@@ -55,17 +55,46 @@ specification (`docs/prompts/`) and ADRs (`docs/adr/`).
 
 ## Quickstart (development)
 
-Prerequisites (exact versions in `.tool-versions`): Docker with Compose v2, Java 21, `uv`,
-Node 24 with `pnpm`.
+There are two supported environments (ADR 0010).
+
+### Option A — GitHub Codespaces (full stack, Docker included)
+
+Recommended for anything that needs Docker: the compose stack, Testcontainers, database security,
+integration and chaos suites.
+
+1. On the repository page on GitHub, choose **Code → Codespaces → ⋯ → New with options…**.
+2. Select the branch, and a machine type with **4 cores and 16 GB RAM** (the devcontainer declares
+   this as its minimum).
+3. Wait for creation. `.devcontainer/post-create.sh` installs the pinned toolchains (checksum-
+   verified), all locked dependencies and the git hooks, then runs `REQUIRE_DOCKER=1 make ci`,
+   which includes starting the core stack and its smoke test. Its output is in the creation log.
+4. In the Codespaces terminal:
+
+```bash
+make up            # core stack; waits until every service is healthy
+make smoke         # functional checks: TimescaleDB, Redis, Kafka, S3 bucket, MLflow artifact
+make ps            # status; MLflow on port 5000, Mailpit on 8025 (see the Ports tab)
+make down          # stop (volumes kept)
+```
+
+### Option B — a local machine without Docker
+
+Everything that does not need Docker runs locally: unit tests, lint, type checks, governance,
+licence checks, and later feature code and reduced-scale ML training.
+
+Prerequisites (exact versions in `.tool-versions`): Java 21, `uv`, Node 24 with `pnpm`. The
+Docker CLI is used only to validate `docker-compose.yml`; no daemon is needed.
 
 ```bash
 make bootstrap     # locked Python, Node and Maven dependencies; pre-commit hooks
-make ci            # lint, strict type checks, unit tests, governance, secrets scan
-make up            # core local stack; waits for every service to report healthy
+make ci            # all checks; Docker suites print "SKIPPED: … requires Docker, verified in CI"
 ```
 
-`make up` generates a git-ignored `.env` with random local credentials on first run. The
-stack is for **synthetic data only**.
+Docker-dependent suites never skip silently: CI runs them on every push with `REQUIRE_DOCKER=1`,
+which turns a missing Docker daemon into a failure. `make up` generates a git-ignored `.env` with
+random local credentials on first run. The stack is for **synthetic data only**.
+
+Performance numbers are never taken from CI runners; see `docs/benchmarks/hardware.md`.
 
 ## Governance
 

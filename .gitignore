@@ -52,3 +52,4 @@ test-results/
 
 # --- Generated reports ---
 build/
+.devcontainer/.post-create-ok

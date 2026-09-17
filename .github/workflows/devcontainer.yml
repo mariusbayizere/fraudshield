@@ -1,0 +1,50 @@
+# Builds the Codespaces devcontainer on a GitHub runner, which runs .devcontainer/post-create.sh
+# (pinned toolchains, locked dependencies, `REQUIRE_DOCKER=1 make ci` including the Docker
+# stack), then re-checks the stack from inside the container (ADR 0010).
+# Heavy, so it runs when the environment definition changes, weekly, and on demand.
+name: devcontainer
+
+on:
+  push:
+    paths:
+      - ".devcontainer/**"
+      - ".github/workflows/devcontainer.yml"
+      - ".tool-versions"
+      - ".python-version"
+      - ".nvmrc"
+      - "Makefile"
+      - "docker-compose.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".devcontainer/**"
+      - ".github/workflows/devcontainer.yml"
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: devcontainer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-verify:
+    name: build devcontainer, post-create make ci, smoke test inside
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3.1900000450
+        with:
+          push: never
+          runCmd: |
+            set -euo pipefail
+            test -f .devcontainer/.post-create-ok || { echo "post-create did not complete" >&2; exit 1; }
+            java -version 2>&1 | head -1
+            uv --version
+            node --version
+            pnpm --version
+            make smoke

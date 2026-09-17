@@ -1,0 +1,51 @@
+{
+  "name": "FraudShield",
+  "image": "mcr.microsoft.com/devcontainers/base:3.0.8-ubuntu24.04@sha256:d7c468679f45a52ad3673d06656b5bf16e488990b17216a1fa295d9e1f89d724",
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "16gb",
+    "storage": "32gb"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:4.1.1": {
+      "moby": true,
+      "dockerDashComposeVersion": "v2",
+      "installDockerBuildx": true
+    },
+    "ghcr.io/devcontainers/features/java:1.8.3": {
+      "version": "21.0.12-tem",
+      "jdkDistro": "tem",
+      "installMaven": false,
+      "installGradle": false
+    },
+    "ghcr.io/devcontainers/features/node:2.1.0": {
+      "version": "24.21.0",
+      "pnpmVersion": "none",
+      "nodeGypDependencies": false
+    }
+  },
+  "remoteEnv": {
+    "PATH": "${containerEnv:HOME}/.local/bin:${containerEnv:PATH}",
+    "UV_PYTHON_PREFERENCE": "only-managed"
+  },
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "forwardPorts": [5000, 8025, 8089],
+  "portsAttributes": {
+    "5000": { "label": "MLflow", "onAutoForward": "silent" },
+    "8025": { "label": "Mailpit", "onAutoForward": "silent" },
+    "8089": { "label": "WireMock", "onAutoForward": "silent" }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "charliermarsh.ruff",
+        "ms-python.python",
+        "ms-python.mypy-type-checker",
+        "vscjava.vscode-java-pack",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "editorconfig.editorconfig"
+      ]
+    }
+  }
+}
