@@ -49,3 +49,6 @@ test-results/
 !.vscode/extensions.json
 *.iml
 .DS_Store
+
+# --- Generated reports ---
+build/

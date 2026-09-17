@@ -1,0 +1,39 @@
+#!/usr/bin/env sh
+# Pinned, checksum-verified gitleaks launcher (build prompt G.5; review finding U6).
+#
+# The pre-commit hook, `make secrets-scan` and CI all call this script, so every scan uses
+# exactly the version below. The release archive is downloaded once into a per-user cache,
+# verified against the SHA-256 published in the release's checksums file, and never trusted
+# from PATH.
+set -eu
+
+GITLEAKS_VERSION="8.30.1"
+GITLEAKS_SHA256_LINUX_X64="551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+
+case "$(uname -s)-$(uname -m)" in
+  Linux-x86_64) platform="linux_x64"; expected_sha="$GITLEAKS_SHA256_LINUX_X64" ;;
+  *)
+    echo "tools/bin/gitleaks: no pinned checksum for $(uname -s)-$(uname -m); add one before use" >&2
+    exit 2
+    ;;
+esac
+
+cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/fraudshield/gitleaks-${GITLEAKS_VERSION}-${platform}"
+binary="$cache_dir/gitleaks"
+
+if [ ! -x "$binary" ]; then
+  mkdir -p "$cache_dir"
+  archive="$cache_dir/gitleaks.tar.gz"
+  url="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_${platform}.tar.gz"
+  curl -sSLf --retry 3 -o "$archive" "$url"
+  actual_sha=$(sha256sum "$archive" | cut -d' ' -f1)
+  if [ "$actual_sha" != "$expected_sha" ]; then
+    rm -f "$archive"
+    echo "tools/bin/gitleaks: checksum mismatch for $url (got $actual_sha)" >&2
+    exit 1
+  fi
+  tar -xzf "$archive" -C "$cache_dir" gitleaks
+  rm -f "$archive"
+fi
+
+exec "$binary" "$@"

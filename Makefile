@@ -20,7 +20,7 @@ bootstrap: ## Install locked Python, Node and Maven dependencies
 	uv sync --all-packages --locked
 	$(PNPM) install --frozen-lockfile
 	$(MVNW) -q dependency:go-offline
-	uv run pre-commit install
+	uv run pre-commit install --install-hooks
 
 .PHONY: env
 env: ## Create .env with random local development credentials (never overwrites)
@@ -90,12 +90,16 @@ compose-config: ## Validate docker-compose.yml without starting containers
 	$(COMPOSE) --env-file .env.example --profile full config -q
 
 .PHONY: secrets-scan
-secrets-scan: ## Gitleaks scan of the working tree and history
-	gitleaks git --redact --no-banner .
-	gitleaks dir --redact --no-banner .
+secrets-scan: ## Gitleaks scan of history and working tree (pinned, checksum-verified binary)
+	tools/bin/gitleaks git --redact --no-banner --exit-code 1 .
+	tools/bin/gitleaks dir --redact --no-banner --exit-code 1 .
+
+.PHONY: licences
+licences: ## Dependency licence inventory and policy check (ADR 0009)
+	uv run fs-licences --output build/licence-inventory.json
 
 .PHONY: ci
-ci: lint typecheck test governance compose-config secrets-scan ## Everything CI runs, locally
+ci: lint typecheck test governance compose-config secrets-scan licences ## Everything CI runs (except the Docker stack job), locally
 
 # --- Later milestones --------------------------------------------------------------------
 # These targets are part of the documented interface (build prompt C.5) and are implemented

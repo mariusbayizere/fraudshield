@@ -22,8 +22,6 @@ env:
   PYTHON_VERSION: "3.12.14"
   NODE_VERSION: "24.21.0"
   JAVA_VERSION: "21"
-  GITLEAKS_VERSION: "8.30.1"
-  GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
 
 jobs:
   python:
@@ -84,11 +82,13 @@ jobs:
       - run: pnpm test:coverage
 
   governance:
-    name: traceability-check, defect register, scope guard
+    name: traceability-check, defect register, scope guard, commit messages
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
           version: ${{ env.UV_VERSION }}
@@ -99,8 +99,79 @@ jobs:
       - run: uv run fs-traceability-seed --check
       - run: uv run fs-traceability check
       - run: uv run fs-scope-guard
+      - name: Commit messages introduced by this push or pull request (G.3)
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            range="$PR_BASE..HEAD"
+          elif [ -n "$BEFORE" ] && ! printf '%s' "$BEFORE" | grep -qE '^0+$' && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            range="$BEFORE..$HEAD_SHA"
+          elif git rev-parse -q --verify origin/main >/dev/null; then
+            range="origin/main..$HEAD_SHA"
+          else
+            echo "no base to compare against (first push of the repository); nothing to check"
+            exit 0
+          fi
+          uv run fs-commit-msg --rev-range "$range"
       - name: Validate docker-compose.yml
         run: docker compose --env-file .env.example --profile full config -q
+
+  licences:
+    name: dependency licence inventory (ADR 0009)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: frontend/package.json
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: uv sync --all-packages --locked
+      - run: pnpm install --frozen-lockfile
+        working-directory: frontend
+      - run: make licences
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: licence-inventory
+          path: build/licence-inventory.json
+          if-no-files-found: ignore
+
+  pre-commit:
+    name: pre-commit hooks on all files (G.5 guards)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+      - run: uv sync --all-packages --locked
+      # Hooks with dedicated CI jobs are skipped here: gitleaks (secrets), governance,
+      # prettier (frontend), spotless (java).
+      - run: uv run pre-commit run --all-files --show-diff-on-failure
+        env:
+          SKIP: gitleaks,governance,prettier,spotless
 
   stack:
     name: core compose stack healthy + smoke test (M0 gate)
@@ -134,10 +205,5 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - name: Install gitleaks (checksum verified)
-        run: |
-          curl -sSLf -o gitleaks.tgz \
-            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
-          echo "${GITLEAKS_SHA256}  gitleaks.tgz" | sha256sum -c -
-          tar -xzf gitleaks.tgz gitleaks
-      - run: ./gitleaks git --redact --no-banner --exit-code 1 .
+      # Same pinned, checksum-verified launcher as the local hook, run independently of hooks.
+      - run: tools/bin/gitleaks git --redact --no-banner --exit-code 1 .

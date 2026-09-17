@@ -3,6 +3,7 @@ name = "fraudshield-tools"
 version = "0.1.0"
 description = "Governance tooling: defect register, traceability matrix, scope guard"
 requires-python = "==3.12.*"
+license = "Apache-2.0"
 dependencies = ["PyYAML==6.0.3"]
 
 [project.scripts]
@@ -10,6 +11,8 @@ fs-traceability = "fraudshield_tools.traceability:main"
 fs-traceability-seed = "fraudshield_tools.traceability_seed:main"
 fs-defect-register = "fraudshield_tools.defect_register:main"
 fs-scope-guard = "fraudshield_tools.scope_guard:main"
+fs-commit-msg = "fraudshield_tools.commit_msg:main"
+fs-licences = "fraudshield_tools.licences:main"
 
 [build-system]
 requires = ["hatchling==1.32.0"]
