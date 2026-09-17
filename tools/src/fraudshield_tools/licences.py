@@ -81,6 +81,21 @@ EXCEPTIONS: dict[str, tuple[str, str]] = {
         "metadata says only 'BSD'; dist-info/licenses/LICENSE is the 3-clause text with the "
         "non-endorsement clause (verified 2026-09-17)",
     ),
+    "python:jsonschema-path@0.5.0": (
+        "Apache-2.0",
+        "classifier says only 'Apache Software License'; dist-info/licenses/LICENSE is the "
+        "Apache License, Version 2.0 text (verified 2026-09-17)",
+    ),
+    "python:pathable@0.6.0": (
+        "Apache-2.0",
+        "classifier says only 'Apache Software License'; dist-info/licenses/LICENSE is the "
+        "Apache License, Version 2.0 text (verified 2026-09-17)",
+    ),
+    "python:openapi-schema-validator@0.9.0": (
+        "BSD-3-Clause",
+        "classifier says only 'BSD License'; dist-info/licenses/LICENSE is headed "
+        "'BSD 3-Clause License' with the non-endorsement clause (verified 2026-09-17)",
+    ),
     "maven:com.tngtech.archunit:archunit@1.5.0": (
         "Apache-2.0 AND BSD-3-Clause",
         "POM declares Apache-2.0 and 'BSD'; the BSD part is shaded ASM, whose bundled "

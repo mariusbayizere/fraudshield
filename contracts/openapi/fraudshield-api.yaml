@@ -1,0 +1,3342 @@
+openapi: 3.1.0
+jsonSchemaDialect: https://spec.openapis.org/oas/3.1/dialect/base
+info:
+  title: FraudShield API
+  version: 1.0.0-m1
+  summary: Real-time fraud decisions for East African digital payments, and the staff console API.
+  description: |
+    Contract-first specification (ADR 0011). Conventions:
+
+    * Money is a decimal string plus an ISO 4217 currency; never a JSON number.
+    * Account, counterparty, device and agent identifiers are opaque tokens (`tok_…`); raw phone or
+      account numbers are rejected.
+    * Errors are RFC 9457 problem details with `type` URNs and a `correlation_id`.
+    * Machine clients authenticate with `X-API-Key`; staff with an RS256 bearer JWT.
+    * Every operation declares `x-required-scopes` (API keys), `x-required-roles` (staff),
+      `x-refresh-cookie: true` (token refresh) or `x-public: true`.
+
+    SYNTHETIC DATA ONLY in development and demo environments (D-21).
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+servers:
+  - url: /api/v1
+    description: Relative to the deployment's base URL
+tags:
+  - name: ingestion
+    description: Machine-to-machine transaction ingestion and decisions (FR-01, FR-03)
+  - name: health
+  - name: auth
+    description: Staff authentication and account lifecycle (FR-07)
+  - name: alerts
+    description: Analyst alert feed, investigation and decisions (FR-04)
+  - name: accounts
+    description: Account history, behavioural fingerprint and network (FR-04-06..08)
+  - name: risk-officer
+    description: Portfolio, model performance, campaigns, rules, thresholds, SAR, overrides (FR-05)
+  - name: admin
+    description: Users, API keys, models, datasets, health, audit (FR-06)
+  - name: verification
+    description: Server-rendered customer verification page (FR-03-04/05, D-25, D-42)
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ---------------------------------------------------------------------------------------------
+  # Ingestion (API key)
+  # ---------------------------------------------------------------------------------------------
+  /transactions/ingest:
+    post:
+      tags: [ingestion]
+      operationId: ingestTransaction
+      summary: Score a transaction and return the decision synchronously
+      description: |
+        Validates, scores and decides within the synchronous latency budget (D-13). Submitting the
+        same `transaction_id` again within 24 hours returns the cached decision without rescoring,
+        with header `Idempotent-Replayed: true` (FR-01-03). MEDIUM decisions return `HOLD`; the final
+        decision follows via `GET /decisions/{transaction_id}` and the `decision.final` webhook (D-14).
+      security:
+        - apiKeyAuth: []
+      x-required-scopes: ["ingest:write"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TransactionIngestRequest" }
+            examples:
+              mobileMoney: { $ref: "#/components/examples/IngestMobileMoney" }
+              ussd: { $ref: "#/components/examples/IngestUssd" }
+              agentBanking: { $ref: "#/components/examples/IngestAgentBanking" }
+              card: { $ref: "#/components/examples/IngestCard" }
+              online: { $ref: "#/components/examples/IngestOnline" }
+              bankTransfer: { $ref: "#/components/examples/IngestBankTransfer" }
+      responses:
+        "200":
+          description: Decision (first submission or idempotent replay)
+          headers:
+            Idempotent-Replayed:
+              description: Present with value `true` when the response is a cached replay
+              schema: { type: string, enum: ["true"] }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DecisionResponse" }
+              examples:
+                declined: { $ref: "#/components/examples/DecisionDeclined" }
+                hold: { $ref: "#/components/examples/DecisionHold" }
+                approved: { $ref: "#/components/examples/DecisionApproved" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "415": { $ref: "#/components/responses/UnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /transactions/ingest/batch:
+    post:
+      tags: [ingestion]
+      operationId: ingestTransactionBatch
+      summary: Submit up to 1,000 transactions for asynchronous scoring (FR-01-06)
+      security:
+        - apiKeyAuth: []
+      x-required-scopes: ["ingest:write"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TransactionBatchRequest" }
+      responses:
+        "202":
+          description: Accepted; poll the job
+          headers:
+            Location:
+              description: URL of the job resource
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobAccepted" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /jobs/{job_id}:
+    get:
+      tags: [ingestion]
+      operationId: getJob
+      summary: Batch job progress and per-item results
+      security:
+        - apiKeyAuth: []
+      x-required-scopes: ["jobs:read"]
+      parameters:
+        - $ref: "#/components/parameters/JobId"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Job status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobStatus" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /decisions/{transaction_id}:
+    get:
+      tags: [ingestion]
+      operationId: getFinalDecision
+      summary: Current or final decision for a transaction (D-14)
+      security:
+        - apiKeyAuth: []
+      x-required-scopes: ["decisions:read"]
+      parameters:
+        - $ref: "#/components/parameters/TransactionId"
+      responses:
+        "200":
+          description: Decision state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FinalDecision" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  # ---------------------------------------------------------------------------------------------
+  # Health (public, minimal bodies)
+  # ---------------------------------------------------------------------------------------------
+  /health/ml:
+    get:
+      tags: [health]
+      operationId: getMlHealth
+      summary: ML scoring service health
+      security: []
+      x-public: true
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ComponentHealth" }
+        "503":
+          description: Unhealthy or degraded (rule-based fallback active)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ComponentHealth" }
+
+  /health/kafka:
+    get:
+      tags: [health]
+      operationId: getKafkaHealth
+      summary: Kafka producer and local spool health
+      security: []
+      x-public: true
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ComponentHealth" }
+        "503":
+          description: Broker unreachable; decisions continue, events spool to disk (D-15)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ComponentHealth" }
+
+  # ---------------------------------------------------------------------------------------------
+  # Auth (FR-07)
+  # ---------------------------------------------------------------------------------------------
+  /auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Email and password sign-in
+      description: |
+        Returns an access token in the body and sets a rotating refresh-token cookie
+        (httpOnly, Secure, SameSite=Strict, path `/api/v1/auth/refresh`) plus a CSRF cookie (D-27).
+        10 attempts per 15 minutes per IP (higher for allow-listed office IPs, D-26); 5 failures lock
+        the account.
+      security: []
+      x-public: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: Signed in
+          headers:
+            Set-Cookie:
+              description: Refresh-token and CSRF cookies
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenResponse" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "423": { $ref: "#/components/responses/Locked" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /auth/google:
+    post:
+      tags: [auth]
+      operationId: loginWithGoogle
+      summary: Google sign-in (authorization code with PKCE)
+      description: |
+        The ID token is verified server-side (JWKS signature, `aud`, `iss`, `exp`,
+        `email_verified`). Existing active accounts link by verified email; an allow-listed domain
+        creates an ANALYST account in `PENDING_APPROVAL` with no access (D-23).
+      security: []
+      x-public: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GoogleSignInRequest" }
+      responses:
+        "200":
+          description: Signed in
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenResponse" }
+        "202":
+          description: Account created and awaiting administrator approval
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PendingApproval" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /auth/refresh:
+    post:
+      tags: [auth]
+      operationId: refreshToken
+      summary: Rotate the refresh token and issue a new access token
+      description: Reuse of a rotated refresh token revokes the whole token family (D-27).
+      security:
+        - refreshCookie: []
+      x-refresh-cookie: true
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "200":
+          description: New access token; refresh cookie rotated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: End this session; revokes Google tokens when present (FR-07-09)
+      x-required-roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER, ADMIN]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204": { description: Signed out }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /auth/logout-all:
+    post:
+      tags: [auth]
+      operationId: logoutEverywhere
+      summary: Invalidate every session by incrementing the token version (D-27)
+      x-required-roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER, ADMIN]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "204": { description: All sessions invalidated }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /auth/me:
+    get:
+      tags: [auth]
+      operationId: getCurrentUser
+      summary: Signed-in user's profile (name, avatar, role) for the header (FR-04-01)
+      x-required-roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER, ADMIN]
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StaffUser" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /auth/register:
+    post:
+      tags: [auth]
+      operationId: register
+      summary: Self-registration; always creates a PENDING_APPROVAL account (D-24)
+      security: []
+      x-public: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegistrationRequest" }
+      responses:
+        "202":
+          description: Registered; awaiting email verification and administrator approval
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PendingApproval" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /auth/availability:
+    get:
+      tags: [auth]
+      operationId: checkAvailability
+      summary: Rate-limited availability check for email or employee ID during registration
+      description: Responses take near-constant time to limit enumeration (E.8).
+      security: []
+      x-public: true
+      parameters:
+        - name: field
+          in: query
+          required: true
+          schema: { type: string, enum: [email, employee_id] }
+        - name: value
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 254 }
+      responses:
+        "200":
+          description: Availability
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [available]
+                additionalProperties: false
+                properties:
+                  available: { type: boolean }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /auth/email-verification:
+    post:
+      tags: [auth]
+      operationId: verifyEmail
+      summary: Confirm an email address with a single-use token
+      security: []
+      x-public: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SingleUseTokenRequest" }
+      responses:
+        "204": { description: Email verified }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "410": { $ref: "#/components/responses/Gone" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /auth/password-reset/request:
+    post:
+      tags: [auth]
+      operationId: requestPasswordReset
+      summary: Email a 6-digit one-time code (FR-07-08); same response whether or not the email exists
+      security: []
+      x-public: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              additionalProperties: false
+              properties:
+                email: { $ref: "#/components/schemas/Email" }
+      responses:
+        "202": { description: "If the account exists, a code was sent" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /auth/password-reset/verify:
+    post:
+      tags: [auth]
+      operationId: verifyPasswordResetCode
+      summary: Exchange a valid one-time code for a short-lived reset token
+      security: []
+      x-public: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, code]
+              additionalProperties: false
+              properties:
+                email: { $ref: "#/components/schemas/Email" }
+                code: { type: string, pattern: "^[0-9]{6}$" }
+      responses:
+        "200":
+          description: Code accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [reset_token, expires_at]
+                additionalProperties: false
+                properties:
+                  reset_token: { type: string, minLength: 32 }
+                  expires_at: { $ref: "#/components/schemas/Timestamp" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /auth/password-reset/complete:
+    post:
+      tags: [auth]
+      operationId: completePasswordReset
+      summary: Set a new password with a reset token; invalidates all sessions (FR-07-09)
+      security: []
+      x-public: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reset_token, new_password]
+              additionalProperties: false
+              properties:
+                reset_token: { type: string, minLength: 32 }
+                new_password: { $ref: "#/components/schemas/Password" }
+      responses:
+        "204": { description: Password changed }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "410": { $ref: "#/components/responses/Gone" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /auth/password:
+    put:
+      tags: [auth]
+      operationId: changePassword
+      summary: Change password while signed in; invalidates all sessions (FR-07-09)
+      x-required-roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER, ADMIN]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password, new_password]
+              additionalProperties: false
+              properties:
+                current_password: { type: string, minLength: 1, maxLength: 128 }
+                new_password: { $ref: "#/components/schemas/Password" }
+      responses:
+        "204": { description: Password changed }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /auth/unlock:
+    post:
+      tags: [auth]
+      operationId: unlockAccount
+      summary: Unlock a locked account with the emailed single-use token (FR-07-06)
+      security: []
+      x-public: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SingleUseTokenRequest" }
+      responses:
+        "204": { description: Account unlocked }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "410": { $ref: "#/components/responses/Gone" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /auth/jwks.json:
+    get:
+      tags: [auth]
+      operationId: getJwks
+      summary: Public keys for access-token verification (key rotation by `kid`)
+      security: []
+      x-public: true
+      responses:
+        "200":
+          description: JSON Web Key Set
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [keys]
+                properties:
+                  keys:
+                    type: array
+                    items: { type: object }
+
+  # ---------------------------------------------------------------------------------------------
+  # Analyst console (FR-04)
+  # ---------------------------------------------------------------------------------------------
+  /dashboard/stats:
+    get:
+      tags: [alerts]
+      operationId: getDashboardStats
+      summary: The seven header statistics (SRS 5.4)
+      x-required-roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
+      responses:
+        "200":
+          description: Statistics for the caller's institution
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DashboardStats" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /alerts:
+    get:
+      tags: [alerts]
+      operationId: listAlerts
+      summary: Alert feed with composable filters (FR-04-02, FR-04-09)
+      description: |
+        Default order is HIGH first, then fraud probability descending (FR-04-02). `sort=expected_loss`
+        orders by calibrated probability × amount in RWF (D-10). `queue=anomaly` lists
+        Isolation-Forest-only alerts, which hold nothing and have no timer (D-10).
+      x-required-roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
+      parameters:
+        - { name: queue, in: query, schema: { type: string, enum: [standard, anomaly, escalated], default: standard } }
+        - { name: transaction_id, in: query, schema: { type: string, format: uuid } }
+        - { name: account_id, in: query, schema: { $ref: "#/components/schemas/Token" } }
+        - { name: amount_min, in: query, schema: { $ref: "#/components/schemas/DecimalAmount" } }
+        - { name: amount_max, in: query, schema: { $ref: "#/components/schemas/DecimalAmount" } }
+        - name: channel
+          in: query
+          style: form
+          explode: false
+          schema: { type: array, items: { $ref: "#/components/schemas/Channel" }, uniqueItems: true }
+        - { name: from, in: query, schema: { $ref: "#/components/schemas/Timestamp" } }
+        - { name: to, in: query, schema: { $ref: "#/components/schemas/Timestamp" } }
+        - name: tier
+          in: query
+          style: form
+          explode: false
+          schema: { type: array, items: { $ref: "#/components/schemas/AlertTier" }, uniqueItems: true }
+        - { name: analyst_id, in: query, schema: { type: string, format: uuid } }
+        - name: outcome
+          in: query
+          style: form
+          explode: false
+          schema: { type: array, items: { $ref: "#/components/schemas/AlertStatus" }, uniqueItems: true }
+        - { name: sort, in: query, schema: { type: string, enum: [priority, expected_loss, newest], default: priority } }
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: A page of alerts
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AlertPage" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /alerts/{alert_id}:
+    get:
+      tags: [alerts]
+      operationId: getAlert
+      summary: Alert detail for the investigation drawer summary tab
+      x-required-roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
+      parameters:
+        - $ref: "#/components/parameters/AlertId"
+      responses:
+        "200":
+          description: Alert
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AlertDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /alerts/{alert_id}/explanation:
+    get:
+      tags: [alerts]
+      operationId: getAlertExplanation
+      summary: All 44 SHAP contributions in margin space with base value and templates (FR-04-05, D-05)
+      x-required-roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
+      parameters:
+        - $ref: "#/components/parameters/AlertId"
+      responses:
+        "200":
+          description: Explanation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Explanation" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /alerts/{alert_id}/decisions:
+    post:
+      tags: [alerts]
+      operationId: decideAlert
+      summary: CONFIRM FRAUD or MARK LEGITIMATE with a mandatory comment (FR-04-04)
+      description: |
+        Written immediately as `PENDING_COMMIT`; side effects are published after the 5-second undo
+        window (D-44). A stale `alert_version` or a MEDIUM alert past its deadline returns 409 with
+        the current state (D-29).
+      x-required-roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
+      parameters:
+        - $ref: "#/components/parameters/AlertId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AlertDecisionRequest" }
+      responses:
+        "202":
+          description: Decision recorded, pending commit
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AlertDecisionAccepted" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/StaleAlert" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /alerts/{alert_id}/decisions/{decision_id}/undo:
+    post:
+      tags: [alerts]
+      operationId: undoAlertDecision
+      summary: Undo a decision within its grace window (D-44)
+      x-required-roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
+      parameters:
+        - $ref: "#/components/parameters/AlertId"
+        - name: decision_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204": { description: Undone; a compensating record and an ANALYST_DECISION/UNDO audit event were written }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /alerts/{alert_id}/escalations:
+    post:
+      tags: [alerts]
+      operationId: escalateAlert
+      summary: Escalate to a senior analyst or risk officer with a reason (FR-04-10)
+      x-required-roles: [ANALYST, SENIOR_ANALYST]
+      parameters:
+        - $ref: "#/components/parameters/AlertId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EscalationRequest" }
+      responses:
+        "201":
+          description: New alert entry at the target tier, linked to the original
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AlertSummary" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/StaleAlert" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /alerts/{alert_id}/overrides:
+    post:
+      tags: [risk-officer]
+      operationId: overrideAlertDecision
+      summary: Senior override of an analyst decision with a reason of at least 20 characters (FR-05-01)
+      x-required-roles: [RISK_OFFICER]
+      parameters:
+        - $ref: "#/components/parameters/AlertId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OverrideRequest" }
+      responses:
+        "201":
+          description: SENIOR_OVERRIDE recorded, referencing the original decision
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DecisionRecord" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/StaleAlert" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /transactions/{transaction_id}/scoring-result:
+    get:
+      tags: [alerts]
+      operationId: getScoringResult
+      summary: Full ScoringResult (all nine FR-02-01 fields) for staff investigation
+      x-required-roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
+      parameters:
+        - $ref: "#/components/parameters/TransactionId"
+      responses:
+        "200":
+          description: Scoring result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScoringResult" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /me/performance:
+    get:
+      tags: [alerts]
+      operationId: getMyPerformance
+      summary: Reviews today, average review time, accuracy from customer verifications, backlog (FR-04-11)
+      x-required-roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
+      responses:
+        "200":
+          description: Performance
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AnalystPerformance" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /accounts/{account_token}/transactions:
+    get:
+      tags: [accounts]
+      operationId: listAccountTransactions
+      summary: Account history, most recent first, 30 per page (FR-04-06)
+      x-required-roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
+      parameters:
+        - $ref: "#/components/parameters/AccountToken"
+        - $ref: "#/components/parameters/Cursor"
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 30, default: 30 }
+      responses:
+        "200":
+          description: A page of transactions
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AccountTransactionPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /accounts/{account_token}/behaviour-profile:
+    get:
+      tags: [accounts]
+      operationId: getBehaviourProfile
+      summary: Hourly pattern, amount histogram, channel mix and this-vs-normal comparison (FR-04-07)
+      x-required-roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
+      parameters:
+        - $ref: "#/components/parameters/AccountToken"
+        - name: transaction_id
+          in: query
+          required: true
+          description: Transaction compared with the account's 90-day normal
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Behavioural fingerprint
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BehaviourProfile" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /accounts/{account_token}/network:
+    get:
+      tags: [accounts]
+      operationId: getAccountNetwork
+      summary: Counterparty graph up to second degree, at most 50 nodes (FR-04-08)
+      x-required-roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
+      parameters:
+        - $ref: "#/components/parameters/AccountToken"
+      responses:
+        "200":
+          description: Graph
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AccountNetwork" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  # ---------------------------------------------------------------------------------------------
+  # Risk officer (FR-05)
+  # ---------------------------------------------------------------------------------------------
+  /portfolio/summary:
+    get:
+      tags: [risk-officer]
+      operationId: getPortfolioSummary
+      summary: Fraud prevented (RWF and count), fraud rate by channel and MCC, top counterparties (FR-05-02)
+      x-required-roles: [RISK_OFFICER]
+      parameters:
+        - name: period
+          in: query
+          schema: { type: string, enum: [day, week, month], default: day }
+      responses:
+        "200":
+          description: Portfolio summary
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortfolioSummary" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /portfolio/heatmap:
+    get:
+      tags: [risk-officer]
+      operationId: getFraudHeatmap
+      summary: District-level fraud counts with k-anonymity (cells under 10 events merged or suppressed, D-46)
+      x-required-roles: [RISK_OFFICER]
+      parameters:
+        - name: period
+          in: query
+          schema: { type: string, enum: [day, week, month], default: week }
+      responses:
+        "200":
+          description: Heatmap cells
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Heatmap" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /model-performance:
+    get:
+      tags: [risk-officer]
+      operationId: getModelPerformance
+      summary: Live AUC-ROC from labels with label coverage, precision, recall, F1, FPR trend, drift (FR-05-03)
+      x-required-roles: [RISK_OFFICER, ADMIN]
+      responses:
+        "200":
+          description: Model performance
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModelPerformance" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /campaigns:
+    get:
+      tags: [risk-officer]
+      operationId: listCampaigns
+      summary: Detected fraud campaigns (FR-05-04)
+      x-required-roles: [RISK_OFFICER, SENIOR_ANALYST]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [ACTIVE, CLOSED] } }
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Campaigns
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CampaignPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /campaigns/{campaign_id}:
+    patch:
+      tags: [risk-officer]
+      operationId: updateCampaignStatus
+      summary: Close or reopen a campaign
+      x-required-roles: [RISK_OFFICER]
+      parameters:
+        - name: campaign_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status, version]
+              additionalProperties: false
+              properties:
+                status: { type: string, enum: [ACTIVE, CLOSED] }
+                version: { type: integer, minimum: 0 }
+      responses:
+        "200":
+          description: Updated campaign
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Campaign" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /rules:
+    get:
+      tags: [risk-officer]
+      operationId: listRules
+      summary: Custom alert rules and their current versions (FR-05-05)
+      x-required-roles: [RISK_OFFICER]
+      responses:
+        "200":
+          description: Rules
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Rule" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+    post:
+      tags: [risk-officer]
+      operationId: createRule
+      summary: Create a rule from the JSON DSL; effective within 60 seconds
+      x-required-roles: [RISK_OFFICER]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RuleDraft" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Rule" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /rules/preview:
+    post:
+      tags: [risk-officer]
+      operationId: previewRule
+      summary: Count matches of a draft rule over the last 7 days before saving
+      x-required-roles: [RISK_OFFICER]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RuleExpression" }
+      responses:
+        "200":
+          description: Match count
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [matched_transactions, window_days]
+                additionalProperties: false
+                properties:
+                  matched_transactions: { type: integer, minimum: 0 }
+                  window_days: { type: integer, const: 7 }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /rules/{rule_id}/versions:
+    post:
+      tags: [risk-officer]
+      operationId: createRuleVersion
+      summary: Edit a rule by creating a new immutable version
+      x-required-roles: [RISK_OFFICER]
+      parameters:
+        - $ref: "#/components/parameters/RuleId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RuleDraft" }
+      responses:
+        "201":
+          description: New version
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Rule" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /rules/{rule_id}/state:
+    put:
+      tags: [risk-officer]
+      operationId: setRuleState
+      summary: Enable, disable or soft-delete a rule
+      x-required-roles: [RISK_OFFICER]
+      parameters:
+        - $ref: "#/components/parameters/RuleId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [state, version]
+              additionalProperties: false
+              properties:
+                state: { type: string, enum: [ENABLED, DISABLED, DELETED] }
+                version: { type: integer, minimum: 0 }
+      responses:
+        "200":
+          description: Updated rule
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Rule" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /thresholds:
+    get:
+      tags: [risk-officer]
+      operationId: getThresholds
+      summary: Current per-channel thresholds and MEDIUM timeout policies (FR-05-07, D-10)
+      x-required-roles: [RISK_OFFICER, ADMIN]
+      responses:
+        "200":
+          description: Thresholds
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ThresholdSet" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /thresholds/impact-preview:
+    post:
+      tags: [risk-officer]
+      operationId: previewThresholdImpact
+      summary: Estimated alerts per hour at proposed thresholds, from the last 24 h of scores
+      x-required-roles: [RISK_OFFICER, ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ChannelThreshold" }
+      responses:
+        "200":
+          description: Estimate
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [channel, estimated_high_per_hour, estimated_medium_per_hour]
+                additionalProperties: false
+                properties:
+                  channel: { $ref: "#/components/schemas/Channel" }
+                  estimated_high_per_hour: { type: number, minimum: 0 }
+                  estimated_medium_per_hour: { type: number, minimum: 0 }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /sar-reports:
+    get:
+      tags: [risk-officer]
+      operationId: listSarReports
+      summary: Suspicious activity report drafts (FR-05-06, D-22)
+      x-required-roles: [RISK_OFFICER]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [DRAFT, SIGNED_OFF] } }
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Reports
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SarReportPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /sar-reports/{report_id}:
+    get:
+      tags: [risk-officer]
+      operationId: getSarReport
+      summary: "Report draft; PDF with `Accept: application/pdf` (watermarked DRAFT, never auto-submitted)"
+      x-required-roles: [RISK_OFFICER]
+      parameters:
+        - $ref: "#/components/parameters/ReportId"
+      responses:
+        "200":
+          description: Report
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SarReport" }
+            application/pdf:
+              schema: { type: string, contentMediaType: application/pdf }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "406": { $ref: "#/components/responses/NotAcceptable" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /sar-reports/{report_id}/sign-off:
+    post:
+      tags: [risk-officer]
+      operationId: signOffSarReport
+      summary: Record the risk officer's review and sign-off (REGULATORY_REPORT audit event)
+      x-required-roles: [RISK_OFFICER]
+      parameters:
+        - $ref: "#/components/parameters/ReportId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version, attestation]
+              additionalProperties: false
+              properties:
+                version: { type: integer, minimum: 0 }
+                attestation: { type: string, minLength: 20, maxLength: 2000 }
+      responses:
+        "200":
+          description: Signed off
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SarReport" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  # ---------------------------------------------------------------------------------------------
+  # Admin (FR-06, FR-02-06)
+  # ---------------------------------------------------------------------------------------------
+  /admin/thresholds:
+    patch:
+      tags: [admin]
+      operationId: updateThresholds
+      summary: Change per-channel thresholds or timeout policy at runtime; effective within 60 s (FR-02-06)
+      description: Creates a new immutable threshold version; a THRESHOLD_CHANGE audit event is written.
+      x-required-roles: [ADMIN, RISK_OFFICER]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ThresholdUpdate" }
+      responses:
+        "200":
+          description: New threshold version
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ThresholdSet" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /admin/users:
+    get:
+      tags: [admin]
+      operationId: listUsers
+      summary: Staff accounts
+      x-required-roles: [ADMIN]
+      parameters:
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/UserStatus" } }
+        - { name: role, in: query, schema: { $ref: "#/components/schemas/Role" } }
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Users
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StaffUserPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+    post:
+      tags: [admin]
+      operationId: createUser
+      summary: Create a staff account; sends a welcome email with a temporary password (FR-06-01)
+      x-required-roles: [ADMIN]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StaffUserCreate" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StaffUser" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /admin/users/{user_id}:
+    get:
+      tags: [admin]
+      operationId: getUser
+      summary: Staff account
+      x-required-roles: [ADMIN]
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: User
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StaffUser" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+    patch:
+      tags: [admin]
+      operationId: updateUser
+      summary: Update profile, role or status; role and status changes increment the token version (FR-06-02, D-27)
+      x-required-roles: [ADMIN]
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StaffUserUpdate" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StaffUser" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /admin/approvals:
+    get:
+      tags: [admin]
+      operationId: listPendingApprovals
+      summary: Accounts awaiting approval (D-23, D-24)
+      x-required-roles: [ADMIN]
+      responses:
+        "200":
+          description: Pending accounts
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/StaffUser" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /admin/approvals/{user_id}:
+    post:
+      tags: [admin]
+      operationId: decideApproval
+      summary: Approve with a granted role, or reject
+      x-required-roles: [ADMIN]
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              additionalProperties: false
+              properties:
+                decision: { type: string, enum: [APPROVE, REJECT] }
+                granted_role: { $ref: "#/components/schemas/Role" }
+                reason: { type: string, maxLength: 500 }
+              if:
+                properties: { decision: { const: APPROVE } }
+              then:
+                required: [granted_role]
+      responses:
+        "200":
+          description: Updated account
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StaffUser" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /admin/ip-allowlist:
+    get:
+      tags: [admin]
+      operationId: listOfficeIpAllowlist
+      summary: Office egress IP ranges with a higher login rate ceiling (D-26)
+      x-required-roles: [ADMIN]
+      responses:
+        "200":
+          description: Entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/IpAllowlistEntry" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+    post:
+      tags: [admin]
+      operationId: addOfficeIpRange
+      summary: Add an office egress range
+      x-required-roles: [ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IpAllowlistEntryCreate" }
+      responses:
+        "201":
+          description: Added
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IpAllowlistEntry" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /admin/ip-allowlist/{entry_id}:
+    delete:
+      tags: [admin]
+      operationId: removeOfficeIpRange
+      summary: Remove an office egress range
+      x-required-roles: [ADMIN]
+      parameters:
+        - name: entry_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204": { description: Removed }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /admin/api-keys:
+    get:
+      tags: [admin]
+      operationId: listApiKeys
+      summary: API keys with name, scopes and last four characters only (FR-06-07)
+      x-required-roles: [ADMIN]
+      responses:
+        "200":
+          description: Keys
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ApiKey" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+    post:
+      tags: [admin]
+      operationId: createApiKey
+      summary: Create a key; the raw secret is returned exactly once
+      x-required-roles: [ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ApiKeyCreate" }
+      responses:
+        "201":
+          description: Created
+          headers:
+            Cache-Control:
+              description: Always `no-store`
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiKeyCreated" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /admin/api-keys/{key_id}/rotate:
+    post:
+      tags: [admin]
+      operationId: rotateApiKey
+      summary: Issue a replacement; the old key stays valid for a 24-hour overlap
+      x-required-roles: [ADMIN]
+      parameters:
+        - $ref: "#/components/parameters/KeyId"
+      responses:
+        "201":
+          description: Replacement key (raw secret returned once)
+          headers:
+            Cache-Control:
+              description: Always `no-store`
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiKeyCreated" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /admin/api-keys/{key_id}/revoke:
+    post:
+      tags: [admin]
+      operationId: revokeApiKey
+      summary: Revoke; requests with the key return 401 within 5 seconds
+      x-required-roles: [ADMIN]
+      parameters:
+        - $ref: "#/components/parameters/KeyId"
+      responses:
+        "204": { description: Revoked }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /admin/models:
+    get:
+      tags: [admin]
+      operationId: listModelVersions
+      summary: Model versions with metrics, aliases and promotion gate state (FR-06-03, D-11, D-50)
+      x-required-roles: [ADMIN]
+      responses:
+        "200":
+          description: Versions
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ModelVersion" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /admin/models/{model_version}/promotion:
+    post:
+      tags: [admin]
+      operationId: promoteModel
+      summary: Promote to production; rejected with reasons unless the shadow gate passes (D-11)
+      x-required-roles: [ADMIN]
+      parameters:
+        - $ref: "#/components/parameters/ModelVersionParam"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "202":
+          description: Promotion started; effective within 60 seconds
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModelVersion" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/PromotionGateFailed" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /admin/models/rollback:
+    post:
+      tags: [admin]
+      operationId: rollbackModel
+      summary: Move @production back to @previous_production within 30 seconds
+      x-required-roles: [ADMIN]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "202":
+          description: Rollback started
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ModelVersion" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /admin/models/shadow:
+    put:
+      tags: [admin]
+      operationId: setShadowModel
+      summary: Set or clear the @shadow model (FR-02-08)
+      x-required-roles: [ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [model_version]
+              additionalProperties: false
+              properties:
+                model_version: { type: [string, "null"], maxLength: 100 }
+      responses:
+        "200":
+          description: Shadow state
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [model_version, enabled_at]
+                properties:
+                  model_version: { type: [string, "null"] }
+                  enabled_at: { type: [string, "null"], format: date-time }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /admin/datasets:
+    get:
+      tags: [admin]
+      operationId: listTrainingDatasets
+      summary: Uploaded labelled datasets (FR-06-04)
+      x-required-roles: [ADMIN]
+      responses:
+        "200":
+          description: Datasets
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/TrainingDataset" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+    post:
+      tags: [admin]
+      operationId: uploadTrainingDataset
+      summary: Upload a labelled CSV; schema-validated and scanned for raw PII before acceptance
+      x-required-roles: [ADMIN]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, name]
+              properties:
+                name: { type: string, minLength: 3, maxLength: 100 }
+                file: { type: string, contentMediaType: text/csv }
+      responses:
+        "201":
+          description: Accepted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrainingDataset" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /admin/retraining-jobs:
+    post:
+      tags: [admin]
+      operationId: startRetraining
+      summary: Start retraining on a dataset; starts within 60 seconds, progress streamed over WebSocket
+      x-required-roles: [ADMIN]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [dataset_id]
+              additionalProperties: false
+              properties:
+                dataset_id: { type: string, format: uuid }
+      responses:
+        "202":
+          description: Started
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RetrainingJob" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /admin/retraining-jobs/{job_id}:
+    get:
+      tags: [admin]
+      operationId: getRetrainingJob
+      summary: Retraining progress and evaluation outcome
+      x-required-roles: [ADMIN]
+      parameters:
+        - $ref: "#/components/parameters/JobId"
+      responses:
+        "200":
+          description: Job
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RetrainingJob" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /admin/health:
+    get:
+      tags: [admin]
+      operationId: getSystemHealth
+      summary: Consumer lag, scoring latency, error rate, Redis hit rate, pool usage, queue depths (FR-06-05)
+      x-required-roles: [ADMIN]
+      responses:
+        "200":
+          description: Health snapshot from Prometheus
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SystemHealth" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /admin/audit-events:
+    get:
+      tags: [admin]
+      operationId: searchAuditEvents
+      summary: Search the append-only audit log (FR-06-06, D-32)
+      x-required-roles: [ADMIN]
+      parameters:
+        - { name: user_id, in: query, schema: { type: string, format: uuid } }
+        - { name: event_type, in: query, schema: { $ref: "#/components/schemas/AuditEventType" } }
+        - { name: from, in: query, schema: { $ref: "#/components/schemas/Timestamp" } }
+        - { name: to, in: query, schema: { $ref: "#/components/schemas/Timestamp" } }
+        - { name: entity_type, in: query, schema: { type: string, maxLength: 64 } }
+        - { name: entity_id, in: query, schema: { type: string, maxLength: 128 } }
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Events
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuditEventPage" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /admin/circuit-breakers:
+    get:
+      tags: [admin]
+      operationId: listCircuitBreakers
+      summary: MCC circuit breaker states (FR-03-07, D-18)
+      x-required-roles: [ADMIN, RISK_OFFICER]
+      responses:
+        "200":
+          description: Breakers
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/CircuitBreaker" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /admin/webhook-deliveries:
+    get:
+      tags: [admin]
+      operationId: listFailedWebhookDeliveries
+      summary: Webhook deliveries that exhausted retries (dead-letter queue, E.1)
+      x-required-roles: [ADMIN]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Failed deliveries
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WebhookDeliveryPage" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  # ---------------------------------------------------------------------------------------------
+  # Customer verification (server-rendered HTML, no JavaScript; D-25, D-42)
+  # ---------------------------------------------------------------------------------------------
+  /verify/{token}:
+    servers:
+      - url: /
+        description: Served outside /api/v1 on the institution's own domain
+    get:
+      tags: [verification]
+      operationId: showVerificationPage
+      summary: Masked transaction details with "Yes, this was me" / "No, this was not me"
+      description: |
+        When self-service is disabled (recent or unknown SIM swap, device change in 24 h, score ≥ 0.95,
+        account-takeover signals), the page tells the customer to contact the institution instead (D-25).
+        Expired or used tokens show a non-revealing message. Page weight ≤ 30 KB.
+      security: []
+      x-public: true
+      parameters:
+        - $ref: "#/components/parameters/VerificationToken"
+        - name: lang
+          in: query
+          schema: { $ref: "#/components/schemas/Locale" }
+      responses:
+        "200":
+          description: Verification page
+          content:
+            text/html:
+              schema: { type: string }
+        "410":
+          description: Expired or already used (same wording in both cases)
+          content:
+            text/html:
+              schema: { type: string }
+    post:
+      tags: [verification]
+      operationId: submitVerification
+      summary: Record the customer's answer; "Yes" lifts the block within 10 seconds unless disabled
+      security: []
+      x-public: true
+      parameters:
+        - $ref: "#/components/parameters/VerificationToken"
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [answer, csrf]
+              properties:
+                answer: { type: string, enum: [WAS_ME, NOT_ME] }
+                csrf: { type: string, minLength: 32 }
+      responses:
+        "200":
+          description: Result page
+          content:
+            text/html:
+              schema: { type: string }
+        "410":
+          description: Expired or already used
+          content:
+            text/html:
+              schema: { type: string }
+
+components:
+  securitySchemes:
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: "`fsk_<env>_<keyId>_<secret>`; verified by HMAC with a server pepper (D-19)."
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "RS256 access token, 15-minute expiry; claims sub, role, first_name, email, institution_id, token_version, kid."
+    refreshCookie:
+      type: apiKey
+      in: cookie
+      name: fs_refresh
+      description: Rotating refresh token (httpOnly, Secure, SameSite=Strict, path /api/v1/auth/refresh)
+
+  parameters:
+    TransactionId:
+      name: transaction_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    JobId:
+      name: job_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    AlertId:
+      name: alert_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    RuleId:
+      name: rule_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ReportId:
+      name: report_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    UserId:
+      name: user_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    KeyId:
+      name: key_id
+      in: path
+      required: true
+      schema: { type: string, pattern: "^[a-z0-9]{12}$" }
+    ModelVersionParam:
+      name: model_version
+      in: path
+      required: true
+      schema: { type: string, pattern: "^[A-Za-z0-9._-]{1,100}$" }
+    AccountToken:
+      name: account_token
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/Token" }
+    VerificationToken:
+      name: token
+      in: path
+      required: true
+      description: At least 128 bits of randomness, base64url; stored only as a SHA-256 hash
+      schema: { type: string, pattern: "^[A-Za-z0-9_-]{22,128}$" }
+    Cursor:
+      name: cursor
+      in: query
+      schema: { type: string, maxLength: 512 }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Unique per logical action; replays return the original outcome (D-29)
+      schema: { type: string, format: uuid }
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      description: Double-submit token matching the CSRF cookie (D-27)
+      schema: { type: string, minLength: 32, maxLength: 256 }
+
+  responses:
+    ValidationProblem:
+      description: Missing, malformed or invalid fields
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/ValidationProblem" }
+          examples:
+            missingField:
+              value:
+                type: urn:fraudshield:problem:validation
+                title: Request validation failed
+                status: 400
+                detail: 1 field is invalid
+                correlation_id: 6f1c2d8e-5b0a-4c55-9f7a-2a1d3c4b5e6f
+                errors:
+                  - field: currency
+                    code: required
+                    message: currency is required
+    Unauthorized:
+      description: Missing, invalid, expired or revoked credentials
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    Forbidden:
+      description: Authenticated but not permitted (wrong role, wrong API-key scope, pending approval)
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    NotFound:
+      description: Not found in the caller's institution
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    NotAcceptable:
+      description: Unsupported Accept header
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    Conflict:
+      description: Conflicting state or duplicate resource
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    StaleAlert:
+      description: The alert changed since the client read it, or its review deadline passed (D-29)
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/StaleAlertProblem" }
+    PromotionGateFailed:
+      description: Shadow gate not met; reasons listed (D-11)
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/PromotionGateProblem" }
+    Gone:
+      description: Token expired or already used
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    Locked:
+      description: Account locked after repeated failures; unlock by email link, administrator or after 30 minutes
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    PayloadTooLarge:
+      description: Body exceeds the size limit
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    UnsupportedMediaType:
+      description: Content-Type must be application/json
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    TooManyRequests:
+      description: Rate limited
+      headers:
+        Retry-After:
+          description: Seconds to wait
+          schema: { type: integer, minimum: 1 }
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    ServiceUnavailable:
+      description: A dependency is unavailable and no safe fallback exists
+      headers:
+        Retry-After:
+          description: Seconds to wait
+          schema: { type: integer, minimum: 1 }
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    UnexpectedProblem:
+      description: Unexpected error; the correlation ID identifies server logs
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+
+  examples:
+    IngestMobileMoney:
+      summary: MOBILE_MONEY domestic P2P transfer (Kigali)
+      value:
+        transaction_id: 3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11
+        account_id: tok_A1b2C3d4E5f6G7h8J9k0L1m2
+        counterparty_id: tok_Z9y8X7w6V5u4T3s2R1q0P9o8
+        amount: "15000"
+        currency: RWF
+        channel: MOBILE_MONEY
+        merchant_category_code: "4829"
+        latitude: -1.9441
+        longitude: 30.0619
+        device_fingerprint: tok_D3v1c3F1ng3rpr1ntAaBbCc0
+        counterparty_country: RW
+        transaction_timestamp: "2026-09-17T08:15:30Z"
+    IngestUssd:
+      summary: USSD transfer from a feature phone — no device fingerprint (D-04)
+      value:
+        transaction_id: 7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60
+        account_id: tok_U5sdF3atur3Ph0n3Acct0001
+        counterparty_id: tok_Cp7Rur4lK1nsh1pAcct000022
+        amount: "5000"
+        currency: RWF
+        channel: USSD
+        merchant_category_code: "4829"
+        latitude: -2.5967
+        longitude: 29.7394
+        device_fingerprint: null
+        counterparty_country: RW
+        transaction_timestamp: "2026-09-17T06:02:11Z"
+    IngestAgentBanking:
+      summary: AGENT_BANKING cash-out at a registered agent (Kampala)
+      value:
+        transaction_id: c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e5f
+        account_id: tok_AgntCust0mer00000000A001
+        counterparty_id: tok_AgntCashP00l0000000000B2
+        amount: "250000"
+        currency: UGX
+        channel: AGENT_BANKING
+        merchant_category_code: "6011"
+        latitude: 0.3476
+        longitude: 32.5825
+        device_fingerprint: tok_AgntP0sT3rm1nal00000C030
+        agent_id: tok_Ag3ntK4mp4l4C3ntr4l00004
+        counterparty_country: UG
+        transaction_timestamp: "2026-09-17T17:45:00Z"
+    IngestCard:
+      summary: CARD-present purchase (Nairobi supermarket)
+      value:
+        transaction_id: 0b9a8c7d-6e5f-4a3b-9c2d-1e0f9a8b7c6d
+        account_id: tok_CardH0ld3rAcct0000000N10
+        counterparty_id: tok_M3rchNa1r0b1Sup3rm4rk3t1
+        amount: "3450.50"
+        currency: KES
+        channel: CARD
+        merchant_category_code: "5411"
+        merchant_name: Synthetic Supermarket 001
+        latitude: -1.2864
+        longitude: 36.8172
+        device_fingerprint: tok_P0sT3rm1n4lNa1r0b1000070
+        counterparty_country: KE
+        transaction_timestamp: "2026-09-17T12:30:45Z"
+    IngestOnline:
+      summary: ONLINE card-not-present purchase with an EAC cross-border merchant
+      value:
+        transaction_id: 5e6f7a8b-9c0d-4e1f-a2b3-c4d5e6f7a8b9
+        account_id: tok_0nl1n3Shopp3rAcct000T010
+        counterparty_id: tok_M3rchD4r3sS4l4amStor3001
+        amount: "120000.00"
+        currency: TZS
+        channel: ONLINE
+        merchant_category_code: "5732"
+        merchant_name: Synthetic Electronics 002
+        latitude: -6.7924
+        longitude: 39.2083
+        device_fingerprint: tok_Br0ws3rF1ng3rpr1ntW3b008
+        counterparty_country: TZ
+        transaction_timestamp: "2026-09-17T21:10:05Z"
+    IngestBankTransfer:
+      summary: BANK_TRANSFER salary remittance across an EAC corridor (Goma to Kigali)
+      value:
+        transaction_id: 9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b6a
+        account_id: tok_S4l4ryPayr0llG0m4Acct001
+        counterparty_id: tok_Rec1p13ntK1g4l1Acct00009
+        amount: "450000.00"
+        currency: CDF
+        channel: BANK_TRANSFER
+        merchant_category_code: "4829"
+        latitude: -1.6792
+        longitude: 29.2228
+        device_fingerprint: tok_B4nk1ngAppD3v1c3G0m40010
+        counterparty_country: RW
+        transaction_timestamp: "2026-09-30T09:00:00Z"
+    DecisionDeclined:
+      summary: HIGH risk — declined and auto-blocked
+      value:
+        transaction_id: 3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11
+        decision: DECLINE
+        risk_tier: HIGH
+        reason_codes: [VELOCITY_SPIKE, NEW_COUNTERPARTY, RECENT_SIM_SWAP]
+        scoring_result_id: 2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d
+        model_version: fs-ensemble-2026.09.1
+        decision_latency_ms: 31
+        review_deadline_at: null
+        ml_unavailable_fallback: false
+    DecisionHold:
+      summary: MEDIUM risk — held for analyst review (D-14)
+      value:
+        transaction_id: 7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60
+        decision: HOLD
+        risk_tier: MEDIUM
+        reason_codes: [UNUSUAL_HOUR, AMOUNT_ABOVE_NORMAL]
+        scoring_result_id: 8b7a6c5d-4e3f-4a2b-9c1d-0e9f8a7b6c5d
+        model_version: fs-ensemble-2026.09.1
+        decision_latency_ms: 28
+        review_deadline_at: "2026-09-17T06:02:41Z"
+        ml_unavailable_fallback: false
+    DecisionApproved:
+      summary: LOW risk — approved
+      value:
+        transaction_id: 0b9a8c7d-6e5f-4a3b-9c2d-1e0f9a8b7c6d
+        decision: APPROVE
+        risk_tier: LOW
+        reason_codes: []
+        scoring_result_id: 1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f
+        model_version: fs-ensemble-2026.09.1
+        decision_latency_ms: 19
+        review_deadline_at: null
+        ml_unavailable_fallback: false
+
+  schemas:
+    # --- primitives ------------------------------------------------------------------------------
+    Token:
+      type: string
+      pattern: "^tok_[A-Za-z0-9]{24,64}$"
+      description: Opaque token issued by the institution's tokenisation service; never raw PII
+    DecimalAmount:
+      type: string
+      pattern: "^(0|[1-9][0-9]{0,13})(\\.[0-9]{1,4})?$"
+      description: Non-negative decimal with at most 14 integer digits and 4 decimals (DECIMAL(18,4))
+    PositiveAmount:
+      allOf:
+        - $ref: "#/components/schemas/DecimalAmount"
+        - not:
+            pattern: "^0(\\.0{1,4})?$"
+      description: DecimalAmount greater than zero
+    CurrencyCode:
+      type: string
+      enum: [RWF, KES, TZS, UGX, CDF, BIF, SSP, SOS, USD, EUR]
+      description: ISO 4217 codes accepted (matches the Java CurrencyCode enum)
+    Money:
+      type: object
+      required: [amount, currency]
+      additionalProperties: false
+      properties:
+        amount: { $ref: "#/components/schemas/DecimalAmount" }
+        currency: { $ref: "#/components/schemas/CurrencyCode" }
+    CountryCode:
+      type: string
+      pattern: "^[A-Z]{2}$"
+      description: ISO 3166-1 alpha-2
+    Timestamp:
+      type: string
+      format: date-time
+      pattern: "Z$"
+      description: RFC 3339 in UTC
+    Channel:
+      type: string
+      enum: [MOBILE_MONEY, CARD, AGENT_BANKING, USSD, ONLINE, BANK_TRANSFER]
+    RiskTier:
+      type: string
+      enum: [HIGH, MEDIUM, LOW]
+    AlertTier:
+      type: string
+      enum: [HIGH, MEDIUM, ANOMALY]
+    Decision:
+      type: string
+      enum: [APPROVE, DECLINE, HOLD]
+    FinalDecisionValue:
+      type: string
+      enum: [APPROVE, DECLINE, HOLD, TIMEOUT_RELEASE]
+    Role:
+      type: string
+      enum: [ANALYST, SENIOR_ANALYST, RISK_OFFICER, ADMIN]
+    UserStatus:
+      type: string
+      enum: [PENDING_APPROVAL, ACTIVE, LOCKED, DEACTIVATED]
+    Locale:
+      type: string
+      enum: [en, rw, fr, sw]
+    Email:
+      type: string
+      format: email
+      maxLength: 254
+    Password:
+      type: string
+      minLength: 8
+      maxLength: 128
+      description: At least one upper-case letter, lower-case letter, digit and special character (FR-07-07)
+      allOf:
+        - pattern: "[A-Z]"
+        - pattern: "[a-z]"
+        - pattern: "[0-9]"
+        - pattern: "[!@#$%^&*]"
+    ReasonCode:
+      type: string
+      pattern: "^[A-Z][A-Z0-9_]{2,63}$"
+      description: Stable machine-readable reason; localised text lives in the console, not the API
+    AlertStatus:
+      type: string
+      enum: [PENDING, IN_REVIEW, CONFIRMED_FRAUD, MARKED_LEGITIMATE, AUTO_RELEASED, ESCALATED, OVERRIDDEN]
+    AuditEventType:
+      type: string
+      description: The twelve audit event types (D-32)
+      enum:
+        [AUTH, USER_ADMIN, TRANSACTION_DECISION, AUTO_BLOCK, CUSTOMER_VERIFICATION, ANALYST_DECISION,
+         SENIOR_OVERRIDE, THRESHOLD_CHANGE, RULE_CHANGE, MODEL_LIFECYCLE, API_KEY_LIFECYCLE,
+         REGULATORY_REPORT]
+    Probability:
+      type: number
+      minimum: 0
+      maximum: 1
+
+    # --- problems (RFC 9457) --------------------------------------------------------------------
+    Problem:
+      type: object
+      required: [type, title, status, correlation_id]
+      properties:
+        type: { type: string, pattern: "^urn:fraudshield:problem:[a-z0-9-]+$" }
+        title: { type: string, maxLength: 200 }
+        status: { type: integer, minimum: 400, maximum: 599 }
+        detail: { type: string, maxLength: 2000 }
+        instance: { type: string, maxLength: 500 }
+        correlation_id: { type: string, format: uuid }
+    ValidationProblem:
+      allOf:
+        - $ref: "#/components/schemas/Problem"
+        - type: object
+          required: [errors]
+          properties:
+            errors:
+              type: array
+              minItems: 1
+              items:
+                type: object
+                required: [field, code, message]
+                additionalProperties: false
+                properties:
+                  field: { type: string, maxLength: 200 }
+                  code: { type: string, pattern: "^[a-z_]{2,64}$" }
+                  message: { type: string, maxLength: 500 }
+    StaleAlertProblem:
+      allOf:
+        - $ref: "#/components/schemas/Problem"
+        - type: object
+          required: [current]
+          properties:
+            current: { $ref: "#/components/schemas/AlertSummary" }
+    PromotionGateProblem:
+      allOf:
+        - $ref: "#/components/schemas/Problem"
+        - type: object
+          required: [gate]
+          properties:
+            gate: { $ref: "#/components/schemas/ShadowGate" }
+
+    # --- ingestion ------------------------------------------------------------------------------
+    TransactionIngestRequest:
+      type: object
+      description: FR-01-02 schema plus the additions in ADR 0011
+      required:
+        [transaction_id, account_id, counterparty_id, amount, currency, channel, merchant_category_code,
+         latitude, longitude, transaction_timestamp]
+      additionalProperties: false
+      properties:
+        transaction_id: { type: string, format: uuid }
+        account_id: { $ref: "#/components/schemas/Token" }
+        counterparty_id: { $ref: "#/components/schemas/Token" }
+        amount: { $ref: "#/components/schemas/PositiveAmount" }
+        currency: { $ref: "#/components/schemas/CurrencyCode" }
+        channel: { $ref: "#/components/schemas/Channel" }
+        merchant_category_code: { type: string, pattern: "^[0-9]{4}$" }
+        merchant_name: { type: string, maxLength: 100 }
+        latitude: { type: number, minimum: -90, maximum: 90 }
+        longitude: { type: number, minimum: -180, maximum: 180 }
+        device_fingerprint:
+          oneOf:
+            - $ref: "#/components/schemas/Token"
+            - type: "null"
+        agent_id: { $ref: "#/components/schemas/Token" }
+        counterparty_country: { $ref: "#/components/schemas/CountryCode" }
+        transaction_timestamp:
+          $ref: "#/components/schemas/Timestamp"
+          description: Not more than 5 minutes in the future (checked by the server clock)
+      allOf:
+        - if:
+            properties: { channel: { const: AGENT_BANKING } }
+          then:
+            required: [agent_id]
+    TransactionBatchRequest:
+      type: object
+      required: [transactions]
+      additionalProperties: false
+      properties:
+        transactions:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          items: { $ref: "#/components/schemas/TransactionIngestRequest" }
+    DecisionResponse:
+      type: object
+      description: Minimal machine response (D-12); model internals stay on staff endpoints
+      required:
+        [transaction_id, decision, risk_tier, reason_codes, scoring_result_id, model_version,
+         decision_latency_ms, review_deadline_at, ml_unavailable_fallback]
+      additionalProperties: false
+      properties:
+        transaction_id: { type: string, format: uuid }
+        decision: { $ref: "#/components/schemas/Decision" }
+        risk_tier: { $ref: "#/components/schemas/RiskTier" }
+        reason_codes:
+          type: array
+          maxItems: 3
+          items: { $ref: "#/components/schemas/ReasonCode" }
+        scoring_result_id: { type: string, format: uuid }
+        model_version: { type: string, maxLength: 100 }
+        decision_latency_ms: { type: integer, minimum: 0 }
+        review_deadline_at:
+          description: Set only for HOLD
+          oneOf:
+            - $ref: "#/components/schemas/Timestamp"
+            - type: "null"
+        ml_unavailable_fallback: { type: boolean }
+      allOf:
+        - if:
+            properties: { decision: { const: HOLD } }
+          then:
+            properties:
+              review_deadline_at: { $ref: "#/components/schemas/Timestamp" }
+    FinalDecision:
+      type: object
+      required: [transaction_id, decision, final, decided_at]
+      additionalProperties: false
+      properties:
+        transaction_id: { type: string, format: uuid }
+        decision: { $ref: "#/components/schemas/FinalDecisionValue" }
+        final: { type: boolean, description: False while HOLD is pending }
+        decided_at: { $ref: "#/components/schemas/Timestamp" }
+        decided_by: { type: string, enum: [MODEL, ANALYST, TIMEOUT_POLICY, CUSTOMER_VERIFICATION, SENIOR_OVERRIDE] }
+        review_deadline_at:
+          oneOf:
+            - $ref: "#/components/schemas/Timestamp"
+            - type: "null"
+    JobAccepted:
+      type: object
+      required: [job_id, accepted, status_url]
+      additionalProperties: false
+      properties:
+        job_id: { type: string, format: uuid }
+        accepted: { type: integer, minimum: 1, maximum: 1000 }
+        status_url: { type: string }
+    JobStatus:
+      type: object
+      required: [job_id, state, total, processed, failed, results]
+      additionalProperties: false
+      properties:
+        job_id: { type: string, format: uuid }
+        state: { type: string, enum: [QUEUED, RUNNING, COMPLETED, FAILED] }
+        total: { type: integer, minimum: 0 }
+        processed: { type: integer, minimum: 0 }
+        failed: { type: integer, minimum: 0 }
+        results:
+          type: array
+          items:
+            type: object
+            required: [transaction_id, outcome]
+            additionalProperties: false
+            properties:
+              transaction_id: { type: string, format: uuid }
+              outcome: { type: string, enum: [DECIDED, REJECTED] }
+              decision: { $ref: "#/components/schemas/DecisionResponse" }
+              problem: { $ref: "#/components/schemas/ValidationProblem" }
+        next_cursor: { type: [string, "null"] }
+    ComponentHealth:
+      type: object
+      required: [status]
+      additionalProperties: false
+      properties:
+        status: { type: string, enum: [UP, DEGRADED, DOWN] }
+        detail: { type: string, maxLength: 200 }
+
+    # --- scoring and explanations ---------------------------------------------------------------
+    ShapContribution:
+      type: object
+      required: [feature, value, shap, direction, template_key]
+      additionalProperties: false
+      properties:
+        feature: { type: string, pattern: "^[a-z][a-z0-9_]{1,63}$" }
+        value:
+          description: Feature value; null when the feature is structurally missing (D-04)
+          type: [number, string, "null"]
+        shap: { type: number, description: Weighted contribution in log-odds margin space (D-05) }
+        direction: { type: string, enum: [INCREASES_RISK, DECREASES_RISK] }
+        template_key: { type: string, pattern: "^feature\\.[a-z0-9_]+\\.[a-z_]+$" }
+    ScoringResult:
+      type: object
+      description: The nine FR-02-01 fields plus identifiers and fallback flag
+      required:
+        [scoring_result_id, transaction_id, ensemble_score, xgboost_score, lightgbm_score, anomaly_score,
+         risk_tier, shap_top5, feature_vector, model_version, scoring_duration_ms, ml_unavailable_fallback]
+      additionalProperties: false
+      properties:
+        scoring_result_id: { type: string, format: uuid }
+        transaction_id: { type: string, format: uuid }
+        ensemble_score: { $ref: "#/components/schemas/Probability" }
+        xgboost_score: { $ref: "#/components/schemas/Probability" }
+        lightgbm_score: { $ref: "#/components/schemas/Probability" }
+        anomaly_score: { $ref: "#/components/schemas/Probability" }
+        risk_tier: { $ref: "#/components/schemas/RiskTier" }
+        shap_top5:
+          type: array
+          maxItems: 5
+          items: { $ref: "#/components/schemas/ShapContribution" }
+        feature_vector:
+          type: object
+          description: All 44 features by name; structurally missing features are null (D-04)
+          minProperties: 44
+          maxProperties: 44
+          additionalProperties:
+            type: [number, string, "null"]
+        model_version: { type: string, maxLength: 100 }
+        scoring_duration_ms: { type: integer, minimum: 0 }
+        ml_unavailable_fallback: { type: boolean }
+    Explanation:
+      type: object
+      required: [transaction_id, base_value, final_margin, calibrated_probability, contributions, summary_template_key]
+      additionalProperties: false
+      properties:
+        transaction_id: { type: string, format: uuid }
+        base_value: { type: number, description: Expected margin (log-odds) }
+        final_margin: { type: number }
+        calibrated_probability: { $ref: "#/components/schemas/Probability" }
+        contributions:
+          type: array
+          minItems: 44
+          maxItems: 44
+          items: { $ref: "#/components/schemas/ShapContribution" }
+        summary_template_key: { type: string }
+        summary_parameters:
+          type: object
+          additionalProperties: { type: [number, string] }
+
+    # --- alerts ---------------------------------------------------------------------------------
+    AlertSummary:
+      type: object
+      description: Card and feed row content (FR-04-03)
+      required:
+        [alert_id, version, transaction_id, tier, status, fraud_probability, amount, channel,
+         masked_account_name, merchant, transaction_timestamp, top_reasons, review_deadline_at]
+      additionalProperties: false
+      properties:
+        alert_id: { type: string, format: uuid }
+        version: { type: integer, minimum: 0 }
+        transaction_id: { type: string, format: uuid }
+        tier: { $ref: "#/components/schemas/AlertTier" }
+        status: { $ref: "#/components/schemas/AlertStatus" }
+        fraud_probability: { $ref: "#/components/schemas/Probability" }
+        expected_loss_rwf: { $ref: "#/components/schemas/DecimalAmount" }
+        amount: { $ref: "#/components/schemas/Money" }
+        channel: { $ref: "#/components/schemas/Channel" }
+        masked_account_name:
+          type: string
+          maxLength: 64
+          description: Masked display value from the PII vault, e.g. "J*** M***"; never a full name
+          pattern: "^[^@\\d]*$"
+        merchant: { type: [string, "null"], maxLength: 100 }
+        transaction_timestamp: { $ref: "#/components/schemas/Timestamp" }
+        top_reasons:
+          type: array
+          maxItems: 3
+          items: { $ref: "#/components/schemas/ShapContribution" }
+        review_deadline_at:
+          oneOf:
+            - $ref: "#/components/schemas/Timestamp"
+            - type: "null"
+        escalated_from_alert_id: { type: [string, "null"], format: uuid }
+    AlertDetail:
+      allOf:
+        - $ref: "#/components/schemas/AlertSummary"
+        - type: object
+          required: [account_token, counterparty_token, summary_template_key, anomaly_score, decisions]
+          properties:
+            account_token: { $ref: "#/components/schemas/Token" }
+            counterparty_token: { $ref: "#/components/schemas/Token" }
+            summary_template_key: { type: string }
+            summary_parameters:
+              type: object
+              additionalProperties: { type: [number, string] }
+            anomaly_score: { $ref: "#/components/schemas/Probability" }
+            decisions:
+              type: array
+              items: { $ref: "#/components/schemas/DecisionRecord" }
+    AlertPage:
+      type: object
+      required: [items, next_cursor]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/AlertSummary" }
+        next_cursor: { type: [string, "null"] }
+    AlertDecisionRequest:
+      type: object
+      required: [decision, comment, alert_version]
+      additionalProperties: false
+      properties:
+        decision: { type: string, enum: [CONFIRM_FRAUD, MARK_LEGITIMATE] }
+        comment: { type: string, minLength: 10, maxLength: 2000 }
+        alert_version: { type: integer, minimum: 0 }
+    AlertDecisionAccepted:
+      type: object
+      required: [decision_id, state, undo_until]
+      additionalProperties: false
+      properties:
+        decision_id: { type: string, format: uuid }
+        state: { type: string, const: PENDING_COMMIT }
+        undo_until: { $ref: "#/components/schemas/Timestamp" }
+    EscalationRequest:
+      type: object
+      required: [target_role, reason, alert_version]
+      additionalProperties: false
+      properties:
+        target_role: { type: string, enum: [SENIOR_ANALYST, RISK_OFFICER] }
+        reason: { type: string, minLength: 10, maxLength: 2000 }
+        alert_version: { type: integer, minimum: 0 }
+    OverrideRequest:
+      type: object
+      required: [original_decision_id, new_decision, reason, alert_version]
+      additionalProperties: false
+      properties:
+        original_decision_id: { type: string, format: uuid }
+        new_decision: { type: string, enum: [CONFIRM_FRAUD, MARK_LEGITIMATE] }
+        reason: { type: string, minLength: 20, maxLength: 2000 }
+        alert_version: { type: integer, minimum: 0 }
+    DecisionRecord:
+      type: object
+      required: [decision_id, decision, analyst, decided_at, state]
+      additionalProperties: false
+      properties:
+        decision_id: { type: string, format: uuid }
+        decision:
+          type: string
+          enum: [CONFIRM_FRAUD, MARK_LEGITIMATE, ESCALATE, AUTO_RELEASED, AUTO_BLOCKED, SENIOR_OVERRIDE]
+        analyst: { $ref: "#/components/schemas/StaffReference" }
+        comment: { type: [string, "null"], maxLength: 2000 }
+        decided_at: { $ref: "#/components/schemas/Timestamp" }
+        state: { type: string, enum: [PENDING_COMMIT, COMMITTED, UNDONE] }
+        override_of_decision_id: { type: [string, "null"], format: uuid }
+        false_positive_confirmed: { type: [boolean, "null"] }
+    StaffReference:
+      type: [object, "null"]
+      required: [user_id, first_name, last_name, role]
+      additionalProperties: false
+      properties:
+        user_id: { type: string, format: uuid }
+        first_name: { type: string, maxLength: 50 }
+        last_name: { type: string, maxLength: 50 }
+        role: { $ref: "#/components/schemas/Role" }
+    DashboardStats:
+      type: object
+      required:
+        [high_open, medium_open, auto_blocked_today, reviewed_today, fraud_prevented_today,
+         average_review_seconds, analysts_online]
+      additionalProperties: false
+      properties:
+        high_open: { type: integer, minimum: 0 }
+        medium_open: { type: integer, minimum: 0 }
+        auto_blocked_today: { type: integer, minimum: 0 }
+        reviewed_today: { type: integer, minimum: 0 }
+        fraud_prevented_today: { $ref: "#/components/schemas/Money" }
+        average_review_seconds: { type: number, minimum: 0 }
+        analysts_online: { type: integer, minimum: 0 }
+    AnalystPerformance:
+      type: object
+      required: [reviewed_today, average_review_seconds, backlog, accuracy_rate, verified_decisions]
+      additionalProperties: false
+      properties:
+        reviewed_today: { type: integer, minimum: 0 }
+        average_review_seconds: { type: number, minimum: 0 }
+        backlog: { type: integer, minimum: 0 }
+        accuracy_rate: { type: [number, "null"], minimum: 0, maximum: 1, description: Null until customer verifications exist }
+        verified_decisions: { type: integer, minimum: 0 }
+
+    # --- accounts -------------------------------------------------------------------------------
+    AccountTransaction:
+      type: object
+      required: [transaction_id, amount, channel, transaction_timestamp, risk_score, risk_tier, outcome]
+      additionalProperties: false
+      properties:
+        transaction_id: { type: string, format: uuid }
+        amount: { $ref: "#/components/schemas/Money" }
+        channel: { $ref: "#/components/schemas/Channel" }
+        transaction_timestamp: { $ref: "#/components/schemas/Timestamp" }
+        risk_score: { $ref: "#/components/schemas/Probability" }
+        risk_tier: { $ref: "#/components/schemas/RiskTier" }
+        outcome: { type: string, enum: [APPROVED, BLOCKED, PENDING] }
+    AccountTransactionPage:
+      type: object
+      required: [items, next_cursor]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          maxItems: 30
+          items: { $ref: "#/components/schemas/AccountTransaction" }
+        next_cursor: { type: [string, "null"] }
+    BehaviourProfile:
+      type: object
+      required: [hourly_counts, amount_histogram, channel_mix, comparison, window_days]
+      additionalProperties: false
+      properties:
+        window_days: { type: integer, const: 90 }
+        hourly_counts:
+          type: array
+          minItems: 24
+          maxItems: 24
+          items: { type: integer, minimum: 0 }
+        amount_histogram:
+          type: array
+          items:
+            type: object
+            required: [lower_rwf, upper_rwf, count]
+            additionalProperties: false
+            properties:
+              lower_rwf: { $ref: "#/components/schemas/DecimalAmount" }
+              upper_rwf: { $ref: "#/components/schemas/DecimalAmount" }
+              count: { type: integer, minimum: 0 }
+        channel_mix:
+          type: array
+          items:
+            type: object
+            required: [channel, count]
+            additionalProperties: false
+            properties:
+              channel: { $ref: "#/components/schemas/Channel" }
+              count: { type: integer, minimum: 0 }
+        comparison:
+          type: array
+          items:
+            type: object
+            required: [attribute, this_transaction, normal, anomalous]
+            additionalProperties: false
+            properties:
+              attribute: { type: string, maxLength: 64 }
+              this_transaction: { type: [string, number, "null"] }
+              normal: { type: [string, number, "null"] }
+              anomalous: { type: boolean }
+    AccountNetwork:
+      type: object
+      required: [nodes, edges]
+      additionalProperties: false
+      properties:
+        nodes:
+          type: array
+          maxItems: 50
+          items:
+            type: object
+            required: [token, degree, confirmed_fraud]
+            additionalProperties: false
+            properties:
+              token: { $ref: "#/components/schemas/Token" }
+              degree: { type: integer, minimum: 0, maximum: 2 }
+              confirmed_fraud: { type: boolean }
+        edges:
+          type: array
+          items:
+            type: object
+            required: [source, target, transaction_count]
+            additionalProperties: false
+            properties:
+              source: { $ref: "#/components/schemas/Token" }
+              target: { $ref: "#/components/schemas/Token" }
+              transaction_count: { type: integer, minimum: 1 }
+
+    # --- risk officer ---------------------------------------------------------------------------
+    PortfolioSummary:
+      type: object
+      required: [period, fraud_prevented, fraud_prevented_count, fraud_rate_by_channel, fraud_rate_by_mcc, top_counterparties]
+      additionalProperties: false
+      properties:
+        period: { type: string, enum: [day, week, month] }
+        fraud_prevented: { $ref: "#/components/schemas/Money" }
+        fraud_prevented_count: { type: integer, minimum: 0 }
+        fraud_rate_by_channel:
+          type: array
+          items:
+            type: object
+            required: [channel, rate, transactions]
+            additionalProperties: false
+            properties:
+              channel: { $ref: "#/components/schemas/Channel" }
+              rate: { $ref: "#/components/schemas/Probability" }
+              transactions: { type: integer, minimum: 0 }
+        fraud_rate_by_mcc:
+          type: array
+          items:
+            type: object
+            required: [merchant_category_code, rate, transactions]
+            additionalProperties: false
+            properties:
+              merchant_category_code: { type: string, pattern: "^[0-9]{4}$" }
+              rate: { $ref: "#/components/schemas/Probability" }
+              transactions: { type: integer, minimum: 0 }
+        top_counterparties:
+          type: array
+          maxItems: 10
+          items:
+            type: object
+            required: [counterparty_token, confirmed_fraud_count, amount]
+            additionalProperties: false
+            properties:
+              counterparty_token: { $ref: "#/components/schemas/Token" }
+              confirmed_fraud_count: { type: integer, minimum: 0 }
+              amount: { $ref: "#/components/schemas/Money" }
+    Heatmap:
+      type: object
+      required: [period, k_anonymity_threshold, cells]
+      additionalProperties: false
+      properties:
+        period: { type: string, enum: [day, week, month] }
+        k_anonymity_threshold: { type: integer, const: 10 }
+        cells:
+          type: array
+          items:
+            type: object
+            required: [country, district_code, fraud_events]
+            additionalProperties: false
+            properties:
+              country: { $ref: "#/components/schemas/CountryCode" }
+              district_code: { type: string, maxLength: 32 }
+              fraud_events: { type: integer, minimum: 10 }
+    ModelPerformance:
+      type: object
+      required: [model_version, window_hours, label_coverage, auc_roc, precision, recall, f1, false_positive_rate, drift_alert, baseline_auc_roc]
+      additionalProperties: false
+      properties:
+        model_version: { type: string, maxLength: 100 }
+        window_hours: { type: integer, minimum: 1 }
+        label_coverage: { $ref: "#/components/schemas/Probability" }
+        auc_roc: { type: [number, "null"], minimum: 0, maximum: 1 }
+        baseline_auc_roc: { type: number, minimum: 0, maximum: 1 }
+        precision: { type: [number, "null"], minimum: 0, maximum: 1 }
+        recall: { type: [number, "null"], minimum: 0, maximum: 1 }
+        f1: { type: [number, "null"], minimum: 0, maximum: 1 }
+        false_positive_rate: { type: [number, "null"], minimum: 0, maximum: 1 }
+        drift_alert: { type: boolean, description: True when AUC-ROC dropped more than 0.03 from baseline }
+        top_feature_psi:
+          type: array
+          items:
+            type: object
+            required: [feature, psi]
+            additionalProperties: false
+            properties:
+              feature: { type: string }
+              psi: { type: number, minimum: 0 }
+    Campaign:
+      type: object
+      required: [campaign_id, campaign_name, detected_at, shared_feature_type, shared_feature_value, transaction_count, total_amount, status, version]
+      additionalProperties: false
+      properties:
+        campaign_id: { type: string, format: uuid }
+        campaign_name: { type: string, pattern: "^CMP-[0-9]{8}-(DEVICE|COUNTERPARTY|GEOGRAPHIC|MCC)-[0-9]{4}$" }
+        detected_at: { $ref: "#/components/schemas/Timestamp" }
+        shared_feature_type: { type: string, enum: [DEVICE, COUNTERPARTY, GEOGRAPHIC, MCC] }
+        shared_feature_value: { type: string, maxLength: 128 }
+        transaction_count: { type: integer, minimum: 5 }
+        total_amount: { $ref: "#/components/schemas/Money" }
+        status: { type: string, enum: [ACTIVE, CLOSED] }
+        version: { type: integer, minimum: 0 }
+    CampaignPage:
+      type: object
+      required: [items, next_cursor]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Campaign" }
+        next_cursor: { type: [string, "null"] }
+    RuleExpression:
+      description: Rule DSL AST (E.6); fields are raw request fields or the 44 registered features
+      oneOf:
+        - type: object
+          required: [all]
+          additionalProperties: false
+          properties:
+            all: { type: array, minItems: 1, items: { $ref: "#/components/schemas/RuleExpression" } }
+        - type: object
+          required: [any]
+          additionalProperties: false
+          properties:
+            any: { type: array, minItems: 1, items: { $ref: "#/components/schemas/RuleExpression" } }
+        - type: object
+          required: [not]
+          additionalProperties: false
+          properties:
+            not: { $ref: "#/components/schemas/RuleExpression" }
+        - type: object
+          required: [field, op]
+          additionalProperties: false
+          properties:
+            field: { type: string, pattern: "^[a-z][a-z0-9_]{1,63}$" }
+            op: { type: string, enum: [eq, ne, gt, gte, lt, lte, in, not_in, between, is_null, is_not_null] }
+            value: { type: [string, number, boolean, array, "null"] }
+    RuleDraft:
+      type: object
+      required: [rule_name, description, expression, risk_tier_override]
+      additionalProperties: false
+      properties:
+        rule_name: { type: string, pattern: "^[A-Za-z0-9 _.-]{3,80}$" }
+        description: { type: string, minLength: 10, maxLength: 1000 }
+        expression: { $ref: "#/components/schemas/RuleExpression" }
+        risk_tier_override: { type: string, enum: [HIGH, MEDIUM], description: Rules may only raise a tier }
+    Rule:
+      allOf:
+        - $ref: "#/components/schemas/RuleDraft"
+        - type: object
+          required: [rule_id, version, state, created_by, created_at, trigger_count, last_triggered_at]
+          properties:
+            rule_id: { type: string, format: uuid }
+            version: { type: integer, minimum: 1 }
+            state: { type: string, enum: [ENABLED, DISABLED, DELETED] }
+            created_by: { $ref: "#/components/schemas/StaffReference" }
+            created_at: { $ref: "#/components/schemas/Timestamp" }
+            trigger_count: { type: integer, minimum: 0 }
+            last_triggered_at:
+              oneOf:
+                - $ref: "#/components/schemas/Timestamp"
+                - type: "null"
+    ChannelThreshold:
+      type: object
+      required: [channel, medium_threshold, high_threshold]
+      additionalProperties: false
+      description: Half-open tiers — HIGH ≥ high; MEDIUM ≥ medium and < high; LOW otherwise (E.6)
+      properties:
+        channel: { $ref: "#/components/schemas/Channel" }
+        medium_threshold: { $ref: "#/components/schemas/Probability" }
+        high_threshold: { $ref: "#/components/schemas/Probability" }
+        medium_timeout_policy: { type: string, enum: [RELEASE_WITH_TIMEOUT_LABEL, DECLINE_AND_VERIFY] }
+    ThresholdSet:
+      type: object
+      required: [version, effective_at, channels]
+      additionalProperties: false
+      properties:
+        version: { type: integer, minimum: 1 }
+        effective_at: { $ref: "#/components/schemas/Timestamp" }
+        channels:
+          type: array
+          minItems: 6
+          maxItems: 6
+          items: { $ref: "#/components/schemas/ChannelThreshold" }
+    ThresholdUpdate:
+      type: object
+      required: [base_version, channels, reason]
+      additionalProperties: false
+      properties:
+        base_version: { type: integer, minimum: 1 }
+        reason: { type: string, minLength: 10, maxLength: 500 }
+        channels:
+          type: array
+          minItems: 1
+          maxItems: 6
+          items: { $ref: "#/components/schemas/ChannelThreshold" }
+    SarReport:
+      type: object
+      required: [report_id, version, template_version, status, transaction_ids, created_at, fields, watermark]
+      additionalProperties: false
+      properties:
+        report_id: { type: string, format: uuid }
+        version: { type: integer, minimum: 0 }
+        template_version: { type: string, maxLength: 32 }
+        status: { type: string, enum: [DRAFT, SIGNED_OFF] }
+        transaction_ids:
+          type: array
+          minItems: 1
+          items: { type: string, format: uuid }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        signed_off_by: { $ref: "#/components/schemas/StaffReference" }
+        watermark: { type: string, const: "Draft — requires compliance review" }
+        fields:
+          type: array
+          items:
+            type: object
+            required: [key, value, confirmation]
+            additionalProperties: false
+            properties:
+              key: { type: string, maxLength: 64 }
+              value: { type: [string, number, "null"] }
+              confirmation: { type: string, enum: [CONFIRMED_FROM_PRIMARY_SOURCE, UNCONFIRMED_FIELD] }
+    SarReportPage:
+      type: object
+      required: [items, next_cursor]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/SarReport" }
+        next_cursor: { type: [string, "null"] }
+
+    # --- auth and staff -------------------------------------------------------------------------
+    LoginRequest:
+      type: object
+      required: [email, password]
+      additionalProperties: false
+      properties:
+        email: { $ref: "#/components/schemas/Email" }
+        password: { type: string, minLength: 1, maxLength: 128 }
+    GoogleSignInRequest:
+      type: object
+      required: [authorization_code, code_verifier, redirect_uri]
+      additionalProperties: false
+      properties:
+        authorization_code: { type: string, minLength: 10, maxLength: 2048 }
+        code_verifier: { type: string, pattern: "^[A-Za-z0-9._~-]{43,128}$" }
+        redirect_uri: { type: string, maxLength: 2048 }
+    TokenResponse:
+      type: object
+      required: [access_token, token_type, expires_in, user]
+      additionalProperties: false
+      properties:
+        access_token: { type: string }
+        token_type: { type: string, const: Bearer }
+        expires_in: { type: integer, const: 900 }
+        user: { $ref: "#/components/schemas/StaffUser" }
+    PendingApproval:
+      type: object
+      required: [status, message_key]
+      additionalProperties: false
+      properties:
+        status: { type: string, const: PENDING_APPROVAL }
+        message_key: { type: string }
+    SingleUseTokenRequest:
+      type: object
+      required: [token]
+      additionalProperties: false
+      properties:
+        token: { type: string, pattern: "^[A-Za-z0-9_-]{22,128}$" }
+    PersonName:
+      type: string
+      minLength: 2
+      maxLength: 50
+      pattern: "^[A-Za-zÀ-ÖØ-öø-ÿĀ-ž][A-Za-zÀ-ÖØ-öø-ÿĀ-ž'-]*$"
+      description: >-
+        Letters (Latin, Latin-1 Supplement and Latin Extended-A, covering English, French,
+        Kinyarwanda and Kiswahili names), hyphens and apostrophes (SRS 5.3). An explicit class rather
+        than \p{L} so Java, JavaScript and Python evaluate it identically.
+    PhoneE164:
+      type: string
+      pattern: "^\\+[1-9][0-9]{6,14}$"
+    EmployeeId:
+      type: string
+      pattern: "^[A-Za-z0-9]{4,20}$"
+    RegistrationRequest:
+      type: object
+      description: Department and requested role are separate; the granted role is set by an administrator (D-24)
+      required: [first_name, last_name, email, phone, employee_id, department, requested_role, password, preferred_locale]
+      additionalProperties: false
+      properties:
+        first_name: { $ref: "#/components/schemas/PersonName" }
+        last_name: { $ref: "#/components/schemas/PersonName" }
+        email: { $ref: "#/components/schemas/Email" }
+        phone: { $ref: "#/components/schemas/PhoneE164" }
+        employee_id: { $ref: "#/components/schemas/EmployeeId" }
+        department: { type: string, enum: [FRAUD_OPERATIONS, RISK, COMPLIANCE, IT, OTHER] }
+        requested_role: { $ref: "#/components/schemas/Role" }
+        password: { $ref: "#/components/schemas/Password" }
+        preferred_locale: { $ref: "#/components/schemas/Locale" }
+    StaffUser:
+      type: object
+      required: [user_id, first_name, last_name, email, role, status, employee_id, department, preferred_locale, created_at]
+      additionalProperties: false
+      properties:
+        user_id: { type: string, format: uuid }
+        first_name: { $ref: "#/components/schemas/PersonName" }
+        last_name: { $ref: "#/components/schemas/PersonName" }
+        email: { $ref: "#/components/schemas/Email" }
+        phone: { oneOf: [{ $ref: "#/components/schemas/PhoneE164" }, { type: "null" }] }
+        avatar_url: { type: [string, "null"], maxLength: 2048 }
+        role: { $ref: "#/components/schemas/Role" }
+        requested_role: { oneOf: [{ $ref: "#/components/schemas/Role" }, { type: "null" }] }
+        status: { $ref: "#/components/schemas/UserStatus" }
+        employee_id: { $ref: "#/components/schemas/EmployeeId" }
+        department: { type: string, enum: [FRAUD_OPERATIONS, RISK, COMPLIANCE, IT, OTHER] }
+        preferred_locale: { $ref: "#/components/schemas/Locale" }
+        email_verified: { type: boolean }
+        linked_providers:
+          type: array
+          items: { type: string, enum: [GOOGLE] }
+        last_login_at: { type: [string, "null"], format: date-time }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+    StaffUserCreate:
+      type: object
+      required: [first_name, last_name, email, employee_id, department, role, preferred_locale]
+      additionalProperties: false
+      properties:
+        first_name: { $ref: "#/components/schemas/PersonName" }
+        last_name: { $ref: "#/components/schemas/PersonName" }
+        email: { $ref: "#/components/schemas/Email" }
+        phone: { $ref: "#/components/schemas/PhoneE164" }
+        employee_id: { $ref: "#/components/schemas/EmployeeId" }
+        department: { type: string, enum: [FRAUD_OPERATIONS, RISK, COMPLIANCE, IT, OTHER] }
+        role: { $ref: "#/components/schemas/Role" }
+        preferred_locale: { $ref: "#/components/schemas/Locale" }
+    StaffUserUpdate:
+      type: object
+      minProperties: 2
+      required: [version]
+      additionalProperties: false
+      properties:
+        version: { type: integer, minimum: 0 }
+        first_name: { $ref: "#/components/schemas/PersonName" }
+        last_name: { $ref: "#/components/schemas/PersonName" }
+        phone: { $ref: "#/components/schemas/PhoneE164" }
+        department: { type: string, enum: [FRAUD_OPERATIONS, RISK, COMPLIANCE, IT, OTHER] }
+        role: { $ref: "#/components/schemas/Role" }
+        status: { type: string, enum: [ACTIVE, DEACTIVATED, LOCKED] }
+        preferred_locale: { $ref: "#/components/schemas/Locale" }
+    StaffUserPage:
+      type: object
+      required: [items, next_cursor]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/StaffUser" }
+        next_cursor: { type: [string, "null"] }
+    IpAllowlistEntryCreate:
+      type: object
+      required: [cidr, description]
+      additionalProperties: false
+      properties:
+        cidr: { type: string, pattern: "^[0-9a-fA-F:.]+/[0-9]{1,3}$" }
+        description: { type: string, minLength: 3, maxLength: 200 }
+    IpAllowlistEntry:
+      allOf:
+        - $ref: "#/components/schemas/IpAllowlistEntryCreate"
+        - type: object
+          required: [entry_id, created_by, created_at]
+          properties:
+            entry_id: { type: string, format: uuid }
+            created_by: { $ref: "#/components/schemas/StaffReference" }
+            created_at: { $ref: "#/components/schemas/Timestamp" }
+    ApiKeyScope:
+      type: string
+      enum: ["ingest:write", "decisions:read", "jobs:read"]
+    ApiKeyCreate:
+      type: object
+      required: [name, scopes]
+      additionalProperties: false
+      properties:
+        name: { type: string, pattern: "^[A-Za-z0-9 _.-]{3,80}$" }
+        scopes:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/ApiKeyScope" }
+        webhook_url: { type: [string, "null"], format: uri, pattern: "^https://" }
+    ApiKey:
+      type: object
+      required: [key_id, name, scopes, last_four, state, created_at, expires_at, last_used_at]
+      additionalProperties: false
+      properties:
+        key_id: { type: string, pattern: "^[a-z0-9]{12}$" }
+        name: { type: string }
+        scopes:
+          type: array
+          items: { $ref: "#/components/schemas/ApiKeyScope" }
+        last_four: { type: string, pattern: "^[A-Za-z0-9]{4}$" }
+        state: { type: string, enum: [ACTIVE, ROTATING, REVOKED] }
+        created_at: { $ref: "#/components/schemas/Timestamp" }
+        expires_at: { type: [string, "null"], format: date-time, description: Set during the 24-hour rotation overlap }
+        last_used_at: { type: [string, "null"], format: date-time }
+    ApiKeyCreated:
+      allOf:
+        - $ref: "#/components/schemas/ApiKey"
+        - type: object
+          required: [raw_key]
+          properties:
+            raw_key:
+              type: string
+              pattern: "^fsk_(dev|test|stg|prod)_[a-z0-9]{12}_[A-Za-z0-9_-]{43}$"
+              description: Shown exactly once; only an HMAC of the secret is stored (D-19)
+            webhook_signing_secret:
+              type: [string, "null"]
+              description: Shown exactly once; used to verify decision.final webhooks
+
+    # --- models, datasets, health, audit ----------------------------------------------------------
+    ShadowGate:
+      type: object
+      description: Promotion requirements (D-11)
+      required: [shadow_hours, shadow_scored, auc_delta, label_coverage, psi, passed, reasons]
+      additionalProperties: false
+      properties:
+        shadow_hours: { type: number, minimum: 0 }
+        shadow_scored: { type: integer, minimum: 0 }
+        auc_delta: { type: [number, "null"] }
+        label_coverage: { $ref: "#/components/schemas/Probability" }
+        psi: { type: [number, "null"], minimum: 0 }
+        passed: { type: boolean }
+        reasons:
+          type: array
+          items:
+            type: string
+            enum:
+              [SHADOW_UNDER_24_HOURS, SHADOW_UNDER_50000_SCORED, AUC_DELTA_BELOW_MINUS_0_010,
+               INSUFFICIENT_LABELS, PSI_AT_OR_ABOVE_0_2, EVALUATION_GATE_FAILED]
+    ModelVersion:
+      type: object
+      required: [model_version, aliases, training_date, training_dataset_size, metrics, mlflow_run_id]
+      additionalProperties: false
+      properties:
+        model_version: { type: string, maxLength: 100 }
+        aliases:
+          type: array
+          items: { type: string, enum: [production, shadow, previous_production] }
+        training_date: { $ref: "#/components/schemas/Timestamp" }
+        training_dataset_size: { type: integer, minimum: 0 }
+        metrics:
+          type: object
+          additionalProperties: false
+          properties:
+            auc_roc: { type: number }
+            recall_at_1pct_fpr: { type: number }
+            precision_at_1pct_fpr: { type: number }
+            recall: { type: number }
+            precision: { type: number }
+            f1: { type: number }
+            ece: { type: number }
+        mlflow_run_id: { type: string, maxLength: 64 }
+        shadow_gate: { oneOf: [{ $ref: "#/components/schemas/ShadowGate" }, { type: "null" }] }
+    TrainingDataset:
+      type: object
+      required: [dataset_id, name, rows, uploaded_at, validation_state, sha256]
+      additionalProperties: false
+      properties:
+        dataset_id: { type: string, format: uuid }
+        name: { type: string }
+        rows: { type: integer, minimum: 0 }
+        uploaded_at: { $ref: "#/components/schemas/Timestamp" }
+        sha256: { type: string, pattern: "^[0-9a-f]{64}$" }
+        validation_state: { type: string, enum: [VALIDATING, ACCEPTED, REJECTED] }
+        rejection_reasons:
+          type: array
+          items: { type: string }
+    RetrainingJob:
+      type: object
+      required: [job_id, dataset_id, state, progress_percent, started_at]
+      additionalProperties: false
+      properties:
+        job_id: { type: string, format: uuid }
+        dataset_id: { type: string, format: uuid }
+        state: { type: string, enum: [QUEUED, TRAINING, EVALUATING, COMPLETED, FAILED] }
+        progress_percent: { type: integer, minimum: 0, maximum: 100 }
+        started_at: { $ref: "#/components/schemas/Timestamp" }
+        candidate_model_version: { type: [string, "null"] }
+        evaluation_passed: { type: [boolean, "null"] }
+    SystemHealth:
+      type: object
+      required:
+        [kafka_consumer_lag, scoring_latency_ms, api_error_rate, redis_hit_ratio, db_pool_in_use,
+         auto_block_rate, alert_queue_depth, review_duration_seconds, degraded_modes]
+      additionalProperties: false
+      properties:
+        kafka_consumer_lag:
+          type: array
+          items:
+            type: object
+            required: [topic, group, lag]
+            additionalProperties: false
+            properties:
+              topic: { type: string }
+              group: { type: string }
+              lag: { type: integer, minimum: 0 }
+        scoring_latency_ms:
+          type: object
+          required: [p50, p95, p99]
+          additionalProperties: false
+          properties:
+            p50: { type: number, minimum: 0 }
+            p95: { type: number, minimum: 0 }
+            p99: { type: number, minimum: 0 }
+        api_error_rate: { $ref: "#/components/schemas/Probability" }
+        redis_hit_ratio: { $ref: "#/components/schemas/Probability" }
+        db_pool_in_use: { $ref: "#/components/schemas/Probability" }
+        auto_block_rate: { $ref: "#/components/schemas/Probability" }
+        alert_queue_depth:
+          type: object
+          required: [HIGH, MEDIUM, ANOMALY]
+          additionalProperties: false
+          properties:
+            HIGH: { type: integer, minimum: 0 }
+            MEDIUM: { type: integer, minimum: 0 }
+            ANOMALY: { type: integer, minimum: 0 }
+        review_duration_seconds:
+          type: object
+          required: [p50, p90]
+          additionalProperties: false
+          properties:
+            p50: { type: number, minimum: 0 }
+            p90: { type: number, minimum: 0 }
+        degraded_modes:
+          type: array
+          items: { type: string, enum: [ML_UNAVAILABLE, DEGRADED_MODE, KAFKA_SPOOLING, REALTIME_PAUSED] }
+    AuditEvent:
+      type: object
+      required: [event_id, event_type, action, entity_type, entity_id, event_at, actor, row_hash]
+      additionalProperties: false
+      properties:
+        event_id: { type: string, format: uuid }
+        event_type: { $ref: "#/components/schemas/AuditEventType" }
+        action: { type: string, pattern: "^[A-Z][A-Z_]{1,63}$" }
+        entity_type: { type: string, maxLength: 64 }
+        entity_id: { type: string, maxLength: 128 }
+        event_at: { $ref: "#/components/schemas/Timestamp" }
+        actor:
+          description: Null for system events
+          oneOf:
+            - $ref: "#/components/schemas/StaffReference"
+            - type: "null"
+        before_value: { type: [object, "null"] }
+        after_value: { type: [object, "null"] }
+        ip_address: { type: [string, "null"], maxLength: 45 }
+        row_hash: { type: string, pattern: "^[0-9a-f]{64}$" }
+    AuditEventPage:
+      type: object
+      required: [items, next_cursor]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/AuditEvent" }
+        next_cursor: { type: [string, "null"] }
+    CircuitBreaker:
+      type: object
+      required: [merchant_category_code, state, window_fraud_rate, window_transactions, opened_at]
+      additionalProperties: false
+      properties:
+        merchant_category_code: { type: string, pattern: "^[0-9]{4}$" }
+        state: { type: string, enum: [CLOSED, OPEN] }
+        window_fraud_rate: { $ref: "#/components/schemas/Probability" }
+        window_transactions: { type: integer, minimum: 0 }
+        opened_at: { type: [string, "null"], format: date-time }
+        clean_since: { type: [string, "null"], format: date-time }
+    WebhookDelivery:
+      type: object
+      required: [delivery_id, event, transaction_id, attempts, last_status, last_attempt_at]
+      additionalProperties: false
+      properties:
+        delivery_id: { type: string, format: uuid }
+        event: { type: string, const: decision.final }
+        transaction_id: { type: string, format: uuid }
+        attempts: { type: integer, minimum: 1 }
+        last_status: { type: [integer, "null"] }
+        last_attempt_at: { $ref: "#/components/schemas/Timestamp" }
+    WebhookDeliveryPage:
+      type: object
+      required: [items, next_cursor]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/WebhookDelivery" }
+        next_cursor: { type: [string, "null"] }

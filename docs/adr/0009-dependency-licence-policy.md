@@ -89,8 +89,9 @@ generative property testing of the decision engine — is kept:
 | Exceptions | keyed by ecosystem, name **and version**; an upgrade removes the exception and forces review | `test_exceptions_are_version_pinned` |
 
 Current exceptions, verified from shipped licence files on 2026-09-17: `nodeenv@1.10.0`
-(BSD-3-Clause) and `com.tngtech.archunit:archunit@1.5.0` (Apache-2.0 AND BSD-3-Clause for shaded
-ASM).
+(BSD-3-Clause), `com.tngtech.archunit:archunit@1.5.0` (Apache-2.0 AND BSD-3-Clause for shaded
+ASM), and, added with the M1 contract tests, `jsonschema-path@0.5.0` and `pathable@0.6.0`
+(Apache-2.0) and `openapi-schema-validator@0.9.0` (BSD-3-Clause).
 
 ## Consequences
 

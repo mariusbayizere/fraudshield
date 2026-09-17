@@ -8,7 +8,7 @@ requires-python = "==3.12.*"
 package = false
 
 [tool.uv.workspace]
-members = ["tools", "ml"]
+members = ["tools", "ml", "contracts"]
 
 [dependency-groups]
 dev = [
@@ -17,6 +17,7 @@ dev = [
     "pytest-cov==7.1.0",
     "ruff==0.16.8",
     "types-PyYAML==6.0.12.20260906",
+    "types-jsonschema==4.26.0.20260518",
     "pre-commit==4.6.2",
 ]
 
@@ -29,7 +30,7 @@ select = ["E", "F", "W", "I", "N", "UP", "B", "S", "A", "C4", "DTZ", "PT", "RET"
 ignore = ["PLR2004"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["fraudshield_tools", "fraudshield_ml"]
+known-first-party = ["fraudshield_tools", "fraudshield_ml", "fraudshield_contracts"]
 
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**" = ["S101", "PLR0913"]

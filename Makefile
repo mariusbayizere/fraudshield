@@ -50,21 +50,22 @@ ps: ## Show local stack status
 
 .PHONY: lint
 lint: ## Lint and format-check all components
-	uv run ruff check tools ml
-	uv run ruff format --check tools ml
+	uv run ruff check tools ml contracts
+	uv run ruff format --check tools ml contracts
 	$(PNPM) lint
 	$(PNPM) format:check
 	$(MVNW) -q checkstyle:check
 
 .PHONY: typecheck
 typecheck: ## Strict type checks (mypy, tsc)
-	uv run mypy tools/src tools/tests ml/src ml/tests
+	uv run mypy tools/src tools/tests ml/src ml/tests contracts/src contracts/tests
 	$(PNPM) typecheck
 
 .PHONY: test-python
 test-python: ## Python unit tests with the 90% line-coverage gate (SRS 8.1)
 	cd tools && uv run pytest -q
 	cd ml && uv run pytest -q
+	cd contracts && uv run pytest -q
 
 .PHONY: test-java
 test-java: ## Java build, unit tests, SpotBugs and coverage gate (requires-docker tests need Docker)

@@ -39,13 +39,15 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           enable-cache: true
       - run: uv sync --all-packages --locked
-      - run: uv run ruff check tools ml
-      - run: uv run ruff format --check tools ml
-      - run: uv run mypy tools/src tools/tests ml/src ml/tests
+      - run: uv run ruff check tools ml contracts
+      - run: uv run ruff format --check tools ml contracts
+      - run: uv run mypy tools/src tools/tests ml/src ml/tests contracts/src contracts/tests
       - run: uv run pytest -q
         working-directory: tools
       - run: uv run pytest -q
         working-directory: ml
+      - run: uv run pytest -q
+        working-directory: contracts
 
   java:
     name: java (checkstyle, junit, spotbugs, jacoco)
