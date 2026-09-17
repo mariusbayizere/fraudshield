@@ -116,6 +116,39 @@ properties matter more than realism details:
 - Each scenario has a design note in `docs/ml/scenarios/`. Notes describe the mechanism, detection
   signals, legitimate look-alikes and assumed parameters, at detection level only.
 
+### 6a. SRS targets are met by construction, not by sampling luck
+
+Owner direction, 2026-09-17: the fraud-rate and country-mix targets must hold at any size, and a
+deviation must be explainable as bias or as noise. Probabilistic sampling met them only in
+expectation, and a 200K-row run missed the test-period fraud rate (0.605% against 0.91%) and the
+country mix (2.2 pp) well outside tolerance. Four changes make the targets structural:
+
+- **A monthly fraud intensity schedule.** `fraud.monthly_intensity` (24 values,
+  CALIBRATED_TO_SRS_TARGET) carries a rising trend with month-to-month variation. `fraud_schedule`
+  rescales it so that the volume-weighted overall rate is exactly 0.87% and refuses to run if the
+  planned test period lands more than 0.02 pp from 0.91%.
+- **Exact scenario quotas.** Each month's target is split across the scenarios by their ML-DATA-04
+  shares and placed on exactly that many victims, chosen by the smallest keyed draw among the
+  eligible customers. Nothing is left to per-customer coin flips.
+- **Capacity-aware reallocation.** A scenario can be infeasible in a month: at the start of the
+  simulation no customer has reached its bust-out month, so synthetic identity cannot run. Its
+  share is reallocated to the scenarios that have spare capacity, so the month still hits its
+  fraud target exactly while the mix stays as close to ML-DATA-04 as the population allows. The
+  generator fails if no scenario has capacity for the month's target.
+- **Exact population quotas.** Country, then segment within country, are assigned by sequential
+  apportionment, so every prefix of the population is within one customer of its quota. Activity
+  multipliers are placed on the log-normal's quantiles and rescaled to average one per country, so
+  volume and mix no longer inherit the tail's sampling variance.
+
+Verification reports a Wilson 95% confidence interval for each month's fraud rate next to its
+target, so noise (the interval covers the target) is distinguishable from bias (it does not). The
+same standard sizes the identifier-construction band: the wider of 0.03 and 1.96 null standard
+errors for the number of distinct tokens actually measured, because an AUC over a few hundred fraud
+tokens is noisy by construction.
+
+Dataset-level target checks run on the test period, which the SRS specifies as a dataset property.
+No model metric or feature-label statistic is computed on the test period during generator work.
+
 ### 7. Dependencies
 
 `numpy` (BSD-3-Clause), `pyarrow` (Apache-2.0) and `PyYAML` (MIT), all permissive (ADR 0009).
