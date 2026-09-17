@@ -22,7 +22,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  DEVCONTAINER_INPUTS: '^(\.devcontainer/.*|\.tool-versions|\.python-version|\.nvmrc|Makefile|docker-compose[^/]*\.ya?ml|.*Dockerfile[^/]*|infrastructure/docker/.*|uv\.lock|frontend/pnpm-lock\.yaml|backend/(.*/)?pom\.xml|backend/\.mvn/.*|\.github/workflows/devcontainer\.yml)$'
+  DEVCONTAINER_INPUTS: '^(\.devcontainer/.*|\.tool-versions|\.python-version|\.nvmrc|Makefile|docker-compose[^/]*\.ya?ml|.*Dockerfile[^/]*|infrastructure/docker/.*|uv\.lock|(.*/)?pyproject\.toml|frontend/pnpm-lock\.yaml|frontend/package\.json|backend/(.*/)?pom\.xml|backend/\.mvn/.*|\.github/workflows/devcontainer\.yml)$'
 
 jobs:
   changes:

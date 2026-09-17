@@ -43,9 +43,12 @@ Format: ID · title · source · priority · due · description · acceptance.
 
 ### GOV-5 · Devcontainer workflow triggers and default branch
 - **Source:** DR-7 (NIT) · **Priority:** low · **Due:** M2 (re-dated at the M1 close; the default branch is an open owner action, GOV-9)
-- **Status:** triggers widened in the path-filtered workflows (lockfiles, manifests, `.mvn`);
-  remaining: `pyproject.toml`, `tools/**`, `package.json` if post-create depends on them; the owner
-  sets `main` as the default branch so the nightly schedule runs.
+- **Status:** workflow part CLOSED in M2; the default branch remains an owner action (GOV-9).
+  `pyproject.toml` at any depth and `frontend/package.json` are now devcontainer inputs, because
+  post-create installs from them (`uv sync --all-packages --locked`, `pnpm install
+  --frozen-lockfile`). `tools/**` is deliberately not an input: post-create runs the tools through
+  `make ci`, but the container build does not depend on their source, and every change to them is
+  already checked by the `ci` workflow. Adding them would run the heavy build on most commits.
 
 ### GOV-6 · Line pragma inside fenced code blocks
 - **Source:** DR-9 (NIT) · **Priority:** low · **Due:** M2 · **Status:** CLOSED in M2
