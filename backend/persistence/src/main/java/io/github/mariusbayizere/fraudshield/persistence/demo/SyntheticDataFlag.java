@@ -2,7 +2,6 @@ package io.github.mariusbayizere.fraudshield.persistence.demo;
 
 import java.util.Arrays;
 import org.springframework.core.env.Environment;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
  * Decides the {@code synthetic_data} flag of {@code GET /api/v1/environment}, which makes the UI
@@ -18,21 +17,10 @@ public final class SyntheticDataFlag {
   private SyntheticDataFlag() {}
 
   /**
-   * Whether the database holds synthetic demo data.
-   *
-   * @param jdbc template on any FraudShield database role
-   * @return true when any institution was created by demo seeding
-   */
-  public static boolean databaseHasSyntheticData(JdbcTemplate jdbc) {
-    return Boolean.TRUE.equals(
-        jdbc.queryForObject("SELECT fraudshield.deployment_has_synthetic_data()", Boolean.class));
-  }
-
-  /**
    * Whether the deployment runs on synthetic data.
    *
    * @param environment the application environment
-   * @param databaseHasSyntheticData result of {@link #databaseHasSyntheticData(JdbcTemplate)}
+   * @param databaseHasSyntheticData whether the database marker is set
    * @return true when the database holds demo data, demo seeding is enabled, or a dev or demo
    *     profile is active
    */
@@ -47,7 +35,7 @@ public final class SyntheticDataFlag {
    * Fails when the database holds demo data and the active profiles are not only dev or demo.
    *
    * @param environment the application environment
-   * @param databaseHasSyntheticData result of {@link #databaseHasSyntheticData(JdbcTemplate)}
+   * @param databaseHasSyntheticData whether the database marker is set
    * @throws IllegalStateException for a production-like profile against a seeded database
    */
   public static void checkProfiles(Environment environment, boolean databaseHasSyntheticData) {

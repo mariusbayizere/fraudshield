@@ -56,12 +56,28 @@ only and to show "SYNTHETIC DATA — NOT FOR PRODUCTION" in the UI.
      it.
    - `deployment_has_synthetic_data()` (`SECURITY DEFINER`, one boolean, executable by every
      application role without a tenant) reads the marker.
-   - `SyntheticDataAutoConfiguration` creates `SyntheticDataStatus` in every Spring Boot application
-     with a FraudShield database, after Flyway. It fails startup when the marker is set and the
-     active profiles are not only `dev`/`demo`, and it supplies the banner flag.
-   - `SyntheticDataStatusTest` starts the real database tool against a seeded database: it refuses
-     `prod` and no profile, starts under `demo` with the flag on, and starts under `prod` against a
-     clean database with the flag off.
+   - `SyntheticDataGuard`, registered in `META-INF/spring.factories`, runs in every Spring Boot
+     application when the context is prepared, before any bean exists, so lazy initialisation and
+     the set of beans do not matter (owner direction, PB-15, PB-16). It:
+     - opens its own JDBC connection from `spring.datasource.url`/`username`/`password` and reads the
+       marker;
+     - fails startup when the marker is set and the active profiles are not only `dev`/`demo`;
+     - fails closed: a connection or query error stops startup, except a database not migrated yet
+       (no FraudShield schema or function), which cannot hold demo data;
+     - during refresh, before any singleton is created, fails startup when a `DataSource` bean exists
+       that the property-based check did not cover (no `spring.datasource.url`, or more than one data
+       source);
+     - registers `SyntheticDataStatus`, the banner flag.
+   - The guard checks at startup only; a `prod` process that is already running while someone seeds
+     its database is not stopped (seeding requires the migrator credentials).
+   - `SyntheticDataGuardTest` starts real applications against seeded, clean, unmigrated and
+     unreachable databases:
+     - it refuses `prod`, no profile, `prod` with `spring.main.lazy-initialization=true`, and an
+       application without auto-configuration (no `JdbcTemplate`);
+     - it fails closed for an unreachable database;
+     - it starts `demo` with the flag on, and starts `prod` against a clean or unmigrated database
+       with the flag off.
+   - `SyntheticDataGuardCoverageTest` refuses a custom `DataSource` without the property.
 6. **Local secret scanning.**
    - `make secrets-scan` scans committed history (`gitleaks git`) and every committable
      working-tree file: tracked files plus untracked files that are not ignored

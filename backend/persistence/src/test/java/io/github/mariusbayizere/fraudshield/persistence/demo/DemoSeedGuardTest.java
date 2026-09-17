@@ -30,7 +30,8 @@ class DemoSeedGuardTest {
     }
     // A command-line argument, not builder.properties(): default properties rank below
     // application.yml, which disables seeding, so the guard would never see the value.
-    return builder.run("--" + DemoSeedGuard.ENABLED_PROPERTY + "=" + seeding);
+    return builder.run(
+        "--" + DemoSeedGuard.ENABLED_PROPERTY + "=" + seeding, "--spring.datasource.url=");
   }
 
   @ParameterizedTest
@@ -53,7 +54,7 @@ class DemoSeedGuardTest {
         new SpringApplicationBuilder(EmptyApplication.class)
             .web(WebApplicationType.NONE)
             .profiles("prod")
-            .run()) {
+            .run("--spring.datasource.url=")) {
       assertThat(DemoSeedGuard.isEnabled(context.getEnvironment())).isFalse();
     }
   }
