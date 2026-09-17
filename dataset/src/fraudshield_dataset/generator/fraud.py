@@ -15,12 +15,13 @@ per-entity streams, so it does not depend on which batch simulates a customer.
 from __future__ import annotations
 
 import calendar
+from bisect import bisect_left
 from dataclasses import dataclass
 from functools import cached_property
 
 import numpy as np
 
-from fraudshield_dataset.generator.config import SimulationConfig, seasonal_factor
+from fraudshield_dataset.generator.config import SimulationConfig
 from fraudshield_dataset.generator.keys import stream, token, transaction_uuid
 from fraudshield_dataset.generator.legit import (
     CASH_MCC,
@@ -74,6 +75,7 @@ class Incident:
     customer: Customer
     month_index: int
     rng: np.random.Generator
+    rows: int = 1
     variant: str = BASE_VARIANT
     sequence: int = 0
     day: int = 1
@@ -120,64 +122,219 @@ class FraudModel:
         self.smartphone_share = 1.0 - p.mapping("population.segment_share")["rural_ussd"]
         self.to_mule = p.number("fraud.drain_to_mule_probability")
         self.choice = p.mapping("fraud.scenario_channel_share")
-        self.probability = {s: self._probabilities(s) for s in SCENARIOS}
+        self._plans: dict[tuple[str, int], dict[int, int]] = {}
+        self._month_plans: dict[int, tuple[dict[str, int], dict[str, int]]] = {}
+        self._validate_scenario_capacity()
 
-    # --- calibration -------------------------------------------------------------------------
+    # --- calibration: exact quotas per scenario-month --------------------------------------
 
     def _joiners(self, month: int) -> int:
         active = self.config.customers_active
         return active[month] - (active[month - 1] if month > 0 else 0)
 
-    def _eligible(self, scenario: str, month: int) -> float:
-        active = self.config.customers_active[month]
-        if scenario in ("account_takeover", "card_not_present", "merchant_fraud"):
-            return active * self.smartphone_share
-        if scenario == "mule_account":
-            return active * self.mule_fraction
-        if scenario == "synthetic_identity":
-            low, high = self.bust
-            joined = [self._joiners(month - k) for k in range(low, high + 1) if month - k >= 0]
-            return self.synthetic_fraction * sum(joined) / (high - low + 1)
-        return float(active)
+    def monthly_target(self, month: int) -> int:
+        """Fraudulent rows the whole month must produce (ML-DATA-02, the calibrated schedule).
 
-    def _probabilities(self, scenario: str) -> tuple[float, ...]:
+        Fraud rows are added to the legitimate ones, so hitting a fraud *rate* of ``r`` means
+        placing ``legitimate * r / (1 - r)`` rows. The legitimate count is exact (see
+        :meth:`LegitimateBehaviour.planned_counts`), so the month's fraud rate is the scheduled
+        rate up to rounding and to incidents that spill into the next month's file.
+        """
+        rate = self.config.fraud_rate_by_month[month]
+        return round(self.legitimate.planned_rows(month) * rate / (1.0 - rate))
+
+    def allocation(self, month: int) -> dict[str, int]:
+        """Fraudulent rows per scenario for this month (ML-DATA-02 exactly, ML-DATA-04 in mix)."""
+        return self._month_plan(month)[0]
+
+    def incidents(self, scenario: str, month: int) -> int:
+        """How many separate incidents this scenario stages in this month."""
+        return self._month_plan(month)[1][scenario]
+
+    def _month_plan(self, month: int) -> tuple[dict[str, int], dict[str, int]]:
+        """Rows and incidents per scenario for one month.
+
+        The month's target is split by the ML-DATA-04 shares, turned into a whole number of
+        incidents, and only then converted back into row counts that sum to the target exactly.
+        Allocating in incidents matters: a scenario whose incidents run from 3 to 40 rows cannot
+        deliver 2 rows, so splitting rows first would leave the month beside its target.
+
+        A scenario can be infeasible in a month: at the start of the simulation no customer has
+        reached its bust-out month, so synthetic identity cannot run. It then contributes nothing
+        and its share is carried by the scenarios that can, which keeps the month exactly on its
+        fraud target while the mix stays as close to ML-DATA-04 as the population allows.
+        """
+        if month in self._month_plans:
+            return self._month_plans[month]
+        total = self.monthly_target(month)
+        available = {s: self.eligible_count(s, month) for s in SCENARIOS}
+        incidents = {}
+        for scenario in SCENARIOS:
+            low, high = self.rows_range[scenario]
+            wanted = total * self.share[scenario] / ((low + high) / 2)
+            count = min(available[scenario], round(wanted))
+            if wanted > 0 and available[scenario] and count == 0:
+                count = 1
+            incidents[scenario] = count
+        self._fit_to_target(incidents, available, total, month)
+        rows = self._rows_per_scenario(incidents, total)
+        self._month_plans[month] = (rows, incidents)
+        return self._month_plans[month]
+
+    def _fit_to_target(
+        self, incidents: dict[str, int], available: dict[str, int], total: int, month: int
+    ) -> None:
+        """Add or drop whole incidents until the target sits inside the achievable row range."""
+        by_share = sorted(SCENARIOS, key=lambda s: -self.share[s])
+        while sum(incidents[s] * self.rows_range[s][1] for s in SCENARIOS) < total:
+            candidates = [s for s in by_share if incidents[s] < available[s]]
+            if not candidates:
+                reachable = sum(available[s] * self.rows_range[s][1] for s in SCENARIOS)
+                raise ParameterError(
+                    f"month {self.config.months[month]}: the fraud target of {total} rows exceeds "
+                    f"what every scenario can stage ({reachable} rows); raise the role fractions"
+                )
+            incidents[candidates[0]] += 1
+        while sum(incidents[s] * self.rows_range[s][0] for s in SCENARIOS) > total:
+            running = [s for s in reversed(by_share) if incidents[s] > 0]
+            incidents[running[0]] -= 1
+
+    def _rows_per_scenario(self, incidents: dict[str, int], total: int) -> dict[str, int]:
+        """Spread ``total`` rows over the incidents, each scenario inside its own row range."""
+        rows = {s: self.rows_range[s][0] * incidents[s] for s in SCENARIOS}
+        room = {
+            s: (self.rows_range[s][1] - self.rows_range[s][0]) * incidents[s] for s in SCENARIOS
+        }
+        surplus = total - sum(rows.values())
+        room_total = sum(room.values())
+        if room_total:
+            for scenario in SCENARIOS:
+                share = surplus * room[scenario] // room_total
+                rows[scenario] += min(room[scenario], share)
+                room[scenario] -= min(room[scenario], share)
+        # Integer division leaves a few rows over; give them to the largest scenarios with room.
+        for scenario in sorted(SCENARIOS, key=lambda s: -self.share[s]):
+            outstanding = total - sum(rows.values())
+            if outstanding <= 0:
+                break
+            rows[scenario] += min(room[scenario], outstanding)
+        return rows
+
+    def _validate_scenario_capacity(self) -> None:
+        """Refuse a scenario share its role holders could never stage (ML-DATA-04).
+
+        Monthly reallocation is right for a scenario that cannot run yet, but a share beyond what
+        its role can ever supply would be reallocated away for the whole simulation and the
+        scenario would all but disappear. The test is scale-free: the rows the share asks for over
+        the simulation must not exceed the rows the eligible customers could stage even if every
+        one of them were a victim of a maximum-length incident every month.
+
+        A scenario with no role holder at all is a different matter: the population is simply too
+        small to contain one (0.4% of a few hundred development customers is less than one mule).
+        That is a size limitation, not a parameter error, so it is left to the eight-scenario gate
+        in the realism report, which runs on the released dataset.
+        """
+        months = range(len(self.config.months))
+        for scenario in SCENARIOS:
+            intended = sum(self.monthly_target(m) for m in months) * self.share[scenario]
+            capacity = sum(self.eligible_count(scenario, m) for m in months)
+            if not intended or not capacity:
+                continue
+            stageable = capacity * self.rows_range[scenario][1]
+            if intended > stageable:
+                raise ParameterError(
+                    f"scenario {scenario} is asked for {intended:.0f} rows but its role holders "
+                    f"could stage at most {stageable}; raise its role fraction or lower its share"
+                )
+
+    @cached_property
+    def _pools(self) -> tuple[list[int], list[int], dict[int, list[int]]]:
+        """Role pools in one pass over the population: mules, non-rural customers, bust-outs.
+
+        Roles come from keyed streams, so a pool is a property of the seed and not of the order in
+        which months are simulated. Sorted index lists make each month's eligible set a prefix
+        slice instead of a fresh pass over every customer.
+        """
+        mules: list[int] = []
+        urban: list[int] = []
+        bust_outs: dict[int, list[int]] = {}
+        for index in range(self.config.customers_total):
+            if self.is_mule(index):
+                mules.append(index)
+            if self.population.segment_of(index) != "rural_ussd":
+                urban.append(index)
+            bust = self._bust_out_month(index)
+            if bust is not None and bust < len(self.config.months):
+                bust_outs.setdefault(bust, []).append(index)
+        return mules, urban, bust_outs
+
+    def eligible(self, scenario: str, month: int) -> list[int]:
+        """Customer indices that can suffer (or commit) this scenario in this month."""
+        active = self.config.customers_active[month]
+        mules, urban, bust_outs = self._pools
+        if scenario == "mule_account":
+            return mules[: bisect_left(mules, active)]
+        if scenario == "synthetic_identity":
+            return bust_outs.get(month, [])
+        if scenario in ("account_takeover", "card_not_present", "merchant_fraud"):
+            return urban[: bisect_left(urban, active)]
+        return list(range(active))
+
+    def eligible_count(self, scenario: str, month: int) -> int:
+        """Size of :meth:`eligible`, without materialising the whole active population."""
+        active = self.config.customers_active[month]
+        mules, urban, bust_outs = self._pools
+        if scenario == "mule_account":
+            return bisect_left(mules, active)
+        if scenario == "synthetic_identity":
+            return len(bust_outs.get(month, ()))
+        if scenario in ("account_takeover", "card_not_present", "merchant_fraud"):
+            return bisect_left(urban, active)
+        return active
+
+    def plan(self, scenario: str, month: int) -> dict[int, int]:
+        """Victim index to row count: exactly the incidents and rows the target needs.
+
+        Victims are the customers with the smallest keyed draw among the eligible ones, so the
+        count is exact rather than binomial, and independent of which batch simulates a customer.
+        Row counts stay inside the scenario's range and sum to the monthly target.
+        """
+        key = (scenario, month)
+        if key in self._plans:
+            return self._plans[key]
         low, high = self.rows_range[scenario]
-        per_incident = (low + high) / 2
-        probabilities = []
-        for month, label in enumerate(self.config.months):
-            target_rows = (
-                self.config.monthly_volume[month]
-                * seasonal_factor(self.config.parameters, label)
-                * self.config.fraud_rate_by_month[month]
-                * self.share[scenario]
-            )
-            eligible = self._eligible(scenario, month)
-            probability = target_rows / (per_incident * eligible) if eligible > 0 else 0.0
-            probabilities.append(probability)
-        if max(probabilities) > 1.0:
-            raise ParameterError(
-                f"scenario {scenario}: calibration needs more eligible customers than exist "
-                f"(incident probability {max(probabilities):.2f} > 1); raise its role fraction"
-            )
-        return tuple(probabilities)
+        rows, incident_counts = self._month_plan(month)
+        target = rows[scenario]
+        incidents = incident_counts[scenario]
+        candidates = self.eligible(scenario, month)
+        rng = stream(self.config.seed, "select", scenario, self.config.months[month])
+        chosen: list[int] = []
+        if incidents:
+            draws = rng.random(len(candidates))
+            order = np.argsort(draws, kind="stable")[:incidents]
+            chosen = sorted(candidates[i] for i in order)
+        counts = [int(rng.integers(low, high + 1)) for _ in chosen]
+        _match_total(counts, target, low, high)
+        plan = {index: count for index, count in zip(chosen, counts, strict=True) if count > 0}
+        self._plans[key] = plan
+        return plan
 
     # --- roles --------------------------------------------------------------------------------
 
     def is_mule(self, index: int) -> bool:
         return bool(stream(self.config.seed, "role", "mule", index).random() < self.mule_fraction)
 
-    def bust_out_month(self, customer: Customer) -> int | None:
-        rng = stream(self.config.seed, "role", "synthetic", customer.index)
+    def _bust_out_month(self, index: int) -> int | None:
+        rng = stream(self.config.seed, "role", "synthetic", index)
         if rng.random() >= self.synthetic_fraction:
             return None
-        return customer.join_month + int(rng.integers(self.bust[0], self.bust[1] + 1))
+        return self.population.join_month(index) + int(rng.integers(self.bust[0], self.bust[1] + 1))
 
     @cached_property
     def mules_by_country(self) -> dict[str, list[int]]:
         mules: dict[str, list[int]] = {}
-        for index in range(self.config.customers_total):
-            if self.is_mule(index):
-                mules.setdefault(self.population.country_of(index), []).append(index)
+        for index in self._pools[0]:
+            mules.setdefault(self.population.country_of(index), []).append(index)
         return mules
 
     def _members(self, kind: str, country: str, pool: int, fraction: float) -> list[int]:
@@ -211,21 +368,12 @@ class FraudModel:
             return
         label = self.config.months[month]
         for scenario in SCENARIOS:
-            if not self._eligible_customer(scenario, customer, month):
+            count = self.plan(scenario, month).get(customer.index)
+            if count is None:
                 continue
             rng = stream(self.config.seed, "fraud", scenario, customer.index, label)
-            if rng.random() < self.probability[scenario][month]:
-                incident = Incident(scenario, customer, month, rng)
-                getattr(self, f"_{scenario}")(incident, rows, events)
-
-    def _eligible_customer(self, scenario: str, customer: Customer, month: int) -> bool:
-        if scenario in ("account_takeover", "card_not_present", "merchant_fraud"):
-            return customer.has_smartphone
-        if scenario == "mule_account":
-            return self.is_mule(customer.index)
-        if scenario == "synthetic_identity":
-            return self.bust_out_month(customer) == month
-        return True
+            incident = Incident(scenario, customer, month, rng, rows=count)
+            getattr(self, f"_{scenario}")(incident, rows, events)
 
     def _start(self, incident: Incident) -> int:
         """UTC start of an incident, on any day of its month.
@@ -256,10 +404,8 @@ class FraudModel:
         )
 
     def _times(self, incident: Incident, start: int) -> list[int]:
-        low, high = self.rows_range[incident.scenario]
-        count = int(incident.rng.integers(low, high + 1))
         span = int(incident.rng.integers(self.burst[0], self.burst[1] + 1)) * _MINUTE
-        return sorted(start + int(t) for t in incident.rng.integers(0, span, size=count))
+        return sorted(start + int(t) for t in incident.rng.integers(0, span, size=incident.rows))
 
     def _device(self, incident: Incident, channel: str, fraud_device: bool) -> str | None:
         customer = incident.customer
@@ -548,3 +694,15 @@ class FraudModel:
                         self._device(incident, channel, fraud_device=False),
                     ),
                 )
+
+
+def _match_total(counts: list[int], target: int, low: int, high: int) -> None:
+    """Nudge ``counts`` in place, staying within ``[low, high]``, until they sum to ``target``."""
+    position = 0
+    while counts and sum(counts) != target and position < len(counts) * (high - low + 1):
+        index = position % len(counts)
+        difference = target - sum(counts)
+        step = 1 if difference > 0 else -1
+        if low <= counts[index] + step <= high:
+            counts[index] += step
+        position += 1

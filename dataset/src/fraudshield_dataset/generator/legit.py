@@ -96,7 +96,53 @@ class LegitimateBehaviour:
         self.active_hours = (low, high)
         self.travel_distance = p.number("behaviour.travel_distance_degrees")
         self.night = p.number("behaviour.night_activity_probability")
+        self.volume_sigma = p.number("behaviour.volume_jitter_log_sigma")
+        self._planned: dict[int, np.ndarray] = {}
         self.night_end = int(self.active_hours[0])
+
+    def planned_counts(self, month_index: int) -> np.ndarray:
+        """Transactions per active customer this month, apportioned to exact cell quotas.
+
+        Each country-and-segment cell has a row quota for the month: its active customers times
+        the mean transaction count times the month's seasonal factor. The quota is shared out
+        among the cell's customers in proportion to their activity and a month-to-month jitter, by
+        prefix flooring, so the counts sum to the quota exactly.
+
+        Drawing each customer's count from a Poisson distribution instead left the country and
+        channel mixes with the sampling noise of a few hundred development customers (2.2 points
+        at 200K rows, against a 0.5 point tolerance). Here the mixes and the total volume are
+        exact at any size (ML-DATA-01, ML-DATA-03, ML-DATA-05) and only the split within a cell is
+        random, which keeps a customer's months uneven.
+        """
+        if month_index in self._planned:
+            return self._planned[month_index]
+        active = self.config.customers_active[month_index]
+        label = self.config.months[month_index]
+        seasonal = seasonal_factor(self.config.parameters, label)
+        activity = self.population.activity_array[:active]
+        cells = self.population.cell_codes[:active]
+        # One draw for the whole month, so the counts cannot depend on how customers are batched.
+        rng = stream(self.config.seed, "volume", label)
+        jitter = np.exp(self.volume_sigma * rng.standard_normal(active) - self.volume_sigma**2 / 2)
+        weights = activity * jitter
+        counts = np.zeros(active, dtype=np.int64)
+        for cell in np.unique(cells):
+            members = np.flatnonzero(cells == cell)
+            # The quota follows the cell's active customer count, not its activity sum: the
+            # counts are apportioned to quota, so a prefix of the activity sequence must not be
+            # able to pull a country's row share away from its customer share (ML-DATA-05).
+            quota = round(self.mean * seasonal * len(members))
+            cumulative = np.cumsum(weights[members])
+            if cumulative[-1] <= 0:
+                continue
+            edges = np.floor(quota * cumulative / cumulative[-1]).astype(np.int64)
+            counts[members] = np.diff(np.concatenate(([0], edges)))
+        self._planned = {month_index: counts}  # one month at a time keeps memory flat
+        return counts
+
+    def planned_rows(self, month_index: int) -> int:
+        """Legitimate rows planned for this month: the sum of every cell's quota."""
+        return int(self.planned_counts(month_index).sum())
 
     def day_weights(self, customer: Customer, year: int, month: int) -> np.ndarray:
         days = calendar.monthrange(year, month)[1]
@@ -128,8 +174,7 @@ class LegitimateBehaviour:
         year, month = int(label[:4]), int(label[5:])
         rng = stream(self.config.seed, "legit", customer.index, label)
         # Normalised to a yearly mean of one: school-fee months gain volume, the total does not.
-        seasonal = seasonal_factor(self.config.parameters, label)
-        count = int(rng.poisson(self.mean * customer.activity * seasonal))
+        count = int(self.planned_counts(month_index)[customer.index])
         if count == 0:
             return rows
         shares = self.shares[customer.segment]

@@ -1,5 +1,10 @@
 description: Legitimate behaviour models (Part E.3) for timing, amounts, channels and counterparties.
 parameters:
+  volume_jitter_log_sigma:
+    value: 0.35
+    unit: standard deviation of the log of a customer's month-to-month volume jitter (mean one)
+    provenance: ASSUMED
+    rationale: A customer's transaction count varies from month to month around its own activity level; sigma 0.35 keeps most months within about a third of that level. The jitter only decides how a cell's exact monthly row quota is shared out, so month-to-month variation is kept while the country, segment and volume totals stay exact (ML-DATA-01, ML-DATA-03, ML-DATA-05).
   rural_ussd_channel_share:
     value: {USSD: 0.60, AGENT_BANKING: 0.30, MOBILE_MONEY: 0.10}
     unit: fraction of a rural USSD customer's transactions by channel

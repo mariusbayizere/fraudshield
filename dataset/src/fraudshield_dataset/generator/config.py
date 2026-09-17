@@ -96,14 +96,15 @@ def build_config(
         parameters=parameters,
         channel_share_by_segment=segment_channel_shares(parameters),
         split=split,
-        fraud_rate_by_month=fraud_ramp(parameters, months, volume, split),
+        fraud_rate_by_month=fraud_schedule(parameters, months, volume, split),
     )
 
 
 _DAY = 86_400_000_000
+# The schedule must land within 0.02 percentage points of the SRS test-period rate.
 
 
-def _month_bounds(month: str) -> tuple[int, int]:
+def month_bounds(month: str) -> tuple[int, int]:
     first = dt.datetime.fromisoformat(f"{month}-01T00:00:00+00:00")
     following = month_labels(month, 2)[1]
     last = dt.datetime.fromisoformat(f"{following}-01T00:00:00+00:00")
@@ -129,7 +130,7 @@ def _planned_rate(
     return [
         (lo, hi, v * seasonal_factor(parameters, m) / (hi - lo))
         for m, v in zip(months, volume, strict=True)
-        for lo, hi in (_month_bounds(m),)
+        for lo, hi in (month_bounds(m),)
     ]
 
 
@@ -162,24 +163,39 @@ def plan_split(
     return SplitPlan(validation_start, calibration_start, embargo_start, test_start, end)
 
 
-def fraud_ramp(
+def fraud_schedule(
     parameters: ParameterSet, months: tuple[str, ...], volume: tuple[int, ...], split: SplitPlan
 ) -> tuple[float, ...]:
-    """Monthly true fraud rate ``a + b * month`` meeting the overall and test-period targets."""
+    """Monthly true fraud rate from the calibrated intensity schedule (ML-DATA-02, D-07).
+
+    The schedule carries the rising trend and the month-to-month variation. Here it is scaled so
+    that the volume-weighted overall rate equals the target exactly, and checked against the
+    test-period target, so both SRS figures hold by construction instead of by sampling luck.
+    """
     overall = parameters.number("fraud.fraud_rate_overall")
-    test = parameters.number("fraud.fraud_rate_test")
+    test_target = parameters.number("fraud.fraud_rate_test")
+    intensity = parameters.numbers("fraud.monthly_intensity")
+    if len(intensity) != len(months):
+        raise ParameterError(
+            f"fraud.monthly_intensity has {len(intensity)} values for {len(months)} months"
+        )
     weights, test_weights = [], []
-    for m, v in zip(months, volume, strict=True):
-        lo, hi = _month_bounds(m)
-        planned = v * seasonal_factor(parameters, m)
-        weights.append(planned)
-        test_weights.append(planned * max(0, hi - max(lo, split.test_start)) / (hi - lo))
-    index = range(len(months))
-    s0, s1 = sum(weights), sum(i * w for i, w in zip(index, weights, strict=True))
-    t0, t1 = sum(test_weights), sum(i * w for i, w in zip(index, test_weights, strict=True))
-    slope = (test * t0 - overall * s0 * t0 / s0) / (t1 - s1 * t0 / s0)
-    intercept = (overall * s0 - slope * s1) / s0
-    rates = tuple(intercept + slope * i for i in index)
-    if min(rates) <= 0:
-        raise ParameterError("the fraud-rate targets imply a non-positive monthly rate")
+    for month, planned in zip(months, volume, strict=True):
+        lo, hi = month_bounds(month)
+        scaled = planned * seasonal_factor(parameters, month)
+        weights.append(scaled)
+        test_weights.append(scaled * max(0, hi - max(lo, split.test_start)) / (hi - lo))
+    total = sum(weights)
+    weighted_mean = sum(i * w for i, w in zip(intensity, weights, strict=True)) / total
+    rates = tuple(overall * i / weighted_mean for i in intensity)
+    test_total = sum(test_weights)
+    if test_total <= 0:
+        raise ParameterError("the planned test period carries no volume")
+    test_rate = sum(r * w for r, w in zip(rates, test_weights, strict=True)) / test_total
+    tolerance = parameters.number("fraud.test_rate_tolerance")
+    if abs(test_rate - test_target) > tolerance:
+        raise ParameterError(
+            f"fraud.monthly_intensity gives a test-period rate of {test_rate:.5f}, more than "
+            f"{tolerance} from the {test_target} target; adjust the schedule's trend"
+        )
     return rates

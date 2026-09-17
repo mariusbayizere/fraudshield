@@ -14,6 +14,7 @@ from fraudshield_dataset import cli
 from fraudshield_dataset.generator import config as config_module
 from fraudshield_dataset.generator.config import (
     CHANNELS,
+    SimulationConfig,
     build_config,
     month_labels,
     seasonal_factor,
@@ -244,13 +245,23 @@ def test_fraud_enabling_events_are_recorded_like_legitimate_events(medium: Path)
     assert kinds == {"SIM_SWAP", "DEVICE_CHANGE"}
 
 
-def test_calibration_refuses_impossible_role_fractions() -> None:
+def test_calibration_refuses_a_share_its_role_holders_cannot_stage() -> None:
+    """A share beyond what the role can ever stage is a parameter inconsistency, not noise."""
     parameters = load_parameters()
+    shares = dict.fromkeys(SCENARIOS, 0.0)
+    shares["synthetic_identity"] = 0.9
+    shares["velocity"] = 0.1
     config = build_config(
-        _with(parameters, fraud__synthetic_identity_fraction=0.0001), seed=1, total_rows=60_000
+        _with(
+            parameters,
+            fraud__scenario_share=shares,
+            fraud__synthetic_identity_fraction=0.01,
+        ),
+        seed=1,
+        total_rows=600_000,
     )
     population = Population(config)
-    with pytest.raises(ParameterError, match="synthetic_identity"):
+    with pytest.raises(ParameterError, match="synthetic_identity is asked for"):
         FraudModel(config, population, LegitimateBehaviour(config, population))
 
 
@@ -269,3 +280,78 @@ def test_fraud_rate_ramp_meets_both_targets() -> None:
     split = config.split
     assert split.validation_start < split.calibration_start < split.embargo_start
     assert split.test_start - split.embargo_start == 7 * 86_400_000_000
+
+
+def _test_period_rate(parameters: ParameterSet, config: SimulationConfig) -> float:
+    """Volume-weighted fraud rate over the part of each month inside the test period."""
+    weights = []
+    for month, planned in zip(config.months, config.monthly_volume, strict=True):
+        low, high = config_module.month_bounds(month)
+        scaled = planned * seasonal_factor(parameters, month)
+        weights.append(scaled * max(0, high - max(low, config.split.test_start)) / (high - low))
+    return sum(r * w for r, w in zip(config.fraud_rate_by_month, weights, strict=True)) / sum(
+        weights
+    )
+
+
+@pytest.mark.req("ML-DATA-02", "D-07")
+def test_the_intensity_schedule_meets_the_test_period_target_by_construction() -> None:
+    parameters = load_parameters()
+    config = build_config(parameters, seed=1)
+    assert _test_period_rate(parameters, config) == pytest.approx(
+        parameters.number("fraud.fraud_rate_test"),
+        abs=parameters.number("fraud.test_rate_tolerance"),
+    )
+
+
+@pytest.mark.req("ML-DATA-02")
+def test_a_flat_intensity_schedule_is_refused_because_it_misses_the_test_target() -> None:
+    parameters = load_parameters()
+    months = len(parameters.numbers("fraud.monthly_intensity"))
+    flat = _with(parameters, fraud__monthly_intensity=[1.0] * months)
+    with pytest.raises(ParameterError, match="test-period rate"):
+        build_config(flat, seed=1)
+
+
+@pytest.mark.req("ML-DATA-02")
+def test_a_schedule_of_the_wrong_length_is_refused() -> None:
+    short = _with(load_parameters(), fraud__monthly_intensity=[1.0, 1.0])
+    with pytest.raises(ParameterError, match="monthly_intensity has 2 values"):
+        build_config(short, seed=1)
+
+
+@pytest.mark.req("ML-DATA-02", "ML-DATA-04")
+def test_every_month_allocates_its_whole_fraud_target_across_feasible_scenarios() -> None:
+    config = build_config(load_parameters(), seed=3, total_rows=60_000)
+    population = Population(config)
+    model = FraudModel(config, population, LegitimateBehaviour(config, population))
+    for month in range(len(config.months)):
+        allocation = model.allocation(month)
+        assert sum(allocation.values()) == model.monthly_target(month)
+        assert set(allocation) == set(SCENARIOS)
+        for scenario, rows in allocation.items():
+            low, high = model.rows_range[scenario]
+            planned = model.plan(scenario, month)
+            assert sum(planned.values()) == rows
+            assert all(low <= count <= high for count in planned.values())
+            assert len(planned) == model.incidents(scenario, month)
+            assert len(planned) <= model.eligible_count(scenario, month)
+    # No customer has reached its bust-out month at the start, so that scenario cannot run yet and
+    # its share is reallocated: the month still hits its target.
+    assert model.allocation(0)["synthetic_identity"] == 0
+    assert model.allocation(len(config.months) - 1)["synthetic_identity"] > 0
+
+
+@pytest.mark.req("ML-DATA-05")
+def test_country_and_segment_quotas_are_exact_for_every_population_prefix() -> None:
+    config = build_config(load_parameters(), seed=7, total_rows=200_000)
+    population = Population(config)
+    shares = config.parameters.mapping("geography.country_share")
+    counts = dict.fromkeys(shares, 0)
+    for index in range(config.customers_total):
+        counts[population.country_of(index)] += 1
+        size = index + 1
+        # Sequential apportionment keeps every prefix within one customer of its exact quota,
+        # so the country mix holds at development scale and not only in expectation.
+        for country, share in shares.items():
+            assert abs(counts[country] - share * size) < 1.0

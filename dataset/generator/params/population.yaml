@@ -9,7 +9,7 @@ parameters:
     value: 0.8
     unit: standard deviation of the log of each customer's activity multiplier (mean-one log-normal)
     provenance: ASSUMED
-    rationale: Customer activity is heavily skewed in payment data generally; a log-normal with sigma 0.8 gives a long tail of heavy users while keeping most customers near the mean.
+    rationale: Customer activity is heavily skewed in payment data generally; a log-normal with sigma 0.8 gives a long tail of heavy users while keeping most customers near the mean. The generator places customers on this distribution's quantiles and rescales each country's multipliers to average exactly one, so the shape is preserved while the planned volume and country mix do not inherit sampling variance.
   segment_share:
     value: {urban_salaried: 0.35, informal_trader: 0.25, rural_ussd: 0.30, student: 0.10}
     unit: fraction of customers

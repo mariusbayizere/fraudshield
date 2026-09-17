@@ -15,6 +15,7 @@ import numpy as np
 
 from fraudshield_dataset.generator.config import COUNTRIES, SEGMENTS, SimulationConfig
 from fraudshield_dataset.generator.keys import stream, token
+from fraudshield_dataset.normal import inverse_cdf
 
 
 @dataclass(frozen=True)
@@ -108,15 +109,83 @@ class Population:
         self._mcc_weights = np.array([mcc_share[c] for c in self._mcc_codes])
         self._mcc_weights /= self._mcc_weights.sum()
 
-    def _offset(self, name: str) -> float:
-        return float(stream(self.config.seed, "stratification", name).random())
+    def _offset(self, name: str, *parts: str) -> float:
+        return float(stream(self.config.seed, "stratification", name, *parts).random())
+
+    @cached_property
+    def _apportioned(self) -> tuple[list[str], list[str], list[float]]:
+        """Country, segment and activity multiplier per customer index.
+
+        Countries are apportioned sequentially (each index goes to the country furthest below its
+        quota), so **every prefix** of the population matches the SRS country mix within one
+        customer: the mix holds while the population grows month by month, without sampling noise
+        (ML-DATA-05). Segments are apportioned the same way within each country. Activity
+        multipliers are placed on the log-normal's quantiles rather than drawn, and rescaled so
+        that they average exactly one within each country and segment. The heavy tail is kept, but
+        the planned volume per country and segment no longer depends on where a finite sample
+        happens to land in that tail, which is what made small runs miss their row count, their
+        country mix (ML-DATA-05) and, through the segment mix, their channel mix (ML-DATA-03).
+        """
+        total = self.config.customers_total
+        countries = sorted(self._country_share)
+        segments = sorted(self._segment_share)
+        country_counts = dict.fromkeys(countries, 0)
+        segment_counts = {c: dict.fromkeys(segments, 0) for c in countries}
+        assigned_country: list[str] = []
+        assigned_segment: list[str] = []
+        activity: list[float] = []
+        cells: dict[tuple[str, str], list[int]] = {}
+        sigma = self._activity_sigma
+        for index in range(total):
+            country = max(
+                countries,
+                key=lambda c: self._country_share[c] * (index + 1) - country_counts[c],
+            )
+            country_counts[country] += 1
+            rank = country_counts[country]
+            segment = max(
+                segments,
+                key=lambda t: self._segment_share[t] * rank - segment_counts[country][t],
+            )
+            segment_counts[country][segment] += 1
+            # The quantile sequence runs within the (country, segment) cell, so activity is not a
+            # function of the apportionment order and stays independent of the segment a customer
+            # lands in; the channel mix then follows the segment mix rather than the ordering.
+            cell_rank = segment_counts[country][segment]
+            point = (self._offset("activity", country, segment) + cell_rank * _GOLDEN) % 1.0
+            assigned_country.append(country)
+            assigned_segment.append(segment)
+            cells.setdefault((country, segment), []).append(index)
+            activity.append(math.exp(sigma * inverse_cdf(point) - sigma**2 / 2))
+        for members in cells.values():
+            mean = sum(activity[i] for i in members) / len(members)
+            for i in members:
+                activity[i] /= mean
+        return assigned_country, assigned_segment, activity
+
+    @cached_property
+    def activity_array(self) -> np.ndarray:
+        """Activity multiplier per customer index, for the volume apportionment."""
+        return np.array(self._apportioned[2], dtype=np.float64)
+
+    @cached_property
+    def cell_codes(self) -> np.ndarray:
+        """Country-and-segment cell per customer index; volume is apportioned within a cell."""
+        countries, segments, _ = self._apportioned
+        names = sorted({(c, s) for c, s in zip(countries, segments, strict=True)})
+        code = {cell: i for i, cell in enumerate(names)}
+        return np.array(
+            [code[(c, s)] for c, s in zip(countries, segments, strict=True)], dtype=np.int64
+        )
 
     def country_of(self, index: int) -> str:
-        """A customer's country without building the customer (stratified, see :meth:`customer`)."""
-        return _stratified(index, _GOLDEN, self._offset("country"), self._country_share)
+        return self._apportioned[0][index]
 
     def segment_of(self, index: int) -> str:
-        return _stratified(index, _SILVER, self._offset("segment"), self._segment_share)
+        return self._apportioned[1][index]
+
+    def activity_of(self, index: int) -> float:
+        return self._apportioned[2][index]
 
     def join_month(self, index: int) -> int:
         for month, active in enumerate(self.config.customers_active):
@@ -132,7 +201,7 @@ class Population:
         country = self.country_of(index)
         segment = self.segment_of(index)
         kyc = _choice(rng, self._kyc_share)
-        activity = float(rng.lognormal(-(self._activity_sigma**2) / 2, self._activity_sigma))
+        activity = self.activity_of(index)
         centre = self._centres[country]
         home = (
             float(centre[0] + rng.normal(0, self._home_spread)),
@@ -203,20 +272,6 @@ class Population:
 
 
 _GOLDEN = (math.sqrt(5.0) - 1.0) / 2.0
-_SILVER = math.sqrt(2.0) - 1.0
-
-
-def _stratified(index: int, step: float, offset: float, shares: dict[str, float]) -> str:
-    """Category for position ``index`` of an additive-recurrence sequence over cumulative shares."""
-    point = (offset + (index + 1) * step) % 1.0
-    total = sum(shares.values())
-    cumulative = 0.0
-    keys = list(shares)
-    for key in keys:
-        cumulative += shares[key] / total
-        if point < cumulative:
-            return key
-    return keys[-1]
 
 
 def _choice(rng: np.random.Generator, shares: dict[str, float]) -> str:
