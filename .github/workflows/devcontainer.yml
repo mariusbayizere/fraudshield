@@ -84,3 +84,21 @@ jobs:
             node --version
             pnpm --version
             make smoke
+      # Output inside the container is not parsed for annotations; the post-create log is written
+      # to the mounted workspace, so report its tail from the runner (readable without log access).
+      - name: Report post-create log on failure
+        if: failure()
+        run: |
+          log=.devcontainer/post-create.log
+          if [ ! -f "$log" ]; then
+            echo "::error title=post-create::no post-create.log (failed before the script started)"
+            exit 0
+          fi
+          tail -n 60 "$log"
+          python3 - "$log" <<'PY'
+          import sys
+          lines = open(sys.argv[1], errors="replace").read().splitlines()[-40:]
+          message = "\n".join(lines)[-3500:]
+          escaped = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=post-create log tail::{escaped}")
+          PY

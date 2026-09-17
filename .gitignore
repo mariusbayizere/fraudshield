@@ -53,3 +53,4 @@ test-results/
 # --- Generated reports ---
 build/
 .devcontainer/.post-create-ok
+.devcontainer/post-create.log

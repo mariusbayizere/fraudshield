@@ -11,6 +11,12 @@ trap 'echo "::error title=post-create failed::line ${LINENO}: ${BASH_COMMAND}"' 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$repo_root"
 
+# Keep a copy of all output in the (host-mounted) workspace, so a CI step outside the container
+# can report it when post-create fails. Git-ignored.
+log_file="$repo_root/.devcontainer/post-create.log"
+exec > >(tee "$log_file") 2>&1
+echo "post-create started $(date -u +%FT%TZ) as $(id -un) in $repo_root"
+
 # The workspace is mounted from the host and owned by a different user than the container user,
 # which git rejects as "dubious ownership"; pre-commit, gitleaks and the traceability checks all
 # call git. This writes the container user's git config only, never the host's.
