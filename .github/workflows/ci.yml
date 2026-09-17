@@ -1,5 +1,6 @@
-# FraudShield CI — M0 scope: lint, type checks and unit tests for all three languages,
-# governance (traceability, defect register, scope guard), secrets scan, compose validation.
+# FraudShield CI — lint, type checks and unit tests for all three languages, governance
+# (traceability, defect register, scope guard, commit messages, compose budgets), licences,
+# pre-commit guards and secrets scan. The Docker stack runs in stack.yml (path-filtered, ADR 0010).
 # Later stages of SRS 8.1 (integration, security scans, ML gate, images, deploys) are added
 # in M9 (docs/adr/0002 explains why there is no develop branch).
 name: ci
@@ -181,30 +182,6 @@ jobs:
       - run: uv run pre-commit run --all-files --show-diff-on-failure
         env:
           SKIP: gitleaks,governance,prettier,spotless
-
-  stack:
-    name: core compose stack healthy + smoke test (M0 gate)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: make env
-      - name: make up (wait for every healthcheck)
-        run: make up
-      - name: Functional smoke test
-        shell: bash
-        run: make smoke 2>&1 | tee stack-smoke.log
-      - name: Diagnose services on failure (annotations)
-        if: failure()
-        run: ./infrastructure/docker/scripts/diagnose-stack.sh
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: always()
-        with:
-          name: stack-smoke-log
-          path: stack-smoke.log
-          if-no-files-found: ignore
-      - if: always()
-        run: docker compose --profile full down -v
 
   secrets:
     name: gitleaks

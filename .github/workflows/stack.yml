@@ -1,32 +1,34 @@
-# Builds the Codespaces devcontainer on a GitHub runner, which runs .devcontainer/post-create.sh
-# (pinned toolchains, locked dependencies, `REQUIRE_DOCKER=1 make ci` including the Docker
-# stack), then re-checks the stack from inside the container (ADR 0010).
+# Core compose stack: `make up` (every healthcheck, --wait) and the functional smoke test.
+# Authoritative evidence for the M0 gate "make up healthy" (ADR 0010).
 #
-# Heavy, so it runs only when its inputs changed, and always on pushes to main, nightly, and on
-# manual dispatch (owner direction, 2026-09-17).
-name: devcontainer
+# To save CI minutes the job runs only when its inputs changed, and always on pushes to main,
+# nightly, and on manual dispatch (owner direction, 2026-09-17).
+name: stack
 
 on:
   push:
   pull_request:
     branches: [main]
   schedule:
-    - cron: "17 2 * * *"
+    - cron: "41 1 * * *"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: devcontainer-${{ github.ref }}
+  group: stack-${{ github.ref }}
   cancel-in-progress: true
 
 env:
-  DEVCONTAINER_INPUTS: '^(\.devcontainer/.*|\.tool-versions|\.python-version|\.nvmrc|Makefile|docker-compose[^/]*\.ya?ml|.*Dockerfile[^/]*|infrastructure/docker/.*|uv\.lock|frontend/pnpm-lock\.yaml|backend/(.*/)?pom\.xml|backend/\.mvn/.*|\.github/workflows/devcontainer\.yml)$'
+  REQUIRE_DOCKER: "1"
+  # Inputs of the stack: compose files, Dockerfiles, container scripts and config, the Makefile
+  # targets that drive them, the devcontainer, and dependency locks.
+  STACK_INPUTS: '^(docker-compose[^/]*\.ya?ml|.*Dockerfile[^/]*|\.dockerignore|\.env\.example|infrastructure/docker/.*|\.devcontainer/.*|Makefile|uv\.lock|frontend/pnpm-lock\.yaml|backend/(.*/)?pom\.xml|\.github/workflows/stack\.yml)$'
 
 jobs:
   changes:
-    name: detect devcontainer input changes
+    name: detect stack input changes
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
@@ -58,29 +60,36 @@ jobs:
           else
             base="$BEFORE"
           fi
-          matches=$(git diff --name-only "$base" "$HEAD_SHA" | grep -E "$DEVCONTAINER_INPUTS" || true)
+          changed=$(git diff --name-only "$base" "$HEAD_SHA")
+          matches=$(printf '%s\n' "$changed" | grep -E "$STACK_INPUTS" || true)
           if [ -n "$matches" ]; then
             decide true "inputs changed: $(printf '%s' "$matches" | tr '\n' ' ')"
           else
-            decide false "no devcontainer inputs changed since $base"
+            decide false "no stack inputs changed since $base"
           fi
 
-  build-and-verify:
-    name: build devcontainer, post-create make ci, smoke test inside
+  stack:
+    name: core compose stack healthy + smoke test (M0 gate)
     needs: changes
     if: needs.changes.outputs.run == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3.1900000450
+      - run: make env
+      - name: make up (wait for every healthcheck)
+        run: make up
+      - name: Functional smoke test
+        shell: bash
+        run: make smoke 2>&1 | tee stack-smoke.log
+      - name: Diagnose services on failure (annotations)
+        if: failure()
+        run: ./infrastructure/docker/scripts/diagnose-stack.sh
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
         with:
-          push: never
-          runCmd: |
-            set -euo pipefail
-            test -f .devcontainer/.post-create-ok || { echo "post-create did not complete" >&2; exit 1; }
-            java -version 2>&1 | head -1
-            uv --version
-            node --version
-            pnpm --version
-            make smoke
+          name: stack-smoke-log
+          path: stack-smoke.log
+          if-no-files-found: ignore
+      - if: always()
+        run: docker compose --profile full down -v
