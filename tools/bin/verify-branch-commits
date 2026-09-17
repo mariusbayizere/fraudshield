@@ -31,8 +31,34 @@ def run(command: list[str], cwd: Path) -> tuple[bool, str]:
     result = subprocess.run(  # noqa: S603 - fixed commands built below
         command, cwd=cwd, capture_output=True, text=True, check=False, env=env
     )
-    tail = (result.stdout + result.stderr).strip().splitlines()[-3:]
+    lines = (result.stdout + result.stderr).strip().splitlines()
+    # Maven prints the cause on [ERROR] lines, while stderr may end with unrelated warnings.
+    errors = [line for line in lines if line.startswith("[ERROR]") and line.strip() != "[ERROR]"]
+    tail = errors[:3] if errors else lines[-3:]
     return result.returncode == 0, " / ".join(tail)
+
+
+def docker_available() -> bool:
+    try:
+        probe = subprocess.run(
+            ["docker", "info"],  # noqa: S607
+            capture_output=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return False
+    return probe.returncode == 0
+
+
+def maven_verify() -> list[str]:
+    """Like `make test-java`: tests tagged requires-docker run only where they can (ADR 0010).
+
+    They also run without Docker when FRAUDSHIELD_TEST_POSTGRES_URL points at a database server.
+    """
+    command = ["./mvnw", "-B", "-ntp", "-q", "verify"]
+    if not docker_available() and not os.environ.get("FRAUDSHIELD_TEST_POSTGRES_URL"):
+        command.append("-DexcludedGroups=requires-docker")
+    return command
 
 
 def checks_for(files: list[str], worktree: Path) -> list[tuple[str, list[str], str]]:
@@ -56,7 +82,7 @@ def checks_for(files: list[str], worktree: Path) -> list[tuple[str, list[str], s
             (f"pytest {package}", ["uv", "run", "pytest", "-q", "-p", "no:cacheprovider"], package),
         ]
     if any(f.startswith("backend/") for f in files):
-        checks.append(("maven verify", ["./mvnw", "-B", "-ntp", "-q", "verify"], "backend"))
+        checks.append(("maven verify", maven_verify(), "backend"))
     if any(f.startswith("frontend/") for f in files):
         checks += [
             ("pnpm install", ["pnpm", "install", "--frozen-lockfile", "--silent"], "frontend"),
