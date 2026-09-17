@@ -1,0 +1,239 @@
+# Golden authorisation matrix (ADR 0014). Reviewed row by row against the SRS FRs and build
+# prompt E.8. contracts/tests/test_authorisation_matrix.py fails if the OpenAPI document differs
+# from this file in either direction, so a role change needs a deliberate edit here too.
+# access: roles (staff bearer JWT), scopes (API key), public, or refresh-cookie.
+operations:
+  ingestTransaction:
+    scopes: ["ingest:write"]
+    ref: "FR-01-01, E.1, E.8 (scope ingest:write)"
+  ingestTransactionBatch:
+    scopes: ["ingest:write"]
+    ref: "FR-01-06, E.1, E.8 (scope ingest:write)"
+  getJob:
+    scopes: ["jobs:read"]
+    ref: "FR-01-06, E.1, E.8 (scope jobs:read)"
+  getFinalDecision:
+    scopes: ["decisions:read"]
+    ref: "D-14, E.1, E.8 (scope decisions:read)"
+  getLiveness:
+    public: true
+    ref: "E.1; status only, management port (ADR 0014)"
+  getMlHealth:
+    roles: [ADMIN]
+    ref: "E.1, FR-06-05; ADMIN only because it reveals fallback mode (ADR 0014)"
+  getKafkaHealth:
+    roles: [ADMIN]
+    ref: "E.1, FR-06-05; ADMIN only because it reveals spooling (ADR 0014)"
+  login:
+    public: true
+    ref: "FR-07-06, D-26"
+  loginWithGoogle:
+    public: true
+    ref: "FR-07-03, D-23"
+  refreshToken:
+    refresh-cookie: true
+    ref: "D-27"
+  logout:
+    roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER, ADMIN]
+    ref: "FR-07-09"
+  logoutEverywhere:
+    roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER, ADMIN]
+    ref: "D-27"
+  getCurrentUser:
+    roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER, ADMIN]
+    ref: "FR-04-01"
+  register:
+    public: true
+    ref: "FR-07-02, D-24"
+  checkAvailability:
+    public: true
+    ref: "FR-07-02, E.8"
+  verifyEmail:
+    public: true
+    ref: "FR-07-02"
+  requestPasswordReset:
+    public: true
+    ref: "FR-07-08"
+  verifyPasswordResetCode:
+    public: true
+    ref: "FR-07-08"
+  completePasswordReset:
+    public: true
+    ref: "FR-07-08, FR-07-09"
+  changePassword:
+    roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER, ADMIN]
+    ref: "FR-07-09"
+  unlockAccount:
+    public: true
+    ref: "FR-07-06"
+  getJwks:
+    public: true
+    ref: "E.8 (JWKS with key rotation)"
+  getDashboardStats:
+    roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
+    ref: "SRS 5.4, FR-04-01; decision roles only"
+  listAlerts:
+    roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
+    ref: "FR-04-02, FR-04-09, FR-05-01"
+  getAlert:
+    roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
+    ref: "FR-04-03, FR-05-01"
+  getAlertExplanation:
+    roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
+    ref: "FR-04-05, FR-05-01"
+  decideAlert:
+    roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
+    ref: "FR-04-04, FR-05-01; never ADMIN (E.8, ADR 0014)"
+  undoAlertDecision:
+    roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
+    ref: "D-44; never ADMIN (E.8, ADR 0014)"
+  escalateAlert:
+    roles: [ANALYST, SENIOR_ANALYST]
+    ref: "FR-04-10; target strictly above caller, so RISK_OFFICER cannot escalate"
+  overrideAlertDecision:
+    roles: [RISK_OFFICER]
+    ref: "FR-05-01; RISK_OFFICER only"
+  getScoringResult:
+    roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
+    ref: "FR-02-01, D-12 (full result on staff endpoints only)"
+  getMyPerformance:
+    roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
+    ref: "FR-04-11"
+  listAccountTransactions:
+    roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
+    ref: "FR-04-06"
+  getBehaviourProfile:
+    roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
+    ref: "FR-04-07"
+  getAccountNetwork:
+    roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
+    ref: "FR-04-08"
+  getPortfolioSummary:
+    roles: [RISK_OFFICER]
+    ref: "FR-05-02"
+  getFraudHeatmap:
+    roles: [RISK_OFFICER]
+    ref: "FR-05-02, D-46"
+  getModelPerformance:
+    roles: [RISK_OFFICER, ADMIN]
+    ref: "FR-05-03; ADMIN also reads it to judge promotion and rollback (FR-06-03)"
+  listCampaigns:
+    roles: [RISK_OFFICER]
+    ref: "FR-05-04"
+  updateCampaignStatus:
+    roles: [RISK_OFFICER]
+    ref: "FR-05-04"
+  listRules:
+    roles: [RISK_OFFICER]
+    ref: "FR-05-05"
+  createRule:
+    roles: [RISK_OFFICER]
+    ref: "FR-05-05"
+  previewRule:
+    roles: [RISK_OFFICER]
+    ref: "FR-05-05"
+  createRuleVersion:
+    roles: [RISK_OFFICER]
+    ref: "FR-05-05"
+  setRuleState:
+    roles: [RISK_OFFICER]
+    ref: "FR-05-05"
+  getThresholds:
+    roles: [RISK_OFFICER, ADMIN]
+    ref: "FR-05-07 (risk officer view), FR-02-06 (admin read access, ADR 0014)"
+  previewThresholdImpact:
+    roles: [RISK_OFFICER]
+    ref: "FR-05-07; preview belongs to whoever may change thresholds"
+  listSarReports:
+    roles: [RISK_OFFICER]
+    ref: "FR-05-06, D-22"
+  getSarReport:
+    roles: [RISK_OFFICER]
+    ref: "FR-05-06, D-22"
+  signOffSarReport:
+    roles: [RISK_OFFICER]
+    ref: "FR-05-06, D-22"
+  updateThresholds:
+    roles: [RISK_OFFICER]
+    ref: "FR-02-06, FR-05-07; RISK_OFFICER only, separation of duties (ADR 0014)"
+  listUsers:
+    roles: [ADMIN]
+    ref: "FR-06-01, FR-06-02"
+  createUser:
+    roles: [ADMIN]
+    ref: "FR-06-01"
+  getUser:
+    roles: [ADMIN]
+    ref: "FR-06-02"
+  updateUser:
+    roles: [ADMIN]
+    ref: "FR-06-02, FR-07-01 (no self-modification)"
+  listPendingApprovals:
+    roles: [ADMIN]
+    ref: "D-23, D-24"
+  decideApproval:
+    roles: [ADMIN]
+    ref: "D-23, D-24"
+  listOfficeIpAllowlist:
+    roles: [ADMIN]
+    ref: "D-26"
+  addOfficeIpRange:
+    roles: [ADMIN]
+    ref: "D-26"
+  removeOfficeIpRange:
+    roles: [ADMIN]
+    ref: "D-26"
+  listApiKeys:
+    roles: [ADMIN]
+    ref: "FR-06-07"
+  createApiKey:
+    roles: [ADMIN]
+    ref: "FR-06-07, D-19"
+  rotateApiKey:
+    roles: [ADMIN]
+    ref: "FR-06-07, D-19"
+  revokeApiKey:
+    roles: [ADMIN]
+    ref: "FR-06-07, D-19"
+  listModelVersions:
+    roles: [ADMIN]
+    ref: "FR-06-03, D-11"
+  promoteModel:
+    roles: [ADMIN]
+    ref: "FR-06-03, D-11"
+  rollbackModel:
+    roles: [ADMIN]
+    ref: "FR-06-03"
+  setShadowModel:
+    roles: [ADMIN]
+    ref: "FR-02-08"
+  listTrainingDatasets:
+    roles: [ADMIN]
+    ref: "FR-06-04"
+  uploadTrainingDataset:
+    roles: [ADMIN]
+    ref: "FR-06-04"
+  startRetraining:
+    roles: [ADMIN]
+    ref: "FR-06-04"
+  getRetrainingJob:
+    roles: [ADMIN]
+    ref: "FR-06-04"
+  getSystemHealth:
+    roles: [ADMIN]
+    ref: "FR-06-05"
+  searchAuditEvents:
+    roles: [ADMIN]
+    ref: "FR-06-06, D-32"
+  listCircuitBreakers:
+    roles: [ADMIN]
+    ref: "FR-03-07 (admin panel), D-18"
+  listFailedWebhookDeliveries:
+    roles: [ADMIN]
+    ref: "E.1 (DLQ visible in admin)"
+  showVerificationPage:
+    public: true
+    ref: "FR-03-04, D-25, D-42 (token is the credential)"
+  submitVerification:
+    public: true
+    ref: "FR-03-05, D-25, D-42 (token is the credential)"

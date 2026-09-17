@@ -18,6 +18,16 @@ EXAMPLES = DOC["components"]["examples"]
 CHANNELS = {"MOBILE_MONEY", "CARD", "AGENT_BANKING", "USSD", "ONLINE", "BANK_TRANSFER"}
 AUTH_MARKERS = ("x-required-scopes", "x-required-roles", "x-public", "x-refresh-cookie")
 MACHINE_PATH_PREFIXES = ("/transactions/ingest", "/jobs/", "/decisions/")
+# Probes and component health return their status schema for every outcome, the verification
+# page returns HTML, and the JWKS document is static.
+NO_PROBLEM_DEFAULT = {
+    "getLiveness",
+    "getMlHealth",
+    "getKafkaHealth",
+    "showVerificationPage",
+    "submitVerification",
+    "getJwks",
+}
 
 
 def _example(name: str) -> dict[str, Any]:
@@ -40,7 +50,7 @@ def test_operations_have_unique_ids_summaries_and_tags() -> None:
     assert all(op.spec.get("summary") and op.spec.get("tags") for op in ops)
 
 
-@pytest.mark.req("FR-01-05", "FR-07-01", "FR-07-05")
+@pytest.mark.req("FR-01-05", "FR-07-05")
 def test_every_operation_declares_exactly_one_authorisation_class() -> None:
     role_enum = set(SCHEMAS["Role"]["enum"])
     scope_enum = set(SCHEMAS["ApiKeyScope"]["enum"])
@@ -68,21 +78,13 @@ def test_every_operation_declares_exactly_one_authorisation_class() -> None:
             assert set(roles) <= role_enum, where
 
 
-@pytest.mark.req("FR-01-05", "FR-07-05")
-def test_api_keys_cannot_reach_staff_or_admin_operations() -> None:
-    for op in operations(DOC):
-        uses_api_key = any("apiKeyAuth" in entry for entry in op.spec.get("security") or [])
-        if op.path.startswith(("/alerts", "/admin", "/accounts", "/rules", "/portfolio", "/auth")):
-            assert not uses_api_key, f"{op.method.upper()} {op.path} accepts API keys"
-
-
 def test_secured_operations_document_401_and_403_and_json_ops_have_problem_default() -> None:
     for op in operations(DOC):
         where = f"{op.method.upper()} {op.path}"
         responses = op.spec["responses"]
         if "x-required-scopes" in op.spec or "x-required-roles" in op.spec:
             assert {"401", "403"} <= responses.keys(), where
-        if op.path.startswith(("/health", "/verify", "/auth/jwks")):
+        if op.operation_id in NO_PROBLEM_DEFAULT:
             continue
         assert "default" in responses, f"{where}: missing default problem response"
 
@@ -100,47 +102,6 @@ def test_ingest_examples_cover_all_six_channels_and_validate() -> None:
     by_channel = {p["channel"]: p for p in payloads}
     assert by_channel["USSD"]["device_fingerprint"] is None
     assert "agent_id" in by_channel["AGENT_BANKING"]
-
-
-def _mutated(**changes: object) -> dict[str, Any]:
-    payload = _example("IngestMobileMoney")
-    for key, value in changes.items():
-        if value is _REMOVE:
-            payload.pop(key)
-        else:
-            payload[key] = value
-    return payload
-
-
-_REMOVE = object()
-
-
-@pytest.mark.req("FR-01-02", "NFR-SEC-03")
-@pytest.mark.parametrize(
-    ("label", "payload"),
-    [
-        ("missing currency", _mutated(currency=_REMOVE)),
-        ("missing transaction_id", _mutated(transaction_id=_REMOVE)),
-        ("amount as JSON number", _mutated(amount=15000)),
-        ("amount with 5 decimals", _mutated(amount="1.00001")),
-        ("zero amount", _mutated(amount="0.0000")),
-        ("negative amount", _mutated(amount="-5")),
-        ("15 integer digits", _mutated(amount="100000000000000")),
-        ("raw MSISDN account", _mutated(account_id="+250788123456")),
-        ("raw account number counterparty", _mutated(counterparty_id="0788123456")),
-        ("unsupported currency", _mutated(currency="XYZ")),
-        ("3-digit MCC", _mutated(merchant_category_code="481")),
-        ("latitude out of range", _mutated(latitude=91)),
-        ("longitude out of range", _mutated(longitude=-181)),
-        ("unknown channel", _mutated(channel="CRYPTO")),
-        ("non-UTC timestamp", _mutated(transaction_timestamp="2026-09-17T10:15:30+02:00")),
-        ("not a UUID", _mutated(transaction_id="12345")),
-        ("unexpected field", _mutated(customer_name="Synthetic Person")),
-        ("agent banking without agent_id", _mutated(channel="AGENT_BANKING")),
-    ],
-)
-def test_invalid_ingest_payloads_are_rejected(label: str, payload: dict[str, Any]) -> None:
-    assert errors(DOC, "TransactionIngestRequest", payload), f"accepted: {label}"
 
 
 @pytest.mark.req("FR-01-02", "D-43")
@@ -176,28 +137,23 @@ def test_currency_enum_matches_the_java_money_type() -> None:
 @pytest.mark.req("D-12")
 def test_ingest_response_exposes_no_model_internals() -> None:
     response = SCHEMAS["DecisionResponse"]
-    assert set(response["required"]) == {
-        "transaction_id",
-        "decision",
-        "risk_tier",
-        "reason_codes",
-        "scoring_result_id",
-        "model_version",
-        "decision_latency_ms",
-        "review_deadline_at",
-        "ml_unavailable_fallback",
-    }
+    assert (
+        set(response["required"])
+        == set(response["properties"])
+        == {
+            "transaction_id",
+            "decision",
+            "risk_tier",
+            "reason_codes",
+            "scoring_result_id",
+            "model_version",
+            "decision_latency_ms",
+            "review_deadline_at",
+            "ml_unavailable_fallback",
+        }
+    )
     assert response["additionalProperties"] is False
     assert response["properties"]["reason_codes"]["maxItems"] == 3
-    forbidden = {
-        "feature_vector",
-        "xgboost_score",
-        "lightgbm_score",
-        "anomaly_score",
-        "shap_top5",
-        "ensemble_score",
-    }
-    assert forbidden.isdisjoint(response["properties"])
 
 
 @pytest.mark.req("D-12", "D-14")
@@ -210,6 +166,99 @@ def test_decision_examples_validate_and_hold_requires_a_deadline() -> None:
     too_many_reasons = _example("DecisionDeclined")
     too_many_reasons["reason_codes"] = ["A_ONE", "B_TWO", "C_THREE", "D_FOUR"]
     assert errors(DOC, "DecisionResponse", too_many_reasons)
+
+
+@pytest.mark.req("D-12", "D-14")
+@pytest.mark.parametrize(
+    ("base", "changes", "valid"),
+    [
+        ("DecisionApproved", {"review_deadline_at": "2026-09-17T06:02:41Z"}, False),
+        ("DecisionApproved", {"risk_tier": "HIGH"}, False),
+        ("DecisionApproved", {"risk_tier": "MEDIUM"}, False),
+        ("DecisionHold", {"risk_tier": "LOW"}, False),
+        ("DecisionDeclined", {"decision": "APPROVE", "reason_codes": []}, False),
+        ("DecisionDeclined", {"risk_tier": "LOW", "reason_codes": ["ACCOUNT_FROZEN"]}, True),
+        ("DecisionDeclined", {"risk_tier": "MEDIUM", "reason_codes": ["ACCOUNT_FROZEN"]}, True),
+    ],
+)
+def test_decision_tier_and_deadline_are_consistent(
+    base: str, changes: dict[str, Any], valid: bool
+) -> None:
+    payload = _example(base) | changes
+    assert (errors(DOC, "DecisionResponse", payload) == []) is valid
+
+
+def _final_decision(**changes: object) -> dict[str, Any]:
+    state: dict[str, Any] = {
+        "event_id": "5f607182-9a0b-4cbe-8f1a-4b5c6d7e8f90",
+        "transaction_id": "7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60",
+        "decision_sequence": 2,
+        "decision": "DECLINE",
+        "final": True,
+        "decided_at": "2026-09-17T06:02:35Z",
+        "decided_by": "ANALYST",
+        "reason_codes": ["UNUSUAL_HOUR"],
+        "review_deadline_at": None,
+        "supersedes_decision": "HOLD",
+    }
+    return state | changes
+
+
+@pytest.mark.req("D-14")
+@pytest.mark.parametrize(
+    ("label", "state", "valid"),
+    [
+        ("analyst declines a hold", _final_decision(), True),
+        (
+            "pending hold at ingest",
+            _final_decision(
+                decision_sequence=1,
+                decision="HOLD",
+                final=False,
+                decided_by="MODEL",
+                review_deadline_at="2026-09-17T06:02:41Z",
+                supersedes_decision=None,
+            ),
+            True,
+        ),
+        (
+            "customer verification approves a decline",
+            _final_decision(
+                decision_sequence=3,
+                decision="APPROVE",
+                decided_by="CUSTOMER_VERIFICATION",
+                supersedes_decision="DECLINE",
+            ),
+            True,
+        ),
+        ("hold marked final", _final_decision(decision="HOLD", final=True), False),
+        ("non-hold not final", _final_decision(final=False), False),
+        (
+            "later state returns to hold",
+            _final_decision(
+                decision="HOLD", final=False, review_deadline_at="2026-09-17T06:02:41Z"
+            ),
+            False,
+        ),
+        (
+            "first state without MODEL",
+            _final_decision(decision_sequence=1, supersedes_decision=None),
+            False,
+        ),
+        ("later state without predecessor", _final_decision(supersedes_decision=None), False),
+        ("later state decided by MODEL", _final_decision(decided_by="MODEL"), False),
+        ("sequence zero", _final_decision(decision_sequence=0), False),
+        (
+            "missing event_id",
+            {k: v for k, v in _final_decision().items() if k != "event_id"},
+            False,
+        ),
+    ],
+)
+def test_final_decision_states_are_ordered_and_consistent(
+    label: str, state: dict[str, Any], valid: bool
+) -> None:
+    assert (errors(DOC, "FinalDecision", state) == []) is valid, label
 
 
 @pytest.mark.req("FR-02-01")
@@ -230,7 +279,7 @@ def test_scoring_result_carries_all_nine_required_fields() -> None:
     assert vector["minProperties"] == vector["maxProperties"] == 44
 
 
-@pytest.mark.req("FR-01-06", "FR-02-06")
+# Contract presence only: these routes are named in the SRS; behaviour is verified in M5-M7.
 @pytest.mark.parametrize(
     ("method", "path"),
     [
@@ -242,10 +291,42 @@ def test_scoring_result_carries_all_nine_required_fields() -> None:
         ("get", "/alerts"),
         ("get", "/health/ml"),
         ("get", "/health/kafka"),
+        ("get", "/actuator/health"),
     ],
 )
 def test_srs_named_routes_exist(method: str, path: str) -> None:
     assert method in DOC["paths"].get(path, {}), f"{method.upper()} {path}"
+
+
+@pytest.mark.req("FR-01-03")
+def test_ingest_documents_idempotency_conflicts() -> None:
+    ingest = DOC["paths"]["/transactions/ingest"]["post"]
+    assert ingest["responses"]["409"]["$ref"].endswith("/IdempotencyConflict")
+    assert "fingerprint" in ingest["description"]
+    assert (
+        "idempotency-conflict" in DOC["paths"]["/transactions/ingest/batch"]["post"]["description"]
+    )
+
+
+@pytest.mark.req("FR-07-02", "UX-REG-01")
+def test_every_staff_name_field_uses_the_person_name_rule() -> None:
+    for name in (
+        "StaffReference",
+        "StaffUser",
+        "StaffUserCreate",
+        "StaffUserUpdate",
+        "RegistrationRequest",
+    ):
+        properties = SCHEMAS[name]["properties"]
+        for field in ("first_name", "last_name"):
+            assert properties[field] == {"$ref": "#/components/schemas/PersonName"}, (name, field)
+
+
+@pytest.mark.req("D-19")
+def test_generated_secrets_have_recognisable_prefixes() -> None:
+    created = SCHEMAS["ApiKeyCreated"]["allOf"][1]["properties"]
+    assert created["raw_key"]["pattern"].startswith("^fsk_")
+    assert created["webhook_signing_secret"]["pattern"].startswith("^whsec_")
 
 
 def test_batch_limit_is_one_thousand() -> None:
@@ -282,22 +363,6 @@ def test_registration_separates_department_from_requested_role() -> None:
     assert set(registration["department"]["enum"]).isdisjoint(set(SCHEMAS["Role"]["enum"]))
 
 
-@pytest.mark.req("FR-07-07")
-@pytest.mark.parametrize(
-    ("password", "valid"),
-    [
-        ("Str0ng!pass", True),
-        ("short1!A", True),
-        ("nouppercase1!", False),
-        ("NoDigits!!", False),
-        ("NoSpecial123", False),
-        ("Sh0rt!", False),
-    ],
-)
-def test_password_policy(password: str, valid: bool) -> None:
-    assert (errors(DOC, "Password", password) == []) is valid
-
-
 @pytest.mark.req("NFR-SEC-03")
 def test_no_raw_personal_data_fields_in_any_schema() -> None:
     banned = {"account_name", "customer_name", "full_name", "msisdn", "phone_number", "national_id"}
@@ -319,6 +384,52 @@ def test_problem_examples_validate() -> None:
         "application/problem+json"
     ]["examples"]["missingField"]["value"]
     assert errors(DOC, "ValidationProblem", example) == []
+
+
+def test_problem_types_come_from_the_catalogue() -> None:
+    catalogue = SCHEMAS["ProblemType"]["enum"]
+    assert len(catalogue) == len(set(catalogue))
+    assert all(re.fullmatch(r"urn:fraudshield:problem:[a-z0-9-]+", t) for t in catalogue)
+    declared: set[str] = set()
+    for name, response in DOC["components"]["responses"].items():
+        if "application/problem+json" not in response.get("content", {}):
+            continue
+        types = response.get("x-problem-types")
+        assert types, f"response {name} does not list its problem types"
+        assert set(types) <= set(catalogue), name
+        declared.update(types)
+    assert declared == set(catalogue), set(catalogue) - declared
+    mentioned = set(re.findall(r"urn:fraudshield:problem:[a-z0-9-]+", json.dumps(DOC)))
+    assert mentioned <= set(catalogue), mentioned - set(catalogue)
+    problem = _example_problem()
+    problem["type"] = "urn:fraudshield:problem:not-in-catalogue"
+    assert errors(DOC, "Problem", problem)
+
+
+def _example_problem() -> dict[str, Any]:
+    return {
+        "type": "urn:fraudshield:problem:forbidden",
+        "title": "Forbidden",
+        "status": 403,
+        "correlation_id": "6f1c2d8e-5b0a-4c55-9f7a-2a1d3c4b5e6f",
+    }
+
+
+def test_validation_problem_is_400_or_422_with_the_validation_type() -> None:
+    example = DOC["components"]["responses"]["ValidationProblem"]["content"][
+        "application/problem+json"
+    ]["examples"]["missingField"]["value"]
+    assert errors(DOC, "ValidationProblem", example | {"status": 409})
+    assert errors(DOC, "ValidationProblem", example | {"type": "urn:fraudshield:problem:conflict"})
+    bad_code = copy.deepcopy(example)
+    bad_code["errors"][0]["code"] = "made_up"
+    assert errors(DOC, "ValidationProblem", bad_code)
+
+
+def test_timestamps_are_utc() -> None:
+    text = json.dumps(SCHEMAS)
+    assert '"date-time"' in text
+    assert text.count('"format": "date-time"') == 1, "use the Timestamp schema, which requires Z"
 
 
 @pytest.mark.req("FR-07-02", "UX-REG-01", "UX-REG-02")

@@ -1,0 +1,976 @@
+{
+  "description": "Request validation vectors (ADR 0011 section 6). Each case gives the request body (or raw_body when it is not JSON), the HTTP status and the errors[] field/code pairs the API must return. schema_detectable=false marks checks the server makes beyond JSON Schema; contract tests assert that the schema accepts those bodies, so the server check is known to be needed. Controller tests in M6 and M7 consume this file. Identifiers are synthetic; phone-shaped values use the unassigned E.164 country code 999.",
+  "schemas": {
+    "TransactionIngestRequest": [
+      {
+        "label": "valid mobile money example",
+        "body": {
+          "transaction_id": "3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11",
+          "account_id": "tok_A1b2C3d4E5f6G7h8J9k0L1m2",
+          "counterparty_id": "tok_Z9y8X7w6V5u4T3s2R1q0P9o8",
+          "amount": "15000",
+          "currency": "RWF",
+          "channel": "MOBILE_MONEY",
+          "merchant_category_code": "4829",
+          "latitude": -1.9441,
+          "longitude": 30.0619,
+          "device_fingerprint": "tok_D3v1c3F1ng3rpr1ntAaBbCc0",
+          "counterparty_country": "RW",
+          "transaction_timestamp": "2026-09-17T08:15:30Z"
+        },
+        "expected_status": 200,
+        "expected_errors": [],
+        "schema_detectable": true
+      },
+      {
+        "label": "null device fingerprint is allowed",
+        "body": {
+          "transaction_id": "3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11",
+          "account_id": "tok_A1b2C3d4E5f6G7h8J9k0L1m2",
+          "counterparty_id": "tok_Z9y8X7w6V5u4T3s2R1q0P9o8",
+          "amount": "15000",
+          "currency": "RWF",
+          "channel": "MOBILE_MONEY",
+          "merchant_category_code": "4829",
+          "latitude": -1.9441,
+          "longitude": 30.0619,
+          "device_fingerprint": null,
+          "counterparty_country": "RW",
+          "transaction_timestamp": "2026-09-17T08:15:30Z"
+        },
+        "expected_status": 200,
+        "expected_errors": [],
+        "schema_detectable": true
+      },
+      {
+        "label": "missing currency",
+        "body": {
+          "transaction_id": "3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11",
+          "account_id": "tok_A1b2C3d4E5f6G7h8J9k0L1m2",
+          "counterparty_id": "tok_Z9y8X7w6V5u4T3s2R1q0P9o8",
+          "amount": "15000",
+          "channel": "MOBILE_MONEY",
+          "merchant_category_code": "4829",
+          "latitude": -1.9441,
+          "longitude": 30.0619,
+          "device_fingerprint": "tok_D3v1c3F1ng3rpr1ntAaBbCc0",
+          "counterparty_country": "RW",
+          "transaction_timestamp": "2026-09-17T08:15:30Z"
+        },
+        "expected_status": 400,
+        "expected_errors": [
+          {
+            "field": "currency",
+            "code": "required"
+          }
+        ],
+        "schema_detectable": true
+      },
+      {
+        "label": "missing transaction_id",
+        "body": {
+          "account_id": "tok_A1b2C3d4E5f6G7h8J9k0L1m2",
+          "counterparty_id": "tok_Z9y8X7w6V5u4T3s2R1q0P9o8",
+          "amount": "15000",
+          "currency": "RWF",
+          "channel": "MOBILE_MONEY",
+          "merchant_category_code": "4829",
+          "latitude": -1.9441,
+          "longitude": 30.0619,
+          "device_fingerprint": "tok_D3v1c3F1ng3rpr1ntAaBbCc0",
+          "counterparty_country": "RW",
+          "transaction_timestamp": "2026-09-17T08:15:30Z"
+        },
+        "expected_status": 400,
+        "expected_errors": [
+          {
+            "field": "transaction_id",
+            "code": "required"
+          }
+        ],
+        "schema_detectable": true
+      },
+      {
+        "label": "unexpected field",
+        "body": {
+          "transaction_id": "3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11",
+          "account_id": "tok_A1b2C3d4E5f6G7h8J9k0L1m2",
+          "counterparty_id": "tok_Z9y8X7w6V5u4T3s2R1q0P9o8",
+          "amount": "15000",
+          "currency": "RWF",
+          "channel": "MOBILE_MONEY",
+          "merchant_category_code": "4829",
+          "latitude": -1.9441,
+          "longitude": 30.0619,
+          "device_fingerprint": "tok_D3v1c3F1ng3rpr1ntAaBbCc0",
+          "counterparty_country": "RW",
+          "transaction_timestamp": "2026-09-17T08:15:30Z",
+          "customer_name": "Synthetic Person"
+        },
+        "expected_status": 400,
+        "expected_errors": [
+          {
+            "field": "customer_name",
+            "code": "unknown_field"
+          }
+        ],
+        "schema_detectable": true
+      },
+      {
+        "label": "raw MSISDN as account_id",
+        "body": {
+          "transaction_id": "3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11",
+          "account_id": "+999000000001",
+          "counterparty_id": "tok_Z9y8X7w6V5u4T3s2R1q0P9o8",
+          "amount": "15000",
+          "currency": "RWF",
+          "channel": "MOBILE_MONEY",
+          "merchant_category_code": "4829",
+          "latitude": -1.9441,
+          "longitude": 30.0619,
+          "device_fingerprint": "tok_D3v1c3F1ng3rpr1ntAaBbCc0",
+          "counterparty_country": "RW",
+          "transaction_timestamp": "2026-09-17T08:15:30Z"
+        },
+        "expected_status": 400,
+        "expected_errors": [
+          {
+            "field": "account_id",
+            "code": "not_a_token"
+          }
+        ],
+        "schema_detectable": true
+      },
+      {
+        "label": "raw account number as counterparty_id",
+        "body": {
+          "transaction_id": "3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11",
+          "account_id": "tok_A1b2C3d4E5f6G7h8J9k0L1m2",
+          "counterparty_id": "0000000001",
+          "amount": "15000",
+          "currency": "RWF",
+          "channel": "MOBILE_MONEY",
+          "merchant_category_code": "4829",
+          "latitude": -1.9441,
+          "longitude": 30.0619,
+          "device_fingerprint": "tok_D3v1c3F1ng3rpr1ntAaBbCc0",
+          "counterparty_country": "RW",
+          "transaction_timestamp": "2026-09-17T08:15:30Z"
+        },
+        "expected_status": 400,
+        "expected_errors": [
+          {
+            "field": "counterparty_id",
+            "code": "not_a_token"
+          }
+        ],
+        "schema_detectable": true
+      },
+      {
+        "label": "AGENT_BANKING without agent_id",
+        "body": {
+          "transaction_id": "3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11",
+          "account_id": "tok_A1b2C3d4E5f6G7h8J9k0L1m2",
+          "counterparty_id": "tok_Z9y8X7w6V5u4T3s2R1q0P9o8",
+          "amount": "15000",
+          "currency": "RWF",
+          "channel": "AGENT_BANKING",
+          "merchant_category_code": "4829",
+          "latitude": -1.9441,
+          "longitude": 30.0619,
+          "device_fingerprint": "tok_D3v1c3F1ng3rpr1ntAaBbCc0",
+          "counterparty_country": "RW",
+          "transaction_timestamp": "2026-09-17T08:15:30Z"
+        },
+        "expected_status": 400,
+        "expected_errors": [
+          {
+            "field": "agent_id",
+            "code": "required"
+          }
+        ],
+        "schema_detectable": true
+      },
+      {
+        "label": "malformed JSON",
+        "raw_body": "{\"transaction_id\": ",
+        "expected_status": 400,
+        "expected_errors": [
+          {
+            "field": "",
+            "code": "malformed_json"
+          }
+        ],
+        "schema_detectable": false
+      },
+      {
+        "label": "amount as a JSON number",
+        "body": {
+          "transaction_id": "3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11",
+          "account_id": "tok_A1b2C3d4E5f6G7h8J9k0L1m2",
+          "counterparty_id": "tok_Z9y8X7w6V5u4T3s2R1q0P9o8",
+          "amount": 15000,
+          "currency": "RWF",
+          "channel": "MOBILE_MONEY",
+          "merchant_category_code": "4829",
+          "latitude": -1.9441,
+          "longitude": 30.0619,
+          "device_fingerprint": "tok_D3v1c3F1ng3rpr1ntAaBbCc0",
+          "counterparty_country": "RW",
+          "transaction_timestamp": "2026-09-17T08:15:30Z"
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "amount",
+            "code": "type_mismatch"
+          }
+        ],
+        "schema_detectable": true
+      },
+      {
+        "label": "latitude as a string",
+        "body": {
+          "transaction_id": "3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11",
+          "account_id": "tok_A1b2C3d4E5f6G7h8J9k0L1m2",
+          "counterparty_id": "tok_Z9y8X7w6V5u4T3s2R1q0P9o8",
+          "amount": "15000",
+          "currency": "RWF",
+          "channel": "MOBILE_MONEY",
+          "merchant_category_code": "4829",
+          "latitude": "-1.9441",
+          "longitude": 30.0619,
+          "device_fingerprint": "tok_D3v1c3F1ng3rpr1ntAaBbCc0",
+          "counterparty_country": "RW",
+          "transaction_timestamp": "2026-09-17T08:15:30Z"
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "latitude",
+            "code": "type_mismatch"
+          }
+        ],
+        "schema_detectable": true
+      },
+      {
+        "label": "amount with 5 decimals",
+        "body": {
+          "transaction_id": "3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11",
+          "account_id": "tok_A1b2C3d4E5f6G7h8J9k0L1m2",
+          "counterparty_id": "tok_Z9y8X7w6V5u4T3s2R1q0P9o8",
+          "amount": "1.00001",
+          "currency": "RWF",
+          "channel": "MOBILE_MONEY",
+          "merchant_category_code": "4829",
+          "latitude": -1.9441,
+          "longitude": 30.0619,
+          "device_fingerprint": "tok_D3v1c3F1ng3rpr1ntAaBbCc0",
+          "counterparty_country": "RW",
+          "transaction_timestamp": "2026-09-17T08:15:30Z"
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "amount",
+            "code": "invalid_format"
+          }
+        ],
+        "schema_detectable": true
+      },
+      {
+        "label": "amount with a leading zero",
+        "body": {
+          "transaction_id": "3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11",
+          "account_id": "tok_A1b2C3d4E5f6G7h8J9k0L1m2",
+          "counterparty_id": "tok_Z9y8X7w6V5u4T3s2R1q0P9o8",
+          "amount": "01",
+          "currency": "RWF",
+          "channel": "MOBILE_MONEY",
+          "merchant_category_code": "4829",
+          "latitude": -1.9441,
+          "longitude": 30.0619,
+          "device_fingerprint": "tok_D3v1c3F1ng3rpr1ntAaBbCc0",
+          "counterparty_country": "RW",
+          "transaction_timestamp": "2026-09-17T08:15:30Z"
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "amount",
+            "code": "invalid_format"
+          }
+        ],
+        "schema_detectable": true
+      },
+      {
+        "label": "amount in exponent notation",
+        "body": {
+          "transaction_id": "3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11",
+          "account_id": "tok_A1b2C3d4E5f6G7h8J9k0L1m2",
+          "counterparty_id": "tok_Z9y8X7w6V5u4T3s2R1q0P9o8",
+          "amount": "1e3",
+          "currency": "RWF",
+          "channel": "MOBILE_MONEY",
+          "merchant_category_code": "4829",
+          "latitude": -1.9441,
+          "longitude": 30.0619,
+          "device_fingerprint": "tok_D3v1c3F1ng3rpr1ntAaBbCc0",
+          "counterparty_country": "RW",
+          "transaction_timestamp": "2026-09-17T08:15:30Z"
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "amount",
+            "code": "invalid_format"
+          }
+        ],
+        "schema_detectable": true
+      },
+      {
+        "label": "zero amount",
+        "body": {
+          "transaction_id": "3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11",
+          "account_id": "tok_A1b2C3d4E5f6G7h8J9k0L1m2",
+          "counterparty_id": "tok_Z9y8X7w6V5u4T3s2R1q0P9o8",
+          "amount": "0.0000",
+          "currency": "RWF",
+          "channel": "MOBILE_MONEY",
+          "merchant_category_code": "4829",
+          "latitude": -1.9441,
+          "longitude": 30.0619,
+          "device_fingerprint": "tok_D3v1c3F1ng3rpr1ntAaBbCc0",
+          "counterparty_country": "RW",
+          "transaction_timestamp": "2026-09-17T08:15:30Z"
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "amount",
+            "code": "out_of_range"
+          }
+        ],
+        "schema_detectable": true
+      },
+      {
+        "label": "negative amount",
+        "body": {
+          "transaction_id": "3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11",
+          "account_id": "tok_A1b2C3d4E5f6G7h8J9k0L1m2",
+          "counterparty_id": "tok_Z9y8X7w6V5u4T3s2R1q0P9o8",
+          "amount": "-5",
+          "currency": "RWF",
+          "channel": "MOBILE_MONEY",
+          "merchant_category_code": "4829",
+          "latitude": -1.9441,
+          "longitude": 30.0619,
+          "device_fingerprint": "tok_D3v1c3F1ng3rpr1ntAaBbCc0",
+          "counterparty_country": "RW",
+          "transaction_timestamp": "2026-09-17T08:15:30Z"
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "amount",
+            "code": "out_of_range"
+          }
+        ],
+        "schema_detectable": true
+      },
+      {
+        "label": "15 integer digits",
+        "body": {
+          "transaction_id": "3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11",
+          "account_id": "tok_A1b2C3d4E5f6G7h8J9k0L1m2",
+          "counterparty_id": "tok_Z9y8X7w6V5u4T3s2R1q0P9o8",
+          "amount": "100000000000000",
+          "currency": "RWF",
+          "channel": "MOBILE_MONEY",
+          "merchant_category_code": "4829",
+          "latitude": -1.9441,
+          "longitude": 30.0619,
+          "device_fingerprint": "tok_D3v1c3F1ng3rpr1ntAaBbCc0",
+          "counterparty_country": "RW",
+          "transaction_timestamp": "2026-09-17T08:15:30Z"
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "amount",
+            "code": "out_of_range"
+          }
+        ],
+        "schema_detectable": true
+      },
+      {
+        "label": "unsupported currency",
+        "body": {
+          "transaction_id": "3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11",
+          "account_id": "tok_A1b2C3d4E5f6G7h8J9k0L1m2",
+          "counterparty_id": "tok_Z9y8X7w6V5u4T3s2R1q0P9o8",
+          "amount": "15000",
+          "currency": "XYZ",
+          "channel": "MOBILE_MONEY",
+          "merchant_category_code": "4829",
+          "latitude": -1.9441,
+          "longitude": 30.0619,
+          "device_fingerprint": "tok_D3v1c3F1ng3rpr1ntAaBbCc0",
+          "counterparty_country": "RW",
+          "transaction_timestamp": "2026-09-17T08:15:30Z"
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "currency",
+            "code": "unsupported_value"
+          }
+        ],
+        "schema_detectable": true
+      },
+      {
+        "label": "unknown channel",
+        "body": {
+          "transaction_id": "3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11",
+          "account_id": "tok_A1b2C3d4E5f6G7h8J9k0L1m2",
+          "counterparty_id": "tok_Z9y8X7w6V5u4T3s2R1q0P9o8",
+          "amount": "15000",
+          "currency": "RWF",
+          "channel": "CRYPTO",
+          "merchant_category_code": "4829",
+          "latitude": -1.9441,
+          "longitude": 30.0619,
+          "device_fingerprint": "tok_D3v1c3F1ng3rpr1ntAaBbCc0",
+          "counterparty_country": "RW",
+          "transaction_timestamp": "2026-09-17T08:15:30Z"
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "channel",
+            "code": "unsupported_value"
+          }
+        ],
+        "schema_detectable": true
+      },
+      {
+        "label": "3-digit MCC",
+        "body": {
+          "transaction_id": "3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11",
+          "account_id": "tok_A1b2C3d4E5f6G7h8J9k0L1m2",
+          "counterparty_id": "tok_Z9y8X7w6V5u4T3s2R1q0P9o8",
+          "amount": "15000",
+          "currency": "RWF",
+          "channel": "MOBILE_MONEY",
+          "merchant_category_code": "481",
+          "latitude": -1.9441,
+          "longitude": 30.0619,
+          "device_fingerprint": "tok_D3v1c3F1ng3rpr1ntAaBbCc0",
+          "counterparty_country": "RW",
+          "transaction_timestamp": "2026-09-17T08:15:30Z"
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "merchant_category_code",
+            "code": "invalid_format"
+          }
+        ],
+        "schema_detectable": true
+      },
+      {
+        "label": "latitude above 90",
+        "body": {
+          "transaction_id": "3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11",
+          "account_id": "tok_A1b2C3d4E5f6G7h8J9k0L1m2",
+          "counterparty_id": "tok_Z9y8X7w6V5u4T3s2R1q0P9o8",
+          "amount": "15000",
+          "currency": "RWF",
+          "channel": "MOBILE_MONEY",
+          "merchant_category_code": "4829",
+          "latitude": 91,
+          "longitude": 30.0619,
+          "device_fingerprint": "tok_D3v1c3F1ng3rpr1ntAaBbCc0",
+          "counterparty_country": "RW",
+          "transaction_timestamp": "2026-09-17T08:15:30Z"
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "latitude",
+            "code": "out_of_range"
+          }
+        ],
+        "schema_detectable": true
+      },
+      {
+        "label": "longitude below -180",
+        "body": {
+          "transaction_id": "3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11",
+          "account_id": "tok_A1b2C3d4E5f6G7h8J9k0L1m2",
+          "counterparty_id": "tok_Z9y8X7w6V5u4T3s2R1q0P9o8",
+          "amount": "15000",
+          "currency": "RWF",
+          "channel": "MOBILE_MONEY",
+          "merchant_category_code": "4829",
+          "latitude": -1.9441,
+          "longitude": -181,
+          "device_fingerprint": "tok_D3v1c3F1ng3rpr1ntAaBbCc0",
+          "counterparty_country": "RW",
+          "transaction_timestamp": "2026-09-17T08:15:30Z"
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "longitude",
+            "code": "out_of_range"
+          }
+        ],
+        "schema_detectable": true
+      },
+      {
+        "label": "timestamp with an offset instead of Z",
+        "body": {
+          "transaction_id": "3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11",
+          "account_id": "tok_A1b2C3d4E5f6G7h8J9k0L1m2",
+          "counterparty_id": "tok_Z9y8X7w6V5u4T3s2R1q0P9o8",
+          "amount": "15000",
+          "currency": "RWF",
+          "channel": "MOBILE_MONEY",
+          "merchant_category_code": "4829",
+          "latitude": -1.9441,
+          "longitude": 30.0619,
+          "device_fingerprint": "tok_D3v1c3F1ng3rpr1ntAaBbCc0",
+          "counterparty_country": "RW",
+          "transaction_timestamp": "2026-09-17T10:15:30+02:00"
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "transaction_timestamp",
+            "code": "invalid_format"
+          }
+        ],
+        "schema_detectable": true
+      },
+      {
+        "label": "transaction_id not a UUID",
+        "body": {
+          "transaction_id": "12345",
+          "account_id": "tok_A1b2C3d4E5f6G7h8J9k0L1m2",
+          "counterparty_id": "tok_Z9y8X7w6V5u4T3s2R1q0P9o8",
+          "amount": "15000",
+          "currency": "RWF",
+          "channel": "MOBILE_MONEY",
+          "merchant_category_code": "4829",
+          "latitude": -1.9441,
+          "longitude": 30.0619,
+          "device_fingerprint": "tok_D3v1c3F1ng3rpr1ntAaBbCc0",
+          "counterparty_country": "RW",
+          "transaction_timestamp": "2026-09-17T08:15:30Z"
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "transaction_id",
+            "code": "invalid_format"
+          }
+        ],
+        "schema_detectable": true
+      },
+      {
+        "label": "timestamp more than 5 minutes in the future",
+        "body": {
+          "transaction_id": "3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11",
+          "account_id": "tok_A1b2C3d4E5f6G7h8J9k0L1m2",
+          "counterparty_id": "tok_Z9y8X7w6V5u4T3s2R1q0P9o8",
+          "amount": "15000",
+          "currency": "RWF",
+          "channel": "MOBILE_MONEY",
+          "merchant_category_code": "4829",
+          "latitude": -1.9441,
+          "longitude": 30.0619,
+          "device_fingerprint": "tok_D3v1c3F1ng3rpr1ntAaBbCc0",
+          "counterparty_country": "RW",
+          "transaction_timestamp": "2999-01-01T00:00:00Z"
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "transaction_timestamp",
+            "code": "timestamp_in_future"
+          }
+        ],
+        "schema_detectable": false
+      },
+      {
+        "label": "400 and 422 errors together report 400 with both",
+        "body": {
+          "transaction_id": "3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11",
+          "account_id": "tok_A1b2C3d4E5f6G7h8J9k0L1m2",
+          "counterparty_id": "tok_Z9y8X7w6V5u4T3s2R1q0P9o8",
+          "amount": "15000",
+          "channel": "MOBILE_MONEY",
+          "merchant_category_code": "4829",
+          "latitude": 91,
+          "longitude": 30.0619,
+          "device_fingerprint": "tok_D3v1c3F1ng3rpr1ntAaBbCc0",
+          "counterparty_country": "RW",
+          "transaction_timestamp": "2026-09-17T08:15:30Z"
+        },
+        "expected_status": 400,
+        "expected_errors": [
+          {
+            "field": "currency",
+            "code": "required"
+          },
+          {
+            "field": "latitude",
+            "code": "out_of_range"
+          }
+        ],
+        "schema_detectable": true
+      }
+    ],
+    "ThresholdUpdate": [
+      {
+        "label": "valid update",
+        "body": {
+          "base_version": 3,
+          "reason": "Card fraud wave in September",
+          "channels": [
+            {
+              "channel": "CARD",
+              "medium_threshold": 0.6,
+              "high_threshold": 0.85
+            }
+          ]
+        },
+        "expected_status": 200,
+        "expected_errors": [],
+        "schema_detectable": true
+      },
+      {
+        "label": "medium equal to high",
+        "body": {
+          "base_version": 3,
+          "reason": "Card fraud wave in September",
+          "channels": [
+            {
+              "channel": "CARD",
+              "medium_threshold": 0.85,
+              "high_threshold": 0.85
+            }
+          ]
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "channels[0]",
+            "code": "thresholds_not_ordered"
+          }
+        ],
+        "schema_detectable": false
+      },
+      {
+        "label": "medium above high",
+        "body": {
+          "base_version": 3,
+          "reason": "Card fraud wave in September",
+          "channels": [
+            {
+              "channel": "CARD",
+              "medium_threshold": 0.9,
+              "high_threshold": 0.1
+            }
+          ]
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "channels[0]",
+            "code": "thresholds_not_ordered"
+          }
+        ],
+        "schema_detectable": false
+      },
+      {
+        "label": "duplicate channel",
+        "body": {
+          "base_version": 3,
+          "reason": "Card fraud wave in September",
+          "channels": [
+            {
+              "channel": "CARD",
+              "medium_threshold": 0.6,
+              "high_threshold": 0.85
+            },
+            {
+              "channel": "CARD",
+              "medium_threshold": 0.6,
+              "high_threshold": 0.9
+            }
+          ]
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "channels[1].channel",
+            "code": "duplicate_channel"
+          }
+        ],
+        "schema_detectable": false
+      },
+      {
+        "label": "probability above 1",
+        "body": {
+          "base_version": 3,
+          "reason": "Card fraud wave in September",
+          "channels": [
+            {
+              "channel": "CARD",
+              "medium_threshold": 0.6,
+              "high_threshold": 1.5
+            }
+          ]
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "channels[0].high_threshold",
+            "code": "out_of_range"
+          }
+        ],
+        "schema_detectable": true
+      },
+      {
+        "label": "missing reason",
+        "body": {
+          "base_version": 3,
+          "channels": [
+            {
+              "channel": "CARD",
+              "medium_threshold": 0.6,
+              "high_threshold": 0.85
+            }
+          ]
+        },
+        "expected_status": 400,
+        "expected_errors": [
+          {
+            "field": "reason",
+            "code": "required"
+          }
+        ],
+        "schema_detectable": true
+      }
+    ],
+    "IpAllowlistEntryCreate": [
+      {
+        "label": "valid IPv4 range",
+        "body": {
+          "cidr": "203.0.113.0/24",
+          "description": "Head office egress (documentation range)"
+        },
+        "expected_status": 201,
+        "expected_errors": [],
+        "schema_detectable": true
+      },
+      {
+        "label": "valid IPv6 range",
+        "body": {
+          "cidr": "2001:db8::/32",
+          "description": "Head office egress (documentation range)"
+        },
+        "expected_status": 201,
+        "expected_errors": [],
+        "schema_detectable": true
+      },
+      {
+        "label": "octets and prefix out of range",
+        "body": {
+          "cidr": "999.999.1.1/999",
+          "description": "Head office egress (documentation range)"
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "cidr",
+            "code": "invalid_cidr"
+          }
+        ],
+        "schema_detectable": false
+      },
+      {
+        "label": "host bits set",
+        "body": {
+          "cidr": "203.0.113.7/24",
+          "description": "Head office egress (documentation range)"
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "cidr",
+            "code": "invalid_cidr"
+          }
+        ],
+        "schema_detectable": false
+      },
+      {
+        "label": "IPv6 prefix above 128",
+        "body": {
+          "cidr": "2001:db8::/129",
+          "description": "Head office egress (documentation range)"
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "cidr",
+            "code": "invalid_cidr"
+          }
+        ],
+        "schema_detectable": false
+      },
+      {
+        "label": "no prefix",
+        "body": {
+          "cidr": "203.0.113.0",
+          "description": "Head office egress (documentation range)"
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "cidr",
+            "code": "invalid_format"
+          }
+        ],
+        "schema_detectable": true
+      }
+    ],
+    "ApiKeyCreate": [
+      {
+        "label": "valid key with webhook",
+        "body": {
+          "name": "Core banking production",
+          "scopes": [
+            "ingest:write",
+            "decisions:read"
+          ],
+          "webhook_url": "https://hooks.example.com/fraudshield"
+        },
+        "expected_status": 201,
+        "expected_errors": [],
+        "schema_detectable": true
+      },
+      {
+        "label": "valid key without webhook",
+        "body": {
+          "name": "Core banking production",
+          "scopes": [
+            "ingest:write",
+            "decisions:read"
+          ],
+          "webhook_url": null
+        },
+        "expected_status": 201,
+        "expected_errors": [],
+        "schema_detectable": true
+      },
+      {
+        "label": "plain HTTP webhook",
+        "body": {
+          "name": "Core banking production",
+          "scopes": [
+            "ingest:write",
+            "decisions:read"
+          ],
+          "webhook_url": "http://hooks.example.com/fraudshield"
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "webhook_url",
+            "code": "invalid_format"
+          }
+        ],
+        "schema_detectable": true
+      },
+      {
+        "label": "cloud metadata address",
+        "body": {
+          "name": "Core banking production",
+          "scopes": [
+            "ingest:write",
+            "decisions:read"
+          ],
+          "webhook_url": "https://169.254.169.254/latest/meta-data"
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "webhook_url",
+            "code": "webhook_url_not_allowed"
+          }
+        ],
+        "schema_detectable": false
+      },
+      {
+        "label": "private IP literal",
+        "body": {
+          "name": "Core banking production",
+          "scopes": [
+            "ingest:write",
+            "decisions:read"
+          ],
+          "webhook_url": "https://10.0.0.5/hook"
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "webhook_url",
+            "code": "webhook_url_not_allowed"
+          }
+        ],
+        "schema_detectable": false
+      },
+      {
+        "label": "loopback host name",
+        "body": {
+          "name": "Core banking production",
+          "scopes": [
+            "ingest:write",
+            "decisions:read"
+          ],
+          "webhook_url": "https://localhost/hook"
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "webhook_url",
+            "code": "webhook_url_not_allowed"
+          }
+        ],
+        "schema_detectable": false
+      },
+      {
+        "label": "user info in URL",
+        "body": {
+          "name": "Core banking production",
+          "scopes": [
+            "ingest:write",
+            "decisions:read"
+          ],
+          "webhook_url": "https://user:pass@hooks.example.com/hook"
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "webhook_url",
+            "code": "webhook_url_not_allowed"
+          }
+        ],
+        "schema_detectable": false
+      }
+    ]
+  }
+}

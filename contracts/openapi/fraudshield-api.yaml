@@ -52,10 +52,26 @@ paths:
       operationId: ingestTransaction
       summary: Score a transaction and return the decision synchronously
       description: |
-        Validates, scores and decides within the synchronous latency budget (D-13). Submitting the
-        same `transaction_id` again within 24 hours returns the cached decision without rescoring,
-        with header `Idempotent-Replayed: true` (FR-01-03). MEDIUM decisions return `HOLD`; the final
-        decision follows via `GET /decisions/{transaction_id}` and the `decision.final` webhook (D-14).
+        Validates, scores and decides within the synchronous latency budget (D-13). MEDIUM decisions
+        return `HOLD`; the final decision follows via `GET /decisions/{transaction_id}` and the
+        `decision.final` webhook (D-14).
+
+        **Idempotency (FR-01-03).** The idempotency record stores, with the cached
+        `DecisionResponse`, a SHA-256 fingerprint of the canonical request (the validated fields
+        serialised in schema order, amounts as normalised decimal strings). Within 24 hours:
+        * same `transaction_id`, same fingerprint → 200 with the cached decision and
+          `Idempotent-Replayed: true`, no rescoring;
+        * same `transaction_id`, different fingerprint → 409 `idempotency-conflict`; nothing is
+          scored or cached, and an AUTH audit event with action `IDEMPOTENCY_CONFLICT` is written;
+        * a duplicate that arrives while the first request is still being decided waits for that
+          result (up to the latency budget) and then follows the two rules above; if the first
+          request fails, the duplicate is processed as a first submission.
+
+        **Validation (ADR 0011 section 6).** 400 when the body is not a usable instance of the
+        schema (malformed JSON, missing required field, unknown field, raw identifier instead of a
+        token); otherwise 422 for type mismatches and unacceptable values. Every error is listed in
+        `errors[]` with a `ValidationErrorCode`; with errors of both classes the status is 400.
+        Vectors: contracts/validation/request-validation-vectors.json.
       security:
         - apiKeyAuth: []
       x-required-scopes: ["ingest:write"]
@@ -89,6 +105,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "413": { $ref: "#/components/responses/PayloadTooLarge" }
+        "409": { $ref: "#/components/responses/IdempotencyConflict" }
         "415": { $ref: "#/components/responses/UnsupportedMediaType" }
         "422": { $ref: "#/components/responses/ValidationProblem" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
@@ -100,6 +117,10 @@ paths:
       tags: [ingestion]
       operationId: ingestTransactionBatch
       summary: Submit up to 1,000 transactions for asynchronous scoring (FR-01-06)
+      description: >-
+        Items follow the single-ingest idempotency rules; an item whose transaction_id conflicts
+        with an earlier submission is reported in the job results as REJECTED with an
+        idempotency-conflict problem, and the other items are still processed.
       security:
         - apiKeyAuth: []
       x-required-scopes: ["ingest:write"]
@@ -173,15 +194,41 @@ paths:
         default: { $ref: "#/components/responses/UnexpectedProblem" }
 
   # ---------------------------------------------------------------------------------------------
-  # Health (public, minimal bodies)
+  # Health. Component detail is for administrators only (ADR 0014): a public endpoint showing
+  # that the ML scorer has fallen back to rules would tell attackers when to strike.
   # ---------------------------------------------------------------------------------------------
+  /actuator/health:
+    servers:
+      - url: /
+        description: Management port of each API instance; not routed through the public ingress
+    get:
+      tags: [health]
+      operationId: getLiveness
+      summary: Process liveness and readiness for orchestration probes
+      description: >-
+        Reports only whether this API instance can accept and decide requests. The rule-based
+        fallback keeps the API able to decide, so ML or Kafka degradation does not change this
+        status and is not disclosed here.
+      security: []
+      x-public: true
+      responses:
+        "200":
+          description: Up
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProbeStatus" }
+        "503":
+          description: Down
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProbeStatus" }
+
   /health/ml:
     get:
       tags: [health]
       operationId: getMlHealth
-      summary: ML scoring service health
-      security: []
-      x-public: true
+      summary: ML scoring service health, including whether the rule-based fallback is active
+      x-required-roles: [ADMIN]
       responses:
         "200":
           description: Healthy
@@ -193,14 +240,15 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ComponentHealth" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
 
   /health/kafka:
     get:
       tags: [health]
       operationId: getKafkaHealth
       summary: Kafka producer and local spool health
-      security: []
-      x-public: true
+      x-required-roles: [ADMIN]
       responses:
         "200":
           description: Healthy
@@ -212,6 +260,8 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ComponentHealth" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
 
   # ---------------------------------------------------------------------------------------------
   # Auth (FR-07)
@@ -225,7 +275,10 @@ paths:
         Returns an access token in the body and sets a rotating refresh-token cookie
         (httpOnly, Secure, SameSite=Strict, path `/api/v1/auth/refresh`) plus a CSRF cookie (D-27).
         10 attempts per 15 minutes per IP (higher for allow-listed office IPs, D-26); 5 failures lock
-        the account.
+        the account. A password longer than 72 UTF-8 bytes is answered as invalid credentials
+        without calling bcrypt. Correct credentials for an account in `PENDING_APPROVAL` or
+        `DEACTIVATED` return 403 `account-not-active` (a wrong password returns 401 whatever the
+        account state, so the state is not revealed to someone without the password).
       security: []
       x-public: true
       requestBody:
@@ -245,6 +298,7 @@ paths:
               schema: { $ref: "#/components/schemas/TokenResponse" }
         "400": { $ref: "#/components/responses/ValidationProblem" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AccountNotActive" }
         "423": { $ref: "#/components/responses/Locked" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
@@ -309,6 +363,11 @@ paths:
       tags: [auth]
       operationId: logout
       summary: End this session; revokes Google tokens when present (FR-07-09)
+      description: >-
+        The refresh cookie is scoped to the refresh path and never reaches this endpoint, so the
+        session is identified by the access token's `sid` claim: the server revokes the refresh
+        token family stored under that session ID and clears the cookie with a `Set-Cookie` that
+        uses the refresh path (D-27).
       x-required-roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER, ADMIN]
       parameters:
         - $ref: "#/components/parameters/CsrfToken"
@@ -353,6 +412,10 @@ paths:
       tags: [auth]
       operationId: register
       summary: Self-registration; always creates a PENDING_APPROVAL account (D-24)
+      description: >-
+        The response is the same 202 whether or not the email or employee ID is already
+        registered, so registration cannot be used to discover accounts (E.8). For a duplicate no
+        account is created and the existing account's owner is emailed a notice instead.
       security: []
       x-public: true
       requestBody:
@@ -362,12 +425,14 @@ paths:
             schema: { $ref: "#/components/schemas/RegistrationRequest" }
       responses:
         "202":
-          description: Registered; awaiting email verification and administrator approval
+          description: >-
+            Accepted; if the details were new, the account awaits email verification and
+            administrator approval
           content:
             application/json:
               schema: { $ref: "#/components/schemas/PendingApproval" }
         "400": { $ref: "#/components/responses/ValidationProblem" }
-        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
 
@@ -519,7 +584,7 @@ paths:
               required: [current_password, new_password]
               additionalProperties: false
               properties:
-                current_password: { type: string, minLength: 1, maxLength: 128 }
+                current_password: { type: string, minLength: 1, maxLength: 72, x-max-utf8-bytes: 72 }
                 new_password: { $ref: "#/components/schemas/Password" }
       responses:
         "204": { description: Password changed }
@@ -593,7 +658,9 @@ paths:
       description: |
         Default order is HIGH first, then fraud probability descending (FR-04-02). `sort=expected_loss`
         orders by calibrated probability × amount in RWF (D-10). `queue=anomaly` lists
-        Isolation-Forest-only alerts, which hold nothing and have no timer (D-10).
+        Isolation-Forest-only alerts, which hold nothing and have no timer (D-10). `queue=escalated`
+        lists only escalated entries whose target role is at or below the caller's role, plus
+        entries the caller escalated.
       x-required-roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
       parameters:
         - { name: queue, in: query, schema: { type: string, enum: [standard, anomaly, escalated], default: standard } }
@@ -681,6 +748,16 @@ paths:
         window (D-44). A stale `alert_version` or a MEDIUM alert past its deadline returns 409 with
         the current state (D-29).
       x-required-roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
+      x-authorisation-rules:
+        - rule: Callers rank ANALYST < SENIOR_ANALYST < RISK_OFFICER (E.8). An escalated alert entry can be decided only by a caller whose role is at or above its target_role
+          problem: urn:fraudshield:problem:escalation-level-required
+          status: 403
+        - rule: A stale alert_version returns the current alert
+          problem: urn:fraudshield:problem:stale-alert
+          status: 409
+        - rule: A MEDIUM alert past review_deadline_at can no longer be decided here
+          problem: urn:fraudshield:problem:review-deadline-passed
+          status: 409
       parameters:
         - $ref: "#/components/parameters/AlertId"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -697,9 +774,9 @@ paths:
               schema: { $ref: "#/components/schemas/AlertDecisionAccepted" }
         "400": { $ref: "#/components/responses/ValidationProblem" }
         "401": { $ref: "#/components/responses/Unauthorized" }
-        "403": { $ref: "#/components/responses/Forbidden" }
+        "403": { $ref: "#/components/responses/AuthorisationRuleViolation" }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { $ref: "#/components/responses/StaleAlert" }
+        "409": { $ref: "#/components/responses/StateConflict" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
 
   /alerts/{alert_id}/decisions/{decision_id}/undo:
@@ -708,6 +785,13 @@ paths:
       operationId: undoAlertDecision
       summary: Undo a decision within its grace window (D-44)
       x-required-roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
+      x-authorisation-rules:
+        - rule: Only the author of the decision can undo it
+          problem: urn:fraudshield:problem:not-decision-author
+          status: 403
+        - rule: Only a PENDING_COMMIT decision before undo_until can be undone
+          problem: urn:fraudshield:problem:undo-window-expired
+          status: 409
       parameters:
         - $ref: "#/components/parameters/AlertId"
         - name: decision_id
@@ -717,9 +801,9 @@ paths:
       responses:
         "204": { description: Undone; a compensating record and an ANALYST_DECISION/UNDO audit event were written }
         "401": { $ref: "#/components/responses/Unauthorized" }
-        "403": { $ref: "#/components/responses/Forbidden" }
+        "403": { $ref: "#/components/responses/AuthorisationRuleViolation" }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { $ref: "#/components/responses/Conflict" }
+        "409": { $ref: "#/components/responses/StateConflict" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
 
   /alerts/{alert_id}/escalations:
@@ -728,6 +812,16 @@ paths:
       operationId: escalateAlert
       summary: Escalate to a senior analyst or risk officer with a reason (FR-04-10)
       x-required-roles: [ANALYST, SENIOR_ANALYST]
+      x-authorisation-rules:
+        - rule: target_role must rank strictly above the caller's role (a SENIOR_ANALYST can escalate only to RISK_OFFICER)
+          problem: urn:fraudshield:problem:escalation-target-not-higher
+          status: 422
+        - rule: Callers rank ANALYST < SENIOR_ANALYST < RISK_OFFICER (E.8). An escalated alert entry can be decided only by a caller whose role is at or above its target_role
+          problem: urn:fraudshield:problem:escalation-level-required
+          status: 403
+        - rule: A stale alert_version returns the current alert
+          problem: urn:fraudshield:problem:stale-alert
+          status: 409
       parameters:
         - $ref: "#/components/parameters/AlertId"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -744,9 +838,10 @@ paths:
               schema: { $ref: "#/components/schemas/AlertSummary" }
         "400": { $ref: "#/components/responses/ValidationProblem" }
         "401": { $ref: "#/components/responses/Unauthorized" }
-        "403": { $ref: "#/components/responses/Forbidden" }
+        "403": { $ref: "#/components/responses/AuthorisationRuleViolation" }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { $ref: "#/components/responses/StaleAlert" }
+        "409": { $ref: "#/components/responses/StateConflict" }
+        "422": { $ref: "#/components/responses/AuthorisationRuleViolation" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
 
   /alerts/{alert_id}/overrides:
@@ -755,6 +850,16 @@ paths:
       operationId: overrideAlertDecision
       summary: Senior override of an analyst decision with a reason of at least 20 characters (FR-05-01)
       x-required-roles: [RISK_OFFICER]
+      x-authorisation-rules:
+        - rule: Only a COMMITTED decision can be overridden; a PENDING_COMMIT one is still undoable by its author
+          problem: urn:fraudshield:problem:decision-not-committed
+          status: 409
+        - rule: A risk officer cannot override a decision they made or an override they made
+          problem: urn:fraudshield:problem:own-decision-override
+          status: 403
+        - rule: A stale alert_version returns the current alert
+          problem: urn:fraudshield:problem:stale-alert
+          status: 409
       parameters:
         - $ref: "#/components/parameters/AlertId"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -771,9 +876,9 @@ paths:
               schema: { $ref: "#/components/schemas/DecisionRecord" }
         "400": { $ref: "#/components/responses/ValidationProblem" }
         "401": { $ref: "#/components/responses/Unauthorized" }
-        "403": { $ref: "#/components/responses/Forbidden" }
+        "403": { $ref: "#/components/responses/AuthorisationRuleViolation" }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { $ref: "#/components/responses/StaleAlert" }
+        "409": { $ref: "#/components/responses/StateConflict" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
 
   /transactions/{transaction_id}/scoring-result:
@@ -941,7 +1046,7 @@ paths:
       tags: [risk-officer]
       operationId: listCampaigns
       summary: Detected fraud campaigns (FR-05-04)
-      x-required-roles: [RISK_OFFICER, SENIOR_ANALYST]
+      x-required-roles: [RISK_OFFICER]
       parameters:
         - { name: status, in: query, schema: { type: string, enum: [ACTIVE, CLOSED] } }
         - $ref: "#/components/parameters/Cursor"
@@ -1142,7 +1247,7 @@ paths:
       tags: [risk-officer]
       operationId: previewThresholdImpact
       summary: Estimated alerts per hour at proposed thresholds, from the last 24 h of scores
-      x-required-roles: [RISK_OFFICER, ADMIN]
+      x-required-roles: [RISK_OFFICER]
       requestBody:
         required: true
         content:
@@ -1248,8 +1353,14 @@ paths:
       tags: [admin]
       operationId: updateThresholds
       summary: Change per-channel thresholds or timeout policy at runtime; effective within 60 s (FR-02-06)
-      description: Creates a new immutable threshold version; a THRESHOLD_CHANGE audit event is written.
-      x-required-roles: [ADMIN, RISK_OFFICER]
+      description: |
+        Creates a new immutable threshold version; a THRESHOLD_CHANGE audit event is written. The
+        path keeps the SRS name (FR-02-06), but only a risk officer may change thresholds: they
+        decide which fraud is declined, and an administrator who also manages users, API keys and
+        models must not control the decision surface alone (separation of duties, ADR 0014).
+        Semantic checks (422): `medium_threshold` < `high_threshold` (`thresholds_not_ordered`) and
+        at most one entry per channel (`duplicate_channel`).
+      x-required-roles: [RISK_OFFICER]
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -1336,7 +1447,20 @@ paths:
       tags: [admin]
       operationId: updateUser
       summary: Update profile, role or status; role and status changes increment the token version (FR-06-02, D-27)
+      description: >-
+        Every account holds exactly one role (ADR 0014); an ADMIN is never also given a decision
+        role, so ADMIN does not decide alerts (E.8).
       x-required-roles: [ADMIN]
+      x-authorisation-rules:
+        - rule: An administrator cannot change their own role or status (FR-07-01, no self-elevation)
+          problem: urn:fraudshield:problem:self-modification
+          status: 403
+        - rule: The last ACTIVE ADMIN of an institution cannot be demoted, locked or deactivated
+          problem: urn:fraudshield:problem:last-active-admin
+          status: 409
+        - rule: A stale version returns the current account
+          problem: urn:fraudshield:problem:conflict
+          status: 409
       parameters:
         - $ref: "#/components/parameters/UserId"
       requestBody:
@@ -1352,9 +1476,9 @@ paths:
               schema: { $ref: "#/components/schemas/StaffUser" }
         "400": { $ref: "#/components/responses/ValidationProblem" }
         "401": { $ref: "#/components/responses/Unauthorized" }
-        "403": { $ref: "#/components/responses/Forbidden" }
+        "403": { $ref: "#/components/responses/AuthorisationRuleViolation" }
         "404": { $ref: "#/components/responses/NotFound" }
-        "409": { $ref: "#/components/responses/Conflict" }
+        "409": { $ref: "#/components/responses/StateConflict" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
 
   /admin/approvals:
@@ -1635,7 +1759,7 @@ paths:
                 required: [model_version, enabled_at]
                 properties:
                   model_version: { type: [string, "null"] }
-                  enabled_at: { type: [string, "null"], format: date-time }
+                  enabled_at: { oneOf: [{ $ref: "#/components/schemas/Timestamp" }, { type: "null" }] }
         "400": { $ref: "#/components/responses/ValidationProblem" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
@@ -1784,7 +1908,7 @@ paths:
       tags: [admin]
       operationId: listCircuitBreakers
       summary: MCC circuit breaker states (FR-03-07, D-18)
-      x-required-roles: [ADMIN, RISK_OFFICER]
+      x-required-roles: [ADMIN]
       responses:
         "200":
           description: Breakers
@@ -1890,7 +2014,7 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: "RS256 access token, 15-minute expiry; claims sub, role, first_name, email, institution_id, token_version, kid."
+      description: "RS256 access token, 15-minute expiry; claims sub, role, first_name, email, institution_id, token_version, sid (session and refresh-token family ID, ADR 0014), kid."
     refreshCookie:
       type: apiKey
       in: cookie
@@ -1973,6 +2097,7 @@ components:
   responses:
     ValidationProblem:
       description: Missing, malformed or invalid fields
+      x-problem-types: ["urn:fraudshield:problem:validation"]
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/ValidationProblem" }
@@ -1990,61 +2115,73 @@ components:
                     message: currency is required
     Unauthorized:
       description: Missing, invalid, expired or revoked credentials
+      x-problem-types: ["urn:fraudshield:problem:unauthorized"]
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
     Forbidden:
       description: Authenticated but not permitted (wrong role, wrong API-key scope, pending approval)
+      x-problem-types: ["urn:fraudshield:problem:forbidden"]
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
     NotFound:
       description: Not found in the caller's institution
+      x-problem-types: ["urn:fraudshield:problem:not-found"]
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
     NotAcceptable:
       description: Unsupported Accept header
+      x-problem-types: ["urn:fraudshield:problem:not-acceptable"]
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
     Conflict:
       description: Conflicting state or duplicate resource
+      x-problem-types: ["urn:fraudshield:problem:conflict"]
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
     StaleAlert:
       description: The alert changed since the client read it, or its review deadline passed (D-29)
+      x-problem-types: ["urn:fraudshield:problem:stale-alert", "urn:fraudshield:problem:review-deadline-passed"]
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/StaleAlertProblem" }
     PromotionGateFailed:
       description: Shadow gate not met; reasons listed (D-11)
+      x-problem-types: ["urn:fraudshield:problem:promotion-gate-failed"]
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/PromotionGateProblem" }
     Gone:
       description: Token expired or already used
+      x-problem-types: ["urn:fraudshield:problem:gone"]
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
     Locked:
       description: Account locked after repeated failures; unlock by email link, administrator or after 30 minutes
+      x-problem-types: ["urn:fraudshield:problem:account-locked"]
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
     PayloadTooLarge:
       description: Body exceeds the size limit
+      x-problem-types: ["urn:fraudshield:problem:payload-too-large"]
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
     UnsupportedMediaType:
       description: Content-Type must be application/json
+      x-problem-types: ["urn:fraudshield:problem:unsupported-media-type"]
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
     TooManyRequests:
       description: Rate limited
+      x-problem-types: ["urn:fraudshield:problem:rate-limited"]
       headers:
         Retry-After:
           description: Seconds to wait
@@ -2054,6 +2191,7 @@ components:
           schema: { $ref: "#/components/schemas/Problem" }
     ServiceUnavailable:
       description: A dependency is unavailable and no safe fallback exists
+      x-problem-types: ["urn:fraudshield:problem:service-unavailable"]
       headers:
         Retry-After:
           description: Seconds to wait
@@ -2061,8 +2199,54 @@ components:
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
+    AuthorisationRuleViolation:
+      description: >-
+        The role may call this operation but an object-level rule in the operation's
+        x-authorisation-rules forbids this call (ADR 0014); 403 for permission rules, 422 for an
+        invalid escalation target
+      x-problem-types:
+        - "urn:fraudshield:problem:forbidden"
+        - "urn:fraudshield:problem:escalation-level-required"
+        - "urn:fraudshield:problem:not-decision-author"
+        - "urn:fraudshield:problem:own-decision-override"
+        - "urn:fraudshield:problem:escalation-target-not-higher"
+        - "urn:fraudshield:problem:self-modification"
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    StateConflict:
+      description: The target changed or is in a state that does not allow this action
+      x-problem-types:
+        - "urn:fraudshield:problem:conflict"
+        - "urn:fraudshield:problem:stale-alert"
+        - "urn:fraudshield:problem:review-deadline-passed"
+        - "urn:fraudshield:problem:decision-not-committed"
+        - "urn:fraudshield:problem:undo-window-expired"
+        - "urn:fraudshield:problem:last-active-admin"
+      content:
+        application/problem+json:
+          schema:
+            description: StaleAlertProblem (with the current alert) for stale-alert, otherwise Problem
+            anyOf:
+              - $ref: "#/components/schemas/StaleAlertProblem"
+              - $ref: "#/components/schemas/Problem"
+    AccountNotActive:
+      description: The account is pending approval or deactivated (D-23, D-24, FR-06-02)
+      x-problem-types: ["urn:fraudshield:problem:account-not-active"]
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    IdempotencyConflict:
+      description: >-
+        The transaction_id was already submitted within 24 hours with a different request
+        fingerprint; nothing was scored (FR-01-03)
+      x-problem-types: ["urn:fraudshield:problem:idempotency-conflict"]
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
     UnexpectedProblem:
       description: Unexpected error; the correlation ID identifies server logs
+      x-problem-types: ["urn:fraudshield:problem:internal"]
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
@@ -2265,13 +2449,22 @@ components:
     Password:
       type: string
       minLength: 8
-      maxLength: 128
-      description: At least one upper-case letter, lower-case letter, digit and special character (FR-07-07)
+      maxLength: 72
+      x-max-utf8-bytes: 72
+      x-validation: password
+      description: |
+        FR-07-07 policy, decided in ADR 0014: 8 to 72 characters **and** at most 72 UTF-8 bytes,
+        because bcrypt uses only the first 72 bytes (a longer password would be silently truncated
+        or rejected by the encoder). With multi-byte characters the character limit is lower; the
+        server and the front end enforce the byte limit, which JSON Schema cannot express. At least
+        one ASCII upper-case letter, one ASCII lower-case letter, one ASCII digit and one character
+        that is none of these and not whitespace (any symbol or non-ASCII character counts). Spaces
+        are allowed inside. Shared vectors: contracts/validation/password-vectors.json.
       allOf:
         - pattern: "[A-Z]"
         - pattern: "[a-z]"
         - pattern: "[0-9]"
-        - pattern: "[!@#$%^&*]"
+        - pattern: "[^A-Za-z0-9\\s]"
     ReasonCode:
       type: string
       pattern: "^[A-Z][A-Z0-9_]{2,63}$"
@@ -2296,18 +2489,78 @@ components:
       type: object
       required: [type, title, status, correlation_id]
       properties:
-        type: { type: string, pattern: "^urn:fraudshield:problem:[a-z0-9-]+$" }
+        type: { $ref: "#/components/schemas/ProblemType" }
         title: { type: string, maxLength: 200 }
         status: { type: integer, minimum: 400, maximum: 599 }
         detail: { type: string, maxLength: 2000 }
         instance: { type: string, maxLength: 500 }
         correlation_id: { type: string, format: uuid }
+    ProblemType:
+      type: string
+      description: |
+        The problem type catalogue (RFC 9457 `type`, ADR 0011 section 6). Clients switch on these
+        values; adding one is backward compatible, renaming or removing one is breaking. Each
+        response in components/responses lists the types it may carry in `x-problem-types`.
+      enum:
+        - urn:fraudshield:problem:validation
+        - urn:fraudshield:problem:unauthorized
+        - urn:fraudshield:problem:forbidden
+        - urn:fraudshield:problem:account-not-active
+        - urn:fraudshield:problem:self-modification
+        - urn:fraudshield:problem:escalation-level-required
+        - urn:fraudshield:problem:not-decision-author
+        - urn:fraudshield:problem:own-decision-override
+        - urn:fraudshield:problem:escalation-target-not-higher
+        - urn:fraudshield:problem:not-found
+        - urn:fraudshield:problem:not-acceptable
+        - urn:fraudshield:problem:conflict
+        - urn:fraudshield:problem:stale-alert
+        - urn:fraudshield:problem:review-deadline-passed
+        - urn:fraudshield:problem:decision-not-committed
+        - urn:fraudshield:problem:undo-window-expired
+        - urn:fraudshield:problem:idempotency-conflict
+        - urn:fraudshield:problem:last-active-admin
+        - urn:fraudshield:problem:promotion-gate-failed
+        - urn:fraudshield:problem:gone
+        - urn:fraudshield:problem:payload-too-large
+        - urn:fraudshield:problem:unsupported-media-type
+        - urn:fraudshield:problem:account-locked
+        - urn:fraudshield:problem:rate-limited
+        - urn:fraudshield:problem:service-unavailable
+        - urn:fraudshield:problem:internal
+    ValidationErrorCode:
+      type: string
+      description: >-
+        Field-level error codes (ADR 0011 section 6). `x-status-by-code` gives the HTTP status each
+        code implies: 400 when the body is not a usable instance of the schema, 422 for a
+        well-formed field with an unacceptable value. A response with codes of both classes is 400
+        and lists all errors. Shared vectors: contracts/validation/request-validation-vectors.json.
+      enum: [malformed_json, required, unknown_field, not_a_token, type_mismatch, invalid_format, unsupported_value, out_of_range, too_many_items, timestamp_in_future, thresholds_not_ordered, duplicate_channel, invalid_cidr, webhook_url_not_allowed, password_policy, person_name]
+      x-status-by-code:
+        malformed_json: 400
+        required: 400
+        unknown_field: 400
+        not_a_token: 400
+        type_mismatch: 422
+        invalid_format: 422
+        unsupported_value: 422
+        out_of_range: 422
+        too_many_items: 422
+        timestamp_in_future: 422
+        thresholds_not_ordered: 422
+        duplicate_channel: 422
+        invalid_cidr: 422
+        webhook_url_not_allowed: 422
+        password_policy: 422
+        person_name: 422
     ValidationProblem:
       allOf:
         - $ref: "#/components/schemas/Problem"
         - type: object
           required: [errors]
           properties:
+            type: { const: "urn:fraudshield:problem:validation" }
+            status: { enum: [400, 422] }
             errors:
               type: array
               minItems: 1
@@ -2317,7 +2570,7 @@ components:
                 additionalProperties: false
                 properties:
                   field: { type: string, maxLength: 200 }
-                  code: { type: string, pattern: "^[a-z_]{2,64}$" }
+                  code: { $ref: "#/components/schemas/ValidationErrorCode" }
                   message: { type: string, maxLength: 500 }
     StaleAlertProblem:
       allOf:
@@ -2400,27 +2653,123 @@ components:
           oneOf:
             - $ref: "#/components/schemas/Timestamp"
             - type: "null"
-        ml_unavailable_fallback: { type: boolean }
+        ml_unavailable_fallback:
+          type: boolean
+          description: >-
+            True when the ML scorer was unavailable and the rule-based fallback decided (NFR-REL-01).
+            An addition to the D-12 field list, recorded in ADR 0011 section 9: integrators need it
+            to route fallback decisions to their own review, and it reveals no model internals.
+      allOf:
+        - description: HOLD, and only HOLD, carries a review deadline (D-14)
+          if:
+            properties: { decision: { const: HOLD } }
+          then:
+            properties:
+              review_deadline_at: { $ref: "#/components/schemas/Timestamp" }
+          else:
+            properties:
+              review_deadline_at: { type: "null" }
+        - description: HOLD is the MEDIUM outcome (E.6)
+          if:
+            properties: { decision: { const: HOLD } }
+          then:
+            properties:
+              risk_tier: { const: MEDIUM }
+        - description: APPROVE is only possible for LOW (E.6)
+          if:
+            properties: { decision: { const: APPROVE } }
+          then:
+            properties:
+              risk_tier: { const: LOW }
+        - description: >-
+            HIGH is always declined. DECLINE with a lower tier is allowed for a frozen account
+            (reason ACCOUNT_FROZEN, E.6 step 2).
+          if:
+            properties: { risk_tier: { const: HIGH } }
+          then:
+            properties:
+              decision: { const: DECLINE }
+    FinalDecision:
+      type: object
+      description: |
+        One decision state of a transaction (D-14). The same shape is returned by
+        `GET /decisions/{transaction_id}` (latest state), published on `fs.decisions.final` and sent
+        as the `decision.final` webhook body, so the three cannot drift (ADR 0011 section 9).
+
+        A transaction's decision can change more than once, so receivers must order by
+        `decision_sequence`, not by decision value: apply a state only if its `decision_sequence` is
+        greater than the last one applied for that `transaction_id`; otherwise acknowledge and
+        ignore it. `event_id` identifies one state and stays the same across delivery retries.
+
+        Allowed transitions (anything else is a server defect):
+        * sequence 1 (`decided_by: MODEL`): APPROVE, DECLINE or HOLD, as in the ingest response;
+        * HOLD → APPROVE or DECLINE (`ANALYST`), TIMEOUT_RELEASE (`TIMEOUT_POLICY`,
+          RELEASE_WITH_TIMEOUT_LABEL) or DECLINE (`TIMEOUT_POLICY`, DECLINE_AND_VERIFY);
+        * DECLINE → APPROVE (`CUSTOMER_VERIFICATION` "Yes, this was me", or `SENIOR_OVERRIDE`);
+        * APPROVE or TIMEOUT_RELEASE → DECLINE and DECLINE → APPROVE (`SENIOR_OVERRIDE`);
+        * no state ever returns to HOLD.
+      required:
+        [event_id, transaction_id, decision_sequence, decision, final, decided_at, decided_by,
+         reason_codes, review_deadline_at, supersedes_decision]
+      additionalProperties: false
+      properties:
+        event_id:
+          type: string
+          format: uuid
+          description: Identifies this state; the deduplication key for webhook and Kafka deliveries
+        transaction_id: { type: string, format: uuid }
+        decision_sequence:
+          type: integer
+          minimum: 1
+          description: 1 for the ingest decision; increases by exactly 1 with each change
+        decision: { $ref: "#/components/schemas/FinalDecisionValue" }
+        final:
+          type: boolean
+          description: >-
+            False only while HOLD awaits review. A final state can still be superseded by a later
+            sequence (customer verification or senior override).
+        decided_at:
+          $ref: "#/components/schemas/Timestamp"
+          description: When this state was decided (for HOLD, the ingest decision time)
+        decided_by:
+          type: string
+          enum: [MODEL, ANALYST, TIMEOUT_POLICY, CUSTOMER_VERIFICATION, SENIOR_OVERRIDE]
+        reason_codes:
+          type: array
+          maxItems: 3
+          items: { $ref: "#/components/schemas/ReasonCode" }
+        review_deadline_at:
+          oneOf:
+            - $ref: "#/components/schemas/Timestamp"
+            - type: "null"
+        supersedes_decision:
+          description: The decision of sequence n-1; null for sequence 1
+          oneOf:
+            - $ref: "#/components/schemas/FinalDecisionValue"
+            - type: "null"
       allOf:
         - if:
             properties: { decision: { const: HOLD } }
           then:
             properties:
+              final: { const: false }
               review_deadline_at: { $ref: "#/components/schemas/Timestamp" }
-    FinalDecision:
-      type: object
-      required: [transaction_id, decision, final, decided_at]
-      additionalProperties: false
-      properties:
-        transaction_id: { type: string, format: uuid }
-        decision: { $ref: "#/components/schemas/FinalDecisionValue" }
-        final: { type: boolean, description: False while HOLD is pending }
-        decided_at: { $ref: "#/components/schemas/Timestamp" }
-        decided_by: { type: string, enum: [MODEL, ANALYST, TIMEOUT_POLICY, CUSTOMER_VERIFICATION, SENIOR_OVERRIDE] }
-        review_deadline_at:
-          oneOf:
-            - $ref: "#/components/schemas/Timestamp"
-            - type: "null"
+          else:
+            properties:
+              final: { const: true }
+              review_deadline_at: { type: "null" }
+        - if:
+            properties: { decision_sequence: { const: 1 } }
+          then:
+            properties:
+              decided_by: { const: MODEL }
+              supersedes_decision: { type: "null" }
+              decision: { enum: [APPROVE, DECLINE, HOLD] }
+          else:
+            properties:
+              decided_by: { not: { const: MODEL } }
+              supersedes_decision: { $ref: "#/components/schemas/FinalDecisionValue" }
+              decision: { not: { const: HOLD } }
     JobAccepted:
       type: object
       required: [job_id, accepted, status_url]
@@ -2451,6 +2800,12 @@ components:
               decision: { $ref: "#/components/schemas/DecisionResponse" }
               problem: { $ref: "#/components/schemas/ValidationProblem" }
         next_cursor: { type: [string, "null"] }
+    ProbeStatus:
+      type: object
+      required: [status]
+      additionalProperties: false
+      properties:
+        status: { type: string, enum: [UP, DOWN] }
     ComponentHealth:
       type: object
       required: [status]
@@ -2522,12 +2877,19 @@ components:
 
     # --- alerts ---------------------------------------------------------------------------------
     AlertSummary:
-      type: object
       description: Card and feed row content (FR-04-03)
+      allOf:
+        - $ref: "#/components/schemas/AlertSummaryBase"
+      unevaluatedProperties: false
+    AlertSummaryBase:
+      type: object
+      description: >-
+        Open base shared by AlertSummary and AlertDetail. Not used directly; the composing schemas
+        close it with unevaluatedProperties (additionalProperties inside allOf makes the
+        composition unsatisfiable).
       required:
         [alert_id, version, transaction_id, tier, status, fraud_probability, amount, channel,
          masked_account_name, merchant, transaction_timestamp, top_reasons, review_deadline_at]
-      additionalProperties: false
       properties:
         alert_id: { type: string, format: uuid }
         version: { type: integer, minimum: 0 }
@@ -2555,8 +2917,9 @@ components:
             - type: "null"
         escalated_from_alert_id: { type: [string, "null"], format: uuid }
     AlertDetail:
+      unevaluatedProperties: false
       allOf:
-        - $ref: "#/components/schemas/AlertSummary"
+        - $ref: "#/components/schemas/AlertSummaryBase"
         - type: object
           required: [account_token, counterparty_token, summary_template_key, anomaly_score, decisions]
           properties:
@@ -2633,8 +2996,8 @@ components:
       additionalProperties: false
       properties:
         user_id: { type: string, format: uuid }
-        first_name: { type: string, maxLength: 50 }
-        last_name: { type: string, maxLength: 50 }
+        first_name: { $ref: "#/components/schemas/PersonName" }
+        last_name: { $ref: "#/components/schemas/PersonName" }
         role: { $ref: "#/components/schemas/Role" }
     DashboardStats:
       type: object
@@ -2882,17 +3245,22 @@ components:
             op: { type: string, enum: [eq, ne, gt, gte, lt, lte, in, not_in, between, is_null, is_not_null] }
             value: { type: [string, number, boolean, array, "null"] }
     RuleDraft:
+      allOf:
+        - $ref: "#/components/schemas/RuleDraftBase"
+      unevaluatedProperties: false
+    RuleDraftBase:
       type: object
+      description: Open base shared by RuleDraft and Rule (closed by the composing schemas)
       required: [rule_name, description, expression, risk_tier_override]
-      additionalProperties: false
       properties:
         rule_name: { type: string, pattern: "^[A-Za-z0-9 _.-]{3,80}$" }
         description: { type: string, minLength: 10, maxLength: 1000 }
         expression: { $ref: "#/components/schemas/RuleExpression" }
         risk_tier_override: { type: string, enum: [HIGH, MEDIUM], description: Rules may only raise a tier }
     Rule:
+      unevaluatedProperties: false
       allOf:
-        - $ref: "#/components/schemas/RuleDraft"
+        - $ref: "#/components/schemas/RuleDraftBase"
         - type: object
           required: [rule_id, version, state, created_by, created_at, trigger_count, last_triggered_at]
           properties:
@@ -2910,7 +3278,10 @@ components:
       type: object
       required: [channel, medium_threshold, high_threshold]
       additionalProperties: false
-      description: Half-open tiers — HIGH ≥ high; MEDIUM ≥ medium and < high; LOW otherwise (E.6)
+      description: >-
+        Half-open tiers — HIGH ≥ high; MEDIUM ≥ medium and < high; LOW otherwise (E.6). The server
+        rejects medium_threshold ≥ high_threshold with 422 thresholds_not_ordered (JSON Schema
+        cannot compare two fields).
       properties:
         channel: { $ref: "#/components/schemas/Channel" }
         medium_threshold: { $ref: "#/components/schemas/Probability" }
@@ -2927,6 +3298,7 @@ components:
           type: array
           minItems: 6
           maxItems: 6
+          description: Exactly one entry per channel
           items: { $ref: "#/components/schemas/ChannelThreshold" }
     ThresholdUpdate:
       type: object
@@ -2939,6 +3311,7 @@ components:
           type: array
           minItems: 1
           maxItems: 6
+          description: At most one entry per channel (422 duplicate_channel)
           items: { $ref: "#/components/schemas/ChannelThreshold" }
     SarReport:
       type: object
@@ -2983,7 +3356,12 @@ components:
       additionalProperties: false
       properties:
         email: { $ref: "#/components/schemas/Email" }
-        password: { type: string, minLength: 1, maxLength: 128 }
+        password:
+          type: string
+          minLength: 1
+          maxLength: 72
+          x-max-utf8-bytes: 72
+          description: Longer input is rejected as invalid credentials (401) without calling bcrypt
     GoogleSignInRequest:
       type: object
       required: [authorization_code, code_verifier, redirect_uri]
@@ -3068,7 +3446,7 @@ components:
         linked_providers:
           type: array
           items: { type: string, enum: [GOOGLE] }
-        last_login_at: { type: [string, "null"], format: date-time }
+        last_login_at: { oneOf: [{ $ref: "#/components/schemas/Timestamp" }, { type: "null" }] }
         created_at: { $ref: "#/components/schemas/Timestamp" }
     StaffUserCreate:
       type: object
@@ -3107,15 +3485,27 @@ components:
           items: { $ref: "#/components/schemas/StaffUser" }
         next_cursor: { type: [string, "null"] }
     IpAllowlistEntryCreate:
+      allOf:
+        - $ref: "#/components/schemas/IpAllowlistEntryBase"
+      unevaluatedProperties: false
+    IpAllowlistEntryBase:
       type: object
+      description: Open base shared by IpAllowlistEntryCreate and IpAllowlistEntry
       required: [cidr, description]
-      additionalProperties: false
       properties:
-        cidr: { type: string, pattern: "^[0-9a-fA-F:.]+/[0-9]{1,3}$" }
+        cidr:
+          type: string
+          pattern: "^[0-9a-fA-F:.]+/[0-9]{1,3}$"
+          maxLength: 43
+          description: >-
+            IPv4 or IPv6 network in CIDR notation. The pattern only screens the shape; the server
+            parses the address and prefix (IPv4 prefix ≤ 32, IPv6 ≤ 128, no host bits set) and
+            rejects anything else with 422 invalid_cidr.
         description: { type: string, minLength: 3, maxLength: 200 }
     IpAllowlistEntry:
+      unevaluatedProperties: false
       allOf:
-        - $ref: "#/components/schemas/IpAllowlistEntryCreate"
+        - $ref: "#/components/schemas/IpAllowlistEntryBase"
         - type: object
           required: [entry_id, created_by, created_at]
           properties:
@@ -3136,11 +3526,27 @@ components:
           minItems: 1
           uniqueItems: true
           items: { $ref: "#/components/schemas/ApiKeyScope" }
-        webhook_url: { type: [string, "null"], format: uri, pattern: "^https://" }
+        webhook_url:
+          type: [string, "null"]
+          format: uri
+          pattern: "^https://"
+          maxLength: 2048
+          description: |
+            Receives `decision.final`. Rejected with 422 `webhook_url_not_allowed` unless it is an
+            absolute HTTPS URL without user info whose host resolves only to public addresses: no
+            loopback, private (RFC 1918, RFC 4193), link-local (including 169.254.169.254 cloud
+            metadata), carrier-grade NAT (100.64.0.0/10), multicast or unspecified addresses, and
+            no IP literals. The dispatcher resolves the host again at every delivery, pins the
+            connection to the checked address and does not follow redirects (SSRF, M6 test
+            obligation).
     ApiKey:
+      allOf:
+        - $ref: "#/components/schemas/ApiKeyBase"
+      unevaluatedProperties: false
+    ApiKeyBase:
       type: object
+      description: Open base shared by ApiKey and ApiKeyCreated
       required: [key_id, name, scopes, last_four, state, created_at, expires_at, last_used_at]
-      additionalProperties: false
       properties:
         key_id: { type: string, pattern: "^[a-z0-9]{12}$" }
         name: { type: string }
@@ -3150,11 +3556,14 @@ components:
         last_four: { type: string, pattern: "^[A-Za-z0-9]{4}$" }
         state: { type: string, enum: [ACTIVE, ROTATING, REVOKED] }
         created_at: { $ref: "#/components/schemas/Timestamp" }
-        expires_at: { type: [string, "null"], format: date-time, description: Set during the 24-hour rotation overlap }
-        last_used_at: { type: [string, "null"], format: date-time }
+        expires_at:
+          description: Set during the 24-hour rotation overlap
+          oneOf: [{ $ref: "#/components/schemas/Timestamp" }, { type: "null" }]
+        last_used_at: { oneOf: [{ $ref: "#/components/schemas/Timestamp" }, { type: "null" }] }
     ApiKeyCreated:
+      unevaluatedProperties: false
       allOf:
-        - $ref: "#/components/schemas/ApiKey"
+        - $ref: "#/components/schemas/ApiKeyBase"
         - type: object
           required: [raw_key]
           properties:
@@ -3164,7 +3573,10 @@ components:
               description: Shown exactly once; only an HMAC of the secret is stored (D-19)
             webhook_signing_secret:
               type: [string, "null"]
-              description: Shown exactly once; used to verify decision.final webhooks
+              pattern: "^whsec_(dev|test|stg|prod)_[A-Za-z0-9]{32,64}$"
+              description: >-
+                Shown exactly once; verifies decision.final webhooks. Null when the key has no
+                webhook_url. The fixed prefix lets secret scanners recognise it.
 
     # --- models, datasets, health, audit ----------------------------------------------------------
     ShadowGate:
@@ -3321,8 +3733,8 @@ components:
         state: { type: string, enum: [CLOSED, OPEN] }
         window_fraud_rate: { $ref: "#/components/schemas/Probability" }
         window_transactions: { type: integer, minimum: 0 }
-        opened_at: { type: [string, "null"], format: date-time }
-        clean_since: { type: [string, "null"], format: date-time }
+        opened_at: { oneOf: [{ $ref: "#/components/schemas/Timestamp" }, { type: "null" }] }
+        clean_since: { oneOf: [{ $ref: "#/components/schemas/Timestamp" }, { type: "null" }] }
     WebhookDelivery:
       type: object
       required: [delivery_id, event, transaction_id, attempts, last_status, last_attempt_at]
