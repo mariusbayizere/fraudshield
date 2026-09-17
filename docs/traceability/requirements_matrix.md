@@ -260,7 +260,7 @@ Rows: 258. Status counts: IN_PROGRESS 7, NOT_STARTED 251.
 | D-44 | M | M8 | NOT_STARTED | "Undo within 5 seconds" conflicts with immutable decisions and immediate side effects | — | — | — | — |
 | D-45 | M | M8 | NOT_STARTED | SHAP chart "all 44 features ranked" overwhelms under time pressure. | — | — | — | — |
 | D-46 | M | M8 | NOT_STARTED | Leaflet base-map tiles from public servers break the CSP, data residency and 2G usability; per-point fraud maps can expose individuals. | — | — | — | — |
-| D-47 | M | M0 | IN_PROGRESS | KinyaMed text in 05B | tools/src/fraudshield_tools/scope_guard.py<br>tools/src/fraudshield_tools/traceability_seed.py | tools/tests/test_scope_and_registers.py:26<br>tools/tests/test_scope_and_registers.py:31<br>tools/tests/test_scope_and_registers.py:56<br>tools/tests/test_scope_and_registers.py:73 | — | — |
+| D-47 | M | M0 | IN_PROGRESS | KinyaMed text in 05B | tools/src/fraudshield_tools/scope_guard.py<br>tools/src/fraudshield_tools/traceability_seed.py | tools/tests/test_scope_and_registers.py:169<br>tools/tests/test_scope_and_registers.py:26<br>tools/tests/test_scope_and_registers.py:31<br>tools/tests/test_scope_and_registers.py:56<br>tools/tests/test_scope_and_registers.py:73 | — | — |
 | D-48 | M | M0 | IN_PROGRESS | The roadmap compresses everything into weeks 4–6. | docs/adr/0001-record-architecture-decisions.md<br>docs/traceability/requirements.yaml | — | — | — |
 | D-49 | M | M1 | NOT_STARTED | TimescaleDB availability and licensing. | — | — | — | — |
 | D-50 | M | M5 | NOT_STARTED | MLflow "stages" are deprecated in favour of registry aliases. | — | — | — | — |

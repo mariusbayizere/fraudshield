@@ -43,33 +43,96 @@ PERMISSIVE = frozenset(
 )
 # Weak-copyleft and documentation licences acceptable for tools that are never distributed.
 DEV_ONLY = frozenset(
-    {"EPL-1.0", "EPL-2.0", "MPL-2.0", "LGPL-2.1-or-later", "LGPL-3.0-or-later", "CC-BY-4.0"}
+    {
+        "EPL-1.0",
+        "EPL-2.0",
+        "MPL-2.0",
+        "LGPL-2.1-only",
+        "LGPL-2.1-or-later",
+        "LGPL-3.0-only",
+        "LGPL-3.0-or-later",
+        "CC-BY-4.0",
+    }
 )
+# Recognised so that they fail as "not allowed" rather than "unidentified".
+DENIED = frozenset(
+    {
+        "GPL-2.0-only",
+        "GPL-2.0-or-later",
+        "GPL-3.0-only",
+        "GPL-3.0-or-later",
+        "AGPL-3.0-only",
+        "AGPL-3.0-or-later",
+        "SSPL-1.0",
+        "BUSL-1.1",
+        "Elastic-2.0",
+    }
+)
+KNOWN = PERMISSIVE | DEV_ONLY | DENIED
 ALLOWED = {"runtime": PERMISSIVE, "dev": PERMISSIVE | DEV_ONLY}
+# SPDX exceptions that do not change the base licence's acceptability.
+ALLOWED_WITH_EXCEPTIONS = frozenset({"LLVM-exception"})
 
-# Reviewed per-package decisions where metadata is missing or ambiguous. Key: ecosystem:name.
-EXCEPTIONS: dict[str, tuple[str, str]] = {}
+# Reviewed, version-pinned decisions where metadata is missing or ambiguous; an upgrade of the
+# package removes the exception and forces a new review. Value: (SPDX expression, reason).
+EXCEPTIONS: dict[str, tuple[str, str]] = {
+    "python:nodeenv@1.10.0": (
+        "BSD-3-Clause",
+        "metadata says only 'BSD'; dist-info/licenses/LICENSE is the 3-clause text with the "
+        "non-endorsement clause (verified 2026-09-17)",
+    ),
+    "maven:com.tngtech.archunit:archunit@1.5.0": (
+        "Apache-2.0 AND BSD-3-Clause",
+        "POM declares Apache-2.0 and 'BSD'; the BSD part is shaded ASM, whose bundled "
+        "asm.license is the 3-clause text (verified 2026-09-17)",
+    ),
+}
 
-_NORMALISE: tuple[tuple[re.Pattern[str], str], ...] = tuple(
-    (re.compile(pattern, re.IGNORECASE), spdx)
-    for pattern, spdx in (
-        (r"^apache[- ]2\.0$|apache (software )?licen[cs]e,? (version )?2\.0", "Apache-2.0"),
-        (r"^mit(-0)?$|^mit licen[cs]e$|permission is hereby granted, free of charge", "MIT"),
-        (r"^bsd-2-clause$|simplified bsd", "BSD-2-Clause"),
-        (r"^bsd-3-clause$|new bsd|modified bsd|^bsd( licen[cs]e)?$", "BSD-3-Clause"),
-        (r"^isc( licen[cs]e)?$", "ISC"),
-        (r"^psf-2\.0$|python software foundation", "PSF-2.0"),
-        (r"^mpl-2\.0$|mozilla public license 2\.0", "MPL-2.0"),
-        (r"^epl-2\.0$|eclipse public license (v|- v)?(ersion )?2\.0", "EPL-2.0"),
-        (r"^epl-1\.0$|eclipse public license (v|- v)?(ersion )?1\.0", "EPL-1.0"),
-        (r"^blueoak-1\.0\.0$", "BlueOak-1.0.0"),
-        (r"^cc0-1\.0$", "CC0-1.0"),
-        (r"^cc-by-4\.0$", "CC-BY-4.0"),
-        (r"^0bsd$", "0BSD"),
-        (r"^zlib$", "Zlib"),
-        (r"^unlicense$", "Unlicense"),
-    )
+_NAME_PATTERNS: tuple[tuple[str, str], ...] = (
+    (
+        r"^(the )?apache (software )?licen[cs]e,? (version )?2(\.0)?$|^apache[- ]2(\.0)?$",
+        "Apache-2.0",
+    ),
+    (r"^mit( licen[cs]e)?$|^expat$|^permission is hereby granted, free of charge", "MIT"),
+    (r"^(bsd[- ]2[- ]clause|simplified bsd)( licen[cs]e)?$", "BSD-2-Clause"),
+    (r"^(bsd[- ]3[- ]clause|new bsd|modified bsd|revised bsd)( licen[cs]e)?$", "BSD-3-Clause"),
+    (r"^isc( licen[cs]e)?( \(iscl\))?$", "ISC"),
+    (r"^(psf|python software foundation)( licen[cs]e)?( 2\.0)?$", "PSF-2.0"),
+    (r"^mozilla public licen[cs]e,? (version )?2\.0( \(mpl 2\.0\))?$", "MPL-2.0"),
+    (r"^eclipse public licen[cs]e,? ?(- )?v(ersion)? ?2\.0$|^epl 2\.0$", "EPL-2.0"),
+    (r"^eclipse public licen[cs]e,? ?(- )?v(ersion)? ?1\.0$|^epl 1\.0$", "EPL-1.0"),
+    (
+        r"^gnu lesser general public licen[cs]e v2(\.1)? or later( \(lgplv2\+\))?$",
+        "LGPL-2.1-or-later",
+    ),
+    (
+        r"^(gnu lesser general public licen[cs]e v2(\.1)?( \(lgplv2\))?|lgplv?2\.1)$",
+        "LGPL-2.1-only",
+    ),
+    (r"^gnu lesser general public licen[cs]e v3 or later( \(lgplv3\+\))?$", "LGPL-3.0-or-later"),
+    (r"^(gnu lesser general public licen[cs]e v3( \(lgplv3\))?|lgplv?3(\.0)?)$", "LGPL-3.0-only"),
+    (r"^gnu affero general public licen[cs]e v3 or later( \(agplv3\+\))?$", "AGPL-3.0-or-later"),
+    (r"^(gnu affero general public licen[cs]e v3( \(agplv3\))?|agplv?3(\.0)?)$", "AGPL-3.0-only"),
+    (r"^gnu general public licen[cs]e v2 or later( \(gplv2\+\))?$", "GPL-2.0-or-later"),
+    (r"^(gnu general public licen[cs]e v2( \(gplv2\))?|gplv?2(\.0)?)$", "GPL-2.0-only"),
+    (r"^gnu general public licen[cs]e v3 or later( \(gplv3\+\))?$", "GPL-3.0-or-later"),
+    (r"^(gnu general public licen[cs]e v3( \(gplv3\))?|gplv?3(\.0)?)$", "GPL-3.0-only"),
+    (r"^(server side public licen[cs]e|sspl)( v1| 1\.0)?$", "SSPL-1.0"),
+    (r"^(blueoak-1\.0\.0|blue oak model licen[cs]e 1\.0\.0)$", "BlueOak-1.0.0"),
+    (r"^(cc0-1\.0|cc0 1\.0 universal)$", "CC0-1.0"),
 )
+_COMPILED_NAMES = tuple((re.compile(p, re.IGNORECASE), spdx) for p, spdx in _NAME_PATTERNS)
+_DEPRECATED_SPDX = {
+    "GPL-2.0": "GPL-2.0-only",
+    "GPL-2.0+": "GPL-2.0-or-later",
+    "GPL-3.0": "GPL-3.0-only",
+    "GPL-3.0+": "GPL-3.0-or-later",
+    "LGPL-2.1": "LGPL-2.1-only",
+    "LGPL-2.1+": "LGPL-2.1-or-later",
+    "LGPL-3.0": "LGPL-3.0-only",
+    "LGPL-3.0+": "LGPL-3.0-or-later",
+    "AGPL-3.0": "AGPL-3.0-only",
+}
 
 
 @dataclass(frozen=True)
@@ -79,40 +142,132 @@ class Dependency:
     version: str
     scope: str
     declared: tuple[str, ...]
+    # How several declared licences combine: "any" (dual licensing, e.g. Python classifiers)
+    # or "all" (every declared licence applies, e.g. several <license> entries in a Maven POM).
+    combine: str = "any"
 
 
 def normalise(raw: str) -> str | None:
-    text = " ".join(raw.split())
-    for pattern, spdx in _NORMALISE:
+    """SPDX identifier for a single licence name or identifier, or None if not recognised."""
+    text = " ".join(raw.split()).strip()
+    candidate = _DEPRECATED_SPDX.get(text, text)
+    if candidate in KNOWN:
+        return candidate
+    for pattern, spdx in _COMPILED_NAMES:
         if pattern.search(text):
             return spdx
     return None
 
 
-def spdx_options(declared: tuple[str, ...]) -> set[str]:
-    """Licences the dependency may be used under (any one suffices)."""
-    options: set[str] = set()
-    for entry in declared:
-        for alternative in re.split(r"\s+OR\s+", entry.strip("() ")):
-            spdx = normalise(alternative)
-            if spdx:
-                options.add(spdx)
-    return options
+_TOKEN = re.compile(r"\(|\)|[^\s()]+")
+
+
+class _Parser:
+    """Recursive-descent parser for SPDX expressions: OR binds loosest, then AND, then WITH."""
+
+    def __init__(self, text: str) -> None:
+        self.tokens = _TOKEN.findall(text)
+        self.position = 0
+
+    def _peek(self) -> str | None:
+        return self.tokens[self.position] if self.position < len(self.tokens) else None
+
+    def _take(self) -> str:
+        token = self._peek()
+        if token is None:
+            raise ValueError("unexpected end of licence expression")
+        self.position += 1
+        return token
+
+    def parse(self) -> bool | None:
+        value = self._or()
+        if self._peek() is not None:
+            raise ValueError(f"unexpected token {self._peek()!r}")
+        return value
+
+    def _or(self) -> bool | None:
+        values = [self._and()]
+        while self._peek() == "OR":
+            self._take()
+            values.append(self._and())
+        if any(v is True for v in values):
+            return True
+        return False if all(v is False for v in values) else None
+
+    def _and(self) -> bool | None:
+        values = [self._with()]
+        while self._peek() == "AND":
+            self._take()
+            values.append(self._with())
+        if any(v is False for v in values):
+            return False
+        return True if all(v is True for v in values) else None
+
+    def _with(self) -> bool | None:
+        value = self._atom()
+        if self._peek() == "WITH":
+            self._take()
+            exception = self._take()
+            if exception not in ALLOWED_WITH_EXCEPTIONS:
+                return None if value is not False else False
+        return value
+
+    def _atom(self) -> bool | None:
+        symbol = self._take()
+        if symbol == "(":
+            value = self._or()
+            if self._take() != ")":
+                raise ValueError("unbalanced parentheses")
+            return value
+        spdx = normalise(symbol)
+        if spdx is None:
+            return None
+        return spdx in self.allowed
+
+    allowed: frozenset[str] = frozenset()
+
+
+def _evaluate_expression(expression: str, allowed: frozenset[str]) -> bool | None:
+    # A licence *name* (free text such as "GNU General Public License v3 (GPLv3)") is matched
+    # as a whole; anything else is parsed as an SPDX expression.
+    whole = normalise(expression)
+    if whole is not None:
+        return whole in allowed
+    parser = _Parser(expression)
+    parser.allowed = allowed
+    try:
+        return parser.parse()
+    except ValueError:
+        return None
+
+
+def evaluate(dependency: Dependency) -> bool | None:
+    """True if allowed for the dependency's scope, False if not, None if unidentified."""
+    allowed = ALLOWED[dependency.scope]
+    key = f"{dependency.ecosystem}:{dependency.name}@{dependency.version}"
+    if key in EXCEPTIONS:
+        return _evaluate_expression(EXCEPTIONS[key][0], allowed)
+    values = [_evaluate_expression(d, allowed) for d in dependency.declared if d.strip()]
+    if not values:
+        return None
+    if dependency.combine == "all":
+        if any(v is False for v in values):
+            return False
+        return True if all(v is True for v in values) else None
+    if any(v is True for v in values) and all(v is not None for v in values):
+        return True
+    return False if all(v is False for v in values) else None
 
 
 def violations(dependencies: list[Dependency]) -> list[str]:
     found: list[str] = []
     for dep in dependencies:
-        key = f"{dep.ecosystem}:{dep.name}"
-        if key in EXCEPTIONS:
-            continue
-        options = spdx_options(dep.declared)
-        if not options:
-            found.append(f"{key}@{dep.version} ({dep.scope}): unidentified licence {dep.declared}")
-        elif not options & ALLOWED[dep.scope]:
-            found.append(
-                f"{key}@{dep.version} ({dep.scope}): {sorted(options)} not allowed for {dep.scope}"
-            )
+        verdict = evaluate(dep)
+        label = f"{dep.ecosystem}:{dep.name}@{dep.version} ({dep.scope})"
+        if verdict is None:
+            found.append(f"{label}: unidentified licence {dep.declared}")
+        elif verdict is False:
+            found.append(f"{label}: {dep.declared} not allowed for {dep.scope}")
     return found
 
 
@@ -148,12 +303,18 @@ def python_dependencies(root: Path) -> list[Dependency]:
         name = metadata["Name"]
         if name.lower().startswith("fraudshield-"):
             continue
-        declared = [metadata.get("License-Expression") or "", metadata.get("License") or ""]
-        declared += [
+        # Most authoritative source only: SPDX expression, else classifiers, else free text.
+        classifiers = [
             c.split("::")[-1].strip()
             for c in metadata.get_all("Classifier") or []
             if c.startswith("License ::")
         ]
+        if metadata.get("License-Expression"):
+            declared = [metadata["License-Expression"]]
+        elif classifiers:
+            declared = classifiers
+        else:
+            declared = (metadata.get("License") or "").strip().splitlines()[:1]
         scope = "runtime" if name.lower() in runtime else "dev"
         found.append(
             Dependency("python", name, dist.version, scope, tuple(d for d in declared if d))
@@ -235,7 +396,9 @@ def java_dependencies(root: Path) -> list[Dependency]:
     for gav, licences in sorted(everything.items()):
         group, artifact, version = gav.split(":")
         scope = "runtime" if gav in runtime else "dev"
-        dependencies.append(Dependency("maven", f"{group}:{artifact}", version, scope, licences))
+        dependencies.append(
+            Dependency("maven", f"{group}:{artifact}", version, scope, licences, combine="all")
+        )
     return dependencies
 
 

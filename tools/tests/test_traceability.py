@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 import yaml
 
+from fraudshield_tools.evidence import RunVerdict
 from fraudshield_tools.traceability import (
     TaggedTest,
     check,
@@ -14,6 +15,18 @@ from fraudshield_tools.traceability import (
     main,
     render_matrix,
 )
+
+
+class FakeVerifier:
+    def __init__(self, commits: frozenset[str] = frozenset(), in_ci: bool = False) -> None:
+        self.commits = commits
+        self.in_ci = in_ci
+
+    def commit_in_history(self, sha: str) -> bool:
+        return sha in self.commits
+
+    def ci_run(self, run_id: int) -> RunVerdict:
+        return RunVerdict(run_id == 35179479949, "fake")
 
 
 def _row(**overrides: Any) -> dict[str, Any]:
@@ -128,7 +141,7 @@ def test_matrix_lists_tests_and_status_counts() -> None:
 )
 def test_evidence_must_reference_path_commit_or_ci_run(tmp_path: Path, evidence: str) -> None:
     row = _row(status="DONE", evidence=[evidence])
-    report = check([row], {}, [TaggedTest("FR-01-03", "t.py:3")], tmp_path, lambda _sha: False)
+    report = check([row], {}, [TaggedTest("FR-01-03", "t.py:3")], tmp_path, FakeVerifier())
     assert report.errors, f"evidence {evidence!r} was accepted"
 
 
@@ -137,19 +150,23 @@ def test_evidence_accepts_existing_commit_and_ci_run_url(tmp_path: Path) -> None
         status="DONE",
         evidence=[
             "3f82d6a make ci green at this commit",
-            "https://github.com/mariusbayizere/fraudshield/actions/runs/35175017636",
+            "https://github.com/mariusbayizere/fraudshield/actions/runs/35179479949",
         ],
     )
     report = check(
-        [row], {}, [TaggedTest("FR-01-03", "t.py:3")], tmp_path, lambda sha: sha == "3f82d6a"
+        [row],
+        {},
+        [TaggedTest("FR-01-03", "t.py:3")],
+        tmp_path,
+        FakeVerifier(commits=frozenset({"3f82d6a"})),
     )
     assert report.errors == []
 
 
 def test_unknown_commit_in_evidence_fails(tmp_path: Path) -> None:
     row = _row(status="DONE", evidence=["deadbee"])
-    report = check([row], {}, [TaggedTest("FR-01-03", "t.py:3")], tmp_path, lambda _sha: False)
-    assert any("not in the repository" in e for e in report.errors)
+    report = check([row], {}, [TaggedTest("FR-01-03", "t.py:3")], tmp_path, FakeVerifier())
+    assert any("not an ancestor of HEAD" in e for e in report.errors)
 
 
 def test_deviation_must_be_existing_adr_file(tmp_path: Path) -> None:

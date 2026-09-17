@@ -164,3 +164,31 @@ def test_scope_guard_cli_reports_violations(
     assert "notes.md" in capsys.readouterr().err
     offending.write_text("alert review\n")
     assert scope_guard.main() == 0
+
+
+@pytest.mark.req("D-47")
+def test_re_review_exemption_routes_are_closed(tmp_path: Path) -> None:
+    compound = "Kinya" + "Med"
+    yaml_file = tmp_path / "docs/traceability/requirements.yaml"
+    yaml_file.parent.mkdir(parents=True)
+    yaml_file.write_text(
+        "requirements:\n"
+        f"- id: D-47\n  title: {compound} text in 05B\n  notes: ''\n"
+        f"- id: FR-01-01\n  title: Ingest\n  notes: reuse the {_TRI} flow\n"
+    )
+    matrix = tmp_path / "docs/traceability/requirements_matrix.md"
+    matrix.write_text(f"| D-47 | M | M0 | DONE | {compound} text in 05B | — |\n")
+    code = tmp_path / "backend/src/main/java/Flow.java"
+    code.parent.mkdir(parents=True)
+    code.write_text(f"// {_PAT} flow  {LINE_PRAGMA}\n")
+    review_path = tmp_path / f"docs/reviews/M1/{_PAT}-notes.md"
+    review_path.parent.mkdir(parents=True)
+    review_path.write_text("quoted finding\n")
+
+    found = violations(tmp_path, [yaml_file, matrix, code, review_path])
+
+    assert found == {
+        "docs/traceability/requirements.yaml": [_TRI],
+        "backend/src/main/java/Flow.java": [_PAT],
+        f"docs/reviews/M1/{_PAT}-notes.md": [_PAT],
+    }

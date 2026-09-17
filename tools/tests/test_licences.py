@@ -9,38 +9,13 @@ from fraudshield_tools import licences
 from fraudshield_tools.licences import (
     Dependency,
     InventoryError,
-    normalise,
     parse_third_party_report,
-    spdx_options,
     violations,
 )
 
 
-@pytest.mark.parametrize(
-    ("raw", "spdx"),
-    [
-        ("The Apache Software License, Version 2.0", "Apache-2.0"),
-        ("Apache License, Version 2.0", "Apache-2.0"),
-        ("Eclipse Public License v2.0", "EPL-2.0"),
-        ("MIT License", "MIT"),
-        ("Permission is hereby granted, free of charge, to any person", "MIT"),
-        ("BSD", "BSD-3-Clause"),
-        ("Python Software Foundation License", "PSF-2.0"),
-        ("Mozilla Public License 2.0 (MPL 2.0)", "MPL-2.0"),
-        ("GNU General Public License v3", None),
-        ("Server Side Public License", None),
-    ],
-)
-def test_normalise(raw: str, spdx: str | None) -> None:
-    assert normalise(raw) == spdx
-
-
-def test_or_expressions_offer_alternatives() -> None:
-    assert spdx_options(("Apache-2.0 OR BSD-2-Clause",)) == {"Apache-2.0", "BSD-2-Clause"}
-
-
 def _dep(scope: str, *declared: str) -> Dependency:
-    return Dependency("maven", "org.example:lib", "1.0", scope, declared)
+    return Dependency("maven", "org.example:lib", "1.0", scope, declared, "all")
 
 
 def test_policy_by_scope() -> None:
@@ -49,9 +24,8 @@ def test_policy_by_scope() -> None:
     runtime_epl = violations([_dep("runtime", "Eclipse Public License v2.0")])
     assert len(runtime_epl) == 1
     assert "not allowed for runtime" in runtime_epl[0]
-    assert "unidentified" in violations([_dep("dev", "GNU Affero General Public License")])[0]
+    assert "not allowed" in violations([_dep("dev", "GNU Affero General Public License v3")])[0]
     assert "unidentified" in violations([_dep("dev")])[0]
-    assert violations([_dep("runtime", "SSPL", "MIT")]) == []  # dual licence: MIT suffices
 
 
 REPORT = "\n".join(

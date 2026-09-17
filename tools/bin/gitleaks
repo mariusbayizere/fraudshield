@@ -9,9 +9,15 @@ set -eu
 
 GITLEAKS_VERSION="8.30.1"
 GITLEAKS_SHA256_LINUX_X64="551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+# SHA-256 of the extracted binary, re-verified on every run so a tampered cache is never executed.
+GITLEAKS_BINARY_SHA256_LINUX_X64="88f91962aa2f93ac6ab281d553b9e125f5197bbbce38f9f2437f7299c32e5509"
 
 case "$(uname -s)-$(uname -m)" in
-  Linux-x86_64) platform="linux_x64"; expected_sha="$GITLEAKS_SHA256_LINUX_X64" ;;
+  Linux-x86_64)
+    platform="linux_x64"
+    expected_sha="$GITLEAKS_SHA256_LINUX_X64"
+    expected_binary_sha="$GITLEAKS_BINARY_SHA256_LINUX_X64"
+    ;;
   *)
     echo "tools/bin/gitleaks: no pinned checksum for $(uname -s)-$(uname -m); add one before use" >&2
     exit 2
@@ -34,6 +40,13 @@ if [ ! -x "$binary" ]; then
   fi
   tar -xzf "$archive" -C "$cache_dir" gitleaks
   rm -f "$archive"
+fi
+
+actual_binary_sha=$(sha256sum "$binary" | cut -d' ' -f1)
+if [ "$actual_binary_sha" != "$expected_binary_sha" ]; then
+  echo "tools/bin/gitleaks: cached binary $binary does not match the pinned SHA-256; deleting it" >&2
+  rm -f "$binary"
+  exit 1
 fi
 
 exec "$binary" "$@"

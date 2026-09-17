@@ -11,9 +11,10 @@ Enforcement rules (ADR 0004). SRS-derived fields are verified separately by
      :mod:`fraudshield_tools.test_tags`, which ignores comments and disabled tests).
   3. A verification method other than ``test`` is allowed only for the rows listed in
      ``VERIFICATION_OVERRIDES`` (a reviewed decision, not a per-row escape hatch).
-  4. Rows with a completed status carry evidence, and every evidence entry starts with an
-     existing repository path, a commit SHA present in the repository, or a GitHub Actions
-     run URL of this repository. Free text alone ("tested") is rejected.
+  4. Rows with a completed status carry evidence, verified by
+     :mod:`fraudshield_tools.evidence`: an existing repository path, a commit that is an
+     ancestor of HEAD, or a successful GitHub Actions run of this repository for a commit in
+     HEAD's history. Benchmark rows need a measurement file from a recorded machine (ADR 0010).
   5. ``DONE_WITH_DEVIATION`` rows name at least one existing ``docs/adr/NNNN-*.md``; every
      deviation entry must be such a file. Other statuses have their required fields.
   6. Completed rows verified by ``test`` have at least one tagged test.
@@ -28,10 +29,8 @@ from __future__ import annotations
 
 import argparse
 import re
-import subprocess
 import sys
 from collections import defaultdict
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -39,6 +38,11 @@ from typing import Any
 import yaml
 
 from fraudshield_tools import REPO_ROOT
+from fraudshield_tools.evidence import (
+    EvidenceVerifier,
+    GitEvidenceVerifier,
+    check_row_references,
+)
 from fraudshield_tools.repo import tracked_files
 from fraudshield_tools.test_tags import TaggedTest, discover
 from fraudshield_tools.traceability_seed import VERIFICATION_OVERRIDES
@@ -69,31 +73,11 @@ FINAL_STATUSES = EVIDENCED_STATUSES | {"REQUIRES_EXTERNAL_PARTY"}
 VERIFICATIONS = {"test", "inspection", "manual", "external"}
 MILESTONES = [f"M{n}" for n in range(13)]
 
-PATH_LIKE = re.compile(r"^[\w.\-]+(/[\w.\-]+)+$")
-ADR_PATH = re.compile(r"^docs/adr/\d{4}-[a-z0-9-]+\.md$")
-COMMIT_SHA = re.compile(r"^[0-9a-f]{7,40}$")
-CI_RUN_URL = re.compile(r"^https://github\.com/mariusbayizere/fraudshield/actions/runs/\d+$")
-
-CommitExists = Callable[[str], bool]
-
 
 @dataclass
 class CheckReport:
     errors: list[str] = field(default_factory=list)
-
-
-def git_commit_exists(root: Path) -> CommitExists:
-    def exists(sha: str) -> bool:
-        # A fixed git command plus a value already matched against COMMIT_SHA.
-        result = subprocess.run(  # noqa: S603
-            ["git", "cat-file", "-e", f"{sha}^{{commit}}"],  # noqa: S607
-            cwd=root,
-            capture_output=True,
-            check=False,
-        )
-        return result.returncode == 0
-
-    return exists
+    warnings: list[str] = field(default_factory=list)
 
 
 def discover_tagged_tests(root: Path, files: list[Path] | None = None) -> list[TaggedTest]:
@@ -114,7 +98,7 @@ def check(
     milestones: dict[str, Any],
     tests: list[TaggedTest],
     root: Path,
-    commit_exists: CommitExists | None = None,
+    verifier: EvidenceVerifier | None = None,
 ) -> CheckReport:
     report = CheckReport()
     ids = [str(row.get("id")) for row in rows]
@@ -135,8 +119,7 @@ def check(
         report.errors.append(f"milestones.yaml: unknown milestones {bad_milestones}")
     closed_upto = max((_milestone_index(m) for m in completed if m in MILESTONES), default=-1)
 
-    exists = commit_exists or git_commit_exists(root)
-    context = _RowContext(tests_by_id, closed_upto, root, exists)
+    context = _RowContext(tests_by_id, closed_upto, root, verifier or GitEvidenceVerifier(root))
     for row in rows:
         _check_row(row, context, report)
     return report
@@ -147,7 +130,7 @@ class _RowContext:
     tests_by_id: dict[str, list[str]]
     closed_upto: int
     root: Path
-    commit_exists: CommitExists
+    verifier: EvidenceVerifier
 
 
 def _check_row(row: dict[str, Any], context: _RowContext, report: CheckReport) -> None:
@@ -182,7 +165,9 @@ def _check_row(row: dict[str, Any], context: _RowContext, report: CheckReport) -
             report.errors.append(f"{where} Must row in closed {milestone} has status {status}")
         if row.get("verification") == "test" and not has_test:
             report.errors.append(f"{where} Must row in closed {milestone} lacks a tagged test")
-    _check_references(row, context.root, context.commit_exists, report)
+    references = check_row_references(row, context.root, context.verifier)
+    report.errors.extend(references.errors)
+    report.warnings.extend(references.warnings)
 
 
 def _check_status_fields(row: dict[str, Any], has_test: bool, report: CheckReport) -> None:
@@ -201,41 +186,6 @@ def _check_status_fields(row: dict[str, Any], has_test: bool, report: CheckRepor
             report.errors.append(f"{where} status {status} but no tagged test found")
     if status in required and not row.get(required[status][0]):
         report.errors.append(f"{where} {status} {required[status][1]}")
-
-
-def _first_token(entry: object) -> str:
-    return str(entry).strip().split(" ", 1)[0]
-
-
-def _check_references(
-    row: dict[str, Any], root: Path, commit_exists: CommitExists, report: CheckReport
-) -> None:
-    where = f"{row.get('id')}:"
-    for entry in row.get("evidence") or []:
-        token = _first_token(entry)
-        path = token.split("#", 1)[0].split(":", 1)[0]
-        if CI_RUN_URL.match(token):
-            continue
-        if COMMIT_SHA.match(token):
-            if not commit_exists(token):
-                report.errors.append(f"{where} evidence commit {token} is not in the repository")
-            continue
-        if PATH_LIKE.match(path):
-            if not (root / path).exists():
-                report.errors.append(f"{where} evidence path does not exist: {path}")
-            continue
-        report.errors.append(
-            f"{where} evidence {str(entry)!r} must start with a repository path, "
-            "a commit SHA or a CI run URL"
-        )
-    for entry in row.get("deviations") or []:
-        token = _first_token(entry)
-        if not ADR_PATH.match(token) or not (root / token).is_file():
-            report.errors.append(f"{where} deviation {str(entry)!r} is not an existing ADR file")
-    for entry in row.get("implementation") or []:
-        path = _first_token(entry).split("#", 1)[0].split(":", 1)[0]
-        if not PATH_LIKE.match(path) or not (root / path).exists():
-            report.errors.append(f"{where} implementation path does not exist: {path}")
 
 
 def _cell(values: list[str]) -> str:
@@ -295,11 +245,13 @@ def main(argv: list[str] | None = None) -> int:
     matrix_path = root / MATRIX_MD
     if not matrix_path.exists() or matrix_path.read_text(encoding="utf-8") != matrix:
         report.errors.append(f"{MATRIX_MD} is stale; run: uv run fs-traceability render")
+    for message in report.warnings:
+        print(f"WARNING {message}", file=sys.stderr)
     for message in report.errors:
         print(f"ERROR {message}", file=sys.stderr)
     print(
         f"traceability-check: {len(rows)} rows, {len(tests)} tagged tests, "
-        f"{len(report.errors)} errors"
+        f"{len(report.errors)} errors, {len(report.warnings)} warnings"
     )
     return 1 if report.errors else 0
 

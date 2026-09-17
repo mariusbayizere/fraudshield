@@ -85,6 +85,10 @@ jobs:
     name: traceability-check, defect register, scope guard, commit messages
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    # actions: read lets fs-traceability verify CI-run evidence through the Actions API.
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -98,6 +102,8 @@ jobs:
       - run: uv run fs-defect-register --check
       - run: uv run fs-traceability-seed --check
       - run: uv run fs-traceability check
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       - run: uv run fs-scope-guard
       - name: Commit messages introduced by this push or pull request (G.3)
         env:

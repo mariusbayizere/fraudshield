@@ -35,11 +35,23 @@ def test_good_message_passes() -> None:
         ("feat: add x\nbody on second line", "second line must be blank"),
         ("feat: add x\n\n" + "y" * 73, "line 3 is 73 characters"),
         ("feat: add x\n\nCo-Authored-By: Someone <a@b.c>", "co-author"),
+        ("feat: add x\n\n   co-authored-by: Someone <a@b.c>", "co-author"),
+        ("feat: add x\n\nGenerated-by: Claude Code", "co-author"),
+        ("feat: add x\n\nSigned-off-by: Claude <noreply@anthropic.com>", "co-author"),
+        ("feat: updated things", "placeholder"),
+        ("chore: minor", "placeholder"),
         ("", "empty"),
     ],
 )
 def test_rule_violations(message: str, expected: str) -> None:
     assert any(expected in p for p in problems(message)), problems(message)
+
+
+def test_owner_sign_off_and_real_summaries_are_allowed() -> None:
+    assert problems("fix(api): update threshold cache on config change") == []
+    assert (
+        problems("docs: add testing guide\n\nSigned-off-by: Marius Bayizere <m@example.org>") == []
+    )
 
 
 def test_comment_lines_and_indented_code_are_ignored() -> None:

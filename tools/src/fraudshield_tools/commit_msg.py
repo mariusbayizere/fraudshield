@@ -34,9 +34,18 @@ TYPES = (
 )
 SUBJECT = re.compile(rf"^(?:{'|'.join(TYPES)})(?:\([a-z0-9][a-z0-9-]*\))?!?: (?P<summary>\S.*)$")
 MAX_LINE = 72
-PLACEHOLDER_SUMMARIES = re.compile(r"^(wip|update|fix stuff|changes|misc|tmp)\b", re.IGNORECASE)
+# A summary consisting only of a placeholder phrase ("update", "updated things", "wip").
+PLACEHOLDER_SUMMARIES = re.compile(
+    r"^(wip|updates?|updated( things| stuff)?|fix(es|ed)? stuff|stuff|changes|misc|tmp|temp|"
+    r"more|minor( changes)?|tweaks?|cleanup|asdf|test|testing|commit)$",
+    re.IGNORECASE,
+)
+# Co-author trailers and tool attribution in any form, including indented trailers and
+# sign-offs by automated tools (G.1 rule 3: commits are authored solely by the owner).
 FORBIDDEN_TRAILERS = re.compile(
-    r"^(co-authored-by|generated with|🤖 generated)", re.IGNORECASE | re.MULTILINE
+    r"^\s*(co-authored-by|generated[- ]by|generated with|🤖)\b"
+    r"|^\s*signed-off-by:.*\b(claude|anthropic|copilot|chatgpt|openai|noreply@anthropic\.com)\b",
+    re.IGNORECASE | re.MULTILINE,
 )
 
 
