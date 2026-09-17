@@ -59,6 +59,10 @@ Format: ID · title · source · priority · due · description · acceptance.
 - **Problem:** `Assisted-by:` and `Co-developed-by:` trailers naming tools, "Made with …" lines, and
   placeholder summaries with trailing words ("updated things across modules") pass.
 - **Acceptance:** those forms are rejected, with tests; owner trailers remain allowed.
+- **Status:** CLOSED in M2. `Assisted-by`, `Co-developed-by`, `Co-created-by` and `pair-programmed-by`
+  are rejected when they name a tool, as are "made/built/written/created/drafted with <tool>" lines;
+  a summary containing a vague object ("things", "stuff", "misc") is rejected whatever follows it.
+  The same trailers naming a person still pass, with a test for each direction.
 
 ### GOV-8 · Container images pinned by digest
 - **Source:** ADR 0003, re-review residual risk · **Priority:** medium · **Due:** M9
