@@ -138,6 +138,97 @@ smoke test and the devcontainer build. The minor findings are fixed on the event
 | NF-E10 | NIT | The self-test's committer email is not email-shaped; the test's email-shaped rejection value is built at run time. The OpenAPI examples on `main` still use RFC 2606 `example.com` addresses as synthetic placeholders; the owner may prefer none | — |
 | NF-E11 | NIT | CR-11 row corrected: making a field optional is compatible in this mode, and the self-tests do not include M4 | this file |
 
+## Re-check of m1/contracts-events (N-01 … N-09) and owner decisions
+
+`contracts-events-recheck.md`: 0ea2f2f CHANGES_REQUIRED on one MAJOR (N-01). Every NF-E finding was
+verified fixed except NF-E07, which was accepted as disclosed. The owner then decided six further
+points (2026-09-17). All the work below is in commits after the history rewrite described next; SHAs
+in this section are post-rewrite.
+
+| # | Sev | Resolution | Commit | Verification |
+|---|---|---|---|---|
+| N-01 | MAJOR | `make secrets-scan` runs `uv run python tools/bin/gitleaks-selftest`; the CI secrets job calls the script directly (the runner has `python3`) | e692225 | devcontainer workflow on the pushed head (CI evidence below) |
+| N-02 | MINOR | Contract test forbids `$ref` under `if`, `not`, `contains`, `propertyNames`, `dependentSchemas`; ADR 0012 wording narrowed. The checker itself is unchanged (feature-complete, owner decision 5) | e692225 | `test_no_reference_hides_under_keywords_the_compatibility_checker_does_not_track` |
+| N-03 | MINOR | Superseded: the custom proto checker is deleted and replaced by buf (owner decision 5) | c86db7c | `test_proto_breaking.py` |
+| N-04 | MINOR | The guard fails (exit 2) when Kafka schemas exist at the merge base but no baseline is read. A test asserts the baseline count read from HEAD equals the committed schema count. Behaviour on `main` pushes is documented | e692225 | `test_guard_fails_closed_when_baselines_cannot_be_read`, `test_published_baselines_are_read_from_git_history` |
+| N-05 | NIT | The self-test rejects allowlists without exact values and anchored paths, rule-level allowlists and `.gitleaksignore`, and plants copies beside each allowed file with its extension (37 plants) | e692225 | Author mutations, all caught: vector path widened keeping `.json`; Kafka path widened to `^contracts/.*\.json$`; schema path without `$`; schema path widened keeping `.yaml`; paths-only allowlist; rule-level allowlist; `.gitleaksignore` present. Response wording corrected here |
+| N-06 | NIT | Seven-channel `ThresholdUpdate` vector pins `maxItems` → `item_count_out_of_range`. No request schema uses `maxProperties`, and no request `oneOf` can over-match, so neither can be pinned by a request vector (accepted) | 437c401 | `test_request_vector[ThresholdUpdate: more than six channel entries]` |
+| N-07 | NIT | Batch sequence 1 is in the job results | e692225 | `decision-final.md` |
+| N-08 | NIT | **Accepted, not changed.** Owner decision 5 freezes the JSON Schema checker except for BLOCKERs. Annotation-only edits to definitions a `oneOf` uses will therefore count as breaking | — | — |
+| N-09 | NIT | Clear errors for a missing ref and for no common history | e692225 | `test_guard_explains_a_missing_ref` |
+
+**Owner decisions (2026-09-17)**
+
+1. **Asymmetric dual control** for thresholds, the MEDIUM timeout policy and MCC circuit-breaker
+   settings. Implemented in 437c401: ADR 0014 §3, `common.config.DualControlWorkflow` with an
+   injected clock, and 16 tests (tightening immediate, loosening pending until approved, revert at
+   exactly 24 h, self-approval 403, ADMIN, ANALYST and SENIOR_ANALYST 403, classification). The
+   contract gains propose (`PATCH /admin/thresholds`, `PATCH /admin/circuit-breaker-settings`), pending
+   list, approval and rejection endpoints. Deviations are recorded on FR-02-06, FR-05-07 and FR-03-07.
+   The two RISK_OFFICER demo accounts are part of the M1 database seed (next work item).
+2. **Health:** public `GET /api/v1/health` returns only `{"status"}`; ml, kafka, db and redis detail is
+   on the management port; the deviation is on OPS-CI-07 and OPS-OBS-05 (437c401).
+3. **example.com addresses:** kept (RFC 2606).
+4. **History rewrite:** ADR 0015 and `tools/bin/verify-branch-commits` (efb3d40). The rewrite and
+   per-commit results are below.
+5. **buf:** buf 1.72.0 pinned by checksum. All 16 proto mutation cases were first run by hand against
+   buf and are now tests, with the custom checker and baseline deleted (c86db7c, ADR 0016). The JSON
+   Schema checker is feature-complete.
+6. **m0/bootstrap:** `git merge-base --is-ancestor origin/m0/bootstrap origin/main` succeeds, but the
+   GitHub API reports `default_branch: m0/bootstrap`, not `main`. Per the owner's instruction the
+   branch was **not deleted**; the owner needs to switch the default branch first.
+
+## History rewrite of m1/contracts-events (ADR 0015)
+
+The branch was rebuilt from `main` (fb9093f) with a scripted `git rebase -i`. The final tree is
+byte-identical to the pre-rewrite head 0efa2cf (`git diff --quiet` succeeds); the only later change is the verification-script fix noted below. Squashes:
+
+- b419e1e (event `if` discriminators) was folded into ced4324, and the message was reworded to drop
+  the stale test count. This makes the combined commit pass on its own (NF-E07).
+- 837dd48 (secret-format samples) was folded into 065a66c, with the message extended.
+- 4a7d8d2 (count correction) was folded into 07638e2.
+
+| Before | After |
+|---|---|
+| 962cb40, ee3c685 | unchanged |
+| ced4324 + b419e1e | dba1021 |
+| 065a66c + 837dd48 | 50e250c |
+| 07638e2 + 4a7d8d2 | 40b80e3 |
+| 3c24b6c | e389d5a |
+| 556099c | b6290b9 |
+| 339ed23 | b538cd7 |
+| 792ca4b | 696ea58 |
+| 0ea2f2f | e013785 |
+| 6920324 | c86db7c |
+| 888e984 | 437c401 |
+| 7a01c77 | e692225 |
+| 0efa2cf | efb3d40 |
+
+SHAs earlier in this file, and in the review records, refer to the history before this table.
+
+### Per-commit verification
+
+Per-commit verification of `main..m1/contracts-events` (`tools/bin/verify-branch-commits`, ADR 0015).
+
+| Commit | Subject | Result | Time | Checks |
+|---|---|---|---|---|
+| 962cb40 | feat(contracts): add Kafka, scoring gRPC and webhook contracts | pass | 39 s | commit message; uv sync; defect register; traceability seed; traceability; scope guard; ruff tools; format tools; mypy tools; pytest tools; ruff ml; format ml; mypy ml; pytest ml; ruff contracts; format contracts; mypy contracts; pytest contracts; gitleaks history scan |
+| ee3c685 | docs(adr): decide event isolation, evolution checks and secret scanning | pass | 2 s | commit message; uv sync; defect register; traceability seed; traceability; scope guard |
+| dba1021 | fix(contracts): resolve the event findings of the contracts review | pass | 28 s | commit message; uv sync; defect register; traceability seed; traceability; scope guard; ruff tools; format tools; mypy tools; pytest tools; ruff ml; format ml; mypy ml; pytest ml; ruff contracts; format contracts; mypy contracts; pytest contracts |
+| 50e250c | sec(secrets): scope gitleaks allowlists to exact values and prove them | pass | 26 s | commit message; uv sync; defect register; traceability seed; traceability; scope guard; ruff tools; format tools; mypy tools; pytest tools; ruff ml; format ml; mypy ml; pytest ml; ruff contracts; format contracts; mypy contracts; pytest contracts; gitleaks self-test |
+| 40b80e3 | docs(reviews): respond to the event findings of the contracts review | pass | 2 s | commit message; uv sync; defect register; traceability seed; traceability; scope guard |
+| e389d5a | docs(reviews): record the OpenAPI re-check and the events re-review | pass | 2 s | commit message; uv sync; defect register; traceability seed; traceability; scope guard |
+| b6290b9 | fix(contracts): resolve the OpenAPI re-check minor findings | pass | 28 s | commit message; uv sync; defect register; traceability seed; traceability; scope guard; ruff tools; format tools; mypy tools; pytest tools; ruff ml; format ml; mypy ml; pytest ml; ruff contracts; format contracts; mypy contracts; pytest contracts |
+| b538cd7 | fix(contracts): resolve the events re-review findings | pass | 32 s | commit message; uv sync; defect register; traceability seed; traceability; scope guard; ruff tools; format tools; mypy tools; pytest tools; ruff ml; format ml; mypy ml; pytest ml; ruff contracts; format contracts; mypy contracts; pytest contracts |
+| 696ea58 | sec(secrets): plant every allowlisted value outside its scope | pass | 20 s | commit message; uv sync; defect register; traceability seed; traceability; scope guard; ruff tools; format tools; mypy tools; pytest tools; gitleaks self-test |
+| e013785 | docs(reviews): respond to the OpenAPI re-check and events re-review | pass | 3 s | commit message; uv sync; defect register; traceability seed; traceability; scope guard |
+| c86db7c | build(contracts): use buf for protobuf lint and breaking changes | pass | 38 s | commit message; uv sync; defect register; traceability seed; traceability; scope guard; ruff tools; format tools; mypy tools; pytest tools; ruff ml; format ml; mypy ml; pytest ml; ruff contracts; format contracts; mypy contracts; pytest contracts |
+| 437c401 | feat(contracts): apply the owner decisions on dual control and health | pass | 72 s | commit message; uv sync; defect register; traceability seed; traceability; scope guard; ruff tools; format tools; mypy tools; pytest tools; ruff ml; format ml; mypy ml; pytest ml; ruff contracts; format contracts; mypy contracts; pytest contracts; maven verify |
+| e692225 | fix(contracts): resolve the events re-check findings | pass | 34 s | commit message; uv sync; defect register; traceability seed; traceability; scope guard; ruff tools; format tools; mypy tools; pytest tools; ruff ml; format ml; mypy ml; pytest ml; ruff contracts; format contracts; mypy contracts; pytest contracts; gitleaks self-test |
+| efb3d40 | docs(adr): allow history rewriting on unmerged feature branches | pass | 15 s | commit message; uv sync; defect register; traceability seed; traceability; scope guard; ruff tools; format tools; mypy tools; pytest tools |
+
+The first run failed only 962cb40, with a bug in the verification script: it ran the gitleaks self-test at a commit where the self-test does not exist yet. The script was fixed to scan that commit's history with the pinned gitleaks instead, and to ignore an inherited `VIRTUAL_ENV`. The fix was folded into the tip commit (7203304 → efb3d40), and the run above is the second one. This response commit changes only documentation; it passes the governance checks through the pre-commit hook and is covered by `make ci` and CI.
+
 ## Other process notes
 
 - **Owner finding 3 (mixed commits).** Every commit in this round was made with the owner's
