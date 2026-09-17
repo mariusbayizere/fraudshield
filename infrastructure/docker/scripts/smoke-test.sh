@@ -7,7 +7,20 @@
 set -euo pipefail
 
 compose() { docker compose --profile core "$@"; }
-step() { printf '\n== %s\n' "$1"; }
+current_step="start"
+step() {
+  current_step="$1"
+  printf '\n== %s\n' "$1"
+}
+# In GitHub Actions, surface the failing step as an annotation (visible without log access).
+on_error() {
+  local status=$? line=$1 command=$2
+  echo "smoke test failed in step '${current_step}' at line ${line}: ${command} (exit ${status})" >&2
+  if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+    echo "::error title=smoke test failed::step '${current_step}', line ${line}, exit ${status}: ${command}"
+  fi
+}
+trap 'on_error "$LINENO" "$BASH_COMMAND"' ERR
 
 step "service health"
 unhealthy=$(compose ps --format '{{.Service}} {{.Health}}' | awk '$1 != "object-store-init" && $2 != "healthy"')
