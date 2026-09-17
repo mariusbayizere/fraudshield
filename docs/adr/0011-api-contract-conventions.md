@@ -5,6 +5,8 @@
 - **Requirements affected:** FR-01-01 … FR-01-07, FR-02-06, FR-03-02, FR-04-*, FR-05-*, FR-06-*,
   FR-07-*, NFR-SEC-03
 - **Defects referenced:** D-12, D-14, D-19, D-24, D-27, D-29, D-44
+- **Amended:** 2026-09-17 after the M1 contracts review (CR-02, CR-07, CR-08, CR-20 … CR-23, CR-31);
+  authorisation decisions moved to ADR 0014
 
 ## Context
 
@@ -17,34 +19,91 @@ code tend to diverge between languages, so the conventions are fixed once here a
 1. **Contract-first.** `contracts/openapi/fraudshield-api.yaml` (OpenAPI 3.1, JSON Schema 2020-12)
    is the source of truth. The API serves it at `/api/docs`; M6/M7 tests assert that controllers
    match it. Front-end types are generated from it (build prompt H.4).
-2. **Base path** `/api/v1`. The customer verification page (`/verify/{token}`) and health endpoints
-   outside `/api/v1` (`/actuator/health`) are documented in the same file.
+2. **Base path** `/api/v1`. The customer verification page (`/verify/{token}`) and the orchestration
+   probe `/actuator/health` (management port, status only, ADR 0014) are outside `/api/v1` and are
+   documented in the same file with a path-level `servers` override.
 3. **Money** travels as a decimal string with its currency, never as a JSON number:
    `amount` matches `^(0|[1-9]\d{0,13})(\.\d{1,4})?$` (at most 14 integer digits and 4 decimals,
    `DECIMAL(18,4)`), and `currency` is an ISO 4217 code. Ingested amounts must be greater than zero
    (`Money.requirePositive`). This matches the Java `Money` type exactly.
 4. **Identifiers.** `transaction_id` is a UUID and the idempotency key (FR-01-03). Account,
-   counterparty, device and agent identifiers are opaque tokens matching `^tok_[A-Za-z0-9]{24,}$`;
+   counterparty, device and agent identifiers are opaque tokens matching `^tok_[A-Za-z0-9]{24,64}$`;
    raw phone or account numbers are rejected at the schema boundary (E.1, NFR-SEC-03).
 5. **Time** is RFC 3339 in UTC with a `Z` suffix; local times are derived and shown with a zone
    abbreviation only in the UI (D-43).
 6. **Errors** use RFC 9457 `application/problem+json`. `type` is a stable URN
-   `urn:fraudshield:problem:<name>` (the project owns no domain name to host problem URLs). Every
-   problem carries `correlation_id`; validation problems carry `errors[]` with `field`, `code` and
-   `message`. 400 is for missing or malformed fields, 422 for type mismatches and semantic
-   violations (FR-01-02).
+   `urn:fraudshield:problem:<name>` from the `ProblemType` catalogue in the contract; each response
+   lists the types it may carry in `x-problem-types`, and a test fails if a type is used anywhere
+   without being catalogued. The project owns no domain name to host problem URLs. `fraudshield` is
+   not a registered URN namespace (RFC 8141), so these identifiers are opaque names, not resolvable
+   URNs; if a domain is acquired they can be mapped to URLs without changing their meaning. Every
+   problem carries `correlation_id`; validation problems carry `errors[]` with `field`, a `code`
+   from `ValidationErrorCode`, and `message`.
+
+   **400 or 422** (E.1, FR-01-02). E.1 says missing fields → 400, type mismatches → 422 and raw
+   MSISDNs → 400; the rule that reconciles all three is whether the body is a usable instance of
+   the schema at all:
+
+   | Check | Status | `errors[].code` |
+   |---|---|---|
+   | Body is not valid JSON | 400 | `malformed_json` |
+   | Required field missing (including conditional, e.g. `agent_id` for AGENT_BANKING) | 400 | `required` |
+   | Field not in the schema | 400 | `unknown_field` |
+   | Identifier field is not a `tok_` token (raw MSISDN or account number) | 400 | `not_a_token` |
+   | JSON type differs (amount as a number, latitude as a string) | 422 | `type_mismatch` |
+   | Wrong shape: UUID, decimal scale above 4, leading zero, exponent, MCC digits, timestamp not in UTC | 422 | `invalid_format` |
+   | Value outside an enum (currency, channel) | 422 | `unsupported_value` |
+   | Number or amount outside its range (amount ≤ 0 or above 14 integer digits, latitude, longitude, probability) | 422 | `out_of_range` |
+   | More array items than allowed (batch above 1,000) | 422 | `too_many_items` |
+   | Timestamp more than 5 minutes ahead of the server clock | 422 | `timestamp_in_future` |
+   | Threshold medium ≥ high; duplicate channel | 422 | `thresholds_not_ordered`, `duplicate_channel` |
+   | CIDR that does not parse or has host bits set | 422 | `invalid_cidr` |
+   | Webhook URL resolving to a non-public address, IP literal or user info | 422 | `webhook_url_not_allowed` |
+   | Password or person-name rule (ADR 0013, 0014) | 422 | `password_policy`, `person_name` |
+
+   All errors are reported; if any is a 400-class error the status is 400. The contract holds the
+   same mapping in `ValidationErrorCode.x-status-by-code`, and
+   `contracts/validation/request-validation-vectors.json` gives request bodies with the expected
+   status and codes. Contract tests check the vectors against the schema (including that the
+   server-only checks are ones the schema cannot make); the M6 and M7 controller tests consume the
+   same file.
 7. **Authentication.** Machine clients use `X-API-Key: fsk_<env>_<keyId>_<secret>` (D-19); staff use
    `Authorization: Bearer <RS256 JWT>` (FR-07-04). API keys never reach staff endpoints (FR-01-05).
+   Webhook signing secrets have the form `whsec_<env>_<32–64 alphanumerics>`; both prefixes exist
+   so secret scanners can recognise the project's credentials.
 8. **Authorisation is declared per operation**, not inferred: `x-required-scopes` for API-key
-   operations and `x-required-roles` for staff operations (roles ANALYST, SENIOR_ANALYST,
-   RISK_OFFICER, ADMIN; ADMIN is not implied to decide alerts, E.8). Public operations declare
-   `security: []` and `x-public: true`. The M7 role × endpoint matrix test reads these extensions.
+   operations, `x-required-roles` for staff operations, `x-public: true` with `security: []` for
+   public ones, and `x-authorisation-rules` for object-level rules. The declarations must equal the
+   reviewed golden matrix; the model and its decisions are in ADR 0014.
 9. **Ingest response** is the minimal `DecisionResponse` (D-12); the full `ScoringResult` is only on
-   staff endpoints. MEDIUM returns `HOLD` with `review_deadline_at`; the final decision is available
-   from `GET /decisions/{transaction_id}` and the signed `decision.final` webhook (D-14).
+   staff endpoints. Its property set is exactly the seven D-12 fields plus two additions, and a test
+   asserts the exact set: `review_deadline_at` (required by D-14 for HOLD, null otherwise) and
+   `ml_unavailable_fallback` (true when the rule-based fallback decided, so integrators can route
+   those decisions to their own review; it reveals no model internals). The schema also enforces
+   E.6 consistency: HOLD ⇔ a deadline, HOLD ⇒ MEDIUM, APPROVE ⇒ LOW, HIGH ⇒ DECLINE (DECLINE with a
+   lower tier is allowed only for a frozen account).
+
+   **Final decisions (D-14).** One `FinalDecision` shape is returned by
+   `GET /decisions/{transaction_id}`, published on `fs.decisions.final` and sent as the
+   `decision.final` webhook body. A decision can change several times (HOLD → DECLINE → APPROVE by
+   customer verification → DECLINE by senior override), so each state carries an `event_id` (the
+   deduplication key, constant across delivery retries) and a per-transaction `decision_sequence`
+   that starts at 1 for the ingest decision and increases by 1 per change. Receivers apply a state
+   only if its sequence is greater than the last one applied, and acknowledge and ignore anything
+   else; deduplicating on the decision value would drop a repeated DECLINE and let a delayed APPROVE
+   undo a newer DECLINE. The allowed transitions are listed in the schema description; the schema
+   enforces the structural ones (sequence 1 is decided by MODEL, later states name their
+   predecessor and never return to HOLD).
 10. **Concurrency and offline replay.** Mutations on alerts carry the alert `version` (optimistic
     locking) and an `Idempotency-Key` header; stale versions return 409 with the current state
     (D-29). Analyst decisions return `202` with `undo_until` (D-44).
+
+    **Ingest idempotency (FR-01-03).** The idempotency record stores a SHA-256 fingerprint of the
+    canonical validated request with the cached response. The same `transaction_id` with the same
+    fingerprint within 24 hours replays the cached decision; with a different fingerprint it returns
+    409 `idempotency-conflict` without scoring (otherwise a resubmitted larger amount would inherit
+    an approval it never earned). A duplicate that arrives while the first is still being decided
+    waits for that result.
 11. **Pagination** is cursor-based (`cursor`, `limit` ≤ 200, response `next_cursor`).
 12. **Schema additions to FR-01-02**, each optional and required only where stated: `agent_id` (token;
     required when `channel` is `AGENT_BANKING`, for the agent-specific features of E.2),
