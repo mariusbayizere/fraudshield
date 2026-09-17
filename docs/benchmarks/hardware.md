@@ -1,9 +1,14 @@
-# Reference hardware for local measurements
+# Machines used for measurements
 
-Every benchmark file in `docs/benchmarks/` states which machine produced it. Results from the
-machine below are **development-machine measurements**; requirements whose targets need more
-capacity (10,000 TPS ingestion, training on 5M rows within practical time) are marked
-`VERIFIED_AT_REDUCED_SCALE` with the scale used (build prompt A.3 rule 8).
+Every benchmark file in `docs/benchmarks/` states which machine produced it. Each machine that
+produces measurements has a level-2 section whose heading starts with its lower-case ID
+(`## dev-laptop-01 …`); traceability rows cite it as `machine: <id>` in `reduced_scale`, and
+`fs-traceability check` rejects IDs not recorded here (ADR 0010). Requirements whose targets need
+more capacity than the machine used are marked `VERIFIED_AT_REDUCED_SCALE` with the scale used
+(build prompt A.3 rule 8).
+
+Policy (ADR 0010): performance gate numbers are never taken from shared CI runners; the Docker
+stack is verified in CI and in Codespaces, not on `dev-laptop-01`.
 
 ## dev-laptop-01 (recorded 2026-09-17)
 
@@ -16,13 +21,42 @@ capacity (10,000 TPS ingestion, training on 5M rows within practical time) are m
 | Java | OpenJDK 21.0.12 | `java -version` |
 | Python | CPython 3.12.14 (uv-managed) | `uv python list` |
 | Node | 24.21.0, pnpm 12.4.2 | `node -v`, `pnpm --version` |
-| Docker | Engine installed; daemon not running during M0 (starting it requires administrator rights) | `systemctl status docker` |
+| Docker | Engine installed but **not used**: owner decision 2026-09-17, too little free memory while working (ADR 0010) | `systemctl status docker` |
 
 Implications recorded now so they are not rediscovered later:
 
-- The full `core` compose profile sets memory limits totalling 3,968 MiB (about 3.9 GiB); with ~1.8 GiB free
-  the stack may need other applications closed.
-- A 5M-row dataset and gradient-boosting training are feasible but slow on two cores; full
-  runs will be reported with wall-clock time and reduced-scale runs used for iteration.
-- Load tests at 10,000 TPS are not achievable on this machine; M10 will report the largest
-  sustained rate measured and provide the distributed Locust configuration for full scale.
+- The `core` compose profile sets memory limits totalling 3,968 MiB, more than the ~1.8 GiB free;
+  the stack runs in CI and Codespaces instead (ADR 0010).
+- A 5M-row dataset and gradient-boosting training are feasible but slow on two cores; runs on this
+  machine are reduced-scale and reported with wall-clock time.
+- Load tests at 10,000 TPS are not achievable here; they need the dedicated benchmark machine
+  below, with the distributed Locust configuration for full scale.
+
+## GitHub-hosted CI runners (not a measurement machine)
+
+`ubuntu-24.04` runners run every Docker-dependent suite (`REQUIRE_DOCKER=1`) and the `stack` job
+that evidences the M0 gate. They are shared, and their hardware varies between runs, so their
+timings are never used as gate evidence (ADR 0010). There is deliberately no machine ID for them.
+
+## Planned: dedicated benchmark machine (not yet provisioned)
+
+Needed before M5, M6 and M10 benchmark rows can be closed beyond `VERIFIED_AT_REDUCED_SCALE`.
+Candidate: a Codespaces machine or cloud instance with dedicated vCPUs. When provisioned, add a
+section headed with its ID recording, from commands run on the machine at measurement time: CPU
+model and core/thread count (`lscpu`), memory (`free -m`), disk type, OS and kernel (`uname -a`),
+JDK (`java -version`), Python and key library versions, container runtime version, whether the
+vCPUs are dedicated or shared, and the date. No numbers are recorded here in advance.
+
+## Memory budget per compose profile
+
+Sum of `deploy.resources.limits.memory`, enforced by `fs-compose-budget` (ADR 0010):
+
+| Profile | Budget (MiB) | Current total (MiB) | Services |
+|---|---|---|---|
+| core | 4,096 | 3,968 | timescaledb 768, pii-vault 256, redis 320, kafka 768, object-store 384, object-store-init 128, mlflow 1,024, mailpit 64, wiremock 256 |
+| ml | 6,144 | 0 | scoring service and workers arrive in M5 |
+| obs | 5,120 | 0 | Prometheus, Grafana, Loki, OpenTelemetry Collector arrive in M9 |
+| full | 10,240 | 3,968 | all profiles together |
+
+Budgets fit the 16 GB Codespaces machine with room for the IDE, Maven and test JVMs. The `core`
+total exceeds the memory `dev-laptop-01` has free, which is why the stack does not run there.

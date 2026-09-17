@@ -18,6 +18,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  # Docker-dependent suites must run in CI, never skip (ADR 0010).
+  REQUIRE_DOCKER: "1"
   UV_VERSION: "0.12.15"
   PYTHON_VERSION: "3.12.14"
   NODE_VERSION: "24.21.0"
@@ -105,6 +107,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
       - run: uv run fs-scope-guard
+      - run: uv run fs-compose-budget
       - name: Commit messages introduced by this push or pull request (G.3)
         env:
           EVENT_NAME: ${{ github.event_name }}

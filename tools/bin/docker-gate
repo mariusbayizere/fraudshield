@@ -1,0 +1,29 @@
+#!/usr/bin/env sh
+# Run a Docker-dependent suite, or say explicitly that it was skipped (ADR 0010).
+#
+#   tools/bin/docker-gate <suite-name> <ci-job> -- <command> [args...]
+#
+# Docker available            -> runs the command.
+# Docker unavailable          -> prints "SKIPPED: <suite> requires Docker, verified in CI (job: <ci-job>)"
+#                                and exits 0, so local `make ci` stays usable on the author's laptop.
+# Docker unavailable and REQUIRE_DOCKER is set (CI, Codespaces) -> fails; never a silent pass.
+set -eu
+
+if [ "$#" -lt 4 ] || [ "$3" != "--" ]; then
+  echo "usage: tools/bin/docker-gate <suite-name> <ci-job> -- <command> [args...]" >&2
+  exit 2
+fi
+suite=$1
+job=$2
+shift 3
+
+if docker info >/dev/null 2>&1; then
+  exec "$@"
+fi
+
+if [ -n "${REQUIRE_DOCKER:-}" ]; then
+  echo "ERROR: ${suite} requires Docker; REQUIRE_DOCKER is set but no Docker daemon is reachable" >&2
+  exit 1
+fi
+
+echo "SKIPPED: ${suite} requires Docker, verified in CI (job: ${job})"

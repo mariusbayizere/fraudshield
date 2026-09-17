@@ -13,6 +13,10 @@ fs-defect-register = "fraudshield_tools.defect_register:main"
 fs-scope-guard = "fraudshield_tools.scope_guard:main"
 fs-commit-msg = "fraudshield_tools.commit_msg:main"
 fs-licences = "fraudshield_tools.licences:main"
+fs-compose-budget = "fraudshield_tools.compose_budget:main"
+
+[project.entry-points.pytest11]
+fraudshield-requires-docker = "fraudshield_tools.pytest_docker"
 
 [build-system]
 requires = ["hatchling==1.32.0"]
@@ -24,4 +28,4 @@ packages = ["src/fraudshield_tools"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = ["req(*ids): links a test to requirement or defect IDs in docs/traceability/requirements.yaml"]
-addopts = "--strict-markers --import-mode=importlib --cov=fraudshield_tools --cov-branch --cov-report=term-missing:skip-covered --cov-fail-under=90"
+addopts = "-rs --strict-markers --import-mode=importlib --cov=fraudshield_tools --cov-branch --cov-report=term-missing:skip-covered --cov-fail-under=90"

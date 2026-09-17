@@ -1,5 +1,7 @@
 # FraudShield developer entry points. Run `make help` for the list.
-# Requires: Docker with Compose v2, Java 21, uv, Node 24 + pnpm (versions in .tool-versions).
+# Requires: Java 21, uv, Node 24 + pnpm (versions in .tool-versions). Docker with Compose v2 is
+# needed only for Docker-dependent suites; without it they print "SKIPPED: ... verified in CI"
+# (ADR 0010). Set REQUIRE_DOCKER=1 to make a missing Docker daemon an error instead.
 
 SHELL := /usr/bin/env bash
 .SHELLFLAGS := -euo pipefail -c
@@ -7,6 +9,7 @@ SHELL := /usr/bin/env bash
 
 COMPOSE := docker compose
 MVNW := cd backend && ./mvnw -B -ntp
+DOCKER_GATE := tools/bin/docker-gate
 PNPM := cd frontend && pnpm
 
 .PHONY: help
@@ -64,12 +67,23 @@ test-python: ## Python unit tests with the 90% line-coverage gate (SRS 8.1)
 	cd ml && uv run pytest -q
 
 .PHONY: test-java
-test-java: ## Java build, unit tests, SpotBugs and coverage gate
-	$(MVNW) verify
+test-java: ## Java build, unit tests, SpotBugs and coverage gate (requires-docker tests need Docker)
+	@if docker info >/dev/null 2>&1; then \
+	  cd backend && ./mvnw -B -ntp verify; \
+	elif [ -n "$${REQUIRE_DOCKER:-}" ]; then \
+	  echo "ERROR: JUnit tests tagged requires-docker need Docker; REQUIRE_DOCKER is set" >&2; exit 1; \
+	else \
+	  echo "SKIPPED: JUnit tests tagged requires-docker require Docker, verified in CI (job: java)"; \
+	  cd backend && ./mvnw -B -ntp verify -DexcludedGroups=requires-docker; \
+	fi
 
 .PHONY: test-frontend
 test-frontend: ## Front-end unit tests with coverage thresholds
 	$(PNPM) test:coverage
+
+.PHONY: stack-test
+stack-test: ## Start the core stack and run the functional smoke test (Docker)
+	$(DOCKER_GATE) stack-test stack -- bash -c 'make up && make smoke'
 
 .PHONY: test
 test: test-python test-java test-frontend ## All unit test suites
@@ -80,13 +94,14 @@ governance: ## Defect register, traceability and scope checks (D.2, D-47)
 	uv run fs-traceability-seed --check
 	uv run fs-traceability check
 	uv run fs-scope-guard
+	uv run fs-compose-budget
 
 .PHONY: traceability
 traceability: ## Regenerate the traceability matrix from YAML and test tags
 	uv run fs-traceability render
 
 .PHONY: compose-config
-compose-config: ## Validate docker-compose.yml without starting containers
+compose-config: ## Validate docker-compose.yml without starting containers (needs the docker CLI only)
 	$(COMPOSE) --env-file .env.example --profile full config -q
 
 .PHONY: secrets-scan
@@ -99,7 +114,7 @@ licences: ## Dependency licence inventory and policy check (ADR 0009)
 	uv run fs-licences --output build/licence-inventory.json
 
 .PHONY: ci
-ci: lint typecheck test governance compose-config secrets-scan licences ## Everything CI runs (except the Docker stack job), locally
+ci: lint typecheck test governance compose-config secrets-scan licences stack-test ## Everything CI runs; Docker suites skip visibly without Docker
 
 # --- Later milestones --------------------------------------------------------------------
 # These targets are part of the documented interface (build prompt C.5) and are implemented
