@@ -21,7 +21,7 @@ env:
   UV_VERSION: "0.12.15"
   PYTHON_VERSION: "3.12.14"
   NODE_VERSION: "24.21.0"
-  JAVA_VERSION: "21"
+  JAVA_VERSION: "21.0.12"
 
 jobs:
   python:
