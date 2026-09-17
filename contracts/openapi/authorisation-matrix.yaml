@@ -21,6 +21,9 @@ operations:
   getPublicHealth:
     public: true
     ref: "E.1 health; status only, owner decision (ADR 0014)"
+  getDeploymentEnvironment:
+    public: true
+    ref: "D-21 synthetic-data banner; shown before login (ADR 0019)"
   getLiveness:
     public: true
     ref: "E.1; status only, management port (ADR 0014)"

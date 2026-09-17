@@ -524,6 +524,9 @@ examples:
     state: COMMITTED
     override_of_decision_id: null
     false_positive_confirmed: null
+  DeploymentEnvironment:
+  - synthetic_data: true
+  - synthetic_data: false
   EscalationRequest:
   - target_role: SENIOR_ANALYST
     reason: Linked to an active device campaign

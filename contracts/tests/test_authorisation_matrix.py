@@ -163,6 +163,21 @@ def test_object_level_rules_are_declared_with_documented_problems(operation_id: 
         assert rule.get("code", "required") in codes, rule
 
 
+@pytest.mark.req("D-21")
+def test_synthetic_data_flag_is_public_and_reveals_nothing_else() -> None:
+    """The banner shows before login (ADR 0019), so the flag is public and is the only field."""
+    environment = OPS["getDeploymentEnvironment"]
+    assert environment.path == "/environment"
+    assert declared_access(environment.spec) == ("public", frozenset())
+    assert "x-network" not in environment.spec
+    ok = environment.spec["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
+    schema = DOC["components"]["schemas"][ok.rsplit("/", 1)[1]]
+    assert schema["properties"].keys() == {"synthetic_data"}
+    assert schema["properties"]["synthetic_data"]["type"] == "boolean"
+    assert schema["required"] == ["synthetic_data"]
+    assert schema["additionalProperties"] is False
+
+
 def test_health_detail_is_not_public() -> None:
     """Owner decision: one public status-only endpoint; component detail on the management port."""
     public = OPS["getPublicHealth"]

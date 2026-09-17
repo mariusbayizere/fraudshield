@@ -38,6 +38,12 @@ up: env ## Start the core local stack and wait until every service is healthy
 smoke: ## Functional smoke test of the running core stack (M0 gate evidence)
 	./infrastructure/docker/scripts/smoke-test.sh
 
+.PHONY: seed-demo
+seed-demo: ## Migrate the stack database and seed synthetic demo accounts (credentials made locally, ADR 0019)
+	$(COMPOSE) --profile core exec -T timescaledb bash /docker-entrypoint-initdb.d/20-fraudshield-roles.sh
+	$(MVNW) -q package -pl persistence -am -DskipTests -Djacoco.skip=true -Dspotbugs.skip=true -Dcheckstyle.skip=true
+	uv run fs-seed-demo
+
 .PHONY: down
 down: ## Stop the local stack (volumes are kept)
 	$(COMPOSE) --profile full down
@@ -107,9 +113,9 @@ compose-config: ## Validate docker-compose.yml without starting containers (need
 	$(COMPOSE) --env-file .env.example --profile full config -q
 
 .PHONY: secrets-scan
-secrets-scan: ## Gitleaks scan of history and working tree (pinned, checksum-verified binary)
+secrets-scan: ## Gitleaks scan of history and committable working-tree files (pinned binary)
 	tools/bin/gitleaks git --log-opts=HEAD --redact --no-banner --exit-code 1 .
-	tools/bin/gitleaks dir --redact --no-banner --exit-code 1 .
+	tools/bin/gitleaks-worktree
 	uv run python tools/bin/gitleaks-selftest
 
 .PHONY: licences

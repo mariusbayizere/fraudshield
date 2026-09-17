@@ -222,6 +222,28 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ProbeStatus" }
 
+  /environment:
+    get:
+      tags: [health]
+      operationId: getDeploymentEnvironment
+      summary: Whether this deployment runs on synthetic data, for the UI banner
+      description: >-
+        synthetic_data is true when demo seeding is enabled or the dev or demo profile is active.
+        The UI then shows the banner "SYNTHETIC DATA — NOT FOR PRODUCTION" on every page, including
+        the login page, so the endpoint is public (D-21, ADR 0019). It reveals nothing else about
+        the deployment.
+      security: []
+      x-public: true
+      responses:
+        "200":
+          description: Deployment environment
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeploymentEnvironment" }
+        "406": { $ref: "#/components/responses/NotAcceptable" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
   /actuator/health:
     servers:
       - url: "{scheme}://{instance}:{managementPort}"
@@ -3216,6 +3238,14 @@ components:
       additionalProperties: false
       properties:
         status: { type: string, enum: [UP, DOWN] }
+    DeploymentEnvironment:
+      type: object
+      required: [synthetic_data]
+      additionalProperties: false
+      properties:
+        synthetic_data:
+          type: boolean
+          description: True in development and demo deployments; the UI shows the synthetic-data banner
     ComponentHealth:
       type: object
       required: [status]

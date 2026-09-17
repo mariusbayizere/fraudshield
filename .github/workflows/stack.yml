@@ -24,7 +24,7 @@ env:
   REQUIRE_DOCKER: "1"
   # Inputs of the stack: compose files, Dockerfiles, container scripts and config, the Makefile
   # targets that drive them, the devcontainer, and dependency locks.
-  STACK_INPUTS: '^(docker-compose[^/]*\.ya?ml|.*Dockerfile[^/]*|\.dockerignore|\.env\.example|infrastructure/docker/.*|\.devcontainer/.*|Makefile|uv\.lock|frontend/pnpm-lock\.yaml|backend/(.*/)?pom\.xml|\.github/workflows/stack\.yml)$'
+  STACK_INPUTS: '^(docker-compose[^/]*\.ya?ml|.*Dockerfile[^/]*|\.dockerignore|\.env\.example|infrastructure/docker/.*|\.devcontainer/.*|Makefile|uv\.lock|frontend/pnpm-lock\.yaml|backend/(.*/)?pom\.xml|backend/persistence/src/main/.*|tools/src/fraudshield_tools/seed_demo\.py|\.github/workflows/stack\.yml)$'
 
 jobs:
   changes:
@@ -82,6 +82,17 @@ jobs:
       - name: Functional smoke test
         shell: bash
         run: make smoke 2>&1 | tee stack-smoke.log
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "21.0.12"
+          cache: maven
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - name: make seed-demo (migrations, roles, demo accounts; ADR 0019)
+        shell: bash
+        run: |
+          make seed-demo 2>&1 | grep -v -e 'fsk_dev_' -e '@example.com' | tee stack-seed.log
+          ./infrastructure/docker/scripts/check-seeded-stack.sh 2>&1 | tee -a stack-seed.log
       - name: Diagnose services on failure (annotations)
         if: failure()
         run: ./infrastructure/docker/scripts/diagnose-stack.sh
@@ -89,7 +100,9 @@ jobs:
         if: always()
         with:
           name: stack-smoke-log
-          path: stack-smoke.log
+          path: |
+            stack-smoke.log
+            stack-seed.log
           if-no-files-found: ignore
       - if: always()
         run: docker compose --profile full down -v

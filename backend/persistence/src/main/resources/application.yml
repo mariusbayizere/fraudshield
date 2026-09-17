@@ -1,5 +1,5 @@
-# Database tool configuration (ADR 0017). Connection values come from the environment; nothing
-# secret is committed.
+# Database tool configuration (ADR 0017, ADR 0019). Connection values come from the environment;
+# nothing secret is committed.
 spring:
   main:
     web-application-type: none
@@ -13,3 +13,7 @@ spring:
     default-schema: fraudshield
     create-schemas: false
     locations: classpath:db/migration
+
+fraudshield:
+  demo-seed:
+    enabled: false
