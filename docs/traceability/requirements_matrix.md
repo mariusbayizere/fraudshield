@@ -3,7 +3,7 @@
 
 # FraudShield Requirements Traceability Matrix
 
-Rows: 258. Status counts: IN_PROGRESS 6, NOT_STARTED 252.
+Rows: 258. Status counts: IN_PROGRESS 7, NOT_STARTED 251.
 
 | ID | Priority | Milestone | Status | Title | Implementation | Tests | Evidence | Deviations |
 |---|---|---|---|---|---|---|---|---|
@@ -222,7 +222,7 @@ Rows: 258. Status counts: IN_PROGRESS 6, NOT_STARTED 252.
 | D-06 | M | M4 | NOT_STARTED | Isolation Forest score range and threshold conflict. | — | — | — | — |
 | D-07 | M | M2 | NOT_STARTED | Temporal split definitions disagree | — | — | — | — |
 | D-08 | M | M2 | NOT_STARTED | Results on synthetic data can look perfect and prove nothing. | — | — | — | — |
-| D-09 | M | M4 | NOT_STARTED | Unsupported numeric claims in the SRS | — | — | — | — |
+| D-09 | M | M4 | IN_PROGRESS | Unsupported numeric claims in the SRS | docs/research/claims_register.md | — | — | — |
 | D-10 | M | M6 | NOT_STARTED | Alert volume will overwhelm analysts; the 30-second MEDIUM timer then auto-releases most risky transactions. | — | — | — | — |
 | D-11 | M | M5 | NOT_STARTED | Shadow "within 1%" is ambiguous and labels are delayed. | — | — | — | — |
 | D-12 | M | M6 | NOT_STARTED | Model extraction and privacy risk: returning the full ScoringResult (feature_vector, per-model scores, SHAP) to the core-banking caller exposes model internals. | — | — | — | — |

@@ -1,0 +1,82 @@
+# FraudShield
+
+Real-time explainable fraud detection and analyst intelligence platform for East African
+digital payments: mobile money, USSD, agent banking, cards, online and bank transfers across
+Rwanda, Kenya, Tanzania, Uganda and the DRC.
+
+> **Project status: M0 — bootstrap and governance.** No fraud model, dataset or service is
+> implemented yet. This README states only what exists and has been verified; measured
+> results will be added with their hardware, scale and raw data as milestones close.
+> FraudShield is an independent research project. It is not deployed at, endorsed by, or
+> validated with any financial institution or regulator.
+
+## Why
+
+Most published fraud-detection models are trained on card transactions from Europe and North
+America. East African payments differ in ways those models do not capture: USSD transactions
+from feature phones have no device fingerprint, agent cash-in/cash-out has no card
+equivalent, round-sum transfers are normal behaviour, and EAC cross-border corridors are
+regional rather than foreign. FraudShield is designed for that context: a streaming decision
+path that blocks high-risk payments within a strict latency budget, SHAP explanations for
+every flagged transaction, and an analyst console built for low-end Android devices on 3G.
+
+Quantitative claims about the regional fraud landscape that appear in the requirements
+document are tracked in [`docs/research/claims_register.md`](docs/research/claims_register.md)
+and are not repeated here until verified against primary sources.
+
+## Planned architecture
+
+```mermaid
+flowchart LR
+  CB[Core banking / payment gateway] -- HTTPS + API key --> API[fraudshield-api<br/>Spring Boot 4, Java 21]
+  API -- gRPC mTLS --> ML[fraudshield-ml<br/>XGBoost + LightGBM + Isolation Forest + SHAP]
+  API <--> R[(Redis<br/>features, idempotency, thresholds)]
+  API -- after decision --> K[[Kafka]]
+  K --> P[(PostgreSQL 16 + TimescaleDB)]
+  K --> WS[WebSocket push] --> UI[Analyst console PWA<br/>React 19 + MUI]
+  ML <--> MLF[MLflow registry]
+```
+
+Synchronous decision path with an asynchronous durability path; full design in the build
+specification (`docs/prompts/`) and ADRs (`docs/adr/`).
+
+## Repository map
+
+| Path | Contents |
+|---|---|
+| `backend/` | Spring Boot services (Maven multi-module) — `common` money/currency primitives today |
+| `ml/` | Python ML package (`ml/src/fraudshield_ml`) — operating-point analysis today |
+| `frontend/` | Staff console — WCAG contrast utilities today |
+| `tools/` | Governance tooling: defect register, traceability matrix, scope guard |
+| `docs/srs/` | Requirements (SRS v1.0) and the binding defect register |
+| `docs/adr/` | Architecture decision records |
+| `docs/traceability/` | Requirements ↔ tests ↔ evidence (258 rows) |
+| `docker-compose.yml` | Local stack: Kafka, PostgreSQL + TimescaleDB, PII vault, Redis, MLflow, fakes |
+
+## Quickstart (development)
+
+Prerequisites (exact versions in `.tool-versions`): Docker with Compose v2, Java 21, `uv`,
+Node 24 with `pnpm`.
+
+```bash
+make bootstrap     # locked Python, Node and Maven dependencies; pre-commit hooks
+make ci            # lint, strict type checks, unit tests, governance, secrets scan
+make up            # core local stack; waits for every service to report healthy
+```
+
+`make up` generates a git-ignored `.env` with random local credentials on first run. The
+stack is for **synthetic data only**.
+
+## Governance
+
+- Every requirement, SRS table row and defect resolution has a row in
+  [`docs/traceability/requirements_matrix.md`](docs/traceability/requirements_matrix.md);
+  tests link to rows by tag, and CI fails on unknown tags or unevidenced claims.
+- Deviations from the SRS are recorded in [`docs/srs/defect_register.md`](docs/srs/defect_register.md)
+  and `docs/adr/`.
+- Milestone reviews are recorded in `docs/reviews/`.
+
+## Licence and citation
+
+Source code: Apache-2.0 (`LICENSE`). Citation metadata: `CITATION.cff` (no DOI has been
+issued yet).

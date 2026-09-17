@@ -3106,9 +3106,10 @@ requirements:
   affects:
   - RES-01
   - RES-02
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation:
+  - docs/research/claims_register.md
   evidence: []
   deviations: []
 - id: D-10
