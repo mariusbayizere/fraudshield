@@ -8,8 +8,9 @@ verification, notes) are preserved for existing IDs.
 
 from __future__ import annotations
 
+import argparse
 import re
-from collections.abc import Callable
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -366,17 +367,19 @@ def build_rows(srs_text: str, prompt_text: str) -> list[dict[str, Any]]:
 
 
 def _defect_title(raw: str) -> str:
-    title = re.sub(r"\*\*|`", "", raw).strip()
-    # D-47's own title names the forbidden project; describe it neutrally instead.
-    neutral = "Copy-paste text from an unrelated project in SRS 05B"
-    return neutral if banned_terms_in(title) else title
+    return re.sub(r"\*\*|`", "", raw).strip()
+
+
+# D-47's title quotes the out-of-scope vocabulary it forbids; it is the only row allowed to.
+ROWS_ALLOWED_OUT_OF_SCOPE_TERMS = frozenset({"D-47"})
 
 
 def _assert_no_banned_terms(rows: list[dict[str, Any]]) -> None:
     leaks = {
         row["id"]: banned_terms_in(f"{row['title']} {row['srs_text']}")
         for row in rows
-        if banned_terms_in(f"{row['title']} {row['srs_text']}")
+        if row["id"] not in ROWS_ALLOWED_OUT_OF_SCOPE_TERMS
+        and banned_terms_in(f"{row['title']} {row['srs_text']}")
     }
     if leaks:
         raise SeedError(f"D-47 substitutions incomplete: {leaks}")
@@ -420,16 +423,42 @@ YAML_HEADER = """# FraudShield requirements traceability (build prompt D.2).
 """
 
 
-def dump(rows: list[dict[str, Any]], path: Path) -> None:
+def render_yaml(rows: list[dict[str, Any]]) -> str:
     body = yaml.safe_dump({"requirements": rows}, sort_keys=False, allow_unicode=True, width=100)
-    path.write_text(YAML_HEADER + body, encoding="utf-8")
+    return YAML_HEADER + body
 
 
-def main(write: Callable[[list[dict[str, Any]], Path], None] = dump) -> int:
-    fresh = build_rows(SRS_MD.read_text(encoding="utf-8"), PROMPT_PATH.read_text(encoding="utf-8"))
-    rows = merge(fresh, load_rows(REQUIREMENTS_YAML))
-    write(rows, REQUIREMENTS_YAML)
-    print(f"seeded {len(rows)} requirement rows into {REQUIREMENTS_YAML.relative_to(REPO_ROOT)}")
+def dump(rows: list[dict[str, Any]], path: Path) -> None:
+    path.write_text(render_yaml(rows), encoding="utf-8")
+
+
+def main(argv: list[str] | None = None, root: Path = REPO_ROOT) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="fail if SRS-derived fields, the row set or the YAML layout differ from a fresh seed",
+    )
+    args = parser.parse_args(argv)
+    srs = (root / SRS_MD.relative_to(REPO_ROOT)).read_text(encoding="utf-8")
+    prompt = (root / PROMPT_PATH.relative_to(REPO_ROOT)).read_text(encoding="utf-8")
+    target = root / REQUIREMENTS_YAML.relative_to(REPO_ROOT)
+    expected = render_yaml(merge(build_rows(srs, prompt), load_rows(target)))
+    if args.check:
+        current = target.read_text(encoding="utf-8") if target.exists() else ""
+        if current != expected:
+            print(
+                f"{REQUIREMENTS_YAML.relative_to(REPO_ROOT)} differs from the SRS-derived seed "
+                "(edited title/section/priority/milestone/defects, added or removed rows, or "
+                "unseeded layout); fix the SRS source or seeder mappings under review, then run: "
+                "uv run fs-traceability-seed",
+                file=sys.stderr,
+            )
+            return 1
+        print("traceability seed up to date")
+        return 0
+    target.write_text(expected, encoding="utf-8")
+    print(f"seeded {expected.count(chr(10) + '- id: ')} requirement rows")
     return 0
 
 

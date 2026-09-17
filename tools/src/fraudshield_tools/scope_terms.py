@@ -33,5 +33,9 @@ _CAMEL_BOUNDARY = re.compile(r"(?<=[a-z])(?=[A-Z])")
 
 
 def banned_terms_in(text: str) -> list[str]:
-    words = _CAMEL_BOUNDARY.sub(" ", text)
-    return sorted({match.group(1).lower() for match in BANNED_PATTERN.finditer(words)})
+    # Match the text as written (catches compound names such as the project names) and with
+    # camelCase split (catches identifiers such as a component named after a banned word).
+    split = _CAMEL_BOUNDARY.sub(" ", text)
+    return sorted(
+        {m.group(1).lower() for variant in (text, split) for m in BANNED_PATTERN.finditer(variant)}
+    )

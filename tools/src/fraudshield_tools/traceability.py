@@ -4,16 +4,24 @@
 tests tagged in code and the milestone state, and fails CI on any violation.
 ``fs-traceability render`` regenerates docs/traceability/requirements_matrix.md.
 
-Enforcement rules (ADR 0004):
+Enforcement rules (ADR 0004). SRS-derived fields are verified separately by
+``fs-traceability-seed --check``.
   1. IDs are unique and well formed; enums are valid.
-  2. Every requirement ID used as a test tag exists in the YAML.
-  3. Rows with a completed status carry evidence; each status has its required fields.
-  4. Completed rows verified by ``test`` have at least one tagged test.
-  5. For every milestone listed as completed in milestones.yaml, every Must row assigned
+  2. Every requirement ID used as a test tag exists in the YAML (tags are discovered by
+     :mod:`fraudshield_tools.test_tags`, which ignores comments and disabled tests).
+  3. A verification method other than ``test`` is allowed only for the rows listed in
+     ``VERIFICATION_OVERRIDES`` (a reviewed decision, not a per-row escape hatch).
+  4. Rows with a completed status carry evidence, and every evidence entry starts with an
+     existing repository path, a commit SHA present in the repository, or a GitHub Actions
+     run URL of this repository. Free text alone ("tested") is rejected.
+  5. ``DONE_WITH_DEVIATION`` rows name at least one existing ``docs/adr/NNNN-*.md``; every
+     deviation entry must be such a file. Other statuses have their required fields.
+  6. Completed rows verified by ``test`` have at least one tagged test.
+  7. For every milestone listed as completed in milestones.yaml, every Must row assigned
      to it (or earlier) is in a final status, and Must rows verified by ``test`` have
      at least one tagged test.
-  6. Evidence and deviation paths that look like repository files exist.
-  7. The rendered matrix is up to date.
+  8. Implementation paths exist.
+  9. The rendered matrix is up to date.
 """
 
 from __future__ import annotations
@@ -23,6 +31,7 @@ import re
 import subprocess
 import sys
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -30,6 +39,11 @@ from typing import Any
 import yaml
 
 from fraudshield_tools import REPO_ROOT
+from fraudshield_tools.repo import tracked_files
+from fraudshield_tools.test_tags import TaggedTest, discover
+from fraudshield_tools.traceability_seed import VERIFICATION_OVERRIDES
+
+__all__ = ["CheckReport", "TaggedTest", "check", "discover_tagged_tests", "main", "render_matrix"]
 
 REQUIREMENTS_YAML = Path("docs/traceability/requirements.yaml")
 MILESTONES_YAML = Path("docs/traceability/milestones.yaml")
@@ -55,66 +69,35 @@ FINAL_STATUSES = EVIDENCED_STATUSES | {"REQUIRES_EXTERNAL_PARTY"}
 VERIFICATIONS = {"test", "inspection", "manual", "external"}
 MILESTONES = [f"M{n}" for n in range(13)]
 
-JAVA_TAG = re.compile(r'@Tag\(\s*"([^"]+)"\s*\)')
-PY_REQ = re.compile(r"@pytest\.mark\.req\(([^)]*)\)")
-# Matches it('[ID] …'), test.skip("[ID] …") and the table form it.each([...])('[ID] …').
-TS_TITLE = re.compile(
-    r"""(?:\b(?:it|test|describe)(?:\.\w+)?\(|\]\)\()\s*['"`]\[([A-Z0-9 ,\-]+)\]"""
-)
-QUOTED = re.compile(r"""['"]([^'"]+)['"]""")
 PATH_LIKE = re.compile(r"^[\w.\-]+(/[\w.\-]+)+$")
+ADR_PATH = re.compile(r"^docs/adr/\d{4}-[a-z0-9-]+\.md$")
+COMMIT_SHA = re.compile(r"^[0-9a-f]{7,40}$")
+CI_RUN_URL = re.compile(r"^https://github\.com/mariusbayizere/fraudshield/actions/runs/\d+$")
 
-
-@dataclass(frozen=True)
-class TaggedTest:
-    requirement_id: str
-    location: str
+CommitExists = Callable[[str], bool]
 
 
 @dataclass
 class CheckReport:
     errors: list[str] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
 
 
-def tracked_files(root: Path) -> list[Path]:
-    """Files tracked or staged in git plus untracked, non-ignored files."""
-    result = subprocess.run(
-        ["git", "ls-files", "--cached", "--others", "--exclude-standard"],  # noqa: S607
-        cwd=root,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return [root / line for line in result.stdout.splitlines() if (root / line).is_file()]
+def git_commit_exists(root: Path) -> CommitExists:
+    def exists(sha: str) -> bool:
+        # A fixed git command plus a value already matched against COMMIT_SHA.
+        result = subprocess.run(  # noqa: S603
+            ["git", "cat-file", "-e", f"{sha}^{{commit}}"],  # noqa: S607
+            cwd=root,
+            capture_output=True,
+            check=False,
+        )
+        return result.returncode == 0
 
-
-def _is_test_file(rel: str) -> bool:
-    name = rel.rsplit("/", 1)[-1]
-    if rel.endswith(".java"):
-        return "/src/test/" in rel
-    if rel.endswith(".py"):
-        return name.startswith("test_") or name.endswith("_test.py")
-    return bool(re.search(r"\.(test|spec)\.(ts|tsx)$", name))
+    return exists
 
 
 def discover_tagged_tests(root: Path, files: list[Path] | None = None) -> list[TaggedTest]:
-    found: list[TaggedTest] = []
-    for path in files if files is not None else tracked_files(root):
-        rel = path.relative_to(root).as_posix()
-        if not _is_test_file(rel):
-            continue
-        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-            ids: list[str] = []
-            if rel.endswith(".java"):
-                ids = JAVA_TAG.findall(line)
-            elif rel.endswith(".py"):
-                ids = [q for args in PY_REQ.findall(line) for q in QUOTED.findall(args)]
-            else:
-                groups = TS_TITLE.findall(line)
-                ids = [part.strip() for group in groups for part in group.split(",")]
-            found.extend(TaggedTest(req_id, f"{rel}:{lineno}") for req_id in ids)
-    return found
+    return discover(root, files if files is not None else tracked_files(root))
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
@@ -131,6 +114,7 @@ def check(
     milestones: dict[str, Any],
     tests: list[TaggedTest],
     root: Path,
+    commit_exists: CommitExists | None = None,
 ) -> CheckReport:
     report = CheckReport()
     ids = [str(row.get("id")) for row in rows]
@@ -151,18 +135,23 @@ def check(
         report.errors.append(f"milestones.yaml: unknown milestones {bad_milestones}")
     closed_upto = max((_milestone_index(m) for m in completed if m in MILESTONES), default=-1)
 
+    exists = commit_exists or git_commit_exists(root)
+    context = _RowContext(tests_by_id, closed_upto, root, exists)
     for row in rows:
-        _check_row(row, tests_by_id, closed_upto, root, report)
+        _check_row(row, context, report)
     return report
 
 
-def _check_row(
-    row: dict[str, Any],
-    tests_by_id: dict[str, list[str]],
-    closed_upto: int,
-    root: Path,
-    report: CheckReport,
-) -> None:
+@dataclass(frozen=True)
+class _RowContext:
+    tests_by_id: dict[str, list[str]]
+    closed_upto: int
+    root: Path
+    commit_exists: CommitExists
+
+
+def _check_row(row: dict[str, Any], context: _RowContext, report: CheckReport) -> None:
+    tests_by_id, closed_upto = context.tests_by_id, context.closed_upto
     req_id = str(row.get("id"))
     where = f"{req_id}:"
     if not ID_PATTERN.match(req_id):
@@ -171,6 +160,15 @@ def _check_row(
     for key, allowed in enums:
         if row.get(key) not in allowed:
             report.errors.append(f"{where} invalid {key} {row.get(key)!r}")
+    expected_verification = VERIFICATION_OVERRIDES.get(req_id, "test")
+    if (
+        row.get("verification") in VERIFICATIONS
+        and row.get("verification") != expected_verification
+    ):
+        report.errors.append(
+            f"{where} verification {row.get('verification')!r} is not permitted; "
+            f"expected {expected_verification!r} (change VERIFICATION_OVERRIDES via review)"
+        )
     milestone = row.get("milestone")
     if milestone not in MILESTONES:
         report.errors.append(f"{where} invalid milestone {milestone!r}")
@@ -184,7 +182,7 @@ def _check_row(
             report.errors.append(f"{where} Must row in closed {milestone} has status {status}")
         if row.get("verification") == "test" and not has_test:
             report.errors.append(f"{where} Must row in closed {milestone} lacks a tagged test")
-    _check_paths(row, root, report)
+    _check_references(row, context.root, context.commit_exists, report)
 
 
 def _check_status_fields(row: dict[str, Any], has_test: bool, report: CheckReport) -> None:
@@ -205,16 +203,39 @@ def _check_status_fields(row: dict[str, Any], has_test: bool, report: CheckRepor
         report.errors.append(f"{where} {status} {required[status][1]}")
 
 
-def _check_paths(row: dict[str, Any], root: Path, report: CheckReport) -> None:
-    references = [
-        *(row.get("evidence") or []),
-        *(row.get("deviations") or []),
-        *(row.get("implementation") or []),
-    ]
-    for ref in references:
-        candidate = str(ref).split(" ", 1)[0].split("#", 1)[0].split(":", 1)[0]
-        if PATH_LIKE.match(candidate) and not (root / candidate).exists():
-            report.errors.append(f"{row.get('id')}: referenced path does not exist: {candidate}")
+def _first_token(entry: object) -> str:
+    return str(entry).strip().split(" ", 1)[0]
+
+
+def _check_references(
+    row: dict[str, Any], root: Path, commit_exists: CommitExists, report: CheckReport
+) -> None:
+    where = f"{row.get('id')}:"
+    for entry in row.get("evidence") or []:
+        token = _first_token(entry)
+        path = token.split("#", 1)[0].split(":", 1)[0]
+        if CI_RUN_URL.match(token):
+            continue
+        if COMMIT_SHA.match(token):
+            if not commit_exists(token):
+                report.errors.append(f"{where} evidence commit {token} is not in the repository")
+            continue
+        if PATH_LIKE.match(path):
+            if not (root / path).exists():
+                report.errors.append(f"{where} evidence path does not exist: {path}")
+            continue
+        report.errors.append(
+            f"{where} evidence {str(entry)!r} must start with a repository path, "
+            "a commit SHA or a CI run URL"
+        )
+    for entry in row.get("deviations") or []:
+        token = _first_token(entry)
+        if not ADR_PATH.match(token) or not (root / token).is_file():
+            report.errors.append(f"{where} deviation {str(entry)!r} is not an existing ADR file")
+    for entry in row.get("implementation") or []:
+        path = _first_token(entry).split("#", 1)[0].split(":", 1)[0]
+        if not PATH_LIKE.match(path) or not (root / path).exists():
+            report.errors.append(f"{where} implementation path does not exist: {path}")
 
 
 def _cell(values: list[str]) -> str:

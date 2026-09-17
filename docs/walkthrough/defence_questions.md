@@ -33,7 +33,7 @@ it is in ADR 0003.
 Redis 7.4 onward is not under an OSI-approved permissive licence; 7.2 is the last BSD-3 line and
 still receives patches (7.2.16, August 2026). ADR 0003.
 
-**Q: Section 05B of your SRS describes a different, non-financial domain. Is this system reused from somewhere?**
+**Q: Section 05B of your SRS talks about patients, triage and clinics. Is this system reused from somewhere?** <!-- scope-guard: allow D-47 -->
 No. That text was copied into the requirements document from a separate project by the same
 author. Those rows were rewritten to their FraudShield equivalents during seeding (D-47), and a CI
 check fails if that vocabulary appears anywhere in the codebase.

@@ -3680,7 +3680,7 @@ requirements:
   deviations: []
 - id: D-47
   section: Build prompt Part B defect register
-  title: Copy-paste text from an unrelated project in SRS 05B
+  title: KinyaMed text in 05B
   priority: M
   milestone: M0
   srs_text: See docs/srs/defect_register.md

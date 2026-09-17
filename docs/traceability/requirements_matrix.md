@@ -167,7 +167,7 @@ Rows: 258. Status counts: IN_PROGRESS 7, NOT_STARTED 251.
 | ML-DATA-07 | M | M2 | NOT_STARTED | Feature completeness | — | — | — | D-04 |
 | ML-DATA-08 | M | M2 | NOT_STARTED | Dataset release | — | — | — | — |
 | ML-GATE-01 | M | M4 | NOT_STARTED | AUC-ROC (last-3-month test set) | — | — | — | D-07 |
-| ML-GATE-02 | M | M4 | NOT_STARTED | Precision at 1% FPR | — | ml/tests/metrics/test_operating_points.py:16<br>ml/tests/metrics/test_operating_points.py:22<br>tools/tests/test_traceability.py:106 | — | D-01 |
+| ML-GATE-02 | M | M4 | NOT_STARTED | Precision at 1% FPR | — | ml/tests/metrics/test_operating_points.py:16<br>ml/tests/metrics/test_operating_points.py:22 | — | D-01 |
 | ML-GATE-03 | M | M4 | NOT_STARTED | Recall (fraud capture rate) | — | ml/tests/metrics/test_operating_points.py:33 | — | D-02 |
 | ML-GATE-04 | M | M4 | NOT_STARTED | F1 Score | — | ml/tests/metrics/test_operating_points.py:33 | — | D-02 |
 | ML-GATE-05 | M | M4 | NOT_STARTED | False Positive Rate at threshold 0.85 | — | — | — | D-02 |
@@ -214,7 +214,7 @@ Rows: 258. Status counts: IN_PROGRESS 7, NOT_STARTED 251.
 | RES-05 | M | M11 | NOT_STARTED | Training and evaluation pipeline | — | — | — | — |
 | RES-06 | M | M11 | NOT_STARTED | Full system source code | — | — | — | — |
 | RES-07 | M | M11 | NOT_STARTED | Citation file | — | — | — | — |
-| D-01 | M | M4 | IN_PROGRESS | "Precision at 1% FPR ≥ 0.720" is mathematically impossible. | ml/src/fraudshield_ml/metrics/operating_points.py | ml/tests/metrics/test_operating_points.py:16<br>ml/tests/metrics/test_operating_points.py:22<br>ml/tests/metrics/test_operating_points.py:27<br>tools/tests/test_traceability.py:106 | — | — |
+| D-01 | M | M4 | IN_PROGRESS | "Precision at 1% FPR ≥ 0.720" is mathematically impossible. | ml/src/fraudshield_ml/metrics/operating_points.py | ml/tests/metrics/test_operating_points.py:16<br>ml/tests/metrics/test_operating_points.py:22<br>ml/tests/metrics/test_operating_points.py:27 | — | — |
 | D-02 | M | M4 | IN_PROGRESS | Recall, F1 and FNR thresholds lack a defined operating point. | ml/src/fraudshield_ml/metrics/operating_points.py | ml/tests/metrics/test_operating_points.py:33<br>ml/tests/metrics/test_operating_points.py:41 | — | — |
 | D-03 | M | M3 | NOT_STARTED | The feature breakdown sums to 46, not 44. | — | — | — | — |
 | D-04 | M | M3 | NOT_STARTED | "USSD: 40 features computed without device_fingerprint" is undefined. | — | — | — | — |
@@ -260,7 +260,7 @@ Rows: 258. Status counts: IN_PROGRESS 7, NOT_STARTED 251.
 | D-44 | M | M8 | NOT_STARTED | "Undo within 5 seconds" conflicts with immutable decisions and immediate side effects | — | — | — | — |
 | D-45 | M | M8 | NOT_STARTED | SHAP chart "all 44 features ranked" overwhelms under time pressure. | — | — | — | — |
 | D-46 | M | M8 | NOT_STARTED | Leaflet base-map tiles from public servers break the CSP, data residency and 2G usability; per-point fraud maps can expose individuals. | — | — | — | — |
-| D-47 | M | M0 | IN_PROGRESS | Copy-paste text from an unrelated project in SRS 05B | tools/src/fraudshield_tools/scope_guard.py<br>tools/src/fraudshield_tools/traceability_seed.py | tools/tests/test_scope_and_registers.py:19<br>tools/tests/test_scope_and_registers.py:24<br>tools/tests/test_scope_and_registers.py:47 | — | — |
+| D-47 | M | M0 | IN_PROGRESS | KinyaMed text in 05B | tools/src/fraudshield_tools/scope_guard.py<br>tools/src/fraudshield_tools/traceability_seed.py | tools/tests/test_scope_and_registers.py:26<br>tools/tests/test_scope_and_registers.py:31<br>tools/tests/test_scope_and_registers.py:56<br>tools/tests/test_scope_and_registers.py:73 | — | — |
 | D-48 | M | M0 | IN_PROGRESS | The roadmap compresses everything into weeks 4–6. | docs/adr/0001-record-architecture-decisions.md<br>docs/traceability/requirements.yaml | — | — | — |
 | D-49 | M | M1 | NOT_STARTED | TimescaleDB availability and licensing. | — | — | — | — |
 | D-50 | M | M5 | NOT_STARTED | MLflow "stages" are deprecated in favour of registry aliases. | — | — | — | — |

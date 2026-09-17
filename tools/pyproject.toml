@@ -7,6 +7,7 @@ dependencies = ["PyYAML==6.0.3"]
 
 [project.scripts]
 fs-traceability = "fraudshield_tools.traceability:main"
+fs-traceability-seed = "fraudshield_tools.traceability_seed:main"
 fs-defect-register = "fraudshield_tools.defect_register:main"
 fs-scope-guard = "fraudshield_tools.scope_guard:main"
 
@@ -20,4 +21,4 @@ packages = ["src/fraudshield_tools"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = ["req(*ids): links a test to requirement or defect IDs in docs/traceability/requirements.yaml"]
-addopts = "--strict-markers --import-mode=importlib"
+addopts = "--strict-markers --import-mode=importlib --cov=fraudshield_tools --cov-branch --cov-report=term-missing:skip-covered --cov-fail-under=90"

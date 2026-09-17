@@ -96,6 +96,7 @@ jobs:
           enable-cache: true
       - run: uv sync --all-packages --locked
       - run: uv run fs-defect-register --check
+      - run: uv run fs-traceability-seed --check
       - run: uv run fs-traceability check
       - run: uv run fs-scope-guard
       - name: Validate docker-compose.yml

@@ -59,7 +59,7 @@ typecheck: ## Strict type checks (mypy, tsc)
 	$(PNPM) typecheck
 
 .PHONY: test-python
-test-python: ## Python unit tests
+test-python: ## Python unit tests with the 90% line-coverage gate (SRS 8.1)
 	cd tools && uv run pytest -q
 	cd ml && uv run pytest -q
 
@@ -77,6 +77,7 @@ test: test-python test-java test-frontend ## All unit test suites
 .PHONY: governance
 governance: ## Defect register, traceability and scope checks (D.2, D-47)
 	uv run fs-defect-register --check
+	uv run fs-traceability-seed --check
 	uv run fs-traceability check
 	uv run fs-scope-guard
 
