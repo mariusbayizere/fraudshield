@@ -144,6 +144,7 @@
         </dependencies>
         <configuration>
           <effort>Max</effort>
+          <excludeFilterFile>${maven.multiModuleProjectDirectory}/spotbugs-exclude.xml</excludeFilterFile>
           <threshold>Low</threshold>
           <failOnError>true</failOnError>
           <plugins>

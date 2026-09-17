@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import copy
+import json
 import re
+import unicodedata
 from typing import Any
 
 import pytest
@@ -317,3 +319,22 @@ def test_problem_examples_validate() -> None:
         "application/problem+json"
     ]["examples"]["missingField"]["value"]
     assert errors(DOC, "ValidationProblem", example) == []
+
+
+@pytest.mark.req("FR-07-02", "UX-REG-01", "UX-REG-02")
+def test_person_name_schema_defers_to_the_shared_unicode_rule() -> None:
+    name = SCHEMAS["PersonName"]
+    assert (name["minLength"], name["maxLength"]) == (2, 100)
+    assert "pattern" not in name, "regex engines differ in Unicode support (ADR 0013)"
+    assert name["x-validation"] == "person-name"
+    vectors_path = CONTRACTS_ROOT / "validation" / "person-name-vectors.json"
+    raw = vectors_path.read_bytes()
+    assert raw.isascii(), (
+        "vectors are stored with JSON escapes so no hidden characters are committed"
+    )
+    vectors = json.loads(raw)
+    assert (vectors["min_code_points"], vectors["max_code_points"]) == (2, 100)
+    assert {"WHITESPACE", "LENGTH", "CHARACTERS"} == {v["reason"] for v in vectors["reject"]}
+    accepted = [v["normalised"] for v in vectors["accept"]]
+    assert all(unicodedata.is_normalized("NFC", value) for value in accepted)
+    assert any(not unicodedata.is_normalized("NFC", v["input"]) for v in vectors["accept"])

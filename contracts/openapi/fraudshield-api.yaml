@@ -3017,12 +3017,15 @@ components:
     PersonName:
       type: string
       minLength: 2
-      maxLength: 50
-      pattern: "^[A-Za-zÀ-ÖØ-öø-ÿĀ-ž][A-Za-zÀ-ÖØ-öø-ÿĀ-ž'-]*$"
+      maxLength: 100
+      x-validation: person-name
       description: >-
-        Letters (Latin, Latin-1 Supplement and Latin Extended-A, covering English, French,
-        Kinyarwanda and Kiswahili names), hyphens and apostrophes (SRS 5.3). An explicit class rather
-        than \p{L} so Java, JavaScript and Python evaluate it identically.
+        A first or last name as written, including multiple given names. The server normalises to
+        NFC and enforces the person-name rule (ADR 0013): 2-100 Unicode code points; parts of Unicode
+        letters and combining marks, each starting with a letter, separated by exactly one space,
+        hyphen or apostrophe (ASCII or U+2019); no digits, symbols, emoji, control characters or
+        surrounding whitespace. The rule is not a JSON Schema pattern because regex engines differ
+        in Unicode support; shared vectors are in contracts/validation/person-name-vectors.json.
     PhoneE164:
       type: string
       pattern: "^\\+[1-9][0-9]{6,14}$"

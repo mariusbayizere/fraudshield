@@ -1306,6 +1306,8 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'Deviation (ADR 0013, owner finding): 2-100 code points, Unicode letters and combining marks,
+    spaces, hyphens and apostrophes, NFC-normalised; close as DONE_WITH_DEVIATION citing docs/adr/0013-person-name-validation.md.'
 - id: UX-REG-02
   section: 5.3 Registration form
   title: Last Name
@@ -1319,6 +1321,8 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'Deviation (ADR 0013, owner finding): 2-100 code points, Unicode letters and combining marks,
+    spaces, hyphens and apostrophes, NFC-normalised; close as DONE_WITH_DEVIATION citing docs/adr/0013-person-name-validation.md.'
 - id: UX-REG-03
   section: 5.3 Registration form
   title: Email
