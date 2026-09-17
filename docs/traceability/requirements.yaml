@@ -3623,9 +3623,11 @@ requirements:
   defects: []
   affects:
   - FR-03-04
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation:
+  - backend/common/src/main/java/io/github/mariusbayizere/fraudshield/common/money/Money.java
+  - backend/common/src/main/java/io/github/mariusbayizere/fraudshield/common/money/CurrencyCode.java
   evidence: []
   deviations: []
 - id: D-44

@@ -3,7 +3,7 @@
 
 # FraudShield Requirements Traceability Matrix
 
-Rows: 258. Status counts: IN_PROGRESS 4, NOT_STARTED 254.
+Rows: 258. Status counts: IN_PROGRESS 5, NOT_STARTED 253.
 
 | ID | Priority | Milestone | Status | Title | Implementation | Tests | Evidence | Deviations |
 |---|---|---|---|---|---|---|---|---|
@@ -256,7 +256,7 @@ Rows: 258. Status counts: IN_PROGRESS 4, NOT_STARTED 254.
 | D-40 | M | M8 | NOT_STARTED | Lighthouse removed its PWA category in Lighthouse 12, | — | — | — | — |
 | D-41 | M | M8 | NOT_STARTED | iOS web push only works for Home-Screen-installed PWAs | — | — | — | — |
 | D-42 | M | M8 | NOT_STARTED | Feature phones (KaiOS/Opera Mini, 240 px, 2G) will not run a bank analyst console, and analysts are staff with smartphones or PCs. | — | — | — | — |
-| D-43 | M | M8 | NOT_STARTED | SRS has no localisation, yet serves Rwanda and the EAC. | — | — | — | — |
+| D-43 | M | M8 | IN_PROGRESS | SRS has no localisation, yet serves Rwanda and the EAC. | backend/common/src/main/java/io/github/mariusbayizere/fraudshield/common/money/Money.java<br>backend/common/src/main/java/io/github/mariusbayizere/fraudshield/common/money/CurrencyCode.java | backend/common/src/test/java/io/github/mariusbayizere/fraudshield/common/money/MoneyTest.java:20<br>backend/common/src/test/java/io/github/mariusbayizere/fraudshield/common/money/MoneyTest.java:28<br>backend/common/src/test/java/io/github/mariusbayizere/fraudshield/common/money/MoneyTest.java:44 | — | — |
 | D-44 | M | M8 | NOT_STARTED | "Undo within 5 seconds" conflicts with immutable decisions and immediate side effects | — | — | — | — |
 | D-45 | M | M8 | NOT_STARTED | SHAP chart "all 44 features ranked" overwhelms under time pressure. | — | — | — | — |
 | D-46 | M | M8 | NOT_STARTED | Leaflet base-map tiles from public servers break the CSP, data residency and 2G usability; per-point fraud maps can expose individuals. | — | — | — | — |
