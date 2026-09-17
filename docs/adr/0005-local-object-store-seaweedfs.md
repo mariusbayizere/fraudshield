@@ -28,6 +28,23 @@ Option 2. The S3 API is the contract; application code uses only the S3 API via
 configuration (`MLFLOW_S3_ENDPOINT_URL`, bucket names), so the store is replaceable by any
 S3-compatible production service.
 
+## Every MinIO reference in the build prompt, and what supersedes it
+
+Verified with `grep -n -i minio docs/prompts/FraudShield_Master_Build_Prompt.md` (three
+occurrences) and a search for related object-storage duties (`S3`, `artifact store`, `upload`).
+Amended during the M0 review (owner finding 4).
+
+| Prompt location | Text | Superseded by |
+|---|---|---|
+| C.1 component table, MLflow row (line 258) | "S3-compatible artifact store (MinIO locally)" | SeaweedFS S3 gateway `object-store:8333`, bucket `mlflow-artifacts`; MLflow runs with `--artifacts-destination s3://mlflow-artifacts --serve-artifacts`. Verified by `make smoke` (MLflow run with an artifact written to and read back from the bucket) |
+| D.3 M0 scope (line 347) | compose `core` profile "(… Redis, MinIO, MLflow …)" | `object-store` and `object-store-init` services in the `core` profile |
+| G.5 step 4 (line 633) | "Large artifacts go to MinIO/MLflow locally" | Same SeaweedFS store, through MLflow (models, evaluation reports) or directly by S3 API for large generated files |
+| E.8 admin, FR-06-04 (no MinIO wording) | "dataset upload (CSV schema validation, size limit, PII pattern scan)" | Uploaded training datasets are stored as S3 objects in a separate bucket (`training-datasets`, created by the migration or init step that introduces the feature in M8), never in PostgreSQL or git; the bucket name is configuration |
+| E.3 / M2 dataset generation (no MinIO wording) | generated CSV/Parquet outputs | Local generator output stays on disk under the git-ignored `dataset/output/`; publication artifacts go to HuggingFace/Zenodo (author) — no object store needed at M2 |
+
+No other part of the prompt depends on MinIO-specific APIs (admin console, `mc` client, bucket
+notifications); only the S3 API is required.
+
 ## Consequences
 
 - `docker-compose.yml` service `object-store` runs SeaweedFS with an S3 endpoint on 8333.

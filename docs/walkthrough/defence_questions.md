@@ -18,9 +18,13 @@ FPR of about 0.28% at that threshold, which is consistent with the FPR < 1.5% ta
 the block threshold 0.85. Evidence: `test_implied_operating_point_for_srs_recall_and_f1_targets`.
 
 **Q: How do I know a requirement marked done was actually tested?**
-Tests are linked to requirement IDs by tags in code, not by a hand-maintained list. CI's
-traceability check fails if a row is marked complete without evidence and a tagged test, if a
-tag names an unknown requirement, or if a closed milestone still has open Must rows.
+Tests are linked to requirement IDs by tags in code, not by a hand-maintained list, and
+comments or disabled tests do not count. CI fails if a row is marked complete without a tagged
+test, if its evidence is free text rather than an existing file, commit or CI run, if a tag
+names an unknown requirement, if a closed milestone still has open Must rows, or if anyone edits
+a requirement's SRS-derived text, priority or milestone by hand. One honest limit: source
+inspection cannot see a test skipped at runtime; counting only passed tests from executed CI
+reports replaces it in M9.
 Evidence: `tools/src/fraudshield_tools/traceability.py`, `tools/tests/test_traceability.py`, ADR 0004.
 
 **Q: The SRS names Spring Boot 3, React 18 and MUI v5. Why are you not using them?**

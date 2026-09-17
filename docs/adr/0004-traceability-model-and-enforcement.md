@@ -43,14 +43,28 @@ priority of the functional requirement they serve (e.g. the MEDIUM timer badge f
 FR-03-02 = S; the behavioural fingerprint follows FR-04-07 = S; background sync and push are
 S because D-29/D-41 forbid relying on them).
 
-**Verification method.** Default `test`. Exceptions: `inspection` (D-48, RES-07 citation
+**Verification method.** Default `test`; the check rejects any other method on rows not listed
+in `VERIFICATION_OVERRIDES`, so the list itself is the reviewed decision. Exceptions: `inspection` (D-48, RES-07 citation
 file), `external` (NFR-SEC-09 data residency and NFR-SEC-10 penetration test, D-21/D-28;
 NFR-PERF-09 99.9% monthly availability, which only a production month can show), `manual`
 (MOB-DEV-07 Opera Mini/KaiOS physical-device check).
 
 **Tests are discovered, not listed.** JUnit `@Tag("ID")`, pytest
-`@pytest.mark.req("ID", …)`, and Vitest/Playwright titles starting `[ID]` or `[ID, ID]`.
-An unknown tag fails the check.
+`@pytest.mark.req("ID", …)`, and Vitest/Playwright titles starting `[ID]` or `[ID, ID]`
+(`fraudshield_tools.test_tags`). Python is parsed with `ast`; Java and TypeScript are scanned
+after removing comments, across lines; skipped and disabled tests are ignored. An unknown tag
+fails the check. Limitation: tests skipped at runtime are still counted; from M9, CI derives tags
+from executed test reports and counts only passed tests.
+
+**Evidence and deviations** (amended during the M0 review). Each evidence entry must start with
+an existing repository path, a commit SHA present in the repository, or a GitHub Actions run URL
+of this repository, optionally followed by a description. Each deviation must be an existing
+`docs/adr/NNNN-*.md`.
+
+**Seed integrity.** `fs-traceability-seed --check` regenerates the rows from the SRS and the build
+prompt, merges the committed progress fields, and fails if the result differs from the committed
+YAML. SRS-derived fields therefore cannot be edited by hand, and rows cannot be added or deleted
+outside the seeder.
 
 **Milestone state** lives in `docs/traceability/milestones.yaml`. A milestone is added to
 `completed` only in the commit that closes it after an approved milestone review.

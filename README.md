@@ -71,7 +71,9 @@ stack is for **synthetic data only**.
 
 - Every requirement, SRS table row and defect resolution has a row in
   [`docs/traceability/requirements_matrix.md`](docs/traceability/requirements_matrix.md);
-  tests link to rows by tag, and CI fails on unknown tags or unevidenced claims.
+  tests link to rows by tag. CI fails on unknown tags, on completed rows whose evidence is not an
+  existing path, commit or CI run, on deviations that are not existing ADRs, and on requirement
+  rows that differ from the SRS-derived seed (ADR 0004).
 - Deviations from the SRS are recorded in [`docs/srs/defect_register.md`](docs/srs/defect_register.md)
   and `docs/adr/`.
 - Milestone reviews are recorded in `docs/reviews/`.

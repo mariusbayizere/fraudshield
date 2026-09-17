@@ -30,6 +30,7 @@ gated milestones M0–M12 of build prompt D.3.
 
 ## Consequences
 
-- `DONE_WITH_DEVIATION` rows must name an existing ADR file; `fs-traceability check`
-  enforces this.
+- Deviations in traceability rows must be existing `docs/adr/NNNN-*.md` files, and
+  `DONE_WITH_DEVIATION` requires at least one; `fs-traceability check` enforces both (tests in
+  `tools/tests/test_traceability.py`, strengthened during the M0 review).
 - D-48 is verified by inspection: requirement rows carry milestones, not weeks.
