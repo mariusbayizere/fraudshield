@@ -73,6 +73,10 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history: make ci verifies that commits cited as traceability evidence are
+          # ancestors of HEAD, which a shallow clone cannot answer.
+          fetch-depth: 0
       - uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3.1900000450
         with:
           push: never

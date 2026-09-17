@@ -88,3 +88,11 @@ Format: ID · title · source · priority · due · description · acceptance.
 - **Source:** M0 milestone review M-1 (MINOR) · **Priority:** high · **Due:** M1, before the first data-flow component
 - **Note:** this is a product security artefact (build prompt D-28, I.3), not governance tooling; it is
   delivered as part of M1.
+
+### GOV-14 · Clear error for commit evidence in shallow clones
+- **Source:** M0 closing-commit devcontainer run 35185341158 · **Priority:** low · **Due:** M1
+- **Problem:** in a shallow clone, `fs-traceability check` reports cited commits as "not an ancestor of
+  HEAD", which reads like bad evidence rather than missing history. Fixed for CI by full-history
+  checkouts; the message should name the cause.
+- **Acceptance:** when `git rev-parse --is-shallow-repository` is true, the error says the clone is
+  shallow and how to fetch full history.
