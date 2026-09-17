@@ -10,7 +10,8 @@ The credentials reach the Java process through its environment, never its comman
 not appear in process listings. The database tool itself refuses to seed under any profile other
 than ``dev`` or ``demo``.
 
-Usage: ``make seed-demo`` (Compose stack) or ``uv run fs-seed-demo --db-url jdbc:postgresql://...``.
+Usage: ``make seed-demo`` (Compose stack), or for another database
+``uv run --package fraudshield-tools fs-seed-demo --db-url jdbc:postgresql://...``.
 """
 
 from __future__ import annotations

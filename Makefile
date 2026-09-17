@@ -42,7 +42,7 @@ smoke: ## Functional smoke test of the running core stack (M0 gate evidence)
 seed-demo: ## Migrate the stack database and seed synthetic demo accounts (credentials made locally, ADR 0019)
 	$(COMPOSE) --profile core exec -T timescaledb bash /docker-entrypoint-initdb.d/20-fraudshield-roles.sh
 	$(MVNW) -q package -pl persistence -am -DskipTests -Djacoco.skip=true -Dspotbugs.skip=true -Dcheckstyle.skip=true
-	uv run fs-seed-demo
+	uv run --package fraudshield-tools fs-seed-demo
 
 .PHONY: down
 down: ## Stop the local stack (volumes are kept)

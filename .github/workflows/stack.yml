@@ -93,6 +93,15 @@ jobs:
         run: |
           make seed-demo 2>&1 | grep -v -e 'fsk_dev_' -e '@example.com' | tee stack-seed.log
           ./infrastructure/docker/scripts/check-seeded-stack.sh 2>&1 | tee -a stack-seed.log
+      # Job logs need authentication; annotations do not. The log has no secrets (filtered above).
+      - name: Annotate seed-demo failure
+        if: failure()
+        shell: bash
+        run: |
+          [[ -f stack-seed.log ]] || exit 0
+          tail=$(tail -n 25 stack-seed.log)
+          tail=${tail//'%'/'%25'}; tail=${tail//$'\r'/'%0D'}; tail=${tail//$'\n'/'%0A'}
+          echo "::error title=seed-demo log tail::${tail}"
       - name: Diagnose services on failure (annotations)
         if: failure()
         run: ./infrastructure/docker/scripts/diagnose-stack.sh
