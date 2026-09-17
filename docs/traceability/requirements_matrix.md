@@ -165,7 +165,7 @@ Rows: 258. Status counts: DONE 5, DONE_WITH_DEVIATION 1, IN_PROGRESS 9, NOT_STAR
 | ML-DATA-05 | M | M2 | NOT_STARTED | Geographic coverage | — | dataset/tests/test_generator.py:104<br>dataset/tests/test_generator.py:345<br>dataset/tests/test_normal.py:9<br>dataset/tests/test_normal.py:9<br>dataset/tests/test_normal.py:9 | — | — |
 | ML-DATA-06 | M | M2 | NOT_STARTED | Temporal coverage | — | dataset/tests/test_generator.py:64 | — | D-07 |
 | ML-DATA-07 | M | M2 | NOT_STARTED | Feature completeness | — | — | — | D-04 |
-| ML-DATA-08 | M | M2 | NOT_STARTED | Dataset release | — | — | — | — |
+| ML-DATA-08 | M | M2 | NOT_STARTED | Dataset release | — | dataset/tests/test_export.py:16<br>dataset/tests/test_export.py:16<br>dataset/tests/test_export.py:16<br>dataset/tests/test_export.py:16<br>dataset/tests/test_export.py:16<br>dataset/tests/test_export.py:16<br>dataset/tests/test_export.py:16 | — | — |
 | ML-GATE-01 | M | M4 | NOT_STARTED | AUC-ROC (last-3-month test set) | — | — | — | D-07 |
 | ML-GATE-02 | M | M4 | NOT_STARTED | Precision at 1% FPR | — | ml/tests/metrics/test_operating_points.py:16<br>ml/tests/metrics/test_operating_points.py:22 | — | D-01 |
 | ML-GATE-03 | M | M4 | NOT_STARTED | Recall (fraud capture rate) | — | ml/tests/metrics/test_operating_points.py:33 | — | D-02 |

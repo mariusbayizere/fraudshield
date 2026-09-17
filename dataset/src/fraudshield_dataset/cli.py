@@ -14,6 +14,7 @@ from fraudshield_dataset.paths import PROVENANCE_MD, REALISM_REPORT_MD
 from fraudshield_dataset.provenance_report import render
 from fraudshield_dataset.realism.checks import run_checks
 from fraudshield_dataset.realism.report import render as render_report
+from fraudshield_dataset.release.export import export
 
 
 def _provenance(check: bool) -> int:
@@ -62,7 +63,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     report.add_argument("--rows", type=int)
     report.add_argument("--full", action="store_true")
     report.add_argument("--output", type=Path, default=REALISM_REPORT_MD)
+    export_command = commands.add_parser("export", help="assemble a verifiable release")
+    export_command.add_argument("dataset", type=Path)
+    export_command.add_argument("--output", type=Path, required=True)
+    export_command.add_argument(
+        "--no-csv", action="store_true", help="export Parquet only (CSV is written here alone)"
+    )
     args = parser.parse_args(argv)
+    if args.command == "export":
+        release = export(args.dataset, args.output, csv_tables=not args.no_csv)
+        rows = release.rows["transactions"]
+        print(f"exported {rows} transaction rows and {len(release.files)} files to {args.output}")
+        return 0
     if args.command == "report":
         config = build_config(load_parameters(), seed=args.seed, total_rows=args.rows)
         results, measures = run_checks(args.dataset, config, full=args.full)
