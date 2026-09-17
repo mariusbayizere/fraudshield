@@ -20,7 +20,7 @@ capacity (10,000 TPS ingestion, training on 5M rows within practical time) are m
 
 Implications recorded now so they are not rediscovered later:
 
-- The full `core` compose profile reserves about 3.5 GiB of memory limits; with ~1.8 GiB free
+- The full `core` compose profile sets memory limits totalling 3,968 MiB (about 3.9 GiB); with ~1.8 GiB free
   the stack may need other applications closed.
 - A 5M-row dataset and gradient-boosting training are feasible but slow on two cores; full
   runs will be reported with wall-clock time and reduced-scale runs used for iteration.
