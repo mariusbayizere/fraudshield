@@ -3578,7 +3578,6 @@ requirements:
   evidence:
   - backend/persistence/src/test/java/io/github/mariusbayizere/fraudshield/persistence/DatabaseSecurityTest.java
     (tenant isolation, composite foreign keys, uniqueness rules)
-  - tools/tests/test_migration_guard.py (merged migrations are immutable)
   - docs/reviews/M1/milestone-review.md (M1 milestone review and delta re-check)
   deviations:
   - docs/adr/0017-data-model-and-database-security.md

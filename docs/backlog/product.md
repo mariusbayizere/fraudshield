@@ -167,3 +167,8 @@ the decision engine M6, staff identity, admin and audit M7).
   are tagged D-31 although the guard is governance (PB-20).
 - **Acceptance:** compare with `git hash-object --path`; reject out-of-order versions; retag the
   tests; D-31 evidence no longer cites them.
+- **Status:** CLOSED in M2. The guard asks git for the blob id so a file that differs only by an
+  end-of-line filter is no longer reported as modified, and a new migration at or below the highest
+  merged version is rejected because Flyway would skip it. The tests are untagged (the guard is
+  governance tooling, not evidence for a schema-completeness defect) and the D-31 row no longer
+  cites them.

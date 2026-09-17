@@ -8,8 +8,6 @@ import pytest
 from fraudshield_tools import migration_guard
 from fraudshield_tools.migration_guard import MIGRATIONS, GuardError, changed_migrations
 
-pytestmark = pytest.mark.req("D-31")
-
 
 def _git(root: Path, *args: str) -> None:
     subprocess.run(  # noqa: S603 - fixed git commands on a temporary repository
@@ -34,6 +32,27 @@ def repo(tmp_path: Path) -> Path:
 
 def test_new_migrations_are_allowed(repo: Path) -> None:
     (repo / MIGRATIONS / "V3__third.sql").write_text("CREATE TABLE c (id int);\n")
+    assert changed_migrations(repo, "main") == []
+
+
+def test_a_new_migration_below_the_highest_merged_version_is_rejected(repo: Path) -> None:
+    """PB-24: Flyway applies migrations in version order, so V1.5 after V2 would never run."""
+    (repo / MIGRATIONS / "V1_5__late.sql").write_text("CREATE TABLE c (id int);\n")
+
+    problems = changed_migrations(repo, "main")
+
+    assert len(problems) == 1
+    assert "sorts at or below the highest merged migration (V2)" in problems[0]
+
+
+def test_a_migration_whose_bytes_differ_only_by_line_endings_is_not_flagged(repo: Path) -> None:
+    """PB-24: git applies its filters when it hashes, so the guard must ask git, not the bytes."""
+    (repo / ".gitattributes").write_text("*.sql text eol=crlf\n")
+    _git(repo, "add", ".gitattributes")
+    _git(repo, "commit", "-q", "-m", "line endings")
+    merged = repo / MIGRATIONS / "V1__first.sql"
+    merged.write_bytes(merged.read_bytes().replace(b"\n", b"\r\n"))
+
     assert changed_migrations(repo, "main") == []
 
 
