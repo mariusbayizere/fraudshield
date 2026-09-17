@@ -50,21 +50,38 @@ RULE_FOR_PREFIX = {
 
 
 def allowlisted_values(config: Path) -> list[tuple[str, list[str]]]:
-    """Every exact value the configuration allows, with the directories of its allowed paths."""
+    """Every exact allowed value with the places a copy must still be reported.
+
+    For each allowlist path the copies go next to the allowed file, once with an unrelated extension
+    and once with the fixture's own extension, so widening a path while keeping its file shape
+    (for example ``^contracts/webhooks/.*\\.json$``) is detected.
+    """
+    document = tomllib.loads(config.read_text(encoding="utf-8"))
+    for rule in document.get("rules", []):
+        if "allowlists" in rule or "allowlist" in rule:
+            sys.exit(f"gitleaks-selftest: rule {rule.get('id')} has its own allowlist; not allowed")
+    if (ROOT / ".gitleaksignore").exists() or (config.parent / ".gitleaksignore").exists():
+        sys.exit("gitleaks-selftest: .gitleaksignore is not allowed; use exact-value allowlists")
     values: list[tuple[str, list[str]]] = []
-    for allowlist in tomllib.loads(config.read_text(encoding="utf-8")).get("allowlists", []):
-        directories = [
-            path.removeprefix("^").rpartition("/")[0].replace("\\.", ".")
-            for path in allowlist.get("paths", [])
-        ]
-        for regex in allowlist.get("regexes", []):
+    for allowlist in document.get("allowlists", []):
+        if not allowlist.get("regexes") or not allowlist.get("paths"):
+            sys.exit("gitleaks-selftest: every allowlist needs exact regexes and paths")
+        places: list[str] = []
+        for path in allowlist["paths"]:
+            if not (path.startswith("^") and path.endswith("$")):
+                sys.exit(f"gitleaks-selftest: allowlist path {path!r} must be anchored")
+            directory = path.removeprefix("^").rpartition("/")[0].replace("\\.", ".")
+            extension = path.removesuffix("$").rpartition("\\.")[2]
+            prefix = f"{directory}/" if directory else ""
+            places += [f"{prefix}copied-{{index}}.txt", f"{prefix}copied-{{index}}.{extension}"]
+        for regex in allowlist["regexes"]:
             if not (regex.startswith("^") and regex.endswith("$")):
                 sys.exit(f"gitleaks-selftest: allowlist regex {regex!r} is not an exact value")
             inner = regex[1:-1]
             value = inner.replace("\\.", ".")
             if re.escape(value) != inner:
                 sys.exit(f"gitleaks-selftest: allowlist regex {regex!r} is a pattern, not a value")
-            values.append((value, directories))
+            values.append((value, places))
     return values
 
 
@@ -143,10 +160,10 @@ def plant(repo: Path) -> Counter[tuple[str, str]]:
     # Every exact allowed value copied outside its path: catches widened or removed path scopes.
     # Copies go to an unrelated directory and next to the allowed file under a name its path
     # regex does not match, so even a slightly widened path scope is detected.
-    for index, (value, directories) in enumerate(allowlisted_values(repo / ".gitleaks.toml")):
+    for index, (value, places) in enumerate(allowlisted_values(repo / ".gitleaks.toml")):
         content, rule = secret_line(value)
-        for directory in ["elsewhere", *directories]:
-            plants.append((f"{directory}/copied-{index}.txt", content, rule, False))
+        for place in ["elsewhere/copied-{index}.txt", *places]:
+            plants.append((place.format(index=index), content, rule, False))
     for relative, content, _, append in plants:
         path = repo / relative
         path.parent.mkdir(parents=True, exist_ok=True)

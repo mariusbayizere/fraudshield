@@ -110,7 +110,7 @@ compose-config: ## Validate docker-compose.yml without starting containers (need
 secrets-scan: ## Gitleaks scan of history and working tree (pinned, checksum-verified binary)
 	tools/bin/gitleaks git --log-opts=HEAD --redact --no-banner --exit-code 1 .
 	tools/bin/gitleaks dir --redact --no-banner --exit-code 1 .
-	tools/bin/gitleaks-selftest
+	uv run python tools/bin/gitleaks-selftest
 
 .PHONY: licences
 licences: ## Dependency licence inventory and policy check (ADR 0009)

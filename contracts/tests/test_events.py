@@ -75,6 +75,37 @@ def test_catalogue_lists_exactly_the_c3_topics_with_key_retention_and_dlq() -> N
         assert topic.dlq == f"{topic.name}.dlq"
 
 
+UNTRACKED_REF_KEYWORDS = ("if", "not", "contains", "propertyNames", "dependentSchemas")
+
+
+def test_no_reference_hides_under_keywords_the_compatibility_checker_does_not_track() -> None:
+    """Review N-02: widening a definition used under these keywords can reject old messages.
+
+    The feature-complete checker treats only definitions under oneOf as fragile, so ban these.
+    """
+
+    def refs(node: object) -> bool:
+        if isinstance(node, dict):
+            return "$ref" in node or any(refs(value) for value in node.values())
+        if isinstance(node, list):
+            return any(refs(value) for value in node)
+        return False
+
+    def walk(node: object, where: str) -> None:
+        if isinstance(node, dict):
+            for keyword in UNTRACKED_REF_KEYWORDS:
+                if keyword in node:
+                    assert not refs(node[keyword]), f"{where}/{keyword} uses $ref"
+            for key, value in node.items():
+                walk(value, f"{where}/{key}")
+        elif isinstance(node, list):
+            for index, value in enumerate(node):
+                walk(value, f"{where}/{index}")
+
+    for schema_id, schema in schemas().items():
+        walk(schema, schema_id)
+
+
 def test_if_conditions_require_their_discriminator() -> None:
     """An `if` on an absent property passes vacuously and would apply `then` to every event."""
 

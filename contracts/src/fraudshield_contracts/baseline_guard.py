@@ -6,6 +6,9 @@ base with the published branch and checks the current Kafka schemas against thos
 `buf breaking` on the proto against the proto at the merge base, so only a change that is compatible
 with what consumers already run can merge.
 
+On a push to main itself the merge base is HEAD, so the check compares HEAD with itself: the guard
+protects changes before they merge (branches and pull requests), not commits already on main.
+
 Usage: ``fs-contract-baselines --against origin/main`` (CI, full history) or ``--against main``.
 """
 
@@ -22,6 +25,7 @@ from fraudshield_contracts.compatibility import breaking_changes_between
 from fraudshield_contracts.events import schemas
 
 KAFKA_BASELINE = "contracts/kafka/baseline"
+KAFKA_SCHEMAS = "contracts/kafka/schemas"
 PROTO_ROOT = "contracts/proto"
 PROTO_FILE = f"{PROTO_ROOT}/fraudshield/scoring/v1/scoring.proto"
 BUF = CONTRACTS_ROOT.parent / "tools" / "bin" / "buf"
@@ -73,10 +77,32 @@ def _has(base: str, path: str) -> bool:
     return True
 
 
+class GuardError(RuntimeError):
+    """The guard could not establish what is published, so it cannot pass."""
+
+
+def merge_base(against: str) -> str:
+    try:
+        _git("rev-parse", "--verify", "--quiet", f"{against}^{{commit}}")
+    except subprocess.CalledProcessError as error:
+        raise GuardError(
+            f"ref {against!r} not found; fetch it first (for example `git fetch origin main`)"
+        ) from error
+    try:
+        return _git("merge-base", "HEAD", against).strip()
+    except subprocess.CalledProcessError as error:
+        raise GuardError(f"HEAD and {against!r} have no common history") from error
+
+
 def check(against: str) -> list[str]:
-    base = _git("merge-base", "HEAD", against).strip()
+    base = merge_base(against)
     problems: list[str] = []
     published = published_kafka_baseline(base)
+    if not published and _has(base, KAFKA_SCHEMAS):
+        raise GuardError(
+            f"Kafka schemas exist at {base[:12]} but no baseline could be read "
+            f"from {KAFKA_BASELINE}"
+        )
     for schema_id, found in breaking_changes_between(published, dict(schemas())).items():
         problems.extend(f"kafka {schema_id}: {change}" for change in found)
     proto_published = _has(base, PROTO_FILE)

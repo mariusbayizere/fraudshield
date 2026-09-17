@@ -54,8 +54,10 @@ processes, so their conventions must be explicit and tested.
    previous one accepted, so **consumers deploy first** and producers follow. Producers validate
    against the closed schemas. Consumers validate as tolerant readers that ignore unknown properties
    (`validate_event(..., reader=True)`), so a producer may add an optional field once consumers are
-   deployed; making a field optional or widening a type, enum or bound (outside a `oneOf`) is compatible
-   in this mode. Anything else is breaking: removing or renaming a property; making one required;
+   deployed; making a field optional or widening a type, enum or bound is compatible in this mode,
+   except for definitions reachable from a `oneOf` (see below). A contract test forbids `$ref` under
+   `if`, `not`, `contains`, `propertyNames` and `dependentSchemas`, where widening a definition could
+   also reject old messages and the checker does not look. Anything else is breaking: removing or renaming a property; making one required;
    narrowing a type, enum, pattern or bound; closing an object; adding a constrained property to an open
    object; changing a `$ref` or a conditional; any change inside a `oneOf`, or to a definition a `oneOf`
    uses (branches could stop being exclusive). A breaking change is published as a **new topic**
@@ -66,7 +68,9 @@ processes, so their conventions must be explicit and tested.
    compare the whole schema set with it (`breaking_changes_between`). Because a commit could edit a
    schema and its baseline together, the governance job also runs `fs-contract-baselines`, which reads
    the baselines published at the merge base with `origin/main` (full history) and checks the current
-   schemas and proto against those. The checker is conservative in the cases above; its self-tests
+   schemas and proto against those. It fails when schemas exist at the merge base but no baseline can
+   be read. On a push to `main` the merge base is HEAD, so the guard protects changes before they merge,
+   not commits already on `main`. The checker is conservative in the cases above; its self-tests
    apply each kind of breaking change, including the overlapping-`oneOf` cases found in review, and
    require it to be reported. By owner decision (2026-09-17) the JSON Schema checker is feature-complete:
    further changes are made only for BLOCKER findings.

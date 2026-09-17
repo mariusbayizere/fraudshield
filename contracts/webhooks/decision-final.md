@@ -70,8 +70,9 @@ Java dispatcher (M6) and integrators' receivers use the same files.
 
 - Success is any 2xx within 10 seconds.
 - Retries use exponential backoff with full jitter, starting at 30 seconds, for up to 24 hours.
-- Sequence 1 (the ingest decision) is never sent by webhook: the synchronous ingest response already
-  delivered it. Webhooks start at sequence 2.
+- Sequence 1 (the ingest decision) is never sent by webhook. The integrator already has it: in the
+  synchronous ingest response, or, for batch ingest, in the job results (`GET /jobs/{job_id}`).
+  Webhooks start at sequence 2.
 - When a newer state of a transaction is created, any pending retry of an older state of that
   transaction is cancelled (it is superseded, not dead-lettered) and the newest state is sent
   immediately, so a failing old delivery never delays a newer decision. Receivers must still apply
