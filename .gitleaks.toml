@@ -1,16 +1,57 @@
-# Gitleaks configuration: the default rule set plus two narrow, documented allowlists.
-# Anything else that matches a rule still fails the scan.
+# Gitleaks configuration: the default rule set, rules for FraudShield's own credential formats, and
+# allowlists that name exact values in exact files for the one rule that matches them. Nothing is
+# allowed by pattern alone, so a real secret of any shape anywhere else still fails the scan.
+# Every allowlist sets targetRules: gitleaks 8.30.1 `dir` skips whole files that match a global
+# allowlist's paths even with condition = "AND", which would hide any other secret in a fixture. tools/bin/gitleaks-selftest plants fake
+# secrets in a throw-away repository and proves each one is still reported (ADR 0012, review CR-13).
 title = "FraudShield gitleaks configuration"
 
 [extend]
 useDefault = true
 
-[[allowlists]]
-description = "Opaque tok_ identifiers for accounts, devices, counterparties and agents are not credentials (ADR 0011); fixtures use synthetic values"
-regexes = ['''^tok_[A-Za-z0-9]{24,64}$''']
+[[rules]]
+id = "fraudshield-api-key"
+description = "FraudShield API key: fsk_<env>_<keyId>_<secret> (ADR 0011, D-19)"
+regex = '''\bfsk_(?:dev|test|stg|prod)_[a-z0-9]{12}_[A-Za-z0-9_-]{43}'''
+keywords = ["fsk_"]
+
+[[rules]]
+id = "fraudshield-webhook-signing-secret"
+description = "FraudShield webhook signing secret: whsec_<env>_<32-64 alphanumerics> (ADR 0011)"
+regex = '''\bwhsec_(?:dev|test|stg|prod)_[A-Za-z0-9]{32,64}'''
+keywords = ["whsec_"]
 
 [[allowlists]]
-description = "Published webhook signature test vectors; the whsec_test_ values are test oracles, not secrets (ADR 0012)"
+description = "Published webhook signature test secrets, only in the vector file (ADR 0012)"
+# generic-api-key matched the first published file, where each vector had a "secret" key.
+targetRules = ["fraudshield-webhook-signing-secret", "generic-api-key"]
 condition = "AND"
 paths = ['''^contracts/webhooks/signature-test-vectors\.json$''']
-regexes = ['''^whsec_test_[A-Za-z0-9_]+$''']
+regexes = [
+  '''^whsec_test_4f7c2a9b1e8d6035c7a1b2c3d4e5f607$''',
+  '''^whsec_test_9b0e3d6a2c8f7154e2b3c4d5e6f7a819$''',
+  '''^whsec_test_00000000000000000000000000000000$''',
+  # "wrong secret" vector as first published (history only; the current file no longer has it).
+  '''^whsec_test_4f7c2a9b1e8d6035c7a1b2c3d4e5f607x$''',
+]
+
+[[allowlists]]
+description = "Synthetic tok_ identifiers in the first published Kafka examples (history only; now low-entropy placeholders)"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''^contracts/kafka/examples/fs\.[a-z.]+\.json$''']
+regexes = [
+  '''^tok_A1b2C3d4E5f6G7h8J9k0L1m2$''',
+  '''^tok_U5sdF3atur3Ph0n3Acct0001$''',
+  '''^tok_Z9y8X7w6V5u4T3s2R1q0P9o8$''',
+]
+
+[[allowlists]]
+description = "Format-only placeholder credentials in the OpenAPI schema examples"
+targetRules = ["fraudshield-api-key", "fraudshield-webhook-signing-secret"]
+condition = "AND"
+paths = ['''^contracts/openapi/schema-examples\.yaml$''']
+regexes = [
+  '''^fsk_prod_a1b2c3d4e5f6_EXAMPLEexampleEXAMPLEexampleEXAMPLEexample0$''',
+  '''^whsec_prod_EXAMPLEexampleEXAMPLEexample0000$''',
+]

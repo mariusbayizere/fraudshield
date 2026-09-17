@@ -323,20 +323,27 @@ def test_every_staff_name_field_uses_the_person_name_rule() -> None:
             assert properties[field] == {"$ref": "#/components/schemas/PersonName"}, (name, field)
 
 
+def _secret_sample(prefix: str, filler: str, length: int) -> str:
+    """Built at run time: a literal would be folded into .pyc files and pytest's cache, where
+    the repository's own secret-scanning rules would report it."""
+    return prefix + "".join(filler for _ in range(length))
+
+
 @pytest.mark.req("D-19")
 @pytest.mark.parametrize(
     ("field", "valid", "invalid"),
     [
         (
             "raw_key",
-            "fsk_prod_a1b2c3d4e5f6_" + "A" * 43,
-            "fsk_live_a1b2c3d4e5f6_" + "A" * 43,
+            ("fsk_prod_a1b2c3d4e5f6_", "A", 43),
+            ("fsk_live_a1b2c3d4e5f6_", "A", 43),
         ),
-        ("webhook_signing_secret", "whsec_stg_" + "a" * 32, "whsec_stg_" + "a" * 31),
+        ("webhook_signing_secret", ("whsec_stg_", "a", 32), ("whsec_stg_", "a", 31)),
     ],
+    ids=["raw_key", "webhook_signing_secret"],
 )
 def test_generated_secrets_have_exact_recognisable_formats(
-    field: str, valid: str, invalid: str
+    field: str, valid: tuple[str, str, int], invalid: tuple[str, str, int]
 ) -> None:
     created = SCHEMAS["ApiKeyCreated"]["allOf"][1]["properties"]
     assert created["raw_key"]["pattern"] == (
@@ -345,8 +352,8 @@ def test_generated_secrets_have_exact_recognisable_formats(
     assert created["webhook_signing_secret"]["pattern"] == (
         "^whsec_(dev|test|stg|prod)_[A-Za-z0-9]{32,64}$"
     )
-    assert re.fullmatch(created[field]["pattern"].strip("^$"), valid)
-    assert not re.fullmatch(created[field]["pattern"].strip("^$"), invalid)
+    assert re.fullmatch(created[field]["pattern"].strip("^$"), _secret_sample(*valid))
+    assert not re.fullmatch(created[field]["pattern"].strip("^$"), _secret_sample(*invalid))
 
 
 @pytest.mark.req("D-14")
