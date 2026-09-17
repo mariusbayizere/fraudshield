@@ -60,3 +60,18 @@ def test_unreachable_f1_recall_pairs_are_rejected(f1: float, recall: float) -> N
 def test_out_of_domain_rates_are_rejected(base_rate: float, fpr: float) -> None:
     with pytest.raises(OperatingPointError):
         precision_ceiling_at_fpr(base_rate, fpr)
+
+
+@pytest.mark.req("D-02")
+def test_precision_of_exactly_one_is_accepted_with_zero_fpr() -> None:
+    # F1 = 2/3 with recall 1/2 requires P = (2/3 * 1/2) / (1 - 2/3) = 1 exactly.
+    point = implied_operating_point(f1=2 / 3, recall=0.5, base_rate=0.01)
+    assert point.precision == pytest.approx(1.0, abs=1e-12)
+    assert point.false_positive_rate == pytest.approx(0.0, abs=1e-12)
+
+
+@pytest.mark.req("D-02")
+def test_precision_just_above_one_is_rejected() -> None:
+    # F1 = 0.7 with recall 0.5 would need P = 0.35 / 0.3 = 1.1667.
+    with pytest.raises(OperatingPointError, match="unreachable"):
+        implied_operating_point(f1=0.7, recall=0.5, base_rate=0.01)

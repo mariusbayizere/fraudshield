@@ -215,7 +215,7 @@ Rows: 258. Status counts: IN_PROGRESS 7, NOT_STARTED 251.
 | RES-06 | M | M11 | NOT_STARTED | Full system source code | — | — | — | — |
 | RES-07 | M | M11 | NOT_STARTED | Citation file | — | — | — | — |
 | D-01 | M | M4 | IN_PROGRESS | "Precision at 1% FPR ≥ 0.720" is mathematically impossible. | ml/src/fraudshield_ml/metrics/operating_points.py | ml/tests/metrics/test_operating_points.py:16<br>ml/tests/metrics/test_operating_points.py:22<br>ml/tests/metrics/test_operating_points.py:27 | — | — |
-| D-02 | M | M4 | IN_PROGRESS | Recall, F1 and FNR thresholds lack a defined operating point. | ml/src/fraudshield_ml/metrics/operating_points.py | ml/tests/metrics/test_operating_points.py:33<br>ml/tests/metrics/test_operating_points.py:41 | — | — |
+| D-02 | M | M4 | IN_PROGRESS | Recall, F1 and FNR thresholds lack a defined operating point. | ml/src/fraudshield_ml/metrics/operating_points.py | ml/tests/metrics/test_operating_points.py:33<br>ml/tests/metrics/test_operating_points.py:41<br>ml/tests/metrics/test_operating_points.py:65<br>ml/tests/metrics/test_operating_points.py:73 | — | — |
 | D-03 | M | M3 | NOT_STARTED | The feature breakdown sums to 46, not 44. | — | — | — | — |
 | D-04 | M | M3 | NOT_STARTED | "USSD: 40 features computed without device_fingerprint" is undefined. | — | — | — | — |
 | D-05 | M | M4 | NOT_STARTED | Calibrating two models separately, then averaging, does not yield a calibrated ensemble; SHAP additivity is only exact in each model's margin space. | — | — | — | — |
