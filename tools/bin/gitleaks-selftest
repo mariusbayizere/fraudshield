@@ -6,23 +6,25 @@ secrets, scans it with the pinned tools/bin/gitleaks and the repository's .gitle
 unless exactly the planted secrets are reported. The fake values are generated at run time, so no
 secret-shaped string is committed; they are random and valid for no service.
 
-Planted cases: a tok_-shaped secret outside the Kafka examples, a random tok_ value inside the
-allowlisted Kafka example path, a bare FraudShield API key, a webhook signing secret outside the
-vector file, the published test secret copied to another file, a new whsec_test_ value inside the
-vector file, a new API key inside the schema examples, and AWS access key IDs outside and inside an
-allowlisted fixture (the latter catches allowlists that make `gitleaks dir` skip files). Run with no
-arguments from anywhere in the repository; standard library only.
+Planted cases: secrets outside every allowlisted path (a tok_-shaped key, a bare API key, a
+signing secret, an AWS key ID); new values inside each allowlisted path in the alphabets of the
+allowed values; an AWS key ID inside an allowlisted fixture (catches allowlists that make
+`gitleaks dir` skip files); and every exact allowlisted value, read from .gitleaks.toml, copied to a
+file outside its path (catches widened or removed path scopes). Run with no arguments from anywhere
+in the repository; standard library only.
 """
 
 from __future__ import annotations
 
 import json
+import re
 import secrets
 import shutil
 import string
 import subprocess
 import sys
 import tempfile
+import tomllib
 from collections import Counter
 from pathlib import Path
 
@@ -40,64 +42,117 @@ def random_text(alphabet: str, length: int) -> str:
     return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
+RULE_FOR_PREFIX = {
+    "tok_": "generic-api-key",
+    "fsk_": "fraudshield-api-key",
+    "whsec_": "fraudshield-webhook-signing-secret",
+}
+
+
+def allowlisted_values(config: Path) -> list[tuple[str, list[str]]]:
+    """Every exact value the configuration allows, with the directories of its allowed paths."""
+    values: list[tuple[str, list[str]]] = []
+    for allowlist in tomllib.loads(config.read_text(encoding="utf-8")).get("allowlists", []):
+        directories = [
+            path.removeprefix("^").rpartition("/")[0].replace("\\.", ".")
+            for path in allowlist.get("paths", [])
+        ]
+        for regex in allowlist.get("regexes", []):
+            if not (regex.startswith("^") and regex.endswith("$")):
+                sys.exit(f"gitleaks-selftest: allowlist regex {regex!r} is not an exact value")
+            inner = regex[1:-1]
+            value = inner.replace("\\.", ".")
+            if re.escape(value) != inner:
+                sys.exit(f"gitleaks-selftest: allowlist regex {regex!r} is a pattern, not a value")
+            values.append((value, directories))
+    return values
+
+
+def secret_line(value: str) -> tuple[str, str]:
+    """A line that makes exactly one rule report the value, and that rule's id."""
+    for prefix, rule in RULE_FOR_PREFIX.items():
+        if value.startswith(prefix):
+            return (f'api_key = "{value}"\n' if prefix == "tok_" else f"{value}\n"), rule
+    sys.exit(f"gitleaks-selftest: no planting rule for allowlisted value {value[:6]}...")
+
+
 def plant(repo: Path) -> Counter[tuple[str, str]]:
     """Write the planted secrets; return the (file, rule) findings the scan must produce."""
-    vectors = json.loads((repo / FIXTURES[0]).read_text(encoding="utf-8"))
-    published_test_secret = vectors["vectors"][0]["secrets"][0]
-    api_key = "fsk_prod_{}_{}".format(
-        random_text(string.ascii_lowercase + string.digits, 12),
-        random_text(ALNUM + "_-", 43),
-    )
-    planted = {
-        "backend/src/main/resources/application-prod.yml": (
+    hexdigits = "0123456789abcdef"
+    lower_alnum = string.ascii_lowercase + string.digits
+    aws = "AKIA" + random_text(string.ascii_uppercase + "234567", 16)
+    api_key = f"fsk_prod_{random_text(lower_alnum, 12)}_{random_text(ALNUM + '_-', 43)}"
+    # (file, content, rule, append to an existing fixture?)
+    plants: list[tuple[str, str, str, bool]] = [
+        # Secrets outside every allowlisted path.
+        (
+            "backend/src/main/resources/application-prod.yml",
             f'api_key: "tok_{random_text(ALNUM, 40)}"\n',
             "generic-api-key",
+            False,
         ),
-        "contracts/kafka/examples/fs.planted.example.json": (
-            json.dumps({"account_token": f"tok_{random_text(ALNUM, 40)}"}) + "\n",
-            "generic-api-key",
+        (
+            "deploy/api-keys.yaml",
+            f"keys:\n  - fsk_prod_{random_text(lower_alnum, 12)}_{random_text(ALNUM + '_-', 43)}\n",
+            "fraudshield-api-key",
+            False,
         ),
-        "deploy/api-keys.yaml": (f"keys:\n  - {api_key}\n", "fraudshield-api-key"),
-        "config/webhook.txt": (
+        (
+            "config/webhook.txt",
             f"whsec_prod_{random_text(ALNUM, 40)}\n",
             "fraudshield-webhook-signing-secret",
+            False,
         ),
-        "contracts/webhooks/copied-vectors.json": (
-            json.dumps({"secret": published_test_secret}) + "\n",
+        ("infra/aws.env", f"{aws}\n", "aws-access-token", False),
+        # New values inside each allowlisted path, in the alphabets of the allowed values: catch
+        # allowlist values widened into patterns.
+        (
+            "contracts/webhooks/signature-test-vectors.json",
+            f"whsec_test_{random_text(hexdigits, 32)}\n",
             "fraudshield-webhook-signing-secret",
+            True,
         ),
-        "infra/aws.env": (
-            f"AKIA{random_text(string.ascii_uppercase + '234567', 16)}\n",
-            "aws-access-token",
-        ),
-    }
-    for relative, (content, _) in planted.items():
-        path = repo / relative
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding="utf-8")
-    appended = {
-        "contracts/webhooks/signature-test-vectors.json": (
+        (
+            "contracts/webhooks/signature-test-vectors.json",
             f"whsec_test_{random_text(ALNUM, 32)}\n",
             "fraudshield-webhook-signing-secret",
+            True,
         ),
-        "contracts/openapi/schema-examples.yaml": (
-            "# planted\nplanted_raw_key: fsk_prod_{}_{}\n".format(
-                random_text(string.ascii_lowercase + string.digits, 12),
-                random_text(ALNUM + "_-", 43),
-            ),
+        (
+            "contracts/kafka/examples/fs.planted.example.json",
+            json.dumps({"api_key": f"tok_{random_text(ALNUM, 24)}"}) + "\n",
+            "generic-api-key",
+            False,
+        ),
+        (
+            "contracts/openapi/schema-examples.yaml",
+            f"planted_raw_key: {api_key}\n",
             "fraudshield-api-key",
+            True,
         ),
-        # A different kind of secret inside an allowlisted fixture: catches allowlists that make
+        (
+            "contracts/openapi/schema-examples.yaml",
+            f"planted_signing_secret: whsec_prod_{random_text(ALNUM, 32)}\n",
+            "fraudshield-webhook-signing-secret",
+            True,
+        ),
+        # Another kind of secret inside an allowlisted fixture: catches allowlists that make
         # gitleaks dir skip the whole file.
-        "contracts/kafka/examples/fs.alerts.high.json": (
-            f"AKIA{random_text(string.ascii_uppercase + '234567', 16)}\n",
-            "aws-access-token",
-        ),
-    }
-    for relative, (content, _) in appended.items():
-        with (repo / relative).open("a", encoding="utf-8") as handle:
+        ("contracts/kafka/examples/fs.alerts.high.json", f"{aws}\n", "aws-access-token", True),
+    ]
+    # Every exact allowed value copied outside its path: catches widened or removed path scopes.
+    # Copies go to an unrelated directory and next to the allowed file under a name its path
+    # regex does not match, so even a slightly widened path scope is detected.
+    for index, (value, directories) in enumerate(allowlisted_values(repo / ".gitleaks.toml")):
+        content, rule = secret_line(value)
+        for directory in ["elsewhere", *directories]:
+            plants.append((f"{directory}/copied-{index}.txt", content, rule, False))
+    for relative, content, _, append in plants:
+        path = repo / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a" if append else "w", encoding="utf-8") as handle:
             handle.write(content)
-    return Counter((f, rule) for f, (_, rule) in {**planted, **appended}.items())
+    return Counter((relative, rule) for relative, _, rule, _ in plants)
 
 
 def scan(repo: Path, mode: str) -> Counter[tuple[str, str]]:
@@ -124,7 +179,7 @@ def main() -> int:
             shutil.copy(ROOT / relative, repo / relative)
         expected = plant(repo)
         git = ["git", "-C", str(repo), "-c", "user.name=selftest"]
-        git += ["-c", "user.email=selftest@example.com"]
+        git += ["-c", "user.email=selftest"]
         # Fixed git commands against the temporary repository only.
         subprocess.run([*git, "init", "-q"], check=True)  # noqa: S603
         subprocess.run([*git, "add", "-A"], check=True)  # noqa: S603
