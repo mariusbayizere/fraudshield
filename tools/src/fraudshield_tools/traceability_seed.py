@@ -153,7 +153,12 @@ DEFECT_LINKS: dict[str, tuple[str, ...]] = {
 
 DEFECT_MILESTONES: dict[str, str] = {
     **dict.fromkeys(("D-47", "D-48"), "M0"),
-    **dict.fromkeys(("D-20", "D-30", "D-31", "D-32", "D-49"), "M1"),
+    **dict.fromkeys(("D-30", "D-31"), "M1"),
+    # Re-planned out of M1 by ADR 0021 (M1 milestone review MAJOR-1): the M1 part is delivered and
+    # recorded in each row's notes; the remainder needs a later component.
+    "D-20": "M6",
+    "D-32": "M7",
+    "D-49": "M9",
     **dict.fromkeys(("D-07", "D-08"), "M2"),
     **dict.fromkeys(("D-03", "D-04"), "M3"),
     **dict.fromkeys(("D-01", "D-02", "D-05", "D-06", "D-09"), "M4"),
@@ -230,7 +235,7 @@ SECTION_MILESTONE = {
 ROW_MILESTONE_OVERRIDES = {
     "NFR-SEC-05": "M1",
     "NFR-SEC-06": "M6",
-    "NFR-SEC-03": "M1",
+    "NFR-SEC-03": "M7",  # ADR 0021: vault and tokenisation M6, analyst inspector test M7
     "ML-GATE-12": "M5",
     "ML-GATE-13": "M5",
     "TEST-01": "M3",

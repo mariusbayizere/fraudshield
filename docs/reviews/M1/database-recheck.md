@@ -89,3 +89,42 @@ I ran M1 and M6 together because they fail different tests. I restored the files
 - **Gate:** the merge condition "CI green" is **not met**. `main` is not updated until the
   devcontainer workflow passes on a re-run (`workflow_dispatch`, which needs an authenticated owner),
   or the MLflow failure is diagnosed and fixed.
+
+## Author's addendum 2: MLflow root cause, PB-15/PB-16, and the owner's merge decision
+
+- **MLflow HTTP 500 (owner direction: a bug, not a flake).** Diagnostics added in 720a5ee and d96638f
+  (redacted resource snapshot after every smoke test, uploaded and annotated) showed the MLflow
+  container at its 1 GiB limit in both the stack and devcontainer jobs:
+  - `memory.peak` equal to the limit, 4,015 and 4,500 `memory.max` events, 832–861 MiB of anonymous
+    memory;
+  - Docker memory (16 GiB), CPUs (4) and free disk (77–82 GB) the same in both environments;
+  - only ~340 MiB held by the listed server and uvicorn processes.
+
+  MLflow 3.16.0 starts a job runner and one Huey consumer process per server-side job type when the
+  backend store is a database (`MLFLOW_SERVER_ENABLE_JOB_EXECUTION` defaults to true;
+  `mlflow/server/__init__.py`, `mlflow/server/jobs/utils.py`). A process the kernel kills at the
+  limit leaves the container running, with no OOMKilled flag, and the upload fails with HTTP 500.
+  754ade1 disables job execution, which FraudShield does not use, and keeps the limit. The smoke test
+  now fails when any container records an `oom_kill` or MLflow's anonymous memory exceeds 60% of its
+  limit.
+
+  | 754ade1 | stack job | devcontainer job |
+  |---|---|---|
+  | MLflow anonymous memory | 393 MiB (38%) | 393 MiB (38%) |
+  | `memory.peak` | 528 MiB | 527 MiB |
+  | `memory.max` events | 0 | 0 |
+  | `oom_kill` | 0 | 0 |
+  | MLflow processes | server + uvicorn | server + uvicorn |
+
+- **PB-15/PB-16** (owner direction: fix before merging), 02bb017. `SyntheticDataGuard` is a
+  `spring.factories` listener with its own JDBC connection. It runs before any bean is created, is
+  independent of lazy initialisation and of the beans present, and fails closed.
+  `SyntheticDataGuardTest` covers prod + `spring.main.lazy-initialization=true` and an application
+  without `JdbcTemplate` against a seeded database; three mutations of the guard are caught.
+- **CI for 754ade1 on `m1/database`:** ci 35224607902, stack 35224607797 and devcontainer 35224608001
+  all success, with the stack and devcontainer jobs executed.
+- **Owner decision (2026-09-17):** "Evidence accepted. The MLflow root cause is proven by measurement
+  and guarded by a deterministic budget check (60% memory, OOM-kill check) that passed on 754ade1 in
+  all three workflows. The 3-consecutive-dispatch requirement is waived for this merge." `main` was
+  fast-forwarded from 0781e6f to 754ade1 over SSH. Two extra devcontainer dispatches on `main` follow
+  as evidence, not as a merge condition, once `gh` is authenticated in the session.

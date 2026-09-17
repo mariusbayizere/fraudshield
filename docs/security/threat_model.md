@@ -84,7 +84,8 @@ developer machine ↔ public repository.
 | Kafka (6) | T/I: plaintext, unauthenticated local broker | TLS + SASL, per-service ACLs; events carry tokens only | M6, M9 |
 | Webhooks (7) | S/T: forged or replayed callbacks | HMAC signature with timestamp and tolerance, published test vectors (contract) | M6 |
 | Scoring service (3) | T: model poisoning; D: latency attack | Model promotion gates, shadow scoring, rule-based fallback (C.4) | M4, M5 |
-| PII vault (8) | I: vault reachable from every service | Separate instance, separate roles, TLS, network policy (D-20) | M6, M9 |
+| PII vault (8) | I: vault reachable from every service; raw PII in the main database | Separate instance, separate roles, AES-256-GCM envelope encryption behind a key-provider interface (M6); TLS, KMS, encrypted volumes, network policy (M9) (D-20, re-planned by ADR 0021). Until then every customer identifier column accepts tokens only (`SchemaPoliciesTest`) | M6, M9 |
+| Webhook signing secrets at rest | I: `api_keys.webhook_secret_ciphertext` decrypted by whoever holds the key; rotation undefined | Envelope encryption with the D-20 key provider and a key id per secret (M6); KMS and rotation procedure (M9) | M6, M9 |
 | Customer verification (5) | S: guessed or reused links | Token hash lookup, single use (`verificationTokenAnswersOnce`), expiry trigger | schema M1, page M6 |
 | Front end (2) | I: cached alert data on shared phones (D-29) | No offline decision replay without re-validation, cache limits | M8 |
 
@@ -95,6 +96,8 @@ developer machine ↔ public repository.
 | Local `core` stack | I/E: plaintext Kafka, Redis without TLS, MLflow and Mailpit without auth | Ports on 127.0.0.1; random credentials in `.env`; synthetic data only | Dev only; production controls M9 |
 | CI | T: action or tool supply chain; I: token misuse | Actions pinned by SHA; read-only permissions; gitleaks, buf and uv checksum-verified; frozen lockfiles | Images by tag, not digest (GOV-8) |
 | Secret scanning | I: secrets committed | Pre-commit gitleaks on staged changes, CI history scan, committable working-tree scan, self-test with planted secrets | Git-ignored local files are not scanned by design (ADR 0019) |
+| CI stack diagnostics (public annotations and artifacts) | I: credentials in MLflow, object-store or TimescaleDB logs published with the run | Redaction of every `.env` value of 8+ characters and of `://user:pass@` in command lines, in pure bash, dropping the logs when `.env` is unreadable; CI credentials are throw-away per run | Secrets not in `.env` (for example `.demo-credentials`) or shorter than 8 characters are not redacted; move to an allowlisted excerpt if logs grow |
+| `fs_migrator` credential | T/R: the schema owner can disable or drop append-only triggers and rewrite decisions, blocks, labels or configuration versions | Owner used only by the migration job, never by services (M9); audit log tamper-evident through the hash chain and signed anchors (M7) | Non-audit append-only tables have no tamper evidence beyond grants and triggers |
 | Devcontainer | E: Docker-in-Docker privileged | Base image by digest | Feature versions not digest-pinned |
 
 ## 4. Open risks

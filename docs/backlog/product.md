@@ -132,3 +132,23 @@ the decision engine M6, staff identity, admin and audit M7).
   migrated at bd222fe fails Flyway validation and needs `make down` with volumes removed.
 - **Acceptance:** from the merge to `main` on, migrations only change through new versions, enforced
   by a governance check that fails when a merged `V*.sql` file changes; the walkthrough notes the reset.
+- **Status:** fixed at the M1 close: `fs-migration-guard --against origin/main` (in `make governance`
+  and the CI governance job) fails when a migration file present at the merge base is modified,
+  renamed or deleted. Like the contract-baseline guard, it protects branches before they merge.
+
+### PB-21 · One `writer_partition` range for the audit event contract and the table
+- **Source:** M1 milestone review MINOR-4 · **Priority:** medium · **Due:** M6 (before the first audit writer)
+- **Problem:** the Kafka `audit-event` schema allows `writer_partition` 0..1023, while the database
+  CHECK and `audit_chain_heads` allow 0..63, so an event valid on Kafka can be rejected by the database.
+- **Acceptance:** one range, chosen with the audit writer design; either a new migration widens the
+  CHECKs (merged migrations are immutable) or a new schema version narrows the contract (ADR 0012); a
+  test compares the two.
+
+### PB-22 · Synthetic-data guard coverage edges
+- **Source:** M1 milestone review NIT-1 · **Priority:** low · **Due:** M5 (first Spring service with database access)
+- **Problem:** `requireCoverage` does not initialise `FactoryBean`s, so a `DataSource` declared with
+  another return type can be missed; R2DBC connection factories are not covered; the guard runs only
+  in applications that depend on `fraudshield-persistence`.
+- **Acceptance:** ADR 0019 requires every Spring service with database access to depend on the
+  module (or its guard), states that R2DBC is out of scope unless matched, and a test covers a
+  `FactoryBean`-produced data source.

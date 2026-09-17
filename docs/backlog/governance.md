@@ -19,7 +19,7 @@ Format: ID · title · source · priority · due · description · acceptance.
   names the machine; the row list is extended; tests cover each evasion.
 
 ### GOV-2 · Fail on runtime-skipped tests when Docker is required
-- **Source:** DR-3 (MINOR) · **Priority:** high · **Due:** before M1 closes
+- **Source:** DR-3 (MINOR) · **Priority:** high · **Due:** M3 (re-dated at the M1 close: no runtime-skip form exists yet, and `TestDatabase` throws rather than skips without Docker; M3 adds the first Redis Testcontainers and Python Docker tests)
 - **Problem:** `pytest.skip()` inside a test body, JUnit `Assumptions`, and
   `@Testcontainers(disabledWithoutDocker = true)` pass silently under `REQUIRE_DOCKER=1`; some
   never-running forms still count as tagged tests (custom disabling annotations, abstract tests,
@@ -35,14 +35,14 @@ Format: ID · title · source · priority · due · description · acceptance.
   `deploy.replicas` multiplies limits; an unparseable limit is a reported error, not a traceback.
 
 ### GOV-4 · Tests for the shell gates and allowlist prefix matching
-- **Source:** DR-6 (NIT) · **Priority:** low · **Due:** M1
+- **Source:** DR-6 (NIT) · **Priority:** low · **Due:** M3 (re-dated at the M1 close: the shell gates did not change in M1)
 - **Problem:** surviving mutants — `docker-gate` ignoring `REQUIRE_DOCKER`, the gitleaks cached-binary
   check disabled, scope-guard allowlist prefix matching.
 - **Acceptance:** subprocess tests with a stub `docker` on PATH and a tampered gitleaks cache; a test
   that `docs/srs.bak/x.md` is not exempted by the `docs/srs/` entry.
 
 ### GOV-5 · Devcontainer workflow triggers and default branch
-- **Source:** DR-7 (NIT) · **Priority:** low · **Due:** M1
+- **Source:** DR-7 (NIT) · **Priority:** low · **Due:** M2 (re-dated at the M1 close; the default branch is an open owner action, GOV-9)
 - **Status:** triggers widened in the path-filtered workflows (lockfiles, manifests, `.mvn`);
   remaining: `pyproject.toml`, `tools/**`, `package.json` if post-create depends on them; the owner
   sets `main` as the default branch so the nightly schedule runs.
@@ -53,7 +53,7 @@ Format: ID · title · source · priority · due · description · acceptance.
   documents that it is honoured there.
 
 ### GOV-7 · Commit-message tool attribution trailers
-- **Source:** R-8 remainder (NIT) · **Priority:** low · **Due:** M1
+- **Source:** R-8 remainder (NIT) · **Priority:** low · **Due:** M2 (re-dated at the M1 close: no such trailer has appeared; governance is time-boxed)
 - **Problem:** `Assisted-by:` and `Co-developed-by:` trailers naming tools, "Made with …" lines, and
   placeholder summaries with trailing words ("updated things across modules") pass.
 - **Acceptance:** those forms are rejected, with tests; owner trailers remain allowed.
@@ -63,11 +63,11 @@ Format: ID · title · source · priority · due · description · acceptance.
 - **Acceptance:** compose and Kubernetes images are pinned by digest, with an update process.
 
 ### GOV-9 · Branch protection on `main`
-- **Source:** G.2; `gh` not authenticated on the build machine · **Priority:** high · **Due:** M1 (owner action)
+- **Source:** G.2; `gh` not authenticated on the build machine · **Priority:** high · **Due:** owner action, open at the M1 close (the owner reported the `protect-main` ruleset and `main` as default branch; not verifiable from the build session until `gh` is authenticated there)
 - **Acceptance:** `main` is the default branch and requires the `ci` jobs (and `stack` when it runs).
 
 ### GOV-10 · Gate evidence must quote job results, not run conclusions
-- **Source:** M0 milestone review F-4 (NIT) · **Priority:** medium · **Due:** M1
+- **Source:** M0 milestone review F-4 (NIT) · **Priority:** medium · **Due:** M2 (re-dated at the M1 close: M1 evidence records quote job-level results by hand, as the M1 milestone review did; the automated check is still open)
 - **Problem:** with path filters, a skipped `stack` or `build-and-verify` job still makes the run
   conclude "success".
 - **Acceptance:** evidence records and any automated run verification check the named job ran and
@@ -91,7 +91,7 @@ Format: ID · title · source · priority · due · description · acceptance.
   delivered as part of M1.
 
 ### GOV-14 · Clear error for commit evidence in shallow clones
-- **Source:** M0 closing-commit devcontainer run 35185341158 · **Priority:** low · **Due:** M1
+- **Source:** M0 closing-commit devcontainer run 35185341158 · **Priority:** low · **Due:** M3 (re-dated at the M1 close: CI uses full-history checkouts, so the misleading message has not recurred)
 - **Problem:** in a shallow clone, `fs-traceability check` reports cited commits as "not an ancestor of
   HEAD", which reads like bad evidence rather than missing history. Fixed for CI by full-history
   checkouts; the message should name the cause.

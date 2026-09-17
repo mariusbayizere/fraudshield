@@ -109,11 +109,20 @@ requirements:
   srs_text: 'Acceptance criterion: OpenAPI spec validates against OpenAPI 3.1 schema; all endpoints documented;
     East African channel examples present'
   defects: []
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - contracts/openapi/fraudshield-api.yaml
+  - contracts/openapi/schema-examples.yaml
+  evidence:
+  - 'contracts/tests/test_openapi.py (tagged FR-01-07: document validates against OpenAPI 3.1, operations
+    documented, SRS-named routes exist)'
+  - contracts/tests/test_openapi_examples.py (ingest examples for all six channels validate)
+  - docs/reviews/M1/milestone-review.md (M1 milestone review and delta re-check)
+  - 754ade1 (main)
   deviations: []
+  notes: Serving the document at /api/docs is controller work, asserted in M6 (ADR 0011); the acceptance
+    criterion is met by the contract.
 - id: FR-02-01
   section: 3.2 FR-02 ML fraud scoring engine
   title: 'Every ScoringResult contains: ensemble_score (float 0-1), xgboost_score, lightgbm_score, anomaly_score
@@ -1098,16 +1107,22 @@ requirements:
   section: 4.2 Security
   title: PII tokenisation
   priority: M
-  milestone: M1
+  milestone: M7
   srs_text: 'Implementation: Account holder name and phone stored as opaque tokens; actual PII in separate
     encrypted PII store; no raw PII in analyst-facing API responses; Verification: API response audit:
     account_name field in all analyst endpoints shows masked token only; confirmed by inspector test'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation:
+  - contracts/openapi/fraudshield-api.yaml
+  - backend/persistence/src/main/resources/db/migration/V3__transactions_and_scoring.sql
   evidence: []
-  deviations: []
+  deviations:
+  - docs/adr/0021-m1-scope-replan.md
+  notes: 'Re-planned to M7 by ADR 0021. M1: contracts accept tokens only (contract tests) and every customer
+    identifier column is CHECK (is_token(...)) (SchemaPoliciesTest). Remaining: PII store and tokenisation
+    at ingestion (M6), analyst-endpoint inspector test (M7).'
 - id: NFR-SEC-04
   section: 4.2 Security
   title: No secrets in version control
@@ -1132,12 +1147,17 @@ requirements:
     denied from application DB user; confirmed by security test'
   defects:
   - D-32
-  status: IN_PROGRESS
+  status: DONE
   verification: test
   implementation:
   - backend/persistence/src/main/resources/db/migration/V8__audit_log.sql
   - backend/persistence/src/main/resources/db/migration/V11__grants.sql
-  evidence: []
+  evidence:
+  - 'backend/persistence/src/test/java/io/github/mariusbayizere/fraudshield/persistence/DatabaseSecurityTest.java
+    (appRoleCannotUpdateOrDeleteAppendOnlyTables: UPDATE, DELETE and TRUNCATE on audit_events return 42501
+    for fs_app)'
+  - docs/reviews/M1/milestone-review.md (M1 milestone review and delta re-check)
+  - 754ade1 (main)
   deviations: []
 - id: NFR-SEC-06
   section: 4.2 Security
@@ -3350,7 +3370,7 @@ requirements:
   section: Build prompt Part B defect register
   title: '"PostgreSQL TDE" does not exist in community PostgreSQL 16.'
   priority: M
-  milestone: M1
+  milestone: M6
   srs_text: See docs/srs/defect_register.md
   defects: []
   affects:
@@ -3359,7 +3379,12 @@ requirements:
   verification: test
   implementation: []
   evidence: []
-  deviations: []
+  deviations:
+  - docs/adr/0021-m1-scope-replan.md
+  notes: 'Re-planned from M1 to M6 by ADR 0021: vault schema, dedicated role and AES-256-GCM envelope
+    encryption behind a key-provider interface in M6; KMS, encrypted volumes, Redis TLS and network policy
+    in M9. M1 delivered only the separate Compose instance; no customer PII column exists in the main
+    schema.'
 - id: D-21
   section: Build prompt Part B defect register
   title: 'Data residency: SRS says "af-south-1 or equivalent", but af-south-1 is Cape Town, outside the
@@ -3375,6 +3400,7 @@ requirements:
   implementation:
   - backend/persistence/src/main/java/io/github/mariusbayizere/fraudshield/persistence/demo/DemoSeedGuard.java
   - backend/persistence/src/main/java/io/github/mariusbayizere/fraudshield/persistence/demo/SyntheticDataFlag.java
+  - backend/persistence/src/main/java/io/github/mariusbayizere/fraudshield/persistence/demo/SyntheticDataGuard.java
   - frontend/src/lib/environment/syntheticDataBanner.ts
   - tools/src/fraudshield_tools/seed_demo.py
   evidence: []
@@ -3514,15 +3540,21 @@ requirements:
   defects: []
   affects:
   - FR-03-08
-  status: IN_PROGRESS
+  status: DONE
   verification: test
   implementation:
   - backend/persistence/src/main/resources/db/migration/V5__blocking_verification_and_labels.sql
   - backend/persistence/src/main/resources/db/migration/V4__alerts_rules_and_campaigns.sql
   - backend/persistence/src/main/resources/db/migration/V1__tenancy_and_common_functions.sql
-  evidence: []
-  deviations:
   - docs/adr/0017-data-model-and-database-security.md
+  evidence:
+  - backend/persistence/src/test/java/io/github/mariusbayizere/fraudshield/persistence/DatabaseSecurityTest.java
+    (append-only tables deny UPDATE and DELETE to every application role)
+  - 'backend/persistence/src/test/java/io/github/mariusbayizere/fraudshield/persistence/SchemaPoliciesTest.java
+    (autoBlockStateIsDerivedFromAppendOnlyFacts: v_auto_block_status from blocked to frozen; other tenant
+    sees nothing)'
+  - docs/reviews/M1/milestone-review.md (M1 milestone review and delta re-check)
+  deviations: []
 - id: D-31
   section: Build prompt Part B defect register
   title: Tables required by functional requirements are missing from the schema.
@@ -3534,7 +3566,7 @@ requirements:
   - FR-06-07
   - FR-07-08
   - FR-05-06
-  status: IN_PROGRESS
+  status: DONE_WITH_DEVIATION
   verification: test
   implementation:
   - backend/persistence/src/main/resources/db/migration/V2__identity_and_access.sql
@@ -3543,14 +3575,21 @@ requirements:
   - backend/persistence/src/main/resources/db/migration/V7__models_and_training.sql
   - backend/persistence/src/main/resources/db/migration/V9__outbox.sql
   - backend/persistence/src/main/resources/db/migration/V11__grants.sql
-  evidence: []
+  evidence:
+  - backend/persistence/src/test/java/io/github/mariusbayizere/fraudshield/persistence/DatabaseSecurityTest.java
+    (tenant isolation, composite foreign keys, uniqueness rules)
+  - tools/tests/test_migration_guard.py (merged migrations are immutable)
+  - docs/reviews/M1/milestone-review.md (M1 milestone review and delta re-check)
   deviations:
   - docs/adr/0017-data-model-and-database-security.md
+  notes: 'Deviation (ADR 0017): TimescaleDB forbids compression with row-level security, so hypertables
+    are isolated by an insert guard and security-barrier views; outbox_events has no RLS (cross-tenant
+    relay, tokens only).'
 - id: D-32
   section: Build prompt Part B defect register
   title: Audit log needs tamper evidence, not only permissions, and "12 action types" are unnamed.
   priority: M
-  milestone: M1
+  milestone: M7
   srs_text: See docs/srs/defect_register.md
   defects: []
   affects:
@@ -3564,10 +3603,11 @@ requirements:
   - backend/persistence/src/main/resources/db/migration/V10__timescale_policies_and_aggregates.sql
   evidence: []
   deviations:
-  - docs/adr/0017-data-model-and-database-security.md
-  notes: Schema, 12 event types, database-assigned hash chain, verify_audit_chain, anchors table, compression
-    and 7-year retention are M1. The daily signed Merkle-root job and the `fraudshield audit verify` CLI
-    come with the audit service.
+  - docs/adr/0021-m1-scope-replan.md
+  notes: 'Re-planned to M7 by ADR 0021. M1: 12 event types, database-assigned hash chain, verify_audit_chain,
+    audit_anchors, compliance role, compression 30 days and retention 7 years by recorded_at (DatabaseSecurityTest,
+    SchemaPoliciesTest). Remaining: daily signed Merkle-root job and the fraudshield audit verify CLI
+    (M7).'
 - id: D-33
   section: Build prompt Part B defect register
   title: Several SRS colour pairings fail WCAG 2.1 AA text contrast
@@ -3829,7 +3869,7 @@ requirements:
   section: Build prompt Part B defect register
   title: TimescaleDB availability and licensing.
   priority: M
-  milestone: M1
+  milestone: M9
   srs_text: See docs/srs/defect_register.md
   defects: []
   affects:
@@ -3840,7 +3880,11 @@ requirements:
   - backend/persistence/src/main/resources/db/migration/V10__timescale_policies_and_aggregates.sql
   - docs/adr/0018-timescaledb-licence-and-deployment.md
   evidence: []
-  deviations: []
+  deviations:
+  - docs/adr/0021-m1-scope-replan.md
+  notes: 'Re-planned to M9 by ADR 0021. M1: ADR 0018 (licence analysis and features used), pinned image,
+    hypertables, compression, retention and continuous aggregates exercised (SchemaPoliciesTest). Remaining:
+    self-hosted PostgreSQL + TimescaleDB on Kubernetes (M9).'
 - id: D-50
   section: Build prompt Part B defect register
   title: MLflow "stages" are deprecated in favour of registry aliases.
