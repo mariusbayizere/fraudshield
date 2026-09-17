@@ -5,7 +5,10 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Sequence
+from pathlib import Path
 
+from fraudshield_dataset.generator.config import build_config
+from fraudshield_dataset.generator.pipeline import generate
 from fraudshield_dataset.params import ParameterError, load_parameters
 from fraudshield_dataset.paths import PROVENANCE_MD
 from fraudshield_dataset.provenance_report import render
@@ -37,7 +40,24 @@ def main(argv: Sequence[str] | None = None) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     provenance = commands.add_parser("provenance", help="render dataset/params_provenance.md")
     provenance.add_argument("--check", action="store_true", help="fail if the file is stale")
+    generator = commands.add_parser(
+        "generate", help="simulate the dataset into partitioned Parquet"
+    )
+    generator.add_argument("--output", type=Path, required=True)
+    generator.add_argument("--seed", type=int, default=20260917)
+    generator.add_argument(
+        "--rows", type=int, help="target rows (default: volume.total_rows_target)"
+    )
+    generator.add_argument("--chunk-size", type=int, default=8, help="shards simulated together")
     args = parser.parse_args(argv)
+    if args.command == "generate":
+        config = build_config(load_parameters(), seed=args.seed, total_rows=args.rows)
+        result = generate(config, args.output, chunk_size=args.chunk_size)
+        print(
+            f"generated {result.rows} rows in {len(result.rows_by_month)} months; "
+            f"peak RSS {result.peak_rss_bytes / 2**20:.0f} MiB"
+        )
+        return 0
     return _provenance(args.check)
 
 

@@ -112,6 +112,14 @@ class ParameterSet:
             raise ParameterError(f"{key}: expected a mapping of numbers, got {value!r}")
         return {str(k): float(v) for k, v in value.items()}
 
+    def numbers(self, key: str) -> list[float]:
+        value = self.value(key)
+        if not isinstance(value, list) or not all(
+            isinstance(v, int | float) and not isinstance(v, bool) for v in value
+        ):
+            raise ParameterError(f"{key}: expected a list of numbers, got {value!r}")
+        return [float(v) for v in value]
+
     def categories(self) -> list[str]:
         return sorted(self.descriptions)
 

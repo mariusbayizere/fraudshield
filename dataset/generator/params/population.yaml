@@ -1,0 +1,62 @@
+description: Customers, their segments, activity and account-level events.
+parameters:
+  mean_transactions_per_active_customer_month:
+    value: 14
+    unit: transactions per active customer per month (mean)
+    provenance: ASSUMED
+    rationale: Sets the number of simulated customers for a given volume; a few transactions every week is a plausible order of magnitude for an active mobile-money and bank user, not a measured figure.
+  activity_log_sigma:
+    value: 0.8
+    unit: standard deviation of the log of each customer's activity multiplier (mean-one log-normal)
+    provenance: ASSUMED
+    rationale: Customer activity is heavily skewed in payment data generally; a log-normal with sigma 0.8 gives a long tail of heavy users while keeping most customers near the mean.
+  segment_share:
+    value: {urban_salaried: 0.35, informal_trader: 0.25, rural_ussd: 0.30, student: 0.10}
+    unit: fraction of customers
+    provenance: ASSUMED
+    rationale: Four behavioural segments needed by Part E.3 (salary cycles, market days, rural USSD use); the split is a modelling choice chosen so the channel mix can still be met.
+  kyc_tier_share:
+    value: {TIER_1: 0.45, TIER_2: 0.40, TIER_3: 0.15}
+    unit: fraction of customers by KYC tier (1 = lowest limits)
+    provenance: ASSUMED
+    rationale: Tiered KYC with most customers on lower tiers is the common mobile-money structure; the exact shares are a modelling choice.
+  legit_sim_swap_monthly_probability:
+    value: 0.004
+    unit: probability that a customer has a legitimate SIM replacement in a month
+    provenance: ASSUMED
+    rationale: Legitimate SIM replacements (lost or damaged SIMs) must exist so a SIM swap alone does not identify fraud; the rate is a modelling choice.
+  device_change_monthly_probability:
+    value: 0.02
+    unit: probability that a smartphone customer changes device in a month
+    provenance: ASSUMED
+    rationale: Legitimate device changes (new phones, reinstalls) must exist so a new device alone does not identify account takeover; roughly one change every four years per customer.
+  counterparties_per_customer:
+    value: 12
+    unit: distinct regular person-to-person counterparties per customer (mean)
+    provenance: ASSUMED
+    rationale: Family and social payment circles; the size is a modelling choice that controls how often payments go to known counterparties.
+  customers_per_merchant:
+    value: 40
+    unit: customers per simulated merchant
+    provenance: ASSUMED
+    rationale: Controls merchant pool size so each merchant sees repeat customers; a modelling choice.
+  customers_per_agent:
+    value: 150
+    unit: customers per simulated cash agent
+    provenance: ASSUMED
+    rationale: Controls agent pool size so agents serve many customers, as cash-in and cash-out networks do; a modelling choice.
+  home_spread_degrees:
+    value: 0.6
+    unit: standard deviation (degrees) of customers' home locations around the country centre
+    provenance: ASSUMED
+    rationale: A single urban-and-peri-urban cluster per country of roughly 60 km; district population weights (Part E.3) are not sourced yet, so this is a stand-in modelling choice.
+  merchants_per_customer:
+    value: [3, 8]
+    unit: inclusive range of regular merchants per customer
+    provenance: ASSUMED
+    rationale: A handful of shops, fuel stations and billers each customer pays repeatedly; a modelling choice.
+  min_counterparties:
+    value: 2
+    unit: minimum number of regular person-to-person counterparties per customer
+    provenance: ASSUMED
+    rationale: Every customer has at least a couple of people they pay, so person-to-person payments never have an empty choice set; a modelling choice.

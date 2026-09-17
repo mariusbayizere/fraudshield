@@ -44,3 +44,8 @@ warn_unreachable = true
 [[tool.mypy.overrides]]
 module = ["grpc_tools", "grpc_tools.*"]
 ignore_missing_imports = true
+
+# pyarrow ships no type information (no py.typed); it is the dataset package's columnar I/O layer.
+[[tool.mypy.overrides]]
+module = ["pyarrow", "pyarrow.*"]
+ignore_missing_imports = true

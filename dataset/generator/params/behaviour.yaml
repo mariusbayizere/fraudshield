@@ -1,0 +1,112 @@
+description: Legitimate behaviour models (Part E.3) for timing, amounts, channels and counterparties.
+parameters:
+  rural_ussd_channel_share:
+    value: {USSD: 0.60, AGENT_BANKING: 0.30, MOBILE_MONEY: 0.10}
+    unit: fraction of a rural USSD customer's transactions by channel
+    provenance: ASSUMED
+    rationale: Rural feature-phone users transact mostly through USSD menus and cash agents; the shares are chosen so the remaining segments can still meet the SRS channel mix.
+  amount_median_rwf:
+    value: {MOBILE_MONEY: 8000, USSD: 5000, AGENT_BANKING: 20000, CARD: 25000, ONLINE: 18000, BANK_TRANSFER: 120000}
+    unit: median transaction amount in RWF equivalent, by channel
+    provenance: ASSUMED
+    rationale: Relative ordering (small USSD and P2P payments, larger card and much larger bank transfers) is the modelling intent; absolute medians are illustrative, not measured.
+  amount_log_sigma:
+    value: 1.0
+    unit: standard deviation of the natural log of the amount around the channel median
+    provenance: ASSUMED
+    rationale: Payment amounts are right-skewed; sigma 1.0 spans roughly a factor of seven either side of the median for 95% of payments.
+  round_sum_probability:
+    value: 0.35
+    unit: probability that a person-to-person, cash or transfer amount is rounded to a round sum
+    provenance: ASSUMED
+    rationale: Part E.3 requires round-sum transfers as legitimate look-alike behaviour; the rate is a modelling choice.
+  salary_day_range:
+    value: [25, 28]
+    unit: day of month on which a salaried customer's salary credit falls (inclusive range)
+    provenance: ASSUMED
+    rationale: Month-end salary cycles required by Part E.3; the exact window is a modelling choice.
+  payday_spend_boost:
+    value: 2.5
+    unit: relative weight of days in the week after payday for salaried customers
+    provenance: ASSUMED
+    rationale: Spending concentrates after salary credit; the multiplier is a modelling choice.
+  market_day_weight:
+    value: 3.0
+    unit: relative weight of a trader's weekly market day
+    provenance: ASSUMED
+    rationale: Part E.3 requires market days; each trader gets one weekly market day with this relative activity weight, a modelling choice.
+  school_fee_months:
+    value: [1, 5, 9]
+    unit: calendar months in which school-fee payments peak
+    provenance: ASSUMED
+    rationale: Part E.3 requires school-fee periods; start-of-term months are used as a modelling choice without checking each country's calendar.
+  school_fee_volume_boost:
+    value: 1.3
+    unit: relative monthly transaction volume multiplier in school-fee months
+    provenance: ASSUMED
+    rationale: Modelling choice for the school-fee seasonal peak.
+  cross_border_share:
+    value: 0.03
+    unit: fraction of person-to-person and bank transfers sent to another EAC country
+    provenance: ASSUMED
+    rationale: Part E.3 requires family remittances along EAC corridors; the share is a modelling choice.
+  remittance_corridors:
+    value: {RW: [UG, KE, CD], KE: [UG, TZ], TZ: [KE, UG], UG: [KE, RW], CD: [RW, UG]}
+    unit: destination countries for cross-border transfers, by sender country
+    provenance: ASSUMED
+    rationale: Neighbouring-country corridors chosen by geography; destination weights are uniform as a modelling choice.
+  agent_peak_hours:
+    value: [8, 18]
+    unit: local hours of the two daily cash-agent peaks
+    provenance: ASSUMED
+    rationale: Part E.3 requires cash-in and cash-out peaks; morning and after-work peaks are a modelling choice.
+  travel_probability:
+    value: 0.05
+    unit: probability that a transaction happens away from the customer's home area
+    provenance: ASSUMED
+    rationale: Occasional travel so location alone does not identify account misuse; a modelling choice.
+  home_jitter_degrees:
+    value: 0.15
+    unit: standard deviation of a transaction's latitude and longitude around home (degrees)
+    provenance: ASSUMED
+    rationale: About 15 km of movement around home; a modelling choice.
+  merchant_mcc_share:
+    value: {"5411": 0.30, "5812": 0.12, "5541": 0.10, "4814": 0.12, "4900": 0.08, "5912": 0.08, "5732": 0.06, "5651": 0.06, "8211": 0.08}
+    unit: fraction of merchants by ISO 18245 merchant category code
+    provenance: ASSUMED
+    rationale: Everyday categories (groceries, restaurants, fuel, airtime, utilities, pharmacies, electronics, clothing, schools) with groceries most common; the weights are a modelling choice.
+  p2p_share_of_wallet_payments:
+    value: 0.60
+    unit: fraction of MOBILE_MONEY and USSD transactions that are person-to-person (the rest pay merchants)
+    provenance: ASSUMED
+    rationale: Person-to-person transfers dominate wallet use in mobile-money markets as a qualitative pattern; the exact share is a modelling choice.
+  wallet_hour_mean_local:
+    value: 13.5
+    unit: mean local hour of day of non-agent transactions
+    provenance: ASSUMED
+    rationale: Daytime-centred activity with an early-afternoon mean; a modelling choice for the hour-of-day profile.
+  wallet_hour_sd:
+    value: 4.0
+    unit: standard deviation (hours) of the local hour of non-agent transactions
+    provenance: ASSUMED
+    rationale: Spreads activity from morning to late evening; a modelling choice.
+  agent_hour_sd:
+    value: 1.5
+    unit: standard deviation (hours) around each cash-agent peak hour
+    provenance: ASSUMED
+    rationale: Peaks of about three hours around the morning and evening agent peaks; a modelling choice.
+  active_hours_local:
+    value: [5.0, 23.5]
+    unit: earliest and latest local hour at which legitimate activity is placed
+    provenance: ASSUMED
+    rationale: Little legitimate activity before dawn or after midnight; night-time activity is left to fraud scenarios and occasional look-alikes, a modelling choice.
+  travel_distance_degrees:
+    value: 1.0
+    unit: standard deviation (degrees) of the displacement when a customer transacts away from home
+    provenance: ASSUMED
+    rationale: About 100 km, a trip to another town; a modelling choice.
+  payday_window_days:
+    value: 7
+    unit: days from salary day (inclusive) over which the payday spending boost applies
+    provenance: ASSUMED
+    rationale: Spending concentrated in the week after salary credit; a modelling choice.

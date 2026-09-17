@@ -1,0 +1,22 @@
+description: Local currencies and the fixed conversion rates to RWF used for amount_rwf.
+parameters:
+  currency_by_country:
+    value: {RW: RWF, KE: KES, TZ: TZS, UG: UGX, CD: CDF}
+    unit: ISO 4217 code of the local currency by ISO 3166 country
+    provenance: ASSUMED
+    rationale: National currencies of the five markets; stated as a modelling input rather than a sourced figure because no document was consulted for it in this project.
+  rwf_per_unit:
+    value: {RWF: 1.0, KES: 10.0, TZS: 0.5, UGX: 0.35, CDF: 0.45}
+    unit: RWF per one unit of the currency (fixed for the whole simulation)
+    provenance: ASSUMED
+    rationale: Round illustrative rates of the right order of magnitude; the data is synthetic and rates are held fixed so amounts stay comparable. Not taken from a published exchange-rate series.
+  country_centre:
+    value: {RW: [-1.95, 30.06], KE: [-1.29, 36.82], TZ: [-6.80, 39.28], UG: [0.35, 32.58], CD: [-4.32, 15.31]}
+    unit: latitude and longitude (degrees) around which customers of the country live
+    provenance: ASSUMED
+    rationale: Approximate coordinates of the largest city of each country, used as a single home cluster; district-level population weights (Part E.3) are not yet sourced.
+  utc_offset_hours:
+    value: {RW: 2, KE: 3, TZ: 3, UG: 3, CD: 1}
+    unit: hours ahead of UTC used to place local activity hours in UTC timestamps
+    provenance: ASSUMED
+    rationale: Standard time zones of the simulated home areas (Kinshasa for DRC); fixed offsets without daylight saving, stated as a modelling input because no document was consulted for it here.
