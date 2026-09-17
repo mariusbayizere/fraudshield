@@ -38,3 +38,9 @@ Format: ID · title · source · priority · due · problem · acceptance.
 - **Problem:** refusal-to-operation coverage is partial (for example `ROLE_NOT_PERMITTED` omits
   `rejectConfigChange` and `proposeCircuitBreakerChange`).
 - **Acceptance:** every operation that can raise a refusal is listed.
+
+### PB-6 · Licence inventory for container images
+- **Source:** ADR 0018 · **Priority:** medium · **Due:** M9 (deployment)
+- **Problem:** the ADR 0009 inventory covers library dependencies only; the TimescaleDB image (TSL) is
+  recorded only in ADR 0018.
+- **Acceptance:** every Compose and deployment image is listed with its licence and policy status.
