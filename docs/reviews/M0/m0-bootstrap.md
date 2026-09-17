@@ -178,3 +178,235 @@ Probes of checker guarantees, run in a scratch directory outside the repository 
   review remains the backstop for D-47.
 - **Claims C-1..C-8 remain UNVERIFIED** and depend on the author supplying primary sources (D-09).
   No public-facing text currently states them, which is correct.
+
+---
+
+# Re-review: M0 fixes (branch `m0/bootstrap`, 14 commits 3f82d6a..cd99dc9)            Reviewer role: Principal Reviewer
+Date: 2026-09-17 (UTC)   Branch/commit: m0/bootstrap @ cd99dc9ad7dfcd5f1a68b0d8b914025dee33647e   Requirements: ML-GATE-02..04, OPS-CI-01, OPS-CI-02 (M0 scope)   Defects: D-01, D-02, D-17, D-33, D-43, D-47, D-48, D-51
+Verdict: APPROVED_WITH_MINORS
+
+Summary: all 5 MAJOR and 11 MINOR findings from the first review, plus the 7 owner findings, were
+checked against the code rather than against `m0-bootstrap-response.md`. Every earlier MAJOR is
+fixed, and I re-ran the evasions to confirm. Two earlier findings (2 and 3) are only partly
+fixed: the traceability checker can still be satisfied by weak or fabricated evidence, and test
+discovery still counts some skipped tests. Those gaps and six other new issues are tracked below
+(R-1 … R-10). **Open findings: 0 BLOCKER, 0 MAJOR, 6 MINOR, 4 NIT.**
+
+## Checks re-run (command → result)
+
+| Command | Result |
+|---|---|
+| `make ci` (repo root, `export PATH=~/.local/opt/node/bin:~/.local/bin:$PATH`) | exit 0, 1 m 53 s wall |
+| ↳ ruff check / format | All checks passed / 22 files already formatted |
+| ↳ mypy --strict | no issues in 20 source files |
+| ↳ `cd tools && uv run pytest -q` | 69 passed; branch coverage 94.60 % (gate 90 %) |
+| ↳ `cd ml && uv run pytest -q` | 14 passed; coverage 100 % (gate 90 %). 8 further consecutive runs: 14 passed each (the author's reported one-off failure did not reproduce) |
+| ↳ `./mvnw -B -ntp verify` | BUILD SUCCESS; Spotless clean; Checkstyle 0; 1028 tests (1000 seeded + edges), 0 failures; SpotBugs 0; JaCoCo gate met |
+| ↳ frontend lint / format / typecheck / `test:coverage` | clean; 16 passed; 100 % coverage. Verbose titles now read "…fails AA text contrast at 3.19:1" |
+| ↳ `fs-defect-register --check` | up to date (51) |
+| ↳ `fs-traceability-seed --check` | up to date |
+| ↳ `fs-traceability check` | 258 rows, 21 tagged tests, 0 errors |
+| ↳ `fs-scope-guard` | 0 files |
+| ↳ `docker compose … config -q` | exit 0 |
+| ↳ `tools/bin/gitleaks git` / `dir` | 23 commits, no leaks / no leaks |
+| ↳ `fs-licences` | 187 dependencies (runtime 0, dev 187), 0 violations |
+| `uv run fs-commit-msg --rev-range 3f82d6a..HEAD` | 14 messages, 0 problems; no Co-Authored-By or tool signatures (`git log --format=%B` grep) |
+| `tools/bin/gitleaks` pin vs upstream `gitleaks_8.30.1_checksums.txt` | `551f6fc8…70eb` matches. A copy of the launcher with a wrong checksum, run against an empty cache, exited 1 with "checksum mismatch" |
+| O-7: SRS FR rows parsed per section | FR-01 7, FR-02 10, FR-03 8, FR-04 12, FR-05 7, FR-06 7, FR-07 9 = 60; every section contiguous; YAML FR set = SRS set; priorities M 47 / S 12 / C 1 |
+| O-4: ADR 0007 versions vs Maven Central | `spring-boot-dependencies-4.1.1.pom`: Flyway 12.4.0, Testcontainers 2.0.5, Jackson 3.1.5 / 2.21.5, Security 7.1.1, Framework 7.0.9, JUnit 6.0.3, Kafka 4.2.1, spring-kafka 4.1.1, Lettuce 7.5.2, pgjdbc 42.7.13, Micrometer 1.17.1, Thymeleaf 3.1.5. springdoc-openapi 3.1.1 parent = spring-boot-starter-parent 4.1.0. resilience4j-spring-boot4 2.4.0 → spring-boot-autoconfigure 4.0.0. **All match** |
+| O-4: ADR 0005 MinIO mentions | `grep -ci minio` on the build prompt = 3, matching the ADR table |
+| O-1: remote state | `git ls-remote origin` shows only `refs/heads/m0/bootstrap` @ cd99dc9; there is no `main`; the GitHub API reports `default_branch: m0/bootstrap` |
+| Action pin `actions/upload-artifact` v7.0.1 | tag → commit 043fb46…, matches the pin |
+| `git status --short` after all runs and mutations | clean |
+
+**GitHub Actions for cd99dc9: run 35179479949** (push, attempt 1): completed / **success**.
+
+| Job | Conclusion |
+|---|---|
+| python (ruff, mypy --strict, pytest) | success |
+| java (checkstyle, junit, spotbugs, jacoco) | success |
+| frontend (tsc, eslint, prettier, vitest) | success |
+| traceability-check, defect register, scope guard, commit messages | success |
+| dependency licence inventory (ADR 0009) | success |
+| pre-commit hooks on all files (G.5 guards) | success |
+| core compose stack healthy + smoke test (M0 gate) | success (03:47:34Z → 03:49:15Z) |
+| gitleaks | success |
+
+`stack` job history on this branch (public API): 35176401589 @ 485bdf8 failure ("Functional
+smoke test"); 35177597483 @ ce4c10d failure ("make up"); 35177814042 @ ce6df6a failure
+("make up"); 35178368063 @ 4c7a81e cancelled; 35178432654 @ 162cc44 failure ("make up"; the
+annotation shows `mlflow running health=starting`); **35178641969 @ 2882a99 success;
+35179479949 @ cd99dc9 success.** Result: two consecutive green runs after the MLflow
+worker/memory fix, following three failures before it.
+
+## Mutation and evasion checks (what was broken → what caught it)
+
+Every edit was reverted with `git checkout -- <file>` (scratch files deleted), and `git status --short` was clean afterwards.
+
+Repeats of the first review's survivors and evasions:
+
+| # | Change | Result |
+|---|---|---|
+| R1 | `operating_points.py:61` `precision > 1.0` → `> 1.5` | **killed**: `test_precision_just_above_one_is_rejected` |
+| R2 | `traceability.py:296` stale-matrix check disabled | **killed**: `test_main_check_fails_on_stale_matrix_and_passes_after_render` |
+| E1 | `requirements.yaml` FR-01-03 priority M→S, milestone M6→M12, matrix re-rendered | **detected**: `fs-traceability-seed --check` exit 1 (`fs-traceability check` alone still passes, which is by design) |
+| E2 | FR-01-04 row deleted | **detected**: seed check exit 1 |
+| E3 | D-47 `DONE_WITH_DEVIATION`, evidence "tested", deviation "ADR 9999 (nonexistent)" | **detected**: 2 errors (evidence form; deviation not an existing ADR) |
+| E4 | D-47 `DONE`, `verification: inspection`, evidence "should work" | **detected**: 2 errors (verification not permitted; evidence form) |
+| E5 | Java tag in `// comment` and on a `@Disabled` test; multi-line `@pytest.mark.req(` | **handled**: comments and `@Disabled` ignored, multi-line decorator found (`tools/tests/test_test_tags.py` and my probes) |
+
+New attempts against the new code:
+
+| # | Target | Change or probe | Result |
+|---|---|---|---|
+| N1 | `traceability.py` evidence | D-47 `DONE`, evidence = `https://github.com/mariusbayizere/fraudshield/actions/runs/1` (fabricated) | **passes all checks** (R-1) |
+| N2 | same | D-47 `DONE`, evidence = unrelated existing commit `89d6859` | **passes all checks** (R-1) |
+| N3 | `scope_guard.py` allowlist | a banned D-47 term in the `notes:` progress field of FR-04-01 in `requirements.yaml` | **passes** seed check, traceability check and scope guard (R-2) |
+| N4 | `scope_guard.py` pragma | `frontend/src/probe.ts`: exported PascalCase identifier built from a banned term, followed by `// scope-guard: allow D-47` | **passes**: the pragma works in production code (R-2) |
+| N5 | `scope_guard.py` allowlist | file under `docs/reviews/` whose *path and content* contain a banned term | **passes** (R-2) |
+| N6 | `test_tags.py` | `@pytest.mark.skipif(True)`, module-level `pytestmark = pytest.mark.skip`, `from pytest import mark` + `@mark.skip`, `@pytest.mark.xfail(run=False)` | all **counted as tagged tests** (R-3) |
+| N7 | `test_tags.py` | Java `@org.junit.jupiter.api.Disabled` (fully qualified); `@Disabled @Nested` inner class; `@EnabledIf` that never runs; `@Tag` on a private non-test helper | all **counted** (R-3) |
+| N8 | `test_tags.py` | TS `describe.skip` wrapping a tagged `it` (documented limitation); tag text inside a string literal | both **counted** (R-3) |
+| N9 | `licences.py` | runtime dep with `License-Expression: GPL-3.0-only` plus classifier `MIT License` | **no violation** (R-4) |
+| N10 | `licences.py` | dev dep `LGPL-2.1-or-later` | **violation "unidentified licence"**, although ADR 0009 lists it as allowed for dev (R-4) |
+| N11 | `commit_msg.py` | `feat: updated things`; indented ` Co-authored-by:`; `Generated-by: Claude Code`; `Signed-off-by: Claude <noreply@anthropic.com>` | all **accepted** (R-8) |
+| M1 | `licences.py:112` runtime uses dev allowlist | **killed**: `test_policy_by_scope`, `test_main_writes_inventory_and_fails_on_violation` |
+| M2 | `licences.py:205` Maven declared-count check removed | **killed**: `test_parse_third_party_report_verifies_count` |
+| M3 | `commit_msg.py:137` `MAX_LINE` 72→73 | **killed** (2 cases) |
+| M4 | `commit_msg.py:165` trailer check removed | **killed**: co-author case |
+| M5 | `test_tags.py:499` TS skip/todo modifiers ignored | **killed** |
+| M6 | `test_tags.py:488` Java declaration `@Disabled` ignored | **killed** |
+| M7 | `test_tags.py:382` Python `skip` ignored | **killed** |
+| M8 | `scope_guard.py:36` pragma loosened to `scope-guard: allow` | **killed**: `test_allowlist_and_line_pragma` |
+| M9 | `scope_guard.py:53` every allowlist entry prefix-matched (`requirements.yaml.bak` etc. exempt) | **SURVIVED** (R-2) |
+| M10 | `traceability.py:75` CI run URL accepted for any GitHub repository | **SURVIVED** (R-1) |
+| M11 | `traceability.py:220` commit existence not checked | **killed**: `test_unknown_commit_in_evidence_fails` |
+| M12 | `traceability_seed.py` `--check` comparison disabled | **killed**: both `test_seed_check_detects_edited_or_deleted_rows` cases |
+
+## Findings
+
+### Status of the first review's findings
+
+| # | Severity | Status | Verified by reviewer |
+|---|---|---|---|
+| 1 | MAJOR | RESOLVED | E1, E2 detected; M12 killed; `fs-traceability-seed --check` runs in CI `governance`, `make governance` and the pre-commit `governance` hook |
+| 2 | MAJOR | PARTIALLY_RESOLVED | Free text, missing ADRs and non-granted verification methods are rejected (E3, E4). Fabricated run URLs and unrelated commits still pass (N1, N2, M10), tracked as R-1. Downgraded to MINOR because no row is DONE yet and D.1 step 10 still requires review of the commit SHA |
+| 3 | MAJOR | PARTIALLY_RESOLVED | AST/comment-aware discovery works for the common forms (E5, M5–M7 killed). Several skip/disable forms are still counted (N6–N8), tracked as R-3. Downgraded to MINOR because no milestone is closed and ADR 0004 commits to executed-report tags in M9 |
+| 4 | MAJOR | RESOLVED | `frontend/pnpm-workspace.yaml` deleted; `prettier` 3.9.6 in `package.json` and lockfile; `pnpm install --frozen-lockfile` green in CI (frontend and licences jobs) |
+| 5 | MAJOR | RESOLVED | CI `stack` job (`make up --wait` + `make smoke`) green in runs 35178641969 and 35179479949 |
+| 6 | MINOR | RESOLVED | `KAFKA_LOG_DIRS=/var/lib/kafka/data`; healthcheck `KAFKA_HEAP_OPTS=-Xmx64m`; stack green |
+| 7 | MINOR | RESOLVED | healthcheck probes `:9333/cluster/healthz` and `:8333/healthz`; init retries 10×, then asserts the bucket; 128m limit; smoke test asserts `object-store-init` exit 0 and an MLflow artifact round-trip |
+| 8 | MINOR | RESOLVED | CI `pre-commit` job green; Prettier and Spotless hooks; Spotless check bound to Maven `validate` (seen in `make ci`) |
+| 9 | MINOR | RESOLVED | `--cov-fail-under=90` branch coverage in both packages: 94.60 % / 100 % |
+| 10 | MINOR | RESOLVED | R1 killed; exact P = 1 case accepted (computed P = 0.9999999999999998, so the test is deterministic) |
+| 11 | MINOR | RESOLVED | R2 killed |
+| 12 | MINOR | RESOLVED | verbose titles show the ratios |
+| 13 | MINOR | RESOLVED | evidence commands, pinned/decided/deferred split, Redis 8 AGPL and Valkey options; Temurin 21.0.12 in `.tool-versions` and CI (see R-9) |
+| 14 | MINOR | RESOLVED | inventory runs in CI and `make ci`; build plugins assessed in ADR 0009; jqwik decision recorded. New defects in the tool: R-4; jqwik vs D-17: R-5 |
+| 15 | MINOR | RESOLVED | `.jqwik-database` removed; `**/.mvn/wrapper/maven-wrapper.jar` |
+| 16 | MINOR | RESOLVED | `docs/architecture/repository_layout.md`; the empty local directories are gone |
+| 17 | NIT | RESOLVED | `fs-commit-msg` hook and CI step; 14 new commits pass (quality of the rule: R-8) |
+| 18 | NIT | RESOLVED (accepted with reason) | reason is sound (no `gh`, branches need CI without PRs) |
+| 19 | NIT | RESOLVED | `git rev-parse --show-toplevel` with fallback |
+| 20 | NIT | RESOLVED | tie cases 0.125→0.12, 0.135→0.14, −0.125→−0.12; negative amounts documented |
+| 21 | NIT | RESOLVED | password moved to `/tmp/redis.conf` (umask 077); smoke test checks authenticated and unauthenticated access |
+| 22 | NIT | RESOLVED | pre-commit-hooks frozen at `3e8a870` |
+
+### Status of the repository owner's findings
+
+| # | Severity | Status | Verified by reviewer |
+|---|---|---|---|
+| O-1 | BLOCKER | PARTIALLY_RESOLVED (owner action) | No `main` and no earlier "first commit" on the remote (`git ls-remote`), so nothing needs integrating: creating `main` from the approved head by fast-forward is correct and needs no force. **The default branch is still `m0/bootstrap`** (API). Setting it to `main` and enabling protection is an owner action once `main` is pushed. It does not block the merge itself |
+| O-2 | MAJOR | RESOLVED | same evidence as finding 4 |
+| O-3 | BLOCKER for tagging | RESOLVED for merge; tag condition below | CI `stack` job green twice. The job runs on GitHub's runner, not on the reference laptop (residual risk) |
+| O-4 | MAJOR | RESOLVED | ADR 0007 versions match Maven Central; the Resilience4j Boot 4.0 build is correctly flagged as a risk; the ADR 0005 table covers all 3 MinIO mentions |
+| O-5 | MINOR | RESOLVED, with new gaps R-2 | allowlist has reasons; pragma must name D-47 (M8 killed); defence question restored |
+| O-6 | MINOR | RESOLVED | checksum matches upstream; mismatch rejected; the CI `secrets` job runs full history independently. Cache trust: R-7 |
+| O-7 | — | RESOLVED | counts reproduced exactly (see Checks) |
+
+### New findings
+
+| # | Severity | Location | Finding | Required action | Status |
+|---|---|---|---|---|---|
+| R-1 | MINOR | `tools/src/fraudshield_tools/traceability.py:74-75, 214-222` | Evidence is checked for form, not substance. Any URL matching `…/fraudshield/actions/runs/\d+` passes without checking that the run exists or succeeded (N1: run ID `1`). Any commit in the object store passes, even an unrelated or unreachable one (N2). The repository-specific URL regex has no test (M10 survived). This leaves open the "fabricated or unreproducible evidence" hole that finding 2 was about. | Require commit SHAs to be ancestors of `HEAD` (`git merge-base --is-ancestor`). For CI run URLs, either validate them in the CI `governance` job through the Actions API (run exists, `conclusion == success`, `head_sha` in history) or drop URLs and require a SHA. Add tests for a foreign-repository URL, a non-ancestor commit and a non-existent run. | OPEN |
+| R-2 | MINOR | `tools/src/fraudshield_tools/scope_guard.py:23-36, 51-54, 67`; `docs/adr/0008-out-of-scope-content-guard.md` | Three gaps in the D-47 guard. (a) `requirements.yaml` is allowlisted on the grounds that "only the D-47 row carries these terms", but progress fields (`notes`, `evidence`, `implementation`, `blocked_reason`, `reduced_scale`) are neither generated nor scanned (N3). (b) The pragma exempts a line in any file, including production code (N4), whereas ADR 0008 limits it to sentences discussing the defect. (c) `docs/reviews/` is exempt for paths as well as content (N5), and file entries are prefix-safe only by an untested branch (M9 survived). | Scan the progress fields of every YAML row (and render only scanned values into the matrix). Accept the pragma only in `*.md` under `docs/` (or require the line to also contain `D-47` outside the pragma). Keep checking file paths inside allowlisted directories. Add tests for each case and for `requirements.yaml.bak`. | OPEN |
+| R-3 | MINOR | `tools/src/fraudshield_tools/test_tags.py:377-411, 479-491, 494-520` | Tests that never run are still counted as evidence: `skipif(True)`, module-level `pytestmark = pytest.mark.skip`, `from pytest import mark` / `@mark.skip`, `xfail(run=False)`; Java fully qualified `@org.junit.jupiter.api.Disabled`, `@Disabled` on a `@Nested` class, `@EnabledIf`/`@DisabledIf`, `@Tag` on non-`@Test` methods; TS `describe.skip` parents and tag text inside string literals (N6–N8). Only runtime skips are documented as a limitation. | Before any milestone closes (M1 at the latest): handle the listed static forms, or only count Java tags on methods annotated `@Test`/`@ParameterizedTest`/`@RepeatedTest`/`@TestFactory`, and treat any `skip*`/`xfail(run=False)`/`pytestmark` skip as disabled. Keep the M9 plan to count only passed tests from executed reports, and bring it forward if feasible. | OPEN |
+| R-4 | MINOR | `tools/src/fraudshield_tools/licences.py:44-48, 53-72, 92-100, 151-156`; `docs/adr/0009-dependency-licence-policy.md:36-37` | (a) `spdx_options` takes the union of every metadata field, so conflicting metadata passes. A runtime package whose `License-Expression` is `GPL-3.0-only` and which carries an MIT classifier is accepted (N9). (b) `LGPL-2.1-or-later`/`LGPL-3.0-or-later` are in `DEV_ONLY` but have no normaliser pattern, so they are always "unidentified" (N10), contradicting ADR 0009. (c) The classifier `BSD License` is assumed to be BSD-3-Clause, and the unanchored `permission is hereby granted, free of charge` search can match non-MIT text. Runtime scope is empty today, so there is no current violation. | Give `License-Expression` precedence when present and treat classifiers as fallback only. Parse `AND` expressions as requiring every term. Add LGPL/GPL/AGPL normalisers so copyleft is identified and rejected or allowed explicitly. Map a bare `BSD License` to "unidentified" unless an exception is recorded. Add tests for each. | OPEN |
+| R-5 | MINOR | `docs/adr/0009-dependency-licence-policy.md:6, 48-52`; `backend/README.md:19`; build prompt D-17 (line 124) and E.12 (line 524) | jqwik removal deviates from **Part B binding resolution D-17** ("JUnit 5 (plus jqwik property tests)"), not only from E.12. Under A.4, an ADR ranks below Part B, yet ADR 0009 lists "Defects referenced: —" and does not argue from A.4 item 1. The replacement (1000 fixed-seed cases) is deterministic example testing: generation never varies between runs and failures do not shrink, so it is weaker than the property testing D-17 and E.12 ask for. `backend/README.md:19` still says "JUnit 5 + jqwik". The removal itself is defensible given the maintainer's notice aimed at automated agents. | Amend ADR 0009 (or write a dedicated ADR): reference D-17 and E.12, state the precedence argument (A.4 item 1, a legal/usage-terms risk), and name the property-testing approach for the M6 decision engine (for example a per-run random seed printed on failure for reproduction, with fixed regression seeds kept). Add D-17 to the ADR's defects and to the D-17 row's `deviations` when it closes. Fix `backend/README.md:19`. | OPEN |
+| R-6 | MINOR | commit `4c7a81e` (`.pre-commit-config.yaml`) | This commit configures hooks that call `tools/bin/gitleaks` and `uv run fs-commit-msg`, both added one commit later in `162cc44`. With hooks installed, that commit blocks every commit. Its subject ("ci: annotate unhealthy stack services…") does not mention the pre-commit changes. CI for it was cancelled, so it was never verified. This breaks G.3 ("each commit builds…", coherent scope). | Do not rewrite published history (G.6). Record this in the merge description. From now on, keep hook changes in the commit that introduces what they call, and run `pre-commit run --all-files` before each commit, not only on the branch head. | OPEN |
+| R-7 | NIT | `tools/bin/gitleaks:24` | The checksum is verified only on first download. Afterwards any executable at `~/.cache/fraudshield/gitleaks-8.30.1-linux_x64/gitleaks` is trusted and run. | Also pin the extracted binary's SHA-256 and verify it on every run, or keep the verified archive and re-check before `exec`. | OPEN |
+| R-8 | NIT | `tools/src/fraudshield_tools/commit_msg.py:138-141` | Accepted: `feat: updated things` (non-imperative placeholder), an indented ` Co-authored-by:`, `Generated-by: Claude Code`, and `Signed-off-by: Claude <noreply@anthropic.com>` (N11). G.1 rule 3 forbids tool-generated signatures. | Match trailers with optional leading whitespace. Forbid `Generated-by`/`Assisted-by` and trailers naming known tool identities or `noreply@anthropic.com`. Extend the placeholder check to inflected forms (`updated`, `changes`). Add tests. | OPEN |
+| R-9 | NIT | `docs/adr/0003-toolchain-and-stack-versions.md:18`; `.github/workflows/ci.yml:24` | The ADR says the latest Temurin GA is 21.0.12+8. The Adoptium API lists `21.0.12+101.0.LTS` (a respin) above `+8`, and CI pins `21.0.12` without a build number, so the resolved build can change. | Pin the exact build (e.g. `21.0.12+8`, or `+101` after checking), or reword the ADR to say the patch level is pinned and the build is not. | OPEN |
+| R-10 | NIT | `infrastructure/docker/scripts/smoke-test.sh:82` | The object-store listing of `/buckets/mlflow-artifacts` is printed but not asserted, so the smoke test does not independently prove the artifact landed in SeaweedFS rather than being served some other way. The MLflow round-trip does exercise the proxied S3 path. | Pipe to `grep -q smoke.txt` (or query the S3 API directly with the generated credentials) and fail otherwise. | OPEN |
+
+## Evidence reproduced (claimed vs measured)
+
+| Claim (response document) | Measured | Match |
+|---|---|---|
+| Seed check catches priority/milestone edits and deleted rows (finding 1) | E1, E2 exit 1; M12 killed | yes |
+| Evidence must be an existing path, commit or CI run; "tested", "should work", "ADR 9999" rejected (finding 2) | E3, E4 rejected; fabricated URL and unrelated commit accepted | partly (R-1) |
+| Comments and disabled tests are ignored (finding 3) | common forms yes; N6–N8 not | partly (R-3) |
+| `pnpm install --frozen-lockfile` passes the release-age policy (finding 4) | CI frontend and licences jobs green; exclusion file deleted | yes |
+| Stack job green for the branch head (finding 5 / O-3) | run 35179479949 `stack` success; also 35178641969 @ 2882a99 | yes |
+| tools 94.60 %, ML 100 % coverage (finding 9) | 94.60 % / 100.00 % | yes |
+| `> 1.0` → `> 1.5` mutant now fails `test_precision_just_above_one_is_rejected` (finding 10) | reproduced | yes |
+| D-33 titles show ratios (finding 12) | "…at 3.19:1" | yes |
+| 187 dependencies (144 npm, 25 Python, 18 Maven), 0 violations (finding 14) | 187, runtime 0 / dev 187, 0 violations (per-ecosystem split not re-derived) | yes |
+| New commits pass `fs-commit-msg`; only ba14868 violates (finding 17) | 14 checked, 0 problems | yes |
+| Gitleaks SHA-256 551f6fc8… matches release; wrong checksum rejected (O-6) | matches upstream checksums file; mismatch exit 1 | yes |
+| 60 FRs: 7/10/8/12/7/7/9; M 47, S 12, C 1 (O-7) | identical | yes |
+| ADR 0007 BOM and library versions (O-4) | identical (see Checks) | yes |
+| ADR 0005: three MinIO occurrences (O-4) | 3 | yes |
+| `hardware.md`: core memory limits total 3,968 MiB | 768+256+320+768+384+128+1024+64+256 = 3,968 | yes |
+| `origin/main` does not exist (O-1) | `git ls-remote`: only `m0/bootstrap`; default branch `m0/bootstrap` | yes |
+| One ML test failure did not reproduce | 9 consecutive runs green | consistent |
+| Committed copy of the first review is unaltered | `git show HEAD:docs/reviews/M0/m0-bootstrap.md` identical to the reviewer's file (md5 9e2b0a30…) | yes |
+
+## Residual risks
+
+- **Stack health rests on two green CI runs** on GitHub's `ubuntu-24.04` runner, after three
+  failures caused by MLflow worker deaths under the memory limit. Flakiness is not ruled out, and
+  the stack has still never run on the 2-core / 7.8 GiB reference laptop, where roughly
+  3.9 GiB of limits compete with 2–3 GiB of free memory. The workflow has no
+  `workflow_dispatch`, so extra runs require new pushes.
+- **Traceability evidence** can still be satisfied by plausible-looking but irrelevant references
+  (R-1) and by tests that never run (R-3). Until those are fixed, human review of every row moved
+  to DONE is the control.
+- **The D-47 guard** can be bypassed with the pragma in code, in `requirements.yaml` progress
+  fields, and under `docs/reviews/` (R-2).
+- **Java property testing** is currently deterministic example testing (R-5). The decision engine
+  (M6) needs real generative coverage.
+- **Resilience4j Spring Boot 4 starter** is built against Boot 4.0.0 (ADR 0007); the risk is
+  accepted until the M6 integration tests.
+- **Branch protection and default branch** depend on the owner (O-1); nothing server-side stops a
+  red merge yet.
+- **Image digests** are still tag-pinned (deferred to M9); the dev stack stays deliberately
+  insecure (plaintext Kafka, no Redis TLS, flat network including the PII vault).
+
+## Merge and tag decision
+
+**Merge to `main`: permitted.** No BLOCKER or MAJOR finding is open, and the verdict is
+`APPROVED_WITH_MINORS`. Conditions:
+
+1. Commit this review record on `m0/bootstrap`. Wait for that commit's CI run to finish with
+   **all 8 jobs green, including `stack`**. Then create `main` by fast-forward from that commit
+   and push without force (the remote has no `main`, so there is no history to integrate).
+2. Record R-1 … R-10 as tracked issues: GitHub issues once `gh` is authenticated, or until then a
+   tracked list in the merge description and `docs/walkthrough/M0.md` open items. The merge
+   description (G.4) must note the non-self-consistent commit `4c7a81e` (R-6).
+
+**Tag `m0-complete`: not yet.** Tag only after all of the following:
+
+1. The CI run for the push to `main` (the tagged commit) is green, including `stack`. That
+   satisfies the gate items "`make up` healthy", "CI green" and "traceability-check runs" on the
+   exact commit being tagged.
+2. The milestone-level review (I.3) is written to `docs/reviews/M0/milestone-review.md` from a
+   clean worktree of `main`, with verdict `APPROVED` or `APPROVED_WITH_MINORS`.
+3. `M0` is added to `docs/traceability/milestones.yaml` `completed` in the closing commit.
+   `fs-traceability check` must then pass: the M0 Must rows D-47 and D-48 need a final status and
+   valid evidence, and D-47 needs its tagged test.
+4. The owner sets `main` as the default branch and enables branch protection requiring the 8 `ci`
+   jobs. If that cannot be done immediately, record it as an open owner action in the M0 status
+   block. It is not a code condition for the tag, but O-1 stays open until it is done.
+5. R-3 is fixed before any later milestone is closed, since that is the first time the
+   closed-milestone test rule depends on discovery accuracy. The other minors may follow in M1.
