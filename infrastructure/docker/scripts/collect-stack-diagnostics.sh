@@ -26,6 +26,22 @@ compose() { docker compose --profile core "$@"; }
   for container in $(compose ps -a -q); do
     docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}} status={{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} restarts={{.RestartCount}} limit={{.HostConfig.Memory}}' "$container"
   done
+  echo "## cgroup memory events per container (oom_kill > 0: the kernel killed a process inside)"
+  for container in $(compose ps -q); do
+    service=$(docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "$container")
+    events=$(docker exec "$container" cat /sys/fs/cgroup/memory.events 2>/dev/null | tr '\n' ' ')
+    stat=$(docker exec "$container" sh -c "grep -E '^(anon|file|shmem) ' /sys/fs/cgroup/memory.stat" 2>/dev/null | tr '\n' ' ')
+    peak=$(docker exec "$container" cat /sys/fs/cgroup/memory.peak 2>/dev/null)
+    echo "$service: ${events:-n/a} | ${stat:-n/a} | peak=${peak:-n/a}"
+  done
+  echo "## mlflow processes (pid, VmRSS kB, command)"
+  mlflow_container=$(compose ps -q mlflow)
+  if [[ -n "$mlflow_container" ]]; then
+    docker exec "$mlflow_container" sh -c 'for p in /proc/[0-9]*; do
+      rss=$(awk "/^VmRSS/ {print \$2}" "$p/status" 2>/dev/null)
+      [ -n "$rss" ] && printf "%s %s %s\n" "${p#/proc/}" "$rss" "$(tr "\0" " " < "$p/cmdline")"
+    done' 2>&1 | sed -E 's#://[^@ ]*@#://***@#g' | cut -c1-200
+  fi
 } > "$out/resources.txt" 2>&1
 
 for service in mlflow object-store timescaledb; do
