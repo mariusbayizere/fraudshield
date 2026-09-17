@@ -410,3 +410,239 @@ New attempts against the new code:
    block. It is not a code condition for the tag, but O-1 stays open until it is done.
 5. R-3 is fixed before any later milestone is closed, since that is the first time the
    closed-milestone test rule depends on discovery accuracy. The other minors may follow in M1.
+
+---
+
+# Delta review (2018bec..b08ba61)            Reviewer role: Principal Reviewer
+Date: 2026-09-17 (UTC)   Branch/commit: m0/bootstrap @ b08ba61c7a9bef2a36899bb277ed784575849023 (commits c772a97, 426d0f8, 2f9f864, 4238698, b08ba61)   Requirements: OPS-CI-01..04, NFR-REL-01 (note only), benchmark rows per ADR 0010   Defects: D-17, D-47, D-51
+Verdict: CHANGES_REQUIRED
+
+Scope: the author's fixes for R-1 … R-10, plus new work following the owner's decision that
+Docker will not run on the laptop (ADR 0010, devcontainer, Docker gating, compose memory budget,
+benchmark evidence rules).
+
+Summary: the fixes for R-1, R-2, R-4, R-5, R-6, R-7, R-9 and R-10 hold, and every evasion that
+worked in the re-review is now caught. The local Docker gating is correct: skips are visible, and
+`REQUIRE_DOCKER` fails when Docker is missing. The three required consecutive green `stack` runs
+exist. However, **the new devcontainer workflow failed on its first run** (post-create command),
+so the Codespaces environment the README tells the author to use has not been shown to work, and
+merging would put a red workflow on `main`. That one MAJOR finding requires changes. The
+benchmark rule does not yet stop a CI-runner number from closing a benchmark row. **Open findings: 0
+BLOCKER, 1 MAJOR, 4 MINOR, 5 NIT.**
+
+## Checks re-run (command → result)
+
+| Command | Result |
+|---|---|
+| `make ci` (repo root, `export PATH=~/.local/opt/node/bin:~/.local/bin:$PATH`; Docker daemon inactive) | exit 0, 1 m 40 s |
+| ↳ ruff / format / mypy | clean; 32 files formatted; mypy no issues in 30 files |
+| ↳ tools pytest | 131 passed; branch coverage 92.94 % (gate 90 %) |
+| ↳ ml pytest | 14 passed; 100 % |
+| ↳ `make test-java` | printed `SKIPPED: JUnit tests tagged requires-docker require Docker, verified in CI (job: java)`, then `verify -DexcludedGroups=requires-docker`: 1028 tests, 0 failures, BUILD SUCCESS |
+| ↳ frontend | 16 passed |
+| ↳ governance | defect register current; seed up to date; `traceability-check: 258 rows, 22 tagged tests, 0 errors, 0 warnings`; scope-guard 0; `compose-budget: core 3968/4096 MiB, ml 0/6144, obs 0/5120, full 3968/10240; 0 errors` |
+| ↳ secrets-scan | 29 commits, no leaks; dir no leaks |
+| ↳ licences | 187 dependencies (runtime 0, dev 187), 0 violations |
+| ↳ `stack-test` | printed `SKIPPED: stack-test requires Docker, verified in CI (job: stack)` |
+| `REQUIRE_DOCKER=1 make stack-test` | `ERROR: stack-test requires Docker; REQUIRE_DOCKER is set but no Docker daemon is reachable`, make exit 2 |
+| `REQUIRE_DOCKER=1 make test-java` | `ERROR: JUnit tests tagged requires-docker need Docker; REQUIRE_DOCKER is set`, make exit 2 |
+| `REQUIRE_DOCKER=0 tools/bin/docker-gate …` / `REQUIRE_DOCKER=` (empty) | exit 1 (any non-empty value means required) / SKIPPED exit 0 |
+| pytest plugin, scratch module with one `@pytest.mark.requires_docker` test | no env: skipped with reason and summary line `SKIPPED: 1 test(s) require Docker, verified in CI`. `REQUIRE_DOCKER=1`: exit 4, UsageError. `REQUIRE_DOCKER=1 -m "not requires_docker"`: exit 4 (still fails). Plugin disabled with `--strict-markers` (the repository's setting): exit 2, unknown marker |
+| `uv run fs-commit-msg --rev-range 2018bec..b08ba61` | 5 messages, 0 problems |
+| Devcontainer pins, upstream | base image `3.0.8-ubuntu24.04` digest `sha256:d7c46867…d724` matches MCR; features `docker-in-docker:4.1.1`, `java:1.8.3`, `node:2.1.0` exist on GHCR; `devcontainers/ci` tag v0.3.1900000450 → commit 513af61, matches; uv 0.12.15 tarball SHA-256 `f9793576…a638` matches the release `.sha256` |
+| `git status --short` after every mutation and probe | clean |
+
+**GitHub Actions for b08ba61** (public API, 2026-09-17 04:23–04:26Z):
+
+| Run | Workflow | Conclusion | Jobs |
+|---|---|---|---|
+| **35181726185** | ci | **success** | gitleaks ✔, java ✔, licences ✔, **stack ✔ (04:23:13Z → 04:24:53Z)**, pre-commit ✔, python ✔, governance ✔, frontend ✔ |
+| **35181726205** | devcontainer | **failure** | `build devcontainer, post-create make ci, smoke test inside`: step 3 `devcontainers/ci` failed after ~3 min. Annotations: "Dev container up failed: Command failed: /bin/sh -c bash .devcontainer/post-create.sh … postCreateCommand from devcontainer.json failed." Logs need authentication, so I could not identify which command failed |
+
+**Consecutive `stack` runs** (ci workflow on `m0/bootstrap`, newest first): 35181726185 @ b08ba61
+success; 35179479949 @ cd99dc9 success; 35178641969 @ 2882a99 success; 35178432654 @ 162cc44
+failure. Commit 2018bec was pushed together with later commits and has no run of its own.
+**Three consecutive green `stack` runs exist.** `docker-compose.yml` is unchanged across them (the
+last change is 2882a99); `smoke-test.sh` became stricter in 4238698 and passed.
+`docs/reviews/M0/stack-gate-evidence.md`, which ADR 0010 requires, does not exist yet (DR-5).
+
+## Mutation and evasion checks (what was broken → what caught it)
+
+Every edit was reverted with `git checkout -- <file>`, scratch files were deleted, and `git status --short` was clean afterwards.
+
+Repeats of the evasions that succeeded in the re-review:
+
+| # | Attempt | Result |
+|---|---|---|
+| R-1/N1 | D-47 `DONE` with fabricated run URL `…/actions/runs/1` | **caught in CI**: without a token it is a `WARNING` locally (exit 0); with `GITHUB_ACTIONS=true` it is an `ERROR`. B3 (downgrade to warning in CI), B4 (ancestor check replaced by existence) and B5 (run head_sha history check removed) are all **killed** |
+| R-1/N2 | unrelated but ancestor commit as evidence | accepted, **by design** (ancestry is what was asked for); relevance remains a review control |
+| R-2/N3 | banned term in `notes:` of FR-04-01 | **caught**: scope guard reports `requirements.yaml` |
+| R-2/N4 | banned PascalCase identifier with `// scope-guard: allow D-47` in `frontend/src/probe.ts` | **caught** |
+| R-2/N5 | banned term in a file *path* under `docs/reviews/` | **caught** (content under `docs/reviews/` stays exempt by design) |
+| R-2/M9 | allowlist entries prefix-matched (`rel.startswith(entry)`) | **SURVIVED again** (DR-6) |
+| R-3/N6–N8 | `skipif(True)`, module `pytestmark` skip, `from pytest import mark` + `@mark.skip`, `xfail(run=False)`, FQN `@Disabled`, `@Disabled @Nested`, `@EnabledIf`, `@Tag` on helper, `describe.skip` parent, tag inside a string | **all excluded** (none counted) |
+| R-4/N9 | GPL expression plus MIT classifier | the collector now keeps only the most authoritative field, so the two can no longer be unioned. LGPL-2.1-or-later (dev) is allowed; bare "BSD License" is unidentified; `MIT AND GPL-3.0-only` is not allowed; SSPL and BUSL are not allowed |
+| R-8/N11 | `feat: updated things`; indented `Co-authored-by`; `Generated-by: Claude Code`; `Signed-off-by: Claude <noreply@anthropic.com>` | **all rejected** |
+
+New attempts against the delta:
+
+| # | Target | Attempt | Result |
+|---|---|---|---|
+| X1 | `docker-gate` | can a Docker suite pass silently? no Docker + `REQUIRE_DOCKER` unset → visible SKIPPED; set → exit 1; `REQUIRE_DOCKER=0` → exit 1 | no silent path found |
+| X2 | `pytest_docker` | `-m "not requires_docker"` under `REQUIRE_DOCKER=1`; plugin disabled; `FS_DOCKER_AVAILABLE=1` override | deselection still fails (exit 4); disabling the plugin fails on strict markers; the override makes tests run (and fail if Docker is absent), so no silent pass |
+| X3 | runtime skips under `REQUIRE_DOCKER` | test body `pytest.skip("docker not reachable")` (plugin active, `REQUIRE_DOCKER=1`, plugin sees no marker) | **passes as "skipped"**, exit 0. JUnit `Assumptions`/`@Testcontainers(disabledWithoutDocker = true)` behave the same way, and CI has no "fail on skipped" rule (DR-3) |
+| X4 | test_tags | `@Testcontainers(disabledWithoutDocker = true)` class; custom meta-annotation `@Pending`; `abstract` `@Test`; `pytest.importorskip` at module level; class `__test__ = False`; `getattr(pytest.mark, "skip")`; Playwright `test.fixme`; `it.only` sibling; `const d = describe.skip`; `test.describe.configure({mode:'skip'})` | **all counted as tagged tests** (DR-3) |
+| X5 | benchmark rule | NFR-PERF-02 `DONE` with `docs/benchmarks/2026-09-20-NFR-PERF-02.json` containing CI-runner numbers | **no error** (DR-2) |
+| X6 | benchmark rule | NFR-PERF-02 `DONE` with evidence `docs/benchmarks/hardware.md` | **no error**: the hardware record itself counts as a "measurement file" (DR-2) |
+| X7 | benchmark rule | `VERIFIED_AT_REDUCED_SCALE` with `machine: github-actions-ubuntu-24-04` after adding a lower-case `## github-actions-ubuntu-24-04` section | **no error**: nothing distinguishes a dedicated machine from a CI runner (DR-2) |
+| X8 | benchmark rule | NFR-PERF-02 `DONE` with only a CI run URL | **caught** ("needs a measurement file") |
+| X9 | benchmark rule | `MOB-PERF-01` / `D-16` `DONE` with only a CI run URL | **no error**: not in `BENCHMARK_ROWS` (DR-2) |
+| X10 | compose_budget | extra service with **no `profiles`** (starts with every profile) and 8 g limit | **not counted**, 0 errors (DR-4) |
+| X11 | compose_budget | `deploy.replicas: 4` × 1000 m | counted once (DR-4) |
+| X12 | compose_budget | `mem_limit: 8g` with no deploy limit / interpolated `${MEM:-1g}` / `1GiB` | errors or exceptions (fails closed; the exception is a traceback, not a message) |
+| X13 | scope guard | pragma inside a fenced code block in `docs/**/*.md` | accepted (DR-9) |
+| X14 | scope guard | prefix `title: <D-47 title>` on another YAML row's title | scope guard passes; **seed check catches it** |
+| X15 | commit_msg | `Assisted-by: Claude`; `Co-developed-by: Claude <noreply@anthropic.com>`; body line `Made with Cursor`; `feat: updated things across modules` | **all accepted** (R-8 remainder) |
+| X16 | licences | `MIT OR GPL-3.0-only`, `(MIT AND (GPL-2.0-only OR BSD-3-Clause))`, `Apache-2.0 WITH LLVM-exception` | allowed (correct SPDX semantics); `LicenseRef-Proprietary` (dev) unidentified; malformed `MIT AND` unidentified |
+
+Mutants (tools test suite, `--no-cov`):
+
+| # | Mutation | Result |
+|---|---|---|
+| D1 | `tools/bin/docker-gate`: `REQUIRE_DOCKER` branch disabled | **SURVIVED**: no test exercises the script (DR-6) |
+| D2 | `pytest_docker.py`: `REQUIRE_DOCKER` ignored | killed |
+| D3 | `pytest_docker.py`: summary line removed | killed |
+| D4 | `pytest_docker.py`: skip marker not added | killed |
+| B1 | `evidence.py`: measurement-file rule removed | killed |
+| B2 | `evidence.py`: machine rule removed | killed |
+| B3–B5 | see R-1 row | killed |
+| C1 | `compose_budget.py`: budget comparison +1024 slack | killed |
+| C2 | `compose_budget.py`: missing limit allowed | killed |
+| C3 | `compose_budget.py`: core budget 4096 → 8192 | killed |
+| S1 | `scope_guard.py`: pragma allowed in every file | killed |
+| S2 | `scope_guard.py`: allowlisted directories skip path check | killed |
+| S3 | `scope_guard.py`: whole YAML skipped | killed |
+| S4 | `scope_guard.py`: allowlist prefix match | **SURVIVED** (DR-6) |
+| J1 | `test_tags/java.py`: disabling annotations ignored | killed (3 tests) |
+| Y1 | `test_tags/python.py`: `xfail` no longer disables | killed |
+| K1 | `commit_msg.py`: tool sign-off rule removed | killed |
+| G1 | `tools/bin/gitleaks`: cached-binary re-verification disabled | **SURVIVED**: no test exercises the script (DR-6) |
+
+## Devcontainer and CI inspection
+
+- **Plausibility.** The devcontainer is mostly sound: base image pinned by digest, pinned
+  features, uv checksum-verified, a Docker wait loop, and a `.post-create-ok` sentinel checked by
+  the workflow so a partial setup cannot pass. Failures do surface: run 35181726205 went red.
+  **But the first run failed during post-create**, and the cause is unknown from public data. It
+  failed after about 3 minutes, before any long `make ci` step could plausibly finish. Likely
+  suspects to check in the log: `uv run pre-commit install --install-hooks` in a workspace whose
+  owner UID differs from the container user (git "dubious ownership"), and Corepack or pnpm
+  download prompts. `remoteEnv.PATH` uses `${containerEnv:HOME}`, which is unset if the image
+  defines no `HOME` in its container environment; post-create exports `PATH` itself, so this
+  affects the terminal but not post-create.
+- **Post-create runs the full `REQUIRE_DOCKER=1 make ci`**, including licences and the stack, on
+  every Codespace creation. That is slow (>10 min expected) and any flaky check marks creation as
+  failed. This is acceptable as a verification choice, but it is the author's everyday environment.
+- **Workflow triggers** omit inputs that post-create's `make ci` depends on (`uv.lock`,
+  `pyproject.toml`, `tools/**`, `frontend/package.json`, `frontend/pnpm-lock.yaml`,
+  `backend/pom.xml`, `infrastructure/docker/scripts/**`). The weekly `schedule` runs only on the
+  default branch, which is still `m0/bootstrap` (DR-7).
+- **`REQUIRE_DOCKER: "1"` at workflow level** is correct: all jobs run on `ubuntu-24.04`, where a
+  Docker daemon exists. The `java` and `python` jobs call Maven/pytest directly, not through the
+  Makefile gate, so JUnit runtime skips are unguarded (DR-3).
+- **Governance token.** Job-level `permissions: {contents: read, actions: read}` replaces the
+  workflow default for that job only. The token is passed only to the `fs-traceability check`
+  step. This is least-privilege and correct. Pull requests from forks get a read-only token,
+  which is enough for `GET /actions/runs/{id}`. A 403 from rate limiting is reported as "not valid
+  evidence" (an error), which can fail CI spuriously but never passes silently.
+
+## Owner follow-ups interpreted by the author (item e)
+
+| Item | Author's interpretation | Assessment |
+|---|---|---|
+| Memory budget per compose profile | `fs-compose-budget`: every service needs a limit; core 4,096 / ml 6,144 / obs 5,120 / full 10,240 MiB; runs in governance | **Reasonable** and mechanically sound (C1–C3 killed). Gaps: services without `profiles`, replicas (DR-4). The ml/obs/full numbers precede any service that uses them and should be marked provisional. They are presented as part of an owner decision (DR-5) |
+| ADR 0009 boundary cases | table of SPDX `OR`/`AND`/`WITH`, authoritative-field rule, unknown classifier members block, GPL-family denied, LGPL dev-only, bare BSD unidentified, version-pinned exceptions (nodeenv, ArchUnit) | **Reasonable and tested**. My probes (X16, R-4 repeats) agree with the table |
+| Resilience4j on Boot 4.1 | traceability note on NFR-REL-01: M6 circuit-breaker integration test in a Boot 4.1 context is the compatibility proof, with a fallback to the core library | **Reasonable** for M0. At M6 this must become a tagged test named in the row |
+| Provenance | ADR 0010 is headed "Accepted (repository owner decision)" and its Decision section includes the budget numbers and benchmark enforcement design, which the author supplied | Mixing author interpretation into a record attributed to the owner blurs A.3 rule 1 accountability (DR-5) |
+
+## Findings
+
+### Status of re-review findings
+
+| # | Severity | Status | Verified by reviewer |
+|---|---|---|---|
+| R-1 | MINOR | RESOLVED | ancestry and API checks (`evidence.py:52-86`); fabricated URL is an error in CI; B3–B5 killed |
+| R-2 | MINOR | RESOLVED | N3–N5 caught; S1–S3 killed. S4 survivor and code-block pragma tracked as DR-6 / DR-9 |
+| R-3 | MINOR | RESOLVED for every listed form | all 10 forms excluded. Further forms and runtime skips tracked as DR-3 |
+| R-4 | MINOR | RESOLVED | single authoritative field (`licences.py:305-321`); SPDX parser; GPL-family denied; LGPL recognised; bare BSD unidentified; tests `test_licences_policy.py` |
+| R-5 | MINOR | RESOLVED | ADR 0009 cites D-17 and E.12 with the A.4 item 1 argument, labels the M0 cases as examples, plans M6 generative properties; D-17 row note; `backend/README.md:19` corrected |
+| R-6 | MINOR | RESOLVED | history note `docs/walkthrough/M0.md:94` |
+| R-7 | NIT | RESOLVED (untested, DR-6) | binary SHA-256 re-checked on every run (`tools/bin/gitleaks`) |
+| R-8 | NIT | PARTIALLY_RESOLVED | listed forms rejected; `Assisted-by: Claude`, `Co-developed-by: Claude <noreply@anthropic.com>`, "Made with Cursor", `feat: updated things across modules` pass (X15) |
+| R-9 | NIT | RESOLVED | ADR 0003:18 states patch-level pin and build resolution |
+| R-10 | NIT | RESOLVED | `smoke-test.sh:83-86` asserts `smoke.txt` in the bucket; passed in run 35181726185 (robustness: DR-8) |
+
+### New findings
+
+| # | Severity | Location | Finding | Required action | Status |
+|---|---|---|---|---|---|
+| DR-1 | MAJOR | `.devcontainer/post-create.sh`; `.devcontainer/devcontainer.json`; `.github/workflows/devcontainer.yml`; `README.md` (Option A); ADR 0010 Decision item 2 | The devcontainer workflow's first run (**35181726205**, b08ba61) **failed**: `postCreateCommand … post-create.sh` exited non-zero after about 3 min. The README tells the author to use Codespaces for all Docker work, and ADR 0010 says "the Codespaces setup itself is tested", so the owner's decision (b) is not met. The workflow triggers on push when `.devcontainer/**`, `Makefile` or `docker-compose.yml` change, so creating `main` from this branch will very likely run it and put a red check on `main` (A.3 rule 7). | Read the job log (authenticated), fix the failing post-create step, and get a **green devcontainer run** on the branch head before fast-forwarding `main`. Record the run ID with the stack evidence. Until it is green, mark Codespaces in README and ADR 0010 as "unverified". | OPEN |
+| DR-2 | MINOR | `tools/src/fraudshield_tools/evidence.py:96-114, 197-213`; `docs/adr/0010-…md` Decision item 4 ("`fs-traceability check` enforces this") | A CI-runner number **can** close a benchmark row. (a) `DONE` needs only an evidence path starting with `docs/benchmarks/`, and `docs/benchmarks/hardware.md` itself qualifies (X5, X6). (b) The machine rule applies only to `VERIFIED_AT_REDUCED_SCALE`, not to `DONE`. (c) Any lower-case `## <id>` heading counts as a recorded machine, including a CI runner section (X7). (d) `BENCHMARK_ROWS` omits rows whose criteria are timings (e.g. `MOB-PERF-*`, FR-04-07 "render within 1 second", D-13, D-16), which can close on a CI run URL (X9). | For every evidenced status of a benchmark row, require `machine: <id>`. The machine section must declare `dedicated: yes` (a line the checker reads), and `DONE` must be impossible until one exists. Exclude `hardware.md` as a measurement file, and require the measurement file to name the same machine ID. Derive or extend `BENCHMARK_ROWS` to cover every timing, throughput or render-time criterion (or record the exclusions in ADR 0010). Add tests for X5–X7 and X9. Must be done before the first benchmark row moves (FR-02-02 in M3). | OPEN |
+| DR-3 | MINOR | `tools/src/fraudshield_tools/pytest_docker.py`; `.github/workflows/ci.yml` (java, python jobs); `tools/src/fraudshield_tools/test_tags/{python,java,typescript}.py` | Docker tests can still pass silently at runtime, and never-running tests still count. Under `REQUIRE_DOCKER=1`, `pytest.skip()` in a test body passes (X3). JUnit `Assumptions` or `@Testcontainers(disabledWithoutDocker = true)` would skip without failing the `java` job. Tag discovery counts `disabledWithoutDocker` classes, custom disabling meta-annotations, `abstract` tests, module `importorskip`, `__test__ = False`, `getattr` marks, Playwright `test.fixme`, `it.only` siblings, aliased `describe.skip` and `describe.configure({mode:'skip'})` (X4). ADR 0004 documents only "runtime skips and non-literal conditions". | Under `REQUIRE_DOCKER`: make the pytest plugin fail the session when any test is skipped (or skipped for a Docker reason), and add a JUnit Platform `TestExecutionListener` (or a Surefire report check in CI) that fails on skipped tests. Forbid `disabledWithoutDocker` with a Checkstyle regexp. Extend test_tags for `fixme`, `.only`, `importorskip`, `__test__ = False` and `abstract`, or document each form in ADR 0004. Bring forward counting only executed, passed tests before any milestone with Docker-dependent Must rows closes (M1). | OPEN |
+| DR-4 | MINOR | `tools/src/fraudshield_tools/compose_budget.py:39-58` | Services without `profiles` start with every profile but are added to no profile total (X10), so a new unprofiled service bypasses the budget entirely. `deploy.replicas` is ignored (X11). Unparseable limits raise a traceback instead of a reported error (X12). | Count unprofiled services in every budgeted profile (or reject them), multiply by `replicas`, catch `BudgetError` into the error list, and add tests. | OPEN |
+| DR-5 | MINOR | `docs/adr/0010-container-stack-verified-in-ci-not-on-authors-laptop.md:3, 38-42, 68-71`; `docs/walkthrough/M0.md:76`; `docs/reviews/M0/stack-gate-evidence.md` (missing) | (a) ADR 0010 is recorded as an owner decision but also contains author interpretations of follow-ups the owner never put in writing: the budget numbers and the benchmark-enforcement design. The ADR does not separate the two. (b) The ADR requires stack runs to be "recorded with run IDs in `docs/reviews/M0/stack-gate-evidence.md`", which does not exist, and the walkthrough already says the stack "needed three consecutive green runs" in the past tense. | Split ADR 0010 into owner decisions (a–d, as given) and author proposals (budgets, enforcement mechanics, the ADR 0009 boundary table, the NFR-REL-01 plan) marked "pending owner confirmation". Create `stack-gate-evidence.md` with run IDs 35178641969, 35179479949, 35181726185 (commits, dates, job conclusions), plus the run for the merge candidate. | OPEN |
+| DR-6 | NIT | `tools/bin/docker-gate`; `tools/bin/gitleaks`; `tools/src/fraudshield_tools/scope_guard.py:57-61` | Three mutants survive: D1 (`REQUIRE_DOCKER` branch of `docker-gate` disabled), G1 (gitleaks cached-binary check disabled) and S4 (allowlist prefix match). The shell gates the Docker decision rests on have no tests. | Add subprocess tests: `docker-gate` with a stub `docker` on `PATH` (available / unavailable × `REQUIRE_DOCKER` set / unset / `0`), and `gitleaks` with a tampered cache in a temporary `XDG_CACHE_HOME`. Add a test that `docs/adr/0008-out-of-scope-content-guard.md.bak` is not exempt. | OPEN |
+| DR-7 | NIT | `.github/workflows/devcontainer.yml:7-24` | Path triggers omit files that post-create's `make ci` depends on (lockfiles, `pyproject.toml`, `tools/**`, `frontend/package.json`, `backend/pom.xml`, `infrastructure/docker/scripts/**`). The weekly schedule only runs on the default branch (currently `m0/bootstrap`). | Add those paths (or run on every PR to `main`), and set `main` as the default branch (O-1). | OPEN |
+| DR-8 | NIT | `infrastructure/docker/scripts/smoke-test.sh:83-86` | `… | tee /dev/stderr | grep -q 'smoke.txt' || fail …` runs under `pipefail`. If `grep -q` exits before `tee` finishes writing, `tee` gets SIGPIPE and the pipeline fails although the artifact exists. | Capture the listing in a variable, print it, then test it with `grep -q`. | OPEN |
+| DR-9 | NIT | `tools/src/fraudshield_tools/scope_guard.py` (`PRAGMA_SCOPE`) | The pragma is honoured inside fenced code blocks in `docs/**/*.md` (X13), so code samples in docs can carry banned identifiers. | Ignore the pragma inside fenced blocks, or accept this and record it in ADR 0008. | OPEN |
+| R-8 (remainder) | NIT | `tools/src/fraudshield_tools/commit_msg.py:37-49` | See the R-8 status row (X15). | Forbid `Assisted-by`/`Co-developed-by` trailers and tool identities in any trailer; treat `updated things …` as a placeholder prefix; add tests. | OPEN |
+
+## Evidence reproduced (claimed vs measured)
+
+| Claim | Measured | Match |
+|---|---|---|
+| Local `make ci` prints SKIPPED for Docker suites, never silent (ADR 0010 item 3) | two SKIPPED lines (java, stack-test); plus the pytest summary line when marked tests exist | yes |
+| `REQUIRE_DOCKER=1` turns a missing daemon into a failure | `make stack-test` and `make test-java` exit 2; pytest exit 4 | yes |
+| All CI jobs set `REQUIRE_DOCKER=1` | workflow-level `env` in `ci.yml` | yes (JUnit runtime skips unguarded, DR-3) |
+| Three consecutive green `stack` runs before merge/tag (ADR 0010 item 1) | 35178641969, 35179479949, 35181726185 all green, no failure in between | yes (evidence file missing, DR-5) |
+| The devcontainer workflow tests the Codespaces setup (commit 2f9f864) | run 35181726205 **failure** in post-create | **no** (DR-1) |
+| Benchmark rows cannot use CI-runner numbers; `fs-traceability check` enforces this (ADR 0010 item 4) | X5–X7, X9 pass | **no** (DR-2) |
+| `fs-compose-budget` fails if any service lacks a limit or a profile exceeds its budget | limits and totals enforced; unprofiled services and replicas not counted | partly (DR-4) |
+| core profile 3,968 / 4,096 MiB | `compose-budget: core 3968/4096` | yes |
+| Licence boundary table (ADR 0009) | my probes agree with every row checked | yes |
+| Pinned devcontainer image, features, action, uv checksum (commit 2f9f864) | all verified upstream | yes |
+| "tools/tests (120 tests, 95.9% coverage)" (commit c772a97) | not re-derived at c772a97; at b08ba61: 131 tests, 92.94 % | not reproduced for that commit; consistent with later commits adding code |
+| 5 new commit messages meet G.3 | `fs-commit-msg`: 0 problems | yes |
+
+## Residual risks
+
+- **Codespaces is unproven** until DR-1 is fixed. From M1 onward, Docker-dependent work has no
+  verified interactive environment, only CI.
+- **Three green stack runs over about 50 minutes on shared runners** show the MLflow fix holds
+  under normal conditions, but not under runner contention. A future red stack run should reset
+  the count, as ADR 0010's own wording implies.
+- **Benchmark integrity** depends on review until DR-2 is fixed. The first exposure is M3
+  (`benchmark.py features`).
+- **Runtime-skipped tests** in CI (DR-3) could hide missing Docker coverage once Testcontainers
+  suites arrive in M1.
+- Unchanged from the re-review: the Resilience4j Boot 4.0 build, tag-pinned images, the
+  deliberately insecure dev stack, and no branch protection or default branch until the owner acts.
+
+## Does anything block the M0 closing plan?
+
+Plan: 3 consecutive green stack runs → fast-forward `main` → milestone review from a clean
+worktree of `main` → close M0 in `milestones.yaml` → tag `m0-complete`.
+
+- **Step 1 (3 green stack runs):** satisfied by 35178641969, 35179479949, 35181726185.
+  `stack-gate-evidence.md` still has to be written (DR-5). The commit actually fast-forwarded,
+  which will include this review record and the DR fixes, needs its own green `ci` run. Any red
+  `stack` run before then resets the count.
+- **Step 2 (fast-forward `main`): BLOCKED by DR-1.** The devcontainer workflow is red on the
+  branch head, will run when `main` is created, and `main` must be green. Fix it, get a green
+  `devcontainer` run and a green `ci` run on the same head commit, then fast-forward without force.
+- **Steps 3–5 (milestone review, `milestones.yaml`, tag):** no additional blocker from this delta.
+  DR-5 (provenance split and evidence file) should be done before the milestone review so that
+  review has correct records. DR-2, DR-3 and DR-4 may be scheduled (DR-2 before M3; DR-3 before
+  M1 closes), with R-8 and DR-6 … DR-9 tracked as issues. The earlier tag conditions still apply:
+  the tagged commit's CI green including `stack`, D-47/D-48 final with evidence, and the owner
+  setting `main` as default branch with protection (or recorded as an open owner action).
