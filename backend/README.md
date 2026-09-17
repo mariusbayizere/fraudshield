@@ -16,5 +16,5 @@ ArchUnit tests enforce this per module.
 | `auth`, `staff-api` | planned | M7 |
 | `notify`, `sar`, `verify-web` | planned | M6–M8 |
 
-**Test.** `./mvnw -B -ntp verify` runs Checkstyle (Google style), JUnit 5 + jqwik, SpotBugs with
+**Test.** `./mvnw -B -ntp verify` runs Checkstyle (Google style), JUnit 5 (property cases from seeded generators; jqwik removed, ADR 0009), SpotBugs with
 FindSecBugs and the JaCoCo line-coverage gate (≥ 85%).

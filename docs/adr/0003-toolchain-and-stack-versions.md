@@ -15,7 +15,7 @@ Amended during the M0 review, before first merge to `main` (findings 13 and owne
 
 | SRS names | Upstream status on 2026-09-17 | Decision |
 |---|---|---|
-| Java 21 | LTS, supported; latest Temurin GA 21.0.12+8 (2026-07) | **Java 21.0.12** — CI pins Temurin `21.0.12`; the build machine runs Ubuntu OpenJDK 21.0.12; the Maven enforcer accepts `[21,22)` so any patched 21 builds locally, while CI fixes the patch level for reproducible results |
+| Java 21 | LTS, supported; Adoptium lists 21.0.12+8 and its respin 21.0.12.1+1 as the latest GA builds (2026-07) | **Java 21.0.12** — CI pins the *patch release* `21.0.12` (the Temurin build within it, including respins, is resolved by `actions/setup-java` and shown in the job log); the devcontainer uses SDKMAN `21.0.12-tem`; the build machine runs Ubuntu OpenJDK 21.0.12; the Maven enforcer accepts `[21,22)` locally |
 | Spring Boot 3 | 3.5 OSS support ended 2026-06-30; Spring Framework 6.2 EOL 2026-06-30, last release 2026-06-08 | **Spring Boot 4.1.1** (Spring Framework 7.0; supported to 2027-07-31) |
 | Python (unversioned; prompt: 3.12) | 3.12 security-only until 2028-10, still patched | **Python 3.12.14** (uv-managed) |
 | React 18 | active support ended 2024-12 | **React 19.3** |

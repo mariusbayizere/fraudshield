@@ -19,6 +19,8 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
+    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
 - id: FR-01-02
   section: 3.1 FR-01 Transaction ingestion API
   title: 'Transaction schema: transaction_id (UUID), account_id (tokenised), counterparty_id (tokenised),
@@ -92,6 +94,8 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
+    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
 - id: FR-01-07
   section: 3.1 FR-01 Transaction ingestion API
   title: OpenAPI 3.1 specification served at /api/docs with request/response examples for all 6 channel
@@ -139,6 +143,8 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
+    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
 - id: FR-02-03
   section: 3.2 FR-02 ML fraud scoring engine
   title: XGBoost + LightGBM probabilities isotonic-regression calibrated; Expected Calibration Error <
@@ -214,6 +220,8 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
+    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
 - id: FR-02-08
   section: 3.2 FR-02 ML fraud scoring engine
   title: 'Shadow mode: new model scores every transaction alongside production model; only production
@@ -243,6 +251,8 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
+    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
 - id: FR-02-10
   section: 3.2 FR-02 ML fraud scoring engine
   title: 'Model versioning: every ScoringResult records model_version string; old model continues scoring
@@ -272,6 +282,8 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
+    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
 - id: FR-03-02
   section: 3.3 FR-03 Risk decision and auto-block engine
   title: 'MEDIUM risk (0.60-0.84): transaction held; published to analyst queue; 30-second countdown;
@@ -302,6 +314,8 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
+    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
 - id: FR-03-04
   section: 3.3 FR-03 Risk decision and auto-block engine
   title: 'Customer SMS on auto-block: masked account number, transaction amount, currency, timestamp,
@@ -900,6 +914,8 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
+    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
 - id: NFR-PERF-02
   section: 4.1 Performance
   title: Auto-block end-to-end latency
@@ -914,6 +930,8 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
+    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
 - id: NFR-PERF-03
   section: 4.1 Performance
   title: ML ensemble scoring latency
@@ -927,6 +945,8 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
+    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
 - id: NFR-PERF-04
   section: 4.1 Performance
   title: Feature engineering latency
@@ -940,6 +960,8 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
+    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
 - id: NFR-PERF-05
   section: 4.1 Performance
   title: Analyst dashboard real-time update
@@ -953,6 +975,8 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
+    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
 - id: NFR-PERF-06
   section: 4.1 Performance
   title: SHAP waterfall chart render
@@ -966,6 +990,8 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
+    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
 - id: NFR-PERF-07
   section: 4.1 Performance
   title: Alert feed initial load
@@ -979,6 +1005,8 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
+    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
 - id: NFR-PERF-08
   section: 4.1 Performance
   title: Google OAuth login flow
@@ -992,6 +1020,8 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
+    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
 - id: NFR-PERF-09
   section: 4.1 Performance
   title: System availability
@@ -1018,6 +1048,8 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
+    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
 - id: NFR-SEC-01
   section: 4.2 Security
   title: Encryption at rest
@@ -1175,6 +1207,10 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M6: circuit-breaker integration test (ML scorer down -> rule-based fallback within 5 s) runs
+    in a Spring Boot 4.1 context and is the compatibility proof for resilience4j-spring-boot4 2.4.0, built
+    against Boot 4.0.0 (ADR 0007); fallback plan: resilience4j-circuitbreaker core with explicit beans.
+    Tagged requires-docker if it uses Testcontainers (ADR 0010).'
 - id: NFR-REL-02
   section: 4.3 Reliability
   title: Kafka broker failure
@@ -1235,6 +1271,8 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
+    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
 - id: NFR-REL-06
   section: 4.3 Reliability
   title: Google OAuth service unavailable
@@ -2446,6 +2484,8 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
+    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
 - id: ML-GATE-13
   section: 7.2 Model deployment gate
   title: Shadow mode AUC-ROC delta
@@ -2798,6 +2838,8 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
+    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
 - id: TEST-10
   section: 9 Testing requirements
   title: 'Performance: ML Throughput'
@@ -2813,6 +2855,8 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
+    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
 - id: TEST-11
   section: 9 Testing requirements
   title: 'Frontend: Unit'
@@ -3236,6 +3280,8 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: jqwik removed (ADR 0009, A.4 item 1); M6 decision-engine property tests use a JUnit 5 extension
+    with per-run logged seeds; close as DONE_WITH_DEVIATION citing ADR 0009.
 - id: D-18
   section: Build prompt Part B defect register
   title: '"Exactly 30 s" and "exactly at 5%" need tolerances and minimum volume.'

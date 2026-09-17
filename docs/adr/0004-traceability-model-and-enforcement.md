@@ -53,8 +53,11 @@ NFR-PERF-09 99.9% monthly availability, which only a production month can show),
 `@pytest.mark.req("ID", …)`, and Vitest/Playwright titles starting `[ID]` or `[ID, ID]`
 (`fraudshield_tools.test_tags`). Python is parsed with `ast`; Java and TypeScript are scanned
 after removing comments, across lines; skipped and disabled tests are ignored. An unknown tag
-fails the check. Limitation: tests skipped at runtime are still counted; from M9, CI derives tags
-from executed test reports and counts only passed tests.
+fails the check. Only upper-case, ID-shaped JUnit tags are requirement tags; lower-case tags
+(for example `requires-docker`, ADR 0010) are execution groups. Tags count only on tests enabled
+unconditionally (M0 re-review finding R-3). Limitation: runtime skips and non-literal conditions
+are still counted; from M9, CI derives tags from executed test reports and counts only passed
+tests.
 
 **Evidence and deviations** (amended during the M0 review). Each evidence entry must start with
 an existing repository path, a commit SHA present in the repository, or a GitHub Actions run URL

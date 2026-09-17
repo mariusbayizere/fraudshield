@@ -18,8 +18,20 @@
 | Python (pytest) | `@pytest.mark.req("FR-02-04", "D-05")` |
 | TypeScript (Vitest/Playwright) | test title starting `[FR-04-04]` or `[D-33, UX-DASH-01]` |
 
-`uv run fs-traceability check` fails on unknown IDs, on completed rows without evidence, and
-on Must rows in closed milestones without tagged tests.
+`uv run fs-traceability check` fails on unknown IDs, on completed rows without verifiable
+evidence, and on Must rows in closed milestones without tagged tests.
+
+## Tests that need Docker
+
+| Language | Marker |
+|---|---|
+| Java | `@Tag("requires-docker")` |
+| Python | `@pytest.mark.requires_docker` |
+| Make target | wrap the command in `tools/bin/docker-gate <suite> <ci-job> -- …` |
+
+Without Docker they print `SKIPPED: … requires Docker, verified in CI`; with `REQUIRE_DOCKER=1`
+(CI, Codespaces) a missing daemon fails the run (ADR 0010). Performance numbers used for gates come
+only from a machine recorded in `docs/benchmarks/hardware.md`, never from CI runners.
 
 ## Commits
 
