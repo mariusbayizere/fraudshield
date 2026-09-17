@@ -79,7 +79,11 @@ path = client.download_artifacts(run.info.run_id, "smoke.txt", "/tmp")
 assert open(path).read() == "smoke"
 print("artifact round-trip ok; artifact_uri =", run.info.artifact_uri)
 PY
-compose exec -T object-store sh -c 'echo "fs.ls -l /buckets/mlflow-artifacts" | weed shell -master=127.0.0.1:9333' | head -5
+# The artifact must exist as an object in the S3 bucket, not only through the MLflow API.
+compose exec -T object-store sh -c \
+  'echo "fs.tree /buckets/mlflow-artifacts" | weed shell -master=127.0.0.1:9333' \
+  | tee /dev/stderr | grep -q 'smoke.txt' || fail "smoke.txt not found in the mlflow-artifacts bucket"
+echo "artifact present in the object store"
 
 step "mailpit and wiremock ready"
 compose exec -T mailpit /mailpit readyz && echo "mailpit ready"
