@@ -48,9 +48,11 @@ Format: ID · title · source · priority · due · description · acceptance.
   sets `main` as the default branch so the nightly schedule runs.
 
 ### GOV-6 · Line pragma inside fenced code blocks
-- **Source:** DR-9 (NIT) · **Priority:** low · **Due:** M2
+- **Source:** DR-9 (NIT) · **Priority:** low · **Due:** M2 · **Status:** CLOSED in M2
 - **Acceptance:** the scope-guard pragma is ignored inside fenced code blocks in Markdown, or ADR 0008
   documents that it is honoured there.
+- **Closed by:** the guard tracks fence state and honours the pragma only outside a fence; a test
+  shows a fenced pragma failing to exempt its line while unfenced ones still do.
 
 ### GOV-7 · Commit-message tool attribution trailers
 - **Source:** R-8 remainder (NIT) · **Priority:** low · **Due:** M2 (re-dated at the M1 close: no such trailer has appeared; governance is time-boxed)

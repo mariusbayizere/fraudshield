@@ -7,7 +7,9 @@ Exemptions, all reviewed rather than silent (ADR 0008):
   D-47 decision record, and review records. File *paths* are checked everywhere.
 * The generated traceability YAML and matrix are scanned in full (including progress fields
   such as ``notes``), except the D-47 row's verbatim title.
-* A line pragma ``scope-guard: allow D-47`` exempts that line, only in Markdown under ``docs/``.
+* A line pragma ``scope-guard: allow D-47`` exempts that line, only in Markdown under ``docs/``
+  and only outside fenced code blocks: inside a fence the pragma is part of an example being
+  shown, not a decision to exempt this repository's own text (GOV-6).
 
 Content is never rephrased merely to avoid the guard.
 """
@@ -40,6 +42,7 @@ TRACEABILITY_MATRIX = "docs/traceability/requirements_matrix.md"
 DEFECT_ROW_WITH_TERMS = "D-47"
 LINE_PRAGMA = "scope-guard: allow D-47"
 PRAGMA_SCOPE = re.compile(r"^docs/.+\.md$")
+FENCE = re.compile(r"^\s*(`{3,}|~{3,})")
 BINARY_SUFFIXES = {
     ".docx",
     ".png",
@@ -80,8 +83,27 @@ def _scannable_content(rel: str, text: str, d47_title: str | None) -> str:
         ]
         return "\n".join(lines)
     if PRAGMA_SCOPE.match(rel):
-        return "\n".join(line for line in text.splitlines() if LINE_PRAGMA not in line)
+        return "\n".join(_without_pragma_lines(text))
     return text
+
+
+def _without_pragma_lines(text: str) -> list[str]:
+    """Drop pragma lines, but honour the pragma only outside fenced code blocks (GOV-6).
+
+    A fence quotes text rather than asserting it: documentation that shows what the pragma looks
+    like, or quotes a file that uses it, must not thereby exempt itself.
+    """
+    kept: list[str] = []
+    fence = ""
+    for line in text.splitlines():
+        marker = FENCE.match(line)
+        if marker and not fence:
+            fence = marker.group(1)
+        elif marker and line.lstrip().startswith(fence):
+            fence = ""
+        if fence or LINE_PRAGMA not in line:
+            kept.append(line)
+    return kept
 
 
 def violations(root: Path, files: list[Path]) -> dict[str, list[str]]:

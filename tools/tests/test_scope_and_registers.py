@@ -88,6 +88,22 @@ def test_allowlist_and_line_pragma(tmp_path: Path) -> None:
     assert found == {"docs/walkthrough/q.md": [_TRI], "docs/walkthrough/w.md": [_PAT]}
 
 
+@pytest.mark.req("D-47")
+def test_the_line_pragma_is_inert_inside_a_fenced_code_block(tmp_path: Path) -> None:
+    """GOV-6: a fence quotes text rather than asserting it, so it cannot exempt itself."""
+    page = tmp_path / "docs/walkthrough/fenced.md"
+    page.parent.mkdir(parents=True)
+    page.write_text(
+        f"exempt here {_PAT} <!-- {LINE_PRAGMA} -->\n"
+        "```\n"
+        f"quoted example {_TRI} <!-- {LINE_PRAGMA} -->\n"
+        "```\n"
+        f"exempt again {_PAT} <!-- {LINE_PRAGMA} -->\n"
+    )
+
+    assert violations(tmp_path, [page]) == {"docs/walkthrough/fenced.md": [_TRI]}
+
+
 def _seed_tree(tmp_path: Path) -> Path:
     for rel in (
         "docs/srs/FraudShield_SRS_v1_0.md",
