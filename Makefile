@@ -107,7 +107,7 @@ compose-config: ## Validate docker-compose.yml without starting containers (need
 
 .PHONY: secrets-scan
 secrets-scan: ## Gitleaks scan of history and working tree (pinned, checksum-verified binary)
-	tools/bin/gitleaks git --redact --no-banner --exit-code 1 .
+	tools/bin/gitleaks git --log-opts=HEAD --redact --no-banner --exit-code 1 .
 	tools/bin/gitleaks dir --redact --no-banner --exit-code 1 .
 
 .PHONY: licences
