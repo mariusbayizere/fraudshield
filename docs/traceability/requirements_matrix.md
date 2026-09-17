@@ -208,7 +208,7 @@ Rows: 258. Status counts: DONE 5, DONE_WITH_DEVIATION 1, IN_PROGRESS 9, NOT_STAR
 | TEST-13 | M | M9 | NOT_STARTED | Security | — | — | — | — |
 | TEST-14 | M | M4 | NOT_STARTED | ML Evaluation Gate | — | — | — | — |
 | RES-01 | M | M2 | NOT_STARTED | FraudShield-EAC-Transactions dataset | — | — | — | D-08<br>D-09 |
-| RES-02 | M | M2 | NOT_STARTED | Dataset datasheet | — | — | — | D-09 |
+| RES-02 | M | M2 | NOT_STARTED | Dataset datasheet | — | dataset/tests/test_params.py:14<br>dataset/tests/test_params.py:14<br>dataset/tests/test_params.py:14<br>dataset/tests/test_params.py:14<br>dataset/tests/test_params.py:14<br>dataset/tests/test_params.py:14<br>dataset/tests/test_params.py:14 | — | D-09 |
 | RES-03 | M | M11 | NOT_STARTED | Trained model weights | — | — | — | — |
 | RES-04 | M | M11 | NOT_STARTED | SHAP analysis notebook | — | — | — | — |
 | RES-05 | M | M11 | NOT_STARTED | Training and evaluation pipeline | — | — | — | — |
@@ -221,7 +221,7 @@ Rows: 258. Status counts: DONE 5, DONE_WITH_DEVIATION 1, IN_PROGRESS 9, NOT_STAR
 | D-05 | M | M4 | NOT_STARTED | Calibrating two models separately, then averaging, does not yield a calibrated ensemble; SHAP additivity is only exact in each model's margin space. | — | — | — | — |
 | D-06 | M | M4 | NOT_STARTED | Isolation Forest score range and threshold conflict. | — | — | — | — |
 | D-07 | M | M2 | NOT_STARTED | Temporal split definitions disagree | — | — | — | — |
-| D-08 | M | M2 | NOT_STARTED | Results on synthetic data can look perfect and prove nothing. | — | — | — | — |
+| D-08 | M | M2 | NOT_STARTED | Results on synthetic data can look perfect and prove nothing. | — | dataset/tests/test_params.py:14<br>dataset/tests/test_params.py:14<br>dataset/tests/test_params.py:14<br>dataset/tests/test_params.py:14<br>dataset/tests/test_params.py:14<br>dataset/tests/test_params.py:14<br>dataset/tests/test_params.py:14 | — | — |
 | D-09 | M | M4 | IN_PROGRESS | Unsupported numeric claims in the SRS | docs/research/claims_register.md | — | — | — |
 | D-10 | M | M6 | NOT_STARTED | Alert volume will overwhelm analysts; the 30-second MEDIUM timer then auto-releases most risky transactions. | — | contracts/tests/test_events.py:179 | — | — |
 | D-11 | M | M5 | NOT_STARTED | Shadow "within 1%" is ambiguous and labels are delayed. | — | — | — | — |

@@ -1,0 +1,26 @@
+[project]
+name = "fraudshield-dataset"
+version = "0.1.0"
+description = "FraudShield-EAC-Transactions synthetic data generator, realism checks and reports (ADR 0022)"
+requires-python = "==3.12.*"
+license = "Apache-2.0"
+dependencies = [
+    "numpy==2.5.3",
+    "pyarrow==25.0.1",
+    "PyYAML==6.0.3",
+]
+
+[project.scripts]
+fs-dataset = "fraudshield_dataset.cli:main"
+
+[build-system]
+requires = ["hatchling==1.32.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fraudshield_dataset"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["req(*ids): links a test to requirement or defect IDs in docs/traceability/requirements.yaml"]
+addopts = "-rs --strict-markers --import-mode=importlib --cov=fraudshield_dataset --cov-branch --cov-report=term-missing:skip-covered --cov-fail-under=90"

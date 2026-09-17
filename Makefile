@@ -56,15 +56,15 @@ ps: ## Show local stack status
 
 .PHONY: lint
 lint: ## Lint and format-check all components
-	uv run ruff check tools ml contracts
-	uv run ruff format --check tools ml contracts
+	uv run ruff check tools ml contracts dataset
+	uv run ruff format --check tools ml contracts dataset
 	$(PNPM) lint
 	$(PNPM) format:check
 	$(MVNW) -q checkstyle:check
 
 .PHONY: typecheck
 typecheck: ## Strict type checks (mypy, tsc)
-	uv run mypy tools/src tools/tests ml/src ml/tests contracts/src contracts/tests
+	uv run mypy tools/src tools/tests ml/src ml/tests contracts/src contracts/tests dataset/src dataset/tests
 	$(PNPM) typecheck
 
 .PHONY: test-python
@@ -72,6 +72,7 @@ test-python: ## Python unit tests with the 90% line-coverage gate (SRS 8.1)
 	cd tools && uv run pytest -q
 	cd ml && uv run pytest -q
 	cd contracts && uv run pytest -q
+	cd dataset && uv run pytest -q
 
 .PHONY: test-java
 test-java: ## Java build, unit tests, SpotBugs and coverage gate (requires-docker tests need Docker)
@@ -104,6 +105,7 @@ governance: ## Defect register, traceability and scope checks (D.2, D-47)
 	uv run fs-compose-budget
 	uv run fs-contract-baselines --against origin/main
 	uv run fs-migration-guard --against origin/main
+	uv run fs-dataset provenance --check
 
 .PHONY: traceability
 traceability: ## Regenerate the traceability matrix from YAML and test tags

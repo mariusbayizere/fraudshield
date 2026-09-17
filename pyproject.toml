@@ -8,7 +8,7 @@ requires-python = "==3.12.*"
 package = false
 
 [tool.uv.workspace]
-members = ["tools", "ml", "contracts"]
+members = ["tools", "ml", "contracts", "dataset"]
 
 [dependency-groups]
 dev = [
@@ -30,7 +30,7 @@ select = ["E", "F", "W", "I", "N", "UP", "B", "S", "A", "C4", "DTZ", "PT", "RET"
 ignore = ["PLR2004"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["fraudshield_tools", "fraudshield_ml", "fraudshield_contracts"]
+known-first-party = ["fraudshield_tools", "fraudshield_ml", "fraudshield_contracts", "fraudshield_dataset"]
 
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**" = ["S101", "PLR0913"]

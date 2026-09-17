@@ -1,0 +1,12 @@
+description: Overall fraud prevalence targets.
+parameters:
+  fraud_rate_overall:
+    value: 0.0087
+    unit: fraction of transactions labelled fraud (true label)
+    provenance: CALIBRATED_TO_SRS_TARGET
+    citation: SRS v1.0 section 7.1, ML-DATA-02 (0.87% overall)
+  fraud_rate_test:
+    value: 0.0091
+    unit: fraction of transactions labelled fraud in the temporal hold-out test set (true label)
+    provenance: CALIBRATED_TO_SRS_TARGET
+    citation: SRS v1.0 section 7.1, ML-DATA-02 (test set slightly higher, 0.91%)

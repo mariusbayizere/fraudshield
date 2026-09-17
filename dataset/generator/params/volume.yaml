@@ -1,0 +1,23 @@
+description: Size, span and growth of the simulated transaction stream.
+parameters:
+  total_rows_target:
+    value: 5200000
+    unit: transactions
+    provenance: CALIBRATED_TO_SRS_TARGET
+    citation: SRS v1.0 section 7.1, ML-DATA-01 (at least 5,000,000; 4.16M train / 520K validation / 520K test)
+    rationale: The three split sizes named in ML-DATA-01 sum to 5.2M, so the generator targets 5.2M rather than the 5M floor.
+  simulation_months:
+    value: 24
+    unit: months
+    provenance: CALIBRATED_TO_SRS_TARGET
+    citation: SRS v1.0 section 7.1, ML-DATA-06 (24 months simulation)
+  start_month:
+    value: "2024-01"
+    unit: calendar month (YYYY-MM)
+    provenance: ASSUMED
+    rationale: Calendar anchor for weekdays, month ends and school-fee terms; any recent 24-month window serves, and the data is synthetic.
+  monthly_growth_rate:
+    value: 0.03
+    unit: relative month-over-month increase in transaction volume
+    provenance: ASSUMED
+    rationale: D-07 requires realistic volume growth over 24 months; 3% per month roughly doubles volume over the span, a modelling choice not taken from a published series.
