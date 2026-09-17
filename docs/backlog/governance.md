@@ -78,6 +78,9 @@ Format: ID · title · source · priority · due · description · acceptance.
   conclude "success".
 - **Acceptance:** evidence records and any automated run verification check the named job ran and
   succeeded (`GitEvidenceVerifier.ci_run` inspects jobs, not only the run conclusion).
+- **Status:** CLOSED in M2. `ci_run` fetches the run's jobs and accepts the run as evidence only if
+  every job concluded success; a skipped job is named in the verdict. Tests cover a skipped job, a
+  run reporting no jobs, and the existing run-level rejections.
 
 ### GOV-11 · D-17 must close on the M6 decision-engine property tests
 - **Source:** M0 milestone review F-2 (NIT) · **Priority:** medium · **Due:** M6

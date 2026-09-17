@@ -169,11 +169,27 @@ def test_git_verifier_queries_actions_api(tmp_path: Path, monkeypatch: pytest.Mo
         1: {"conclusion": "success", "head_sha": "good"},
         2: {"conclusion": "failure", "head_sha": "good"},
         3: {"conclusion": "success", "head_sha": "elsewhere"},
+        4: {"conclusion": "success", "head_sha": "good"},
+        5: {"conclusion": "success", "head_sha": "good"},
+    }
+    # GOV-10: a run concludes success even when a path filter skipped one of its jobs.
+    jobs: dict[int, Any] = {
+        1: {"jobs": [{"name": "python", "conclusion": "success"}]},
+        4: {
+            "jobs": [
+                {"name": "changes", "conclusion": "success"},
+                {"name": "stack", "conclusion": "skipped"},
+            ]
+        },
+        5: {"jobs": []},
     }
 
     def fake_urlopen(request: Any, timeout: int) -> io.BytesIO:
         assert request.headers["Authorization"] == f"Bearer {FAKE_TOKEN}"
-        run_id = int(request.full_url.rsplit("/", 1)[1])
+        url = request.full_url.split("?", 1)[0]
+        if url.endswith("/jobs"):
+            return io.BytesIO(json.dumps(jobs[int(url.rsplit("/", 2)[1])]).encode())
+        run_id = int(url.rsplit("/", 1)[1])
         if run_id == 404:
             raise urllib.error.HTTPError(request.full_url, 404, "Not Found", {}, None)  # type: ignore[arg-type]
         if run_id == 500:
@@ -181,8 +197,12 @@ def test_git_verifier_queries_actions_api(tmp_path: Path, monkeypatch: pytest.Mo
         return io.BytesIO(json.dumps(responses[run_id]).encode())
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-    assert verifier.ci_run(1) == RunVerdict(True, "success")
+    assert verifier.ci_run(1) == RunVerdict(True, "success, 1 job(s) succeeded")
     assert verifier.ci_run(2).verified is False
     assert verifier.ci_run(3).verified is False
     assert verifier.ci_run(404) == RunVerdict(False, "Actions API returned HTTP 404")
     assert verifier.ci_run(500).verified is None
+    skipped = verifier.ci_run(4)
+    assert skipped.verified is False
+    assert "stack skipped" in skipped.detail
+    assert verifier.ci_run(5) == RunVerdict(False, "run reports no jobs")
