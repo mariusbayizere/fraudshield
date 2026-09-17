@@ -15,6 +15,7 @@ step() {
 # Every failure path goes through fail(), which in GitHub Actions also emits an error
 # annotation, readable through the public API without log access.
 fail() {
+  "$(dirname "$0")/collect-stack-diagnostics.sh" >&2 || true
   echo "smoke test failed in step '${current_step}': $1" >&2
   if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
     echo "::error title=smoke test failed::step '${current_step}': $1"
@@ -91,4 +92,5 @@ step "mailpit and wiremock ready"
 compose exec -T mailpit /mailpit readyz && echo "mailpit ready"
 compose exec -T wiremock curl -fsS http://127.0.0.1:8080/__admin/health && echo
 
+"$(dirname "$0")/collect-stack-diagnostics.sh"
 step "all smoke checks passed"

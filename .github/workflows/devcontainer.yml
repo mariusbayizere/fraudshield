@@ -89,6 +89,28 @@ jobs:
             node --version
             pnpm --version
             make smoke
+      # MLflow HTTP 500 investigation: resources and service logs from the smoke test (redacted),
+      # as an artifact and as annotations readable without authentication.
+      - name: Stack diagnostics
+        if: always()
+        shell: bash
+        run: |
+          dir=build/stack-diagnostics
+          [[ -d "$dir" ]] || { echo "no stack diagnostics collected"; exit 0; }
+          escape() { local t=$1; t=${t//'%'/'%25'}; t=${t//$'\r'/'%0D'}; t=${t//$'\n'/'%0A'}; printf '%s' "$t"; }
+          echo "::notice title=devcontainer stack resources::$(escape "$(head -c 3500 "$dir/resources.txt")")"
+          if [[ "${{ job.status }}" != "success" ]]; then
+            for service in mlflow object-store; do
+              [[ -f "$dir/logs-$service.txt" ]] || continue
+              echo "::error title=devcontainer ${service} log tail::$(escape "$(tail -n 60 "$dir/logs-$service.txt" | tail -c 3500)")"
+            done
+          fi
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: devcontainer-stack-diagnostics
+          path: build/stack-diagnostics
+          if-no-files-found: ignore
       # Output inside the container is not parsed for annotations; the post-create log is written
       # to the mounted workspace, so report its tail from the runner (readable without log access).
       - name: Report post-create log on failure
