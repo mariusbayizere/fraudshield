@@ -27,6 +27,12 @@ public record Money(BigDecimal amount, CurrencyCode currency) {
   /** Total significant digits stored, matching {@code DECIMAL(18,4)}. */
   public static final int STORAGE_PRECISION = 18;
 
+  /** Smallest non-zero magnitude that {@code DECIMAL(18,4)} can store: 0.0001. */
+  public static final BigDecimal SMALLEST_STORABLE_MAGNITUDE = new BigDecimal("0.0001");
+
+  /** Largest magnitude that {@code DECIMAL(18,4)} can store: 99,999,999,999,999.9999. */
+  public static final BigDecimal LARGEST_STORABLE_MAGNITUDE = new BigDecimal("99999999999999.9999");
+
   /**
    * Creates a money value, rejecting amounts that cannot be stored exactly.
    *
@@ -49,6 +55,28 @@ public record Money(BigDecimal amount, CurrencyCode currency) {
   /** Parses a decimal string such as {@code "15000"} or {@code "1250.50"}. */
   public static Money of(String amount, CurrencyCode currency) {
     return new Money(new BigDecimal(amount), currency);
+  }
+
+  /**
+   * The smallest amount expressible in the currency's minor unit, for example 1 RWF or 0.01 KES.
+   */
+  public static Money smallestMinorUnit(CurrencyCode currency) {
+    return new Money(BigDecimal.ONE.movePointLeft(currency.minorUnitDigits()), currency);
+  }
+
+  /**
+   * Returns this value if the amount is strictly greater than zero.
+   *
+   * <p>For boundaries that require {@code amount > 0}, such as transaction ingestion (build prompt
+   * E.1).
+   *
+   * @throws IllegalArgumentException if the amount is zero or negative
+   */
+  public Money requirePositive() {
+    if (!isPositive()) {
+      throw new IllegalArgumentException("amount must be greater than zero");
+    }
+    return this;
   }
 
   /** Whether the amount is strictly greater than zero. */

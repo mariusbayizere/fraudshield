@@ -230,7 +230,7 @@ Rows: 258. Status counts: IN_PROGRESS 7, NOT_STARTED 251.
 | D-14 | M | M6 | NOT_STARTED | MEDIUM "hold for 30 seconds" cannot be an open HTTP request. | — | — | — | — |
 | D-15 | M | M6 | NOT_STARTED | "Buffer up to 10,000 transactions in memory" loses data if the pod dies. | — | — | — | — |
 | D-16 | M | M5 | NOT_STARTED | Python in the hot path at 10k TPS. | — | — | — | — |
-| D-17 | M | M6 | NOT_STARTED | pytest is listed for the Risk Decision Engine, which is a Spring Boot service. | — | — | — | — |
+| D-17 | M | M6 | NOT_STARTED | pytest is listed for the Risk Decision Engine, which is a Spring Boot service. | — | backend/common/src/test/java/io/github/mariusbayizere/fraudshield/common/money/MoneyBoundaryTest.java:21 | — | — |
 | D-18 | M | M6 | NOT_STARTED | "Exactly 30 s" and "exactly at 5%" need tolerances and minimum volume. | — | — | — | — |
 | D-19 | M | M7 | NOT_STARTED | API keys "stored as bcrypt hash" cannot be verified at 10,000 TPS | — | — | — | — |
 | D-20 | M | M1 | NOT_STARTED | "PostgreSQL TDE" does not exist in community PostgreSQL 16. | — | — | — | — |
@@ -256,7 +256,7 @@ Rows: 258. Status counts: IN_PROGRESS 7, NOT_STARTED 251.
 | D-40 | M | M8 | NOT_STARTED | Lighthouse removed its PWA category in Lighthouse 12, | — | — | — | — |
 | D-41 | M | M8 | NOT_STARTED | iOS web push only works for Home-Screen-installed PWAs | — | — | — | — |
 | D-42 | M | M8 | NOT_STARTED | Feature phones (KaiOS/Opera Mini, 240 px, 2G) will not run a bank analyst console, and analysts are staff with smartphones or PCs. | — | — | — | — |
-| D-43 | M | M8 | IN_PROGRESS | SRS has no localisation, yet serves Rwanda and the EAC. | backend/common/src/main/java/io/github/mariusbayizere/fraudshield/common/money/Money.java<br>backend/common/src/main/java/io/github/mariusbayizere/fraudshield/common/money/CurrencyCode.java | backend/common/src/test/java/io/github/mariusbayizere/fraudshield/common/money/MoneyTest.java:19<br>backend/common/src/test/java/io/github/mariusbayizere/fraudshield/common/money/MoneyTest.java:27<br>backend/common/src/test/java/io/github/mariusbayizere/fraudshield/common/money/MoneyTest.java:46 | — | — |
+| D-43 | M | M8 | IN_PROGRESS | SRS has no localisation, yet serves Rwanda and the EAC. | backend/common/src/main/java/io/github/mariusbayizere/fraudshield/common/money/Money.java<br>backend/common/src/main/java/io/github/mariusbayizere/fraudshield/common/money/CurrencyCode.java | backend/common/src/test/java/io/github/mariusbayizere/fraudshield/common/money/MoneyBoundaryTest.java:22<br>backend/common/src/test/java/io/github/mariusbayizere/fraudshield/common/money/MoneyTest.java:19<br>backend/common/src/test/java/io/github/mariusbayizere/fraudshield/common/money/MoneyTest.java:27<br>backend/common/src/test/java/io/github/mariusbayizere/fraudshield/common/money/MoneyTest.java:46 | — | — |
 | D-44 | M | M8 | NOT_STARTED | "Undo within 5 seconds" conflicts with immutable decisions and immediate side effects | — | — | — | — |
 | D-45 | M | M8 | NOT_STARTED | SHAP chart "all 44 features ranked" overwhelms under time pressure. | — | — | — | — |
 | D-46 | M | M8 | NOT_STARTED | Leaflet base-map tiles from public servers break the CSP, data residency and 2G usability; per-point fraud maps can expose individuals. | — | — | — | — |
