@@ -152,3 +152,18 @@ the decision engine M6, staff identity, admin and audit M7).
 - **Acceptance:** ADR 0019 requires every Spring service with database access to depend on the
   module (or its guard), states that R2DBC is out of scope unless matched, and a test covers a
   `FactoryBean`-produced data source.
+
+### PB-23 · Catalogue test: every token column carries `is_token`
+- **Source:** M1 delta re-check (MINOR) · **Priority:** medium · **Due:** M6 (tokenisation at ingestion)
+- **Problem:** `SchemaPoliciesTest` rejects raw values in the four `transactions` token columns only;
+  the other `CHECK (is_token(...))` columns (V3 `fraud_scores`, V5 blocks, notifications, freezes) are
+  not asserted.
+- **Acceptance:** a catalogue test fails when any `*_token` text column lacks an `is_token` CHECK.
+
+### PB-24 · Migration guard robustness
+- **Source:** M1 delta re-check (NITs) · **Priority:** low · **Due:** M2
+- **Problem:** blob ids are computed from working-tree bytes (false positives with eol filters); a
+  new migration whose version sorts below the highest merged one is not flagged; the guard's tests
+  are tagged D-31 although the guard is governance (PB-20).
+- **Acceptance:** compare with `git hash-object --path`; reject out-of-order versions; retag the
+  tests; D-31 evidence no longer cites them.

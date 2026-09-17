@@ -232,3 +232,114 @@ MINOR-1..4 and the NITs may go into the closing commit or be re-dated in the bac
 ---
 
 Housekeeping: the review worktree `…/scratchpad/fs-review-m1` has been removed, and `git worktree list` no longer lists it. The 17 databases my runs created on 127.0.0.1:55432 were dropped, and the database list matches the pre-review snapshot. The main checkout was not touched: its existing modification to `docs/reviews/M1/database-recheck.md` and the untracked `.claude/` directory were already there. I used 6 GitHub API requests.
+
+## Delta re-check
+
+Date: 2026-09-17 (UTC)   Branch/commit: `m1/close` @ 837f31d43d9d (on top of `main` 754ade1: 2f40a67 tests and tag fixes, 31774f5 migration guard, 837f31d re-plan and closing docs)   Reviewer role: Principal Reviewer (independent)
+Scope: what Decisions (a) asks for (ADR and seed change, persistence suite, MU5 and MU6, `traceability-check` with `completed: [M0, M1]`), plus PB-20 and a check of how MINOR-1..4 and the NITs were handled. Per the owner's pace direction, only BLOCKER and MAJOR findings are raised; smaller points go to the backlog. The GitHub API was not called.
+Verdict: **APPROVED_WITH_MINORS**
+
+### Checks re-run (clean worktree at 837f31d, `PATH=$HOME/.local/bin:$PATH`)
+
+| Command | Result |
+|---|---|
+| `uv sync --all-packages --locked` | exit 0 |
+| `cd backend && FRAUDSHIELD_TEST_POSTGRES_URL=… ./mvnw -B -ntp verify -pl persistence -am` (local PG16 + TimescaleDB 2.30.0) | **BUILD SUCCESS, 60 tests, 0 failures, 0 skipped**, 3 m 22 s. DatabaseSecurityTest 20, DemoDataSeederTest 5, DemoSeedGuardTest 13, SyntheticDataGuardCoverageTest 3, SyntheticDataGuardTest 7, SyntheticDataFlagTest 5, **SchemaPoliciesTest 7**. Checkstyle 0 violations, SpotBugs clean |
+| MU5: V10 `SELECT add_retention_policy('audit_events', drop_after => interval '7 years');` deleted; `-Dtest=SchemaPoliciesTest -Dsurefire.failIfNoSpecifiedTests=false` | **killed**: `compressionAndRetentionPoliciesMatchTheRetentionRules:76`. The policy map lacked `audit_events:policy_retention=7 years`. BUILD FAILURE, 1 of 7 failed |
+| MU6: V3 `is_token` body → `SELECT p_value IS NOT NULL`; same test selection | **killed**: `rawPhoneAndAccountNumbersAreRejectedInTokenColumns[1..4]` (`account_token`, `counterparty_token`, `device_token`, `agent_token`). 4 of 7 failed |
+| Restore | `git checkout -- .` after each mutation; `git status --short` empty |
+| `uv run fs-traceability-seed --check` | `traceability seed up to date`, exit 0 |
+| `uv run fs-traceability check` (`milestones.yaml`: `current: M2`, `completed: [M0, M1]`) | `258 rows, 171 tagged tests, 0 errors, 0 warnings`, exit 0 |
+| Does that check actually catch a problem? (D-32 milestone temporarily set back to M1) | `ERROR D-32: Must row in closed M1 has status IN_PROGRESS` → 2 errors. Restored → 0 errors |
+| `uv run fs-migration-guard --against 754ade1` | `11 merged migrations, 0 changed`, exit 0 |
+| Does the guard actually catch a problem? (one line appended to V1) | `ERROR …V1__tenancy_and_common_functions.sql: modified after it was merged…`, exit 1. Restored |
+| `uv run pytest tools/tests/test_migration_guard.py` | 5 passed |
+| Database cleanup | 9 databases created by these runs (found by diffing `pg_database` before and after) dropped with `DROP DATABASE … WITH (FORCE)`. The list now matches the snapshot taken before the runs (`fraudshield_db`, `postgres`, `template0`, `template1`) |
+
+### MAJOR-1: **RESOLVED**
+
+- **The re-plan is honest and complete.** `docs/adr/0021-m1-scope-replan.md` takes each of the four rows in turn:
+  - what M1 delivered;
+  - what remains;
+  - the new milestone, and why that milestone (it builds the component the row needs).
+
+  It matches this review's recommendation exactly:
+  - D-20 → M6, with KMS, encrypted volumes, Redis TLS and NetworkPolicy in M9.
+  - NFR-SEC-03 → M7, with the vault and tokenisation in M6.
+  - D-32 → M7: signed Merkle-root job and `fraudshield audit verify`.
+  - D-49 → M9: Kubernetes.
+
+  The "delivered" column claims nothing that is missing. D-20 honestly lists only the Compose instance. D-49's claim that the features are "exercised by tests" is now true through SchemaPoliciesTest.
+- **The seed applies the re-plan, citing the ADR.** In `traceability_seed.py`:
+  - `DEFECT_MILESTONES` now keeps only D-30 and D-31 on M1.
+  - D-20, D-32 and D-49 have explicit entries, under a comment citing ADR 0021 and MAJOR-1.
+  - `ROW_MILESTONE_OVERRIDES["NFR-SEC-03"] = "M7"` carries the same reference.
+
+  `--check` is green.
+- **The moved rows' statuses are justified.**
+  - D-20 is NOT_STARTED / M6.
+  - NFR-SEC-03, D-32 and D-49 are IN_PROGRESS on M7, M7 and M9.
+  - Each row's `notes` records the M1 part delivered and the remaining part per milestone, and `deviations` cites ADR 0021.
+- **The remaining M1 rows' statuses are justified by their evidence.**
+  - FR-01-07 DONE. Evidence: tagged `test_openapi.py` tests (the SRS route test is now tagged too), `test_openapi_examples.py:84` (tagged), 754ade1, this review. The `/api/docs` note closes NIT-2.
+  - NFR-SEC-05 DONE. Evidence: `appRoleCannotUpdateOrDeleteAppendOnlyTables`, which now carries the tag.
+  - D-30 DONE. Evidence: the append-only test plus `autoBlockStateIsDerivedFromAppendOnlyFacts`, which walks blocked → SMS sent → verified → unblocked → frozen and checks that bank B sees nothing. ADR 0017 was moved from `deviations` to `implementation`, as asked.
+  - D-31 DONE_WITH_DEVIATION. ADR 0017 is cited, and the deviation (hypertables use views plus an insert guard; `outbox_events` has no RLS) is spelled out in `notes`.
+- **Threat model §3.4 is aligned.** The PII vault row now reads "M6 (envelope encryption, key provider) / M9 (TLS, KMS, volumes, network policy)", cites ADR 0021, and names the interim control: token-only columns.
+- **Remaining conditions for the closing commit:**
+  - Several `evidence` entries cite "milestone-review.md (… and delta re-check)", so this section must be appended before the tag.
+  - `milestones.yaml` was set to `completed: [M0, M1]` ahead of this verdict. That is consistent once this APPROVED_WITH_MINORS is recorded.
+
+### MAJOR-2: **RESOLVED**
+
+`SchemaPoliciesTest` covers every item MAJOR-2 asked for:
+- **(a) Compression and retention policies.** An exact `containsExactlyInAnyOrderEntriesOf` over `timescaledb_information.jobs`: audit retention 7 years and compression 30 days; shadow retention 180 days and compression 7 days; compression 30 days on `transactions` and `fraud_scores`. Tagged D-32 and D-49.
+- **(b) Continuous aggregates.** Both aggregates and their refresh schedules (15 min and 5 min). No direct SELECT for `fs_app` or `fs_app_readonly`, SELECT only through the `v_` views. Tenant isolation checked through both views, including rows not yet materialised.
+- **(c) Token columns.** Raw E.164 phone numbers, local phone numbers, 16-digit card numbers, too-short tokens and wrong-case prefixes are rejected with SQLSTATE 23514 in all four `transactions` token columns. A valid `tok_…` value is accepted. Tagged NFR-SEC-03 and FR-01-02.
+- **(d) `v_auto_block_status`.** The state walk and the cross-tenant check described under D-30 above. Tagged D-30.
+
+MU5 and MU6 are both killed (table above). No main-source migration changed in the three commits (`git diff --stat 754ade1 837f31d -- backend/persistence/src/main` is empty), so the PB-20 guard is satisfied.
+
+### MINOR-1..4 and NITs: how each was handled
+
+| Finding | Handling | Check |
+|---|---|---|
+| MINOR-1 | PB-20 implemented: `migration_guard.py`, 5 tests, in `make governance` and the CI governance job (`fetch-depth: 0`). GOV-2 → M3, GOV-4 → M3, GOV-5 → M2, GOV-7 → M2, GOV-10 → M2, GOV-14 → M3, each with a one-line reason. GOV-9 recorded as an open owner action, not verifiable from the build session | honest; GOV-2's reason (no runtime-skip form exists yet; `TestDatabase` throws) is accurate. GOV-9 must also appear in the Part J status block, per Decisions (b) item 4 |
+| MINOR-2 | Threat model: public CI diagnostics, including their redaction limits (non-`.env` and short secrets); `fs_migrator` misuse, with the residual for non-audit append-only tables stated; webhook secrets at rest (M6/M9); D-20 alignment | complete |
+| MINOR-3 | NFR-SEC-05 tag moved to the gate test; NFR-SEC-03 tag removed from the RLS test; `test_srs_named_routes_exist` tagged FR-01-07 | verified in the diff |
+| MINOR-4 | Backlog PB-21 (due M6, before the first audit writer); acceptance respects ADR 0012 and immutable migrations | acceptable deferral: no audit writer exists yet |
+| NIT-1 | Backlog PB-22 (due M5) | ok |
+| NIT-2 | FR-01-07 row note | ok |
+
+### New findings
+
+BLOCKER: none. MAJOR: none.
+
+### Backlog candidates (MINOR/NIT, one line each)
+
+- MINOR: `rawPhoneAndAccountNumbersAreRejectedInTokenColumns` checks only the four `transactions` columns. The other `CHECK (is_token(...))` columns (V3:121, V5:8/25/110) are not asserted per column. A catalogue test ("every `*_token text` column carries `is_token`") would back the "every customer identifier column" claim in the NFR-SEC-03 note and the threat model.
+- NIT: `migration_guard.blob_id` hashes working-tree bytes. A checkout with eol or filter attributes (for example `autocrlf` on Windows) would report false "modified" errors. Comparing `git hash-object --path` (or `git diff --name-status base -- MIGRATIONS`) would avoid that. Fold into PB-22 or a GOV item.
+- NIT: the guard does not flag a new migration whose version sorts below the highest merged one. Flyway refuses that on migrated databases unless `outOfOrder` is enabled.
+- NIT: `tools/tests/test_migration_guard.py` is tagged D-31 and is cited as D-31 evidence. The guard is PB-20 governance, not D-31's resolution. Harmless, but it inflates D-31 coverage.
+- NIT: NFR-SEC-03 lists ADR 0021 under `deviations`. ADR 0021 changes the milestone, not the requirement. Consider `notes` only, or a convention note in the traceability README.
+- NIT: threat model §3.1 (anchor signing, "planned (audit service)") and §4 R-2 ("Audit service milestone") could name M7, as ADR 0021 does.
+
+### Decision on closing M1
+
+**M1 may close.** MAJOR-1 and MAJOR-2 are resolved, and everything Decisions (a) required was reproduced.
+
+Tag `m1-complete` (annotated) only after all of the following:
+1. This delta re-check is appended to `docs/reviews/M1/milestone-review.md`.
+2. The remaining Decisions (b) items are in the closing commit:
+   - the `CHANGELOG.md` M1 entry;
+   - the Part J status block, with GOV-9 as an open owner action;
+   - the PB-20 `make down -v` note for local volumes migrated before the merge.
+3. `m1/close` reaches `main`.
+4. On that `main` commit, CI is green at job level:
+   - `ci` 7/7;
+   - `stack`: the `core compose stack healthy + smoke test` job actually **executed**, not skipped by path filters;
+   - `devcontainer`: `build-and-verify` actually **executed**.
+
+   The author checks CI and quotes the job-level results in the status block (GOV-10 practice).
+
+Housekeeping: the worktree `…/scratchpad/fs-delta-m1` was removed. `git worktree list` shows only the main checkout and the two existing `.claude/worktrees/agent-*` entries, which were not touched. The main checkout's working tree was not modified. 0 GitHub API requests.
