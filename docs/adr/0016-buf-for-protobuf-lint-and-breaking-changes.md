@@ -32,13 +32,19 @@ mutation cases.
    history) and in `make governance`. Until main contains the proto, it reports "not yet published".
    The committed descriptor baseline is deleted.
 4. **Verification.** `contracts/tests/test_proto_breaking.py` runs `buf lint`. It also runs
-   `buf breaking` on edited copies and requires the expected finding for every mutation case the
-   custom checker had, and for the review's surviving cases:
-   - renumbered field; field deleted without reserving, or with only its number reserved; type change;
-     rename; label change; oneof member type change;
-   - enum value renamed; enum value deleted without reserving;
-   - method removed; request or response made streaming; package changed;
-   - field or enum reservation dropped; reserved field or enum number reused.
+   `buf breaking` on edited copies and requires the expected finding for each of these cases:
+   - fields: renumbered; deleted without reserving, or with only its number reserved; type change;
+     rename; label change; oneof member type change; moved into a oneof;
+   - enum values: renamed; renumbered; deleted without reserving, or with only the number or only the
+     name reserved;
+   - declarations: message, enum, service or method deleted; request or response made streaming;
+     package changed;
+   - reservations: field or enum reservation dropped; reserved field or enum number reused.
+
+   The events final review (F-04) found that removing some configured rules went unnoticed. The
+   author then removed each deletion rule, and excluded `FIELD_SAME_ONEOF`, `MESSAGE_NO_DELETE`,
+   `ENUM_NO_DELETE` and `SERVICE_NO_DELETE`, one at a time, and confirmed that a test fails each
+   time.
 
    Adding a field, and removing a field or enum value with both reservations, must pass. A reserved
    number cannot be reused within one file, because protoc rejects that, so reuse is caught where the

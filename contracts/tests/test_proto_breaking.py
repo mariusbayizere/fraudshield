@@ -54,7 +54,49 @@ def test_proto_passes_buf_lint() -> None:
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+UNUSED_MESSAGE = ("message ScoreRequest {", "message Unused {}\n\nmessage ScoreRequest {")
+UNUSED_ENUM = (
+    "enum Channel {",
+    "enum UnusedKind {\n  UNUSED_KIND_UNSPECIFIED = 0;\n}\n\nenum Channel {",
+)
+UNUSED_SERVICE = (
+    "service ScoringService {",
+    "service UnusedService {}\n\nservice ScoringService {",
+)
+
 BREAKING = [
+    (
+        "enum value deleted, only its number reserved",
+        [],
+        [("  CHANNEL_BANK_TRANSFER = 6;\n", "  reserved 6;\n")],
+        "without reserving the name",
+    ),
+    (
+        "enum value deleted, only its name reserved",
+        [],
+        [("  CHANNEL_BANK_TRANSFER = 6;\n", '  reserved "CHANNEL_BANK_TRANSFER";\n')],
+        "without reserving the number",
+    ),
+    (
+        "enum value renumbered",
+        [],
+        [("CHANNEL_USSD = 4;", "CHANNEL_USSD = 7;")],
+        "was deleted without reserving the number",
+    ),
+    (
+        "field moved into a oneof",
+        [],
+        [
+            (
+                "  double shap_base_value = 12;\n",
+                "  oneof base {\n    double shap_base_value = 12;\n  }\n",
+            )
+        ],
+        "oneof",
+    ),
+    ("message deleted", [UNUSED_MESSAGE], [], 'Previously present message "Unused"'),
+    ("enum deleted", [UNUSED_ENUM], [], 'Previously present enum "UnusedKind"'),
+    ("service deleted", [UNUSED_SERVICE], [], 'Previously present service "UnusedService"'),
     (
         "renumbered field",
         [],

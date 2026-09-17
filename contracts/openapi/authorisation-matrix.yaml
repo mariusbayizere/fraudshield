@@ -205,6 +205,12 @@ operations:
   getConfigChange:
     roles: [RISK_OFFICER]
     ref: "Owner decision (ADR 0014)"
+  withdrawConfigChange:
+    roles: [RISK_OFFICER]
+    ref: "Owner decision (ADR 0014): the proposer withdraws a loosening proposal"
+    rules:
+      - { problem: not-change-proposer, status: 403 }
+      - { problem: change-not-open, status: 409 }
   approveConfigChange:
     roles: [RISK_OFFICER]
     ref: "Owner decision (ADR 0014): approval or confirmation by a different risk officer"

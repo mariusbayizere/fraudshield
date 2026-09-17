@@ -92,6 +92,26 @@ public record ConfigChange(
     return Optional.ofNullable(reviewedBy);
   }
 
+  ConfigChange withBaseline(ConfigSettings baseline) {
+    return new ConfigChange(
+        changeId,
+        direction,
+        status,
+        proposedBy,
+        proposedAt,
+        reason,
+        baseVersion,
+        baseline,
+        proposed,
+        confirmBy,
+        reviewedBy,
+        reviewedAt,
+        reviewReason,
+        effectiveAt,
+        revertedAt,
+        revertCause);
+  }
+
   ConfigChange withStatus(ChangeStatus newStatus) {
     return new ConfigChange(
         changeId,

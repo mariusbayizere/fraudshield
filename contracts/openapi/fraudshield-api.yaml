@@ -1483,7 +1483,8 @@ paths:
       operationId: proposeThresholdChange
       summary: Propose per-channel thresholds or MEDIUM timeout policy under dual control (FR-02-06, FR-05-07)
       description: |
-        The path keeps the SRS name (FR-02-06). Channels not listed keep their current values.
+        The path keeps the SRS name (FR-02-06). Channels not listed keep their current values, and
+        an entry without `medium_timeout_policy` keeps that channel's current policy.
         Owner decision (ADR 0014), asymmetric dual control. Only RISK_OFFICER proposes; ADMIN
         cannot. **Tightening** (a lower threshold, a lower circuit-breaker rate or volume, a
         longer clean reset, or RELEASE_WITH_TIMEOUT_LABEL → DECLINE_AND_VERIFY) takes effect at
@@ -1491,7 +1492,10 @@ paths:
         must confirm it within 24 hours, otherwise it is reverted automatically and a
         THRESHOLD_CHANGE audit event records the revert. **Loosening**, or a change mixing both,
         is PENDING_APPROVAL and takes effect within 60 s of approval by a different RISK_OFFICER.
-        At most one open change per kind; the proposal must name the version in effect.
+        A tightening is never blocked: it supersedes an open loosening proposal (SUPERSEDED) and
+        folds an unconfirmed tightening into itself, keeping that change's baseline, so one
+        confirmation keeps both and one revert restores the baseline. A loosening is refused while
+        another change of its kind is open. The proposal must name the version in effect.
         Semantic checks (422): `medium_threshold` < `high_threshold` (`thresholds_not_ordered`),
         at most one entry per channel (`duplicate_channel`), and a real change (`no_change`).
       x-required-roles: [RISK_OFFICER]
@@ -1499,7 +1503,7 @@ paths:
         - rule: The proposal must be based on the configuration version in effect
           problem: urn:fraudshield:problem:conflict
           status: 409
-        - rule: At most one change per configuration kind may wait for review
+        - rule: A loosening change is refused while another change of its kind waits for review (a tightening change supersedes it instead)
           problem: urn:fraudshield:problem:open-change-exists
           status: 409
         - rule: Proposed settings must differ from the settings in effect
@@ -1555,14 +1559,17 @@ paths:
         must confirm it within 24 hours, otherwise it is reverted automatically and a
         THRESHOLD_CHANGE audit event records the revert. **Loosening**, or a change mixing both,
         is PENDING_APPROVAL and takes effect within 60 s of approval by a different RISK_OFFICER.
-        At most one open change per kind; the proposal must name the version in effect.
+        A tightening is never blocked: it supersedes an open loosening proposal (SUPERSEDED) and
+        folds an unconfirmed tightening into itself, keeping that change's baseline, so one
+        confirmation keeps both and one revert restores the baseline. A loosening is refused while
+        another change of its kind is open. The proposal must name the version in effect.
         Changing the rolling window always counts as loosening.
       x-required-roles: [RISK_OFFICER]
       x-authorisation-rules:
         - rule: The proposal must be based on the configuration version in effect
           problem: urn:fraudshield:problem:conflict
           status: 409
-        - rule: At most one change per configuration kind may wait for review
+        - rule: A loosening change is refused while another change of its kind waits for review (a tightening change supersedes it instead)
           problem: urn:fraudshield:problem:open-change-exists
           status: 409
         - rule: Proposed settings must differ from the settings in effect
@@ -1636,6 +1643,38 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /config-changes/{change_id}/withdrawal:
+    post:
+      tags: [risk-officer]
+      operationId: withdrawConfigChange
+      summary: Withdraw a loosening proposal before review (proposer only)
+      description: >-
+        A tightening change cannot be withdrawn, because undoing it would loosen without a second
+        risk officer; it is confirmed, rejected or reverted at its deadline instead. A
+        THRESHOLD_CHANGE audit event (WITHDRAWN) is written.
+      x-required-roles: [RISK_OFFICER]
+      x-authorisation-rules:
+        - rule: Only the proposer can withdraw a change
+          problem: urn:fraudshield:problem:not-change-proposer
+          status: 403
+        - rule: Only a loosening change pending approval can be withdrawn
+          problem: urn:fraudshield:problem:change-not-open
+          status: 409
+      parameters:
+        - $ref: "#/components/parameters/ChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Withdrawn
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigChange" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AuthorisationRuleViolation" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/StateConflict" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
 
   /config-changes/{change_id}/approval:
@@ -2546,6 +2585,7 @@ components:
         - "urn:fraudshield:problem:own-decision-override"
         - "urn:fraudshield:problem:self-modification"
         - "urn:fraudshield:problem:self-review"
+        - "urn:fraudshield:problem:not-change-proposer"
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
@@ -2854,6 +2894,7 @@ components:
         - urn:fraudshield:problem:not-decision-author
         - urn:fraudshield:problem:own-decision-override
         - urn:fraudshield:problem:self-review
+        - urn:fraudshield:problem:not-change-proposer
         - urn:fraudshield:problem:not-found
         - urn:fraudshield:problem:not-acceptable
         - urn:fraudshield:problem:conflict
@@ -3675,8 +3716,11 @@ components:
           type: array
           minItems: 6
           maxItems: 6
-          description: Exactly one entry per channel
-          items: { $ref: "#/components/schemas/ChannelThreshold" }
+          description: Exactly one entry per channel, each with its MEDIUM timeout policy
+          items:
+            allOf:
+              - $ref: "#/components/schemas/ChannelThreshold"
+              - required: [medium_timeout_policy]
     ThresholdUpdate:
       type: object
       required: [base_version, channels, reason]
@@ -3699,8 +3743,9 @@ components:
         PENDING_APPROVAL (loosening, not applied), APPLIED_PENDING_CONFIRMATION (tightening, in
         effect until confirmed or reverted), APPROVED (loosening applied), CONFIRMED (tightening
         kept), REJECTED (loosening never applied), REVERTED (tightening undone by rejection or by
-        the 24-hour deadline).
-      enum: [PENDING_APPROVAL, APPLIED_PENDING_CONFIRMATION, APPROVED, CONFIRMED, REJECTED, REVERTED]
+        the 24-hour deadline), SUPERSEDED (replaced by a later tightening before review),
+        WITHDRAWN (loosening withdrawn by its proposer).
+      enum: [PENDING_APPROVAL, APPLIED_PENDING_CONFIRMATION, APPROVED, CONFIRMED, REJECTED, REVERTED, SUPERSEDED, WITHDRAWN]
     CircuitBreakerSettings:
       type: object
       description: >-
@@ -3759,11 +3804,11 @@ components:
             required: [direction]
           then:
             properties:
-              status: { enum: [APPLIED_PENDING_CONFIRMATION, CONFIRMED, REVERTED] }
+              status: { enum: [APPLIED_PENDING_CONFIRMATION, CONFIRMED, REVERTED, SUPERSEDED] }
               confirm_by: { $ref: "#/components/schemas/Timestamp" }
           else:
             properties:
-              status: { enum: [PENDING_APPROVAL, APPROVED, REJECTED] }
+              status: { enum: [PENDING_APPROVAL, APPROVED, REJECTED, SUPERSEDED, WITHDRAWN] }
               confirm_by: { type: "null" }
     ConfigSettingsValue:
       description: Complete settings of the change's kind
@@ -3781,22 +3826,14 @@ components:
         next_cursor: { type: [string, "null"] }
     ConfigReviewRequest:
       type: object
-      required: [change_version]
       additionalProperties: false
       properties:
-        change_version:
-          type: string
-          description: The status the reviewer saw; a different current status returns 409
-          enum: [PENDING_APPROVAL, APPLIED_PENDING_CONFIRMATION]
-        comment: { type: string, maxLength: 500 }
+        comment: { type: string, minLength: 1, maxLength: 500, description: Stored as the review reason }
     ConfigRejectionRequest:
       type: object
-      required: [change_version, reason]
+      required: [reason]
       additionalProperties: false
       properties:
-        change_version:
-          type: string
-          enum: [PENDING_APPROVAL, APPLIED_PENDING_CONFIRMATION]
         reason: { type: string, minLength: 10, maxLength: 500 }
     SarReport:
       type: object

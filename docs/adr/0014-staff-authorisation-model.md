@@ -60,20 +60,31 @@ Option 3.
      it then takes effect within 60 s of approval. Loosening means the opposite changes, including
      `DECLINE_AND_VERIFY` → `RELEASE_WITH_TIMEOUT_LABEL`; any change mixing tightening and loosening
      elements; and any change of the breaker's rolling window.
-   - At most one open change per kind, and a proposal must name the version in effect, so a revert
-     never overwrites a later change.
+   - A proposal must name the version in effect, and at most one change per kind is open. A
+     tightening is never blocked, so emergency tightening is always possible (events final review
+     F-01). A tightening supersedes an open loosening proposal (`SUPERSEDED`). It folds an unconfirmed
+     tightening into itself: the new change keeps that change's baseline and a new 24-hour deadline,
+     so one confirmation keeps both and one revert restores the baseline. A loosening is refused
+     (409) while another change of its kind is open. The proposer may withdraw a loosening proposal
+     (`WITHDRAWN`); a tightening cannot be withdrawn, because that would loosen without a second
+     officer.
    - The SRS path `PATCH /admin/thresholds` (FR-02-06) is kept as the threshold proposal.
      `PATCH /admin/circuit-breaker-settings` proposes breaker settings. `GET /config-changes` lists
-     pending changes, and `POST /config-changes/{id}/approval` and `…/rejection` review them.
-   - `fraudshield_contracts` declares the rules, and `common.config.DualControlWorkflow` implements
-     them with an injected clock. `DualControlWorkflowTest` covers: tightening immediate; loosening
-     pending until approved; confirmation; auto-revert at exactly 24 hours and not one nanosecond
-     before; rejection revert; self-approval 403; ADMIN, ANALYST and SENIOR_ANALYST 403; timeout
-     policy and breaker classification; mixed changes; stale versions; one open change per kind.
+     pending changes, `POST /config-changes/{id}/approval` and `…/rejection` review them, and
+     `…/withdrawal` withdraws a loosening proposal.
+   - The OpenAPI contract and the authorisation matrix declare the rules, and
+     `common.config.DualControlWorkflow` implements them with an injected clock. A contract test checks
+     that every domain refusal maps to a documented status and a catalogued problem type.
+     `DualControlWorkflowTest` covers:
+     - tightening immediate, loosening pending until approved, and confirmation;
+     - auto-revert at exactly 24 hours and not one nanosecond before, and revert on rejection;
+     - self-approval 403, and 403 for ADMIN, ANALYST and SENIOR_ANALYST;
+     - classification of each threshold and breaker element in both directions, and mixed changes;
+     - superseding, folding in, withdrawal, not found, and stale versions.
    - **Deviation:** FR-02-06 and FR-05-07 say a threshold change takes effect within 60 seconds.
      Loosening now takes effect within 60 seconds of *approval*, not of the request.
-   - Demo data seeds two RISK_OFFICER accounts so the flow can be demonstrated. This is added with
-     the M1 database seed.
+   - Demo data will seed two RISK_OFFICER accounts so the flow can be demonstrated. They are not
+     implemented yet; they come with the M1 database seed, with a test.
 4. **Least-privilege reads (CR-30).** Campaigns are Risk Officer only (FR-05-04). Circuit-breaker
    state is ADMIN only (FR-03-07 "admin panel"). ADMIN keeps read access to model performance because
    promotion and rollback decisions depend on it (FR-06-03).

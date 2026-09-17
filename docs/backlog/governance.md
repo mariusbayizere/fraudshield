@@ -96,3 +96,12 @@ Format: ID · title · source · priority · due · description · acceptance.
   checkouts; the message should name the cause.
 - **Acceptance:** when `git rev-parse --is-shallow-repository` is true, the error says the clone is
   shallow and how to fetch full history.
+
+### GOV-15 · Gitleaks self-test: same file name in another directory
+
+- **Source:** events final review F-11 (NIT), 2026-09-17.
+- **Problem:** an allowlist path widened to match the fixture's file name in any directory (for
+  example `^contracts/.*/signature-test-vectors\.json$`) is not caught; copies are planted only beside
+  the fixture and in an unrelated directory.
+- **Acceptance:** the self-test also plants each allowlisted value under the fixture's own file name
+  in a sibling directory, and that path widening fails it.

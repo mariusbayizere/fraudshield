@@ -498,11 +498,9 @@ examples:
       revert_cause: null
     next_cursor: null
   ConfigRejectionRequest:
-  - change_version: PENDING_APPROVAL
-    reason: Fraud on this channel is still rising
+  - reason: Fraud on this channel is still rising
   ConfigReviewRequest:
-  - change_version: APPLIED_PENDING_CONFIRMATION
-    comment: Confirmed with fraud operations
+  - comment: Confirmed with fraud operations
   DashboardStats:
   - high_open: 3
     medium_open: 11

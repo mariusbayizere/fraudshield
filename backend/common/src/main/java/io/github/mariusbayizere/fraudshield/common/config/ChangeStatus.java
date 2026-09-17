@@ -13,5 +13,12 @@ public enum ChangeStatus {
   /** A loosening change rejected by a second risk officer; never applied. */
   REJECTED,
   /** A tightening change undone, by rejection or because nobody confirmed it within 24 hours. */
-  REVERTED
+  REVERTED,
+  /**
+   * Replaced by a later tightening change of the same kind before review: a loosening proposal is
+   * dropped, and an unconfirmed tightening is folded into the new change, which keeps its baseline.
+   */
+  SUPERSEDED,
+  /** A loosening proposal withdrawn by its proposer before review. */
+  WITHDRAWN
 }

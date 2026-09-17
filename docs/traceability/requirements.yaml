@@ -677,7 +677,8 @@ requirements:
   deviations:
   - docs/adr/0014-staff-authorisation-model.md
   notes: 'Deviation (owner decision, ADR 0014 section 3): dual control as FR-02-06, including the MEDIUM
-    timeout policy; demo seed has two RISK_OFFICER accounts (M1 database work).'
+    timeout policy; two RISK_OFFICER demo accounts are still to be seeded, with a test, in the M1 database
+    work.'
 - id: FR-06-01
   section: 3.6 FR-06 Admin panel
   title: 'Admin creates staff accounts: first name, last name, email, phone (country code flag + dial

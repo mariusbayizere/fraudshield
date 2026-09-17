@@ -16,7 +16,8 @@
 //   label or oneof membership changes. contracts/tests/test_proto.py compares the compiled
 //   descriptor with contracts/proto/baseline/scoring-v1.json and fails on any such change.
 // * The scorer also serves the standard grpc.health.v1.Health service for orchestration probes;
-//   GetModelStatus below reports model versions for /api/v1/health/ml.
+//   GetModelStatus below reports model versions for the management-port /actuator/health/ml
+//   (ADR 0014).
 syntax = "proto3";
 
 package fraudshield.scoring.v1;
@@ -32,7 +33,7 @@ service ScoringService {
   // UNAVAILABLE the API's circuit breaker switches to the rule-based fallback (C.4).
   rpc Score(ScoreRequest) returns (ScoreResponse);
 
-  // Loaded-model information for /api/v1/health/ml and hot-swap monitoring. Liveness uses the
+  // Loaded-model information for /actuator/health/ml and hot-swap monitoring. Liveness uses the
   // standard grpc.health.v1.Health service, registered alongside this one.
   rpc GetModelStatus(GetModelStatusRequest) returns (GetModelStatusResponse);
 }

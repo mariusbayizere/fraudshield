@@ -13,9 +13,13 @@ public final class DualControlException extends RuntimeException {
     ROLE_NOT_PERMITTED(403, "urn:fraudshield:problem:forbidden"),
     /** The proposer cannot approve, confirm or reject their own change. */
     SELF_REVIEW(403, "urn:fraudshield:problem:self-review"),
+    /** Only the proposer may withdraw a proposal. */
+    NOT_PROPOSER(403, "urn:fraudshield:problem:not-change-proposer"),
+    /** No change with this identifier exists in the institution. */
+    CHANGE_NOT_FOUND(404, "urn:fraudshield:problem:not-found"),
     /** The change is no longer waiting for review. */
     CHANGE_NOT_OPEN(409, "urn:fraudshield:problem:change-not-open"),
-    /** Another change of the same kind is still waiting for review. */
+    /** A loosening change cannot be proposed while another change of its kind awaits review. */
     OPEN_CHANGE_EXISTS(409, "urn:fraudshield:problem:open-change-exists"),
     /** The proposal was made against an older configuration version. */
     STALE_BASE_VERSION(409, "urn:fraudshield:problem:conflict"),

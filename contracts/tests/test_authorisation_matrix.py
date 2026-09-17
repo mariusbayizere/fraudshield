@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import copy
+import re
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from fraudshield_contracts import CONTRACTS_ROOT
 from fraudshield_contracts.authorisation import declared_access, load_matrix, matrix_differences
 from fraudshield_contracts.openapi import load, operations
 
@@ -28,6 +30,7 @@ DUAL_CONTROL = (
     "getConfigChange",
     "approveConfigChange",
     "rejectConfigChange",
+    "withdrawConfigChange",
 )
 ADMIN_ONLY_OPERATIONS = {
     "listUsers",
@@ -264,3 +267,39 @@ def test_malformed_rows_and_undeclared_operations_are_reported(tmp_path: Path) -
     empty.write_text("rows: []\n", encoding="utf-8")
     with pytest.raises(ValueError, match="no operations mapping"):
         load_matrix(empty)
+
+
+DOMAIN_REFUSALS = (
+    CONTRACTS_ROOT.parent
+    / "backend/common/src/main/java/io/github/mariusbayizere/fraudshield/common/config"
+    / "DualControlException.java"
+)
+DOMAIN_OPERATIONS = {
+    "ROLE_NOT_PERMITTED": ["proposeThresholdChange", "approveConfigChange", "withdrawConfigChange"],
+    "SELF_REVIEW": ["approveConfigChange", "rejectConfigChange"],
+    "NOT_PROPOSER": ["withdrawConfigChange"],
+    "CHANGE_NOT_FOUND": ["approveConfigChange", "rejectConfigChange", "withdrawConfigChange"],
+    "CHANGE_NOT_OPEN": ["approveConfigChange", "rejectConfigChange", "withdrawConfigChange"],
+    "OPEN_CHANGE_EXISTS": ["proposeThresholdChange", "proposeCircuitBreakerChange"],
+    "STALE_BASE_VERSION": ["proposeThresholdChange", "proposeCircuitBreakerChange"],
+    "NO_CHANGE": ["proposeThresholdChange", "proposeCircuitBreakerChange"],
+}
+
+
+@pytest.mark.req("FR-05-07")
+def test_domain_refusals_match_the_contract() -> None:
+    """Review F-02: every Java refusal maps to a documented status and catalogued problem type."""
+    source = DOMAIN_REFUSALS.read_text(encoding="utf-8")
+    pattern = r'^\s+([A-Z_]+)\((\d{3}), "([^"]+)"\)'
+    refusals = {
+        name: (int(status), problem) for name, status, problem in re.findall(pattern, source, re.M)
+    }
+    assert set(refusals) == set(DOMAIN_OPERATIONS)
+    responses = DOC["components"]["responses"]
+    for name, (status, problem) in refusals.items():
+        assert problem in PROBLEM_TYPES, name
+        for operation_id in DOMAIN_OPERATIONS[name]:
+            documented = OPS[operation_id].spec["responses"]
+            assert str(status) in documented, (name, operation_id)
+            ref = documented[str(status)]["$ref"].rsplit("/", 1)[1]
+            assert problem in responses[ref]["x-problem-types"], (name, operation_id, ref)

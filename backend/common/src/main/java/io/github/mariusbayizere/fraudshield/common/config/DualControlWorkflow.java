@@ -25,8 +25,12 @@ import java.util.function.Consumer;
  *   <li>Loosening (or mixed): one RISK_OFFICER proposes; it takes effect only when a different
  *       RISK_OFFICER approves.
  *   <li>Nobody reviews their own change, and ADMIN and analysts can neither propose nor review.
- *   <li>At most one open change per configuration kind, so a revert never overwrites a later
- *       change; every applied change or revert creates a new configuration version.
+ *   <li>At most one open change per configuration kind. A tightening change is never blocked: it
+ *       supersedes an open loosening proposal, and it folds an unconfirmed tightening change into
+ *       itself, keeping that change's baseline, so one confirmation keeps both and one revert (by
+ *       rejection or deadline) restores the baseline. A loosening change is refused while another
+ *       change of its kind is open. The proposer may withdraw a loosening proposal.
+ *   <li>Every applied change or revert creates a new configuration version.
  * </ul>
  *
  * <p>The clock is injected so the 24-hour revert is testable. Persistence and propagation (effect
@@ -126,17 +130,29 @@ public final class DualControlWorkflow {
           Refusal.STALE_BASE_VERSION,
           "proposal is based on version " + baseVersion + ", current is " + versions.get(kind));
     }
-    if (open().stream().anyMatch(change -> change.kind() == kind)) {
-      throw new DualControlException(
-          Refusal.OPEN_CHANGE_EXISTS, "another " + kind + " change is waiting for review");
-    }
-    ConfigSettings previous = current.get(kind);
+    ConfigSettings current = this.current.get(kind);
     ChangeDirection direction =
         proposed
-            .directionFrom(previous)
+            .directionFrom(current)
             .orElseThrow(
                 () -> new DualControlException(Refusal.NO_CHANGE, "settings are unchanged"));
     Instant now = clock.instant();
+    Optional<ConfigChange> open = open().stream().filter(c -> c.kind() == kind).findFirst();
+    ConfigSettings baseline = current;
+    if (open.isPresent()) {
+      ConfigChange existing = open.get();
+      if (direction == ChangeDirection.LOOSENING) {
+        throw new DualControlException(
+            Refusal.OPEN_CHANGE_EXISTS, "another " + kind + " change is waiting for review");
+      }
+      if (existing.status() == ChangeStatus.APPLIED_PENDING_CONFIRMATION) {
+        // Folded in: the new change's revert must also undo the unconfirmed earlier tightening.
+        baseline = existing.previous();
+      }
+      ConfigChange superseded = existing.withStatus(ChangeStatus.SUPERSEDED);
+      changes.put(existing.changeId(), superseded);
+      audit.accept(new ConfigAuditEvent(Action.SUPERSEDED, superseded, actor, now));
+    }
     boolean tightening = direction == ChangeDirection.TIGHTENING;
     ConfigChange change =
         new ConfigChange(
@@ -147,7 +163,7 @@ public final class DualControlWorkflow {
             now,
             reason,
             baseVersion,
-            previous,
+            baseline,
             proposed,
             tightening ? now.plus(CONFIRMATION_WINDOW) : null,
             null,
@@ -175,18 +191,19 @@ public final class DualControlWorkflow {
    *
    * @param actor the reviewing staff member
    * @param changeId the change
+   * @param comment optional reviewer comment, may be null
    * @return the change after approval
    * @throws DualControlException if a rule refuses the approval
    */
-  public synchronized ConfigChange approve(Actor actor, UUID changeId) {
+  public synchronized ConfigChange approve(Actor actor, UUID changeId, String comment) {
     ConfigChange change = openChangeForReview(actor, changeId);
     Instant now = clock.instant();
     ConfigChange result;
     if (change.direction() == ChangeDirection.TIGHTENING) {
-      result = change.reviewed(ChangeStatus.CONFIRMED, actor, now, null);
+      result = change.reviewed(ChangeStatus.CONFIRMED, actor, now, comment);
       audit.accept(new ConfigAuditEvent(Action.CONFIRMED, result, actor, now));
     } else {
-      result = change.reviewed(ChangeStatus.APPROVED, actor, now, null).applied(now);
+      result = change.reviewed(ChangeStatus.APPROVED, actor, now, comment).applied(now);
       apply(change.proposed());
       audit.accept(new ConfigAuditEvent(Action.APPROVED, result, actor, now));
     }
@@ -224,6 +241,33 @@ public final class DualControlWorkflow {
   }
 
   /**
+   * Withdraws a loosening proposal before review. Only its proposer may withdraw it; a tightening
+   * change cannot be withdrawn, because undoing it would loosen without a second risk officer.
+   *
+   * @param actor the proposer
+   * @param changeId the change
+   * @return the withdrawn change
+   * @throws DualControlException if a rule refuses the withdrawal
+   */
+  public synchronized ConfigChange withdraw(Actor actor, UUID changeId) {
+    requireRiskOfficer(actor);
+    ConfigChange change = existing(changeId);
+    if (!change.proposedBy().userId().equals(actor.userId())) {
+      throw new DualControlException(
+          Refusal.NOT_PROPOSER, "only the proposer can withdraw a change");
+    }
+    if (change.status() != ChangeStatus.PENDING_APPROVAL) {
+      throw new DualControlException(
+          Refusal.CHANGE_NOT_OPEN, "only a loosening change pending approval can be withdrawn");
+    }
+    Instant now = clock.instant();
+    ConfigChange result = change.withStatus(ChangeStatus.WITHDRAWN);
+    changes.put(changeId, result);
+    audit.accept(new ConfigAuditEvent(Action.WITHDRAWN, result, actor, now));
+    return result;
+  }
+
+  /**
    * Reverts every tightening change whose confirmation deadline has passed. Called by a scheduler
    * and before every other action.
    *
@@ -247,15 +291,23 @@ public final class DualControlWorkflow {
 
   private ConfigChange openChangeForReview(Actor actor, UUID changeId) {
     requireRiskOfficer(actor);
-    Objects.requireNonNull(changeId, "changeId");
     revertOverdue();
-    ConfigChange change = changes.get(changeId);
-    if (change == null || !change.isOpen()) {
+    ConfigChange change = existing(changeId);
+    if (!change.isOpen()) {
       throw new DualControlException(Refusal.CHANGE_NOT_OPEN, "change is not waiting for review");
     }
     if (change.proposedBy().userId().equals(actor.userId())) {
       throw new DualControlException(
           Refusal.SELF_REVIEW, "a change must be reviewed by a different risk officer");
+    }
+    return change;
+  }
+
+  private ConfigChange existing(UUID changeId) {
+    Objects.requireNonNull(changeId, "changeId");
+    ConfigChange change = changes.get(changeId);
+    if (change == null) {
+      throw new DualControlException(Refusal.CHANGE_NOT_FOUND, "no such change");
     }
     return change;
   }

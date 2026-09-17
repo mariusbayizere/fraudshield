@@ -22,7 +22,9 @@ before they merge.
 2. **How.** Rebase (for example with fixups and rewording) so that **every commit passes the fast
    checks on its own**. Push only the feature branch, with `git push --force-with-lease=<branch>:<old
    sha>` naming the exact remote head that was reviewed. Never force-push `main`, a tag, or a branch
-   that is already merged; the `main` ruleset also blocks force pushes and deletions.
+   that is already merged. The owner reported creating a `main` ruleset that blocks force pushes and
+   deletions. The unauthenticated GitHub API cannot confirm it (it reports `protected: false`), so
+   this ADR does not rely on it.
 3. **Proof.** `tools/bin/verify-branch-commits <base> <branch> <report.md>` checks out each commit of
    the branch in a temporary worktree. For each commit it runs the commit-message check, the governance
    checks and the fast checks for the components the commit touches:
@@ -33,6 +35,13 @@ before they merge.
 
    It writes one row per commit to the report, and the review response records the report. Docker
    suites stay in CI (ADR 0010).
+
+   The checks are selective, as the owner specified ("fast checks for touched components"). A
+   component a commit does not touch keeps the result it had at the previous commit, so on a branch
+   whose first commit passes, a failure appears at the commit that introduces it. Changes to shared
+   Python files run all Python suites. The limit: a commit that breaks another component without
+   touching its files (for example a tool it calls) is not detected by this script; full CI on the
+   branch head still runs every suite.
 4. **Records.** Review records and responses keep the SHAs they were written against. A response
    written after a rewrite includes the old-to-new SHA mapping, so earlier references stay traceable.
 5. **Still forbidden (G.6):** `--no-verify`; rewriting `main` or tags; deleting remote branches or tags

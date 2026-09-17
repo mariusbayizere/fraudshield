@@ -18,6 +18,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
 
 /** Asymmetric dual control for thresholds, timeout policies and circuit breakers (ADR 0014). */
@@ -86,7 +87,7 @@ class DualControlWorkflowTest {
     ConfigChange change = workflow.propose(OFFICER_A, cardHigh("0.80"), 1, "card fraud wave");
     clock.advance(Duration.ofHours(3));
 
-    ConfigChange confirmed = workflow.approve(OFFICER_B, change.changeId());
+    ConfigChange confirmed = workflow.approve(OFFICER_B, change.changeId(), null);
 
     assertThat(confirmed.status()).isEqualTo(ChangeStatus.CONFIRMED);
     assertThat(confirmed.reviewer()).contains(OFFICER_B);
@@ -121,7 +122,7 @@ class DualControlWorkflowTest {
     assertThat(revert.action()).isEqualTo(Action.REVERTED);
     assertThat(revert.actingStaff()).isEmpty();
     assertThat(ConfigAuditEvent.EVENT_TYPE).isEqualTo("THRESHOLD_CHANGE");
-    assertThatThrownBy(() -> workflow.approve(OFFICER_B, change.changeId()))
+    assertThatThrownBy(() -> workflow.approve(OFFICER_B, change.changeId(), null))
         .isInstanceOf(DualControlException.class)
         .extracting(e -> ((DualControlException) e).refusal())
         .isEqualTo(Refusal.CHANGE_NOT_OPEN);
@@ -132,7 +133,8 @@ class DualControlWorkflowTest {
     ConfigChange change = workflow.propose(OFFICER_A, cardHigh("0.80"), 1, "card fraud wave");
     clock.advance(Duration.ofHours(25));
 
-    assertRefused(() -> workflow.approve(OFFICER_B, change.changeId()), Refusal.CHANGE_NOT_OPEN);
+    assertRefused(
+        () -> workflow.approve(OFFICER_B, change.changeId(), null), Refusal.CHANGE_NOT_OPEN);
     assertThat(workflow.find(change.changeId()))
         .get()
         .extracting(ConfigChange::status)
@@ -165,7 +167,7 @@ class DualControlWorkflowTest {
     assertThat(workflow.revertOverdue()).isEmpty();
     assertThat(workflow.current(ConfigKind.CHANNEL_THRESHOLDS)).isEqualTo(defaults());
 
-    ConfigChange approved = workflow.approve(OFFICER_B, change.changeId());
+    ConfigChange approved = workflow.approve(OFFICER_B, change.changeId(), null);
 
     assertThat(approved.status()).isEqualTo(ChangeStatus.APPROVED);
     assertThat(approved.effectiveAt()).isEqualTo(START.plus(Duration.ofDays(3)));
@@ -190,11 +192,13 @@ class DualControlWorkflowTest {
   void selfApprovalAndSelfRejectionAreForbidden() {
     ConfigChange loosening =
         workflow.propose(OFFICER_A, cardHigh("0.90"), 1, "too many false alarms");
-    assertRefused(() -> workflow.approve(OFFICER_A, loosening.changeId()), Refusal.SELF_REVIEW);
+    assertRefused(
+        () -> workflow.approve(OFFICER_A, loosening.changeId(), null), Refusal.SELF_REVIEW);
     workflow.reject(OFFICER_B, loosening.changeId(), "not now");
 
     ConfigChange tightening = workflow.propose(OFFICER_A, cardHigh("0.80"), 1, "card fraud wave");
-    assertRefused(() -> workflow.approve(OFFICER_A, tightening.changeId()), Refusal.SELF_REVIEW);
+    assertRefused(
+        () -> workflow.approve(OFFICER_A, tightening.changeId(), null), Refusal.SELF_REVIEW);
     assertRefused(
         () -> workflow.reject(OFFICER_A, tightening.changeId(), "withdraw"), Refusal.SELF_REVIEW);
     assertThat(Refusal.SELF_REVIEW.status()).isEqualTo(403);
@@ -209,7 +213,8 @@ class DualControlWorkflowTest {
     assertRefused(
         () -> workflow.propose(other, cardHigh("0.80"), 1, "try"), Refusal.ROLE_NOT_PERMITTED);
     ConfigChange change = workflow.propose(OFFICER_A, cardHigh("0.90"), 1, "false alarms");
-    assertRefused(() -> workflow.approve(other, change.changeId()), Refusal.ROLE_NOT_PERMITTED);
+    assertRefused(
+        () -> workflow.approve(other, change.changeId(), null), Refusal.ROLE_NOT_PERMITTED);
     assertRefused(
         () -> workflow.reject(other, change.changeId(), "no"), Refusal.ROLE_NOT_PERMITTED);
     assertThat(Refusal.ROLE_NOT_PERMITTED.status()).isEqualTo(403);
@@ -270,17 +275,147 @@ class DualControlWorkflowTest {
   }
 
   @Test
-  void oneOpenChangePerKindAndProposalsMustUseTheCurrentVersion() {
+  void proposalsMustUseTheCurrentVersionAndChangeSomething() {
     workflow.propose(OFFICER_A, cardHigh("0.80"), 1, "card fraud wave");
     assertRefused(
         () -> workflow.propose(OFFICER_B, cardHigh("0.75"), 1, "stale"),
         Refusal.STALE_BASE_VERSION);
     assertRefused(
-        () -> workflow.propose(OFFICER_B, cardHigh("0.75"), 2, "stack"),
-        Refusal.OPEN_CHANGE_EXISTS);
-    assertRefused(
         () -> workflow.propose(OFFICER_B, breakerDefaults(), 1, "same"), Refusal.NO_CHANGE);
     assertThat(Refusal.NO_CHANGE.status()).isEqualTo(422);
+  }
+
+  @Test
+  void looseningIsRefusedWhileAnotherChangeOfItsKindIsOpen() {
+    workflow.propose(OFFICER_A, cardHigh("0.80"), 1, "card fraud wave");
+    assertRefused(
+        () -> workflow.propose(OFFICER_B, cardHigh("0.90"), 2, "false alarms"),
+        Refusal.OPEN_CHANGE_EXISTS);
+  }
+
+  @Test
+  void tighteningSupersedesPendingLooseningProposal() {
+    ConfigChange loosening = workflow.propose(OFFICER_A, cardHigh("0.90"), 1, "false alarms");
+
+    ConfigChange tightening = workflow.propose(OFFICER_B, cardHigh("0.80"), 1, "emergency");
+
+    assertThat(tightening.status()).isEqualTo(ChangeStatus.APPLIED_PENDING_CONFIRMATION);
+    assertThat(workflow.current(ConfigKind.CHANNEL_THRESHOLDS)).isEqualTo(cardHigh("0.80"));
+    assertThat(workflow.find(loosening.changeId()))
+        .get()
+        .extracting(ConfigChange::status)
+        .isEqualTo(ChangeStatus.SUPERSEDED);
+    assertThat(workflow.open()).containsExactly(tightening);
+    assertRefused(
+        () -> workflow.approve(OFFICER_B, loosening.changeId(), null), Refusal.CHANGE_NOT_OPEN);
+    assertThat(audit)
+        .extracting(ConfigAuditEvent::action)
+        .containsExactly(Action.PROPOSED, Action.SUPERSEDED, Action.APPLIED_PENDING_CONFIRMATION);
+  }
+
+  @Test
+  void secondTighteningFoldsInTheFirstSoOneRevertRestoresTheBaseline() {
+    ChannelThresholds cardTighter = cardHigh("0.80");
+    ChannelThresholds bothTighter =
+        cardTighter.with(
+            Channel.USSD,
+            ChannelThreshold.of("0.55", "0.85", MediumTimeoutPolicy.RELEASE_WITH_TIMEOUT_LABEL));
+    ConfigChange first = workflow.propose(OFFICER_A, cardTighter, 1, "card fraud wave");
+    clock.advance(Duration.ofHours(20));
+
+    ConfigChange second = workflow.propose(OFFICER_A, bothTighter, 2, "USSD wave as well");
+
+    assertThat(workflow.find(first.changeId()))
+        .get()
+        .extracting(ConfigChange::status)
+        .isEqualTo(ChangeStatus.SUPERSEDED);
+    assertThat(second.previous()).isEqualTo(defaults());
+    assertThat(second.confirmBy()).isEqualTo(START.plus(Duration.ofHours(44)));
+    assertThat(workflow.current(ConfigKind.CHANNEL_THRESHOLDS)).isEqualTo(bothTighter);
+
+    clock.advance(Duration.ofHours(24));
+    assertThat(workflow.revertOverdue())
+        .extracting(ConfigChange::changeId)
+        .containsExactly(second.changeId());
+    assertThat(workflow.current(ConfigKind.CHANNEL_THRESHOLDS)).isEqualTo(defaults());
+  }
+
+  @Test
+  void proposerCanWithdrawLooseningProposalButNotTighteningChange() {
+    ConfigChange loosening = workflow.propose(OFFICER_A, cardHigh("0.90"), 1, "false alarms");
+    assertRefused(() -> workflow.withdraw(OFFICER_B, loosening.changeId()), Refusal.NOT_PROPOSER);
+
+    ConfigChange withdrawn = workflow.withdraw(OFFICER_A, loosening.changeId());
+
+    assertThat(withdrawn.status()).isEqualTo(ChangeStatus.WITHDRAWN);
+    assertThat(workflow.open()).isEmpty();
+    assertThat(workflow.current(ConfigKind.CHANNEL_THRESHOLDS)).isEqualTo(defaults());
+    ConfigChange tightening = workflow.propose(OFFICER_A, cardHigh("0.80"), 1, "fraud wave");
+    assertRefused(
+        () -> workflow.withdraw(OFFICER_A, tightening.changeId()), Refusal.CHANGE_NOT_OPEN);
+    assertRefused(
+        () -> workflow.withdraw(ADMIN, tightening.changeId()), Refusal.ROLE_NOT_PERMITTED);
+    assertThat(audit).extracting(ConfigAuditEvent::action).contains(Action.WITHDRAWN);
+  }
+
+  @Test
+  void unknownChangesAreNotFound() {
+    UUID unknown = UUID.fromString("00000000-0000-4000-8000-000000000000");
+    assertRefused(() -> workflow.approve(OFFICER_B, unknown, null), Refusal.CHANGE_NOT_FOUND);
+    assertRefused(() -> workflow.reject(OFFICER_B, unknown, "no"), Refusal.CHANGE_NOT_FOUND);
+    assertRefused(() -> workflow.withdraw(OFFICER_B, unknown), Refusal.CHANGE_NOT_FOUND);
+    assertThat(Refusal.CHANGE_NOT_FOUND.status()).isEqualTo(404);
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "0.55, 0.85, RELEASE_WITH_TIMEOUT_LABEL, TIGHTENING",
+    "0.65, 0.85, RELEASE_WITH_TIMEOUT_LABEL, LOOSENING",
+    "0.60, 0.80, RELEASE_WITH_TIMEOUT_LABEL, TIGHTENING",
+    "0.60, 0.90, RELEASE_WITH_TIMEOUT_LABEL, LOOSENING",
+    "0.60, 0.85, DECLINE_AND_VERIFY, TIGHTENING"
+  })
+  void eachThresholdElementIsClassifiedAndAppliedByDirection(
+      String medium, String high, MediumTimeoutPolicy policy, ChangeDirection expected) {
+    ChannelThresholds changed =
+        defaults().with(Channel.ONLINE, ChannelThreshold.of(medium, high, policy));
+    assertThat(changed.directionFrom(defaults())).contains(expected);
+    ConfigChange change = workflow.propose(OFFICER_A, changed, 1, "per-element check");
+    assertThat(change.status())
+        .isEqualTo(
+            expected == ChangeDirection.TIGHTENING
+                ? ChangeStatus.APPLIED_PENDING_CONFIRMATION
+                : ChangeStatus.PENDING_APPROVAL);
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "0.04, 15, 100, 60, TIGHTENING",
+    "0.06, 15, 100, 60, LOOSENING",
+    "0.05, 15, 50, 60, TIGHTENING",
+    "0.05, 15, 150, 60, LOOSENING",
+    "0.05, 15, 100, 90, TIGHTENING",
+    "0.05, 15, 100, 30, LOOSENING",
+    "0.05, 10, 100, 60, LOOSENING",
+    "0.05, 30, 100, 60, LOOSENING"
+  })
+  void eachCircuitBreakerElementIsClassifiedAndAppliedByDirection(
+      String rate, long windowMinutes, int volume, long resetMinutes, ChangeDirection expected) {
+    CircuitBreakerSettings changed =
+        new CircuitBreakerSettings(
+            new BigDecimal(rate),
+            Duration.ofMinutes(windowMinutes),
+            volume,
+            Duration.ofMinutes(resetMinutes));
+    assertThat(changed.directionFrom(breakerDefaults())).contains(expected);
+    ConfigChange change = workflow.propose(OFFICER_A, changed, 1, "per-element check");
+    assertThat(change.status())
+        .isEqualTo(
+            expected == ChangeDirection.TIGHTENING
+                ? ChangeStatus.APPLIED_PENDING_CONFIRMATION
+                : ChangeStatus.PENDING_APPROVAL);
+    assertThat(workflow.current(ConfigKind.MCC_CIRCUIT_BREAKER))
+        .isEqualTo(expected == ChangeDirection.TIGHTENING ? changed : breakerDefaults());
   }
 
   @Test

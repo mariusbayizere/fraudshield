@@ -30,7 +30,11 @@ public record ConfigAuditEvent(Action action, ConfigChange change, Actor actor, 
     /** A loosening change was rejected. */
     REJECTED,
     /** A tightening change was reverted by rejection or by the confirmation deadline. */
-    REVERTED
+    REVERTED,
+    /** An open change was superseded by a later tightening change. */
+    SUPERSEDED,
+    /** A loosening proposal was withdrawn by its proposer. */
+    WITHDRAWN
   }
 
   /** Validates required components. */
