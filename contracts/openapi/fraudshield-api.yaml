@@ -194,9 +194,34 @@ paths:
         default: { $ref: "#/components/responses/UnexpectedProblem" }
 
   # ---------------------------------------------------------------------------------------------
-  # Health. Component detail is for administrators only (ADR 0014): a public endpoint showing
-  # that the ML scorer has fallen back to rules would tell attackers when to strike.
+  # Health (owner decision, ADR 0014): one public status-only endpoint; component detail (ML, Kafka,
+  # database, Redis) only on the management port, which is never routed through the public ingress.
+  # A public endpoint showing that the ML scorer has fallen back to rules would tell attackers when
+  # to strike.
   # ---------------------------------------------------------------------------------------------
+  /health:
+    get:
+      tags: [health]
+      operationId: getPublicHealth
+      summary: Public status of the API, with no component detail
+      description: >-
+        UP when this deployment can accept and decide requests (the rule-based fallback counts as
+        able to decide), otherwise DOWN. The body is exactly {"status": "UP"} or {"status": "DOWN"}:
+        no component names, versions, hostnames or fallback state.
+      security: []
+      x-public: true
+      responses:
+        "200":
+          description: Up
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProbeStatus" }
+        "503":
+          description: Down
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProbeStatus" }
+
   /actuator/health:
     servers:
       - url: "{scheme}://{instance}:{managementPort}"
@@ -210,9 +235,8 @@ paths:
       operationId: getLiveness
       summary: Process liveness and readiness for orchestration probes
       description: >-
-        Reports only whether this API instance can accept and decide requests. The rule-based
-        fallback keeps the API able to decide, so ML or Kafka degradation does not change this
-        status and is not disclosed here.
+        Reports only whether this API instance can accept and decide requests. ML or Kafka
+        degradation does not change it, because the rule-based fallback keeps the API able to decide.
       security: []
       x-public: true
       x-network: management
@@ -239,11 +263,9 @@ paths:
     get:
       tags: [health]
       operationId: getMlComponentHealth
-      summary: ML scorer health for the monitoring probe and the deployment smoke test
+      summary: ML scorer health, including whether the rule-based fallback is active
       description: >-
-        The SRS blackbox probe and staging smoke test read ML health without a staff token. They
-        use this management-port endpoint, which is never routed through the public ingress, so
-        the fallback state is not visible to attackers (ADR 0014).
+        For the SRS uptime probe (replaces /api/v1/health/ml) and the admin health panel's backend.
       security: []
       x-public: true
       x-network: management
@@ -254,7 +276,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ComponentHealth" }
         "503":
-          description: Unhealthy or degraded
+          description: Unhealthy or degraded (rule-based fallback active)
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ComponentHealth" }
@@ -270,10 +292,9 @@ paths:
     get:
       tags: [health]
       operationId: getKafkaComponentHealth
-      summary: Kafka producer and spool health for the deployment smoke test
+      summary: Kafka producer and spool health
       description: >-
-        Replaces the SRS staging gate's unauthenticated /api/v1/health/kafka check. Management port
-        only, never routed through the public ingress (ADR 0014).
+        For the SRS staging gate (replaces /api/v1/health/kafka) and the admin health panel's backend.
       security: []
       x-public: true
       x-network: management
@@ -289,12 +310,23 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ComponentHealth" }
 
-  /health/ml:
+  /actuator/health/db:
+    servers:
+      - url: "{scheme}://{instance}:{managementPort}"
+        description: Management port of each API instance, reachable only from the cluster network
+        variables:
+          scheme: { default: http, enum: [http, https] }
+          instance: { default: localhost }
+          managementPort: { default: "8081" }
     get:
       tags: [health]
-      operationId: getMlHealth
-      summary: ML scoring service health, including whether the rule-based fallback is active
-      x-required-roles: [ADMIN]
+      operationId: getDatabaseComponentHealth
+      summary: PostgreSQL primary and connection pool health
+      description: >-
+        Management port only; used by probes and the admin health panel's backend.
+      security: []
+      x-public: true
+      x-network: management
       responses:
         "200":
           description: Healthy
@@ -302,19 +334,28 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ComponentHealth" }
         "503":
-          description: Unhealthy or degraded (rule-based fallback active)
+          description: Primary unreachable or pool exhausted
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ComponentHealth" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "403": { $ref: "#/components/responses/Forbidden" }
 
-  /health/kafka:
+  /actuator/health/redis:
+    servers:
+      - url: "{scheme}://{instance}:{managementPort}"
+        description: Management port of each API instance, reachable only from the cluster network
+        variables:
+          scheme: { default: http, enum: [http, https] }
+          instance: { default: localhost }
+          managementPort: { default: "8081" }
     get:
       tags: [health]
-      operationId: getKafkaHealth
-      summary: Kafka producer and local spool health
-      x-required-roles: [ADMIN]
+      operationId: getRedisComponentHealth
+      summary: Redis feature store and cache health
+      description: >-
+        Management port only; DOWN triggers the database fallback and the DEGRADED_MODE metric (C.4).
+      security: []
+      x-public: true
+      x-network: management
       responses:
         "200":
           description: Healthy
@@ -322,12 +363,10 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ComponentHealth" }
         "503":
-          description: Broker unreachable; decisions continue, events spool to disk (D-15)
+          description: Redis unreachable
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ComponentHealth" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "403": { $ref: "#/components/responses/Forbidden" }
 
   # ---------------------------------------------------------------------------------------------
   # Auth (FR-07)
@@ -1441,16 +1480,32 @@ paths:
   /admin/thresholds:
     patch:
       tags: [admin]
-      operationId: updateThresholds
-      summary: Change per-channel thresholds or timeout policy at runtime; effective within 60 s (FR-02-06)
+      operationId: proposeThresholdChange
+      summary: Propose per-channel thresholds or MEDIUM timeout policy under dual control (FR-02-06, FR-05-07)
       description: |
-        Creates a new immutable threshold version; a THRESHOLD_CHANGE audit event is written. The
-        path keeps the SRS name (FR-02-06), but only a risk officer may change thresholds: they
-        decide which fraud is declined, and an administrator who also manages users, API keys and
-        models must not control the decision surface alone (separation of duties, ADR 0014).
-        Semantic checks (422): `medium_threshold` < `high_threshold` (`thresholds_not_ordered`) and
-        at most one entry per channel (`duplicate_channel`).
+        The path keeps the SRS name (FR-02-06). Channels not listed keep their current values.
+        Owner decision (ADR 0014), asymmetric dual control. Only RISK_OFFICER proposes; ADMIN
+        cannot. **Tightening** (a lower threshold, a lower circuit-breaker rate or volume, a
+        longer clean reset, or RELEASE_WITH_TIMEOUT_LABEL → DECLINE_AND_VERIFY) takes effect at
+        once (within 60 s, FR-05-07) as APPLIED_PENDING_CONFIRMATION; a different RISK_OFFICER
+        must confirm it within 24 hours, otherwise it is reverted automatically and a
+        THRESHOLD_CHANGE audit event records the revert. **Loosening**, or a change mixing both,
+        is PENDING_APPROVAL and takes effect within 60 s of approval by a different RISK_OFFICER.
+        At most one open change per kind; the proposal must name the version in effect.
+        Semantic checks (422): `medium_threshold` < `high_threshold` (`thresholds_not_ordered`),
+        at most one entry per channel (`duplicate_channel`), and a real change (`no_change`).
       x-required-roles: [RISK_OFFICER]
+      x-authorisation-rules:
+        - rule: The proposal must be based on the configuration version in effect
+          problem: urn:fraudshield:problem:conflict
+          status: 409
+        - rule: At most one change per configuration kind may wait for review
+          problem: urn:fraudshield:problem:open-change-exists
+          status: 409
+        - rule: Proposed settings must differ from the settings in effect
+          problem: urn:fraudshield:problem:validation
+          code: no_change
+          status: 422
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -1459,15 +1514,199 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/ThresholdUpdate" }
       responses:
-        "200":
-          description: New threshold version
+        "201":
+          description: Change recorded (applied at once if tightening, pending if loosening)
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ThresholdSet" }
+              schema: { $ref: "#/components/schemas/ConfigChange" }
         "400": { $ref: "#/components/responses/ValidationProblem" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
-        "409": { $ref: "#/components/responses/Conflict" }
+        "409": { $ref: "#/components/responses/StateConflict" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /circuit-breaker-settings:
+    get:
+      tags: [risk-officer]
+      operationId: getCircuitBreakerSettings
+      summary: MCC circuit-breaker trip and reset settings in effect (FR-03-07, D-18)
+      x-required-roles: [RISK_OFFICER, ADMIN]
+      responses:
+        "200":
+          description: Settings in effect
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CircuitBreakerSettings" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /admin/circuit-breaker-settings:
+    patch:
+      tags: [admin]
+      operationId: proposeCircuitBreakerChange
+      summary: Propose MCC circuit-breaker settings under dual control (FR-03-07, D-18)
+      description: |
+        Owner decision (ADR 0014), asymmetric dual control. Only RISK_OFFICER proposes; ADMIN
+        cannot. **Tightening** (a lower threshold, a lower circuit-breaker rate or volume, a
+        longer clean reset, or RELEASE_WITH_TIMEOUT_LABEL → DECLINE_AND_VERIFY) takes effect at
+        once (within 60 s, FR-05-07) as APPLIED_PENDING_CONFIRMATION; a different RISK_OFFICER
+        must confirm it within 24 hours, otherwise it is reverted automatically and a
+        THRESHOLD_CHANGE audit event records the revert. **Loosening**, or a change mixing both,
+        is PENDING_APPROVAL and takes effect within 60 s of approval by a different RISK_OFFICER.
+        At most one open change per kind; the proposal must name the version in effect.
+        Changing the rolling window always counts as loosening.
+      x-required-roles: [RISK_OFFICER]
+      x-authorisation-rules:
+        - rule: The proposal must be based on the configuration version in effect
+          problem: urn:fraudshield:problem:conflict
+          status: 409
+        - rule: At most one change per configuration kind may wait for review
+          problem: urn:fraudshield:problem:open-change-exists
+          status: 409
+        - rule: Proposed settings must differ from the settings in effect
+          problem: urn:fraudshield:problem:validation
+          code: no_change
+          status: 422
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CircuitBreakerSettingsUpdate" }
+      responses:
+        "201":
+          description: Change recorded (applied at once if tightening, pending if loosening)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigChange" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/StateConflict" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /config-changes:
+    get:
+      tags: [risk-officer]
+      operationId: listConfigChanges
+      summary: Risk-configuration changes, by default those waiting for a second risk officer
+      x-required-roles: [RISK_OFFICER]
+      parameters:
+        - name: status
+          in: query
+          style: form
+          explode: false
+          schema:
+            type: array
+            uniqueItems: true
+            items: { $ref: "#/components/schemas/ConfigChangeStatus" }
+            default: [PENDING_APPROVAL, APPLIED_PENDING_CONFIRMATION]
+        - { name: kind, in: query, schema: { $ref: "#/components/schemas/ConfigKind" } }
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: A page of changes, oldest open change first
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigChangePage" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /config-changes/{change_id}:
+    get:
+      tags: [risk-officer]
+      operationId: getConfigChange
+      summary: One risk-configuration change
+      x-required-roles: [RISK_OFFICER]
+      parameters:
+        - $ref: "#/components/parameters/ChangeId"
+      responses:
+        "200":
+          description: The change
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigChange" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /config-changes/{change_id}/approval:
+    post:
+      tags: [risk-officer]
+      operationId: approveConfigChange
+      summary: Approve a loosening change (applies it) or confirm a tightening change
+      description: A THRESHOLD_CHANGE audit event (APPROVED or CONFIRMED) names both risk officers.
+      x-required-roles: [RISK_OFFICER]
+      x-authorisation-rules:
+        - rule: A change is approved, confirmed or rejected only by a risk officer other than its proposer
+          problem: urn:fraudshield:problem:self-review
+          status: 403
+        - rule: Only a change waiting for review (PENDING_APPROVAL or APPLIED_PENDING_CONFIRMATION before its deadline) can be reviewed
+          problem: urn:fraudshield:problem:change-not-open
+          status: 409
+      parameters:
+        - $ref: "#/components/parameters/ChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfigReviewRequest" }
+      responses:
+        "200":
+          description: Approved (applied) or confirmed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigChange" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AuthorisationRuleViolation" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/StateConflict" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /config-changes/{change_id}/rejection:
+    post:
+      tags: [risk-officer]
+      operationId: rejectConfigChange
+      summary: Reject a loosening change, or reject and immediately revert a tightening change
+      description: A THRESHOLD_CHANGE audit event (REJECTED or REVERTED) names both risk officers.
+      x-required-roles: [RISK_OFFICER]
+      x-authorisation-rules:
+        - rule: A change is approved, confirmed or rejected only by a risk officer other than its proposer
+          problem: urn:fraudshield:problem:self-review
+          status: 403
+        - rule: Only a change waiting for review (PENDING_APPROVAL or APPLIED_PENDING_CONFIRMATION before its deadline) can be reviewed
+          problem: urn:fraudshield:problem:change-not-open
+          status: 409
+      parameters:
+        - $ref: "#/components/parameters/ChangeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfigRejectionRequest" }
+      responses:
+        "200":
+          description: Rejected, or reverted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConfigChange" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AuthorisationRuleViolation" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/StateConflict" }
         "422": { $ref: "#/components/responses/ValidationProblem" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
 
@@ -2150,6 +2389,11 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    ChangeId:
+      name: change_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     KeyId:
       name: key_id
       in: path
@@ -2301,6 +2545,7 @@ components:
         - "urn:fraudshield:problem:not-decision-author"
         - "urn:fraudshield:problem:own-decision-override"
         - "urn:fraudshield:problem:self-modification"
+        - "urn:fraudshield:problem:self-review"
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
@@ -2313,6 +2558,8 @@ components:
         - "urn:fraudshield:problem:decision-not-committed"
         - "urn:fraudshield:problem:undo-window-expired"
         - "urn:fraudshield:problem:last-active-admin"
+        - "urn:fraudshield:problem:change-not-open"
+        - "urn:fraudshield:problem:open-change-exists"
       content:
         application/problem+json:
           schema:
@@ -2606,6 +2853,7 @@ components:
         - urn:fraudshield:problem:escalation-level-required
         - urn:fraudshield:problem:not-decision-author
         - urn:fraudshield:problem:own-decision-override
+        - urn:fraudshield:problem:self-review
         - urn:fraudshield:problem:not-found
         - urn:fraudshield:problem:not-acceptable
         - urn:fraudshield:problem:conflict
@@ -2615,6 +2863,8 @@ components:
         - urn:fraudshield:problem:undo-window-expired
         - urn:fraudshield:problem:idempotency-conflict
         - urn:fraudshield:problem:last-active-admin
+        - urn:fraudshield:problem:change-not-open
+        - urn:fraudshield:problem:open-change-exists
         - urn:fraudshield:problem:promotion-gate-failed
         - urn:fraudshield:problem:gone
         - urn:fraudshield:problem:payload-too-large
@@ -2631,7 +2881,7 @@ components:
         well-formed field with an unacceptable value. A response with codes of both classes is 400
         and lists all errors. `fraudshield_contracts.validation` maps JSON Schema errors to these
         codes; shared vectors: contracts/validation/request-validation-vectors.json.
-      enum: [malformed_json, required, unknown_field, not_a_token, type_mismatch, invalid_format, unsupported_value, out_of_range, length_out_of_range, item_count_out_of_range, duplicate_items, timestamp_in_future, thresholds_not_ordered, duplicate_channel, invalid_cidr, webhook_url_not_allowed, password_policy, person_name, escalation_target_not_higher]
+      enum: [malformed_json, required, unknown_field, not_a_token, type_mismatch, invalid_format, unsupported_value, out_of_range, length_out_of_range, item_count_out_of_range, duplicate_items, timestamp_in_future, thresholds_not_ordered, duplicate_channel, invalid_cidr, webhook_url_not_allowed, password_policy, person_name, escalation_target_not_higher, no_change]
       x-status-by-code:
         malformed_json: 400
         required: 400
@@ -2652,6 +2902,7 @@ components:
         password_policy: 422
         person_name: 422
         escalation_target_not_higher: 422
+        no_change: 422
     ValidationProblem:
       allOf:
         - $ref: "#/components/schemas/Problem"
@@ -3439,6 +3690,114 @@ components:
           maxItems: 6
           description: At most one entry per channel (422 duplicate_channel)
           items: { $ref: "#/components/schemas/ChannelThreshold" }
+    ConfigKind:
+      type: string
+      enum: [CHANNEL_THRESHOLDS, MCC_CIRCUIT_BREAKER]
+    ConfigChangeStatus:
+      type: string
+      description: >-
+        PENDING_APPROVAL (loosening, not applied), APPLIED_PENDING_CONFIRMATION (tightening, in
+        effect until confirmed or reverted), APPROVED (loosening applied), CONFIRMED (tightening
+        kept), REJECTED (loosening never applied), REVERTED (tightening undone by rejection or by
+        the 24-hour deadline).
+      enum: [PENDING_APPROVAL, APPLIED_PENDING_CONFIRMATION, APPROVED, CONFIRMED, REJECTED, REVERTED]
+    CircuitBreakerSettings:
+      type: object
+      description: >-
+        The breaker opens when the fraud rate over the rolling window exceeds the threshold with at
+        least the minimum number of transactions, and closes after the clean reset period (D-18).
+      required: [version, fraud_rate_threshold, window_minutes, minimum_transactions, clean_reset_minutes]
+      additionalProperties: false
+      properties:
+        version: { type: integer, minimum: 1 }
+        fraud_rate_threshold: { type: number, exclusiveMinimum: 0, exclusiveMaximum: 1 }
+        window_minutes: { type: integer, minimum: 1, maximum: 1440 }
+        minimum_transactions: { type: integer, minimum: 1 }
+        clean_reset_minutes: { type: integer, minimum: 1, maximum: 10080 }
+    CircuitBreakerSettingsUpdate:
+      type: object
+      required: [base_version, reason, fraud_rate_threshold, window_minutes, minimum_transactions, clean_reset_minutes]
+      additionalProperties: false
+      properties:
+        base_version: { type: integer, minimum: 1 }
+        reason: { type: string, minLength: 10, maxLength: 500 }
+        fraud_rate_threshold: { type: number, exclusiveMinimum: 0, exclusiveMaximum: 1 }
+        window_minutes: { type: integer, minimum: 1, maximum: 1440 }
+        minimum_transactions: { type: integer, minimum: 1 }
+        clean_reset_minutes: { type: integer, minimum: 1, maximum: 10080 }
+    ConfigChange:
+      type: object
+      description: A risk-configuration change under dual control (ADR 0014)
+      required:
+        [change_id, kind, direction, status, proposed_by, proposed_at, reason, base_version,
+         previous, proposed, confirm_by, reviewed_by, reviewed_at, review_reason, effective_at,
+         reverted_at, revert_cause]
+      additionalProperties: false
+      properties:
+        change_id: { type: string, format: uuid }
+        kind: { $ref: "#/components/schemas/ConfigKind" }
+        direction: { type: string, enum: [TIGHTENING, LOOSENING] }
+        status: { $ref: "#/components/schemas/ConfigChangeStatus" }
+        proposed_by: { $ref: "#/components/schemas/StaffReference" }
+        proposed_at: { $ref: "#/components/schemas/Timestamp" }
+        reason: { type: string, maxLength: 500 }
+        base_version: { type: integer, minimum: 1 }
+        previous: { $ref: "#/components/schemas/ConfigSettingsValue" }
+        proposed: { $ref: "#/components/schemas/ConfigSettingsValue" }
+        confirm_by:
+          description: Deadline for confirming a tightening change; null for loosening
+          oneOf: [{ $ref: "#/components/schemas/Timestamp" }, { type: "null" }]
+        reviewed_by: { $ref: "#/components/schemas/StaffReference" }
+        reviewed_at: { oneOf: [{ $ref: "#/components/schemas/Timestamp" }, { type: "null" }] }
+        review_reason: { type: [string, "null"], maxLength: 500 }
+        effective_at: { oneOf: [{ $ref: "#/components/schemas/Timestamp" }, { type: "null" }] }
+        reverted_at: { oneOf: [{ $ref: "#/components/schemas/Timestamp" }, { type: "null" }] }
+        revert_cause: { type: [string, "null"], enum: [REJECTED, NOT_CONFIRMED_IN_TIME, null] }
+      allOf:
+        - if:
+            properties: { direction: { const: TIGHTENING } }
+            required: [direction]
+          then:
+            properties:
+              status: { enum: [APPLIED_PENDING_CONFIRMATION, CONFIRMED, REVERTED] }
+              confirm_by: { $ref: "#/components/schemas/Timestamp" }
+          else:
+            properties:
+              status: { enum: [PENDING_APPROVAL, APPROVED, REJECTED] }
+              confirm_by: { type: "null" }
+    ConfigSettingsValue:
+      description: Complete settings of the change's kind
+      oneOf:
+        - $ref: "#/components/schemas/ThresholdSet"
+        - $ref: "#/components/schemas/CircuitBreakerSettings"
+    ConfigChangePage:
+      type: object
+      required: [items, next_cursor]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ConfigChange" }
+        next_cursor: { type: [string, "null"] }
+    ConfigReviewRequest:
+      type: object
+      required: [change_version]
+      additionalProperties: false
+      properties:
+        change_version:
+          type: string
+          description: The status the reviewer saw; a different current status returns 409
+          enum: [PENDING_APPROVAL, APPLIED_PENDING_CONFIRMATION]
+        comment: { type: string, maxLength: 500 }
+    ConfigRejectionRequest:
+      type: object
+      required: [change_version, reason]
+      additionalProperties: false
+      properties:
+        change_version:
+          type: string
+          enum: [PENDING_APPROVAL, APPLIED_PENDING_CONFIRMATION]
+        reason: { type: string, minLength: 10, maxLength: 500 }
     SarReport:
       type: object
       required: [report_id, version, template_version, status, transaction_ids, created_at, fields, watermark]

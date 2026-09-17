@@ -296,9 +296,213 @@ examples:
     window_transactions: 180
     opened_at: '2026-09-17T08:15:30Z'
     clean_since: null
+  CircuitBreakerSettings:
+  - version: 1
+    fraud_rate_threshold: 0.05
+    window_minutes: 15
+    minimum_transactions: 100
+    clean_reset_minutes: 60
+  CircuitBreakerSettingsUpdate:
+  - base_version: 1
+    reason: Campaign on MCC 4829 needs earlier trips
+    fraud_rate_threshold: 0.04
+    window_minutes: 15
+    minimum_transactions: 100
+    clean_reset_minutes: 60
   ComponentHealth:
   - status: DEGRADED
     detail: rule-based fallback active
+  ConfigChange:
+  - change_id: c6d7e8f9-0a1b-4c2d-8e3f-4a5b6c7d8e9f
+    kind: CHANNEL_THRESHOLDS
+    direction: TIGHTENING
+    status: APPLIED_PENDING_CONFIRMATION
+    proposed_by:
+      user_id: 6c2a1b3d-4e5f-4a71-9b8c-0d1e2f3a4b5c
+      first_name: Hélène
+      last_name: Ngũgĩ
+      role: RISK_OFFICER
+    proposed_at: '2026-09-17T08:15:30Z'
+    reason: Card fraud wave in September
+    base_version: 3
+    previous:
+      version: 3
+      effective_at: '2026-09-10T08:00:00Z'
+      channels:
+      - channel: MOBILE_MONEY
+        medium_threshold: 0.6
+        high_threshold: 0.85
+        medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+      - channel: CARD
+        medium_threshold: 0.6
+        high_threshold: 0.85
+        medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+      - channel: AGENT_BANKING
+        medium_threshold: 0.6
+        high_threshold: 0.85
+        medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+      - channel: USSD
+        medium_threshold: 0.6
+        high_threshold: 0.85
+        medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+      - channel: ONLINE
+        medium_threshold: 0.6
+        high_threshold: 0.85
+        medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+      - channel: BANK_TRANSFER
+        medium_threshold: 0.6
+        high_threshold: 0.85
+        medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+    proposed:
+      version: 4
+      effective_at: '2026-09-17T08:15:30Z'
+      channels:
+      - channel: MOBILE_MONEY
+        medium_threshold: 0.6
+        high_threshold: 0.85
+        medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+      - channel: CARD
+        medium_threshold: 0.6
+        high_threshold: 0.8
+        medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+      - channel: AGENT_BANKING
+        medium_threshold: 0.6
+        high_threshold: 0.85
+        medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+      - channel: USSD
+        medium_threshold: 0.6
+        high_threshold: 0.85
+        medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+      - channel: ONLINE
+        medium_threshold: 0.6
+        high_threshold: 0.85
+        medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+      - channel: BANK_TRANSFER
+        medium_threshold: 0.6
+        high_threshold: 0.85
+        medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+    confirm_by: '2026-09-18T08:15:30Z'
+    reviewed_by: null
+    reviewed_at: null
+    review_reason: null
+    effective_at: '2026-09-17T08:15:30Z'
+    reverted_at: null
+    revert_cause: null
+  ConfigChangePage:
+  - items:
+    - change_id: c6d7e8f9-0a1b-4c2d-8e3f-4a5b6c7d8e9f
+      kind: CHANNEL_THRESHOLDS
+      direction: TIGHTENING
+      status: APPLIED_PENDING_CONFIRMATION
+      proposed_by:
+        user_id: 6c2a1b3d-4e5f-4a71-9b8c-0d1e2f3a4b5c
+        first_name: Hélène
+        last_name: Ngũgĩ
+        role: RISK_OFFICER
+      proposed_at: '2026-09-17T08:15:30Z'
+      reason: Card fraud wave in September
+      base_version: 3
+      previous:
+        version: 3
+        effective_at: '2026-09-10T08:00:00Z'
+        channels:
+        - channel: MOBILE_MONEY
+          medium_threshold: 0.6
+          high_threshold: 0.85
+          medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+        - channel: CARD
+          medium_threshold: 0.6
+          high_threshold: 0.85
+          medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+        - channel: AGENT_BANKING
+          medium_threshold: 0.6
+          high_threshold: 0.85
+          medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+        - channel: USSD
+          medium_threshold: 0.6
+          high_threshold: 0.85
+          medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+        - channel: ONLINE
+          medium_threshold: 0.6
+          high_threshold: 0.85
+          medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+        - channel: BANK_TRANSFER
+          medium_threshold: 0.6
+          high_threshold: 0.85
+          medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+      proposed:
+        version: 4
+        effective_at: '2026-09-17T08:15:30Z'
+        channels:
+        - channel: MOBILE_MONEY
+          medium_threshold: 0.6
+          high_threshold: 0.85
+          medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+        - channel: CARD
+          medium_threshold: 0.6
+          high_threshold: 0.8
+          medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+        - channel: AGENT_BANKING
+          medium_threshold: 0.6
+          high_threshold: 0.85
+          medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+        - channel: USSD
+          medium_threshold: 0.6
+          high_threshold: 0.85
+          medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+        - channel: ONLINE
+          medium_threshold: 0.6
+          high_threshold: 0.85
+          medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+        - channel: BANK_TRANSFER
+          medium_threshold: 0.6
+          high_threshold: 0.85
+          medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+      confirm_by: '2026-09-18T08:15:30Z'
+      reviewed_by: null
+      reviewed_at: null
+      review_reason: null
+      effective_at: '2026-09-17T08:15:30Z'
+      reverted_at: null
+      revert_cause: null
+    - change_id: d7e8f90a-1b2c-4d3e-9f4a-5b6c7d8e9f0a
+      kind: MCC_CIRCUIT_BREAKER
+      direction: LOOSENING
+      status: PENDING_APPROVAL
+      proposed_by:
+        user_id: 8e4c3d5f-6a71-4c93-9dae-2f3a4b5c6d7e
+        first_name: Wanjirũ
+        last_name: Uwase
+        role: RISK_OFFICER
+      proposed_at: '2026-09-17T08:15:30Z'
+      reason: MCC 5732 trips on normal weekend volume
+      base_version: 1
+      previous:
+        version: 1
+        fraud_rate_threshold: 0.05
+        window_minutes: 15
+        minimum_transactions: 100
+        clean_reset_minutes: 60
+      proposed:
+        version: 2
+        fraud_rate_threshold: 0.05
+        window_minutes: 15
+        minimum_transactions: 200
+        clean_reset_minutes: 60
+      confirm_by: null
+      reviewed_by: null
+      reviewed_at: null
+      review_reason: null
+      effective_at: null
+      reverted_at: null
+      revert_cause: null
+    next_cursor: null
+  ConfigRejectionRequest:
+  - change_version: PENDING_APPROVAL
+    reason: Fraud on this channel is still rising
+  ConfigReviewRequest:
+  - change_version: APPLIED_PENDING_CONFIRMATION
+    comment: Confirmed with fraud operations
   DashboardStats:
   - high_open: 3
     medium_open: 11
@@ -1009,7 +1213,7 @@ examples:
       medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
     - channel: CARD
       medium_threshold: 0.6
-      high_threshold: 0.85
+      high_threshold: 0.8
       medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
     - channel: AGENT_BANKING
       medium_threshold: 0.6

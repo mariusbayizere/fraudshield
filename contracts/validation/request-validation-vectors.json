@@ -634,7 +634,7 @@
     ],
     "ThresholdUpdate": [
       {
-        "label": "valid update",
+        "label": "valid proposal",
         "body": {
           "base_version": 3,
           "reason": "Card fraud wave in September",
@@ -646,8 +646,82 @@
             }
           ]
         },
-        "expected_status": 200,
+        "expected_status": 201,
         "expected_errors": [],
+        "schema_detectable": true
+      },
+      {
+        "label": "no change from the settings in effect",
+        "body": {
+          "base_version": 3,
+          "reason": "Card fraud wave in September",
+          "channels": [
+            {
+              "channel": "CARD",
+              "medium_threshold": 0.6,
+              "high_threshold": 0.85
+            }
+          ]
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "channels",
+            "code": "no_change"
+          }
+        ],
+        "schema_detectable": false
+      },
+      {
+        "label": "more than six channel entries",
+        "body": {
+          "base_version": 3,
+          "reason": "Card fraud wave in September",
+          "channels": [
+            {
+              "channel": "CARD",
+              "medium_threshold": 0.6,
+              "high_threshold": 0.85
+            },
+            {
+              "channel": "CARD",
+              "medium_threshold": 0.6,
+              "high_threshold": 0.85
+            },
+            {
+              "channel": "CARD",
+              "medium_threshold": 0.6,
+              "high_threshold": 0.85
+            },
+            {
+              "channel": "CARD",
+              "medium_threshold": 0.6,
+              "high_threshold": 0.85
+            },
+            {
+              "channel": "CARD",
+              "medium_threshold": 0.6,
+              "high_threshold": 0.85
+            },
+            {
+              "channel": "CARD",
+              "medium_threshold": 0.6,
+              "high_threshold": 0.85
+            },
+            {
+              "channel": "CARD",
+              "medium_threshold": 0.6,
+              "high_threshold": 0.85
+            }
+          ]
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "channels",
+            "code": "item_count_out_of_range"
+          }
+        ],
         "schema_detectable": true
       },
       {

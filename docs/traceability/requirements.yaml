@@ -208,7 +208,11 @@ requirements:
   verification: test
   implementation: []
   evidence: []
-  deviations: []
+  deviations:
+  - docs/adr/0014-staff-authorisation-model.md
+  notes: 'Deviation (owner decision, ADR 0014 section 3): asymmetric dual control; loosening takes effect
+    within 60 s of approval by a second RISK_OFFICER, tightening at once with 24 h confirmation or automatic
+    revert.'
 - id: FR-02-07
   section: 3.2 FR-02 ML fraud scoring engine
   title: 'ML scoring latency: p50 < 15ms, p95 < 25ms, p99 < 40ms (ensemble + SHAP for flagged transactions
@@ -379,7 +383,10 @@ requirements:
   verification: test
   implementation: []
   evidence: []
-  deviations: []
+  deviations:
+  - docs/adr/0014-staff-authorisation-model.md
+  notes: 'Owner decision (ADR 0014 section 3): MCC circuit-breaker settings are under the same asymmetric
+    dual control; breaker state stays ADMIN-readable.'
 - id: FR-03-08
   section: 3.3 FR-03 Risk decision and auto-block engine
   title: All auto-block decisions append-only in audit log; no decision deletable or modifiable; override
@@ -667,7 +674,10 @@ requirements:
   verification: test
   implementation: []
   evidence: []
-  deviations: []
+  deviations:
+  - docs/adr/0014-staff-authorisation-model.md
+  notes: 'Deviation (owner decision, ADR 0014 section 3): dual control as FR-02-06, including the MEDIUM
+    timeout policy; demo seed has two RISK_OFFICER accounts (M1 database work).'
 - id: FR-06-01
   section: 3.6 FR-06 Admin panel
   title: 'Admin creates staff accounts: first name, last name, email, phone (country code flag + dial
@@ -2608,9 +2618,9 @@ requirements:
   evidence: []
   deviations:
   - docs/adr/0014-staff-authorisation-model.md
-  notes: 'Deviation (ADR 0014, review NF-07): /api/v1/health/ml and /api/v1/health/kafka are ADMIN-only,
-    so the unauthenticated probe and smoke test use the management-port /actuator/health/ml and /actuator/health/kafka;
-    close as DONE_WITH_DEVIATION citing docs/adr/0014-staff-authorisation-model.md.'
+  notes: 'Deviation (owner decision, ADR 0014 section 6): /api/v1/health/ml and /api/v1/health/kafka do
+    not exist; public /api/v1/health is status only, and the probe and smoke test use the management-port
+    /actuator/health/ml and /actuator/health/kafka; close as DONE_WITH_DEVIATION citing docs/adr/0014-staff-authorisation-model.md.'
 - id: OPS-CI-08
   section: 8.1 CI/CD pipeline
   title: Production Deploy
@@ -2700,9 +2710,9 @@ requirements:
   evidence: []
   deviations:
   - docs/adr/0014-staff-authorisation-model.md
-  notes: 'Deviation (ADR 0014, review NF-07): /api/v1/health/ml and /api/v1/health/kafka are ADMIN-only,
-    so the unauthenticated probe and smoke test use the management-port /actuator/health/ml and /actuator/health/kafka;
-    close as DONE_WITH_DEVIATION citing docs/adr/0014-staff-authorisation-model.md.'
+  notes: 'Deviation (owner decision, ADR 0014 section 6): /api/v1/health/ml and /api/v1/health/kafka do
+    not exist; public /api/v1/health is status only, and the probe and smoke test use the management-port
+    /actuator/health/ml and /actuator/health/kafka; close as DONE_WITH_DEVIATION citing docs/adr/0014-staff-authorisation-model.md.'
 - id: OPS-OBS-06
   section: 8.2 Observability
   title: Fraud Rate Anomaly

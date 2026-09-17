@@ -18,21 +18,24 @@ operations:
   getFinalDecision:
     scopes: ["decisions:read"]
     ref: "D-14, E.1, E.8 (scope decisions:read)"
+  getPublicHealth:
+    public: true
+    ref: "E.1 health; status only, owner decision (ADR 0014)"
   getLiveness:
     public: true
     ref: "E.1; status only, management port (ADR 0014)"
   getMlComponentHealth:
     public: true
-    ref: "SRS monitoring probe and staging smoke test; management port only (ADR 0014)"
+    ref: "SRS 8.2 uptime probe; management port only (ADR 0014)"
   getKafkaComponentHealth:
     public: true
-    ref: "SRS staging gate (Kafka health); management port only (ADR 0014)"
-  getMlHealth:
-    roles: [ADMIN]
-    ref: "E.1, FR-06-05; ADMIN only because it reveals fallback mode (ADR 0014)"
-  getKafkaHealth:
-    roles: [ADMIN]
-    ref: "E.1, FR-06-05; ADMIN only because it reveals spooling (ADR 0014)"
+    ref: "SRS 8.1 staging gate; management port only (ADR 0014)"
+  getDatabaseComponentHealth:
+    public: true
+    ref: "C.4 failure behaviour; management port only (ADR 0014)"
+  getRedisComponentHealth:
+    public: true
+    ref: "C.4 failure behaviour; management port only (ADR 0014)"
   login:
     public: true
     ref: "FR-07-06, D-26"
@@ -179,9 +182,41 @@ operations:
   signOffSarReport:
     roles: [RISK_OFFICER]
     ref: "FR-05-06, D-22"
-  updateThresholds:
+  proposeThresholdChange:
     roles: [RISK_OFFICER]
-    ref: "FR-02-06, FR-05-07; RISK_OFFICER only, separation of duties (ADR 0014)"
+    ref: "FR-02-06, FR-05-07; asymmetric dual control, never ADMIN (owner decision, ADR 0014)"
+    rules:
+      - { problem: conflict, status: 409 }
+      - { problem: open-change-exists, status: 409 }
+      - { problem: validation, status: 422, code: no_change }
+  getCircuitBreakerSettings:
+    roles: [RISK_OFFICER, ADMIN]
+    ref: "FR-03-07 (admin panel), D-18"
+  proposeCircuitBreakerChange:
+    roles: [RISK_OFFICER]
+    ref: "FR-03-07, D-18; asymmetric dual control, never ADMIN (owner decision, ADR 0014)"
+    rules:
+      - { problem: conflict, status: 409 }
+      - { problem: open-change-exists, status: 409 }
+      - { problem: validation, status: 422, code: no_change }
+  listConfigChanges:
+    roles: [RISK_OFFICER]
+    ref: "Owner decision (ADR 0014): pending-change list for the second risk officer"
+  getConfigChange:
+    roles: [RISK_OFFICER]
+    ref: "Owner decision (ADR 0014)"
+  approveConfigChange:
+    roles: [RISK_OFFICER]
+    ref: "Owner decision (ADR 0014): approval or confirmation by a different risk officer"
+    rules:
+      - { problem: self-review, status: 403 }
+      - { problem: change-not-open, status: 409 }
+  rejectConfigChange:
+    roles: [RISK_OFFICER]
+    ref: "Owner decision (ADR 0014): rejection or revert by a different risk officer"
+    rules:
+      - { problem: self-review, status: 403 }
+      - { problem: change-not-open, status: 409 }
   listUsers:
     roles: [ADMIN]
     ref: "FR-06-01, FR-06-02"

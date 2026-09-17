@@ -21,6 +21,14 @@ ALERT_DECISION_OPERATIONS = {
     "escalateAlert",
     "overrideAlertDecision",
 }
+DUAL_CONTROL = (
+    "proposeThresholdChange",
+    "proposeCircuitBreakerChange",
+    "listConfigChanges",
+    "getConfigChange",
+    "approveConfigChange",
+    "rejectConfigChange",
+)
 ADMIN_ONLY_OPERATIONS = {
     "listUsers",
     "createUser",
@@ -53,7 +61,8 @@ def test_document_matches_the_reviewed_matrix_exactly() -> None:
         ("decideAlert", ["ANALYST", "SENIOR_ANALYST", "RISK_OFFICER", "ADMIN"]),
         ("overrideAlertDecision", ["RISK_OFFICER", "ANALYST"]),
         ("createApiKey", ["ANALYST", "ADMIN"]),
-        ("updateThresholds", ["RISK_OFFICER", "ADMIN"]),
+        ("proposeThresholdChange", ["RISK_OFFICER", "ADMIN"]),
+        ("approveConfigChange", ["RISK_OFFICER", "ADMIN"]),
     ],
 )
 def test_matrix_check_detects_a_widened_role_list(operation_id: str, roles: list[str]) -> None:
@@ -90,8 +99,27 @@ def test_admin_never_decides_alerts() -> None:
 
 @pytest.mark.req("FR-05-01", "FR-02-06", "FR-05-07")
 def test_only_risk_officers_override_and_change_thresholds() -> None:
-    for operation_id in ("overrideAlertDecision", "updateThresholds", "previewThresholdImpact"):
+    for operation_id in ("overrideAlertDecision", "previewThresholdImpact", *DUAL_CONTROL):
         assert declared_access(OPS[operation_id].spec) == ("roles", frozenset({"RISK_OFFICER"}))
+
+
+@pytest.mark.req("FR-05-07", "FR-03-07")
+def test_dual_control_endpoints_forbid_admin_and_self_review() -> None:
+    """Owner decision: ADMIN never proposes or approves; nobody reviews their own change."""
+    for operation_id in DUAL_CONTROL:
+        assert "ADMIN" not in declared_access(OPS[operation_id].spec)[1], operation_id
+    for operation_id in ("approveConfigChange", "rejectConfigChange"):
+        problems = {r["problem"] for r in OPS[operation_id].spec["x-authorisation-rules"]}
+        assert "urn:fraudshield:problem:self-review" in problems
+        assert (
+            OPS[operation_id]
+            .spec["responses"]["403"]["$ref"]
+            .endswith("/AuthorisationRuleViolation")
+        )
+    for operation_id in ("proposeThresholdChange", "proposeCircuitBreakerChange"):
+        assert "Tightening" in OPS[operation_id].spec["description"]
+        assert "24 hours" in OPS[operation_id].spec["description"]
+    assert OPS["proposeThresholdChange"].path == "/admin/thresholds"  # SRS path kept (FR-02-06)
 
 
 @pytest.mark.req("FR-06-01", "FR-06-03", "FR-06-07")
@@ -112,7 +140,10 @@ def test_api_keys_reach_only_the_four_machine_operations() -> None:
 
 
 @pytest.mark.req("FR-07-01")
-@pytest.mark.parametrize("operation_id", sorted(ALERT_DECISION_OPERATIONS | {"updateUser"}))
+@pytest.mark.parametrize(
+    "operation_id",
+    sorted(ALERT_DECISION_OPERATIONS | {"updateUser", *DUAL_CONTROL[:2], *DUAL_CONTROL[4:]}),
+)
 def test_object_level_rules_are_declared_with_documented_problems(operation_id: str) -> None:
     spec = OPS[operation_id].spec
     rules = spec.get("x-authorisation-rules")
@@ -130,11 +161,29 @@ def test_object_level_rules_are_declared_with_documented_problems(operation_id: 
 
 
 def test_health_detail_is_not_public() -> None:
-    for operation_id in ("getMlHealth", "getKafkaHealth"):
-        assert declared_access(OPS[operation_id].spec) == ("roles", frozenset({"ADMIN"}))
+    """Owner decision: one public status-only endpoint; component detail on the management port."""
+    public = OPS["getPublicHealth"]
+    assert public.path == "/health"
+    assert declared_access(public.spec) == ("public", frozenset())
+    assert "x-network" not in public.spec
+    for status in ("200", "503"):
+        ref = public.spec["responses"][status]["content"]["application/json"]["schema"]["$ref"]
+        assert ref.endswith("/ProbeStatus")
     probe = DOC["components"]["schemas"]["ProbeStatus"]
     assert probe["properties"].keys() == {"status"}
     assert probe["properties"]["status"]["enum"] == ["UP", "DOWN"]
+    assert probe["additionalProperties"] is False
+    health_paths = {
+        op.path for op in OPS.values() if "health" in op.path and op.path != "/admin/health"
+    }
+    assert health_paths == {
+        "/health",
+        "/actuator/health",
+        "/actuator/health/ml",
+        "/actuator/health/kafka",
+        "/actuator/health/db",
+        "/actuator/health/redis",
+    }
 
 
 @pytest.mark.req("FR-07-01")

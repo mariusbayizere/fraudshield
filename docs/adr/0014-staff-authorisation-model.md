@@ -1,7 +1,7 @@
 # 0014 — Staff authorisation model
 
-- **Status:** Accepted (author decision after the M1 contracts review, 2026-09-17; the threshold
-  separation-of-duties choice is flagged for the repository owner in the M1 status report)
+- **Status:** Accepted (author decision after the M1 contracts review, 2026-09-17; decisions 3 and 6
+  amended by repository owner decisions on 2026-09-17)
 - **Date:** 2026-09-17
 - **Requirements affected:** FR-01-05, FR-02-06, FR-03-07, FR-05-01, FR-05-03, FR-05-04, FR-05-07,
   FR-06-01 … FR-06-07, FR-07-01, FR-07-07, FR-07-09, E.1, E.8
@@ -45,13 +45,35 @@ Option 3.
    matrix also lists each operation's object-level rules (problem type and status, or `filter`), so a
    rule cannot be dropped or changed silently. The M7 role × endpoint test reads the same
    declarations against the running API.
-3. **Thresholds (separation of duties).** Only RISK_OFFICER changes thresholds and previews their
-   impact; ADMIN and RISK_OFFICER can read them. The SRS path `/admin/thresholds` is kept for
-   traceability. Thresholds decide which fraud is declined; an ADMIN, who already controls users,
-   API keys and models, must not also control them alone. FR-05-07's "admin UI" is read as the
-   console's settings area, which a risk officer uses. *Owner check:* if the owner reads FR-02-06 as
-   requiring ADMIN write access, the alternative is dual control (an ADMIN proposes, a different
-   RISK_OFFICER approves, both named in the THRESHOLD_CHANGE audit event).
+3. **Risk configuration under asymmetric dual control** *(owner decision)*. It applies to per-channel
+   thresholds, the MEDIUM timeout policy, and MCC circuit-breaker settings.
+   - Only RISK_OFFICER proposes, approves, confirms or rejects; **ADMIN cannot** (403), and ADMIN
+     keeps read access to thresholds and breaker settings. A change is never reviewed by its
+     proposer: self-approval, self-confirmation and self-rejection all return 403 `self-review`.
+   - **Tightening** takes effect immediately, within 60 s (FR-05-07), as
+     `APPLIED_PENDING_CONFIRMATION`. Tightening means a lower threshold, a lower breaker rate or
+     minimum volume, a longer clean reset, or `RELEASE_WITH_TIMEOUT_LABEL` → `DECLINE_AND_VERIFY`. A
+     different RISK_OFFICER must confirm it within 24 hours. Otherwise it is reverted automatically:
+     the previous settings are restored as a new version, and a THRESHOLD_CHANGE audit event with a
+     system actor records the revert. A rejection reverts it at once.
+   - **Loosening** is `PENDING_APPROVAL` and changes nothing until a different RISK_OFFICER approves;
+     it then takes effect within 60 s of approval. Loosening means the opposite changes, including
+     `DECLINE_AND_VERIFY` → `RELEASE_WITH_TIMEOUT_LABEL`; any change mixing tightening and loosening
+     elements; and any change of the breaker's rolling window.
+   - At most one open change per kind, and a proposal must name the version in effect, so a revert
+     never overwrites a later change.
+   - The SRS path `PATCH /admin/thresholds` (FR-02-06) is kept as the threshold proposal.
+     `PATCH /admin/circuit-breaker-settings` proposes breaker settings. `GET /config-changes` lists
+     pending changes, and `POST /config-changes/{id}/approval` and `…/rejection` review them.
+   - `fraudshield_contracts` declares the rules, and `common.config.DualControlWorkflow` implements
+     them with an injected clock. `DualControlWorkflowTest` covers: tightening immediate; loosening
+     pending until approved; confirmation; auto-revert at exactly 24 hours and not one nanosecond
+     before; rejection revert; self-approval 403; ADMIN, ANALYST and SENIOR_ANALYST 403; timeout
+     policy and breaker classification; mixed changes; stale versions; one open change per kind.
+   - **Deviation:** FR-02-06 and FR-05-07 say a threshold change takes effect within 60 seconds.
+     Loosening now takes effect within 60 seconds of *approval*, not of the request.
+   - Demo data seeds two RISK_OFFICER accounts so the flow can be demonstrated. This is added with
+     the M1 database seed.
 4. **Least-privilege reads (CR-30).** Campaigns are Risk Officer only (FR-05-04). Circuit-breaker
    state is ADMIN only (FR-03-07 "admin panel"). ADMIN keeps read access to model performance because
    promotion and rollback decisions depend on it (FR-06-03).
@@ -69,16 +91,18 @@ Option 3.
    - an administrator cannot change their own role or status (`self-modification`, 403, FR-07-01),
      and the last ACTIVE ADMIN of an institution cannot be demoted, locked or deactivated
      (`last-active-admin`, 409).
-6. **Component health is not public (CR-10).** `/health/ml` and `/health/kafka` require ADMIN,
-   because showing that the rule-based fallback is active tells attackers when to strike.
-   Orchestration probes use `/actuator/health` on the management port, which returns only `UP` or
-   `DOWN` for the API process; the fallback keeps the API able to decide, so ML degradation does not
-   change it. **Deviation from SRS 8.1 (staging gate) and 8.2 (uptime probe):** the unauthenticated
-   blackbox probe and the smoke test cannot present a staff token, and a monitoring robot with an
-   ADMIN account would break the one-person-one-role model. They read `/actuator/health/ml` and
-   `/actuator/health/kafka` on the management port, which is reachable only from the cluster network
-   and never routed through the ingress; `/actuator/health` stays process-only. The contract marks
-   both with `x-network: management`; OPS-CI-07 and OPS-OBS-05 carry the deviation.
+6. **Health** *(owner decision)*. `GET /api/v1/health` is the only public health endpoint, and it
+   returns exactly `{"status": "UP"}` or `{"status": "DOWN"}`, with no component names, versions,
+   hostnames or fallback state. Detailed health is exposed only on the management port, which is
+   reachable only from the internal cluster network and never routed through the ingress (marked
+   `x-network: management` in the contract):
+   - `/actuator/health/ml`, `/kafka`, `/db` and `/redis`;
+   - `/actuator/health`, which is process liveness only.
+
+   Showing that the ML scorer has fallen back to rules would tell attackers when to strike. **Deviation
+   from E.1 and SRS 8.1 and 8.2:** `/api/v1/health/ml` and `/api/v1/health/kafka` do not exist. The
+   staging smoke test and the uptime probe read the management endpoints instead, and the admin health
+   panel (FR-06-05) gets its detail from the backend. OPS-CI-07 and OPS-OBS-05 carry the deviation.
 7. **Passwords (CR-09).** 8–72 code points and at most 72 UTF-8 bytes, because bcrypt (cost 12,
    FR-07-07) reads only the first 72 bytes and current Spring Security encoders reject longer input.
    Permitted characters: anything except Unicode general categories Cc, Cf, Cs and Co (controls such
@@ -114,5 +138,5 @@ Option 3.
 - **Residual risk:** two colluding ADMINs, or an ADMIN who creates and approves a sock-puppet
   RISK_OFFICER account, can still bypass separation of duties. Dual control on role grants is
   recorded for the M7 threat model (`docs/security/threat_model.md`) rather than built now.
-- If the owner prefers ADMIN write access to thresholds, decision 3 changes to dual control and the
-  matrix and tests change with it.
+- Risk officers must be staffed so that a second officer can review within 24 hours; otherwise
+  tightening changes revert and loosening changes wait.
