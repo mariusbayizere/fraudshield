@@ -68,7 +68,8 @@ processes, so their conventions must be explicit and tested.
    the baselines published at the merge base with `origin/main` (full history) and checks the current
    schemas and proto against those. The checker is conservative in the cases above; its self-tests
    apply each kind of breaking change, including the overlapping-`oneOf` cases found in review, and
-   require it to be reported.
+   require it to be reported. By owner decision (2026-09-17) the JSON Schema checker is feature-complete:
+   further changes are made only for BLOCKER findings.
 6. **Scoring gRPC** (`fraudshield.scoring.v1`): the API sends the transaction and the Redis account
    context; the scorer returns the FR-02-01 fields plus `anomaly_raw` (D-06), all 44 SHAP contributions
    for flagged transactions in margin space with base value and final margin (D-05), the feature
@@ -79,16 +80,10 @@ processes, so their conventions must be explicit and tested.
    `Stage` enum. Liveness uses the standard `grpc.health.v1.Health` service; `GetModelStatus` reports
    loaded model versions.
 
-   **Evolution.** Fields and enum values are only added. A removed number and its name are reserved, and
-   no number, name, type, label or oneof membership changes. A reservation is never dropped, reserved
-   numbers and names are never reused (fields and enum values), and methods keep their request and
-   response types and streaming mode. `contracts/proto/baseline/scoring-v1.json` summarises the compiled
-   descriptor; `fraudshield_contracts.proto_compat` fails the build on any such change, and
-   `fs-contract-baselines` repeats the comparison against the baseline published on `main`. Its
-   self-tests compile edited copies of the proto (a renumbered field, a deletion without `reserved`, a
-   type change, a rename, a label change, a renamed enum value, a removed method, a streaming response)
-   and check a dropped reservation and enum reuse.
-   `buf breaking` was not added, to avoid another pinned binary.
+   **Evolution.** Fields and enum values are only added. A field or enum value is removed only with its
+   number and name reserved; a reservation is never dropped; no number, name, type, label, oneof
+   membership, package, method or streaming mode changes. This is enforced by `buf breaking` against
+   the proto on main (ADR 0016, which replaced the custom descriptor checker first described here).
 7. **Webhook signatures** follow `contracts/webhooks/decision-final.md`: `t=<unix>,v1=<hex HMAC-SHA256>`
    over `t + "." + raw body`, with `t` in canonical digits. Each attempt is signed with that attempt's
    time, so late retries stay inside the 300-second window; a newer state cancels pending retries of

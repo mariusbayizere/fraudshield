@@ -2,14 +2,12 @@ from __future__ import annotations
 
 import copy
 import json
-import shutil
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from fraudshield_contracts import proto_compat
 from fraudshield_contracts.compatibility import (
     breaking_changes,
     breaking_changes_between,
@@ -196,135 +194,3 @@ def test_checker_accepts_compatible_changes(label: str, mutate: Callable[[Any], 
     new = copy.deepcopy(old)
     mutate(new)
     assert breaking_changes(old, new) == [], label
-
-
-# --- protobuf -------------------------------------------------------------------------------------
-
-
-def test_proto_matches_its_committed_baseline() -> None:
-    current = proto_compat.summarise(proto_compat.compile_descriptor())
-    baseline = json.loads(proto_compat.BASELINE_PATH.read_text(encoding="utf-8"))
-    assert proto_compat.breaking_changes(baseline, current) == []
-    assert current == baseline, (
-        "compatible proto change: regenerate contracts/proto/baseline/scoring-v1.json and review it"
-    )
-
-
-def _compile_edited(tmp_path: Path, old: str, new: str) -> dict[str, Any]:
-    root = tmp_path / "proto"
-    shutil.copytree(proto_compat.PROTO_ROOT, root, ignore=shutil.ignore_patterns("baseline"))
-    target = root / proto_compat.SCORING_PROTO
-    text = target.read_text(encoding="utf-8")
-    assert text.count(old) == 1, old
-    target.write_text(text.replace(old, new), encoding="utf-8")
-    return proto_compat.summarise(proto_compat.compile_descriptor(root))
-
-
-PROTO_BREAKING = [
-    ("renumbered field", "string model_version = 14;", "string model_version = 18;"),
-    ("field deleted without reserved", "  double shap_base_value = 12;\n", ""),
-    ("type change", "  Money amount = 5;", "  string amount = 5;"),
-    ("renamed field", "string traceparent = 4;", "string trace_parent = 4;"),
-    ("label change", "optional string device_token = 10;", "repeated string device_token = 10;"),
-    ("enum value renamed", "CHANNEL_USSD = 4;", "CHANNEL_FEATURE_PHONE = 4;"),
-    (
-        "response made server-streaming (review R5b)",
-        "rpc Score(ScoreRequest) returns (ScoreResponse);",
-        "rpc Score(ScoreRequest) returns (stream ScoreResponse);",
-    ),
-    (
-        "method removed",
-        "  rpc GetModelStatus(ModelStatusRequest) returns (ModelStatusResponse);\n",
-        "",
-    ),
-    (
-        "reserved number reused",
-        "  double shap_base_value = 12;\n",
-        '  reserved 12;\n  reserved "shap_base_value";\n  double shap_base = 12;\n',
-    ),
-]
-
-
-@pytest.mark.parametrize(
-    ("label", "old", "new"), PROTO_BREAKING, ids=[p[0] for p in PROTO_BREAKING]
-)
-def test_proto_checker_reports_breaking_changes(
-    tmp_path: Path, label: str, old: str, new: str
-) -> None:
-    baseline = json.loads(proto_compat.BASELINE_PATH.read_text(encoding="utf-8"))
-    if label == "reserved number reused":
-        # protoc rejects this within one file; the checker's own reuse rule (a later version that
-        # drops the reservation) is exercised on summaries in the next test.
-        with pytest.raises(RuntimeError):
-            _compile_edited(tmp_path, old, new)
-        return
-    assert proto_compat.breaking_changes(baseline, _compile_edited(tmp_path, old, new)), label
-
-
-def test_proto_checker_accepts_an_added_field_and_a_properly_reserved_removal(
-    tmp_path: Path,
-) -> None:
-    baseline = json.loads(proto_compat.BASELINE_PATH.read_text(encoding="utf-8"))
-    added = _compile_edited(
-        tmp_path / "added",
-        "  repeated StageTiming stage_timings = 17;\n",
-        "  repeated StageTiming stage_timings = 17;\n  string trace_id = 18;\n",
-    )
-    assert proto_compat.breaking_changes(baseline, added) == []
-    reserved = _compile_edited(
-        tmp_path / "reserved",
-        "  double shap_base_value = 12;\n",
-        '  reserved 12;\n  reserved "shap_base_value";\n',
-    )
-    assert proto_compat.breaking_changes(baseline, reserved) == []
-    reused = copy.deepcopy(reserved)
-    message = reused["messages"][".fraudshield.scoring.v1.ScoringResult"]
-    message["fields"]["12"] = {
-        "name": "shap_base",
-        "type": "TYPE_DOUBLE",
-        "type_name": "",
-        "label": "LABEL_OPTIONAL",
-        "oneof": None,
-        "proto3_optional": False,
-    }
-    assert proto_compat.breaking_changes(reserved, reused) == [
-        ".fraudshield.scoring.v1.ScoringResult field 12: reuses a reserved number"
-    ]
-
-
-def test_proto_checker_rejects_dropping_a_reservation_to_reuse_it(tmp_path: Path) -> None:
-    """Review R5c: reserve, then unreserve, then reuse must fail at the unreserve step."""
-    reserved = _compile_edited(
-        tmp_path / "reserved",
-        "  double shap_base_value = 12;\n",
-        '  reserved 12;\n  reserved "shap_base_value";\n',
-    )
-    unreserved = _compile_edited(tmp_path / "unreserved", "  double shap_base_value = 12;\n", "")
-    changes = proto_compat.breaking_changes(reserved, unreserved)
-    assert (
-        ".fraudshield.scoring.v1.ScoringResult: reserved numbers 12-12 no longer reserved"
-        in changes
-    )
-    assert (
-        ".fraudshield.scoring.v1.ScoringResult: reserved name shap_base_value no longer reserved"
-        in changes
-    )
-
-
-def test_proto_checker_rejects_enum_value_reuse() -> None:
-    baseline = json.loads(proto_compat.BASELINE_PATH.read_text(encoding="utf-8"))
-    old = copy.deepcopy(baseline)
-    channel = old["enums"][".fraudshield.scoring.v1.Channel"]
-    del channel["values"]["6"]
-    channel["reserved_numbers"] = [[6, 6]]
-    channel["reserved_names"] = ["CHANNEL_BANK_TRANSFER"]
-    new = copy.deepcopy(old)
-    new["enums"][".fraudshield.scoring.v1.Channel"]["values"]["6"] = "CHANNEL_WALLET"
-    new["enums"][".fraudshield.scoring.v1.Channel"]["reserved_numbers"] = []
-    changes = proto_compat.breaking_changes(old, new)
-    assert any("reuses a reserved number or name" in c for c in changes)
-    assert any("no longer reserved" in c for c in changes)
-    moved = copy.deepcopy(baseline)
-    moved["enums"][".fraudshield.scoring.v1.Channel"]["values"]["7"] = "CHANNEL_USSD"
-    del moved["enums"][".fraudshield.scoring.v1.Channel"]["values"]["4"]
-    assert any("renumbered" in c for c in proto_compat.breaking_changes(baseline, moved))

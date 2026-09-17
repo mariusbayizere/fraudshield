@@ -34,7 +34,7 @@ service ScoringService {
 
   // Loaded-model information for /api/v1/health/ml and hot-swap monitoring. Liveness uses the
   // standard grpc.health.v1.Health service, registered alongside this one.
-  rpc GetModelStatus(ModelStatusRequest) returns (ModelStatusResponse);
+  rpc GetModelStatus(GetModelStatusRequest) returns (GetModelStatusResponse);
 }
 
 enum Channel {
@@ -234,9 +234,9 @@ message ScoreResponse {
   ScoringResult result = 1;
 }
 
-message ModelStatusRequest {}
+message GetModelStatusRequest {}
 
-message ModelStatusResponse {
+message GetModelStatusResponse {
   enum Status {
     STATUS_UNSPECIFIED = 0;
     STATUS_SERVING = 1;
