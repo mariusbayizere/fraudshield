@@ -49,6 +49,7 @@ def render(
         f"| Rows | {measures['rows']:,} |",
         f"| Mode | {_MODE[full]} |",
         f"| Generator peak RSS | {measures['peak_rss_bytes'] / 2**20:.0f} MiB (limit 2048 MiB) |",
+        f"| Checks peak RSS | {measures['checks_peak_rss_bytes'] / 2**20:.0f} MiB |",
         f"| Chunk size (shards per batch) | {measures['chunk_size']} |",
         "| Machine | "
         + ", ".join(f"{k} {v}" for k, v in sorted(measures["machine"].items()))

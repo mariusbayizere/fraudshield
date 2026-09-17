@@ -35,6 +35,7 @@ from numpy.typing import NDArray
 from fraudshield_dataset.generator.config import CHANNELS, SimulationConfig
 from fraudshield_dataset.generator.fraud import NOVEL_VARIANT
 from fraudshield_dataset.generator.legit import MINOR_UNITS
+from fraudshield_dataset.generator.pipeline import peak_rss_bytes
 from fraudshield_dataset.realism.stats import (
     auc,
     cross_validated_auc,
@@ -128,6 +129,7 @@ class Dataset:
         self.features = Columns()
         self.shortcut = Columns()
         self.observed_parts: list[NDArray[np.bool_]] = []
+        self.feature_label_parts: list[NDArray[np.bool_]] = []
         self.true_parts: list[NDArray[np.bool_]] = []
         self.time_parts: list[NDArray[np.int64]] = []
         self.file_index_parts: list[NDArray[np.float64]] = []
@@ -164,14 +166,19 @@ class Dataset:
             monthly = self.fraud_types_by_month.setdefault(month, {})
             for kind in labels.filter(labels["is_fraud_true"])["fraud_type"].to_pylist():
                 monthly[kind] = monthly.get(kind, 0) + 1
-        observed = self.observed
+        feature_labels = self.feature_labels
         for name in _CATEGORICALS:
             codes = self.features.get(name).astype(np.int64)
-            self.features.replace(name, _category_rates(codes, observed))
+            self.features.replace(name, _category_rates(codes, feature_labels))
 
     @property
     def observed(self) -> NDArray[np.bool_]:
         return np.concatenate(self.observed_parts)
+
+    @property
+    def feature_labels(self) -> NDArray[np.bool_]:
+        """Observed labels of the rows the feature matrix holds (all fraud, sampled legitimate)."""
+        return np.concatenate(self.feature_label_parts)
 
     @property
     def true(self) -> NDArray[np.bool_]:
@@ -185,6 +192,12 @@ class Dataset:
         observed = labels["is_fraud_observed"].to_numpy(zero_copy_only=False)
         true = labels["is_fraud_true"].to_numpy(zero_copy_only=False)
         micros = t["transaction_timestamp"].cast(pa.int64()).to_numpy()
+        ids = t["transaction_id"].to_pylist()
+        # All fraud rows plus a keyed sample of legitimate ones. AUC compares the two classes, so
+        # sampling legitimate rows at a fixed rate leaves it unbiased, and the feature matrix then
+        # costs the sample rather than the dataset: 404 MiB at a million rows would have been two
+        # gigabytes at five million, over the memory budget for this project.
+        keep = np.flatnonzero(true | np.array([_sampled(i, self.config.seed) for i in ids]))
         self.observed_parts.append(observed)
         self.true_parts.append(true)
         self.time_parts.append(micros)
@@ -195,9 +208,10 @@ class Dataset:
         )
         for kind in labels["fraud_type"].drop_null().to_pylist():
             self.fraud_types[kind] = self.fraud_types.get(kind, 0) + 1
-        self._behavioural_features(t, micros)
+        self._behavioural_features(t, micros, keep)
+        self.feature_label_parts.append(observed[keep])
         self._formats_and_nulls(t, true)
-        self._shortcut_columns(t, micros, observed, true)
+        self._shortcut_columns(t, micros, observed, ids, keep)
         self._identifier_tokens(t, observed)
         # Eight bytes of a keyed digest per identifier: uniqueness over millions of rows can then
         # be checked with one sort instead of holding every string in memory.
@@ -205,42 +219,51 @@ class Dataset:
             np.fromiter(
                 (
                     int.from_bytes(hashlib.blake2b(i.encode(), digest_size=8).digest(), "big")
-                    for i in t["transaction_id"].to_pylist()
+                    for i in ids
                 ),
                 dtype=np.uint64,
                 count=t.num_rows,
             )
         )
 
-    def _behavioural_features(self, t: pa.Table, micros: NDArray[np.int64]) -> None:
+    def _behavioural_features(
+        self, t: pa.Table, micros: NDArray[np.int64], keep: NDArray[np.int64]
+    ) -> None:
         channel, currency = t["channel"].to_pylist(), t["currency"].to_pylist()
         for c in channel:
             self.channel_counts[c] = self.channel_counts.get(c, 0) + 1
         for c in currency:
             self.currency_counts[c] = self.currency_counts.get(c, 0) + 1
-        home = [self.country_of_currency[c] for c in currency]
+        # The mixes above count every row; the features below describe the sample only.
+        home = [self.country_of_currency[currency[i]] for i in keep]
         offset = np.array([self.offsets[h] for h in home]) * _MICROS_PER_HOUR
-        local = micros + offset.astype(np.int64)
-        amount = pc.cast(t["amount"], pa.float64()).to_numpy()
+        local = micros[keep] + offset.astype(np.int64)
+        amount = pc.cast(t["amount"], pa.float64()).to_numpy()[keep]
         destination = t["counterparty_country"].to_pylist()
         f = self.features
-        f.add("amount_rwf", pc.cast(t["amount_rwf"], pa.float64()).to_numpy())
+        f.add("amount_rwf", pc.cast(t["amount_rwf"], pa.float64()).to_numpy()[keep])
         f.add("local_hour", (local // 1_000_000) % 86_400 // 3600)
         f.add("day_of_week", (local // _MICROS_PER_DAY + 3) % 7)
-        f.add("day_of_month", pc.day(t["transaction_timestamp"]).to_numpy())
+        f.add("day_of_month", pc.day(t["transaction_timestamp"]).to_numpy()[keep])
         f.add("round_amount", np.mod(amount, 1000) == 0)
-        f.add("latitude", t["latitude"].to_numpy())
-        f.add("longitude", t["longitude"].to_numpy())
-        f.add("device_missing", pc.is_null(t["device_fingerprint"]).to_numpy(zero_copy_only=False))
-        f.add("agent_present", pc.is_valid(t["agent_id"]).to_numpy(zero_copy_only=False))
-        f.add("cross_border", np.array([d != h for d, h in zip(destination, home, strict=True)]))
+        f.add("latitude", t["latitude"].to_numpy()[keep])
+        f.add("longitude", t["longitude"].to_numpy()[keep])
+        f.add(
+            "device_missing",
+            pc.is_null(t["device_fingerprint"]).to_numpy(zero_copy_only=False)[keep],
+        )
+        f.add("agent_present", pc.is_valid(t["agent_id"]).to_numpy(zero_copy_only=False)[keep])
+        f.add(
+            "cross_border",
+            np.array([destination[i] != h for i, h in zip(keep, home, strict=True)]),
+        )
         for name in _CATEGORICALS:
             encoded = pc.dictionary_encode(t[name]).combine_chunks()
             vocabulary = self._vocabularies.setdefault(name, {})
             codes = np.array(
                 [vocabulary.setdefault(v, len(vocabulary)) for v in encoded.dictionary.to_pylist()]
             )
-            f.add(name, codes[encoded.indices.to_numpy()])
+            f.add(name, codes[encoded.indices.to_numpy()][keep])
 
     def _formats_and_nulls(self, t: pa.Table, true: NDArray[np.bool_]) -> None:
         columns = {
@@ -281,11 +304,9 @@ class Dataset:
         t: pa.Table,
         micros: NDArray[np.int64],
         observed: NDArray[np.bool_],
-        true: NDArray[np.bool_],
+        ids: list[str],
+        keep: NDArray[np.int64],
     ) -> None:
-        # All fraud rows plus a keyed sample of legitimate rows.
-        ids = t["transaction_id"].to_pylist()
-        keep = np.flatnonzero(true | np.array([_sampled(i, self.config.seed) for i in ids]))
         kept_ids = [ids[i] for i in keep]
         accounts = t["account_id"].to_pylist()
         self.shortcut.add("transaction_id_first_byte", _hex_byte(kept_ids, 0))
@@ -310,7 +331,10 @@ def _leakage_checks(
     data: Dataset, config: SimulationConfig, measures: dict[str, Any]
 ) -> list[CheckResult]:
     observed = data.observed
-    single = {name: separation(data.features.get(name), observed) for name in data.features.names}
+    feature_labels = data.feature_labels
+    single = {
+        name: separation(data.features.get(name), feature_labels) for name in data.features.names
+    }
     worst = max(single, key=lambda k: single[k])
     measures["single_feature_auc"] = single
 
@@ -354,7 +378,7 @@ def _leakage_checks(
     rule = (data.features.get("amount_rwf") >= threshold).astype(float) + (
         data.features.get("local_hour") < 5
     )
-    measures["trivial_rule_auc"] = auc(rule, observed)
+    measures["trivial_rule_auc"] = auc(rule, feature_labels)
     return [
         CheckResult(
             "single-feature AUC",
@@ -593,6 +617,9 @@ def run_checks(
         + _label_and_format_checks(data, config, full, measures)
         + _distribution_checks(data, root, config, full, measures)
     )
+    # Measured, not assumed: the checks read the dataset month by month and keep per-row arrays
+    # plus a sample of the features, so their cost is reported next to the generator's.
+    measures["checks_peak_rss_bytes"] = peak_rss_bytes()
     return results, measures
 
 
