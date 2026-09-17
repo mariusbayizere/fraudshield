@@ -160,6 +160,40 @@ def _month_events(
     return table.take(order)
 
 
+@dataclass(frozen=True)
+class _Simulation:
+    config: SimulationConfig
+    population: Population
+    legitimate: LegitimateBehaviour
+    scenarios: list[Scenario]
+    shards: dict[int, list[int]]
+    chunk_size: int
+
+    def month(
+        self, month_index: int
+    ) -> tuple[list[pa.Table], list[pa.Table], list[Customer], list[FraudEvent]]:
+        """Simulate one month in batches of ``chunk_size`` shards, each converted to Arrow."""
+        transaction_tables: list[pa.Table] = []
+        label_tables: list[pa.Table] = []
+        simulated: list[Customer] = []
+        fraud_events: list[FraudEvent] = []
+        for first in range(0, SHARDS, self.chunk_size):
+            batch = Rows()
+            for shard in range(first, min(first + self.chunk_size, SHARDS)):
+                for index in self.shards[shard]:
+                    if self.population.join_month(index) > month_index:
+                        continue
+                    customer = self.population.customer(index)
+                    simulated.append(customer)
+                    batch.extend(self.legitimate.month(customer, month_index))
+                    for scenario in self.scenarios:
+                        scenario(customer, month_index, batch, fraud_events)
+            # Convert each batch at once so Python objects never accumulate for a whole month.
+            transaction_tables.append(_transactions_table(batch))
+            label_tables.append(_labels_table(self.config, batch))
+        return transaction_tables, label_tables, simulated, fraud_events
+
+
 def generate(
     config: SimulationConfig,
     output: Path,
@@ -174,33 +208,37 @@ def generate(
     scenario_list: list[Scenario] = (
         [FraudModel(config, population, legitimate)] if scenarios is None else list(scenarios)
     )
-    shards = _customers_by_shard(config)
+    simulation = _Simulation(
+        config, population, legitimate, scenario_list, _customers_by_shard(config), chunk_size
+    )
     rows_by_month: dict[str, int] = {}
     daily: Counter[str] = Counter()
     checksums: dict[str, str] = {}
+    carried: tuple[pa.Table, pa.Table] | None = None
+    dropped_after_end = 0
     for month_index, month in enumerate(config.months):
-        transaction_tables: list[pa.Table] = []
-        label_tables: list[pa.Table] = []
-        simulated: list[Customer] = []
-        fraud_events: list[FraudEvent] = []
-        for first in range(0, SHARDS, chunk_size):
-            batch = Rows()
-            for shard in range(first, min(first + chunk_size, SHARDS)):
-                for index in shards[shard]:
-                    if population.join_month(index) > month_index:
-                        continue
-                    customer = population.customer(index)
-                    simulated.append(customer)
-                    batch.extend(legitimate.month(customer, month_index))
-                    for scenario in scenario_list:
-                        scenario(customer, month_index, batch, fraud_events)
-            # Convert each batch at once so Python objects never accumulate for a whole month.
-            transaction_tables.append(_transactions_table(batch))
-            label_tables.append(_labels_table(config, batch))
-            del batch
+        transaction_tables, label_tables, simulated, fraud_events = simulation.month(month_index)
+        if carried is not None:
+            transaction_tables.insert(0, carried[0])
+            label_tables.insert(0, carried[1])
         table = pa.concat_tables(transaction_tables)
         labels = pa.concat_tables(label_tables)
         del transaction_tables, label_tables
+        # Fraud bursts and delayed drains that run past the month end belong to the next month's
+        # file; after the last month they are outside the simulated period and dropped.
+        month_end = (
+            month_start_micros(config.months[month_index + 1])
+            if month_index + 1 < len(config.months)
+            else config.split.end
+        )
+        spills = pc.greater_equal(table["transaction_timestamp"].cast(pa.int64()), month_end)
+        if month_index + 1 < len(config.months):
+            carried = (table.filter(spills), labels.filter(spills))
+        else:
+            dropped_after_end = int(pc.sum(spills).as_py() or 0)
+            carried = None
+        keep = pc.invert(spills)
+        table, labels = table.filter(keep), labels.filter(keep)
         order = pc.sort_indices(
             table, [("transaction_timestamp", "ascending"), ("transaction_id", "ascending")]
         )
@@ -230,6 +268,7 @@ def generate(
         "rows": sum(rows_by_month.values()),
         "rows_by_month": rows_by_month,
         "rows_by_day": dict(sorted(daily.items())),
+        "rows_dropped_after_simulation_end": dropped_after_end,
         "sha256": dict(sorted(checksums.items())),
     }
     (output / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")

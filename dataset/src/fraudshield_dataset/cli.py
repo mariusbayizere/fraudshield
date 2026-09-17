@@ -12,6 +12,7 @@ from fraudshield_dataset.generator.pipeline import generate
 from fraudshield_dataset.params import ParameterError, load_parameters
 from fraudshield_dataset.paths import PROVENANCE_MD
 from fraudshield_dataset.provenance_report import render
+from fraudshield_dataset.realism.checks import run_checks
 
 
 def _provenance(check: bool) -> int:
@@ -49,7 +50,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--rows", type=int, help="target rows (default: volume.total_rows_target)"
     )
     generator.add_argument("--chunk-size", type=int, default=8, help="shards simulated together")
+    check = commands.add_parser("check", help="run the anti-leakage and realism checks")
+    check.add_argument("dataset", type=Path)
+    check.add_argument("--seed", type=int, default=20260917)
+    check.add_argument("--rows", type=int, help="target rows the dataset was generated with")
+    check.add_argument("--full", action="store_true", help="gate size and distribution targets")
     args = parser.parse_args(argv)
+    if args.command == "check":
+        config = build_config(load_parameters(), seed=args.seed, total_rows=args.rows)
+        results, _ = run_checks(args.dataset, config, full=args.full)
+        for r in results:
+            status = "PASS" if r.passed else ("FAIL" if r.gate else "INFO")
+            print(f"{status:4} {r.name}: {r.value} [{r.requirement}]")
+        return 0 if all(r.passed or not r.gate for r in results) else 1
     if args.command == "generate":
         config = build_config(load_parameters(), seed=args.seed, total_rows=args.rows)
         result = generate(config, args.output, chunk_size=args.chunk_size)

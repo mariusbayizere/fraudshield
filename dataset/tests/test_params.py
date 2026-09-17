@@ -161,6 +161,8 @@ def test_typed_accessors_reject_the_wrong_type(tmp_path: Path) -> None:
         parameters.mapping("typed.text")
     with pytest.raises(ParameterError):
         parameters.numbers("typed.mix")
+    with pytest.raises(ParameterError):
+        parameters.texts("typed.mix")
     with pytest.raises(KeyError, match="unknown generator parameter"):
         parameters.get("typed.missing")
     with pytest.raises(ParameterError, match="no parameter files"):

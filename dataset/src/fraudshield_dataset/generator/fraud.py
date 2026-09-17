@@ -116,8 +116,6 @@ class FraudModel:
         self.novelty_share = p.number("fraud.novelty_share_of_sim_swap")
         delay_low, delay_high = p.numbers("fraud.novelty_delay_days")
         self.novelty_delay = (int(delay_low), int(delay_high))
-        # Incidents start early enough that bursts and delayed drains stay in their calendar month.
-        self.latest_start_margin_days = self.novelty_delay[1] + 1
         self.mule_cross_border = p.number("fraud.mule_cross_border_share")
         self.smartphone_share = 1.0 - p.mapping("population.segment_share")["rural_ussd"]
         self.to_mule = p.number("fraud.drain_to_mule_probability")
@@ -230,11 +228,20 @@ class FraudModel:
         return True
 
     def _start(self, incident: Incident) -> int:
-        """UTC start of an incident, early enough that the whole incident stays in its month."""
+        """UTC start of an incident, on any day of its month.
+
+        Rows that fall past the month end are carried into the next month's file by the pipeline,
+        so fraud is not missing from the end of months (that gap was caught by the shortcut
+        detector as a row-position artefact).
+        """
         rng, customer = incident.rng, incident.customer
         label = self.config.months[incident.month_index]
         days = calendar.monthrange(int(label[:4]), int(label[5:]))[1]
-        day = int(rng.integers(1, days - self.latest_start_margin_days + 1))
+        # Incidents follow the victim's own daily activity profile (payday weeks, market days),
+        # so fraud blends into busy periods instead of being spread evenly over the month; an
+        # even spread made time-of-month (row position) predictive of the label.
+        weights = self.legitimate.day_weights(customer, int(label[:4]), int(label[5:]))
+        day = int(rng.choice(days, p=weights)) + 1
         if rng.random() < self.night:
             seconds = int(rng.integers(0, self.legitimate.night_end * 3600))
         else:

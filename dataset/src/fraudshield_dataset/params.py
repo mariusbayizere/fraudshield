@@ -112,6 +112,12 @@ class ParameterSet:
             raise ParameterError(f"{key}: expected a mapping of numbers, got {value!r}")
         return {str(k): float(v) for k, v in value.items()}
 
+    def texts(self, key: str) -> dict[str, str]:
+        value = self.value(key)
+        if not isinstance(value, dict) or not all(isinstance(v, str) for v in value.values()):
+            raise ParameterError(f"{key}: expected a mapping of strings, got {value!r}")
+        return {str(k): v for k, v in value.items()}
+
     def numbers(self, key: str) -> list[float]:
         value = self.value(key)
         if not isinstance(value, list) or not all(
