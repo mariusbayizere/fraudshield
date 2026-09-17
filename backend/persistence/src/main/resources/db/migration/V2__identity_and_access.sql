@@ -53,12 +53,15 @@ CREATE TABLE refresh_tokens (
   token_hash bytea NOT NULL UNIQUE CHECK (octet_length(token_hash) = 32),
   expires_at timestamptz NOT NULL,
   revoked_at timestamptz,
-  replaced_by uuid REFERENCES refresh_tokens (id),
+  replaced_by uuid,
   created_by_ip inet,
   oauth_provider text CHECK (oauth_provider IN ('GOOGLE')),
   user_agent text CHECK (char_length(user_agent) <= 1024),
   created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (id, institution_id),
   FOREIGN KEY (user_id, institution_id) REFERENCES users (id, institution_id),
+  -- Composite, so a token can only be replaced by one of the same institution (review MAJOR-1).
+  FOREIGN KEY (replaced_by, institution_id) REFERENCES refresh_tokens (id, institution_id),
   CHECK (expires_at > created_at)
 );
 CREATE INDEX refresh_tokens_user_active ON refresh_tokens (user_id) WHERE revoked_at IS NULL;
@@ -135,14 +138,15 @@ CREATE TABLE api_keys (
   expires_at timestamptz,
   revoked_at timestamptz,
   last_used_at timestamptz,
-  replaced_by uuid REFERENCES api_keys (id),
+  replaced_by uuid,
+  UNIQUE (id, institution_id),
   FOREIGN KEY (created_by, institution_id) REFERENCES users (id, institution_id),
+  FOREIGN KEY (replaced_by, institution_id) REFERENCES api_keys (id, institution_id),
   CHECK ((webhook_url IS NULL) = (webhook_secret_ciphertext IS NULL)),
   CHECK ((webhook_secret_ciphertext IS NULL) = (webhook_secret_key_id IS NULL)),
   CHECK ((state = 'REVOKED') = (revoked_at IS NOT NULL)),
   CHECK (state <> 'ROTATING' OR expires_at IS NOT NULL)
 );
-CREATE UNIQUE INDEX api_keys_id_institution ON api_keys (id, institution_id);
 CALL enable_tenant_isolation('api_keys');
 
 -- API-key authentication happens before the institution is known.

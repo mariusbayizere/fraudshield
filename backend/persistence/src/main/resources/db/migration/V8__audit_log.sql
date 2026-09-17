@@ -5,6 +5,15 @@
 -- them and concurrent writers to one partition are serialised. Tampering with a stored row, deleting
 -- one or re-ordering them breaks the chain, which verify_audit_chain reports. A daily job stores the
 -- signed Merkle root of the day's hashes in audit_anchors.
+--
+-- The hypertable is partitioned, compressed and retained by recorded_at, the inserting transaction's
+-- start time. The trigger rejects any other value and refuses (serialization_failure, retry) a
+-- transaction that started before the last row of its chain, so recorded_at never decreases along a
+-- partition's chain and time-based retention can only drop a prefix. event_at is the business time
+-- chosen by the writer and may be old (replayed or delayed events); partitioning by it would let a
+-- backdated row be dropped from the middle of a chain, which verification cannot tell apart from
+-- tampering (review MAJOR-2). TimescaleDB routes a row to its chunk before BEFORE triggers run, so the
+-- trigger cannot assign a different time itself.
 
 CREATE TABLE audit_events (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -31,11 +40,11 @@ CREATE TABLE audit_events (
   recorded_at timestamptz NOT NULL DEFAULT now(),
   prev_hash bytea NOT NULL CHECK (octet_length(prev_hash) = 32),
   row_hash bytea NOT NULL CHECK (octet_length(row_hash) = 32),
-  PRIMARY KEY (event_at, id),
-  UNIQUE (writer_partition, seq, event_at),
+  PRIMARY KEY (recorded_at, id),
+  UNIQUE (writer_partition, seq, recorded_at),
   CHECK ((user_id IS NULL) = (user_role IS NULL))
 );
-SELECT create_hypertable('audit_events', by_range('event_at', interval '1 month'));
+SELECT create_hypertable('audit_events', by_range('recorded_at', interval '1 month'));
 CREATE INDEX audit_events_type_time ON audit_events (institution_id, event_type, event_at DESC);
 CREATE INDEX audit_events_user_time ON audit_events (institution_id, user_id, event_at DESC);
 CREATE INDEX audit_events_chain ON audit_events (writer_partition, seq);
@@ -45,7 +54,8 @@ CALL enable_tenant_view_isolation('audit_events');
 CREATE TABLE audit_chain_heads (
   writer_partition smallint PRIMARY KEY CHECK (writer_partition BETWEEN 0 AND 63),
   last_seq bigint NOT NULL CHECK (last_seq >= 0),
-  last_hash bytea NOT NULL CHECK (octet_length(last_hash) = 32)
+  last_hash bytea NOT NULL CHECK (octet_length(last_hash) = 32),
+  last_recorded_at timestamptz NOT NULL
 );
 
 -- The exact bytes that are hashed; used by the trigger and by verification.
@@ -56,7 +66,8 @@ CREATE FUNCTION audit_row_hash(e audit_events) RETURNS bytea
       e.writer_partition, e.seq, encode(e.prev_hash, 'hex'), e.id, e.institution_id, e.event_type, e.action,
       e.entity_type, e.entity_id, e.user_id, e.user_first_name, e.user_last_name, e.user_role,
       e.before_value, e.after_value, host(e.ip_address), masklen(e.ip_address), e.user_agent, e.correlation_id,
-      to_char(e.event_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'))::text, 'UTF8'))
+      to_char(e.event_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+      to_char(e.recorded_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'))::text, 'UTF8'))
   $$;
 
 CREATE FUNCTION audit_events_chain() RETURNS trigger
@@ -66,16 +77,25 @@ CREATE FUNCTION audit_events_chain() RETURNS trigger
 DECLARE
   head fraudshield.audit_chain_heads%ROWTYPE;
 BEGIN
-  INSERT INTO fraudshield.audit_chain_heads (writer_partition, last_seq, last_hash)
-    VALUES (NEW.writer_partition, 0, '\x0000000000000000000000000000000000000000000000000000000000000000'::bytea)
+  IF NEW.recorded_at IS DISTINCT FROM now() THEN
+    RAISE EXCEPTION 'audit_events.recorded_at is assigned by the database'
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  INSERT INTO fraudshield.audit_chain_heads (writer_partition, last_seq, last_hash, last_recorded_at)
+    VALUES (NEW.writer_partition, 0, '\x0000000000000000000000000000000000000000000000000000000000000000'::bytea,
+            '-infinity')
     ON CONFLICT (writer_partition) DO NOTHING;
   SELECT * INTO STRICT head FROM fraudshield.audit_chain_heads
     WHERE writer_partition = NEW.writer_partition FOR UPDATE;
   NEW.seq := head.last_seq + 1;
   NEW.prev_hash := head.last_hash;
-  NEW.recorded_at := now();
+  IF NEW.recorded_at < head.last_recorded_at THEN
+    RAISE EXCEPTION 'audit chain % already has a row recorded after this transaction started; retry',
+      NEW.writer_partition USING ERRCODE = 'serialization_failure';
+  END IF;
   NEW.row_hash := fraudshield.audit_row_hash(NEW);
-  UPDATE fraudshield.audit_chain_heads SET last_seq = NEW.seq, last_hash = NEW.row_hash
+  UPDATE fraudshield.audit_chain_heads
+    SET last_seq = NEW.seq, last_hash = NEW.row_hash, last_recorded_at = NEW.recorded_at
     WHERE writer_partition = NEW.writer_partition;
   RETURN NEW;
 END
@@ -106,7 +126,7 @@ BEGIN
     IF e.seq <> expected_seq THEN
       RETURN QUERY SELECT checked, expected_seq, 'missing row: sequence gap'::text; RETURN;
     END IF;
-    IF e.prev_hash <> expected_prev THEN
+    IF e.prev_hash IS DISTINCT FROM expected_prev THEN
       RETURN QUERY SELECT checked, e.seq, 'prev_hash does not match the previous row'::text; RETURN;
     END IF;
     IF e.row_hash <> fraudshield.audit_row_hash(e) THEN

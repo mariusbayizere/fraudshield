@@ -226,6 +226,34 @@ class DatabaseSecurityTest {
   }
 
   @Test
+  void everyForeignKeyBetweenTenantTablesIncludesTheInstitution() throws SQLException {
+    // A single-column reference ignores row-level security: it could point at another
+    // institution's row and its error would reveal that the row exists (review MAJOR-1).
+    try (Connection admin = db.superuser()) {
+      assertThat(
+              strings(
+                  admin,
+                  """
+                  SELECT c.conrelid::regclass || '.' || c.conname FROM pg_constraint c
+                  JOIN pg_class t ON t.oid = c.conrelid
+                  JOIN pg_namespace n ON n.oid = t.relnamespace AND n.nspname = 'fraudshield'
+                  WHERE c.contype = 'f'
+                    AND EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid = c.conrelid
+                                AND a.attname = 'institution_id')
+                    AND EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid = c.confrelid
+                                AND a.attname = 'institution_id')
+                    AND NOT EXISTS (
+                      SELECT 1 FROM unnest(c.conkey, c.confkey) AS k (source, target)
+                      JOIN pg_attribute sa ON sa.attrelid = c.conrelid AND sa.attnum = k.source
+                      JOIN pg_attribute ta ON ta.attrelid = c.confrelid AND ta.attnum = k.target
+                      WHERE sa.attname = 'institution_id' AND ta.attname = 'institution_id')
+                  ORDER BY 1
+                  """))
+          .isEmpty();
+    }
+  }
+
+  @Test
   void everyTenantTableIsIsolated() throws SQLException {
     try (Connection admin = db.superuser()) {
       List<String> unprotected =
@@ -399,37 +427,98 @@ class DatabaseSecurityTest {
   }
 
   @Test
-  void theChainSurvivesCompressionOfOldChunks() throws SQLException {
+  void theChainSurvivesCompression() throws SQLException {
     short partition = 9;
     try (Connection app = tenant("fs_app", BANK_A)) {
       for (int days = 200; days >= 0; days -= 40) {
-        try (PreparedStatement insert =
-            app.prepareStatement(
-                """
-                INSERT INTO audit_events (institution_id, writer_partition, event_type, action,
-                  entity_type,
-                  entity_id, event_at)
-                VALUES (?, ?, 'RULE_CHANGE', 'UPDATED', 'rule', 'r1', now() - make_interval(days =>
-                  ?))
-                """)) {
-          insert.setObject(1, BANK_A);
-          insert.setShort(2, partition);
-          insert.setInt(3, days);
-          insert.executeUpdate();
-        }
+        insertAuditAt(app, partition, days);
       }
+      app.commit();
+    }
+    try (Connection owner = db.as("fs_migrator")) {
+      // Pause the policy so it cannot compress the same chunk concurrently, then compress every
+      // chunk: rows are partitioned by the transaction time, so all of them are recent.
+      exec(
+          owner,
+          """
+          SELECT alter_job(job_id, scheduled => false) FROM timescaledb_information.jobs
+          WHERE proc_name = 'policy_compression' AND hypertable_name = 'audit_events'
+          """);
+      assertThat(
+              count(
+                  owner,
+                  "SELECT count(compress_chunk(c, if_not_compressed => true))"
+                      + " FROM show_chunks('fraudshield.audit_events') c"))
+          .isPositive();
+    }
+    try (Connection app = tenant("fs_app", BANK_A)) {
+      insertAuditAt(app, partition, 0);
       app.commit();
     }
     try (Connection owner = db.as("fs_migrator")) {
       assertThat(
               count(
                   owner,
-                  "SELECT count(compress_chunk(c, true)) FROM "
-                      + "show_chunks('fraudshield.audit_events',"
-                      + " older_than => interval '30 days') c"))
+                  """
+                  SELECT count(*) FROM timescaledb_information.chunks
+                  WHERE hypertable_name = 'audit_events' AND is_compressed
+                  """))
           .isPositive();
     }
-    assertThat(verify(partition)).isEqualTo("6|null|null");
+    assertThat(verify(partition)).isEqualTo("7|null|null");
+  }
+
+  @Test
+  @Tag("FR-06-06")
+  void retentionFollowsTheChainOrderNotTheWritersEventTime() throws SQLException {
+    // Review MAJOR-2: a backdated event_at must not decide which rows retention drops.
+    try (Connection admin = db.superuser()) {
+      assertThat(
+              strings(
+                  admin,
+                  """
+                  SELECT column_name FROM timescaledb_information.dimensions
+                  WHERE hypertable_schema = 'fraudshield' AND hypertable_name = 'audit_events'
+                  """))
+          .containsExactly("recorded_at");
+    }
+    short partition = 11;
+    try (Connection app = tenant("fs_app", BANK_A)) {
+      insertAuditAt(app, partition, 3650);
+      assertThat(
+              bool(
+                  app,
+                  "SELECT recorded_at = now() AND event_at < now() - interval '9 years'"
+                      + " FROM v_audit_events WHERE writer_partition = 11"))
+          .isTrue();
+      assertSqlState(
+          app,
+          "INSERT INTO audit_events (institution_id, writer_partition, event_type, action,"
+              + " entity_type, entity_id, event_at, recorded_at) VALUES ('"
+              + BANK_A
+              + "', 11, 'AUTH', 'LOGIN', 'user', 'u1', now(), now() - interval '1 year')",
+          "42501");
+      app.commit();
+    }
+    // A transaction that started before the chain's last row must retry, so recorded_at never
+    // decreases along a chain and retention can only remove a prefix.
+    try (Connection earlier = tenant("fs_app", BANK_A)) {
+      exec(earlier, "SELECT now()");
+      try (Connection later = tenant("fs_app", BANK_A)) {
+        exec(later, "SELECT pg_sleep(0.01)");
+        insertAuditAt(later, partition, 0);
+        later.commit();
+      }
+      assertSqlState(
+          earlier,
+          "INSERT INTO audit_events (institution_id, writer_partition, event_type, action,"
+              + " entity_type, entity_id, event_at) VALUES ('"
+              + BANK_A
+              + "', 11, 'AUTH', 'LOGIN', 'user', 'u1', now())",
+          "40001");
+      earlier.rollback();
+    }
+    assertThat(verify(partition)).isEqualTo("2|null|null");
   }
 
   // --- integrity constraints
@@ -613,6 +702,22 @@ class DatabaseSecurityTest {
                   + "RETURNING id");
       app.commit();
       return decision;
+    }
+  }
+
+  private static void insertAuditAt(Connection connection, short partition, int daysAgo)
+      throws SQLException {
+    try (PreparedStatement insert =
+        connection.prepareStatement(
+            """
+            INSERT INTO audit_events (institution_id, writer_partition, event_type, action,
+              entity_type, entity_id, event_at)
+            VALUES (?, ?, 'RULE_CHANGE', 'UPDATED', 'rule', 'r1', now() - make_interval(days => ?))
+            """)) {
+      insert.setObject(1, BANK_A);
+      insert.setShort(2, partition);
+      insert.setInt(3, daysAgo);
+      insert.executeUpdate();
     }
   }
 

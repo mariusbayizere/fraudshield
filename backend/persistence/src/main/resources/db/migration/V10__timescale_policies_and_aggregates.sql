@@ -19,12 +19,12 @@ ALTER TABLE shadow_scores SET (
 SELECT add_compression_policy('shadow_scores', compress_after => interval '7 days');
 SELECT add_retention_policy('shadow_scores', drop_after => interval '180 days');
 
--- D-32: compressed after 30 days, kept 7 years (BNR retention). Anchors keep the chain verifiable
+-- D-32: compressed after 30 days, kept 7 years (BNR retention), both by recorded_at (V8). Anchors keep the chain verifiable
 -- from the oldest retained position after old chunks are dropped.
 ALTER TABLE audit_events SET (
   timescaledb.compress,
   timescaledb.compress_segmentby = 'writer_partition',
-  timescaledb.compress_orderby = 'seq, event_at, id');
+  timescaledb.compress_orderby = 'seq, recorded_at, id');
 SELECT add_compression_policy('audit_events', compress_after => interval '30 days');
 SELECT add_retention_policy('audit_events', drop_after => interval '7 years');
 
