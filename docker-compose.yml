@@ -178,7 +178,7 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - >-
-        exec mlflow server --host 0.0.0.0 --port 5000
+        exec mlflow server --host 0.0.0.0 --port 5000 --workers 1
         --backend-store-uri "postgresql://mlflow:$${MLFLOW_DB_PASSWORD}@timescaledb:5432/mlflow"
         --artifacts-destination s3://mlflow-artifacts --serve-artifacts
         --allowed-hosts "localhost,localhost:5000,127.0.0.1,127.0.0.1:5000,mlflow,mlflow:5000"
@@ -189,8 +189,10 @@ services:
       timeout: 6s
       retries: 30
       start_period: 30s
+    # One worker: the default spawns several, and under the memory limit a worker was killed
+    # repeatedly in CI ("Child process died"), leaving the service stuck in "starting".
     deploy:
-      resources: { limits: { memory: 768m } }
+      resources: { limits: { memory: 1024m } }
 
   # Local SMTP fake (D-51). Web UI on 8025.
   mailpit:
