@@ -13,7 +13,7 @@ from decimal import Decimal
 
 import numpy as np
 
-from fraudshield_dataset.generator.config import CHANNELS, SimulationConfig
+from fraudshield_dataset.generator.config import CHANNELS, SimulationConfig, seasonal_factor
 from fraudshield_dataset.generator.keys import stream, token, transaction_uuid
 from fraudshield_dataset.generator.population import Customer, Population
 from fraudshield_dataset.generator.schema import Rows
@@ -95,6 +95,8 @@ class LegitimateBehaviour:
         low, high = p.numbers("behaviour.active_hours_local")
         self.active_hours = (low, high)
         self.travel_distance = p.number("behaviour.travel_distance_degrees")
+        self.night = p.number("behaviour.night_activity_probability")
+        self.night_end = int(self.active_hours[0])
 
     def day_weights(self, customer: Customer, year: int, month: int) -> np.ndarray:
         days = calendar.monthrange(year, month)[1]
@@ -109,6 +111,8 @@ class LegitimateBehaviour:
         return weights / weights.sum()
 
     def local_seconds(self, rng: np.random.Generator, channel: str) -> int:
+        if rng.random() < self.night:
+            return int(rng.integers(0, self.night_end * 3600))
         if channel == "AGENT_BANKING":
             hour = float(rng.choice(self.agent_hours)) + rng.normal(0, self.agent_hour_sd)
         else:
@@ -123,12 +127,8 @@ class LegitimateBehaviour:
         label = self.config.months[month_index]
         year, month = int(label[:4]), int(label[5:])
         rng = stream(self.config.seed, "legit", customer.index, label)
-        # Normalised so the yearly average is one: the boost moves volume into school-fee months
-        # without changing the calibrated total.
-        yearly_mean = (
-            len(self.school_months) * self.school_boost + 12 - len(self.school_months)
-        ) / 12
-        seasonal = (self.school_boost if month in self.school_months else 1.0) / yearly_mean
+        # Normalised to a yearly mean of one: school-fee months gain volume, the total does not.
+        seasonal = seasonal_factor(self.config.parameters, label)
         count = int(rng.poisson(self.mean * customer.activity * seasonal))
         if count == 0:
             return rows

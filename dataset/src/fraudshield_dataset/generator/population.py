@@ -111,6 +111,13 @@ class Population:
     def _offset(self, name: str) -> float:
         return float(stream(self.config.seed, "stratification", name).random())
 
+    def country_of(self, index: int) -> str:
+        """A customer's country without building the customer (stratified, see :meth:`customer`)."""
+        return _stratified(index, _GOLDEN, self._offset("country"), self._country_share)
+
+    def segment_of(self, index: int) -> str:
+        return _stratified(index, _SILVER, self._offset("segment"), self._segment_share)
+
     def join_month(self, index: int) -> int:
         for month, active in enumerate(self.config.customers_active):
             if index < active:
@@ -122,8 +129,8 @@ class Population:
         rng = stream(seed, "customer", index)
         # Country and segment are stratified (low-discrepancy sequences), not drawn independently,
         # so the SRS country mix is met without sampling noise; other attributes use the stream.
-        country = _stratified(index, _GOLDEN, self._offset("country"), self._country_share)
-        segment = _stratified(index, _SILVER, self._offset("segment"), self._segment_share)
+        country = self.country_of(index)
+        segment = self.segment_of(index)
         kyc = _choice(rng, self._kyc_share)
         activity = float(rng.lognormal(-(self._activity_sigma**2) / 2, self._activity_sigma))
         centre = self._centres[country]

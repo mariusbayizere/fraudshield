@@ -1,4 +1,4 @@
-description: Overall fraud prevalence targets.
+description: Fraud prevalence targets, scenario mix, incident shapes, adversarial adaptation and the novel test-period sub-variant.
 parameters:
   fraud_rate_overall:
     value: 0.0087
@@ -10,3 +10,109 @@ parameters:
     unit: fraction of transactions labelled fraud in the temporal hold-out test set (true label)
     provenance: CALIBRATED_TO_SRS_TARGET
     citation: SRS v1.0 section 7.1, ML-DATA-02 (test set slightly higher, 0.91%)
+  scenario_share:
+    value: {sim_swap: 0.16, account_takeover: 0.16, agent_fraud: 0.12, velocity: 0.12, card_not_present: 0.14, mule_account: 0.12, merchant_fraud: 0.08, synthetic_identity: 0.10}
+    unit: fraction of fraudulent transactions by scenario
+    provenance: ASSUMED
+    rationale: ML-DATA-04 requires eight distinct types without one dominating; the split is a modelling choice with no published East African breakdown consulted.
+  rows_per_incident:
+    value: {sim_swap: [2, 6], account_takeover: [2, 8], agent_fraud: [1, 3], velocity: [6, 15], card_not_present: [1, 5], mule_account: [4, 12], merchant_fraud: [1, 3], synthetic_identity: [3, 8]}
+    unit: inclusive range of fraudulent transactions per incident, by scenario
+    provenance: ASSUMED
+    rationale: Drains and bursts span several transactions while card fraud and merchant fraud are often single charges; ranges are modelling choices.
+  amount_multiplier:
+    value: {sim_swap: 2.5, account_takeover: 2.2, agent_fraud: 2.0, velocity: 0.4, card_not_present: 1.8, mule_account: 2.0, merchant_fraud: 1.4, synthetic_identity: 3.0}
+    unit: multiple of the channel's median legitimate amount used as the median fraudulent amount
+    provenance: ASSUMED
+    rationale: Drains and bust-outs move more money than typical payments while card testing uses small amounts; moderate multiples keep the amount alone from identifying fraud (single-feature AUC limit, D-08).
+  burst_minutes:
+    value: [2, 180]
+    unit: inclusive range of minutes over which the transactions of one incident are spread
+    provenance: ASSUMED
+    rationale: Fraudulent drains and bursts happen within minutes to hours of the enabling event; a modelling choice.
+  night_probability:
+    value: 0.25
+    unit: probability that a fraud incident starts at night (local 00:00-05:00)
+    provenance: ASSUMED
+    rationale: Account misuse is often timed when victims are asleep; legitimate night activity also exists (behaviour.night_activity_probability), so the hour alone is a weak signal.
+  new_device_probability:
+    value: 0.7
+    unit: probability that account takeover or card-not-present fraud uses a device never seen on the account
+    provenance: ASSUMED
+    rationale: Takeovers usually operate from the fraudster's own device, but not always (malware, remote access); a modelling choice.
+  mule_account_fraction:
+    value: 0.004
+    unit: fraction of customers acting as mule accounts
+    provenance: ASSUMED
+    rationale: A small set of accounts receives and forwards proceeds for many victims (fan-in, fan-out); a modelling choice.
+  compromised_agent_fraction:
+    value: 0.02
+    unit: fraction of cash agents involved in agent fraud
+    provenance: ASSUMED
+    rationale: A small share of agents perform fake cash-outs or float manipulation; a modelling choice.
+  colluding_merchant_fraction:
+    value: 0.01
+    unit: fraction of merchants that run fraudulent card charges
+    provenance: ASSUMED
+    rationale: A small share of merchants process charges with compromised card data; a modelling choice.
+  synthetic_identity_fraction:
+    value: 0.12
+    unit: fraction of newly joining customers that are synthetic identities
+    provenance: ASSUMED
+    rationale: Chosen so the ASSUMED synthetic-identity share of fraud (fraud.scenario_share) can be met with at most one bust-out incident per identity; it is higher than a plausible real share of onboarding and is a calibration consequence, not an estimate.
+  synthetic_identity_bust_out_months:
+    value: [2, 6]
+    unit: inclusive range of months after joining before a synthetic identity busts out
+    provenance: ASSUMED
+    rationale: Synthetic identities build history for a few months before extracting funds; a modelling choice.
+  adaptation_start_month:
+    value: 12
+    unit: simulation month (0-based index) from which fraud adapts to published rules
+    provenance: CALIBRATED_TO_SRS_TARGET
+    citation: Build prompt Part E.3 and binding resolution D-08 (amounts drift just below rule thresholds after rules are published in simulation month 12)
+    rationale: Month 12 counted from the first simulated month as index 12, the thirteenth month.
+  rule_amount_threshold_rwf:
+    value: 500000
+    unit: RWF amount above which the simulated published rule flags a transfer
+    provenance: ASSUMED
+    rationale: Illustrative large-transfer rule threshold for the adversarial adaptation; not an actual institution's rule.
+  adaptation_band:
+    value: [0.90, 0.99]
+    unit: fraction of the rule threshold at which adapted fraudulent amounts are placed
+    provenance: ASSUMED
+    rationale: Amounts placed just below the threshold, as required by D-08; the band is a modelling choice.
+  adaptation_probability:
+    value: 0.6
+    unit: probability that an above-threshold fraudulent amount is adapted after the adaptation month
+    provenance: ASSUMED
+    rationale: Not every fraudster learns the rule; a modelling choice.
+  novelty_share_of_sim_swap:
+    value: 0.4
+    unit: fraction of SIM-swap incidents in the test period that use the novel sub-variant
+    provenance: ASSUMED
+    rationale: D-08 requires a sub-variant that appears only in the test period; its share within the test period is a modelling choice.
+  novelty_delay_days:
+    value: [2, 4]
+    unit: inclusive range of days between the enabling event and the drain in the novel sub-variant
+    provenance: ASSUMED
+    rationale: The novel sub-variant delays the drain so that recency-based signals learned from the earlier SIM-swap pattern do not fire; a modelling choice.
+  mule_cross_border_share:
+    value: 0.15
+    unit: fraction of mule-account forwarding transfers sent to another EAC country
+    provenance: ASSUMED
+    rationale: Mules move proceeds across borders more often than ordinary customers remit (behaviour.cross_border_share); the share is a modelling choice.
+  takeover_lead_minutes:
+    value: [5, 60]
+    unit: inclusive range of minutes between the enabling SIM swap or device change and the first fraudulent transaction
+    provenance: ASSUMED
+    rationale: Takeovers are exploited quickly once control is gained; a modelling choice.
+  drain_to_mule_probability:
+    value: 0.7
+    unit: probability that a drained or forwarded transfer goes to a known mule account rather than a one-off new account
+    provenance: ASSUMED
+    rationale: Proceeds concentrate in mule accounts, which creates fan-in, while some go to throwaway accounts; a modelling choice.
+  scenario_channel_share:
+    value: {sim_swap_round_sum: 0.5, velocity_card: 0.5, card_not_present_online: 0.7, mule_bank_transfer: 0.4, mule_round_sum: 0.6, synthetic_cash_out: 0.5}
+    unit: probabilities of channel or amount choices within scenarios (see fraud.py for each use)
+    provenance: ASSUMED
+    rationale: Within-scenario choices (round sums in drains and forwarding, card versus wallet in bursts, online versus card for card-not-present, cash-out versus transfer in bust-outs) are modelling choices.

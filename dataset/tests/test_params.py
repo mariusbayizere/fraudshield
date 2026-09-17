@@ -98,6 +98,7 @@ def test_every_problem_is_reported_at_once(tmp_path: Path) -> None:
         },
     )
     (tmp_path / "shapeless.yaml").write_text("- just a list\n", encoding="utf-8")
+    (tmp_path / "unparseable.yaml").write_text("a: [1, 2\n", encoding="utf-8")
     with pytest.raises(ParameterError) as caught:
         load_parameters(tmp_path)
     message = str(caught.value)
@@ -114,6 +115,7 @@ def test_every_problem_is_reported_at_once(tmp_path: Path) -> None:
         "broken.not_a_mapping: expected a mapping",
         "broken.accessed_on_assumed: accessed applies to SOURCED parameters only",
         "shapeless.yaml: expected 'description'",
+        "unparseable.yaml: not valid YAML",
     ):
         assert expected in message, expected
 

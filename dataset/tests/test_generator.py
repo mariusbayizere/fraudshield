@@ -16,9 +16,13 @@ from fraudshield_dataset.generator.config import (
     CHANNELS,
     build_config,
     month_labels,
+    seasonal_factor,
     segment_channel_shares,
 )
+from fraudshield_dataset.generator.fraud import NOVEL_VARIANT, SCENARIOS, FraudModel
+from fraudshield_dataset.generator.legit import LegitimateBehaviour
 from fraudshield_dataset.generator.pipeline import generate
+from fraudshield_dataset.generator.population import Population
 from fraudshield_dataset.generator.schema import ACCOUNT_EVENTS, LABELS, TRANSACTIONS
 from fraudshield_dataset.params import ParameterError, ParameterSet, load_parameters
 
@@ -186,3 +190,82 @@ def test_generator_code_has_no_unexplained_numeric_literals() -> None:
             ):
                 found.append(f"{path.name}:{node.lineno}: {node.value}")
     assert found == []
+
+
+def _with(parameters: ParameterSet, **overrides: object) -> ParameterSet:
+    changed = dict(parameters.parameters)
+    for key, value in overrides.items():
+        name = key.replace("__", ".")
+        changed[name] = type(changed[name])(**{**changed[name].__dict__, "value": value})
+    return ParameterSet(changed, parameters.descriptions)
+
+
+# Every test-period SIM swap uses the novel sub-variant, so its placement can be checked at a size
+# that runs in seconds; the realism report checks presence with the real parameters at full size.
+_MEDIUM = {"fraud__novelty_share_of_sim_swap": 1.0}
+
+
+@pytest.fixture(scope="module")
+def medium(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    output = tmp_path_factory.mktemp("medium")
+    parameters = _with(load_parameters(), **_MEDIUM)
+    generate(build_config(parameters, seed=5, total_rows=60_000), output, chunk_size=16)
+    return output
+
+
+@pytest.mark.req("ML-DATA-04", "D-08")
+def test_all_eight_scenarios_occur_and_the_novel_variant_only_in_the_test_period(
+    medium: Path,
+) -> None:
+    config = build_config(_with(load_parameters(), **_MEDIUM), seed=5, total_rows=60_000)
+    labels = ds.dataset(medium / "labels", format="parquet", partitioning="hive").to_table()
+    transactions = ds.dataset(medium / "transactions", format="parquet", partitioning="hive")
+    timestamps = transactions.to_table(columns=["transaction_timestamp"])["transaction_timestamp"]
+    fraud = labels.filter(labels["is_fraud_true"])
+    assert set(pc.unique(fraud["fraud_type"]).to_pylist()) == set(SCENARIOS)
+    variants = labels["scenario_variant"].to_pylist()
+    novel = [
+        t
+        for t, v in zip(timestamps.cast(pa.int64()).to_pylist(), variants, strict=True)
+        if v == NOVEL_VARIANT
+    ]
+    assert novel, "the novel sub-variant must appear in the test period"
+    assert min(novel) >= config.split.test_start
+    legitimate = labels.filter(pc.invert(labels["is_fraud_true"]))
+    assert legitimate["fraud_type"].null_count == legitimate.num_rows
+    rate = pc.mean(labels["is_fraud_true"].cast(pa.float64())).as_py()
+    assert 0.004 < rate < 0.015
+
+
+@pytest.mark.req("D-08")
+def test_fraud_enabling_events_are_recorded_like_legitimate_events(medium: Path) -> None:
+    events = ds.dataset(medium / "account_events", format="parquet", partitioning="hive").to_table()
+    kinds = set(pc.unique(events["event_type"]).to_pylist())
+    assert kinds == {"SIM_SWAP", "DEVICE_CHANGE"}
+
+
+def test_calibration_refuses_impossible_role_fractions() -> None:
+    parameters = load_parameters()
+    config = build_config(
+        _with(parameters, fraud__synthetic_identity_fraction=0.0001), seed=1, total_rows=60_000
+    )
+    population = Population(config)
+    with pytest.raises(ParameterError, match="synthetic_identity"):
+        FraudModel(config, population, LegitimateBehaviour(config, population))
+
+
+def test_fraud_rate_ramp_meets_both_targets() -> None:
+    parameters = load_parameters()
+    config = build_config(parameters, seed=1)
+    weights = [
+        v * seasonal_factor(parameters, m)
+        for m, v in zip(config.months, config.monthly_volume, strict=True)
+    ]
+    overall = sum(r * w for r, w in zip(config.fraud_rate_by_month, weights, strict=True)) / sum(
+        weights
+    )
+    assert overall == pytest.approx(parameters.number("fraud.fraud_rate_overall"), rel=1e-6)
+    assert config.fraud_rate_by_month[-1] > config.fraud_rate_by_month[0]
+    split = config.split
+    assert split.validation_start < split.calibration_start < split.embargo_start
+    assert split.test_start - split.embargo_start == 7 * 86_400_000_000

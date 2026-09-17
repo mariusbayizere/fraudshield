@@ -110,3 +110,8 @@ parameters:
     unit: days from salary day (inclusive) over which the payday spending boost applies
     provenance: ASSUMED
     rationale: Spending concentrated in the week after salary credit; a modelling choice.
+  night_activity_probability:
+    value: 0.03
+    unit: probability that a legitimate transaction happens at night (local 00:00-05:00)
+    provenance: ASSUMED
+    rationale: Some legitimate activity (shift workers, late transfers) happens at night so that night-time alone does not identify fraud; a modelling choice.

@@ -24,6 +24,7 @@ import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
 from fraudshield_dataset.generator.config import SimulationConfig
+from fraudshield_dataset.generator.fraud import FraudEvent, FraudModel
 from fraudshield_dataset.generator.keys import SHARDS, shard_of, stream
 from fraudshield_dataset.generator.legit import LegitimateBehaviour, month_start_micros
 from fraudshield_dataset.generator.population import Customer, Population
@@ -39,8 +40,8 @@ _WRITE_OPTIONS = {
 }
 _MICROS_PER_HOUR = 3_600_000_000
 
-# A scenario adds fraud rows for a customer-month; scenarios are plugged in by the fraud modules.
-Scenario = Callable[[Customer, int, Rows], None]
+# A scenario adds fraud rows (and the account events that enable them) for a customer-month.
+Scenario = Callable[[Customer, int, Rows, list[FraudEvent]], None]
 
 
 @dataclass(frozen=True)
@@ -120,7 +121,12 @@ def _write(table: pa.Table, path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _month_events(config: SimulationConfig, customers: Iterable[Customer], month: int) -> pa.Table:
+def _month_events(
+    config: SimulationConfig,
+    customers: Iterable[Customer],
+    month: int,
+    fraud_events: Iterable[FraudEvent],
+) -> pa.Table:
     start = month_start_micros(config.months[month])
     offsets = config.parameters.mapping("currencies.utc_offset_hours")
     accounts, kinds, times = [], [], []
@@ -131,6 +137,10 @@ def _month_events(config: SimulationConfig, customers: Iterable[Customer], month
                 kinds.append(event.kind)
                 local = (event.day - 1) * 86_400 + event.seconds
                 times.append(start + (local - int(offsets[customer.country]) * 3600) * 1_000_000)
+    for fraud_event in fraud_events:
+        accounts.append(fraud_event.account_id)
+        kinds.append(fraud_event.kind)
+        times.append(fraud_event.timestamp)
     table = pa.table(
         {
             "account_id": accounts,
@@ -154,14 +164,16 @@ def generate(
     config: SimulationConfig,
     output: Path,
     chunk_size: int = 8,
-    scenarios: Iterable[Scenario] = (),
+    scenarios: Iterable[Scenario] | None = None,
 ) -> GenerationResult:
     """Simulate every month and write ``transactions``, ``labels`` and ``account_events``."""
     if chunk_size < 1:
         raise ValueError("chunk_size must be at least 1")
-    scenario_list = list(scenarios)
     population = Population(config)
     legitimate = LegitimateBehaviour(config, population)
+    scenario_list: list[Scenario] = (
+        [FraudModel(config, population, legitimate)] if scenarios is None else list(scenarios)
+    )
     shards = _customers_by_shard(config)
     rows_by_month: dict[str, int] = {}
     daily: Counter[str] = Counter()
@@ -170,6 +182,7 @@ def generate(
         transaction_tables: list[pa.Table] = []
         label_tables: list[pa.Table] = []
         simulated: list[Customer] = []
+        fraud_events: list[FraudEvent] = []
         for first in range(0, SHARDS, chunk_size):
             batch = Rows()
             for shard in range(first, min(first + chunk_size, SHARDS)):
@@ -180,7 +193,7 @@ def generate(
                     simulated.append(customer)
                     batch.extend(legitimate.month(customer, month_index))
                     for scenario in scenario_list:
-                        scenario(customer, month_index, batch)
+                        scenario(customer, month_index, batch, fraud_events)
             # Convert each batch at once so Python objects never accumulate for a whole month.
             transaction_tables.append(_transactions_table(batch))
             label_tables.append(_labels_table(config, batch))
@@ -203,13 +216,13 @@ def generate(
         )
         simulated.sort(key=lambda c: c.index)
         checksums[f"account_events/{partition}/part-0000.parquet"] = _write(
-            _month_events(config, simulated, month_index),
+            _month_events(config, simulated, month_index, fraud_events),
             output / "account_events" / partition / "part-0000.parquet",
         )
         rows_by_month[month] = table.num_rows
         days = pc.strftime(table.column("transaction_timestamp"), format="%Y-%m-%d").to_pylist()
         daily.update(days)
-        del table, labels, simulated
+        del table, labels, simulated, fraud_events
     peak = peak_rss_bytes()
     manifest = {
         "dataset": "FraudShield-EAC-Transactions",

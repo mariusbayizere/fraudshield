@@ -176,7 +176,11 @@ def load_parameters(directory: Path = PARAMS_DIR) -> ParameterSet:
         raise ParameterError(f"no parameter files in {directory}")
     for path in files:
         category = path.stem
-        document = yaml.safe_load(path.read_text(encoding="utf-8"))
+        try:
+            document = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except yaml.YAMLError as error:
+            problems.append(f"{path.name}: not valid YAML ({error.__class__.__name__})")
+            continue
         if not isinstance(document, dict) or not isinstance(document.get("parameters"), dict):
             problems.append(f"{path.name}: expected 'description' and a 'parameters' mapping")
             continue
