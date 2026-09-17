@@ -2976,9 +2976,10 @@ requirements:
   defects: []
   affects:
   - ML-GATE-02
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation:
+  - ml/src/fraudshield_ml/metrics/operating_points.py
   evidence: []
   deviations: []
 - id: D-02
@@ -2993,9 +2994,10 @@ requirements:
   - ML-GATE-04
   - ML-GATE-05
   - ML-GATE-06
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation:
+  - ml/src/fraudshield_ml/metrics/operating_points.py
   evidence: []
   deviations: []
 - id: D-03

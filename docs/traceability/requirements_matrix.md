@@ -3,7 +3,7 @@
 
 # FraudShield Requirements Traceability Matrix
 
-Rows: 258. Status counts: IN_PROGRESS 2, NOT_STARTED 256.
+Rows: 258. Status counts: IN_PROGRESS 4, NOT_STARTED 254.
 
 | ID | Priority | Milestone | Status | Title | Implementation | Tests | Evidence | Deviations |
 |---|---|---|---|---|---|---|---|---|
@@ -167,9 +167,9 @@ Rows: 258. Status counts: IN_PROGRESS 2, NOT_STARTED 256.
 | ML-DATA-07 | M | M2 | NOT_STARTED | Feature completeness | — | — | — | D-04 |
 | ML-DATA-08 | M | M2 | NOT_STARTED | Dataset release | — | — | — | — |
 | ML-GATE-01 | M | M4 | NOT_STARTED | AUC-ROC (last-3-month test set) | — | — | — | D-07 |
-| ML-GATE-02 | M | M4 | NOT_STARTED | Precision at 1% FPR | — | tools/tests/test_traceability.py:106 | — | D-01 |
-| ML-GATE-03 | M | M4 | NOT_STARTED | Recall (fraud capture rate) | — | — | — | D-02 |
-| ML-GATE-04 | M | M4 | NOT_STARTED | F1 Score | — | — | — | D-02 |
+| ML-GATE-02 | M | M4 | NOT_STARTED | Precision at 1% FPR | — | ml/tests/metrics/test_operating_points.py:16<br>ml/tests/metrics/test_operating_points.py:22<br>tools/tests/test_traceability.py:106 | — | D-01 |
+| ML-GATE-03 | M | M4 | NOT_STARTED | Recall (fraud capture rate) | — | ml/tests/metrics/test_operating_points.py:33 | — | D-02 |
+| ML-GATE-04 | M | M4 | NOT_STARTED | F1 Score | — | ml/tests/metrics/test_operating_points.py:33 | — | D-02 |
 | ML-GATE-05 | M | M4 | NOT_STARTED | False Positive Rate at threshold 0.85 | — | — | — | D-02 |
 | ML-GATE-06 | M | M4 | NOT_STARTED | False Negative Rate | — | — | — | D-02 |
 | ML-GATE-07 | M | M4 | NOT_STARTED | MOBILE_MONEY channel AUC-ROC | — | — | — | — |
@@ -214,8 +214,8 @@ Rows: 258. Status counts: IN_PROGRESS 2, NOT_STARTED 256.
 | RES-05 | M | M11 | NOT_STARTED | Training and evaluation pipeline | — | — | — | — |
 | RES-06 | M | M11 | NOT_STARTED | Full system source code | — | — | — | — |
 | RES-07 | M | M11 | NOT_STARTED | Citation file | — | — | — | — |
-| D-01 | M | M4 | NOT_STARTED | "Precision at 1% FPR ≥ 0.720" is mathematically impossible. | — | tools/tests/test_traceability.py:106 | — | — |
-| D-02 | M | M4 | NOT_STARTED | Recall, F1 and FNR thresholds lack a defined operating point. | — | — | — | — |
+| D-01 | M | M4 | IN_PROGRESS | "Precision at 1% FPR ≥ 0.720" is mathematically impossible. | ml/src/fraudshield_ml/metrics/operating_points.py | ml/tests/metrics/test_operating_points.py:16<br>ml/tests/metrics/test_operating_points.py:22<br>ml/tests/metrics/test_operating_points.py:27<br>tools/tests/test_traceability.py:106 | — | — |
+| D-02 | M | M4 | IN_PROGRESS | Recall, F1 and FNR thresholds lack a defined operating point. | ml/src/fraudshield_ml/metrics/operating_points.py | ml/tests/metrics/test_operating_points.py:33<br>ml/tests/metrics/test_operating_points.py:41 | — | — |
 | D-03 | M | M3 | NOT_STARTED | The feature breakdown sums to 46, not 44. | — | — | — | — |
 | D-04 | M | M3 | NOT_STARTED | "USSD: 40 features computed without device_fingerprint" is undefined. | — | — | — | — |
 | D-05 | M | M4 | NOT_STARTED | Calibrating two models separately, then averaging, does not yield a calibrated ensemble; SHAP additivity is only exact in each model's margin space. | — | — | — | — |
