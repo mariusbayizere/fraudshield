@@ -40,7 +40,7 @@ python_version = "3.12"
 strict = true
 warn_unreachable = true
 
-# grpcio-tools ships no type information; it is used only to compile protobuf contracts in tests.
+# grpcio-tools and protobuf ship no type information; they compile and inspect the protobuf contracts.
 [[tool.mypy.overrides]]
-module = ["grpc_tools", "grpc_tools.*"]
+module = ["grpc_tools", "grpc_tools.*", "google.protobuf", "google.protobuf.*"]
 ignore_missing_imports = true

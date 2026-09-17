@@ -1,5 +1,5 @@
 {
-  "event_id": "0d1e2f3a-4b5c-4d6e-8f70-81a2b3c4d5e6",
+  "event_id": "e39df2f5-7eef-5cc7-96bd-4763faee6a24",
   "event_type": "decision.final",
   "schema_version": 1,
   "occurred_at": "2026-09-17T08:15:30Z",
@@ -7,10 +7,18 @@
   "producer": "fraudshield-api",
   "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
   "payload": {
+    "event_id": "5f607182-9a0b-4cbe-8f1a-4b5c6d7e8f90",
     "transaction_id": "7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60",
+    "decision_sequence": 2,
     "decision": "TIMEOUT_RELEASE",
+    "final": true,
     "decided_at": "2026-09-17T06:02:41Z",
     "decided_by": "TIMEOUT_POLICY",
+    "reason_codes": [
+      "UNUSUAL_HOUR",
+      "AMOUNT_ABOVE_NORMAL"
+    ],
+    "review_deadline_at": null,
     "supersedes_decision": "HOLD"
   }
 }

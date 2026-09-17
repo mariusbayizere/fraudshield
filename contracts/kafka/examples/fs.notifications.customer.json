@@ -1,5 +1,5 @@
 {
-  "event_id": "0d1e2f3a-4b5c-4d6e-8f70-81a2b3c4d5e6",
+  "event_id": "02a7c911-79dc-5608-9e91-3fbba1400136",
   "event_type": "notification.requested",
   "schema_version": 1,
   "occurred_at": "2026-09-17T08:15:30Z",
@@ -8,7 +8,7 @@
   "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
   "payload": {
     "notification_id": "4d5e6f7a-8b9c-4d0e-9f1a-2b3c4d5e6f7a",
-    "account_token": "tok_A1b2C3d4E5f6G7h8J9k0L1m2",
+    "account_token": "tok_exampleAccount0000000001",
     "channel": "SMS",
     "template_key": "sms.auto_block",
     "locale": "rw",

@@ -1,0 +1,910 @@
+{
+  "enums": {
+    ".fraudshield.scoring.v1.Channel": {
+      "reserved_names": [],
+      "reserved_numbers": [],
+      "values": {
+        "0": "CHANNEL_UNSPECIFIED",
+        "1": "CHANNEL_MOBILE_MONEY",
+        "2": "CHANNEL_CARD",
+        "3": "CHANNEL_AGENT_BANKING",
+        "4": "CHANNEL_USSD",
+        "5": "CHANNEL_ONLINE",
+        "6": "CHANNEL_BANK_TRANSFER"
+      }
+    },
+    ".fraudshield.scoring.v1.ModelStatusResponse.Status": {
+      "reserved_names": [],
+      "reserved_numbers": [],
+      "values": {
+        "0": "STATUS_UNSPECIFIED",
+        "1": "STATUS_SERVING",
+        "2": "STATUS_DEGRADED",
+        "3": "STATUS_NOT_SERVING"
+      }
+    },
+    ".fraudshield.scoring.v1.RiskTier": {
+      "reserved_names": [],
+      "reserved_numbers": [],
+      "values": {
+        "0": "RISK_TIER_UNSPECIFIED",
+        "1": "RISK_TIER_LOW",
+        "2": "RISK_TIER_MEDIUM",
+        "3": "RISK_TIER_HIGH"
+      }
+    },
+    ".fraudshield.scoring.v1.StageTiming.Stage": {
+      "reserved_names": [],
+      "reserved_numbers": [],
+      "values": {
+        "0": "STAGE_UNSPECIFIED",
+        "1": "STAGE_FEATURES",
+        "2": "STAGE_ENSEMBLE",
+        "3": "STAGE_CALIBRATION",
+        "4": "STAGE_ISOLATION_FOREST",
+        "5": "STAGE_SHAP"
+      }
+    }
+  },
+  "messages": {
+    ".fraudshield.scoring.v1.AccountContext": {
+      "fields": {
+        "1": {
+          "label": "LABEL_OPTIONAL",
+          "name": "tx_count_60s",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_UINT32",
+          "type_name": ""
+        },
+        "10": {
+          "label": "LABEL_OPTIONAL",
+          "name": "amount_mad_90d_rwf",
+          "oneof": null,
+          "proto3_optional": true,
+          "type": "TYPE_STRING",
+          "type_name": ""
+        },
+        "11": {
+          "label": "LABEL_OPTIONAL",
+          "name": "amount_max_90d_rwf",
+          "oneof": null,
+          "proto3_optional": true,
+          "type": "TYPE_STRING",
+          "type_name": ""
+        },
+        "12": {
+          "label": "LABEL_OPTIONAL",
+          "name": "history_count_90d",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_UINT32",
+          "type_name": ""
+        },
+        "13": {
+          "label": "LABEL_OPTIONAL",
+          "name": "last_location",
+          "oneof": null,
+          "proto3_optional": true,
+          "type": "TYPE_MESSAGE",
+          "type_name": ".fraudshield.scoring.v1.GeoPoint"
+        },
+        "14": {
+          "label": "LABEL_OPTIONAL",
+          "name": "last_transaction_at",
+          "oneof": null,
+          "proto3_optional": true,
+          "type": "TYPE_MESSAGE",
+          "type_name": ".google.protobuf.Timestamp"
+        },
+        "15": {
+          "label": "LABEL_OPTIONAL",
+          "name": "home_centroid_90d",
+          "oneof": null,
+          "proto3_optional": true,
+          "type": "TYPE_MESSAGE",
+          "type_name": ".fraudshield.scoring.v1.GeoPoint"
+        },
+        "16": {
+          "label": "LABEL_REPEATED",
+          "name": "countries_seen",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_STRING",
+          "type_name": ""
+        },
+        "17": {
+          "label": "LABEL_OPTIONAL",
+          "name": "account_age_days",
+          "oneof": null,
+          "proto3_optional": true,
+          "type": "TYPE_UINT32",
+          "type_name": ""
+        },
+        "18": {
+          "label": "LABEL_OPTIONAL",
+          "name": "kyc_tier",
+          "oneof": null,
+          "proto3_optional": true,
+          "type": "TYPE_UINT32",
+          "type_name": ""
+        },
+        "19": {
+          "label": "LABEL_OPTIONAL",
+          "name": "days_since_sim_swap",
+          "oneof": null,
+          "proto3_optional": true,
+          "type": "TYPE_UINT32",
+          "type_name": ""
+        },
+        "2": {
+          "label": "LABEL_OPTIONAL",
+          "name": "tx_count_1h",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_UINT32",
+          "type_name": ""
+        },
+        "20": {
+          "label": "LABEL_OPTIONAL",
+          "name": "days_since_previous_activity",
+          "oneof": null,
+          "proto3_optional": true,
+          "type": "TYPE_UINT32",
+          "type_name": ""
+        },
+        "21": {
+          "label": "LABEL_OPTIONAL",
+          "name": "counterparty_new_for_account",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_BOOL",
+          "type_name": ""
+        },
+        "22": {
+          "label": "LABEL_OPTIONAL",
+          "name": "counterparty_account_age_days",
+          "oneof": null,
+          "proto3_optional": true,
+          "type": "TYPE_UINT32",
+          "type_name": ""
+        },
+        "23": {
+          "label": "LABEL_OPTIONAL",
+          "name": "counterparty_unique_senders_24h",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_UINT32",
+          "type_name": ""
+        },
+        "24": {
+          "label": "LABEL_OPTIONAL",
+          "name": "counterparty_confirmed_fraud_90d",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_UINT32",
+          "type_name": ""
+        },
+        "25": {
+          "label": "LABEL_OPTIONAL",
+          "name": "tx_count_to_counterparty_30d",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_UINT32",
+          "type_name": ""
+        },
+        "26": {
+          "label": "LABEL_OPTIONAL",
+          "name": "device",
+          "oneof": null,
+          "proto3_optional": true,
+          "type": "TYPE_MESSAGE",
+          "type_name": ".fraudshield.scoring.v1.DeviceContext"
+        },
+        "27": {
+          "label": "LABEL_OPTIONAL",
+          "name": "agent",
+          "oneof": null,
+          "proto3_optional": true,
+          "type": "TYPE_MESSAGE",
+          "type_name": ".fraudshield.scoring.v1.AgentContext"
+        },
+        "28": {
+          "label": "LABEL_OPTIONAL",
+          "name": "geo_cell_fraud_rate_30d",
+          "oneof": null,
+          "proto3_optional": true,
+          "type": "TYPE_DOUBLE",
+          "type_name": ""
+        },
+        "29": {
+          "label": "LABEL_OPTIONAL",
+          "name": "accounts_sharing_device_or_phone",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_UINT32",
+          "type_name": ""
+        },
+        "3": {
+          "label": "LABEL_OPTIONAL",
+          "name": "tx_count_24h",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_UINT32",
+          "type_name": ""
+        },
+        "30": {
+          "label": "LABEL_OPTIONAL",
+          "name": "volume_ramp_ratio_7d",
+          "oneof": null,
+          "proto3_optional": true,
+          "type": "TYPE_DOUBLE",
+          "type_name": ""
+        },
+        "4": {
+          "label": "LABEL_OPTIONAL",
+          "name": "tx_count_7d",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_UINT32",
+          "type_name": ""
+        },
+        "5": {
+          "label": "LABEL_OPTIONAL",
+          "name": "amount_sum_24h_rwf",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_STRING",
+          "type_name": ""
+        },
+        "6": {
+          "label": "LABEL_OPTIONAL",
+          "name": "amount_sum_7d_rwf",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_STRING",
+          "type_name": ""
+        },
+        "7": {
+          "label": "LABEL_OPTIONAL",
+          "name": "unique_counterparties_24h",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_UINT32",
+          "type_name": ""
+        },
+        "8": {
+          "label": "LABEL_OPTIONAL",
+          "name": "mean_hourly_count_30d",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_DOUBLE",
+          "type_name": ""
+        },
+        "9": {
+          "label": "LABEL_OPTIONAL",
+          "name": "amount_median_90d_rwf",
+          "oneof": null,
+          "proto3_optional": true,
+          "type": "TYPE_STRING",
+          "type_name": ""
+        }
+      },
+      "reserved_names": [],
+      "reserved_numbers": []
+    },
+    ".fraudshield.scoring.v1.AgentContext": {
+      "fields": {
+        "1": {
+          "label": "LABEL_OPTIONAL",
+          "name": "float_utilisation_ratio",
+          "oneof": null,
+          "proto3_optional": true,
+          "type": "TYPE_DOUBLE",
+          "type_name": ""
+        },
+        "2": {
+          "label": "LABEL_OPTIONAL",
+          "name": "cashout_count_1h",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_UINT32",
+          "type_name": ""
+        },
+        "3": {
+          "label": "LABEL_OPTIONAL",
+          "name": "unique_customers_1h",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_UINT32",
+          "type_name": ""
+        },
+        "4": {
+          "label": "LABEL_OPTIONAL",
+          "name": "distance_from_registered_km",
+          "oneof": null,
+          "proto3_optional": true,
+          "type": "TYPE_DOUBLE",
+          "type_name": ""
+        }
+      },
+      "reserved_names": [],
+      "reserved_numbers": []
+    },
+    ".fraudshield.scoring.v1.DeviceContext": {
+      "fields": {
+        "1": {
+          "label": "LABEL_OPTIONAL",
+          "name": "device_new_for_account",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_BOOL",
+          "type_name": ""
+        },
+        "2": {
+          "label": "LABEL_OPTIONAL",
+          "name": "accounts_per_device_7d",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_UINT32",
+          "type_name": ""
+        },
+        "3": {
+          "label": "LABEL_OPTIONAL",
+          "name": "device_changes_24h",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_UINT32",
+          "type_name": ""
+        },
+        "4": {
+          "label": "LABEL_OPTIONAL",
+          "name": "device_age_days",
+          "oneof": null,
+          "proto3_optional": true,
+          "type": "TYPE_UINT32",
+          "type_name": ""
+        }
+      },
+      "reserved_names": [],
+      "reserved_numbers": []
+    },
+    ".fraudshield.scoring.v1.FeatureValue": {
+      "fields": {
+        "1": {
+          "label": "LABEL_OPTIONAL",
+          "name": "number",
+          "oneof": "value",
+          "proto3_optional": false,
+          "type": "TYPE_DOUBLE",
+          "type_name": ""
+        },
+        "2": {
+          "label": "LABEL_OPTIONAL",
+          "name": "category",
+          "oneof": "value",
+          "proto3_optional": false,
+          "type": "TYPE_STRING",
+          "type_name": ""
+        },
+        "3": {
+          "label": "LABEL_OPTIONAL",
+          "name": "missing",
+          "oneof": "value",
+          "proto3_optional": false,
+          "type": "TYPE_MESSAGE",
+          "type_name": ".fraudshield.scoring.v1.FeatureValue.Missing"
+        }
+      },
+      "reserved_names": [],
+      "reserved_numbers": []
+    },
+    ".fraudshield.scoring.v1.FeatureValue.Missing": {
+      "fields": {},
+      "reserved_names": [],
+      "reserved_numbers": []
+    },
+    ".fraudshield.scoring.v1.GeoPoint": {
+      "fields": {
+        "1": {
+          "label": "LABEL_OPTIONAL",
+          "name": "latitude",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_DOUBLE",
+          "type_name": ""
+        },
+        "2": {
+          "label": "LABEL_OPTIONAL",
+          "name": "longitude",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_DOUBLE",
+          "type_name": ""
+        }
+      },
+      "reserved_names": [],
+      "reserved_numbers": []
+    },
+    ".fraudshield.scoring.v1.ModelStatusRequest": {
+      "fields": {},
+      "reserved_names": [],
+      "reserved_numbers": []
+    },
+    ".fraudshield.scoring.v1.ModelStatusResponse": {
+      "fields": {
+        "1": {
+          "label": "LABEL_OPTIONAL",
+          "name": "status",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_ENUM",
+          "type_name": ".fraudshield.scoring.v1.ModelStatusResponse.Status"
+        },
+        "2": {
+          "label": "LABEL_OPTIONAL",
+          "name": "production_model_version",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_STRING",
+          "type_name": ""
+        },
+        "3": {
+          "label": "LABEL_OPTIONAL",
+          "name": "shadow_model_version",
+          "oneof": null,
+          "proto3_optional": true,
+          "type": "TYPE_STRING",
+          "type_name": ""
+        },
+        "4": {
+          "label": "LABEL_OPTIONAL",
+          "name": "feature_registry_version",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_STRING",
+          "type_name": ""
+        }
+      },
+      "reserved_names": [],
+      "reserved_numbers": []
+    },
+    ".fraudshield.scoring.v1.Money": {
+      "fields": {
+        "1": {
+          "label": "LABEL_OPTIONAL",
+          "name": "amount",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_STRING",
+          "type_name": ""
+        },
+        "2": {
+          "label": "LABEL_OPTIONAL",
+          "name": "currency",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_STRING",
+          "type_name": ""
+        }
+      },
+      "reserved_names": [],
+      "reserved_numbers": []
+    },
+    ".fraudshield.scoring.v1.ScoreRequest": {
+      "fields": {
+        "1": {
+          "label": "LABEL_OPTIONAL",
+          "name": "transaction",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_MESSAGE",
+          "type_name": ".fraudshield.scoring.v1.Transaction"
+        },
+        "2": {
+          "label": "LABEL_OPTIONAL",
+          "name": "context",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_MESSAGE",
+          "type_name": ".fraudshield.scoring.v1.AccountContext"
+        },
+        "3": {
+          "label": "LABEL_REPEATED",
+          "name": "configured_limits",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_MESSAGE",
+          "type_name": ".fraudshield.scoring.v1.Money"
+        },
+        "4": {
+          "label": "LABEL_OPTIONAL",
+          "name": "traceparent",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_STRING",
+          "type_name": ""
+        }
+      },
+      "reserved_names": [],
+      "reserved_numbers": []
+    },
+    ".fraudshield.scoring.v1.ScoreResponse": {
+      "fields": {
+        "1": {
+          "label": "LABEL_OPTIONAL",
+          "name": "result",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_MESSAGE",
+          "type_name": ".fraudshield.scoring.v1.ScoringResult"
+        }
+      },
+      "reserved_names": [],
+      "reserved_numbers": []
+    },
+    ".fraudshield.scoring.v1.ScoringResult": {
+      "fields": {
+        "1": {
+          "label": "LABEL_OPTIONAL",
+          "name": "scoring_result_id",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_STRING",
+          "type_name": ""
+        },
+        "10": {
+          "label": "LABEL_REPEATED",
+          "name": "feature_vector",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_MESSAGE",
+          "type_name": ".fraudshield.scoring.v1.ScoringResult.FeatureVectorEntry"
+        },
+        "11": {
+          "label": "LABEL_REPEATED",
+          "name": "shap_all",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_MESSAGE",
+          "type_name": ".fraudshield.scoring.v1.ShapContribution"
+        },
+        "12": {
+          "label": "LABEL_OPTIONAL",
+          "name": "shap_base_value",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_DOUBLE",
+          "type_name": ""
+        },
+        "13": {
+          "label": "LABEL_OPTIONAL",
+          "name": "final_margin",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_DOUBLE",
+          "type_name": ""
+        },
+        "14": {
+          "label": "LABEL_OPTIONAL",
+          "name": "model_version",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_STRING",
+          "type_name": ""
+        },
+        "15": {
+          "label": "LABEL_OPTIONAL",
+          "name": "feature_registry_version",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_STRING",
+          "type_name": ""
+        },
+        "16": {
+          "label": "LABEL_OPTIONAL",
+          "name": "scoring_duration_ms",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_UINT32",
+          "type_name": ""
+        },
+        "17": {
+          "label": "LABEL_REPEATED",
+          "name": "stage_timings",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_MESSAGE",
+          "type_name": ".fraudshield.scoring.v1.StageTiming"
+        },
+        "2": {
+          "label": "LABEL_OPTIONAL",
+          "name": "transaction_id",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_STRING",
+          "type_name": ""
+        },
+        "3": {
+          "label": "LABEL_OPTIONAL",
+          "name": "ensemble_score",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_DOUBLE",
+          "type_name": ""
+        },
+        "4": {
+          "label": "LABEL_OPTIONAL",
+          "name": "xgboost_score",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_DOUBLE",
+          "type_name": ""
+        },
+        "5": {
+          "label": "LABEL_OPTIONAL",
+          "name": "lightgbm_score",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_DOUBLE",
+          "type_name": ""
+        },
+        "6": {
+          "label": "LABEL_OPTIONAL",
+          "name": "anomaly_score",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_DOUBLE",
+          "type_name": ""
+        },
+        "7": {
+          "label": "LABEL_OPTIONAL",
+          "name": "anomaly_raw",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_DOUBLE",
+          "type_name": ""
+        },
+        "8": {
+          "label": "LABEL_OPTIONAL",
+          "name": "model_risk_tier",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_ENUM",
+          "type_name": ".fraudshield.scoring.v1.RiskTier"
+        },
+        "9": {
+          "label": "LABEL_REPEATED",
+          "name": "shap_top5",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_MESSAGE",
+          "type_name": ".fraudshield.scoring.v1.ShapContribution"
+        }
+      },
+      "reserved_names": [],
+      "reserved_numbers": []
+    },
+    ".fraudshield.scoring.v1.ScoringResult.FeatureVectorEntry": {
+      "fields": {
+        "1": {
+          "label": "LABEL_OPTIONAL",
+          "name": "key",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_STRING",
+          "type_name": ""
+        },
+        "2": {
+          "label": "LABEL_OPTIONAL",
+          "name": "value",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_MESSAGE",
+          "type_name": ".fraudshield.scoring.v1.FeatureValue"
+        }
+      },
+      "reserved_names": [],
+      "reserved_numbers": []
+    },
+    ".fraudshield.scoring.v1.ShapContribution": {
+      "fields": {
+        "1": {
+          "label": "LABEL_OPTIONAL",
+          "name": "feature",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_STRING",
+          "type_name": ""
+        },
+        "2": {
+          "label": "LABEL_OPTIONAL",
+          "name": "value",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_MESSAGE",
+          "type_name": ".fraudshield.scoring.v1.FeatureValue"
+        },
+        "3": {
+          "label": "LABEL_OPTIONAL",
+          "name": "shap",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_DOUBLE",
+          "type_name": ""
+        },
+        "4": {
+          "label": "LABEL_OPTIONAL",
+          "name": "increases_risk",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_BOOL",
+          "type_name": ""
+        },
+        "5": {
+          "label": "LABEL_OPTIONAL",
+          "name": "template_key",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_STRING",
+          "type_name": ""
+        }
+      },
+      "reserved_names": [],
+      "reserved_numbers": []
+    },
+    ".fraudshield.scoring.v1.StageTiming": {
+      "fields": {
+        "1": {
+          "label": "LABEL_OPTIONAL",
+          "name": "stage",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_ENUM",
+          "type_name": ".fraudshield.scoring.v1.StageTiming.Stage"
+        },
+        "2": {
+          "label": "LABEL_OPTIONAL",
+          "name": "milliseconds",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_DOUBLE",
+          "type_name": ""
+        }
+      },
+      "reserved_names": [],
+      "reserved_numbers": []
+    },
+    ".fraudshield.scoring.v1.Transaction": {
+      "fields": {
+        "1": {
+          "label": "LABEL_OPTIONAL",
+          "name": "transaction_id",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_STRING",
+          "type_name": ""
+        },
+        "10": {
+          "label": "LABEL_OPTIONAL",
+          "name": "device_token",
+          "oneof": null,
+          "proto3_optional": true,
+          "type": "TYPE_STRING",
+          "type_name": ""
+        },
+        "11": {
+          "label": "LABEL_OPTIONAL",
+          "name": "agent_token",
+          "oneof": null,
+          "proto3_optional": true,
+          "type": "TYPE_STRING",
+          "type_name": ""
+        },
+        "12": {
+          "label": "LABEL_OPTIONAL",
+          "name": "counterparty_country",
+          "oneof": null,
+          "proto3_optional": true,
+          "type": "TYPE_STRING",
+          "type_name": ""
+        },
+        "13": {
+          "label": "LABEL_OPTIONAL",
+          "name": "transaction_timestamp",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_MESSAGE",
+          "type_name": ".google.protobuf.Timestamp"
+        },
+        "14": {
+          "label": "LABEL_OPTIONAL",
+          "name": "received_at",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_MESSAGE",
+          "type_name": ".google.protobuf.Timestamp"
+        },
+        "2": {
+          "label": "LABEL_OPTIONAL",
+          "name": "institution_id",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_STRING",
+          "type_name": ""
+        },
+        "3": {
+          "label": "LABEL_OPTIONAL",
+          "name": "account_token",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_STRING",
+          "type_name": ""
+        },
+        "4": {
+          "label": "LABEL_OPTIONAL",
+          "name": "counterparty_token",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_STRING",
+          "type_name": ""
+        },
+        "5": {
+          "label": "LABEL_OPTIONAL",
+          "name": "amount",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_MESSAGE",
+          "type_name": ".fraudshield.scoring.v1.Money"
+        },
+        "6": {
+          "label": "LABEL_OPTIONAL",
+          "name": "amount_rwf",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_STRING",
+          "type_name": ""
+        },
+        "7": {
+          "label": "LABEL_OPTIONAL",
+          "name": "channel",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_ENUM",
+          "type_name": ".fraudshield.scoring.v1.Channel"
+        },
+        "8": {
+          "label": "LABEL_OPTIONAL",
+          "name": "merchant_category_code",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_STRING",
+          "type_name": ""
+        },
+        "9": {
+          "label": "LABEL_OPTIONAL",
+          "name": "location",
+          "oneof": null,
+          "proto3_optional": false,
+          "type": "TYPE_MESSAGE",
+          "type_name": ".fraudshield.scoring.v1.GeoPoint"
+        }
+      },
+      "reserved_names": [],
+      "reserved_numbers": []
+    }
+  },
+  "package": "fraudshield.scoring.v1",
+  "services": {
+    ".fraudshield.scoring.v1.ScoringService": {
+      "GetModelStatus": {
+        "input": ".fraudshield.scoring.v1.ModelStatusRequest",
+        "output": ".fraudshield.scoring.v1.ModelStatusResponse"
+      },
+      "Score": {
+        "input": ".fraudshield.scoring.v1.ScoreRequest",
+        "output": ".fraudshield.scoring.v1.ScoreResponse"
+      }
+    }
+  }
+}

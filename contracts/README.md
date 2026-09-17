@@ -7,6 +7,9 @@ Versioned interface contracts shared by Java, Python and TypeScript. Delivered i
   - `schema-examples.yaml` — a valid example for every object schema an operation uses.
 - `validation/` — vectors shared by the Java, TypeScript and contract tests: person names (ADR 0013),
   passwords (ADR 0014) and request validation with expected status and error codes (ADR 0011).
-- `proto/` — gRPC scoring contract between the API and the ML scorer.
-- `kafka/` — JSON Schema per topic (C.3) with key, partitions, retention and DLQ.
-- `webhooks/` — `decision.final` payload and HMAC-SHA256 signature specification (D-14).
+- `proto/` — gRPC scoring contract between the API and the ML scorer; `baseline/` holds the descriptor
+  summary that the evolution check compares with (ADR 0012).
+- `kafka/` — JSON Schema per topic (C.3) with key, partitions, retention, DLQ and event-type binding;
+  `baseline/` holds the published schemas that the backward-compatibility check compares with.
+- `webhooks/` — `decision.final` signature and delivery specification with signature and ordering
+  vectors (D-14).

@@ -1,48 +1,153 @@
 {
-  "description": "Test vectors for the decision.final webhook signature. The secret is a published test value, not a credential.",
+  "description": "Test vectors for the decision.final webhook signature (contracts/webhooks/decision-final.md). The whsec_test_ secrets are published test values, not credentials. Each attempt is signed with the time of that attempt, so a retry carries a new t and the same body.",
   "vectors": [
     {
       "name": "valid",
-      "secret": "whsec_test_4f7c2a9b1e8d6035c7a1b2c3d4e5f607",
-      "timestamp": 1789624961,
-      "body": "{\"transaction_id\":\"7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60\",\"decision\":\"TIMEOUT_RELEASE\",\"decided_at\":\"2026-09-17T06:02:41Z\",\"decided_by\":\"TIMEOUT_POLICY\",\"supersedes_decision\":\"HOLD\"}",
-      "header": "t=1789624961,v1=96b3a9df4f3758b0f6b3be263a82d886b460f905e265c18fd4de9c1fd39b2b41",
+      "secrets": [
+        "whsec_test_4f7c2a9b1e8d6035c7a1b2c3d4e5f607"
+      ],
+      "body": "{\"event_id\":\"5f607182-9a0b-4cbe-8f1a-4b5c6d7e8f90\",\"transaction_id\":\"7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60\",\"decision_sequence\":2,\"decision\":\"TIMEOUT_RELEASE\",\"final\":true,\"decided_at\":\"2026-09-17T06:02:41Z\",\"decided_by\":\"TIMEOUT_POLICY\",\"reason_codes\":[\"UNUSUAL_HOUR\",\"AMOUNT_ABOVE_NORMAL\"],\"review_deadline_at\":null,\"supersedes_decision\":\"HOLD\"}",
+      "header": "t=1789624961,v1=dd2dfc74bf00c37c185abf04e006e9e05112b2584faf0ba8e5512a87dd306e56",
       "verify_at": 1789625021,
       "expected": "VALID"
     },
     {
       "name": "tampered body",
-      "secret": "whsec_test_4f7c2a9b1e8d6035c7a1b2c3d4e5f607",
-      "timestamp": 1789624961,
-      "body": "{\"transaction_id\":\"7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60\",\"decision\":\"APPROVE\",\"decided_at\":\"2026-09-17T06:02:41Z\",\"decided_by\":\"TIMEOUT_POLICY\",\"supersedes_decision\":\"HOLD\"}",
-      "header": "t=1789624961,v1=96b3a9df4f3758b0f6b3be263a82d886b460f905e265c18fd4de9c1fd39b2b41",
+      "secrets": [
+        "whsec_test_4f7c2a9b1e8d6035c7a1b2c3d4e5f607"
+      ],
+      "body": "{\"event_id\":\"5f607182-9a0b-4cbe-8f1a-4b5c6d7e8f90\",\"transaction_id\":\"7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60\",\"decision_sequence\":2,\"decision\":\"APPROVE\",\"final\":true,\"decided_at\":\"2026-09-17T06:02:41Z\",\"decided_by\":\"TIMEOUT_POLICY\",\"reason_codes\":[\"UNUSUAL_HOUR\",\"AMOUNT_ABOVE_NORMAL\"],\"review_deadline_at\":null,\"supersedes_decision\":\"HOLD\"}",
+      "header": "t=1789624961,v1=dd2dfc74bf00c37c185abf04e006e9e05112b2584faf0ba8e5512a87dd306e56",
       "verify_at": 1789625021,
       "expected": "INVALID_SIGNATURE"
     },
     {
-      "name": "outside the 5-minute replay window",
-      "secret": "whsec_test_4f7c2a9b1e8d6035c7a1b2c3d4e5f607",
-      "timestamp": 1789624961,
-      "body": "{\"transaction_id\":\"7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60\",\"decision\":\"TIMEOUT_RELEASE\",\"decided_at\":\"2026-09-17T06:02:41Z\",\"decided_by\":\"TIMEOUT_POLICY\",\"supersedes_decision\":\"HOLD\"}",
-      "header": "t=1789624961,v1=96b3a9df4f3758b0f6b3be263a82d886b460f905e265c18fd4de9c1fd39b2b41",
+      "name": "wrong secret",
+      "secrets": [
+        "whsec_test_00000000000000000000000000000000"
+      ],
+      "body": "{\"event_id\":\"5f607182-9a0b-4cbe-8f1a-4b5c6d7e8f90\",\"transaction_id\":\"7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60\",\"decision_sequence\":2,\"decision\":\"TIMEOUT_RELEASE\",\"final\":true,\"decided_at\":\"2026-09-17T06:02:41Z\",\"decided_by\":\"TIMEOUT_POLICY\",\"reason_codes\":[\"UNUSUAL_HOUR\",\"AMOUNT_ABOVE_NORMAL\"],\"review_deadline_at\":null,\"supersedes_decision\":\"HOLD\"}",
+      "header": "t=1789624961,v1=dd2dfc74bf00c37c185abf04e006e9e05112b2584faf0ba8e5512a87dd306e56",
+      "verify_at": 1789625021,
+      "expected": "INVALID_SIGNATURE"
+    },
+    {
+      "name": "exactly 300 seconds old",
+      "secrets": [
+        "whsec_test_4f7c2a9b1e8d6035c7a1b2c3d4e5f607"
+      ],
+      "body": "{\"event_id\":\"5f607182-9a0b-4cbe-8f1a-4b5c6d7e8f90\",\"transaction_id\":\"7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60\",\"decision_sequence\":2,\"decision\":\"TIMEOUT_RELEASE\",\"final\":true,\"decided_at\":\"2026-09-17T06:02:41Z\",\"decided_by\":\"TIMEOUT_POLICY\",\"reason_codes\":[\"UNUSUAL_HOUR\",\"AMOUNT_ABOVE_NORMAL\"],\"review_deadline_at\":null,\"supersedes_decision\":\"HOLD\"}",
+      "header": "t=1789624961,v1=dd2dfc74bf00c37c185abf04e006e9e05112b2584faf0ba8e5512a87dd306e56",
+      "verify_at": 1789625261,
+      "expected": "VALID"
+    },
+    {
+      "name": "301 seconds old",
+      "secrets": [
+        "whsec_test_4f7c2a9b1e8d6035c7a1b2c3d4e5f607"
+      ],
+      "body": "{\"event_id\":\"5f607182-9a0b-4cbe-8f1a-4b5c6d7e8f90\",\"transaction_id\":\"7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60\",\"decision_sequence\":2,\"decision\":\"TIMEOUT_RELEASE\",\"final\":true,\"decided_at\":\"2026-09-17T06:02:41Z\",\"decided_by\":\"TIMEOUT_POLICY\",\"reason_codes\":[\"UNUSUAL_HOUR\",\"AMOUNT_ABOVE_NORMAL\"],\"review_deadline_at\":null,\"supersedes_decision\":\"HOLD\"}",
+      "header": "t=1789624961,v1=dd2dfc74bf00c37c185abf04e006e9e05112b2584faf0ba8e5512a87dd306e56",
       "verify_at": 1789625262,
       "expected": "EXPIRED"
     },
     {
-      "name": "wrong secret",
-      "secret": "whsec_test_4f7c2a9b1e8d6035c7a1b2c3d4e5f607x",
-      "timestamp": 1789624961,
-      "body": "{\"transaction_id\":\"7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60\",\"decision\":\"TIMEOUT_RELEASE\",\"decided_at\":\"2026-09-17T06:02:41Z\",\"decided_by\":\"TIMEOUT_POLICY\",\"supersedes_decision\":\"HOLD\"}",
-      "header": "t=1789624961,v1=96b3a9df4f3758b0f6b3be263a82d886b460f905e265c18fd4de9c1fd39b2b41",
+      "name": "300 seconds in the future",
+      "secrets": [
+        "whsec_test_4f7c2a9b1e8d6035c7a1b2c3d4e5f607"
+      ],
+      "body": "{\"event_id\":\"5f607182-9a0b-4cbe-8f1a-4b5c6d7e8f90\",\"transaction_id\":\"7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60\",\"decision_sequence\":2,\"decision\":\"TIMEOUT_RELEASE\",\"final\":true,\"decided_at\":\"2026-09-17T06:02:41Z\",\"decided_by\":\"TIMEOUT_POLICY\",\"reason_codes\":[\"UNUSUAL_HOUR\",\"AMOUNT_ABOVE_NORMAL\"],\"review_deadline_at\":null,\"supersedes_decision\":\"HOLD\"}",
+      "header": "t=1789624961,v1=dd2dfc74bf00c37c185abf04e006e9e05112b2584faf0ba8e5512a87dd306e56",
+      "verify_at": 1789624661,
+      "expected": "VALID"
+    },
+    {
+      "name": "301 seconds in the future",
+      "secrets": [
+        "whsec_test_4f7c2a9b1e8d6035c7a1b2c3d4e5f607"
+      ],
+      "body": "{\"event_id\":\"5f607182-9a0b-4cbe-8f1a-4b5c6d7e8f90\",\"transaction_id\":\"7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60\",\"decision_sequence\":2,\"decision\":\"TIMEOUT_RELEASE\",\"final\":true,\"decided_at\":\"2026-09-17T06:02:41Z\",\"decided_by\":\"TIMEOUT_POLICY\",\"reason_codes\":[\"UNUSUAL_HOUR\",\"AMOUNT_ABOVE_NORMAL\"],\"review_deadline_at\":null,\"supersedes_decision\":\"HOLD\"}",
+      "header": "t=1789624961,v1=dd2dfc74bf00c37c185abf04e006e9e05112b2584faf0ba8e5512a87dd306e56",
+      "verify_at": 1789624660,
+      "expected": "EXPIRED"
+    },
+    {
+      "name": "rotation: header signed with old and new, receiver has the new secret",
+      "secrets": [
+        "whsec_test_9b0e3d6a2c8f7154e2b3c4d5e6f7a819"
+      ],
+      "body": "{\"event_id\":\"5f607182-9a0b-4cbe-8f1a-4b5c6d7e8f90\",\"transaction_id\":\"7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60\",\"decision_sequence\":2,\"decision\":\"TIMEOUT_RELEASE\",\"final\":true,\"decided_at\":\"2026-09-17T06:02:41Z\",\"decided_by\":\"TIMEOUT_POLICY\",\"reason_codes\":[\"UNUSUAL_HOUR\",\"AMOUNT_ABOVE_NORMAL\"],\"review_deadline_at\":null,\"supersedes_decision\":\"HOLD\"}",
+      "header": "t=1789624961,v1=dd2dfc74bf00c37c185abf04e006e9e05112b2584faf0ba8e5512a87dd306e56,v1=b95a9228455a0ff8ca8583966e10206f7dc5214e155533783454bb043b66ce9b",
+      "verify_at": 1789625021,
+      "expected": "VALID"
+    },
+    {
+      "name": "rotation: receiver still has only the old secret",
+      "secrets": [
+        "whsec_test_4f7c2a9b1e8d6035c7a1b2c3d4e5f607"
+      ],
+      "body": "{\"event_id\":\"5f607182-9a0b-4cbe-8f1a-4b5c6d7e8f90\",\"transaction_id\":\"7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60\",\"decision_sequence\":2,\"decision\":\"TIMEOUT_RELEASE\",\"final\":true,\"decided_at\":\"2026-09-17T06:02:41Z\",\"decided_by\":\"TIMEOUT_POLICY\",\"reason_codes\":[\"UNUSUAL_HOUR\",\"AMOUNT_ABOVE_NORMAL\"],\"review_deadline_at\":null,\"supersedes_decision\":\"HOLD\"}",
+      "header": "t=1789624961,v1=dd2dfc74bf00c37c185abf04e006e9e05112b2584faf0ba8e5512a87dd306e56,v1=b95a9228455a0ff8ca8583966e10206f7dc5214e155533783454bb043b66ce9b",
+      "verify_at": 1789625021,
+      "expected": "VALID"
+    },
+    {
+      "name": "rotation: neither signature matches",
+      "secrets": [
+        "whsec_test_00000000000000000000000000000000"
+      ],
+      "body": "{\"event_id\":\"5f607182-9a0b-4cbe-8f1a-4b5c6d7e8f90\",\"transaction_id\":\"7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60\",\"decision_sequence\":2,\"decision\":\"TIMEOUT_RELEASE\",\"final\":true,\"decided_at\":\"2026-09-17T06:02:41Z\",\"decided_by\":\"TIMEOUT_POLICY\",\"reason_codes\":[\"UNUSUAL_HOUR\",\"AMOUNT_ABOVE_NORMAL\"],\"review_deadline_at\":null,\"supersedes_decision\":\"HOLD\"}",
+      "header": "t=1789624961,v1=dd2dfc74bf00c37c185abf04e006e9e05112b2584faf0ba8e5512a87dd306e56,v1=b95a9228455a0ff8ca8583966e10206f7dc5214e155533783454bb043b66ce9b",
       "verify_at": 1789625021,
       "expected": "INVALID_SIGNATURE"
     },
     {
-      "name": "malformed header",
-      "secret": "whsec_test_4f7c2a9b1e8d6035c7a1b2c3d4e5f607",
-      "timestamp": 1789624961,
-      "body": "{\"transaction_id\":\"7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60\",\"decision\":\"TIMEOUT_RELEASE\",\"decided_at\":\"2026-09-17T06:02:41Z\",\"decided_by\":\"TIMEOUT_POLICY\",\"supersedes_decision\":\"HOLD\"}",
-      "header": "v1=96b3a9df4f3758b0f6b3be263a82d886b460f905e265c18fd4de9c1fd39b2b41",
+      "name": "missing t",
+      "secrets": [
+        "whsec_test_4f7c2a9b1e8d6035c7a1b2c3d4e5f607"
+      ],
+      "body": "{\"event_id\":\"5f607182-9a0b-4cbe-8f1a-4b5c6d7e8f90\",\"transaction_id\":\"7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60\",\"decision_sequence\":2,\"decision\":\"TIMEOUT_RELEASE\",\"final\":true,\"decided_at\":\"2026-09-17T06:02:41Z\",\"decided_by\":\"TIMEOUT_POLICY\",\"reason_codes\":[\"UNUSUAL_HOUR\",\"AMOUNT_ABOVE_NORMAL\"],\"review_deadline_at\":null,\"supersedes_decision\":\"HOLD\"}",
+      "header": "v1=dd2dfc74bf00c37c185abf04e006e9e05112b2584faf0ba8e5512a87dd306e56",
+      "verify_at": 1789625021,
+      "expected": "MALFORMED"
+    },
+    {
+      "name": "missing v1",
+      "secrets": [
+        "whsec_test_4f7c2a9b1e8d6035c7a1b2c3d4e5f607"
+      ],
+      "body": "{\"event_id\":\"5f607182-9a0b-4cbe-8f1a-4b5c6d7e8f90\",\"transaction_id\":\"7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60\",\"decision_sequence\":2,\"decision\":\"TIMEOUT_RELEASE\",\"final\":true,\"decided_at\":\"2026-09-17T06:02:41Z\",\"decided_by\":\"TIMEOUT_POLICY\",\"reason_codes\":[\"UNUSUAL_HOUR\",\"AMOUNT_ABOVE_NORMAL\"],\"review_deadline_at\":null,\"supersedes_decision\":\"HOLD\"}",
+      "header": "t=1789624961",
+      "verify_at": 1789625021,
+      "expected": "MALFORMED"
+    },
+    {
+      "name": "duplicate t",
+      "secrets": [
+        "whsec_test_4f7c2a9b1e8d6035c7a1b2c3d4e5f607"
+      ],
+      "body": "{\"event_id\":\"5f607182-9a0b-4cbe-8f1a-4b5c6d7e8f90\",\"transaction_id\":\"7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60\",\"decision_sequence\":2,\"decision\":\"TIMEOUT_RELEASE\",\"final\":true,\"decided_at\":\"2026-09-17T06:02:41Z\",\"decided_by\":\"TIMEOUT_POLICY\",\"reason_codes\":[\"UNUSUAL_HOUR\",\"AMOUNT_ABOVE_NORMAL\"],\"review_deadline_at\":null,\"supersedes_decision\":\"HOLD\"}",
+      "header": "t=1789624961,t=1789624962,v1=dd2dfc74bf00c37c185abf04e006e9e05112b2584faf0ba8e5512a87dd306e56",
+      "verify_at": 1789625021,
+      "expected": "MALFORMED"
+    },
+    {
+      "name": "t in non-ASCII digits",
+      "secrets": [
+        "whsec_test_4f7c2a9b1e8d6035c7a1b2c3d4e5f607"
+      ],
+      "body": "{\"event_id\":\"5f607182-9a0b-4cbe-8f1a-4b5c6d7e8f90\",\"transaction_id\":\"7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60\",\"decision_sequence\":2,\"decision\":\"TIMEOUT_RELEASE\",\"final\":true,\"decided_at\":\"2026-09-17T06:02:41Z\",\"decided_by\":\"TIMEOUT_POLICY\",\"reason_codes\":[\"UNUSUAL_HOUR\",\"AMOUNT_ABOVE_NORMAL\"],\"review_deadline_at\":null,\"supersedes_decision\":\"HOLD\"}",
+      "header": "t=\u0661\u0667\u0668\u0669\u0666\u0662\u0664\u0669\u0666\u0661,v1=dd2dfc74bf00c37c185abf04e006e9e05112b2584faf0ba8e5512a87dd306e56",
+      "verify_at": 1789625021,
+      "expected": "MALFORMED"
+    },
+    {
+      "name": "v1 not 64 lower-case hex digits",
+      "secrets": [
+        "whsec_test_4f7c2a9b1e8d6035c7a1b2c3d4e5f607"
+      ],
+      "body": "{\"event_id\":\"5f607182-9a0b-4cbe-8f1a-4b5c6d7e8f90\",\"transaction_id\":\"7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60\",\"decision_sequence\":2,\"decision\":\"TIMEOUT_RELEASE\",\"final\":true,\"decided_at\":\"2026-09-17T06:02:41Z\",\"decided_by\":\"TIMEOUT_POLICY\",\"reason_codes\":[\"UNUSUAL_HOUR\",\"AMOUNT_ABOVE_NORMAL\"],\"review_deadline_at\":null,\"supersedes_decision\":\"HOLD\"}",
+      "header": "t=1789624961,v1=DD2DFC74BF00C37C185ABF04E006E9E05112B2584FAF0BA8E5512A87DD306E56",
       "verify_at": 1789625021,
       "expected": "MALFORMED"
     }

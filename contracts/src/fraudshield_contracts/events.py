@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 from dataclasses import dataclass
 from functools import cache
@@ -27,6 +28,8 @@ class Topic:
     partitions: int
     retention: str
     payload_schema: Path
+    event_type: str
+    schema_version: int
     spec: dict[str, Any]
 
     @property
@@ -50,6 +53,8 @@ def topics() -> list[Topic]:
             partitions=int(entry["partitions"]),
             retention=entry["retention"],
             payload_schema=KAFKA_ROOT / entry["payload_schema"],
+            event_type=entry["event_type"],
+            schema_version=int(entry["schema_version"]),
             spec=entry,
         )
         for entry in catalogue()["topics"]
@@ -66,9 +71,27 @@ def schemas() -> dict[str, dict[str, Any]]:
     return loaded
 
 
-def _registry() -> Registry[Any]:
+def tolerant(schema: Any) -> Any:
+    """A copy that ignores unknown properties, for consumers (tolerant reader, ADR 0012).
+
+    Producers validate against the closed schemas; consumers deployed before a producer that adds
+    an optional field must still accept its messages.
+    """
+    if isinstance(schema, dict):
+        return {
+            key: tolerant(value)
+            for key, value in schema.items()
+            if not (key in ("additionalProperties", "unevaluatedProperties") and value is False)
+        }
+    if isinstance(schema, list):
+        return [tolerant(value) for value in schema]
+    return copy.deepcopy(schema)
+
+
+def _registry(reader: bool = False) -> Registry[Any]:
     registry: Registry[Any] = Registry()
-    for schema_id, schema in schemas().items():
+    for schema_id, loaded in schemas().items():
+        schema = tolerant(loaded) if reader else loaded
         resource: Resource[Any] = Resource.from_contents(schema, default_specification=DRAFT202012)
         registry = registry.with_resource(schema_id, resource)
     return registry
@@ -78,13 +101,27 @@ def schema_id_for(path: Path) -> str:
     return str(json.loads(path.read_text(encoding="utf-8"))["$id"])
 
 
-def validate_event(topic: Topic, event: object) -> list[ValidationError]:
-    """Errors for the envelope and for the payload against the topic's schema."""
-    registry = _registry()
+def validate_event(topic: Topic, event: object, reader: bool = False) -> list[ValidationError]:
+    """Errors for the envelope, its topic binding and the payload against the topic's schema.
+
+    ``reader=True`` validates as a consumer does, ignoring unknown properties.
+    """
+    registry = _registry(reader)
     envelope = Draft202012Validator(
         {"$ref": ENVELOPE_ID}, registry=registry, format_checker=FormatChecker()
     )
     found = list(envelope.iter_errors(event))
+    if isinstance(event, dict):
+        for field, expected in (
+            ("event_type", topic.event_type),
+            ("schema_version", topic.schema_version),
+        ):
+            if field in event and event[field] != expected:
+                found.append(
+                    ValidationError(
+                        f"{field} {event[field]!r} is not {expected!r} for {topic.name}"
+                    )
+                )
     if isinstance(event, dict) and "payload" in event:
         payload = Draft202012Validator(
             {"$ref": schema_id_for(topic.payload_schema)},

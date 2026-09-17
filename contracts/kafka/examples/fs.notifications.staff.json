@@ -1,5 +1,5 @@
 {
-  "event_id": "0d1e2f3a-4b5c-4d6e-8f70-81a2b3c4d5e6",
+  "event_id": "7f9fa31d-8741-5509-a352-54c3ad6569a3",
   "event_type": "notification.requested",
   "schema_version": 1,
   "occurred_at": "2026-09-17T08:15:30Z",
@@ -13,7 +13,7 @@
     "kind": "ACCOUNT_FROZEN",
     "template_key": "email.account_frozen",
     "parameters": {
-      "account_token": "tok_A1b2C3d4E5f6G7h8J9k0L1m2",
+      "account_token": "tok_exampleAccount0000000001",
       "high_risk_count": 3
     }
   }

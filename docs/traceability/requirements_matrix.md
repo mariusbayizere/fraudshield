@@ -8,7 +8,7 @@ Rows: 258. Status counts: DONE 2, IN_PROGRESS 5, NOT_STARTED 251.
 | ID | Priority | Milestone | Status | Title | Implementation | Tests | Evidence | Deviations |
 |---|---|---|---|---|---|---|---|---|
 | FR-01-01 | M | M6 | NOT_STARTED | POST /api/v1/transactions/ingest accepts transaction payload; validates schema; publishes to Kafka within 5ms | — | — | — | D-13 |
-| FR-01-02 | M | M6 | NOT_STARTED | Transaction schema: transaction_id (UUID), account_id (tokenised), counterparty_id (tokenised), amount (DECIMAL 18,4), currency (ISO 4217 3-char), channel ENUM(MOBILE_MONEY/CARD/AGENT_BANKING/USSD/ONLINE/BANK_TRANSFER), merchant_category_code (4-char), latitude, longitude, device_fingerprint (nullable), transaction_timestamp (ISO 8601 UTC) | — | contracts/tests/test_openapi.py:108<br>contracts/tests/test_validation_vectors.py:137<br>contracts/tests/test_validation_vectors.py:39<br>contracts/tests/test_validation_vectors.py:78 | — | — |
+| FR-01-02 | M | M6 | NOT_STARTED | Transaction schema: transaction_id (UUID), account_id (tokenised), counterparty_id (tokenised), amount (DECIMAL 18,4), currency (ISO 4217 3-char), channel ENUM(MOBILE_MONEY/CARD/AGENT_BANKING/USSD/ONLINE/BANK_TRANSFER), merchant_category_code (4-char), latitude, longitude, device_fingerprint (nullable), transaction_timestamp (ISO 8601 UTC) | — | contracts/tests/test_events.py:297<br>contracts/tests/test_openapi.py:108<br>contracts/tests/test_validation_vectors.py:137<br>contracts/tests/test_validation_vectors.py:39<br>contracts/tests/test_validation_vectors.py:78 | — | — |
 | FR-01-03 | M | M6 | NOT_STARTED | Idempotent ingestion: duplicate transaction_id within 24 hours returns 200 with cached ScoringResult; not reprocessed | — | contracts/tests/test_openapi.py:302 | — | D-12 |
 | FR-01-04 | M | M6 | NOT_STARTED | All 6 East African channels handled as first-class types with channel-specific feature engineering | — | contracts/tests/test_openapi.py:93 | — | D-04 |
 | FR-01-05 | M | M6 | NOT_STARTED | API key authentication for core banking system (machine-to-machine); JWT for human-facing endpoints; keys scoped to ingestion endpoints only | — | contracts/tests/test_authorisation_matrix.py:105<br>contracts/tests/test_authorisation_matrix.py:44<br>contracts/tests/test_openapi.py:54 | — | — |
@@ -79,7 +79,7 @@ Rows: 258. Status counts: DONE 2, IN_PROGRESS 5, NOT_STARTED 251.
 | NFR-PERF-10 | M | M10 | NOT_STARTED | API ingestion error rate | — | — | — | — |
 | NFR-SEC-01 | M | M9 | NOT_STARTED | Encryption at rest | — | — | — | D-20 |
 | NFR-SEC-02 | M | M9 | NOT_STARTED | Encryption in transit | — | — | — | — |
-| NFR-SEC-03 | M | M1 | NOT_STARTED | PII tokenisation | — | contracts/tests/test_events.py:76<br>contracts/tests/test_events.py:86<br>contracts/tests/test_openapi.py:444<br>contracts/tests/test_validation_vectors.py:39 | — | — |
+| NFR-SEC-03 | M | M1 | NOT_STARTED | PII tokenisation | — | contracts/tests/test_events.py:159<br>contracts/tests/test_events.py:190<br>contracts/tests/test_events.py:224<br>contracts/tests/test_events.py:297<br>contracts/tests/test_openapi.py:444<br>contracts/tests/test_validation_vectors.py:39 | — | — |
 | NFR-SEC-04 | M | M9 | NOT_STARTED | No secrets in version control | — | — | — | — |
 | NFR-SEC-05 | M | M1 | NOT_STARTED | Audit log immutability | — | — | — | D-32 |
 | NFR-SEC-06 | M | M6 | NOT_STARTED | SQL injection prevention | — | — | — | — |
@@ -223,12 +223,12 @@ Rows: 258. Status counts: DONE 2, IN_PROGRESS 5, NOT_STARTED 251.
 | D-07 | M | M2 | NOT_STARTED | Temporal split definitions disagree | — | — | — | — |
 | D-08 | M | M2 | NOT_STARTED | Results on synthetic data can look perfect and prove nothing. | — | — | — | — |
 | D-09 | M | M4 | IN_PROGRESS | Unsupported numeric claims in the SRS | docs/research/claims_register.md | — | — | — |
-| D-10 | M | M6 | NOT_STARTED | Alert volume will overwhelm analysts; the 30-second MEDIUM timer then auto-releases most risky transactions. | — | contracts/tests/test_events.py:65 | — | — |
+| D-10 | M | M6 | NOT_STARTED | Alert volume will overwhelm analysts; the 30-second MEDIUM timer then auto-releases most risky transactions. | — | contracts/tests/test_events.py:148 | — | — |
 | D-11 | M | M5 | NOT_STARTED | Shadow "within 1%" is ambiguous and labels are delayed. | — | — | — | — |
 | D-12 | M | M6 | NOT_STARTED | Model extraction and privacy risk: returning the full ScoringResult (feature_vector, per-model scores, SHAP) to the core-banking caller exposes model internals. | — | contracts/tests/test_openapi.py:138<br>contracts/tests/test_openapi.py:160<br>contracts/tests/test_openapi.py:172 | — | — |
 | D-13 | M | M6 | NOT_STARTED | The latency budget sums to 51 ms and puts PostgreSQL and Kafka round-trips in the synchronous path, but the p95 target is 50 ms. | — | — | — | — |
-| D-14 | M | M6 | NOT_STARTED | MEDIUM "hold for 30 seconds" cannot be an open HTTP request. | — | contracts/tests/test_events.py:65<br>contracts/tests/test_openapi.py:160<br>contracts/tests/test_openapi.py:172<br>contracts/tests/test_openapi.py:208<br>contracts/tests/test_openapi.py:352<br>contracts/tests/test_webhooks.py:14<br>contracts/tests/test_webhooks.py:26<br>contracts/tests/test_webhooks.py:46 | — | — |
-| D-15 | M | M6 | NOT_STARTED | "Buffer up to 10,000 transactions in memory" loses data if the pod dies. | — | contracts/tests/test_events.py:128 | — | — |
+| D-14 | M | M6 | NOT_STARTED | MEDIUM "hold for 30 seconds" cannot be an open HTTP request. | — | contracts/tests/test_events.py:148<br>contracts/tests/test_events.py:304<br>contracts/tests/test_openapi.py:160<br>contracts/tests/test_openapi.py:172<br>contracts/tests/test_openapi.py:208<br>contracts/tests/test_openapi.py:352<br>contracts/tests/test_webhooks.py:27<br>contracts/tests/test_webhooks.py:75<br>contracts/tests/test_webhooks.py:86 | — | — |
+| D-15 | M | M6 | NOT_STARTED | "Buffer up to 10,000 transactions in memory" loses data if the pod dies. | — | — | — | — |
 | D-16 | M | M5 | NOT_STARTED | Python in the hot path at 10k TPS. | — | — | — | — |
 | D-17 | M | M6 | NOT_STARTED | pytest is listed for the Risk Decision Engine, which is a Spring Boot service. | — | backend/common/src/test/java/io/github/mariusbayizere/fraudshield/common/money/MoneyBoundaryTest.java:21 | — | — |
 | D-18 | M | M6 | NOT_STARTED | "Exactly 30 s" and "exactly at 5%" need tolerances and minimum volume. | — | — | — | — |
@@ -238,14 +238,14 @@ Rows: 258. Status counts: DONE 2, IN_PROGRESS 5, NOT_STARTED 251.
 | D-22 | M | M8 | NOT_STARTED | Regulatory mapping is unverified. | — | — | — | — |
 | D-23 | M | M7 | NOT_STARTED | Google OAuth "new Google user creates ANALYST account" would let any Google user into a bank's fraud console. | — | — | — | — |
 | D-24 | M | M7 | NOT_STARTED | The registration form lets users pick a role (Department = role); FR-07-01 says users cannot self-elevate. | — | contracts/tests/test_openapi.py:436 | — | — |
-| D-25 | M | M6 | NOT_STARTED | Customer verification by SMS link defeats itself in SIM-swap fraud, | — | contracts/tests/test_events.py:76 | — | — |
+| D-25 | M | M6 | NOT_STARTED | Customer verification by SMS link defeats itself in SIM-swap fraud, | — | contracts/tests/test_events.py:159<br>contracts/tests/test_events.py:173 | — | — |
 | D-26 | M | M7 | NOT_STARTED | "10 attempts per 15 min per IP" will lock out whole bank offices and mobile users behind carrier-grade NAT; 5-failure account lock enables denial-of-service against analysts. | — | — | — | — |
 | D-27 | M | M7 | NOT_STARTED | Stateless JWTs cannot be invalidated "within 5 seconds" on deactivation or password change. | — | — | — | — |
 | D-28 | M | M9 | NOT_STARTED | A third-party penetration test cannot be performed by the build agent. | — | — | — | — |
 | D-29 | M | M8 | NOT_STARTED | Offline analyst decisions replayed later (Background Sync) can be stale or dangerous, | — | contracts/tests/test_openapi.py:360 | — | — |
 | D-30 | M | M1 | NOT_STARTED | auto_block_events is declared immutable but contains mutable columns | — | — | — | — |
 | D-31 | M | M1 | NOT_STARTED | Tables required by functional requirements are missing from the schema. | — | — | — | — |
-| D-32 | M | M1 | NOT_STARTED | Audit log needs tamper evidence, not only permissions, and "12 action types" are unnamed. | — | contracts/tests/test_events.py:103<br>contracts/tests/test_openapi.py:414 | — | — |
+| D-32 | M | M1 | NOT_STARTED | Audit log needs tamper evidence, not only permissions, and "12 action types" are unnamed. | — | contracts/tests/test_events.py:241<br>contracts/tests/test_openapi.py:414 | — | — |
 | D-33 | M | M8 | IN_PROGRESS | Several SRS colour pairings fail WCAG 2.1 AA text contrast | frontend/src/design-system/color/contrast.ts | frontend/src/design-system/color/contrast.test.ts:46<br>frontend/src/design-system/color/contrast.test.ts:60<br>frontend/src/design-system/color/contrast.test.ts:66 | — | — |
 | D-34 | M | M8 | NOT_STARTED | animate-pulse "infinite" on HIGH cards violates WCAG 2.2.2 (motion > 5 s needs a pause control), conflicts with the mobile battery principle in 05B, and causes fatigue on long shifts. | — | — | — | — |
 | D-35 | M | M8 | NOT_STARTED | HIGH "pinned at top" uses MUI X DataGrid row pinning, which is a paid (Pro) feature. | — | — | — | — |
@@ -256,7 +256,7 @@ Rows: 258. Status counts: DONE 2, IN_PROGRESS 5, NOT_STARTED 251.
 | D-40 | M | M8 | NOT_STARTED | Lighthouse removed its PWA category in Lighthouse 12, | — | — | — | — |
 | D-41 | M | M8 | NOT_STARTED | iOS web push only works for Home-Screen-installed PWAs | — | — | — | — |
 | D-42 | M | M8 | NOT_STARTED | Feature phones (KaiOS/Opera Mini, 240 px, 2G) will not run a bank analyst console, and analysts are staff with smartphones or PCs. | — | — | — | — |
-| D-43 | M | M8 | IN_PROGRESS | SRS has no localisation, yet serves Rwanda and the EAC. | backend/common/src/main/java/io/github/mariusbayizere/fraudshield/common/money/Money.java<br>backend/common/src/main/java/io/github/mariusbayizere/fraudshield/common/money/CurrencyCode.java | backend/common/src/test/java/io/github/mariusbayizere/fraudshield/common/money/MoneyBoundaryTest.java:22<br>backend/common/src/test/java/io/github/mariusbayizere/fraudshield/common/money/MoneyTest.java:19<br>backend/common/src/test/java/io/github/mariusbayizere/fraudshield/common/money/MoneyTest.java:27<br>backend/common/src/test/java/io/github/mariusbayizere/fraudshield/common/money/MoneyTest.java:46<br>contracts/tests/test_events.py:110<br>contracts/tests/test_openapi.py:108<br>contracts/tests/test_openapi.py:126 | — | — |
+| D-43 | M | M8 | IN_PROGRESS | SRS has no localisation, yet serves Rwanda and the EAC. | backend/common/src/main/java/io/github/mariusbayizere/fraudshield/common/money/Money.java<br>backend/common/src/main/java/io/github/mariusbayizere/fraudshield/common/money/CurrencyCode.java | backend/common/src/test/java/io/github/mariusbayizere/fraudshield/common/money/MoneyBoundaryTest.java:22<br>backend/common/src/test/java/io/github/mariusbayizere/fraudshield/common/money/MoneyTest.java:19<br>backend/common/src/test/java/io/github/mariusbayizere/fraudshield/common/money/MoneyTest.java:27<br>backend/common/src/test/java/io/github/mariusbayizere/fraudshield/common/money/MoneyTest.java:46<br>contracts/tests/test_events.py:272<br>contracts/tests/test_openapi.py:108<br>contracts/tests/test_openapi.py:126 | — | — |
 | D-44 | M | M8 | NOT_STARTED | "Undo within 5 seconds" conflicts with immutable decisions and immediate side effects | — | — | — | — |
 | D-45 | M | M8 | NOT_STARTED | SHAP chart "all 44 features ranked" overwhelms under time pressure. | — | — | — | — |
 | D-46 | M | M8 | NOT_STARTED | Leaflet base-map tiles from public servers break the CSP, data residency and 2G usability; per-point fraud maps can expose individuals. | — | — | — | — |

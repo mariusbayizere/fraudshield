@@ -12,7 +12,11 @@
 // * Timestamps are google.protobuf.Timestamp in UTC.
 // * Every ScoringResult carries a model_version; a result is never produced by an unversioned model
 //   (FR-02-10).
-// * Fields are only ever added. Removed field numbers and names are reserved.
+// * Fields are only ever added. Removed field numbers and names are reserved, and no number, type,
+//   label or oneof membership changes. contracts/tests/test_proto.py compares the compiled
+//   descriptor with contracts/proto/baseline/scoring-v1.json and fails on any such change.
+// * The scorer also serves the standard grpc.health.v1.Health service for orchestration probes;
+//   GetModelStatus below reports model versions for /api/v1/health/ml.
 syntax = "proto3";
 
 package fraudshield.scoring.v1;
@@ -28,8 +32,9 @@ service ScoringService {
   // UNAVAILABLE the API's circuit breaker switches to the rule-based fallback (C.4).
   rpc Score(ScoreRequest) returns (ScoreResponse);
 
-  // Liveness and loaded-model information for /api/v1/health/ml and hot-swap monitoring.
-  rpc Health(HealthRequest) returns (HealthResponse);
+  // Loaded-model information for /api/v1/health/ml and hot-swap monitoring. Liveness uses the
+  // standard grpc.health.v1.Health service, registered alongside this one.
+  rpc GetModelStatus(ModelStatusRequest) returns (ModelStatusResponse);
 }
 
 enum Channel {
@@ -162,10 +167,13 @@ message ScoreRequest {
 
 // Feature value: a number, a category, or structurally missing (NaN, D-04).
 message FeatureValue {
+  // Marker for a structurally missing value; it has no fields, so it cannot be "not missing".
+  message Missing {}
+
   oneof value {
     double number = 1;
     string category = 2;
-    bool missing = 3;
+    Missing missing = 3;
   }
 }
 
@@ -180,8 +188,15 @@ message ShapContribution {
 }
 
 message StageTiming {
-  // One of: features, ensemble, calibration, isolation_forest, shap.
-  string stage = 1;
+  enum Stage {
+    STAGE_UNSPECIFIED = 0;
+    STAGE_FEATURES = 1;
+    STAGE_ENSEMBLE = 2;
+    STAGE_CALIBRATION = 3;
+    STAGE_ISOLATION_FOREST = 4;
+    STAGE_SHAP = 5;
+  }
+  Stage stage = 1;
   double milliseconds = 2;
 }
 
@@ -219,9 +234,9 @@ message ScoreResponse {
   ScoringResult result = 1;
 }
 
-message HealthRequest {}
+message ModelStatusRequest {}
 
-message HealthResponse {
+message ModelStatusResponse {
   enum Status {
     STATUS_UNSPECIFIED = 0;
     STATUS_SERVING = 1;

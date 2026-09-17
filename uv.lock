@@ -140,6 +140,7 @@ dependencies = [
     { name = "grpcio-tools" },
     { name = "jsonschema" },
     { name = "openapi-spec-validator" },
+    { name = "protobuf" },
     { name = "pyyaml" },
     { name = "referencing" },
 ]
@@ -149,6 +150,7 @@ requires-dist = [
     { name = "grpcio-tools", specifier = "==1.84.0" },
     { name = "jsonschema", specifier = "==4.26.0" },
     { name = "openapi-spec-validator", specifier = "==0.9.0" },
+    { name = "protobuf", specifier = "==7.36.1" },
     { name = "pyyaml", specifier = "==6.0.3" },
     { name = "referencing", specifier = "==0.37.0" },
 ]

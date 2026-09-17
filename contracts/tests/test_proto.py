@@ -85,13 +85,13 @@ def test_money_is_a_decimal_string_not_a_float(scoring_pb2: ModuleType) -> None:
 
 @pytest.mark.req("D-04")
 def test_feature_value_can_represent_structural_missingness(scoring_pb2: ModuleType) -> None:
-    missing = scoring_pb2.FeatureValue(missing=True)
+    missing = scoring_pb2.FeatureValue(missing=scoring_pb2.FeatureValue.Missing())
     assert missing.WhichOneof("value") == "missing"
     result = scoring_pb2.ScoringResult(model_version="fs-ensemble-2026.09.1")
-    result.feature_vector["device_age_days"].missing = True
+    result.feature_vector["device_age_days"].missing.SetInParent()
     assert result.feature_vector["device_age_days"].WhichOneof("value") == "missing"
 
 
-def test_service_exposes_score_and_health(scoring_pb2: ModuleType) -> None:
+def test_service_exposes_score_and_model_status(scoring_pb2: ModuleType) -> None:
     methods = set(scoring_pb2.DESCRIPTOR.services_by_name["ScoringService"].methods_by_name)
-    assert methods == {"Score", "Health"}
+    assert methods == {"Score", "GetModelStatus"}
