@@ -103,6 +103,7 @@ governance: ## Defect register, traceability and scope checks (D.2, D-47)
 	uv run fs-scope-guard
 	uv run fs-compose-budget
 	uv run fs-contract-baselines --against origin/main
+	uv run fs-migration-guard --against origin/main
 
 .PHONY: traceability
 traceability: ## Regenerate the traceability matrix from YAML and test tags

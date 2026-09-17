@@ -113,6 +113,8 @@ jobs:
       - run: uv run fs-compose-budget
       # Kafka schemas and the proto must stay compatible with the baselines already on main.
       - run: uv run fs-contract-baselines --against origin/main
+      # Merged Flyway migrations are immutable; changes go into new migrations (PB-20).
+      - run: uv run fs-migration-guard --against origin/main
       - name: Commit messages introduced by this push or pull request (G.3)
         env:
           EVENT_NAME: ${{ github.event_name }}
