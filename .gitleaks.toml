@@ -1,0 +1,16 @@
+# Gitleaks configuration: the default rule set plus two narrow, documented allowlists.
+# Anything else that matches a rule still fails the scan.
+title = "FraudShield gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Opaque tok_ identifiers for accounts, devices, counterparties and agents are not credentials (ADR 0011); fixtures use synthetic values"
+regexes = ['''^tok_[A-Za-z0-9]{24,64}$''']
+
+[[allowlists]]
+description = "Published webhook signature test vectors; the whsec_test_ values are test oracles, not secrets (ADR 0012)"
+condition = "AND"
+paths = ['''^contracts/webhooks/signature-test-vectors\.json$''']
+regexes = ['''^whsec_test_[A-Za-z0-9_]+$''']

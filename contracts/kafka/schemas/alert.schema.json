@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fraudshield:kafka:alert",
+  "title": "fs.alerts.high / fs.alerts.medium / fs.alerts.anomaly payload",
+  "type": "object",
+  "required": [
+    "alert_id",
+    "version",
+    "transaction_id",
+    "account_token",
+    "tier",
+    "fraud_probability",
+    "amount",
+    "channel",
+    "transaction_timestamp",
+    "scoring_result_id",
+    "review_deadline_at",
+    "holds_transaction"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "alert_id": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "transaction_id": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+    },
+    "account_token": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Token"
+    },
+    "tier": {
+      "type": "string",
+      "enum": [
+        "HIGH",
+        "MEDIUM",
+        "ANOMALY"
+      ]
+    },
+    "fraud_probability": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Probability"
+    },
+    "anomaly_score": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Probability"
+    },
+    "amount": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Money"
+    },
+    "expected_loss_rwf": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/DecimalAmount"
+    },
+    "channel": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Channel"
+    },
+    "transaction_timestamp": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Timestamp"
+    },
+    "scoring_result_id": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+    },
+    "review_deadline_at": {
+      "oneOf": [
+        {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/Timestamp"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "holds_transaction": {
+      "type": "boolean",
+      "description": "False for ANOMALY alerts (D-10)"
+    },
+    "reason_codes": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "$ref": "urn:fraudshield:kafka:common#/$defs/ReasonCode"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "tier": {
+            "const": "MEDIUM"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "review_deadline_at": {
+            "$ref": "urn:fraudshield:kafka:common#/$defs/Timestamp"
+          },
+          "holds_transaction": {
+            "const": true
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "tier": {
+            "const": "ANOMALY"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "review_deadline_at": {
+            "type": "null"
+          },
+          "holds_transaction": {
+            "const": false
+          }
+        }
+      }
+    }
+  ]
+}

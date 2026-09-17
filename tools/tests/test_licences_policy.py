@@ -20,6 +20,7 @@ def _dep(scope: str, *declared: str, combine: str = "any", name: str = "lib") ->
         ("MIT License", "MIT"),
         ("Permission is hereby granted, free of charge, to any person", "MIT"),
         ("Python Software Foundation License", "PSF-2.0"),
+        ("3-Clause BSD License", "BSD-3-Clause"),
         ("Mozilla Public License 2.0 (MPL 2.0)", "MPL-2.0"),
         ("GNU Lesser General Public License v2 or later (LGPLv2+)", "LGPL-2.1-or-later"),
         ("GNU Lesser General Public License v3 (LGPLv3)", "LGPL-3.0-only"),

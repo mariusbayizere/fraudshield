@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fraudshield:kafka:notification-customer",
+  "title": "fs.notifications.customer payload — an intent, not a message (D-25, D-43)",
+  "type": "object",
+  "required": [
+    "notification_id",
+    "account_token",
+    "template_key",
+    "locale",
+    "parameters",
+    "channel"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "notification_id": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+    },
+    "account_token": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Token"
+    },
+    "channel": {
+      "type": "string",
+      "enum": [
+        "SMS"
+      ]
+    },
+    "template_key": {
+      "type": "string",
+      "pattern": "^sms\\.[a-z_]+$"
+    },
+    "locale": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Locale"
+    },
+    "auto_block_event_id": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+    },
+    "verification_link_allowed": {
+      "type": "boolean",
+      "description": "False when self-service unblock is disabled (D-25)"
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "masked_account": {
+          "type": "string",
+          "pattern": "^\\*{3,}[0-9A-Za-z]{2,4}$"
+        },
+        "amount": {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/Money"
+        },
+        "local_time": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "reference_code": {
+          "type": "string",
+          "pattern": "^[A-Z0-9]{6,10}$"
+        }
+      }
+    }
+  }
+}

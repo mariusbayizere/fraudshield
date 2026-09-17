@@ -1,0 +1,19 @@
+{
+  "event_id": "0d1e2f3a-4b5c-4d6e-8f70-81a2b3c4d5e6",
+  "event_type": "config.changed",
+  "schema_version": 1,
+  "occurred_at": "2026-09-17T08:15:30Z",
+  "institution_id": "5b1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+  "producer": "fraudshield-api",
+  "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+  "payload": {
+    "config_kind": "THRESHOLDS",
+    "version": 5,
+    "effective_at": "2026-09-17T08:16:00Z",
+    "entity_id": null,
+    "summary": {
+      "channel": "USSD",
+      "high_threshold": 0.87
+    }
+  }
+}

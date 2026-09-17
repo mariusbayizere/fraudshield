@@ -1,0 +1,50 @@
+{
+  "description": "Test vectors for the decision.final webhook signature. The secret is a published test value, not a credential.",
+  "vectors": [
+    {
+      "name": "valid",
+      "secret": "whsec_test_4f7c2a9b1e8d6035c7a1b2c3d4e5f607",
+      "timestamp": 1789624961,
+      "body": "{\"transaction_id\":\"7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60\",\"decision\":\"TIMEOUT_RELEASE\",\"decided_at\":\"2026-09-17T06:02:41Z\",\"decided_by\":\"TIMEOUT_POLICY\",\"supersedes_decision\":\"HOLD\"}",
+      "header": "t=1789624961,v1=96b3a9df4f3758b0f6b3be263a82d886b460f905e265c18fd4de9c1fd39b2b41",
+      "verify_at": 1789625021,
+      "expected": "VALID"
+    },
+    {
+      "name": "tampered body",
+      "secret": "whsec_test_4f7c2a9b1e8d6035c7a1b2c3d4e5f607",
+      "timestamp": 1789624961,
+      "body": "{\"transaction_id\":\"7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60\",\"decision\":\"APPROVE\",\"decided_at\":\"2026-09-17T06:02:41Z\",\"decided_by\":\"TIMEOUT_POLICY\",\"supersedes_decision\":\"HOLD\"}",
+      "header": "t=1789624961,v1=96b3a9df4f3758b0f6b3be263a82d886b460f905e265c18fd4de9c1fd39b2b41",
+      "verify_at": 1789625021,
+      "expected": "INVALID_SIGNATURE"
+    },
+    {
+      "name": "outside the 5-minute replay window",
+      "secret": "whsec_test_4f7c2a9b1e8d6035c7a1b2c3d4e5f607",
+      "timestamp": 1789624961,
+      "body": "{\"transaction_id\":\"7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60\",\"decision\":\"TIMEOUT_RELEASE\",\"decided_at\":\"2026-09-17T06:02:41Z\",\"decided_by\":\"TIMEOUT_POLICY\",\"supersedes_decision\":\"HOLD\"}",
+      "header": "t=1789624961,v1=96b3a9df4f3758b0f6b3be263a82d886b460f905e265c18fd4de9c1fd39b2b41",
+      "verify_at": 1789625262,
+      "expected": "EXPIRED"
+    },
+    {
+      "name": "wrong secret",
+      "secret": "whsec_test_4f7c2a9b1e8d6035c7a1b2c3d4e5f607x",
+      "timestamp": 1789624961,
+      "body": "{\"transaction_id\":\"7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60\",\"decision\":\"TIMEOUT_RELEASE\",\"decided_at\":\"2026-09-17T06:02:41Z\",\"decided_by\":\"TIMEOUT_POLICY\",\"supersedes_decision\":\"HOLD\"}",
+      "header": "t=1789624961,v1=96b3a9df4f3758b0f6b3be263a82d886b460f905e265c18fd4de9c1fd39b2b41",
+      "verify_at": 1789625021,
+      "expected": "INVALID_SIGNATURE"
+    },
+    {
+      "name": "malformed header",
+      "secret": "whsec_test_4f7c2a9b1e8d6035c7a1b2c3d4e5f607",
+      "timestamp": 1789624961,
+      "body": "{\"transaction_id\":\"7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60\",\"decision\":\"TIMEOUT_RELEASE\",\"decided_at\":\"2026-09-17T06:02:41Z\",\"decided_by\":\"TIMEOUT_POLICY\",\"supersedes_decision\":\"HOLD\"}",
+      "header": "v1=96b3a9df4f3758b0f6b3be263a82d886b460f905e265c18fd4de9c1fd39b2b41",
+      "verify_at": 1789625021,
+      "expected": "MALFORMED"
+    }
+  ]
+}

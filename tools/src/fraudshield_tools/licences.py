@@ -110,7 +110,10 @@ _NAME_PATTERNS: tuple[tuple[str, str], ...] = (
     ),
     (r"^mit( licen[cs]e)?$|^expat$|^permission is hereby granted, free of charge", "MIT"),
     (r"^(bsd[- ]2[- ]clause|simplified bsd)( licen[cs]e)?$", "BSD-2-Clause"),
-    (r"^(bsd[- ]3[- ]clause|new bsd|modified bsd|revised bsd)( licen[cs]e)?$", "BSD-3-Clause"),
+    (
+        r"^(bsd[- ]3[- ]clause|3[- ]clause bsd|new bsd|modified bsd|revised bsd)( licen[cs]e)?$",
+        "BSD-3-Clause",
+    ),
     (r"^isc( licen[cs]e)?( \(iscl\))?$", "ISC"),
     (r"^(psf|python software foundation)( licen[cs]e)?( 2\.0)?$", "PSF-2.0"),
     (r"^mozilla public licen[cs]e,? (version )?2\.0( \(mpl 2\.0\))?$", "MPL-2.0"),

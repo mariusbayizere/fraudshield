@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fraudshield:kafka:transaction-raw",
+  "title": "fs.transactions.raw payload — the ingestion request (FR-01-02, ADR 0011)",
+  "type": "object",
+  "required": [
+    "transaction_id",
+    "account_id",
+    "counterparty_id",
+    "amount",
+    "currency",
+    "channel",
+    "merchant_category_code",
+    "latitude",
+    "longitude",
+    "transaction_timestamp"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "transaction_id": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+    },
+    "account_id": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Token"
+    },
+    "counterparty_id": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Token"
+    },
+    "amount": {
+      "allOf": [
+        {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/DecimalAmount"
+        },
+        {
+          "not": {
+            "pattern": "^0(\\.0{1,4})?$"
+          }
+        }
+      ]
+    },
+    "currency": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/CurrencyCode"
+    },
+    "channel": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Channel"
+    },
+    "merchant_category_code": {
+      "type": "string",
+      "pattern": "^[0-9]{4}$"
+    },
+    "merchant_name": {
+      "type": "string",
+      "maxLength": 100
+    },
+    "latitude": {
+      "type": "number",
+      "minimum": -90,
+      "maximum": 90
+    },
+    "longitude": {
+      "type": "number",
+      "minimum": -180,
+      "maximum": 180
+    },
+    "device_fingerprint": {
+      "oneOf": [
+        {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/Token"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "agent_id": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Token"
+    },
+    "counterparty_country": {
+      "type": "string",
+      "pattern": "^[A-Z]{2}$"
+    },
+    "transaction_timestamp": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Timestamp"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "channel": {
+            "const": "AGENT_BANKING"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "agent_id"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,122 @@
+# Kafka topic catalogue (build prompt C.3; ADR 0012). Topics are created from this file, never
+# implicitly by producers (auto-create is disabled in every environment).
+#
+# Every message value is a JSON event envelope (schemas/envelope.schema.json) whose `payload`
+# matches the topic's payload schema. No message carries raw personal data: accounts, devices,
+# counterparties and agents are tokens; customer contact details are resolved from the PII vault by
+# the notification service at send time.
+#
+# key:        what the partitioning key is, so ordering holds per key
+# retention:  ISO 8601 duration; the DLQ keeps failed messages longer for investigation
+# partitions: production default; tests only check it is positive
+defaults:
+  replication_factor: 3
+  min_insync_replicas: 2
+  cleanup_policy: delete
+  dlq_suffix: .dlq
+  dlq_retention: P30D
+topics:
+  - name: fs.transactions.raw
+    purpose: Alternative ingress from core banking; consumed by the same decision code as HTTP ingest
+    key: transaction_id
+    partitions: 48
+    retention: P7D
+    payload_schema: schemas/transaction-raw.schema.json
+    producers: [core-banking]
+    consumers: [fraudshield-api]
+  - name: fs.transactions.scored
+    purpose: Decision and scoring reference for every transaction, after the synchronous response
+    key: account_token
+    partitions: 48
+    retention: P7D
+    payload_schema: schemas/transaction-scored.schema.json
+    producers: [fraudshield-api]
+    consumers: [persistence, feature-store-updater, alerting, analytics]
+  - name: fs.alerts.high
+    purpose: HIGH-risk auto-blocks for the analyst feed and freeze checks
+    key: account_token
+    partitions: 12
+    retention: P14D
+    payload_schema: schemas/alert.schema.json
+    producers: [fraudshield-api]
+    consumers: [websocket-fanout, notification-service]
+  - name: fs.alerts.medium
+    purpose: MEDIUM holds with review deadlines
+    key: account_token
+    partitions: 12
+    retention: P14D
+    payload_schema: schemas/alert.schema.json
+    producers: [fraudshield-api]
+    consumers: [websocket-fanout, deadline-scheduler]
+  - name: fs.alerts.anomaly
+    purpose: Isolation-Forest-only alerts for the non-blocking ANOMALY_REVIEW queue (D-10)
+    key: account_token
+    partitions: 12
+    retention: P14D
+    payload_schema: schemas/alert.schema.json
+    producers: [fraudshield-api]
+    consumers: [websocket-fanout]
+  - name: fs.decisions.final
+    purpose: Final decision per transaction (APPROVE, DECLINE, TIMEOUT_RELEASE) for integrators and webhooks (D-14)
+    key: transaction_id
+    partitions: 24
+    retention: P7D
+    payload_schema: schemas/decision-final.schema.json
+    producers: [fraudshield-api]
+    consumers: [webhook-dispatcher, core-banking]
+  - name: fs.audit.events
+    purpose: Audit events before they are appended to the hash-chained audit_events hypertable (D-32)
+    key: writer_partition
+    partitions: 6
+    retention: P7D
+    payload_schema: schemas/audit-event.schema.json
+    producers: [fraudshield-api, fraudshield-ml-worker]
+    consumers: [audit-writer]
+  - name: fs.notifications.customer
+    purpose: Customer SMS intents; contact details resolved from the PII vault only at send time (D-25)
+    key: account_token
+    partitions: 12
+    retention: P3D
+    payload_schema: schemas/notification-customer.schema.json
+    producers: [fraudshield-api]
+    consumers: [notification-service]
+  - name: fs.notifications.staff
+    purpose: Staff email, push and WebSocket notifications (freeze, escalation, unlock, approvals)
+    key: recipient_user_id
+    partitions: 6
+    retention: P3D
+    payload_schema: schemas/notification-staff.schema.json
+    producers: [fraudshield-api]
+    consumers: [notification-service, websocket-fanout]
+  - name: fs.labels
+    purpose: Fraud and legitimate labels from analysts, customers and chargebacks, with availability time (E.2 leakage rule)
+    key: transaction_id
+    partitions: 12
+    retention: P400D
+    payload_schema: schemas/label.schema.json
+    producers: [fraudshield-api]
+    consumers: [label-pipeline, model-performance]
+  - name: fs.ml.retrain
+    purpose: Retraining job requests and progress
+    key: job_id
+    partitions: 3
+    retention: P30D
+    payload_schema: schemas/ml-retrain.schema.json
+    producers: [fraudshield-api, fraudshield-ml-worker]
+    consumers: [fraudshield-ml-worker, websocket-fanout]
+  - name: fs.ml.shadow
+    purpose: Shadow-model scores computed off the hot path, compared with production (FR-02-08, D-11)
+    key: transaction_id
+    partitions: 24
+    retention: P14D
+    payload_schema: schemas/ml-shadow.schema.json
+    producers: [fraudshield-ml-worker]
+    consumers: [shadow-comparator]
+  - name: fs.config.changes
+    purpose: Threshold, rule, API-key revocation and token-version changes, applied atomically by version
+    key: config_kind
+    partitions: 1
+    retention: P30D
+    payload_schema: schemas/config-change.schema.json
+    producers: [fraudshield-api]
+    consumers: [fraudshield-api, fraudshield-ml]

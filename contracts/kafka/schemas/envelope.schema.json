@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fraudshield:kafka:envelope",
+  "title": "Event envelope for every FraudShield Kafka message value",
+  "type": "object",
+  "required": [
+    "event_id",
+    "event_type",
+    "schema_version",
+    "occurred_at",
+    "institution_id",
+    "producer",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid",
+      "description": "Unique per event; consumers deduplicate on it"
+    },
+    "event_type": {
+      "type": "string",
+      "pattern": "^[a-z]+(\\.[a-z_]+)+$"
+    },
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "occurred_at": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Timestamp"
+    },
+    "institution_id": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+    },
+    "producer": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{2,40}$"
+    },
+    "traceparent": {
+      "type": "string",
+      "pattern": "^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$"
+    },
+    "payload": {
+      "type": "object"
+    }
+  }
+}

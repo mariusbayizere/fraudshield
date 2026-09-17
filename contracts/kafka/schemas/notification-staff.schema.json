@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fraudshield:kafka:notification-staff",
+  "title": "fs.notifications.staff payload",
+  "type": "object",
+  "required": [
+    "notification_id",
+    "kind",
+    "template_key",
+    "parameters"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "notification_id": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+    },
+    "recipient_user_id": {
+      "oneOf": [
+        {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "recipient_role": {
+      "oneOf": [
+        {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/Role"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "ACCOUNT_FROZEN",
+        "ALERT_ESCALATED",
+        "ACCOUNT_LOCKED",
+        "APPROVAL_REQUIRED",
+        "WELCOME",
+        "PASSWORD_RESET_CODE",
+        "EMAIL_VERIFICATION",
+        "MODEL_GATE_RESULT"
+      ]
+    },
+    "template_key": {
+      "type": "string",
+      "pattern": "^(email|push|ws)\\.[a-z_]+$"
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "string",
+          "number",
+          "boolean"
+        ]
+      }
+    }
+  },
+  "anyOf": [
+    {
+      "required": [
+        "recipient_user_id"
+      ]
+    },
+    {
+      "required": [
+        "recipient_role"
+      ]
+    }
+  ]
+}

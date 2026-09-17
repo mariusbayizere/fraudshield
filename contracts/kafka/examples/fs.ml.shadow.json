@@ -1,0 +1,18 @@
+{
+  "event_id": "0d1e2f3a-4b5c-4d6e-8f70-81a2b3c4d5e6",
+  "event_type": "shadow.scored",
+  "schema_version": 1,
+  "occurred_at": "2026-09-17T08:15:30Z",
+  "institution_id": "5b1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+  "producer": "fraudshield-ml-worker",
+  "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+  "payload": {
+    "transaction_id": "3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11",
+    "production_model_version": "fs-ensemble-2026.09.1",
+    "production_ensemble_score": 0.91,
+    "shadow_model_version": "fs-ensemble-2026.10.1",
+    "shadow_ensemble_score": 0.88,
+    "shadow_risk_tier": "HIGH",
+    "scored_at": "2026-09-17T08:15:31Z"
+  }
+}

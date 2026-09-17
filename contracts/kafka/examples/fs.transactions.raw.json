@@ -1,0 +1,22 @@
+{
+  "event_id": "0d1e2f3a-4b5c-4d6e-8f70-81a2b3c4d5e6",
+  "event_type": "transaction.received",
+  "schema_version": 1,
+  "occurred_at": "2026-09-17T08:15:30Z",
+  "institution_id": "5b1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+  "producer": "core-banking",
+  "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+  "payload": {
+    "transaction_id": "3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11",
+    "account_id": "tok_A1b2C3d4E5f6G7h8J9k0L1m2",
+    "counterparty_id": "tok_Z9y8X7w6V5u4T3s2R1q0P9o8",
+    "amount": "15000",
+    "currency": "RWF",
+    "channel": "MOBILE_MONEY",
+    "merchant_category_code": "4829",
+    "latitude": -1.9441,
+    "longitude": 30.0619,
+    "device_fingerprint": null,
+    "transaction_timestamp": "2026-09-17T08:15:30Z"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fraudshield:kafka:ml-shadow",
+  "title": "fs.ml.shadow payload (FR-02-08, D-11)",
+  "type": "object",
+  "required": [
+    "transaction_id",
+    "production_model_version",
+    "production_ensemble_score",
+    "shadow_model_version",
+    "shadow_ensemble_score",
+    "scored_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "transaction_id": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+    },
+    "production_model_version": {
+      "type": "string",
+      "maxLength": 100
+    },
+    "production_ensemble_score": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Probability"
+    },
+    "shadow_model_version": {
+      "type": "string",
+      "maxLength": 100
+    },
+    "shadow_ensemble_score": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Probability"
+    },
+    "shadow_risk_tier": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/RiskTier"
+    },
+    "scored_at": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Timestamp"
+    }
+  }
+}

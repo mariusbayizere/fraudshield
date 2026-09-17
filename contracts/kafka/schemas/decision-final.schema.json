@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fraudshield:kafka:decision-final",
+  "title": "fs.decisions.final payload and decision.final webhook body (D-14)",
+  "type": "object",
+  "required": [
+    "transaction_id",
+    "decision",
+    "decided_at",
+    "decided_by"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "transaction_id": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+    },
+    "decision": {
+      "type": "string",
+      "enum": [
+        "APPROVE",
+        "DECLINE",
+        "TIMEOUT_RELEASE"
+      ]
+    },
+    "decided_at": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Timestamp"
+    },
+    "decided_by": {
+      "type": "string",
+      "enum": [
+        "MODEL",
+        "ANALYST",
+        "TIMEOUT_POLICY",
+        "CUSTOMER_VERIFICATION",
+        "SENIOR_OVERRIDE"
+      ]
+    },
+    "reason_codes": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "$ref": "urn:fraudshield:kafka:common#/$defs/ReasonCode"
+      }
+    },
+    "supersedes_decision": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "APPROVE",
+        "DECLINE",
+        "HOLD",
+        "TIMEOUT_RELEASE",
+        null
+      ]
+    }
+  }
+}
