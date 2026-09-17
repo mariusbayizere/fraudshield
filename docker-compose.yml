@@ -65,7 +65,15 @@ services:
     profiles: [core, full]
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?run make env}
-    command: ["sh", "-c", "exec redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy noeviction --requirepass \"$$REDIS_PASSWORD\""]
+    # The password is written to a private config file rather than passed as an argument, so it
+    # does not appear in the process list (`docker top`).
+    command:
+      - sh
+      - -c
+      - >-
+        umask 077 &&
+        printf 'appendonly yes\nmaxmemory 256mb\nmaxmemory-policy noeviction\nrequirepass %s\n' "$$REDIS_PASSWORD" > /tmp/redis.conf &&
+        exec redis-server /tmp/redis.conf
     ports: ["127.0.0.1:6379:6379"]
     volumes: [redis-data:/data]
     healthcheck:
@@ -95,11 +103,13 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       # Topics are created explicitly from contracts/kafka (M1); never implicitly by producers.
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
       KAFKA_HEAP_OPTS: "-Xms256m -Xmx512m"
     ports: ["127.0.0.1:9092:9092"]
     volumes: [kafka-data:/var/lib/kafka/data]
     healthcheck:
-      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka:29092 >/dev/null 2>&1"]
+      # The CLI starts its own JVM; cap its heap so it cannot push the container over its limit.
+      test: ["CMD-SHELL", "KAFKA_HEAP_OPTS=-Xmx64m /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka:29092 >/dev/null 2>&1"]
       interval: 10s
       timeout: 10s
       retries: 30
@@ -125,7 +135,8 @@ services:
     ports: ["127.0.0.1:8333:8333"]
     volumes: [object-store-data:/data]
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9333/cluster/healthz >/dev/null"]
+      # Both the master and the S3 gateway must answer; MLflow only talks to S3.
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9333/cluster/healthz >/dev/null && wget -qO- http://127.0.0.1:8333/healthz >/dev/null"]
       interval: 5s
       timeout: 5s
       retries: 30
@@ -139,11 +150,18 @@ services:
     depends_on:
       object-store: { condition: service_healthy }
     entrypoint: ["/bin/sh", "-c"]
+    # Idempotent: create the bucket if missing (with retries), then assert it exists.
     command:
       - >-
-        echo "s3.bucket.list" | weed shell -master=object-store:9333 | grep -q mlflow-artifacts ||
-        echo "s3.bucket.create -name mlflow-artifacts" | weed shell -master=object-store:9333
+        for attempt in 1 2 3 4 5 6 7 8 9 10; do
+        echo "s3.bucket.list" | weed shell -master=object-store:9333 2>/dev/null | grep -q mlflow-artifacts && break;
+        echo "s3.bucket.create -name mlflow-artifacts" | weed shell -master=object-store:9333 || true;
+        sleep 3;
+        done;
+        echo "s3.bucket.list" | weed shell -master=object-store:9333 | grep -q mlflow-artifacts
     restart: "no"
+    deploy:
+      resources: { limits: { memory: 128m } }
 
   mlflow:
     <<: *defaults

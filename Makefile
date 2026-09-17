@@ -31,6 +31,10 @@ up: env ## Start the core local stack and wait until every service is healthy
 	$(COMPOSE) --profile core up -d --wait --wait-timeout 300
 	$(COMPOSE) --profile core ps
 
+.PHONY: smoke
+smoke: ## Functional smoke test of the running core stack (M0 gate evidence)
+	./infrastructure/docker/scripts/smoke-test.sh
+
 .PHONY: down
 down: ## Stop the local stack (volumes are kept)
 	$(COMPOSE) --profile full down
