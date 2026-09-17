@@ -44,6 +44,9 @@ uv sync --all-packages --locked
 
 export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 corepack enable --install-directory "$HOME/.local/bin"
+# Keep pnpm's content-addressed store out of the workspace: on the /workspaces mount pnpm would
+# otherwise create .pnpm-store/ inside the repository, where repository-wide scans read it.
+pnpm config set store-dir "$HOME/.local/share/pnpm/store" --location=global
 (cd frontend && pnpm install --frozen-lockfile)
 
 (cd backend && ./mvnw -B -ntp -q dependency:go-offline)

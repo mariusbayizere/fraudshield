@@ -37,6 +37,7 @@ target/
 
 # --- Node ---
 node_modules/
+.pnpm-store/
 dist/
 coverage/
 .vite/
