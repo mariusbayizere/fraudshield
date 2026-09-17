@@ -4,8 +4,17 @@
 # CI devcontainer workflow can tell a completed setup from a partial one.
 set -Eeuo pipefail
 
+# Emit a GitHub annotation on failure: in the devcontainer CI workflow this is the only part of
+# the post-create output that is readable without log access. Harmless in a Codespaces terminal.
+trap 'echo "::error title=post-create failed::line ${LINENO}: ${BASH_COMMAND}"' ERR
+
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$repo_root"
+
+# The workspace is mounted from the host and owned by a different user than the container user,
+# which git rejects as "dubious ownership"; pre-commit, gitleaks and the traceability checks all
+# call git. This writes the container user's git config only, never the host's.
+git config --global --add safe.directory "$repo_root"
 rm -f .devcontainer/.post-create-ok
 
 UV_VERSION="0.12.15"
@@ -27,6 +36,7 @@ fi
 uv python install "$(cat .python-version)"
 uv sync --all-packages --locked
 
+export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 corepack enable --install-directory "$HOME/.local/bin"
 (cd frontend && pnpm install --frozen-lockfile)
 
