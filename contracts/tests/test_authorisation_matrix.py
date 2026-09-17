@@ -160,6 +160,20 @@ def test_matrix_check_detects_a_removed_or_changed_object_rule(
     assert differences[0].startswith(f"{operation_id}: document rules")
 
 
+@pytest.mark.req("FR-07-01", "FR-05-01")
+def test_self_elevation_and_self_override_rules_cannot_be_dropped() -> None:
+    def problems(operation_id: str) -> set[str]:
+        return {rule.get("problem", "") for rule in OPS[operation_id].spec["x-authorisation-rules"]}
+
+    assert "urn:fraudshield:problem:self-modification" in problems("updateUser")
+    assert "urn:fraudshield:problem:last-active-admin" in problems("updateUser")
+    assert "urn:fraudshield:problem:own-decision-override" in problems("overrideAlertDecision")
+    assert "urn:fraudshield:problem:not-decision-author" in problems("undoAlertDecision")
+    [queue] = OPS["listAlerts"].spec["x-authorisation-rules"]
+    assert "queue=escalated" in queue["rule"]
+    assert "target role is at or below the caller" in queue["rule"]
+
+
 @pytest.mark.req("FR-04-10")
 def test_only_roles_below_risk_officer_can_escalate() -> None:
     kind, roles = declared_access(OPS["escalateAlert"].spec)

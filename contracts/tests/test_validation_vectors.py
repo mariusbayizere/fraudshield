@@ -45,7 +45,7 @@ def test_request_vector(schema: str, case: dict[str, Any]) -> None:
         expected_status = 400 if any(STATUS_BY_CODE[c] == 400 for c in codes) else 422
         assert case["expected_status"] == expected_status
     else:
-        assert case["expected_status"] in (200, 201)
+        assert case["expected_status"] in (200, 201, 202)
     if "raw_body" in case:
         assert not case["schema_detectable"]
         with pytest.raises(json.JSONDecodeError):
@@ -135,6 +135,17 @@ def test_classifier_reports_duplicates_item_counts_and_unmapped_keywords(
 
 
 @pytest.mark.req("FR-01-02")
+def test_vectors_exercise_every_error_code_the_mapping_produces() -> None:
+    used = {
+        e["code"]
+        for cases in REQUESTS["schemas"].values()
+        for c in cases
+        for e in c["expected_errors"]
+    }
+    assert set(validation.KEYWORD_CODES.values()) | {"not_a_token", "malformed_json"} <= used
+    assert "escalation_target_not_higher" in used
+
+
 def test_ingest_vectors_cover_both_statuses_and_every_ingest_code() -> None:
     cases = REQUESTS["schemas"]["TransactionIngestRequest"]
     assert {c["expected_status"] for c in cases} == {200, 400, 422}
@@ -161,7 +172,8 @@ def _password_rejection(value: str) -> str | None:
         return "LENGTH"
     if len(value.encode("utf-8")) > PASSWORDS["max_utf8_bytes"]:
         return "BYTES"
-    if any(ch != " " and unicodedata.category(ch)[0] in "CZ" for ch in value):
+    forbidden = {"Cc", "Cf", "Cs", "Co", "Zs", "Zl", "Zp"}
+    if any(ch != " " and unicodedata.category(ch) in forbidden for ch in value):
         return "CHARACTERS"
     checks: tuple[tuple[str, Callable[[str], bool]], ...] = (
         ("UPPER", lambda ch: "A" <= ch <= "Z"),

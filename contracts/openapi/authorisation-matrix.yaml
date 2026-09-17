@@ -24,6 +24,9 @@ operations:
   getMlComponentHealth:
     public: true
     ref: "SRS monitoring probe and staging smoke test; management port only (ADR 0014)"
+  getKafkaComponentHealth:
+    public: true
+    ref: "SRS staging gate (Kafka health); management port only (ADR 0014)"
   getMlHealth:
     roles: [ADMIN]
     ref: "E.1, FR-06-05; ADMIN only because it reveals fallback mode (ADR 0014)"

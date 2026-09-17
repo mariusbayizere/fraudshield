@@ -1,5 +1,5 @@
 {
-  "description": "Request validation vectors (ADR 0011 section 6). Each case gives the request body (or raw_body when it is not JSON), the HTTP status and the errors[] field/code pairs the API must return. schema_detectable=false marks checks the server makes beyond JSON Schema; contract tests assert that the schema accepts those bodies, so the server check is known to be needed. Controller tests in M6 and M7 consume this file. Identifiers are synthetic; phone-shaped values use the unassigned E.164 country code 999.",
+  "description": "Request validation vectors (ADR 0011 section 6). Each case gives the request body (or raw_body when it is not JSON), the HTTP status and the errors[] field/code pairs the API must return. schema_detectable=false marks checks the server makes beyond JSON Schema; contract tests assert that the schema accepts those bodies, so the server check is known to be needed. Controller tests in M6 and M7 consume this file. A field of \"\" means the request body itself (for example an update with nothing to change). The server-only escalation case assumes a SENIOR_ANALYST caller. Identifiers are synthetic; phone-shaped values use the unassigned E.164 country code 999.",
   "schemas": {
     "TransactionIngestRequest": [
       {
@@ -970,6 +970,339 @@
           }
         ],
         "schema_detectable": false
+      },
+      {
+        "label": "no scopes",
+        "body": {
+          "name": "Core banking production",
+          "scopes": [],
+          "webhook_url": "https://hooks.example.com/fraudshield"
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "scopes",
+            "code": "item_count_out_of_range"
+          }
+        ],
+        "schema_detectable": true
+      },
+      {
+        "label": "repeated scope",
+        "body": {
+          "name": "Core banking production",
+          "scopes": [
+            "ingest:write",
+            "ingest:write"
+          ],
+          "webhook_url": "https://hooks.example.com/fraudshield"
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "scopes",
+            "code": "duplicate_items"
+          }
+        ],
+        "schema_detectable": true
+      }
+    ],
+    "RuleDraft": [
+      {
+        "label": "valid rule",
+        "body": {
+          "rule_name": "Night cash-out burst",
+          "description": "Three or more agent cash-outs at night within an hour",
+          "expression": {
+            "all": [
+              {
+                "field": "is_local_night",
+                "op": "eq",
+                "value": 1
+              },
+              {
+                "field": "agent_cashout_count_1h",
+                "op": "gte",
+                "value": 3
+              }
+            ]
+          },
+          "risk_tier_override": "MEDIUM"
+        },
+        "expected_status": 201,
+        "expected_errors": [],
+        "schema_detectable": true
+      },
+      {
+        "label": "unknown operator inside all",
+        "body": {
+          "rule_name": "Night cash-out burst",
+          "description": "Three or more agent cash-outs at night within an hour",
+          "expression": {
+            "all": [
+              {
+                "field": "is_local_night",
+                "op": "eq",
+                "value": 1
+              },
+              {
+                "field": "agent_cashout_count_1h",
+                "op": "greater",
+                "value": 3
+              }
+            ]
+          },
+          "risk_tier_override": "MEDIUM"
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "expression.all[1].op",
+            "code": "unsupported_value"
+          }
+        ],
+        "schema_detectable": true
+      },
+      {
+        "label": "unknown operator at the root",
+        "body": {
+          "rule_name": "Night cash-out burst",
+          "description": "Three or more agent cash-outs at night within an hour",
+          "expression": {
+            "field": "is_local_night",
+            "op": "greater",
+            "value": 1
+          },
+          "risk_tier_override": "MEDIUM"
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "expression.op",
+            "code": "unsupported_value"
+          }
+        ],
+        "schema_detectable": true
+      },
+      {
+        "label": "empty all",
+        "body": {
+          "rule_name": "Night cash-out burst",
+          "description": "Three or more agent cash-outs at night within an hour",
+          "expression": {
+            "all": []
+          },
+          "risk_tier_override": "MEDIUM"
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "expression.all",
+            "code": "item_count_out_of_range"
+          }
+        ],
+        "schema_detectable": true
+      },
+      {
+        "label": "description too short",
+        "body": {
+          "rule_name": "Night cash-out burst",
+          "description": "short",
+          "expression": {
+            "all": [
+              {
+                "field": "is_local_night",
+                "op": "eq",
+                "value": 1
+              },
+              {
+                "field": "agent_cashout_count_1h",
+                "op": "gte",
+                "value": 3
+              }
+            ]
+          },
+          "risk_tier_override": "MEDIUM"
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "description",
+            "code": "length_out_of_range"
+          }
+        ],
+        "schema_detectable": true
+      },
+      {
+        "label": "missing rule_name",
+        "body": {
+          "description": "Three or more agent cash-outs at night within an hour",
+          "expression": {
+            "all": [
+              {
+                "field": "is_local_night",
+                "op": "eq",
+                "value": 1
+              },
+              {
+                "field": "agent_cashout_count_1h",
+                "op": "gte",
+                "value": 3
+              }
+            ]
+          },
+          "risk_tier_override": "MEDIUM"
+        },
+        "expected_status": 400,
+        "expected_errors": [
+          {
+            "field": "rule_name",
+            "code": "required"
+          }
+        ],
+        "schema_detectable": true
+      }
+    ],
+    "StaffUserUpdate": [
+      {
+        "label": "valid status change",
+        "body": {
+          "version": 4,
+          "status": "DEACTIVATED"
+        },
+        "expected_status": 200,
+        "expected_errors": [],
+        "schema_detectable": true
+      },
+      {
+        "label": "nothing to change",
+        "body": {
+          "version": 4
+        },
+        "expected_status": 400,
+        "expected_errors": [
+          {
+            "field": "",
+            "code": "required"
+          }
+        ],
+        "schema_detectable": true
+      }
+    ],
+    "OverrideRequest": [
+      {
+        "label": "valid override",
+        "body": {
+          "original_decision_id": "1b2c3d4e-5f60-4a7b-9c8d-0e1f2a3b4c5d",
+          "new_decision": "MARK_LEGITIMATE",
+          "reason": "Customer confirmed at branch with national ID",
+          "alert_version": 3
+        },
+        "expected_status": 201,
+        "expected_errors": [],
+        "schema_detectable": true
+      },
+      {
+        "label": "reason under 20 characters",
+        "body": {
+          "original_decision_id": "1b2c3d4e-5f60-4a7b-9c8d-0e1f2a3b4c5d",
+          "new_decision": "MARK_LEGITIMATE",
+          "reason": "Confirmed by phone",
+          "alert_version": 3
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "reason",
+            "code": "length_out_of_range"
+          }
+        ],
+        "schema_detectable": true
+      }
+    ],
+    "EscalationRequest": [
+      {
+        "label": "valid escalation",
+        "body": {
+          "target_role": "SENIOR_ANALYST",
+          "reason": "Linked to an active device campaign",
+          "alert_version": 2
+        },
+        "expected_status": 201,
+        "expected_errors": [],
+        "schema_detectable": true
+      },
+      {
+        "label": "target not above a senior analyst caller",
+        "body": {
+          "target_role": "SENIOR_ANALYST",
+          "reason": "Linked to an active device campaign",
+          "alert_version": 2
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "target_role",
+            "code": "escalation_target_not_higher"
+          }
+        ],
+        "schema_detectable": false
+      },
+      {
+        "label": "unknown target role",
+        "body": {
+          "target_role": "ADMIN",
+          "reason": "Linked to an active device campaign",
+          "alert_version": 2
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "target_role",
+            "code": "unsupported_value"
+          }
+        ],
+        "schema_detectable": true
+      }
+    ],
+    "TransactionBatchRequest": [
+      {
+        "label": "valid batch",
+        "body": {
+          "transactions": [
+            {
+              "transaction_id": "3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11",
+              "account_id": "tok_A1b2C3d4E5f6G7h8J9k0L1m2",
+              "counterparty_id": "tok_Z9y8X7w6V5u4T3s2R1q0P9o8",
+              "amount": "15000",
+              "currency": "RWF",
+              "channel": "MOBILE_MONEY",
+              "merchant_category_code": "4829",
+              "latitude": -1.9441,
+              "longitude": 30.0619,
+              "device_fingerprint": "tok_D3v1c3F1ng3rpr1ntAaBbCc0",
+              "counterparty_country": "RW",
+              "transaction_timestamp": "2026-09-17T08:15:30Z"
+            }
+          ]
+        },
+        "expected_status": 202,
+        "expected_errors": [],
+        "schema_detectable": true
+      },
+      {
+        "label": "empty batch",
+        "body": {
+          "transactions": []
+        },
+        "expected_status": 422,
+        "expected_errors": [
+          {
+            "field": "transactions",
+            "code": "item_count_out_of_range"
+          }
+        ],
+        "schema_detectable": true
       }
     ]
   }

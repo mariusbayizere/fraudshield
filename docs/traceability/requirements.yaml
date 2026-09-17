@@ -2606,9 +2606,10 @@ requirements:
   verification: test
   implementation: []
   evidence: []
-  deviations: []
+  deviations:
+  - docs/adr/0014-staff-authorisation-model.md
   notes: 'Deviation (ADR 0014, review NF-07): /api/v1/health/ml and /api/v1/health/kafka are ADMIN-only,
-    so the unauthenticated probe and smoke test use the management-port /actuator/health/ml and /actuator/health;
+    so the unauthenticated probe and smoke test use the management-port /actuator/health/ml and /actuator/health/kafka;
     close as DONE_WITH_DEVIATION citing docs/adr/0014-staff-authorisation-model.md.'
 - id: OPS-CI-08
   section: 8.1 CI/CD pipeline
@@ -2697,9 +2698,10 @@ requirements:
   verification: test
   implementation: []
   evidence: []
-  deviations: []
+  deviations:
+  - docs/adr/0014-staff-authorisation-model.md
   notes: 'Deviation (ADR 0014, review NF-07): /api/v1/health/ml and /api/v1/health/kafka are ADMIN-only,
-    so the unauthenticated probe and smoke test use the management-port /actuator/health/ml and /actuator/health;
+    so the unauthenticated probe and smoke test use the management-port /actuator/health/ml and /actuator/health/kafka;
     close as DONE_WITH_DEVIATION citing docs/adr/0014-staff-authorisation-model.md.'
 - id: OPS-OBS-06
   section: 8.2 Observability

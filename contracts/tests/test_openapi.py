@@ -23,6 +23,7 @@ MACHINE_PATH_PREFIXES = ("/transactions/ingest", "/jobs/", "/decisions/")
 NO_PROBLEM_DEFAULT = {
     "getLiveness",
     "getMlComponentHealth",
+    "getKafkaComponentHealth",
     "getMlHealth",
     "getKafkaHealth",
     "showVerificationPage",

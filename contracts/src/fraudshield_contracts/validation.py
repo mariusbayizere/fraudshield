@@ -80,19 +80,28 @@ def _leaf_codes(error: ValidationError, schemas: dict[str, Any]) -> set[tuple[st
 def _branch_codes(
     error: ValidationError, schemas: dict[str, Any], path: str
 ) -> set[tuple[str, str]]:
-    """For oneOf/anyOf, report the branch whose JSON type matched, or a type mismatch."""
+    """For oneOf/anyOf, report the branch the value was evidently meant for.
+
+    A branch is ruled out if its JSON type does not match. Among the rest, the branch whose own
+    required properties are present wins, and then the one with the fewest errors, so a bad leaf in
+    one alternative is not reported as missing keys of another (NF-01, re-check NEW-01).
+    """
+    if not error.context:
+        # oneOf matched more than one branch: the value is ambiguous, not malformed.
+        return {(path, "unsupported_value")}
     branches: dict[int, list[ValidationError]] = {}
-    for sub in error.context or []:
+    for sub in error.context:
         branches.setdefault(int(sub.relative_schema_path[0]), []).append(sub)
-    matching = [
-        errors
-        for errors in branches.values()
-        if not any(e.validator == "type" and not e.relative_path for e in errors)
-    ]
-    if not matching:
+
+    def at_root(errors: list[ValidationError], keyword: str) -> bool:
+        return any(e.validator == keyword and not e.relative_path for e in errors)
+
+    candidates = [errors for errors in branches.values() if not at_root(errors, "type")]
+    if not candidates:
         return {(path, "type_mismatch")}
+    best = min(candidates, key=lambda errors: (at_root(errors, "required"), len(errors)))
     codes: set[tuple[str, str]] = set()
-    for sub in matching[0]:
+    for sub in best:
         codes |= _leaf_codes(sub, schemas)
     return codes
 

@@ -66,7 +66,8 @@ code tend to diverge between languages, so the conventions are fixed once here a
    | Password or person-name rule (ADR 0013, 0014) | 422 | `password_policy`, `person_name` |
 
    All errors are reported; if any is a 400-class error the status is 400. Every operation with a
-   request body documents both 400 and 422. The contract holds the status per code in
+   JSON or multipart request body documents both 400 and 422 (the server-rendered verification form
+   answers with an HTML page instead). The contract holds the status per code in
    `ValidationErrorCode.x-status-by-code`; `fraudshield_contracts.validation` is the executable
    keyword-to-code mapping (it fails on an unmapped keyword); and
    `contracts/validation/request-validation-vectors.json` gives request bodies with the expected

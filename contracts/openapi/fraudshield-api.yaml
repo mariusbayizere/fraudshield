@@ -259,6 +259,36 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ComponentHealth" }
 
+  /actuator/health/kafka:
+    servers:
+      - url: "{scheme}://{instance}:{managementPort}"
+        description: Management port of each API instance, reachable only from the cluster network
+        variables:
+          scheme: { default: http, enum: [http, https] }
+          instance: { default: localhost }
+          managementPort: { default: "8081" }
+    get:
+      tags: [health]
+      operationId: getKafkaComponentHealth
+      summary: Kafka producer and spool health for the deployment smoke test
+      description: >-
+        Replaces the SRS staging gate's unauthenticated /api/v1/health/kafka check. Management port
+        only, never routed through the public ingress (ADR 0014).
+      security: []
+      x-public: true
+      x-network: management
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ComponentHealth" }
+        "503":
+          description: Broker unreachable; decisions continue and events spool to disk (D-15)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ComponentHealth" }
+
   /health/ml:
     get:
       tags: [health]
@@ -2518,9 +2548,10 @@ components:
       x-validation: password
       description: |
         FR-07-07 policy, decided in ADR 0014: 8 to 72 code points **and** at most 72 UTF-8 bytes,
-        because bcrypt uses only the first 72 bytes. No character of Unicode category C (controls,
-        format characters such as U+200B and U+FEFF, surrogates, private use, unassigned) or Z other
-        than U+0020 SPACE. At least one ASCII upper-case letter, one ASCII lower-case letter, one
+        because bcrypt uses only the first 72 bytes. No character of Unicode categories Cc, Cf, Cs or
+        Co (controls, format characters such as U+200B and U+FEFF, surrogates, private use) or Z
+        other than U+0020 SPACE. Unassigned code points are not rejected, because what is unassigned
+        depends on each runtime's Unicode version. At least one ASCII upper-case letter, one ASCII lower-case letter, one
         ASCII digit, and one special character: any other permitted character except the space
         (punctuation, symbols, emoji, non-ASCII letters and digits). JSON Schema cannot express the
         byte limit or Unicode categories, so the pattern below is only a screen; the server and the

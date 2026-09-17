@@ -75,15 +75,18 @@ Option 3.
    `DOWN` for the API process; the fallback keeps the API able to decide, so ML degradation does not
    change it. **Deviation from SRS 8.1 (staging gate) and 8.2 (uptime probe):** the unauthenticated
    blackbox probe and the smoke test cannot present a staff token, and a monitoring robot with an
-   ADMIN account would break the one-person-one-role model. They read `/actuator/health/ml` (and
-   `/actuator/health` for Kafka spooling through the aggregate) on the management port, which is
-   reachable only from the cluster network and never routed through the ingress. The contract marks
+   ADMIN account would break the one-person-one-role model. They read `/actuator/health/ml` and
+   `/actuator/health/kafka` on the management port, which is reachable only from the cluster network
+   and never routed through the ingress; `/actuator/health` stays process-only. The contract marks
    both with `x-network: management`; OPS-CI-07 and OPS-OBS-05 carry the deviation.
 7. **Passwords (CR-09).** 8–72 code points and at most 72 UTF-8 bytes, because bcrypt (cost 12,
    FR-07-07) reads only the first 72 bytes and current Spring Security encoders reject longer input.
-   Permitted characters: anything except Unicode general category C (controls such as NUL, tab and
-   U+001C; format characters such as U+200B and U+FEFF; surrogates; private use; unassigned) and
-   category Z other than U+0020 SPACE (so no U+00A0 or U+2028). Classes are defined by code point,
+   Permitted characters: anything except Unicode general categories Cc, Cf, Cs and Co (controls such
+   as NUL, tab and U+001C; format characters such as U+200B and U+FEFF; surrogates; private use) and
+   category Z other than U+0020 SPACE (so no U+00A0 or U+2028). Unassigned code points (Cn) are
+   allowed and count as special: which code points are unassigned depends on the Unicode version of
+   each runtime (Python 3.12 has 15.0), so rejecting them would make Python, Java and JavaScript
+   disagree on new characters. Classes are defined by code point,
    not by an engine's `\s`, because Python, JavaScript and Java disagree on what whitespace is.
    Required: an ASCII upper-case letter, an ASCII lower-case letter, an ASCII digit, and a special
    character, meaning any other permitted character except the space (punctuation, symbols, emoji,
