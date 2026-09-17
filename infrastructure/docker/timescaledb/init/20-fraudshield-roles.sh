@@ -10,7 +10,8 @@ bootstrap=${FRAUDSHIELD_BOOTSTRAP_SQL:-/fraudshield-bootstrap/bootstrap.sql}
 psql -v ON_ERROR_STOP=1 --quiet --username "${POSTGRES_USER:-postgres}" --dbname "$database" \
   -f "$bootstrap"
 
-# Passwords are passed as psql variables on stdin, never on a command line.
+# Passwords are passed as psql variables (visible to processes inside this container while psql runs;
+# backlog PB-9) and are never written to a file or the server log.
 psql -v ON_ERROR_STOP=1 --quiet --username "${POSTGRES_USER:-postgres}" --dbname "$database" \
   --set=migrator="${FS_MIGRATOR_DB_PASSWORD:?}" \
   --set=app="${FS_APP_DB_PASSWORD:?}" \

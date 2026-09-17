@@ -39,8 +39,15 @@ random ones. The migrations run as `fs_migrator`, never as a superuser.
   setting fails closed.
 - Ordinary tenant tables enable RLS with one policy, `institution_id = current_institution()`, for
   both `USING` and `WITH CHECK`.
-- Cross-tenant references are impossible by construction: child tables reference `(id,
-  institution_id)` of their parent with composite foreign keys.
+- Cross-tenant references are impossible by construction: every foreign key between tenant tables,
+  self-references such as `api_keys.replaced_by` included, is composite on `(id, institution_id)`.
+  A single-column key would ignore RLS, so it could point at another institution's row, and its
+  error would reveal that the row exists. `everyForeignKeyBetweenTenantTablesIncludesTheInstitution`
+  checks the catalogue (review MAJOR-1). Global tables (models, training datasets) may still
+  reference `users (id)`.
+- Trust assumption: every application role can set `fraudshield.institution_id`, so the database
+  binds a connection to a tenant only as far as the service sets it correctly. Services set it in one
+  place from the authenticated principal (M2).
 - Authentication runs before the tenant is known (sign-in by email, API key, refresh cookie,
   email-verification and customer-verification links). Narrow `SECURITY DEFINER` functions
   (`auth_find_*`, `verification_find_by_token`) with a fixed `search_path` return only ids, the
@@ -66,16 +73,29 @@ random ones. The migrations run as `fs_migrator`, never as a superuser.
   `account_freeze_events`, and `v_auto_block_status` derives the current state. The same pattern
   applies to alert decisions (commit and undo tables), rule versions and threshold versions.
 - Append-only tables get `INSERT` and `SELECT` grants only. They also get `forbid_modification`
-  triggers for `UPDATE`, `DELETE` and `TRUNCATE`, which also stop the owner, so a mistaken grant or
-  migration cannot modify history. `sar_reports` is frozen by trigger after sign-off.
+  triggers for `UPDATE`, `DELETE` and `TRUNCATE`, which also stop the owner's ordinary statements, so
+  a mistaken grant or migration cannot modify history. They do not stop the owner from disabling
+  triggers, truncating TimescaleDB chunks directly or dropping chunks; for the audit log the hash
+  chain and anchors detect that. `sar_reports` is frozen by trigger after sign-off.
 
 ### Audit hash chain (D-32)
 
 - `audit_events` accepts exactly the 12 `event_type` values of D-32, each with an `action`.
 - A `SECURITY DEFINER` trigger per writer partition (0–63) locks that partition's `audit_chain_heads`
   row and assigns `seq`, `prev_hash` and `row_hash`. `row_hash` is SHA-256 of a canonical JSONB array
-  of every column (`audit_row_hash`). The application cannot supply or skip these values, and
+  of the row's columns (`audit_row_hash`). The application cannot supply or skip these values, and
   concurrent writers to one partition are serialised.
+- **Time dimension (review MAJOR-2).** The hypertable is partitioned, compressed and retained by
+  `recorded_at`, the inserting transaction's start time, not by the writer-chosen `event_at`
+  (business time, which may be old for replayed or delayed events). Partitioning by `event_at` would
+  let retention drop a backdated row from the middle of a chain, which verification cannot tell apart
+  from tampering. TimescaleDB routes a row to its chunk before BEFORE triggers run, so the trigger
+  cannot assign the time itself. Instead it:
+  - rejects any `recorded_at` other than `now()`;
+  - raises `serialization_failure` (the writer retries) when the transaction started before the last
+    row of its chain.
+
+  So `recorded_at` never decreases along a chain, and time-based retention can only remove a prefix.
 - `verify_audit_chain(partition, after_seq, after_hash)` (`SECURITY DEFINER`, returns positions only,
   never content) reports sequence gaps, broken links, altered rows and a head ahead of stored rows.
 - `audit_anchors` (append-only) stores the daily signed Merkle root per partition. The signing job and
