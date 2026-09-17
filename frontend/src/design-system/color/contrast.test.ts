@@ -38,12 +38,12 @@ describe('contrastRatio', () => {
 
   // D-33 measured failures of SRS 5.2 pairings when used for normal-size text.
   it.each([
-    ['white on risk.medium #D97706', WHITE, '#D97706', 3.19],
-    ['white on risk.low #059669', WHITE, '#059669', 3.77],
-    ['white on channel.agent_banking #0D9488', WHITE, '#0D9488', 3.74],
-    ['#D97706 on risk.medium.bg #FFFBEB', '#D97706', '#FFFBEB', 3.07],
-    ['#DC2626 on risk.high.bg #FEF2F2', '#DC2626', '#FEF2F2', 4.41],
-  ])('[D-33] SRS pairing %s fails AA text contrast at %d:1', (_label, fg, bg, expected) => {
+    { label: 'white on risk.medium #D97706', fg: WHITE, bg: '#D97706', expected: 3.19 },
+    { label: 'white on risk.low #059669', fg: WHITE, bg: '#059669', expected: 3.77 },
+    { label: 'white on channel.agent_banking #0D9488', fg: WHITE, bg: '#0D9488', expected: 3.74 },
+    { label: '#D97706 on risk.medium.bg #FFFBEB', fg: '#D97706', bg: '#FFFBEB', expected: 3.07 },
+    { label: '#DC2626 on risk.high.bg #FEF2F2', fg: '#DC2626', bg: '#FEF2F2', expected: 4.41 },
+  ])('[D-33] SRS pairing $label fails AA text contrast at $expected:1', ({ fg, bg, expected }) => {
     const ratio = contrastRatio(fg, bg);
     expect(twoDecimals(ratio)).toBe(expected);
     expect(ratio).toBeLessThan(AA_NORMAL_TEXT);
@@ -51,13 +51,13 @@ describe('contrastRatio', () => {
 
   // D-33 text-safe replacement tokens.
   it.each([
-    ['risk.high.text on risk.high.bg', '#B91C1C', '#FEF2F2', 5.91],
-    ['risk.medium.text on risk.medium.bg', '#B45309', '#FFFBEB', 4.84],
-    ['white on risk.medium.text', WHITE, '#B45309', 5.02],
-    ['risk.low.text on risk.low.bg', '#047857', '#F0FDF4', 5.24],
-    ['white on risk.low.text', WHITE, '#047857', 5.48],
-    ['white on channel.agent_banking.text', WHITE, '#0F766E', 5.47],
-  ])('[D-33] text-safe token %s passes AA at %d:1', (_label, fg, bg, expected) => {
+    { label: 'risk.high.text on risk.high.bg', fg: '#B91C1C', bg: '#FEF2F2', expected: 5.91 },
+    { label: 'risk.medium.text on risk.medium.bg', fg: '#B45309', bg: '#FFFBEB', expected: 4.84 },
+    { label: 'white on risk.medium.text', fg: WHITE, bg: '#B45309', expected: 5.02 },
+    { label: 'risk.low.text on risk.low.bg', fg: '#047857', bg: '#F0FDF4', expected: 5.24 },
+    { label: 'white on risk.low.text', fg: WHITE, bg: '#047857', expected: 5.48 },
+    { label: 'white on channel.agent_banking.text', fg: WHITE, bg: '#0F766E', expected: 5.47 },
+  ])('[D-33] text-safe token $label passes AA at $expected:1', ({ fg, bg, expected }) => {
     const ratio = contrastRatio(fg, bg);
     expect(twoDecimals(ratio)).toBe(expected);
     expect(ratio).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
