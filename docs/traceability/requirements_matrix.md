@@ -162,7 +162,7 @@ Rows: 258. Status counts: DONE 5, DONE_WITH_DEVIATION 1, IN_PROGRESS 9, NOT_STAR
 | ML-DATA-02 | M | M2 | NOT_STARTED | Fraud rate | — | — | — | — |
 | ML-DATA-03 | M | M2 | NOT_STARTED | Channel distribution | — | dataset/tests/test_generator.py:103 | — | — |
 | ML-DATA-04 | M | M2 | NOT_STARTED | Fraud pattern diversity | — | dataset/tests/test_generator.py:216<br>dataset/tests/test_realism_checks.py:63<br>dataset/tests/test_scenario_notes.py:11<br>dataset/tests/test_scenario_notes.py:11 | — | D-08 |
-| ML-DATA-05 | M | M2 | NOT_STARTED | Geographic coverage | — | dataset/tests/test_generator.py:103 | — | — |
+| ML-DATA-05 | M | M2 | NOT_STARTED | Geographic coverage | — | dataset/tests/test_generator.py:103<br>dataset/tests/test_normal.py:9<br>dataset/tests/test_normal.py:9<br>dataset/tests/test_normal.py:9 | — | — |
 | ML-DATA-06 | M | M2 | NOT_STARTED | Temporal coverage | — | dataset/tests/test_generator.py:63 | — | D-07 |
 | ML-DATA-07 | M | M2 | NOT_STARTED | Feature completeness | — | — | — | D-04 |
 | ML-DATA-08 | M | M2 | NOT_STARTED | Dataset release | — | — | — | — |
