@@ -167,3 +167,16 @@ def test_cli_report_writes_every_section(plant_base: Path, tmp_path: Path) -> No
     ):
         assert heading in text, heading
     assert "FraudShield-EAC synthetic benchmark" in text
+
+
+def test_duplicate_transaction_ids_are_caught(plant_base: Path, tmp_path: Path) -> None:
+    def repeat_first_id(t: pa.Table, labels: pa.Table) -> tuple[pa.Table, pa.Table]:
+        ids = t["transaction_id"].to_pylist()
+        ids[1] = ids[0]  # the same payment listed twice
+        return _replace(t, "transaction_id", pa.array(ids)), _replace(
+            labels, "transaction_id", pa.array(ids)
+        )
+
+    results = _results(_plant(plant_base, tmp_path / "duplicate", repeat_first_id), PLANT_ROWS)
+    assert not results["identifier uniqueness"].passed
+    assert results["identifier uniqueness"].value.startswith("24 duplicate")

@@ -147,6 +147,7 @@ class Dataset:
             "legitimate": {},
         }
         self.tokens: dict[str, dict[str, bool]] = {}
+        self.id_digests: list[NDArray[np.uint64]] = []
         self._vocabularies: dict[str, dict[str, int]] = {}
         months = sorted(
             p.name.removeprefix("month=") for p in (root / "transactions").glob("month=*")
@@ -198,6 +199,18 @@ class Dataset:
         self._formats_and_nulls(t, true)
         self._shortcut_columns(t, micros, observed, true)
         self._identifier_tokens(t, observed)
+        # Eight bytes of a keyed digest per identifier: uniqueness over millions of rows can then
+        # be checked with one sort instead of holding every string in memory.
+        self.id_digests.append(
+            np.fromiter(
+                (
+                    int.from_bytes(hashlib.blake2b(i.encode(), digest_size=8).digest(), "big")
+                    for i in t["transaction_id"].to_pylist()
+                ),
+                dtype=np.uint64,
+                count=t.num_rows,
+            )
+        )
 
     def _behavioural_features(self, t: pa.Table, micros: NDArray[np.int64]) -> None:
         channel, currency = t["channel"].to_pylist(), t["currency"].to_pylist()
@@ -397,6 +410,9 @@ def _label_and_format_checks(
     measures["label_noise"] = {"missed_fraud_rate": missed_rate, "false_fraud_rate": false_rate}
     before = [t for t in data.novel_timestamps if t < config.split.test_start]
     violations = sum(data.format_violations.values())
+    digests = np.concatenate(data.id_digests)
+    duplicates = digests.size - int(np.unique(digests).size)
+    measures["duplicate_transaction_ids"] = duplicates
     unmatched = {
         channel: sorted(signatures - data.null_signatures["legitimate"].get(channel, set()))
         for channel, signatures in data.null_signatures["fraud"].items()
@@ -416,6 +432,13 @@ def _label_and_format_checks(
             True,
             f"{len(data.novel_timestamps)} rows, {len(before)} before the test start",
             "only in the temporal hold-out test period, and present (D-08)",
+        ),
+        CheckResult(
+            "identifier uniqueness",
+            duplicates == 0,
+            True,
+            f"{duplicates} duplicate transaction ids in {digests.size} rows",
+            "every transaction id occurs once (ingestion contract)",
         ),
         CheckResult(
             "value formats",
