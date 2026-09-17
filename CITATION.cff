@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use FraudShield, please cite it using this metadata."
+type: software
+title: "FraudShield: Real-Time Explainable Fraud Detection for East African Digital Payments"
+abstract: >-
+  Research software for real-time, explainable fraud detection and analyst decision support
+  for East African digital payment channels. Development in progress; no DOI has been issued.
+authors:
+  - family-names: Bayizere
+    given-names: Marius
+    affiliation: "Independent Researcher, Kigali, Rwanda"
+repository-code: "https://github.com/mariusbayizere/fraudshield"
+license: Apache-2.0
+version: 0.1.0-dev
+keywords:
+  - fraud detection
+  - explainable machine learning
+  - mobile money
+  - East Africa

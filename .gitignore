@@ -1,0 +1,51 @@
+# --- Secrets and local environment (never commit; G.6) ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.jks
+
+# --- Datasets, models and experiment artifacts (G.5 step 4) ---
+*.csv
+*.parquet
+*.onnx
+*.ubj
+*.pkl
+*.joblib
+mlruns/
+mlartifacts/
+dataset/output/
+reports/
+!docs/**/*.csv
+
+# --- Python ---
+.venv/
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.hypothesis/
+.coverage
+htmlcov/
+
+# --- Java ---
+target/
+.mvn/wrapper/maven-wrapper.jar
+
+# --- Node ---
+node_modules/
+dist/
+coverage/
+.vite/
+playwright-report/
+test-results/
+
+# --- Editors and OS ---
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.iml
+.DS_Store

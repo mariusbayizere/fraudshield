@@ -1,0 +1,10 @@
+* text=auto eol=lf
+*.cmd text eol=crlf
+*.docx binary
+*.png binary
+*.jpg binary
+*.woff2 binary
+docs/traceability/requirements_matrix.md linguist-generated=true
+docs/srs/defect_register.md linguist-generated=true
+frontend/pnpm-lock.yaml linguist-generated=true
+uv.lock linguist-generated=true
