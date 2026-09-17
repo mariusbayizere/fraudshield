@@ -41,16 +41,30 @@ public final class DemoSeedGuard
     if (!isEnabled(environment)) {
       return;
     }
-    Set<String> active = new TreeSet<>(Arrays.asList(environment.getActiveProfiles()));
-    if (active.isEmpty() || !ALLOWED_PROFILES.containsAll(active)) {
+    if (!onlyDevOrDemoProfiles(environment)) {
       throw new IllegalStateException(
           "Refusing to start: demo seeding ("
               + ENABLED_PROPERTY
               + "=true) is allowed only when every active profile is dev or demo, but the active"
               + " profiles are "
-              + active
+              + activeProfiles(environment)
               + " (ADR 0019)");
     }
+  }
+
+  /**
+   * Whether at least one profile is active and every active profile is dev or demo.
+   *
+   * @param environment the application environment
+   * @return true only for dev and demo deployments
+   */
+  public static boolean onlyDevOrDemoProfiles(Environment environment) {
+    Set<String> active = activeProfiles(environment);
+    return !active.isEmpty() && ALLOWED_PROFILES.containsAll(active);
+  }
+
+  static Set<String> activeProfiles(Environment environment) {
+    return new TreeSet<>(Arrays.asList(environment.getActiveProfiles()));
   }
 
   /**

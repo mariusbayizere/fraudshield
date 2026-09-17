@@ -44,12 +44,25 @@ only and to show "SYNTHETIC DATA — NOT FOR PRODUCTION" in the UI.
 4. **Banner.**
    - The public `GET /api/v1/environment` returns exactly `{"synthetic_data": boolean}`. It is public
      because the banner must show on the login page, and it discloses nothing else.
-   - `synthetic_data` is true when demo seeding is enabled or a `dev` or `demo` profile is active
-     (`SyntheticDataFlag`). Because of rule 1, a deployment with demo data always shows the banner.
+   - `synthetic_data` is true when the database holds demo data, demo seeding is enabled, or a `dev`
+     or `demo` profile is active (`SyntheticDataFlag`).
    - The front end shows `SYNTHETIC DATA — NOT FOR PRODUCTION` whenever the flag is true
      (`frontend/src/lib/environment/syntheticDataBanner.ts`), and rejects a malformed body. The React
      shell that renders it on every page arrives in M8, and its component test must use this module.
-5. **Local secret scanning.**
+5. **The database remembers (review MAJOR-3).** Seeding runs in a one-shot process, so a check of
+   that process's profiles alone would not stop a later `prod` service from serving the seeded
+   database.
+   - The seeder marks its institution `institutions.synthetic = true`; only `fs_migrator` can write
+     it.
+   - `deployment_has_synthetic_data()` (`SECURITY DEFINER`, one boolean, executable by every
+     application role without a tenant) reads the marker.
+   - `SyntheticDataAutoConfiguration` creates `SyntheticDataStatus` in every Spring Boot application
+     with a FraudShield database, after Flyway. It fails startup when the marker is set and the
+     active profiles are not only `dev`/`demo`, and it supplies the banner flag.
+   - `SyntheticDataStatusTest` starts the real database tool against a seeded database: it refuses
+     `prod` and no profile, starts under `demo` with the flag on, and starts under `prod` against a
+     clean database with the flag off.
+6. **Local secret scanning.**
    - `make secrets-scan` scans committed history (`gitleaks git`) and every committable
      working-tree file: tracked files plus untracked files that are not ignored
      (`tools/bin/gitleaks-worktree`).

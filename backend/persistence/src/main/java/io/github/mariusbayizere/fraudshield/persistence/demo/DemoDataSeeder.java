@@ -86,8 +86,8 @@ public final class DemoDataSeeder implements ApplicationRunner {
               }
               UUID institution = UUID.randomUUID();
               jdbc.update(
-                  "INSERT INTO fraudshield.institutions (id, code, name, country) VALUES (?, ?, "
-                      + "?, ?)",
+                  "INSERT INTO fraudshield.institutions (id, code, name, country, synthetic)"
+                      + " VALUES (?, ?, ?, ?, true)",
                   institution,
                   INSTITUTION_CODE,
                   "Synthetic Demo Bank (not a real institution)",

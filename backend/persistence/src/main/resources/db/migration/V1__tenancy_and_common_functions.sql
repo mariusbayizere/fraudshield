@@ -82,6 +82,8 @@ CREATE TABLE institutions (
   code text NOT NULL UNIQUE CHECK (code ~ '^[a-z0-9][a-z0-9-]{1,31}$'),
   name text NOT NULL CHECK (char_length(name) BETWEEN 2 AND 200),
   country char(2) NOT NULL CHECK (country ~ '^[A-Z]{2}$'),
+  -- True for institutions created by demo seeding (ADR 0019). Only fs_migrator can write it.
+  synthetic boolean NOT NULL DEFAULT false,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -90,3 +92,11 @@ CREATE TRIGGER institutions_updated_at BEFORE UPDATE ON institutions
 ALTER TABLE institutions ENABLE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON institutions
   USING (id = current_institution()) WITH CHECK (id = current_institution());
+
+-- Whether this database holds synthetic demo data (ADR 0019). Callable before a tenant is set, so
+-- every service can refuse to start outside the dev and demo profiles against a seeded database and
+-- can show the synthetic-data banner (D-21). Returns one boolean, nothing about any institution.
+CREATE FUNCTION deployment_has_synthetic_data() RETURNS boolean
+  LANGUAGE sql STABLE SECURITY DEFINER
+  SET search_path = fraudshield, pg_temp
+  AS $$ SELECT EXISTS (SELECT 1 FROM fraudshield.institutions WHERE synthetic) $$;

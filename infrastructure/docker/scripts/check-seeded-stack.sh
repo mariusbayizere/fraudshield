@@ -54,6 +54,10 @@ other=$(app_sql "$app_password" \
 [[ "$other" == "0" ]] || fail "another tenant sees $other demo users"
 echo "demo tenant sees 5 users; another tenant sees 0"
 
+marker=$(app_sql "$app_password" "select fraudshield.deployment_has_synthetic_data()")
+[[ "$marker" == "t" ]] || fail "the seeded database is not marked synthetic ('$marker')"
+echo "database marked as holding synthetic data"
+
 if app_sql "wrong-$app_password" "select 1" >/dev/null 2>&1; then
   fail "fs_app logged in with a wrong password"
 fi

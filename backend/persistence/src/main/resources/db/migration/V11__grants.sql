@@ -71,7 +71,8 @@ GRANT SELECT ON
   TO fs_compliance_ro;
 GRANT SELECT ON v_alert_decision_state, v_auto_block_status TO fs_compliance_ro;
 
-GRANT EXECUTE ON FUNCTION current_institution(), is_token(text) TO fs_app, fs_app_readonly, fs_compliance_ro;
+GRANT EXECUTE ON FUNCTION current_institution(), is_token(text), deployment_has_synthetic_data()
+  TO fs_app, fs_app_readonly, fs_compliance_ro;
 -- The tenant views call current_institution() with the view owner's rights; the functions used by
 -- CHECK constraints and triggers run as the inserting role.
 GRANT EXECUTE ON FUNCTION
