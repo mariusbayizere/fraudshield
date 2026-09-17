@@ -27,6 +27,7 @@ institution's data (D-08).
 | trivial rule baseline | pass | no | AUC 0.604 | reported (amount >= rule threshold, or local hour before 05:00) |
 | label noise | pass | no | missed 1.58%, false 1.52% of true fraud | each direction 1-2% of true fraud labels (D-08) |
 | novel sub-variant placement | pass | yes | 60 rows, 0 before the test start | only in the temporal hold-out test period, and present (D-08) |
+| identifier uniqueness | pass | yes | 0 duplicate transaction ids in 1005621 rows | every transaction id occurs once (ingestion contract) |
 | value formats | pass | yes | 0 violations | tokens, MCC, amount scale and coordinate precision valid for every row |
 | null signatures per channel | pass | yes | every fraud null pattern also occurs in legitimate rows | identical null patterns per channel for fraud and legitimate rows |
 | fraud rate | pass | no | overall 0.870% (95% CI 0.852%-0.888%), test 0.931% (95% CI 0.874%-0.992%) | 0.87% overall, 0.91% test, +/- 0.5 pp (ML-DATA-02) |
