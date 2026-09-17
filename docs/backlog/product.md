@@ -93,3 +93,38 @@ Format: ID · title · source · priority · due · problem · acceptance.
   globally, so a writer can learn whether a user id exists in another institution.
 - **Acceptance:** reference through an operator table or validate the actor in the service; decision
   recorded in ADR 0017.
+
+### PB-15 · Synthetic-data guard must survive lazy initialisation
+- **Source:** M1 database re-check item 1 (MINOR, reproduced) · **Priority:** high · **Due:** before M2 wires the API
+- **Problem:** with `spring.main.lazy-initialization=true`, `SyntheticDataStatus` is never created, so a
+  `prod` process starts against a seeded database.
+- **Acceptance:** `LazyInitializationExcludeFilter` for the bean (or a `SmartInitializingSingleton`);
+  `SyntheticDataStatusTest` covers lazy initialisation.
+
+### PB-16 · Synthetic-data guard fails loudly without a `JdbcTemplate`
+- **Source:** M1 database re-check item 2 (MINOR) · **Priority:** high · **Due:** before M2 wires the API
+- **Problem:** `@ConditionalOnBean(JdbcTemplate.class)` silently skips the guard in an application
+  with several data sources or a custom `JdbcOperations`.
+- **Acceptance:** condition on `DataSource` and fail startup when the check cannot run.
+
+### PB-17 · Synthetic-data check for non-Spring database clients
+- **Source:** M1 database re-check item 3 (MINOR) · **Priority:** medium · **Due:** when a non-Spring service gets database access
+- **Acceptance:** that service calls `deployment_has_synthetic_data()` at startup; ADR 0019 updated.
+
+### PB-18 · Audit writers: retry on 40001, prefer READ COMMITTED
+- **Source:** M1 database re-check items 4–5 · **Priority:** medium · **Due:** M2 (audit writer)
+- **Problem:** REPEATABLE READ writers get 40001 whenever the partition was written after their
+  snapshot; a wall-clock step back stalls audit writes with 40001 until the clock catches up.
+- **Acceptance:** the audit writer retries on 40001 in READ COMMITTED; ADR 0017 documents both.
+
+### PB-19 · Test hygiene for `SyntheticDataStatusTest` and `TestDatabase`
+- **Source:** M1 database re-check items 6–7 (NIT) · **Priority:** low · **Due:** next change to either
+- **Acceptance:** the no-profile case asserts the message; `TestDatabase` drops its `fs_test_*`
+  databases when the JVM exits.
+
+### PB-20 · Migrations are immutable from the first merge
+- **Source:** M1 database re-check item 8 (NIT) · **Priority:** medium · **Due:** M1 merge
+- **Problem:** V1, V2, V8, V10 and V11 were edited in place before merge; a local stack volume
+  migrated at bd222fe fails Flyway validation and needs `make down` with volumes removed.
+- **Acceptance:** from the merge to `main` on, migrations only change through new versions, enforced
+  by a governance check that fails when a merged `V*.sql` file changes; the walkthrough notes the reset.
