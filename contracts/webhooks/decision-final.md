@@ -38,8 +38,10 @@ late it is.
 
 Receivers must:
 
-1. Parse the header: exactly one `t` of ASCII digits and at least one `v1` of 64 lower-case hex
-   digits; anything else is **malformed**.
+1. Parse the header as comma-separated `key=value` pairs: exactly one `t`, written as ASCII digits
+   without leading zeros, and at least one `v1` of 64 lower-case hex digits; otherwise it is
+   **malformed**. Keys other than `t` and `v1` are ignored, so a later signature scheme (`v2`) can be
+   added alongside. The signed text is `t` exactly as it appears in the header.
 2. Reject if `|now − t| > 300` seconds (**replay window**; exactly 300 is accepted).
 3. Compare signatures in constant time.
 4. Apply the state only if `decision_sequence` is greater than the last sequence applied for that
@@ -55,7 +57,8 @@ identifies a state and stays the same across retries of that state.
 
 - `signature-test-vectors.json`: valid; tampered body; wrong secret; exactly 300 and 301 seconds old;
   300 and 301 seconds in the future; key rotation with either secret and with neither; missing `t`;
-  missing `v1`; duplicate `t`; non-ASCII digits in `t`; a `v1` that is not lower-case hex.
+  missing `v1`; duplicate `t` (different and identical values); non-ASCII digits in `t`; a leading
+  zero in `t`; a `v1` that is not lower-case hex; an unknown key that is ignored.
 - `delivery-ordering-vectors.json`: deliveries in order with a repeated decision value, a delayed
   retry of an older APPROVE after a newer DECLINE, and a duplicate delivery, each with the expected
   APPLY or IGNORE.
@@ -67,9 +70,12 @@ Java dispatcher (M6) and integrators' receivers use the same files.
 
 - Success is any 2xx within 10 seconds.
 - Retries use exponential backoff with full jitter, starting at 30 seconds, for up to 24 hours.
-- States for one transaction are sent in sequence order; a state is not sent while an earlier state of
-  the same transaction is still being retried. Receivers must still apply the rule above, because a
-  state can be retried after the receiver has already processed it.
+- Sequence 1 (the ingest decision) is never sent by webhook: the synchronous ingest response already
+  delivered it. Webhooks start at sequence 2.
+- When a newer state of a transaction is created, any pending retry of an older state of that
+  transaction is cancelled (it is superseded, not dead-lettered) and the newest state is sent
+  immediately, so a failing old delivery never delays a newer decision. Receivers must still apply
+  the rule above, because an attempt already in flight can arrive after the newer state.
 - After the final failure the delivery moves to the dead-letter list visible at
   `GET /api/v1/admin/webhook-deliveries`; integrators can also poll
   `GET /api/v1/decisions/{transaction_id}`.

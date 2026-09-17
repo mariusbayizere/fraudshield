@@ -898,12 +898,16 @@
   "services": {
     ".fraudshield.scoring.v1.ScoringService": {
       "GetModelStatus": {
+        "client_streaming": false,
         "input": ".fraudshield.scoring.v1.ModelStatusRequest",
-        "output": ".fraudshield.scoring.v1.ModelStatusResponse"
+        "output": ".fraudshield.scoring.v1.ModelStatusResponse",
+        "server_streaming": false
       },
       "Score": {
+        "client_streaming": false,
         "input": ".fraudshield.scoring.v1.ScoreRequest",
-        "output": ".fraudshield.scoring.v1.ScoreResponse"
+        "output": ".fraudshield.scoring.v1.ScoreResponse",
+        "server_streaming": false
       }
     }
   }

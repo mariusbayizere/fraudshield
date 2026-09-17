@@ -54,14 +54,21 @@ processes, so their conventions must be explicit and tested.
    previous one accepted, so **consumers deploy first** and producers follow. Producers validate
    against the closed schemas. Consumers validate as tolerant readers that ignore unknown properties
    (`validate_event(..., reader=True)`), so a producer may add an optional field once consumers are
-   deployed. Anything else is a breaking change and needs a new `schema_version`: removing or renaming a
-   property; making one required; narrowing a type, enum, pattern or bound; closing an object; changing
-   a `$ref` or a conditional. The new version is published alongside the old one until producers have
-   migrated. `contracts/kafka/baseline/` holds the published schemas, and
-   `fraudshield_contracts.compatibility` compares every current schema with its baseline on every CI run.
-   It is deliberately conservative: a change it cannot prove widening counts as breaking. Its self-tests
-   apply each kind of breaking change and require it to be reported. A committed baseline replaces the
-   earlier plan to compare with `main`, because CI checks out one commit.
+   deployed; making a field optional or widening a type, enum or bound (outside a `oneOf`) is compatible
+   in this mode. Anything else is breaking: removing or renaming a property; making one required;
+   narrowing a type, enum, pattern or bound; closing an object; adding a constrained property to an open
+   object; changing a `$ref` or a conditional; any change inside a `oneOf`, or to a definition a `oneOf`
+   uses (branches could stop being exclusive). A breaking change is published as a **new topic**
+   `<topic>.v<N>` with its own schema file and `schema_version: N` in `topics.yaml`; each topic binds
+   exactly one version, and the old topic runs until producers have migrated.
+
+   Two checks enforce this. `contracts/kafka/baseline/` holds the schemas as committed, and contract tests
+   compare the whole schema set with it (`breaking_changes_between`). Because a commit could edit a
+   schema and its baseline together, the governance job also runs `fs-contract-baselines`, which reads
+   the baselines published at the merge base with `origin/main` (full history) and checks the current
+   schemas and proto against those. The checker is conservative in the cases above; its self-tests
+   apply each kind of breaking change, including the overlapping-`oneOf` cases found in review, and
+   require it to be reported.
 6. **Scoring gRPC** (`fraudshield.scoring.v1`): the API sends the transaction and the Redis account
    context; the scorer returns the FR-02-01 fields plus `anomaly_raw` (D-06), all 44 SHAP contributions
    for flagged transactions in margin space with base value and final margin (D-05), the feature
@@ -73,14 +80,19 @@ processes, so their conventions must be explicit and tested.
    loaded model versions.
 
    **Evolution.** Fields and enum values are only added. A removed number and its name are reserved, and
-   no number, name, type, label or oneof membership changes. `contracts/proto/baseline/scoring-v1.json`
-   summarises the compiled descriptor, and `fraudshield_contracts.proto_compat` fails the build on any
-   such change. Its self-tests compile edited copies of the proto (a renumbered field, a deletion
-   without `reserved`, a type change, a rename, a label change, a renamed enum value, a removed method).
+   no number, name, type, label or oneof membership changes. A reservation is never dropped, reserved
+   numbers and names are never reused (fields and enum values), and methods keep their request and
+   response types and streaming mode. `contracts/proto/baseline/scoring-v1.json` summarises the compiled
+   descriptor; `fraudshield_contracts.proto_compat` fails the build on any such change, and
+   `fs-contract-baselines` repeats the comparison against the baseline published on `main`. Its
+   self-tests compile edited copies of the proto (a renumbered field, a deletion without `reserved`, a
+   type change, a rename, a label change, a renamed enum value, a removed method, a streaming response)
+   and check a dropped reservation and enum reuse.
    `buf breaking` was not added, to avoid another pinned binary.
 7. **Webhook signatures** follow `contracts/webhooks/decision-final.md`: `t=<unix>,v1=<hex HMAC-SHA256>`
-   over `t + "." + raw body`. Each attempt is signed with that attempt's time, so late retries stay
-   inside the 300-second window. Several `v1` values are sent during key rotation. Delivery is
+   over `t + "." + raw body`, with `t` in canonical digits. Each attempt is signed with that attempt's
+   time, so late retries stay inside the 300-second window; a newer state cancels pending retries of
+   older ones, and sequence 1 is never sent by webhook. Several `v1` values are sent during key rotation. Delivery is
    at-least-once, and receivers order and deduplicate by `decision_sequence` (ADR 0011 §9), never by
    decision value. The signature and delivery-ordering vectors are the shared test oracle, verified by
    the Python reference implementation now and the Java dispatcher in M6.

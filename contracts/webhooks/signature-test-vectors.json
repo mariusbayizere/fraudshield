@@ -150,6 +150,36 @@
       "header": "t=1789624961,v1=DD2DFC74BF00C37C185ABF04E006E9E05112B2584FAF0BA8E5512A87DD306E56",
       "verify_at": 1789625021,
       "expected": "MALFORMED"
+    },
+    {
+      "name": "the same t twice",
+      "secrets": [
+        "whsec_test_4f7c2a9b1e8d6035c7a1b2c3d4e5f607"
+      ],
+      "body": "{\"event_id\":\"5f607182-9a0b-4cbe-8f1a-4b5c6d7e8f90\",\"transaction_id\":\"7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60\",\"decision_sequence\":2,\"decision\":\"TIMEOUT_RELEASE\",\"final\":true,\"decided_at\":\"2026-09-17T06:02:41Z\",\"decided_by\":\"TIMEOUT_POLICY\",\"reason_codes\":[\"UNUSUAL_HOUR\",\"AMOUNT_ABOVE_NORMAL\"],\"review_deadline_at\":null,\"supersedes_decision\":\"HOLD\"}",
+      "header": "t=1789624961,t=1789624961,v1=dd2dfc74bf00c37c185abf04e006e9e05112b2584faf0ba8e5512a87dd306e56",
+      "verify_at": 1789625021,
+      "expected": "MALFORMED"
+    },
+    {
+      "name": "t with a leading zero",
+      "secrets": [
+        "whsec_test_4f7c2a9b1e8d6035c7a1b2c3d4e5f607"
+      ],
+      "body": "{\"event_id\":\"5f607182-9a0b-4cbe-8f1a-4b5c6d7e8f90\",\"transaction_id\":\"7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60\",\"decision_sequence\":2,\"decision\":\"TIMEOUT_RELEASE\",\"final\":true,\"decided_at\":\"2026-09-17T06:02:41Z\",\"decided_by\":\"TIMEOUT_POLICY\",\"reason_codes\":[\"UNUSUAL_HOUR\",\"AMOUNT_ABOVE_NORMAL\"],\"review_deadline_at\":null,\"supersedes_decision\":\"HOLD\"}",
+      "header": "t=01789624961,v1=dd2dfc74bf00c37c185abf04e006e9e05112b2584faf0ba8e5512a87dd306e56",
+      "verify_at": 1789625021,
+      "expected": "MALFORMED"
+    },
+    {
+      "name": "unknown key ignored (reserved for future schemes)",
+      "secrets": [
+        "whsec_test_4f7c2a9b1e8d6035c7a1b2c3d4e5f607"
+      ],
+      "body": "{\"event_id\":\"5f607182-9a0b-4cbe-8f1a-4b5c6d7e8f90\",\"transaction_id\":\"7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60\",\"decision_sequence\":2,\"decision\":\"TIMEOUT_RELEASE\",\"final\":true,\"decided_at\":\"2026-09-17T06:02:41Z\",\"decided_by\":\"TIMEOUT_POLICY\",\"reason_codes\":[\"UNUSUAL_HOUR\",\"AMOUNT_ABOVE_NORMAL\"],\"review_deadline_at\":null,\"supersedes_decision\":\"HOLD\"}",
+      "header": "t=1789624961,v0=abc,v1=dd2dfc74bf00c37c185abf04e006e9e05112b2584faf0ba8e5512a87dd306e56",
+      "verify_at": 1789625021,
+      "expected": "VALID"
     }
   ]
 }

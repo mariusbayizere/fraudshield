@@ -111,6 +111,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
       - run: uv run fs-scope-guard
       - run: uv run fs-compose-budget
+      # Kafka schemas and the proto must stay compatible with the baselines already on main.
+      - run: uv run fs-contract-baselines --against origin/main
       - name: Commit messages introduced by this push or pull request (G.3)
         env:
           EVENT_NAME: ${{ github.event_name }}

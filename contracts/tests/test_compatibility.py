@@ -10,7 +10,11 @@ from typing import Any
 import pytest
 
 from fraudshield_contracts import proto_compat
-from fraudshield_contracts.compatibility import breaking_changes
+from fraudshield_contracts.compatibility import (
+    breaking_changes,
+    breaking_changes_between,
+    fragile_definitions,
+)
 from fraudshield_contracts.events import KAFKA_ROOT
 
 BASELINE = KAFKA_ROOT / "baseline"
@@ -26,9 +30,68 @@ def test_every_published_schema_has_a_baseline() -> None:
     assert {p.name for p in BASELINE_FILES} == {p.name for p in CURRENT.glob("*.schema.json")}
 
 
-@pytest.mark.parametrize("baseline", BASELINE_FILES, ids=lambda p: p.name)
-def test_current_schema_is_backward_compatible_with_its_baseline(baseline: Path) -> None:
-    assert breaking_changes(_load(baseline), _load(CURRENT / baseline.name)) == []
+def _set(directory: Path) -> dict[str, Any]:
+    return {
+        schema["$id"]: schema
+        for schema in (_load(path) for path in sorted(directory.glob("*.schema.json")))
+    }
+
+
+@pytest.mark.req("D-14")
+def test_current_schemas_are_backward_compatible_with_their_baseline() -> None:
+    changes = breaking_changes_between(_set(BASELINE), _set(CURRENT))
+    assert len(changes) == len(BASELINE_FILES)
+    assert {schema_id: found for schema_id, found in changes.items() if found} == {}
+
+
+def test_definitions_used_inside_oneof_are_fragile() -> None:
+    fragile = fragile_definitions(_set(CURRENT))
+    assert "urn:fraudshield:kafka:common#/$defs/Uuid" in fragile
+    assert "urn:fraudshield:kafka:common#/$defs/Timestamp" in fragile
+
+
+@pytest.mark.parametrize(
+    ("label", "schema_id", "mutate"),
+    [
+        (
+            "a oneOf branch widened so null matches two branches (review R11)",
+            "urn:fraudshield:kafka:notification-staff",
+            lambda s: s["properties"]["recipient_user_id"]["oneOf"][1].update(
+                type=["null", "string"]
+            ),
+        ),
+        (
+            "a shared definition used inside oneOf made nullable (review R11b)",
+            "urn:fraudshield:kafka:common",
+            lambda s: s["$defs"]["Uuid"].update(type=["string", "null"]),
+        ),
+        (
+            "a constrained property added to the open envelope payload (review R12)",
+            "urn:fraudshield:kafka:envelope",
+            lambda s: (
+                s["properties"]["payload"]
+                .setdefault("properties", {})
+                .update(notification_id={"type": "integer"})
+            ),
+        ),
+    ],
+)
+def test_set_checker_reports_changes_that_break_other_schemas(
+    label: str, schema_id: str, mutate: Callable[[Any], None]
+) -> None:
+    old = _set(BASELINE)
+    new = copy.deepcopy(old)
+    mutate(new[schema_id])
+    assert breaking_changes_between(old, new)[schema_id], label
+
+
+def test_set_checker_reports_a_removed_schema() -> None:
+    old = _set(BASELINE)
+    new = copy.deepcopy(old)
+    del new["urn:fraudshield:kafka:label"]
+    assert breaking_changes_between(old, new)["urn:fraudshield:kafka:label"] == [
+        "urn:fraudshield:kafka:label: schema removed"
+    ]
 
 
 def _decision_final() -> Any:
@@ -44,7 +107,7 @@ def _common() -> Any:
 
 
 BREAKING: list[tuple[str, Callable[[], Any], Callable[[Any], Any]]] = [
-    # The mutations the M1 review applied (M4, M4b) plus the rest of the required list.
+    # The review's M4b edits plus every kind of narrowing ADR 0012 lists.
     ("remove a property", _decision_final, lambda s: s["properties"].pop("reason_codes") and s),
     (
         "newly required property",
@@ -123,6 +186,8 @@ def test_checker_reports_breaking_changes(
         ("enum value added", lambda s: s["properties"]["decided_by"]["enum"].append("RULE")),
         ("bound relaxed", lambda s: s["properties"]["reason_codes"].update(maxItems=5)),
         ("description edited", lambda s: s.update(description="clearer wording")),
+        # Consumers deploy first and tolerate absence, so making a field optional is compatible;
+        # the original review's M4 edit (dropping required fields) is therefore accepted.
         ("required field made optional", lambda s: s["required"].remove("reason_codes")),
     ],
 )
@@ -162,6 +227,11 @@ PROTO_BREAKING = [
     ("renamed field", "string traceparent = 4;", "string trace_parent = 4;"),
     ("label change", "optional string device_token = 10;", "repeated string device_token = 10;"),
     ("enum value renamed", "CHANNEL_USSD = 4;", "CHANNEL_FEATURE_PHONE = 4;"),
+    (
+        "response made server-streaming (review R5b)",
+        "rpc Score(ScoreRequest) returns (ScoreResponse);",
+        "rpc Score(ScoreRequest) returns (stream ScoreResponse);",
+    ),
     (
         "method removed",
         "  rpc GetModelStatus(ModelStatusRequest) returns (ModelStatusResponse);\n",
@@ -220,3 +290,41 @@ def test_proto_checker_accepts_an_added_field_and_a_properly_reserved_removal(
     assert proto_compat.breaking_changes(reserved, reused) == [
         ".fraudshield.scoring.v1.ScoringResult field 12: reuses a reserved number"
     ]
+
+
+def test_proto_checker_rejects_dropping_a_reservation_to_reuse_it(tmp_path: Path) -> None:
+    """Review R5c: reserve, then unreserve, then reuse must fail at the unreserve step."""
+    reserved = _compile_edited(
+        tmp_path / "reserved",
+        "  double shap_base_value = 12;\n",
+        '  reserved 12;\n  reserved "shap_base_value";\n',
+    )
+    unreserved = _compile_edited(tmp_path / "unreserved", "  double shap_base_value = 12;\n", "")
+    changes = proto_compat.breaking_changes(reserved, unreserved)
+    assert (
+        ".fraudshield.scoring.v1.ScoringResult: reserved numbers 12-12 no longer reserved"
+        in changes
+    )
+    assert (
+        ".fraudshield.scoring.v1.ScoringResult: reserved name shap_base_value no longer reserved"
+        in changes
+    )
+
+
+def test_proto_checker_rejects_enum_value_reuse() -> None:
+    baseline = json.loads(proto_compat.BASELINE_PATH.read_text(encoding="utf-8"))
+    old = copy.deepcopy(baseline)
+    channel = old["enums"][".fraudshield.scoring.v1.Channel"]
+    del channel["values"]["6"]
+    channel["reserved_numbers"] = [[6, 6]]
+    channel["reserved_names"] = ["CHANNEL_BANK_TRANSFER"]
+    new = copy.deepcopy(old)
+    new["enums"][".fraudshield.scoring.v1.Channel"]["values"]["6"] = "CHANNEL_WALLET"
+    new["enums"][".fraudshield.scoring.v1.Channel"]["reserved_numbers"] = []
+    changes = proto_compat.breaking_changes(old, new)
+    assert any("reuses a reserved number or name" in c for c in changes)
+    assert any("no longer reserved" in c for c in changes)
+    moved = copy.deepcopy(baseline)
+    moved["enums"][".fraudshield.scoring.v1.Channel"]["values"]["7"] = "CHANNEL_USSD"
+    del moved["enums"][".fraudshield.scoring.v1.Channel"]["values"]["4"]
+    assert any("renumbered" in c for c in proto_compat.breaking_changes(baseline, moved))

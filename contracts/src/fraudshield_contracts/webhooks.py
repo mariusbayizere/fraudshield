@@ -13,7 +13,8 @@ import re
 from enum import StrEnum
 
 REPLAY_WINDOW_SECONDS = 300
-_TIMESTAMP = re.compile(r"[0-9]{1,12}")
+# ASCII digits without leading zeros, so the signed text of t is unambiguous in every language.
+_TIMESTAMP = re.compile(r"0|[1-9][0-9]{0,11}")
 _SIGNATURE = re.compile(r"[0-9a-f]{64}")
 
 

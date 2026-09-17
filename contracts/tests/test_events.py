@@ -201,7 +201,13 @@ def test_customer_notifications_fail_closed(label: str, mutate: Any) -> None:
             {"user_id": "5b1f0a2c-3d4e-4f60-8a7b-9c0d1e2f3a4b", "link": "https://x"},
         ),
         ("ACCOUNT_LOCKED", {"user_id": "5b1f0a2c-3d4e-4f60-8a7b-9c0d1e2f3a4b"}),
-        ("ACCOUNT_FROZEN", {"account_token": "tok_exampleAccount0000000001", "email": "a@b.c"}),
+        (
+            "ACCOUNT_FROZEN",
+            {
+                "account_token": "tok_exampleAccount0000000001",
+                "email": "@".join(["analyst", "example.com"]),
+            },
+        ),
     ],
 )
 def test_staff_notifications_carry_no_credentials_or_contact_details(
@@ -211,6 +217,37 @@ def test_staff_notifications_carry_no_credentials_or_contact_details(
     event["payload"]["kind"] = kind
     event["payload"]["parameters"] = parameters
     assert validate_event(_topic("fs.notifications.staff"), event)
+
+
+USER = "5b1f0a2c-3d4e-4f60-8a7b-9c0d1e2f3a4b"
+VALID_STAFF_PARAMETERS: dict[str, dict[str, Any]] = {
+    "ACCOUNT_FROZEN": {"account_token": "tok_exampleAccount0000000001", "high_risk_count": 3},
+    "ALERT_ESCALATED": {
+        "alert_id": "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+        "target_role": "RISK_OFFICER",
+        "escalated_by_user_id": USER,
+    },
+    "ACCOUNT_LOCKED": {"user_id": USER, "locked_until": "2026-09-17T08:45:00Z"},
+    "APPROVAL_REQUIRED": {"pending_user_id": USER},
+    "WELCOME": {"user_id": USER},
+    "PASSWORD_RESET_CODE": {"user_id": USER},
+    "EMAIL_VERIFICATION": {"user_id": USER},
+    "MODEL_GATE_RESULT": {"model_version": "fs-ensemble-2026.09.1", "passed": False},
+}
+
+
+@pytest.mark.parametrize("kind", sorted(VALID_STAFF_PARAMETERS))
+def test_every_staff_notification_kind_accepts_its_own_parameters_only(kind: str) -> None:
+    """Review NF-E08: each per-kind schema must be satisfiable and bound to the right kind."""
+    topic = _topic("fs.notifications.staff")
+    event = _example("fs.notifications.staff")
+    event["payload"]["kind"] = kind
+    event["payload"]["parameters"] = VALID_STAFF_PARAMETERS[kind]
+    assert validate_event(topic, event) == []
+    for other, parameters in VALID_STAFF_PARAMETERS.items():
+        if set(parameters) != set(VALID_STAFF_PARAMETERS[kind]):
+            event["payload"]["parameters"] = parameters
+            assert validate_event(topic, event), (kind, other)
 
 
 def test_every_staff_notification_kind_has_a_closed_parameter_schema() -> None:

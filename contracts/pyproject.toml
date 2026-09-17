@@ -13,6 +13,9 @@ dependencies = [
     "protobuf==7.36.1",
 ]
 
+[project.scripts]
+fs-contract-baselines = "fraudshield_contracts.baseline_guard:main"
+
 [build-system]
 requires = ["hatchling==1.32.0"]
 build-backend = "hatchling.build"

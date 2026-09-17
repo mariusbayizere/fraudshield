@@ -2,8 +2,9 @@
 
 The baseline is a JSON summary of the compiled descriptor, so a diff is readable in review. Rules:
 existing field and enum-value numbers keep their name, type, label and oneof; a removed number and
-its name must be reserved; a new field must not reuse a reserved number or name; messages, enums,
-services and methods are never removed, and methods keep their request and response types.
+its name must be reserved, and a reservation is never dropped; a new field or enum value must not
+reuse a reserved or removed number or name; messages, enums, services and methods are never
+removed, and methods keep their request and response types and streaming mode.
 """
 
 from __future__ import annotations
@@ -93,7 +94,12 @@ def summarise(descriptor_set: bytes, proto: Path = SCORING_PROTO) -> dict[str, A
         _enum(enum, prefix, enums)
     services = {
         f"{prefix}.{service.name}": {
-            method.name: {"input": method.input_type, "output": method.output_type}
+            method.name: {
+                "input": method.input_type,
+                "output": method.output_type,
+                "client_streaming": method.client_streaming,
+                "server_streaming": method.server_streaming,
+            }
             for method in service.method
         }
         for service in file.service
@@ -135,12 +141,26 @@ def breaking_changes(old: dict[str, Any], new: dict[str, Any]) -> list[str]:
             if method not in current:
                 found.append(f"{name}.{method}: method removed")
             elif current[method] != signature:
-                found.append(f"{name}.{method}: request or response type changed")
+                found.append(f"{name}.{method}: request, response or streaming mode changed")
+    return found
+
+
+def _reservation_changes(name: str, old: dict[str, Any], new: dict[str, Any]) -> list[str]:
+    found = [
+        f"{name}: reserved numbers {start}-{end} no longer reserved"
+        for start, end in old["reserved_numbers"]
+        if not all(_in_ranges(n, new["reserved_numbers"]) for n in range(start, end + 1))
+    ]
+    found.extend(
+        f"{name}: reserved name {reserved} no longer reserved"
+        for reserved in old["reserved_names"]
+        if reserved not in new["reserved_names"]
+    )
     return found
 
 
 def _field_changes(name: str, old: dict[str, Any], new: dict[str, Any]) -> list[str]:
-    found: list[str] = []
+    found: list[str] = _reservation_changes(name, old, new)
     for number, field in old["fields"].items():
         now = new["fields"].get(number)
         where = f"{name} field {number} ({field['name']})"
@@ -172,7 +192,15 @@ def _field_changes(name: str, old: dict[str, Any], new: dict[str, Any]) -> list[
 
 
 def _enum_changes(name: str, old: dict[str, Any], new: dict[str, Any]) -> list[str]:
-    found: list[str] = []
+    found: list[str] = _reservation_changes(name, old, new)
+    old_names = set(old["values"].values())
+    for number, value in new["values"].items():
+        if number in old["values"]:
+            continue
+        if _in_ranges(int(number), old["reserved_numbers"]) or value in old["reserved_names"]:
+            found.append(f"{name} value {number} ({value}): reuses a reserved number or name")
+        if value in old_names:
+            found.append(f"{name} value {value}: renumbered to {number}")
     for number, value in old["values"].items():
         now = new["values"].get(number)
         if now is None:

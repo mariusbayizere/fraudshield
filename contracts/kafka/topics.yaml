@@ -13,7 +13,8 @@
 # GET /decisions. The producing service sets the envelope institution_id from the authenticated
 # principal, so no event can claim another institution.
 #
-# event_type, schema_version: every envelope on the topic must carry exactly these values
+# event_type, schema_version: every envelope on the topic must carry exactly these values. A breaking
+#   payload change is published as a new topic <name>.v<N> with schema_version N (ADR 0012).
 # key:        what the partitioning key is, so ordering holds per key
 # retention:  ISO 8601 duration; the DLQ keeps failed messages longer for investigation
 # partitions: production default; tests only check it is positive
