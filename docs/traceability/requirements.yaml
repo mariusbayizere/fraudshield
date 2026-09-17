@@ -3745,12 +3745,17 @@ requirements:
   - MOB-TOUCH-04
   - MOB-TOUCH-08
   - MOB-DEV-01
-  status: IN_PROGRESS
+  status: DONE
   verification: test
   implementation:
   - tools/src/fraudshield_tools/scope_guard.py
   - tools/src/fraudshield_tools/traceability_seed.py
-  evidence: []
+  evidence:
+  - 'tools/tests/test_scope_and_registers.py (5 tests tagged D-47: repository clean; detection in content,
+    paths, identifiers and compound names; allowlist and pragma; seeded rows)'
+  - docs/adr/0008-out-of-scope-content-guard.md (decision)
+  - docs/reviews/M0/milestone-review.md (M0 milestone review, APPROVED_WITH_MINORS)
+  - 83a9090 (reviewed merge candidate, fast-forwarded to main)
   deviations: []
 - id: D-48
   section: Build prompt Part B defect register
@@ -3760,12 +3765,15 @@ requirements:
   srs_text: See docs/srs/defect_register.md
   defects: []
   affects: []
-  status: IN_PROGRESS
+  status: DONE
   verification: inspection
   implementation:
   - docs/adr/0001-record-architecture-decisions.md
   - docs/traceability/requirements.yaml
-  evidence: []
+  evidence:
+  - 'docs/reviews/M0/milestone-review.md (inspection: all 258 rows carry milestones M0-M12, none a calendar
+    date)'
+  - docs/adr/0001-record-architecture-decisions.md (gated milestones replace the SRS roadmap dates)
   deviations: []
 - id: D-49
   section: Build prompt Part B defect register

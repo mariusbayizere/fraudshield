@@ -5,6 +5,15 @@ All notable changes are recorded here, grouped by milestone. The format follows
 
 ## [Unreleased]
 
+### M0 closed — 2026-09-17
+
+- Gate: `make up` healthy evidenced in CI (ADR 0010) by seven consecutive green `stack` jobs and the
+  `main` runs at 83a9090 (ci 35184974170, stack 35184974152, devcontainer 35184974136); CI green;
+  traceability-check runs; commits visible on the remote.
+- Milestone review: APPROVED_WITH_MINORS (0 BLOCKER, 0 MAJOR, 4 MINOR, 8 NIT), findings in
+  `docs/backlog/governance.md` GOV-1…GOV-13 with due milestones.
+- Rows moved to DONE: D-47, D-48.
+
 ### M0 — Bootstrap and governance
 
 - Repository skeleton, Apache-2.0 licence, security and contribution policies.

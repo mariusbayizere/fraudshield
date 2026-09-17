@@ -3,7 +3,7 @@
 
 # FraudShield Requirements Traceability Matrix
 
-Rows: 258. Status counts: IN_PROGRESS 7, NOT_STARTED 251.
+Rows: 258. Status counts: DONE 2, IN_PROGRESS 5, NOT_STARTED 251.
 
 | ID | Priority | Milestone | Status | Title | Implementation | Tests | Evidence | Deviations |
 |---|---|---|---|---|---|---|---|---|
@@ -260,8 +260,8 @@ Rows: 258. Status counts: IN_PROGRESS 7, NOT_STARTED 251.
 | D-44 | M | M8 | NOT_STARTED | "Undo within 5 seconds" conflicts with immutable decisions and immediate side effects | — | — | — | — |
 | D-45 | M | M8 | NOT_STARTED | SHAP chart "all 44 features ranked" overwhelms under time pressure. | — | — | — | — |
 | D-46 | M | M8 | NOT_STARTED | Leaflet base-map tiles from public servers break the CSP, data residency and 2G usability; per-point fraud maps can expose individuals. | — | — | — | — |
-| D-47 | M | M0 | IN_PROGRESS | KinyaMed text in 05B | tools/src/fraudshield_tools/scope_guard.py<br>tools/src/fraudshield_tools/traceability_seed.py | tools/tests/test_scope_and_registers.py:169<br>tools/tests/test_scope_and_registers.py:26<br>tools/tests/test_scope_and_registers.py:31<br>tools/tests/test_scope_and_registers.py:56<br>tools/tests/test_scope_and_registers.py:73 | — | — |
-| D-48 | M | M0 | IN_PROGRESS | The roadmap compresses everything into weeks 4–6. | docs/adr/0001-record-architecture-decisions.md<br>docs/traceability/requirements.yaml | — | — | — |
+| D-47 | M | M0 | DONE | KinyaMed text in 05B | tools/src/fraudshield_tools/scope_guard.py<br>tools/src/fraudshield_tools/traceability_seed.py | tools/tests/test_scope_and_registers.py:169<br>tools/tests/test_scope_and_registers.py:26<br>tools/tests/test_scope_and_registers.py:31<br>tools/tests/test_scope_and_registers.py:56<br>tools/tests/test_scope_and_registers.py:73 | tools/tests/test_scope_and_registers.py (5 tests tagged D-47: repository clean; detection in content, paths, identifiers and compound names; allowlist and pragma; seeded rows)<br>docs/adr/0008-out-of-scope-content-guard.md (decision)<br>docs/reviews/M0/milestone-review.md (M0 milestone review, APPROVED_WITH_MINORS)<br>83a9090 (reviewed merge candidate, fast-forwarded to main) | — |
+| D-48 | M | M0 | DONE | The roadmap compresses everything into weeks 4–6. | docs/adr/0001-record-architecture-decisions.md<br>docs/traceability/requirements.yaml | — | docs/reviews/M0/milestone-review.md (inspection: all 258 rows carry milestones M0-M12, none a calendar date)<br>docs/adr/0001-record-architecture-decisions.md (gated milestones replace the SRS roadmap dates) | — |
 | D-49 | M | M1 | NOT_STARTED | TimescaleDB availability and licensing. | — | — | — | — |
 | D-50 | M | M5 | NOT_STARTED | MLflow "stages" are deprecated in favour of registry aliases. | — | — | — | — |
 | D-51 | M | M6 | NOT_STARTED | External services must work locally and in CI without real credentials. | — | — | — | — |

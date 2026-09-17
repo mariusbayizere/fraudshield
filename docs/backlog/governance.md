@@ -42,13 +42,13 @@ Format: ID · title · source · priority · due · description · acceptance.
   that `docs/srs.bak/x.md` is not exempted by the `docs/srs/` entry.
 
 ### GOV-5 · Devcontainer workflow triggers and default branch
-- **Source:** DR-7 (NIT) · **Priority:** low · **Due:** after `main` exists
+- **Source:** DR-7 (NIT) · **Priority:** low · **Due:** M1
 - **Status:** triggers widened in the path-filtered workflows (lockfiles, manifests, `.mvn`);
   remaining: `pyproject.toml`, `tools/**`, `package.json` if post-create depends on them; the owner
   sets `main` as the default branch so the nightly schedule runs.
 
 ### GOV-6 · Line pragma inside fenced code blocks
-- **Source:** DR-9 (NIT) · **Priority:** low · **Due:** unscheduled
+- **Source:** DR-9 (NIT) · **Priority:** low · **Due:** M2
 - **Acceptance:** the scope-guard pragma is ignored inside fenced code blocks in Markdown, or ADR 0008
   documents that it is honoured there.
 
@@ -63,5 +63,28 @@ Format: ID · title · source · priority · due · description · acceptance.
 - **Acceptance:** compose and Kubernetes images are pinned by digest, with an update process.
 
 ### GOV-9 · Branch protection on `main`
-- **Source:** G.2; `gh` not authenticated on the build machine · **Priority:** high · **Owner action**
+- **Source:** G.2; `gh` not authenticated on the build machine · **Priority:** high · **Due:** M1 (owner action)
 - **Acceptance:** `main` is the default branch and requires the `ci` jobs (and `stack` when it runs).
+
+### GOV-10 · Gate evidence must quote job results, not run conclusions
+- **Source:** M0 milestone review F-4 (NIT) · **Priority:** medium · **Due:** M1
+- **Problem:** with path filters, a skipped `stack` or `build-and-verify` job still makes the run
+  conclude "success".
+- **Acceptance:** evidence records and any automated run verification check the named job ran and
+  succeeded (`GitEvidenceVerifier.ci_run` inspects jobs, not only the run conclusion).
+
+### GOV-11 · D-17 must close on the M6 decision-engine property tests
+- **Source:** M0 milestone review F-2 (NIT) · **Priority:** medium · **Due:** M6
+- **Problem:** `MoneyBoundaryTest` is tagged D-17, which would satisfy the tagged-test rule before
+  the generative property tests planned in ADR 0009 exist.
+- **Acceptance:** D-17 is closed only with the M6 property tests as evidence (reviewer check), and the
+  row note says so.
+
+### GOV-12 · Rounding tie cases for the remaining currencies
+- **Source:** M0 milestone review F-3 (NIT) · **Priority:** low · **Due:** next change to `MoneyBoundaryTest`
+- **Acceptance:** tie cases for BIF (0 decimals) and USD/EUR/SSP/SOS (2 decimals).
+
+### GOV-13 · Threat model document
+- **Source:** M0 milestone review M-1 (MINOR) · **Priority:** high · **Due:** M1, before the first data-flow component
+- **Note:** this is a product security artefact (build prompt D-28, I.3), not governance tooling; it is
+  delivered as part of M1.
