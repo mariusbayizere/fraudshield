@@ -74,9 +74,34 @@ walks the whole document.
 
 ## m1/contracts-events
 
-CR-02 (events side), CR-11 … CR-17, CR-18 (events side), CR-21 (events side), CR-26 (vectors),
-CR-27 (events fixtures), CR-29 (D-15), CR-33 (proto), CR-34: **OPEN**, to be fixed after the
-branch is rebased onto `main`.
+Rebased onto `m1/contracts-openapi` at fb9093f. The owner's merge order stands: once that branch is
+fast-forwarded to `main`, `main` is fb9093f and this branch needs no further rebase. The original
+contract commit a160160 is now 962cb40; its content is unchanged apart from the regenerated
+traceability matrix. Fix commits: ee3c685 (ADR 0012), ced4324 (contracts), 065a66c (secret scanning),
+b419e1e (event `if` conditions), 837dd48 (secret-format test samples).
+
+| # | Sev | Resolution | Commit | Verification |
+|---|---|---|---|---|
+| CR-02 | BLOCKER | **Events side**: `decision-final` has `event_id`, `decision_sequence`, `final`, `reason_codes`, `review_deadline_at` and `supersedes_decision`, with the same transition rules as the OpenAPI `FinalDecision`. The webhook spec signs each attempt with its own `t` (so late retries stay inside the window) and requires receivers to apply only a higher `decision_sequence` and answer 2xx either way. New `delivery-ordering-vectors.json`; reference `should_apply` | ced4324, b419e1e | `test_decision_final_payload_is_the_openapi_final_decision` (exact equality after resolving `$ref`s); `test_delivery_ordering_vectors` (repeated DECLINE with a higher sequence applied; late APPROVE ignored; duplicate ignored); `test_retries_are_signed_with_the_attempt_time` |
+| CR-11 | MAJOR | `kafka/baseline/` plus `fraudshield_contracts.compatibility`. Mode: backward compatible only, consumers deploy first as tolerant readers (`validate_event(reader=True)`), producers validate closed. `event_type` and `schema_version` bound per topic | ced4324 | `test_current_schema_is_backward_compatible_with_its_baseline` (13 schema files); `test_checker_reports_breaking_changes` (13 kinds, including the review's M4/M4b edits); `test_checker_accepts_compatible_changes` (5); `test_envelope_must_match_the_topic_binding`; `test_consumers_tolerate_unknown_fields_that_producers_may_not_send` |
+| CR-12 | MAJOR | `proto/baseline/scoring-v1.json` (descriptor summary) plus `fraudshield_contracts.proto_compat`; `buf` not added (ADR 0012) | ced4324 | `test_proto_matches_its_committed_baseline`; `test_proto_checker_reports_breaking_changes` compiles edited copies (renumber as in M3, delete without reserve, type change as in M3b, rename, label, enum rename, method removal); reserved removals and added fields accepted, reuse of a reserved number reported |
+| CR-13 | MAJOR | The broad `tok_` allowlist is removed; current Kafka examples use low-entropy placeholders. Allowlists name exact values in exact files, including the pre-fix values still in history, and every allowlist is rule-scoped (`targetRules`). While fixing, the author found that gitleaks 8.30.1 `dir` skips whole files matching a global allowlist path even with `condition = "AND"`: an AWS key planted in the vector file was not reported | 065a66c | `tools/bin/gitleaks-selftest` (make and CI secrets job): 9 planted fake secrets, including one inside an allowlisted fixture, must all be reported in both `git` and `dir` scans. The author ran three config mutations (remove `targetRules`, widen an exact value, remove a path scope), and each failed the self-test. The earlier commit claim "verified that real-looking keys still fail" was inaccurate, as the review said |
+| CR-14 | MAJOR | Rules `fraudshield-api-key` (`fsk_…`) and `fraudshield-webhook-signing-secret` (`whsec_…`); the `whsec_` format is defined in the OpenAPI contract | 065a66c, add5d86 | self-test planted bare `fsk_` and `whsec_prod_` values are reported |
+| CR-15 | MAJOR | Kafka is internal to a deployment: only FraudShield service principals produce and consume (ACLs from `topics.yaml`). Core banking uses HTTP ingest and webhooks. `institution_id` is set from the authenticated principal. The SRS 3.2 direct publish is replaced and recorded (ADR 0012 §2) | ee3c685, ced4324 | `test_only_internal_services_touch_kafka` |
+| CR-16 | MAJOR | Staff notification parameters are closed per kind (`$defs` plus `if`/`then` on `kind`); credentials and links are minted by the auth module at send time and are never in events | ced4324 | `test_staff_notifications_carry_no_credentials_or_contact_details` (temporary password, code, link, missing field, email); `test_every_staff_notification_kind_has_a_closed_parameter_schema` |
+| CR-17 | MAJOR | `verification_link_allowed` required; `auto_block_event_id` required for `sms.auto_block`; E.7 parameters required; `local_time` needs a zone | ced4324 | `test_customer_notifications_fail_closed` (5 cases); phone inside `parameters` rejected (the review's M8 now fails) |
+| CR-18 | MAJOR | **Events side**: shared primitives (13), `transaction-raw` and `decision-final` are compared with OpenAPI after inlining every `$ref`; constant-time comparison asserted | ced4324 | `test_shared_primitives_are_identical_to_openapi`; `test_raw_transaction_payload_has_the_ingest_request_constraints`; `test_structural_comparison_notices_a_weakened_identifier` (the review's M5); `test_signatures_are_compared_in_constant_time` (M7) |
+| CR-21 | MINOR | **Events side**: identical-shape test (see CR-02) | ced4324 | as CR-02 |
+| CR-26 | MINOR | **Events side**: 15 signature vectors (300 and 301 seconds old and in the future, rotation with either or neither secret, missing or duplicate `t`, non-ASCII digits, non-hex `v1`); the verifier accepts exactly one ASCII-digit `t` and 64-hex `v1` values | ced4324 | `test_signature_vectors`, `test_signature_vectors_cover_the_boundaries_and_rotation` |
+| CR-27 | MINOR | **Events side**: fixtures use the unassigned E.164 code 999 | ced4324 | `grep -rn 250788 contracts` is empty |
+| CR-29 | MINOR | **Events side**: the D-15 tag is removed from the envelope `event_id` test | ced4324 | `fs-traceability check` |
+| CR-33 | NIT | **Proto**: `FeatureValue.Missing` empty message; `StageTiming.Stage` enum; `Health` renamed `GetModelStatus`, with the standard `grpc.health.v1` service registered alongside (ADR 0012 §6) | ced4324 | `test_feature_value_can_represent_structural_missingness`, `test_service_exposes_score_and_model_status` |
+| CR-34 | NIT | Distinct example event IDs | ced4324 | `test_example_event_ids_are_unique` |
+
+Also changed on this branch:
+- `protobuf==7.36.1` is declared in `contracts/pyproject.toml` because `proto_compat` imports it directly. It was already locked at that version; `uv.lock` gains two lines.
+- b419e1e applies the OpenAPI finding on vacuous `if` conditions to the alert, decision-final and transaction-raw event schemas. It refreshes the Kafka baseline; nothing on this branch has reached `main`, so the baseline records v1 as first merged.
+- 837dd48: the new `fsk_` and `whsec_` rules flagged literal format samples from an OpenAPI test in `.pyc` files and pytest's cache (`gitleaks dir` also reads ignored files). The samples are now built at run time.
 
 ## Other process notes
 
