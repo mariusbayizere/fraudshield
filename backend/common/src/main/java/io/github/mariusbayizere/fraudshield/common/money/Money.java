@@ -8,9 +8,13 @@ import java.util.Objects;
  * An amount of money in a specific currency.
  *
  * <p>Amounts are stored exactly as {@code DECIMAL(18,4)} (SRS section 6, D-43): at most 18
- * significant digits and 4 decimal places. The scale is normalised to 4 so that equal amounts
- * are equal values regardless of how they were written. Money never uses binary floating
- * point, and arithmetic across currencies is rejected rather than silently converted.
+ * significant digits and 4 decimal places. The scale is normalised to 4 so that equal amounts are
+ * equal values regardless of how they were written. Money never uses binary floating point, and
+ * arithmetic across currencies is rejected rather than silently converted.
+ *
+ * <p>The sign is not restricted here: compensating and reversal entries need negative amounts.
+ * Boundaries that require a positive amount, such as transaction ingestion (build prompt E.1:
+ * {@code amount > 0}), validate it with {@link #isPositive()}.
  *
  * @param amount exact decimal amount, scale normalised to {@link #STORAGE_SCALE}
  * @param currency ISO 4217 currency
@@ -26,8 +30,8 @@ public record Money(BigDecimal amount, CurrencyCode currency) {
   /**
    * Creates a money value, rejecting amounts that cannot be stored exactly.
    *
-   * @throws IllegalArgumentException if the amount has more than 4 decimal places or more
-   *     than 14 integer digits
+   * @throws IllegalArgumentException if the amount has more than 4 decimal places or more than 14
+   *     integer digits
    */
   public Money {
     Objects.requireNonNull(amount, "amount");
@@ -63,8 +67,8 @@ public record Money(BigDecimal amount, CurrencyCode currency) {
   }
 
   /**
-   * The amount rounded to the currency's minor unit for display, using banker's rounding.
-   * For example 1250.5000 RWF displays as 1250 and 99.9950 KES as 100.00.
+   * The amount rounded to the currency's minor unit for display, using banker's rounding. For
+   * example 1250.5000 RWF displays as 1250 and 99.9950 KES as 100.00.
    */
   public BigDecimal displayAmount() {
     return amount.setScale(currency.minorUnitDigits(), RoundingMode.HALF_EVEN);

@@ -7,11 +7,10 @@ import java.util.regex.Pattern;
 /**
  * ISO 4217 currencies accepted by FraudShield, with their minor-unit exponents.
  *
- * <p>The exponents are held in code rather than read from the JDK so that amount formatting
- * cannot change with a JDK upgrade (D-43). A unit test cross-checks the table against
- * {@link java.util.Currency}. The set covers the five EAC markets in the dataset (RW, KE, TZ,
- * UG, CD), the remaining EAC member states, and the settlement currencies seen in
- * cross-border corridors.
+ * <p>The exponents are held in code rather than read from the JDK so that amount formatting cannot
+ * change with a JDK upgrade (D-43). A unit test cross-checks the table against {@link
+ * java.util.Currency}. The set covers the five EAC markets in the dataset (RW, KE, TZ, UG, CD), the
+ * remaining EAC member states, and the settlement currencies seen in cross-border corridors.
  */
 public enum CurrencyCode {
   RWF(0),

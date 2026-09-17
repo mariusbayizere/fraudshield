@@ -35,13 +35,14 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
     <archunit.version>1.5.0</archunit.version>
-    <jqwik.version>1.10.1</jqwik.version>
     <checkstyle.version>14.1.0</checkstyle.version>
     <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
     <spotbugs.version>4.10.4</spotbugs.version>
     <spotbugs-maven-plugin.version>4.10.4.1</spotbugs-maven-plugin.version>
     <findsecbugs.version>1.14.0</findsecbugs.version>
     <jacoco.version>0.8.15</jacoco.version>
+    <spotless-maven-plugin.version>3.10.2</spotless-maven-plugin.version>
+    <google-java-format.version>1.36.1</google-java-format.version>
     <maven-enforcer-plugin.version>3.6.3</maven-enforcer-plugin.version>
 
     <!-- SRS 8.1: Java unit coverage >= 85%. -->
@@ -54,11 +55,6 @@
         <groupId>com.tngtech.archunit</groupId>
         <artifactId>archunit-junit5</artifactId>
         <version>${archunit.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>net.jqwik</groupId>
-        <artifactId>jqwik</artifactId>
-        <version>${jqwik.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
@@ -81,6 +77,29 @@
                 <banDuplicatePomDependencyVersions/>
               </rules>
             </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!-- Formatter (build prompt M0: formatters). Fails the build on unformatted Java;
+           `./mvnw spotless:apply` rewrites files. -->
+      <plugin>
+        <groupId>com.diffplug.spotless</groupId>
+        <artifactId>spotless-maven-plugin</artifactId>
+        <version>${spotless-maven-plugin.version}</version>
+        <configuration>
+          <java>
+            <googleJavaFormat>
+              <version>${google-java-format.version}</version>
+              <style>GOOGLE</style>
+            </googleJavaFormat>
+          </java>
+        </configuration>
+        <executions>
+          <execution>
+            <id>spotless-check</id>
+            <phase>validate</phase>
+            <goals><goal>check</goal></goals>
           </execution>
         </executions>
       </plugin>

@@ -33,7 +33,7 @@ htmlcov/
 
 # --- Java ---
 target/
-.mvn/wrapper/maven-wrapper.jar
+**/.mvn/wrapper/maven-wrapper.jar
 
 # --- Node ---
 node_modules/

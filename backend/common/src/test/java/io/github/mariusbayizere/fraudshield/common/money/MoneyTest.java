@@ -5,15 +5,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
 import java.util.Currency;
-import net.jqwik.api.ForAll;
-import net.jqwik.api.Property;
-import net.jqwik.api.constraints.BigRange;
-import net.jqwik.api.constraints.Scale;
+import java.util.SplittableRandom;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
 
 class MoneyTest {
 
@@ -32,7 +31,10 @@ class MoneyTest {
     "1251.5, RWF, 1252",
     "99.995, KES, 100.00",
     "1000, UGX, 1000",
-    "0.0049, CDF, 0.00"
+    "0.0049, CDF, 0.00",
+    "0.125, KES, 0.12",
+    "0.135, KES, 0.14",
+    "-0.125, KES, -0.12"
   })
   void displayAmountRoundsToMinorUnitsWithBankersRounding(
       String amount, CurrencyCode currency, String expected) {
@@ -84,11 +86,43 @@ class MoneyTest {
     assertThat(CurrencyCode.parse(null)).isEmpty();
   }
 
-  @Property
-  void additionIsExactForStorableAmounts(
-      @ForAll @BigRange(min = "0", max = "1000000000") @Scale(4) BigDecimal a,
-      @ForAll @BigRange(min = "0", max = "1000000000") @Scale(4) BigDecimal b) {
+  /** Fixed seed: generated cases are identical on every run and every machine. */
+  private static final long PROPERTY_SEED = 20260917L;
+
+  private static final int PROPERTY_CASES = 1000;
+
+  /** Maximum amount in ten-thousandths (10^9 whole units at scale 4). */
+  private static final long MAX_SCALED_AMOUNT = 10_000_000_000_000L;
+
+  static Stream<BigDecimal[]> storableAmountPairs() {
+    SplittableRandom random = new SplittableRandom(PROPERTY_SEED);
+    Stream<BigDecimal[]> edges =
+        Stream.of(
+            new BigDecimal[] {BigDecimal.ZERO, BigDecimal.ZERO},
+            new BigDecimal[] {new BigDecimal("0.0001"), new BigDecimal("0.0001")},
+            new BigDecimal[] {new BigDecimal("1000000000.0000"), new BigDecimal("0.9999")});
+    Stream<BigDecimal[]> generated =
+        Stream.generate(
+                () ->
+                    new BigDecimal[] {
+                      BigDecimal.valueOf(random.nextLong(MAX_SCALED_AMOUNT + 1), 4),
+                      BigDecimal.valueOf(random.nextLong(MAX_SCALED_AMOUNT + 1), 4)
+                    })
+            .limit(PROPERTY_CASES);
+    return Stream.concat(edges, generated);
+  }
+
+  @ParameterizedTest
+  @MethodSource("storableAmountPairs")
+  void additionIsExactForStorableAmounts(BigDecimal a, BigDecimal b) {
     Money sum = new Money(a, CurrencyCode.RWF).plus(new Money(b, CurrencyCode.RWF));
     assertThat(sum.amount()).isEqualByComparingTo(a.add(b));
+  }
+
+  @Test
+  void negativeAmountsAreRepresentableForCompensatingEntries() {
+    assertThat(Money.of("-15000", CurrencyCode.RWF).isPositive()).isFalse();
+    assertThat(Money.of("-15000", CurrencyCode.RWF).plus(Money.of("15000", CurrencyCode.RWF)))
+        .isEqualTo(Money.of("0", CurrencyCode.RWF));
   }
 }
