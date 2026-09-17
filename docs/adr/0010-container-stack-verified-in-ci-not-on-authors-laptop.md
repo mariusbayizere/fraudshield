@@ -47,9 +47,10 @@ Option 3.
 2. **Codespaces** *(owner decision; configuration by the author)*. `.devcontainer/devcontainer.json` (4 cores / 16 GB; Docker-in-Docker; Temurin
    21.0.12; Node 24.21.0 with pnpm via Corepack; uv 0.12.15 and Python 3.12.14, checksum-verified)
    runs `REQUIRE_DOCKER=1 make ci` after creation. The `devcontainer` workflow builds it on a
-   GitHub runner and re-runs the smoke test inside it. **Status: unverified until that workflow
-   passes** — its first run (35181726205) failed in post-create; `main` is not created until it
-   is green.
+   GitHub runner and re-runs the smoke test inside it. **Status: verified** by run 35184012247 on
+   6942c96 (post-create including the Docker stack, then the in-container smoke test), after four
+   failing runs whose causes — git ownership of the mounted workspace, the pnpm store inside the
+   workspace, and PATH — were found through the post-create log annotation and fixed.
 3. **Docker-dependent suites** *(owner decision; mechanisms designed by the author)*. They run in CI on every push (`REQUIRE_DOCKER=1` for all CI jobs)
    and can be run interactively in Codespaces. On a machine without Docker they are skipped with
    an explicit message, never silently:
