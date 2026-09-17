@@ -25,9 +25,10 @@
     }
   },
   "remoteEnv": {
-    "PATH": "${containerEnv:HOME}/.local/bin:${containerEnv:PATH}",
+    "PATH": "/home/vscode/.local/bin:${containerEnv:PATH}",
     "UV_PYTHON_PREFERENCE": "only-managed"
   },
+  "remoteUser": "vscode",
   "postCreateCommand": "bash .devcontainer/post-create.sh",
   "forwardPorts": [5000, 8025, 8089],
   "portsAttributes": {

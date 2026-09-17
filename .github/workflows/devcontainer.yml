@@ -78,6 +78,7 @@ jobs:
           push: never
           runCmd: |
             set -euo pipefail
+            export PATH="$HOME/.local/bin:$PATH"
             test -f .devcontainer/.post-create-ok || { echo "post-create did not complete" >&2; exit 1; }
             java -version 2>&1 | head -1
             uv --version

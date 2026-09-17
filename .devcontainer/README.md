@@ -12,6 +12,8 @@ laptop; use this container for the compose stack and for Docker-dependent suites
   dependencies, installs git hooks, waits for the Docker daemon, then runs `REQUIRE_DOCKER=1 make
   ci` (stack included). On success it writes `.devcontainer/.post-create-ok` (git-ignored), which
   the `devcontainer` CI workflow checks.
+- **User and PATH:** runs as `vscode`; `/home/vscode/.local/bin` (uv, uvx, pnpm) is prepended to
+  `PATH` through `remoteEnv`.
 - **Ports:** 5000 MLflow, 8025 Mailpit UI, 8089 WireMock.
 
 Versions here must match `.tool-versions`; the `devcontainer` workflow rebuilds the container when
