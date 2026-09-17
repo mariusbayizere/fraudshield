@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+"""Check out each commit of a branch and run the fast checks for what it touches (ADR 0015).
+
+Usage: uv run python tools/bin/verify-branch-commits <base> <branch> <report.md>
+
+For every commit in base..branch (oldest first) a detached worktree is checked out and these
+run: the commit-message and governance checks always; ruff, format, mypy and pytest for each
+touched Python package (tools, ml, contracts; all three when shared files change); ``mvnw verify``
+when the backend changes; frontend typecheck, lint, format and tests when the frontend changes;
+the gitleaks self-test when secret scanning changes. Docker-dependent suites are left to CI
+(ADR 0010). The report has one row per commit; the exit status is 1 if any commit fails.
+"""
+
+from __future__ import annotations
+
+import os
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+PYTHON_PACKAGES = ("tools", "ml", "contracts")
+SHARED_PYTHON = ("pyproject.toml", "uv.lock", "docs/traceability/", "docs/srs/")
+
+
+def run(command: list[str], cwd: Path) -> tuple[bool, str]:
+    # The worktree has its own .venv; an inherited VIRTUAL_ENV would point uv at the caller's.
+    env = {key: value for key, value in os.environ.items() if key != "VIRTUAL_ENV"}
+    result = subprocess.run(  # noqa: S603 - fixed commands built below
+        command, cwd=cwd, capture_output=True, text=True, check=False, env=env
+    )
+    tail = (result.stdout + result.stderr).strip().splitlines()[-3:]
+    return result.returncode == 0, " / ".join(tail)
+
+
+def checks_for(files: list[str], worktree: Path) -> list[tuple[str, list[str], str]]:
+    """(label, command, working directory relative to the worktree) for the touched components."""
+    checks: list[tuple[str, list[str], str]] = [
+        ("uv sync", ["uv", "sync", "--all-packages", "--locked", "-q"], "."),
+        ("defect register", ["uv", "run", "fs-defect-register", "--check"], "."),
+        ("traceability seed", ["uv", "run", "fs-traceability-seed", "--check"], "."),
+        ("traceability", ["uv", "run", "fs-traceability", "check"], "."),
+        ("scope guard", ["uv", "run", "fs-scope-guard"], "."),
+    ]
+    shared = any(f.startswith(SHARED_PYTHON) for f in files)
+    packages = [p for p in PYTHON_PACKAGES if shared or any(f.startswith(f"{p}/") for f in files)]
+    if any(f.startswith("tools/bin/") for f in files) and "tools" not in packages:
+        packages.append("tools")
+    for package in packages:
+        checks += [
+            (f"ruff {package}", ["uv", "run", "ruff", "check", package], "."),
+            (f"format {package}", ["uv", "run", "ruff", "format", "--check", package], "."),
+            (f"mypy {package}", ["uv", "run", "mypy", f"{package}/src", f"{package}/tests"], "."),
+            (f"pytest {package}", ["uv", "run", "pytest", "-q", "-p", "no:cacheprovider"], package),
+        ]
+    if any(f.startswith("backend/") for f in files):
+        checks.append(("maven verify", ["./mvnw", "-B", "-ntp", "-q", "verify"], "backend"))
+    if any(f.startswith("frontend/") for f in files):
+        checks += [
+            ("pnpm install", ["pnpm", "install", "--frozen-lockfile", "--silent"], "frontend"),
+            ("frontend typecheck", ["pnpm", "typecheck"], "frontend"),
+            ("frontend lint", ["pnpm", "lint"], "frontend"),
+            ("frontend format", ["pnpm", "format:check"], "frontend"),
+            ("frontend tests", ["pnpm", "test:coverage"], "frontend"),
+        ]
+    if any(f in (".gitleaks.toml", "tools/bin/gitleaks-selftest") for f in files):
+        if (worktree / "tools/bin/gitleaks-selftest").exists():
+            selftest = ["uv", "run", "python", "tools/bin/gitleaks-selftest"]
+            checks.append(("gitleaks self-test", selftest, "."))
+        else:
+            scan = ["tools/bin/gitleaks", "git", "--log-opts=HEAD", "--redact", "--no-banner"]
+            checks.append(("gitleaks history scan", [*scan, "--exit-code", "1", "."], "."))
+    return checks
+
+
+def git(*args: str) -> str:
+    return subprocess.run(  # noqa: S603 - fixed git subcommands
+        ["git", "-C", str(ROOT), *args],  # noqa: S607
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) != 3:
+        print(__doc__, file=sys.stderr)
+        return 2
+    base, branch, report = argv
+    commits = git("rev-list", "--reverse", f"{base}..{branch}").split()
+    rows: list[str] = []
+    failed = False
+    with tempfile.TemporaryDirectory(prefix="verify-commits-") as temp:
+        worktree = Path(temp) / "worktree"
+        git("worktree", "add", "--detach", str(worktree), commits[0])
+        try:
+            for sha in commits:
+                subprocess.run(  # noqa: S603
+                    ["git", "checkout", "-q", "--detach", sha],  # noqa: S607
+                    cwd=worktree,
+                    check=True,
+                )
+                subject = git("log", "-1", "--format=%s", sha).strip()
+                files = git("diff-tree", "--no-commit-id", "--name-only", "-r", sha).split()
+                message_file = Path(temp) / "message.txt"
+                message_file.write_text(git("log", "-1", "--format=%B", sha), encoding="utf-8")
+                started = time.monotonic()
+                results: list[str] = []
+                ok, detail = run(["uv", "run", "fs-commit-msg", str(message_file)], worktree)
+                results.append("commit message" if ok else f"commit message FAILED ({detail})")
+                commit_ok = ok
+                for label, command, where in checks_for(files, worktree):
+                    ok, detail = run(command, worktree / where)
+                    results.append(label if ok else f"**{label} FAILED** ({detail})")
+                    commit_ok &= ok
+                seconds = round(time.monotonic() - started)
+                failed |= not commit_ok
+                status = "pass" if commit_ok else "**FAIL**"
+                print(f"{sha[:7]} {status} {subject}", flush=True)
+                rows.append(
+                    f"| {sha[:7]} | {subject} | {status} | {seconds} s | {'; '.join(results)} |"
+                )
+        finally:
+            git("worktree", "remove", "--force", str(worktree))
+    header = [
+        f"Per-commit verification of `{base}..{branch}` "
+        "(`tools/bin/verify-branch-commits`, ADR 0015).",
+        "",
+        "| Commit | Subject | Result | Time | Checks |",
+        "|---|---|---|---|---|",
+    ]
+    Path(report).write_text("\n".join(header + rows) + "\n", encoding="utf-8")
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
