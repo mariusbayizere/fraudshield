@@ -1,0 +1,218 @@
+# FraudShield local development stack.
+#
+#   make up            # profile "core": data stores, streaming, MLflow and third-party fakes
+#
+# Profiles: core (M0), ml (scoring service, M5), obs (Prometheus/Grafana/Loki, M9), full (all).
+# Every port binds to 127.0.0.1 only. Credentials come from .env (see .env.example; `make env`).
+# SYNTHETIC DATA ONLY — this stack is not a production deployment (D-21).
+# Image versions and the reasons for each choice: docs/adr/0003, docs/adr/0005.
+
+name: fraudshield
+
+x-defaults: &defaults
+  restart: unless-stopped
+  networks: [fraudshield]
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" }
+
+services:
+  timescaledb:
+    <<: *defaults
+    image: timescale/timescaledb:2.30.0-pg16
+    profiles: [core, full]
+    environment:
+      POSTGRES_DB: fraudshield_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?run make env}
+      MLFLOW_DB_PASSWORD: ${MLFLOW_DB_PASSWORD:?run make env}
+      TIMESCALEDB_TELEMETRY: "off"
+    command: ["postgres", "-c", "shared_preload_libraries=timescaledb", "-c", "timescaledb.telemetry_level=off"]
+    ports: ["127.0.0.1:5432:5432"]
+    volumes:
+      - timescaledb-data:/var/lib/postgresql/data
+      - ./infrastructure/docker/timescaledb/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d fraudshield_db && psql -U postgres -d mlflow -tAc 'select 1' >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    deploy:
+      resources: { limits: { memory: 768m } }
+
+  # Separate PostgreSQL instance for encrypted PII and the tokenisation map (D-20).
+  pii-vault:
+    <<: *defaults
+    image: postgres:16.15
+    profiles: [core, full]
+    environment:
+      POSTGRES_DB: fraudshield_pii
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${PII_VAULT_SUPERUSER_PASSWORD:?run make env}
+    ports: ["127.0.0.1:5433:5432"]
+    volumes: [pii-vault-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d fraudshield_pii"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    deploy:
+      resources: { limits: { memory: 256m } }
+
+  redis:
+    <<: *defaults
+    image: redis:7.2.16
+    profiles: [core, full]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?run make env}
+    command: ["sh", "-c", "exec redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy noeviction --requirepass \"$$REDIS_PASSWORD\""]
+    ports: ["127.0.0.1:6379:6379"]
+    volumes: [redis-data:/data]
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    deploy:
+      resources: { limits: { memory: 320m } }
+
+  # Single-node KRaft broker. INTERNAL listener for containers, EXTERNAL for the host.
+  kafka:
+    <<: *defaults
+    image: apache/kafka:4.3.1
+    profiles: [core, full]
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: INTERNAL://:29092,EXTERNAL://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      # Topics are created explicitly from contracts/kafka (M1); never implicitly by producers.
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_HEAP_OPTS: "-Xms256m -Xmx512m"
+    ports: ["127.0.0.1:9092:9092"]
+    volumes: [kafka-data:/var/lib/kafka/data]
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka:29092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 20s
+    deploy:
+      resources: { limits: { memory: 768m } }
+
+  # S3-compatible artifact store for MLflow (ADR 0005).
+  object-store:
+    <<: *defaults
+    image: chrislusf/seaweedfs:4.47
+    profiles: [core, full]
+    environment:
+      S3_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY:?run make env}
+      S3_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY:?run make env}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        umask 077 &&
+        printf '{"identities":[{"name":"fraudshield","credentials":[{"accessKey":"%s","secretKey":"%s"}],"actions":["Admin","Read","Write","List","Tagging"]}]}'
+        "$$S3_ACCESS_KEY" "$$S3_SECRET_KEY" > /tmp/s3.json &&
+        exec weed server -dir=/data -s3 -s3.port=8333 -s3.config=/tmp/s3.json -volume.max=4
+    ports: ["127.0.0.1:8333:8333"]
+    volumes: [object-store-data:/data]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9333/cluster/healthz >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    deploy:
+      resources: { limits: { memory: 384m } }
+
+  object-store-init:
+    image: chrislusf/seaweedfs:4.47
+    profiles: [core, full]
+    networks: [fraudshield]
+    depends_on:
+      object-store: { condition: service_healthy }
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        echo "s3.bucket.list" | weed shell -master=object-store:9333 | grep -q mlflow-artifacts ||
+        echo "s3.bucket.create -name mlflow-artifacts" | weed shell -master=object-store:9333
+    restart: "no"
+
+  mlflow:
+    <<: *defaults
+    image: ghcr.io/mlflow/mlflow:v3.16.0-full
+    profiles: [core, full]
+    depends_on:
+      timescaledb: { condition: service_healthy }
+      object-store-init: { condition: service_completed_successfully }
+    environment:
+      MLFLOW_DB_PASSWORD: ${MLFLOW_DB_PASSWORD:?run make env}
+      MLFLOW_S3_ENDPOINT_URL: http://object-store:8333
+      AWS_ACCESS_KEY_ID: ${OBJECT_STORE_ACCESS_KEY:?run make env}
+      AWS_SECRET_ACCESS_KEY: ${OBJECT_STORE_SECRET_KEY:?run make env}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        exec mlflow server --host 0.0.0.0 --port 5000
+        --backend-store-uri "postgresql://mlflow:$${MLFLOW_DB_PASSWORD}@timescaledb:5432/mlflow"
+        --artifacts-destination s3://mlflow-artifacts --serve-artifacts
+        --allowed-hosts "localhost,localhost:5000,127.0.0.1,127.0.0.1:5000,mlflow,mlflow:5000"
+    ports: ["127.0.0.1:5000:5000"]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=4)\""]
+      interval: 10s
+      timeout: 6s
+      retries: 30
+      start_period: 30s
+    deploy:
+      resources: { limits: { memory: 768m } }
+
+  # Local SMTP fake (D-51). Web UI on 8025.
+  mailpit:
+    <<: *defaults
+    image: axllent/mailpit:v1.31.1
+    profiles: [core, full]
+    ports: ["127.0.0.1:1025:1025", "127.0.0.1:8025:8025"]
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    deploy:
+      resources: { limits: { memory: 64m } }
+
+  # HTTP fakes for Africa's Talking, Google JWKS/token endpoints, PagerDuty and the MNO
+  # SIM-swap signal (D-51). Stub mappings are added with each adapter (M6, M7).
+  wiremock:
+    <<: *defaults
+    image: wiremock/wiremock:3.13.2
+    profiles: [core, full]
+    command: ["--port", "8080", "--disable-banner"]
+    ports: ["127.0.0.1:8089:8080"]
+    volumes:
+      - ./infrastructure/docker/wiremock:/home/wiremock:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/__admin/health >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    deploy:
+      resources: { limits: { memory: 256m } }
+
+networks:
+  fraudshield:
+    name: fraudshield
+
+volumes:
+  timescaledb-data:
+  pii-vault-data:
+  redis-data:
+  kafka-data:
+  object-store-data:
