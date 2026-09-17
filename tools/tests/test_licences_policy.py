@@ -18,6 +18,9 @@ def _dep(scope: str, *declared: str, combine: str = "any", name: str = "lib") ->
         ("Eclipse Public License v2.0", "EPL-2.0"),
         ("Eclipse Public License - v 2.0", "EPL-2.0"),
         ("MIT License", "MIT"),
+        ("The MIT License", "MIT"),
+        ("Eclipse Distribution License - v 1.0", "BSD-3-Clause"),
+        ("EDL 1.0", "BSD-3-Clause"),
         ("Permission is hereby granted, free of charge, to any person", "MIT"),
         ("Python Software Foundation License", "PSF-2.0"),
         ("3-Clause BSD License", "BSD-3-Clause"),
@@ -54,14 +57,21 @@ def test_normalise(raw: str, spdx: str | None) -> None:
         ("runtime", ("(MIT",), "any", None),
         # Scope boundary: weak copyleft only for dev
         ("dev", ("EPL-2.0",), "any", True),
-        ("runtime", ("EPL-2.0",), "any", False),
+        # ADR 0020: unmodified EPL-2.0 binaries may ship; other weak copyleft may not.
+        ("runtime", ("EPL-2.0",), "any", True),
+        ("runtime", ("EPL-1.0",), "any", False),
+        ("runtime", ("LGPL-2.1-only",), "any", False),
+        ("runtime", ("MPL-2.0",), "any", False),
+        ("runtime", ("EPL-2.0 OR LGPL-2.1-only",), "any", True),
+        ("runtime", ("EPL-2.0", "LGPL-2.1-only"), "all", False),
         ("dev", ("GNU Lesser General Public License v3 (LGPLv3)",), "any", True),
         ("dev", ("GPL-3.0-only",), "any", False),
         # Several declared licences
         ("runtime", ("MIT License", "Apache Software License"), "any", None),
         ("runtime", ("GNU General Public License v3 (GPLv3)", "MIT License"), "any", True),
         ("runtime", ("The Apache Software License, Version 2.0", "BSD"), "all", None),
-        ("runtime", ("Apache License, Version 2.0", "Eclipse Public License v2.0"), "all", False),
+        ("runtime", ("Apache License, Version 2.0", "Eclipse Public License v2.0"), "all", True),
+        ("runtime", ("Apache License, Version 2.0", "Mozilla Public License 2.0"), "all", False),
         ("dev", ("Apache License, Version 2.0", "Eclipse Public License v2.0"), "all", True),
         # Nothing declared
         ("dev", (), "any", None),
@@ -100,9 +110,30 @@ def test_exceptions_are_version_pinned() -> None:
     assert evaluate(upgraded) is None
 
 
+def test_dual_licensed_runtime_exceptions_rely_on_the_epl_option() -> None:
+    logback = Dependency(
+        "maven",
+        "ch.qos.logback:logback-core",
+        "1.5.38",
+        "runtime",
+        ("EPL-2.0", "LGPL-2.1-only"),
+        "all",
+    )
+    assert evaluate(logback) is True
+    upgraded = Dependency(
+        "maven",
+        "ch.qos.logback:logback-core",
+        "1.5.39",
+        "runtime",
+        ("EPL-2.0", "LGPL-2.1-only"),
+        "all",
+    )
+    assert evaluate(upgraded) is False
+
+
 def test_violation_messages_distinguish_unidentified_from_not_allowed() -> None:
-    messages = violations([_dep("runtime", "EPL-2.0"), _dep("dev", "BSD", name="vague")])
+    messages = violations([_dep("runtime", "LGPL-2.1-only"), _dep("dev", "BSD", name="vague")])
     assert messages == [
-        "python:lib@1.0 (runtime): ('EPL-2.0',) not allowed for runtime",
+        "python:lib@1.0 (runtime): ('LGPL-2.1-only',) not allowed for runtime",
         "python:vague@1.0 (dev): unidentified licence ('BSD',)",
     ]

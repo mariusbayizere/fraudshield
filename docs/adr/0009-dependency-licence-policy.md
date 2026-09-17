@@ -91,7 +91,10 @@ generative property testing of the decision engine — is kept:
 Current exceptions, verified from shipped licence files on 2026-09-17: `nodeenv@1.10.0`
 (BSD-3-Clause), `com.tngtech.archunit:archunit@1.5.0` (Apache-2.0 AND BSD-3-Clause for shaded
 ASM), and, added with the M1 contract tests, `jsonschema-path@0.5.0` and `pathable@0.6.0`
-(Apache-2.0) and `openapi-schema-validator@0.9.0` (BSD-3-Clause).
+(Apache-2.0) and `openapi-schema-validator@0.9.0` (BSD-3-Clause). ADR 0020 (M1 database module) allows unmodified
+EPL-2.0 binaries at runtime and adds `logback-classic` and `logback-core@1.5.38` (EPL-2.0 OR
+LGPL-2.1-only) and `jakarta.annotation-api@3.0.0` (EPL-2.0 OR GPL-2.0-only WITH
+Classpath-exception-2.0).
 
 ## Consequences
 

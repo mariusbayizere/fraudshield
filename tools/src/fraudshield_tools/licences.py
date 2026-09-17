@@ -69,7 +69,10 @@ DENIED = frozenset(
     }
 )
 KNOWN = PERMISSIVE | DEV_ONLY | DENIED
-ALLOWED = {"runtime": PERMISSIVE, "dev": PERMISSIVE | DEV_ONLY}
+# Weak copyleft allowed at runtime for unmodified third-party binaries only (ADR 0020): the ASF
+# "Category B" position. Spring Boot's logging and Jakarta APIs are EPL-2.0 (or dual-licensed).
+RUNTIME_WEAK_COPYLEFT = frozenset({"EPL-2.0"})
+ALLOWED = {"runtime": PERMISSIVE | RUNTIME_WEAK_COPYLEFT, "dev": PERMISSIVE | DEV_ONLY}
 # SPDX exceptions that do not change the base licence's acceptability.
 ALLOWED_WITH_EXCEPTIONS = frozenset({"LLVM-exception"})
 
@@ -96,6 +99,20 @@ EXCEPTIONS: dict[str, tuple[str, str]] = {
         "classifier says only 'BSD License'; dist-info/licenses/LICENSE is headed "
         "'BSD 3-Clause License' with the non-endorsement clause (verified 2026-09-17)",
     ),
+    "maven:ch.qos.logback:logback-classic@1.5.38": (
+        "EPL-2.0 OR LGPL-2.1-only",
+        "POM lists EPL-2.0 and LGPL-2.1-only as separate entries; LICENSE.txt at tag v_1.5.38 says "
+        "dual-licensed 'per the licensee's choosing' (verified 2026-09-17)",
+    ),
+    "maven:ch.qos.logback:logback-core@1.5.38": (
+        "EPL-2.0 OR LGPL-2.1-only",
+        "same project and licence file as logback-classic 1.5.38 (verified 2026-09-17)",
+    ),
+    "maven:jakarta.annotation:jakarta.annotation-api@3.0.0": (
+        "EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0",
+        "POM lists 'EPL 2.0' and 'GPL2 w/ CPE'; the jar's META-INF/NOTICE.md declares "
+        "SPDX 'EPL-2.0 OR GPL-2.0-only with Classpath-exception-2.0' (verified 2026-09-17)",
+    ),
     "maven:com.tngtech.archunit:archunit@1.5.0": (
         "Apache-2.0 AND BSD-3-Clause",
         "POM declares Apache-2.0 and 'BSD'; the BSD part is shaded ASM, whose bundled "
@@ -108,7 +125,9 @@ _NAME_PATTERNS: tuple[tuple[str, str], ...] = (
         r"^(the )?apache (software )?licen[cs]e,? (version )?2(\.0)?$|^apache[- ]2(\.0)?$",
         "Apache-2.0",
     ),
-    (r"^mit( licen[cs]e)?$|^expat$|^permission is hereby granted, free of charge", "MIT"),
+    (r"^(the )?mit( licen[cs]e)?$|^expat$|^permission is hereby granted, free of charge", "MIT"),
+    # The Eclipse Distribution License 1.0 is the BSD 3-Clause text (SPDX lists it as BSD-3-Clause).
+    (r"^(eclipse distribution licen[cs]e,? ?(- )?v(ersion)? ?1\.0|edl 1\.0)$", "BSD-3-Clause"),
     (r"^(bsd[- ]2[- ]clause|simplified bsd)( licen[cs]e)?$", "BSD-2-Clause"),
     (
         r"^(bsd[- ]3[- ]clause|3[- ]clause bsd|new bsd|modified bsd|revised bsd)( licen[cs]e)?$",

@@ -21,9 +21,10 @@ def _dep(scope: str, *declared: str) -> Dependency:
 def test_policy_by_scope() -> None:
     assert violations([_dep("dev", "Eclipse Public License v2.0")]) == []
     assert violations([_dep("runtime", "Apache License, Version 2.0")]) == []
-    runtime_epl = violations([_dep("runtime", "Eclipse Public License v2.0")])
-    assert len(runtime_epl) == 1
-    assert "not allowed for runtime" in runtime_epl[0]
+    assert violations([_dep("runtime", "Eclipse Public License v2.0")]) == []  # ADR 0020
+    runtime_lgpl = violations([_dep("runtime", "GNU Lesser General Public License v3 (LGPLv3)")])
+    assert len(runtime_lgpl) == 1
+    assert "not allowed for runtime" in runtime_lgpl[0]
     assert "not allowed" in violations([_dep("dev", "GNU Affero General Public License v3")])[0]
     assert "unidentified" in violations([_dep("dev")])[0]
 
@@ -104,5 +105,5 @@ def test_main_writes_inventory_and_fails_on_violation(
     output = tmp_path / "inventory.json"
     assert licences.main(["--output", str(output)]) == 0
     assert json.loads(output.read_text())[0]["name"] == "org.example:lib"
-    deps.append(_dep("runtime", "Eclipse Public License v2.0"))
+    deps.append(_dep("runtime", "GNU Lesser General Public License v3 (LGPLv3)"))
     assert licences.main([]) == 1
