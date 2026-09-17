@@ -296,6 +296,7 @@ def test_scoring_result_carries_all_nine_required_fields() -> None:
         ("get", "/actuator/health"),
     ],
 )
+@pytest.mark.req("FR-01-07")
 def test_srs_named_routes_exist(method: str, path: str) -> None:
     assert method in DOC["paths"].get(path, {}), f"{method.upper()} {path}"
 

@@ -72,6 +72,7 @@ class DatabaseSecurityTest {
   @ParameterizedTest
   @ValueSource(strings = {"audit_events", "auto_block_events", "alert_decisions"})
   @Tag("FR-06-06")
+  @Tag("NFR-SEC-05")
   void appRoleCannotUpdateOrDeleteAppendOnlyTables(String table) throws SQLException {
     try (Connection app = tenant("fs_app", BANK_A)) {
       String column = table.equals("alert_decisions") ? "analyst_comment" : "entity_id";
@@ -138,7 +139,6 @@ class DatabaseSecurityTest {
   // ---------------------------------------------
 
   @Test
-  @Tag("NFR-SEC-03")
   void institutionsSeeOnlyTheirOwnRows() throws SQLException {
     try (Connection app = tenant("fs_app", BANK_A)) {
       assertThat(strings(app, "SELECT email FROM users")).containsExactly("analyst.a@example.com");
@@ -342,7 +342,6 @@ class DatabaseSecurityTest {
   }
 
   @Test
-  @Tag("NFR-SEC-05")
   void readOnlyRolesCannotReadCredentialMaterial() throws SQLException {
     try (Connection admin = db.superuser()) {
       List<String> readable =
