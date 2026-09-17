@@ -3,7 +3,7 @@
 
 # FraudShield Requirements Traceability Matrix
 
-Rows: 258. Status counts: IN_PROGRESS 5, NOT_STARTED 253.
+Rows: 258. Status counts: IN_PROGRESS 6, NOT_STARTED 252.
 
 | ID | Priority | Milestone | Status | Title | Implementation | Tests | Evidence | Deviations |
 |---|---|---|---|---|---|---|---|---|
@@ -246,7 +246,7 @@ Rows: 258. Status counts: IN_PROGRESS 5, NOT_STARTED 253.
 | D-30 | M | M1 | NOT_STARTED | auto_block_events is declared immutable but contains mutable columns | — | — | — | — |
 | D-31 | M | M1 | NOT_STARTED | Tables required by functional requirements are missing from the schema. | — | — | — | — |
 | D-32 | M | M1 | NOT_STARTED | Audit log needs tamper evidence, not only permissions, and "12 action types" are unnamed. | — | — | — | — |
-| D-33 | M | M8 | NOT_STARTED | Several SRS colour pairings fail WCAG 2.1 AA text contrast | — | — | — | — |
+| D-33 | M | M8 | IN_PROGRESS | Several SRS colour pairings fail WCAG 2.1 AA text contrast | frontend/src/design-system/color/contrast.ts | frontend/src/design-system/color/contrast.test.ts:46<br>frontend/src/design-system/color/contrast.test.ts:60<br>frontend/src/design-system/color/contrast.test.ts:66 | — | — |
 | D-34 | M | M8 | NOT_STARTED | animate-pulse "infinite" on HIGH cards violates WCAG 2.2.2 (motion > 5 s needs a pause control), conflicts with the mobile battery principle in 05B, and causes fatigue on long shifts. | — | — | — | — |
 | D-35 | M | M8 | NOT_STARTED | HIGH "pinned at top" uses MUI X DataGrid row pinning, which is a paid (Pro) feature. | — | — | — | — |
 | D-36 | M | M8 | NOT_STARTED | Breakpoint names and widths conflict | — | — | — | — |

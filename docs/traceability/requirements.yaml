@@ -3473,9 +3473,10 @@ requirements:
   affects:
   - UX-DASH-01
   - UX-DASH-03
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation:
+  - frontend/src/design-system/color/contrast.ts
   evidence: []
   deviations: []
 - id: D-34
