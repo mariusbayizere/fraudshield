@@ -4,7 +4,7 @@
 # TimescaleDB extension available, PII vault reachable, Redis authenticated round-trip,
 # Kafka topic create/describe/delete, S3 bucket present, MLflow run with an artifact stored
 # through the S3 store, Mailpit and WireMock ready.
-set -euo pipefail
+set -Eeuo pipefail
 
 compose() { docker compose --profile core "$@"; }
 current_step="start"
@@ -12,25 +12,30 @@ step() {
   current_step="$1"
   printf '\n== %s\n' "$1"
 }
-# In GitHub Actions, surface the failing step as an annotation (visible without log access).
-on_error() {
-  local status=$? line=$1 command=$2
-  echo "smoke test failed in step '${current_step}' at line ${line}: ${command} (exit ${status})" >&2
+# Every failure path goes through fail(), which in GitHub Actions also emits an error
+# annotation, readable through the public API without log access.
+fail() {
+  echo "smoke test failed in step '${current_step}': $1" >&2
   if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
-    echo "::error title=smoke test failed::step '${current_step}', line ${line}, exit ${status}: ${command}"
+    echo "::error title=smoke test failed::step '${current_step}': $1"
   fi
+  exit 1
 }
-trap 'on_error "$LINENO" "$BASH_COMMAND"' ERR
+trap 'fail "line $LINENO, exit $?: $BASH_COMMAND"' ERR
 
 step "service health"
-unhealthy=$(compose ps --format '{{.Service}} {{.Health}}' | awk '$1 != "object-store-init" && $2 != "healthy"')
-compose ps --format 'table {{.Service}}\t{{.Image}}\t{{.Status}}'
-if [[ -n "$unhealthy" ]]; then
-  echo "not healthy: $unhealthy" >&2
-  exit 1
-fi
-init_exit=$(docker inspect --format '{{.State.ExitCode}}' "$(compose ps -a -q object-store-init)")
-[[ "$init_exit" == "0" ]] || { echo "object-store-init exited $init_exit" >&2; exit 1; }
+compose ps -a --format 'table {{.Service}}\t{{.Image}}\t{{.Status}}'
+for service in timescaledb pii-vault redis kafka object-store mlflow mailpit wiremock; do
+  container=$(compose ps -q "$service")
+  [[ -n "$container" ]] || fail "$service has no running container"
+  health=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container")
+  [[ "$health" == "healthy" ]] || fail "$service health is '$health'"
+  echo "$service: $health"
+done
+init_container=$(compose ps -a -q object-store-init)
+[[ -n "$init_container" ]] || fail "object-store-init container not found"
+init_exit=$(docker inspect --format '{{.State.ExitCode}}' "$init_container")
+[[ "$init_exit" == "0" ]] || fail "object-store-init exited $init_exit"
 echo "object-store-init exited 0"
 
 step "timescaledb: extension preloaded and installable; mlflow database exists"
@@ -44,8 +49,7 @@ compose exec -T pii-vault psql -U postgres -d fraudshield_pii -tAc "select curre
 step "redis: authenticated write/read, unauthenticated access refused"
 compose exec -T redis sh -c 'REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli set fs:smoke ok EX 30 && REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli get fs:smoke'
 if compose exec -T redis redis-cli get fs:smoke 2>&1 | grep -q '^ok$'; then
-  echo "redis accepted an unauthenticated read" >&2
-  exit 1
+  fail "redis accepted an unauthenticated read"
 fi
 echo "unauthenticated read refused"
 
