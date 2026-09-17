@@ -100,6 +100,38 @@ def render(
         lines.append(
             f"| {country} | {target:.1%} | {measures['country_share'].get(country, 0.0):.2%} |"
         )
+    overall_ci, test_ci = measures["fraud_rate_ci"]["overall"], measures["fraud_rate_ci"]["test"]
+    lines += [
+        "",
+        f"Overall fraud rate 95% CI: {overall_ci[0]:.3%} to {overall_ci[1]:.3%}; "
+        f"test period: {test_ci[0]:.3%} to {test_ci[1]:.3%}.",
+    ]
+    monthly = measures["monthly_fraud"]
+    lines += [
+        "",
+        "## Monthly fraud rate against the calibrated schedule (ML-DATA-02)",
+        "",
+        "The schedule in `fraud.monthly_intensity` sets each month's target and the generator",
+        "places that many fraudulent rows by exact quota, so a deviation can only come from",
+        "rounding, from incidents that spill into the next month, and from the volume actually",
+        "written. The Wilson 95% confidence interval separates that sampling noise (the interval",
+        "covers the target) from bias (it does not).",
+        "",
+        "| Month | Rows | Fraud | Rate | 95% CI | Target | Covers target |",
+        "|---|---:|---:|---:|---|---:|---|",
+    ]
+    for row in monthly:
+        lines.append(
+            f"| {row['month']} | {row['rows']:,} | {row['fraud']:,} | {row['rate']:.3%} | "
+            f"{row['ci_lower']:.3%} - {row['ci_upper']:.3%} | {row['target']:.3%} | "
+            + ("yes" if row["covers_target"] else "**no**")
+            + " |"
+        )
+    covered = sum(1 for row in monthly if row["covers_target"])
+    lines += [
+        "",
+        f"{covered} of {len(monthly)} monthly intervals cover their target.",
+    ]
     lines += [
         "",
         "## Single-feature AUC (limit 0.80, as max(AUC, 1 - AUC), observed label)",
@@ -121,8 +153,14 @@ def render(
         + ", ".join(measures["shortcut_features"])
         + f"): AUC {measures['shortcut_detector_auc']:.3f}.",
         f"- File (month) order alone: AUC {measures['file_order_auc']:.3f}.",
-        "- Identifier construction over distinct tokens: "
-        + ", ".join(f"{k} {v:.3f}" for k, v in measures["identifier_construction_auc"].items())
+        "- Identifier construction over distinct tokens (band is the wider of 0.03 and the 95%"
+        " sampling band under the null, 1.96 SE): "
+        + ", ".join(
+            f"{k} {v:.3f} (+/-{measures['identifier_construction_band'][k]:.3f}, "
+            f"{measures['identifier_token_counts'][k]['fraud_values']:,} of "
+            f"{measures['identifier_token_counts'][k]['values']:,} tokens used by fraud)"
+            for k, v in measures["identifier_construction_auc"].items()
+        )
         + ".",
         f"- Trivial rule baseline (amount at or above the rule threshold, or local night): AUC "
         f"{measures['trivial_rule_auc']:.3f}.",

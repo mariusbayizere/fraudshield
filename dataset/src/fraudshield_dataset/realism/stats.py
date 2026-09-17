@@ -6,6 +6,7 @@ tested against hand-computed cases, so the checks do not depend on a machine-lea
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import numpy as np
@@ -32,6 +33,34 @@ def auc(scores: Floats, labels: Bools) -> float:
     ranks[order] = np.repeat(average, ends - starts)
     rank_sum = float(ranks[labels].sum())
     return (rank_sum - positives * (positives + 1) / 2.0) / (positives * negatives)
+
+
+def wilson_interval(successes: int, total: int, z: float = 1.96) -> tuple[float, float]:
+    """Wilson score interval for a binomial proportion (the default z gives 95%).
+
+    Used for monthly fraud rates: at a few hundred fraud rows a month the normal approximation
+    is unusable near zero, while the Wilson interval stays inside [0, 1] and keeps its nominal
+    coverage, so a rate that misses its target can be called noise or bias honestly.
+    """
+    if total <= 0:
+        return (0.0, 0.0)
+    rate = successes / total
+    denominator = 1.0 + z**2 / total
+    centre = (rate + z**2 / (2 * total)) / denominator
+    spread = z * math.sqrt(rate * (1.0 - rate) / total + z**2 / (4 * total**2)) / denominator
+    return (max(0.0, centre - spread), min(1.0, centre + spread))
+
+
+def null_auc_stderr(positives: int, negatives: int) -> float:
+    """Standard error of the AUC under the null hypothesis that it is 0.5.
+
+    The Mann-Whitney U statistic has variance ``n1 * n0 * (n1 + n0 + 1) / 12`` when the labels are
+    exchangeable, so an AUC computed over few positives is noisy by construction. The checks use
+    this to size their tolerance band instead of trusting one fixed number at every sample size.
+    """
+    if positives <= 0 or negatives <= 0:
+        return 0.0
+    return math.sqrt((positives + negatives + 1) / (12.0 * positives * negatives))
 
 
 def separation(scores: Floats, labels: Bools) -> float:

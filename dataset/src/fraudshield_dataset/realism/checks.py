@@ -35,10 +35,17 @@ from numpy.typing import NDArray
 from fraudshield_dataset.generator.config import CHANNELS, SimulationConfig
 from fraudshield_dataset.generator.fraud import NOVEL_VARIANT
 from fraudshield_dataset.generator.legit import MINOR_UNITS
-from fraudshield_dataset.realism.stats import auc, cross_validated_auc, separation
+from fraudshield_dataset.realism.stats import (
+    auc,
+    cross_validated_auc,
+    null_auc_stderr,
+    separation,
+    wilson_interval,
+)
 
 SINGLE_FEATURE_AUC_LIMIT = 0.80
 SHORTCUT_TOLERANCE = 0.03
+CI_Z = 1.96
 DISTRIBUTION_TOLERANCE_PP = 0.5
 MIN_ROWS_FULL = 5_000_000
 PEAK_RSS_LIMIT_BYTES = 2 * 2**30
@@ -144,6 +151,8 @@ class Dataset:
         months = sorted(
             p.name.removeprefix("month=") for p in (root / "transactions").glob("month=*")
         )
+        if not months:
+            raise FileNotFoundError(f"no month partitions under {root / 'transactions'}")
         for file_index, month in enumerate(months):
             transactions = pq.read_table(
                 root / "transactions" / f"month={month}" / "part-0000.parquet"
@@ -305,16 +314,28 @@ def _leakage_checks(
     measures["file_order_auc"] = file_order
 
     construction = {}
+    token_bands = {}
     for column, seen in data.tokens.items():
         values = list(seen)
         labels = np.array([seen[v] for v in values])
+        positives = int(labels.sum())
         construction[column] = (
             cross_validated_auc(token_features(values), labels, folds=FOLDS, seed=config.seed)
             if labels.any() and not labels.all()
             else 0.5
         )
+        # Few fraud tokens make this AUC noisy on its own, so the band is the wider of the fixed
+        # tolerance and the 95% sampling band under the null hypothesis of no construction signal.
+        token_bands[column] = max(
+            SHORTCUT_TOLERANCE,
+            CI_Z * null_auc_stderr(positives, len(values) - positives),
+        )
     measures["identifier_construction_auc"] = construction
-    worst_token = max(construction, key=lambda k: abs(construction[k] - 0.5))
+    measures["identifier_construction_band"] = token_bands
+    measures["identifier_token_counts"] = {
+        column: {"values": len(seen), "fraud_values": sum(seen.values())}
+        for column, seen in data.tokens.items()
+    }
 
     threshold = config.parameters.number("fraud.rule_amount_threshold_rwf")
     rule = (data.features.get("amount_rwf") >= threshold).astype(float) + (
@@ -348,11 +369,13 @@ def _leakage_checks(
         ),
         CheckResult(
             "identifier construction",
-            abs(construction[worst_token] - 0.5) <= SHORTCUT_TOLERANCE,
+            all(abs(construction[k] - 0.5) <= token_bands[k] for k in construction),
             True,
-            ", ".join(f"{k} {v:.3f}" for k, v in construction.items()),
-            f"token characters do not identify fraud tokens (0.5 +/- {SHORTCUT_TOLERANCE})",
-            "depth-3 tree, 5-fold CV over distinct token values",
+            ", ".join(
+                f"{k} {v:.3f} (band +/-{token_bands[k]:.3f})" for k, v in construction.items()
+            ),
+            "token characters do not identify fraud tokens, within the 95% null band",
+            "depth-3 tree, 5-fold CV over distinct token values; band is max(0.03, 1.96 SE)",
         ),
         CheckResult(
             "trivial rule baseline",
@@ -451,6 +474,30 @@ def _distribution_checks(
         machine=run["machine"],
         chunk_size=run["chunk_size"],
     )
+    monthly = []
+    for index, month in enumerate(sorted(data.rows_by_month)):
+        month_rows = data.rows_by_month[month]
+        month_fraud = sum(data.fraud_types_by_month.get(month, {}).values())
+        low, high = wilson_interval(month_fraud, month_rows, CI_Z)
+        target = config.fraud_rate_by_month[index]
+        monthly.append(
+            {
+                "month": month,
+                "rows": month_rows,
+                "fraud": month_fraud,
+                "rate": month_fraud / month_rows if month_rows else 0.0,
+                "ci_lower": low,
+                "ci_upper": high,
+                "target": target,
+                "covers_target": low <= target <= high,
+            }
+        )
+    measures["monthly_fraud"] = monthly
+    covered = sum(1 for m in monthly if m["covers_target"])
+    overall_ci = wilson_interval(int(data.true.sum()), rows, CI_Z)
+    test_rows = int(splits["test"]["rows"])
+    test_ci = wilson_interval(round(test_rate * test_rows), test_rows, CI_Z)
+    measures["fraud_rate_ci"] = {"overall": overall_ci, "test": test_ci}
     fraud_ok = (
         abs(overall - p.number("fraud.fraud_rate_overall")) * 100 <= DISTRIBUTION_TOLERANCE_PP
         and abs(test_rate - p.number("fraud.fraud_rate_test")) * 100 <= DISTRIBUTION_TOLERANCE_PP
@@ -460,8 +507,17 @@ def _distribution_checks(
             "fraud rate",
             fraud_ok,
             full,
-            f"overall {overall:.3%}, test {test_rate:.3%}",
+            f"overall {overall:.3%} (95% CI {overall_ci[0]:.3%}-{overall_ci[1]:.3%}), "
+            f"test {test_rate:.3%} (95% CI {test_ci[0]:.3%}-{test_ci[1]:.3%})",
             "0.87% overall, 0.91% test, +/- 0.5 pp (ML-DATA-02)",
+        ),
+        CheckResult(
+            "monthly fraud rate",
+            covered == len(monthly),
+            False,
+            f"{covered} of {len(monthly)} months cover their target within a 95% CI",
+            "each month's Wilson 95% CI covers its calibrated intensity target",
+            "a CI that covers the target is sampling noise; one that does not is bias",
         ),
         CheckResult(
             "fraud scenarios",

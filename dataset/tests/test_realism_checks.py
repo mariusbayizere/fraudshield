@@ -157,6 +157,7 @@ def test_cli_report_writes_every_section(plant_base: Path, tmp_path: Path) -> No
         "## Checks",
         "## Temporal split (D-07)",
         "## Distributions against targets",
+        "## Monthly fraud rate against the calibrated schedule (ML-DATA-02)",
         "## Single-feature AUC",
         "## Shortcut and identifier checks",
         "## Labels",
