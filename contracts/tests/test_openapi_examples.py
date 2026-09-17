@@ -98,23 +98,50 @@ def test_unknown_property_is_rejected(name: str) -> None:
         assert errors(DOC, name, extended), f"{name} accepts unknown properties"
 
 
-def test_closed_schemas_are_not_composed_with_allof() -> None:
-    """additionalProperties inside allOf ignores sibling members, so no instance could be valid."""
+def _member_properties(schema: dict[str, Any]) -> set[str]:
+    members = list(schema.get("allOf", []))
+    if "$ref" in schema:
+        members.append({"$ref": schema["$ref"]})
+    found: set[str] = set()
+    for member in members:
+        target = SCHEMAS[member["$ref"].rsplit("/", 1)[1]] if "$ref" in member else member
+        found.update(target.get("properties", {}))
+    return found
+
+
+def test_composed_schemas_are_closed_with_exactly_their_members_properties() -> None:
+    """A closed base inside allOf is unsatisfiable, and unevaluatedProperties reports every field
+    as unexpected when one value is bad (NF-01); composing schemas list the names instead."""
+    composed = 0
     for name, schema in SCHEMAS.items():
-        for member in schema.get("allOf", []):
-            target = member.get("$ref", "").rsplit("/", 1)[-1]
-            resolved = SCHEMAS.get(target, member)
-            has_siblings = len(schema["allOf"]) > 1 or "unevaluatedProperties" in schema
-            if has_siblings and resolved.get("properties"):
-                assert "additionalProperties" not in resolved, (
-                    f"{name} composes {target or 'an inline member'} which sets "
-                    "additionalProperties; close the composition with unevaluatedProperties"
-                )
+        assert "unevaluatedProperties" not in schema, name
+        members = [m for m in schema.get("allOf", []) if "$ref" in m]
+        if "$ref" in schema:
+            members.append(schema)
+        for member in members:
+            target = SCHEMAS[member["$ref"].rsplit("/", 1)[1]]
+            if target.get("properties"):
+                assert "additionalProperties" not in target, f"{name} composes a closed schema"
+        if members and schema.get("additionalProperties") is False:
+            composed += 1
+            listed = schema.get("properties", {})
+            assert all(value is True for value in listed.values()), name
+            assert set(listed) == _member_properties(schema), name
+    assert composed == 8
+
+
+def test_one_bad_value_in_a_composed_schema_reports_one_error() -> None:
+    entry = copy.deepcopy(EXAMPLES["IpAllowlistEntryCreate"][0])
+    entry["cidr"] = "203.0.113.0"
+    assert [error.validator for error in errors(DOC, "IpAllowlistEntryCreate", entry)] == [
+        "pattern"
+    ]
 
 
 def test_the_check_rejects_the_unsatisfiable_composition_it_replaced() -> None:
     broken = copy.deepcopy(DOC)
     schemas = broken["components"]["schemas"]
     schemas["ApiKeyBase"]["additionalProperties"] = False
-    schemas["ApiKeyCreated"].pop("unevaluatedProperties")
+    schemas["ApiKeyCreated"].pop("properties")
+    schemas["ApiKeyCreated"].pop("additionalProperties")
     assert errors(broken, "ApiKeyCreated", EXAMPLES["ApiKeyCreated"][0])

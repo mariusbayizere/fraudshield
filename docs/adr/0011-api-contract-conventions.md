@@ -50,23 +50,32 @@ code tend to diverge between languages, so the conventions are fixed once here a
    | Required field missing (including conditional, e.g. `agent_id` for AGENT_BANKING) | 400 | `required` |
    | Field not in the schema | 400 | `unknown_field` |
    | Identifier field is not a `tok_` token (raw MSISDN or account number) | 400 | `not_a_token` |
-   | JSON type differs (amount as a number, latitude as a string) | 422 | `type_mismatch` |
-   | Wrong shape: UUID, decimal scale above 4, leading zero, exponent, MCC digits, timestamp not in UTC | 422 | `invalid_format` |
-   | Value outside an enum (currency, channel) | 422 | `unsupported_value` |
-   | Number or amount outside its range (amount ≤ 0 or above 14 integer digits, latitude, longitude, probability) | 422 | `out_of_range` |
-   | More array items than allowed (batch above 1,000) | 422 | `too_many_items` |
+   | Object with too few properties (an update that changes nothing) | 400 | `required` |
+   | JSON type differs (amount as a number, latitude as a string); no other code is reported for that field | 422 | `type_mismatch` |
+   | Wrong shape (`format`, `pattern`): UUID, decimal scale above 4, leading zero, exponent, MCC digits, timestamp not in UTC | 422 | `invalid_format` |
+   | Value outside an enum or not the required constant | 422 | `unsupported_value` |
+   | Number or amount outside its range (`minimum`, `maximum`, `not` zero; a canonical decimal string that is negative or has more than 14 integer digits) | 422 | `out_of_range` |
+   | String too short or too long (`minLength`, `maxLength`; e.g. an override reason under 20 characters) | 422 | `length_out_of_range` |
+   | Too few or too many array items (`minItems`, `maxItems`; e.g. a batch above 1,000) | 422 | `item_count_out_of_range` |
+   | Repeated array items (`uniqueItems`) | 422 | `duplicate_items` |
+   | Escalation target not above the caller (ADR 0014) | 422 | `escalation_target_not_higher` |
    | Timestamp more than 5 minutes ahead of the server clock | 422 | `timestamp_in_future` |
    | Threshold medium ≥ high; duplicate channel | 422 | `thresholds_not_ordered`, `duplicate_channel` |
    | CIDR that does not parse or has host bits set | 422 | `invalid_cidr` |
    | Webhook URL resolving to a non-public address, IP literal or user info | 422 | `webhook_url_not_allowed` |
    | Password or person-name rule (ADR 0013, 0014) | 422 | `password_policy`, `person_name` |
 
-   All errors are reported; if any is a 400-class error the status is 400. The contract holds the
-   same mapping in `ValidationErrorCode.x-status-by-code`, and
+   All errors are reported; if any is a 400-class error the status is 400. Every operation with a
+   request body documents both 400 and 422. The contract holds the status per code in
+   `ValidationErrorCode.x-status-by-code`; `fraudshield_contracts.validation` is the executable
+   keyword-to-code mapping (it fails on an unmapped keyword); and
    `contracts/validation/request-validation-vectors.json` gives request bodies with the expected
-   status and codes. Contract tests check the vectors against the schema (including that the
-   server-only checks are ones the schema cannot make); the M6 and M7 controller tests consume the
-   same file.
+   status and (field, code) pairs. Contract tests require the schema to produce exactly those pairs,
+   require server-only cases to pass the schema, and require each operation to document the statuses
+   its vectors expect. The M6 and M7 controller tests consume the same file. Composed schemas are
+   closed by listing their property names beside `additionalProperties: false`, not with
+   `unevaluatedProperties`, which would report every valid field as unexpected when one value is
+   invalid. Every `if` requires the property it tests, so it cannot pass vacuously.
 7. **Authentication.** Machine clients use `X-API-Key: fsk_<env>_<keyId>_<secret>` (D-19); staff use
    `Authorization: Bearer <RS256 JWT>` (FR-07-04). API keys never reach staff endpoints (FR-01-05).
    Webhook signing secrets have the form `whsec_<env>_<32–64 alphanumerics>`; both prefixes exist
@@ -80,8 +89,9 @@ code tend to diverge between languages, so the conventions are fixed once here a
    asserts the exact set: `review_deadline_at` (required by D-14 for HOLD, null otherwise) and
    `ml_unavailable_fallback` (true when the rule-based fallback decided, so integrators can route
    those decisions to their own review; it reveals no model internals). The schema also enforces
-   E.6 consistency: HOLD ⇔ a deadline, HOLD ⇒ MEDIUM, APPROVE ⇒ LOW, HIGH ⇒ DECLINE (DECLINE with a
-   lower tier is allowed only for a frozen account).
+   E.6 consistency: HOLD ⇔ a deadline, HOLD ⇒ MEDIUM, APPROVE ⇒ LOW, HIGH ⇒ DECLINE. The schema
+   allows DECLINE at a lower tier; that DECLINE happens only for a frozen account (reason
+   `ACCOUNT_FROZEN`) is server-enforced and covered by the M6 decision-engine tests.
 
    **Final decisions (D-14).** One `FinalDecision` shape is returned by
    `GET /decisions/{transaction_id}`, published on `fs.decisions.final` and sent as the

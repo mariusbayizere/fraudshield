@@ -7,7 +7,7 @@
   FR-06-01 … FR-06-07, FR-07-01, FR-07-07, FR-07-09, E.1, E.8
 - **Defects referenced:** D-12, D-19, D-23, D-24, D-26, D-27, D-44
 - **Review findings addressed:** CR-03, CR-04, CR-05, CR-06, CR-09, CR-10, CR-24, CR-30
-  (`docs/reviews/M1/contracts-review.md`)
+  (`docs/reviews/M1/contracts-review.md`); NF-03, NF-05, NF-06, NF-07, NF-10 of the re-review
 
 ## Context
 
@@ -41,7 +41,9 @@ Option 3.
    it. `contracts/tests/test_authorisation_matrix.py` fails when the OpenAPI document and the matrix
    differ in either direction, and asserts invariants: no ADMIN on `/alerts` operations; only
    RISK_OFFICER on overrides and threshold changes; only ADMIN on user, API-key and model lifecycle;
-   API keys reach exactly the four machine operations. The M7 role × endpoint test reads the same
+   only ANALYST and SENIOR_ANALYST escalate; API keys reach exactly the four machine operations. The
+   matrix also lists each operation's object-level rules (problem type and status, or `filter`), so a
+   rule cannot be dropped or changed silently. The M7 role × endpoint test reads the same
    declarations against the running API.
 3. **Thresholds (separation of duties).** Only RISK_OFFICER changes thresholds and previews their
    impact; ADMIN and RISK_OFFICER can read them. The SRS path `/admin/thresholds` is kept for
@@ -58,7 +60,8 @@ Option 3.
    - an escalated alert entry is decided only by a caller whose role ranks at or above its target
      role (`escalation-level-required`, 403); `queue=escalated` lists only those entries and entries
      the caller escalated;
-   - an escalation target ranks strictly above the caller (`escalation-target-not-higher`, 422);
+   - an escalation target ranks strictly above the caller (422 `validation` with code
+     `escalation_target_not_higher`);
    - only the author undoes a decision, and only while it is `PENDING_COMMIT` before `undo_until`
      (`not-decision-author` 403, `undo-window-expired` 409);
    - only a `COMMITTED` decision can be overridden (`decision-not-committed`, 409), and never by the
@@ -70,13 +73,24 @@ Option 3.
    because showing that the rule-based fallback is active tells attackers when to strike.
    Orchestration probes use `/actuator/health` on the management port, which returns only `UP` or
    `DOWN` for the API process; the fallback keeps the API able to decide, so ML degradation does not
-   change it.
-7. **Passwords (CR-09).** 8–72 characters and at most 72 UTF-8 bytes, because bcrypt (cost 12,
+   change it. **Deviation from SRS 8.1 (staging gate) and 8.2 (uptime probe):** the unauthenticated
+   blackbox probe and the smoke test cannot present a staff token, and a monitoring robot with an
+   ADMIN account would break the one-person-one-role model. They read `/actuator/health/ml` (and
+   `/actuator/health` for Kafka spooling through the aggregate) on the management port, which is
+   reachable only from the cluster network and never routed through the ingress. The contract marks
+   both with `x-network: management`; OPS-CI-07 and OPS-OBS-05 carry the deviation.
+7. **Passwords (CR-09).** 8–72 code points and at most 72 UTF-8 bytes, because bcrypt (cost 12,
    FR-07-07) reads only the first 72 bytes and current Spring Security encoders reject longer input.
-   Required classes: ASCII upper-case, ASCII lower-case, ASCII digit, and one character that is none
-   of those and not whitespace (so any symbol, accented letter or emoji counts; spaces are allowed
-   but do not count). Sign-in treats input over 72 bytes as invalid credentials without calling
-   bcrypt. Zod and Bean Validation implement the same rule in M7 and are tested against
+   Permitted characters: anything except Unicode general category C (controls such as NUL, tab and
+   U+001C; format characters such as U+200B and U+FEFF; surrogates; private use; unassigned) and
+   category Z other than U+0020 SPACE (so no U+00A0 or U+2028). Classes are defined by code point,
+   not by an engine's `\s`, because Python, JavaScript and Java disagree on what whitespace is.
+   Required: an ASCII upper-case letter, an ASCII lower-case letter, an ASCII digit, and a special
+   character, meaning any other permitted character except the space (punctuation, symbols, emoji,
+   non-ASCII letters and digits). Checks run in the order LENGTH, BYTES, CHARACTERS, UPPER, LOWER,
+   DIGIT, SPECIAL. Sign-in and the current-password field accept up to 1,024 characters as a
+   transport cap only: input over 72 bytes is answered 401 as invalid credentials without calling
+   bcrypt, never as a validation error that would reveal the policy. Zod and Bean Validation implement the same rule in M7 and are tested against
    `contracts/validation/password-vectors.json`; the contract tests carry a reference implementation
    that the vectors are checked against.
 8. **Sessions (CR-24).** Access tokens carry a `sid` claim (the session and refresh-token family ID;
@@ -84,7 +98,10 @@ Option 3.
    refresh cookie is scoped to the refresh path and never reaches the logout endpoint. Sign-in with
    correct credentials for a `PENDING_APPROVAL` or `DEACTIVATED` account returns 403
    `account-not-active`; a wrong password returns 401 regardless of state. Registration returns the
-   same 202 for new and already-registered details and emails the existing owner instead.
+   same 202 for new and already-registered details and emails the existing owner instead. This does
+   not remove enumeration altogether: E.8 requires an availability check for email and employee ID
+   during registration, and `/auth/availability` still answers it. That channel is an **accepted
+   residual risk**, limited by rate limiting and constant-time responses (E.8).
 
 ## Consequences
 

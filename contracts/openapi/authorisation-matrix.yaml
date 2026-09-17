@@ -2,6 +2,9 @@
 # prompt E.8. contracts/tests/test_authorisation_matrix.py fails if the OpenAPI document differs
 # from this file in either direction, so a role change needs a deliberate edit here too.
 # access: roles (staff bearer JWT), scopes (API key), public, or refresh-cookie.
+# rules: the object-level rules each operation must declare in x-authorisation-rules, as
+#   problem/status (plus code for validation) or effect: filter. Rule wording may change; these may
+#   not without a deliberate edit here.
 operations:
   ingestTransaction:
     scopes: ["ingest:write"]
@@ -18,6 +21,9 @@ operations:
   getLiveness:
     public: true
     ref: "E.1; status only, management port (ADR 0014)"
+  getMlComponentHealth:
+    public: true
+    ref: "SRS monitoring probe and staging smoke test; management port only (ADR 0014)"
   getMlHealth:
     roles: [ADMIN]
     ref: "E.1, FR-06-05; ADMIN only because it reveals fallback mode (ADR 0014)"
@@ -75,6 +81,8 @@ operations:
   listAlerts:
     roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
     ref: "FR-04-02, FR-04-09, FR-05-01"
+    rules:
+      - { effect: filter }
   getAlert:
     roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
     ref: "FR-04-03, FR-05-01"
@@ -84,15 +92,30 @@ operations:
   decideAlert:
     roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
     ref: "FR-04-04, FR-05-01; never ADMIN (E.8, ADR 0014)"
+    rules:
+      - { problem: escalation-level-required, status: 403 }
+      - { problem: stale-alert, status: 409 }
+      - { problem: review-deadline-passed, status: 409 }
   undoAlertDecision:
     roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
     ref: "D-44; never ADMIN (E.8, ADR 0014)"
+    rules:
+      - { problem: not-decision-author, status: 403 }
+      - { problem: undo-window-expired, status: 409 }
   escalateAlert:
     roles: [ANALYST, SENIOR_ANALYST]
     ref: "FR-04-10; target strictly above caller, so RISK_OFFICER cannot escalate"
+    rules:
+      - { problem: validation, status: 422, code: escalation_target_not_higher }
+      - { problem: escalation-level-required, status: 403 }
+      - { problem: stale-alert, status: 409 }
   overrideAlertDecision:
     roles: [RISK_OFFICER]
     ref: "FR-05-01; RISK_OFFICER only"
+    rules:
+      - { problem: decision-not-committed, status: 409 }
+      - { problem: own-decision-override, status: 403 }
+      - { problem: stale-alert, status: 409 }
   getScoringResult:
     roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
     ref: "FR-02-01, D-12 (full result on staff endpoints only)"
@@ -168,6 +191,10 @@ operations:
   updateUser:
     roles: [ADMIN]
     ref: "FR-06-02, FR-07-01 (no self-modification)"
+    rules:
+      - { problem: self-modification, status: 403 }
+      - { problem: last-active-admin, status: 409 }
+      - { problem: conflict, status: 409 }
   listPendingApprovals:
     roles: [ADMIN]
     ref: "D-23, D-24"

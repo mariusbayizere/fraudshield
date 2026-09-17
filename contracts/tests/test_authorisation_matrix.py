@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -117,12 +118,15 @@ def test_object_level_rules_are_declared_with_documented_problems(operation_id: 
     rules = spec.get("x-authorisation-rules")
     assert rules, f"{operation_id} has no x-authorisation-rules"
     responses = DOC["components"]["responses"]
+    codes = set(DOC["components"]["schemas"]["ValidationErrorCode"]["enum"])
     for rule in rules:
         assert rule["problem"] in PROBLEM_TYPES, rule
         status = str(rule["status"])
         assert status in spec["responses"], f"{operation_id}: {status} not documented"
         ref = spec["responses"][status]["$ref"].rsplit("/", 1)[1]
         assert rule["problem"] in responses[ref]["x-problem-types"], (operation_id, rule)
+        assert ("code" in rule) is rule["problem"].endswith(":validation"), rule
+        assert rule.get("code", "required") in codes, rule
 
 
 def test_health_detail_is_not_public() -> None:
@@ -131,6 +135,55 @@ def test_health_detail_is_not_public() -> None:
     probe = DOC["components"]["schemas"]["ProbeStatus"]
     assert probe["properties"].keys() == {"status"}
     assert probe["properties"]["status"]["enum"] == ["UP", "DOWN"]
+
+
+@pytest.mark.req("FR-07-01")
+@pytest.mark.parametrize(
+    ("operation_id", "change"),
+    [
+        ("updateUser", lambda rules: rules.pop(0)),
+        ("overrideAlertDecision", lambda rules: rules.pop(1)),
+        ("escalateAlert", lambda rules: rules[0].update(status=403)),
+        ("listAlerts", lambda rules: rules.clear()),
+    ],
+)
+def test_matrix_check_detects_a_removed_or_changed_object_rule(
+    operation_id: str, change: Any
+) -> None:
+    mutated = copy.deepcopy(DOC)
+    for path_item in mutated["paths"].values():
+        for spec in path_item.values():
+            if isinstance(spec, dict) and spec.get("operationId") == operation_id:
+                change(spec["x-authorisation-rules"])
+    differences = matrix_differences(mutated, MATRIX)
+    assert len(differences) == 1
+    assert differences[0].startswith(f"{operation_id}: document rules")
+
+
+@pytest.mark.req("FR-04-10")
+def test_only_roles_below_risk_officer_can_escalate() -> None:
+    kind, roles = declared_access(OPS["escalateAlert"].spec)
+    assert kind == "roles"
+    assert roles <= {"ANALYST", "SENIOR_ANALYST"}
+
+
+def test_sign_in_and_registration_do_not_disclose_account_state() -> None:
+    register = OPS["register"].spec["responses"]
+    assert "409" not in register
+    assert [code for code in register if code.startswith("2")] == ["202"]
+    login = OPS["login"].spec["responses"]
+    assert login["403"]["$ref"].endswith("/AccountNotActive")
+
+
+def test_management_endpoints_are_public_only_on_the_management_network() -> None:
+    for op in OPS.values():
+        if op.path.startswith("/actuator"):
+            assert op.spec.get("x-public") is True
+            assert op.spec.get("x-network") == "management", op.operation_id
+            [server] = DOC["paths"][op.path]["servers"]
+            assert "{managementPort}" in server["url"]
+        else:
+            assert "x-network" not in op.spec, op.operation_id
 
 
 def test_malformed_rows_and_undeclared_operations_are_reported(tmp_path: Path) -> None:

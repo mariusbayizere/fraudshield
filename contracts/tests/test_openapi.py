@@ -22,6 +22,7 @@ MACHINE_PATH_PREFIXES = ("/transactions/ingest", "/jobs/", "/decisions/")
 # page returns HTML, and the JWKS document is static.
 NO_PROBLEM_DEFAULT = {
     "getLiveness",
+    "getMlComponentHealth",
     "getMlHealth",
     "getKafkaHealth",
     "showVerificationPage",
@@ -323,10 +324,87 @@ def test_every_staff_name_field_uses_the_person_name_rule() -> None:
 
 
 @pytest.mark.req("D-19")
-def test_generated_secrets_have_recognisable_prefixes() -> None:
+@pytest.mark.parametrize(
+    ("field", "valid", "invalid"),
+    [
+        (
+            "raw_key",
+            "fsk_prod_a1b2c3d4e5f6_" + "A" * 43,
+            "fsk_live_a1b2c3d4e5f6_" + "A" * 43,
+        ),
+        ("webhook_signing_secret", "whsec_stg_" + "a" * 32, "whsec_stg_" + "a" * 31),
+    ],
+)
+def test_generated_secrets_have_exact_recognisable_formats(
+    field: str, valid: str, invalid: str
+) -> None:
     created = SCHEMAS["ApiKeyCreated"]["allOf"][1]["properties"]
-    assert created["raw_key"]["pattern"].startswith("^fsk_")
-    assert created["webhook_signing_secret"]["pattern"].startswith("^whsec_")
+    assert created["raw_key"]["pattern"] == (
+        "^fsk_(dev|test|stg|prod)_[a-z0-9]{12}_[A-Za-z0-9_-]{43}$"
+    )
+    assert created["webhook_signing_secret"]["pattern"] == (
+        "^whsec_(dev|test|stg|prod)_[A-Za-z0-9]{32,64}$"
+    )
+    assert re.fullmatch(created[field]["pattern"].strip("^$"), valid)
+    assert not re.fullmatch(created[field]["pattern"].strip("^$"), invalid)
+
+
+@pytest.mark.req("D-14")
+def test_final_decision_identity_fields_are_exact() -> None:
+    final = SCHEMAS["FinalDecision"]
+    assert set(final["required"]) == set(final["properties"])
+    assert final["properties"]["event_id"]["format"] == "uuid"
+    assert final["properties"]["transaction_id"]["format"] == "uuid"
+
+
+@pytest.mark.req("D-29")
+def test_stale_alert_conflicts_must_carry_the_current_alert() -> None:
+    schema = DOC["components"]["responses"]["StateConflict"]["content"]["application/problem+json"][
+        "schema"
+    ]
+    problem = _example_problem() | {"status": 409}
+    stale = problem | {"type": "urn:fraudshield:problem:stale-alert"}
+    assert _errors_for(schema, stale), "stale-alert without current must be rejected"
+    assert _errors_for(schema, problem | {"type": "urn:fraudshield:problem:conflict"}) == []
+
+
+def _errors_for(schema: dict[str, Any], payload: dict[str, Any]) -> list[Any]:
+    document = copy.deepcopy(DOC)
+    document["components"]["schemas"]["_Probe"] = schema
+    return errors(document, "_Probe", payload)
+
+
+def test_batch_items_can_report_an_idempotency_conflict() -> None:
+    item = SCHEMAS["JobStatus"]["properties"]["results"]["items"]["properties"]["problem"]
+    conflict = _example_problem() | {
+        "type": "urn:fraudshield:problem:idempotency-conflict",
+        "status": 409,
+    }
+    assert _errors_for(item, conflict) == []
+    assert _errors_for(item, conflict | {"status": 400})
+
+
+def test_if_conditions_require_their_discriminator() -> None:
+    """An `if` on an absent property passes vacuously and would apply `then` to every instance."""
+
+    def walk(node: object, where: str) -> None:
+        if isinstance(node, dict):
+            condition = node.get("if")
+            if isinstance(condition, dict):
+                assert set(condition.get("properties", {})) <= set(condition.get("required", [])), (
+                    where
+                )
+            for key, value in node.items():
+                walk(value, f"{where}/{key}")
+        elif isinstance(node, list):
+            for index, value in enumerate(node):
+                walk(value, f"{where}/{index}")
+
+    walk(DOC, "#")
+    ingest = _example("IngestMobileMoney")
+    del ingest["channel"]
+    assert {e.validator for e in errors(DOC, "TransactionIngestRequest", ingest)} == {"required"}
+    assert len(errors(DOC, "TransactionIngestRequest", ingest)) == 1
 
 
 def test_batch_limit_is_one_thousand() -> None:

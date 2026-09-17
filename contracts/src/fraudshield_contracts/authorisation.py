@@ -47,6 +47,31 @@ def matrix_access(row: dict[str, Any]) -> tuple[str, frozenset[str]]:
     return key, frozenset()
 
 
+PROBLEM_PREFIX = "urn:fraudshield:problem:"
+
+
+def declared_rules(spec: dict[str, Any]) -> list[tuple[str, int | None, str | None]]:
+    """Object-level rules as (problem or 'filter', status, code), ignoring their wording."""
+    found: list[tuple[str, int | None, str | None]] = []
+    for rule in spec.get("x-authorisation-rules", []):
+        if rule.get("effect") == "filter":
+            found.append(("filter", None, None))
+        else:
+            problem = str(rule.get("problem", "")).removeprefix(PROBLEM_PREFIX)
+            found.append((problem, int(rule["status"]), rule.get("code")))
+    return sorted(found, key=str)
+
+
+def matrix_rules(row: dict[str, Any]) -> list[tuple[str, int | None, str | None]]:
+    found: list[tuple[str, int | None, str | None]] = []
+    for rule in row.get("rules", []):
+        if rule.get("effect") == "filter":
+            found.append(("filter", None, None))
+        else:
+            found.append((str(rule["problem"]), int(rule["status"]), rule.get("code")))
+    return sorted(found, key=str)
+
+
 def matrix_differences(document: dict[str, Any], matrix: dict[str, dict[str, Any]]) -> list[str]:
     """Every disagreement between the document and the matrix, in both directions."""
     problems: list[str] = []
@@ -65,6 +90,11 @@ def matrix_differences(document: dict[str, Any], matrix: dict[str, dict[str, Any
             problems.append(
                 f"{op.operation_id}: document declares {actual[0]} {sorted(actual[1])}, "
                 f"matrix says {expected[0]} {sorted(expected[1])}"
+            )
+        if declared_rules(op.spec) != matrix_rules(row):
+            problems.append(
+                f"{op.operation_id}: document rules {declared_rules(op.spec)}, "
+                f"matrix rules {matrix_rules(row)}"
             )
     problems.extend(
         f"{name}: in the matrix but not in the document" for name in matrix.keys() - seen

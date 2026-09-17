@@ -599,8 +599,8 @@ examples:
   - job_id: 718293a4-b1c2-4de0-8b3c-6d7e8f9a0b12
     state: RUNNING
     total: 250
-    processed: 2
-    failed: 1
+    processed: 3
+    failed: 2
     results:
     - transaction_id: 0b9a8c7d-6e5f-4a3b-9c2d-1e0f9a8b7c6d
       outcome: DECIDED
@@ -625,6 +625,13 @@ examples:
         - field: amount
           code: out_of_range
           message: amount must be greater than 0
+    - transaction_id: 5e6f7a8b-9c0d-4e1f-a2b3-c4d5e6f7a8b9
+      outcome: REJECTED
+      problem:
+        type: urn:fraudshield:problem:idempotency-conflict
+        title: Transaction already submitted with different content
+        status: 409
+        correlation_id: 6f1c2d8e-5b0a-4c55-9f7a-2a1d3c4b5e6f
     next_cursor: null
   LoginRequest:
   - email: analyst@example.com

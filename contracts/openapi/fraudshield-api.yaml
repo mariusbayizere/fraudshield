@@ -199,8 +199,12 @@ paths:
   # ---------------------------------------------------------------------------------------------
   /actuator/health:
     servers:
-      - url: /
-        description: Management port of each API instance; not routed through the public ingress
+      - url: "{scheme}://{instance}:{managementPort}"
+        description: Management port of each API instance, reachable only from the cluster network
+        variables:
+          scheme: { default: http, enum: [http, https] }
+          instance: { default: localhost }
+          managementPort: { default: "8081" }
     get:
       tags: [health]
       operationId: getLiveness
@@ -211,6 +215,7 @@ paths:
         status and is not disclosed here.
       security: []
       x-public: true
+      x-network: management
       responses:
         "200":
           description: Up
@@ -222,6 +227,37 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ProbeStatus" }
+
+  /actuator/health/ml:
+    servers:
+      - url: "{scheme}://{instance}:{managementPort}"
+        description: Management port of each API instance, reachable only from the cluster network
+        variables:
+          scheme: { default: http, enum: [http, https] }
+          instance: { default: localhost }
+          managementPort: { default: "8081" }
+    get:
+      tags: [health]
+      operationId: getMlComponentHealth
+      summary: ML scorer health for the monitoring probe and the deployment smoke test
+      description: >-
+        The SRS blackbox probe and staging smoke test read ML health without a staff token. They
+        use this management-port endpoint, which is never routed through the public ingress, so
+        the fallback state is not visible to attackers (ADR 0014).
+      security: []
+      x-public: true
+      x-network: management
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ComponentHealth" }
+        "503":
+          description: Unhealthy or degraded
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ComponentHealth" }
 
   /health/ml:
     get:
@@ -299,6 +335,7 @@ paths:
         "400": { $ref: "#/components/responses/ValidationProblem" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/AccountNotActive" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
         "423": { $ref: "#/components/responses/Locked" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
@@ -333,6 +370,7 @@ paths:
         "400": { $ref: "#/components/responses/ValidationProblem" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
         "503": { $ref: "#/components/responses/ServiceUnavailable" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
@@ -414,8 +452,10 @@ paths:
       summary: Self-registration; always creates a PENDING_APPROVAL account (D-24)
       description: >-
         The response is the same 202 whether or not the email or employee ID is already
-        registered, so registration cannot be used to discover accounts (E.8). For a duplicate no
-        account is created and the existing account's owner is emailed a notice instead.
+        registered, so this endpoint reveals nothing about existing accounts. For a duplicate no
+        account is created and the existing account's owner is emailed a notice instead. The
+        rate-limited availability check remains a deliberate, accepted enumeration channel (E.8,
+        ADR 0014).
       security: []
       x-public: true
       requestBody:
@@ -484,6 +524,7 @@ paths:
         "204": { description: Email verified }
         "400": { $ref: "#/components/responses/ValidationProblem" }
         "410": { $ref: "#/components/responses/Gone" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
 
   /auth/password-reset/request:
@@ -506,6 +547,7 @@ paths:
       responses:
         "202": { description: "If the account exists, a code was sent" }
         "400": { $ref: "#/components/responses/ValidationProblem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
 
@@ -540,6 +582,7 @@ paths:
                   reset_token: { type: string, minLength: 32 }
                   expires_at: { $ref: "#/components/schemas/Timestamp" }
         "400": { $ref: "#/components/responses/ValidationProblem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
         "429": { $ref: "#/components/responses/TooManyRequests" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
 
@@ -565,6 +608,7 @@ paths:
         "204": { description: Password changed }
         "400": { $ref: "#/components/responses/ValidationProblem" }
         "410": { $ref: "#/components/responses/Gone" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
 
   /auth/password:
@@ -584,13 +628,18 @@ paths:
               required: [current_password, new_password]
               additionalProperties: false
               properties:
-                current_password: { type: string, minLength: 1, maxLength: 72, x-max-utf8-bytes: 72 }
+                current_password:
+                  type: string
+                  minLength: 1
+                  maxLength: 1024
+                  description: Over 72 UTF-8 bytes is answered 401 like a wrong password (ADR 0014)
                 new_password: { $ref: "#/components/schemas/Password" }
       responses:
         "204": { description: Password changed }
         "400": { $ref: "#/components/responses/ValidationProblem" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
 
   /auth/unlock:
@@ -609,6 +658,7 @@ paths:
         "204": { description: Account unlocked }
         "400": { $ref: "#/components/responses/ValidationProblem" }
         "410": { $ref: "#/components/responses/Gone" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
 
   /auth/jwks.json:
@@ -662,6 +712,9 @@ paths:
         lists only escalated entries whose target role is at or below the caller's role, plus
         entries the caller escalated.
       x-required-roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
+      x-authorisation-rules:
+        - rule: queue=escalated lists only entries whose target role is at or below the caller's role, plus entries the caller escalated
+          effect: filter
       parameters:
         - { name: queue, in: query, schema: { type: string, enum: [standard, anomaly, escalated], default: standard } }
         - { name: transaction_id, in: query, schema: { type: string, format: uuid } }
@@ -777,6 +830,7 @@ paths:
         "403": { $ref: "#/components/responses/AuthorisationRuleViolation" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/StateConflict" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
 
   /alerts/{alert_id}/decisions/{decision_id}/undo:
@@ -814,7 +868,8 @@ paths:
       x-required-roles: [ANALYST, SENIOR_ANALYST]
       x-authorisation-rules:
         - rule: target_role must rank strictly above the caller's role (a SENIOR_ANALYST can escalate only to RISK_OFFICER)
-          problem: urn:fraudshield:problem:escalation-target-not-higher
+          problem: urn:fraudshield:problem:validation
+          code: escalation_target_not_higher
           status: 422
         - rule: Callers rank ANALYST < SENIOR_ANALYST < RISK_OFFICER (E.8). An escalated alert entry can be decided only by a caller whose role is at or above its target_role
           problem: urn:fraudshield:problem:escalation-level-required
@@ -841,7 +896,7 @@ paths:
         "403": { $ref: "#/components/responses/AuthorisationRuleViolation" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/StateConflict" }
-        "422": { $ref: "#/components/responses/AuthorisationRuleViolation" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
 
   /alerts/{alert_id}/overrides:
@@ -879,6 +934,7 @@ paths:
         "403": { $ref: "#/components/responses/AuthorisationRuleViolation" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/StateConflict" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
 
   /transactions/{transaction_id}/scoring-result:
@@ -1094,6 +1150,7 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
 
   /rules:
@@ -1224,6 +1281,7 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
 
   /thresholds:
@@ -1269,6 +1327,7 @@ paths:
         "400": { $ref: "#/components/responses/ValidationProblem" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
 
   /sar-reports:
@@ -1343,6 +1402,7 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
 
   # ---------------------------------------------------------------------------------------------
@@ -1423,6 +1483,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
 
   /admin/users/{user_id}:
@@ -1479,6 +1540,7 @@ paths:
         "403": { $ref: "#/components/responses/AuthorisationRuleViolation" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/StateConflict" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
 
   /admin/approvals:
@@ -1521,6 +1583,7 @@ paths:
                 reason: { type: string, maxLength: 500 }
               if:
                 properties: { decision: { const: APPROVE } }
+                required: [decision]
               then:
                 required: [granted_role]
       responses:
@@ -1534,6 +1597,7 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
 
   /admin/ip-allowlist:
@@ -1573,6 +1637,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
 
   /admin/ip-allowlist/{entry_id}:
@@ -1634,6 +1699,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
 
   /admin/api-keys/{key_id}/rotate:
@@ -1764,6 +1830,7 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
 
   /admin/datasets:
@@ -1840,6 +1907,7 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
 
   /admin/retraining-jobs/{job_id}:
@@ -2143,12 +2211,6 @@ components:
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
-    StaleAlert:
-      description: The alert changed since the client read it, or its review deadline passed (D-29)
-      x-problem-types: ["urn:fraudshield:problem:stale-alert", "urn:fraudshield:problem:review-deadline-passed"]
-      content:
-        application/problem+json:
-          schema: { $ref: "#/components/schemas/StaleAlertProblem" }
     PromotionGateFailed:
       description: Shadow gate not met; reasons listed (D-11)
       x-problem-types: ["urn:fraudshield:problem:promotion-gate-failed"]
@@ -2202,14 +2264,12 @@ components:
     AuthorisationRuleViolation:
       description: >-
         The role may call this operation but an object-level rule in the operation's
-        x-authorisation-rules forbids this call (ADR 0014); 403 for permission rules, 422 for an
-        invalid escalation target
+        x-authorisation-rules forbids this call (ADR 0014)
       x-problem-types:
         - "urn:fraudshield:problem:forbidden"
         - "urn:fraudshield:problem:escalation-level-required"
         - "urn:fraudshield:problem:not-decision-author"
         - "urn:fraudshield:problem:own-decision-override"
-        - "urn:fraudshield:problem:escalation-target-not-higher"
         - "urn:fraudshield:problem:self-modification"
       content:
         application/problem+json:
@@ -2226,10 +2286,14 @@ components:
       content:
         application/problem+json:
           schema:
-            description: StaleAlertProblem (with the current alert) for stale-alert, otherwise Problem
-            anyOf:
-              - $ref: "#/components/schemas/StaleAlertProblem"
+            description: A stale-alert problem must carry the current alert (D-29)
+            allOf:
               - $ref: "#/components/schemas/Problem"
+              - if:
+                  properties: { type: { const: "urn:fraudshield:problem:stale-alert" } }
+                  required: [type]
+                then:
+                  $ref: "#/components/schemas/StaleAlertProblem"
     AccountNotActive:
       description: The account is pending approval or deactivated (D-23, D-24, FR-06-02)
       x-problem-types: ["urn:fraudshield:problem:account-not-active"]
@@ -2453,18 +2517,19 @@ components:
       x-max-utf8-bytes: 72
       x-validation: password
       description: |
-        FR-07-07 policy, decided in ADR 0014: 8 to 72 characters **and** at most 72 UTF-8 bytes,
-        because bcrypt uses only the first 72 bytes (a longer password would be silently truncated
-        or rejected by the encoder). With multi-byte characters the character limit is lower; the
-        server and the front end enforce the byte limit, which JSON Schema cannot express. At least
-        one ASCII upper-case letter, one ASCII lower-case letter, one ASCII digit and one character
-        that is none of these and not whitespace (any symbol or non-ASCII character counts). Spaces
-        are allowed inside. Shared vectors: contracts/validation/password-vectors.json.
+        FR-07-07 policy, decided in ADR 0014: 8 to 72 code points **and** at most 72 UTF-8 bytes,
+        because bcrypt uses only the first 72 bytes. No character of Unicode category C (controls,
+        format characters such as U+200B and U+FEFF, surrogates, private use, unassigned) or Z other
+        than U+0020 SPACE. At least one ASCII upper-case letter, one ASCII lower-case letter, one
+        ASCII digit, and one special character: any other permitted character except the space
+        (punctuation, symbols, emoji, non-ASCII letters and digits). JSON Schema cannot express the
+        byte limit or Unicode categories, so the pattern below is only a screen; the server and the
+        front end apply the full rule, tested against contracts/validation/password-vectors.json.
       allOf:
         - pattern: "[A-Z]"
         - pattern: "[a-z]"
         - pattern: "[0-9]"
-        - pattern: "[^A-Za-z0-9\\s]"
+        - pattern: "[^A-Za-z0-9 ]"
     ReasonCode:
       type: string
       pattern: "^[A-Z][A-Z0-9_]{2,63}$"
@@ -2510,7 +2575,6 @@ components:
         - urn:fraudshield:problem:escalation-level-required
         - urn:fraudshield:problem:not-decision-author
         - urn:fraudshield:problem:own-decision-override
-        - urn:fraudshield:problem:escalation-target-not-higher
         - urn:fraudshield:problem:not-found
         - urn:fraudshield:problem:not-acceptable
         - urn:fraudshield:problem:conflict
@@ -2534,8 +2598,9 @@ components:
         Field-level error codes (ADR 0011 section 6). `x-status-by-code` gives the HTTP status each
         code implies: 400 when the body is not a usable instance of the schema, 422 for a
         well-formed field with an unacceptable value. A response with codes of both classes is 400
-        and lists all errors. Shared vectors: contracts/validation/request-validation-vectors.json.
-      enum: [malformed_json, required, unknown_field, not_a_token, type_mismatch, invalid_format, unsupported_value, out_of_range, too_many_items, timestamp_in_future, thresholds_not_ordered, duplicate_channel, invalid_cidr, webhook_url_not_allowed, password_policy, person_name]
+        and lists all errors. `fraudshield_contracts.validation` maps JSON Schema errors to these
+        codes; shared vectors: contracts/validation/request-validation-vectors.json.
+      enum: [malformed_json, required, unknown_field, not_a_token, type_mismatch, invalid_format, unsupported_value, out_of_range, length_out_of_range, item_count_out_of_range, duplicate_items, timestamp_in_future, thresholds_not_ordered, duplicate_channel, invalid_cidr, webhook_url_not_allowed, password_policy, person_name, escalation_target_not_higher]
       x-status-by-code:
         malformed_json: 400
         required: 400
@@ -2545,7 +2610,9 @@ components:
         invalid_format: 422
         unsupported_value: 422
         out_of_range: 422
-        too_many_items: 422
+        length_out_of_range: 422
+        item_count_out_of_range: 422
+        duplicate_items: 422
         timestamp_in_future: 422
         thresholds_not_ordered: 422
         duplicate_channel: 422
@@ -2553,6 +2620,7 @@ components:
         webhook_url_not_allowed: 422
         password_policy: 422
         person_name: 422
+        escalation_target_not_higher: 422
     ValidationProblem:
       allOf:
         - $ref: "#/components/schemas/Problem"
@@ -2572,6 +2640,13 @@ components:
                   field: { type: string, maxLength: 200 }
                   code: { $ref: "#/components/schemas/ValidationErrorCode" }
                   message: { type: string, maxLength: 500 }
+    IdempotencyConflictProblem:
+      allOf:
+        - $ref: "#/components/schemas/Problem"
+        - type: object
+          properties:
+            type: { const: "urn:fraudshield:problem:idempotency-conflict" }
+            status: { const: 409 }
     StaleAlertProblem:
       allOf:
         - $ref: "#/components/schemas/Problem"
@@ -2618,6 +2693,7 @@ components:
       allOf:
         - if:
             properties: { channel: { const: AGENT_BANKING } }
+            required: [channel]
           then:
             required: [agent_id]
     TransactionBatchRequest:
@@ -2663,6 +2739,7 @@ components:
         - description: HOLD, and only HOLD, carries a review deadline (D-14)
           if:
             properties: { decision: { const: HOLD } }
+            required: [decision]
           then:
             properties:
               review_deadline_at: { $ref: "#/components/schemas/Timestamp" }
@@ -2672,20 +2749,24 @@ components:
         - description: HOLD is the MEDIUM outcome (E.6)
           if:
             properties: { decision: { const: HOLD } }
+            required: [decision]
           then:
             properties:
               risk_tier: { const: MEDIUM }
         - description: APPROVE is only possible for LOW (E.6)
           if:
             properties: { decision: { const: APPROVE } }
+            required: [decision]
           then:
             properties:
               risk_tier: { const: LOW }
         - description: >-
-            HIGH is always declined. DECLINE with a lower tier is allowed for a frozen account
-            (reason ACCOUNT_FROZEN, E.6 step 2).
+            HIGH is always declined. DECLINE with a lower tier is allowed by the schema; the server
+            produces it only for a frozen account, with reason ACCOUNT_FROZEN (E.6 step 2, a
+            server-enforced rule the M6 decision-engine tests cover).
           if:
             properties: { risk_tier: { const: HIGH } }
+            required: [risk_tier]
           then:
             properties:
               decision: { const: DECLINE }
@@ -2750,6 +2831,7 @@ components:
       allOf:
         - if:
             properties: { decision: { const: HOLD } }
+            required: [decision]
           then:
             properties:
               final: { const: false }
@@ -2760,6 +2842,7 @@ components:
               review_deadline_at: { type: "null" }
         - if:
             properties: { decision_sequence: { const: 1 } }
+            required: [decision_sequence]
           then:
             properties:
               decided_by: { const: MODEL }
@@ -2798,7 +2881,11 @@ components:
               transaction_id: { type: string, format: uuid }
               outcome: { type: string, enum: [DECIDED, REJECTED] }
               decision: { $ref: "#/components/schemas/DecisionResponse" }
-              problem: { $ref: "#/components/schemas/ValidationProblem" }
+              problem:
+                description: Why the item was rejected (validation, or an idempotency conflict)
+                oneOf:
+                  - $ref: "#/components/schemas/ValidationProblem"
+                  - $ref: "#/components/schemas/IdempotencyConflictProblem"
         next_cursor: { type: [string, "null"] }
     ProbeStatus:
       type: object
@@ -2878,9 +2965,11 @@ components:
     # --- alerts ---------------------------------------------------------------------------------
     AlertSummary:
       description: Card and feed row content (FR-04-03)
-      allOf:
-        - $ref: "#/components/schemas/AlertSummaryBase"
-      unevaluatedProperties: false
+      $ref: "#/components/schemas/AlertSummaryBase"
+      # Closed beside the $ref: additionalProperties sees only the names listed here, so a bad
+      # value in the base reports one error instead of marking every field unexpected (NF-01).
+      properties: { alert_id: true, version: true, transaction_id: true, tier: true, status: true, fraud_probability: true, expected_loss_rwf: true, amount: true, channel: true, masked_account_name: true, merchant: true, transaction_timestamp: true, top_reasons: true, review_deadline_at: true, escalated_from_alert_id: true }
+      additionalProperties: false
     AlertSummaryBase:
       type: object
       description: >-
@@ -2917,7 +3006,9 @@ components:
             - type: "null"
         escalated_from_alert_id: { type: [string, "null"], format: uuid }
     AlertDetail:
-      unevaluatedProperties: false
+      # Closed at the composing level with the names from every allOf member (NF-01).
+      properties: { alert_id: true, version: true, transaction_id: true, tier: true, status: true, fraud_probability: true, expected_loss_rwf: true, amount: true, channel: true, masked_account_name: true, merchant: true, transaction_timestamp: true, top_reasons: true, review_deadline_at: true, escalated_from_alert_id: true, account_token: true, counterparty_token: true, summary_template_key: true, summary_parameters: true, anomaly_score: true, decisions: true }
+      additionalProperties: false
       allOf:
         - $ref: "#/components/schemas/AlertSummaryBase"
         - type: object
@@ -3245,9 +3336,11 @@ components:
             op: { type: string, enum: [eq, ne, gt, gte, lt, lte, in, not_in, between, is_null, is_not_null] }
             value: { type: [string, number, boolean, array, "null"] }
     RuleDraft:
-      allOf:
-        - $ref: "#/components/schemas/RuleDraftBase"
-      unevaluatedProperties: false
+      $ref: "#/components/schemas/RuleDraftBase"
+      # Closed beside the $ref: additionalProperties sees only the names listed here, so a bad
+      # value in the base reports one error instead of marking every field unexpected (NF-01).
+      properties: { rule_name: true, description: true, expression: true, risk_tier_override: true }
+      additionalProperties: false
     RuleDraftBase:
       type: object
       description: Open base shared by RuleDraft and Rule (closed by the composing schemas)
@@ -3258,7 +3351,9 @@ components:
         expression: { $ref: "#/components/schemas/RuleExpression" }
         risk_tier_override: { type: string, enum: [HIGH, MEDIUM], description: Rules may only raise a tier }
     Rule:
-      unevaluatedProperties: false
+      # Closed at the composing level with the names from every allOf member (NF-01).
+      properties: { rule_name: true, description: true, expression: true, risk_tier_override: true, rule_id: true, version: true, state: true, created_by: true, created_at: true, trigger_count: true, last_triggered_at: true }
+      additionalProperties: false
       allOf:
         - $ref: "#/components/schemas/RuleDraftBase"
         - type: object
@@ -3359,9 +3454,11 @@ components:
         password:
           type: string
           minLength: 1
-          maxLength: 72
-          x-max-utf8-bytes: 72
-          description: Longer input is rejected as invalid credentials (401) without calling bcrypt
+          maxLength: 1024
+          description: >-
+            1024 is only a transport cap. Input over 72 UTF-8 bytes cannot match any stored password
+            (ADR 0014), so the server answers 401 invalid credentials without calling bcrypt and
+            without revealing the policy.
     GoogleSignInRequest:
       type: object
       required: [authorization_code, code_verifier, redirect_uri]
@@ -3485,9 +3582,11 @@ components:
           items: { $ref: "#/components/schemas/StaffUser" }
         next_cursor: { type: [string, "null"] }
     IpAllowlistEntryCreate:
-      allOf:
-        - $ref: "#/components/schemas/IpAllowlistEntryBase"
-      unevaluatedProperties: false
+      $ref: "#/components/schemas/IpAllowlistEntryBase"
+      # Closed beside the $ref: additionalProperties sees only the names listed here, so a bad
+      # value in the base reports one error instead of marking every field unexpected (NF-01).
+      properties: { cidr: true, description: true }
+      additionalProperties: false
     IpAllowlistEntryBase:
       type: object
       description: Open base shared by IpAllowlistEntryCreate and IpAllowlistEntry
@@ -3503,7 +3602,9 @@ components:
             rejects anything else with 422 invalid_cidr.
         description: { type: string, minLength: 3, maxLength: 200 }
     IpAllowlistEntry:
-      unevaluatedProperties: false
+      # Closed at the composing level with the names from every allOf member (NF-01).
+      properties: { cidr: true, description: true, entry_id: true, created_by: true, created_at: true }
+      additionalProperties: false
       allOf:
         - $ref: "#/components/schemas/IpAllowlistEntryBase"
         - type: object
@@ -3540,9 +3641,11 @@ components:
             connection to the checked address and does not follow redirects (SSRF, M6 test
             obligation).
     ApiKey:
-      allOf:
-        - $ref: "#/components/schemas/ApiKeyBase"
-      unevaluatedProperties: false
+      $ref: "#/components/schemas/ApiKeyBase"
+      # Closed beside the $ref: additionalProperties sees only the names listed here, so a bad
+      # value in the base reports one error instead of marking every field unexpected (NF-01).
+      properties: { key_id: true, name: true, scopes: true, last_four: true, state: true, created_at: true, expires_at: true, last_used_at: true }
+      additionalProperties: false
     ApiKeyBase:
       type: object
       description: Open base shared by ApiKey and ApiKeyCreated
@@ -3561,7 +3664,9 @@ components:
           oneOf: [{ $ref: "#/components/schemas/Timestamp" }, { type: "null" }]
         last_used_at: { oneOf: [{ $ref: "#/components/schemas/Timestamp" }, { type: "null" }] }
     ApiKeyCreated:
-      unevaluatedProperties: false
+      # Closed at the composing level with the names from every allOf member (NF-01).
+      properties: { key_id: true, name: true, scopes: true, last_four: true, state: true, created_at: true, expires_at: true, last_used_at: true, raw_key: true, webhook_signing_secret: true }
+      additionalProperties: false
       allOf:
         - $ref: "#/components/schemas/ApiKeyBase"
         - type: object
