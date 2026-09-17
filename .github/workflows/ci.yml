@@ -194,4 +194,5 @@ jobs:
         with:
           fetch-depth: 0
       # Same pinned, checksum-verified launcher as the local hook, run independently of hooks.
-      - run: tools/bin/gitleaks git --redact --no-banner --exit-code 1 .
+      # History of the commit under test only: other branches carry their own allowlists.
+      - run: tools/bin/gitleaks git --log-opts=HEAD --redact --no-banner --exit-code 1 .
