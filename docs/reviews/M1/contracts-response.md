@@ -30,7 +30,7 @@ until that branch is fixed.
 | CR-25 | MINOR | `thresholds_not_ordered` and `duplicate_channel` documented; vectors (server-only checks) | add5d86 | `test_request_vector[ThresholdUpdate: …]` |
 | CR-26 | MINOR | **API side done**: `webhook_url` SSRF rules and `invalid_cidr` documented with vectors. **Events side open**: signature vectors and strict `t` parsing | add5d86 | `test_request_vector[ApiKeyCreate: …]`, `[IpAllowlistEntryCreate: …]` |
 | CR-27 | MINOR | **API side done**: the MSISDN cases moved to vectors using the unassigned E.164 country code 999. **Events side open**: `test_events.py` fixtures | add5d86 | `grep -rn 250788 contracts` is empty on this branch |
-| CR-28 | MINOR | **Not split.** 70e083b is published on both M1 branches, and the build prompt prohibits rewriting published history, so the commit cannot be split or reworded. Disclosure instead: the licence exceptions in 70e083b (`jsonschema-path@0.5.0`, `pathable@0.6.0`, `openapi-schema-validator@0.9.0`, `nodeenv@1.10.0`, `archunit@1.5.0`) and the ADR 0009 amendment are named here and in the M1 walkthrough. Each was verified from the package's licence file at the time. The owner may decide otherwise | — | This row; `docs/walkthrough/M1.md` |
+| CR-28 | MINOR | **Not split.** 70e083b is published on both M1 branches, and the build prompt prohibits rewriting published history, so the commit cannot be split or reworded. Disclosure instead: the licence exceptions in 70e083b (`jsonschema-path@0.5.0`, `pathable@0.6.0`, `openapi-schema-validator@0.9.0`, `nodeenv@1.10.0`, `archunit@1.5.0`) and the ADR 0009 amendment are named here. Each was verified from the package's licence file at the time. The M1 walkthrough, written when M1 closes, will repeat this disclosure. The owner may decide otherwise | — | This row (the earlier pointer to `docs/walkthrough/M1.md` was wrong: that file does not exist yet, re-review NF-15) |
 | CR-29 | MINOR | **API side done**: the FR-07-01 tag moved to the matrix tests; route-presence tests carry no requirement tags. **Events side open**: D-15 tag | add5d86 | `fs-traceability check` |
 | CR-30 | MINOR | Campaigns RISK_OFFICER only; circuit breakers ADMIN only; ADMIN on model performance justified by FR-06-03 in the matrix | add5d86 | matrix test |
 | CR-31 | NIT | URN kept; ADR 0011 §6 notes that `fraudshield` is an unregistered namespace | d2eaccd | — |
@@ -41,6 +41,36 @@ Also resolved while fixing: the new `schema-examples.yaml` first used random-loo
 under `token:` keys, and the default gitleaks `generic-api-key` rule flagged them in `make ci`
 (`gitleaks dir`, 8 findings). The examples now use low-entropy placeholders
 (`tok_exampleAccount0000000001`), so no allowlist entry is needed for them.
+
+## Re-review of m1/contracts-openapi (NF-01 … NF-15)
+
+Re-review: `contracts-openapi-rereview.md` (at c2ec944; verdict CHANGES_REQUIRED, 0 BLOCKER / 2 MAJOR /
+10 MINOR / 3 NIT; 22 original findings verified fixed, 3 partly fixed, CR-28 accepted as a deviation).
+All fixes are in one commit after c2ec944, recorded in the commit message. The ADR amendments are
+included in it because the contract, tests and ADR text change together.
+
+| # | Sev | Resolution | Verification |
+|---|---|---|---|
+| NF-01 | MAJOR | `unevaluatedProperties` is gone. The eight composed schemas list their members' property names beside `additionalProperties: false`, so one invalid value gives one error | `test_composed_schemas_are_closed_with_exactly_their_members_properties` (listed names must equal the members' properties); `test_one_bad_value_in_a_composed_schema_reports_one_error` |
+| NF-02 | MAJOR | All 30 operations with a JSON or multipart body document 400 and 422 `ValidationProblem`. New codes: `length_out_of_range`, `item_count_out_of_range` (replaces `too_many_items`), `duplicate_items`, `escalation_target_not_higher`. `const` → `unsupported_value`, `minProperties` → `required`. ADR 0011 table rows added. The escalation target rule is now a 422 validation error with that code | `test_every_json_request_body_documents_400_and_422_validation_problems`; `test_operations_document_every_status_their_vectors_expect` |
+| NF-03 | MINOR | The matrix lists each operation's object-level rules (problem/status/code, or `filter` for the escalated queue, which is now a declared rule), and `matrix_differences` compares them. There are explicit tests for sign-in and registration responses | `test_matrix_check_detects_a_removed_or_changed_object_rule` (N2, N2b, N2c, N17 equivalents); `test_sign_in_and_registration_do_not_disclose_account_state` (N19, N20) |
+| NF-04 | MINOR | `fraudshield_contracts.validation.error_codes` maps JSON Schema errors to (field, code); unmapped keywords raise | `test_request_vector` requires exact equality with each vector (N3b and N3c now fail); classifier tests for composed branches, lengths, duplicates and unmapped keywords |
+| NF-05 | MINOR | Sign-in `password` and `current_password` have a 1,024-character transport cap; above 72 bytes → 401 (ADR 0014 §7) | `test_password_schema_limits_match_the_vectors` asserts both caps (N4b) |
+| NF-06 | MINOR | Character rule defined by Unicode category: no C, no Z except U+0020; special = any other permitted non-space character. New reason CHARACTERS; each vector says whether the schema screen detects it | 7 new vectors (U+00A0, U+2028, U+FEFF, U+200B, U+001C, NUL, tab) plus a currency-symbol accept; the reference implementation uses `unicodedata.category` |
+| NF-07 | MINOR | `/actuator/health/ml` on the management port (`x-network: management`) for the probe and smoke test; deviation recorded in ADR 0014 §6 and on OPS-CI-07 and OPS-OBS-05 | `test_management_endpoints_are_public_only_on_the_management_network` |
+| NF-08 | MINOR | `StateConflict` requires `StaleAlertProblem` when `type` is stale-alert (`if`/`then`); the orphaned `StaleAlert` response is removed | `test_stale_alert_conflicts_must_carry_the_current_alert` |
+| NF-09 | MINOR | `JobStatus` item `problem` is `oneOf` `ValidationProblem` or `IdempotencyConflictProblem` (type and 409 fixed); example added | `test_batch_items_can_report_an_idempotency_conflict`; schema examples |
+| NF-10 | MINOR | `register` wording softened; ADR 0014 §8 records availability as an accepted, rate-limited residual enumeration risk (E.8) | — |
+| NF-11 | MINOR | Exact `FinalDecision` required set, UUID formats, exact `raw_key` and `webhook_signing_secret` patterns with matching and non-matching samples | `test_final_decision_identity_fields_are_exact` (N6c, N6d); `test_generated_secrets_have_exact_recognisable_formats` (N9) |
+| NF-12 | NIT | Invariant: `escalateAlert` roles ⊆ {ANALYST, SENIOR_ANALYST} | `test_only_roles_below_risk_officer_can_escalate` (N13) |
+| NF-13 | NIT | ADR 0011 §9 and the schema say the frozen-account DECLINE is server-enforced (M6) | — |
+| NF-14 | NIT | Management endpoints use a server URL with `{managementPort}` | management-network test |
+| NF-15 | MINOR | CR-28 row corrected above | — |
+
+Found while fixing: every `if` that tested a property without requiring it passed vacuously when the
+property was absent. For example, an ingest request without `channel` was also told that `agent_id` was
+required. All `if` blocks now require their discriminator, and `test_if_conditions_require_their_discriminator`
+walks the whole document.
 
 ## m1/contracts-events
 
