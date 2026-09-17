@@ -543,10 +543,11 @@ def _distribution_checks(
         ),
         CheckResult(
             "size",
-            rows >= MIN_ROWS_FULL or not full,
+            rows >= MIN_ROWS_FULL,
             full,
             f"{rows} rows",
-            ">= 5,000,000 rows (ML-DATA-01)",
+            ">= 5,000,000 rows in a release run (ML-DATA-01)",
+            "development runs are smaller on purpose; this is a gate only with --full",
         ),
         CheckResult(
             "generator peak memory",
