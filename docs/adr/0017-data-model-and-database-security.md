@@ -47,7 +47,7 @@ random ones. The migrations run as `fs_migrator`, never as a superuser.
   reference `users (id)`.
 - Trust assumption: every application role can set `fraudshield.institution_id`, so the database
   binds a connection to a tenant only as far as the service sets it correctly. Services set it in one
-  place from the authenticated principal (M2).
+  place from the authenticated principal (M5/M6, when the services are wired).
 - Authentication runs before the tenant is known (sign-in by email, API key, refresh cookie,
   email-verification and customer-verification links). Narrow `SECURITY DEFINER` functions
   (`auth_find_*`, `verification_find_by_token`) with a fixed `search_path` return only ids, the
@@ -113,7 +113,7 @@ previous-production model, one active retraining job), and database-side guards 
 ## Consequences
 
 - Every transaction must start with `SET LOCAL fraudshield.institution_id`. Code that forgets it reads
-  nothing and cannot write, rather than leaking data. The persistence layer (M2) must set it in one
+  nothing and cannot write, rather than leaking data. The service persistence layer (M5/M6) must set it in one
   place.
 - Hypertable reads must use the `v_` views. A test asserts that no application role can select from
   a hypertable.

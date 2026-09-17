@@ -45,7 +45,7 @@ developer machine ↔ public repository.
 | T | Audit row altered, deleted or reordered by someone with storage access | SHA-256 hash chain per writer partition assigned by a SECURITY DEFINER trigger; `verify_audit_chain` detects altered rows, gaps and a head ahead of rows; test with tampering and gaps, and across compression | implemented |
 | T | Backdated audit rows dropped by retention from the middle of a chain (denial of verification) | Chunks and retention follow the database-assigned `recorded_at`, which never decreases along a chain (`retentionFollowsTheChainOrderNotTheWritersEventTime`) | implemented |
 | T | Whole chain rewritten consistently by a database superuser | Daily signed Merkle-root anchors in `audit_anchors` (schema M1); signing key outside the database | planned (audit service) |
-| R | Staff deny a decision or configuration change | Audit events for every decision and dual-control transition with user, role and before/after values; append-only | implemented (schema), planned (writers M2+) |
+| R | Staff deny a decision or configuration change | Audit events for every decision and dual-control transition with user, role and before/after values; append-only | implemented (schema), planned (writers M6, M7) |
 | I | Tenant A reads tenant B's rows | RLS on every tenant table, fail-closed `current_institution()`; hypertables and continuous aggregates via security-barrier views with no direct SELECT; composite FKs on every tenant-to-tenant reference prevent cross-tenant references and existence oracles; tests `institutionsSeeOnlyTheirOwnRows`, `withoutAnInstitutionNothingIsVisibleOrWritable`, `referencesCannotCrossInstitutions`, `everyForeignKeyBetweenTenantTablesIncludesTheInstitution`, `everyTenantTableIsIsolated` | implemented |
 | I | Forgotten tenant setting leaks everything | Unset setting returns no rows and rejects writes | implemented |
 | I | Pre-authentication lookups become a cross-tenant oracle | `auth_find_*` and `verification_find_by_token` return ids and the fields the check needs only; lookup by exact email, key id or token hash | implemented |
@@ -60,12 +60,12 @@ developer machine ↔ public repository.
 | STRIDE | Threat | Control | Status |
 |---|---|---|---|
 | S | Known demo accounts in a production database | `DemoSeedGuard` stops startup when seeding is enabled outside `dev`/`demo`; `@Profile` on the seeder; test under `prod`, `staging`, `default`, mixed and no profile | implemented |
-| S | A production service started later against a database that was seeded earlier | `institutions.synthetic` marker; `SyntheticDataStatus` fails startup of any service outside `dev`/`demo` against a seeded database (`SyntheticDataStatusTest`) | implemented |
+| S | A production service started later against a database that was seeded earlier | `institutions.synthetic` marker; `SyntheticDataGuard` (a `spring.factories` listener with its own JDBC connection, independent of beans and lazy initialisation, failing closed) stops startup of any Spring Boot service outside `dev`/`demo` against a seeded database (`SyntheticDataGuardTest`, `SyntheticDataGuardCoverageTest`) | implemented |
 | S/I | Demo passwords or API key published in the public repository | Generated locally, git-ignored `.demo-credentials` (mode 600), printed once, never on a command line; only bcrypt hashes and HMACs stored; gitleaks rule for `fsk_` keys | implemented |
 | I | Real data entered into a demo deployment | Banner "SYNTHETIC DATA — NOT FOR PRODUCTION" from public `GET /environment` (D-21) | contracted; UI shell M8 |
 | I | Demo credentials leak into CI logs | Stack job filters account and key lines; credentials are throw-away per run | implemented |
 
-### 3.3 Public API (contracted in M1; implemented M2, M6, M7)
+### 3.3 Public API (contracted in M1; implemented M5, M6, M7)
 
 | STRIDE | Threat | Control | Status |
 |---|---|---|---|
@@ -84,7 +84,7 @@ developer machine ↔ public repository.
 | Kafka (6) | T/I: plaintext, unauthenticated local broker | TLS + SASL, per-service ACLs; events carry tokens only | M6, M9 |
 | Webhooks (7) | S/T: forged or replayed callbacks | HMAC signature with timestamp and tolerance, published test vectors (contract) | M6 |
 | Scoring service (3) | T: model poisoning; D: latency attack | Model promotion gates, shadow scoring, rule-based fallback (C.4) | M4, M5 |
-| PII vault (8) | I: vault reachable from every service | Separate instance, separate roles, TLS, network policy (D-20) | M2, M9 |
+| PII vault (8) | I: vault reachable from every service | Separate instance, separate roles, TLS, network policy (D-20) | M6, M9 |
 | Customer verification (5) | S: guessed or reused links | Token hash lookup, single use (`verificationTokenAnswersOnce`), expiry trigger | schema M1, page M6 |
 | Front end (2) | I: cached alert data on shared phones (D-29) | No offline decision replay without re-validation, cache limits | M8 |
 
@@ -103,5 +103,5 @@ developer machine ↔ public repository.
 |---|---|---|
 | R-1 | `main` ruleset (no force push, no deletion) not verifiable without authentication | Owner confirms (F-06) |
 | R-2 | Audit anchors unsigned until the audit service exists | Audit service milestone |
-| R-3 | Application role `fs_app` necessarily reads credential hashes of its tenant; a SQL injection in the API would expose them | Parameterised queries only (M2 persistence layer), static analysis in CI |
+| R-3 | Application role `fs_app` necessarily reads credential hashes of its tenant; a SQL injection in the API would expose them | Parameterised queries only (M5/M6 persistence layer), static analysis in CI |
 | R-4 | Third-party penetration test | REQUIRES_EXTERNAL_PARTY (D-28) |

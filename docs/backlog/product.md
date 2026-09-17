@@ -5,30 +5,32 @@ Owner direction (2026-09-17): from the M1 database work on, reviews fix BLOCKER 
 NIT findings, and backlog candidates raised by re-checks, are logged here instead of starting
 fix-and-re-review rounds. Governance-tooling items stay in `governance.md`.
 
-Format: ID · title · source · priority · due · problem · acceptance.
+Format: ID · title · source · priority · due · problem · acceptance. Due dates are milestone IDs
+from build prompt Part D.3 (M2 is the dataset generator; the scoring service is M5, ingestion and
+the decision engine M6, staff identity, admin and audit M7).
 
 ---
 
 ### PB-1 · Test rejecting and confirming a folded tightening
-- **Source:** contracts-events final re-check B-1 (mutation M11 survived) · **Priority:** medium · **Due:** M2
+- **Source:** contracts-events final re-check B-1 (mutation M11 survived) · **Priority:** medium · **Due:** M7 (risk configuration APIs)
 - **Problem:** rejecting a folded tightening is not tested for restoring the true baseline, and
   confirming it is not tested for keeping both tightenings. The implementation is correct today.
 - **Acceptance:** the fold test has a rejection branch asserting the defaults are restored and a
   confirmation branch asserting both tightenings stay; mutation M11 is caught.
 
 ### PB-2 · Document `previous` of a folded configuration change
-- **Source:** contracts-events final re-check B-2 · **Priority:** low · **Due:** M2
+- **Source:** contracts-events final re-check B-2 · **Priority:** low · **Due:** M7 (risk configuration APIs)
 - **Problem:** for a folded change `previous` is the earlier baseline, not the settings at
   `base_version`; the javadoc of `ConfigChange.previous` and the OpenAPI property do not say so.
 - **Acceptance:** javadoc and OpenAPI descriptions state it.
 
 ### PB-3 · Link superseded configuration changes to their successor
-- **Source:** contracts-events final re-check B-3 · **Priority:** medium · **Due:** M2 (with the audit writer)
+- **Source:** contracts-events final re-check B-3 · **Priority:** medium · **Due:** M7 (audit, with the configuration audit events)
 - **Problem:** neither the `SUPERSEDED` audit event nor `ConfigChange` names the superseding change.
 - **Acceptance:** `superseded_by` in the domain, the contract, `config_changes` and the audit event.
 
 ### PB-4 · State the consequences of folding in ADR 0014
-- **Source:** contracts-events final re-check B-4 · **Priority:** low · **Due:** M2
+- **Source:** contracts-events final re-check B-4 · **Priority:** low · **Due:** M7 (risk configuration APIs)
 - **Problem:** ADR 0014 §3 does not say that chained small tightenings keep an unconfirmed tightening
   in force indefinitely, or that the first officer may confirm a change that folds their own.
 - **Acceptance:** ADR 0014 states both; decide on an alert or a cap for chained folds.
@@ -46,7 +48,7 @@ Format: ID · title · source · priority · due · problem · acceptance.
 - **Acceptance:** every Compose and deployment image is listed with its licence and policy status.
 
 ### PB-7 · Compliance access to `v_auto_block_status`
-- **Source:** M1 database review (MINOR) · **Priority:** medium · **Due:** M2
+- **Source:** M1 database review (MINOR) · **Priority:** medium · **Due:** M7 (compliance and audit access)
 - **Problem:** the view is granted to `fs_compliance_ro`, but querying it fails because the role has no
   SELECT on `customer_verifications` and `customer_notifications`.
 - **Acceptance:** grant the needed columns or drop the grant; a test queries the view as the role.
@@ -77,7 +79,7 @@ Format: ID · title · source · priority · due · problem · acceptance.
 - **Acceptance:** a dedicated role for the anchoring job; `fs_app` has no INSERT on `audit_anchors`.
 
 ### PB-12 · Distinguish SQL NULL from JSON null in the audit row hash
-- **Source:** M1 database review (NIT) · **Priority:** low · **Due:** before the first audit writer (M2)
+- **Source:** M1 database review (NIT) · **Priority:** low · **Due:** before the first audit writer (M6 decision audit events)
 - **Problem:** `audit_row_hash` hashes `before_value`/`after_value` SQL NULL and JSON `null` alike.
 - **Acceptance:** the canonical form tags NULL; a test changes one into the other and verification
   reports the row.
@@ -95,14 +97,16 @@ Format: ID · title · source · priority · due · problem · acceptance.
   recorded in ADR 0017.
 
 ### PB-15 · Synthetic-data guard must survive lazy initialisation
-- **Source:** M1 database re-check item 1 (MINOR, reproduced) · **Priority:** high · **Due:** before M2 wires the API
+- **Source:** M1 database re-check item 1 (MINOR, reproduced) · **Priority:** high · **Due:** M1 (owner direction: fixed before the merge)
+- **Status:** fixed on `m1/database`: the guard is now a `spring.factories` listener with its own JDBC connection (`SyntheticDataGuard`).
 - **Problem:** with `spring.main.lazy-initialization=true`, `SyntheticDataStatus` is never created, so a
   `prod` process starts against a seeded database.
 - **Acceptance:** `LazyInitializationExcludeFilter` for the bean (or a `SmartInitializingSingleton`);
   `SyntheticDataStatusTest` covers lazy initialisation.
 
 ### PB-16 · Synthetic-data guard fails loudly without a `JdbcTemplate`
-- **Source:** M1 database re-check item 2 (MINOR) · **Priority:** high · **Due:** before M2 wires the API
+- **Source:** M1 database re-check item 2 (MINOR) · **Priority:** high · **Due:** M1 (owner direction: fixed before the merge)
+- **Status:** fixed on `m1/database`: independent of beans; fails closed when it cannot check.
 - **Problem:** `@ConditionalOnBean(JdbcTemplate.class)` silently skips the guard in an application
   with several data sources or a custom `JdbcOperations`.
 - **Acceptance:** condition on `DataSource` and fail startup when the check cannot run.
@@ -112,7 +116,7 @@ Format: ID · title · source · priority · due · problem · acceptance.
 - **Acceptance:** that service calls `deployment_has_synthetic_data()` at startup; ADR 0019 updated.
 
 ### PB-18 · Audit writers: retry on 40001, prefer READ COMMITTED
-- **Source:** M1 database re-check items 4–5 · **Priority:** medium · **Due:** M2 (audit writer)
+- **Source:** M1 database re-check items 4–5 · **Priority:** medium · **Due:** M6 (first audit writer: decision events)
 - **Problem:** REPEATABLE READ writers get 40001 whenever the partition was written after their
   snapshot; a wall-clock step back stalls audit writes with 40001 until the clock catches up.
 - **Acceptance:** the audit writer retries on 40001 in READ COMMITTED; ADR 0017 documents both.
