@@ -128,6 +128,8 @@ class Dataset:
         self.shortcut_groups: list[NDArray[np.int64]] = []
         self.novel_timestamps: list[int] = []
         self.fraud_types: dict[str, int] = {}
+        self.fraud_types_by_month: dict[str, dict[str, int]] = {}
+        self.rows_by_month: dict[str, int] = {}
         self.channel_counts: dict[str, int] = {}
         self.currency_counts: dict[str, int] = {}
         self.format_violations = dict.fromkeys(
@@ -148,6 +150,10 @@ class Dataset:
             )
             labels = pq.read_table(root / "labels" / f"month={month}" / "part-0000.parquet")
             self._month(file_index, transactions, labels)
+            self.rows_by_month[month] = transactions.num_rows
+            monthly = self.fraud_types_by_month.setdefault(month, {})
+            for kind in labels.filter(labels["is_fraud_true"])["fraud_type"].to_pylist():
+                monthly[kind] = monthly.get(kind, 0) + 1
         observed = self.observed
         for name in _CATEGORICALS:
             codes = self.features.get(name).astype(np.int64)
@@ -435,6 +441,12 @@ def _distribution_checks(
         channel_share=channel_share,
         country_share=country_share,
         fraud_types=data.fraud_types,
+        fraud_types_by_month=data.fraud_types_by_month,
+        rows_by_month=data.rows_by_month,
+        novel_rows=len(data.novel_timestamps),
+        novel_earliest=min(data.novel_timestamps) if data.novel_timestamps else None,
+        test_start=config.split.test_start,
+        seed=config.seed,
         peak_rss_bytes=run["peak_rss_bytes"],
         machine=run["machine"],
         chunk_size=run["chunk_size"],

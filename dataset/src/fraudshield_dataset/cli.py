@@ -10,9 +10,10 @@ from pathlib import Path
 from fraudshield_dataset.generator.config import build_config
 from fraudshield_dataset.generator.pipeline import generate
 from fraudshield_dataset.params import ParameterError, load_parameters
-from fraudshield_dataset.paths import PROVENANCE_MD
+from fraudshield_dataset.paths import PROVENANCE_MD, REALISM_REPORT_MD
 from fraudshield_dataset.provenance_report import render
 from fraudshield_dataset.realism.checks import run_checks
+from fraudshield_dataset.realism.report import render as render_report
 
 
 def _provenance(check: bool) -> int:
@@ -55,7 +56,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     check.add_argument("--seed", type=int, default=20260917)
     check.add_argument("--rows", type=int, help="target rows the dataset was generated with")
     check.add_argument("--full", action="store_true", help="gate size and distribution targets")
+    report = commands.add_parser("report", help="run the checks and write the realism report")
+    report.add_argument("dataset", type=Path)
+    report.add_argument("--seed", type=int, default=20260917)
+    report.add_argument("--rows", type=int)
+    report.add_argument("--full", action="store_true")
+    report.add_argument("--output", type=Path, default=REALISM_REPORT_MD)
     args = parser.parse_args(argv)
+    if args.command == "report":
+        config = build_config(load_parameters(), seed=args.seed, total_rows=args.rows)
+        results, measures = run_checks(args.dataset, config, full=args.full)
+        args.output.write_text(
+            render_report(results, measures, config, args.full), encoding="utf-8"
+        )
+        print(f"wrote {args.output}")
+        return 0 if all(r.passed or not r.gate for r in results) else 1
     if args.command == "check":
         config = build_config(load_parameters(), seed=args.seed, total_rows=args.rows)
         results, _ = run_checks(args.dataset, config, full=args.full)

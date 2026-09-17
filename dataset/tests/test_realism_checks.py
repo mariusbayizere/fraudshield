@@ -145,3 +145,24 @@ def test_cli_check_exit_codes(plant_base: Path, capsys: pytest.CaptureFixture[st
     output = capsys.readouterr().out
     assert "single-feature AUC" in output
     assert cli.main([*arguments, "--full"]) == 1  # 40K rows cannot meet the 5M size gate
+
+
+def test_cli_report_writes_every_section(plant_base: Path, tmp_path: Path) -> None:
+    output = tmp_path / "realism_report.md"
+    arguments = ["report", str(plant_base), "--seed", str(SEED), "--rows", str(PLANT_ROWS)]
+    assert cli.main([*arguments, "--output", str(output)]) in (0, 1)
+    text = output.read_text(encoding="utf-8")
+    for heading in (
+        "## Run",
+        "## Checks",
+        "## Temporal split (D-07)",
+        "## Distributions against targets",
+        "## Single-feature AUC",
+        "## Shortcut and identifier checks",
+        "## Labels",
+        "## Novel sub-variant placement (D-08)",
+        "## Fraud scenarios over time",
+        "## Parameter provenance",
+    ):
+        assert heading in text, heading
+    assert "FraudShield-EAC synthetic benchmark" in text
