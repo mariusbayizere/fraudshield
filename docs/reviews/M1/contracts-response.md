@@ -229,6 +229,27 @@ Per-commit verification of `main..m1/contracts-events` (`tools/bin/verify-branch
 
 The first run failed only 962cb40, with a bug in the verification script: it ran the gitleaks self-test at a commit where the self-test does not exist yet. The script was fixed to scan that commit's history with the pinned gitleaks instead, and to ignore an inherited `VIRTUAL_ENV`. The fix was folded into the tip commit (7203304 → efb3d40), and the run above is the second one. This response commit changes only documentation; it passes the governance checks through the pre-commit hook and is covered by `make ci` and CI.
 
+## Final review of m1/contracts-events (F-01 … F-11)
+
+`contracts-events-final-review.md`, at e5276e8: CHANGES_REQUIRED (0 BLOCKER, 1 MAJOR, 5 MINOR, 5 NIT). CI was green in
+every job, including the devcontainer (N-01 evidence), and the rewrite was verified. Fixes are in
+fc4ccf6. Per the owner's pace direction, MINOR and NIT findings that were not cheap to
+fix go to the backlog.
+
+| # | Sev | Resolution | Verification |
+|---|---|---|---|
+| F-01 | MAJOR | A tightening is never blocked. It supersedes an open loosening proposal (`SUPERSEDED`), or folds an unconfirmed tightening into itself, keeping that change's baseline, so one confirmation keeps both and one revert restores the baseline. A loosening is still refused while another change of its kind is open. The proposer can withdraw a loosening proposal (`WITHDRAWN`; contract `POST /config-changes/{id}/withdrawal`, matrix, audit action). ADR 0014 §3 describes all of this | `tighteningSupersedesPendingLooseningProposal`; `secondTighteningFoldsInTheFirstSoOneRevertRestoresTheBaseline`; `proposerCanWithdrawLooseningProposalButNotTighteningChange`; `looseningIsRefusedWhileAnotherChangeOfItsKindIsOpen` |
+| F-02 | MINOR | `change_version` is removed from the review requests. The approval `comment` maps to the domain's review reason. An unknown change is 404 `CHANGE_NOT_FOUND` in the domain, as in the contract | `test_domain_refusals_match_the_contract` parses the Java refusals and checks each status and problem type against the contract; `unknownChangesAreNotFound` |
+| F-03 | MINOR | Each threshold element (medium, high, policy) and each breaker element (rate, volume, reset, window) is tested in both directions, including the workflow status and the applied settings | `eachThresholdElementIsClassifiedAndAppliedByDirection` (5 cases); `eachCircuitBreakerElementIsClassifiedAndAppliedByDirection` (8 cases) |
+| F-04 | MINOR | New proto cases: enum value deleted with only its number or only its name reserved; enum value renumbered; field moved into a oneof; message, enum and service deleted. The ADR 0016 wording is corrected. Removing each deletion rule, or excluding `FIELD_SAME_ONEOF`, `MESSAGE_NO_DELETE`, `ENUM_NO_DELETE` or `SERVICE_NO_DELETE`, now fails a test (author runs: 7 rule mutations, 7 caught) | `test_proto_breaking.py` (27 tests) |
+| F-05 | MINOR | Documented rather than changed: the per-commit checks are selective, as the owner specified. ADR 0015 §3 states the transitive argument and its limit (a commit that breaks a component without touching its files); full CI on the head covers the rest | ADR 0015 |
+| F-06 | MINOR | ADR 0015 no longer relies on the ruleset: the owner reported creating one, and the unauthenticated API cannot confirm it (`protected: false`). **Owner action:** please confirm the ruleset exists | ADR 0015 §2 |
+| F-07 | NIT | Reconciled. The tip commit was 7203304 when the rewrite ran and became efb3d40 when the verification-script fix was folded in; 0efa2cf was the pre-rewrite tip. The mapping table's last row, 0efa2cf → efb3d40, is the net effect. Commit messages written before the rewrite keep their original SHAs | this row |
+| F-08 | NIT | A threshold proposal entry without `medium_timeout_policy` keeps that channel's current policy. `ThresholdSet` requires the policy for every channel | contract |
+| F-09 | NIT | `scoring.proto` comments point to `/actuator/health/ml` | — |
+| F-10 | NIT | ADR 0014 now says the OpenAPI contract and matrix declare the rules. The FR-05-07 note and ADR 0014 now say the two demo risk-officer accounts are still to be seeded, with a test, in the M1 database work | traceability check |
+| F-11 | NIT | **Backlog GOV-15**: plant copies under the fixture's own file name in a sibling directory | `docs/backlog/governance.md` |
+
 ## Other process notes
 
 - **Owner finding 3 (mixed commits).** Every commit in this round was made with the owner's
