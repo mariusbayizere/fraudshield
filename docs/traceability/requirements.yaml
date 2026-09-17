@@ -677,8 +677,8 @@ requirements:
   deviations:
   - docs/adr/0014-staff-authorisation-model.md
   notes: 'Deviation (owner decision, ADR 0014 section 3): dual control as FR-02-06, including the MEDIUM
-    timeout policy; two RISK_OFFICER demo accounts are still to be seeded, with a test, in the M1 database
-    work.'
+    timeout policy. The two RISK_OFFICER demo accounts are seeded by make seed-demo with locally generated
+    credentials (ADR 0019, DemoDataSeederTest).'
 - id: FR-06-01
   section: 3.6 FR-06 Admin panel
   title: 'Admin creates staff accounts: first name, last name, email, phone (country code flag + dial
@@ -1132,9 +1132,11 @@ requirements:
     denied from application DB user; confirmed by security test'
   defects:
   - D-32
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation:
+  - backend/persistence/src/main/resources/db/migration/V8__audit_log.sql
+  - backend/persistence/src/main/resources/db/migration/V11__grants.sql
   evidence: []
   deviations: []
 - id: NFR-SEC-06
@@ -3368,11 +3370,19 @@ requirements:
   defects: []
   affects:
   - NFR-SEC-09
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation:
+  - backend/persistence/src/main/java/io/github/mariusbayizere/fraudshield/persistence/demo/DemoSeedGuard.java
+  - backend/persistence/src/main/java/io/github/mariusbayizere/fraudshield/persistence/demo/SyntheticDataFlag.java
+  - frontend/src/lib/environment/syntheticDataBanner.ts
+  - tools/src/fraudshield_tools/seed_demo.py
   evidence: []
-  deviations: []
+  deviations:
+  - docs/adr/0019-demo-seeding-and-synthetic-data-banner.md
+  notes: 'M1: demo seeding only under dev/demo profiles, locally generated credentials, public synthetic_data
+    flag and banner logic (ADR 0019). The residency prerequisite (NFR-SEC-09) and the banner in the React
+    shell (M8) remain.'
 - id: D-22
   section: Build prompt Part B defect register
   title: Regulatory mapping is unverified.
@@ -3504,11 +3514,15 @@ requirements:
   defects: []
   affects:
   - FR-03-08
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation:
+  - backend/persistence/src/main/resources/db/migration/V5__blocking_verification_and_labels.sql
+  - backend/persistence/src/main/resources/db/migration/V4__alerts_rules_and_campaigns.sql
+  - backend/persistence/src/main/resources/db/migration/V1__tenancy_and_common_functions.sql
   evidence: []
-  deviations: []
+  deviations:
+  - docs/adr/0017-data-model-and-database-security.md
 - id: D-31
   section: Build prompt Part B defect register
   title: Tables required by functional requirements are missing from the schema.
@@ -3520,11 +3534,18 @@ requirements:
   - FR-06-07
   - FR-07-08
   - FR-05-06
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation:
+  - backend/persistence/src/main/resources/db/migration/V2__identity_and_access.sql
+  - backend/persistence/src/main/resources/db/migration/V3__transactions_and_scoring.sql
+  - backend/persistence/src/main/resources/db/migration/V6__risk_configuration.sql
+  - backend/persistence/src/main/resources/db/migration/V7__models_and_training.sql
+  - backend/persistence/src/main/resources/db/migration/V9__outbox.sql
+  - backend/persistence/src/main/resources/db/migration/V11__grants.sql
   evidence: []
-  deviations: []
+  deviations:
+  - docs/adr/0017-data-model-and-database-security.md
 - id: D-32
   section: Build prompt Part B defect register
   title: Audit log needs tamper evidence, not only permissions, and "12 action types" are unnamed.
@@ -3536,11 +3557,17 @@ requirements:
   - FR-06-06
   - NFR-SEC-05
   - OPS-OBS-04
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation:
+  - backend/persistence/src/main/resources/db/migration/V8__audit_log.sql
+  - backend/persistence/src/main/resources/db/migration/V10__timescale_policies_and_aggregates.sql
   evidence: []
-  deviations: []
+  deviations:
+  - docs/adr/0017-data-model-and-database-security.md
+  notes: Schema, 12 event types, database-assigned hash chain, verify_audit_chain, anchors table, compression
+    and 7-year retention are M1. The daily signed Merkle-root job and the `fraudshield audit verify` CLI
+    come with the audit service.
 - id: D-33
   section: Build prompt Part B defect register
   title: Several SRS colour pairings fail WCAG 2.1 AA text contrast
@@ -3807,9 +3834,11 @@ requirements:
   defects: []
   affects:
   - NFR-REL-04
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation:
+  - backend/persistence/src/main/resources/db/migration/V10__timescale_policies_and_aggregates.sql
+  - docs/adr/0018-timescaledb-licence-and-deployment.md
   evidence: []
   deviations: []
 - id: D-50

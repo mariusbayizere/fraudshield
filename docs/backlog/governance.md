@@ -86,6 +86,7 @@ Format: ID · title · source · priority · due · description · acceptance.
 
 ### GOV-13 · Threat model document
 - **Source:** M0 milestone review M-1 (MINOR) · **Priority:** high · **Due:** M1, before the first data-flow component
+- **Status:** delivered in M1 as `docs/security/threat_model.md`.
 - **Note:** this is a product security artefact (build prompt D-28, I.3), not governance tooling; it is
   delivered as part of M1.
 
