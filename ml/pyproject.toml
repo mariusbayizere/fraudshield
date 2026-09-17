@@ -1,0 +1,19 @@
+[project]
+name = "fraudshield-ml"
+version = "0.1.0"
+description = "FraudShield ML pipeline and scoring service: features, ensemble, calibration, SHAP, evaluation"
+requires-python = "==3.12.*"
+license = "Apache-2.0"
+dependencies = []
+
+[build-system]
+requires = ["hatchling==1.32.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fraudshield_ml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["req(*ids): links a test to requirement or defect IDs in docs/traceability/requirements.yaml"]
+addopts = "--strict-markers --import-mode=importlib"

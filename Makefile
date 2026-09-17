@@ -1,0 +1,109 @@
+# FraudShield developer entry points. Run `make help` for the list.
+# Requires: Docker with Compose v2, Java 21, uv, Node 24 + pnpm (versions in .tool-versions).
+
+SHELL := /usr/bin/env bash
+.SHELLFLAGS := -euo pipefail -c
+.DEFAULT_GOAL := help
+
+COMPOSE := docker compose
+MVNW := cd backend && ./mvnw -B -ntp
+PNPM := cd frontend && pnpm
+
+.PHONY: help
+help: ## List available targets
+	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "  %-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+
+# --- Environment -------------------------------------------------------------------------
+
+.PHONY: bootstrap
+bootstrap: ## Install locked Python, Node and Maven dependencies
+	uv sync --all-packages --locked
+	$(PNPM) install --frozen-lockfile
+	$(MVNW) -q dependency:go-offline
+	uv run pre-commit install
+
+.PHONY: env
+env: ## Create .env with random local development credentials (never overwrites)
+	@./infrastructure/docker/scripts/generate-dev-env.sh
+
+.PHONY: up
+up: env ## Start the core local stack and wait until every service is healthy
+	$(COMPOSE) --profile core up -d --wait --wait-timeout 300
+	$(COMPOSE) --profile core ps
+
+.PHONY: down
+down: ## Stop the local stack (volumes are kept)
+	$(COMPOSE) --profile full down
+
+.PHONY: ps
+ps: ## Show local stack status
+	$(COMPOSE) --profile full ps
+
+# --- Quality gates -----------------------------------------------------------------------
+
+.PHONY: lint
+lint: ## Lint and format-check all components
+	uv run ruff check tools ml
+	uv run ruff format --check tools ml
+	$(PNPM) lint
+	$(PNPM) format:check
+	$(MVNW) -q checkstyle:check
+
+.PHONY: typecheck
+typecheck: ## Strict type checks (mypy, tsc)
+	uv run mypy tools/src tools/tests ml/src ml/tests
+	$(PNPM) typecheck
+
+.PHONY: test-python
+test-python: ## Python unit tests
+	cd tools && uv run pytest -q
+	cd ml && uv run pytest -q
+
+.PHONY: test-java
+test-java: ## Java build, unit tests, SpotBugs and coverage gate
+	$(MVNW) verify
+
+.PHONY: test-frontend
+test-frontend: ## Front-end unit tests with coverage thresholds
+	$(PNPM) test:coverage
+
+.PHONY: test
+test: test-python test-java test-frontend ## All unit test suites
+
+.PHONY: governance
+governance: ## Defect register, traceability and scope checks (D.2, D-47)
+	uv run fs-defect-register --check
+	uv run fs-traceability check
+	uv run fs-scope-guard
+
+.PHONY: traceability
+traceability: ## Regenerate the traceability matrix from YAML and test tags
+	uv run fs-traceability render
+
+.PHONY: compose-config
+compose-config: ## Validate docker-compose.yml without starting containers
+	$(COMPOSE) --env-file .env.example --profile full config -q
+
+.PHONY: secrets-scan
+secrets-scan: ## Gitleaks scan of the working tree and history
+	gitleaks git --redact --no-banner .
+	gitleaks dir --redact --no-banner .
+
+.PHONY: ci
+ci: lint typecheck test governance compose-config secrets-scan ## Everything CI runs, locally
+
+# --- Later milestones --------------------------------------------------------------------
+# These targets are part of the documented interface (build prompt C.5) and are implemented
+# by the milestones named below. Until then they fail loudly instead of pretending to work.
+
+.PHONY: bench reproduce verify-all report demo-stream
+bench: ## Latency and throughput benchmarks (M3, M5, M6, M10)
+	@echo "make bench is delivered in M3 (features), M5 (scoring) and M6 (decisions)" >&2; exit 2
+reproduce: ## Dataset -> training -> evaluation -> paper tables (M11)
+	@echo "make reproduce is delivered in M11" >&2; exit 2
+verify-all: ## Full verification campaign and report (M10)
+	@echo "make verify-all is delivered in M10" >&2; exit 2
+report: ## Final handover report (M12)
+	@echo "make report is delivered in M12" >&2; exit 2
+demo-stream: ## Synthetic transaction stream for the demo (M6)
+	@echo "make demo-stream is delivered in M6" >&2; exit 2

@@ -1,0 +1,23 @@
+[project]
+name = "fraudshield-tools"
+version = "0.1.0"
+description = "Governance tooling: defect register, traceability matrix, scope guard"
+requires-python = "==3.12.*"
+dependencies = ["PyYAML==6.0.3"]
+
+[project.scripts]
+fs-traceability = "fraudshield_tools.traceability:main"
+fs-defect-register = "fraudshield_tools.defect_register:main"
+fs-scope-guard = "fraudshield_tools.scope_guard:main"
+
+[build-system]
+requires = ["hatchling==1.32.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fraudshield_tools"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["req(*ids): links a test to requirement or defect IDs in docs/traceability/requirements.yaml"]
+addopts = "--strict-markers --import-mode=importlib"

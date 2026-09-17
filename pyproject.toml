@@ -1,0 +1,39 @@
+[project]
+name = "fraudshield-workspace"
+version = "0.0.0"
+description = "uv workspace root for FraudShield Python components (not a distributable package)"
+requires-python = "==3.12.*"
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["tools", "ml"]
+
+[dependency-groups]
+dev = [
+    "mypy==2.3.1",
+    "pytest==9.1.1",
+    "ruff==0.16.8",
+    "types-PyYAML==6.0.12.20260906",
+    "pre-commit==4.6.2",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "S", "A", "C4", "DTZ", "PT", "RET", "SIM", "PL", "RUF"]
+ignore = ["PLR2004"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["fraudshield_tools", "fraudshield_ml"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S101", "PLR0913"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true

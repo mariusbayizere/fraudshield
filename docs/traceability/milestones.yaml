@@ -1,0 +1,4 @@
+# Milestone gate state (build prompt D.3). A milestone is listed in "completed" only
+# after its gate passed and its milestone review verdict was APPROVED or APPROVED_WITH_MINORS.
+current: M0
+completed: []

@@ -1,0 +1,3752 @@
+# FraudShield requirements traceability (build prompt D.2).
+# SRS-derived fields are refreshed by: uv run python -m fraudshield_tools.traceability_seed
+# Progress fields (status, implementation, evidence, deviations, verification, notes)
+# are edited by hand as work lands. Tests are NOT listed here: they are discovered
+# from tags in code (JUnit @Tag, pytest.mark.req, "[ID]" title prefix) by fs-traceability.
+requirements:
+- id: FR-01-01
+  section: 3.1 FR-01 Transaction ingestion API
+  title: POST /api/v1/transactions/ingest accepts transaction payload; validates schema; publishes to
+    Kafka within 5ms
+  priority: M
+  milestone: M6
+  srs_text: 'Acceptance criterion: Locust load test: 10,000 req/sec for 60 seconds; all within 5ms Kafka
+    publish latency; zero data loss confirmed by consumer offset check'
+  defects:
+  - D-13
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-01-02
+  section: 3.1 FR-01 Transaction ingestion API
+  title: 'Transaction schema: transaction_id (UUID), account_id (tokenised), counterparty_id (tokenised),
+    amount (DECIMAL 18,4), currency (ISO 4217 3-char), channel ENUM(MOBILE_MONEY/CARD/AGENT_BANKING/USSD/ONLINE/BANK_TRANSFER),
+    merchant_category_code (4-char), latitude, longitude, device_fingerprint (nullable), transaction_timestamp
+    (ISO 8601 UTC)'
+  priority: M
+  milestone: M6
+  srs_text: 'Acceptance criterion: 400 returned for any missing required field with specific field-level
+    error; 422 for type mismatches'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-01-03
+  section: 3.1 FR-01 Transaction ingestion API
+  title: 'Idempotent ingestion: duplicate transaction_id within 24 hours returns 200 with cached ScoringResult;
+    not reprocessed'
+  priority: M
+  milestone: M6
+  srs_text: 'Acceptance criterion: Integration test: same transaction_id submitted 100 times; exactly
+    1 scored; all 100 return identical cached response; Redis idempotency key TTL=24h confirmed'
+  defects:
+  - D-12
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-01-04
+  section: 3.1 FR-01 Transaction ingestion API
+  title: All 6 East African channels handled as first-class types with channel-specific feature engineering
+  priority: M
+  milestone: M6
+  srs_text: 'Acceptance criterion: Unit test: USSD transactions processed without device_fingerprint crash;
+    AGENT_BANKING triggers agent-specific features; MOBILE_MONEY velocity features computed correctly'
+  defects:
+  - D-04
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-01-05
+  section: 3.1 FR-01 Transaction ingestion API
+  title: API key authentication for core banking system (machine-to-machine); JWT for human-facing endpoints;
+    keys scoped to ingestion endpoints only
+  priority: M
+  milestone: M6
+  srs_text: 'Acceptance criterion: API key cannot access /api/v1/alerts or /api/v1/admin; confirmed by
+    permission test; key rotation supported without downtime'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-01-06
+  section: 3.1 FR-01 Transaction ingestion API
+  title: Batch ingestion POST /api/v1/transactions/ingest/batch accepts up to 1,000 transactions; returns
+    202 Accepted with job_id; results queryable
+  priority: S
+  milestone: M6
+  srs_text: 'Acceptance criterion: Job status endpoint GET /api/v1/jobs/{id} returns progress; all 1,000
+    transactions scored within 30 seconds'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-01-07
+  section: 3.1 FR-01 Transaction ingestion API
+  title: OpenAPI 3.1 specification served at /api/docs with request/response examples for all 6 channel
+    types
+  priority: M
+  milestone: M1
+  srs_text: 'Acceptance criterion: OpenAPI spec validates against OpenAPI 3.1 schema; all endpoints documented;
+    East African channel examples present'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-02-01
+  section: 3.2 FR-02 ML fraud scoring engine
+  title: 'Every ScoringResult contains: ensemble_score (float 0-1), xgboost_score, lightgbm_score, anomaly_score
+    (Isolation Forest), risk_tier ENUM(HIGH/MEDIUM/LOW), shap_top5 (JSONB), feature_vector (JSONB all
+    44), model_version, scoring_duration_ms'
+  priority: M
+  milestone: M5
+  srs_text: 'Acceptance criterion: All 9 fields present in every ScoringResult; no null values on valid
+    input; unit test confirms each field type'
+  defects:
+  - D-12
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-02-02
+  section: 3.2 FR-02 ML fraud scoring engine
+  title: '44 features engineered per transaction within < 10ms: velocity (8 features), amount behaviour
+    (5), temporal patterns (7), geographic (5), counterparty (5), device and channel (5), account profile
+    (5), agent-specific (4), EAC corridor (1), synthetic ID risk (1)'
+  priority: M
+  milestone: M3
+  srs_text: 'Acceptance criterion: Feature engineering unit tests confirm all 44 computed for all 6 channel
+    types; USSD handles missing device_fingerprint gracefully'
+  defects:
+  - D-03
+  - D-04
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-02-03
+  section: 3.2 FR-02 ML fraud scoring engine
+  title: XGBoost + LightGBM probabilities isotonic-regression calibrated; Expected Calibration Error <
+    0.05 on validation set
+  priority: M
+  milestone: M4
+  srs_text: 'Acceptance criterion: Calibration plot generated in evaluate.py; ECE computed and reported;
+    deployment blocked if ECE > 0.05'
+  defects:
+  - D-05
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-02-04
+  section: 3.2 FR-02 ML fraud scoring engine
+  title: SHAP TreeExplainer (exact, no sampling) computes top-5 SHAP features for all transactions with
+    ensemble_score >= 0.60
+  priority: M
+  milestone: M4
+  srs_text: 'Acceptance criterion: SHAP values sum to model output within 0.001 tolerance; confirmed by
+    unit test; 100% SHAP coverage for HIGH and MEDIUM risk'
+  defects:
+  - D-05
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-02-05
+  section: 3.2 FR-02 ML fraud scoring engine
+  title: Isolation Forest anomaly_score computed for every transaction; transactions with anomaly_score
+    > 0.7 sent to analyst review regardless of ensemble_score
+  priority: M
+  milestone: M5
+  srs_text: 'Acceptance criterion: Integration test: synthetic outlier (extreme amount, new location,
+    new device simultaneously) triggers analyst review even with ensemble_score < 0.60'
+  defects:
+  - D-06
+  - D-10
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-02-06
+  section: 3.2 FR-02 ML fraud scoring engine
+  title: Risk thresholds configurable at runtime without model reload via Redis config store; change takes
+    effect within 60 seconds
+  priority: M
+  milestone: M5
+  srs_text: 'Acceptance criterion: Admin API PATCH /api/v1/admin/thresholds; next transaction after 60s
+    uses new threshold; confirmed by integration test'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-02-07
+  section: 3.2 FR-02 ML fraud scoring engine
+  title: 'ML scoring latency: p50 < 15ms, p95 < 25ms, p99 < 40ms (ensemble + SHAP for flagged transactions
+    combined)'
+  priority: M
+  milestone: M5
+  srs_text: 'Acceptance criterion: Locust benchmark: 200 concurrent scoring requests; all percentiles
+    confirmed on target hardware spec'
+  defects:
+  - D-16
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-02-08
+  section: 3.2 FR-02 ML fraud scoring engine
+  title: 'Shadow mode: new model scores every transaction alongside production model; only production
+    result triggers actions; comparison logged to MLflow'
+  priority: M
+  milestone: M5
+  srs_text: 'Acceptance criterion: Shadow mode enabled via admin panel; both scores in audit log; only
+    production score in ScoringResult; MLflow comparison dashboard showing metric delta'
+  defects:
+  - D-11
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-02-09
+  section: 3.2 FR-02 ML fraud scoring engine
+  title: Redis feature store pre-computes and updates velocity features for every account within 100ms
+    of transaction completion
+  priority: M
+  milestone: M3
+  srs_text: 'Acceptance criterion: Redis key TTL set to 30 days; stale key handled by DB fallback; update
+    latency measured by Prometheus; p99 < 100ms'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-02-10
+  section: 3.2 FR-02 ML fraud scoring engine
+  title: 'Model versioning: every ScoringResult records model_version string; old model continues scoring
+    during blue-green switch'
+  priority: M
+  milestone: M5
+  srs_text: 'Acceptance criterion: Blue-green deployment: both model versions score simultaneously during
+    switch window; no transactions score with unversioned model'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-03-01
+  section: 3.3 FR-03 Risk decision and auto-block engine
+  title: 'HIGH risk (ensemble_score >= 0.85): auto-blocked within 50ms of transaction receipt; account
+    flagged; customer SMS dispatched asynchronously'
+  priority: M
+  milestone: M6
+  srs_text: 'Acceptance criterion: Load test: 1,000 HIGH-risk events/sec; all blocked within 50ms p95;
+    0 incorrectly approved; SMS dispatched within 5s'
+  defects:
+  - D-13
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-03-02
+  section: 3.3 FR-03 Risk decision and auto-block engine
+  title: 'MEDIUM risk (0.60-0.84): transaction held; published to analyst queue; 30-second countdown;
+    auto-released with TIMEOUT label if no analyst action'
+  priority: S
+  milestone: M6
+  srs_text: 'Acceptance criterion: Timer starts on Kafka publish; integration test confirms auto-release
+    at exactly 30s; TIMEOUT label in audit log'
+  defects:
+  - D-10
+  - D-14
+  - D-18
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-03-03
+  section: 3.3 FR-03 Risk decision and auto-block engine
+  title: 'LOW risk (< 0.60): approved and processed within total pipeline latency budget; no analyst involvement'
+  priority: M
+  milestone: M6
+  srs_text: 'Acceptance criterion: Approval decision within 50ms total; approval rate consistent with
+    expected 0.87% fraud rate in test set'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-03-04
+  section: 3.3 FR-03 Risk decision and auto-block engine
+  title: 'Customer SMS on auto-block: masked account number, transaction amount, currency, timestamp,
+    10-minute verification link'
+  priority: M
+  milestone: M6
+  srs_text: 'Acceptance criterion: SMS delivered within 5 seconds via Africa''s Talking; verification
+    link expires exactly at 10 minutes; link uses HTTPS'
+  defects:
+  - D-25
+  - D-43
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-03-05
+  section: 3.3 FR-03 Risk decision and auto-block engine
+  title: 'Customer verification: legitimate transaction verified via SMS link; block lifted within 10
+    seconds; false positive logged to ML retraining pipeline'
+  priority: M
+  milestone: M6
+  srs_text: 'Acceptance criterion: Verification flow tested: block lifted within 10s of click; false_positive_confirmed=true
+    in audit log; feature vector queued for retraining'
+  defects:
+  - D-25
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-03-06
+  section: 3.3 FR-03 Risk decision and auto-block engine
+  title: 'Account freeze logic: 3+ HIGH-risk transactions from same account within 1 hour triggers full
+    account freeze + risk officer notification'
+  priority: S
+  milestone: M6
+  srs_text: 'Acceptance criterion: Third HIGH transaction triggers freeze at exactly 3; risk officer email
+    dispatched; audit log records freeze with reason'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-03-07
+  section: 3.3 FR-03 Risk decision and auto-block engine
+  title: 'MCC circuit breaker: fraud rate > 5% from specific MCC in 15-minute rolling window flags all
+    transactions to that MCC for analyst review'
+  priority: S
+  milestone: M6
+  srs_text: 'Acceptance criterion: Circuit breaker triggers within 60s of threshold breach; resets after
+    60-minute clean window; circuit state visible in admin panel'
+  defects:
+  - D-18
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-03-08
+  section: 3.3 FR-03 Risk decision and auto-block engine
+  title: All auto-block decisions append-only in audit log; no decision deletable or modifiable; override
+    creates new audit entry referencing original
+  priority: M
+  milestone: M6
+  srs_text: 'Acceptance criterion: Attempted UPDATE on auto_block_events returns PostgreSQL permission
+    denied; confirmed by database security test'
+  defects:
+  - D-30
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-04-01
+  section: 3.4 FR-04 Analyst dashboard
+  title: Analyst authenticates with email + password OR Google OAuth 2.0; JWT issued; first name, last
+    name, avatar displayed in header
+  priority: M
+  milestone: M8
+  srs_text: 'Acceptance criterion: Both auth paths issue ANALYST JWT; Google profile (first name, last
+    name, email, avatar) stored and displayed correctly'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-04-02
+  section: 3.4 FR-04 Analyst dashboard
+  title: Real-time alert feed via WebSocket; sorted fraud_probability descending; HIGH pinned at top;
+    MEDIUM shows countdown timer
+  priority: M
+  milestone: M8
+  srs_text: 'Acceptance criterion: New alert on all connected dashboards within 1 second; MUI DataGrid
+    virtualised for 10,000+ rows without performance degradation'
+  defects:
+  - D-10
+  - D-35
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-04-03
+  section: 3.4 FR-04 Analyst dashboard
+  title: 'Alert card shows: risk badge (HIGH/MEDIUM), fraud probability MUI CircularProgress gauge, amount
+    + currency, channel icon + label, masked account name, merchant, timestamp, top-3 SHAP feature pills'
+  priority: M
+  milestone: M8
+  srs_text: 'Acceptance criterion: All 8 elements present on every alert card; SHAP pills show feature
+    name + direction arrow + contribution value'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-04-04
+  section: 3.4 FR-04 Analyst dashboard
+  title: One-click CONFIRM FRAUD or MARK LEGITIMATE with mandatory comment field (min 10 characters);
+    actions complete within 2 seconds
+  priority: M
+  milestone: M8
+  srs_text: 'Acceptance criterion: Buttons disabled until comment >= 10 chars; submission shows MUI CircularProgress;
+    success removes alert from feed; undo Snackbar 5 seconds'
+  defects:
+  - D-44
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-04-05
+  section: 3.4 FR-04 Analyst dashboard
+  title: 'SHAP waterfall chart in investigation panel: all 44 features ranked by absolute SHAP value;
+    positive contributions red, negative green; base value and final score annotated'
+  priority: M
+  milestone: M8
+  srs_text: 'Acceptance criterion: Waterfall chart renders within 500ms; Recharts HorizontalBarChart;
+    MUI Tooltip per bar showing plain-English description specific to East African context'
+  defects:
+  - D-45
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-04-06
+  section: 3.4 FR-04 Analyst dashboard
+  title: 'Account history timeline: last 30 transactions with amount, channel icon, timestamp, risk score
+    MUI Chip, outcome badge (APPROVED/BLOCKED/PENDING)'
+  priority: M
+  milestone: M8
+  srs_text: 'Acceptance criterion: Timeline renders within 500ms; accurate against TimescaleDB; scrollable;
+    sorted most recent first'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-04-07
+  section: 3.4 FR-04 Analyst dashboard
+  title: 'Behavioural fingerprint: 4-panel view: hourly transaction pattern heatmap, amount distribution
+    histogram, channel breakdown pie chart, ''This transaction vs your normal'' comparison table'
+  priority: S
+  milestone: M8
+  srs_text: 'Acceptance criterion: All 4 panels render within 1 second; comparison table highlights anomalous
+    fields in amber; accurate against TimescaleDB history'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-04-08
+  section: 3.4 FR-04 Analyst dashboard
+  title: 'Transaction network graph: flagged account + counterparty + 2nd-degree connections; known fraud
+    nodes highlighted red with glow'
+  priority: C
+  milestone: M8
+  srs_text: 'Acceptance criterion: Graph renders up to 50 nodes within 2 seconds using vis-network or
+    D3; fraud nodes correctly coloured; zoom and pan supported'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-04-09
+  section: 3.4 FR-04 Analyst dashboard
+  title: 'Alert filter and search: by transaction_id, account_id, amount range, channel, date range, risk
+    tier, analyst, outcome'
+  priority: M
+  milestone: M8
+  srs_text: 'Acceptance criterion: Composable filters; results within 500ms; URL updates so filtered view
+    is bookmark-shareable'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-04-10
+  section: 3.4 FR-04 Analyst dashboard
+  title: 'Priority escalation: ANALYST escalates to SENIOR_ANALYST or RISK_OFFICER with mandatory escalation
+    reason'
+  priority: M
+  milestone: M8
+  srs_text: 'Acceptance criterion: Escalation creates new alert entry at higher tier; original linked;
+    escalation reason stored; target role analyst notified via WebSocket'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-04-11
+  section: 3.4 FR-04 Analyst dashboard
+  title: 'Analyst performance dashboard: alerts reviewed today, average review time (seconds), accuracy
+    rate from customer verifications, backlog size'
+  priority: S
+  milestone: M8
+  srs_text: 'Acceptance criterion: Metrics update in real time; false positive rate correctly calculated
+    from customer_verifications table'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-04-12
+  section: 3.4 FR-04 Analyst dashboard
+  title: 'WCAG 2.1 AA: risk tier conveyed by text label not colour alone; all controls keyboard-navigable;
+    SHAP chart readable by screen reader'
+  priority: S
+  milestone: M8
+  srs_text: 'Acceptance criterion: 0 critical Axe violations; keyboard navigation confirmed; NVDA announces
+    risk tier text correctly'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-05-01
+  section: 3.5 FR-05 Risk officer panel
+  title: Risk Officer sees all analyst alerts plus escalated alerts; can senior-override any analyst decision
+    with mandatory reason
+  priority: M
+  milestone: M8
+  srs_text: 'Acceptance criterion: Override creates immutable audit entry; both analyst and customer notified;
+    original decision preserved in audit log'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-05-02
+  section: 3.5 FR-05 Risk officer panel
+  title: 'Portfolio risk dashboard: fraud prevented today/week/month (RWF amount + count), fraud rate
+    by channel, fraud rate by MCC, geographic fraud heatmap (Leaflet.js), top-10 fraud counterparty accounts'
+  priority: M
+  milestone: M8
+  srs_text: 'Acceptance criterion: All metrics accurate against TimescaleDB; Leaflet heatmap renders within
+    2 seconds; update in real time'
+  defects:
+  - D-46
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-05-03
+  section: 3.5 FR-05 Risk officer panel
+  title: 'Model performance monitoring: live AUC-ROC from analyst labels, precision, recall, F1, false
+    positive rate trend, drift indicator vs deployment baseline'
+  priority: M
+  milestone: M8
+  srs_text: 'Acceptance criterion: Metrics updated hourly; drift alert if AUC-ROC drops > 0.03 from baseline;
+    MLflow comparison chart embedded in panel'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-05-04
+  section: 3.5 FR-05 Risk officer panel
+  title: 'Fraud campaign detection: clusters of related fraudulent transactions grouped by shared feature
+    (device, counterparty, geography, MCC) within rolling time window'
+  priority: S
+  milestone: M8
+  srs_text: 'Acceptance criterion: Campaign grouping job runs every 15 minutes; clusters visible with
+    shared feature highlighted; campaign status (ACTIVE/CLOSED) manageable'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-05-05
+  section: 3.5 FR-05 Risk officer panel
+  title: 'Custom rule management: create, enable, disable, delete alert rules using structured rule DSL
+    without code deployment'
+  priority: S
+  milestone: M8
+  srs_text: 'Acceptance criterion: Rule change takes effect within 60 seconds; rule audit log records
+    creator, change history; rule engine unit tests cover all DSL operators'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-05-06
+  section: 3.5 FR-05 Risk officer panel
+  title: SAR (Suspicious Activity Report) auto-draft for confirmed fraud transactions in Rwanda BNR reporting
+    format; exportable as PDF
+  priority: S
+  milestone: M8
+  srs_text: 'Acceptance criterion: SAR draft generated within 30 seconds of fraud confirmation; all required
+    BNR fields populated; PDF export produces valid document'
+  defects:
+  - D-22
+  - D-31
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-05-07
+  section: 3.5 FR-05 Risk officer panel
+  title: 'Per-channel threshold management: different HIGH/MEDIUM/LOW thresholds for each of 6 channel
+    types'
+  priority: M
+  milestone: M8
+  srs_text: 'Acceptance criterion: Per-channel thresholds configurable in admin UI; take effect within
+    60 seconds; current thresholds visible per channel in risk officer view'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-06-01
+  section: 3.6 FR-06 Admin panel
+  title: 'Admin creates staff accounts: first name, last name, email, phone (country code flag + dial
+    code + local number stored as E.164), employee ID, department, role (ANALYST/SENIOR_ANALYST/RISK_OFFICER/ADMIN)'
+  priority: M
+  milestone: M7
+  srs_text: 'Acceptance criterion: All fields stored; UNIQUE(email); UNIQUE(employee_id); new account
+    receives welcome email with temporary password + Google OAuth setup link'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-06-02
+  section: 3.6 FR-06 Admin panel
+  title: Admin views, updates, and deactivates any account; deactivated accounts blocked from all auth
+    methods including Google OAuth
+  priority: M
+  milestone: M7
+  srs_text: 'Acceptance criterion: Deactivated OAuth account blocked server-side within 5 seconds of deactivation;
+    confirmed by login attempt test'
+  defects:
+  - D-27
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-06-03
+  section: 3.6 FR-06 Admin panel
+  title: 'Model management: list all MLflow model versions with training date, dataset size, AUC-ROC,
+    precision, recall, F1; promote to production; rollback to previous; enable/disable shadow mode'
+  priority: M
+  milestone: M8
+  srs_text: 'Acceptance criterion: Promotion takes effect within 60 seconds via MLflow model registry;
+    rollback within 30 seconds; no traffic interruption during switch; shadow mode toggle confirmed'
+  defects:
+  - D-50
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-06-04
+  section: 3.6 FR-06 Admin panel
+  title: 'Dataset management: upload new labelled transaction CSV for retraining; trigger retraining job;
+    monitor progress as percentage in real time'
+  priority: S
+  milestone: M8
+  srs_text: 'Acceptance criterion: Retraining starts within 60 seconds of trigger; progress visible; new
+    model auto-evaluated by evaluate.py before promotion option appears'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-06-05
+  section: 3.6 FR-06 Admin panel
+  title: 'System health panel: Kafka consumer lag per topic, ML scoring p50/p95/p99 latency, API error
+    rate, Redis hit rate, DB pool usage, auto-block rate, alert queue depth, analyst response time distribution'
+  priority: M
+  milestone: M9
+  srs_text: 'Acceptance criterion: All metrics from Prometheus; 30-day history in Grafana embedded in
+    panel; configurable alert thresholds with colour indicators'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-06-06
+  section: 3.6 FR-06 Admin panel
+  title: 'Full audit log: every system action with user first name + last name, role, timestamp, action
+    type, entity, before/after values; searchable; immutable'
+  priority: M
+  milestone: M7
+  srs_text: 'Acceptance criterion: 12 action types logged; all write operations audited; no DELETE or
+    UPDATE on audit_events; searchable by user, date range, action type'
+  defects:
+  - D-32
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-06-07
+  section: 3.6 FR-06 Admin panel
+  title: 'API key management: create, rotate, revoke keys for core banking integrations; each key scoped
+    to specific endpoint groups; key name and last-4 chars visible in UI'
+  priority: M
+  milestone: M7
+  srs_text: 'Acceptance criterion: Revoked key returns 401 within 5 seconds; rotation creates new key
+    with 24-hour overlap period; raw key shown exactly once at creation'
+  defects:
+  - D-19
+  - D-31
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-07-01
+  section: 3.7 FR-07 Authentication and authorisation
+  title: 'Four roles with distinct access scopes: ANALYST, SENIOR_ANALYST, RISK_OFFICER, ADMIN; role embedded
+    in JWT claims; cannot self-elevate'
+  priority: M
+  milestone: M7
+  srs_text: 'Acceptance criterion: Role-based tests confirm 403 on all wrong-role endpoint combinations;
+    role claim immutable after issue'
+  defects:
+  - D-24
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-07-02
+  section: 3.7 FR-07 Authentication and authorisation
+  title: 'Email + password registration: first name, last name, country-code phone (flag + dial code selector,
+    249 countries), employee ID, department, password + confirm password; strength meter and complexity
+    requirements'
+  priority: M
+  milestone: M7
+  srs_text: 'Acceptance criterion: Confirm password mismatch blocks submit; strength meter 4 levels; specific
+    failure reasons listed; submit disabled until all validations pass'
+  defects:
+  - D-24
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-07-03
+  section: 3.7 FR-07 Authentication and authorisation
+  title: Google OAuth 2.0 sign-in on login and registration pages; Google ID token verified server-side
+    against Google JWKS; account linked by email
+  priority: M
+  milestone: M7
+  srs_text: 'Acceptance criterion: OAuth flow < 3 seconds; invalid token returns 401; account linking
+    by email confirmed; first name, last name, avatar from Google stored'
+  defects:
+  - D-23
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-07-04
+  section: 3.7 FR-07 Authentication and authorisation
+  title: 'JWT access tokens: 15-minute expiry; RS256; containing user_id, role, first_name, email; refresh
+    tokens: 7-day expiry in httpOnly SameSite=Strict cookie'
+  priority: M
+  milestone: M7
+  srs_text: 'Acceptance criterion: Expired access token returns 401; RS256 signature verified; refresh
+    token rotation confirmed; httpOnly cookie confirmed in browser DevTools'
+  defects:
+  - D-27
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-07-05
+  section: 3.7 FR-07 Authentication and authorisation
+  title: Machine-to-machine API keys for transaction ingestion; keys scoped to ingestion endpoints only;
+    cannot access analyst, admin, or ML endpoints
+  priority: M
+  milestone: M7
+  srs_text: 'Acceptance criterion: API key returns 403 on /api/v1/alerts and /api/v1/admin; confirmed
+    by explicit permission test for every key-accessible endpoint combination'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-07-06
+  section: 3.7 FR-07 Authentication and authorisation
+  title: 'Login rate limited: 10 attempts per 15 minutes per IP; 5 failed attempts locks analyst account
+    with unlock email sent to account email'
+  priority: M
+  milestone: M7
+  srs_text: 'Acceptance criterion: 11th IP attempt returns 429 with Retry-After header; 5th failed attempt
+    triggers account lock; unlock email sent within 30 seconds'
+  defects:
+  - D-26
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-07-07
+  section: 3.7 FR-07 Authentication and authorisation
+  title: 'Password policy: minimum 8 characters, 1 uppercase, 1 lowercase, 1 digit, 1 special character;
+    bcrypt cost factor 12'
+  priority: M
+  milestone: M7
+  srs_text: 'Acceptance criterion: Weak password returns 400 with specific failure reasons; bcrypt cost
+    12 confirmed by timing test (> 100ms per hash)'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-07-08
+  section: 3.7 FR-07 Authentication and authorisation
+  title: 'Password reset: email OTP (6 digits, 10-minute expiry); OTP verified server-side; single-use;
+    triggers password change form'
+  priority: S
+  milestone: M7
+  srs_text: 'Acceptance criterion: OTP email delivered within 30 seconds; expired OTP returns 400; used
+    OTP cannot be reused; confirmed by integration test'
+  defects:
+  - D-31
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-07-09
+  section: 3.7 FR-07 Authentication and authorisation
+  title: All sessions invalidated on password change; Google OAuth session revoked via Google token revocation
+    API on logout
+  priority: M
+  milestone: M7
+  srs_text: 'Acceptance criterion: Login with old JWT after password change returns 401; Google revocation
+    API call confirmed by mock in integration test'
+  defects:
+  - D-27
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: NFR-PERF-01
+  section: 4.1 Performance
+  title: Transaction ingestion throughput
+  priority: M
+  milestone: M10
+  srs_text: 'Target: 10,000+ TPS sustained for 5 minutes; Measurement Method: Locust test: 10k TPS; Kafka
+    consumer lag < 500 msgs; 0 data loss'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: NFR-PERF-02
+  section: 4.1 Performance
+  title: Auto-block end-to-end latency
+  priority: M
+  milestone: M10
+  srs_text: 'Target: p50 < 30ms | p95 < 50ms | p99 < 80ms; Measurement Method: Prometheus histogram: transaction_received
+    to block_decision events'
+  defects:
+  - D-13
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: NFR-PERF-03
+  section: 4.1 Performance
+  title: ML ensemble scoring latency
+  priority: M
+  milestone: M10
+  srs_text: 'Target: p50 < 15ms | p95 < 25ms | p99 < 40ms (including SHAP for flagged); Measurement Method:
+    Per-request timing in structlog; Grafana time-series; MLflow tracking'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: NFR-PERF-04
+  section: 4.1 Performance
+  title: Feature engineering latency
+  priority: M
+  milestone: M10
+  srs_text: 'Target: p95 < 10ms including Redis feature store fetch; Measurement Method: Redis response
+    time + computation time measured separately in Prometheus'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: NFR-PERF-05
+  section: 4.1 Performance
+  title: Analyst dashboard real-time update
+  priority: M
+  milestone: M10
+  srs_text: 'Target: < 1 second from Kafka event to browser DOM update; Measurement Method: End-to-end
+    integration test with millisecond-precision timestamps'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: NFR-PERF-06
+  section: 4.1 Performance
+  title: SHAP waterfall chart render
+  priority: M
+  milestone: M10
+  srs_text: 'Target: < 500ms from investigation panel open to chart interactive; Measurement Method: Playwright
+    performance test; Recharts render timing measured'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: NFR-PERF-07
+  section: 4.1 Performance
+  title: Alert feed initial load
+  priority: M
+  milestone: M10
+  srs_text: 'Target: < 1 second for 500 alerts in virtualised MUI DataGrid; Measurement Method: Playwright
+    test with 500 seeded alerts; time to interactive measured'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: NFR-PERF-08
+  section: 4.1 Performance
+  title: Google OAuth login flow
+  priority: M
+  milestone: M10
+  srs_text: 'Target: < 3 seconds from button click to authenticated dashboard; Measurement Method: Playwright
+    E2E with Google test account; wall-clock timing'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: NFR-PERF-09
+  section: 4.1 Performance
+  title: System availability
+  priority: M
+  milestone: M10
+  srs_text: 'Target: 99.9% monthly (< 9 hours downtime per year); Measurement Method: Prometheus blackbox
+    uptime probe every 30 seconds; PagerDuty integration'
+  defects: []
+  status: NOT_STARTED
+  verification: external
+  implementation: []
+  evidence: []
+  deviations: []
+- id: NFR-PERF-10
+  section: 4.1 Performance
+  title: API ingestion error rate
+  priority: M
+  milestone: M10
+  srs_text: 'Target: < 0.1% errors at 10,000 TPS; Measurement Method: Locust: error percentage monitored;
+    target < 0.1% at peak load'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: NFR-SEC-01
+  section: 4.2 Security
+  title: Encryption at rest
+  priority: M
+  milestone: M9
+  srs_text: 'Implementation: PostgreSQL TDE + application-layer AES-256 for PII fields; Redis encryption
+    at rest; Verification: TDE configuration audit; field encryption verified: raw PII not visible in
+    any SQL query from application role'
+  defects:
+  - D-20
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: NFR-SEC-02
+  section: 4.2 Security
+  title: Encryption in transit
+  priority: M
+  milestone: M9
+  srs_text: 'Implementation: TLS 1.3 for all external connections; mTLS for service-to-service (Spring
+    Boot to Python ML scorer); Verification: SSL Labs A+ rating; mTLS certificate exchange verified in
+    integration test'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: NFR-SEC-03
+  section: 4.2 Security
+  title: PII tokenisation
+  priority: M
+  milestone: M1
+  srs_text: 'Implementation: Account holder name and phone stored as opaque tokens; actual PII in separate
+    encrypted PII store; no raw PII in analyst-facing API responses; Verification: API response audit:
+    account_name field in all analyst endpoints shows masked token only; confirmed by inspector test'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: NFR-SEC-04
+  section: 4.2 Security
+  title: No secrets in version control
+  priority: M
+  milestone: M9
+  srs_text: 'Implementation: All secrets in Kubernetes Secrets or environment variables; Gitleaks in every
+    CI run; Verification: CI fails on any Gitleaks pattern match; no credential string in any committed
+    file'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: NFR-SEC-05
+  section: 4.2 Security
+  title: Audit log immutability
+  priority: M
+  milestone: M1
+  srs_text: 'Implementation: audit_events PostgreSQL table: INSERT-only permissions granted to application
+    role; no UPDATE or DELETE ever granted; Verification: Attempted UPDATE on audit_events returns permission
+    denied from application DB user; confirmed by security test'
+  defects:
+  - D-32
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: NFR-SEC-06
+  section: 4.2 Security
+  title: SQL injection prevention
+  priority: M
+  milestone: M6
+  srs_text: 'Implementation: Spring Data JPA parameterised queries; Python SQLAlchemy ORM throughout;
+    zero raw SQL string concatenation; Verification: OWASP ZAP automated scan: 0 SQL injection findings;
+    SonarQube: 0 injection hotspots'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: NFR-SEC-07
+  section: 4.2 Security
+  title: XSS prevention
+  priority: M
+  milestone: M9
+  srs_text: 'Implementation: React DOM escaping default; strict Content-Security-Policy header; DOMPurify
+    on all dynamic HTML; MUI XSS-safe; Verification: OWASP ZAP: 0 XSS findings; CSP header present with
+    report-uri'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: NFR-SEC-08
+  section: 4.2 Security
+  title: API key security
+  priority: M
+  milestone: M9
+  srs_text: 'Implementation: Keys stored as bcrypt hash; raw key displayed once at creation; rotation
+    creates new key before old expiry; Verification: Raw key not recoverable from DB; key rotation integration
+    test passes'
+  defects:
+  - D-19
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: NFR-SEC-09
+  section: 4.2 Security
+  title: Data residency
+  priority: M
+  milestone: M9
+  srs_text: 'Implementation: All data in Rwanda/EAC region; no export to non-EAC jurisdictions without
+    BNR authorisation; Verification: Cloud region af-south-1 or equivalent; storage audit confirms location'
+  defects:
+  - D-21
+  status: NOT_STARTED
+  verification: external
+  implementation: []
+  evidence: []
+  deviations: []
+- id: NFR-SEC-10
+  section: 4.2 Security
+  title: Annual penetration test
+  priority: M
+  milestone: M9
+  srs_text: 'Implementation: Third-party pen test; OWASP Top 10 + PCI DSS relevant controls; Verification:
+    Zero critical findings required before production; pen test report stored in docs/security/'
+  defects:
+  - D-28
+  status: NOT_STARTED
+  verification: external
+  implementation: []
+  evidence: []
+  deviations: []
+- id: NFR-REL-01
+  section: 4.3 Reliability
+  title: ML scoring service down
+  priority: M
+  milestone: M6
+  srs_text: 'System Behaviour: Rule-based fallback engine activates within 5 seconds; transactions continue
+    with ML_UNAVAILABLE label; Recovery: ML service restart resumes scoring; backlog caught up within
+    2 minutes; Test: Integration: ML service pod killed; fallback activates; Kafka lag clears after restart'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: NFR-REL-02
+  section: 4.3 Reliability
+  title: Kafka broker failure
+  priority: M
+  milestone: M6
+  srs_text: 'System Behaviour: Spring Boot producer retries with exponential backoff (max 30s total);
+    up to 10,000 transactions buffered in memory; Recovery: Kafka restart resumes within 60 seconds; buffered
+    transactions replayed in order; no data loss; Test: Integration: Kafka pod killed; producer buffers;
+    replay confirmed after restart'
+  defects:
+  - D-15
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: NFR-REL-03
+  section: 4.3 Reliability
+  title: Redis feature store down
+  priority: M
+  milestone: M6
+  srs_text: 'System Behaviour: Feature engineering uses DB fallback for velocity features; performance
+    degrades but system continues; Recovery: Redis reconnects automatically; feature store rebuilt from
+    PostgreSQL within 5 minutes; Test: Unit: all Redis calls wrapped in try/except with DB fallback path
+    tested'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: NFR-REL-04
+  section: 4.3 Reliability
+  title: PostgreSQL primary failure
+  priority: M
+  milestone: M6
+  srs_text: 'System Behaviour: TimescaleDB replica promoted within 30 seconds via Kubernetes operator;
+    brief write pause; Recovery: Automatic failover; < 30 second write downtime; synchronous replica ensures
+    zero data loss; Test: Chaos engineering: DB primary pod deleted; replica promotion timed'
+  defects:
+  - D-49
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: NFR-REL-05
+  section: 4.3 Reliability
+  title: Duplicate transaction storm
+  priority: M
+  milestone: M6
+  srs_text: 'System Behaviour: Idempotency key in Redis (24h TTL) ensures each transaction_id scored exactly
+    once; Recovery: Cache hit returns in < 1ms; no reprocessing; no duplicate blocks; Test: Load test:
+    10,000 identical transaction_ids; exactly 1 scored; all return cached response'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: NFR-REL-06
+  section: 4.3 Reliability
+  title: Google OAuth service unavailable
+  priority: M
+  milestone: M6
+  srs_text: 'System Behaviour: Email + password auth continues; Google OAuth button shows ''Temporarily
+    unavailable''; no system downtime; Recovery: OAuth-only users prompted to set password via email OTP;
+    all other auth unaffected; Test: Integration: Google JWKS endpoint mocked as 503; email auth confirmed
+    working'
+  defects:
+  - D-51
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-REG-01
+  section: 5.3 Registration form
+  title: First Name
+  priority: M
+  milestone: M8
+  srs_text: 'MUI Component: TextField required; Validation: Min 2, max 50 chars; letters + hyphens + apostrophes
+    only; UX Behaviour: Validates on blur; inline MUI FormHelperText error'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-REG-02
+  section: 5.3 Registration form
+  title: Last Name
+  priority: M
+  milestone: M8
+  srs_text: 'MUI Component: TextField required; Validation: Min 2, max 50 chars; letters + hyphens + apostrophes
+    only; UX Behaviour: Validates on blur; inline error'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-REG-03
+  section: 5.3 Registration form
+  title: Email
+  priority: M
+  milestone: M8
+  srs_text: 'MUI Component: TextField type=''email'' required; Validation: RFC 5322; async duplicate check
+    500ms debounce; UX Behaviour: ''Checking availability...'' -> tick or ''Email already registered'''
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-REG-04
+  section: 5.3 Registration form
+  title: Phone Number
+  priority: M
+  milestone: M8
+  srs_text: 'MUI Component: Select (flag + country name + dial code, 249 countries, virtualised) + TextField
+    local number; Validation: E.164 stored; digits only after removing leading zero; 6-12 digits; UX Behaviour:
+    Flags from flagcdn.com; keyboard navigable; aria-label for screen readers'
+  defects:
+  - D-38
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-REG-05
+  section: 5.3 Registration form
+  title: Employee ID
+  priority: M
+  milestone: M8
+  srs_text: 'MUI Component: TextField required; Validation: Alphanumeric 4-20 chars; UNIQUE per institution;
+    async check; UX Behaviour: Async uniqueness check; error if duplicate within institution'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-REG-06
+  section: 5.3 Registration form
+  title: Department
+  priority: M
+  milestone: M8
+  srs_text: 'MUI Component: Select required; Validation: ANALYST/SENIOR_ANALYST/RISK_OFFICER/ADMIN match
+    role; UX Behaviour: Dropdown; keyboard accessible; pre-fills role field'
+  defects:
+  - D-24
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-REG-07
+  section: 5.3 Registration form
+  title: Password
+  priority: M
+  milestone: M8
+  srs_text: 'MUI Component: TextField type=''password'' required + show/hide IconButton; Validation: Min
+    8; 1 upper; 1 lower; 1 digit; 1 special char (!@#$%^&*); UX Behaviour: MUI LinearProgress strength
+    meter; 4 levels; failure reasons listed below field'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-REG-08
+  section: 5.3 Registration form
+  title: Confirm Password
+  priority: M
+  milestone: M8
+  srs_text: 'MUI Component: TextField type=''password'' required + show/hide toggle; Validation: Must
+    match Password; real-time validation on every keystroke in either field; UX Behaviour: Submit Button
+    disabled until match; immediate error on mismatch'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-REG-09
+  section: 5.3 Registration form
+  title: OR Divider
+  priority: M
+  milestone: M8
+  srs_text: 'MUI Component: MUI Divider with ''or'' text centred; Validation: —; UX Behaviour: Separates
+    Google Sign-In from email/password form'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-REG-10
+  section: 5.3 Registration form
+  title: Google Sign-In
+  priority: M
+  milestone: M8
+  srs_text: 'MUI Component: MUI Button + Google SVG logo + ''Continue with Google''; full-width; Validation:
+    Google ID token verified server-side against JWKS; UX Behaviour: Per Google brand guidelines; disabled
+    + CircularProgress during OAuth loading'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-DASH-01
+  section: 5.4 Analyst dashboard components
+  title: Stats Header (sticky MUI AppBar)
+  priority: M
+  milestone: M8
+  srs_text: 'Specification: [HIGH N — red badge] [MEDIUM N — amber] [Auto-blocked N] [Reviewed N] [Fraud
+    Prevented RWF X,XXX,XXX] [Avg Review Xs] [Analysts Online N]; Interaction Behaviour: Real-time WebSocket;
+    click any badge to filter; fraud amount animates on update; currency formatted with RWF prefix'
+  defects:
+  - D-33
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-DASH-02
+  section: 5.4 Analyst dashboard components
+  title: Alert Feed (MUI DataGrid virtualised)
+  priority: M
+  milestone: M8
+  srs_text: 'Specification: Columns: risk badge | fraud score gauge (MUI CircularProgress) | amount +
+    currency | channel MUI Chip | masked account name | merchant | timestamp | countdown (MEDIUM) | action
+    buttons; Interaction Behaviour: Sorted fraud_probability DESC; HIGH pinned to top; new alert animates
+    in from right (Framer Motion); MEDIUM countdown in red at < 10s; virtualised for 10,000+ rows'
+  defects:
+  - D-34
+  - D-35
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-DASH-03
+  section: 5.4 Analyst dashboard components
+  title: Risk Score Gauge
+  priority: M
+  milestone: M8
+  srs_text: 'Specification: MUI CircularProgress variant=''determinate'' value=score*100; colour: >= 0.85
+    red, 0.60-0.84 amber, < 0.60 green; percentage in centre; Interaction Behaviour: MUI Tooltip: ''XGBoost
+    + LightGBM ensemble. 0.85+ = HIGH risk auto-block threshold.'''
+  defects:
+  - D-33
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-DASH-04
+  section: 5.4 Analyst dashboard components
+  title: Investigation Drawer (MUI Drawer anchor='right' width=560px)
+  priority: M
+  milestone: M8
+  srs_text: 'Specification: MUI Tabs: Summary | SHAP Explanation | Account History | Behavioural Fingerprint
+    | Network Graph; Interaction Behaviour: Opens within 200ms; drawer stays open while alert feed remains
+    interactive behind it'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-DASH-05
+  section: 5.4 Analyst dashboard components
+  title: SHAP Waterfall Chart
+  priority: M
+  milestone: M8
+  srs_text: 'Specification: Recharts HorizontalBarChart; features sorted by |SHAP| descending; positive=red
+    bars, negative=green bars; base value and final score annotated as text; Interaction Behaviour: MUI
+    Tooltip per bar: feature name + raw value + plain-English description (''This account made 12 transactions
+    in the last 60 seconds — 8.3x its usual rate.'')'
+  defects:
+  - D-45
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-DASH-06
+  section: 5.4 Analyst dashboard components
+  title: Action Panel (bottom of drawer)
+  priority: M
+  milestone: M8
+  srs_text: 'Specification: Full-width: MUI Button ''CONFIRM FRAUD'' (red, outlined) + MUI Button ''MARK
+    LEGITIMATE'' (green) + MUI TextField comment required min 10 chars + MUI Select escalation; Interaction
+    Behaviour: Buttons disabled until comment >= 10 chars; MUI CircularProgress on submit; success closes
+    drawer + removes from feed; MUI Snackbar undo 5 seconds'
+  defects:
+  - D-44
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-DASH-07
+  section: 5.4 Analyst dashboard components
+  title: MEDIUM Timer Badge
+  priority: S
+  milestone: M8
+  srs_text: 'Specification: MUI Chip with countdown seconds; turns red at < 10s; Web Audio API chime at
+    < 5s if notifications enabled; Interaction Behaviour: setInterval every second; audio via Web Audio
+    API only if user has explicitly enabled browser notifications'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-DASH-08
+  section: 5.4 Analyst dashboard components
+  title: Account History Timeline
+  priority: M
+  milestone: M8
+  srs_text: 'Specification: MUI Timeline (vertical); each event: channel MUI Chip + amount + timestamp
+    + risk score MUI Chip + outcome badge; Interaction Behaviour: Most recent first; scrollable within
+    panel; 30-transaction limit with ''Load more'' button'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-DASH-09
+  section: 5.4 Analyst dashboard components
+  title: Behavioural Fingerprint (4 panels)
+  priority: S
+  milestone: M8
+  srs_text: 'Specification: MUI Grid 2x2: (1) Recharts BarChart hourly tx pattern; (2) Recharts Histogram
+    amounts; (3) Recharts PieChart channels; (4) MUI Table ''This transaction vs your normal''; Interaction
+    Behaviour: Comparison table highlights anomalous cells in amber with amber border; ''normal'' values
+    computed from last 90 days'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-PWA-01
+  section: 05B A.3 PWA
+  title: Web App Manifest
+  priority: M
+  milestone: M8
+  srs_text: 'Specification: manifest.json: name, short_name, description, start_url, display=''standalone'',
+    background_color, theme_color, icons 192x192 and 512x512 PNG; Verification: Lighthouse PWA audit:
+    Installable criterion passes; Android Chrome ''Add to Home Screen'' prompt appears after 2 visits'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-PWA-02
+  section: 05B A.3 PWA
+  title: Service Worker
+  priority: M
+  milestone: M8
+  srs_text: 'Specification: Workbox service worker registered on first load; cache-first strategy for
+    app shell (HTML, CSS, JS bundle < 200KB); Verification: DevTools Application tab shows service worker
+    Activated and Running; app shell loads from cache on offline simulation'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-PWA-03
+  section: 05B A.3 PWA
+  title: Offline App Shell
+  priority: M
+  milestone: M8
+  srs_text: 'Specification: When network unavailable, app shell loads from cache; offline banner appears
+    (''No internet — some features unavailable''); cached data readable; Verification: Playwright: network
+    disabled after load; app shell still renders within 1 second; offline banner appears'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-PWA-04
+  section: 05B A.3 PWA
+  title: Offline Data Cache
+  priority: M
+  milestone: M8
+  srs_text: 'Specification: TanStack Query persists last successful API response to IndexedDB; stale data
+    shown with ''Last updated: HH:MM'' label when offline; Verification: IndexedDB populated after first
+    successful call; confirmed by DevTools; stale data renders offline with timestamp banner'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-PWA-05
+  section: 05B A.3 PWA
+  title: Background Sync
+  priority: S
+  milestone: M8
+  srs_text: 'Specification: Actions taken offline (analyst decision) queued in IndexedDB; replayed automatically
+    on connectivity restoration; Verification: Background Sync API; queue persists across page reload;
+    sync fires within 30 seconds of connectivity restoration'
+  defects:
+  - D-29
+  - D-41
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-PWA-06
+  section: 05B A.3 PWA
+  title: Install Prompt
+  priority: M
+  milestone: M8
+  srs_text: 'Specification: Custom ''Install App'' banner after 30 seconds on mobile; dismissible; uses
+    beforeinstallprompt event; never shown on desktop; Verification: Banner appears on Android Chrome
+    after 30s; dismissed state persisted 30 days to localStorage; desktop never shows banner'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-PWA-07
+  section: 05B A.3 PWA
+  title: iOS PWA
+  priority: M
+  milestone: M8
+  srs_text: 'Specification: apple-mobile-web-app-capable, apple-mobile-web-app-status-bar-style, apple-touch-icon
+    180x180 meta tags; Verification: PWA installs from Safari Share menu on iOS 16+; launches full-screen;
+    status bar colour matches brand.primary'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-PWA-08
+  section: 05B A.3 PWA
+  title: Push Notifications
+  priority: S
+  milestone: M8
+  srs_text: 'Specification: Web Push API for HIGH fraud alerts; requires user permission; works when app
+    is backgrounded; Verification: Push received on Android when app backgrounded; shows urgency level
+    and description; tap opens relevant item'
+  defects:
+  - D-41
+  - D-47
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-PWA-09
+  section: 05B A.3 PWA
+  title: Lighthouse PWA Score
+  priority: M
+  milestone: M8
+  srs_text: 'Specification: >= 90 on mobile throttling (Moto G4 profile); Verification: Lighthouse in
+    Playwright CI; score stored as CI artifact; build fails if < 90'
+  defects:
+  - D-40
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-TOUCH-01
+  section: 05B A.4 Touch interaction
+  title: Minimum touch target
+  priority: M
+  milestone: M8
+  srs_text: 'Specification: 48x48px for all interactive elements — buttons, links, icons, form controls,
+    list items, badges; Implementation: Tailwind: min-h-[48px] min-w-[48px] on all interactive elements;
+    MUI theme override: MuiButtonBase minHeight: 48'
+  defects:
+  - D-37
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-TOUCH-02
+  section: 05B A.4 Touch interaction
+  title: Touch feedback
+  priority: M
+  milestone: M8
+  srs_text: 'Specification: Visual feedback within 100ms of touch: MUI ripple, colour change, or scale(0.97)
+    press animation; Implementation: MUI TouchRipple on all MuiButtonBase; Tailwind active:scale-[0.97]
+    transition-transform duration-100 on custom elements'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-TOUCH-03
+  section: 05B A.4 Touch interaction
+  title: Swipe on cards
+  priority: S
+  milestone: M8
+  srs_text: 'Specification: Left swipe on alert card reveals quick actions; right swipe dismisses; Implementation:
+    react-swipeable; threshold 80px; navigator.vibrate(10) haptic on action reveal; snap back on release
+    without action'
+  defects:
+  - D-47
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-TOUCH-04
+  section: 05B A.4 Touch interaction
+  title: Pull-to-refresh
+  priority: S
+  milestone: M8
+  srs_text: 'Specification: Alert feed support pull-to-refresh on mobile; Implementation: Custom touch
+    handler or react-pull-to-refresh; triggers TanStack Query invalidation; spinner during refresh'
+  defects:
+  - D-47
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-TOUCH-05
+  section: 05B A.4 Touch interaction
+  title: Pinch-to-zoom allowed
+  priority: M
+  milestone: M8
+  srs_text: 'Specification: All pages allow native browser pinch-to-zoom — viewport meta does NOT set
+    user-scalable=no or maximum-scale; Implementation: <meta name=''viewport'' content=''width=device-width,
+    initial-scale=1''> only; confirmed in Playwright mobile test'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-TOUCH-06
+  section: 05B A.4 Touch interaction
+  title: No hover-only features
+  priority: M
+  milestone: M8
+  srs_text: 'Specification: No feature requires hover to discover or activate; all hover tooltips also
+    accessible by tap; Implementation: Playwright mobile test: all features discoverable and usable by
+    tap alone; no hover: CSS used for functionality'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-TOUCH-07
+  section: 05B A.4 Touch interaction
+  title: Virtual keyboard handling
+  priority: M
+  milestone: M8
+  srs_text: 'Specification: Form inputs scroll into view when keyboard opens; no input hidden behind keyboard;
+    Implementation: MUI TextField: scrollIntoView on focus; tested on Android Chrome with virtual keyboard;
+    input visible above keyboard'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-TOUCH-08
+  section: 05B A.4 Touch interaction
+  title: Haptic feedback
+  priority: S
+  milestone: M8
+  srs_text: 'Specification: Critical actions (CONFIRM FRAUD) trigger short haptic feedback on supported
+    devices; Implementation: navigator.vibrate([100,50,100]) on critical actions; graceful no-op where
+    unsupported'
+  defects:
+  - D-47
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-NET-01
+  section: 05B A.5 Network resilience
+  title: 4G / WiFi (urban Kigali)
+  priority: M
+  milestone: M8
+  srs_text: 'Speed / Latency: 10-50 Mbps / 20-50ms; Required System Behaviour: Full features; real-time
+    WebSocket; all animations; all charts — standard behaviour'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-NET-02
+  section: 05B A.5 Network resilience
+  title: 3G (peri-urban Rwanda)
+  priority: M
+  milestone: M8
+  srs_text: 'Speed / Latency: 1-5 Mbps / 100-200ms; Required System Behaviour: Full features; images lazy-loaded
+    with blur placeholder; WebSocket with 60s heartbeat; bundle served from service worker cache'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-NET-03
+  section: 05B A.5 Network resilience
+  title: 2G EDGE (rural agent location)
+  priority: M
+  milestone: M8
+  srs_text: 'Speed / Latency: 0.1-0.3 Mbps / 300-1000ms; Required System Behaviour: App shell from service
+    worker cache (instant); no real-time WebSocket; 60-second polling fallback; no images; Framer Motion
+    animations skipped'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-NET-04
+  section: 05B A.5 Network resilience
+  title: Intermittent / offline
+  priority: M
+  milestone: M8
+  srs_text: 'Speed / Latency: 0 Mbps; Required System Behaviour: App shell usable; queued actions persist
+    in IndexedDB via Background Sync; ''You are offline'' banner; silent reconnect every 30 seconds'
+  defects:
+  - D-29
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-NET-05
+  section: 05B A.5 Network resilience
+  title: SMS only (no data, feature phone)
+  priority: M
+  milestone: M8
+  srs_text: 'Speed / Latency: N/A — SMS only; Required System Behaviour: Auto-block SMS to customer fully
+    functional via Africa''s Talking SMS regardless of app status'
+  defects:
+  - D-42
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-PERF-01
+  section: 05B A.6 Mobile performance
+  title: First Contentful Paint (FCP)
+  priority: M
+  milestone: M8
+  srs_text: 'Target on 3G (Moto G4): < 2.5 seconds; Target on 4G / WiFi: < 1.2 seconds; How Measured:
+    Lighthouse; Playwright CI with CPU 4x throttle + 3G network throttle'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-PERF-02
+  section: 05B A.6 Mobile performance
+  title: Largest Contentful Paint (LCP)
+  priority: M
+  milestone: M8
+  srs_text: 'Target on 3G (Moto G4): < 4.0 seconds; Target on 4G / WiFi: < 2.0 seconds; How Measured:
+    Lighthouse; must be image or text block — not spinner'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-PERF-03
+  section: 05B A.6 Mobile performance
+  title: Time to Interactive (TTI)
+  priority: M
+  milestone: M8
+  srs_text: 'Target on 3G (Moto G4): < 5.0 seconds; Target on 4G / WiFi: < 2.5 seconds; How Measured:
+    Lighthouse; main thread unblocked for user input'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-PERF-04
+  section: 05B A.6 Mobile performance
+  title: Total Blocking Time (TBT)
+  priority: M
+  milestone: M8
+  srs_text: 'Target on 3G (Moto G4): < 300ms; Target on 4G / WiFi: < 100ms; How Measured: Lighthouse;
+    no long JS tasks (> 50ms) during page load'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-PERF-05
+  section: 05B A.6 Mobile performance
+  title: Cumulative Layout Shift (CLS)
+  priority: M
+  milestone: M8
+  srs_text: 'Target on 3G (Moto G4): < 0.1; Target on 4G / WiFi: < 0.05; How Measured: Lighthouse; skeleton
+    loaders prevent layout shift on data load'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-PERF-06
+  section: 05B A.6 Mobile performance
+  title: JS bundle (initial, gzipped)
+  priority: M
+  milestone: M8
+  srs_text: 'Target on 3G (Moto G4): < 200KB; Target on 4G / WiFi: < 200KB; How Measured: Vite bundle
+    analyser in CI; build fails if initial bundle > 200KB gzipped; MUI tree-shaking required'
+  defects:
+  - D-39
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-PERF-07
+  section: 05B A.6 Mobile performance
+  title: Offline app shell load
+  priority: M
+  milestone: M8
+  srs_text: 'Target on 3G (Moto G4): < 1.0 seconds; Target on 4G / WiFi: < 1.0 seconds; How Measured:
+    Service worker cache-first; Playwright with offline simulation'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-PERF-08
+  section: 05B A.6 Mobile performance
+  title: Memory on entry-level device
+  priority: M
+  milestone: M8
+  srs_text: 'Target on 3G (Moto G4): < 150MB RAM; Target on 4G / WiFi: < 300MB RAM; How Measured: Chrome
+    DevTools Memory tab; Playwright leak test over 50 interactions'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-COMP-01
+  section: 05B A.7 Mobile component behaviour
+  title: Navigation
+  priority: M
+  milestone: M8
+  srs_text: 'Desktop Behaviour: MUI Drawer sidebar permanent left 240px; Mobile (< 600px) Behaviour: MUI
+    BottomNavigation (3-4 tabs); hamburger for secondary items; How Switched: useMediaQuery(''(max-width:600px)'')
+    toggles Drawer vs BottomNavigation'
+  defects:
+  - D-36
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-COMP-02
+  section: 05B A.7 Mobile component behaviour
+  title: Detail Panels
+  priority: M
+  milestone: M8
+  srs_text: 'Desktop Behaviour: MUI Drawer anchor=''right'' slides in; main content still visible; Mobile
+    (< 600px) Behaviour: Full-screen MUI Dialog; back button closes; swipe down to dismiss; How Switched:
+    Drawer on lg+; Dialog on xs-md; same content, different shell'
+  defects:
+  - D-36
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-COMP-03
+  section: 05B A.7 Mobile component behaviour
+  title: Stats Header
+  priority: M
+  milestone: M8
+  srs_text: 'Desktop Behaviour: Sticky MUI AppBar; all 6-7 stats as MUI Chips; Mobile (< 600px) Behaviour:
+    Horizontal scrollable chip row; or collapsed to 3 most critical with expand button; How Switched:
+    Chip row overflow-x:auto hidden scrollbar on mobile; expand on tap'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-COMP-04
+  section: 05B A.7 Mobile component behaviour
+  title: Data Tables
+  priority: M
+  milestone: M8
+  srs_text: 'Desktop Behaviour: MUI DataGrid with columns, sorting, inline actions; Mobile (< 600px) Behaviour:
+    Card list (MUI List); each item a MUI Card; swipe left for quick actions; How Switched: DataGrid hidden
+    at xs-sm breakpoints; MUI List shown instead; same data source'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-COMP-05
+  section: 05B A.7 Mobile component behaviour
+  title: Charts (Recharts)
+  priority: M
+  milestone: M8
+  srs_text: 'Desktop Behaviour: Full chart with axes, legend, tooltips; Mobile (< 600px) Behaviour: Simplified:
+    no legend (info in title); full-width; larger touch targets; tap opens MUI Tooltip; How Switched:
+    ResponsiveContainer always; mobile Recharts config simplifies axes; tap-to-tooltip'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-COMP-06
+  section: 05B A.7 Mobile component behaviour
+  title: Forms (all)
+  priority: M
+  milestone: M8
+  srs_text: 'Desktop Behaviour: 2-column layout for paired fields (first + last name); Mobile (< 600px)
+    Behaviour: Single column; full-width; submit button position:sticky bottom of screen above keyboard;
+    How Switched: MUI Grid: xs=12 always; md=6 for 2-column; sticky submit tested on Android with keyboard
+    open'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-COMP-07
+  section: 05B A.7 Mobile component behaviour
+  title: Country Code Selector
+  priority: M
+  milestone: M8
+  srs_text: 'Desktop Behaviour: MUI Select Popover inline dropdown; Mobile (< 600px) Behaviour: MUI SwipeableDrawer
+    full-screen with search at top; large touch-friendly country list; How Switched: Select triggers custom
+    SwipeableDrawer on mobile breakpoint; same data and validation'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-COMP-08
+  section: 05B A.7 Mobile component behaviour
+  title: SHAP Waterfall Chart
+  priority: M
+  milestone: M8
+  srs_text: 'Desktop Behaviour: All features; horizontal bars; rich tooltips; Mobile (< 600px) Behaviour:
+    Top-5 features only; vertical orientation; ''Show all'' expands to bottom sheet; How Switched: ResponsiveContainer;
+    mobile renders top-5 config; expand opens MUI SwipeableDrawer with full chart'
+  defects:
+  - D-45
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-COMP-09
+  section: 05B A.7 Mobile component behaviour
+  title: Password Strength Meter
+  priority: M
+  milestone: M8
+  srs_text: 'Desktop Behaviour: MUI LinearProgress + text labels for all 4 levels; Mobile (< 600px) Behaviour:
+    Same component; text labels shortened to icons + colour only at < 375px; How Switched: Conditional
+    label: text on md+; icon-only on sm- ; colour always present for accessibility'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-DEV-01
+  section: 05B A.8 Cross-device testing matrix
+  title: Tecno Spark Go / Itel A23 (320px, Android Go, Chrome Lite)
+  priority: M
+  milestone: M10
+  srs_text: 'Test Method: Playwright emulation + physical device for SMS test; Critical Journeys: Registration;
+    fraud alert; SMS confirmation; Pass Criteria: No horizontal scroll; all text readable; touch targets
+    >= 48px; SMS delivered'
+  defects:
+  - D-47
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-DEV-02
+  section: 05B A.8 Cross-device testing matrix
+  title: iPhone SE 2022 (375px, Safari iOS)
+  priority: M
+  milestone: M10
+  srs_text: 'Test Method: Playwright --browser=webkit device=''iPhone SE''; Critical Journeys: Registration
+    with phone flag selector; password strength; Google OAuth popup; alert result; Pass Criteria: Safari
+    CSS confirmed; OAuth popup works in Safari; no iOS scroll bounce on forms'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-DEV-03
+  section: 05B A.8 Cross-device testing matrix
+  title: Samsung Galaxy A14 (412px, Chrome Android)
+  priority: M
+  milestone: M10
+  srs_text: 'Test Method: Playwright device=''Pixel 5''; Critical Journeys: Alert feed on mobile; alert
+    detail full-screen; alert card; swipe action; Pass Criteria: WebSocket reconnects after tab switch;
+    SHAP chart renders; countdown accurate'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-DEV-04
+  section: 05B A.8 Cross-device testing matrix
+  title: iPad mini 6 (768px, Safari iPadOS)
+  priority: M
+  milestone: M10
+  srs_text: 'Test Method: Playwright device=''iPad Mini''; Critical Journeys: Split panel; filter panel;
+    charts; investigation notes; admin analytics; Pass Criteria: Both panels visible simultaneously; no
+    layout overflow; charts render correctly'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-DEV-05
+  section: 05B A.8 Cross-device testing matrix
+  title: HP Pavilion / 13-inch laptop (1280px, Chrome)
+  priority: M
+  milestone: M10
+  srs_text: 'Test Method: Playwright desktop Chrome; Critical Journeys: Full admin panel; model management;
+    all charts; complete keyboard navigation; Pass Criteria: All features accessible; Lighthouse PWA >=
+    90; 0 Axe critical violations'
+  defects:
+  - D-40
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-DEV-06
+  section: 05B A.8 Cross-device testing matrix
+  title: Desktop 1440px (Firefox)
+  priority: M
+  milestone: M10
+  srs_text: 'Test Method: Playwright desktop Firefox; Critical Journeys: Full dashboard; SHAP waterfall;
+    account history; all tabs in detail panel; Pass Criteria: Firefox rendering identical to Chrome; no
+    Chrome-only CSS without Firefox fallback'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: MOB-DEV-07
+  section: 05B A.8 Cross-device testing matrix
+  title: Opera Mini / KaiOS (feature phone)
+  priority: M
+  milestone: M10
+  srs_text: 'Test Method: Manual on physical device or Opera Mini browser emulation; Critical Journeys:
+    SMS fallback CTA visible; essential info readable; no JS-required critical features; Pass Criteria:
+    Page loads < 15 seconds on EDGE; core info readable without JS; SMS link prominent'
+  defects:
+  - D-42
+  status: NOT_STARTED
+  verification: manual
+  implementation: []
+  evidence: []
+  deviations: []
+- id: ML-DATA-01
+  section: 7.1 Dataset
+  title: Total size
+  priority: M
+  milestone: M2
+  srs_text: 'Specification: >= 5,000,000 labelled transactions (4.16M train / 520K val / 520K test); Rationale:
+    Sufficient for XGBoost/LightGBM to learn rare fraud at realistic 0.87% fraud rate'
+  defects:
+  - D-07
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: ML-DATA-02
+  section: 7.1 Dataset
+  title: Fraud rate
+  priority: M
+  milestone: M2
+  srs_text: 'Specification: 0.87% overall; test set slightly higher (0.91%) to reflect growing fraud trend;
+    Rationale: Realistic imbalance; no artificial oversampling of training set'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: ML-DATA-03
+  section: 7.1 Dataset
+  title: Channel distribution
+  priority: M
+  milestone: M2
+  srs_text: 'Specification: MOBILE_MONEY >= 40%, USSD >= 18%, AGENT_BANKING >= 14%, CARD 12%, ONLINE 9%,
+    BANK_TRANSFER 6%; Rationale: Reflects East African payment landscape; essential for generalisability'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: ML-DATA-04
+  section: 7.1 Dataset
+  title: Fraud pattern diversity
+  priority: M
+  milestone: M2
+  srs_text: 'Specification: 8 distinct types: SIM-swap, account-takeover, agent-fraud, velocity-fraud,
+    card-not-present, mule-account, merchant-fraud, synthetic-identity; Rationale: Prevents model from
+    overfitting to single dominant pattern'
+  defects:
+  - D-08
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: ML-DATA-05
+  section: 7.1 Dataset
+  title: Geographic coverage
+  priority: M
+  milestone: M2
+  srs_text: 'Specification: Rwanda 42%, Kenya 28%, Tanzania 15%, Uganda 10%, DRC 5%; Rationale: Covers
+    all EAC primary financial markets; enables per-country evaluation'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: ML-DATA-06
+  section: 7.1 Dataset
+  title: Temporal coverage
+  priority: M
+  milestone: M2
+  srs_text: 'Specification: 24 months simulation; test set uses final 1.5 months (temporal holdout); Rationale:
+    Prevents temporal data leakage; tests generalisation to future fraud patterns'
+  defects:
+  - D-07
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: ML-DATA-07
+  section: 7.1 Dataset
+  title: Feature completeness
+  priority: M
+  milestone: M2
+  srs_text: 'Specification: All 44 features computable for >= 98% of records; < 2% any missing feature;
+    Rationale: Missing features handled by median imputation; completeness verified in pipeline'
+  defects:
+  - D-04
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: ML-DATA-08
+  section: 7.1 Dataset
+  title: Dataset release
+  priority: M
+  milestone: M2
+  srs_text: 'Specification: FraudShield-EAC-Transactions; CC BY 4.0; HuggingFace Datasets Hub + Zenodo
+    DOI; Rationale: First public East African financial fraud benchmark dataset — standalone research
+    contribution'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: ML-GATE-01
+  section: 7.2 Model deployment gate
+  title: AUC-ROC (last-3-month test set)
+  priority: M
+  milestone: M4
+  srs_text: 'Threshold: 0.940; Financial Justification: Primary ranking performance metric; measures quality
+    across all thresholds'
+  defects:
+  - D-07
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: ML-GATE-02
+  section: 7.2 Model deployment gate
+  title: Precision at 1% FPR
+  priority: M
+  milestone: M4
+  srs_text: 'Threshold: 0.720; Financial Justification: At 1% false positive rate; controls analyst alert
+    volume to manageable level'
+  defects:
+  - D-01
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: ML-GATE-03
+  section: 7.2 Model deployment gate
+  title: Recall (fraud capture rate)
+  priority: M
+  milestone: M4
+  srs_text: 'Threshold: 0.880; Financial Justification: Minimum proportion of actual fraud caught; balance
+    against FPR'
+  defects:
+  - D-02
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: ML-GATE-04
+  section: 7.2 Model deployment gate
+  title: F1 Score
+  priority: M
+  milestone: M4
+  srs_text: 'Threshold: 0.800; Financial Justification: Harmonic mean; balanced measure for imbalanced
+    classes'
+  defects:
+  - D-02
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: ML-GATE-05
+  section: 7.2 Model deployment gate
+  title: False Positive Rate at threshold 0.85
+  priority: M
+  milestone: M4
+  srs_text: 'Threshold: < 1.5%; Financial Justification: At auto-block threshold; acceptable customer
+    friction rate'
+  defects:
+  - D-02
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: ML-GATE-06
+  section: 7.2 Model deployment gate
+  title: False Negative Rate
+  priority: M
+  milestone: M4
+  srs_text: 'Threshold: < 12.0%; Financial Justification: Maximum fraud passing through undetected at
+    threshold 0.85'
+  defects:
+  - D-02
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: ML-GATE-07
+  section: 7.2 Model deployment gate
+  title: MOBILE_MONEY channel AUC-ROC
+  priority: M
+  milestone: M4
+  srs_text: 'Threshold: 0.920; Financial Justification: East African dominant channel requires explicit
+    validation'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: ML-GATE-08
+  section: 7.2 Model deployment gate
+  title: USSD channel AUC-ROC
+  priority: M
+  milestone: M4
+  srs_text: 'Threshold: 0.900; Financial Justification: USSD lacks device fingerprint; harder problem;
+    separate validation required'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: ML-GATE-09
+  section: 7.2 Model deployment gate
+  title: AGENT_BANKING channel AUC-ROC
+  priority: M
+  milestone: M4
+  srs_text: 'Threshold: 0.910; Financial Justification: Agent fraud is East African-specific; novel validation
+    requirement'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: ML-GATE-10
+  section: 7.2 Model deployment gate
+  title: SHAP coverage
+  priority: M
+  milestone: M4
+  srs_text: 'Threshold: 100% for HIGH and MEDIUM risk transactions; Financial Justification: Non-negotiable
+    for analyst trust and BNR regulatory explainability requirement'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: ML-GATE-11
+  section: 7.2 Model deployment gate
+  title: Expected Calibration Error (ECE)
+  priority: M
+  milestone: M4
+  srs_text: 'Threshold: < 0.050; Financial Justification: Probability scores must be calibrated; 0.85
+    score = ~85% fraud probability'
+  defects:
+  - D-05
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: ML-GATE-12
+  section: 7.2 Model deployment gate
+  title: Inference latency p99
+  priority: M
+  milestone: M5
+  srs_text: 'Threshold: < 40ms (ensemble + SHAP for flagged); Financial Justification: Financial system
+    requirement; exceeding causes auto-block latency breach'
+  defects:
+  - D-16
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: ML-GATE-13
+  section: 7.2 Model deployment gate
+  title: Shadow mode AUC-ROC delta
+  priority: M
+  milestone: M5
+  srs_text: 'Threshold: New model within 1% of production before promotion; Financial Justification: Prevents
+    regression during model updates; minimum 24-hour shadow period'
+  defects:
+  - D-11
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: OPS-CI-01
+  section: 8.1 CI/CD pipeline
+  title: Lint + Static Analysis
+  priority: M
+  milestone: M9
+  srs_text: 'Trigger: Every push to any branch; Steps: Checkstyle + SpotBugs (Java); ruff + mypy strict
+    (Python); eslint + tsc --noEmit (TypeScript); SonarQube gate; Gate Criteria: Zero lint errors; zero
+    type errors; SonarQube quality gate passes; zero critical security hotspots'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: OPS-CI-02
+  section: 8.1 CI/CD pipeline
+  title: Unit Tests
+  priority: M
+  milestone: M9
+  srs_text: 'Trigger: Every push; Steps: JUnit 5 (Spring Boot, target >= 85% coverage); pytest (Python
+    ML pipeline, target >= 90%); vitest (React components); Gate Criteria: All tests pass; no new failures;
+    coverage thresholds met'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: OPS-CI-03
+  section: 8.1 CI/CD pipeline
+  title: Integration Tests
+  priority: M
+  milestone: M9
+  srs_text: 'Trigger: Push to develop/main; Steps: Spring Boot Testcontainers (PostgreSQL + TimescaleDB
+    + Redis + Kafka); ML pipeline end-to-end; OAuth mock; full transaction pipeline test; Gate Criteria:
+    All integration tests pass; transaction pipeline latency within target; no Kafka message loss'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: OPS-CI-04
+  section: 8.1 CI/CD pipeline
+  title: Security Scan
+  priority: M
+  milestone: M9
+  srs_text: 'Trigger: Push to main; Steps: OWASP Dependency Check (Java + Python + Node); Gitleaks; trivy
+    container scan; OWASP ZAP API scan against staging; Gate Criteria: Zero high-severity CVEs; no secrets;
+    0 critical ZAP findings; no PII in API responses confirmed'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: OPS-CI-05
+  section: 8.1 CI/CD pipeline
+  title: ML Evaluation Gate
+  priority: M
+  milestone: M9
+  srs_text: 'Trigger: Change to fraudshield/ml/models/ directory; Steps: evaluate.py on held-out last-3-months
+    test set; all 13 metrics in Section 7.2 validated; shadow mode comparison report; Gate Criteria: Deployment
+    blocked if any metric below threshold; LaTeX metric table generated for research paper as CI artifact'
+  defects:
+  - D-07
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: OPS-CI-06
+  section: 8.1 CI/CD pipeline
+  title: Docker Build
+  priority: M
+  milestone: M9
+  srs_text: 'Trigger: Push to main; Steps: docker build: fraudshield-api (Spring Boot), fraudshield-ml
+    (Python), fraudshield-frontend (React); push to GitHub Container Registry; Gate Criteria: All 3 images
+    build; api < 500MB; ml < 1.2GB; frontend < 150MB'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: OPS-CI-07
+  section: 8.1 CI/CD pipeline
+  title: Staging Deploy
+  priority: M
+  milestone: M9
+  srs_text: 'Trigger: Merge to main; Steps: Kubernetes rolling update to fraudshield-staging namespace;
+    smoke test suite; Spring Boot actuator health; Gate Criteria: Smoke tests pass; /actuator/health =
+    UP; /api/v1/health/ml = UP; /api/v1/health/kafka = UP'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: OPS-CI-08
+  section: 8.1 CI/CD pipeline
+  title: Production Deploy
+  priority: M
+  milestone: M9
+  srs_text: 'Trigger: Manual approval after staging + ML gate; Steps: 10% Kubernetes canary for 30 minutes;
+    auto-rollback if error rate > 0.5% or p99 > 80ms; Gate Criteria: Canary passes; full rollout; zero
+    downtime confirmed; PagerDuty alert if rollback triggered'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: OPS-OBS-01
+  section: 8.2 Observability
+  title: Application Metrics
+  priority: M
+  milestone: M9
+  srs_text: 'Tool: Prometheus + Grafana (fraudshield-specific dashboards); Key Metrics: Transaction TPS,
+    scoring p50/p95/p99, auto-block rate, false positive rate, Kafka consumer lag per topic, analyst review
+    time distribution, model version in use; Alert Threshold: TPS drop > 20%; p99 > 80ms; false positive
+    rate > 5%; Kafka lag > 5,000 messages'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: OPS-OBS-02
+  section: 8.2 Observability
+  title: Structured Logs
+  priority: M
+  milestone: M9
+  srs_text: 'Tool: Python structlog JSON + Java SLF4J Logback JSON; Key Metrics: Every transaction scored
+    (transaction_id, ensemble_score, risk_tier, channel, model_version, duration_ms), every auto-block,
+    every analyst decision, every model promotion, every threshold change; Alert Threshold: Any ERROR
+    log triggers PagerDuty; auto-block rate anomaly (> 3x baseline) triggers immediate risk officer alert'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: OPS-OBS-03
+  section: 8.2 Observability
+  title: ML Drift Monitoring
+  priority: M
+  milestone: M9
+  srs_text: 'Tool: Hourly MLflow job + Grafana; Key Metrics: Feature PSI per feature (Population Stability
+    Index), model AUC-ROC from analyst labels, false positive rate trend, fraud rate by channel trend;
+    Alert Threshold: PSI > 0.2 any top-10 feature triggers model review; AUC-ROC drop > 0.03 from baseline
+    triggers retraining evaluation'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: OPS-OBS-04
+  section: 8.2 Observability
+  title: Regulatory Audit Trail
+  priority: M
+  milestone: M9
+  srs_text: 'Tool: TimescaleDB audit_events read-only replica; Key Metrics: Every transaction decision,
+    auto-block, analyst action, model change, threshold change, rule change — immutable, timestamped;
+    Alert Threshold: 7-year retention; accessible to BNR compliance officers; no modifications possible'
+  defects:
+  - D-32
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: OPS-OBS-05
+  section: 8.2 Observability
+  title: Uptime
+  priority: M
+  milestone: M9
+  srs_text: 'Tool: Prometheus blackbox exporter + PagerDuty; Key Metrics: HTTP probe /actuator/health
+    every 30 seconds; /api/v1/health/ml every 60 seconds; Alert Threshold: 2 consecutive failures trigger
+    PagerDuty P1 alert; measured against 99.9% monthly SLA'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: OPS-OBS-06
+  section: 8.2 Observability
+  title: Fraud Rate Anomaly
+  priority: M
+  milestone: M9
+  srs_text: 'Tool: TimescaleDB continuous aggregate + alert rule; Key Metrics: Hourly fraud rate vs 30-day
+    moving average per channel; Alert Threshold: Fraud rate > 3 standard deviations from mean triggers
+    Risk Officer notification within 5 minutes'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: TEST-01
+  section: 9 Testing requirements
+  title: 'Unit: Feature Engineering'
+  priority: M
+  milestone: M3
+  srs_text: 'Framework: pytest; Coverage Target: All 44 features; all 6 channel types; edge cases; Key
+    Scenarios: USSD: 40 features computed without device_fingerprint; AGENT_BANKING: agent-specific features
+    only computed for AGENT channel; round_sum_flag: correct for EAC cultural norms; velocity: correct
+    with 0 historical transactions'
+  defects:
+  - D-04
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: TEST-02
+  section: 9 Testing requirements
+  title: 'Unit: ML Scoring'
+  priority: M
+  milestone: M4
+  srs_text: 'Framework: pytest + unittest.mock; Coverage Target: All scoring paths; calibration; SHAP
+    coverage; fallback; Key Scenarios: Ensemble weighted average = XGB*0.55 + LGB*0.45 to 5 decimal places;
+    Isolation Forest score in [-1,1]; SHAP sum = model output ± 0.001; fallback rule-based engine activates
+    when ML scorer returns 503'
+  defects:
+  - D-05
+  - D-06
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: TEST-03
+  section: 9 Testing requirements
+  title: 'Unit: Risk Decision Engine'
+  priority: M
+  milestone: M6
+  srs_text: 'Framework: pytest; Coverage Target: All threshold combinations; circuit breakers; idempotency;
+    Key Scenarios: HIGH >= 0.85 always auto-blocks; MEDIUM timer starts at exactly 30s; LOW always approves;
+    MCC circuit breaker at exactly 5% fraud rate in 15-min window; idempotency key prevents double-block'
+  defects:
+  - D-17
+  - D-18
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: TEST-04
+  section: 9 Testing requirements
+  title: 'Unit: Auth (JWT + OAuth + API Key)'
+  priority: M
+  milestone: M7
+  srs_text: 'Framework: pytest + JUnit 5; Coverage Target: All auth paths; role scoping; key scoping;
+    Key Scenarios: RS256 JWT verified; expired token 401; API key returns 403 on analyst endpoints; Google
+    mock verified; account linking confirmed; bcrypt cost 12 timing > 100ms'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: TEST-05
+  section: 9 Testing requirements
+  title: 'Integration: Transaction Pipeline'
+  priority: M
+  milestone: M6
+  srs_text: 'Framework: JUnit 5 + Testcontainers; Coverage Target: End-to-end from HTTP to analyst dashboard;
+    Key Scenarios: Transaction ingested -> Kafka published -> ML scored -> risk decision -> auto-block
+    OR analyst alert; p95 < 50ms confirmed; duplicate idempotency: 100 identical submissions = 1 scored'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: TEST-06
+  section: 9 Testing requirements
+  title: 'Integration: Analyst Decision Flow'
+  priority: M
+  milestone: M8
+  srs_text: 'Framework: pytest-asyncio + Playwright; Coverage Target: Complete alert lifecycle; Key Scenarios:
+    CONFIRM_FRAUD: block + audit entry + analyst comment stored + false_positive_confirmed=null; MARK_LEGITIMATE:
+    approve + false_positive_confirmed=true + customer verification link generated; ESCALATE: new entry
+    at SENIOR_ANALYST tier'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: TEST-07
+  section: 9 Testing requirements
+  title: 'Integration: OAuth Flow'
+  priority: M
+  milestone: M7
+  srs_text: 'Framework: pytest + responses mock; Coverage Target: Google OAuth happy path + failure paths;
+    Key Scenarios: Google JWKS verification succeeds; invalid token 401; account linking by matching email;
+    new Google user creates ANALYST role account; Google outage: email auth unaffected'
+  defects:
+  - D-23
+  - D-51
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: TEST-08
+  section: 9 Testing requirements
+  title: 'Integration: Model Shadow Mode'
+  priority: M
+  milestone: M5
+  srs_text: 'Framework: pytest; Coverage Target: Shadow model runs alongside production; Key Scenarios:
+    Shadow model scores every transaction; only production triggers actions; shadow score in audit log;
+    MLflow comparison updated after each transaction'
+  defects:
+  - D-11
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: TEST-09
+  section: 9 Testing requirements
+  title: 'Performance: Load'
+  priority: M
+  milestone: M10
+  srs_text: 'Framework: Locust; Coverage Target: 10,000 TPS for 5 minutes; Key Scenarios: All within latency
+    SLA; Kafka consumer lag < 500 msgs; 0 data loss; auto-block rate matches expected fraud rate; idempotency
+    holds under load'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: TEST-10
+  section: 9 Testing requirements
+  title: 'Performance: ML Throughput'
+  priority: M
+  milestone: M5
+  srs_text: 'Framework: Custom benchmark (benchmark.py); Coverage Target: 200 concurrent scoring requests;
+    Key Scenarios: p50 < 15ms; p99 < 40ms; no memory growth > 50MB over 10,000 consecutive scorings; model
+    in memory (not reloaded)'
+  defects:
+  - D-16
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: TEST-11
+  section: 9 Testing requirements
+  title: 'Frontend: Unit'
+  priority: M
+  milestone: M8
+  srs_text: 'Framework: Vitest + React Testing Library; Coverage Target: All analyst dashboard components;
+    Key Scenarios: RiskGauge: correct colour at all score ranges; ChannelChip: all 6 channels correct
+    colour and label; SHAPWaterfallChart: positive bars red, negative green, sum annotated; ActionPanel:
+    disabled until comment >= 10 chars; TimerBadge: countdown accurate to second'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: TEST-12
+  section: 9 Testing requirements
+  title: 'Frontend: E2E'
+  priority: M
+  milestone: M8
+  srs_text: 'Framework: Playwright (Chromium + Firefox + WebKit); Coverage Target: 5 critical analyst
+    journeys; Key Scenarios: (1) Google OAuth login -> alert feed loads -> HIGH alert pulsing -> open
+    drawer -> SHAP chart renders within 500ms -> CONFIRM FRAUD with comment -> alert removed; (2) MEDIUM
+    countdown to 0 -> auto-release label; (3) Analyst escalates to Risk Officer; (4) Admin promotes new
+    model version; (5) Risk Officer views fraud geographic heatmap'
+  defects:
+  - D-34
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: TEST-13
+  section: 9 Testing requirements
+  title: Security
+  priority: M
+  milestone: M9
+  srs_text: 'Framework: OWASP ZAP + Gitleaks + Trivy + DB permission test; Coverage Target: OWASP Top
+    10 + financial controls; Key Scenarios: 0 SQL injection; 0 XSS; PII tokenisation: raw account name
+    not in any API response; audit log: UPDATE returns permission denied; API key: returns 403 on analyst
+    endpoints; 0 secrets in committed code'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: TEST-14
+  section: 9 Testing requirements
+  title: ML Evaluation Gate
+  priority: M
+  milestone: M4
+  srs_text: 'Framework: evaluate.py; Coverage Target: All 13 metrics in Section 7.2; Key Scenarios: Automated
+    CI gate; LaTeX table generated as artifact; shadow mode AUC-ROC delta computed and logged to MLflow'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: RES-01
+  section: 10 Research artifacts
+  title: FraudShield-EAC-Transactions dataset
+  priority: M
+  milestone: M2
+  srs_text: 'Format: CSV + Parquet; 5M+ transactions; 44 features; 8 fraud types; 6 channels; 5 EAC countries;
+    Licence: CC BY 4.0; Platform: HuggingFace: mariusbayizere/fraudshield-eac-transactions + Zenodo archival
+    DOI'
+  defects:
+  - D-08
+  - D-09
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: RES-02
+  section: 10 Research artifacts
+  title: Dataset datasheet
+  priority: M
+  milestone: M2
+  srs_text: 'Format: Markdown — Gebru et al. (2021) Datasheets for Datasets template; Licence: CC BY 4.0;
+    Platform: GitHub fraudshield repo docs/ + arXiv appendix'
+  defects:
+  - D-09
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: RES-03
+  section: 10 Research artifacts
+  title: Trained model weights
+  priority: M
+  milestone: M11
+  srs_text: 'Format: ONNX (XGBoost + LightGBM); MLflow model registry; scikit-learn compatible; Licence:
+    Apache 2.0; Platform: HuggingFace: mariusbayizere/fraudshield-eac-model + MLflow registry'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: RES-04
+  section: 10 Research artifacts
+  title: SHAP analysis notebook
+  priority: M
+  milestone: M11
+  srs_text: 'Format: Jupyter notebook: feature importance, partial dependence plots, per-channel SHAP,
+    EAC-specific feature analysis; Licence: Apache 2.0; Platform: github.com/mariusbayizere/fraudshield/notebooks/shap_analysis.ipynb'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: RES-05
+  section: 10 Research artifacts
+  title: Training and evaluation pipeline
+  priority: M
+  milestone: M11
+  srs_text: 'Format: train.py, evaluate.py (with LaTeX table output), feature_engineering.py, benchmark.py;
+    Licence: Apache 2.0; Platform: github.com/mariusbayizere/fraudshield/ml/'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: RES-06
+  section: 10 Research artifacts
+  title: Full system source code
+  priority: M
+  milestone: M11
+  srs_text: 'Format: Spring Boot backend, Python ML service, React TypeScript frontend, infrastructure;
+    Licence: Apache 2.0; Platform: github.com/mariusbayizere/fraudshield/ (STANDALONE repository)'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: RES-07
+  section: 10 Research artifacts
+  title: Citation file
+  priority: M
+  milestone: M11
+  srs_text: 'Format: CITATION.cff with paper title, DOI, author, year; Licence: CC0; Platform: github.com/mariusbayizere/fraudshield/CITATION.cff'
+  defects: []
+  status: NOT_STARTED
+  verification: inspection
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-01
+  section: Build prompt Part B defect register
+  title: '"Precision at 1% FPR ≥ 0.720" is mathematically impossible.'
+  priority: M
+  milestone: M4
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - ML-GATE-02
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-02
+  section: Build prompt Part B defect register
+  title: Recall, F1 and FNR thresholds lack a defined operating point.
+  priority: M
+  milestone: M4
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - ML-GATE-03
+  - ML-GATE-04
+  - ML-GATE-05
+  - ML-GATE-06
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-03
+  section: Build prompt Part B defect register
+  title: The feature breakdown sums to 46, not 44.
+  priority: M
+  milestone: M3
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - FR-02-02
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-04
+  section: Build prompt Part B defect register
+  title: '"USSD: 40 features computed without device_fingerprint" is undefined.'
+  priority: M
+  milestone: M3
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - FR-02-02
+  - FR-01-04
+  - ML-DATA-07
+  - TEST-01
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-05
+  section: Build prompt Part B defect register
+  title: Calibrating two models separately, then averaging, does not yield a calibrated ensemble; SHAP
+    additivity is only exact in each model's margin space.
+  priority: M
+  milestone: M4
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - FR-02-03
+  - FR-02-04
+  - ML-GATE-11
+  - TEST-02
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-06
+  section: Build prompt Part B defect register
+  title: Isolation Forest score range and threshold conflict.
+  priority: M
+  milestone: M4
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - FR-02-05
+  - TEST-02
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-07
+  section: Build prompt Part B defect register
+  title: Temporal split definitions disagree
+  priority: M
+  milestone: M2
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - ML-DATA-01
+  - ML-DATA-06
+  - ML-GATE-01
+  - OPS-CI-05
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-08
+  section: Build prompt Part B defect register
+  title: Results on synthetic data can look perfect and prove nothing.
+  priority: M
+  milestone: M2
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - ML-DATA-04
+  - RES-01
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-09
+  section: Build prompt Part B defect register
+  title: Unsupported numeric claims in the SRS
+  priority: M
+  milestone: M4
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - RES-01
+  - RES-02
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-10
+  section: Build prompt Part B defect register
+  title: Alert volume will overwhelm analysts; the 30-second MEDIUM timer then auto-releases most risky
+    transactions.
+  priority: M
+  milestone: M6
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - FR-02-05
+  - FR-03-02
+  - FR-04-02
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-11
+  section: Build prompt Part B defect register
+  title: Shadow "within 1%" is ambiguous and labels are delayed.
+  priority: M
+  milestone: M5
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - FR-02-08
+  - ML-GATE-13
+  - TEST-08
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-12
+  section: Build prompt Part B defect register
+  title: 'Model extraction and privacy risk: returning the full ScoringResult (feature_vector, per-model
+    scores, SHAP) to the core-banking caller exposes model internals.'
+  priority: M
+  milestone: M6
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - FR-01-03
+  - FR-02-01
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-13
+  section: Build prompt Part B defect register
+  title: The latency budget sums to 51 ms and puts PostgreSQL and Kafka round-trips in the synchronous
+    path, but the p95 target is 50 ms.
+  priority: M
+  milestone: M6
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - FR-01-01
+  - FR-03-01
+  - NFR-PERF-02
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-14
+  section: Build prompt Part B defect register
+  title: MEDIUM "hold for 30 seconds" cannot be an open HTTP request.
+  priority: M
+  milestone: M6
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - FR-03-02
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-15
+  section: Build prompt Part B defect register
+  title: '"Buffer up to 10,000 transactions in memory" loses data if the pod dies.'
+  priority: M
+  milestone: M6
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - NFR-REL-02
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-16
+  section: Build prompt Part B defect register
+  title: Python in the hot path at 10k TPS.
+  priority: M
+  milestone: M5
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - FR-02-07
+  - ML-GATE-12
+  - TEST-10
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-17
+  section: Build prompt Part B defect register
+  title: pytest is listed for the Risk Decision Engine, which is a Spring Boot service.
+  priority: M
+  milestone: M6
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - TEST-03
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-18
+  section: Build prompt Part B defect register
+  title: '"Exactly 30 s" and "exactly at 5%" need tolerances and minimum volume.'
+  priority: M
+  milestone: M6
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - FR-03-02
+  - FR-03-07
+  - TEST-03
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-19
+  section: Build prompt Part B defect register
+  title: API keys "stored as bcrypt hash" cannot be verified at 10,000 TPS
+  priority: M
+  milestone: M7
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - NFR-SEC-08
+  - FR-06-07
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-20
+  section: Build prompt Part B defect register
+  title: '"PostgreSQL TDE" does not exist in community PostgreSQL 16.'
+  priority: M
+  milestone: M1
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - NFR-SEC-01
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-21
+  section: Build prompt Part B defect register
+  title: 'Data residency: SRS says "af-south-1 or equivalent", but af-south-1 is Cape Town, outside the
+    EAC — contradicting its own requirement.'
+  priority: M
+  milestone: M9
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - NFR-SEC-09
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-22
+  section: Build prompt Part B defect register
+  title: Regulatory mapping is unverified.
+  priority: M
+  milestone: M8
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - FR-05-06
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-23
+  section: Build prompt Part B defect register
+  title: Google OAuth "new Google user creates ANALYST account" would let any Google user into a bank's
+    fraud console.
+  priority: M
+  milestone: M7
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - FR-07-03
+  - TEST-07
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-24
+  section: Build prompt Part B defect register
+  title: The registration form lets users pick a role (Department = role); FR-07-01 says users cannot
+    self-elevate.
+  priority: M
+  milestone: M7
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - FR-07-01
+  - FR-07-02
+  - UX-REG-06
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-25
+  section: Build prompt Part B defect register
+  title: Customer verification by SMS link defeats itself in SIM-swap fraud,
+  priority: M
+  milestone: M6
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - FR-03-04
+  - FR-03-05
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-26
+  section: Build prompt Part B defect register
+  title: '"10 attempts per 15 min per IP" will lock out whole bank offices and mobile users behind carrier-grade
+    NAT; 5-failure account lock enables denial-of-service against analysts.'
+  priority: M
+  milestone: M7
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - FR-07-06
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-27
+  section: Build prompt Part B defect register
+  title: Stateless JWTs cannot be invalidated "within 5 seconds" on deactivation or password change.
+  priority: M
+  milestone: M7
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - FR-06-02
+  - FR-07-04
+  - FR-07-09
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-28
+  section: Build prompt Part B defect register
+  title: A third-party penetration test cannot be performed by the build agent.
+  priority: M
+  milestone: M9
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - NFR-SEC-10
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-29
+  section: Build prompt Part B defect register
+  title: Offline analyst decisions replayed later (Background Sync) can be stale or dangerous,
+  priority: M
+  milestone: M8
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - MOB-PWA-05
+  - MOB-NET-04
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-30
+  section: Build prompt Part B defect register
+  title: auto_block_events is declared immutable but contains mutable columns
+  priority: M
+  milestone: M1
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - FR-03-08
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-31
+  section: Build prompt Part B defect register
+  title: Tables required by functional requirements are missing from the schema.
+  priority: M
+  milestone: M1
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - FR-06-07
+  - FR-07-08
+  - FR-05-06
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-32
+  section: Build prompt Part B defect register
+  title: Audit log needs tamper evidence, not only permissions, and "12 action types" are unnamed.
+  priority: M
+  milestone: M1
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - FR-06-06
+  - NFR-SEC-05
+  - OPS-OBS-04
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-33
+  section: Build prompt Part B defect register
+  title: Several SRS colour pairings fail WCAG 2.1 AA text contrast
+  priority: M
+  milestone: M8
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - UX-DASH-01
+  - UX-DASH-03
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-34
+  section: Build prompt Part B defect register
+  title: animate-pulse "infinite" on HIGH cards violates WCAG 2.2.2 (motion > 5 s needs a pause control),
+    conflicts with the mobile battery principle in 05B, and causes fatigue on long shifts.
+  priority: M
+  milestone: M8
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - UX-DASH-02
+  - TEST-12
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-35
+  section: Build prompt Part B defect register
+  title: HIGH "pinned at top" uses MUI X DataGrid row pinning, which is a paid (Pro) feature.
+  priority: M
+  milestone: M8
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - FR-04-02
+  - UX-DASH-02
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-36
+  section: Build prompt Part B defect register
+  title: Breakpoint names and widths conflict
+  priority: M
+  milestone: M8
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - MOB-COMP-01
+  - MOB-COMP-02
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-37
+  section: Build prompt Part B defect register
+  title: Tailwind and MUI styles fight each other.
+  priority: M
+  milestone: M8
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - MOB-TOUCH-01
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-38
+  section: Build prompt Part B defect register
+  title: Flags from flagcdn.com leak staff IP addresses to a third party, break the CSP, fail offline
+    and cost data on 3G.
+  priority: M
+  milestone: M8
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - UX-REG-04
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-39
+  section: Build prompt Part B defect register
+  title: 200 KB gzipped initial bundle vs MUI + DataGrid + Recharts + Leaflet + graph library + Framer
+    Motion.
+  priority: M
+  milestone: M8
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - MOB-PERF-06
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-40
+  section: Build prompt Part B defect register
+  title: Lighthouse removed its PWA category in Lighthouse 12,
+  priority: M
+  milestone: M8
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - MOB-PWA-09
+  - MOB-DEV-05
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-41
+  section: Build prompt Part B defect register
+  title: iOS web push only works for Home-Screen-installed PWAs
+  priority: M
+  milestone: M8
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - MOB-PWA-05
+  - MOB-PWA-08
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-42
+  section: Build prompt Part B defect register
+  title: Feature phones (KaiOS/Opera Mini, 240 px, 2G) will not run a bank analyst console, and analysts
+    are staff with smartphones or PCs.
+  priority: M
+  milestone: M8
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - MOB-DEV-07
+  - MOB-NET-05
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-43
+  section: Build prompt Part B defect register
+  title: SRS has no localisation, yet serves Rwanda and the EAC.
+  priority: M
+  milestone: M8
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - FR-03-04
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-44
+  section: Build prompt Part B defect register
+  title: '"Undo within 5 seconds" conflicts with immutable decisions and immediate side effects'
+  priority: M
+  milestone: M8
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - FR-04-04
+  - UX-DASH-06
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-45
+  section: Build prompt Part B defect register
+  title: SHAP chart "all 44 features ranked" overwhelms under time pressure.
+  priority: M
+  milestone: M8
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - FR-04-05
+  - UX-DASH-05
+  - MOB-COMP-08
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-46
+  section: Build prompt Part B defect register
+  title: Leaflet base-map tiles from public servers break the CSP, data residency and 2G usability; per-point
+    fraud maps can expose individuals.
+  priority: M
+  milestone: M8
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - FR-05-02
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-47
+  section: Build prompt Part B defect register
+  title: Copy-paste text from an unrelated project in SRS 05B
+  priority: M
+  milestone: M0
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - MOB-PWA-08
+  - MOB-TOUCH-03
+  - MOB-TOUCH-04
+  - MOB-TOUCH-08
+  - MOB-DEV-01
+  status: IN_PROGRESS
+  verification: test
+  implementation:
+  - tools/src/fraudshield_tools/scope_guard.py
+  - tools/src/fraudshield_tools/traceability_seed.py
+  evidence: []
+  deviations: []
+- id: D-48
+  section: Build prompt Part B defect register
+  title: The roadmap compresses everything into weeks 4–6.
+  priority: M
+  milestone: M0
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects: []
+  status: IN_PROGRESS
+  verification: inspection
+  implementation:
+  - docs/adr/0001-record-architecture-decisions.md
+  - docs/traceability/requirements.yaml
+  evidence: []
+  deviations: []
+- id: D-49
+  section: Build prompt Part B defect register
+  title: TimescaleDB availability and licensing.
+  priority: M
+  milestone: M1
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - NFR-REL-04
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-50
+  section: Build prompt Part B defect register
+  title: MLflow "stages" are deprecated in favour of registry aliases.
+  priority: M
+  milestone: M5
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - FR-06-03
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-51
+  section: Build prompt Part B defect register
+  title: External services must work locally and in CI without real credentials.
+  priority: M
+  milestone: M6
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - TEST-07
+  - NFR-REL-06
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
