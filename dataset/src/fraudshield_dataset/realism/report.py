@@ -169,7 +169,16 @@ def render(
         f"{measures['event_counts']['events']:,} events of which "
         f"{measures['event_counts']['on_fraud_accounts']:,} sit on an account that carries fraud. "
         "How soon a transaction follows an event, and which kind of event it is, are the "
-        "scenario's own signals and are not judged.",
+        "scenario's own signals and are not gated. They are measured rather than assumed: "
+        + (
+            ", ".join(
+                f"{name} AUC {value:.3f}"
+                for name, value in sorted(measures["event_reported_auc"].items())
+            )
+            or "too few events at this size to measure either"
+        )
+        + ". The delay reflects fraud.takeover_lead_minutes = [5, 60], which is ASSUMED, so part "
+        "of that separation is the assumed schedule rather than the scenario itself.",
         f"- File (month) order alone: AUC {measures['file_order_auc']:.3f}.",
         f"- Identifier construction over every character of the distinct tokens. Each band is the "
         f"wider of {SHORTCUT_TOLERANCE} and this statistic's own null band: a family-wise "

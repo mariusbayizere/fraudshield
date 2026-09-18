@@ -37,11 +37,42 @@ The table is shipped in the release and the datasheet invites joining it, and no
    populations, and a new plant-a-leak test re-quantises legitimate events and asserts the gate
    fails.
 
-Two event properties are deliberately **not** judged, and the check says so: how soon a transaction
-follows an event, and which kind of event it is. A SIM swap before a takeover is how that fraud
-works — it separates the classes at 0.537 on its own — and a model is meant to learn it. Including
-it made the new gate fail on a clean dataset, which is how the distinction got drawn explicitly
-rather than by accident.
+Two event properties are deliberately **not gated**: how soon a transaction follows an event, and
+which kind of event it is. A SIM swap before a takeover is how that fraud works and a model is
+meant to learn it. Including them made the new gate fail on a clean dataset, which is how the
+distinction got drawn explicitly rather than by accident.
+
+> **Corrected after the delta re-check (see `delta-recheck.md`).** This paragraph originally
+> justified excluding *both* channels with one number, "0.537 on its own" — which is the **type**
+> channel, the smaller of the two. Measured on the gate's own footing (account-level labels, the
+> same out-of-fold estimator) at 60,355 rows: **delay alone 0.709**, type alone 0.581, against the
+> gated construction pair at 0.544. The larger channel was never measured, and neither was judged
+> by any check: the single-feature AUC gate scores transaction columns and never joins
+> `account_events`. The re-check rejected the call as written, and rightly.
+>
+> **At release scale (1,006,249 rows) it is sharper: delay 0.758, type 0.537.** The 0.537 quoted
+> above reproduces exactly, so that figure was always right *for type* — the error was using it to
+> justify excluding both channels. But at 0.758 the excluded delay channel is the **strongest
+> single signal in the dataset**, above `merchant_category_code` at 0.711, and only 0.042 under the
+> 0.80 D-08 limit. The separation grows with n, so development-scale probes understate it.
+>
+> Consequence for the write-up: "the dataset's strongest single feature is
+> `merchant_category_code` at 0.711" is only true if the account-event join is excluded. Wherever
+> that claim appears — datasheet, walkthrough, defence questions — it now needs that qualification.
+>
+> Two things changed in response, and no gate was widened. Both channels are now **measured and
+> reported** as ungated `CheckResult`s, following the "trivial rule baseline" precedent already in
+> the file, so the claim is a tracked number rather than an assertion in a docstring. And the
+> mechanism is now stated: the lead is drawn from `fraud.takeover_lead_minutes = [5, 60]`, which is
+> `ASSUMED`, so every enabling event is followed by its drain inside a tight uniform window with no
+> long tail and no unexploited swaps. Part of the delay separation is that assumed schedule rather
+> than the scenario, and the report now says so.
+>
+> The line itself stands: this module already judges *construction* against a band around 0.5 and
+> leaves *designed content* to the 0.80 single-feature limit — the shortcut detector takes
+> non-behavioural columns only, and file order is judged apart because drift is designed. Excluding
+> event type from a construction gate is that same pre-existing line, not a gate widened until it
+> passed. What was wrong was leaving the excluded channels measured by nothing.
 
 At a million rows after the fix: **event construction AUC 0.513, band ±0.030, PASS**.
 

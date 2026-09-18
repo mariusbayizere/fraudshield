@@ -17,7 +17,11 @@ Leakage is assessed against the observed label (the one a model would train on):
   accounts legitimately recur;
 - event construction: the account events fraud plants (a SIM swap before a takeover) must be built
   like the legitimate ones. They were not: the microsecond part of the timestamp and the day of the
-  month identified a victim's account outright, in a table the release ships;
+  month identified a victim's account outright, in a table the release ships. Only those two
+  construction properties are gated. Which kind of event it is, and how soon a transaction follows
+  it, are the scenario's own signal rather than construction, so they are **measured and reported
+  but never gated** — the same line this module already draws when the shortcut detector takes
+  non-behavioural columns only, and when file order is judged apart because drift is designed;
 - fraud and legitimate rows share value formats and, per channel, null signatures.
 
 Every band that judges a cross-validated tree is sized to that statistic's null rather than fixed,
@@ -57,6 +61,9 @@ from fraudshield_dataset.realism.stats import (
 
 SINGLE_FEATURE_AUC_LIMIT = 0.80
 SHORTCUT_TOLERANCE = 0.03
+# Every kind of account event the generator writes, in a fixed order so the reported type code
+# means the same thing from one month and one run to the next.
+EVENT_KINDS = ("DEVICE_CHANGE", "SIM_SWAP")
 CI_Z = 1.96
 # Family-wise level for the identifier-construction bands. Three token columns are tested at once,
 # so a per-column 5% band fails about one run in seven by chance; the band is widened to keep the
@@ -217,6 +224,8 @@ class Dataset:
         self.tokens: dict[str, dict[str, bool]] = {}
         self.id_digests: list[NDArray[np.uint64]] = []
         self.event_features = Columns()
+        # The two channels excluded from the event gate, measured for the report only.
+        self.event_reported = Columns()
         self.event_accounts: list[str] = []
         self.fraud_accounts: set[str] = set()
         self._vocabularies: dict[str, dict[str, int]] = {}
@@ -231,7 +240,7 @@ class Dataset:
             )
             labels = pq.read_table(root / "labels" / f"month={month}" / "part-0000.parquet")
             self._month(file_index, transactions, labels)
-            self._month_events(root, month)
+            self._month_events(root, month, transactions)
             self.rows_by_month[month] = transactions.num_rows
             monthly = self.fraud_types_by_month.setdefault(month, {})
             for kind in labels.filter(labels["is_fraud_true"])["fraud_type"].to_pylist():
@@ -245,7 +254,7 @@ class Dataset:
     def observed(self) -> NDArray[np.bool_]:
         return np.concatenate(self.observed_parts)
 
-    def _month_events(self, root: Path, month: str) -> None:
+    def _month_events(self, root: Path, month: str, transactions: pa.Table) -> None:
         """Account events, scored by whether their account ever carries observed fraud.
 
         The events a fraud scenario plants (a SIM swap before a takeover) must be built like the
@@ -253,11 +262,28 @@ class Dataset:
         the month identified a victim's account outright, in a table the release ships and the
         datasheet invites joining (M2 principal review, BLOCKER 1.1).
 
-        Only construction is judged here: the microsecond part of the timestamp and the day of the
-        month. Two things are deliberately left out because they are the scenario's own signal,
-        which a model is meant to learn rather than be protected from: how soon a transaction
-        follows the event, and which kind of event it is. A SIM swap before a takeover is how that
-        fraud works, and it duly separates the classes (0.537 on its own at a million rows).
+        Only construction is **gated** here: the microsecond part of the timestamp and the day of
+        the month. Two things are deliberately left out of the gate because they are the scenario's
+        own signal, which a model is meant to learn rather than be protected from: how soon a
+        transaction follows the event, and which kind of event it is. A SIM swap before a takeover
+        is how that fraud works.
+
+        Both excluded channels are nevertheless **measured and reported** (ungated), because the
+        delta re-check found they were previously judged by nothing at all while the justification
+        for excluding them quoted only the smaller of the two. At 60,355 rows, account-level labels
+        and the gate's own out-of-fold estimator: delay alone 0.709, type alone 0.581, against the
+        gated construction pair at 0.544. The delay figure is the larger channel and is the one the
+        earlier "0.537 on its own" wording did not measure.
+
+        The delay is not purely a consequence of the scenario: ``fraud.takeover_lead_minutes`` is
+        ``[5, 60]`` and ``provenance: ASSUMED``, so every enabling event is followed by its drain
+        inside a tight uniform window with no long tail and no unexploited swaps. Part designed
+        causal signal, part artefact of an assumed schedule, and reporting it keeps that visible
+        rather than asserted.
+
+        Delay is measured to the account's next transaction **within the same month**, which keeps
+        the one-month-at-a-time memory property; an event with no later transaction in its own
+        month is left out of the delay measure only.
         """
         path = root / "account_events" / f"month={month}" / "part-0000.parquet"
         if not path.exists():
@@ -268,7 +294,42 @@ class Dataset:
         micros = events["event_timestamp"].cast(pa.int64()).to_numpy()
         self.event_features.add("event_sub_second", micros % 1_000_000)
         self.event_features.add("event_day_of_month", pc.day(events["event_timestamp"]).to_numpy())
-        self.event_accounts.extend(events["account_id"].to_pylist())
+        accounts = events["account_id"].to_pylist()
+        self.event_accounts.extend(accounts)
+        self._event_reported(accounts, micros, events["event_type"].to_pylist(), transactions)
+
+    def _event_reported(
+        self,
+        accounts: list[str],
+        micros: NDArray[np.int64],
+        kinds: list[str],
+        transactions: pa.Table,
+    ) -> None:
+        """The two excluded channels, measured for the report and gated by nothing.
+
+        See :meth:`_month_events`. Delay is seconds to the account's next transaction in this
+        month; ``-1`` marks an event with no later transaction here, and those rows are dropped
+        before the AUC is taken.
+        """
+        by_account: dict[str, list[int]] = {}
+        tx_micros = transactions["transaction_timestamp"].cast(pa.int64()).to_numpy()
+        for account, stamp in zip(transactions["account_id"].to_pylist(), tx_micros, strict=True):
+            by_account.setdefault(account, []).append(int(stamp))
+        for account_stamps in by_account.values():
+            account_stamps.sort()
+        delays = np.empty(len(accounts), dtype=np.float64)
+        for index, (account, stamp) in enumerate(zip(accounts, micros, strict=True)):
+            later = by_account.get(account, [])
+            position = int(np.searchsorted(later, stamp))
+            delays[index] = (later[position] - stamp) / 1_000_000 if position < len(later) else -1.0
+        self.event_reported.add("event_delay_seconds", delays)
+        self.event_reported.add(
+            "event_type_code",
+            np.array(
+                [EVENT_KINDS.index(k) if k in EVENT_KINDS else len(EVENT_KINDS) for k in kinds],
+                dtype=np.float64,
+            ),
+        )
 
     @property
     def event_labels(self) -> NDArray[np.bool_]:
@@ -441,6 +502,32 @@ class Dataset:
                     seen[value] = seen.get(value, False) or label
 
 
+def _reported_event_auc(
+    data: Dataset, event_labels: NDArray[np.bool_], config: SimulationConfig
+) -> dict[str, float]:
+    """The two channels the event gate excludes, measured on the gate's own footing.
+
+    Account-level labels and the same out-of-fold estimator the gate uses, so these numbers are
+    directly comparable to it. Reported, never gated: a SIM swap before a takeover is signal a
+    model should learn. They are measured because the M2 delta re-check found both judged by
+    nothing at all, while the written justification quoted only the smaller of the two.
+    """
+    measured: dict[str, float] = {}
+    positives = int(event_labels.sum())
+    if not positives or positives == event_labels.size:
+        return measured
+    for channel in data.event_reported.names:
+        column = data.event_reported.get(channel)
+        # -1 marks an event with no later transaction in its own month; see _event_reported.
+        usable = column >= 0.0 if channel == "event_delay_seconds" else np.ones(column.size, bool)
+        channel_labels, channel_values = event_labels[usable], column[usable]
+        if 0 < int(channel_labels.sum()) < channel_labels.size:
+            measured[channel] = cross_validated_auc(
+                channel_values.reshape(-1, 1), channel_labels, folds=FOLDS, seed=config.seed
+            )
+    return measured
+
+
 def _leakage_checks(
     data: Dataset, config: SimulationConfig, full: bool, measures: dict[str, Any]
 ) -> list[CheckResult]:
@@ -497,6 +584,9 @@ def _leakage_checks(
         "events": int(event_labels.size),
         "on_fraud_accounts": event_positives,
     }
+
+    reported_event_auc = _reported_event_auc(data, event_labels, config)
+    measures["event_reported_auc"] = reported_event_auc
 
     file_order = separation(np.concatenate(data.file_index_parts), observed)
     measures["file_order_auc"] = file_order
@@ -561,8 +651,36 @@ def _leakage_checks(
             f"AUC {event_auc:.3f} (band +/-{event_band:.3f}) on {event_labels.size} events, "
             f"{event_positives} on fraud accounts",
             "an account event's construction does not reveal a victim's account (D-08)",
-            "sub-second part, day of month and type of each SIM swap or device change; how soon a "
-            "transaction follows is the scenario's own signal and is deliberately not judged",
+            "sub-second part and day of month of each SIM swap or device change. Which kind of "
+            "event it is, and how soon a transaction follows, are the scenario's own signals and "
+            "are deliberately not gated; both are measured and reported below",
+        ),
+        CheckResult(
+            "event delay (reported)",
+            True,
+            False,
+            (
+                f"AUC {reported_event_auc['event_delay_seconds']:.3f}"
+                if "event_delay_seconds" in reported_event_auc
+                else "not measurable at this size"
+            ),
+            "reported, not gated: seconds from an event to that account's next transaction",
+            "excluded from the event gate as the scenario's own signal, so it is tracked here "
+            "instead. The lead is drawn from fraud.takeover_lead_minutes = [5, 60], which is "
+            "ASSUMED, so part of this separation is the assumed schedule rather than the scenario",
+        ),
+        CheckResult(
+            "event type (reported)",
+            True,
+            False,
+            (
+                f"AUC {reported_event_auc['event_type_code']:.3f}"
+                if "event_type_code" in reported_event_auc
+                else "not measurable at this size"
+            ),
+            "reported, not gated: SIM swap versus device change",
+            "a SIM swap before a takeover is how that fraud works and a model is meant to learn "
+            "it; measured so the claim is a number rather than an assertion",
         ),
         CheckResult(
             "file order",
