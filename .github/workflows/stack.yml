@@ -9,6 +9,10 @@
 # that the stack was verified -- a gate record must quote the job (GOV-10). Milestone M2 changed no
 # path below, so every stack run on its branch skipped the job; its gate record cites the last
 # executed run instead (docs/reviews/M2/gate-evidence.md).
+#
+# And when you do trigger an executing run for a gate: the concurrency group below cancels it as soon
+# as another commit is pushed to the same ref, even a docs-only one that would skip the job. A run
+# collected as gate evidence has to be the last push until it finishes.
 name: stack
 
 on:
