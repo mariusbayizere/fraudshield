@@ -136,7 +136,11 @@ def _month_events(
                 accounts.append(customer.account)
                 kinds.append(event.kind)
                 local = (event.day - 1) * 86_400 + event.seconds
-                times.append(start + (local - int(offsets[customer.country]) * 3600) * 1_000_000)
+                times.append(
+                    start
+                    + (local - int(offsets[customer.country]) * 3600) * 1_000_000
+                    + event.micros
+                )
     for fraud_event in fraud_events:
         accounts.append(fraud_event.account_id)
         kinds.append(fraud_event.kind)

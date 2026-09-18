@@ -14,6 +14,7 @@ from functools import cached_property
 import numpy as np
 
 from fraudshield_dataset.generator.config import COUNTRIES, SEGMENTS, SimulationConfig
+from fraudshield_dataset.generator.daily import Rhythm, day_weights, month_parts
 from fraudshield_dataset.generator.keys import stream, token
 from fraudshield_dataset.normal import inverse_cdf
 
@@ -23,6 +24,7 @@ class AccountEvent:
     month: int
     day: int
     seconds: int
+    micros: int
     kind: str  # SIM_SWAP | DEVICE_CHANGE
 
 
@@ -74,6 +76,11 @@ class Population:
             k: tuple(v) for k, v in _pairs(p.value("currencies.country_centre")).items()
         }
         self._activity_sigma = p.number("population.activity_log_sigma")
+        self._rhythm = Rhythm(
+            p.integer("behaviour.payday_window_days"),
+            p.number("behaviour.payday_spend_boost"),
+            p.number("behaviour.market_day_weight"),
+        )
         low, high = _int_pair(p.value("behaviour.salary_day_range"))
         self._salary_days = (low, high)
         self._sim_swap = p.number("population.legit_sim_swap_monthly_probability")
@@ -225,19 +232,30 @@ class Population:
         events = []
         join = self.join_month(index)
         for month in range(join, len(self.config.months)):
+            kinds = []
             if rng.random() < self._sim_swap:
-                events.append(
-                    AccountEvent(
-                        month, int(rng.integers(1, 28)), int(rng.integers(0, 86400)), "SIM_SWAP"
-                    )
-                )
+                kinds.append("SIM_SWAP")
             if segment != "rural_ussd" and rng.random() < self._device_change:
+                kinds.append("DEVICE_CHANGE")
+            for kind in kinds:
+                # Placed exactly as the events fraud plants are: any day of the real month, drawn
+                # from this customer's own daily profile, and to the microsecond. A legitimate
+                # event confined to days 1-27 on a whole second was a label by itself, since only
+                # planted events fell elsewhere (M2 principal review, BLOCKER 1.1).
+                weights = day_weights(
+                    segment=segment,
+                    salary_day=salary_day,
+                    market_weekday=market_weekday,
+                    month=month_parts(self.config.months[month]),
+                    rhythm=self._rhythm,
+                )
                 events.append(
                     AccountEvent(
                         month,
-                        int(rng.integers(1, 28)),
-                        int(rng.integers(0, 86400)),
-                        "DEVICE_CHANGE",
+                        int(rng.choice(len(weights), p=weights)) + 1,
+                        int(rng.integers(0, 86_400)),
+                        int(rng.integers(0, 1_000_000)),
+                        kind,
                     )
                 )
         return Customer(

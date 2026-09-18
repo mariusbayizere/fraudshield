@@ -6,7 +6,6 @@ transfers, cash-agent peaks and rural USSD use. Every draw comes from the custom
 
 from __future__ import annotations
 
-import calendar
 import datetime as dt
 import math
 from dataclasses import dataclass
@@ -15,6 +14,7 @@ from decimal import Decimal
 import numpy as np
 
 from fraudshield_dataset.generator.config import CHANNELS, SimulationConfig, seasonal_factor
+from fraudshield_dataset.generator.daily import Rhythm, day_weights
 from fraudshield_dataset.generator.keys import stream, token, transaction_uuid
 from fraudshield_dataset.generator.population import Customer, Population
 from fraudshield_dataset.generator.schema import Rows
@@ -158,16 +158,13 @@ class LegitimateBehaviour:
         return int(self.planned_counts(month_index).sum())
 
     def day_weights(self, customer: Customer, year: int, month: int) -> np.ndarray:
-        days = calendar.monthrange(year, month)[1]
-        weights = np.ones(days)
-        if customer.segment == "urban_salaried":
-            start = min(customer.salary_day, days)
-            weights[start - 1 : min(days, start - 1 + self.payday_window)] *= self.payday_boost
-        if customer.segment == "informal_trader":
-            for day in range(1, days + 1):
-                if dt.date(year, month, day).weekday() == customer.market_weekday:
-                    weights[day - 1] *= self.market_weight
-        return weights / weights.sum()
+        return day_weights(
+            segment=customer.segment,
+            salary_day=customer.salary_day,
+            market_weekday=customer.market_weekday,
+            month=(year, month),
+            rhythm=Rhythm(self.payday_window, self.payday_boost, self.market_weight),
+        )
 
     def local_seconds(self, rng: np.random.Generator, channel: str) -> int:
         if rng.random() < self.night:
