@@ -187,7 +187,9 @@ the decision engine M6, staff identity, admin and audit M7).
 - **Interim evidence:** the 1,005,621-row verification run, regenerated on the sourced parameters.
 
 ### PB-26 · Month partition key is the local month, not the UTC month
-- **Source:** M2 principal review (MINOR 2.1) · **Priority:** medium · **Due:** M3 (before any release)
+- **Source:** M2 principal review (MINOR 2.1) · **Priority:** high · **Due:** before M3 features begin
+  (owner direction 2026-09-18: M3 reads these partitions and a wrong key would silently distort
+  time-window features)
 - **Problem:** `transactions/month=YYYY-MM` is the simulated *local* month while `transaction_timestamp`
   is UTC, so rows near a month boundary land one UTC month early: 11 rows of 40,213 in the reviewer's
   run, and the first partition holds timestamps before the dataset's nominal start. Partition pruning
@@ -211,3 +213,54 @@ the decision engine M6, staff identity, admin and audit M7).
   boundary), but that one call is unguarded and may be dead.
 - **Acceptance:** establish whether the call is needed at all — a mutation the test kills, or its
   removal with the row-group test as the guard.
+
+### PB-29 · Country packs: no country, currency or bloc hard-coded
+- **Source:** owner direction 2026-09-18 (Africa-wide), ADR 0023 · **Priority:** high · **Due:** scoped
+  branch after M2 closes, before M3 features
+- **Problem:** country-specific values are spread across the generator, the Java side and the frontend
+  (`COUNTRIES`, currency and timezone tables, country lists in the UI), so the system reads as
+  EAC-shaped and a new country cannot be added without code changes.
+- **Acceptance:** every country-specific value lives in `dataset/params/countries/<alpha-2>.yaml`
+  (currency and ISO 4217 minor units, timezones per region, population and urban share, mobile money
+  penetration, agent and merchant density, channel mix, languages, school terms and public holidays,
+  KYC tiers, phone formats, bloc memberships); no country, currency or bloc named in Java, Python or
+  TypeScript; a synthetic, entirely assumed "Country Z" pack in CI makes the generator, the features
+  and the UI work with zero code changes; the M2 gates stay green with it added.
+
+### PB-30 · Generalise corridor_class to blocs
+- **Source:** owner direction 2026-09-18, ADR 0023 (refs D-03, Part E.2) · **Priority:** high · **Due:**
+  with PB-29
+- **Acceptance:** `corridor_class` becomes `DOMESTIC | INTRA_BLOC | CROSS_BLOC_AFRICA |
+  INTERCONTINENTAL` with bloc membership (EAC, ECOWAS, SADC, COMESA, CEMAC, AMU) read from the packs,
+  a country may hold several memberships, the feature count stays 44, and no EAC special case remains
+  in code.
+
+### PB-31 · Three assumed generalisation packs, kept out of every validated claim
+- **Source:** owner direction 2026-09-18, ADR 0023 · **Priority:** medium · **Due:** with PB-29
+- **Acceptance:** packs for West Africa (NG, GH or SN, covering XOF) and Southern Africa (ZA) marked
+  entirely ASSUMED; the datasheet, claims register and paper state the validated-core/portability-pack
+  split plainly; no result computed on them is reported as evidence about those countries.
+
+### PB-32 · Front-end portability and right-to-left support
+- **Source:** owner direction 2026-09-18, ADR 0023 · **Priority:** high · **Due:** with PB-29 (not
+  retrofitted later)
+- **Acceptance:** currency and number formatting driven by the packs' ISO 4217 minor units; dates and
+  times per country timezone; pluggable i18n locale packs; RTL via CSS logical properties and
+  direction-aware layout, with a Playwright test running the UI in RTL.
+
+### PB-33 · Rename the dataset to FraudShield-Africa-Transactions
+- **Source:** owner direction 2026-09-18, ADR 0023 · **Priority:** medium · **Due:** with PB-29
+- **Acceptance:** the dataset is `FraudShield-Africa-Transactions` with a validated EAC-5 core; README,
+  datasheet, claims register and paper wording carry no sentence implying validation beyond the sourced
+  countries; the manifest's `dataset` field and the export follow.
+
+### PB-34 · Leave-one-country-out and fine-tuning experiments (M4)
+- **Source:** owner direction 2026-09-18, ADR 0023 (Part E.5) · **Priority:** high · **Due:** M4
+- **Problem:** generalisation is currently asserted, not measured, and the traceability register cannot
+  hold the rows because it is generated from the SRS and Part B only.
+- **Acceptance:** `fs-traceability-seed` gains Part E.5 as a row source (with tests), and rows exist for
+  (a) leave-one-country-out over the five EAC countries, reporting AUC, recall at 1% FPR and
+  calibration drift against the in-distribution model with confidence intervals; (b) the same model run
+  over the assumed non-EAC packs, reported as a portability probe on assumed data; (c) a fine-tuning
+  variant that adapts on a small labelled sample from the held-out country and reports how much target
+  data recovers performance.
