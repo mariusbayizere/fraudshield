@@ -12,8 +12,8 @@ This document records what was read, what changed, and what remains a modelling 
 
 | Provenance | Before | After |
 |---|---:|---:|
-| SOURCED | 0 | 10 |
-| ASSUMED | 65 | 57 |
+| SOURCED | 0 | 12 |
+| ASSUMED | 65 | 55 |
 | CALIBRATED_TO_SRS_TARGET | 14 | 14 |
 | **Total** | **79** | **81** |
 
@@ -36,6 +36,7 @@ Each of these was downloaded and read in full text, not summarised from a search
 | S-5 | [World Development Indicators, PA.NUS.FCRF](https://api.worldbank.org/v2/country/RWA;KEN;TZA;UGA;COD/indicator/PA.NUS.FCRF?format=json&date=2023:2024) | World Bank / IMF International Financial Statistics | official exchange rates, 2024 (2023 for the DRC) |
 | S-6 | [IANA Time Zone Database 2026c](https://www.iana.org/time-zones) (as shipped in tzdata 2026c) | IANA, 2026 | UTC offsets of the five countries |
 | S-7 | [School calendar 2024-2025](https://www.nga.ac.rw/storage/nArw8l4yXLQqkb3qi5aHo39WSkW9SH-metaU0NIT09MIENBTEVOREFSLnBkZg==-.pdf) | Nu Vision Academy (implementing Rwanda's national calendar), 2024 | months in which school terms begin |
+| S-8 | [ISO 4217 List One](https://www.six-group.com/dam/download/financial-information/data-center/iso-currrency/lists/list-one.xml) (XML, published 2026-09-17) | ISO / SIX Group as maintenance agency, 2026 | currency code and minor unit per country |
 
 Searched but not used: the National Bank of Rwanda payment statistics pages (JavaScript-rendered,
 no readable figures), the Rwanda Utilities Regulatory Authority telecom statistics (no document
@@ -56,6 +57,8 @@ snippet.
 | `behaviour.p2p_share_of_wallet_payments` | 0.6 | 0.216 | S-1 Tables H2 and H5: 479.1M P2P against 1,736.2M merchant payments |
 | `behaviour.school_fee_months` | Jan, May, Sep | Jan, Apr, Sep | S-7: term 3 begins 22-25 April, not May |
 | `volume.monthly_growth_rate` | 0.03 | 0.0201 | S-1 Table H1: +27% volume in 2024, compounded monthly |
+| `behaviour.cross_border_share` | 0.03 | 0.005 | S-1 Annex G Table G2 and Annex H Table H2: 2,211,374 outbound cross-border wallet transfers against 479.1M person-to-person transfers |
+| `currencies.currency_by_country` | assumed | same values, now sourced | S-8 ISO 4217 List One, published 2026-09-17 |
 | `currencies.rwf_per_unit` | 10 / 0.5 / 0.35 / 0.45 | 9.7768 / 0.5074 / 0.3508 / 0.4958 | S-5 official rates |
 | `currencies.utc_offset_hours` | CD +1 | CD +2 | S-6: the simulated Congolese customers are in the east (Africa/Lubumbashi) |
 | `currencies.country_centre` | CD Kinshasa | CD Goma | consistency with the above; the coordinates themselves stay assumed |
@@ -75,6 +78,36 @@ Verified after the changes, at 60,000 rows: fraud rate 0.870% overall and 0.906%
 period, channel mix within 0.34 pp, country mix within 0.12 pp. The calibrated targets take
 precedence over the sourced values for the fraud rate, the channel mix and the country mix, and
 they continue to hold.
+
+## Coverage of the most influential parameters
+
+The measured ranking (`docs/research/parameter_influence.json`) puts nine parameters in a top group
+the harness could not perturb — either because the value is not numeric or because the generator
+refuses to run with it changed — and then orders the rest by score. Of the top fifteen:
+
+| Rank | Parameter | Provenance after the pass |
+|---:|---|---|
+| 1 | `behaviour.remittance_corridors` | ASSUMED — which neighbours a country remits to; no bilateral series read |
+| 2 | `channels.channel_share` | CALIBRATED (SRS 7.1) |
+| 3 | `currencies.currency_by_country` | SOURCED (ISO 4217) |
+| 4 | `fraud.fraud_rate_overall` | CALIBRATED (SRS 7.1) |
+| 5 | `fraud.fraud_rate_test` | CALIBRATED (SRS 7.1) |
+| 6 | `population.segment_share` | ASSUMED, constrained by the sourced urban share |
+| 7 | `population.urban_share_of_customers` | SOURCED (census weighted by FinScope) |
+| 8 | `volume.simulation_months` | CALIBRATED (D-07 split plan) |
+| 9 | `volume.start_month` | ASSUMED (design choice: the simulated period) |
+| 10 | `geography.country_share` | CALIBRATED (SRS 7.1) |
+| 11 | `population.mean_transactions_per_active_customer_month` | SOURCED |
+| 12 | `behaviour.amount_mean_rwf` | SOURCED |
+| 13 | `behaviour.amount_log_sigma` | ASSUMED — no published dispersion of transaction values found |
+| 14 | `fraud.rows_per_incident` | ASSUMED (fraud) |
+| 15 | `behaviour.school_fee_months` | SOURCED |
+
+Six of the fifteen are sourced, five are calibrated to an SRS target, and four remain assumed: the
+remittance corridors, the split of customers between behavioural segments, the start month of the
+simulated period, and the dispersion of transaction amounts. The first and last are the two worth
+revisiting if a bilateral remittance matrix or a distribution of transaction values by band can be
+read in full.
 
 ## What could not be sourced, and why
 

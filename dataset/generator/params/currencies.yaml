@@ -3,8 +3,17 @@ parameters:
   currency_by_country:
     value: {RW: RWF, KE: KES, TZ: TZS, UG: UGX, CD: CDF}
     unit: ISO 4217 code of the local currency by ISO 3166 country
-    provenance: ASSUMED
-    rationale: National currencies of the five markets; stated as a modelling input rather than a sourced figure because no document was consulted for it in this project.
+    provenance: SOURCED
+    citation: >-
+      ISO 4217 current currency and funds code list (List One), published 2026-09-17 by SIX Group as
+      maintenance agency, read as XML: Rwanda RWF (minor unit 0), Kenya KES (2), Tanzania TZS (2), Uganda
+      UGX (0), Congo (the Democratic Republic of the) CDF (2).
+      https://www.six-group.com/dam/download/financial-information/data-center/iso-currrency/lists/list-one.xml
+    accessed: 2026-09-18
+    rationale: >-
+      The same list gives the minor units the generator rounds amounts to, which are asserted against the
+      JDK's ISO data on the Java side (D-43). "Congo (the)" in the same list is a different country with a
+      different currency (XAF), so the code is taken from the Democratic Republic entry.
   rwf_per_unit:
     value: {RWF: 1.0, KES: 9.7768, TZS: 0.5074, UGX: 0.3508, CDF: 0.4958}
     unit: RWF per one unit of the currency (fixed for the whole simulation)

@@ -28,7 +28,7 @@ presentation, datasheet — uses the replacement wording above.
 ## Sourcing pass, 2026-09-18
 
 A sourcing pass over the generator parameters read seven documents in full and raised the sourced
-parameter count from 0 to 10 of 81 (`docs/research/sourcing_pass.md`). It also established what is
+parameter count from 0 to 12 of 81 (`docs/research/sourcing_pass.md`). It also established what is
 *not* available: no publication found gives fraud incidence by type for these markets, which is why
 every fraud parameter and the claims that depend on them stay unverified. Claims about fraud
 prevalence, detection rates in production, or analyst behaviour cannot be resolved from the payment

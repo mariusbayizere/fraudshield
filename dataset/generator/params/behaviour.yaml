@@ -96,10 +96,21 @@ parameters:
     provenance: ASSUMED
     rationale: Modelling choice for the school-fee seasonal peak.
   cross_border_share:
-    value: 0.03
-    unit: fraction of person-to-person and bank transfers sent to another EAC country
-    provenance: ASSUMED
-    rationale: Part E.3 requires family remittances along EAC corridors; the share is a modelling choice.
+    value: 0.005
+    unit: fraction of person-to-person and bank transfers sent to another country
+    provenance: SOURCED
+    citation: >-
+      Bank of Tanzania, Payment Systems Annual Report for 2024 (2025), Annex G, Table G2 "Cross-border fund
+      transfers by MMO", page 47: 2,211,374 outbound cross-border mobile money transactions in 2024, against
+      479,107,425 person-to-person transfers in Annex H, Table H2, which is 0.46%.
+      https://www.bot.go.tz/Publications/Regular/Annual%20Report/sw/2025032515311662.pdf
+    accessed: 2026-09-18
+    rationale: >-
+      Rounded from 0.46% to 0.5%. The previous value of 3% was six times too high: cross-border transfers are
+      a small share of transfers even in a market with large diaspora flows, because most cross-border value
+      moves through banks in few, large transactions (Table G1: 310,622 outbound bank transfers carrying
+      TZS 116,105 billion, against TZS 340 billion over mobile money). The generator applies this share to
+      person-to-person and bank transfers alike, which the source does not separate.
   remittance_corridors:
     value: {RW: [UG, KE, CD], KE: [UG, TZ], TZ: [KE, UG], UG: [KE, RW], CD: [RW, UG]}
     unit: destination countries for cross-border transfers, by sender country

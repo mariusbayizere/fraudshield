@@ -19,6 +19,9 @@ from fraudshield_dataset.generator.keys import stream, token, transaction_uuid
 from fraudshield_dataset.generator.population import Customer, Population
 from fraudshield_dataset.generator.schema import Rows
 
+# ISO 4217 List One, published 2026-09-17: RWF and UGX have no minor unit, KES, TZS and CDF have
+# two (see currencies.currency_by_country for the citation). The Java side asserts the same table
+# against the JDK's ISO data (D-43).
 MINOR_UNITS = {"RWF": 0, "UGX": 0, "KES": 2, "TZS": 2, "CDF": 2}
 P2P_MCC = "4829"
 CASH_MCC = "6011"

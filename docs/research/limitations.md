@@ -27,10 +27,10 @@ that assumption.
 
 ## The sourced parameters are structural, and partly from a neighbouring market
 
-Ten of 81 parameters are sourced from documents read in full. They fix the population and volume
-structure: transactions per active customer, agents and merchant acceptance points per customer,
-the urban share of customers, per-channel mean amounts, the person-to-person versus merchant split,
-volume growth, exchange rates, time zones and school terms.
+Twelve of 81 parameters are sourced from documents read in full. They fix the population and volume
+structure: transactions per active customer, agents and merchant acceptance points per customer, the
+urban share of customers, per-channel mean amounts, the person-to-person versus merchant split, the
+cross-border share, volume growth, exchange rates, currency codes, time zones and school terms.
 
 Tanzania publishes value and volume by transaction category and Rwanda does not, so the
 per-transaction levels come from Tanzanian aggregates while the dataset's country mix is

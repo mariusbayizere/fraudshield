@@ -97,18 +97,19 @@ documented parameter by parameter in `dataset/params_provenance.md`:
 
 | Provenance | Count | Meaning |
 |---|---:|---|
-| SOURCED | 10 | taken from a document the author downloaded and read |
-| ASSUMED | 57 | a modelling choice with a stated rationale and no source |
+| SOURCED | 12 | taken from a document the author downloaded and read |
+| ASSUMED | 55 | a modelling choice with a stated rationale and no source |
 | CALIBRATED_TO_SRS_TARGET | 14 | set to meet a target in SRS section 7.1 or a binding resolution |
 
-Ten parameters are sourced, after a sourcing pass that read seven documents in full: the Bank of
+Twelve parameters are sourced, after a sourcing pass that read eight documents in full: the Bank of
 Tanzania Payment Systems Annual Report for 2024, the National Bank of Rwanda Annual Report
 2024-2025, the Fifth Rwanda Population and Housing Census 2022, FinScope Rwanda 2024, the World
-Bank/IMF official exchange rate series, the IANA time zone database, and a Rwandan school calendar.
+Bank/IMF official exchange rate series, the IANA time zone database, the ISO 4217 currency list and a
+Rwandan school calendar.
 They cover the structural quantities: transactions per active customer, agents and merchant
 acceptance points per customer, the urban share of customers, per-channel mean amounts, the split
-between person-to-person and merchant payments, volume growth, exchange rates, time zones and the
-school terms. `docs/research/sourcing_pass.md` records every document, every value it changed, and
+between person-to-person and merchant payments, the cross-border share, volume growth, exchange
+rates, currency codes, time zones and the school terms. `docs/research/sourcing_pass.md` records every document, every value it changed, and
 what it could not establish; `docs/research/parameter_influence.md` records how the parameters were
 ranked before the pass, so the effort went to the ones that move the dataset.
 
@@ -150,7 +151,7 @@ the study of a novel fraud variant that appears only in the test period.
 
 - It is synthetic. Model performance here does not transfer to a production system, and a
   detection rate measured on it is not a claim about real fraud.
-- Ten of 81 parameters are sourced and every fraud parameter is assumed (see above). Conclusions
+- Twelve of 81 parameters are sourced and every fraud parameter is assumed (see above). Conclusions
   about East African fraud behaviour cannot be drawn from it.
 - The fraud rate is calibrated to a target of 0.87% overall and 0.91% in the test period, not
   measured from any institution.

@@ -51,10 +51,11 @@ tested against the JDK's ISO data. Evidence: `MoneyTest`, D-43.
 ## M2 — dataset generator
 
 **Q: Your dataset's parameters are invented. Why should I believe anything measured on it?**
-Ten of 81 parameters are sourced from documents read in full, and they are the structural ones:
+Twelve of 81 parameters are sourced from documents read in full, and they are the structural ones:
 transactions per active customer, agents and merchant acceptance points per customer, the urban
 share of customers, per-channel mean amounts, the person-to-person versus merchant split, volume
-growth, exchange rates, time zones and the school terms. The rest are modelling choices, each with
+growth, the cross-border share, exchange rates, currency codes, time zones and the school terms. The
+rest are modelling choices, each with
 a written rationale, and the SRS distribution targets are calibrated design requirements rather
 than observations. Nothing measured on the benchmark is a claim about real fraud; the datasheet
 says so in the same words.
