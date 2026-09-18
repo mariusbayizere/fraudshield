@@ -6,17 +6,43 @@ parameters:
     provenance: ASSUMED
     rationale: National currencies of the five markets; stated as a modelling input rather than a sourced figure because no document was consulted for it in this project.
   rwf_per_unit:
-    value: {RWF: 1.0, KES: 10.0, TZS: 0.5, UGX: 0.35, CDF: 0.45}
+    value: {RWF: 1.0, KES: 9.7768, TZS: 0.5074, UGX: 0.3508, CDF: 0.4958}
     unit: RWF per one unit of the currency (fixed for the whole simulation)
-    provenance: ASSUMED
-    rationale: Round illustrative rates of the right order of magnitude; the data is synthetic and rates are held fixed so amounts stay comparable. Not taken from a published exchange-rate series.
+    provenance: SOURCED
+    citation: >-
+      World Bank, World Development Indicators, indicator PA.NUS.FCRF "Official exchange rate (LCU per US$,
+      period average)", 2024 values read from the World Bank API on 2026-09-18 (source organisation:
+      International Financial Statistics database, International Monetary Fund): RWF 1,318.128 per USD,
+      KES 134.822, TZS 2,597.900, UGX 3,757.263. The 2024 value for the Democratic Republic of the Congo is
+      not published in the series, so CDF uses the 2023 pair (RWF 1,160.099 and CDF 2,340.036 per USD).
+      https://api.worldbank.org/v2/country/RWA;KEN;TZA;UGA;COD/indicator/PA.NUS.FCRF?format=json&date=2023:2024
+    accessed: 2026-09-18
+    rationale: >-
+      Cross rates are the ratio of the two local-currency-per-dollar rates, held fixed for the whole
+      simulation so that amounts stay comparable across the period; real rates moved over 2024 and 2025 (the
+      franc depreciated against each regional currency, NBR Annual Report 2024-2025, Exchange Rate
+      Developments, page 41), and that movement is deliberately not modelled.
   country_centre:
-    value: {RW: [-1.95, 30.06], KE: [-1.29, 36.82], TZ: [-6.80, 39.28], UG: [0.35, 32.58], CD: [-4.32, 15.31]}
+    value: {RW: [-1.95, 30.06], KE: [-1.29, 36.82], TZ: [-6.80, 39.28], UG: [0.35, 32.58], CD: [-1.68, 29.23]}
     unit: latitude and longitude (degrees) around which customers of the country live
     provenance: ASSUMED
-    rationale: Approximate coordinates of the largest city of each country, used as a single home cluster; district-level population weights (Part E.3) are not yet sourced.
+    rationale: >-
+      Approximate coordinates of one city per country, used as a single home cluster: Kigali, Nairobi, Dar
+      es Salaam, Kampala and, for the Democratic Republic of the Congo, Goma rather than Kinshasa, because
+      the simulated Congolese customers belong to the country's East African Community-facing east.
+      District-level population weights (Part E.3) are not sourced.
   utc_offset_hours:
-    value: {RW: 2, KE: 3, TZ: 3, UG: 3, CD: 1}
+    value: {RW: 2, KE: 3, TZ: 3, UG: 3, CD: 2}
     unit: hours ahead of UTC used to place local activity hours in UTC timestamps
-    provenance: ASSUMED
-    rationale: Standard time zones of the simulated home areas (Kinshasa for DRC); fixed offsets without daylight saving, stated as a modelling input because no document was consulted for it here.
+    provenance: SOURCED
+    citation: >-
+      IANA Time Zone Database, version 2026c (as shipped in Debian/Ubuntu tzdata 2026c-0ubuntu0.24.04.1),
+      zones Africa/Kigali (+02:00), Africa/Nairobi (+03:00), Africa/Dar_es_Salaam (+03:00), Africa/Kampala
+      (+03:00) and Africa/Lubumbashi (+02:00), read with zdump/date for 2024-07-01.
+      https://www.iana.org/time-zones
+    accessed: 2026-09-18
+    rationale: >-
+      None of the five zones observes daylight saving, so a fixed offset is exact rather than an
+      approximation. The Democratic Republic of the Congo spans two zones: its simulated customers live in
+      the east (see currencies.country_centre), which is Africa/Lubumbashi at +02:00, not Kinshasa at
+      +01:00.

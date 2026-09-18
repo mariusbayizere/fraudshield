@@ -1,20 +1,42 @@
 description: Customers, their segments, activity and account-level events.
 parameters:
   mean_transactions_per_active_customer_month:
-    value: 14
+    value: 8.8
     unit: transactions per active customer per month (mean)
-    provenance: ASSUMED
-    rationale: Sets the number of simulated customers for a given volume; a few transactions every week is a plausible order of magnitude for an active mobile-money and bank user, not a measured figure.
+    provenance: SOURCED
+    citation: >-
+      Bank of Tanzania, Payment Systems Annual Report for 2024 (2025), Annex H, Table H1 "Mobile Payments", page
+      47: 6,414 million mobile money transactions and 60,745,698 active mobile money users in 2024, which is 8.8
+      transactions per active user per month.
+      https://www.bot.go.tz/Publications/Regular/Annual%20Report/sw/2025032515311662.pdf
+    accessed: 2026-09-18
+    rationale: The report gives yearly volume and active users, so the monthly figure is their ratio divided by twelve. It covers mobile money, the dominant channel; the dataset also carries card, bank and agent-banking rows, which are a small part of the mix (ML-DATA-03).
   activity_log_sigma:
     value: 0.8
     unit: standard deviation of the log of each customer's activity multiplier (mean-one log-normal)
     provenance: ASSUMED
     rationale: Customer activity is heavily skewed in payment data generally; a log-normal with sigma 0.8 gives a long tail of heavy users while keeping most customers near the mean. The generator places customers on this distribution's quantiles and rescales each country's multipliers to average exactly one, so the shape is preserved while the planned volume and country mix do not inherit sampling variance.
+  urban_share_of_customers:
+    value: 0.32
+    unit: fraction of simulated customers living in urban areas
+    provenance: SOURCED
+    citation: >-
+      National Institute of Statistics of Rwanda, Fifth Rwanda Population and Housing Census 2022, Main Indicators
+      Report (2023), Table 2 "Resident population by residence, Province, and District", page 30: 27.9% urban and
+      72.1% rural; and FinScope Rwanda 2024 (NISR, 2024), Figure 26 "Mobile money uptake/use by demographics",
+      page 40: 87% of urban and 72% of rural adults use mobile money.
+      https://statistics.gov.rw/sites/default/files/documents/2025-02/RPHC5_MainIndicatorsReport_Final.pdf
+    accessed: 2026-09-18
+    rationale: >-
+      Payment customers are not the general population, so the census split is weighted by usage: 0.279 x 0.87
+      urban against 0.721 x 0.72 rural gives 31.9% of users in urban areas, rounded to 32%. The generator refuses
+      to run if the urban segments do not sum to this share, so the sourced fact constrains the assumed segment
+      split rather than sitting beside it.
   segment_share:
-    value: {urban_salaried: 0.35, informal_trader: 0.25, rural_ussd: 0.30, student: 0.10}
+    value: {urban_salaried: 0.24, informal_trader: 0.26, rural_ussd: 0.42, student: 0.08}
     unit: fraction of customers
     provenance: ASSUMED
-    rationale: Four behavioural segments needed by Part E.3 (salary cycles, market days, rural USSD use); the split is a modelling choice chosen so the channel mix can still be met.
+    rationale: Four behavioural segments needed by Part E.3 (salary cycles, market days, rural USSD use). The urban segments (urban_salaried, student) sum to the sourced urban_share_of_customers and the rural ones (informal_trader, rural_ussd) to the remainder; how each side divides between its two segments is a modelling choice, and the channel mix is re-solved per segment to keep meeting ML-DATA-03.
   kyc_tier_share:
     value: {TIER_1: 0.45, TIER_2: 0.40, TIER_3: 0.15}
     unit: fraction of customers by KYC tier (1 = lowest limits)
@@ -36,15 +58,30 @@ parameters:
     provenance: ASSUMED
     rationale: Family and social payment circles; the size is a modelling choice that controls how often payments go to known counterparties.
   customers_per_merchant:
-    value: 40
-    unit: customers per simulated merchant
-    provenance: ASSUMED
-    rationale: Controls merchant pool size so each merchant sees repeat customers; a modelling choice.
+    value: 12
+    unit: active customers per simulated merchant
+    provenance: SOURCED
+    citation: >-
+      National Bank of Rwanda, NBR Annual Report 2024-2025 (2025), Table 11 "Payment Access Points", page 86:
+      625,489 modern (mobile and virtual) POS devices in June 2025 against 7,457,114 active mobile payment
+      subscribers, which is 11.9 active customers per merchant acceptance point.
+      https://www.bnr.rw/documents/Annual_Report_2024_25_English_Full_Version_RwYAWN0.pdf
+    accessed: 2026-09-18
+    rationale: Rounded from 11.9 to 12. The report counts acceptance devices rather than businesses, and 99.9% of modern POS are mobile POS, which in practice is one merchant code each. Tanzania reports 1,327,803 merchants against 60,745,698 users for 2024, a ratio of 46 (Payment Systems Annual Report for 2024, page 12); Rwanda's figure is used because Rwanda is the largest country in the simulated mix.
   customers_per_agent:
-    value: 150
-    unit: customers per simulated cash agent
-    provenance: ASSUMED
-    rationale: Controls agent pool size so agents serve many customers, as cash-in and cash-out networks do; a modelling choice.
+    value: 30
+    unit: active customers per simulated cash agent
+    provenance: SOURCED
+    citation: >-
+      National Bank of Rwanda, NBR Annual Report 2024-2025 (2025), Table 11 "Payment Access Points", page 86:
+      240,049 mobile agents and 10,993 banking agents in June 2025; and the same report, Payment Instruments
+      Issuance, page 86: 7,457,114 active mobile payment subscribers in June 2025, which is 29.7 active customers
+      per agent. https://www.bnr.rw/documents/Annual_Report_2024_25_English_Full_Version_RwYAWN0.pdf
+    accessed: 2026-09-18
+    rationale: >-
+      Rounded from 29.7 to 30. Tanzania's ratio for 2024 is 41 (Bank of Tanzania Payment Systems Annual Report for
+      2024, Table H1: 60,745,698 active users, 1,475,281 agents); Rwanda's figure is used because Rwanda is the
+      largest country in the simulated mix (ML-DATA-05).
   home_spread_degrees:
     value: 0.6
     unit: standard deviation (degrees) of customers' home locations around the country centre

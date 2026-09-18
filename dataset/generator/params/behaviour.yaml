@@ -5,16 +5,51 @@ parameters:
     unit: standard deviation of the log of a customer's month-to-month volume jitter (mean one)
     provenance: ASSUMED
     rationale: A customer's transaction count varies from month to month around its own activity level; sigma 0.35 keeps most months within about a third of that level. The jitter only decides how a cell's exact monthly row quota is shared out, so month-to-month variation is kept while the country, segment and volume totals stay exact (ML-DATA-01, ML-DATA-03, ML-DATA-05).
-  rural_ussd_channel_share:
-    value: {USSD: 0.60, AGENT_BANKING: 0.30, MOBILE_MONEY: 0.10}
-    unit: fraction of a rural USSD customer's transactions by channel
+  segment_channel_preference:
+    value:
+      urban_salaried: {MOBILE_MONEY: 40, USSD: 5, AGENT_BANKING: 10, CARD: 20, ONLINE: 15, BANK_TRANSFER: 10}
+      informal_trader: {MOBILE_MONEY: 45, USSD: 20, AGENT_BANKING: 25, CARD: 4, ONLINE: 3, BANK_TRANSFER: 3}
+      rural_ussd: {MOBILE_MONEY: 20, USSD: 45, AGENT_BANKING: 30, CARD: 2, ONLINE: 1, BANK_TRANSFER: 2}
+      student: {MOBILE_MONEY: 50, USSD: 15, AGENT_BANKING: 15, CARD: 8, ONLINE: 10, BANK_TRANSFER: 2}
+    unit: relative weight per channel within a segment (scaled to the SRS mix, not absolute shares)
     provenance: ASSUMED
-    rationale: Rural feature-phone users transact mostly through USSD menus and cash agents; the shares are chosen so the remaining segments can still meet the SRS channel mix.
+    rationale: >-
+      Relative preferences, not measured shares: a rural customer reaches for USSD and an agent, a
+      salaried urban one for a card or online banking, a trader for wallet and agent cash handling, a
+      student for a wallet. The generator fits these weights to the SRS channel mix (ML-DATA-03), which
+      takes precedence, so only the ordering and rough ratios inside each segment come from this
+      parameter. FinScope Rwanda 2024 (Figure 26, page 40) supports rural customers being wallet users at
+      all (72% of rural adults), but no source was found for the interface split within a segment.
+  amount_mean_rwf:
+    value: {MOBILE_MONEY: 15731, AGENT_BANKING: 16664, CARD: 110876, BANK_TRANSFER: 69344}
+    unit: mean transaction amount in RWF equivalent, by channel
+    provenance: SOURCED
+    citation: >-
+      Bank of Tanzania, Payment Systems Annual Report for 2024 (2025); each figure is the reported value
+      divided by the reported volume, converted at currencies.rwf_per_unit. Mobile money: Annex H, Table
+      H1, page 47 (TZS 198,859 billion over 6,414 million transactions). Agent cash-in: Annex H, Table H8,
+      page 48 (TZS 43,763 billion over 1,332.50 million). Card at merchant: Annex I, page 50, local POS
+      transactions (TZS 3,299.30 billion over 15,098,517). Bank to wallet: Annex H, Table H3, page 47
+      (TZS 11,299 billion over 82,676,171).
+      https://www.bot.go.tz/Publications/Regular/Annual%20Report/sw/2025032515311662.pdf
+    accessed: 2026-09-18
+    rationale: >-
+      Tanzanian aggregates, the only per-channel value and volume figures found in a document that could be
+      read in full; no equivalent Rwandan breakdown was published, and the dataset's country mix is
+      Rwanda-weighted, so these levels are an order-of-magnitude anchor rather than a claim about one
+      market. The generator turns each mean into the median its log-normal draw needs
+      (median = mean / exp(sigma^2 / 2), sigma from behaviour.amount_log_sigma). Card figures reflect
+      Tanzanian card usage, which skews to larger purchases than a wallet payment.
   amount_median_rwf:
-    value: {MOBILE_MONEY: 8000, USSD: 5000, AGENT_BANKING: 20000, CARD: 25000, ONLINE: 18000, BANK_TRANSFER: 120000}
-    unit: median transaction amount in RWF equivalent, by channel
+    value: {USSD: 5000, ONLINE: 18000}
+    unit: median transaction amount in RWF equivalent, for the channels with no sourced mean
     provenance: ASSUMED
-    rationale: Relative ordering (small USSD and P2P payments, larger card and much larger bank transfers) is the modelling intent; absolute medians are illustrative, not measured.
+    rationale: >-
+      USSD is an interface rather than a transaction type, so no published series matches it; the figure
+      assumes a USSD payment is smaller than an app wallet payment. For ONLINE, the internet banking series
+      in the Bank of Tanzania report (Annex J, page 50) averages about RWF 5 million per transaction, which
+      is corporate treasury activity rather than the consumer online payments this channel represents, so
+      it is deliberately not used and this median stays a modelling choice.
   amount_log_sigma:
     value: 1.0
     unit: standard deviation of the natural log of the amount around the channel median
@@ -41,10 +76,20 @@ parameters:
     provenance: ASSUMED
     rationale: Part E.3 requires market days; each trader gets one weekly market day with this relative activity weight, a modelling choice.
   school_fee_months:
-    value: [1, 5, 9]
-    unit: calendar months in which school-fee payments peak
-    provenance: ASSUMED
-    rationale: Part E.3 requires school-fee periods; start-of-term months are used as a modelling choice without checking each country's calendar.
+    value: [1, 4, 9]
+    unit: calendar months (1-12) in which school-fee payments raise volume
+    provenance: SOURCED
+    citation: >-
+      School calendar 2024-2025 as published by Nu Vision Academy (nga.ac.rw), which implements the national
+      calendar set by Rwanda's Ministry of Education: term 1 in early September, term 2 beginning 6-10
+      January, term 3 beginning 22-25 April.
+      https://www.nga.ac.rw/storage/nArw8l4yXLQqkb3qi5aHo39WSkW9SH-metaU0NIT09MIENBTEVOREFSLnBkZg==-.pdf
+    accessed: 2026-09-18
+    rationale: >-
+      Read from a school's own copy of the calendar rather than from the ministry's publication, which could
+      not be retrieved; the three term starts it shows are what this parameter needs. The previous value put
+      the third term in May, one month late. Fees are assumed to be paid in the month a term starts, which
+      the calendar does not state.
   school_fee_volume_boost:
     value: 1.3
     unit: relative monthly transaction volume multiplier in school-fee months
@@ -81,10 +126,21 @@ parameters:
     provenance: ASSUMED
     rationale: Everyday categories (groceries, restaurants, fuel, airtime, utilities, pharmacies, electronics, clothing, schools) with groceries most common; the weights are a modelling choice.
   p2p_share_of_wallet_payments:
-    value: 0.60
-    unit: fraction of MOBILE_MONEY and USSD transactions that are person-to-person (the rest pay merchants)
-    provenance: ASSUMED
-    rationale: Person-to-person transfers dominate wallet use in mobile-money markets as a qualitative pattern; the exact share is a modelling choice.
+    value: 0.216
+    unit: fraction of wallet payments (mobile money and USSD) that go to a person rather than a merchant
+    provenance: SOURCED
+    citation: >-
+      Bank of Tanzania, Payment Systems Annual Report for 2024 (2025), Annex H: Table H2
+      "Person-to-Person Transfer (P2P)", page 47, 479,107,425 transactions in 2024; and Table H5
+      "Personal to Business (P2B)", page 47, 1,736.15 million transactions in 2024. P2P is therefore 21.6%
+      of the two together.
+      https://www.bot.go.tz/Publications/Regular/Annual%20Report/sw/2025032515311662.pdf
+    accessed: 2026-09-18
+    rationale: >-
+      The generator's wallet payment is either to a person or to a merchant, which is the P2P and P2B split
+      exactly. The two tables do not sum to the report's total mobile money volume (airtime, bills and
+      other categories are not broken out), so the figure is their ratio rather than a share of all
+      transactions. It is Tanzanian; no Rwandan split of the same kind was found.
   wallet_hour_mean_local:
     value: 13.5
     unit: mean local hour of day of non-agent transactions

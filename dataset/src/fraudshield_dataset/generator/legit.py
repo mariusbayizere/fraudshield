@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import calendar
 import datetime as dt
+import math
 from dataclasses import dataclass
 from decimal import Decimal
 
@@ -74,8 +75,17 @@ class LegitimateBehaviour:
         self.money = Money(config)
         p = config.parameters
         self.mean = p.number("population.mean_transactions_per_active_customer_month")
-        self.median = p.mapping("behaviour.amount_median_rwf")
         self.sigma = p.number("behaviour.amount_log_sigma")
+        # Sourced means become the medians the log-normal draw needs; channels without a published
+        # figure keep an assumed median, so provenance stays per channel rather than averaged.
+        assumed = p.mapping("behaviour.amount_median_rwf")
+        sourced = p.mapping("behaviour.amount_mean_rwf")
+        self.median = {
+            channel: sourced[channel] / math.exp(self.sigma**2 / 2)
+            if channel in sourced
+            else assumed[channel]
+            for channel in CHANNELS
+        }
         self.round_probability = p.number("behaviour.round_sum_probability")
         self.payday_boost = p.number("behaviour.payday_spend_boost")
         self.payday_window = p.integer("behaviour.payday_window_days")
@@ -167,6 +177,14 @@ class LegitimateBehaviour:
         return min(seconds, 86_399)
 
     def month(self, customer: Customer, month_index: int) -> Rows:
+        """One customer-month of legitimate rows.
+
+        The channel comes from the customer's segment mix, which is fitted to the SRS channel mix
+        (ML-DATA-03). Nothing rewrites it afterwards: an earlier version turned a smartphone
+        owner's USSD draw into a wallet payment, which quietly moved the realised mix 3.8 points
+        away from the fitted one once every segment carried some USSD. Whether a row has a device
+        is decided by the channel instead, since a USSD session has no app device.
+        """
         rows = Rows()
         if month_index < customer.join_month:
             return rows
@@ -184,8 +202,6 @@ class LegitimateBehaviour:
         start = month_start_micros(label)
         for n in range(count):
             channel = CHANNELS[int(channels[n])]
-            if channel == "USSD" and customer.has_smartphone:
-                channel = "MOBILE_MONEY"
             day = int(days[n])
             seconds = self.local_seconds(rng, channel)
             timestamp = (

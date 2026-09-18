@@ -14,8 +14,10 @@ from fraudshield_dataset import cli
 from fraudshield_dataset.generator import config as config_module
 from fraudshield_dataset.generator.config import (
     CHANNELS,
+    SEGMENTS,
     SimulationConfig,
     build_config,
+    check_urban_share,
     month_labels,
     seasonal_factor,
     segment_channel_shares,
@@ -128,27 +130,52 @@ def test_channel_shares_by_segment_reproduce_the_srs_mix() -> None:
         assert mixture == pytest.approx(target[channel])
 
 
-def test_inconsistent_rural_shares_are_rejected() -> None:
+def test_segment_channel_preferences_keep_their_ordering() -> None:
+    """Fitting must not turn a rural profile into an urban one (ML-DATA-03)."""
     parameters = load_parameters()
-    changed = dict(parameters.parameters)
-    rural = parameters.get("behaviour.rural_ussd_channel_share")
-    changed[rural.key] = type(rural)(
-        **{**rural.__dict__, "value": {"USSD": 0.1, "AGENT_BANKING": 0.1, "MOBILE_MONEY": 0.8}}
+    shares = segment_channel_shares(parameters)
+
+    assert shares["rural_ussd"]["USSD"] > shares["urban_salaried"]["USSD"]
+    assert shares["rural_ussd"]["AGENT_BANKING"] > shares["urban_salaried"]["AGENT_BANKING"]
+    assert shares["urban_salaried"]["CARD"] > shares["rural_ussd"]["CARD"]
+    assert shares["urban_salaried"]["ONLINE"] > shares["informal_trader"]["ONLINE"]
+    for segment, mix in shares.items():
+        assert sum(mix.values()) == pytest.approx(1.0), segment
+
+
+def test_a_segment_missing_a_channel_weight_is_rejected() -> None:
+    parameters = load_parameters()
+    weights = {segment: {"MOBILE_MONEY": 1.0} for segment in SEGMENTS}
+    changed = _with(parameters, behaviour__segment_channel_preference=weights)
+    with pytest.raises(ParameterError, match="weight for every channel"):
+        segment_channel_shares(changed)
+
+
+def test_a_zero_channel_weight_is_rejected() -> None:
+    parameters = load_parameters()
+    weights = {
+        segment: {channel: (0.0 if channel == "CARD" else 1.0) for channel in CHANNELS}
+        for segment in SEGMENTS
+    }
+    changed = _with(parameters, behaviour__segment_channel_preference=weights)
+    with pytest.raises(ParameterError, match="positive weight"):
+        segment_channel_shares(changed)
+
+
+@pytest.mark.req("ML-DATA-05")
+def test_segments_must_match_the_sourced_urban_share() -> None:
+    """The urban share of customers is sourced; the segment split may not contradict it."""
+    changed = _with(
+        load_parameters(),
+        population__segment_share={
+            "urban_salaried": 0.50,
+            "informal_trader": 0.20,
+            "rural_ussd": 0.20,
+            "student": 0.10,
+        },
     )
-    segment = parameters.get("population.segment_share")
-    changed[segment.key] = type(segment)(
-        **{
-            **segment.__dict__,
-            "value": {
-                "urban_salaried": 0.1,
-                "informal_trader": 0.1,
-                "rural_ussd": 0.7,
-                "student": 0.1,
-            },
-        }
-    )
-    with pytest.raises(ParameterError, match="rural USSD channel shares"):
-        segment_channel_shares(ParameterSet(changed, parameters.descriptions))
+    with pytest.raises(ParameterError, match="urban_share_of_customers"):
+        check_urban_share(changed)
 
 
 def test_month_labels_cross_year_boundaries() -> None:
@@ -176,6 +203,9 @@ _STRUCTURAL_NUMBERS = {
     6, 16, 18, 90, 180,
     # dataset definition (ADR 0022): shard count; Parquet row-group size; numeric tolerance
     64, 65_536, 1024, 1e-12,
+    # solver mechanics: iteration cap for the channel-mix fitting, and the tolerance for the check
+    # that the assumed segment split still matches the sourced urban share (0.5 pp, as ML-DATA-03)
+    200, 0.005,
 }  # fmt: skip
 
 

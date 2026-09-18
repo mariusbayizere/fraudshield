@@ -10,6 +10,12 @@ from fraudshield_dataset.params import ParameterError, ParameterSet
 CHANNELS = ("MOBILE_MONEY", "USSD", "AGENT_BANKING", "CARD", "ONLINE", "BANK_TRANSFER")
 COUNTRIES = ("RW", "KE", "TZ", "UG", "CD")
 SEGMENTS = ("urban_salaried", "informal_trader", "rural_ussd", "student")
+# Which segments live in towns: the urban share of the customer population is sourced (census
+# usage-weighted), so the assumed split between segments has to add up to it.
+URBAN_SEGMENTS = ("urban_salaried", "student")
+URBAN_SHARE_TOLERANCE = 0.005
+FITTING_PASSES = 200
+FITTING_TOLERANCE = 1e-12
 
 
 @dataclass(frozen=True)
@@ -52,24 +58,65 @@ def month_labels(start: str, count: int) -> tuple[str, ...]:
 
 
 def segment_channel_shares(parameters: ParameterSet) -> dict[str, dict[str, float]]:
-    """Per-segment channel shares whose mixture equals the SRS channel mix in expectation.
+    """Per-segment channel mixes whose mixture is the SRS channel mix exactly (ML-DATA-03).
 
-    Rural USSD customers use their own (assumed) mix. Every other segment shares the remainder,
-    which must be non-negative for every channel; otherwise the parameters are inconsistent.
+    Each segment has *relative* channel preferences (a rural customer reaches for USSD, a salaried
+    one for a card) rather than absolute shares, and the mixture of those preferences will not
+    match the SRS mix on its own. Iterative proportional fitting scales the channels until it
+    does: every pass multiplies each channel by the ratio of its target to its current mixture,
+    then renormalises each segment to sum to one. The relative ordering inside a segment survives,
+    and the mix is met by construction at any segment split.
+
+    Solving absolute shares instead, with one segment fixed and the others absorbing the
+    remainder, broke as soon as the population became mostly rural: the remainder pushed urban
+    customers to a fifth of their payments on cards and almost nothing through agents.
     """
     target = parameters.mapping("channels.channel_share")
     segments = parameters.mapping("population.segment_share")
-    rural_mix = parameters.mapping("behaviour.rural_ussd_channel_share")
-    rural = segments["rural_ussd"]
-    remainder = {c: target[c] - rural * rural_mix.get(c, 0.0) for c in CHANNELS}
-    if min(remainder.values()) < -1e-12:
+    check_urban_share(parameters)
+    preference = parameters.value("behaviour.segment_channel_preference")
+    if not isinstance(preference, dict) or set(preference) != set(SEGMENTS):
         raise ParameterError(
-            "rural USSD channel shares exceed the SRS channel mix: " + repr(remainder)
+            "behaviour.segment_channel_preference must give weights for exactly "
+            f"{SEGMENTS}, got {sorted(preference) if isinstance(preference, dict) else preference}"
         )
-    other = {c: max(v, 0.0) / (1.0 - rural) for c, v in remainder.items()}
-    shares = {segment: other for segment in SEGMENTS if segment != "rural_ussd"}
-    shares["rural_ussd"] = {c: rural_mix.get(c, 0.0) for c in CHANNELS}
-    return shares
+    shares: dict[str, dict[str, float]] = {}
+    for segment, weights in preference.items():
+        if not isinstance(weights, dict) or set(weights) != set(CHANNELS):
+            raise ParameterError(f"segment {segment} must have a weight for every channel")
+        total = float(sum(weights.values()))
+        if total <= 0 or min(float(w) for w in weights.values()) <= 0:
+            raise ParameterError(f"segment {segment} needs a positive weight for every channel")
+        shares[segment] = {c: float(weights[c]) / total for c in CHANNELS}
+    for _ in range(FITTING_PASSES):
+        mixture = {c: sum(segments[s] * shares[s][c] for s in SEGMENTS) for c in CHANNELS}
+        if max(abs(mixture[c] - target[c]) for c in CHANNELS) < FITTING_TOLERANCE:
+            return shares
+        for segment in SEGMENTS:
+            scaled = {c: shares[segment][c] * target[c] / mixture[c] for c in CHANNELS}
+            total = sum(scaled.values())
+            shares[segment] = {c: v / total for c, v in scaled.items()}
+    raise ParameterError(
+        "channel preferences could not be fitted to the SRS mix in "
+        f"{FITTING_PASSES} passes; check channels.channel_share and the segment weights"
+    )
+
+
+def check_urban_share(parameters: ParameterSet) -> None:
+    """The urban segments must sum to the sourced urban share of customers (ML-DATA-05).
+
+    The share of customers living in towns is a sourced figure; how those customers divide between
+    the behavioural segments is a modelling choice. Checking the sum here keeps the choice from
+    quietly contradicting the source.
+    """
+    segments = parameters.mapping("population.segment_share")
+    urban = sum(segments[s] for s in URBAN_SEGMENTS)
+    target = parameters.number("population.urban_share_of_customers")
+    if abs(urban - target) > URBAN_SHARE_TOLERANCE:
+        raise ParameterError(
+            f"population.segment_share puts {urban:.3f} of customers in urban segments "
+            f"{URBAN_SEGMENTS}, but population.urban_share_of_customers is {target:.3f}"
+        )
 
 
 def build_config(

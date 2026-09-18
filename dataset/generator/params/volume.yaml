@@ -17,7 +17,18 @@ parameters:
     provenance: ASSUMED
     rationale: Calendar anchor for weekdays, month ends and school-fee terms; any recent 24-month window serves, and the data is synthetic.
   monthly_growth_rate:
-    value: 0.03
-    unit: relative month-over-month increase in transaction volume
-    provenance: ASSUMED
-    rationale: D-07 requires realistic volume growth over 24 months; 3% per month roughly doubles volume over the span, a modelling choice not taken from a published series.
+    value: 0.0201
+    unit: month-on-month growth in transaction volume
+    provenance: SOURCED
+    citation: >-
+      Bank of Tanzania, Payment Systems Annual Report for 2024 (2025), Annex H, Table H1 "Mobile Payments",
+      page 47: mobile money transaction volume grew 27% in 2024 (6,414 million from 5,061.20 million), which
+      is 2.01% per month compounded.
+      https://www.bot.go.tz/Publications/Regular/Annual%20Report/sw/2025032515311662.pdf
+    accessed: 2026-09-18
+    rationale: >-
+      Growth is applied as a smooth monthly ramp rather than the uneven year-on-year path the reports show
+      (Tanzania recorded 41% in 2023 and 27% in 2024; Rwanda's active subscriber count grew only 1.8% in the
+      year to June 2025 while its transaction volume grew much faster, NBR Annual Report 2024-2025, page 86).
+      The dataset's total row count is calibrated to ML-DATA-01, so this rate sets the shape of the ramp
+      rather than the size of the dataset.
