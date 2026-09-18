@@ -185,3 +185,29 @@ the decision engine M6, staff identity, admin and audit M7).
   manifests and runner spec are attached to the M2 gate record. `fs-dataset check --full` must pass,
   including the size gate and the distribution gates.
 - **Interim evidence:** the 1,005,621-row verification run, regenerated on the sourced parameters.
+
+### PB-26 · Month partition key is the local month, not the UTC month
+- **Source:** M2 principal review (MINOR 2.1) · **Priority:** medium · **Due:** M3 (before any release)
+- **Problem:** `transactions/month=YYYY-MM` is the simulated *local* month while `transaction_timestamp`
+  is UTC, so rows near a month boundary land one UTC month early: 11 rows of 40,213 in the reviewer's
+  run, and the first partition holds timestamps before the dataset's nominal start. Partition pruning
+  on `month=` is therefore unsound for anyone filtering by timestamp.
+- **Acceptance:** either partition on the UTC month, or state the convention in the datasheet and the
+  export README and add a test pinning it. A consumer must not have to discover it.
+
+### PB-27 · Generator caches contradict the memory rationale
+- **Source:** M2 principal review (MINOR 2.2) · **Priority:** low · **Due:** M3
+- **Problem:** `FraudModel._plans` and `_month_plans` grow for the whole run (72 and 24 entries) while
+  the neighbouring comment says "one month at a time keeps memory flat", which is true only of
+  `LegitimateBehaviour._planned`. `_validate_scenario_capacity` also recomputes `planned_counts` once
+  per month at construction, so it runs 25 times rather than 24.
+- **Acceptance:** either bound the caches or correct the comments; drop the redundant recomputation.
+
+### PB-28 · Dead `combine_chunks()` and the determinism test's reach
+- **Source:** M2 principal review (addendum, area 2) · **Priority:** low · **Due:** M3
+- **Problem:** the reviewer found no mutation of `pipeline.combine_chunks()` that
+  `test_same_seed_is_byte_identical_across_chunk_sizes` catches, because `Table.take` already returns
+  single-chunk columns. The determinism property is verified (including across a forced row-group
+  boundary), but that one call is unguarded and may be dead.
+- **Acceptance:** establish whether the call is needed at all — a mutation the test kills, or its
+  removal with the row-group test as the guard.
