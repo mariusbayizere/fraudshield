@@ -144,3 +144,46 @@ We found this after the review closed, by measuring the channel that an exclusio
 had been asserted in a comment as "0.537 on its own", which was the *event type* channel, while the
 delay channel was never measured and no gate judged either. Both are now in the report on every run.
 Evidence: `docs/reviews/M2/delta-recheck.md`, `dataset/realism_report.md`.
+
+**Q: What is the smallest dataset your generator can produce, and why does it matter?**
+About 170,000 rows, and it matters because below that the dataset is missing a fraud type. The
+mule-account scenario needs customers holding the mule role, that role is drawn per customer at
+0.4%, and a run of 30,000 rows has only a few hundred customers — so the pool is often empty and
+the scenario cannot be staged. The generator used to skip it and carry on, and the check that would
+have reported the absence is release-only, so every development run quietly produced seven of the
+eight scenarios. It now refuses by default and names the size that would work; a development run
+can waive the refusal explicitly, and the scenarios that could not be staged are recorded in
+`manifest.json`, so a deficient dataset identifies itself.
+Evidence: `docs/reviews/M2/milestone-review.md` MAJOR M-4, `dataset/tests/test_generator.py`.
+
+**Q: How do you know the 170,000-row minimum is right?**
+Because it is derived and pinned, and because two earlier derivations were rejected for failing an
+obvious check. Both sides of the requirement scale with the run, so it looks scale-free and the
+original guard assumed it was; what does not scale is the integer pool actually drawn, whose spread
+grows only like the square root of the run — at 30,000 rows one seed held 27 mules and another 2.
+The minimum is where the expected pool clears the requirement by three standard deviations, and it
+is solved **numerically** because below 300,000 rows the requirement is floored at one whole role
+holder and so is not proportional to the run size.
+The first attempt treated the month-summed capacity as the random quantity, which understates the
+spread roughly 24-fold, since one role holder supplies about 24 customer-months. The second solved a
+closed form that assumed proportionality straight through that floor. Both were rejected on the same
+sanity check: they returned a minimum *smaller* than a run size that had already failed, which would
+have sent a reader in a circle. The surviving derivation is pinned by a test that computes it from
+four different run sizes and requires agreement: 169,492 / 170,455 / 169,972 / 170,069.
+Evidence: `test_the_minimum_size_is_a_property_of_the_parameters_not_the_run`.
+
+**Q: When you quote a number, how do I know what it was measured on?**
+Because every figure offered as evidence states its scale, and whether that scale is at or above the
+170,000-row minimum at which the shipped parameters stage all eight fraud scenarios. This is a
+standing rule adopted after we found that runs below that minimum silently produced seven of the
+eight scenarios, which meant some of our own cited figures came from a structurally different
+dataset than others.
+A sub-minimum figure is not automatically wrong. A missing scenario has its share reallocated to the
+scenarios that can run, so the fraud rate is still met exactly and rate-like figures — overall fraud
+rate, channel mix, country mix — are unaffected. So are construction-like figures, because
+identifiers and timestamps are built identically whatever scenario produced a row. What is affected
+is anything depending on the scenario *mix*: the eight-scenario property itself, the merchant-
+category lift, and the statistical power of the leakage detectors. Without the scale on the figure,
+a reader cannot tell which of those they are looking at — and neither can the author.
+The realism report and the datasheet label any figure measured below the minimum.
+Evidence: `docs/reviews/M2/milestone-review.md`, consequence audit.

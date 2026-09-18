@@ -36,6 +36,41 @@ months (2024-01 to 2025-12). The verification run documented in `dataset/realism
 1,006,249 transactions, generated in under 6 minutes at 181 MiB peak resident memory; the figures in this
 datasheet come from that run unless stated otherwise.
 
+**What is the smallest run that produces the whole dataset?** About **170,000 rows**. Below that the
+mule-account role pool is usually empty, and a scenario with no role holder cannot be staged, so a
+smaller run yields seven of the eight fraud scenarios. The generator refuses such a run by default
+and names the size that would work; a development run may waive the refusal explicitly, and the
+scenarios that could not be staged are then listed in `manifest.json` as `scenarios_not_staged`, so
+a deficient dataset identifies itself rather than resembling a small release.
+
+The figure is derived rather than chosen. Both sides scale with the run — role holders available
+grow like `a·n`, rows demanded like `b·n` — so the requirement looks scale-free, and the guard
+originally assumed it was. What is not scale-free is the integer pool actually drawn, whose spread
+grows only like `√n`: at 30,000 rows one seed held 27 mules and another 2. The minimum is therefore
+set where the expected pool clears the requirement by three standard deviations,
+`E[holders](n) ≥ needed(n) + 3√needed(n)`, and it is solved **numerically rather than in closed
+form** because below 300,000 rows the requirement is floored at one whole holder and is not
+proportional to `n`. Two closed-form derivations were tried and rejected for returning minima below
+a size that had already failed (M2 milestone review, MAJOR M-4).
+
+**The minimum is a property of the parameters, not of the generator.** 170,000 rows applies to the
+shipped defaults, where `mule_account` binds first. Change a role fraction or a scenario share and
+it moves, sometimes by an order of magnitude: raising `fraud.scenario_share.synthetic_identity` to
+0.9 with `fraud.synthetic_identity_fraction` at 0.01 puts the minimum at 1,251,558 rows, because
+that scenario then binds instead. Anyone editing `dataset/generator/params/fraud.yaml` or
+`population.yaml` must recompute it — the generator does it for you: run at any size and, if the
+parameters need more rows, the refusal names the figure.
+
+```console
+$ uv run fs-dataset generate --rows 10000 --seed 20260917 --output /tmp/probe
+ScaleError: scenario mule_account needs 1 customer-months ... Generate at 169,492 rows or more.
+```
+
+The sensitivity harness (`fraudshield_dataset.sensitivity`) deliberately runs below the minimum and
+waives the refusal: it perturbs shares one at a time at development scale and compares each run
+against a baseline generated the same way, so both sides carry the same deficiency and the
+comparison remains valid.
+
 **Does the dataset contain all possible instances or a sample?** It is generated in full: every
 simulated customer's every simulated transaction is present, with one exception recorded in
 `manifest.json` as `rows_dropped_after_simulation_end` — a fraud burst or delayed drain that starts

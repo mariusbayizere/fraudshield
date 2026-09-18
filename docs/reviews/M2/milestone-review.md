@@ -193,6 +193,50 @@ write-up must say so rather than let a convergence curve imply a uniformity that
 report-only `CheckResult` naming the missing scenarios (the "trivial rule baseline" pattern), or a
 warning from the generator. Do not make it a gate; that is what MAJOR 1.5 removed for good reason.
 
+### Consequence audit — what M-4 invalidates in figures already cited
+
+Every run in this project below about 170,000 rows produced a dataset missing `mule_account`. That
+covers a lot of cited evidence, so each class is assessed rather than dismissed. The mechanism
+matters: a scenario that cannot be staged has its share **reallocated to the scenarios that can**
+(`_month_plan`), so the total fraud target is still met exactly and the deficiency shows up as a
+wrong *mix*, not a wrong *rate*.
+
+| Figure | Scale | Status |
+|---|---|---|
+| Fraud rate, overall and test period | 60K, 30K | **Valid.** The month's target is met exactly by reallocation; the rate does not depend on which scenarios fill it. |
+| Channel mix, country mix | 60K, 30K | **Valid.** Fraud is under 1% of rows, so these are set by the legitimate population; reallocation within fraud cannot move them beyond their 0.5 pp tolerance. |
+| Eight-scenario presence (ML-DATA-04) | any run < 170K | **Invalid, and this is the defect itself.** Seven scenarios present, the eighth's share redistributed. |
+| BLOCKER 1.1 probe — event oracle gone | 60,355 | **Valid.** It tests how event timestamps are *constructed*, which is identical whichever scenarios ran. |
+| Plant-a-leak tests | 40K | **Valid.** Each plants a construction leak and asserts the gate fires; the planted signal does not depend on scenario composition. |
+| MCC lift 3.69× | 60,355 | **Affected but corroborated.** Mule drains are person-to-person, so removing the scenario changes the fraud MCC distribution. The figure is independently confirmed at 1,006,249 rows (3.7×, above the minimum), so the conclusion stands on the 1M measurement, not the 60K one. |
+| Event delay 0.709 / type 0.581 | 60,355 | **Affected but corroborated**, as above: 0.758 and 0.537 at 1,006,249 rows are the figures to quote. |
+| Shortcut-detector diagnosis, 10K–100K tiers | below 170K | **See below.** |
+| Everything measured at 1,006,249 rows | 1M | **Valid.** Above the minimum. |
+
+**The single-feature AUC stability series is weakened further.** The argument that out-of-fold
+encoding removed the size dependence rested on 0.753 at 12,033 rows, 0.776 at 60,000 and 0.711 at
+1,006,249. The first two are from datasets missing a fraud scenario and the third is not, so the
+three points are not measurements of one property at three sizes — they are measurements of two
+structurally different datasets. Part of the non-monotonicity may be composition rather than
+sampling. The claim should rest on repeated seeds at a single size above the minimum, which has not
+been done.
+
+**Does the missing scenario invalidate the shortcut-detector diagnosis?** Largely no, and the
+reasoning is worth stating because it is not obvious. The detector asks whether *non-behavioural*
+columns — identifier bytes, sub-second timestamp parts, row position, label delay — predict the
+label. Those columns are constructed identically for every row whatever scenario produced it, so
+removing a scenario changes *which* rows carry the positive label but not how any row is built. The
+two conclusions that matter therefore hold: the clean mean AUC sits at 0.500 and 0.508 (the detector
+is centred, so the generator does not leak through construction), and the band is under-covered
+relative to the observed spread.
+
+What is specific to a seven-scenario dataset is the **power** measurement. Power depends on the size
+and composition of the positive class, and that class is missing one scenario's rows while carrying
+another's inflated share. So "fires on 2 of 15 subtle plants at 10,000 rows" describes the detector
+on the dataset a 10,000-row run actually produces — which is the operationally relevant thing at
+that scale — but it is not an estimate of power on a release dataset shrunk. The re-run will measure
+above the minimum, where the question is well posed.
+
 ### MINOR M-5 — a size limitation is reported as a parameter error
 
 When the pool is small but non-zero the guard raises:

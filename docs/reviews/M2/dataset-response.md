@@ -203,6 +203,19 @@ target-encoding the categoricals on the same rows the AUC was read from, so a ro
 evidence about itself. **Encoding is now out of fold.** Measured after the change: 0.753 at 12K,
 0.776 at 60K, 0.711 at a million — the same property, no longer a function of sample size.
 
+> **Withdrawn, 2026-09-18.** The last clause is not supported and the series should not be quoted.
+> Two separate problems. Three points that rise then fall are not evidence of stability in the first
+> place; they are equally consistent with residual size dependence or fold-assignment noise. And the
+> 12K and 60K points come from runs **below the 170,000-row minimum**, so those datasets were
+> missing a fraud scenario while the 1M one was not (M2 milestone review, MAJOR M-4). The three
+> numbers are therefore not one property measured at three sizes, and part of the non-monotonicity
+> may be composition rather than sampling.
+>
+> What *is* supported: the mechanism fix is sound — out-of-fold encoding removes a row's own label
+> from its own score, which is the right fix for the right reason — and the spread narrowed from a
+> 0.147 range before it to 0.065 after. The stability claim itself is pending a proper measurement:
+> repeated seeds at one size above the minimum, reported with an interval.
+
 What remains is real signal, and it is worth naming: merchant category `4829`
 (person-to-person transfer) carries a 3.7× fraud lift, because the sourced person-to-person share
 (0.216) makes merchant payments the norm while fraud drains go to people. It is the dataset's
