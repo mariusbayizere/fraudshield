@@ -114,10 +114,43 @@ Logged, not fixed: a `DERIVED_FROM_SOURCE` provenance would be more honest, but 
 value touches the loader, its tests, the provenance renderer and 81 parameter blocks, which is more
 than a MINOR warrants during a milestone close.
 
-## Areas 1 and 2 — leakage, and determinism across chunk sizes
+## Area 2 — determinism across chunk sizes
 
-Area 1's open item is the shortcut-detector diagnosis, running at the time of writing; its
-conclusion and the paragraph for the datasheet and defence questions follow when it completes.
+Two tests carry this, and both are honest ones.
 
-Area 2 is not yet reviewed in its own right. The incidental 1M determinism result above is
-supporting evidence, not a substitute for it.
+`test_same_seed_is_byte_identical_across_chunk_sizes` generates at chunk sizes 1 and 64 against a
+fixture built at 8, and compares **every file byte-for-byte** plus `manifest.json`. Byte equality
+rather than row-count or checksum equality is the right assertion: it cannot be satisfied by a
+coincidence.
+
+`test_...across_a_parquet_row_group_boundary` addresses the reviewer's "could not verify" on area 2
+by forcing `ROW_GROUP_SIZE` to 64 so a 6,000-row month spans several groups. It contains the line
+that makes it worth having:
+
+    assert groups > 1, "the boundary this test exists for was not reached"
+
+A determinism test that silently stops reaching the condition it was written for is the failure mode
+that produced MAJOR 4.3 elsewhere in this milestone; this one refuses to pass vacuously. Good.
+
+**Incidental confirmation at release scale.** Regenerating at 1,006,249 rows and seed 20260917,
+after the event-measurement change, reproduced the previously committed report's temporal-split
+table exactly — 792,162 / 101,332 / 40,701 / 10,914 / 101,841 rows, and every rate. That is
+determinism across a *code change* at release scale, which no test covers.
+
+### MINOR M-3 — determinism across chunk sizes is only ever tested at 6,000 rows
+
+Both tests run at 6,000 rows. The property is asserted where it is cheap and assumed where it is
+expensive: at release scale, chunk-size independence is untested. The row-group test mitigates the
+specific reason scale was thought to matter, by forcing the boundary rather than waiting for volume
+to produce it, which is a sound substitution and is documented as such.
+
+It stays MINOR rather than MAJOR because PB-28 already records that `combine_chunks()` — the call
+whose job is chunk-independence — is dead code that no mutation catches, so the remaining risk is
+logged rather than unknown. Worth folding into the release-size run (PB-25) when it happens: that
+run should be done twice at different chunk sizes and the outputs compared, which costs one extra
+run and closes the property at the scale that ships.
+
+## Area 1 — leakage and shortcut detection
+
+The open item is the shortcut-detector diagnosis, running at the time of writing. Its conclusion,
+and the paragraph for the datasheet and the defence questions, follow when it completes.
