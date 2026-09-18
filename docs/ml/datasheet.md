@@ -33,7 +33,8 @@ Three tables:
 
 **How many instances are there?** The release target is at least 5,000,000 transactions over 24
 months (2024-01 to 2025-12). The verification run documented in `dataset/realism_report.md` holds
-1,005,621 transactions; the figures in this datasheet come from that run unless stated otherwise.
+1,006,212 transactions, generated in 13 minutes at 184 MiB peak resident memory; the figures in this
+datasheet come from that run unless stated otherwise.
 
 **Does the dataset contain all possible instances or a sample?** It is generated in full: every
 simulated customer's every simulated transaction is present. There is no sampling step.
@@ -53,19 +54,19 @@ from the calibrated volume and reported with measured counts:
 
 | Split | Rows | True fraud rate | Span (days) |
 |---|---:|---:|---:|
-| train | 791,585 | 0.862% | 612.5 |
-| validation | 99,205 | 0.867% | 53.6 |
-| calibration (last part of validation) | 38,517 | 0.872% | 24.7 |
-| embargo (excluded) | 13,527 | 0.887% | 7.0 |
-| test | 101,304 | 0.931% | 57.9 |
+| train | 792,339 | 0.861% | 602.6 |
+| validation | 100,909 | 0.893% | 57.6 |
+| calibration (last part of validation) | 40,317 | 0.890% | 25.4 |
+| embargo (excluded) | 10,940 | 0.887% | 7.0 |
+| test | 102,024 | 0.915% | 63.8 |
 
 The seven-day embargo between validation and test exists so that a model cannot see the days
 immediately before the test period. One fraud sub-variant occurs only in the test period, so that
 generalisation to an unseen variant can be measured.
 
 **Are there errors, sources of noise or redundancies?** Yes, deliberately. Labels carry noise in
-both directions: 1.6% of true fraud is unlabelled and a similar number of legitimate rows are
-labelled fraud, which is what a real investigation backlog produces. The dataset is otherwise
+both directions: 1.50% of true fraud is unlabelled and a further 1.66% of true fraud's worth of
+legitimate rows are labelled fraud, which is what a real investigation backlog produces. The dataset is otherwise
 internally consistent: no duplicate identifiers, no malformed values (checked on every row).
 
 **Is the dataset self-contained?** Yes. It depends on no external resource, and the licence

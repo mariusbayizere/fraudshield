@@ -9,9 +9,10 @@ institution's data (D-08).
 | Item | Value |
 |---|---|
 | Seed | 20260917 |
-| Rows | 1,005,621 |
+| Rows | 1,006,212 |
 | Mode | development (size and distribution targets reported) |
-| Generator peak RSS | 188 MiB (limit 2048 MiB) |
+| Generator peak RSS | 184 MiB (limit 2048 MiB) |
+| Checks peak RSS | 323 MiB |
 | Chunk size (shards per batch) | 8 |
 | Machine | cpus 4, numpy 2.5.3, platform Linux-7.0.0-31-generic-x86_64-with-glibc2.39, processor x86_64, pyarrow 25.0.1, python 3.12.14 |
 | Verdict | **all gate checks pass** |
@@ -20,23 +21,23 @@ institution's data (D-08).
 
 | Check | Result | Gate | Measured | Requirement |
 |---|---|---|---|---|
-| single-feature AUC | pass | yes | max 0.662 (amount_rwf) | every feature <= 0.8 (D-08) |
-| shortcut detector | pass | yes | AUC 0.511 on 48461 rows | within 0.5 +/- 0.03 (owner direction) |
+| single-feature AUC | pass | yes | max 0.713 (merchant_category_code) | every feature <= 0.8 (D-08) |
+| shortcut detector | pass | yes | AUC 0.500 on 48596 rows | within 0.5 +/- 0.03 (owner direction) |
 | file order | pass | yes | AUC 0.505 | file (month) index alone within 0.5 + 0.03 |
-| identifier construction | pass | yes | account_id 0.483 (band +/-0.030), counterparty_id 0.509 (band +/-0.030), device_fingerprint 0.499 (band +/-0.030) | token characters do not identify fraud tokens, within the 95% null band |
+| identifier construction | pass | yes | account_id 0.494 (band +/-0.030), counterparty_id 0.514 (band +/-0.030), device_fingerprint 0.498 (band +/-0.030) | token characters do not identify fraud tokens, within the null band |
 | trivial rule baseline | pass | no | AUC 0.604 | reported (amount >= rule threshold, or local hour before 05:00) |
-| label noise | pass | no | missed 1.58%, false 1.52% of true fraud | each direction 1-2% of true fraud labels (D-08) |
-| novel sub-variant placement | pass | yes | 60 rows, 0 before the test start | only in the temporal hold-out test period, and present (D-08) |
-| identifier uniqueness | pass | yes | 0 duplicate transaction ids in 1005621 rows | every transaction id occurs once (ingestion contract) |
+| label noise | pass | no | missed 1.50%, false 1.66% of true fraud | each direction 1-2% of true fraud labels (D-08) |
+| novel sub-variant placement | pass | yes | 65 rows, 0 before the test start | only in the temporal hold-out test period, and present (D-08) |
+| identifier uniqueness | pass | yes | 0 duplicate transaction ids in 1006212 rows | every transaction id occurs once (ingestion contract) |
 | value formats | pass | yes | 0 violations | tokens, MCC, amount scale and coordinate precision valid for every row |
 | null signatures per channel | pass | yes | every fraud null pattern also occurs in legitimate rows | identical null patterns per channel for fraud and legitimate rows |
-| fraud rate | pass | no | overall 0.870% (95% CI 0.852%-0.888%), test 0.931% (95% CI 0.874%-0.992%) | 0.87% overall, 0.91% test, +/- 0.5 pp (ML-DATA-02) |
+| fraud rate | pass | no | overall 0.870% (95% CI 0.852%-0.888%), test 0.915% (95% CI 0.859%-0.976%) | 0.87% overall, 0.91% test, +/- 0.5 pp (ML-DATA-02) |
 | monthly fraud rate | pass | no | 24 of 24 months cover their target within a 95% CI | each month's Wilson 95% CI covers its calibrated intensity target |
 | fraud scenarios | pass | yes | 8 types | 8 distinct scenario types (ML-DATA-04) |
-| channel mix | pass | no | max deviation 0.20 pp | SRS channel mix +/- 0.5 pp (ML-DATA-03) |
+| channel mix | pass | no | max deviation 0.17 pp | SRS channel mix +/- 0.5 pp (ML-DATA-03) |
 | country mix | pass | no | max deviation 0.02 pp | SRS country mix +/- 0.5 pp (ML-DATA-05) |
-| size | not met | no | 1005621 rows | >= 5,000,000 rows in a release run (ML-DATA-01) |
-| generator peak memory | pass | yes | 188 MiB | < 2 GiB peak RSS (owner direction) |
+| size | not met | no | 1006212 rows | >= 5,000,000 rows in a release run (ML-DATA-01) |
+| generator peak memory | pass | yes | 184 MiB | < 2 GiB peak RSS (owner direction) |
 
 ## Temporal split (D-07)
 
@@ -45,34 +46,34 @@ counts and rates are measured.
 
 | Split | Rows | True fraud rate | Observed fraud rate | Span (days) |
 |---|---:|---:|---:|---:|
-| train | 791,585 | 0.862% | 0.863% | 612.49 |
-| validation | 99,205 | 0.867% | 0.853% | 53.57 |
-| calibration (last part of validation) | 38,517 | 0.872% | 0.849% | 24.67 |
-| embargo (excluded) | 13,527 | 0.887% | 0.887% | 7.0 |
-| test | 101,304 | 0.931% | 0.928% | 57.94 |
+| train | 792,339 | 0.861% | 0.864% | 602.59 |
+| validation | 100,909 | 0.893% | 0.887% | 57.57 |
+| calibration (last part of validation) | 40,317 | 0.890% | 0.890% | 25.35 |
+| embargo (excluded) | 10,940 | 0.887% | 0.878% | 6.99 |
+| test | 102,024 | 0.915% | 0.912% | 63.84 |
 
-The temporal hold-out test set starts 2025-11-03 22:58 UTC.
+The temporal hold-out test set starts 2025-10-29 01:11 UTC.
 
 ## Distributions against targets
 
 | Channel | Target | Measured |
 |---|---:|---:|
-| MOBILE_MONEY | 41.0% | 40.80% |
-| USSD | 18.0% | 17.96% |
-| AGENT_BANKING | 14.0% | 14.08% |
-| CARD | 12.0% | 12.04% |
-| ONLINE | 9.0% | 9.05% |
-| BANK_TRANSFER | 6.0% | 6.06% |
+| MOBILE_MONEY | 41.0% | 40.83% |
+| USSD | 18.0% | 18.09% |
+| AGENT_BANKING | 14.0% | 13.96% |
+| CARD | 12.0% | 12.02% |
+| ONLINE | 9.0% | 9.09% |
+| BANK_TRANSFER | 6.0% | 6.01% |
 
 | Country | Target | Measured |
 |---|---:|---:|
 | RW | 42.0% | 42.02% |
-| KE | 28.0% | 28.00% |
+| KE | 28.0% | 27.99% |
 | TZ | 15.0% | 15.00% |
 | UG | 10.0% | 10.00% |
 | CD | 5.0% | 4.99% |
 
-Overall fraud rate 95% CI: 0.852% to 0.888%; test period: 0.874% to 0.992%.
+Overall fraud rate 95% CI: 0.852% to 0.888%; test period: 0.859% to 0.976%.
 
 ## Monthly fraud rate against the calibrated schedule (ML-DATA-02)
 
@@ -84,30 +85,30 @@ covers the target) from bias (it does not).
 
 | Month | Rows | Fraud | Rate | 95% CI | Target | Covers target |
 |---|---:|---:|---:|---|---:|---|
-| 2024-01 | 35,430 | 298 | 0.841% | 0.751% - 0.942% | 0.842% | yes |
-| 2024-02 | 28,058 | 230 | 0.820% | 0.721% - 0.932% | 0.819% | yes |
-| 2024-03 | 28,914 | 249 | 0.861% | 0.761% - 0.974% | 0.863% | yes |
-| 2024-04 | 29,774 | 250 | 0.840% | 0.742% - 0.950% | 0.839% | yes |
-| 2024-05 | 39,879 | 349 | 0.875% | 0.788% - 0.971% | 0.874% | yes |
-| 2024-06 | 31,583 | 263 | 0.833% | 0.738% - 0.939% | 0.834% | yes |
-| 2024-07 | 32,539 | 280 | 0.861% | 0.766% - 0.967% | 0.861% | yes |
-| 2024-08 | 33,510 | 275 | 0.821% | 0.730% - 0.923% | 0.820% | yes |
-| 2024-09 | 44,891 | 399 | 0.889% | 0.806% - 0.980% | 0.890% | yes |
-| 2024-10 | 35,554 | 302 | 0.849% | 0.759% - 0.950% | 0.849% | yes |
-| 2024-11 | 36,630 | 321 | 0.876% | 0.786% - 0.977% | 0.876% | yes |
-| 2024-12 | 37,720 | 315 | 0.835% | 0.748% - 0.932% | 0.835% | yes |
-| 2025-01 | 50,519 | 440 | 0.871% | 0.794% - 0.956% | 0.871% | yes |
-| 2025-02 | 40,036 | 356 | 0.889% | 0.802% - 0.986% | 0.890% | yes |
-| 2025-03 | 41,216 | 350 | 0.849% | 0.765% - 0.942% | 0.848% | yes |
-| 2025-04 | 42,464 | 376 | 0.885% | 0.801% - 0.979% | 0.885% | yes |
-| 2025-05 | 56,868 | 489 | 0.860% | 0.787% - 0.939% | 0.860% | yes |
-| 2025-06 | 45,064 | 408 | 0.905% | 0.822% - 0.997% | 0.906% | yes |
-| 2025-07 | 46,387 | 393 | 0.847% | 0.768% - 0.935% | 0.846% | yes |
-| 2025-08 | 47,798 | 422 | 0.883% | 0.803% - 0.971% | 0.883% | yes |
-| 2025-09 | 64,012 | 577 | 0.901% | 0.831% - 0.978% | 0.902% | yes |
-| 2025-10 | 50,707 | 441 | 0.870% | 0.793% - 0.954% | 0.869% | yes |
-| 2025-11 | 52,261 | 482 | 0.922% | 0.844% - 1.008% | 0.923% | yes |
-| 2025-12 | 53,807 | 481 | 0.894% | 0.818% - 0.977% | 0.898% | yes |
+| 2024-01 | 40,040 | 338 | 0.844% | 0.759% - 0.939% | 0.843% | yes |
+| 2024-02 | 31,414 | 258 | 0.821% | 0.727% - 0.927% | 0.820% | yes |
+| 2024-03 | 32,054 | 277 | 0.864% | 0.769% - 0.972% | 0.864% | yes |
+| 2024-04 | 42,499 | 357 | 0.840% | 0.758% - 0.931% | 0.840% | yes |
+| 2024-05 | 33,363 | 292 | 0.875% | 0.781% - 0.981% | 0.876% | yes |
+| 2024-06 | 34,018 | 284 | 0.835% | 0.744% - 0.937% | 0.835% | yes |
+| 2024-07 | 34,709 | 299 | 0.861% | 0.770% - 0.964% | 0.862% | yes |
+| 2024-08 | 35,392 | 291 | 0.822% | 0.733% - 0.922% | 0.821% | yes |
+| 2024-09 | 46,976 | 419 | 0.892% | 0.811% - 0.981% | 0.891% | yes |
+| 2024-10 | 36,847 | 313 | 0.849% | 0.761% - 0.948% | 0.850% | yes |
+| 2024-11 | 37,592 | 330 | 0.878% | 0.788% - 0.977% | 0.877% | yes |
+| 2024-12 | 38,337 | 321 | 0.837% | 0.751% - 0.934% | 0.836% | yes |
+| 2025-01 | 50,854 | 444 | 0.873% | 0.796% - 0.958% | 0.872% | yes |
+| 2025-02 | 39,911 | 356 | 0.892% | 0.804% - 0.989% | 0.891% | yes |
+| 2025-03 | 40,695 | 346 | 0.850% | 0.766% - 0.944% | 0.850% | yes |
+| 2025-04 | 53,995 | 478 | 0.885% | 0.810% - 0.968% | 0.886% | yes |
+| 2025-05 | 42,356 | 365 | 0.862% | 0.778% - 0.954% | 0.862% | yes |
+| 2025-06 | 43,228 | 392 | 0.907% | 0.822% - 1.001% | 0.907% | yes |
+| 2025-07 | 44,072 | 374 | 0.849% | 0.767% - 0.939% | 0.848% | yes |
+| 2025-08 | 44,969 | 398 | 0.885% | 0.803% - 0.976% | 0.884% | yes |
+| 2025-09 | 59,652 | 539 | 0.904% | 0.831% - 0.983% | 0.903% | yes |
+| 2025-10 | 46,788 | 407 | 0.870% | 0.790% - 0.958% | 0.870% | yes |
+| 2025-11 | 47,756 | 441 | 0.923% | 0.842% - 1.013% | 0.924% | yes |
+| 2025-12 | 48,695 | 432 | 0.887% | 0.808% - 0.974% | 0.900% | yes |
 
 24 of 24 monthly intervals cover their target.
 
@@ -115,18 +116,18 @@ covers the target) from bias (it does not).
 
 | Feature | AUC |
 |---|---:|
-| amount_rwf | 0.662 |
-| channel | 0.592 |
-| local_hour | 0.588 |
-| merchant_category_code | 0.583 |
-| round_amount | 0.563 |
-| device_missing | 0.562 |
-| currency | 0.515 |
-| agent_present | 0.510 |
-| day_of_month | 0.505 |
-| cross_border | 0.503 |
-| day_of_week | 0.503 |
-| longitude | 0.501 |
+| merchant_category_code | 0.713 |
+| amount_rwf | 0.651 |
+| channel | 0.602 |
+| device_missing | 0.600 |
+| local_hour | 0.600 |
+| round_amount | 0.574 |
+| day_of_month | 0.515 |
+| currency | 0.514 |
+| agent_present | 0.512 |
+| cross_border | 0.508 |
+| day_of_week | 0.504 |
+| longitude | 0.503 |
 | latitude | 0.500 |
 
 These are raw and cheap per-row features. The 44 engineered features are
@@ -134,49 +135,49 @@ re-checked against the same limit in M3.
 
 ## Shortcut and identifier checks
 
-- Shortcut detector (depth-3 tree, 5-fold CV grouped by account, on transaction_id_first_byte, transaction_id_last_byte, timestamp_microseconds, row_position_in_file): AUC 0.511.
+- Shortcut detector (depth-3 tree, 5-fold CV grouped by account, on transaction_id_first_byte, transaction_id_last_byte, timestamp_microseconds, row_position_in_file): AUC 0.500.
 - File (month) order alone: AUC 0.505.
-- Identifier construction over distinct tokens (band is the wider of 0.03 and the 95% sampling band under the null, 1.96 SE): account_id 0.483 (+/-0.030, 1,641 of 4,095 tokens used by fraud), counterparty_id 0.509 (+/-0.030, 2,065 of 6,127 tokens used by fraud), device_fingerprint 0.499 (+/-0.030, 1,714 of 4,588 tokens used by fraud).
+- Identifier construction over distinct tokens (band is the wider of 0.03 and the 95% sampling band under the null, 1.96 SE): account_id 0.494 (+/-0.030, 1,840 of 5,895 tokens used by fraud), counterparty_id 0.514 (+/-0.030, 2,642 of 8,593 tokens used by fraud), device_fingerprint 0.498 (+/-0.030, 1,638 of 5,467 tokens used by fraud).
 - Trivial rule baseline (amount at or above the rule threshold, or local night): AUC 0.604.
 
 ## Labels
 
-- Missed fraud (true fraud labelled legitimate): 1.58% of true fraud.
-- False fraud (legitimate labelled fraud): 1.52% of true fraud.
+- Missed fraud (true fraud labelled legitimate): 1.50% of true fraud.
+- False fraud (legitimate labelled fraud): 1.66% of true fraud.
 
 ## Novel sub-variant placement (D-08)
 
-60 rows of the novel SIM-swap sub-variant; earliest at 2025-11-07 05:50 UTC; the test period starts 2025-11-03 22:58 UTC.
+65 rows of the novel SIM-swap sub-variant; earliest at 2025-11-07 11:05 UTC; the test period starts 2025-10-29 01:11 UTC.
 
 ## Fraud scenarios over time (true label, rows per month)
 
 | Month | Rows | account_takeover | agent_fraud | card_not_present | merchant_fraud | mule_account | sim_swap | synthetic_identity | velocity |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 2024-01 | 35,430 | 57 | 40 | 48 | 26 | 35 | 58 | 0 | 34 |
-| 2024-02 | 28,058 | 39 | 31 | 37 | 20 | 26 | 43 | 0 | 34 |
-| 2024-03 | 28,914 | 38 | 29 | 34 | 19 | 31 | 42 | 26 | 30 |
-| 2024-04 | 29,774 | 38 | 29 | 34 | 19 | 31 | 43 | 26 | 30 |
-| 2024-05 | 39,879 | 55 | 42 | 48 | 28 | 40 | 61 | 33 | 42 |
-| 2024-06 | 31,583 | 39 | 31 | 35 | 21 | 31 | 48 | 27 | 31 |
-| 2024-07 | 32,539 | 45 | 34 | 39 | 22 | 32 | 50 | 27 | 31 |
-| 2024-08 | 33,510 | 47 | 33 | 41 | 23 | 33 | 49 | 17 | 32 |
-| 2024-09 | 44,891 | 63 | 47 | 55 | 31 | 47 | 67 | 38 | 51 |
-| 2024-10 | 35,554 | 50 | 36 | 42 | 24 | 40 | 52 | 27 | 31 |
-| 2024-11 | 36,630 | 49 | 37 | 44 | 25 | 39 | 54 | 32 | 41 |
-| 2024-12 | 37,720 | 48 | 36 | 43 | 25 | 38 | 53 | 32 | 40 |
-| 2025-01 | 50,519 | 72 | 53 | 65 | 36 | 57 | 76 | 28 | 53 |
-| 2025-02 | 40,036 | 56 | 43 | 52 | 28 | 40 | 62 | 33 | 42 |
-| 2025-03 | 41,216 | 56 | 42 | 49 | 28 | 40 | 60 | 33 | 42 |
-| 2025-04 | 42,464 | 59 | 45 | 53 | 29 | 47 | 64 | 38 | 41 |
-| 2025-05 | 56,868 | 78 | 57 | 67 | 39 | 55 | 83 | 48 | 62 |
-| 2025-06 | 45,064 | 65 | 48 | 57 | 32 | 48 | 68 | 38 | 52 |
-| 2025-07 | 46,387 | 65 | 48 | 54 | 32 | 48 | 66 | 38 | 42 |
-| 2025-08 | 47,798 | 69 | 49 | 59 | 33 | 47 | 70 | 43 | 52 |
-| 2025-09 | 64,012 | 96 | 74 | 87 | 48 | 76 | 102 | 17 | 77 |
-| 2025-10 | 50,707 | 69 | 51 | 62 | 35 | 55 | 74 | 43 | 52 |
-| 2025-11 | 52,261 | 75 | 58 | 66 | 38 | 56 | 77 | 49 | 63 |
-| 2025-12 | 53,807 | 76 | 59 | 70 | 38 | 57 | 78 | 39 | 64 |
+| 2024-01 | 40,040 | 60 | 43 | 53 | 30 | 43 | 64 | 0 | 45 |
+| 2024-02 | 31,414 | 45 | 33 | 41 | 22 | 35 | 48 | 0 | 34 |
+| 2024-03 | 32,054 | 45 | 34 | 39 | 22 | 32 | 47 | 27 | 31 |
+| 2024-04 | 42,499 | 56 | 43 | 52 | 28 | 41 | 62 | 33 | 42 |
+| 2024-05 | 33,363 | 46 | 36 | 43 | 24 | 32 | 52 | 27 | 32 |
+| 2024-06 | 34,018 | 46 | 35 | 40 | 22 | 32 | 49 | 28 | 32 |
+| 2024-07 | 34,709 | 51 | 36 | 43 | 24 | 32 | 53 | 28 | 32 |
+| 2024-08 | 35,392 | 46 | 34 | 43 | 24 | 32 | 52 | 28 | 32 |
+| 2024-09 | 46,976 | 64 | 49 | 59 | 33 | 47 | 72 | 43 | 52 |
+| 2024-10 | 36,847 | 47 | 36 | 42 | 25 | 38 | 54 | 31 | 40 |
+| 2024-11 | 37,592 | 54 | 39 | 44 | 25 | 39 | 56 | 32 | 41 |
+| 2024-12 | 38,337 | 49 | 37 | 44 | 25 | 39 | 54 | 32 | 41 |
+| 2025-01 | 50,854 | 70 | 54 | 63 | 36 | 56 | 75 | 38 | 52 |
+| 2025-02 | 39,911 | 56 | 43 | 52 | 28 | 40 | 62 | 33 | 42 |
+| 2025-03 | 40,695 | 55 | 42 | 48 | 28 | 40 | 58 | 33 | 42 |
+| 2025-04 | 53,995 | 76 | 58 | 67 | 38 | 56 | 80 | 50 | 53 |
+| 2025-05 | 42,356 | 59 | 43 | 50 | 29 | 39 | 66 | 38 | 41 |
+| 2025-06 | 43,228 | 65 | 48 | 54 | 32 | 48 | 65 | 38 | 42 |
+| 2025-07 | 44,072 | 60 | 44 | 51 | 30 | 48 | 61 | 38 | 42 |
+| 2025-08 | 44,969 | 63 | 47 | 55 | 31 | 47 | 67 | 37 | 51 |
+| 2025-09 | 59,652 | 85 | 64 | 75 | 44 | 64 | 89 | 55 | 63 |
+| 2025-10 | 46,788 | 65 | 48 | 57 | 32 | 48 | 67 | 38 | 52 |
+| 2025-11 | 47,756 | 69 | 51 | 62 | 35 | 55 | 74 | 43 | 52 |
+| 2025-12 | 48,695 | 69 | 51 | 59 | 35 | 55 | 68 | 43 | 52 |
 
 ## Parameter provenance
 
-SOURCED: 0, ASSUMED: 65, CALIBRATED_TO_SRS_TARGET: 14 (of 79). Details: `dataset/params_provenance.md`.
+SOURCED: 12, ASSUMED: 55, CALIBRATED_TO_SRS_TARGET: 14 (of 81). Details: `dataset/params_provenance.md`.
