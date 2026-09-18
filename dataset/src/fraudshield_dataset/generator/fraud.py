@@ -18,6 +18,7 @@ import calendar
 from bisect import bisect_left
 from dataclasses import dataclass
 from functools import cached_property
+from math import ceil, sqrt
 
 import numpy as np
 
@@ -31,7 +32,7 @@ from fraudshield_dataset.generator.legit import (
 )
 from fraudshield_dataset.generator.population import Customer, Population
 from fraudshield_dataset.generator.schema import Rows
-from fraudshield_dataset.params import ParameterError
+from fraudshield_dataset.params import ParameterError, ScaleError
 
 SCENARIOS = (
     "sim_swap",
@@ -84,11 +85,18 @@ class Incident:
 
 class FraudModel:
     def __init__(
-        self, config: SimulationConfig, population: Population, legitimate: LegitimateBehaviour
+        self,
+        config: SimulationConfig,
+        population: Population,
+        legitimate: LegitimateBehaviour,
+        *,
+        allow_missing_scenarios: bool = False,
     ) -> None:
         self.config = config
         self.population = population
         self.legitimate = legitimate
+        self.allow_missing_scenarios = allow_missing_scenarios
+        self.missing_scenarios: tuple[str, ...] = ()
         p = config.parameters
         self.share = p.mapping("fraud.scenario_share")
         if set(self.share) != set(SCENARIOS):
@@ -229,23 +237,125 @@ class FraudModel:
         the simulation must not exceed the rows the eligible customers could stage even if every
         one of them were a victim of a maximum-length incident every month.
 
-        A scenario with no role holder at all is a different matter: the population is simply too
-        small to contain one (0.4% of a few hundred development customers is less than one mule).
-        That is a size limitation, not a parameter error, so it is left to the eight-scenario gate
-        in the realism report, which runs on the released dataset.
+        A scenario the population is too small to hold is a size limitation rather than a parameter
+        error, and it used to be waved through silently on the grounds that the eight-scenario gate
+        in the realism report would catch it. That gate is release-only (MAJOR 1.5), so below about
+        170,000 rows every development run quietly produced a dataset with seven of the eight
+        scenarios and nothing said so (M2 milestone review, MAJOR M-4).
+
+        It now refuses by default and names the size that would work. A development run that wants
+        a small dataset anyway passes ``allow_missing_scenarios``, and the scenarios that could not
+        be staged are recorded in the manifest, so a deficient dataset says so about itself instead
+        of looking like a small release.
         """
+        missing: list[str] = []
         months = range(len(self.config.months))
         for scenario in SCENARIOS:
             intended = sum(self.monthly_target(m) for m in months) * self.share[scenario]
-            capacity = sum(self.eligible_count(scenario, m) for m in months)
-            if not intended or not capacity:
+            if not intended:
                 continue
-            stageable = capacity * self.rows_range[scenario][1]
-            if intended > stageable:
+            capacity = sum(self.eligible_count(scenario, m) for m in months)
+            needed = ceil(intended / self.rows_range[scenario][1])
+            if capacity >= needed:
+                continue
+            minimum = self._minimum_rows(scenario, intended)
+            rows = self.config.total_rows
+            head = (
+                f"scenario {scenario} needs {needed} customer-months over the simulation to stage "
+                f"{intended:.0f} rows, but this population supplies {capacity}"
+            )
+            if self.allow_missing_scenarios:
+                # Explicitly waived: record it so the dataset is self-identifying, and carry on.
+                missing.append(scenario)
+                continue
+            if minimum is None:
+                # The expected pool never overtakes the requirement, at any size. More rows cannot
+                # help, so this one really is the parameters.
                 raise ParameterError(
-                    f"scenario {scenario} is asked for {intended:.0f} rows but its role holders "
-                    f"could stage at most {stageable}; raise its role fraction or lower its share"
+                    f"{head}, and its expected pool never reaches that at any run size; "
+                    f"raise its role fraction or lower its share"
                 )
+            if minimum > rows:
+                raise ScaleError(
+                    f"{head}. The parameters are not at fault: {rows:,} rows is too small for "
+                    f"this scenario to occur reliably. Generate at {minimum:,} rows or more."
+                )
+            # Expected pool is ample at this size; this seed simply drew a small one. Quoting a
+            # minimum at or below the current size would send the operator in a circle.
+            expected = self.config.customers_total * self._expected_role_rate(scenario)
+            raise ScaleError(
+                f"{head}. Neither the parameters nor the run size is at fault: {rows:,} rows is "
+                f"normally ample for {scenario} (about {expected:.1f} role holders expected), but "
+                f"seed {self.config.seed} drew too few. Use a different seed, or raise the row "
+                f"count to make the draw reliable."
+            )
+        self.missing_scenarios = tuple(missing)
+
+    def _minimum_rows(self, scenario: str, intended: float) -> int | None:
+        """Smallest row count at which this scenario's role pool is reliably large enough.
+
+        Both sides scale with the run: the role holders available grow like ``a * n`` and the rows
+        the scenario is asked for grow like ``b * n``. That is why the guard's own reasoning called
+        the test scale-free — in expectation it is. What is not scale-free is the integer pool
+        actually drawn, whose standard deviation grows only like ``sqrt(n)``: at 30,000 rows one
+        seed held 27 mules and another 2 (M2 milestone review, MAJOR M-4).
+
+        So the run is reliable once the expected pool clears the requirement by three standard
+        deviations of the requirement's own count::
+
+            a*n  >=  b*n + 3*sqrt(b*n)     =>     n >= 9b / (a - b)**2
+
+        Requiring mere equality would leave about half of all seeds failing, which is how a scale
+        limit came to look like bad luck.
+
+        Returns ``None`` when ``a <= b``: the expected pool never overtakes the requirement at any
+        size, so more rows cannot help and the share or the role fraction really is wrong. That is
+        the one case that is a parameter error rather than a scale limit.
+        """
+        months = len(self.config.months)
+        rows = max(self.config.total_rows, 1)
+        rate = self._expected_role_rate(scenario)
+        if rate <= 0:
+            return None
+        # Per-row rates, both linear in the run size, taken from this configuration.
+        holders_per_row = (self.config.customers_total * rate) / rows
+        incidents_per_row = (intended / self.rows_range[scenario][1]) / rows
+
+        def reliable(n: int) -> bool:
+            # Distinct holders is where the randomness lives: one holder supplies up to ``months``
+            # customer-months, so the month-sum is that binomial magnified, not a count with its
+            # own mean's variance. And a scenario needs a whole holder — the requirement floors at
+            # one — which is why this is solved numerically rather than in closed form: below
+            # 300,000 rows the floor, not the proportion, is what binds.
+            needed_holders = max(ceil(incidents_per_row * n / months), 1)
+            return holders_per_row * n >= needed_holders + 3 * sqrt(needed_holders)
+
+        size = rows
+        for _ in range(64):
+            if reliable(size):
+                break
+            size *= 2
+        else:
+            return None
+        low, high = rows, size
+        while low < high:
+            middle = (low + high) // 2
+            if reliable(middle):
+                high = middle
+            else:
+                low = middle + 1
+        return low
+
+    def _expected_role_rate(self, scenario: str) -> float:
+        """Share of active customers that can hold this scenario's role, before the draw."""
+        if scenario == "mule_account":
+            return self.mule_fraction
+        if scenario == "synthetic_identity":
+            return self.synthetic_fraction
+        if scenario in ("account_takeover", "card_not_present", "merchant_fraud"):
+            _mules, urban, _bust = self._pools
+            return len(urban) / max(self.config.customers_total, 1)
+        return 1.0
 
     @cached_property
     def _pools(self) -> tuple[list[int], list[int], dict[int, list[int]]]:

@@ -25,7 +25,11 @@ ROWS = 20_000
 @pytest.fixture(scope="module")
 def dataset(tmp_path_factory: pytest.TempPathFactory) -> Path:
     output = tmp_path_factory.mktemp("dataset")
-    generate(build_config(load_parameters(), seed=SEED, total_rows=ROWS), output)
+    generate(
+        build_config(load_parameters(), seed=SEED, total_rows=ROWS),
+        output,
+        allow_missing_scenarios=True,
+    )
     return output
 
 

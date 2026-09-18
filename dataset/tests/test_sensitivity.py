@@ -48,7 +48,11 @@ def test_the_score_is_in_units_of_each_property_tolerance() -> None:
 
 def test_the_profile_measures_the_headline_properties(tmp_path: Path) -> None:
     output = tmp_path / "ds"
-    generate(build_config(load_parameters(), seed=SEED, total_rows=ROWS), output)
+    generate(
+        build_config(load_parameters(), seed=SEED, total_rows=ROWS),
+        output,
+        allow_missing_scenarios=True,
+    )
 
     measured = profile(output)
 

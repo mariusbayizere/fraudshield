@@ -203,6 +203,7 @@ def generate(
     output: Path,
     chunk_size: int = 8,
     scenarios: Iterable[Scenario] | None = None,
+    allow_missing_scenarios: bool = False,
 ) -> GenerationResult:
     """Simulate every month and write ``transactions``, ``labels`` and ``account_events``."""
     if chunk_size < 1:
@@ -210,7 +211,13 @@ def generate(
     population = Population(config)
     legitimate = LegitimateBehaviour(config, population)
     scenario_list: list[Scenario] = (
-        [FraudModel(config, population, legitimate)] if scenarios is None else list(scenarios)
+        [
+            FraudModel(
+                config, population, legitimate, allow_missing_scenarios=allow_missing_scenarios
+            )
+        ]
+        if scenarios is None
+        else list(scenarios)
     )
     simulation = _Simulation(
         config, population, legitimate, scenario_list, _customers_by_shard(config), chunk_size
@@ -273,6 +280,12 @@ def generate(
         "rows_by_month": rows_by_month,
         "rows_by_day": dict(sorted(daily.items())),
         "rows_dropped_after_simulation_end": dropped_after_end,
+        # Empty for any dataset worth releasing. Non-empty means the run was too small to stage
+        # these scenarios and said so was acceptable, so the dataset identifies its own gap rather
+        # than looking like a small release (M2 milestone review, MAJOR M-4).
+        "scenarios_not_staged": sorted(
+            s for m in scenario_list for s in getattr(m, "missing_scenarios", ())
+        ),
         "sha256": dict(sorted(checksums.items())),
     }
     (output / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")

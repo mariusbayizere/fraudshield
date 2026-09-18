@@ -40,14 +40,22 @@ def _results(root: Path, rows: int) -> dict[str, CheckResult]:
 @pytest.fixture(scope="module")
 def clean(tmp_path_factory: pytest.TempPathFactory) -> Path:
     output = tmp_path_factory.mktemp("clean")
-    generate(build_config(load_parameters(), seed=SEED, total_rows=CLEAN_ROWS), output)
+    generate(
+        build_config(load_parameters(), seed=SEED, total_rows=CLEAN_ROWS),
+        output,
+        allow_missing_scenarios=True,
+    )
     return output
 
 
 @pytest.fixture(scope="module")
 def plant_base(tmp_path_factory: pytest.TempPathFactory) -> Path:
     output = tmp_path_factory.mktemp("plant-base")
-    generate(build_config(load_parameters(), seed=SEED, total_rows=PLANT_ROWS), output)
+    generate(
+        build_config(load_parameters(), seed=SEED, total_rows=PLANT_ROWS),
+        output,
+        allow_missing_scenarios=True,
+    )
     return output
 
 

@@ -148,7 +148,15 @@ def _with_value(parameters: ParameterSet, key: str, value: Any) -> ParameterSet:
 
 
 def _generate(parameters: ParameterSet, seed: int, rows: int, output: Path) -> Profile:
-    generate(build_config(parameters, seed=seed, total_rows=rows), output, chunk_size=64)
+    # Influence is measured at development scale and by perturbing shares, so a run here is
+    # routinely too small to stage every scenario. That is accepted deliberately: the ranking
+    # compares profiles against a baseline generated the same way (M2 milestone review, M-4).
+    generate(
+        build_config(parameters, seed=seed, total_rows=rows),
+        output,
+        chunk_size=64,
+        allow_missing_scenarios=True,
+    )
     return profile(output)
 
 

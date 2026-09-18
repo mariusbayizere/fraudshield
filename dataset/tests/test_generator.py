@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import re
 from pathlib import Path
 
 import numpy as np
@@ -30,7 +31,7 @@ from fraudshield_dataset.generator.legit import LegitimateBehaviour
 from fraudshield_dataset.generator.pipeline import generate
 from fraudshield_dataset.generator.population import Population
 from fraudshield_dataset.generator.schema import ACCOUNT_EVENTS, LABELS, TRANSACTIONS
-from fraudshield_dataset.params import ParameterError, ParameterSet, load_parameters
+from fraudshield_dataset.params import ParameterError, ParameterSet, ScaleError, load_parameters
 
 GENERATOR_SOURCES = Path(config_module.__file__).parent
 
@@ -45,7 +46,12 @@ def _files(root: Path) -> dict[str, str]:
 @pytest.fixture(scope="module")
 def small(tmp_path_factory: pytest.TempPathFactory) -> Path:
     output = tmp_path_factory.mktemp("small")
-    generate(build_config(load_parameters(), seed=11, total_rows=6000), output, chunk_size=8)
+    generate(
+        build_config(load_parameters(), seed=11, total_rows=6000),
+        output,
+        chunk_size=8,
+        allow_missing_scenarios=True,
+    )
     return output
 
 
@@ -54,7 +60,10 @@ def test_same_seed_is_byte_identical_across_chunk_sizes(small: Path, tmp_path: P
     for chunk_size in (1, 64):
         other = tmp_path / f"chunk-{chunk_size}"
         generate(
-            build_config(load_parameters(), seed=11, total_rows=6000), other, chunk_size=chunk_size
+            build_config(load_parameters(), seed=11, total_rows=6000),
+            other,
+            chunk_size=chunk_size,
+            allow_missing_scenarios=True,
         )
         assert _files(other) == _files(small)
         assert (other / "manifest.json").read_bytes() == (small / "manifest.json").read_bytes()
@@ -62,7 +71,12 @@ def test_same_seed_is_byte_identical_across_chunk_sizes(small: Path, tmp_path: P
 
 @pytest.mark.req("D-08")
 def test_a_different_seed_gives_different_data(small: Path, tmp_path: Path) -> None:
-    generate(build_config(load_parameters(), seed=12, total_rows=6000), tmp_path, chunk_size=8)
+    generate(
+        build_config(load_parameters(), seed=12, total_rows=6000),
+        tmp_path,
+        chunk_size=8,
+        allow_missing_scenarios=True,
+    )
     assert _files(tmp_path) != _files(small)
 
 
@@ -191,7 +205,8 @@ def test_chunk_size_must_be_positive(tmp_path: Path) -> None:
 
 
 def test_cli_generate(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    assert cli.main(["generate", "--output", str(tmp_path), "--rows", "300", "--seed", "3"]) == 0
+    arguments = ["generate", "--output", str(tmp_path), "--rows", "300", "--seed", "3"]
+    assert cli.main([*arguments, "--allow-missing-scenarios"]) == 0
     assert "generated" in capsys.readouterr().out
 
 
@@ -243,7 +258,12 @@ _MEDIUM = {"fraud__novelty_share_of_sim_swap": 1.0}
 def medium(tmp_path_factory: pytest.TempPathFactory) -> Path:
     output = tmp_path_factory.mktemp("medium")
     parameters = _with(load_parameters(), **_MEDIUM)
-    generate(build_config(parameters, seed=5, total_rows=60_000), output, chunk_size=16)
+    generate(
+        build_config(parameters, seed=5, total_rows=60_000),
+        output,
+        chunk_size=16,
+        allow_missing_scenarios=True,
+    )
     return output
 
 
@@ -312,7 +332,12 @@ def test_fraud_enabling_events_are_recorded_like_legitimate_events(medium: Path)
 
 
 def test_calibration_refuses_a_share_its_role_holders_cannot_stage() -> None:
-    """A share beyond what the role can ever stage is a parameter inconsistency, not noise."""
+    """A share beyond what the role can stage at this size is refused rather than quietly dropped.
+
+    The refusal now says which of the three causes it is and, when more rows would fix it, how
+    many. This case is reachable by scale, so it is a ScaleError quoting a minimum rather than a
+    flat parameter error (M2 milestone review, MAJOR M-4).
+    """
     parameters = load_parameters()
     shares = dict.fromkeys(SCENARIOS, 0.0)
     shares["synthetic_identity"] = 0.9
@@ -327,7 +352,7 @@ def test_calibration_refuses_a_share_its_role_holders_cannot_stage() -> None:
         total_rows=600_000,
     )
     population = Population(config)
-    with pytest.raises(ParameterError, match="synthetic_identity is asked for"):
+    with pytest.raises(ScaleError, match=r"synthetic_identity needs \d+ customer-months"):
         FraudModel(config, population, LegitimateBehaviour(config, population))
 
 
@@ -442,7 +467,10 @@ def test_byte_identity_holds_across_a_row_group_boundary(
     one, many = tmp_path / "chunk-1", tmp_path / "chunk-64"
     for output, chunk in ((one, 1), (many, 64)):
         generate(
-            build_config(load_parameters(), seed=11, total_rows=6000), output, chunk_size=chunk
+            build_config(load_parameters(), seed=11, total_rows=6000),
+            output,
+            chunk_size=chunk,
+            allow_missing_scenarios=True,
         )
 
     groups = pq.ParquetFile(
@@ -450,3 +478,47 @@ def test_byte_identity_holds_across_a_row_group_boundary(
     ).num_row_groups
     assert groups > 1, "the boundary this test exists for was not reached"
     assert _files(one) == _files(many)
+
+
+@pytest.mark.req("D-08", "ML-DATA-04")
+def test_a_run_too_small_for_a_scenario_fails_with_the_minimum_size() -> None:
+    """A dataset missing a fraud scenario must fail loudly, not be produced quietly.
+
+    Below about 170,000 rows the mule pool is usually empty, and the capacity guard used to skip
+    the scenario and carry on, so every development run produced a dataset with seven of the eight
+    scenarios and nothing said so (M2 milestone review, MAJOR M-4).
+    """
+    config = build_config(load_parameters(), seed=20260917, total_rows=10_000)
+    population = Population(config)
+
+    with pytest.raises(ScaleError) as raised:
+        FraudModel(config, population, LegitimateBehaviour(config, population))
+
+    message = str(raised.value)
+    assert "mule_account" in message
+    assert "parameters are not at fault" in message
+    # The minimum must be larger than the size that just failed, or it sends the reader in a circle.
+    quoted = int(re.search(r"Generate at ([\d,]+) rows", message).group(1).replace(",", ""))
+    assert quoted > 10_000
+
+
+@pytest.mark.req("ML-DATA-04")
+def test_the_minimum_size_is_a_property_of_the_parameters_not_the_run() -> None:
+    """The same minimum must come back whatever size it was computed from.
+
+    It is derived by extrapolating this run's role rate, so if it moved with the run it would be
+    measuring the run rather than the parameters.
+    """
+    quoted = []
+    for rows in (10_000, 30_000, 100_000):
+        config = build_config(load_parameters(), seed=20260923, total_rows=rows)
+        population = Population(config)
+        with pytest.raises(ScaleError) as raised:
+            FraudModel(config, population, LegitimateBehaviour(config, population))
+        quoted.append(
+            int(
+                re.search(r"Generate at ([\d,]+) rows", str(raised.value)).group(1).replace(",", "")
+            )
+        )
+
+    assert max(quoted) - min(quoted) < 0.05 * min(quoted), quoted

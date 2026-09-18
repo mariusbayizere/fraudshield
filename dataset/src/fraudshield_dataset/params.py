@@ -83,6 +83,15 @@ class ParameterError(ValueError):
     """A parameter file breaks the provenance rules."""
 
 
+class ScaleError(ParameterError):
+    """The run is too small for the parameters, which are themselves fine.
+
+    Separate from :class:`ParameterError` because the repair is different: the operator should
+    raise the row count, not edit a sourced or calibrated share. It subclasses it so that every
+    existing handler still catches it.
+    """
+
+
 @dataclass(frozen=True)
 class ParameterSet:
     parameters: Mapping[str, Parameter]

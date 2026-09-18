@@ -52,6 +52,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--rows", type=int, help="target rows (default: volume.total_rows_target)"
     )
     generator.add_argument("--chunk-size", type=int, default=8, help="shards simulated together")
+    generator.add_argument(
+        "--allow-missing-scenarios",
+        action="store_true",
+        help="generate even if the run is too small to stage every fraud scenario; the ones that "
+        "could not be staged are recorded in manifest.json",
+    )
     check = commands.add_parser("check", help="run the anti-leakage and realism checks")
     check.add_argument("dataset", type=Path)
     check.add_argument("--seed", type=int, default=20260917)
@@ -92,7 +98,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0 if all(r.passed or not r.gate for r in results) else 1
     if args.command == "generate":
         config = build_config(load_parameters(), seed=args.seed, total_rows=args.rows)
-        result = generate(config, args.output, chunk_size=args.chunk_size)
+        result = generate(
+            config,
+            args.output,
+            chunk_size=args.chunk_size,
+            allow_missing_scenarios=args.allow_missing_scenarios,
+        )
         print(
             f"generated {result.rows} rows in {len(result.rows_by_month)} months; "
             f"peak RSS {result.peak_rss_bytes / 2**20:.0f} MiB"
