@@ -8,13 +8,22 @@ Until then it must not appear in public-facing text.
 | # | Claim (SRS location) | Status | Resolution path | Owner |
 |---|---|---|---|---|
 | C-1 | "Mobile money fraud in sub-Saharan Africa grew 64% between 2021 and 2024 (GSMA, 2024)" (section 00) | UNVERIFIED | Author to locate the GSMA publication, confirm the figure, geography and period, and record the exact citation; otherwise remove | Author |
-| C-2 | "Rwanda's digital payment volume exceeded RWF 18 trillion in 2023" (section 00) | UNVERIFIED | Author to confirm against a primary BNR publication (value, year, definition of "digital payments"); otherwise remove | Author |
+| C-2 | "Rwanda's digital payment volume exceeded RWF 18 trillion in 2023" (section 00) | VERIFIED (restate) | Supported, and understated: retail e-payments were 211% of GDP in FY2023/24 and 321% in FY2024/25 (National Bank of Rwanda, NBR Annual Report 2024-2025, Figure 21 "Value of retail e-payment to GDP", page 89, read 2026-09-18), against nominal GDP of RWF 17.18 trillion in 2023 (World Bank NY.GDP.MKTP.CN), which is about RWF 36 trillion. Restate with the fiscal year and the ratio rather than the RWF 18 trillion figure, whose definition and year cannot be matched to a published series | Author |
 | C-3 | "Analysts dismiss > 60% of alerts without action when explanations are absent" (1.1) | UNVERIFIED | Primary study required; otherwise remove. FraudShield cannot measure this without real analysts | Author |
 | C-4 | "Western models achieve AUC-ROC 0.72–0.78 on East African mobile money data" (1.1) | UNVERIFIED | Replace with a FraudShield measurement: ablation "card-style feature set only" vs "full EAC feature set" on the synthetic benchmark (E.5 item 4), reported as a result on synthetic data, not as a statement about real deployments | M4 |
 | C-5 | "Model accuracy degrades 8–15% per year without retraining" (1.1) | UNVERIFIED | Primary source required; the synthetic benchmark can report performance by test month (E.5 item 5), which is not evidence about real-world degradation | Author / M4 |
 | C-6 | "Ensemble reduces variance 12% vs single model" (2.3) | UNVERIFIED | Replace with measured seed-variance comparison, ensemble vs XGBoost and LightGBM alone over 5 seeds (E.5 item 4) | M4 |
-| C-7 | "SIM-swap fraud … dominant fraud type in Rwanda and Kenya" (glossary) | UNVERIFIED | Primary source required before stating as fact; the design treats SIM swap as a high-severity threat regardless (D-25) | Author |
+| C-7 | "SIM-swap fraud … dominant fraud type in Rwanda and Kenya" (glossary) | UNVERIFIED (searched) | Sourcing pass of 2026-09-18 read the NBR Annual Report 2024-2025 and the Bank of Tanzania Payment Systems Annual Report for 2024 in full: neither publishes fraud incidents by type, and the NBR report mentions mobile money fraud only as a consumer complaint category. No primary source found; the claim must not be stated as fact, and the generator's scenario shares remain ASSUMED for the same reason (docs/research/sourcing_pass.md) | Author |
 | C-8 | "First public East African financial fraud benchmark dataset" (7.1, 10) | UNVERIFIED | Novelty claim requires a documented literature and dataset search by the author before publication | Author |
+
+## Sourcing pass, 2026-09-18
+
+A sourcing pass over the generator parameters read seven documents in full and raised the sourced
+parameter count from 0 to 10 of 81 (`docs/research/sourcing_pass.md`). It also established what is
+*not* available: no publication found gives fraud incidence by type for these markets, which is why
+every fraud parameter and the claims that depend on them stay unverified. Claims about fraud
+prevalence, detection rates in production, or analyst behaviour cannot be resolved from the payment
+statistics that exist, and must not be inferred from the synthetic benchmark.
 
 ## Rules
 

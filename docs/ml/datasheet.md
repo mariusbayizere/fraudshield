@@ -97,15 +97,35 @@ documented parameter by parameter in `dataset/params_provenance.md`:
 
 | Provenance | Count | Meaning |
 |---|---:|---|
-| SOURCED | 0 | taken from a document the author read |
-| ASSUMED | 65 | a modelling choice with a stated rationale and no source |
+| SOURCED | 10 | taken from a document the author downloaded and read |
+| ASSUMED | 57 | a modelling choice with a stated rationale and no source |
 | CALIBRATED_TO_SRS_TARGET | 14 | set to meet a target in SRS section 7.1 or a binding resolution |
 
-**No parameter is sourced.** Nothing in this dataset is claimed to be a measurement of East
-African payment behaviour. Every behavioural number is a modelling choice with its reasoning
-written next to it, and the distribution targets are requirements the system was specified
-against, not observations. Anyone comparing results on this benchmark to a production system
-should read that file first.
+Ten parameters are sourced, after a sourcing pass that read seven documents in full: the Bank of
+Tanzania Payment Systems Annual Report for 2024, the National Bank of Rwanda Annual Report
+2024-2025, the Fifth Rwanda Population and Housing Census 2022, FinScope Rwanda 2024, the World
+Bank/IMF official exchange rate series, the IANA time zone database, and a Rwandan school calendar.
+They cover the structural quantities: transactions per active customer, agents and merchant
+acceptance points per customer, the urban share of customers, per-channel mean amounts, the split
+between person-to-person and merchant payments, volume growth, exchange rates, time zones and the
+school terms. `docs/research/sourcing_pass.md` records every document, every value it changed, and
+what it could not establish; `docs/research/parameter_influence.md` records how the parameters were
+ranked before the pass, so the effort went to the ones that move the dataset.
+
+**Most parameters remain modelling choices, and every fraud parameter does.** Scenario prevalence,
+incident length, attack timing and adaptation behaviour are all ASSUMED: no publication found gives
+fraud incidence by type for these markets. The National Bank of Rwanda's annual report discusses a
+Fraud Prevention Forum and consumer complaints about mobile money fraud without publishing incident
+counts, and the Bank of Tanzania report does not break fraud out at all. Sourcing those numbers
+weakly, from a vendor report or a global aggregate presented as regional, would be worse than
+leaving them assumed.
+
+The sourced levels are also not all Rwandan: Tanzania publishes a per-category breakdown of value
+and volume and Rwanda does not, so the per-channel amounts, the transactions per user, the
+person-to-person split and the growth rate come from Tanzanian aggregates while the dataset's
+country mix is Rwanda-weighted. They are order-of-magnitude anchors rather than claims about one
+market, and each citation says so. Nothing in this dataset should be read as a measurement of East
+African payment behaviour, and results on it do not transfer to a production system.
 
 ## Preprocessing, cleaning and labelling
 
@@ -130,8 +150,8 @@ the study of a novel fraud variant that appears only in the test period.
 
 - It is synthetic. Model performance here does not transfer to a production system, and a
   detection rate measured on it is not a claim about real fraud.
-- No parameter is sourced (see above). Conclusions about East African payment behaviour cannot be
-  drawn from it.
+- Ten of 81 parameters are sourced and every fraud parameter is assumed (see above). Conclusions
+  about East African fraud behaviour cannot be drawn from it.
 - The fraud rate is calibrated to a target of 0.87% overall and 0.91% in the test period, not
   measured from any institution.
 - Amounts and locations are simulated; they carry no commercial or geographic information.
