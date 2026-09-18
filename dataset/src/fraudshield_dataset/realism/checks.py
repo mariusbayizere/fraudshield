@@ -11,10 +11,18 @@ Leakage is assessed against the observed label (the one a model would train on):
   within 0.5 +/- 0.03. Folds are grouped by account, so the rows of one incident, which share a
   time, cannot sit on both sides of a split. File (month) order is judged alone, because months
   are calendar time and fraud prevalence drifts over time by design;
-- identifier construction: the same tree over distinct token values (account, counterparty,
-  device), labelled by whether a fraud row uses them, must also stay within 0.5 +/- 0.03. Tokens
-  are judged per distinct value because victims and mule accounts legitimately recur;
+- identifier construction: the same tree over every character of the distinct token values
+  (account, counterparty, device), labelled by whether a fraud row uses them, must stay inside a
+  band sized to its own null. Tokens are judged per distinct value because victims and mule
+  accounts legitimately recur;
+- event construction: the account events fraud plants (a SIM swap before a takeover) must be built
+  like the legitimate ones. They were not: the microsecond part of the timestamp and the day of the
+  month identified a victim's account outright, in a table the release ships;
 - fraud and legitimate rows share value formats and, per channel, null signatures.
+
+Every band that judges a cross-validated tree is sized to that statistic's null rather than fixed,
+because a fixed tolerance is several standard errors at release size and a fraction of one at
+development size.
 """
 
 from __future__ import annotations
@@ -37,10 +45,12 @@ from fraudshield_dataset.generator.fraud import NOVEL_VARIANT
 from fraudshield_dataset.generator.legit import MINOR_UNITS
 from fraudshield_dataset.generator.pipeline import peak_rss_bytes
 from fraudshield_dataset.normal import inverse_cdf
+from fraudshield_dataset.params import ParameterSet
 from fraudshield_dataset.realism.stats import (
+    CV_TREE_NULL_INFLATION,
     auc,
     cross_validated_auc,
-    null_auc_stderr,
+    cv_auc_null_band,
     separation,
     wilson_interval,
 )
@@ -52,6 +62,8 @@ CI_Z = 1.96
 # so a per-column 5% band fails about one run in seven by chance; the band is widened to keep the
 # 5% for the check as a whole (Bonferroni, two-sided).
 FAMILY_ALPHA = 0.05
+# Below this many fraud-carrying token values, a construction AUC says nothing either way.
+MIN_TOKEN_POSITIVES = 30
 DISTRIBUTION_TOLERANCE_PP = 0.5
 MIN_ROWS_FULL = 5_000_000
 PEAK_RSS_LIMIT_BYTES = 2 * 2**30
@@ -94,22 +106,71 @@ class Columns:
         self.parts[name] = [values.astype(np.float32)]
 
 
-def _category_rates(codes: NDArray[np.int64], labels: NDArray[np.bool_]) -> NDArray[np.float64]:
-    """Score each row by its category's fraud rate: the single-feature AUC of a categorical."""
-    positives = np.bincount(codes, weights=labels.astype(np.float64))
-    counts = np.bincount(codes)
-    return (positives / np.maximum(counts, 1))[codes]
+def _category_rates(
+    codes: NDArray[np.int64], labels: NDArray[np.bool_], *, seed: int, folds: int = FOLDS
+) -> NDArray[np.float64]:
+    """Score each row by its category's fraud rate, computed without that row.
+
+    A categorical has no natural order, so its separation is measured by encoding each category
+    with its fraud rate. Encoding on the same rows the AUC is then read from counts a row's own
+    label as evidence about itself: with a hundred fraud rows over twenty merchant categories it
+    put the reported separation at 0.809 on a 12,000-row run and 0.662 at a million, so the D-08
+    limit appeared to depend on the size of the run (M2 principal review, MINOR 1.6 and addendum).
+    Rates are computed out of fold instead, which measures signal rather than self-inclusion.
+    """
+    rng = np.random.default_rng(seed)
+    assignment = rng.integers(0, folds, codes.size)
+    width = int(codes.max()) + 1 if codes.size else 1
+    overall = float(labels.mean()) if labels.size else 0.0
+    scores = np.full(codes.size, overall, dtype=np.float64)
+    for fold in range(folds):
+        held_out = assignment == fold
+        rest = ~held_out
+        if not held_out.any() or not rest.any():
+            continue
+        positives = np.bincount(
+            codes[rest], weights=labels[rest].astype(np.float64), minlength=width
+        )
+        counts = np.bincount(codes[rest], minlength=width)
+        # A category the other folds never saw falls back to the overall rate, which is what a
+        # model with no information about it would predict.
+        rates = np.where(counts > 0, positives / np.maximum(counts, 1), overall)
+        scores[held_out] = rates[codes[held_out]]
+    return scores
 
 
-def _hex_byte(values: list[str], position: int) -> NDArray[np.float64]:
+def id_bytes(values: list[str]) -> NDArray[np.float64]:
+    """Every byte of a UUID-shaped identifier.
+
+    Two bytes used to be read, the first and the last. A marker written into any of the other
+    fourteen was a perfect oracle that every check passed (M2 principal review, MAJOR 1.2), so all
+    sixteen are fed to the detector now.
+    """
+    stripped = [v.replace("-", "") for v in values]
     return np.array(
-        [int(v.replace("-", "")[position : position + 2], 16) for v in values], dtype=np.float64
+        [[int(v[i : i + 2], 16) for i in range(0, 32, 2)] for v in stripped], dtype=np.float64
     )
 
 
 def token_features(values: list[str]) -> NDArray[np.float64]:
-    """Characters after the ``tok_`` prefix and the length: what construction could leak."""
-    return np.array([[ord(v[4]), ord(v[5]), ord(v[-1]), len(v)] for v in values], dtype=np.float64)
+    """Every character of a token's body: what construction could leak.
+
+    Three of the thirty-two characters used to be read, so a marker in any of the other
+    twenty-nine identified an account without any check noticing (M2 principal review, MAJOR 1.2).
+    The length is not a feature: it is the same for every token.
+    """
+    return np.array([[ord(c) for c in v[4:]] for v in values], dtype=np.float64)
+
+
+@dataclass(frozen=True)
+class _MonthColumns:
+    """The per-row arrays one month's shortcut features are built from."""
+
+    micros: NDArray[np.int64]
+    observed: NDArray[np.bool_]
+    ids: list[str]
+    keep: NDArray[np.int64]
+    delay: NDArray[np.int64]
 
 
 def _sampled(transaction_id: str, seed: int) -> bool:
@@ -155,6 +216,9 @@ class Dataset:
         }
         self.tokens: dict[str, dict[str, bool]] = {}
         self.id_digests: list[NDArray[np.uint64]] = []
+        self.event_features = Columns()
+        self.event_accounts: list[str] = []
+        self.fraud_accounts: set[str] = set()
         self._vocabularies: dict[str, dict[str, int]] = {}
         months = sorted(
             p.name.removeprefix("month=") for p in (root / "transactions").glob("month=*")
@@ -167,6 +231,7 @@ class Dataset:
             )
             labels = pq.read_table(root / "labels" / f"month={month}" / "part-0000.parquet")
             self._month(file_index, transactions, labels)
+            self._month_events(root, month)
             self.rows_by_month[month] = transactions.num_rows
             monthly = self.fraud_types_by_month.setdefault(month, {})
             for kind in labels.filter(labels["is_fraud_true"])["fraud_type"].to_pylist():
@@ -174,11 +239,45 @@ class Dataset:
         feature_labels = self.feature_labels
         for name in _CATEGORICALS:
             codes = self.features.get(name).astype(np.int64)
-            self.features.replace(name, _category_rates(codes, feature_labels))
+            self.features.replace(name, _category_rates(codes, feature_labels, seed=config.seed))
 
     @property
     def observed(self) -> NDArray[np.bool_]:
         return np.concatenate(self.observed_parts)
+
+    def _month_events(self, root: Path, month: str) -> None:
+        """Account events, scored by whether their account ever carries observed fraud.
+
+        The events a fraud scenario plants (a SIM swap before a takeover) must be built like the
+        legitimate ones. When they were not, the microsecond part of the timestamp and the day of
+        the month identified a victim's account outright, in a table the release ships and the
+        datasheet invites joining (M2 principal review, BLOCKER 1.1).
+
+        Only construction is judged here: the microsecond part of the timestamp and the day of the
+        month. Two things are deliberately left out because they are the scenario's own signal,
+        which a model is meant to learn rather than be protected from: how soon a transaction
+        follows the event, and which kind of event it is. A SIM swap before a takeover is how that
+        fraud works, and it duly separates the classes (0.537 on its own at a million rows).
+        """
+        path = root / "account_events" / f"month={month}" / "part-0000.parquet"
+        if not path.exists():
+            return
+        events = pq.read_table(path)
+        if not events.num_rows:
+            return
+        micros = events["event_timestamp"].cast(pa.int64()).to_numpy()
+        self.event_features.add("event_sub_second", micros % 1_000_000)
+        self.event_features.add("event_day_of_month", pc.day(events["event_timestamp"]).to_numpy())
+        self.event_accounts.extend(events["account_id"].to_pylist())
+
+    @property
+    def event_labels(self) -> NDArray[np.bool_]:
+        """Whether each event's account carries an observed-fraud row anywhere in the dataset.
+
+        Resolved after every month has been read, so an event in January is judged against the
+        whole dataset's fraud accounts rather than against the ones seen so far.
+        """
+        return np.array([account in self.fraud_accounts for account in self.event_accounts])
 
     @property
     def feature_labels(self) -> NDArray[np.bool_]:
@@ -216,8 +315,22 @@ class Dataset:
         self._behavioural_features(t, micros, keep)
         self.feature_label_parts.append(observed[keep])
         self._formats_and_nulls(t, true)
-        self._shortcut_columns(t, micros, observed, ids, keep)
+        self._shortcut_columns(
+            t,
+            _MonthColumns(
+                micros=micros,
+                observed=observed,
+                ids=ids,
+                keep=keep,
+                delay=labels["label_available_at"].cast(pa.int64()).to_numpy() - micros,
+            ),
+        )
         self._identifier_tokens(t, observed)
+        self.fraud_accounts.update(
+            account
+            for account, flag in zip(t["account_id"].to_pylist(), observed, strict=True)
+            if flag
+        )
         # Eight bytes of a keyed digest per identifier: uniqueness over millions of rows can then
         # be checked with one sort instead of holding every string in memory.
         self.id_digests.append(
@@ -304,20 +417,16 @@ class Dataset:
                 (columns["device_fingerprint"][i] is None, columns["agent_id"][i] is None)
             )
 
-    def _shortcut_columns(
-        self,
-        t: pa.Table,
-        micros: NDArray[np.int64],
-        observed: NDArray[np.bool_],
-        ids: list[str],
-        keep: NDArray[np.int64],
-    ) -> None:
+    def _shortcut_columns(self, t: pa.Table, month: _MonthColumns) -> None:
+        micros, observed, ids, keep = month.micros, month.observed, month.ids, month.keep
         kept_ids = [ids[i] for i in keep]
         accounts = t["account_id"].to_pylist()
-        self.shortcut.add("transaction_id_first_byte", _hex_byte(kept_ids, 0))
-        self.shortcut.add("transaction_id_last_byte", _hex_byte(kept_ids, 30))
+        for position, column in enumerate(id_bytes(kept_ids).T):
+            self.shortcut.add(f"transaction_id_byte_{position:02d}", column)
         self.shortcut.add("timestamp_microseconds", micros[keep] % 1_000_000)
         self.shortcut.add("row_position_in_file", keep / max(t.num_rows - 1, 1))
+        # When a label became available is drawn independently of the label; nothing checked that.
+        self.shortcut.add("label_delay_micros", month.delay[keep])
         self.shortcut_labels.append(observed[keep])
         self.shortcut_groups.append(
             np.array([_account_group(accounts[i]) for i in keep], dtype=np.int64)
@@ -333,7 +442,7 @@ class Dataset:
 
 
 def _leakage_checks(
-    data: Dataset, config: SimulationConfig, measures: dict[str, Any]
+    data: Dataset, config: SimulationConfig, full: bool, measures: dict[str, Any]
 ) -> list[CheckResult]:
     observed = data.observed
     feature_labels = data.feature_labels
@@ -349,15 +458,53 @@ def _leakage_checks(
     detector = cross_validated_auc(
         matrix, shortcut_labels, folds=FOLDS, seed=config.seed, groups=groups
     )
+    # Sized to this detector's own null, like the identifier bands: a fixed 0.03 was 1.5 standard
+    # errors at development scale, so a clean dataset failed the gate about one run in seven
+    # (M2 principal review, MAJOR 1.4).
+    shortcut_positives = int(shortcut_labels.sum())
+    shortcut_band = max(
+        SHORTCUT_TOLERANCE,
+        cv_auc_null_band(
+            shortcut_positives,
+            shortcut_labels.size - shortcut_positives,
+            inverse_cdf(1.0 - FAMILY_ALPHA / 2),
+        ),
+    )
     measures["shortcut_detector_auc"] = detector
+    measures["shortcut_detector_band"] = shortcut_band
     measures["shortcut_features"] = data.shortcut.names
+
+    event_labels = data.event_labels
+    event_names = data.event_features.names
+    event_positives = int(event_labels.sum())
+    if event_names and 0 < event_positives < event_labels.size:
+        event_matrix = np.column_stack([data.event_features.get(n) for n in event_names])
+        event_auc = cross_validated_auc(event_matrix, event_labels, folds=FOLDS, seed=config.seed)
+        event_band = max(
+            SHORTCUT_TOLERANCE,
+            cv_auc_null_band(
+                event_positives,
+                event_labels.size - event_positives,
+                inverse_cdf(1.0 - FAMILY_ALPHA / 2),
+            ),
+        )
+    else:
+        event_auc, event_band = 0.5, SHORTCUT_TOLERANCE
+    measures["event_construction_auc"] = event_auc
+    measures["event_construction_band"] = event_band
+    measures["event_features"] = list(event_names)
+    measures["event_counts"] = {
+        "events": int(event_labels.size),
+        "on_fraud_accounts": event_positives,
+    }
 
     file_order = separation(np.concatenate(data.file_index_parts), observed)
     measures["file_order_auc"] = file_order
 
     construction = {}
     token_bands = {}
-    columns = max(len(data.tokens), 1)
+    token_positives: dict[str, int] = {}
+    columns = len(data.tokens)
     family_z = inverse_cdf(1.0 - FAMILY_ALPHA / (2 * columns))
     for column, seen in data.tokens.items():
         values = list(seen)
@@ -372,10 +519,14 @@ def _leakage_checks(
         # tolerance and the 95% sampling band under the null hypothesis of no construction signal.
         token_bands[column] = max(
             SHORTCUT_TOLERANCE,
-            family_z * null_auc_stderr(positives, len(values) - positives),
+            cv_auc_null_band(positives, len(values) - positives, family_z),
         )
+        token_positives[column] = positives
+    # A column with almost no fraud tokens cannot be judged; saying so beats passing vacuously.
+    unjudged = sorted(c for c, n in token_positives.items() if n < MIN_TOKEN_POSITIVES)
     measures["identifier_construction_auc"] = construction
     measures["identifier_construction_band"] = token_bands
+    measures["identifier_unjudged_columns"] = unjudged
     measures["identifier_token_counts"] = {
         column: {"values": len(seen), "fraud_values": sum(seen.values())}
         for column, seen in data.tokens.items()
@@ -396,12 +547,22 @@ def _leakage_checks(
         ),
         CheckResult(
             "shortcut detector",
-            abs(detector - 0.5) <= SHORTCUT_TOLERANCE,
+            abs(detector - 0.5) <= shortcut_band,
             True,
-            f"AUC {detector:.3f} on {matrix.shape[0]} rows",
-            f"within 0.5 +/- {SHORTCUT_TOLERANCE} (owner direction)",
-            "depth-3 tree, 5-fold CV grouped by account, features: "
+            f"AUC {detector:.3f} (band +/-{shortcut_band:.3f}) on {matrix.shape[0]} rows",
+            "within its null band around 0.5 (owner direction)",
+            f"depth-3 tree, 5-fold CV grouped by account, {len(data.shortcut.names)} features: "
             + ", ".join(data.shortcut.names),
+        ),
+        CheckResult(
+            "event construction",
+            abs(event_auc - 0.5) <= event_band,
+            True,
+            f"AUC {event_auc:.3f} (band +/-{event_band:.3f}) on {event_labels.size} events, "
+            f"{event_positives} on fraud accounts",
+            "an account event's construction does not reveal a victim's account (D-08)",
+            "sub-second part, day of month and type of each SIM swap or device change; how soon a "
+            "transaction follows is the scenario's own signal and is deliberately not judged",
         ),
         CheckResult(
             "file order",
@@ -413,14 +574,18 @@ def _leakage_checks(
         ),
         CheckResult(
             "identifier construction",
-            all(abs(construction[k] - 0.5) <= token_bands[k] for k in construction),
+            all(abs(construction[k] - 0.5) <= token_bands[k] for k in construction)
+            and not (full and unjudged),
             True,
             ", ".join(
                 f"{k} {v:.3f} (band +/-{token_bands[k]:.3f})" for k, v in construction.items()
-            ),
+            )
+            + (f"; too few fraud tokens to judge: {', '.join(unjudged)}" if unjudged else ""),
             "token characters do not identify fraud tokens, within the null band",
-            "depth-3 tree, 5-fold CV over distinct token values; band is max(0.03, z SE) with z "
-            f"for a family-wise {FAMILY_ALPHA:.0%} level over {columns} columns",
+            f"depth-3 tree, 5-fold CV over every character of {columns} token columns; band is "
+            f"max({SHORTCUT_TOLERANCE}, z x {CV_TREE_NULL_INFLATION} SE) with z for a family-wise "
+            f"{FAMILY_ALPHA:.0%} level over those columns. A release run must be able to judge "
+            f"every column ({MIN_TOKEN_POSITIVES}+ fraud tokens)",
         ),
         CheckResult(
             "trivial rule baseline",
@@ -460,10 +625,19 @@ def _label_and_format_checks(
         ),
         CheckResult(
             "novel sub-variant placement",
-            not before and (bool(data.novel_timestamps) or not full),
+            not before,
             True,
             f"{len(data.novel_timestamps)} rows, {len(before)} before the test start",
-            "only in the temporal hold-out test period, and present (D-08)",
+            "never outside the temporal hold-out test period (D-08)",
+        ),
+        CheckResult(
+            "novel sub-variant present",
+            bool(data.novel_timestamps),
+            full,
+            f"{len(data.novel_timestamps)} rows",
+            "at least one novel sub-variant row in a release run (D-08)",
+            "a development run can be too small to contain one; the placement rule above is "
+            "always a gate, presence only at release size",
         ),
         CheckResult(
             "identifier uniqueness",
@@ -577,7 +751,7 @@ def _distribution_checks(
         CheckResult(
             "fraud scenarios",
             len(data.fraud_types) == 8,
-            True,
+            full,
             f"{len(data.fraud_types)} types",
             "8 distinct scenario types (ML-DATA-04)",
             json.dumps(data.fraud_types, sort_keys=True),
@@ -614,6 +788,21 @@ def _distribution_checks(
     ]
 
 
+def parameter_digest(parameters: ParameterSet) -> str:
+    """SHA-256 of every parameter value, so a report states which parameters produced it.
+
+    The committed report described a superseded parameter set for two commits, and its own footer
+    said no parameter was sourced while twelve were (M2 principal review, MAJOR 4.1). A digest makes
+    that drift a test failure rather than something a reader has to notice.
+    """
+    payload = json.dumps(
+        {p.key: p.value for p in sorted(parameters, key=lambda x: x.key)},
+        sort_keys=True,
+        default=str,
+    )
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
 def run_checks(
     root: Path, config: SimulationConfig, full: bool
 ) -> tuple[list[CheckResult], dict[str, Any]]:
@@ -621,13 +810,14 @@ def run_checks(
     data = Dataset(root, config)
     measures: dict[str, Any] = {}
     results = (
-        _leakage_checks(data, config, measures)
+        _leakage_checks(data, config, full, measures)
         + _label_and_format_checks(data, config, full, measures)
         + _distribution_checks(data, root, config, full, measures)
     )
     # Measured, not assumed: the checks read the dataset month by month and keep per-row arrays
     # plus a sample of the features, so their cost is reported next to the generator's.
     measures["checks_peak_rss_bytes"] = peak_rss_bytes()
+    measures["parameter_values_sha256"] = parameter_digest(config.parameters)
     return results, measures
 
 

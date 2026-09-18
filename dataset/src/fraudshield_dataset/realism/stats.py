@@ -13,6 +13,9 @@ import numpy as np
 from numpy.typing import NDArray
 
 DETECTOR_DEPTH = 3
+MIN_LEAF_FLOOR = 5
+MIN_LEAF_CAP = 50
+LEAF_FRACTION = 20
 Floats = NDArray[np.float64]
 Bools = NDArray[np.bool_]
 
@@ -49,6 +52,19 @@ def wilson_interval(successes: int, total: int, z: float = 1.96) -> tuple[float,
     centre = (rate + z**2 / (2 * total)) / denominator
     spread = z * math.sqrt(rate * (1.0 - rate) / total + z**2 / (4 * total**2)) / denominator
     return (max(0.0, centre - spread), min(1.0, centre + spread))
+
+
+# A cross-validated tree's AUC is noisier under the null than a single fixed score vector: its
+# out-of-fold scores take few distinct values, and fitting noise and the overlap between training
+# folds add variance. Measured at 0.96-0.98 of the analytic SD for a single feature but 1.17-1.26 of
+# it for the depth-3 cross-validated tree (M2 principal review, MAJOR 1.3), so bands for the tree
+# are widened by this factor. `test_stats.py` re-measures it and fails if it is not conservative.
+CV_TREE_NULL_INFLATION = 1.3
+
+
+def cv_auc_null_band(positives: int, negatives: int, z: float) -> float:
+    """Half-width of a null band for a cross-validated tree AUC at ``z`` standard errors."""
+    return z * CV_TREE_NULL_INFLATION * null_auc_stderr(positives, negatives)
 
 
 def null_auc_stderr(positives: int, negatives: int) -> float:
@@ -155,6 +171,17 @@ def _gini(positive_weight: float, total_weight: float) -> float:
     return 2.0 * p * (1.0 - p)
 
 
+def min_leaf_for(rows: int) -> int:
+    """Smallest leaf the detector may create, given how much it has to train on.
+
+    A fixed floor of 50 rows cannot split a sample of a hundred at all, so a detector run over a
+    few hundred account events scored exactly 0.5 whatever was planted in them: it was blind rather
+    than reassuring (M2 principal review). The floor now shrinks with the sample and is capped at
+    the original value, so large runs behave as before.
+    """
+    return max(MIN_LEAF_FLOOR, min(MIN_LEAF_CAP, rows // LEAF_FRACTION))
+
+
 def cross_validated_auc(
     features: Floats,
     labels: Bools,
@@ -182,6 +209,7 @@ def cross_validated_auc(
     scores = []
     for fold in range(folds):
         train, test = assignment != fold, assignment == fold
-        tree = ShallowTree(max_depth=DETECTOR_DEPTH).fit(features[train], labels[train])
+        tree = ShallowTree(max_depth=DETECTOR_DEPTH, min_leaf=min_leaf_for(int(train.sum())))
+        tree.fit(features[train], labels[train])
         scores.append(auc(tree.predict(features[test]), labels[test]))
     return float(np.mean(scores))

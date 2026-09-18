@@ -7,7 +7,13 @@ from typing import Any
 
 from fraudshield_dataset.generator.config import CHANNELS, SimulationConfig
 from fraudshield_dataset.params import Provenance
-from fraudshield_dataset.realism.checks import SINGLE_FEATURE_AUC_LIMIT, CheckResult
+from fraudshield_dataset.realism.checks import (
+    FAMILY_ALPHA,
+    SHORTCUT_TOLERANCE,
+    SINGLE_FEATURE_AUC_LIMIT,
+    CheckResult,
+)
+from fraudshield_dataset.realism.stats import CV_TREE_NULL_INFLATION
 
 
 def _time(micros: int | None) -> str:
@@ -50,6 +56,7 @@ def render(
         f"| Mode | {_MODE[full]} |",
         f"| Generator peak RSS | {measures['peak_rss_bytes'] / 2**20:.0f} MiB (limit 2048 MiB) |",
         f"| Checks peak RSS | {measures['checks_peak_rss_bytes'] / 2**20:.0f} MiB |",
+        f"| Parameter values SHA-256 | `{measures['parameter_values_sha256']}` |",
         f"| Chunk size (shards per batch) | {measures['chunk_size']} |",
         "| Machine | "
         + ", ".join(f"{k} {v}" for k, v in sorted(measures["machine"].items()))
@@ -150,12 +157,24 @@ def render(
         "",
         "## Shortcut and identifier checks",
         "",
-        "- Shortcut detector (depth-3 tree, 5-fold CV grouped by account, on "
+        f"- Shortcut detector (depth-3 tree, 5-fold CV grouped by account, on "
+        f"{len(measures['shortcut_features'])} non-behavioural columns): AUC "
+        f"{measures['shortcut_detector_auc']:.3f}, band +/-"
+        f"{measures['shortcut_detector_band']:.3f}. Columns: "
         + ", ".join(measures["shortcut_features"])
-        + f"): AUC {measures['shortcut_detector_auc']:.3f}.",
+        + ".",
+        f"- Account event construction ({', '.join(measures['event_features']) or 'no events'}): "
+        f"AUC {measures['event_construction_auc']:.3f}, band +/-"
+        f"{measures['event_construction_band']:.3f}, over "
+        f"{measures['event_counts']['events']:,} events of which "
+        f"{measures['event_counts']['on_fraud_accounts']:,} sit on an account that carries fraud. "
+        "How soon a transaction follows an event, and which kind of event it is, are the "
+        "scenario's own signals and are not judged.",
         f"- File (month) order alone: AUC {measures['file_order_auc']:.3f}.",
-        "- Identifier construction over distinct tokens (band is the wider of 0.03 and the 95%"
-        " sampling band under the null, 1.96 SE): "
+        f"- Identifier construction over every character of the distinct tokens. Each band is the "
+        f"wider of {SHORTCUT_TOLERANCE} and this statistic's own null band: a family-wise "
+        f"{FAMILY_ALPHA:.0%} level over the columns tested, times {CV_TREE_NULL_INFLATION} for the "
+        f"extra spread a cross-validated tree has over a single feature. "
         + ", ".join(
             f"{k} {v:.3f} (+/-{measures['identifier_construction_band'][k]:.3f}, "
             f"{measures['identifier_token_counts'][k]['fraud_values']:,} of "
