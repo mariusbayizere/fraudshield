@@ -80,23 +80,24 @@ parameters:
     unit: calendar months (1-12) in which school-fee payments raise volume
     provenance: SOURCED
     citation: >-
-      School calendar 2024-2025 as published by Nu Vision Academy (nga.ac.rw), which implements the national
-      calendar set by Rwanda's Ministry of Education: term 1 in early September, term 2 beginning 6-10
-      January, term 3 beginning 22-25 April.
+      "SCHOOL CALENDAR 2024-2025", published by Nu Vision Academy, Rwanda (nga.ac.rw), week-by-week
+      table: week 2 of term 1 is 2-6 September 2024, "Term 2 begins" in the week of 6-10 January 2025,
+      and "Term 3 begins" in the week of 22-25 April 2025.
       https://www.nga.ac.rw/storage/nArw8l4yXLQqkb3qi5aHo39WSkW9SH-metaU0NIT09MIENBTEVOREFSLnBkZg==-.pdf
     accessed: 2026-09-18
     rationale: >-
-      Read from a school's own copy of the calendar rather than from the ministry's publication, which could
-      not be retrieved; the three term starts it shows are what this parameter needs. The previous value put
-      the third term in May, one month late. Fees are assumed to be paid in the month a term starts, which
-      the calendar does not state.
+      This is one school's calendar, not the Ministry of Education's publication, which could not be
+      retrieved; the three term-start months it shows are what this parameter needs, and nothing here
+      claims the document is the national calendar itself. The previous value put the third term in
+      May, one month late. That fees are paid in the month a term starts is an assumption the
+      document does not address.
   school_fee_volume_boost:
     value: 1.3
     unit: relative monthly transaction volume multiplier in school-fee months
     provenance: ASSUMED
     rationale: Modelling choice for the school-fee seasonal peak.
   cross_border_share:
-    value: 0.005
+    value: 0.0046
     unit: fraction of person-to-person and bank transfers sent to another country
     provenance: SOURCED
     citation: >-
@@ -106,11 +107,13 @@ parameters:
       https://www.bot.go.tz/Publications/Regular/Annual%20Report/sw/2025032515311662.pdf
     accessed: 2026-09-18
     rationale: >-
-      Rounded from 0.46% to 0.5%. The previous value of 3% was six times too high: cross-border transfers are
+      The previous value of 3% was six times too high: cross-border transfers are
       a small share of transfers even in a market with large diaspora flows, because most cross-border value
       moves through banks in few, large transactions (Table G1: 310,622 outbound bank transfers carrying
       TZS 116,105 billion, against TZS 340 billion over mobile money). The generator applies this share to
-      person-to-person and bank transfers alike, which the source does not separate.
+      person-to-person and bank transfers alike, which the source does not separate. The figure is
+      Tanzanian, used as a proxy: no Rwandan count of cross-border transfers by transaction was
+      found, and the dataset's country mix is Rwanda-weighted.
   remittance_corridors:
     value: {RW: [UG, KE, CD], KE: [UG, TZ], TZ: [KE, UG], UG: [KE, RW], CD: [RW, UG]}
     unit: destination countries for cross-border transfers, by sender country

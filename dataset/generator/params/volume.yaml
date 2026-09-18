@@ -17,18 +17,21 @@ parameters:
     provenance: ASSUMED
     rationale: Calendar anchor for weekdays, month ends and school-fee terms; any recent 24-month window serves, and the data is synthetic.
   monthly_growth_rate:
-    value: 0.0201
+    value: 0.0199
     unit: month-on-month growth in transaction volume
     provenance: SOURCED
     citation: >-
-      Bank of Tanzania, Payment Systems Annual Report for 2024 (2025), Annex H, Table H1 "Mobile Payments",
-      page 47: mobile money transaction volume grew 27% in 2024 (6,414 million from 5,061.20 million), which
-      is 2.01% per month compounded.
+      Bank of Tanzania, Payment Systems Annual Report for 2024 (2025), Annex H, Table H1 "Mobile
+      Payments", page 47: mobile money transaction volume of 6,414 million in 2024 against 5,061.20
+      million in 2023, a rise of 26.73%, which is 1.99% per month compounded.
       https://www.bot.go.tz/Publications/Regular/Annual%20Report/sw/2025032515311662.pdf
     accessed: 2026-09-18
     rationale: >-
-      Growth is applied as a smooth monthly ramp rather than the uneven year-on-year path the reports show
-      (Tanzania recorded 41% in 2023 and 27% in 2024; Rwanda's active subscriber count grew only 1.8% in the
-      year to June 2025 while its transaction volume grew much faster, NBR Annual Report 2024-2025, page 86).
-      The dataset's total row count is calibrated to ML-DATA-01, so this rate sets the shape of the ramp
-      rather than the size of the dataset.
+      Computed from the two volumes in the table rather than from the report's rounded 27% headline,
+      which would give 2.01% (the earlier value, corrected in the M2 principal review). The figure is
+      Tanzanian: Rwanda publishes no comparable volume series, and its active subscriber count grew
+      only 1.8% in the year to June 2025 while its transaction volume grew far faster (NBR Annual
+      Report 2024-2025, page 86), so this rate is a proxy for the region's growth rather than a
+      measurement of Rwanda's. Growth is applied as a smooth monthly ramp, and the dataset's total
+      row count is calibrated to ML-DATA-01, so the rate sets the shape of the ramp and not the size
+      of the dataset.

@@ -12,8 +12,12 @@ Every number the generator uses lives in ``dataset/generator/params/<category>.y
 
 Provenance is one of:
 
-- ``SOURCED``: taken from a document the author actually read. Needs ``citation`` (document,
-  table or page, year, URL) and ``accessed`` (ISO date).
+- ``SOURCED``: taken from a document the author actually read. Needs ``citation`` naming the
+  document, its publisher, the year, a URL and *where in it* the figure is (a table, page, figure,
+  annex, section, indicator or version); ``accessed`` (an ISO date, not in the future); and a
+  ``rationale`` saying how the value follows from those figures and what the source does not
+  establish. The loader cannot tell whether a document was read, but it can refuse a citation too
+  vague to check (M2 principal review, MAJOR 3.3).
 - ``ASSUMED``: a modelling choice without a source. Needs ``rationale``; must never be presented
   as sourced.
 - ``CALIBRATED_TO_SRS_TARGET``: set to meet an SRS 7.1 target. Needs ``citation`` naming the SRS
@@ -40,6 +44,13 @@ from fraudshield_dataset.paths import PARAMS_DIR
 Value = bool | int | float | str | list[Any] | dict[str, Any]
 
 _NAME = re.compile(r"^[a-z][a-z0-9_]*(\.[A-Za-z0-9_]+)*$")
+# A citation has to say *where* in the document the figure is, not merely that a document exists.
+_LOCATOR = re.compile(
+    r"\b(table|page|pages|figure|annex|annexure|appendix|section|chapter|indicator|list|column|"
+    r"row|version|paragraph|clause)\b",
+    re.IGNORECASE,
+)
+MIN_CITATION_CHARACTERS = 80
 _URL = re.compile(r"https?://\S+")
 _YEAR = re.compile(r"\b(19|20)\d{2}\b")
 _SRS_ROW = re.compile(r"\b(ML-DATA-\d{2}|RES-\d{2}|D-\d{2})\b|section 7\.1")
@@ -130,6 +141,36 @@ class ParameterSet:
         return sorted(self.descriptions)
 
 
+def _sourced_problems(where: str, raw: dict[str, Any]) -> list[str]:
+    """What a SOURCED parameter must carry beyond a value (M2 principal review, MAJOR 3.3)."""
+    citation = raw.get("citation")
+    rationale = raw.get("rationale")
+    accessed = raw.get("accessed")
+    problems: list[str] = []
+    if not (isinstance(citation, str) and _URL.search(citation) and _YEAR.search(citation)):
+        problems.append(f"{where}: SOURCED needs a citation with the year and a URL")
+    elif len(citation.strip()) < MIN_CITATION_CHARACTERS:
+        problems.append(
+            f"{where}: SOURCED citation is {len(citation.strip())} characters; name the document, "
+            f"its publisher and where in it the figure is ({MIN_CITATION_CHARACTERS}+ characters)"
+        )
+    elif not _LOCATOR.search(citation):
+        problems.append(
+            f"{where}: SOURCED citation must say where in the document the figure is "
+            "(table, page, figure, annex, section, indicator or version)"
+        )
+    if not (isinstance(rationale, str) and len(rationale.strip()) >= 20):
+        problems.append(
+            f"{where}: SOURCED needs a rationale too, saying how the value follows from the "
+            "figures and what the source does not establish"
+        )
+    if not isinstance(accessed, dt.date):
+        problems.append(f"{where}: SOURCED needs accessed: YYYY-MM-DD")
+    elif accessed > dt.datetime.now(tz=dt.UTC).date():
+        problems.append(f"{where}: accessed {accessed} is in the future")
+    return problems
+
+
 def _provenance_problems(where: str, raw: dict[str, Any]) -> list[str]:
     problems: list[str] = []
     provenance = raw.get("provenance")
@@ -138,10 +179,7 @@ def _provenance_problems(where: str, raw: dict[str, Any]) -> list[str]:
     if provenance is not None and provenance not in {p.value for p in Provenance}:
         problems.append(f"{where}: provenance must be one of {[p.value for p in Provenance]}")
     if provenance == Provenance.SOURCED:
-        if not (isinstance(citation, str) and _URL.search(citation) and _YEAR.search(citation)):
-            problems.append(f"{where}: SOURCED needs a citation with the year and a URL")
-        if not isinstance(raw.get("accessed"), dt.date):
-            problems.append(f"{where}: SOURCED needs accessed: YYYY-MM-DD")
+        problems.extend(_sourced_problems(where, raw))
     elif provenance == Provenance.ASSUMED:
         if not (isinstance(rationale, str) and len(rationale.strip()) >= 20):
             problems.append(f"{where}: ASSUMED needs a rationale (at least 20 characters)")

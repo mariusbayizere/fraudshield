@@ -10,7 +10,13 @@ parameters:
       transactions per active user per month.
       https://www.bot.go.tz/Publications/Regular/Annual%20Report/sw/2025032515311662.pdf
     accessed: 2026-09-18
-    rationale: The report gives yearly volume and active users, so the monthly figure is their ratio divided by twelve. It covers mobile money, the dominant channel; the dataset also carries card, bank and agent-banking rows, which are a small part of the mix (ML-DATA-03).
+    rationale: >-
+      The report gives yearly volume and active users, so the monthly figure is their ratio divided
+      by twelve. The figure is Tanzanian, used as a proxy: Rwanda publishes subscriber and access
+      point counts but no comparable transaction volume series, and the dataset's country mix is
+      Rwanda-weighted. It also covers mobile money alone, while the SRS channel mix puts 32% of rows
+      on card, bank transfer and agent banking and 9% more online (ML-DATA-03), so it anchors the
+      order of magnitude rather than measuring this dataset's own mix.
   activity_log_sigma:
     value: 0.8
     unit: standard deviation of the log of each customer's activity multiplier (mean-one log-normal)
@@ -25,7 +31,11 @@ parameters:
       Report (2023), Table 2 "Resident population by residence, Province, and District", page 30: 27.9% urban and
       72.1% rural; and FinScope Rwanda 2024 (NISR, 2024), Figure 26 "Mobile money uptake/use by demographics",
       page 40: 87% of urban and 72% of rural adults use mobile money.
+      Census:
       https://statistics.gov.rw/sites/default/files/documents/2025-02/RPHC5_MainIndicatorsReport_Final.pdf
+      FinScope:
+      https://statistics.gov.rw/sites/default/files/documents/2024-09/Rwanda-Finscope-2024-Report_compressed.pdf
+      Both documents were read on 2026-09-18.
     accessed: 2026-09-18
     rationale: >-
       Payment customers are not the general population, so the census split is weighted by usage: 0.279 x 0.87
