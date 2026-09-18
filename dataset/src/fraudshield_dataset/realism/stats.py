@@ -56,10 +56,19 @@ def wilson_interval(successes: int, total: int, z: float = 1.96) -> tuple[float,
 
 # A cross-validated tree's AUC is noisier under the null than a single fixed score vector: its
 # out-of-fold scores take few distinct values, and fitting noise and the overlap between training
-# folds add variance. Measured at 0.96-0.98 of the analytic SD for a single feature but 1.17-1.26 of
-# it for the depth-3 cross-validated tree (M2 principal review, MAJOR 1.3), so bands for the tree
-# are widened by this factor. `test_stats.py` re-measures it and fails if it is not conservative.
-CV_TREE_NULL_INFLATION = 1.3
+# folds add variance, so bands for the tree are widened by this factor.
+#
+# It was 1.3, from a Monte Carlo that measured 1.17-1.26 under the exact null (M2 principal review,
+# MAJOR 1.3). Measured against 45 clean generated datasets at 10,000 / 30,000 / 60,000 rows -- the
+# operational question, "will a clean release fail its own gate", rather than the analytic null --
+# the spread is 1.62 (bootstrap 95% CI [1.32, 1.85]), and 1.3 delivered 89% coverage where 95% was
+# claimed. Per-scale estimates are 1.57 / 1.73 / 1.63 with overlapping intervals, so a constant is
+# the right form over that range. Leave-one-scale-out coverage at the fitted value: 100/93/100%.
+# The two numbers do not contradict each other: a Monte Carlo over one fixed dataset cannot see the
+# variation between datasets, and a release is a new dataset every time.
+# Not measured above 60,000 rows, because the band was floored there until the floor was removed
+# (M2 milestone review); the follow-up sweep tests whether 1.62 still holds at release scale.
+CV_TREE_NULL_INFLATION = 1.62
 
 
 def cv_auc_null_band(positives: int, negatives: int, z: float) -> float:

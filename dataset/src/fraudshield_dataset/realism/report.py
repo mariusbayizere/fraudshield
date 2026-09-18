@@ -9,7 +9,6 @@ from fraudshield_dataset.generator.config import CHANNELS, SimulationConfig
 from fraudshield_dataset.params import Provenance
 from fraudshield_dataset.realism.checks import (
     FAMILY_ALPHA,
-    SHORTCUT_TOLERANCE,
     SINGLE_FEATURE_AUC_LIMIT,
     CheckResult,
 )
@@ -181,8 +180,8 @@ def render(
         + ". The delay reflects fraud.takeover_lead_minutes = [5, 60], which is ASSUMED, so part "
         "of that separation is the assumed schedule rather than the scenario itself.",
         f"- File (month) order alone: AUC {measures['file_order_auc']:.3f}.",
-        f"- Identifier construction over every character of the distinct tokens. Each band is the "
-        f"wider of {SHORTCUT_TOLERANCE} and this statistic's own null band: a family-wise "
+        f"- Identifier construction over every character of the distinct tokens. Each band is "
+        f"this statistic's own null band: a family-wise "
         f"{FAMILY_ALPHA:.0%} level over the columns tested, times {CV_TREE_NULL_INFLATION} for the "
         f"extra spread a cross-validated tree has over a single feature. "
         + ", ".join(

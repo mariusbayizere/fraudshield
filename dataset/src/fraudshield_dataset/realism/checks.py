@@ -8,9 +8,9 @@ Leakage is assessed against the observed label (the one a model would train on):
 - single-feature AUC (``max(AUC, 1 - AUC)``) at most 0.80 for every raw and cheap per-row feature;
 - a shortcut detector: a depth-3 tree on non-behavioural per-row columns only (identifier bytes,
   sub-second timestamp parts, row position within its file) must have a cross-validated AUC
-  within 0.5 +/- 0.03. Folds are grouped by account, so the rows of one incident, which share a
-  time, cannot sit on both sides of a split. File (month) order is judged alone, because months
-  are calendar time and fraud prevalence drifts over time by design;
+  inside a band sized to that statistic's own null. Folds are grouped by account, so the rows of
+  one incident, which share a time, cannot sit on both sides of a split. File (month) order is
+  judged alone, because months are calendar time and fraud prevalence drifts by design;
 - identifier construction: the same tree over every character of the distinct token values
   (account, counterparty, device), labelled by whether a fraud row uses them, must stay inside a
   band sized to its own null. Tokens are judged per distinct value because victims and mule
@@ -26,7 +26,10 @@ Leakage is assessed against the observed label (the one a model would train on):
 
 Every band that judges a cross-validated tree is sized to that statistic's null rather than fixed,
 because a fixed tolerance is several standard errors at release size and a fraction of one at
-development size.
+development size. That held only above a 0.03 floor until the M2 milestone review: the floor was
+inert at small samples, where the analytic term is larger anyway, and bound only at large ones,
+where it made the gate 3.4x more permissive than the null implies -- reinstating, at release scale,
+the defect the null-sized band replaced.
 """
 
 from __future__ import annotations
@@ -528,6 +531,61 @@ def _reported_event_auc(
     return measured
 
 
+def _reported_event_results(measured: dict[str, float]) -> list[CheckResult]:
+    """The two excluded event channels, reported and never gated.
+
+    See :func:`_reported_event_auc` for why they are measured at all.
+    """
+
+    def value(name: str) -> str:
+        return f"AUC {measured[name]:.3f}" if name in measured else "not measurable at this size"
+
+    return [
+        CheckResult(
+            "event delay (reported)",
+            True,
+            False,
+            value("event_delay_seconds"),
+            "reported, not gated: seconds from an event to that account's next transaction",
+            "excluded from the event gate as the scenario's own signal, so it is tracked here "
+            "instead. The lead is drawn from fraud.takeover_lead_minutes = [5, 60], which is "
+            "ASSUMED, so part of this separation is the assumed schedule rather than the scenario",
+        ),
+        CheckResult(
+            "event type (reported)",
+            True,
+            False,
+            value("event_type_code"),
+            "reported, not gated: SIM swap versus device change",
+            "a SIM swap before a takeover is how that fraud works and a model is meant to learn "
+            "it; measured so the claim is a number rather than an assertion",
+        ),
+    ]
+
+
+def _shortcut_detector(
+    data: Dataset, matrix: NDArray[np.float64], config: SimulationConfig, measures: dict[str, Any]
+) -> tuple[float, float]:
+    """The depth-3 tree over non-behavioural columns, and the band its own null implies.
+
+    The band was ``max(0.03, ...)`` until the M2 milestone review. The floor never bound where it
+    was meant to -- the analytic term grows as positives shrink -- and bound only at large samples,
+    making the gate 3.4x more permissive than the null implies at release scale.
+    """
+    labels = np.concatenate(data.shortcut_labels)
+    groups = np.concatenate(data.shortcut_groups)
+    detector = cross_validated_auc(matrix, labels, folds=FOLDS, seed=config.seed, groups=groups)
+    positives = int(labels.sum())
+    band = cv_auc_null_band(positives, labels.size - positives, inverse_cdf(1.0 - FAMILY_ALPHA / 2))
+    # Recorded so a band can be recomputed for any inflation factor without regenerating.
+    measures["shortcut_positives"] = positives
+    measures["shortcut_negatives"] = int(labels.size - positives)
+    measures["shortcut_detector_auc"] = detector
+    measures["shortcut_detector_band"] = band
+    measures["shortcut_features"] = data.shortcut.names
+    return detector, band
+
+
 def _leakage_checks(
     data: Dataset, config: SimulationConfig, full: bool, measures: dict[str, Any]
 ) -> list[CheckResult]:
@@ -540,26 +598,7 @@ def _leakage_checks(
     measures["single_feature_auc"] = single
 
     matrix = np.column_stack([data.shortcut.get(n) for n in data.shortcut.names])
-    shortcut_labels = np.concatenate(data.shortcut_labels)
-    groups = np.concatenate(data.shortcut_groups)
-    detector = cross_validated_auc(
-        matrix, shortcut_labels, folds=FOLDS, seed=config.seed, groups=groups
-    )
-    # Sized to this detector's own null, like the identifier bands: a fixed 0.03 was 1.5 standard
-    # errors at development scale, so a clean dataset failed the gate about one run in seven
-    # (M2 principal review, MAJOR 1.4).
-    shortcut_positives = int(shortcut_labels.sum())
-    shortcut_band = max(
-        SHORTCUT_TOLERANCE,
-        cv_auc_null_band(
-            shortcut_positives,
-            shortcut_labels.size - shortcut_positives,
-            inverse_cdf(1.0 - FAMILY_ALPHA / 2),
-        ),
-    )
-    measures["shortcut_detector_auc"] = detector
-    measures["shortcut_detector_band"] = shortcut_band
-    measures["shortcut_features"] = data.shortcut.names
+    detector, shortcut_band = _shortcut_detector(data, matrix, config, measures)
 
     event_labels = data.event_labels
     event_names = data.event_features.names
@@ -567,13 +606,10 @@ def _leakage_checks(
     if event_names and 0 < event_positives < event_labels.size:
         event_matrix = np.column_stack([data.event_features.get(n) for n in event_names])
         event_auc = cross_validated_auc(event_matrix, event_labels, folds=FOLDS, seed=config.seed)
-        event_band = max(
-            SHORTCUT_TOLERANCE,
-            cv_auc_null_band(
-                event_positives,
-                event_labels.size - event_positives,
-                inverse_cdf(1.0 - FAMILY_ALPHA / 2),
-            ),
+        event_band = cv_auc_null_band(
+            event_positives,
+            event_labels.size - event_positives,
+            inverse_cdf(1.0 - FAMILY_ALPHA / 2),
         )
     else:
         event_auc, event_band = 0.5, SHORTCUT_TOLERANCE
@@ -587,6 +623,7 @@ def _leakage_checks(
 
     reported_event_auc = _reported_event_auc(data, event_labels, config)
     measures["event_reported_auc"] = reported_event_auc
+    reported_event_results = _reported_event_results(reported_event_auc)
 
     file_order = separation(np.concatenate(data.file_index_parts), observed)
     measures["file_order_auc"] = file_order
@@ -605,12 +642,12 @@ def _leakage_checks(
             if labels.any() and not labels.all()
             else 0.5
         )
-        # Few fraud tokens make this AUC noisy on its own, so the band is the wider of the fixed
-        # tolerance and the 95% sampling band under the null hypothesis of no construction signal.
-        token_bands[column] = max(
-            SHORTCUT_TOLERANCE,
-            cv_auc_null_band(positives, len(values) - positives, family_z),
-        )
+        # Sized to this statistic's own null. It used to be the wider of that and a fixed 0.03,
+        # which never bound where it was meant to -- the analytic term grows as positives shrink --
+        # and bound only at large samples, where it made the gate 3.4x more permissive than the
+        # null implies (M2 milestone review). Too few fraud tokens is handled by MIN_TOKEN_POSITIVES
+        # reporting the column unjudged, not by widening the band.
+        token_bands[column] = cv_auc_null_band(positives, len(values) - positives, family_z)
         token_positives[column] = positives
     # A column with almost no fraud tokens cannot be judged; saying so beats passing vacuously.
     unjudged = sorted(c for c, n in token_positives.items() if n < MIN_TOKEN_POSITIVES)
@@ -655,33 +692,7 @@ def _leakage_checks(
             "event it is, and how soon a transaction follows, are the scenario's own signals and "
             "are deliberately not gated; both are measured and reported below",
         ),
-        CheckResult(
-            "event delay (reported)",
-            True,
-            False,
-            (
-                f"AUC {reported_event_auc['event_delay_seconds']:.3f}"
-                if "event_delay_seconds" in reported_event_auc
-                else "not measurable at this size"
-            ),
-            "reported, not gated: seconds from an event to that account's next transaction",
-            "excluded from the event gate as the scenario's own signal, so it is tracked here "
-            "instead. The lead is drawn from fraud.takeover_lead_minutes = [5, 60], which is "
-            "ASSUMED, so part of this separation is the assumed schedule rather than the scenario",
-        ),
-        CheckResult(
-            "event type (reported)",
-            True,
-            False,
-            (
-                f"AUC {reported_event_auc['event_type_code']:.3f}"
-                if "event_type_code" in reported_event_auc
-                else "not measurable at this size"
-            ),
-            "reported, not gated: SIM swap versus device change",
-            "a SIM swap before a takeover is how that fraud works and a model is meant to learn "
-            "it; measured so the claim is a number rather than an assertion",
-        ),
+        *reported_event_results,
         CheckResult(
             "file order",
             file_order <= 0.5 + SHORTCUT_TOLERANCE,
@@ -701,7 +712,7 @@ def _leakage_checks(
             + (f"; too few fraud tokens to judge: {', '.join(unjudged)}" if unjudged else ""),
             "token characters do not identify fraud tokens, within the null band",
             f"depth-3 tree, 5-fold CV over every character of {columns} token columns; band is "
-            f"max({SHORTCUT_TOLERANCE}, z x {CV_TREE_NULL_INFLATION} SE) with z for a family-wise "
+            f"z x {CV_TREE_NULL_INFLATION} SE with z for a family-wise "
             f"{FAMILY_ALPHA:.0%} level over those columns. A release run must be able to judge "
             f"every column ({MIN_TOKEN_POSITIVES}+ fraud tokens)",
         ),

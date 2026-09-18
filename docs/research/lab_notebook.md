@@ -242,3 +242,61 @@ lockfile are both recorded, and the failure mode does not announce itself.
 machine, not an idle one. A suite that takes 13 minutes idle took over 33 under a load average of 7,
 and the timeout that killed it produced an exit code indistinguishable at a glance from a real
 failure.
+
+### 2026-09-18 17:5x · PREDICTION, recorded before the above-minimum tiers land
+
+Sweep commit `a761eb3`; at the time of writing the 10,000 / 30,000 / 60,000-row tiers are complete
+(15 seeds each) and 100,000 upward have not run. Recorded now so that it can be checked rather than
+rationalised afterwards.
+
+**Predicted:** power against the 0.6-strength plant will *not* simply carry over from the
+seven-scenario tiers to the eight-scenario ones, and the fire rate at 200,000 rows may sit below the
+15/15 seen at 60,000 despite the larger sample.
+
+**Reasoning:** the plant marks the first identifier byte on *fraud* rows, so the detector's task is
+to find a signal carried by the positive class. Restoring `mule_account` above 170,000 rows changes
+both the size and the makeup of that class — mule incidents are longer and their rows differ in
+channel and counterparty from the scenarios whose shares were inflated to cover the gap. The
+detector's power is therefore a property of the positive class's composition, not of `n` alone.
+
+**How it will be judged:** fire rate on the 0.6 plant at 200,000 / 300,000 / 500,000 / 1,000,000
+rows, against 15/15 at 60,000. Monotone non-decreasing would refute the prediction. A dip at
+200,000 that recovers by 1,000,000 would support it.
+
+**Either outcome is a result.** If power depends on composition, a leakage detector's power figure
+is not transferable between datasets with different scenario mixes, which is worth stating.
+
+### 2026-09-18 · The band stops being sized to its own null exactly where it matters most
+
+Found while verifying the assumption behind the inflation derivation, and larger than the thing it
+was checking. The shortcut band is
+
+    max(SHORTCUT_TOLERANCE, cv_auc_null_band(positives, negatives, z))   # 0.03, z = 1.96
+    cv_auc_null_band = z * CV_TREE_NULL_INFLATION * null_auc_stderr      # 1.3
+
+so the analytic term only sets the band while it exceeds 0.03. Measured bands across the sweep:
+0.088 at 10,000 rows, 0.050 at 30,000, 0.036 at 60,000, **0.030 at 100,000** — the floor.
+
+Above roughly 60,000–100,000 rows the gate is the flat tolerance, not a band sized to the
+statistic's own null. At the 1,006,249-row verification run the detector sees 48,597 rows with about
+8,700 positives, whose analytic band is **0.011** under the corrected inflation; the floor is
+**2.8× wider**. So at release scale the gate tolerated a deviation nearly three times larger than
+the statistic's null spread implies, and was blind to any construction leak landing between roughly
+0.509 and 0.530.
+
+(An earlier draft of this entry said 3.4×. That was computed with the superseded inflation of 1.3,
+which the same investigation replaced with 1.62; against the corrected value the factor is 2.8×.
+The argument and its direction are unchanged.)
+
+This inverts the problem at the two ends. Below 60,000 rows the band is too *narrow* relative to the
+observed spread (`band ÷ sd` ≈ 1.5 where 1.96 is needed), so clean datasets fail about one run in
+nine. Above 100,000 it is too *wide*, so real leaks can pass. MAJOR 1.3/1.4 replaced a fixed 0.03
+with a null-sized band precisely to stop a fixed number being wrong at every scale — and kept the
+fixed number as a floor, which reintroduces the defect at the scales that ship.
+
+*Consequence for the inflation derivation:* only runs whose band exceeds the floor carry information
+about the inflation factor, so the fit uses the three dense tiers (45 clean runs) and cannot use the
+larger scales at all. That is a limitation of the data, not a choice.
+
+*Why it belongs in the paper:* a tolerance that is the maximum of a principled quantity and a
+convenient constant is two different tests at two different scales, and the switch-over is silent.
