@@ -1,13 +1,45 @@
 # M2 gate evidence
 
-Collected at branch head `f0da249` on `m2/generator`. Job-level results, not run conclusions
-(GOV-10): a path-filtered workflow concludes "success" while the job the gate is about is skipped, so
-a run conclusion is not evidence.
+Job-level results, not run conclusions (GOV-10): a path-filtered workflow concludes "success" while
+the job the gate is about is skipped, so a run conclusion is not evidence.
 
-## CI
+## The two citations are pinned to different commits, deliberately
 
-`ci` run [35310160693](https://github.com/mariusbayizere/fraudshield/actions/runs/35310160693) at
-`f0da249`, every job executed and succeeded:
+`ci` is cited at the branch head; `stack` is cited two commits earlier. That is not an oversight, and
+the reason is the same trap GOV-10 exists for:
+
+- **`ci` is not path-filtered**, so every job runs on every commit. Its citation therefore tracks the
+  head and should be moved forward whenever the head moves — otherwise the tag rests on a commit that
+  is not the one being tagged.
+- **`stack` is path-filtered** (ADR 0010). M2 changed no compose, Dockerfile, infrastructure or
+  lockfile path, so on any commit that touches none of them the run concludes "success" with
+  `core compose stack healthy + smoke test` **skipped**. The head `817db76` is exactly such a commit:
+  run [35323956739](https://github.com/mariusbayizere/fraudshield/actions/runs/35323956739) concluded
+  success with the gate job **skipped**. Citing it would claim the stack was verified when it never
+  ran. So the `stack` citation stays pinned at `f0da249`, the most recent commit where that job
+  actually executed.
+
+Moving a `stack` citation forward to a greener-looking run is precisely the mistake this file exists
+to prevent.
+
+## CI — at the branch head `817db76`
+
+`ci` run [35323956798](https://github.com/mariusbayizere/fraudshield/actions/runs/35323956798) at
+`817db76`, the current branch head, every job executed and succeeded:
+
+| Job | Result |
+|---|---|
+| python (ruff, mypy --strict, pytest) | success |
+| java (checkstyle, junit, spotbugs, jacoco) | success |
+| frontend (tsc, eslint, prettier, vitest) | success |
+| traceability-check, defect register, scope guard, commit messages | success |
+| dependency licence inventory (ADR 0009) | success |
+| pre-commit hooks on all files (G.5 guards) | success |
+| gitleaks | success |
+
+The previous citation, superseded by the one above, was `ci` run
+[35310160693](https://github.com/mariusbayizere/fraudshield/actions/runs/35310160693) at
+`f0da249`, also with every job executed and succeeded:
 
 | Job | Result |
 |---|---|
@@ -27,11 +59,15 @@ most recent run on this branch whose main job actually executed; later pushes to
 outside `DEVCONTAINER_INPUTS`, so their runs concluded success with the job skipped and are not cited
 here.
 
-## Stack — executed on the branch head
+## Stack — pinned at `f0da249`, the last commit where the job executed
 
 `stack` run [35310160631](https://github.com/mariusbayizere/fraudshield/actions/runs/35310160631) at
 `f0da249`: **`core compose stack healthy + smoke test (M0 gate)` = success**, the job executed rather
 than skipped.
+
+This citation is deliberately **not** moved to the head. See the pinning note above: at `817db76` the
+stack run concluded success with the gate job skipped behind the path filter, and quoting that would
+assert something no job verified.
 
 Getting that run took two attempts and both failure modes are now documented in `stack.yml`, beside
 the settings that cause them:
