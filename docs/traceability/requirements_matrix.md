@@ -158,7 +158,7 @@ Rows: 258. Status counts: DONE 5, DONE_WITH_DEVIATION 1, IN_PROGRESS 9, NOT_STAR
 | MOB-DEV-05 | M | M10 | NOT_STARTED | HP Pavilion / 13-inch laptop (1280px, Chrome) | — | — | — | D-40 |
 | MOB-DEV-06 | M | M10 | NOT_STARTED | Desktop 1440px (Firefox) | — | — | — | — |
 | MOB-DEV-07 | M | M10 | NOT_STARTED | Opera Mini / KaiOS (feature phone) | — | — | — | D-42 |
-| ML-DATA-01 | M | M2 | NOT_STARTED | Total size | — | dataset/tests/test_generator.py:106<br>dataset/tests/test_generator.py:49 | — | D-07 |
+| ML-DATA-01 | M | M2 | NOT_STARTED | Total size | — | dataset/tests/test_generator.py:106<br>dataset/tests/test_generator.py:49<br>dataset/tests/test_sensitivity.py:67 | — | D-07 |
 | ML-DATA-02 | M | M2 | NOT_STARTED | Fraud rate | — | dataset/tests/test_generator.py:327<br>dataset/tests/test_generator.py:337<br>dataset/tests/test_generator.py:346<br>dataset/tests/test_generator.py:353 | — | — |
 | ML-DATA-03 | M | M2 | NOT_STARTED | Channel distribution | — | dataset/tests/test_generator.py:106 | — | — |
 | ML-DATA-04 | M | M2 | NOT_STARTED | Fraud pattern diversity | — | dataset/tests/test_generator.py:247<br>dataset/tests/test_generator.py:353<br>dataset/tests/test_realism_checks.py:63<br>dataset/tests/test_scenario_notes.py:11<br>dataset/tests/test_scenario_notes.py:11 | — | D-08 |

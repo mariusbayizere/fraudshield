@@ -53,5 +53,12 @@ low-ranked parameters do not matter.
 
 ## Result
 
-The measured ranking is in `docs/research/parameter_influence.json`, and the sourcing outcome for
-the top parameters is in `docs/research/sourcing_pass.md`.
+The measured ranking is in `docs/research/parameter_influence.json`: 81 parameters, 20,000 rows,
+seed 20260917, step 10%, with a SHA-256 of the parameter values it ranked so a later reader can tell
+whether it still describes the repository. Nine parameters could not be perturbed or made the
+generator refuse to run and are ranked first; `geography.country_share` scores highest among the
+measured ones (10.3 tolerance units), followed by transactions per active customer (9.3), the
+per-channel mean amounts (8.7), the amount dispersion (7.1) and the rows per fraud incident (7.0).
+
+Where the sourcing pass landed against this ranking, including the four parameters in the top
+fifteen that remain assumed, is recorded in `docs/research/sourcing_pass.md`.

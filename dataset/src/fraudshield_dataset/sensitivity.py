@@ -52,6 +52,15 @@ DEFAULT_ROWS = 20_000
 
 
 @dataclass(frozen=True)
+class Trial:
+    """How the ranking is run: dataset size, seed, and how far each parameter is moved."""
+
+    rows: int = DEFAULT_ROWS
+    seed: int = 20260917
+    step: float = DEFAULT_STEP
+
+
+@dataclass(frozen=True)
 class Influence:
     key: str
     score: float
@@ -144,12 +153,19 @@ def _generate(parameters: ParameterSet, seed: int, rows: int, output: Path) -> P
 
 
 def influences(
-    parameters: ParameterSet, seed: int, rows: int, step: float, workspace: Path
+    parameters: ParameterSet,
+    trial: Trial,
+    workspace: Path,
+    keys: Sequence[str] | None = None,
 ) -> list[Influence]:
-    baseline = _generate(parameters, seed, rows, workspace / "baseline")
+    """Rank ``keys`` (every parameter by default) by what perturbing each one moves."""
+    baseline = _generate(parameters, trial.seed, trial.rows, workspace / "baseline")
+    chosen = set(keys) if keys is not None else None
     results: list[Influence] = []
     for parameter in sorted(parameters, key=lambda p: p.key):
-        value = _scaled(parameter.value, step)
+        if chosen is not None and parameter.key not in chosen:
+            continue
+        value = _scaled(parameter.value, trial.step)
         if value is None:
             results.append(
                 Influence(parameter.key, math.inf, "", "not numeric; not perturbable", False)
@@ -158,7 +174,9 @@ def influences(
         target = workspace / "trial"
         shutil.rmtree(target, ignore_errors=True)
         try:
-            measured = _generate(_with_value(parameters, parameter.key, value), seed, rows, target)
+            measured = _generate(
+                _with_value(parameters, parameter.key, value), trial.seed, trial.rows, target
+            )
         except (ParameterError, ValueError, KeyError) as error:
             results.append(
                 Influence(parameter.key, math.inf, "run refused", str(error)[:160], True)
@@ -176,10 +194,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--seed", type=int, default=20260917)
     parser.add_argument("--step", type=float, default=DEFAULT_STEP)
     parser.add_argument("--output", type=Path, required=True, help="JSON ranking to write")
+    parser.add_argument(
+        "--only", action="append", help="rank just this parameter (repeatable); default is all"
+    )
     args = parser.parse_args(argv)
     parameters = load_parameters()
     with tempfile.TemporaryDirectory(prefix="fs-sensitivity-") as workspace:
-        ranking = influences(parameters, args.seed, args.rows, args.step, Path(workspace))
+        trial = Trial(rows=args.rows, seed=args.seed, step=args.step)
+        ranking = influences(parameters, trial, Path(workspace), args.only)
     # The ranking describes one parameter set, so record its digest: a later reader can then tell
     # whether this file still describes the parameters in the repository.
     digest = hashlib.sha256(
@@ -200,6 +222,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "step": args.step,
                 "parameter_values_sha256": digest,
                 "parameter_count": len(parameters),
+                "ranked": len(ranking),
                 "share_tolerance": SHARE_TOLERANCE,
                 "relative_tolerance": RELATIVE_TOLERANCE,
                 "parameters": [
