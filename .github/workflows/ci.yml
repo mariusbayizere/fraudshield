@@ -112,6 +112,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
       - run: uv run fs-scope-guard
+      # The README is written by hand and said "M0" for two whole milestones (M2 review).
+      - run: uv run fs-readme-status
       - run: uv run fs-compose-budget
       # Kafka schemas and the proto must stay compatible with the baselines already on main.
       - run: uv run fs-contract-baselines --against origin/main
