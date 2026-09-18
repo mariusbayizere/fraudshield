@@ -1,13 +1,13 @@
 # M2 gate evidence
 
-Collected at branch head `70b6be8` on `m2/generator`. Job-level results, not run conclusions
+Collected at branch head `f0da249` on `m2/generator`. Job-level results, not run conclusions
 (GOV-10): a path-filtered workflow concludes "success" while the job the gate is about is skipped, so
 a run conclusion is not evidence.
 
 ## CI
 
-`ci` run [35307770169](https://github.com/mariusbayizere/fraudshield/actions/runs/35307770169) at
-`70b6be8`, every job executed and succeeded:
+`ci` run [35310160693](https://github.com/mariusbayizere/fraudshield/actions/runs/35310160693) at
+`f0da249`, every job executed and succeeded:
 
 | Job | Result |
 |---|---|
@@ -27,21 +27,28 @@ most recent run on this branch whose main job actually executed; later pushes to
 outside `DEVCONTAINER_INPUTS`, so their runs concluded success with the job skipped and are not cited
 here.
 
-## Stack — not evidenced on this branch, and the reason
+## Stack — executed on the branch head
 
-**No run on `m2/generator` has executed the stack job.** Every `stack` run on the branch concluded
-"success" with `core compose stack healthy + smoke test` **skipped**, because M2 changed no compose,
-Dockerfile, infrastructure or lockfile path and the workflow is path-filtered (ADR 0010).
+`stack` run [35310160631](https://github.com/mariusbayizere/fraudshield/actions/runs/35310160631) at
+`f0da249`: **`core compose stack healthy + smoke test (M0 gate)` = success**, the job executed rather
+than skipped.
 
-The last executed stack evidence is `stack` run
+Getting that run took two attempts and both failure modes are now documented in `stack.yml`, beside
+the settings that cause them:
+
+1. **Every earlier stack run on this branch skipped the job.** M2 changed no compose, Dockerfile,
+   infrastructure or lockfile path, and the workflow is path-filtered (ADR 0010), so each run concluded
+   "success" with `core compose stack healthy + smoke test` **skipped**. Quoting those conclusions would
+   have claimed the stack was verified when it never ran. `gh` has no credentials in this session, so
+   `workflow_dispatch` was unavailable; the owner-approved alternative was a deliberate touch to a
+   path-filtered input — `stack.yml` itself — which now documents the trap for the next reader.
+2. **The first executing run was cancelled by my own next push.** The concurrency group cancels
+   in-progress runs on the same ref, including for a docs-only commit that would have skipped the job.
+   A run collected as gate evidence has to be the last push until it finishes.
+
+For completeness, the last executed stack evidence before this branch is run
 [35235506847](https://github.com/mariusbayizere/fraudshield/actions/runs/35235506847) at `a7e6896` on
-`main` (2026-09-17), where `core compose stack healthy + smoke test` succeeded — the M1 merge commit.
-M2 adds no service and touches nothing the stack builds, so that remains the applicable evidence;
-the M2 gate does not claim the stack was re-verified.
-
-This is the finding GOV-10 was opened for, reproduced on this very milestone: quoting the three run
-conclusions would have read "ci, stack and devcontainer green on the head", which is true of the runs
-and false of the jobs.
+`main`, the M1 merge commit.
 
 ## Local suites at the head
 
