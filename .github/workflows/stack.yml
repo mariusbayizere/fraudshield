@@ -3,6 +3,12 @@
 #
 # To save CI minutes the job runs only when its inputs changed, and always on pushes to main,
 # nightly, and on manual dispatch (owner direction, 2026-09-17).
+#
+# Reading this workflow's result: when the paths below are untouched, `changes` succeeds, the stack
+# job is SKIPPED, and the run still concludes "success". A run conclusion is therefore not evidence
+# that the stack was verified -- a gate record must quote the job (GOV-10). Milestone M2 changed no
+# path below, so every stack run on its branch skipped the job; its gate record cites the last
+# executed run instead (docs/reviews/M2/gate-evidence.md).
 name: stack
 
 on:
