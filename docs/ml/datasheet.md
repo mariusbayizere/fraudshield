@@ -33,7 +33,7 @@ Three tables:
 
 **How many instances are there?** The release target is at least 5,000,000 transactions over 24
 months (2024-01 to 2025-12). The verification run documented in `dataset/realism_report.md` holds
-1,006,212 transactions, generated in 13 minutes at 184 MiB peak resident memory; the figures in this
+1,006,249 transactions, generated in under 6 minutes at 181 MiB peak resident memory; the figures in this
 datasheet come from that run unless stated otherwise.
 
 **Does the dataset contain all possible instances or a sample?** It is generated in full: every
@@ -57,18 +57,18 @@ from the calibrated volume and reported with measured counts:
 
 | Split | Rows | True fraud rate | Span (days) |
 |---|---:|---:|---:|
-| train | 792,339 | 0.861% | 602.6 |
-| validation | 100,909 | 0.893% | 57.6 |
-| calibration (last part of validation) | 40,317 | 0.890% | 25.4 |
-| embargo (excluded) | 10,940 | 0.887% | 7.0 |
-| test | 102,024 | 0.915% | 63.8 |
+| train | 792,162 | 0.862% | 602.34 |
+| validation | 101,332 | 0.883% | 57.69 |
+| calibration (last part of validation) | 40,701 | 0.909% | 25.36 |
+| embargo (excluded) | 10,914 | 1.008% | 6.99 |
+| test | 101,841 | 0.905% | 63.97 |
 
 The seven-day embargo between validation and test exists so that a model cannot see the days
 immediately before the test period. One fraud sub-variant occurs only in the test period, so that
 generalisation to an unseen variant can be measured.
 
 **Are there errors, sources of noise or redundancies?** Yes, deliberately. Labels carry noise in
-both directions: 1.50% of true fraud is unlabelled and a further 1.66% of true fraud's worth of
+both directions: 1.54% of true fraud is unlabelled and a further 1.66% of true fraud's worth of
 legitimate rows are labelled fraud, which is what a real investigation backlog produces. The dataset is otherwise
 internally consistent: no duplicate identifiers, no malformed values (checked on every row).
 

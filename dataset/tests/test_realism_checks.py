@@ -346,6 +346,53 @@ def test_the_committed_report_describes_the_current_check_set(clean: Path) -> No
     )
 
 
+def _split_table(text: str, columns: int) -> dict[str, tuple[str, ...]]:
+    """Every ``| split | ... |`` row of the first temporal-split table, keyed by split name."""
+    table: dict[str, tuple[str, ...]] = {}
+    for line in text.splitlines():
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) == columns and cells[0] in _SPLIT_NAMES and cells[0] not in table:
+            table[cells[0]] = tuple(cells[1:])
+    return table
+
+
+# The datasheet sits outside the dataset package's own tree, so it is not in `paths`.
+DATASHEET_MD = REALISM_REPORT_MD.parent.parent / "docs" / "ml" / "datasheet.md"
+
+_SPLIT_NAMES = (
+    "train",
+    "validation",
+    "calibration (last part of validation)",
+    "embargo (excluded)",
+    "test",
+)
+
+
+@pytest.mark.req("ML-DATA-08")
+def test_the_datasheet_quotes_the_committed_report() -> None:
+    """The datasheet's measured figures must be the report's, not numbers typed once and left.
+
+    The datasheet says "the figures in this datasheet come from that run", naming the realism
+    report, and for the whole of M2 they did not: its split table matched neither the committed
+    report nor the one before it, being left over from a generator that no longer exists. The two
+    digest guards above cover only the report itself, so nothing looked at the document that
+    actually ships to a dataset user (M2 milestone review, MAJOR M-1).
+    """
+    report = _split_table(REALISM_REPORT_MD.read_text(encoding="utf-8"), columns=5)
+    datasheet = _split_table(DATASHEET_MD.read_text(encoding="utf-8"), columns=4)
+
+    assert set(report) == set(_SPLIT_NAMES), "the report's split table is missing or changed shape"
+    assert set(datasheet) == set(_SPLIT_NAMES), (
+        "the datasheet's split table is missing or changed shape"
+    )
+
+    for split, (rows, true_rate, _observed, span) in report.items():
+        assert datasheet[split] == (rows, true_rate, span), (
+            f"datasheet row for {split!r} is {datasheet[split]}, but the committed report says "
+            f"{(rows, true_rate, span)}; regenerate the report and copy its figures across"
+        )
+
+
 def test_the_check_set_guard_fails_when_a_check_is_added() -> None:
     """The guard has to react to a new check, or it is the old guard with extra steps.
 
