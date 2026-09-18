@@ -37,7 +37,10 @@ months (2024-01 to 2025-12). The verification run documented in `dataset/realism
 datasheet come from that run unless stated otherwise.
 
 **Does the dataset contain all possible instances or a sample?** It is generated in full: every
-simulated customer's every simulated transaction is present. There is no sampling step.
+simulated customer's every simulated transaction is present, with one exception recorded in
+`manifest.json` as `rows_dropped_after_simulation_end` — a fraud burst or delayed drain that starts
+near the end of the last month can run past the simulated period, and those few rows are dropped
+rather than written into a month that does not exist. There is no other sampling step.
 
 **Is any information missing?** Yes, by design. Fields that a real payment may lack are absent in
 the same pattern for fraudulent and legitimate rows: `device_fingerprint` is null on channels that
@@ -114,9 +117,12 @@ rates, currency codes, time zones and the school terms. `docs/research/sourcing_
 what it could not establish; `docs/research/parameter_influence.md` records how the parameters were
 ranked before the pass, so the effort went to the ones that move the dataset.
 
-**Most parameters remain modelling choices, and every fraud parameter does.** Scenario prevalence,
-incident length, attack timing and adaptation behaviour are all ASSUMED: no publication found gives
-fraud incidence by type for these markets. The National Bank of Rwanda's annual report discusses a
+**Most parameters remain modelling choices, and no fraud parameter is sourced.** Of the 25
+parameters in `fraud.yaml`, 21 are ASSUMED — scenario prevalence, the mix between scenario types,
+incident length, attack timing, adaptation behaviour, the mule structure — and the other four are
+calibrated to SRS targets (the overall and test-period fraud rates, the monthly intensity schedule
+and the tolerance that guards it), which are design requirements rather than observations. No
+publication found gives fraud incidence by type for these markets. The National Bank of Rwanda's annual report discusses a
 Fraud Prevention Forum and consumer complaints about mobile money fraud without publishing incident
 counts, and the Bank of Tanzania report does not break fraud out at all. Sourcing those numbers
 weakly, from a vendor report or a global aggregate presented as regional, would be worse than
@@ -152,8 +158,8 @@ the study of a novel fraud variant that appears only in the test period.
 
 - It is synthetic. Model performance here does not transfer to a production system, and a
   detection rate measured on it is not a claim about real fraud.
-- Twelve of 81 parameters are sourced and every fraud parameter is assumed (see above). Conclusions
-  about East African fraud behaviour cannot be drawn from it.
+- Twelve of 81 parameters are sourced; no fraud parameter is (21 assumed, 4 calibrated to SRS
+  targets, see above). Conclusions about East African fraud behaviour cannot be drawn from it.
 - The fraud rate is calibrated to a target of 0.87% overall and 0.91% in the test period, not
   measured from any institution.
 - Amounts and locations are simulated; they carry no commercial or geographic information.

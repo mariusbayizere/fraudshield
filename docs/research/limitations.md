@@ -11,9 +11,12 @@ the behaviour of any institution. A recall figure measured here is a property of
 
 ## No parameter describes fraud behaviour from evidence
 
-All 25 fraud parameters — scenario prevalence, the mix between scenario types, incident length,
-burst timing, adaptation behaviour, the mule structure and the novelty variant — are modelling
-choices. No central bank in the region publishes fraud incidence by type:
+No fraud parameter is sourced. Of the 25 in `fraud.yaml`, 21 are modelling choices — scenario
+prevalence, the mix between scenario types, incident length, burst timing, adaptation behaviour, the
+mule structure and the novelty variant — and four are calibrated to SRS targets (the overall and
+test-period fraud rates, the monthly intensity schedule, and the tolerance that guards it), which
+state what the dataset was required to contain rather than what was observed. No central bank in the
+region publishes fraud incidence by type:
 
 - the National Bank of Rwanda's *Annual Report 2024-2025* describes a Fraud Prevention Forum and
   lists mobile money fraud and scams among consumer complaint categories, without incident counts

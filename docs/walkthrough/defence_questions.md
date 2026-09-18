@@ -94,8 +94,9 @@ Evidence: `docs/research/parameter_influence.md`, `dataset/src/fraudshield_datas
 It is, and it cannot be sourced from published data. No central bank in the region publishes fraud
 incidence by type: the National Bank of Rwanda's annual report discusses a Fraud Prevention Forum
 and lists mobile money fraud as a consumer complaint category without incident counts, and the Bank
-of Tanzania's payment systems report does not break fraud out at all. All 25 fraud parameters
-therefore stay ASSUMED. Sourcing them from a vendor report or a global aggregate presented as
+of Tanzania's payment systems report does not break fraud out at all. So no fraud parameter is
+sourced: 21 of the 25 stay ASSUMED and four are calibrated to SRS targets, which are requirements
+rather than observations. Sourcing them from a vendor report or a global aggregate presented as
 regional would look stronger and be worse. What the benchmark can support is a comparison between
 methods under the same synthetic conditions, not an estimate of real fraud rates.
 Evidence: `docs/research/sourcing_pass.md`, `docs/research/claims_register.md` (C-7).
