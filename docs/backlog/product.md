@@ -172,3 +172,16 @@ the decision engine M6, staff identity, admin and audit M7).
   merged version is rejected because Flyway would skip it. The tests are untagged (the guard is
   governance tooling, not evidence for a schema-completeness defect) and the D-31 row no longer
   cites them.
+
+### PB-25 · Release-size dataset run (ML-DATA-01)
+- **Source:** M2 gate item, owner direction 2026-09-18 · **Priority:** high · **Due:** M2 gate
+- **Problem:** the 5,000,000-row run that ML-DATA-01 requires has not been produced. It must not run
+  on the build laptop (the owner's direction; a million rows takes twenty minutes there and the
+  machine is often busy), and the `dataset` workflow cannot be dispatched because GitHub registers
+  `workflow_dispatch` only from the default branch, which is still `m0/bootstrap`.
+- **Acceptance:** once `main` is the default branch, `.github/workflows/dataset.yml` is pushed to
+  `main` as a single CI-only commit with an ADR recording the direct-to-main exception, the workflow
+  is dispatched with the branch input set to the working branch, and the run's realism report,
+  manifests and runner spec are attached to the M2 gate record. `fs-dataset check --full` must pass,
+  including the size gate and the distribution gates.
+- **Interim evidence:** the 1,005,621-row verification run, regenerated on the sourced parameters.
