@@ -152,5 +152,74 @@ run and closes the property at the scale that ships.
 
 ## Area 1 — leakage and shortcut detection
 
-The open item is the shortcut-detector diagnosis, running at the time of writing. Its conclusion,
-and the paragraph for the datasheet and the defence questions, follow when it completes.
+The shortcut-detector diagnosis is running at the time of writing; its conclusion and the paragraph
+for the datasheet and the defence questions follow when it completes. Three findings are already
+established and do not depend on the remaining scales.
+
+### MAJOR M-4 — below about 20,000 rows a dataset silently lacks a fraud scenario
+
+`FraudModel._validate_scenario_capacity` skips a scenario whose role pool is empty:
+
+    if not intended or not capacity:
+        continue
+
+Measured directly, building the population and the fraud model at each scale:
+
+| rows | seed | mule pool | intended rows | stageable | outcome |
+|---:|---:|---:|---:|---:|---|
+| 10,000 | 20260917 | **0** | 10 | 0 | runs; `mule_account` absent |
+| 10,000 | 20260922 | **0** | 10 | 0 | runs; `mule_account` absent |
+| 20,000 | 20260922 | **0** | 21 | 0 | runs; `mule_account` absent |
+| 20,000 | 20260917 | 22 | 21 | 264 | runs, scenario present |
+| 30,000 | 20260917 | 27 | 32 | 324 | runs, scenario present |
+| 30,000 | 20260922 | ~2 | 32 | **24** | **refused** |
+
+So a development run below roughly 20,000 rows produces a dataset missing one of the eight fraud
+scenarios, with no error and no warning. The check that would report it is the eight-scenario gate,
+which MAJOR 1.5 correctly made `--full`-only so that it stops blocking development runs — with the
+side effect that at development scale **nothing reports the absence at all**. The two changes are
+individually right and jointly leave a hole.
+
+This is MAJOR because development runs are what every test and every quick check uses, and a
+silently absent scenario is a difference in kind, not degree: such a dataset is not a small release
+dataset, it is a different dataset.
+
+**Consequence for this milestone's own evidence.** The diagnosis's 10,000-row tier was measured on
+datasets that structurally lack `mule_account`. Those runs still answer "is the detector centred,
+and how powerful is it at that n", but they cannot be read as a release dataset shrunk, and the
+write-up must say so rather than let a convergence curve imply a uniformity that is not there.
+
+**Recommended fix:** report the absence at development scale instead of staying silent — either a
+report-only `CheckResult` naming the missing scenarios (the "trivial rule baseline" pattern), or a
+warning from the generator. Do not make it a gate; that is what MAJOR 1.5 removed for good reason.
+
+### MINOR M-5 — a size limitation is reported as a parameter error
+
+When the pool is small but non-zero the guard raises:
+
+    scenario mule_account is asked for 32 rows but its role holders could stage at most 24;
+    raise its role fraction or lower its share
+
+At 30,000 rows with seed 20260922 the parameters are correct and the population is simply too small.
+The message directs the operator to change a sourced or calibrated share to work around a scale
+limitation, which is the wrong repair. The guard's own docstring already draws the right
+distinction — "A scenario with no role holder at all is a different matter: the population is simply
+too small… That is a size limitation, not a parameter error" — and then applies it only to the
+zero case.
+
+### MINOR M-6 — the capacity guard's docstring claims to be scale-free, and is not
+
+> The test is scale-free: the rows the share asks for over the simulation must not exceed the rows
+> the eligible customers could stage even if every one of them were a victim of a maximum-length
+> incident every month.
+
+The outcome depends on both scale and seed. Seed 20260922 has no mules at 20,000 rows, about two at
+30,000, and seed 20260917 has twenty-seven at the same 30,000 — a thirteenfold spread in pool size
+at one scale. The ratio the guard tests is scale-free in expectation; the integer pool it tests it
+against is not, and at small n the variance dominates.
+
+### Established about the detector itself (interim)
+
+At 10,000 and 30,000 rows, 15 seeds each, clean mean AUC is 0.500 and 0.508 — centred, with no
+systematic offset from 0.5. The 0.446 that prompted this diagnosis is 1.77 standard deviations below
+the 30,000-row mean: a tail draw, not evidence that the generator leaks.
