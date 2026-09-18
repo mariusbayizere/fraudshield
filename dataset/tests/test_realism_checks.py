@@ -17,7 +17,12 @@ from fraudshield_dataset.generator.fraud import NOVEL_VARIANT
 from fraudshield_dataset.generator.pipeline import generate
 from fraudshield_dataset.params import load_parameters
 from fraudshield_dataset.paths import REALISM_REPORT_MD
-from fraudshield_dataset.realism.checks import CheckResult, parameter_digest, run_checks
+from fraudshield_dataset.realism.checks import (
+    CheckResult,
+    check_digest,
+    parameter_digest,
+    run_checks,
+)
 
 pytestmark = pytest.mark.req("D-08")
 
@@ -320,6 +325,48 @@ def test_the_committed_report_describes_the_current_parameters() -> None:
         "dataset/realism_report.md was generated from different parameter values; regenerate it "
         "with: uv run fs-dataset report <dataset> --rows <rows>"
     )
+
+
+@pytest.mark.req("ML-DATA-08")
+def test_the_committed_report_describes_the_current_check_set(clean: Path) -> None:
+    """A report that omits a check the code performs must fail, not pass quietly.
+
+    The parameter digest above closed one door and left another open: a report generated before a
+    check existed still matched the parameters and passed, while describing a run that never
+    performed that check. Adding the two reported event channels produced exactly that state — no
+    parameter moved, so nothing failed (M2 delta re-check).
+    """
+    config = build_config(load_parameters(), seed=SEED, total_rows=CLEAN_ROWS)
+    results, _ = run_checks(clean, config, full=False)
+    text = REALISM_REPORT_MD.read_text(encoding="utf-8")
+
+    assert check_digest(results) in text, (
+        "dataset/realism_report.md describes a different set of checks than the code performs; "
+        "regenerate it with: uv run fs-dataset report <dataset> --rows <rows>"
+    )
+
+
+def test_the_check_set_guard_fails_when_a_check_is_added() -> None:
+    """The guard has to react to a new check, or it is the old guard with extra steps.
+
+    Adding a check is the case that slipped through: it changes no parameter, so the parameter
+    digest is identical and only a digest over the check set can notice.
+    """
+    before = [
+        CheckResult("single-feature AUC", True, True, "max 0.711", "every feature <= 0.8 (D-08)"),
+        CheckResult("shortcut detector", True, True, "AUC 0.510", "within its null band"),
+    ]
+    added = CheckResult("event delay (reported)", True, False, "AUC 0.713", "reported, not gated")
+
+    assert check_digest([*before, added]) != check_digest(before)
+    # Order must not matter: the same set rendered in a different order is the same check set.
+    assert check_digest(before[::-1]) == check_digest(before)
+    # Semantics count, not just names: rewording what a check requires invalidates a stale report.
+    reworded = [CheckResult(before[0].name, True, True, before[0].value, "a different rule")]
+    assert check_digest(reworded) != check_digest([before[0]])
+    # A measured value legitimately differs run to run and must NOT invalidate the report.
+    revalued = [CheckResult(before[0].name, True, True, "max 0.727", before[0].requirement)]
+    assert check_digest(revalued) == check_digest([before[0]])
 
 
 def _full_results(root: Path, rows: int) -> dict[str, CheckResult]:

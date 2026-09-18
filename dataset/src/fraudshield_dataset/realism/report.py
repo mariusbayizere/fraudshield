@@ -57,6 +57,7 @@ def render(
         f"| Generator peak RSS | {measures['peak_rss_bytes'] / 2**20:.0f} MiB (limit 2048 MiB) |",
         f"| Checks peak RSS | {measures['checks_peak_rss_bytes'] / 2**20:.0f} MiB |",
         f"| Parameter values SHA-256 | `{measures['parameter_values_sha256']}` |",
+        f"| Check set SHA-256 | `{measures['check_set_sha256']}` |",
         f"| Chunk size (shards per batch) | {measures['chunk_size']} |",
         "| Machine | "
         + ", ".join(f"{k} {v}" for k, v in sorted(measures["machine"].items()))

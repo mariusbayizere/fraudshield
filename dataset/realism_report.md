@@ -11,9 +11,10 @@ institution's data (D-08).
 | Seed | 20260917 |
 | Rows | 1,006,249 |
 | Mode | development (size and distribution targets reported) |
-| Generator peak RSS | 188 MiB (limit 2048 MiB) |
-| Checks peak RSS | 284 MiB |
+| Generator peak RSS | 181 MiB (limit 2048 MiB) |
+| Checks peak RSS | 300 MiB |
 | Parameter values SHA-256 | `aa0ec909fa4e0c7793ae1432566b1f6c457cefa75dc002747e92aa05977043c6` |
+| Check set SHA-256 | `e61f5e97d3a70a5a3c167cdb6179835e249438a105b8915e387d30a3b9d5de6e` |
 | Chunk size (shards per batch) | 8 |
 | Machine | cpus 4, numpy 2.5.3, platform Linux-7.0.0-31-generic-x86_64-with-glibc2.39, processor x86_64, pyarrow 25.0.1, python 3.12.14 |
 | Verdict | **all gate checks pass** |
@@ -25,6 +26,8 @@ institution's data (D-08).
 | single-feature AUC | pass | yes | max 0.711 (merchant_category_code) | every feature <= 0.8 (D-08) |
 | shortcut detector | pass | yes | AUC 0.510 (band +/-0.030) on 48597 rows | within its null band around 0.5 (owner direction) |
 | event construction | pass | yes | AUC 0.513 (band +/-0.030) on 2424 events, 1410 on fraud accounts | an account event's construction does not reveal a victim's account (D-08) |
+| event delay (reported) | pass | no | AUC 0.758 | reported, not gated: seconds from an event to that account's next transaction |
+| event type (reported) | pass | no | AUC 0.537 | reported, not gated: SIM swap versus device change |
 | file order | pass | yes | AUC 0.505 | file (month) index alone within 0.5 + 0.03 |
 | identifier construction | pass | yes | account_id 0.506 (band +/-0.030), counterparty_id 0.508 (band +/-0.030), device_fingerprint 0.514 (band +/-0.030) | token characters do not identify fraud tokens, within the null band |
 | trivial rule baseline | pass | no | AUC 0.604 | reported (amount >= rule threshold, or local hour before 05:00) |
@@ -40,7 +43,7 @@ institution's data (D-08).
 | channel mix | pass | no | max deviation 0.16 pp | SRS channel mix +/- 0.5 pp (ML-DATA-03) |
 | country mix | pass | no | max deviation 0.01 pp | SRS country mix +/- 0.5 pp (ML-DATA-05) |
 | size | not met | no | 1006249 rows | >= 5,000,000 rows in a release run (ML-DATA-01) |
-| generator peak memory | pass | yes | 188 MiB | < 2 GiB peak RSS (owner direction) |
+| generator peak memory | pass | yes | 181 MiB | < 2 GiB peak RSS (owner direction) |
 
 ## Temporal split (D-07)
 
@@ -139,7 +142,7 @@ re-checked against the same limit in M3.
 ## Shortcut and identifier checks
 
 - Shortcut detector (depth-3 tree, 5-fold CV grouped by account, on 19 non-behavioural columns): AUC 0.510, band +/-0.030. Columns: transaction_id_byte_00, transaction_id_byte_01, transaction_id_byte_02, transaction_id_byte_03, transaction_id_byte_04, transaction_id_byte_05, transaction_id_byte_06, transaction_id_byte_07, transaction_id_byte_08, transaction_id_byte_09, transaction_id_byte_10, transaction_id_byte_11, transaction_id_byte_12, transaction_id_byte_13, transaction_id_byte_14, transaction_id_byte_15, timestamp_microseconds, row_position_in_file, label_delay_micros.
-- Account event construction (event_sub_second, event_day_of_month): AUC 0.513, band +/-0.030, over 2,424 events of which 1,410 sit on an account that carries fraud. How soon a transaction follows an event, and which kind of event it is, are the scenario's own signals and are not judged.
+- Account event construction (event_sub_second, event_day_of_month): AUC 0.513, band +/-0.030, over 2,424 events of which 1,410 sit on an account that carries fraud. How soon a transaction follows an event, and which kind of event it is, are the scenario's own signals and are not gated. They are measured rather than assumed: event_delay_seconds AUC 0.758, event_type_code AUC 0.537. The delay reflects fraud.takeover_lead_minutes = [5, 60], which is ASSUMED, so part of that separation is the assumed schedule rather than the scenario itself.
 - File (month) order alone: AUC 0.505.
 - Identifier construction over every character of the distinct tokens. Each band is the wider of 0.03 and this statistic's own null band: a family-wise 5% level over the columns tested, times 1.3 for the extra spread a cross-validated tree has over a single feature. account_id 0.506 (+/-0.030, 1,839 of 5,883 tokens used by fraud), counterparty_id 0.508 (+/-0.030, 2,562 of 8,509 tokens used by fraud), device_fingerprint 0.514 (+/-0.030, 1,646 of 5,448 tokens used by fraud).
 - Trivial rule baseline (amount at or above the rule threshold, or local night): AUC 0.604.

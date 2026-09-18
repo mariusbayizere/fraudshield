@@ -906,6 +906,29 @@ def _distribution_checks(
     ]
 
 
+def check_digest(results: list[CheckResult]) -> str:
+    """SHA-256 of the check set: each check's name, what it requires, and whether it gates.
+
+    ``parameter_digest`` closes one door and left another open. It hashes parameter *values*, so a
+    committed report generated before a check existed still matched the repository and passed the
+    guard while describing a run that never performed that check. Adding the two reported event
+    channels produced exactly that state: no parameter moved, the digest still matched, and the
+    shipped report silently omitted two checks the code runs (M2 delta re-check).
+
+    Semantics are digested, not just names, so that renaming what a check *requires* — the sentence
+    a reader relies on — invalidates a stale report too. The measured values are deliberately left
+    out: they legitimately differ between runs, and digesting them would make every report stale.
+    """
+    payload = json.dumps(
+        [
+            {"name": r.name, "requirement": r.requirement, "gate": r.gate}
+            for r in sorted(results, key=lambda r: r.name)
+        ],
+        sort_keys=True,
+    )
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
 def parameter_digest(parameters: ParameterSet) -> str:
     """SHA-256 of every parameter value, so a report states which parameters produced it.
 
@@ -936,6 +959,7 @@ def run_checks(
     # plus a sample of the features, so their cost is reported next to the generator's.
     measures["checks_peak_rss_bytes"] = peak_rss_bytes()
     measures["parameter_values_sha256"] = parameter_digest(config.parameters)
+    measures["check_set_sha256"] = check_digest(results)
     return results, measures
 
 
