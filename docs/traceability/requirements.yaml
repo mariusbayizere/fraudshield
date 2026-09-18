@@ -2260,11 +2260,21 @@ requirements:
     Sufficient for XGBoost/LightGBM to learn rare fraud at realistic 0.87% fraud rate'
   defects:
   - D-07
-  status: NOT_STARTED
+  status: VERIFIED_AT_REDUCED_SCALE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - dataset/src/fraudshield_dataset/generator/pipeline.py
+  - dataset/src/fraudshield_dataset/generator/config.py
+  evidence:
+  - dataset/realism_report.md (1,006,212-row verification run; the size gate needs 5M and is PB-25)
+  - dataset/tests/test_generator.py (byte-identical output across chunk sizes, including across a Parquet
+    row-group boundary)
+  - docs/backlog/product.md (PB-25 records the release-size run as an M2 gate item)
   deviations: []
+  reduced_scale: 'Verified at 1,006,212 rows of the 5,000,000 ML-DATA-01 requires: every gate passes at
+    that size and the size gate itself is reported as not met. The release-size run must happen on a runner
+    (owner direction) and is blocked until main is the default branch, so that workflow_dispatch registers;
+    tracked as PB-25.'
 - id: ML-DATA-02
   section: 7.1 Dataset
   title: Fraud rate
@@ -2273,10 +2283,14 @@ requirements:
   srs_text: 'Specification: 0.87% overall; test set slightly higher (0.91%) to reflect growing fraud trend;
     Rationale: Realistic imbalance; no artificial oversampling of training set'
   defects: []
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - dataset/generator/params/fraud.yaml
+  - dataset/src/fraudshield_dataset/generator/fraud.py
+  evidence:
+  - dataset/realism_report.md (0.870% overall, 0.915% test, all 24 monthly intervals covering target)
+  - dataset/tests/test_realism_checks.py (the fraud-rate gate reacts when fraud is removed)
   deviations: []
 - id: ML-DATA-03
   section: 7.1 Dataset
@@ -2286,10 +2300,14 @@ requirements:
   srs_text: 'Specification: MOBILE_MONEY >= 40%, USSD >= 18%, AGENT_BANKING >= 14%, CARD 12%, ONLINE 9%,
     BANK_TRANSFER 6%; Rationale: Reflects East African payment landscape; essential for generalisability'
   defects: []
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - dataset/src/fraudshield_dataset/generator/config.py
+  - dataset/generator/params/channels.yaml
+  evidence:
+  - dataset/realism_report.md (channel mix within 0.17 pp)
+  - dataset/tests/test_generator.py (iterative proportional fitting reproduces the SRS mix exactly)
   deviations: []
 - id: ML-DATA-04
   section: 7.1 Dataset
@@ -2301,10 +2319,14 @@ requirements:
     overfitting to single dominant pattern'
   defects:
   - D-08
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - dataset/src/fraudshield_dataset/generator/fraud.py
+  - docs/ml/scenarios/README.md
+  evidence:
+  - dataset/realism_report.md (eight scenario types present, per-scenario rows by month)
+  - dataset/tests/test_scenario_notes.py (every scenario has a design note citing existing parameters)
   deviations: []
 - id: ML-DATA-05
   section: 7.1 Dataset
@@ -2314,10 +2336,14 @@ requirements:
   srs_text: 'Specification: Rwanda 42%, Kenya 28%, Tanzania 15%, Uganda 10%, DRC 5%; Rationale: Covers
     all EAC primary financial markets; enables per-country evaluation'
   defects: []
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - dataset/src/fraudshield_dataset/generator/population.py
+  - dataset/generator/params/geography.yaml
+  evidence:
+  - dataset/realism_report.md (country mix within 0.02 pp)
+  - dataset/tests/test_generator.py (every population prefix within one customer of its country quota)
   deviations: []
 - id: ML-DATA-06
   section: 7.1 Dataset
@@ -2328,10 +2354,13 @@ requirements:
     Prevents temporal data leakage; tests generalisation to future fraud patterns'
   defects:
   - D-07
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - dataset/src/fraudshield_dataset/generator/config.py
+  evidence:
+  - dataset/realism_report.md (24 months, 2024-01 to 2025-12, with the temporal split)
+  - dataset/tests/test_generator.py (month labels cross the year boundary)
   deviations: []
 - id: ML-DATA-07
   section: 7.1 Dataset
@@ -2356,10 +2385,14 @@ requirements:
     DOI; Rationale: First public East African financial fraud benchmark dataset — standalone research
     contribution'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - dataset/src/fraudshield_dataset/release/export.py
+  - docs/ml/datasheet.md
+  evidence:
+  - dataset/tests/test_export.py (CSV carries every row, checksums verify, a changed file is reported)
+  - dataset/release/README.md (CC BY 4.0 legal code with its source URL and SHA-256)
   deviations: []
 - id: ML-GATE-01
   section: 7.2 Model deployment gate
@@ -3173,10 +3206,14 @@ requirements:
   - ML-DATA-06
   - ML-GATE-01
   - OPS-CI-05
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - dataset/src/fraudshield_dataset/generator/config.py
+  - dataset/generator/params/split.yaml
+  evidence:
+  - dataset/realism_report.md (train, validation, calibration, 7-day embargo and test, with measured rates)
+  - dataset/tests/test_generator.py (the split plan's boundaries and the embargo width)
   deviations: []
 - id: D-08
   section: Build prompt Part B defect register
@@ -3188,10 +3225,15 @@ requirements:
   affects:
   - ML-DATA-04
   - RES-01
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - dataset/src/fraudshield_dataset/realism/checks.py
+  - dataset/src/fraudshield_dataset/realism/stats.py
+  evidence:
+  - dataset/tests/test_realism_checks.py (eleven planted leaks, each caught by the gate it targets)
+  - dataset/realism_report.md (single-feature AUCs, shortcut and event detectors, label noise, novelty
+    placement)
   deviations: []
 - id: D-09
   section: Build prompt Part B defect register

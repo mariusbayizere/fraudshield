@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 import shutil
 from collections.abc import Callable
 from pathlib import Path
 
 import pyarrow as pa
 import pyarrow.compute as pc
+import pyarrow.dataset as ds
 import pyarrow.parquet as pq
 import pytest
 
@@ -14,7 +16,8 @@ from fraudshield_dataset.generator.config import build_config
 from fraudshield_dataset.generator.fraud import NOVEL_VARIANT
 from fraudshield_dataset.generator.pipeline import generate
 from fraudshield_dataset.params import load_parameters
-from fraudshield_dataset.realism.checks import CheckResult, run_checks
+from fraudshield_dataset.paths import REALISM_REPORT_MD
+from fraudshield_dataset.realism.checks import CheckResult, parameter_digest, run_checks
 
 pytestmark = pytest.mark.req("D-08")
 
@@ -180,3 +183,201 @@ def test_duplicate_transaction_ids_are_caught(plant_base: Path, tmp_path: Path) 
     results = _results(_plant(plant_base, tmp_path / "duplicate", repeat_first_id), PLANT_ROWS)
     assert not results["identifier uniqueness"].passed
     assert results["identifier uniqueness"].value.startswith("24 duplicate")
+
+
+def test_quantised_account_events_are_caught(plant_base: Path, tmp_path: Path) -> None:
+    """The BLOCKER the M2 principal review found: only planted events had sub-second times."""
+    target = tmp_path / "quantised"
+    shutil.copytree(plant_base, target)
+    transactions = ds.dataset(
+        target / "transactions", format="parquet", partitioning="hive"
+    ).to_table(columns=["account_id"])
+    labels = ds.dataset(target / "labels", format="parquet", partitioning="hive").to_table(
+        columns=["is_fraud_observed"]
+    )
+    fraud_accounts = {
+        account
+        for account, flag in zip(
+            transactions["account_id"].to_pylist(),
+            labels["is_fraud_observed"].to_pylist(),
+            strict=True,
+        )
+        if flag
+    }
+    for path in sorted((target / "account_events").glob("month=*/part-0000.parquet")):
+        events = pq.read_table(path)
+        micros = events["event_timestamp"].cast(pa.int64()).to_numpy().copy()
+        for index, account in enumerate(events["account_id"].to_pylist()):
+            if account not in fraud_accounts:  # what the generator used to do to every event
+                micros[index] -= micros[index] % 1_000_000
+        stamped = pa.array(micros, pa.int64()).cast(pa.timestamp("us", tz="UTC"))
+        pq.write_table(
+            events.set_column(
+                events.schema.get_field_index("event_timestamp"),
+                events.schema.field("event_timestamp"),
+                stamped,
+            ),
+            path,
+        )
+
+    results = _results(target, PLANT_ROWS)
+    assert not results["event construction"].passed
+
+
+def test_a_marker_in_any_transaction_id_byte_is_caught(plant_base: Path, tmp_path: Path) -> None:
+    """Only two of sixteen bytes were read, so a marker in byte 5 passed every check."""
+
+    def mark_byte_five(t: pa.Table, labels: pa.Table) -> tuple[pa.Table, pa.Table]:
+        fraud = labels["is_fraud_observed"].to_pylist()
+        ids = [
+            (i[:10] + "ff" + i[12:]) if f else i
+            for i, f in zip(t["transaction_id"].to_pylist(), fraud, strict=True)
+        ]
+        return _replace(t, "transaction_id", pa.array(ids)), _replace(
+            labels, "transaction_id", pa.array(ids)
+        )
+
+    results = _results(_plant(plant_base, tmp_path / "byte5", mark_byte_five), PLANT_ROWS)
+    assert not results["shortcut detector"].passed
+
+
+def test_a_marker_in_any_token_character_is_caught(plant_base: Path, tmp_path: Path) -> None:
+    """Three of thirty-two token characters were read; a marker in the middle passed."""
+
+    def mark_middle(t: pa.Table, labels: pa.Table) -> tuple[pa.Table, pa.Table]:
+        fraud = labels["is_fraud_observed"].to_pylist()
+        victims = {a for a, f in zip(t["account_id"].to_pylist(), fraud, strict=True) if f}
+        accounts = [
+            (a[:14] + "Z" + a[15:]) if a in victims else a for a in t["account_id"].to_pylist()
+        ]
+        return _replace(t, "account_id", pa.array(accounts)), labels
+
+    results = _results(_plant(plant_base, tmp_path / "token-middle", mark_middle), PLANT_ROWS)
+    assert not results["identifier construction"].passed
+
+
+def test_a_label_available_before_its_transaction_is_caught(
+    plant_base: Path, tmp_path: Path
+) -> None:
+    """When a label arrives tells a model nothing about the label; nothing checked that."""
+
+    def fast_labels(t: pa.Table, labels: pa.Table) -> tuple[pa.Table, pa.Table]:
+        fraud = labels["is_fraud_observed"].to_pylist()
+        stamps = t["transaction_timestamp"].cast(pa.int64()).to_numpy()
+        available = [
+            int(s) + (1 if f else 86_400_000_000) for s, f in zip(stamps, fraud, strict=True)
+        ]
+        return t, _replace(
+            labels,
+            "label_available_at",
+            pa.array(available, pa.int64()).cast(pa.timestamp("us", tz="UTC")),
+        )
+
+    results = _results(_plant(plant_base, tmp_path / "fast-labels", fast_labels), PLANT_ROWS)
+    assert not results["shortcut detector"].passed
+
+
+def test_a_malformed_value_is_caught(plant_base: Path, tmp_path: Path) -> None:
+    """The value-format gate had no test that it reacts."""
+
+    def break_mcc(t: pa.Table, labels: pa.Table) -> tuple[pa.Table, pa.Table]:
+        codes = t["merchant_category_code"].to_pylist()
+        codes[0] = "ABCD"
+        return _replace(t, "merchant_category_code", pa.array(codes, pa.string())), labels
+
+    results = _results(_plant(plant_base, tmp_path / "bad-mcc", break_mcc), PLANT_ROWS)
+    assert not results["value formats"].passed
+
+
+def test_fraud_concentrated_in_late_months_is_caught_by_file_order(
+    plant_base: Path, tmp_path: Path
+) -> None:
+    """The file-order gate had no test that it reacts."""
+    state = {"file": 0}
+
+    def drop_early_fraud(t: pa.Table, labels: pa.Table) -> tuple[pa.Table, pa.Table]:
+        state["file"] += 1
+        if state["file"] > 12:
+            return t, labels
+        observed = [False] * labels.num_rows  # no fraud at all in the first half of the year
+        return t, _replace(labels, "is_fraud_observed", pa.array(observed, pa.bool_()))
+
+    results = _results(_plant(plant_base, tmp_path / "late-fraud", drop_early_fraud), PLANT_ROWS)
+    assert not results["file order"].passed
+
+
+@pytest.mark.req("ML-DATA-08")
+def test_the_committed_report_describes_the_current_parameters() -> None:
+    """The report shipped with a release must not describe a superseded parameter set.
+
+    It did, for two commits: its footer said no parameter was sourced while twelve were
+    (M2 principal review, MAJOR 4.1). The digest makes that a failure here instead.
+    """
+    digest = parameter_digest(load_parameters())
+    text = REALISM_REPORT_MD.read_text(encoding="utf-8")
+
+    assert digest in text, (
+        "dataset/realism_report.md was generated from different parameter values; regenerate it "
+        "with: uv run fs-dataset report <dataset> --rows <rows>"
+    )
+
+
+def _full_results(root: Path, rows: int) -> dict[str, CheckResult]:
+    config = build_config(load_parameters(), seed=SEED, total_rows=rows)
+    results, _ = run_checks(root, config, full=True)
+    return {r.name: r for r in results}
+
+
+@pytest.mark.req("ML-DATA-01", "ML-DATA-02", "ML-DATA-03", "ML-DATA-05")
+def test_the_release_gates_react_when_their_property_is_broken(
+    plant_base: Path, tmp_path: Path
+) -> None:
+    """The --full gates had no negative test, so nothing showed they could fail (MAJOR 4.3).
+
+    The size gate is exercised by the dataset being small; the others are broken deliberately.
+    """
+    assert not _full_results(plant_base, PLANT_ROWS)["size"].passed
+
+    def no_label_noise(t: pa.Table, labels: pa.Table) -> tuple[pa.Table, pa.Table]:
+        return t, _replace(labels, "is_fraud_observed", labels["is_fraud_true"])
+
+    def no_fraud(t: pa.Table, labels: pa.Table) -> tuple[pa.Table, pa.Table]:
+        clean = pa.array([False] * labels.num_rows, pa.bool_())
+        return t, _replace(_replace(labels, "is_fraud_true", clean), "is_fraud_observed", clean)
+
+    def one_channel(t: pa.Table, labels: pa.Table) -> tuple[pa.Table, pa.Table]:
+        single = pa.array(["MOBILE_MONEY"] * t.num_rows, pa.string())
+        return _replace(t, "channel", single), labels
+
+    def one_country(t: pa.Table, labels: pa.Table) -> tuple[pa.Table, pa.Table]:
+        single = pa.array(["RWF"] * t.num_rows, pa.string())
+        return _replace(t, "currency", single), labels
+
+    for name, change, check in (
+        ("noiseless", no_label_noise, "label noise"),
+        ("fraudless", no_fraud, "fraud rate"),
+        ("one-channel", one_channel, "channel mix"),
+        ("one-country", one_country, "country mix"),
+    ):
+        results = _full_results(_plant(plant_base, tmp_path / name, change), PLANT_ROWS)
+        assert not results[check].passed, check
+
+
+@pytest.mark.req("ML-DATA-04")
+def test_a_memory_overrun_and_a_missing_scenario_are_caught(
+    plant_base: Path, tmp_path: Path
+) -> None:
+    """The last two gates without a negative test (MAJOR 4.3).
+
+    The scenario count is a release gate: a small run legitimately lacks scenarios, so it is
+    checked in full mode, where this dataset is too small to hold all eight.
+    """
+    assert not _full_results(plant_base, PLANT_ROWS)["fraud scenarios"].passed
+
+    hungry = tmp_path / "hungry"
+    shutil.copytree(plant_base, hungry)
+    run = json.loads((hungry / "run.json").read_text(encoding="utf-8"))
+    run["peak_rss_bytes"] = 3 * 2**30  # over the 2 GiB budget
+    (hungry / "run.json").write_text(json.dumps(run, indent=2, sort_keys=True) + "\n")
+
+    assert not _results(hungry, PLANT_ROWS)["generator peak memory"].passed

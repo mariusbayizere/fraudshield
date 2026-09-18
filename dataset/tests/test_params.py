@@ -23,6 +23,73 @@ def _write(directory: Path, name: str, parameters: dict[str, object]) -> Path:
     return path
 
 
+@pytest.mark.req("D-08")
+@pytest.mark.parametrize(
+    ("citation", "expected"),
+    [
+        ("http://x/2024", "characters"),
+        ("Some Central Bank, Annual Report, 2024, https://bank.example.org/report.pdf", "where in"),
+        (
+            "Bank of Somewhere, Payment Systems Annual Report for 2024 (2025), the bit near the "
+            "start about wallets, https://bank.example.org/report.pdf",
+            "where in",
+        ),
+    ],
+)
+def test_a_citation_too_vague_to_check_is_rejected(
+    tmp_path: Path, citation: str, expected: str
+) -> None:
+    """A SOURCED citation must name the document and where in it the figure is (MAJOR 3.3)."""
+    _write(
+        tmp_path,
+        "volume",
+        {
+            "rows": {
+                "value": 1,
+                "unit": "rows",
+                "provenance": "SOURCED",
+                "citation": citation,
+                "rationale": "A rationale long enough to satisfy the twenty character rule.",
+                "accessed": dt.date(2026, 1, 1),
+            }
+        },
+    )
+    with pytest.raises(ParameterError, match=expected):
+        load_parameters(tmp_path)
+
+
+@pytest.mark.req("D-08")
+def test_sourced_needs_a_rationale_and_a_past_access_date(tmp_path: Path) -> None:
+    citation = (
+        "Bank of Somewhere, Payment Systems Annual Report for 2024 (2025), Annex H, Table H1, "
+        "page 47, https://bank.example.org/report.pdf"
+    )
+    base = {
+        "value": 1,
+        "unit": "rows",
+        "provenance": "SOURCED",
+        "citation": citation,
+        "accessed": dt.date(2026, 1, 1),
+    }
+    _write(tmp_path, "volume", {"rows": base})
+    with pytest.raises(ParameterError, match="needs a rationale"):
+        load_parameters(tmp_path)
+
+    _write(
+        tmp_path,
+        "volume",
+        {
+            "rows": {
+                **base,
+                "rationale": "A rationale long enough to satisfy the twenty character rule.",
+                "accessed": dt.date(2099, 12, 31),
+            }
+        },
+    )
+    with pytest.raises(ParameterError, match="in the future"):
+        load_parameters(tmp_path)
+
+
 def test_repository_parameters_are_valid_and_the_report_is_current() -> None:
     parameters = load_parameters()
     assert len(parameters) > 0
@@ -129,7 +196,11 @@ def test_a_complete_sourced_parameter_loads(tmp_path: Path) -> None:
                 "value": 13246394,
                 "unit": "persons",
                 "provenance": "SOURCED",
-                "citation": "Example census report, table 1, 2022, https://example.org/census",
+                "citation": (
+                    "National Institute of Statistics, Example Census Report (2022), Table 1, "
+                    "page 30, https://example.org/census.pdf"
+                ),
+                "rationale": "Read from the table; the census counts residents, not adults.",
                 "accessed": dt.date(2026, 9, 17),
             }
         },

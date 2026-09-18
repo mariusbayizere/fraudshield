@@ -5,13 +5,16 @@ import hashlib
 import json
 from pathlib import Path
 
+import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.dataset as ds
+import pyarrow.parquet as pq
 import pytest
 
 from fraudshield_dataset import cli
 from fraudshield_dataset.generator import config as config_module
+from fraudshield_dataset.generator import pipeline as pipeline_module
 from fraudshield_dataset.generator.config import (
     CHANNELS,
     SEGMENTS,
@@ -270,9 +273,42 @@ def test_all_eight_scenarios_occur_and_the_novel_variant_only_in_the_test_period
 
 @pytest.mark.req("D-08")
 def test_fraud_enabling_events_are_recorded_like_legitimate_events(medium: Path) -> None:
+    """The events fraud plants must be indistinguishable from legitimate ones by construction.
+
+    This test used to assert only that the two event types exist, which the M2 principal review
+    found vacuous: the property in its name was false, and the microsecond part of the timestamp
+    plus the day of the month identified a victim's account with near-perfect precision.
+    """
     events = ds.dataset(medium / "account_events", format="parquet", partitioning="hive").to_table()
+    transactions = ds.dataset(
+        medium / "transactions", format="parquet", partitioning="hive"
+    ).to_table(columns=["account_id"])
+    labels = ds.dataset(medium / "labels", format="parquet", partitioning="hive").to_table(
+        columns=["is_fraud_true"]
+    )
     kinds = set(pc.unique(events["event_type"]).to_pylist())
     assert kinds == {"SIM_SWAP", "DEVICE_CHANGE"}
+
+    victims = {
+        account
+        for account, fraud in zip(
+            transactions["account_id"].to_pylist(),
+            labels["is_fraud_true"].to_pylist(),
+            strict=True,
+        )
+        if fraud
+    }
+    on_victim = np.array([a in victims for a in events["account_id"].to_pylist()])
+    micros = events["event_timestamp"].cast(pa.int64()).to_numpy()
+    sub_second = micros % 1_000_000
+    day = pc.day(events["event_timestamp"]).to_numpy()
+    base = float(on_victim.mean())
+
+    # Sub-second precision and the day of the month must say nothing about whose account it is.
+    assert (sub_second != 0).mean() > 0.9, "legitimate events are quantised to whole seconds again"
+    assert float(on_victim[sub_second != 0].mean()) < base + 0.15
+    assert (day >= 28).any(), "no event falls in the last days of a month"
+    assert float(on_victim[day >= 28].mean()) < base + 0.25
 
 
 def test_calibration_refuses_a_share_its_role_holders_cannot_stage() -> None:
@@ -367,9 +403,13 @@ def test_every_month_allocates_its_whole_fraud_target_across_feasible_scenarios(
             assert len(planned) == model.incidents(scenario, month)
             assert len(planned) <= model.eligible_count(scenario, month)
     # No customer has reached its bust-out month at the start, so that scenario cannot run yet and
-    # its share is reallocated: the month still hits its target.
+    # its share is reallocated: the month still hits its target. Which later months can run it
+    # depends on when customers joined, so the property is that it runs over the simulation, not
+    # that it runs in any particular month.
     assert model.allocation(0)["synthetic_identity"] == 0
-    assert model.allocation(len(config.months) - 1)["synthetic_identity"] > 0
+    staged = [model.allocation(m)["synthetic_identity"] for m in range(len(config.months))]
+    assert sum(staged) > 0
+    assert sum(1 for rows in staged if rows) >= 3
 
 
 @pytest.mark.req("ML-DATA-05")
@@ -385,3 +425,28 @@ def test_country_and_segment_quotas_are_exact_for_every_population_prefix() -> N
         # so the country mix holds at development scale and not only in expectation.
         for country, share in shares.items():
             assert abs(counts[country] - share * size) < 1.0
+
+
+@pytest.mark.req("D-08", "ML-DATA-01")
+def test_byte_identity_holds_across_a_row_group_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Determinism was only ever tested on months small enough to fit one Parquet row group.
+
+    A release month holds several, and the layout is what `combine_chunks()` is there to keep
+    chunk-independent, so the row-group boundary is forced here rather than by a larger run
+    (M2 principal review, area 2 "could not verify").
+    """
+    monkeypatch.setattr(pipeline_module, "ROW_GROUP_SIZE", 64)
+    monkeypatch.setitem(pipeline_module._WRITE_OPTIONS, "row_group_size", 64)
+    one, many = tmp_path / "chunk-1", tmp_path / "chunk-64"
+    for output, chunk in ((one, 1), (many, 64)):
+        generate(
+            build_config(load_parameters(), seed=11, total_rows=6000), output, chunk_size=chunk
+        )
+
+    groups = pq.ParquetFile(
+        next((one / "transactions").glob("month=*/part-0000.parquet"))
+    ).num_row_groups
+    assert groups > 1, "the boundary this test exists for was not reached"
+    assert _files(one) == _files(many)

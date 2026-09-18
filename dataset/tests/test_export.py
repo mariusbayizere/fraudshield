@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import csv as csv_module
 import json
+import resource
+import subprocess
+import sys
 from pathlib import Path
 
 import pyarrow.dataset as ds
@@ -9,7 +12,7 @@ import pytest
 
 from fraudshield_dataset import cli
 from fraudshield_dataset.generator.config import build_config
-from fraudshield_dataset.generator.pipeline import generate, peak_rss_bytes
+from fraudshield_dataset.generator.pipeline import generate
 from fraudshield_dataset.params import load_parameters
 from fraudshield_dataset.release.export import LICENCE, TABLES, export, verify
 
@@ -85,9 +88,21 @@ def test_release_json_describes_the_data_and_its_licence(dataset: Path, release:
 
 
 def test_export_streams_within_the_memory_budget(dataset: Path, tmp_path: Path) -> None:
-    before = peak_rss_bytes()
-    export(dataset, tmp_path / "streamed")
-    assert peak_rss_bytes() - before < 512 * 2**20
+    """Measured in a fresh process: ``ru_maxrss`` is a high-water mark, so a delta inside this
+    process reads as zero once anything earlier in the suite has peaked (M2 principal review).
+    """
+    script = (
+        "from pathlib import Path\n"
+        "from fraudshield_dataset.release.export import export\n"
+        f"export(Path({str(dataset)!r}), Path({str(tmp_path / 'streamed')!r}))\n"
+    )
+    finished = subprocess.run(  # noqa: S603 - fixed interpreter, no shell
+        [sys.executable, "-c", script], check=True, capture_output=True, text=True
+    )
+    peak = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss * 1024
+
+    assert finished.returncode == 0
+    assert peak < 512 * 2**20, f"export peaked at {peak / 2**20:.0f} MiB"
 
 
 def test_export_refuses_a_directory_without_a_manifest(tmp_path: Path) -> None:

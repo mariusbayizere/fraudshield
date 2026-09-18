@@ -1,9 +1,19 @@
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import pytest
 
-from fraudshield_dataset.realism.stats import ShallowTree, auc, cross_validated_auc, separation
+from fraudshield_dataset.realism.stats import (
+    CV_TREE_NULL_INFLATION,
+    ShallowTree,
+    auc,
+    cross_validated_auc,
+    null_auc_stderr,
+    separation,
+    wilson_interval,
+)
 
 pytestmark = pytest.mark.req("D-08")
 
@@ -53,3 +63,66 @@ def test_grouped_folds_keep_each_group_on_one_side() -> None:
     grouped = cross_validated_auc(x, y, folds=5, seed=1, groups=groups)
     assert ungrouped > 0.6  # clusters leak across folds
     assert abs(grouped - 0.5) < 0.06
+
+
+@pytest.mark.parametrize(
+    ("successes", "total", "low", "high"),
+    [
+        # Published worked examples for the Wilson score interval.
+        (0, 10, 0.0, 0.2775),
+        (10, 10, 0.7225, 1.0),
+        (5, 10, 0.2366, 0.7634),
+        (100, 1000, 0.0829, 0.1202),
+    ],
+)
+def test_wilson_interval_matches_published_values(
+    successes: int, total: int, low: float, high: float
+) -> None:
+    measured = wilson_interval(successes, total)
+    # Published values are quoted to four decimals, so the tolerance is half a unit in the last.
+    assert measured[0] == pytest.approx(low, abs=5e-5)
+    assert measured[1] == pytest.approx(high, abs=5e-5)
+
+
+def test_wilson_interval_stays_inside_zero_and_one_and_handles_no_data() -> None:
+    assert wilson_interval(0, 0) == (0.0, 0.0)
+    for successes in range(0, 21):
+        low, high = wilson_interval(successes, 20)
+        assert 0.0 <= low <= successes / 20 <= high <= 1.0
+
+
+def test_null_auc_stderr_matches_the_mann_whitney_null() -> None:
+    # sqrt((n1 + n0 + 1) / (12 n1 n0)) for the rank-sum statistic under exchangeable labels.
+    assert null_auc_stderr(50, 50) == pytest.approx(math.sqrt(101 / (12 * 2500)), rel=1e-12)
+    assert null_auc_stderr(1, 1) == pytest.approx(math.sqrt(3 / 12), rel=1e-12)
+    assert null_auc_stderr(0, 10) == 0.0
+    assert null_auc_stderr(10, 0) == 0.0
+    # Noise falls as the smaller class grows.
+    assert null_auc_stderr(10, 1000) > null_auc_stderr(100, 1000)
+
+
+@pytest.mark.req("D-08")
+def test_the_tree_null_band_is_conservative_for_the_statistic_it_judges() -> None:
+    """The analytic standard error is for a single score vector, not a fitted tree.
+
+    The identifier and shortcut gates size their bands with it, multiplied by
+    ``CV_TREE_NULL_INFLATION``. This measures the true null spread of the statistic those gates
+    actually compute and fails if the constant is not conservative (M2 principal review, MAJOR 1.3).
+    """
+    rng = np.random.default_rng(20260918)
+    values, positives, trials = 240, 95, 150
+    deviations = []
+    for trial in range(trials):
+        features = rng.integers(48, 122, size=(values, 8)).astype(np.float64)
+        labels = np.zeros(values, dtype=bool)
+        labels[rng.choice(values, positives, replace=False)] = True
+        deviations.append(cross_validated_auc(features, labels, folds=5, seed=trial) - 0.5)
+
+    measured = float(np.std(deviations, ddof=1))
+    analytic = null_auc_stderr(positives, values - positives)
+    inflation = measured / analytic
+
+    assert inflation < CV_TREE_NULL_INFLATION, (
+        f"the cross-validated tree's null SD is {inflation:.2f} analytic standard errors; "
+        f"CV_TREE_NULL_INFLATION is {CV_TREE_NULL_INFLATION} and must stay above it"
+    )
