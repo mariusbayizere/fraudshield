@@ -36,6 +36,7 @@ from fraudshield_dataset.generator.config import CHANNELS, SimulationConfig
 from fraudshield_dataset.generator.fraud import NOVEL_VARIANT
 from fraudshield_dataset.generator.legit import MINOR_UNITS
 from fraudshield_dataset.generator.pipeline import peak_rss_bytes
+from fraudshield_dataset.normal import inverse_cdf
 from fraudshield_dataset.realism.stats import (
     auc,
     cross_validated_auc,
@@ -47,6 +48,10 @@ from fraudshield_dataset.realism.stats import (
 SINGLE_FEATURE_AUC_LIMIT = 0.80
 SHORTCUT_TOLERANCE = 0.03
 CI_Z = 1.96
+# Family-wise level for the identifier-construction bands. Three token columns are tested at once,
+# so a per-column 5% band fails about one run in seven by chance; the band is widened to keep the
+# 5% for the check as a whole (Bonferroni, two-sided).
+FAMILY_ALPHA = 0.05
 DISTRIBUTION_TOLERANCE_PP = 0.5
 MIN_ROWS_FULL = 5_000_000
 PEAK_RSS_LIMIT_BYTES = 2 * 2**30
@@ -352,6 +357,8 @@ def _leakage_checks(
 
     construction = {}
     token_bands = {}
+    columns = max(len(data.tokens), 1)
+    family_z = inverse_cdf(1.0 - FAMILY_ALPHA / (2 * columns))
     for column, seen in data.tokens.items():
         values = list(seen)
         labels = np.array([seen[v] for v in values])
@@ -365,7 +372,7 @@ def _leakage_checks(
         # tolerance and the 95% sampling band under the null hypothesis of no construction signal.
         token_bands[column] = max(
             SHORTCUT_TOLERANCE,
-            CI_Z * null_auc_stderr(positives, len(values) - positives),
+            family_z * null_auc_stderr(positives, len(values) - positives),
         )
     measures["identifier_construction_auc"] = construction
     measures["identifier_construction_band"] = token_bands
@@ -411,8 +418,9 @@ def _leakage_checks(
             ", ".join(
                 f"{k} {v:.3f} (band +/-{token_bands[k]:.3f})" for k, v in construction.items()
             ),
-            "token characters do not identify fraud tokens, within the 95% null band",
-            "depth-3 tree, 5-fold CV over distinct token values; band is max(0.03, 1.96 SE)",
+            "token characters do not identify fraud tokens, within the null band",
+            "depth-3 tree, 5-fold CV over distinct token values; band is max(0.03, z SE) with z "
+            f"for a family-wise {FAMILY_ALPHA:.0%} level over {columns} columns",
         ),
         CheckResult(
             "trivial rule baseline",
