@@ -218,8 +218,65 @@ The outcome depends on both scale and seed. Seed 20260922 has no mules at 20,000
 at one scale. The ratio the guard tests is scale-free in expectation; the integer pool it tests it
 against is not, and at small n the variance dominates.
 
-### Established about the detector itself (interim)
+### Established about the detector itself (interim, and see the provenance warning below)
 
-At 10,000 and 30,000 rows, 15 seeds each, clean mean AUC is 0.500 and 0.508 — centred, with no
-systematic offset from 0.5. The 0.446 that prompted this diagnosis is 1.77 standard deviations below
-the 30,000-row mean: a tail draw, not evidence that the generator leaks.
+Sweep design: clean plus three planted leaks at each scale, the plant rewriting the first byte of
+`transaction_id` to agree with the observed label with probability `strength`. `1.0` is a perfect
+oracle and tests only liveness; `0.6` is the subtle case worth defending; `0.5` carries no
+information and is a negative control on the plant itself.
+
+| scale | variant | n | mean AUC | sd | band | band ÷ sd | gate fired |
+|---|---|---:|---:|---:|---:|---:|---:|
+| 10,000 | clean | 15 | 0.500 | 0.054 | 0.088 | 1.62 | 1/15 |
+| 10,000 | plant 1.0 | 15 | 0.993 | 0.026 | 0.088 | — | 15/15 |
+| 10,000 | plant 0.6 | 15 | 0.515 | 0.051 | 0.088 | 1.74 | 2/15 |
+| 10,000 | plant 0.5 | 15 | 0.510 | 0.043 | 0.088 | 2.03 | 0/15 |
+| 30,000 | clean | 14 | 0.508 | 0.035 | 0.050 | 1.44 | 2/14 |
+| 30,000 | plant 1.0 | 14 | 1.000 | 0.000 | 0.050 | — | 14/14 |
+| 30,000 | plant 0.6 | 13 | 0.568 | 0.025 | 0.050 | 2.00 | 8/13 |
+| 30,000 | plant 0.5 | 13 | 0.508 | 0.027 | 0.050 | 1.90 | 1/13 |
+
+**The generator does not leak.** Clean mean AUC is 0.500 and 0.508 — centred at both scales, with no
+systematic offset. A construction leak would show as a persistent displacement from 0.5, and there
+is none. The 0.446 that prompted this diagnosis sits 1.77 standard deviations below the 30,000-row
+mean: a tail draw.
+
+**Power rises steeply with n.** Against the subtle plant the gate fires 2/15 at 10,000 rows and 8/13
+at 30,000, with mean AUC climbing 0.515 → 0.568. The negative control stays quiet throughout (1/28
+across both scales), so that is real sensitivity rather than a detector that fires at any
+disturbance. Power was still climbing at 30,000, so the scale at which it saturates was not reached.
+
+**The band is under-covered — this contradicts a claim marked CLOSED.** `band ÷ sd` is 1.44–1.62
+where a 95% interval needs 1.96, so the band behaves as roughly an 85–90% interval while being
+described as 95%. That predicts a 10–15% false-alarm rate on clean data; the observed rates are 1/15
+and 2/14, i.e. 7% and 14%. `CV_TREE_NULL_INFLATION = 1.3` is therefore **not conservative**, against
+what MAJOR 1.3/1.4 asserted and what the delta re-check marked CLOSED on that basis. Reaching a true
+95% band would need roughly 1.7.
+
+Two caveats belong with that. The standard deviation here is measured *across seeds*, so it mixes
+dataset variability with estimator variability; for the operational question "will a clean release
+fail its gate" that is the right quantity, but it is not the null the analytic standard error
+describes, which is what the calibration test asserts against. Both can hold at once — the test can
+pass while releases still fail one run in seven. And per **M-4**, the 10,000-row datasets
+structurally lack `mule_account`, so that tier is not a release dataset shrunk.
+
+**No band change is proposed.** The owner's direction was to diagnose rather than re-band, and this
+is the finding, not a licence to widen.
+
+### ⚠ Provenance of the table above — it cannot currently be reproduced
+
+The raw results (`shortcut_diagnosis.jsonl`, 163 records) and the sweep harness were written to the
+session scratchpad, which was cleared at a session boundary. The figures above are the summary
+statistics computed from that data before it was lost, and they are recorded here rather than
+discarded — but the underlying records are gone, and nothing above can be re-derived without
+re-running the sweep.
+
+Treat the table as a measurement that was made and reported, not as one that is currently backed by
+stored evidence. Before any of it is quoted in the paper or the defence, the sweep must be re-run
+with its outputs written **inside the repository** rather than to scratch.
+
+The sweep was also incomplete when it stopped: 10,000 and 30,000 rows finished at 15 seeds each,
+60,000 reached about 11 seeds, and 100,000 / 300,000 / 1,000,000 were never started — twice halted
+by the host for system memory pressure. So the minimum valid scale is **bounded but not located**:
+below 20,000 rows a dataset is structurally deficient (M-4), and power against a subtle leak is still
+rising at 30,000.
