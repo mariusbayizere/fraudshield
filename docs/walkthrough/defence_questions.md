@@ -114,3 +114,33 @@ to SRS 7.1 and are met by construction. Re-verified after the changes at 60,000 
 0.870% overall and 0.906% in the test period, channel mix within 0.34 pp, country mix within
 0.12 pp.
 Evidence: `dataset/realism_report.md`, `dataset/tests/test_realism_checks.py`.
+
+**Q: How do you know your synthetic data doesn't leak the label?**
+Because leakage is a gate, not a hope, and every gate has a test that fails when its property is
+broken. Three checks carry it. Single-feature AUC caps every raw and cheap per-row feature at 0.80
+(D-08), measured as `max(AUC, 1 - AUC)` with out-of-fold encoding, so a category cannot be scored
+using its own rows' labels. A shortcut detector runs a depth-3 tree over the non-behavioural columns
+only — all sixteen transaction-id bytes, the sub-second timestamp, row position in file, and the
+label-availability delay — and must land inside a band sized to that statistic's own null, with
+folds grouped by account so one incident's rows cannot straddle a split. Identifier construction
+runs the same tree over every character of every account, counterparty and device token. Eleven
+plant-a-leak tests, one per gate, each fail without their fix; three of them exist because a
+reviewer planted markers the earlier detectors could not see — in id byte 5, in token character 10,
+and in a one-microsecond label delay — and every leakage number stayed bit-identical.
+Evidence: `dataset/realism_report.md`, `dataset/tests/test_realism_checks.py`.
+
+**Q: What is the strongest single signal in the dataset, and is it a leak?**
+0.758, and no. It is the time from a SIM swap or device change to that account's next transaction,
+reached by joining `account_events` to the transactions on the account token. It is above the
+strongest transaction column, `merchant_category_code` at 0.711, and both are inside the 0.80 D-08
+ceiling — the delay by 0.042. It is not a leak: a SIM swap before a takeover is how that fraud
+works, and a model is meant to learn it, which is why it is measured and reported but deliberately
+not gated. Two caveats belong with the number. Part of it is an artefact of the generator rather
+than the phenomenon: the lead is drawn from `fraud.takeover_lead_minutes = [5, 60]`, provenance
+`ASSUMED`, so every enabling event is followed by its drain in a tight uniform window with no long
+tail and no unexploited swap, which real life does not guarantee. And the separation grows with
+sample size — 0.709 at 60,000 rows, 0.758 at 1,006,249 — so it must be quoted at release scale.
+We found this after the review closed, by measuring the channel that an exclusion had excused: it
+had been asserted in a comment as "0.537 on its own", which was the *event type* channel, while the
+delay channel was never measured and no gate judged either. Both are now in the report on every run.
+Evidence: `docs/reviews/M2/delta-recheck.md`, `dataset/realism_report.md`.

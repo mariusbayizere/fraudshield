@@ -163,6 +163,19 @@ the study of a novel fraud variant that appears only in the test period.
 - The fraud rate is calibrated to a target of 0.87% overall and 0.91% in the test period, not
   measured from any institution.
 - Amounts and locations are simulated; they carry no commercial or geographic information.
+- **No single feature separates the classes beyond AUC 0.80** (D-08), measured as
+  `max(AUC, 1 − AUC)` with out-of-fold encoding for categoricals. At 1,006,249 rows the strongest
+  transaction column is `merchant_category_code` at 0.711. The strongest channel in the dataset as
+  a whole is **0.758**, and it is not a transaction column: joining `account_events` to the
+  transactions by account token — which this datasheet invites above — gives the time from a SIM
+  swap or device change to that account's next transaction, and that delay carries 0.758.
+  A benchmark result that uses the event join is therefore not comparable to one that does not, and
+  which of the two was used should be stated.
+- The event-delay signal is partly an artefact of the generator, not only of the scenario. The lead
+  time is drawn from `fraud.takeover_lead_minutes = [5, 60]`, provenance `ASSUMED`, so every
+  fraud-enabling event is followed by its drain inside a tight uniform window, with no long tail and
+  no unexploited event. Real SIM swaps sometimes precede nothing. Do not read the strength of this
+  signal as evidence about how quickly real takeovers follow a SIM swap.
 
 **Are there tasks for which it should not be used?** It must not be used to characterise real
 customers, real fraud prevalence, or the behaviour of any real institution, and it must not be
