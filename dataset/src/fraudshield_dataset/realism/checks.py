@@ -47,6 +47,7 @@ import pyarrow.compute as pc
 import pyarrow.parquet as pq
 from numpy.typing import NDArray
 
+from fraudshield_dataset.fingerprint import dataset_fingerprint
 from fraudshield_dataset.generator.config import CHANNELS, SimulationConfig
 from fraudshield_dataset.generator.countries import minor_units_by_currency
 from fraudshield_dataset.generator.fraud import NOVEL_VARIANT
@@ -987,6 +988,10 @@ def run_checks(
     measures["checks_peak_rss_bytes"] = peak_rss_bytes()
     measures["parameter_values_sha256"] = parameter_digest(config.parameters)
     measures["check_set_sha256"] = check_digest(results)
+    # The digest above hashes the parameters the run was given; this hashes the rows it produced
+    # (PB-41). A draw can change with every parameter value identical - PB-29 did exactly that -
+    # so the input digest cannot answer "is this report about this dataset?" and never could.
+    measures["dataset_fingerprint_sha256"] = dataset_fingerprint(root)
     return results, measures
 
 

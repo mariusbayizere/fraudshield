@@ -13,6 +13,7 @@ import pyarrow.parquet as pq
 import pytest
 
 from fraudshield_dataset import cli
+from fraudshield_dataset.fingerprint import dataset_fingerprint
 from fraudshield_dataset.generator.config import build_config
 from fraudshield_dataset.generator.fraud import NOVEL_VARIANT
 from fraudshield_dataset.generator.pipeline import generate
@@ -25,6 +26,7 @@ from fraudshield_dataset.realism.checks import (
     parameter_digest,
     run_checks,
 )
+from fraudshield_dataset.realism.report import render as render_report
 
 pytestmark = pytest.mark.req("D-08")
 
@@ -335,6 +337,33 @@ def test_the_committed_report_describes_the_current_parameters() -> None:
         "dataset/realism_report.md was generated from different parameter values; regenerate it "
         "with: uv run fs-dataset report <dataset> --rows <rows>"
     )
+
+
+@pytest.mark.req("ML-DATA-08")
+def test_a_generated_report_carries_the_fingerprint_of_the_dataset_it_describes(
+    clean: Path,
+) -> None:
+    """PB-41: the report says which dataset it is about, in a value a machine can compare.
+
+    Asserted against a report generated here rather than against the committed one, deliberately.
+    The committed report describes a million-row run that is not in the repository, so a static
+    assertion could only check the field's *shape* — and a shape check would pass just as happily
+    over a fingerprint belonging to some other dataset, which is the failure being prevented. The
+    substantive comparison needs the data, so it lives where the data is: at report generation,
+    and at `export`, which refuses to bundle a report whose fingerprint is not this dataset's.
+    """
+    config = build_config(load_parameters(), seed=SEED, total_rows=CLEAN_ROWS)
+    results, measures = run_checks(clean, config, full=False)
+    fingerprint = dataset_fingerprint(clean)
+
+    assert measures["dataset_fingerprint_sha256"] == fingerprint
+    assert fingerprint != measures["parameter_values_sha256"], (
+        "precondition: the two hashes are different values, or this test could be passing on the "
+        "parameter digest under another name"
+    )
+    text = render_report(results, measures, config, False)
+    assert fingerprint in text, "the rendered report does not carry the dataset's fingerprint"
+    assert "Dataset fingerprint SHA-256" in text
 
 
 @pytest.mark.req("ML-DATA-08")

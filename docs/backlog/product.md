@@ -413,6 +413,33 @@ the decision engine M6, staff identity, admin and audit M7).
 - **Note:** the parameter digest is kept alongside it. The two answer different questions and one
   does not replace the other: the digest localises *why* a report went stale, the fingerprint
   detects *that* it did.
+- **CLOSED 2026-09-19 (M3), with one correction to its own acceptance.**
+  `fraudshield_dataset.fingerprint` hashes the `SAMPLE_ROWS` rows of each of the three tables that
+  sort first under a canonical ordering, plus each table's row count. Sampled by **value**, never
+  by position, so it is independent of partition layout and chunk size — E4 permits the chunk size
+  to change and requires the dataset not to, and a fingerprint that moved with it would be loosened
+  the first time it fired. The row counts are in the payload because a sample answers "are these
+  the same rows?" and only the count answers "are these all of them?". The parameter digest is kept
+  alongside, as the note above requires.
+- **The acceptance's mutation no longer reproduces its defect, and was replaced rather than
+  recorded as passing.** Reversing the country pack order leaves the dataset byte-identical
+  (12,000 rows, seed 20260917): `Population._apportioned` sorts the country share itself, so
+  apportionment is insensitive to the order packs arrive in. That closure is now pinned by
+  `test_the_generator_no_longer_re_draws_when_the_pack_order_changes`, because deleting one
+  `sorted()` would reopen it. The executed mutation is `_GOLDEN` — a constant in generator code,
+  covered by no provenance record, which moves every activity multiplier and therefore every
+  subsequent row. Fingerprint moves, parameter digest does not, both asserted.
+- **Enforced at the export, not only recorded in a field.** `export()` refuses to bundle a realism
+  report that does not carry the exported dataset's fingerprint, and takes `--report` so that a
+  release-size run bundles the report generated *by that run*. A release ships the data and the
+  report together and a consumer has nothing to tell them apart with, so a warning would reach only
+  whoever ran the export.
+- **Remaining, deliberately:** the committed `dataset/realism_report.md` describes a 1,012,522-row
+  run and carries no fingerprint, since adding one means regenerating it — a citable evidence run.
+  Until then it cannot be bundled with any other dataset, which the export refuses and a test
+  asserts. It gains a fingerprint at its next regeneration, whether that is PB-25's release-size CI
+  run or the next full local run; no release can ship without one, so this is a visible gap rather
+  than a silent one.
 
 ### PB-42 · `CROSS_BLOC_AFRICA` names a continent the rule does not test
 - **Source:** implementing `corridor_class` (PB-30), 2026-09-19 · **Priority:** low · **Due:** with

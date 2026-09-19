@@ -1178,3 +1178,55 @@ denominator instead of a NaN.
 class of defect. The honest version is narrower — declaring it **located** the defect, and only the
 mutation test proved the declaration was being honoured. A field that nothing checks is a comment
 with a type annotation.
+
+### 2026-09-19 · The fingerprint found that the defect it was built for had already closed
+
+PB-41 asked for a dataset fingerprint — a hash over **output rows** rather than over parameters —
+because PB-29 re-drew the entire benchmark while changing no parameter value, and
+`parameter_digest` could not see it by construction. The acceptance named the mutation to prove it
+with: *change the country iteration order alone, leaving every parameter value identical, and
+assert the guard fails.*
+
+**It doesn't fail. Reversing the pack order leaves the dataset byte-identical.** Measured on a
+12,000-row run at seed 20260917: same fingerprint, both orders. The reason is in the code PB-29
+itself produced — `Population._apportioned` starts with `countries = sorted(self._country_share)`,
+so apportionment re-sorts whatever order the packs arrive in, and the merchant and agent tables are
+dicts keyed by country rather than sequences consumed in order. The specific door PB-29 came
+through is shut.
+
+Three things follow, and the order matters.
+
+**First, the mutation had to be replaced rather than reported as passing.** A mutation that no
+longer reproduces its defect proves nothing about the guard; writing "no difference detected" beside
+it would have been true and useless. The replacement is `_GOLDEN`, the low-discrepancy step the
+activity multipliers walk: a constant that lives in generator **code**, is covered by no provenance
+record, and moves every customer's activity multiplier and therefore every row drawn afterwards.
+Changing it re-draws the dataset with every parameter value byte-identical, the fingerprint moves,
+and the parameter digest does not.
+
+**Second, the class is what matters, not the instance.** PB-41's framing — "a changed iteration
+order" — was one instance of *anything outside the parameter set that steers the draw*: a code
+constant, an algorithm replaced by an equivalent one, a library's sampler changing between
+versions. Fixing the instance closed one door and left the class open, which is the
+guard-with-two-doors shape appearing **in the fix for a guard-with-two-doors**. The fingerprint is
+the right response precisely because it does not enumerate the ways an input can escape notice; it
+hashes the output.
+
+**Third, the closure is now pinned.** That the generator is insensitive to pack order is a property
+someone could remove without noticing — deleting one `sorted()` would do it — so it is a test
+rather than a paragraph. If it breaks, PB-29 is possible a second time and the test says so.
+
+*The uncomfortable part, recorded because it is the useful part:* had the mutation been written as
+specified and simply run, it would have passed with the guard absent, because the fingerprint did
+not yet exist when the behaviour it was meant to detect stopped occurring. The thing that caught it
+was running the mutation **before** writing the assertion it was supposed to satisfy, and being
+surprised. A mutation table is only evidence if the mutations are executed; a row filled in from
+the design document is a plan, not a result.
+
+**Where the guard actually bites.** The fingerprint is written into `realism_report.md` and
+`release.json`, and `export()` **refuses** to bundle a realism report that does not carry the
+fingerprint of the dataset being exported. Refusing rather than warning: a release ships the data
+and the report together and a consumer has nothing to tell them apart with, which is exactly the
+state PB-39 shipped for two commits. The committed report describes a 1,012,522-row run and carries
+no fingerprint until its next regeneration, so today it cannot be bundled with any other dataset —
+which is the correct behaviour and is visible rather than silent.

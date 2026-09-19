@@ -75,9 +75,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     export_command.add_argument(
         "--no-csv", action="store_true", help="export Parquet only (CSV is written here alone)"
     )
+    export_command.add_argument(
+        "--report",
+        type=Path,
+        default=None,
+        help="the realism report to bundle, defaulting to the committed one; it must carry this "
+        "dataset's fingerprint or the export refuses (PB-41)",
+    )
     args = parser.parse_args(argv)
     if args.command == "export":
-        release = export(args.dataset, args.output, csv_tables=not args.no_csv)
+        release = export(args.dataset, args.output, csv_tables=not args.no_csv, report=args.report)
         rows = release.rows["transactions"]
         print(f"exported {rows} transaction rows and {len(release.files)} files to {args.output}")
         return 0
