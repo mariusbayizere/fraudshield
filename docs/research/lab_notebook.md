@@ -609,3 +609,47 @@ of primitives that carry their own hand-computed tests. And the mutation suite i
 that must *pass* — an honest reassociation of a window sum — because without a case that should not
 fire, a tolerance that rejects everything looks identical to one that works. That is the 0.5-strength
 plant from M2's power curve, in a new place.
+
+### 2026-09-19 · A test whose fixture lacks the condition it tests passes vacuously, and reading cannot detect it
+
+Twice in one session, and the second time in the same session the first was written down.
+
+**Instance one.** The test pinning that categorical folds group by account constructed 40 accounts
+with `code = account % 4` and `fraud = account % 2 == 0`. Every category therefore came out *purely*
+fraud or *purely* legitimate, so each category's rate was 0 or 1 whichever way the folds were drawn,
+and grouped and per-row folding produced identical scores. The test asserted they differed; it
+failed, which is how it was noticed — but had it been written the other way round, asserting they
+agreed, it would have passed forever while testing nothing.
+
+**Instance two.** The test pinning that partition-key drift is bounded by the largest UTC offset ran
+on the shared 6,000-row fixture at seed 11. Seed 11 produces **zero** drifting rows. The assertion
+`earliest >= start - max_offset` therefore held over an empty set. It was found by mutating the
+permitted drift to zero — claiming no drift is allowed at all — and watching the test still pass.
+Seed 13 produces 7 drifting rows; on that fixture the same mutation fails with
+"2024-06 reaches 1.4h before its start, beyond the 3.0h maximum UTC offset".
+
+**What the two have in common is not carelessness.** Both tests were correct as written. Both would
+survive review by reading, because nothing in the test's text is wrong — the defect is in the
+*fixture*, one level away, and the assertion is simply never reached in a state that could fail. A
+reviewer checking the assertion sees an assertion that would catch the bug if the data reached it.
+
+**Two mechanisms, one cheap and one expensive.** Mutation testing finds these reliably but costs a
+run per mutation and is easy to skip. A **precondition assertion** — `assert drifting > 0` before
+bounding the drift, `assert mixed_categories` before checking the encoding — costs nothing, runs
+every time, and converts a vacuous pass into a loud failure naming what the fixture is missing. It
+is now M3 exit criterion E12, with E13 requiring each of the 44 feature tests to exercise its
+feature non-trivially and E14 requiring mutation results to be recorded as they are produced rather
+than assembled at the end.
+
+*Why it belongs in the paper:* this is the same recurrence structure as the guard/floor/folds family,
+in a different dimension. There the fix addressed the individual case and missed the aggregate; here
+the test asserts the right property over data that cannot exhibit it. In both, the artefact is
+correct in isolation and wrong in context, and in both, reading is the wrong instrument — the first
+needed the question "what does the aggregated version look like?", the second needs "does the
+fixture contain the case?". A methodology section that lists tests written is weaker than one that
+states how the tests were shown capable of failing.
+
+*The uncomfortable part:* instance two happened after instance one had been analysed, written up and
+turned into an exit criterion, by the same author, in the same session. Knowing the failure mode did
+not prevent repeating it. That is the argument for the structural fix — a precondition the test
+cannot omit — over the habit of remembering.

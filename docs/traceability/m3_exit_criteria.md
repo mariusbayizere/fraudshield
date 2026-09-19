@@ -5,6 +5,9 @@ definition of done: each is checkable, and the first two exist because M2 paid f
 
 ## Rules M2 paid for
 
+Numbered E1, E2 and E12–E14. The identifiers are stable references, so they are not renumbered when
+a rule is added; E12–E14 arrived after the feature-pipeline criteria were written.
+
 ### E1 — every fold, split, sample and target encoding is account-grouped and time-respecting
 
 M2 found the same defect three times, each a correct fix that stopped one step short of the
@@ -38,6 +41,44 @@ Until it is explained:
 - every metric that depends on target encoding is reported at a fixed, stated scale;
 - comparisons between feature sets, models or ablations use the **same** dataset size, and say so;
 - a metric quoted without its scale is not admissible as evidence, in the paper or the review record.
+
+### E12 — every bound, absence or invariant test asserts its own precondition first
+
+Twice in one session a test passed while proving nothing, and in both cases the cause was the same:
+**the fixture did not contain the condition the test claimed to check.** The fold-grouping test
+constructed categories that were purely fraud or purely legitimate, so grouped and ungrouped folds
+agreed trivially. The partition-drift test used a fixture seed with zero drifting rows, so a bound on
+how far rows may drift held over an empty set. Neither is visible by reading the test; both were
+found only by mutating the thing under test and seeing the test still pass.
+
+Required of every test that asserts a bound, an absence or an invariant:
+
+- **assert the precondition explicitly, before the assertion it exists for** — `assert drifting > 0`
+  before bounding the drift, `assert mixed_categories` before checking the encoding, `assert
+  crossings > 0` before asserting window behaviour at a boundary;
+- the precondition assertion carries a message saying what is missing, so a fixture that stops
+  exercising the case fails loudly instead of silently passing;
+- where the precondition is probabilistic in the fixture, pick a seed that makes it deterministic
+  and say in the docstring why that seed. A precondition that holds one run in fifteen is a flaky
+  test, not a precondition.
+
+A precondition turns a vacuous pass into a loud failure without needing a mutation run, which is
+what makes it structural rather than a habit someone has to remember.
+
+### E13 — the 44 feature tests each exercise their feature non-trivially
+
+Per Part E.2 each feature has unit tests with hand-computed expectations. Each must additionally
+include at least one case where the feature is **non-trivially exercised** — non-zero history, a
+window boundary crossed, a structural NaN present — with that precondition asserted per E12. A
+velocity feature whose tests only ever see an empty history, or a distance feature that only ever
+sees a single transaction, proves nothing about the feature and everything about the fixture.
+
+### E14 — mutation checks run as the tests are written, and are recorded
+
+The parity suite and the feature gate tests carry a mutation table naming each deliberate divergence
+tried and the result, filled in **as each is implemented** rather than assembled at the end. The
+table lives beside the design it tests (`docs/ml/training_serving_parity.md` for parity). A mutation
+that passes is not a curiosity: it is the specification for a case the test is missing.
 
 ## Feature pipeline
 
