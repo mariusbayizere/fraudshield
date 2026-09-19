@@ -397,6 +397,12 @@ class FeatureSpec:
     window: str | None = None
     contract: WindowContract | None = None
     tolerance_note: str | None = None
+    #: Set when the feature is *computable but carries no signal on the current dataset*, naming
+    #: the backlog item and what would clear it. Unlike the ten contract fields this has a default,
+    #: and deliberately: it records an observed property of the data, not a fork two independent
+    #: implementations could resolve differently. ML-DATA-07's completeness check cannot catch this
+    #: class — a degenerate feature *is* computable — so it has to be declared.
+    degeneracy: str | None = None
 
     def __post_init__(self) -> None:
         for field_name in ("definition", "nan_rule", "leakage_note", "template_id"):
@@ -1361,6 +1367,15 @@ for _spec_ in (
             "merchant_activity_15m and no device aggregate at all, so the database genuinely "
             "cannot answer this question — as opposed to answering it inconveniently."
         ),
+        degeneracy=(
+            "DEGENERATE ON THE CURRENT DATASET (PB-40). Measured at tree d85385f: 5,484 distinct "
+            "device fingerprints across 5,920 accounts, and zero used by more than one account "
+            "(max accounts per device: 1). The feature is therefore identically 1 and has no "
+            "variance. The generator has no device-sharing mechanism; this is a data gap, not a "
+            "feature defect, and the feature ships computing correctly over data that does not "
+            "exercise it. Cleared when the generator shares devices between accounts, scheduled "
+            "before M4 training so the feature is non-degenerate when the model using it is fitted."
+        ),
     ),
     FeatureSpec(
         name="device_changes_24h",
@@ -1699,6 +1714,14 @@ for _spec_ in (
             label_basis=LabelBasis.NOT_LABEL_DERIVED,
             minimum_history=None,
             history_key=HistoryKey.ACCOUNT,
+        ),
+        degeneracy=(
+            "PARTIALLY DEGENERATE ON THE CURRENT DATASET (PB-40). Part E.2 defines this composite "
+            "over four terms, one being 'shared device and phone attributes across accounts'. "
+            "No device in the dataset is shared, so that term contributes a constant and the score "
+            "is effectively a composite of three terms, not four. The score remains in [0, 1] and "
+            "emits no NaN, so nothing downstream signals the loss — which is why it is declared "
+            "here. Cleared with accounts_per_device_7d, before M4 training."
         ),
     ),
 ):

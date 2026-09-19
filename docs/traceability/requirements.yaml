@@ -178,6 +178,15 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M3 evaluation-design constraint (E1, adopted 2026-09-19): seven of the 44 features aggregate
+    over an entity other than the account (counterparty, device, agent, geo cell), so account-grouped
+    folds do not isolate them, and component folding is unavailable - measured, the counterparty and geo-cell
+    graphs are single components spanning 100% of accounts and the agent graph reaches 38% (docs/research/component_sizes.json,
+    tree d85385f). The train/validation/test split is temporal with an embargo, and a validation row reading
+    earlier cross-account rows is what serving does, not leakage. The live exposure is OUT-OF-FOLD TARGET
+    ENCODING INSIDE THE TRAINING PERIOD, where folds are random and account-grouped - where M-8 lived.
+    Required: out-of-fold encodings are computed over rows strictly EARLIER IN TIME than the row being
+    encoded, never over random folds. This is settled, not open; M4 must not be designed as if it were.'
 - id: FR-02-04
   section: 3.2 FR-02 ML fraud scoring engine
   title: SHAP TreeExplainer (exact, no sampling) computes top-5 SHAP features for all transactions with
@@ -2417,6 +2426,15 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M3 evaluation-design constraint (E1, adopted 2026-09-19): seven of the 44 features aggregate
+    over an entity other than the account (counterparty, device, agent, geo cell), so account-grouped
+    folds do not isolate them, and component folding is unavailable - measured, the counterparty and geo-cell
+    graphs are single components spanning 100% of accounts and the agent graph reaches 38% (docs/research/component_sizes.json,
+    tree d85385f). The train/validation/test split is temporal with an embargo, and a validation row reading
+    earlier cross-account rows is what serving does, not leakage. The live exposure is OUT-OF-FOLD TARGET
+    ENCODING INSIDE THE TRAINING PERIOD, where folds are random and account-grouped - where M-8 lived.
+    Required: out-of-fold encodings are computed over rows strictly EARLIER IN TIME than the row being
+    encoded, never over random folds. This is settled, not open; M4 must not be designed as if it were.'
 - id: ML-GATE-02
   section: 7.2 Model deployment gate
   title: Precision at 1% FPR
@@ -2431,6 +2449,15 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M3 evaluation-design constraint (E1, adopted 2026-09-19): seven of the 44 features aggregate
+    over an entity other than the account (counterparty, device, agent, geo cell), so account-grouped
+    folds do not isolate them, and component folding is unavailable - measured, the counterparty and geo-cell
+    graphs are single components spanning 100% of accounts and the agent graph reaches 38% (docs/research/component_sizes.json,
+    tree d85385f). The train/validation/test split is temporal with an embargo, and a validation row reading
+    earlier cross-account rows is what serving does, not leakage. The live exposure is OUT-OF-FOLD TARGET
+    ENCODING INSIDE THE TRAINING PERIOD, where folds are random and account-grouped - where M-8 lived.
+    Required: out-of-fold encodings are computed over rows strictly EARLIER IN TIME than the row being
+    encoded, never over random folds. This is settled, not open; M4 must not be designed as if it were.'
 - id: ML-GATE-03
   section: 7.2 Model deployment gate
   title: Recall (fraud capture rate)
@@ -2445,6 +2472,15 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M3 evaluation-design constraint (E1, adopted 2026-09-19): seven of the 44 features aggregate
+    over an entity other than the account (counterparty, device, agent, geo cell), so account-grouped
+    folds do not isolate them, and component folding is unavailable - measured, the counterparty and geo-cell
+    graphs are single components spanning 100% of accounts and the agent graph reaches 38% (docs/research/component_sizes.json,
+    tree d85385f). The train/validation/test split is temporal with an embargo, and a validation row reading
+    earlier cross-account rows is what serving does, not leakage. The live exposure is OUT-OF-FOLD TARGET
+    ENCODING INSIDE THE TRAINING PERIOD, where folds are random and account-grouped - where M-8 lived.
+    Required: out-of-fold encodings are computed over rows strictly EARLIER IN TIME than the row being
+    encoded, never over random folds. This is settled, not open; M4 must not be designed as if it were.'
 - id: ML-GATE-04
   section: 7.2 Model deployment gate
   title: F1 Score
@@ -2459,6 +2495,15 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M3 evaluation-design constraint (E1, adopted 2026-09-19): seven of the 44 features aggregate
+    over an entity other than the account (counterparty, device, agent, geo cell), so account-grouped
+    folds do not isolate them, and component folding is unavailable - measured, the counterparty and geo-cell
+    graphs are single components spanning 100% of accounts and the agent graph reaches 38% (docs/research/component_sizes.json,
+    tree d85385f). The train/validation/test split is temporal with an embargo, and a validation row reading
+    earlier cross-account rows is what serving does, not leakage. The live exposure is OUT-OF-FOLD TARGET
+    ENCODING INSIDE THE TRAINING PERIOD, where folds are random and account-grouped - where M-8 lived.
+    Required: out-of-fold encodings are computed over rows strictly EARLIER IN TIME than the row being
+    encoded, never over random folds. This is settled, not open; M4 must not be designed as if it were.'
 - id: ML-GATE-05
   section: 7.2 Model deployment gate
   title: False Positive Rate at threshold 0.85
@@ -2553,6 +2598,15 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M3 evaluation-design constraint (E1, adopted 2026-09-19): seven of the 44 features aggregate
+    over an entity other than the account (counterparty, device, agent, geo cell), so account-grouped
+    folds do not isolate them, and component folding is unavailable - measured, the counterparty and geo-cell
+    graphs are single components spanning 100% of accounts and the agent graph reaches 38% (docs/research/component_sizes.json,
+    tree d85385f). The train/validation/test split is temporal with an embargo, and a validation row reading
+    earlier cross-account rows is what serving does, not leakage. The live exposure is OUT-OF-FOLD TARGET
+    ENCODING INSIDE THE TRAINING PERIOD, where folds are random and account-grouped - where M-8 lived.
+    Required: out-of-fold encodings are computed over rows strictly EARLIER IN TIME than the row being
+    encoded, never over random folds. This is settled, not open; M4 must not be designed as if it were.'
 - id: ML-GATE-12
   section: 7.2 Model deployment gate
   title: Inference latency p99
@@ -3025,13 +3079,13 @@ requirements:
   - dataset/src/fraudshield_dataset/generator/pipeline.py
   - dataset/src/fraudshield_dataset/release/export.py
   evidence:
-  - dataset/realism_report.md (1,006,249 rows, seed 20260917, all gate checks pass)
+  - dataset/realism_report.md (1,012,522 rows, seed 20260917, tree d85385f, all gate checks pass)
   - dataset/tests/test_generator.py
   - dataset/tests/test_realism_checks.py
   - dataset/tests/test_export.py
   deviations: []
   notes: See ADR 0024 for why the feature clause is not M2's to satisfy.
-  reduced_scale: 'Verified at 1,006,249 rows against a 5,000,000-row specification. Delivered at this
+  reduced_scale: 'Verified at 1,012,522 rows against a 5,000,000-row specification. Delivered at this
     scale: CSV and Parquet output, 8 fraud types, 6 channels, 5 EAC countries, CC BY 4.0, determinism
     from a seed, and every realism and anti-leakage gate. Carried: the 5,000,000-row count is PB-25, blocked
     because workflow_dispatch registers only from the default branch, still m0/bootstrap, and the run

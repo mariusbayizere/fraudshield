@@ -74,15 +74,26 @@ every other, and the counterparty graph is fully connected. This is exactly why 
 decision is made against a measured distribution — the reasoning above was not careless, and it was
 still wrong.
 
-**Open, and not to be resolved by assertion a second time.** With component folding unavailable, the
-candidates are the training-fold restriction (leakage traded for training/serving skew) or
-**temporal separation**. The dataset already has a temporal split with an embargo, and for a strictly
-backward-looking aggregate a validation row reading earlier cross-account rows is **not leakage** —
-it is what serving does. The real exposure is narrower: **out-of-fold target encoding within the
-training period**, where folds are random and account-grouped rather than temporal, which is where
-M-8 lived. The likely rule is that out-of-fold encodings are computed over rows strictly earlier in
-time than the row being encoded. Not adopted here pending an owner decision, because it changes M4's
-evaluation design.
+**Resolved 2026-09-19: temporal separation, and the exposure is narrower than component folding
+implied.**
+
+The dataset already splits train/validation/test **temporally with an embargo**. For a strictly
+backward-looking aggregate, a validation row reading *earlier* cross-account rows is **not
+leakage** — it is exactly what serving does. Cross-account contamination across a temporal boundary
+is therefore not the problem; it is the behaviour being reproduced.
+
+The live exposure is one place only: **out-of-fold target encoding inside the training period**,
+where folds are random and account-grouped rather than temporal. That is where M-8 lived, and it is
+where a counterparty-keyed or cell-keyed aggregate still crosses a fold boundary that means
+something.
+
+**The rule: out-of-fold encodings are computed over rows strictly earlier in time than the row being
+encoded, never over random folds.** This replaces component folding for every non-`ACCOUNT` key and
+needs no graph, so the density measurement's outcome does not gate it — the measurement's value was
+proving that component folding was not available, which is what forced the question.
+
+Carried into M4 as an evaluation-design constraint on `ML-GATE-01` through `-04`, `ML-GATE-11` and
+`FR-02-03`, so the evaluation cannot be designed as though this were still open.
 
 **Separately: `accounts_per_device_7d` has zero variance in this dataset** and the device-sharing
 term of `synthetic_identity_score` is dead with it. That is a generator gap against ML-DATA-07, not
@@ -262,7 +273,8 @@ says results "cannot be cited" for this reason.
   set's columns are disjoint from that list.
 - **E6** — the `account_events` join is available to features, and any feature derived from it is
   measured and reported alongside the transaction features. The event-to-transaction delay separates
-  the classes at 0.758 and is the dataset's strongest single channel; a feature set that uses it is
+  the classes at **0.746** (tree `d85385f`; 0.758 on the pre-PB-29 draw) and is the dataset's
+  strongest single channel, above `merchant_category_code` at 0.707; a feature set that uses it is
   not comparable to one that does not, and each must say which.
 
 ## Prerequisites landing in the same branch

@@ -130,16 +130,20 @@ and in a one-microsecond label delay — and every leakage number stayed bit-ide
 Evidence: `dataset/realism_report.md`, `dataset/tests/test_realism_checks.py`.
 
 **Q: What is the strongest single signal in the dataset, and is it a leak?**
-0.758, and no. It is the time from a SIM swap or device change to that account's next transaction,
+0.746, and no. It is the time from a SIM swap or device change to that account's next transaction,
 reached by joining `account_events` to the transactions on the account token. It is above the
-strongest transaction column, `merchant_category_code` at 0.706, and both are inside the 0.80 D-08
-ceiling — the delay by 0.042. It is not a leak: a SIM swap before a takeover is how that fraud
+strongest transaction column, `merchant_category_code` at 0.707, and both are inside the 0.80 D-08
+ceiling — the delay by 0.054. It is not a leak: a SIM swap before a takeover is how that fraud
 works, and a model is meant to learn it, which is why it is measured and reported but deliberately
 not gated. Two caveats belong with the number. Part of it is an artefact of the generator rather
 than the phenomenon: the lead is drawn from `fraud.takeover_lead_minutes = [5, 60]`, provenance
 `ASSUMED`, so every enabling event is followed by its drain in a tight uniform window with no long
 tail and no unexploited swap, which real life does not guarantee. And the separation grows with
-sample size — 0.709 at 60,000 rows, 0.758 at 1,006,249 — so it must be quoted at release scale.
+sample size — 0.709 at 60,000 rows, 0.746 at 1,012,522 — so it must be quoted at release scale.
+(Both of those, and every figure in this answer, are from the dataset at tree `d85385f`; M2
+published 0.758 at 1,006,249 rows before PB-29 changed the country iteration order and re-drew the
+dataset. The 60,000-row figure is from the earlier draw and has not been re-measured, so the two
+ends of that comparison are not from the same draw — the direction holds, the gap is indicative.)
 We found this after the review closed, by measuring the channel that an exclusion had excused: it
 had been asserted in a comment as "0.537 on its own", which was the *event type* channel, while the
 delay channel was never measured and no gate judged either. Both are now in the report on every run.
@@ -190,7 +194,9 @@ Evidence: `docs/reviews/M2/milestone-review.md`, consequence audit.
 
 **Q: You reported a three-sigma anomaly and then withdrew it. What happened?**
 We used the wrong denominator, and repeated seeds caught it. A single 1,006,249-row run read a
-shortcut-detector AUC of 0.510. Standardised against the *analytic* null standard error of 0.00346
+shortcut-detector AUC of 0.510. (That run and every figure in this answer are from the pre-PB-29
+draw, and are kept as they were read, because this answer is about what was believed and why it was
+wrong. The current dataset reads 0.509 — the same ordinary reading, from a different draw.) Standardised against the *analytic* null standard error of 0.00346
 that is t = +2.89, and we recorded a prediction that it signalled a real construction signal in the
 generator. Five seeds at the same scale then gave 0.5096, 0.4916, 0.5070, 0.5119 and 0.5044: the
 seed-to-seed standard deviation is 0.0079, more than twice the analytic figure, and 0.510 is simply
@@ -234,6 +240,6 @@ cannot settle whether it is constant: four to ten seeds give estimates from 0.84
 needs about 50 seeds per scale, roughly eight hours at a million rows. The value is used above that
 range as an extrapolation, and the code says so.
 Third, **the release-size run has never happened.** ML-DATA-01 asks for 5,000,000 rows; the
-verification run is 1,006,249. It sits at `VERIFIED_AT_REDUCED_SCALE` with that reason recorded, not
+verification run is 1,012,522. It sits at `VERIFIED_AT_REDUCED_SCALE` with that reason recorded, not
 quietly marked done.
 Evidence: `docs/reviews/M2/milestone-review.md`, `docs/research/lab_notebook.md`.

@@ -33,8 +33,19 @@ Three tables:
 
 **How many instances are there?** The release target is at least 5,000,000 transactions over 24
 months (2024-01 to 2025-12). The verification run documented in `dataset/realism_report.md` holds
-1,006,249 transactions, generated in under 6 minutes at 181 MiB peak resident memory; the figures in this
-datasheet come from that run unless stated otherwise.
+1,012,522 transactions, generated at 178 MiB peak resident memory; the figures in this datasheet
+come from that run unless stated otherwise.
+
+**Which run, exactly (added 2026-09-19).** Every figure here comes from the dataset generated at
+tree `d85385fa43b8a392271135bf226d7053eaab01ce`, seed 20260917. **Regenerating at the `m2-complete`
+tag reproduces M2's published figures; regenerating on `main` does not.** PB-29 moved every country
+fact into packs, and `countries.simulated()` sorts, so country iteration changed from declaration
+order to alphabetical and every downstream random draw shifted. **No parameter value changed** — the
+pack FX rates are byte-identical to the table they replaced. The dataset's *properties* are
+unchanged: every gate still passes, every rank order holds, the fraud rate is the same to three
+decimal places. The *draw* is different, so absolute figures moved. A reader comparing M2's tagged
+evidence against a fresh run on `main` is seeing a **re-draw, not a corrected error and not a
+defect**.
 
 **What is the smallest run that produces the whole dataset?** About **170,000 rows**. Below that the
 mule-account role pool is usually empty, and a scenario with no role holder cannot be staged, so a
@@ -87,9 +98,10 @@ Activity is placed in each customer's local time and then converted to UTC. A tr
 the *previous* month while sitting in the current month's partition. The generator carries rows
 forward past a partition's end but never backward, so the drift is one-directional.
 
-Measured at 1,006,249 rows: **447 rows (0.044%) have a UTC timestamp earlier than their partition's
-start; none is later.** The first partition's earliest timestamp is 2023-12-31 21:15 UTC, before the
-dataset's nominal start of 2024-01-01.
+Measured at 1,012,522 rows (tree `d85385f`): **463 rows (0.046%) have a UTC timestamp earlier than
+their partition's start; none is later.** The first partition's earliest timestamp is
+2023-12-31 21:08 UTC, before the dataset's nominal start of 2024-01-01. (The pre-PB-29 draw gave
+447 rows, 0.044% — the same property, a different draw.)
 
 **What a consumer must do.** Backward drift can never exceed the largest UTC offset in the dataset
 (+3 hours), so it can never span a whole partition. To select every row whose *UTC* month is `M`,
@@ -124,7 +136,7 @@ immediately before the test period. One fraud sub-variant occurs only in the tes
 generalisation to an unseen variant can be measured.
 
 **Are there errors, sources of noise or redundancies?** Yes, deliberately. Labels carry noise in
-both directions: 1.54% of true fraud is unlabelled and a further 1.66% of true fraud's worth of
+both directions: 1.66% of true fraud is unlabelled and a further 1.67% of true fraud's worth of
 legitimate rows are labelled fraud, which is what a real investigation backlog produces. The dataset is otherwise
 internally consistent: no duplicate identifiers, no malformed values (checked on every row).
 
@@ -220,11 +232,12 @@ the study of a novel fraud variant that appears only in the test period.
   measured from any institution.
 - Amounts and locations are simulated; they carry no commercial or geographic information.
 - **No single feature separates the classes beyond AUC 0.80** (D-08), measured as
-  `max(AUC, 1 − AUC)` with out-of-fold encoding for categoricals. At 1,006,249 rows the strongest
-  transaction column is `merchant_category_code` at **0.706**. The strongest channel in the dataset as
-  a whole is **0.758**, and it is not a transaction column: joining `account_events` to the
-  transactions by account token — which this datasheet invites above — gives the time from a SIM
-  swap or device change to that account's next transaction, and that delay carries 0.758.
+  `max(AUC, 1 − AUC)` with out-of-fold encoding for categoricals. At 1,012,522 rows (tree
+  `d85385f`) the strongest transaction column is `merchant_category_code` at **0.707**. The
+  strongest channel in the dataset as a whole is **0.746**, and it is not a transaction column:
+  joining `account_events` to the transactions by account token — which this datasheet invites
+  above — gives the time from a SIM swap or device change to that account's next transaction, and
+  that delay carries 0.746. (M2 published 0.706 and 0.758 from the pre-PB-29 draw.)
 - Single-feature AUCs are computed with target encoding whose folds are **whole accounts**. Folding
   per row leaves the other rows of a fraud incident inside the estimate that scores it, which
   inflated `merchant_category_code` by 0.005 and `channel` by 0.006 before it was corrected. Any
@@ -249,7 +262,7 @@ the study of a novel fraud variant that appears only in the test period.
    1.62 is derived from 45 clean datasets there, where per-scale estimates agree. Above 60,000 rows
    it is an extrapolation: four to ten seeds give estimates from 0.84 to 2.32, too wide to settle.
 3. **The release-size run has not happened.** The target is 5,000,000 transactions; every figure in
-   this datasheet comes from a 1,006,249-row run. ML-DATA-01 is recorded as
+   this datasheet comes from a 1,012,522-row run. ML-DATA-01 is recorded as
    `VERIFIED_AT_REDUCED_SCALE`, not as met.
 
 **Are there tasks for which it should not be used?** It must not be used to characterise real

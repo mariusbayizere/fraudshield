@@ -1,5 +1,20 @@
 # M2 dataset review — response
 
+> **Note added 2026-09-19 — the figures below are from a superseded draw, not from an error.**
+> PB-29 moved every country fact into packs, and `countries.simulated()` sorts, so country
+> iteration changed from declaration order to alphabetical and every downstream random draw
+> shifted. **No parameter value changed**; the pack FX rates are byte-identical to the table they
+> replaced. **The dataset's properties are unchanged — the draw is not.** Every gate still passes,
+> every rank order holds, the fraud rate is identical to three decimal places; absolute figures
+> moved. Headline changes: event delay 0.758 → **0.746**, `merchant_category_code` 0.706 →
+> **0.707**, rows 1,006,249 → **1,012,522**.
+>
+> **This is a re-draw, not a corrected error.** Nothing below was measured wrongly. Regenerating at
+> the `m2-complete` tag reproduces these figures; regenerating on `main` does not. Current values
+> are in `dataset/realism_report.md` (tree `d85385f`); the reasoning is in `docs/ml/datasheet.md`
+> under "Which run, exactly".
+
+
 Reviewer: independent Principal Review of `m2/generator` at `4a4e79d`, in its own worktree, plus an
 addendum after a delegated area-4 pass returned. Verdict: **CHANGES_REQUESTED** — 1 BLOCKER,
 1 blocking-grade MAJOR, 11 MAJOR, ~15 MINOR/NIT.

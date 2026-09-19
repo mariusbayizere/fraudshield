@@ -390,3 +390,37 @@ def test_no_durable_feature_is_silently_served_by_a_rolling_window() -> None:
         assert "flush" in note or "durable" in note, (
             f"{name} is DURABLE but its leakage note does not say what a cache flush would do"
         )
+
+
+@pytest.mark.req("FR-02-02", "ML-DATA-07")
+def test_a_feature_with_no_signal_on_this_dataset_declares_it() -> None:
+    """PB-40. ML-DATA-07's completeness check cannot catch this class, so the registry must.
+
+    A degenerate feature is *computable* — `accounts_per_device_7d` returns 1 for every row, and
+    `synthetic_identity_score` returns a number in [0, 1] with one of its four terms constant.
+    "All 44 computable for >= 98% of records" is satisfied by both. Nothing downstream emits a NaN
+    or raises, so the loss is silent until someone asks why a feature has zero importance.
+    """
+    degenerate = {n: s.degeneracy for n, s in REGISTRY.items() if s.degeneracy}
+    assert degenerate, (
+        "precondition: at least one feature is declared degenerate; without one this test passes "
+        "vacuously (E12)"
+    )
+    assert set(degenerate) == {"accounts_per_device_7d", "synthetic_identity_score"}
+    for name, note in degenerate.items():
+        assert "PB-40" in note, f"{name} must name the backlog item tracking its degeneracy"
+        assert "Cleared" in note, (
+            f"{name} must say what would clear the degeneracy, so it is a scheduled gap rather "
+            "than a permanent property"
+        )
+
+
+@pytest.mark.req("FR-02-02")
+def test_no_other_feature_silently_claims_to_be_fine() -> None:
+    """The control: `degeneracy` defaults to None, so the test above proves nothing on its own.
+
+    If every feature were accidentally marked degenerate the test above would still pass its
+    membership check only by luck. This asserts the default actually applies to the other 42.
+    """
+    healthy = [n for n, s in REGISTRY.items() if s.degeneracy is None]
+    assert len(healthy) == 42, f"expected 42 non-degenerate features, got {len(healthy)}"

@@ -335,7 +335,10 @@ the decision engine M6, staff identity, admin and audit M7).
 
 ### PB-40 · The generator never shares a device between accounts, so two features are dead
 - **Source:** E1's component-size measurement on the regenerated 1M dataset, 2026-09-19 ·
-  **Priority:** high · **Due:** M3, before the device features are implemented
+  **Priority:** high · **Due:** **before M4 training, deliberately NOT during M3** (owner decision
+  2026-09-19: changing the generator re-draws the dataset, and a session has just been spent on the
+  consequences of one re-draw. The features ship declared-degenerate now and are non-degenerate by
+  the time the model using them is fitted.)
 - **Observed:** 5,484 distinct device fingerprints across 5,920 accounts, and **zero** used by more
   than one account (max accounts per device: 1). Measured at tree `d85385f`,
   `docs/research/component_sizes.json`.
@@ -347,3 +350,32 @@ the decision engine M6, staff identity, admin and audit M7).
   that `accounts_per_device_7d` has a distribution and the synthetic-identity ring scenario has the
   mechanism Part E.2 describes. A test asserts the feature is non-constant on a generated dataset
   (E13: a feature whose tests never see sharing proves nothing about the feature).
+- **Done in M3 instead:** both features declare `degeneracy` in the registry, naming PB-40 and what
+  would clear it, with `test_a_feature_with_no_signal_on_this_dataset_declares_it` asserting the
+  declaration and `test_no_other_feature_silently_claims_to_be_fine` as its control. Clearing PB-40
+  must also delete those declarations, which the second test will force.
+
+### PB-41 · The report's digest covers parameters, so a changed draw is invisible to it
+- **Source:** PB-39's root cause, 2026-09-19 · **Priority:** high · **Due:** M3, before the next
+  release export
+- **Observed:** PB-29 changed **no parameter value** — the pack FX rates are byte-identical to the
+  table they replaced — yet the generated dataset changed completely, because `simulated()` sorts
+  and country iteration went from declaration order to alphabetical. `parameter_digest` hashes
+  parameter values, so it could not see this. It caught PB-39 only incidentally, because the pack
+  refactor also changed the parameter *structure*; had the sort been introduced on its own, in a
+  commit touching only `countries.py`, **the guard would have passed while every figure in the
+  report silently became wrong.**
+- **Why this is the family, not an instance.** Sixth appearance of the guard-with-two-doors shape
+  recorded in `docs/research/lab_notebook.md` ("The pattern"): a guard that checks the input it was
+  written for and not the output it exists to protect. The digest answers "did the parameters
+  change?" when the question the report needs answered is **"is this report still about this
+  dataset?"**
+- **Acceptance:** `release.json` and `realism_report.md` carry a **dataset fingerprint** — a hash
+  over a deterministic sample of output rows (the first N transaction ids and amounts under a fixed
+  ordering), not over the parameters. The existing report test asserts the fingerprint as it
+  currently asserts the parameter digest. Mutation-proved per E14: change the country iteration
+  order alone, leaving every parameter value identical, and assert the report test **fails** — the
+  exact case that passed this time.
+- **Note:** the parameter digest is kept alongside it. The two answer different questions and one
+  does not replace the other: the digest localises *why* a report went stale, the fingerprint
+  detects *that* it did.

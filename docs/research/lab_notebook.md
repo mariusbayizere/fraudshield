@@ -1033,3 +1033,51 @@ random and account-grouped rather than temporal. That is where M-8 lived, and it
 counterparty-keyed or cell-keyed aggregate still crosses folds. Recorded as the open question; the
 plausible answer is that out-of-fold encodings must be computed over rows strictly earlier in time
 than the row being encoded, not over random folds.
+
+### 2026-09-19 · A refactor that changed no parameter value re-drew the entire dataset
+
+**Every figure in the entries above this line is from the pre-PB-29 draw and is left exactly as it
+was recorded.** This notebook is chronological; editing past entries to carry today's numbers would
+turn a record of what was found, when, into a claim that it was always known. The mapping is here
+instead, once.
+
+PB-29 moved every country fact into packs. `countries.simulated()` returns
+`sorted(parameters.mapping("geography.country_share"))`, so country iteration went from the
+declaration order `{RW, KE, TZ, UG, CD}` to alphabetical `[CD, KE, RW, TZ, UG]`. Every downstream
+random draw shifted. **No parameter value changed** — the pack FX rates are byte-identical to the
+`currencies.rwf_per_unit` table they replaced, verified value by value.
+
+| Figure | Pre-PB-29 | Current (tree `d85385f`) |
+|---|---:|---:|
+| Rows | 1,006,249 | 1,012,522 |
+| Event delay (strongest channel) | 0.758 | **0.746** |
+| `merchant_category_code` | 0.706 | **0.707** |
+| Shortcut detector | 0.510 | 0.509 |
+| Event construction | 0.513 | 0.526 |
+| Fraud rate, test split | 0.905% | 0.927% |
+| Partition drift | 447 rows (0.044%) | 463 rows (0.046%) |
+
+**The sort is correct and should stay.** A dataset that changes because someone reorders a YAML file
+would be worse. What was wrong was that the consequence went unremarked: the commit message
+described moving facts into packs, and nothing said "this re-draws the benchmark".
+
+**Why no guard caught it for three commits, which is the part that generalises.** The report carries
+a `parameter_digest` — a hash over parameter *values* — and the test asserts that digest appears in
+the committed report. A change that alters the draw while leaving every value identical is
+**invisible to it by construction**. It caught this only by accident: the pack refactor also changed
+the parameter *structure*, so the digest moved for an unrelated reason. Had the sort been introduced
+on its own, in a commit touching only `countries.py`, the guard would have passed while every figure
+in the report became wrong.
+
+This is the **sixth instance** of the shape recorded above as "The pattern": a guard that checks the
+input it was written against rather than the output it exists to protect. The digest answers *did the
+parameters change?*; the question the report needs answered is *is this report still about this
+dataset?* Recorded as PB-41, whose fix is a **dataset fingerprint** — a hash over a deterministic
+sample of output rows — carried in `release.json` and the report, so any change to the draw from any
+cause invalidates it. The parameter digest stays alongside: it localises *why* a report went stale,
+the fingerprint detects *that* it did.
+
+*Why it belongs in the paper:* a synthetic benchmark's reproducibility claim is only as good as its
+weakest invariant. "Deterministic from a seed" is true here and was never violated — and it was not
+sufficient, because determinism guarantees the same output from the same code, not the same output
+across a refactor nobody thought could matter. The honest claim names the tree, not just the seed.
