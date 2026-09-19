@@ -104,8 +104,21 @@ the failure shape this repository refuses in its gitleaks configuration for the 
 
 **The assertion this ADR demanded, performed:** `build/licence-inventory.json` contains
 `{"ecosystem": "python", "name": "h3", "version": "4.5.0", "scope": "runtime", ...}`. The check now
-passes **because a dependency was assessed**, not because the scope was empty — which is the only
-form of "passing" that means anything the first time a code path runs.
+passes **because a dependency was assessed**, not because the scope was empty.
+
+**The general point, recorded because it outlives this dependency: a check that has only ever run
+against an empty scope is untested.** From M0 until 2026-09-19 the Python runtime scope of
+`fs-licences` was empty, and the check passed on every commit for the whole of M0, M1 and M2. Those
+passes carried no information — an empty input satisfies almost any predicate, and a green check
+over nothing is indistinguishable from a green check over something. The very first real input
+failed it. The failure was correct and the tool was right, but its record of passing said nothing
+until that moment, and nobody could have known which from the CI output alone.
+
+This is the same shape as the Maven report parser's "0 of 18 parsed" incident recorded above, and
+the same shape as the band floor and the parameter digest: **a protection whose reach is narrower
+than its appearance.** Wherever a gate's scope can be empty, the gate should report the size of
+what it checked, so that "passed" and "had nothing to check" are distinguishable without reading
+the inventory.
 
 ## Deviation from D-17 and E.12 (amended during the M0 re-review, finding R-5)
 

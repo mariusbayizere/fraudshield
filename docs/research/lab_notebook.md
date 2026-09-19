@@ -1081,3 +1081,61 @@ the fingerprint detects *that* it did.
 weakest invariant. "Deterministic from a seed" is true here and was never violated — and it was not
 sufficient, because determinism guarantees the same output from the same code, not the same output
 across a refactor nobody thought could matter. The honest claim names the tree, not just the seed.
+
+### 2026-09-19 · Two fields justified themselves the day they were written, by different routes
+
+**`history_requirement=DURABLE` earned its keep when the cold-cache test was written, not when the
+field was added.**
+
+The field was added by reasoning: `history_basis=OBSERVED_CAPPED` divides by history actually
+observed, which needs a first-seen timestamp, which a rolling window cannot reconstruct once an
+account is older than the window. That argument is correct and it was, by itself, **decorative** —
+the online path was implemented with `first_seen_at` set on the first `observe()`, which looks
+right and is wrong. It takes the rolling window's earliest *arrival* for the account's *start*.
+Those coincide only when a replay happens to begin at an account's very first transaction, which is
+true in a from-scratch backfill and false in every other situation: a cache flush, a mid-stream
+restart, a shard rebalance.
+
+Nothing in the warm-path tests could see it. Every hand-computed case passed. It surfaced the moment
+the cold-cache case was written, as a parity failure with batch reading 0.96 and online reading 1.0
+on a one-row fixture — and the first thing I did was assume the fixture was wrong, which it also
+was, for an unrelated reason.
+
+`restore_first_seen` now exists, and the test asserts that a flush **without** it changes the
+feature. That assertion is the field's content: **without a test proving the durable value's loss is
+detectable, `DURABLE` is a label with nothing behind it** — a declaration that something must
+survive, in a system where nothing checks that it did.
+
+The generalisation: **a contract field is not real until something fails when it is violated.** The
+registry can refuse a blank field, which is cheap and catches omissions. It cannot tell whether the
+value declared is the value implemented. Only a test that breaks the declared property and asserts
+the consequence can do that, and for `DURABLE` the cold-cache case is the only place that is
+possible.
+
+### 2026-09-19 · A guard that vanishes under an optimisation flag is absent exactly where it matters
+
+Both feature paths were first written with `assert contract is not None` to narrow an optional type
+before reading it. `python -O` **strips every `assert`**. In a production deployment running with
+optimisations, those guards are not weakened — they do not exist, and the code proceeds to an
+attribute access on `None`.
+
+Same family as the band floor and the parameter digest: **a protection whose reach is narrower than
+its appearance.** The band floor was inert at the scale it was meant to bind; the digest could not
+see the change it existed to catch; an `assert` is absent in the configuration most likely to be
+production. In each case reading the code suggests a guard, and the guard is missing in the specific
+regime that matters.
+
+Replaced by `registry.contract_for()` and `registry.smoothing_for()` — lookups that **raise**, and
+which keep the feature paths free of the `WindowContract | None` narrowing that invited the assert
+in the first place.
+
+**The check already existed, which is the more useful finding.** Ruff's `S` rules are in `select`,
+so `S101` is enforced across all Python source with `**/tests/**` exempted — asserts in tests are
+the assertion mechanism, not a guard. It flagged these the moment they were written. Mutation-proved
+rather than assumed: an `assert`-as-guard planted in `primitives.py` was reported as
+`S101 Use of 'assert' detected`, and the file restored with `git status` verified clean.
+
+Audited for the same shape elsewhere: **zero** bare asserts in any Python source directory, and
+**zero** in Java main source — which matters because the JVM disables `assert` unless `-ea` is
+passed, so a Java assert-as-guard has exactly the same failure mode and no lint rule caught the
+first one because there has never been one.

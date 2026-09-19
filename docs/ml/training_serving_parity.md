@@ -150,23 +150,41 @@ specification for a case the test is missing.
 | # | Mutation | What it simulates | Caught by | Result |
 |---|---|---|---|---|
 | 1 | reassociate a window sum (accumulate in reverse order) | the benign case the tolerance must *tolerate* | — | **must PASS** (see note) |
-| 2 | window bound `<` instead of `≤` | classic off-by-one at a boundary | window-boundary cases, count equality | pending |
-| 3 | a 24 h window computed over 25 h | silent window drift | count equality | pending |
+| 2 | window bound `<` instead of `≤` | classic off-by-one at a boundary | window-boundary cases, count equality | **DETECTED** 2026-09-19: 0.96 → 2.0 |
+| 3 | a 24 h window computed over 25 h | silent window drift | count equality | **DETECTED** 2026-09-19 (run as 30 d over 31 d) |
 | 4 | local time applied in one path only | D-43 timezone handling diverging | `local_hour_sin/cos`, `is_local_night` | pending |
 | 5 | a structural missing emitted as `0.0` rather than NaN | the D-04 contract collapsing to a number | NaN-position equality | pending |
 | 6 | a category encoded from a different fold | the M2 encoding defect, reproduced in serving | exact categorical equality | pending |
-| 7 | a label used whose `label_available_at` is after the transaction | future leakage in the batch path | prefix replay | pending |
+| 7 | a label used whose `label_available_at` is after the transaction | future leakage in the batch path | prefix replay | **DETECTED** 2026-09-19: 1.5/59 → 2.5/60 |
 | 8 | a sum accumulated in float32 | precision loss masquerading as reassociation | the relative tolerance | pending |
 | 9 | the fallback path serves a bucket-aligned 1 h count as if it were trailing | the degraded path diverging where no warm-path test looks | cold-cache case, `fallback_behaviour` | pending |
-| 10 | `account_first_seen_at` lost on flush, so `OBSERVED_CAPPED` divides by a shorter history | a `DURABLE` field that is not durable | cold-cache case | pending |
+| 10 | `account_first_seen_at` lost on flush, so `OBSERVED_CAPPED` divides by a shorter history | a `DURABLE` field that is not durable | cold-cache case | **DETECTED** 2026-09-19 — see note |
 | 11 | the batch path joins current thresholds instead of as-of ones | ADR 0026's configuration drift | the required configuration-change fixture | pending |
-| 12 | a non-account-keyed aggregate computed over all rows rather than training folds | cross-account leakage E1's grouping cannot see | single-feature AUC rises above its clean value | pending |
+| 12 | a non-account-keyed aggregate computed over all rows rather than training folds | cross-account leakage E1's grouping cannot see | single-feature AUC rises above its clean value | **DETECTED** 2026-09-19, one step earlier: the value changes at all |
 
 **Mutation 1 is the control, and it is the one that must pass.** Without it the suite cannot
 distinguish "the tolerance catches bugs" from "the tolerance catches everything, including honest
 reassociation" — in which case it would be loosened under pressure and stop catching anything. It is
 the same role the 0.5-strength plant played in M2's power curve: without a case that *should not*
 fire, a detector that fires at everything looks identical to one that works.
+
+**Five rows executed 2026-09-19** in `ml/tests/features/test_mutations.py`, against the two
+implemented features. Each applies the divergence and asserts the values disagree by more than ADR
+0025's tolerance — a mutation that slips inside the tolerance is the specification for a missing
+case, not a curiosity.
+
+**Seven rows stay `pending` and are not marked passed by omission.** Rows 1, 5 and 8 need an
+amount-sum or structural-NaN feature; row 4 a temporal feature; row 6 a categorical; row 9 the DB
+fallback path; row 11 `just_below_limit_flag`. None exists yet.
+
+**Note on row 10, because the obvious version of it is the wrong one.** Two flush scenarios behave
+oppositely. *Everything lost* — arrivals and first-seen re-derived together — shrinks numerator and
+denominator in step, moves the ratio barely, and is nearly invisible. *Arrivals restored, first-seen
+not* divides a full 30 days of rows by a two-day apparent history, inflating the baseline and
+collapsing the ratio on every established account at once. The second is **exactly what M1's schema
+produces today**, since the transactions come back from the database and there is no per-account
+table for first-seen (PB-37). The test asserts detection rather than a direction, and asserts the
+ordering between the two scenarios so the reasoning fails loudly if it is ever wrong.
 
 Results are recorded in this table as the mutations are implemented, not summarised elsewhere.
 

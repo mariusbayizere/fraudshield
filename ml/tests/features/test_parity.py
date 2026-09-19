@@ -152,10 +152,51 @@ def test_the_shared_primitives_against_hand_computed_values() -> None:
     assert h3_cell(-1.9441, 30.0619) != h3_cell(-1.2921, 36.8219)
 
 
+#: Three tight clusters, so several accounts transact inside the same H3 resolution-6 cell.
+#: Jitter is +/-0.004 deg (~450 m) against a cell edge of ~3.2 km, which makes sharing the rule
+#: rather than an accident of rounding.
+_CLUSTERS = ((-1.9441, 30.0619), (-1.9500, 30.0700), (-1.2921, 36.8219))
+
+
+def _multi_account_history(
+    accounts: int = 6, per_account: int = 12, seed: int = 20260919
+) -> list[Transaction]:
+    """Arrivals from several accounts, interleaved in time and sharing cells.
+
+    A single-account replay cannot exercise a cross-account aggregate at all: every row it sees
+    belongs to the same account, so a cell rate keyed by the cell is indistinguishable from one
+    keyed by the account. `geo_cell_fraud_rate_30d` is the feature whose leakage note was already
+    wrong once for exactly this reason, so its fixture has to contain the thing that went wrong.
+    """
+    rng = random.Random(seed)  # noqa: S311 - fixture shape, not a security context
+    rows: list[Transaction] = []
+    for a in range(accounts):
+        when = START + timedelta(hours=rng.randrange(0, 48))
+        centre = _CLUSTERS[a % len(_CLUSTERS)]
+        for i in range(per_account):
+            when += timedelta(minutes=rng.choice([45, 200, 900, 3000]))
+            rows.append(
+                Transaction(
+                    transaction_id=f"a{a}t{i}",
+                    account_id=f"A{a}",
+                    timestamp=when,
+                    amount_rwf=float(rng.randrange(1000, 500000)),
+                    latitude=centre[0] + rng.uniform(-0.004, 0.004),
+                    longitude=centre[1] + rng.uniform(-0.004, 0.004),
+                )
+            )
+    rows.sort(key=lambda r: r.timestamp)
+    return rows
+
+
 @pytest.mark.req("FR-02-02")
-def test_the_cell_rate_agrees_across_paths_under_prefix_replay() -> None:
-    """Prefix replay for the label-derived feature, where the batch path can see the future."""
-    rows = _history(n=40)
+def test_the_cell_rate_agrees_across_paths_under_multi_account_prefix_replay() -> None:
+    """Prefix replay for the label-derived, cell-keyed feature, across accounts.
+
+    The batch path can see the future and the whole corpus; the online path can see neither. Both
+    must read the same value at every prefix, with labels gated on `available_at`.
+    """
+    rows = _multi_account_history()
     outcomes = {
         row.transaction_id: Outcome(
             transaction_id=row.transaction_id,
@@ -164,16 +205,68 @@ def test_the_cell_rate_agrees_across_paths_under_prefix_replay() -> None:
         )
         for i, row in enumerate(rows)
     }
+
+    # E12: the preconditions this test depends on, asserted before the assertion they exist for.
+    accounts_by_cell: dict[str, set[str]] = {}
+    for row in rows:
+        accounts_by_cell.setdefault(h3_cell(row.latitude, row.longitude), set()).add(row.account_id)
+    shared = {cell: who for cell, who in accounts_by_cell.items() if len(who) > 1}
+    assert shared, (
+        "precondition: no H3 cell in the fixture is used by more than one account, so this replay "
+        "would not exercise a cross-account aggregate at all"
+    )
+    assert max(len(who) for who in shared.values()) >= 2
+    assert len({r.account_id for r in rows}) >= 3, "precondition: several accounts"
     assert any(o.is_fraud for o in outcomes.values()), "precondition: the fixture contains fraud"
 
     online = OnlineFeatures()
     for outcome in outcomes.values():
         online.observe_outcome(outcome)
 
+    seen_nonzero = False
     for k, scored in enumerate(rows):
         online_value = online.geo_cell_fraud_rate_30d(scored, prior=0.0087)
         batch_value = batch.geo_cell_fraud_rate_30d(rows[:k], outcomes, scored, prior=0.0087)
         assert _agree(batch_value, online_value), (
-            f"prefix {k}: batch {batch_value!r} vs online {online_value!r}"
+            f"prefix {k} ({scored.transaction_id}, {scored.account_id}): "
+            f"batch {batch_value!r} vs online {online_value!r}"
         )
+        if batch_value > 0.0087:
+            seen_nonzero = True
         online.observe(scored)
+
+    assert seen_nonzero, (
+        "every prefix returned the prior, so no confirmed fraud ever entered a cell rate and the "
+        "replay proved nothing about the aggregate (E12/E13)"
+    )
+
+
+@pytest.mark.req("FR-02-02")
+def test_the_cell_rate_reads_other_accounts_rows_which_is_why_it_needs_a_control() -> None:
+    """The property that makes `history_key=GEO_CELL` necessary, asserted rather than assumed.
+
+    If the cell rate were in fact account-scoped, E1's account-grouped folds would isolate it and
+    `cross_account_control` would be unnecessary. This shows it is not: restricting the corpus to
+    the scored account's own rows changes the value.
+    """
+    rows = _multi_account_history()
+    outcomes = {
+        row.transaction_id: Outcome(
+            transaction_id=row.transaction_id,
+            is_fraud=(i % 5 == 0),
+            available_at=row.timestamp + timedelta(days=1),
+        )
+        for i, row in enumerate(rows)
+    }
+    scored = rows[-1]
+    prior_rows = rows[:-1]
+    own = [r for r in prior_rows if r.account_id == scored.account_id]
+    assert own, "precondition: the scored account has prior rows of its own"
+    assert len(own) < len(prior_rows), "precondition: other accounts also have rows"
+
+    across = batch.geo_cell_fraud_rate_30d(prior_rows, outcomes, scored, prior=0.0087)
+    own_only = batch.geo_cell_fraud_rate_30d(own, outcomes, scored, prior=0.0087)
+    assert across != own_only, (
+        "the cell rate is unchanged by other accounts' rows, so either the fixture's cells are not "
+        "shared or the aggregate is not cell-keyed; in both cases history_key=GEO_CELL is wrong"
+    )
