@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "FraudShield ML pipeline and scoring service: features, ensemble, calibration, SHAP, evaluation"
 requires-python = "==3.12.*"
 license = "Apache-2.0"
-dependencies = []
+dependencies = [
+    "h3==4.5.0",
+]
 
 [build-system]
 requires = ["hatchling==1.32.0"]

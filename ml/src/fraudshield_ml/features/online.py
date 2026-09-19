@@ -1,0 +1,165 @@
+"""The online feature path: incremental state, one transaction at a time.
+
+Independent of `fraudshield_ml.features.batch` — neither imports the other, enforced by a test that
+walks the import graph. Both import `registry` (declarative) and `types` (data).
+
+The online path never sees a history; it sees arrivals. That asymmetry is the whole point of prefix
+replay: handing both paths a completed history proves they agree on a situation this one never
+encounters, and cannot detect a batch window that reaches forward in time.
+
+**Usage is `compute` then `observe`, in that order.** `compute` reads state accumulated from
+transactions that arrived *before* the one being scored, which is what `self_inclusion=EXCLUDED`
+means operationally. Calling `observe` first would fold the scored transaction into its own window.
+"""
+
+from __future__ import annotations
+
+from collections import deque
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
+
+from fraudshield_ml.features.primitives import h3_cell
+from fraudshield_ml.features.registry import smoothing_for
+from fraudshield_ml.features.types import Outcome, Transaction
+
+_SHORT = timedelta(hours=1)
+_LONG = timedelta(days=30)
+_CELL = timedelta(days=30)
+
+
+@dataclass
+class AccountState:
+    """Per-account online state.
+
+    `first_seen_at` is the `DURABLE` field. It is held separately from `arrivals` precisely because
+    it is not recoverable from them: once an account is older than the rolling window, the window
+    has forgotten when it started, and a cache flush would silently switch the feature from
+    OBSERVED_CAPPED to a shorter apparent history. The cold-cache parity case is the only test that
+    exercises this.
+    """
+
+    first_seen_at: datetime | None = None
+    arrivals: deque[datetime] = field(default_factory=deque)
+
+    def evict_before(self, cutoff: datetime) -> None:
+        while self.arrivals and self.arrivals[0] <= cutoff:
+            self.arrivals.popleft()
+
+
+@dataclass
+class CellState:
+    """Per-cell online state: arrivals and the labels that have landed for them."""
+
+    arrivals: deque[tuple[datetime, str]] = field(default_factory=deque)
+
+    def evict_before(self, cutoff: datetime) -> None:
+        while self.arrivals and self.arrivals[0][0] <= cutoff:
+            self.arrivals.popleft()
+
+
+class OnlineFeatures:
+    """Accumulates the state the online path serves from."""
+
+    def __init__(self) -> None:
+        self._accounts: dict[str, AccountState] = {}
+        self._cells: dict[str, CellState] = {}
+        self._outcomes: dict[str, Outcome] = {}
+
+    # ---- state ------------------------------------------------------------------------------
+
+    def observe(self, transaction: Transaction) -> None:
+        """Fold a transaction into state. Call **after** `compute` for that transaction."""
+        account = self._accounts.setdefault(transaction.account_id, AccountState())
+        if account.first_seen_at is None:
+            account.first_seen_at = transaction.timestamp
+        account.arrivals.append(transaction.timestamp)
+        account.evict_before(transaction.timestamp - _LONG)
+
+        cell = self._cells.setdefault(
+            h3_cell(transaction.latitude, transaction.longitude), CellState()
+        )
+        cell.arrivals.append((transaction.timestamp, transaction.transaction_id))
+        cell.evict_before(transaction.timestamp - _CELL)
+
+    def restore_first_seen(self, account_id: str, first_seen_at: datetime) -> None:
+        """Load an account's durable first-seen timestamp from persistent storage.
+
+        **Required after a cache flush, and on any replay that does not start at an account's very
+        first transaction.** Without it the online path infers first-seen from its earliest
+        *arrival*, which is the rolling window's edge rather than the account's start — silently
+        switching `velocity_ratio_1h_vs_30d` from OBSERVED_CAPPED to a shorter apparent history and
+        inflating the ratio for every established account at once.
+
+        That this method must exist is the operational content of `history_requirement=DURABLE`:
+        the value cannot be reconstructed from anything the cache holds, so something outside the
+        cache has to supply it (PB-37 records that M1 has no table for it yet).
+        """
+        state = self._accounts.setdefault(account_id, AccountState())
+        state.first_seen_at = first_seen_at
+
+    def observe_outcome(self, outcome: Outcome) -> None:
+        """Record a label. It becomes visible only from its `available_at`, not on arrival here."""
+        self._outcomes[outcome.transaction_id] = outcome
+
+    def flush_cache(self) -> None:
+        """Drop everything a cache holds, keeping nothing.
+
+        The cold-cache parity case calls this mid-replay. A `DURABLE` field that does not survive
+        it is a contract violation, and this is the only place that becomes visible.
+        """
+        self._accounts.clear()
+        self._cells.clear()
+
+    # ---- features ---------------------------------------------------------------------------
+
+    def velocity_ratio_1h_vs_30d(self, scored: Transaction) -> float:
+        """See `registry`'s contract. Computed from arrivals, not from a filtered history."""
+        alpha = smoothing_for("velocity_ratio_1h_vs_30d").alpha
+
+        state = self._accounts.get(scored.account_id)
+        if state is None or state.first_seen_at is None:
+            return (0 + alpha) / (0.0 + alpha)  # zero history: exactly 1.0, by construction
+
+        t = scored.timestamp
+        short_edge = t - _SHORT
+        long_edge = t - _LONG
+
+        short_count = 0
+        long_count = 0
+        for arrival in state.arrivals:
+            if arrival >= t:
+                continue
+            if arrival > short_edge:
+                short_count += 1
+            elif arrival > long_edge:
+                long_count += 1
+
+        observed_seconds = (t - state.first_seen_at).total_seconds()
+        capped = min(observed_seconds, _LONG.total_seconds())
+        baseline_hours = (capped - _SHORT.total_seconds()) / 3600.0
+        long_mean = long_count / baseline_hours if baseline_hours > 0 else 0.0
+
+        return (short_count + alpha) / (long_mean + alpha)
+
+    def geo_cell_fraud_rate_30d(self, scored: Transaction, prior: float) -> float:
+        """See `registry`'s contract. Labels are gated on `available_at`, never on confirmation."""
+        alpha = smoothing_for("geo_cell_fraud_rate_30d").alpha
+
+        state = self._cells.get(h3_cell(scored.latitude, scored.longitude))
+        if state is None:
+            return (0 + alpha * prior) / (0 + alpha)
+
+        t = scored.timestamp
+        edge = t - _CELL
+        total = 0
+        fraud = 0
+        for arrival, transaction_id in state.arrivals:
+            if transaction_id == scored.transaction_id or not (edge < arrival < t):
+                continue
+            outcome = self._outcomes.get(transaction_id)
+            if outcome is None or outcome.available_at >= t:
+                continue
+            total += 1
+            fraud += int(outcome.is_fraud)
+
+        return (fraud + alpha * prior) / (total + alpha)

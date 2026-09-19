@@ -355,7 +355,7 @@ class Dtype(Enum):
 #: so each carries its own unit tests with hand-computed expectations. A shared window-aggregation
 #: helper is deliberately **not** permitted: it is precisely the surface the parity test exists to
 #: cover, and sharing it would make the test prove that a function equals itself.
-SHARED_PRIMITIVES = frozenset({"haversine_km", "fx_to_rwf"})
+SHARED_PRIMITIVES = frozenset({"haversine_km", "fx_to_rwf", "h3_cell"})
 
 
 class ReferenceDataBasis(Enum):
@@ -423,6 +423,27 @@ class FeatureSpec:
                 f"{self.name}: carries a WindowContract but declares no window; the contract's "
                 "fields have no meaning without one"
             )
+
+
+def contract_for(name: str) -> WindowContract:
+    """The declared window contract, or a refusal naming the feature.
+
+    A lookup, not a computation: it exists so the feature paths do not each carry an ``assert`` to
+    narrow `WindowContract | None`. ``assert`` is stripped under ``python -O``, so a guard written
+    that way is absent in exactly the deployment where it would matter.
+    """
+    spec = REGISTRY[name]
+    if spec.contract is None:
+        raise ValueError(f"{name} declares no window contract, so it has no window semantics")
+    return spec.contract
+
+
+def smoothing_for(name: str) -> Smoothing:
+    """The declared smoothing, or a refusal. Also a lookup."""
+    smoothing = contract_for(name).smoothing
+    if smoothing is None:
+        raise ValueError(f"{name} declares no smoothing, so it has no zero-evidence value")
+    return smoothing
 
 
 def validate(specs: dict[str, FeatureSpec]) -> None:

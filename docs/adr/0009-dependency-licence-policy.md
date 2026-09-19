@@ -81,6 +81,32 @@ therefore itself unverified at the moment the first dependency arrives, and the 
 "0 of 18 parsed" precedent above is the reason not to assume it works. Assert the runtime scope
 contains `h3` when the dependency lands, rather than reading a passing check as confirmation.
 
+### Outcome, same day: the prediction held and the check failed on first contact
+
+`h3==4.5.0` was added and `fs-licences` **failed immediately**:
+
+```
+ERROR python:h3@4.5.0 (runtime): unidentified licence ('Apache Software License',)
+```
+
+Not a false alarm — the correct behaviour. h3 publishes **no `License-Expression`**; its `License`
+metadata field carries the full licence text rather than an identifier, and its only structured
+signal is the classifier `License :: OSI Approved :: Apache Software License`, which is **ambiguous
+between Apache 1.0, 1.1 and 2.0**. The tool refuses to guess, exactly as this ADR requires.
+
+Resolved by an `EXCEPTIONS` entry naming the verification, which is the mechanism this ADR already
+defines and which two packages (`jsonschema-path`, `pathable`) already use for the same classifier.
+Verified 2026-09-19: the METADATA `License` field and `dist-info/licenses/LICENSE` both carry the
+text headed "Apache License, Version 2.0". **Deliberately not fixed by adding an
+`Apache Software License` → `Apache-2.0` normaliser**: that would silently accept Apache 1.1 from
+any future package declaring the same classifier, trading a per-package verification for a pattern —
+the failure shape this repository refuses in its gitleaks configuration for the same reason.
+
+**The assertion this ADR demanded, performed:** `build/licence-inventory.json` contains
+`{"ecosystem": "python", "name": "h3", "version": "4.5.0", "scope": "runtime", ...}`. The check now
+passes **because a dependency was assessed**, not because the scope was empty — which is the only
+form of "passing" that means anything the first time a code path runs.
+
 ## Deviation from D-17 and E.12 (amended during the M0 re-review, finding R-5)
 
 Binding resolution D-17 says decision-engine tests use "JUnit 5 (plus jqwik property tests)", and

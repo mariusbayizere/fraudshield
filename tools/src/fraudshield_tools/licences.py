@@ -89,6 +89,14 @@ EXCEPTIONS: dict[str, tuple[str, str]] = {
         "classifier says only 'Apache Software License'; dist-info/licenses/LICENSE is the "
         "Apache License, Version 2.0 text (verified 2026-09-17)",
     ),
+    "python:h3@4.5.0": (
+        "Apache-2.0",
+        "classifier says only 'Apache Software License', which is ambiguous between 1.0, 1.1 and "
+        "2.0, and there is no License-Expression. The METADATA License field carries the full "
+        "licence text headed 'Apache License, Version 2.0', and "
+        "dist-info/licenses/LICENSE is the same text (verified 2026-09-19). First runtime "
+        "dependency of fraudshield-ml; see ADR 0009's 2026-09-19 amendment",
+    ),
     "python:pathable@0.6.0": (
         "Apache-2.0",
         "classifier says only 'Apache Software License'; dist-info/licenses/LICENSE is the "
