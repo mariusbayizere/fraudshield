@@ -297,16 +297,41 @@ the decision engine M6, staff identity, admin and audit M7).
   feature layer, where it becomes a training/serving skew that appears only during an incident.
   Bucket-aligned substitution for a trailing window is not an acceptable resolution.
 
-### PB-37 · `account_first_seen_at` has no table, and `OBSERVED_CAPPED` needs one
-- **Source:** checking M1's schema for a durable first-seen, 2026-09-19 · **Priority:** high ·
-  **Due:** M6 migration, declared in M3
-- **Acceptance:** a migration adds durable per-account first-seen state. M1 has **no per-account
-  table at all** — accounts appear only as `account_token` columns on `transactions` and its
-  aggregates — so there is nowhere for a `DURABLE` field to live. `velocity_ratio_1h_vs_30d` is
-  registered `history_basis=OBSERVED_CAPPED`, which divides by observed history and therefore needs
-  a first-seen timestamp that survives a cache flush; the registry refuses the combination without
-  `history_requirement=DURABLE`. Related: `transactions` has a compression policy (30 days) but **no
-  retention policy**, so first-seen is currently recoverable by scan — which is not a contract.
+### PB-37 · `account_first_seen_at` has no table, and the online path collapses without it
+- **Source:** checking M1's schema for a durable first-seen, 2026-09-19; re-ranked the same day
+  after parity mutation 10 · **Priority:** **HIGH — correctness, not convenience** · **Due:**
+  **before M6 wires the online path**, not before M4 training. The failure is a production-recovery
+  failure, not a training one.
+- **The schema gap:** M1 has **no per-account table at all** — accounts appear only as
+  `account_token` columns on `transactions` and its aggregates — so there is nowhere a durable
+  first-seen can live. `velocity_ratio_1h_vs_30d` is registered `history_basis=OBSERVED_CAPPED`,
+  which divides by observed history and therefore requires one; the registry refuses that
+  combination without `history_requirement=DURABLE`.
+- **The mechanism, which is why this is high and not medium.** Parity mutation 10 showed two flush
+  scenarios behaving oppositely:
+  - *Arrivals and first-seen both lost.* Numerator and denominator shrink in step, the ratio barely
+    moves, the damage is small. This is the case intuition reaches for, and it is not the problem.
+  - *Arrivals restored, first-seen not.* The transactions come back from the database — which is
+    exactly what happens, because they are in `transactions` — while the per-account first-seen does
+    not, **because no table holds it**. Thirty days of rows are then divided by whatever span the
+    cache happens to hold. The baseline inflates and **the ratio collapses on every established
+    account simultaneously**, during a recovery, while the system is already degraded and nobody is
+    positioned to notice a feature distribution shifting.
+  It is training/serving skew that appears only in an incident, which is the class the parity suite
+  exists to prevent and the one no warm-path test visits.
+- **Interim mitigation, already shipped:** the online path **fails closed**. Without a durable
+  first-seen the feature is NaN, covered by D-04's native missing handling, and `observe()` no
+  longer infers first-seen from its earliest arrival — the inference that made `DURABLE`
+  decorative. Asserted by `test_the_online_path_fails_closed_without_a_durable_first_seen` and its
+  control `test_observing_transactions_never_invents_a_first_seen`. A missing feature during
+  recovery is honest; a collapsed ratio across the account base is not.
+- **Acceptance:** a migration adds durable per-account state carrying **both** the account opening
+  date (`account_age_days`) and the first-seen-in-data timestamp — an account may be opened long
+  before it transacts, so one does not substitute for the other. The online path reads it and stops
+  returning NaN, and a test asserts the feature survives a cache flush with the durable store
+  present. Related: `transactions` has a compression policy (30 days) but **no retention policy**,
+  so first-seen is currently recoverable by full scan — which is a property of today's data volume,
+  not a contract.
 
 ### PB-38 · `account_activity_hourly` refreshes 8 days, but a 30-day feature reads it
 - **Source:** reading V10's refresh policy against the registry, 2026-09-19 · **Priority:** medium ·

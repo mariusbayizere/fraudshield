@@ -1139,3 +1139,42 @@ Audited for the same shape elsewhere: **zero** bare asserts in any Python source
 **zero** in Java main source — which matters because the JVM disables `assert` unless `-ea` is
 passed, so a Java assert-as-guard has exactly the same failure mode and no lint rule caught the
 first one because there has never been one.
+
+### 2026-09-19 · Fail closed: the interim fix for a schema gap that only bites during recovery
+
+Parity mutation 10 turned PB-37 from a scheduling item into a correctness one, by showing that the
+two cache-flush scenarios behave **oppositely**:
+
+- *Arrivals and first-seen both lost.* Numerator and denominator shrink together, the ratio barely
+  moves. This is the scenario intuition reaches for, and it is not the problem.
+- *Arrivals restored, first-seen not.* Thirty days of rows divided by whatever span the cache
+  happens to hold. The baseline inflates and **the ratio collapses on every established account at
+  once.**
+
+The second is not hypothetical: it is what M1's schema produces today. Transactions come back from
+the database because they live in `transactions`; the per-account first-seen does not, because **no
+table holds it**. So the damaging case is the one the system is actually built to produce, and it
+appears during a recovery — when the system is already degraded and a shifted feature distribution
+is the least likely thing anyone is watching.
+
+**The interim fix is to fail closed.** Without a durable first-seen the online path emits NaN, which
+D-04's native missing handling already covers, and `observe()` no longer infers first-seen from its
+earliest arrival — the inference that made `DURABLE` decorative in the first place. A genuinely new
+account's first-seen is supplied by the caller, having consulted the durable store, rather than
+guessed by the feature.
+
+**The asymmetry that makes this the right call:** a missing feature during recovery costs one
+feature's worth of signal, on the rows scored during the incident, and announces itself. A plausible
+wrong number costs the whole account base's velocity signal, silently, and is indistinguishable from
+a genuine surge in behaviour — so the natural reading of the resulting alert volume is "the attack
+is real", which is the worst possible interpretation to reach during an incident.
+
+Two tests hold it: one asserting the NaN, and a control asserting `observe()` never invents a
+first-seen. The control matters more than the assertion — without it, the NaN test would pass only
+until the first transaction arrived, and every post-flush account would quietly receive a wrong
+denominator instead of a NaN.
+
+*Why it belongs in the paper:* the feature contract's claim is that declaring a property prevents a
+class of defect. The honest version is narrower — declaring it **located** the defect, and only the
+mutation test proved the declaration was being honoured. A field that nothing checks is a comment
+with a type annotation.

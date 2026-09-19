@@ -70,8 +70,12 @@ class OnlineFeatures:
     def observe(self, transaction: Transaction) -> None:
         """Fold a transaction into state. Call **after** `compute` for that transaction."""
         account = self._accounts.setdefault(transaction.account_id, AccountState())
-        if account.first_seen_at is None:
-            account.first_seen_at = transaction.timestamp
+        # Deliberately does NOT set first_seen_at. Taking the first arrival as the account's start
+        # is the invention that makes `DURABLE` decorative: after a flush the earliest arrival is
+        # the rolling window's edge, not the account's beginning. The caller supplies it through
+        # `restore_first_seen`, from the durable store or - for a genuinely new account - from the
+        # transaction itself, having consulted that store. Until PB-37's table exists there is no
+        # store, so this feature fails closed.
         account.arrivals.append(transaction.timestamp)
         account.evict_before(transaction.timestamp - _LONG)
 
@@ -118,7 +122,17 @@ class OnlineFeatures:
 
         state = self._accounts.get(scored.account_id)
         if state is None or state.first_seen_at is None:
-            return (0 + alpha) / (0.0 + alpha)  # zero history: exactly 1.0, by construction
+            # FAIL CLOSED (PB-37). `history_basis=OBSERVED_CAPPED` divides by history actually
+            # observed, so without a durable first-seen there is no denominator - only a guess.
+            # A guess here is not a small error: restoring arrivals from the database while the
+            # per-account first-seen is missing divides thirty days of rows by whatever span the
+            # cache happens to hold, collapsing the ratio on every established account at once,
+            # during a recovery, when the system is already degraded.
+            #
+            # NaN instead. The models' native missing handling (D-04) covers it, and a missing
+            # feature during recovery is honest where a plausible wrong number is training/serving
+            # skew arriving exactly when nobody is positioned to notice.
+            return float("nan")
 
         t = scored.timestamp
         short_edge = t - _SHORT

@@ -35,9 +35,13 @@ def guard_shared_parameter_trees() -> Iterator[None]:
     before = {root: tree_digest(root, REPO_ROOT) for root in GUARDED_TREES}
     # E12: the guard is worthless over an empty set, and a renamed or moved params directory would
     # make it one silently. Assert the precondition the guard depends on.
-    assert any(before.values()), (
-        f"E15 guard found no files under {[str(r) for r in GUARDED_TREES]}; the guarded tree moved "
-        "and the guard is now vacuous"
+    watched = sum(len(digests) for digests in before.values())
+    # ADR 0009's generalisation: "passed" and "had nothing to check" must be distinguishable. A
+    # session-scoped fixture prints nothing on success, so the count goes in the failure message
+    # and the empty case fails outright rather than passing over nothing.
+    assert watched, (
+        f"E15 guard watched 0 files under {[str(r) for r in GUARDED_TREES]}; the guarded tree "
+        "moved and the guard is now vacuous, so this run's results cannot be cited"
     )
     yield
     changes: list[str] = []
@@ -48,7 +52,8 @@ def guard_shared_parameter_trees() -> Iterator[None]:
         pytest.fail(
             "E15: a test modified shared state outside tmp_path, so this run's results cannot be "
             "cited. A test needing a different parameter tree copies it into tmp_path and loads "
-            "from there; load_parameters() takes a directory for exactly this reason."
+            f"from there; load_parameters() takes a directory for exactly this reason. "
+            f"({watched} files watched.)"
             f"\n  {listing}",
             pytrace=False,
         )

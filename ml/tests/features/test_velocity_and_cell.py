@@ -6,6 +6,7 @@ other, and the shared primitives are covered only by tests like these.
 
 from __future__ import annotations
 
+import math
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -55,9 +56,55 @@ def test_zero_history_returns_exactly_one_on_both_paths() -> None:
 
     Not approximately: both terms are smoothed by the same alpha with prior 1.0, so the ratio is
     exactly representable. 0.0 would read as suspiciously quiet and NaN would discard the row.
+
+    A genuinely new account's first-seen **is** the scored transaction — but the online path is
+    told that, having consulted the durable store, rather than inferring it. The inference is
+    indistinguishable from a post-flush cache, which is why it is the caller's job.
     """
     assert batch.velocity_ratio_1h_vs_30d([], SCORED, first_seen_at=SCORED.timestamp) == 1.0
-    assert OnlineFeatures().velocity_ratio_1h_vs_30d(SCORED) == 1.0
+
+    online = OnlineFeatures()
+    online.restore_first_seen("A", SCORED.timestamp)
+    assert online.velocity_ratio_1h_vs_30d(SCORED) == 1.0
+
+
+@pytest.mark.req("FR-02-02", "D-04")
+def test_the_online_path_fails_closed_without_a_durable_first_seen() -> None:
+    """PB-37. No durable first-seen means no denominator, so NaN rather than a plausible number.
+
+    Until the per-account table exists there is nothing to restore from, and the damaging case is
+    not a cold start: it is arrivals restored from the database while first-seen is not, which
+    divides thirty days of rows by whatever span the cache holds and collapses the ratio across the
+    entire account base during a recovery. A missing feature is honest; that number is not.
+    """
+    online = OnlineFeatures()
+    for i in range(5):
+        online.observe(tx(timedelta(hours=-10 + i), tid=f"h{i}"))
+    assert math.isnan(online.velocity_ratio_1h_vs_30d(SCORED)), (
+        "the feature must be NaN when the durable first-seen is unavailable"
+    )
+
+    # And it must recover exactly once the durable value is supplied, or NaN would be permanent.
+    online.restore_first_seen("A", T - timedelta(hours=25))
+    recovered = online.velocity_ratio_1h_vs_30d(SCORED)
+    assert not math.isnan(recovered), "restoring the durable value must restore the feature"
+    assert recovered > 0.0
+
+
+@pytest.mark.req("FR-02-02")
+def test_observing_transactions_never_invents_a_first_seen() -> None:
+    """The control for the test above: `observe` must not quietly fix the fail-closed case.
+
+    If `observe` set first-seen from the first arrival, the NaN test would pass only until the
+    first transaction arrived, and every post-flush account would silently get a wrong denominator
+    instead of a NaN — which is the defect, not the fix.
+    """
+    online = OnlineFeatures()
+    online.observe(tx(timedelta(hours=-5), tid="first"))
+    assert math.isnan(online.velocity_ratio_1h_vs_30d(SCORED)), (
+        "observe() inferred a first-seen from an arrival, which is the rolling window's edge "
+        "rather than the account's start"
+    )
 
 
 @pytest.mark.req("FR-02-02")

@@ -466,6 +466,18 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR {problem}", file=sys.stderr)
     counts = {scope: sum(d.scope == scope for d in dependencies) for scope in ("runtime", "dev")}
     print(f"licences: {len(dependencies)} dependencies {counts}, {len(problems)} violations")
+    # The Python runtime scope was empty from M0 until 2026-09-19, so this check passed on every
+    # commit through three milestones while carrying no information: an empty input satisfies
+    # almost any predicate. The first real input failed it. An empty scope is therefore reported
+    # as a warning in its own right, so a green run over nothing cannot be mistaken for a green
+    # run over something (ADR 0009, 2026-09-19 amendment).
+    for scope, count in counts.items():
+        if count == 0:
+            print(
+                f"WARNING the {scope} scope is empty, so this run checked nothing for it; "
+                "a pass here means 'had nothing to check', not 'checked and was clean'",
+                file=sys.stderr,
+            )
     return 1 if problems else 0
 
 

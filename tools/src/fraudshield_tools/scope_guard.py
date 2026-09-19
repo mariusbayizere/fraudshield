@@ -125,10 +125,20 @@ def violations(root: Path, files: list[Path]) -> dict[str, list[str]]:
 
 
 def main() -> int:
-    found = violations(REPO_ROOT, tracked_files(REPO_ROOT))
+    scanned = tracked_files(REPO_ROOT)
+    found = violations(REPO_ROOT, scanned)
     for rel, terms in sorted(found.items()):
         print(f"ERROR {rel}: out-of-scope terms {terms} (D-47)", file=sys.stderr)
-    print(f"scope-guard: {len(found)} files with out-of-scope terms")
+    # ADR 0009's generalisation: a check that has only ever run against an empty scope is
+    # untested, so "passed" and "had nothing to check" must be distinguishable in the output
+    # rather than merely inferable. Reporting the size of what was checked is the cheap form.
+    print(f"scope-guard: {len(found)} files with out-of-scope terms, of {len(scanned)} scanned")
+    if not scanned:
+        print(
+            "ERROR scope-guard scanned 0 files; a pass over an empty set is not a pass",
+            file=sys.stderr,
+        )
+        return 1
     return 1 if found else 0
 
 

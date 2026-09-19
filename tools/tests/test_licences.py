@@ -107,3 +107,57 @@ def test_main_writes_inventory_and_fails_on_violation(
     assert json.loads(output.read_text())[0]["name"] == "org.example:lib"
     deps.append(_dep("runtime", "GNU Lesser General Public License v3 (LGPLv3)"))
     assert licences.main([]) == 1
+
+
+def _no_collection(monkeypatch: pytest.MonkeyPatch, dependencies: list[Dependency]) -> None:
+    """Patch out the three collectors, which shell out to Maven and pnpm and take two minutes."""
+
+    monkeypatch.setattr(licences, "python_dependencies", lambda _root: list(dependencies))
+    monkeypatch.setattr(licences, "node_dependencies", lambda _root: [])
+    monkeypatch.setattr(licences, "java_dependencies", lambda _root: [])
+
+
+@pytest.mark.req("OPS-CI-04")
+def test_an_empty_scope_is_reported_as_carrying_no_information(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """ADR 0009, 2026-09-19: a check that has only ever run against an empty scope is untested.
+
+    From M0 until h3 landed, the Python runtime scope was empty. The licence check passed on every
+    commit through three milestones and those passes said nothing — an empty input satisfies almost
+    any predicate, and a green check over nothing is indistinguishable in CI output from a green
+    check over something. The first real input failed it.
+
+    So an empty scope now says so, loudly, in its own line.
+    """
+
+    _no_collection(monkeypatch, [])
+    assert licences.main([]) == 0, "precondition: an empty inventory has no violations to find"
+    captured = capsys.readouterr()
+    assert "the runtime scope is empty" in captured.err
+    assert "the dev scope is empty" in captured.err
+    assert "had nothing to check" in captured.err
+
+
+@pytest.mark.req("OPS-CI-04")
+def test_a_populated_scope_does_not_warn(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The control: a warning that always fires is noise, and would be filtered within a week."""
+    populated = [
+        Dependency(
+            ecosystem="python",
+            name="example",
+            version="1.0.0",
+            scope=scope,
+            declared=("MIT",),
+            combine="any",
+        )
+        for scope in ("runtime", "dev")
+    ]
+    _no_collection(monkeypatch, populated)
+    licences.main([])
+    captured = capsys.readouterr()
+    assert "scope is empty" not in captured.err, (
+        "neither scope is empty in this fixture, so neither should warn"
+    )

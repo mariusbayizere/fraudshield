@@ -464,8 +464,16 @@ _VELOCITY_RATIO = FeatureSpec(
     ),
     source=Source.REDIS,
     nan_rule=(
-        "Never NaN, on any path: zero history returns 1.0 by construction, and the DB fallback "
-        "serves the same value by hybrid read, so there is no degraded-path NaN either."
+        "Warm path: never NaN. Zero history returns 1.0 by construction, and the DB fallback "
+        "serves the same value by hybrid read. "
+        "FAILS CLOSED (PB-37): NaN whenever the durable first-seen is unavailable for the account. "
+        "history_basis=OBSERVED_CAPPED divides by history actually observed, so without that "
+        "timestamp there is no denominator, only a guess - and the guess is not a small error. "
+        "Restoring arrivals from the database while the per-account first-seen is missing, which "
+        "is what M1's schema produces today, divides thirty days of rows by whatever span the "
+        "cache happens to hold and collapses the ratio across the entire account base, during a "
+        "recovery, when the system is already degraded. The models' native missing handling "
+        "(D-04) covers a NaN; nothing covers a plausible wrong number."
     ),
     leakage_note=(
         "Both windows are strictly backward-looking and exclude the scored transaction, so no "
