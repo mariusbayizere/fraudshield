@@ -196,6 +196,19 @@ the decision engine M6, staff identity, admin and audit M7).
   on `month=` is therefore unsound for anyone filtering by timestamp.
 - **Acceptance:** either partition on the UTC month, or state the convention in the datasheet and the
   export README and add a test pinning it. A consumer must not have to discover it.
+- **Closed 2026-09-19 (M3), second option.** Repartitioning on UTC would move rows into
+  already-written partitions, so it needs either a month of buffering or a change to how activity is
+  placed — and the latter alters every row, invalidating the report, the checksums and the tagged M2
+  evidence. Disproportionate for 0.044% of rows whose drift is bounded and one-directional.
+  Instead: measured precisely (447 of 1,006,249 rows drift backward, none forward, first partition
+  reaching to 2023-12-31 21:15 UTC); documented in the datasheet with the consumer rule (to select
+  UTC month M, read partitions M and M+1 and filter on the timestamp); carried in `release.json`
+  under `partitioning` so a machine reading the release learns it without the prose; and pinned by
+  `test_the_partition_key_is_the_simulation_month_and_its_drift_is_bounded`, which asserts no row is
+  carried forward and none reaches back further than the +3 h maximum UTC offset.
+  The test is on seed 13, not the shared fixture's seed 11: seed 11 produces no drifting row at
+  6,000 rows, so the bound held vacuously — mutating the permitted drift to zero left the test
+  passing, which is how the vacuity was found.
 
 ### PB-27 · Generator caches contradict the memory rationale
 - **Source:** M2 principal review (MINOR 2.2) · **Priority:** low · **Due:** M3

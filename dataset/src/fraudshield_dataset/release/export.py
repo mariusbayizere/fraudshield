@@ -108,6 +108,17 @@ def export(source: Path, output: Path, *, csv_tables: bool = True) -> ExportResu
         "rows": manifest["rows"],
         "rows_by_table": rows,
         "rows_by_month": manifest["rows_by_month"],
+        # The partition key is the simulation month in local time, not the UTC month of the
+        # timestamp, and a consumer filtering by timestamp must know it (PB-26). Stated here as
+        # well as in the datasheet, because a machine reading release.json will not read prose.
+        "partitioning": {
+            "key": "month",
+            "meaning": "simulation month in local time, not the UTC month of transaction_timestamp",
+            "drift": "a row's UTC timestamp may precede its partition start, never follow its end",
+            "max_backward_drift_hours": 3,
+            "consumer_rule": "to select a UTC month M, read partitions M and M+1 and filter on "
+            "transaction_timestamp; pruning on month= alone is unsound",
+        },
         "formats": ["parquet", "csv"] if csv_tables else ["parquet"],
         "licence": {"name": "CC BY 4.0", "file": LICENCE.name, "sha256": _sha256(LICENCE)},
         "source_manifest_sha256": _sha256(manifest_path),

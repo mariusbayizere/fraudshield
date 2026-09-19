@@ -27,7 +27,7 @@ from fraudshield_dataset.generator.config import (
     segment_channel_shares,
 )
 from fraudshield_dataset.generator.fraud import NOVEL_VARIANT, SCENARIOS, FraudModel
-from fraudshield_dataset.generator.legit import LegitimateBehaviour
+from fraudshield_dataset.generator.legit import LegitimateBehaviour, month_start_micros
 from fraudshield_dataset.generator.pipeline import generate
 from fraudshield_dataset.generator.population import Population
 from fraudshield_dataset.generator.schema import ACCOUNT_EVENTS, LABELS, TRANSACTIONS
@@ -522,3 +522,53 @@ def test_the_minimum_size_is_a_property_of_the_parameters_not_the_run() -> None:
         )
 
     assert max(quoted) - min(quoted) < 0.05 * min(quoted), quoted
+
+
+@pytest.mark.req("ML-DATA-06", "D-07")
+def test_the_partition_key_is_the_simulation_month_and_its_drift_is_bounded(tmp_path: Path) -> None:
+    """`month=` is the simulation month in local time, not the UTC month of the timestamp.
+
+    A transaction placed at local 00:30 on the 1st in a UTC+3 country carries a UTC timestamp in the
+    previous month, and the spill filter carries rows forward only. At 1,006,249 rows this affects
+    447 rows (0.044%), all in one direction (M2 milestone review, PB-26).
+
+    The convention is not a defect to hide but a bound to state: backward drift can never exceed the
+    largest UTC offset in the dataset, so a consumer filtering by UTC timestamp needs at most a
+    one-partition lookahead -- rows whose UTC month is M may sit in partition M+1, never further.
+
+    Seed 13 rather than the shared fixture's seed 11, because seed 11 produces no drifting row at
+    6,000 rows and the bound would then hold vacuously: mutating the maximum offset to zero left
+    the test passing, which is how the vacuity was found.
+    """
+    output = tmp_path / "drift"
+    generate(
+        build_config(load_parameters(), seed=13, total_rows=6000),
+        output,
+        chunk_size=8,
+        allow_missing_scenarios=True,
+    )
+    offsets = load_parameters().mapping("currencies.utc_offset_hours")
+    max_offset_micros = int(max(offsets.values())) * 3_600_000_000
+
+    drift_before = 0
+    for directory in sorted((output / "transactions").glob("month=*")):
+        month = directory.name.removeprefix("month=")
+        start = month_start_micros(month)
+        end = month_start_micros(month_labels(month, 2)[1])
+        stamps = pq.read_table(directory / "part-0000.parquet", columns=["transaction_timestamp"])[
+            "transaction_timestamp"
+        ].cast(pa.int64())
+
+        # Forward: never. A row at or past its partition's end is carried to the next month.
+        assert pc.sum(pc.greater_equal(stamps, end)).as_py() == 0, f"{month} holds a later row"
+        # Backward: bounded by the largest UTC offset, never a whole partition.
+        earliest = pc.min(stamps).as_py()
+        assert earliest >= start - max_offset_micros, (
+            f"{month} reaches {(start - earliest) / 3_600_000_000:.1f}h before its start, "
+            f"beyond the {max(offsets.values())}h maximum UTC offset"
+        )
+        drift_before += pc.sum(pc.less(stamps, start)).as_py() or 0
+
+    # Without this the bound holds vacuously on data where nothing drifts, and the test passes even
+    # when the permitted drift is mutated to zero.
+    assert drift_before > 0, "no row drifted, so the bound above was not exercised"

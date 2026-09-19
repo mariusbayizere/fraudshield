@@ -77,6 +77,27 @@ simulated customer's every simulated transaction is present, with one exception 
 near the end of the last month can run past the simulated period, and those few rows are dropped
 rather than written into a month that does not exist. There is no other sampling step.
 
+**How are the files partitioned, and what does the partition key mean?** Each table is written as
+`month=YYYY-MM/part-0000.parquet`. **The key is the simulation month in local time, not the UTC
+month of `transaction_timestamp`**, and the difference is bounded and measurable rather than
+incidental.
+
+Activity is placed in each customer's local time and then converted to UTC. A transaction at local
+00:30 on the 1st in a UTC+3 country (Kenya, Tanzania, Uganda) therefore carries a UTC timestamp in
+the *previous* month while sitting in the current month's partition. The generator carries rows
+forward past a partition's end but never backward, so the drift is one-directional.
+
+Measured at 1,006,249 rows: **447 rows (0.044%) have a UTC timestamp earlier than their partition's
+start; none is later.** The first partition's earliest timestamp is 2023-12-31 21:15 UTC, before the
+dataset's nominal start of 2024-01-01.
+
+**What a consumer must do.** Backward drift can never exceed the largest UTC offset in the dataset
+(+3 hours), so it can never span a whole partition. To select every row whose *UTC* month is `M`,
+read partitions `M` and `M+1` and filter on `transaction_timestamp`. Partition pruning on `month=`
+alone is unsound for a UTC-timestamp filter. The bound is pinned by
+`test_the_partition_key_is_the_simulation_month_and_its_drift_is_bounded`, which fails if a row is
+ever carried forward or reaches back further than the maximum offset.
+
 **Is any information missing?** Yes, by design. Fields that a real payment may lack are absent in
 the same pattern for fraudulent and legitimate rows: `device_fingerprint` is null on channels that
 carry no device, `agent_id` is null away from agent banking. The realism checks fail the dataset
