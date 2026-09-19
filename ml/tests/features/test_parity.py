@@ -9,6 +9,7 @@ batch path is computed on **the prefix ending at that transaction only**.
 from __future__ import annotations
 
 import itertools
+import math
 import random
 from datetime import UTC, datetime, timedelta
 
@@ -17,7 +18,12 @@ import pytest
 from fraudshield_ml.features import batch
 from fraudshield_ml.features.online import OnlineFeatures
 from fraudshield_ml.features.primitives import h3_cell, haversine_km
-from fraudshield_ml.features.types import Outcome, Transaction
+from fraudshield_ml.features.types import (
+    LimitDimension,
+    OperationalLimit,
+    Outcome,
+    Transaction,
+)
 
 START = datetime(2025, 1, 1, tzinfo=UTC)
 TOLERANCE_ABS = 1e-12
@@ -270,3 +276,287 @@ def test_the_cell_rate_reads_other_accounts_rows_which_is_why_it_needs_a_control
         "the cell rate is unchanged by other accounts' rows, so either the fixture's cells are not "
         "shared or the aggregate is not cell-keyed; in both cases history_key=GEO_CELL is wrong"
     )
+
+
+#: A replay for the trailing account aggregates. Separate from `_history` because those features
+#: need amounts that vary over orders of magnitude and counterparties that repeat: a replay where
+#: every amount is equal cannot distinguish a sum from a count times a constant, and one where
+#: every counterparty is distinct cannot distinguish a set from a row count.
+def _velocity_history(n: int = 80, seed: int = 20260919) -> list[Transaction]:
+    rng = random.Random(seed)  # noqa: S311 - fixture shape, not a security context
+    rows: list[Transaction] = []
+    when = START
+    for i in range(n):
+        when += timedelta(seconds=rng.choice([20, 45, 900, 5_000, 40_000, 200_000, 900_000]))
+        rows.append(
+            Transaction(
+                transaction_id=f"v{i}",
+                account_id="A",
+                timestamp=when,
+                amount_rwf=float(rng.choice([250, 1_500, 48_000, 1_200_000, 9_800_000])),
+                latitude=-1.9441,
+                longitude=30.0619,
+                counterparty_id=f"M{rng.randrange(6)}",
+            )
+        )
+    return rows
+
+
+@pytest.mark.req("FR-02-02")
+def test_the_trailing_aggregates_agree_at_every_prefix() -> None:
+    """Prefix replay for the seven trailing account aggregates, counts exactly and sums by ADR 0025.
+
+    The counts and the distinct count are compared with `==` rather than `_agree`: ADR 0025 allows
+    a count no tolerance, and reusing the float comparison here would quietly grant one.
+    """
+    rows = _velocity_history()
+    online = OnlineFeatures()
+
+    spans = [b.timestamp - a.timestamp for a, b in itertools.pairwise(rows)]
+    assert any(s < timedelta(seconds=60) for s in spans), (
+        "precondition: the replay must put two rows inside 60 s, or tx_count_60s is 0 throughout "
+        "and proves nothing (E12/E13)"
+    )
+    assert any(s > timedelta(days=7) for s in spans), (
+        "precondition: the replay must leave a gap longer than 7 d, or no window ever empties"
+    )
+
+    seen_counts: set[int] = set()
+    seen_sums: set[float] = set()
+    seen_parties: set[int] = set()
+    for k, scored in enumerate(rows):
+        prefix = rows[:k]
+        for name in ("tx_count_60s", "tx_count_1h", "tx_count_24h", "tx_count_7d"):
+            expected = batch.tx_count(prefix, scored, name)
+            assert online.tx_count(scored, name) == expected, f"prefix {k}, {name}"
+            if name == "tx_count_24h":
+                seen_counts.add(expected)
+        for name in ("amount_sum_24h", "amount_sum_7d"):
+            expected_sum = batch.amount_sum(prefix, scored, name)
+            assert _agree(expected_sum, online.amount_sum(scored, name)), f"prefix {k}, {name}"
+            if name == "amount_sum_7d":
+                seen_sums.add(expected_sum)
+        parties = batch.unique_counterparties_24h(prefix, scored)
+        assert online.unique_counterparties_24h(scored) == parties, f"prefix {k}, counterparties"
+        seen_parties.add(parties)
+        online.observe(scored)
+
+    # E13: the replay must have exercised each feature non-trivially, not merely agreed on zeros.
+    assert len(seen_counts) > 3, f"tx_count_24h took only {sorted(seen_counts)} across the replay"
+    assert max(seen_sums) > 1e6, "no large sum in the replay, so the tolerance was never stretched"
+    assert len(seen_parties) > 2, "the distinct-counterparty count barely moved"
+
+
+def _agree_including_nan(batch_value: float, online_value: float) -> bool:
+    """ADR 0025 rule 3: NaN positions must match exactly, never absorbed by a tolerance.
+
+    A NaN on one path against a number on the other is a contract violation rather than a
+    numerical difference, so the two cases are separated here rather than run through `_agree`,
+    where `nan != nan` would make every comparison fail for the wrong reason.
+    """
+    if math.isnan(batch_value) or math.isnan(online_value):
+        return math.isnan(batch_value) and math.isnan(online_value)
+    return _agree(batch_value, online_value)
+
+
+#: A configuration change inside the replay, which ADR 0026 makes a **required fixture property**
+#: rather than a case in a list: the two paths agree for every transaction newer than the last
+#: change, so a fixture without one passes with the as-of bug present.
+_LIMIT_CHANGE_AT = START + timedelta(days=40)
+_REPLAY_LIMITS = (
+    OperationalLimit(
+        dimension=LimitDimension.CHANNEL,
+        applies_to="MOBILE_MONEY",
+        amount_rwf=60_000.0,
+        effective_at=START - timedelta(days=1),
+    ),
+    OperationalLimit(
+        dimension=LimitDimension.CHANNEL,
+        applies_to="MOBILE_MONEY",
+        amount_rwf=1_300_000.0,
+        effective_at=_LIMIT_CHANGE_AT,
+    ),
+)
+
+#: Denominations in minor units, as a pack supplies them; an invented currency, since the feature
+#: paths must never name one.
+_REPLAY_DENOMINATIONS = {"AAA": (100, 1_000)}
+
+
+def _amount_history(n: int = 70, seed: int = 20260919) -> list[Transaction]:
+    """Arrivals carrying everything the amount features read.
+
+    Amounts span four orders of magnitude so the z-score has a scale to find and the ratio to the
+    maximum moves; some are exact multiples of a denomination and some are not.
+    """
+    rng = random.Random(seed)  # noqa: S311 - fixture shape, not a security context
+    rows: list[Transaction] = []
+    when = START
+    for i in range(n):
+        when += timedelta(hours=rng.choice([2, 9, 40, 170, 700]))
+        minor = rng.choice([57_400, 60_000, 1_000, 12_345, 250_000, 999])
+        rows.append(
+            Transaction(
+                transaction_id=f"m{i}",
+                account_id="A",
+                timestamp=when,
+                amount_rwf=float(minor),
+                latitude=-1.9441,
+                longitude=30.0619,
+                counterparty_id=f"M{rng.randrange(4)}",
+                amount_minor=minor,
+                currency="AAA",
+                channel="MOBILE_MONEY",
+            )
+        )
+    return rows
+
+
+@pytest.mark.req("FR-02-02", "ML-GATE-01")
+def test_the_amount_features_agree_at_every_prefix_across_a_configuration_change() -> None:
+    """Prefix replay for the five amount features, with ADR 0026's required fixture property.
+
+    The preconditions come first and there are three, because this replay can be vacuous in three
+    separate ways: no configuration change (the as-of bug becomes invisible), no thin-history
+    prefix (the NaN contract is never exercised), and no round amount (the flag is constant).
+    """
+    rows = _amount_history()
+    changes = sum(
+        1 for limit in _REPLAY_LIMITS if rows[0].timestamp < limit.effective_at < rows[-1].timestamp
+    )
+    assert changes > 0, (
+        "precondition (ADR 0026): the replayed history must span at least one configuration "
+        "change, or the two paths agree for every row and the suite is blind to as-of drift"
+    )
+    assert sum(1 for r in rows if r.timestamp < _LIMIT_CHANGE_AT) > 5, (
+        "precondition: and enough rows fall on the earlier side of it to matter"
+    )
+    assert any(r.amount_minor is not None and r.amount_minor % 1_000 == 0 for r in rows), (
+        "precondition: some amount is an exact multiple of a denomination"
+    )
+
+    online = OnlineFeatures()
+    flags: set[bool] = set()
+    nan_prefixes = 0
+    for k, scored in enumerate(rows):
+        prefix = rows[:k]
+        pairs = (
+            (batch.amount_log1p(scored), online.amount_log1p(scored)),
+            (
+                batch.amount_zscore_90d(prefix, scored),
+                online.amount_zscore_90d(scored),
+            ),
+            (
+                batch.amount_to_max_90d_ratio(prefix, scored),
+                online.amount_to_max_90d_ratio(scored),
+            ),
+        )
+        for batch_value, online_value in pairs:
+            assert _agree_including_nan(batch_value, online_value), (
+                f"prefix {k} ({scored.transaction_id}): {batch_value!r} vs {online_value!r}"
+            )
+        if math.isnan(batch.amount_zscore_90d(prefix, scored)):
+            nan_prefixes += 1
+
+        assert batch.round_sum_flag(scored, _REPLAY_DENOMINATIONS) == online.round_sum_flag(
+            scored, _REPLAY_DENOMINATIONS
+        ), f"prefix {k}: round_sum_flag"
+        below = batch.just_below_limit_flag(scored, _REPLAY_LIMITS, kyc_tier=None)
+        assert below == online.just_below_limit_flag(scored, _REPLAY_LIMITS, kyc_tier=None), (
+            f"prefix {k}: just_below_limit_flag"
+        )
+        flags.add(below)
+        online.observe(scored)
+
+    assert nan_prefixes > 0, (
+        "no prefix was below the z-score's five-observation threshold, so the NaN contract was "
+        "never exercised (E13)"
+    )
+    assert flags == {True, False}, (
+        "just_below_limit_flag was constant across the replay, so parity on it proved nothing"
+    )
+
+
+def _journey_history(n: int = 60, seed: int = 20260920) -> list[Transaction]:
+    """Arrivals that move between three cities and four destination countries.
+
+    A replay that never leaves one place makes every distance 0 and every country familiar after
+    the first row, so the geographic features would agree on constants.
+    """
+    rng = random.Random(seed)  # noqa: S311 - fixture shape, not a security context
+    places = ((-1.9441, 30.0619), (-1.2921, 36.8219), (0.3476, 32.5825))
+    destinations = ("AA", "BB", "CC", "DD")
+    rows: list[Transaction] = []
+    when = START
+    for i in range(n):
+        when += timedelta(minutes=rng.choice([7, 55, 300, 2_000, 30_000]))
+        place = places[rng.randrange(len(places))]
+        rows.append(
+            Transaction(
+                transaction_id=f"g{i}",
+                account_id="A",
+                timestamp=when,
+                amount_rwf=float(rng.randrange(1_000, 900_000)),
+                latitude=place[0] + rng.uniform(-0.01, 0.01),
+                longitude=place[1] + rng.uniform(-0.01, 0.01),
+                counterparty_id=f"M{rng.randrange(5)}",
+                counterparty_country=destinations[rng.randrange(len(destinations))],
+            )
+        )
+    return rows
+
+
+@pytest.mark.req("FR-02-02")
+def test_the_geographic_and_gap_features_agree_at_every_prefix() -> None:
+    """Prefix replay for the four features that read the previous transaction or the 90 d window.
+
+    Three preconditions, because this replay can be vacuous in three ways: never moving (every
+    distance 0), never saturating the speed cap (the cap untested), and never revisiting a country
+    (the novelty flag constant True).
+    """
+    rows = _journey_history()
+    online = OnlineFeatures()
+    online.restore_first_seen("A", rows[0].timestamp)
+
+    distances: set[float] = set()
+    speeds: set[float] = set()
+    novelty: set[bool] = set()
+    nan_gaps = 0
+    for k, scored in enumerate(rows):
+        prefix = rows[:k]
+        for batch_value, online_value in (
+            (
+                batch.seconds_since_last_tx(prefix, scored),
+                online.seconds_since_last_tx(scored),
+            ),
+            (
+                batch.distance_from_last_tx_km(prefix, scored),
+                online.distance_from_last_tx_km(scored),
+            ),
+            (batch.implied_speed_kmh(prefix, scored), online.implied_speed_kmh(scored)),
+            (
+                batch.distance_from_home_centroid_km(prefix, scored),
+                online.distance_from_home_centroid_km(scored),
+            ),
+        ):
+            assert _agree_including_nan(batch_value, online_value), (
+                f"prefix {k} ({scored.transaction_id}): {batch_value!r} vs {online_value!r}"
+            )
+        new_country = batch.is_new_country_for_account(prefix, scored)
+        assert new_country == online.is_new_country_for_account(scored), f"prefix {k}: country"
+
+        distance = batch.distance_from_last_tx_km(prefix, scored)
+        if not math.isnan(distance):
+            distances.add(round(distance, 3))
+            speeds.add(batch.implied_speed_kmh(prefix, scored))
+        else:
+            nan_gaps += 1
+        novelty.add(new_country)
+        online.observe(scored)
+
+    assert nan_gaps == 1, f"only the first row should have no predecessor, got {nan_gaps}"
+    assert len(distances) > 5, "the replay barely moved, so the distances proved nothing"
+    assert max(speeds) == batch.MAX_IMPLIED_SPEED_KMH, (
+        "no prefix saturated the speed cap, so the cap is untested by this replay"
+    )
+    assert novelty == {True, False}, "every country was new, so the novelty flag was constant"

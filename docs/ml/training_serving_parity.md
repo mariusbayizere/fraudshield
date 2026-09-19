@@ -149,19 +149,20 @@ specification for a case the test is missing.
 
 | # | Mutation | What it simulates | Caught by | Result |
 |---|---|---|---|---|
-| 1 | reassociate a window sum (accumulate in reverse order) | the benign case the tolerance must *tolerate* | — | **must PASS** (see note) |
+| 1 | a naive running total instead of a compensated sum | the benign case the tolerance must *tolerate* | — | **PASSED** 2026-09-19 — see note, the mutation had to be changed |
 | 2 | window bound `<` instead of `≤` | classic off-by-one at a boundary | window-boundary cases, count equality | **DETECTED** 2026-09-19: 0.96 → 2.0 |
 | 3 | a 24 h window computed over 25 h | silent window drift | count equality | **DETECTED** 2026-09-19 (run as 30 d over 31 d) |
-| 4 | local time applied in one path only | D-43 timezone handling diverging | `local_hour_sin/cos`, `is_local_night` | pending |
+| 4 | local time applied in one path only | D-43 timezone handling diverging | `local_hour_sin/cos`, `is_local_night` | **DETECTED** 2026-09-19: local midnight in a +2 pack, sin 0.0 vs -0.5, night True vs False |
 | 5 | a structural missing emitted as `0.0` rather than NaN | the D-04 contract collapsing to a number | NaN-position equality | pending |
 | 6 | a category encoded from a different fold | the M2 encoding defect, reproduced in serving | exact categorical equality | **DETECTED** 2026-09-19, in the runnable form — see note |
 | 7 | a label used whose `label_available_at` is after the transaction | future leakage in the batch path | prefix replay | **DETECTED** 2026-09-19: 1.5/59 → 2.5/60 |
-| 8 | a sum accumulated in float32 | precision loss masquerading as reassociation | the relative tolerance | pending |
+| 8 | a sum accumulated in float32 | precision loss masquerading as reassociation | the relative tolerance | **DETECTED** 2026-09-19: 1.0000197e7 vs 1.0000198e7, a gap of 1.33 against a tolerance of 1.0e-5 |
 | 9 | the fallback path serves a bucket-aligned 1 h count as if it were trailing | the degraded path diverging where no warm-path test looks | cold-cache case, `fallback_behaviour` | pending |
 | 10 | `account_first_seen_at` lost on flush, so `OBSERVED_CAPPED` divides by a shorter history | a `DURABLE` field that is not durable | cold-cache case | **DETECTED** 2026-09-19 — see note |
-| 11 | the batch path joins current thresholds instead of as-of ones | ADR 0026's configuration drift | the required configuration-change fixture | pending |
+| 11 | the batch path joins current thresholds instead of as-of ones | ADR 0026's configuration drift | the required configuration-change fixture | **DETECTED** 2026-09-19: True (in force then) vs False (in force today) |
 | 12 | a non-account-keyed aggregate computed over all rows rather than training folds | cross-account leakage E1's grouping cannot see | single-feature AUC rises above its clean value | **DETECTED** 2026-09-19, one step earlier: the value changes at all |
 | 13 | the shared-bloc test placed before the same-country test | a corridor rule whose branch order silently reclassifies every domestic row | exact categorical equality | **DETECTED** 2026-09-19 |
+| 14 | the implied-speed cap applied on one path only | a saturating indicator becoming a measurement on one side | the relative tolerance | **DETECTED** 2026-09-19: 1,000 vs 7,549 km/h, with a control that a merely fast journey does not saturate |
 
 **Mutation 1 is the control, and it is the one that must pass.** Without it the suite cannot
 distinguish "the tolerance catches bugs" from "the tolerance catches everything, including honest
@@ -169,7 +170,28 @@ reassociation" — in which case it would be loosened under pressure and stop ca
 the same role the 0.5-strength plant played in M2's power curve: without a case that *should not*
 fire, a detector that fires at everything looks identical to one that works.
 
-**Seven rows executed 2026-09-19** in `ml/tests/features/test_mutations.py`, against the three
+**Running row 1 changed what it tests, and the change is the interesting part.** As written it
+reassociated a window sum by accumulating in reverse order, and it **failed its own
+precondition**: the two orders produced the identical float. Both paths sum with the built-in
+`sum()`, and **since CPython 3.12 `sum()` applies Neumaier compensated summation to floats**, so
+both are correctly rounded and agree bit-for-bit for the same multiset whatever order they visit
+it in. The reassociation this row exists to permit does not occur between today's two
+implementations at all.
+
+That is not a reason to delete the row, and the reason it is not is worth stating. The production
+online path will not re-add a window on every request: a Redis-backed store keeps an
+**incrementally updated running total**, which cannot be compensated because it never sees the
+window twice. So the difference the tolerance must admit is real and arrives at M6 without any
+change to these features. The row therefore compares the compensated sum against a naive running
+total, in both directions, and asserts the tolerance admits it — measured gap 7.5e-9 against a
+tolerance of 1.0e-5 at a heavy user's seven-day total, three orders of magnitude of room.
+
+**The pairing of rows 1 and 8 is what makes either mean anything.** Row 1 says the tolerance
+admits a correct implementation differing in the last bits; row 8 says it rejects one that has
+lost seven significant digits. A suite holding only row 1's reasoning — "the paths accumulate
+differently, so small differences are fine" — has no rule separating 7.5e-9 from 1.33.
+
+**Twelve rows executed 2026-09-19** in `ml/tests/features/test_mutations.py`, against the ten
 implemented features. Each applies the divergence and asserts the values disagree by more than ADR
 0025's tolerance — a mutation that slips inside the tolerance is the specification for a missing
 case, not a curiosity.
@@ -191,9 +213,22 @@ carried into M4 with the encoder rather than closed here.
 **Row 13 was added when `corridor_class` was implemented**, per E14's requirement that mutations
 are recorded as they are tried rather than assembled at the end.
 
-**Five rows stay `pending` and are not marked passed by omission.** Rows 1, 5 and 8 need an
-amount-sum or structural-NaN feature; row 4 a temporal feature; row 9 the DB fallback path; row 11
-`just_below_limit_flag`. None exists yet.
+**Two rows stay `pending` and are not marked passed by omission.** Row 5 needs a structural-NaN
+feature and row 9 the DB fallback path. Rows 1 and 8 became runnable with the amount-sum
+features, row 11 with `just_below_limit_flag` and row 4 with the temporal group; all four were
+run as they arrived.
+
+**Row 4 turns on the fixture, like row 11.** At local noon the two readings coincide in every
+positive offset, so a temporal fixture built from working hours would pass with the offset ignored
+altogether. Every temporal fixture in the suite is therefore chosen so that the local and the UTC
+answer differ — a different hour, and where possible a different day.
+
+**Row 11 is the one whose fixture is the test.** The mutation is what a batch implementation does
+by *default* — join the configuration table, take the current row — and the two paths agree for
+every transaction newer than the last change, so the assertion is worth nothing without the
+`changes > 0` precondition in front of it. Both the mutation row and the amount-group prefix
+replay assert that precondition before comparing anything, which is ADR 0026's required fixture
+property rather than a habit.
 
 **Note on row 10, because the obvious version of it is the wrong one.** Two flush scenarios behave
 oppositely. *Everything lost* — arrivals and first-seen re-derived together — shrinks numerator and

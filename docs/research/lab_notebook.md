@@ -1230,3 +1230,40 @@ and the report together and a consumer has nothing to tell them apart with, whic
 state PB-39 shipped for two commits. The committed report describes a 1,012,522-row run and carries
 no fingerprint until its next regeneration, so today it cannot be bundled with any other dataset —
 which is the correct behaviour and is visible rather than silent.
+
+### 2026-09-19 · The control mutation failed its own precondition, and that was the finding
+
+Parity mutation 1 is the row that must **pass**: an honest reassociation of a window sum, there so
+that the suite can tell "the tolerance catches bugs" from "the tolerance catches everything". It
+was written as *accumulate the window in reverse order* and asserted the two orders differ before
+asserting they agree within ADR 0025's tolerance.
+
+**It failed on the precondition. The two orders produce the identical float.** Both feature paths
+sum with the built-in `sum()`, and since CPython 3.12 `sum()` applies **Neumaier compensated
+summation** to floats. Both paths are therefore correctly rounded and agree bit-for-bit for the
+same multiset however they visit it, so the reassociation the tolerance exists to permit does not
+happen between them.
+
+The first reading of that is "the tolerance is unnecessary, and rows 1 and 8 are about nothing".
+The correct reading is narrower and points forward. **The production online path will not re-add a
+window on every request.** A Redis-backed store keeps an incrementally updated running total,
+because re-reading a 30-day window per transaction is what the store exists to avoid — and a
+running total cannot be compensated, since it never sees the window twice. So the difference the
+tolerance must admit is real; it arrives at M6, without any change to these features, and the
+suite would meet it for the first time in production if the row had been deleted as vacuous.
+
+The row now compares the compensated sum against a naive running total in both directions:
+measured gap **7.5e-9** against a tolerance of **1.0e-5** at a heavy user's seven-day total.
+
+**What makes rows 1 and 8 evidence is that they are a pair.** Row 1 says the tolerance admits a
+correct implementation differing in the last bits; row 8 says it rejects one that has lost seven
+significant digits — float32 accumulation of the same window, gap **1.33**. A suite holding only
+row 1's reasoning ("the paths accumulate differently, so small differences are fine") has no rule
+that separates 7.5e-9 from 1.33, and would accept both. ADR 0025's relative rule does, by five
+orders of magnitude.
+
+*The general point, which is the third time this session has produced it:* **a mutation is only
+evidence once it has been executed.** Row 1 was written from the design document, was plainly
+correct as reasoning, and described arithmetic the interpreter stopped doing in 3.12. Rows filled
+in from a design are a plan. The table's value is that it records results, and a result can
+contradict the design that predicted it.

@@ -351,6 +351,43 @@ class Dtype(Enum):
     ORDINAL = "ordinal"
 
 
+#: Which features are NaN when an account's only prior transaction shares the scored timestamp
+#: exactly, and why that is a documented limit rather than a defect (owner direction 2026-09-19).
+#:
+#: A predecessor is a row **strictly earlier** than the scored one. That is the convention every
+#: windowed feature here uses, and it is the only one the online path *can* implement: at scoring
+#: time a transaction stamped the same instant may not have arrived yet, so a rule that counted it
+#: would make the two paths disagree precisely on simultaneous transactions. Since a burst of
+#: drains inside one second is itself a fraud pattern, putting the divergence there would be the
+#: worst available place for it.
+#:
+#: The consequence, stated rather than left to be discovered: when the ONLY prior transaction
+#: shares the scored timestamp exactly, these three features are NaN —
+#: ``seconds_since_last_tx``, ``distance_from_last_tx_km`` and ``implied_speed_kmh``. That is the
+#: honest output (a capped speed derived from a zero gap would be a number with no journey behind
+#: it), and it is a silence, so it is named here and in the datasheet rather than inferred.
+#:
+#: **Detecting simultaneous bursts is the velocity group's job, not the geographic group's**, and
+#: whether the velocity group can actually do it is a measured question rather than an assumption:
+#: ``tx_count_60s`` uses the same strictly-earlier bound, so it too cannot see a row stamped the
+#: same microsecond. What it does see is any row stamped even one microsecond earlier. The
+#: measurement therefore has to be of the *data*: how often an account's consecutive transactions
+#: carry byte-identical timestamps.
+#:
+#: **Measured on 201,243 rows at seed 20260917 (tree ``65c8351``): zero collisions.** No two
+#: transactions on an account are ever stamped the same instant, so the silence above costs
+#: nothing on this benchmark and the strictly-earlier bound excludes nothing from
+#: ``tx_count_60s`` either. In the same run 6 consecutive same-account pairs are under a second
+#: apart and 261 are under a minute, so the velocity group does see the bursts this dataset has —
+#: about 0.13% of rows. Rare rather than dead, which is what a burst indicator should be, but a
+#: claim resting on it is a claim about a few hundred rows at this scale (E2). Recorded in the
+#: datasheet with the tree.
+SIMULTANEOUS_PREDECESSOR_NOTE = (
+    "seconds_since_last_tx, distance_from_last_tx_km and implied_speed_kmh are NaN when the only "
+    "prior transaction shares the scored timestamp exactly, because a predecessor is strictly "
+    "earlier on both paths. Simultaneous-burst detection belongs to the velocity group."
+)
+
 #: Primitives both paths may share, per parity Decision 4. The parity test cannot see into these,
 #: so each carries its own unit tests with hand-computed expectations. A shared window-aggregation
 #: helper is deliberately **not** permitted: it is precisely the surface the parity test exists to
@@ -952,7 +989,14 @@ for _spec_ in (
         name="local_hour_sin",
         group=Group.TEMPORAL,
         dtype=Dtype.FLOAT64,
-        definition="sin(2*pi*local_hour/24), so 23:00 and 00:00 are adjacent rather than extremes.",
+        definition=(
+            "sin(2*pi*local_hour/24), so 23:00 and 00:00 are adjacent rather than extremes. "
+            "local_hour is the INTEGER local hour 0-23, not a fractional hour: Part E.2's own "
+            "examples are clock hours, is_local_night and local_day_of_week are hour and day "
+            "quantities, and a fractional hour is a second encoding of a quantity the group "
+            "already encodes. Stated here because two implementations would each pick one "
+            "plausibly, differently and silently, which is what this registry exists to stop."
+        ),
         source=Source.REQUEST,
         nan_rule=_LOCAL_TIME_NAN,
         leakage_note=_LOCAL_TIME_LEAKAGE,
@@ -963,7 +1007,11 @@ for _spec_ in (
         name="local_hour_cos",
         group=Group.TEMPORAL,
         dtype=Dtype.FLOAT64,
-        definition="cos(2*pi*local_hour/24), the quadrature partner that makes the pair injective.",
+        definition=(
+            "cos(2*pi*local_hour/24), the quadrature partner that makes the pair injective. "
+            "Reads the same INTEGER local hour 0-23 as local_hour_sin; the pair must be computed "
+            "from one value, or the two together encode a point off the unit circle."
+        ),
         source=Source.REQUEST,
         nan_rule=_LOCAL_TIME_NAN,
         leakage_note=_LOCAL_TIME_LEAKAGE,
@@ -1078,11 +1126,20 @@ for _spec_ in (
         dtype=Dtype.FLOAT64,
         definition=(
             "distance_from_last_tx_km divided by the elapsed hours since the previous transaction, "
-            "capped at 1000 km/h — above commercial cruising speed, so anything at the cap is "
-            "already impossible rather than merely fast. The cap also defines the "
-            "zero-elapsed-time "
-            "case, which is otherwise a division by zero and is common: two transactions can share "
-            "a timestamp to the stored resolution."
+            "capped at 1000 km/h. "
+            "WHAT THE CAP MEANS WHEN IT BINDS: not 'fast'. 1000 km/h is above commercial cruising "
+            "speed, so a value at the cap says the two locations cannot both have been visited by "
+            "one person in that time — a proxy for a shared account, a stolen credential used "
+            "elsewhere, or a spoofed location, never for travel. It is a saturating indicator and "
+            "the model should read it as a category, which is why it saturates rather than "
+            "reporting 3,000 or 40,000 and letting a tree split inside the impossible range. "
+            "CORRECTED 2026-09-19 (owner decision): an earlier wording said the cap also defined "
+            "a zero-elapsed-time case. It does not, and the case cannot arise. A predecessor is a "
+            "row STRICTLY earlier than the scored one — the convention every windowed feature "
+            "here uses, and the only one the online path can implement, since at scoring time a "
+            "transaction sharing the timestamp may not have arrived — so the elapsed time is "
+            "always positive and the cap now applies only to fast-but-positive gaps. See "
+            "SIMULTANEOUS_PREDECESSOR_NOTE."
         ),
         source=Source.REDIS,
         nan_rule="NaN with no prior transaction, inherited from both of its inputs.",
@@ -1128,8 +1185,17 @@ for _spec_ in (
         group=Group.GEOGRAPHIC,
         dtype=Dtype.BOOL,
         definition=(
-            "True when this account has no prior transaction in the scored transaction's country, "
-            "over unbounded history. Country comes from the pack, never hard-coded (ADR 0023)."
+            "True when this account has never before sent to the scored transaction's COUNTERPARTY "
+            "COUNTRY, over unbounded history. Country comes from the pack, never hard-coded "
+            "(ADR 0023). "
+            "RESOLVED 2026-09-19 (owner decision). Part E.2 says 'the scored transaction's "
+            "country', which reads most naturally as where the transaction happened — and that is "
+            "not computable here: no column records it, transaction locations are continuous "
+            "coordinates, and resolving them would put a geocoder inside the feature path. The "
+            "account's own country is computable and never changes in this dataset, so that "
+            "reading would have shipped a third declared degeneracy. The counterparty's country is "
+            "recorded per row, varies, and makes this the destination-novelty signal that sits "
+            "beside corridor_class."
         ),
         source=Source.REDIS,
         nan_rule=(

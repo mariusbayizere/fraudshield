@@ -20,14 +20,22 @@ one.
 
 from __future__ import annotations
 
+import math
 from datetime import UTC, datetime, timedelta
 
+import numpy as np
 import pytest
 
 from fraudshield_ml.features import batch
 from fraudshield_ml.features.online import OnlineFeatures
 from fraudshield_ml.features.registry import categories_for, smoothing_for
-from fraudshield_ml.features.types import CountryFacts, Outcome, Transaction
+from fraudshield_ml.features.types import (
+    CountryFacts,
+    LimitDimension,
+    OperationalLimit,
+    Outcome,
+    Transaction,
+)
 
 T = datetime(2025, 6, 1, 12, 0, tzinfo=UTC)
 KIGALI = (-1.9441, 30.0619)
@@ -245,12 +253,12 @@ def test_mutation_12_cell_rate_over_all_rows_rather_than_training_folds_is_detec
 #: SOURCED pack fact with an accessed date, and memberships do change — Somalia joined the EAC in
 #: 2024, Tanzania left COMESA — so "the packs the other path read" is not a hypothetical.
 _PACKS_TODAY = {
-    "RW": CountryFacts("RW", "AF", frozenset({"EAC", "COMESA"})),
-    "TZ": CountryFacts("TZ", "AF", frozenset({"EAC", "SADC"})),
+    "RW": CountryFacts("RW", "AF", frozenset({"EAC", "COMESA"}), 2),
+    "TZ": CountryFacts("TZ", "AF", frozenset({"EAC", "SADC"}), 3),
 }
 _PACKS_STALE = {
-    "RW": CountryFacts("RW", "AF", frozenset({"COMESA"})),
-    "TZ": CountryFacts("TZ", "AF", frozenset({"SADC"})),
+    "RW": CountryFacts("RW", "AF", frozenset({"COMESA"}), 2),
+    "TZ": CountryFacts("TZ", "AF", frozenset({"SADC"}), 3),
 }
 
 
@@ -317,3 +325,283 @@ def test_mutation_13_testing_the_shared_bloc_before_the_same_country_is_detected
     assert_detected_exactly(
         correct, mutated, "shared-bloc test placed before the same-country test"
     )
+
+
+# --- amount-sum rows: the tolerance's two sides ------------------------------------------------
+
+#: A heavy user's seven-day window: one large transfer and fifty-nine small ones. The mix of
+#: magnitudes is what makes the order of accumulation matter at all — a window of equal amounts
+#: reassociates exactly and would make row 1 pass for the wrong reason.
+_HEAVY_AMOUNTS = [1.0e7] + [x * 0.1 + 1.0 / 3.0 for x in range(1, 60)]
+
+
+def _heavy_window() -> list[Transaction]:
+    return [
+        Transaction(
+            transaction_id=f"s{i}",
+            account_id="A",
+            timestamp=T - timedelta(hours=i + 1),
+            amount_rwf=amount,
+            latitude=KIGALI[0],
+            longitude=KIGALI[1],
+            counterparty_id="M1",
+        )
+        for i, amount in enumerate(_HEAVY_AMOUNTS)
+    ]
+
+
+@pytest.mark.req("FR-02-02")
+def test_mutation_1_an_honest_reassociation_must_pass() -> None:
+    """**The control, and the one row that must NOT be detected.**
+
+    Without it the suite cannot distinguish "the tolerance catches bugs" from "the tolerance
+    catches everything, including correct arithmetic" — and a tolerance that fails on correct code
+    gets loosened under pressure until it catches nothing. Same role as M2's 0.5-strength plant in
+    the power curve: a case that *should not* fire.
+
+    **What running it revealed, recorded because it changes what the row means.** Both paths
+    accumulate with the built-in `sum()`, and since CPython 3.12 `sum()` applies Neumaier
+    compensated summation to floats. Both are therefore correctly rounded, agree bit-for-bit for
+    the same multiset **whatever order they visit it in**, and the reassociation this row exists to
+    permit does not currently occur between them at all. The first version of this test asserted
+    that two orders differed and failed, because they do not.
+
+    The row is not therefore vacuous, and must not be deleted as such. The comparison is against a
+    **naive running total**, which is what the production online path will be: a Redis-backed store
+    keeps an incrementally updated sum rather than re-adding a window on every request, and an
+    incremental total cannot be compensated because it never sees the window twice. So the
+    difference the tolerance must admit is real, it is simply not visible between today's two
+    implementations — and it will appear at M6 without any change to these features.
+
+    Asserted in both directions, so the row does not quietly become a test of one order.
+    """
+    rows = _heavy_window()
+    compensated = batch.amount_sum(rows, SCORED, "amount_sum_7d")
+
+    running_forward = 0.0
+    for row in rows:
+        running_forward += row.amount_rwf
+    running_reverse = 0.0
+    for row in reversed(rows):
+        running_reverse += row.amount_rwf
+
+    assert len({compensated, running_forward, running_reverse}) > 1, (
+        "precondition: a naive running total must differ from the compensated sum in at least one "
+        "order, or this control passes over arithmetic that could not have failed (E12)"
+    )
+    allowed = 1e-12 + 1e-12 * abs(compensated)
+    for name, value in (("forward", running_forward), ("reverse", running_reverse)):
+        gap = abs(compensated - value)
+        assert gap <= allowed, (
+            f"a naive running total accumulated {name} moved the sum by {gap!r}, outside the "
+            f"tolerance {allowed!r}. ADR 0025's rule would fail on a correct online store, which "
+            "is how a tolerance gets loosened until it catches nothing"
+        )
+    # The margin is not an accident of this fixture: at 1e7 the tolerance is ~1e-5 while one ulp is
+    # ~1.9e-9, so a running total has three orders of magnitude of room before it binds.
+    assert max(abs(compensated - running_forward), abs(compensated - running_reverse)) > 0.0
+    assert allowed > 1e-6
+
+
+@pytest.mark.req("FR-02-02")
+def test_mutation_8_a_sum_accumulated_in_float32_is_detected() -> None:
+    """Precision loss masquerading as reassociation, which is exactly why row 1 is not enough.
+
+    float32 carries about seven significant decimal digits. At a heavy user's seven-day total the
+    error is in the ones, not in the last bits — visibly a different number — yet a suite holding
+    only row 1's reasoning ("the paths sum in different orders, so small differences are fine")
+    would have no rule that separates the two. ADR 0025's relative tolerance does: it is three
+    orders of magnitude stricter than the specification's 1e-9 at this magnitude, and the float32
+    error is eight orders of magnitude larger than the tolerance.
+    """
+    rows = _heavy_window()
+    correct = batch.amount_sum(rows, SCORED, "amount_sum_7d")
+
+    # Accumulated at single precision, the way a store or a feature column typed float32 would.
+    narrowed = np.float32(0.0)
+    for row in rows:
+        narrowed = np.float32(narrowed + np.float32(row.amount_rwf))
+    mutated = float(narrowed)
+
+    assert correct > 1e6, "precondition: the sum is large enough for float32 to lose digits"
+    assert_detected(correct, mutated, "window sum accumulated in float32")
+    # Recorded rather than merely detected: the gap is in the ones, not in the last bits.
+    assert abs(correct - mutated) > 1.0
+
+
+# --- configuration drift: the row that needs a fixture property, not a fixture value ------------
+
+
+@pytest.mark.req("FR-02-02")
+def test_mutation_11_joining_current_thresholds_instead_of_as_of_ones_is_detected() -> None:
+    """ADR 0026's defect, applied to the batch path and caught by the required fixture property.
+
+    The mutation is what a batch implementation does *by default*: join the configuration table
+    and take the row that is current. For a transaction from 200 days ago that reads today's
+    1,000,000 limit instead of the 500,000 limit it was actually subject to, and an amount of
+    480,000 moves from inside the band to outside it.
+
+    **The fixture property is the test.** The two paths agree for every transaction newer than the
+    last configuration change, so a fixture set without one passes with the bug present — the
+    suite would not be weak, it would be blind. The precondition asserting `changes > 0` is
+    therefore asserted before the comparison, and is why ADR 0026 made it a property of the
+    fixture rather than a case in a list.
+    """
+    limits = [
+        OperationalLimit(
+            dimension=LimitDimension.CHANNEL,
+            applies_to="MOBILE_MONEY",
+            amount_rwf=500_000.0,
+            effective_at=T - timedelta(days=365),
+        ),
+        OperationalLimit(
+            dimension=LimitDimension.CHANNEL,
+            applies_to="MOBILE_MONEY",
+            amount_rwf=1_000_000.0,
+            effective_at=T - timedelta(days=30),
+        ),
+    ]
+    scored = Transaction(
+        transaction_id="old",
+        account_id="A",
+        timestamp=T - timedelta(days=200),
+        amount_rwf=480_000.0,
+        latitude=KIGALI[0],
+        longitude=KIGALI[1],
+        channel="MOBILE_MONEY",
+    )
+
+    changes = sum(1 for limit in limits if limit.effective_at > scored.timestamp)
+    assert changes > 0, (
+        "precondition (E12, ADR 0026): the fixture must span a configuration change that is in "
+        "the future relative to the scored transaction, or both readings coincide and this "
+        "mutation cannot be detected at all"
+    )
+
+    correct = batch.just_below_limit_flag(scored, limits, kyc_tier=None)
+    # The mutation: take the latest version of each limit, ignoring effective_at entirely.
+    current = max(limits, key=lambda limit: limit.effective_at)
+    mutated = current.amount_rwf * 0.95 <= scored.amount_rwf < current.amount_rwf
+
+    assert correct is True, "the transaction is inside the band that was in force at the time"
+    assert mutated is False, "and outside the band in force today"
+    assert correct != mutated, (
+        "joining current thresholds gave the same answer as resolving them as of the transaction, "
+        "so this fixture does not span a change that matters"
+    )
+
+
+# --- temporal rows -------------------------------------------------------------------------------
+
+
+@pytest.mark.req("FR-02-02", "D-43")
+def test_mutation_4_local_time_applied_in_one_path_only_is_detected() -> None:
+    """D-43's timezone handling diverging: one path reads local time, the other UTC.
+
+    The fixture is 22:00 UTC, which is **local midnight** in a +2 pack. The hour pair therefore
+    moves from (0, 1) to sin/cos of 22, `is_local_night` flips from True to False, and
+    `local_day_of_week` changes day. All three are asserted, because the three features fail
+    differently: two by a tolerance, one by exact equality and one by an ordinal.
+
+    A fixture at local noon would show none of it — noon is noon in every positive offset — which
+    is why every temporal fixture in this suite is chosen so the local and UTC answers differ.
+    """
+    packs = {"RW": CountryFacts("RW", "AF", frozenset({"EAC"}), 2)}
+    scored = Transaction(
+        transaction_id="midnight",
+        account_id="A",
+        timestamp=T.replace(hour=22, minute=0),
+        amount_rwf=1_000.0,
+        latitude=KIGALI[0],
+        longitude=KIGALI[1],
+        account_country="RW",
+    )
+    assert batch.local_hour(scored, packs) == 0, "precondition: local midnight"
+    assert scored.timestamp.hour == 22, "precondition: and a different UTC hour"
+
+    correct_sin = batch.local_hour_sin(scored, packs)
+    correct_cos = batch.local_hour_cos(scored, packs)
+    # The mutation: the offset is never applied, so the UTC hour is used as the local one.
+    mutated_sin = math.sin(2.0 * math.pi * scored.timestamp.hour / 24.0)
+    mutated_cos = math.cos(2.0 * math.pi * scored.timestamp.hour / 24.0)
+
+    assert_detected(correct_sin, mutated_sin, "local time applied in one path only (sin)")
+    assert_detected(correct_cos, mutated_cos, "local time applied in one path only (cos)")
+
+    assert batch.is_local_night(scored, packs) is True
+    assert (0 <= scored.timestamp.hour <= 4) is False, (
+        "the same transaction is night locally and not night in UTC, which exact equality catches"
+    )
+    assert batch.local_day_of_week(scored, packs) != scored.timestamp.weekday()
+
+
+@pytest.mark.req("FR-02-02")
+def test_mutation_14_the_speed_cap_applied_on_one_path_only_is_detected() -> None:
+    """Row 14, added when the zero-elapsed clause was removed (owner direction 2026-09-19).
+
+    The cap is the whole of what `implied_speed_kmh` says in the impossible range: at the cap the
+    feature reports "one person cannot have been in both places", and uncapped it reports a number
+    that looks like a measurement. A path that dropped the cap would agree with the other for
+    every plausible journey and diverge only where the feature carries its signal — the
+    guard-with-two-doors shape, arriving as a difference between paths rather than as a missing
+    check.
+
+    The precondition asserts the fixture actually saturates, so this cannot pass over a journey
+    that was merely fast.
+    """
+    previous = Transaction(
+        transaction_id="previous",
+        account_id="A",
+        timestamp=T - timedelta(minutes=6),
+        amount_rwf=1_000.0,
+        latitude=KIGALI[0],
+        longitude=KIGALI[1],
+    )
+    scored = Transaction(
+        transaction_id="scored",
+        account_id="A",
+        timestamp=T,
+        amount_rwf=1_000.0,
+        latitude=-1.2921,
+        longitude=36.8219,
+    )
+
+    capped = batch.implied_speed_kmh([previous], scored)
+    distance = batch.distance_from_last_tx_km([previous], scored)
+    uncapped = distance / (6.0 / 60.0)
+
+    assert capped == batch.MAX_IMPLIED_SPEED_KMH, "precondition: the fixture saturates the cap"
+    assert uncapped > batch.MAX_IMPLIED_SPEED_KMH * 5, (
+        "precondition: and does so by a wide margin, not by a rounding"
+    )
+    assert_detected(capped, uncapped, "implied-speed cap applied on one path only")
+
+
+@pytest.mark.req("FR-02-02")
+def test_the_cap_does_not_fire_for_a_journey_that_is_merely_fast() -> None:
+    """The control for the row above, and the reason the cap sits at 1,000 rather than lower.
+
+    754.9 km in an hour is an aircraft, not an impossibility. If the cap fired here the feature
+    would report the same number for a flight and for a spoofed location, and the mutation above
+    would pass for the wrong reason — a detector that fires at everything looks identical to one
+    that works.
+    """
+    previous = Transaction(
+        transaction_id="previous",
+        account_id="A",
+        timestamp=T - timedelta(hours=1),
+        amount_rwf=1_000.0,
+        latitude=KIGALI[0],
+        longitude=KIGALI[1],
+    )
+    scored = Transaction(
+        transaction_id="scored",
+        account_id="A",
+        timestamp=T,
+        amount_rwf=1_000.0,
+        latitude=-1.2921,
+        longitude=36.8219,
+    )
+    speed = batch.implied_speed_kmh([previous], scored)
+    assert speed < batch.MAX_IMPLIED_SPEED_KMH
+    assert speed == pytest.approx(754.9, abs=0.1)

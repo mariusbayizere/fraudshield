@@ -265,6 +265,39 @@ the study of a novel fraud variant that appears only in the test period.
    this datasheet comes from a 1,012,522-row run. ML-DATA-01 is recorded as
    `VERIFIED_AT_REDUCED_SCALE`, not as met.
 
+**What do the M3 features go silent on?** One documented silence, with the measurement that says
+what it costs on this dataset.
+
+A *predecessor* is a transaction **strictly earlier** than the one being scored. Every windowed
+feature uses that bound, and it is the only one the online path can implement: at scoring time a
+transaction stamped the same instant may not have arrived, so a rule that counted it would make
+the training and serving paths disagree precisely on simultaneous transactions — which is itself a
+fraud pattern, a burst of drains inside one second. The consequence is that when an account's
+**only** prior transaction shares the scored timestamp exactly, three features are NaN rather than
+reporting a journey: `seconds_since_last_tx`, `distance_from_last_tx_km` and `implied_speed_kmh`.
+A capped speed computed from a zero gap would be a number with no journey behind it.
+
+**Measured on 201,243 rows at seed 20260917 (200,000-row run, tree `65c8351`): the case does not
+occur.** Zero of 201,243 rows share an `(account_id, transaction_timestamp)` pair with another —
+no two transactions on an account are ever stamped the same instant — so the three features lose
+nothing here. The silence is a property of the rule, not a gap in this benchmark, and it is
+recorded so that a consumer whose own data does contain simultaneous transactions knows what these
+features will do with them.
+
+**Simultaneous-burst detection belongs to the velocity group, and it can see the bursts this
+dataset has.** Since no timestamps collide, the strictly-earlier bound excludes nothing from
+`tx_count_60s`. In the same run, 6 consecutive same-account pairs are less than a second apart and
+261 are less than a minute apart, out of 199,999 — so `tx_count_60s` is non-zero for roughly
+**0.13%** of rows. That is a rare feature rather than a dead one, which is what a burst indicator
+should be; but any claim resting on it is a claim about a few hundred rows at this scale, and it
+should be quoted with that count rather than with an overall rate.
+
+**What does `implied_speed_kmh` mean at its cap?** Not "fast". The cap is 1,000 km/h, above
+commercial cruising speed, so a value at the cap says one person cannot have been in both places
+in that time — a proxy for a shared account, a credential used elsewhere, or a spoofed location.
+It saturates rather than reporting 3,000 or 40,000 so that a model cannot split *inside* the
+impossible range and learn a distinction with no meaning.
+
 **Are there tasks for which it should not be used?** It must not be used to characterise real
 customers, real fraud prevalence, or the behaviour of any real institution, and it must not be
 presented as real transaction data. The scenario notes describe detection signals, not how to

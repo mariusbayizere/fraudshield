@@ -40,13 +40,13 @@ _CODE = re.compile(r"[=(\[]|^\s*(return|if|elif|raise)\b")
 #: make no claim about anywhere: `ZW` is an invented African country in an invented bloc, `QQ` an
 #: invented non-African one. They are the ML-side counterpart of the generator's Country Z test.
 PACKS: dict[str, CountryFacts] = {
-    "RW": CountryFacts("RW", "AF", frozenset({"EAC", "COMESA"})),
-    "KE": CountryFacts("KE", "AF", frozenset({"EAC", "COMESA"})),
-    "TZ": CountryFacts("TZ", "AF", frozenset({"EAC", "SADC"})),
-    "UG": CountryFacts("UG", "AF", frozenset({"EAC", "COMESA"})),
-    "CD": CountryFacts("CD", "AF", frozenset({"EAC", "COMESA", "SADC"})),
-    "ZW": CountryFacts("ZW", "AF", frozenset({"ZBLOC"})),
-    "QQ": CountryFacts("QQ", "QQ", frozenset({"QBLOC"})),
+    "RW": CountryFacts("RW", "AF", frozenset({"EAC", "COMESA"}), 2),
+    "KE": CountryFacts("KE", "AF", frozenset({"EAC", "COMESA"}), 3),
+    "TZ": CountryFacts("TZ", "AF", frozenset({"EAC", "SADC"}), 3),
+    "UG": CountryFacts("UG", "AF", frozenset({"EAC", "COMESA"}), 3),
+    "CD": CountryFacts("CD", "AF", frozenset({"EAC", "COMESA", "SADC"}), 1),
+    "ZW": CountryFacts("ZW", "AF", frozenset({"ZBLOC"}), 2),
+    "QQ": CountryFacts("QQ", "QQ", frozenset({"QBLOC"}), -5),
 }
 
 
@@ -164,8 +164,8 @@ def test_an_invented_country_in_an_invented_bloc_needs_no_code_change() -> None:
     0023 names alongside it.
     """
     packs = dict(PACKS)
-    packs["XK"] = CountryFacts("XK", "AF", frozenset({"XBLOC", "EAC"}))
-    packs["XL"] = CountryFacts("XL", "AF", frozenset({"XBLOC"}))
+    packs["XK"] = CountryFacts("XK", "AF", frozenset({"XBLOC", "EAC"}), 1)
+    packs["XL"] = CountryFacts("XL", "AF", frozenset({"XBLOC"}), 1)
 
     scored = tx("XK", "XL")
     assert batch.corridor_class(scored, packs) == INTRA_BLOC
