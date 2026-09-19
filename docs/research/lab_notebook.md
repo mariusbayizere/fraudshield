@@ -300,3 +300,220 @@ larger scales at all. That is a limitation of the data, not a choice.
 
 *Why it belongs in the paper:* a tolerance that is the maximum of a principled quantity and a
 convenient constant is two different tests at two different scales, and the switch-over is silent.
+
+### 2026-09-18 19:5x · PREDICTION: the shortcut detector's positive offset is real
+
+Sweep v2 commit `be2d7b0`; no above-minimum tier has produced a record yet. Recorded before the
+measurement, like the composition prediction above.
+
+**Predicted:** the clean mean AUC sits above 0.5 at every scale above the minimum, the one-sided
+test rejects zero offset at 300,000 rows and above, and the effect is a roughly constant AUC offset
+of about **+0.005 to +0.010** rather than something that shrinks with n.
+
+**Reasoning — the standardised deviations are not flat.** Writing `t = (AUC − 0.5) / SE` with
+`SE = band / (1.96 × 1.62)`:
+
+| rows | mean t | implied offset |
+|---:|---:|---:|
+| 10,000 | −0.01 | ~0 |
+| 30,000 | +0.31 | +0.006 |
+| 60,000 | +0.37 | +0.005 |
+| 1,006,249 (single run) | **+2.89** | **+0.010** |
+
+A *fixed* AUC offset produces `t` growing like `√n`, because SE shrinks while the offset does not.
+From 60,000 to 1,006,249 rows is 16.7× the data, so √n predicts about 4.1× the t; observed is 7.8×.
+Same order, and far from the flat line that pure noise would give. Sampling noise would leave the
+implied offset scattering about zero rather than landing between +0.005 and +0.010 four times.
+
+The single-run t of +2.89 is what a floored band of 0.03 could never have revealed: it passed at
+0.010 against 0.030 with room to spare, and passes at 0.010 against 0.011 only just.
+
+**Mechanism hypothesis, to be tested by ablation:** `row_position_in_file`. Fraud arrives as
+incidents — short bursts of rows sharing an account and a time — while legitimate rows are spread
+across the month, and rows are written in timestamp order. Anything that makes fraud intensity vary
+*within* a month (month-end salary and school-fee peaks are in the generator by design) leaves
+position within the file weakly predictive of the label. The other candidates are weaker: identifier
+bytes are UUID-uniform, the label delay is drawn independently of the label by construction, and the
+sub-second part was equalised when the BLOCKER was fixed.
+
+**How it will be judged:** pooled clean AUCs per tier at 200,000 / 300,000 / 500,000 / 1,000,000
+rows, one-sided against 0.5 with bootstrap CIs. Intervals excluding zero at the larger tiers confirm
+it; intervals straddling zero, or an implied offset shrinking with n, refute it.
+
+**If confirmed, the response is to find the cause, not to move the threshold.** Ablate the detector's
+columns one at a time, identify which carries the signal, and trace it to the construction code. A
+generator with a small, quantified, disclosed construction signal is more credible than one claiming
+a perfect 0.500, so the outcome is a limitation to state with its size — not a failure to hide.
+
+### 2026-09-19 · THE central methodological error of M2: an analytic null where the empirical spread applied
+
+The most valuable thing found in this milestone, and it was our own mistake.
+
+A single 1,006,249-row run read a shortcut-detector AUC of 0.510. Standardising it as
+`t = (0.510 − 0.5) / SE` with the **analytic** null standard error of 0.00346 gave **t = +2.89** —
+nearly three sigma — and a hypothesis was built on it: a real, small, persistent construction
+signal, predicted to reject at 300,000 rows and above.
+
+Five seeds at 1,000,000 rows gave `0.5096, 0.4916, 0.5070, 0.5119, 0.5044`. The empirical
+seed-to-seed standard deviation is **0.0079**, more than twice the analytic 0.00346. Against the
+denominator that actually applies, 0.510 is the second-highest of five ordinary readings. Pooled
+across all tiers above the scenario minimum: n = 24, mean 0.5031, bootstrap 95% CI
+[0.4992, 0.5070] — straddling 0.5. The prediction was refuted.
+
+**The error was using a theoretical null where an operational spread was the right denominator.**
+The analytic SE describes the variability of the statistic on one fixed dataset. What varies between
+releases is the dataset itself, and that spread is larger. Every run is a new draw of the data, not
+a new draw of the estimator on fixed data.
+
+**The same error, one level down, is what the band floor investigation had just corrected.**
+`CV_TREE_NULL_INFLATION` existed precisely because a cross-validated tree is noisier than the
+analytic null implies, and it was raised from 1.3 to 1.62 by measuring the spread across clean
+datasets rather than trusting a Monte Carlo over a fixed one. Having made that correction, the same
+analytic denominator was then used to standardise a single reading, in the same investigation,
+within the same hour.
+
+*Why it belongs in the paper:* this is the discipline that separates the two, stated as a rule —
+**a single three-sigma reading is not evidence; repeated seeds are.** It generalises to every result
+this project will report. Any figure standardised against a theoretical null must say so, and any
+claim of an effect must rest on repeated draws of whatever actually varies in deployment. A result
+quoted with the wrong denominator is not conservative or aggressive, it is simply unmeasured.
+
+### 2026-09-19 · Two recorded predictions, both refuted by measurement
+
+Both were written down before their tiers ran, with reasoning and a stated test. Both were wrong.
+
+**Composition-dependent power.** Predicted: the detector's power against a 0.6-strength plant would
+not carry over from seven-scenario to eight-scenario datasets, possibly dipping at 200,000 rows,
+because restoring `mule_account` changes the size and makeup of the positive class the detector must
+find. Measured: power rose monotonically and fired on every planted leak from 60,000 rows upward —
+mean AUC 0.5781 / 0.5886 / 0.5890 / 0.5975 at 60K / 100K / 200K / 300K, 100% firing throughout. No
+dip, not even directionally.
+
+**A real positive offset.** Predicted above; refuted above.
+
+*Why both belong in the paper:* two falsifiable hypotheses, each recorded with its mechanism and its
+test before the data existed, each refuted by the data. The method worked exactly as intended — the
+value was in being able to be wrong cheaply and visibly, rather than in being right. Predictions
+written after the measurement cannot do that, which is why they were timestamped and committed
+first.
+
+### 2026-09-19 · The inflation factor: grounded where measured, extrapolated above
+
+`CV_TREE_NULL_INFLATION = 1.62` is derived from 45 clean datasets at 10,000 / 30,000 / 60,000 rows,
+where 15 seeds per scale give estimates of 1.57 / 1.73 / 1.63 with overlapping intervals — a
+constant is the right form over that range, and leave-one-scale-out coverage at the fitted value is
+100 / 93 / 100%.
+
+Above 60,000 rows it is an extrapolation, and the sweep cannot settle it: with 4 to 10 seeds the
+per-scale estimates scatter from 0.84 to 2.32 with bootstrap intervals spanning almost that whole
+range. Estimating a standard deviation from five seeds carries about ±35% relative error. Settling
+whether `k` drifts with `n` needs roughly **50 seeds per scale** (±10%), which at 1,000,000 rows is
+about eight hours of compute. Recorded as future work rather than guessed at.
+
+### 2026-09-19 · The pattern: a fix that keeps the old behaviour as a floor reinstates the defect it replaced
+
+Three instances in one milestone, each a correct fix that stopped one step short of the structural
+form of the same problem. Recorded together because the recurrence, not any single case, is the
+finding.
+
+| # | Defect | Fix applied | Structural form left untouched |
+|---|---|---|---|
+| 1 | A shipped report described superseded parameters | digest the parameter **values** | the **check set** was not digested, so adding a check left the report stale and green |
+| 2 | A fixed 0.03 tolerance was wrong at every scale | size the band to the statistic's **own null** | the fixed tolerance was kept as a **floor**, so above ~100,000 rows the gate reverted to it and became 2.8x too permissive |
+| 3 | A row's own label scored that row | compute category rates **out of fold** | folds were assigned **per row**, so the other rows of the same fraud incident stayed in the estimate that scored it |
+
+In each case the obvious form of the defect — the individual value, the individual row — was
+addressed, and the aggregate form — the set, the regime, the group — was not. Instance 2 is the
+sharpest: the floor was inert exactly where it was meant to protect (small samples, where the
+analytic term is larger anyway) and active exactly where it did harm (large samples, where it
+replaced a tight null with a loose constant). A fix that retains the old behaviour as a fallback
+does not reduce to the old behaviour rarely; it reduces to it in whichever regime the fallback binds,
+and that regime is usually not the one the author was thinking about.
+
+None of the three was found by the guard it concerned. Instance 1 was found by a delta re-check
+looking at something else, instance 2 by verifying an assumption inside an unrelated derivation, and
+instance 3 by asking what mechanism could explain a residual that instance 2's correction had
+exposed. A guard cannot audit itself, and the defects lived in the seam between two guards that were
+each individually right.
+
+**The testable habit this leaves:** for every guard, ask what the grouped, floored or aggregated
+version of the same defect looks like. It becomes an M3 exit criterion rather than a note — any
+target encoding, fold assignment, sampling or split in the feature pipeline must be account-grouped
+and time-respecting, with a test that fails if it is not.
+
+### 2026-09-19 · Out-of-fold by row is not out-of-fold by incident
+
+`_category_rates` assigned folds with `rng.integers(0, folds, codes.size)` — one draw per row. Fraud
+arrives as incidents: several rows sharing an account and a time. So an incident's rows landed in
+different folds, and the "out of fold" category rate used to score a row still contained that row's
+own siblings. The shortcut detector had grouped its folds by account since MAJOR 1.2, for exactly
+this reason; the encoding never did.
+
+Measured at seed 20260917, per-row folds against account-grouped folds:
+
+| feature | 300,000 rows | 1,006,249 rows |
+|---|---|---|
+| `merchant_category_code` | 0.7107 → 0.7064 (−0.0043) | 0.7106 → 0.7060 (−0.0046) |
+| `channel` | 0.5897 → 0.5803 (−0.0094) | 0.5973 → 0.5915 (−0.0057) |
+| `currency` | 0.5353 → 0.5054 (−0.0299) | 0.5093 → 0.5086 (−0.0007) |
+
+Every single-feature AUC reported before this was inflated by roughly that much. The headline figure
+is restated 0.711 → **0.706**, still inside the 0.80 D-08 ceiling.
+
+**The mechanism was confirmed as a source of inflation and refuted as the explanation for the size
+dependence**, which was the reason it was investigated. If sibling leakage drove the 300,000-versus-
+1,000,000 gap, grouping would remove more at the smaller scale. It removes the same at both, and for
+the one seed measured at both there is no gap at all (0.7107 against 0.7106). The gap lives in the
+seed ensemble: ten seeds at 300,000 span 0.7107–0.7298 while five at 1,000,000 cluster 0.7091–0.7139.
+Smaller runs read both higher and far more variable, and grouping does not touch that. **The residual
+size dependence is unexplained** and is recorded as such rather than attributed to a second mechanism
+invented to cover it.
+
+That matters past this milestone: M3's engineered features use the same encoding, so M4 evaluation
+must control for dataset size when comparing feature sets, not only for the leakage the fix removes.
+
+*Also worth recording:* while reconciling the probe against the sweep, a single seed's 0.7107 was
+briefly treated as disagreeing with the sweep's ten-seed **mean** of 0.7193. They agree exactly —
+that seed is simply the lowest of the ten. Same family of error as the t-denominator mistake above:
+comparing quantities whose populations differ.
+
+### 2026-09-19 · OPEN QUESTION carried out of M2: single-feature AUC depends on scale, and we do not know why
+
+The one scientific question M2 leaves unanswered. Recorded rather than investigated further, on the
+owner's direction to close the milestone.
+
+**What is measured.** Ten seeds at 300,000 rows give a seed-to-seed standard deviation of 0.0055 for
+the maximum single-feature AUC (`merchant_category_code` is the argmax in all ten). Across scales the
+figure ranges 0.065 — **twelve times** the seed-level spread — so the variation is not seed noise.
+Ten seeds at 300,000 span 0.7107–0.7298; five at 1,000,000 cluster 0.7091–0.7139. Smaller runs read
+both higher and markedly more variable.
+
+**What it is not.** It is not the fold-grouping defect. That defect is real and was fixed, but
+account-grouped folds remove the same amount at both scales — 0.0043 at 300,000 and 0.0046 at
+1,000,000 — and for the one seed measured at both there is no gap at all (0.7107 against 0.7106). A
+mechanism that inflated small runs preferentially would have removed more at 300,000. Sibling
+leakage does not account for it.
+
+**What would settle it.** Candidates that can be separated by experiment:
+
+1. *Per-category sample size.* Out-of-fold rate estimates for each merchant category are noisier when
+   fewer rows carry each category. Test by holding the number of rows per category fixed while
+   varying total rows — subsample large runs down to a small run's per-category counts and see
+   whether the AUC rises to match.
+2. *Incident concentration.* At smaller n a category's fraud rows come from fewer, larger incidents,
+   so its realised lift is a draw from a wider distribution. Test by measuring the AUC against the
+   number of distinct fraud incidents rather than rows.
+3. *Fold count interacting with n.* Five folds is fixed while rows per fold change with n. Test by
+   varying folds with n held constant, and n with folds scaled to keep rows per fold constant.
+
+Each is a few hours of compute and none needs new generator code.
+
+**How it is contained meanwhile.** M3 exit criterion E2: every metric depending on target encoding is
+reported at a fixed, stated scale, and comparisons between feature sets, models or ablations use the
+same dataset size. A metric quoted without its scale is not admissible as evidence. That does not
+explain the effect; it stops it being mistaken for one.
+
+*Why it belongs in the paper:* a benchmark whose headline leakage statistic moves with dataset size
+by more than its own seed noise is a property of the benchmark worth publishing, whether or not the
+cause is found. Reporting it as an unexplained limitation with a stated containment is more useful
+than a clean number that quietly depends on how much data was generated.

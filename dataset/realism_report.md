@@ -11,8 +11,8 @@ institution's data (D-08).
 | Seed | 20260917 |
 | Rows | 1,006,249 |
 | Mode | development (size and distribution targets reported) |
-| Generator peak RSS | 175 MiB (limit 2048 MiB) |
-| Checks peak RSS | 283 MiB |
+| Generator peak RSS | 225 MiB (limit 2048 MiB) |
+| Checks peak RSS | 294 MiB |
 | Parameter values SHA-256 | `aa0ec909fa4e0c7793ae1432566b1f6c457cefa75dc002747e92aa05977043c6` |
 | Check set SHA-256 | `e61f5e97d3a70a5a3c167cdb6179835e249438a105b8915e387d30a3b9d5de6e` |
 | Chunk size (shards per batch) | 8 |
@@ -23,7 +23,7 @@ institution's data (D-08).
 
 | Check | Result | Gate | Measured | Requirement |
 |---|---|---|---|---|
-| single-feature AUC | pass | yes | max 0.711 (merchant_category_code) | every feature <= 0.8 (D-08) |
+| single-feature AUC | pass | yes | max 0.706 (merchant_category_code) | every feature <= 0.8 (D-08) |
 | shortcut detector | pass | yes | AUC 0.510 (band +/-0.011) on 48597 rows | within its null band around 0.5 (owner direction) |
 | event construction | pass | yes | AUC 0.513 (band +/-0.038) on 2424 events, 1410 on fraud accounts | an account event's construction does not reveal a victim's account (D-08) |
 | event delay (reported) | pass | no | AUC 0.758 | reported, not gated: seconds from an event to that account's next transaction |
@@ -43,7 +43,7 @@ institution's data (D-08).
 | channel mix | pass | no | max deviation 0.16 pp | SRS channel mix +/- 0.5 pp (ML-DATA-03) |
 | country mix | pass | no | max deviation 0.01 pp | SRS country mix +/- 0.5 pp (ML-DATA-05) |
 | size | not met | no | 1006249 rows | >= 5,000,000 rows in a release run (ML-DATA-01) |
-| generator peak memory | pass | yes | 175 MiB | < 2 GiB peak RSS (owner direction) |
+| generator peak memory | pass | yes | 225 MiB | < 2 GiB peak RSS (owner direction) |
 
 ## Temporal split (D-07)
 
@@ -122,11 +122,11 @@ covers the target) from bias (it does not).
 
 | Feature | AUC |
 |---|---:|
-| merchant_category_code | 0.711 |
+| merchant_category_code | 0.706 |
 | amount_rwf | 0.652 |
 | device_missing | 0.602 |
-| channel | 0.597 |
 | local_hour | 0.596 |
+| channel | 0.592 |
 | round_amount | 0.576 |
 | day_of_month | 0.519 |
 | agent_present | 0.513 |

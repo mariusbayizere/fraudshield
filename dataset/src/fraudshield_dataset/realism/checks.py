@@ -117,19 +117,34 @@ class Columns:
 
 
 def _category_rates(
-    codes: NDArray[np.int64], labels: NDArray[np.bool_], *, seed: int, folds: int = FOLDS
+    codes: NDArray[np.int64],
+    labels: NDArray[np.bool_],
+    groups: NDArray[np.int64],
+    *,
+    seed: int,
+    folds: int = FOLDS,
 ) -> NDArray[np.float64]:
     """Score each row by its category's fraud rate, computed without that row.
 
     A categorical has no natural order, so its separation is measured by encoding each category
     with its fraud rate. Encoding on the same rows the AUC is then read from counts a row's own
-    label as evidence about itself: with a hundred fraud rows over twenty merchant categories it
-    put the reported separation at 0.809 on a 12,000-row run and 0.662 at a million, so the D-08
-    limit appeared to depend on the size of the run (M2 principal review, MINOR 1.6 and addendum).
-    Rates are computed out of fold instead, which measures signal rather than self-inclusion.
+    label as evidence about itself: with a hundred fraud rows over twenty merchant categories it put
+    the reported separation at 0.809 on a 12,000-row run and 0.662 at a million, so the D-08 limit
+    appeared to depend on the size of the run (M2 principal review, MINOR 1.6 and addendum). Rates
+    are computed out of fold instead, which measures signal rather than self-inclusion.
+
+    Out of fold by *account*, not by row. Removing a row's own label while leaving the other rows of
+    its incident in the same estimate fixes the obvious form of the defect and not its structural
+    one (M2 milestone review).
     """
     rng = np.random.default_rng(seed)
-    assignment = rng.integers(0, folds, codes.size)
+    # Folds are whole accounts, not individual rows. Fraud arrives as incidents -- several rows
+    # sharing an account -- so per-row folds leave an incident's siblings in the "out of fold" rate
+    # that scores it. Measured at 1,006,249 rows, that inflated merchant_category_code by 0.005,
+    # channel by 0.006 and currency by 0.001 (M2 milestone review). The shortcut detector has always
+    # grouped its folds by account for exactly this reason; the encoding did not.
+    unique, inverse = np.unique(groups, return_inverse=True)
+    assignment = rng.integers(0, folds, unique.size)[inverse]
     width = int(codes.max()) + 1 if codes.size else 1
     overall = float(labels.mean()) if labels.size else 0.0
     scores = np.full(codes.size, overall, dtype=np.float64)
@@ -249,9 +264,12 @@ class Dataset:
             for kind in labels.filter(labels["is_fraud_true"])["fraud_type"].to_pylist():
                 monthly[kind] = monthly.get(kind, 0) + 1
         feature_labels = self.feature_labels
+        feature_groups = np.concatenate(self.shortcut_groups)
         for name in _CATEGORICALS:
             codes = self.features.get(name).astype(np.int64)
-            self.features.replace(name, _category_rates(codes, feature_labels, seed=config.seed))
+            self.features.replace(
+                name, _category_rates(codes, feature_labels, feature_groups, seed=config.seed)
+            )
 
     @property
     def observed(self) -> NDArray[np.bool_]:

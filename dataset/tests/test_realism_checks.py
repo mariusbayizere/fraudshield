@@ -5,6 +5,7 @@ import shutil
 from collections.abc import Callable
 from pathlib import Path
 
+import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.dataset as ds
@@ -19,6 +20,7 @@ from fraudshield_dataset.params import load_parameters
 from fraudshield_dataset.paths import REALISM_REPORT_MD
 from fraudshield_dataset.realism.checks import (
     CheckResult,
+    _category_rates,
     check_digest,
     parameter_digest,
     run_checks,
@@ -483,3 +485,39 @@ def test_a_memory_overrun_and_a_missing_scenario_are_caught(
     (hungry / "run.json").write_text(json.dumps(run, indent=2, sort_keys=True) + "\n")
 
     assert not _results(hungry, PLANT_ROWS)["generator peak memory"].passed
+
+
+@pytest.mark.req("D-08")
+def test_the_categorical_encoding_folds_by_account_not_by_row() -> None:
+    """An incident's siblings must not sit in the fold that scores it.
+
+    Removing a row's own label from its own score fixed the obvious form of the defect; fraud
+    arrives as incidents sharing an account, so per-row folds left the other rows of the same
+    incident inside the "out of fold" rate. Measured at 1,006,249 rows that inflated
+    merchant_category_code by 0.005 and channel by 0.006 (M2 milestone review).
+
+    Each account is wholly fraud or wholly legitimate and contributes several rows, and every
+    category mixes both kinds of account, so the rate a fold sees genuinely depends on which
+    accounts it holds.
+    """
+    accounts, codes, labels = [], [], []
+    for account in range(40):
+        for _ in range(5):
+            accounts.append(account)
+            codes.append(account % 4)
+            labels.append((account // 4) % 2 == 0)
+    groups = np.array(accounts, dtype=np.int64)
+    codes_array = np.array(codes, dtype=np.int64)
+    labels_array = np.array(labels, dtype=bool)
+
+    grouped = _category_rates(codes_array, labels_array, groups, seed=SEED)
+    per_row = _category_rates(codes_array, labels_array, np.arange(len(accounts)), seed=SEED)
+
+    # Grouped: an account sits wholly in one fold, so its rows share one score.
+    for account in range(40):
+        rows = grouped[groups == account]
+        assert np.allclose(rows, rows[0]), f"account {account} was split across folds"
+    # Per row: an account's rows land in different folds, which is the defect.
+    split = [a for a in range(40) if not np.allclose(per_row[groups == a], per_row[groups == a][0])]
+    assert split, "the per-row baseline did not split any account, so it tests nothing"
+    assert not np.allclose(grouped, per_row)

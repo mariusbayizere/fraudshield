@@ -191,6 +191,9 @@ def _record(
         "strength": strength,
         "below_scenario_minimum": below_minimum,
         "scenarios_not_staged": not_staged,
+        # Records written before the encoding moved from per-row to account-grouped folds carry
+        # "per_row_folds" and a single_feature_max about 0.005 high (M2 milestone review, M-8).
+        "categorical_encoding": "account_grouped_folds",
         **rest,
     }
 

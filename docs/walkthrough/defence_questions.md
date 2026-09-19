@@ -132,7 +132,7 @@ Evidence: `dataset/realism_report.md`, `dataset/tests/test_realism_checks.py`.
 **Q: What is the strongest single signal in the dataset, and is it a leak?**
 0.758, and no. It is the time from a SIM swap or device change to that account's next transaction,
 reached by joining `account_events` to the transactions on the account token. It is above the
-strongest transaction column, `merchant_category_code` at 0.711, and both are inside the 0.80 D-08
+strongest transaction column, `merchant_category_code` at 0.706, and both are inside the 0.80 D-08
 ceiling — the delay by 0.042. It is not a leak: a SIM swap before a takeover is how that fraud
 works, and a model is meant to learn it, which is why it is measured and reported but deliberately
 not gated. Two caveats belong with the number. Part of it is an artefact of the generator rather
@@ -187,3 +187,53 @@ category lift, and the statistical power of the leakage detectors. Without the s
 a reader cannot tell which of those they are looking at — and neither can the author.
 The realism report and the datasheet label any figure measured below the minimum.
 Evidence: `docs/reviews/M2/milestone-review.md`, consequence audit.
+
+**Q: You reported a three-sigma anomaly and then withdrew it. What happened?**
+We used the wrong denominator, and repeated seeds caught it. A single 1,006,249-row run read a
+shortcut-detector AUC of 0.510. Standardised against the *analytic* null standard error of 0.00346
+that is t = +2.89, and we recorded a prediction that it signalled a real construction signal in the
+generator. Five seeds at the same scale then gave 0.5096, 0.4916, 0.5070, 0.5119 and 0.5044: the
+seed-to-seed standard deviation is 0.0079, more than twice the analytic figure, and 0.510 is simply
+the second-highest of five ordinary readings. Pooled across every scale above the dataset's minimum,
+the mean is 0.5031 with a bootstrap 95% interval of [0.4992, 0.5070], which straddles 0.5. There is
+no offset, and the prediction was refuted.
+The mistake is worth naming because it is easy to make: an analytic null describes how the statistic
+varies on one fixed dataset, while what actually varies between releases is the dataset. The spread
+that matters is the larger one. We had corrected exactly this error one level down an hour earlier —
+it is why the null band's inflation factor was re-derived from clean datasets rather than a Monte
+Carlo over a fixed one — and then made it again while standardising a single reading.
+The rule we now hold to: **a single three-sigma reading is not evidence; repeated seeds are.** Every
+figure standardised against a theoretical null says so, and every claimed effect rests on repeated
+draws of whatever varies in deployment.
+Evidence: `docs/reviews/M2/shortcut_diagnosis.jsonl`, `docs/research/lab_notebook.md`.
+
+**Q: Did you ever predict something and get it wrong?**
+Twice in M2, both recorded with their reasoning and their test before the data existed. We predicted
+the leakage detector's power would not carry over from datasets missing a fraud scenario to complete
+ones, because restoring the mule-account scenario changes the positive class; power rose
+monotonically instead and caught every planted leak from 60,000 rows up. And we predicted the
+positive offset above. Both were refuted by measurement.
+They are in the record deliberately. A prediction written after the result cannot be wrong, and so
+cannot be evidence of anything; one written before it can be, and the two that failed here did more
+to discipline the analysis than the ones that held.
+Evidence: `docs/research/lab_notebook.md`, entries timestamped before each tier ran.
+
+**Q: What does M2 leave unresolved?**
+Three things, stated as limitations rather than buried.
+First, **single-feature AUC depends on dataset size by more than seed noise, and we cannot explain
+it.** Ten seeds at 300,000 rows give a seed-to-seed standard deviation of 0.0055; the range across
+scales is 0.065, twelve times that. It is not the fold-grouping defect we found and fixed —
+account-grouped folds remove the same amount at 300,000 and 1,000,000 rows, and for the seed
+measured at both there is no gap at all. This is the one open scientific question from the
+milestone. Until it is explained, every metric depending on target encoding is reported at a fixed,
+stated scale, and comparisons use the same dataset size (M3 exit criterion E2). The experiments that
+would separate the candidate causes are written down in the lab notebook.
+Second, **the null band's inflation factor is grounded only where it was measured.** 1.62 comes from
+45 clean datasets at 10,000–60,000 rows, where per-scale estimates agree. Above 60,000 the sweep
+cannot settle whether it is constant: four to ten seeds give estimates from 0.84 to 2.32. Settling it
+needs about 50 seeds per scale, roughly eight hours at a million rows. The value is used above that
+range as an extrapolation, and the code says so.
+Third, **the release-size run has never happened.** ML-DATA-01 asks for 5,000,000 rows; the
+verification run is 1,006,249. It sits at `VERIFIED_AT_REDUCED_SCALE` with that reason recorded, not
+quietly marked done.
+Evidence: `docs/reviews/M2/milestone-review.md`, `docs/research/lab_notebook.md`.

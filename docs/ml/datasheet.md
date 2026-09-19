@@ -200,10 +200,14 @@ the study of a novel fraud variant that appears only in the test period.
 - Amounts and locations are simulated; they carry no commercial or geographic information.
 - **No single feature separates the classes beyond AUC 0.80** (D-08), measured as
   `max(AUC, 1 − AUC)` with out-of-fold encoding for categoricals. At 1,006,249 rows the strongest
-  transaction column is `merchant_category_code` at 0.711. The strongest channel in the dataset as
+  transaction column is `merchant_category_code` at **0.706**. The strongest channel in the dataset as
   a whole is **0.758**, and it is not a transaction column: joining `account_events` to the
   transactions by account token — which this datasheet invites above — gives the time from a SIM
   swap or device change to that account's next transaction, and that delay carries 0.758.
+- Single-feature AUCs are computed with target encoding whose folds are **whole accounts**. Folding
+  per row leaves the other rows of a fraud incident inside the estimate that scores it, which
+  inflated `merchant_category_code` by 0.005 and `channel` by 0.006 before it was corrected. Any
+  re-measurement that folds per row will read higher than the figures here.
   A benchmark result that uses the event join is therefore not comparable to one that does not, and
   which of the two was used should be stated.
 - The event-delay signal is partly an artefact of the generator, not only of the scenario. The lead
@@ -211,6 +215,21 @@ the study of a novel fraud variant that appears only in the test period.
   fraud-enabling event is followed by its drain inside a tight uniform window, with no long tail and
   no unexploited event. Real SIM swaps sometimes precede nothing. Do not read the strength of this
   signal as evidence about how quickly real takeovers follow a SIM swap.
+
+**What is known to be unresolved about it?** Three things, stated rather than buried.
+
+1. **Single-feature AUC depends on the size of the run by more than seed noise, and the cause is not
+   known.** Ten seeds at 300,000 rows give a seed-to-seed standard deviation of 0.0055 for the
+   strongest feature, while the range across sizes is 0.065 — twelve times that. It is not the
+   fold-grouping defect corrected above: account-grouped folds remove the same amount at 300,000 and
+   1,000,000 rows. Any comparison of feature sets, models or ablations must therefore use the same
+   dataset size and say so; a figure quoted without its scale cannot be interpreted.
+2. **The anti-leakage bands' inflation factor is measured only at 10,000–60,000 rows.** The value
+   1.62 is derived from 45 clean datasets there, where per-scale estimates agree. Above 60,000 rows
+   it is an extrapolation: four to ten seeds give estimates from 0.84 to 2.32, too wide to settle.
+3. **The release-size run has not happened.** The target is 5,000,000 transactions; every figure in
+   this datasheet comes from a 1,006,249-row run. ML-DATA-01 is recorded as
+   `VERIFIED_AT_REDUCED_SCALE`, not as met.
 
 **Are there tasks for which it should not be used?** It must not be used to characterise real
 customers, real fraud prevalence, or the behaviour of any real institution, and it must not be

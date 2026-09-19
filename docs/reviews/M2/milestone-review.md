@@ -324,3 +324,77 @@ The sweep was also incomplete when it stopped: 10,000 and 30,000 rows finished a
 by the host for system memory pressure. So the minimum valid scale is **bounded but not located**:
 below 20,000 rows a dataset is structurally deficient (M-4), and power against a subtle leak is still
 rising at 30,000.
+
+---
+
+## Area 1 — conclusion, after the sweep and two further defects
+
+The diagnosis that began with "a clean 30,159-row dataset fails its own gate" ended by finding two
+defects larger than the failure it was sent to explain. Both are fixed.
+
+### The 30,000-row failure was a tail draw, not a leak
+
+Clean mean AUC is centred at every scale: 0.4997 / 0.5062 / 0.5052 at 10K / 30K / 60K, and pooled
+across every tier above the scenario minimum, 0.5031 with a bootstrap 95% interval of
+[0.4992, 0.5070]. A construction leak would show a persistent displacement from 0.5. There is none.
+
+### MAJOR M-7 — the band stopped being null-sized exactly where it mattered (FIXED)
+
+`max(0.03, z x inflation x SE)`. The floor was inert at small samples, where the analytic term is
+larger anyway, and bound from about 100,000 rows upward. At the 1,006,249-row verification run the
+analytic band is 0.011 against the floor's 0.030: the gate was **2.8x more permissive than the
+statistic's null implies**, and blind to any construction leak between roughly 0.509 and 0.530.
+MAJOR 1.3/1.4 replaced a fixed tolerance with a null-sized band and kept the fixed tolerance as a
+floor, which reinstated the defect at release scale. Removed.
+
+### MAJOR M-8 — the categorical encoding folded per row, not per incident (FIXED)
+
+`_category_rates` drew one fold per row. Fraud arrives as incidents sharing an account, so an
+incident's siblings stayed inside the "out of fold" rate that scored it. The shortcut detector has
+grouped its folds by account since MAJOR 1.2; the encoding never did. Measured inflation at
+1,006,249 rows: `merchant_category_code` 0.005, `channel` 0.006, `currency` 0.001. Every
+single-feature AUC reported before this is inflated by about that much.
+
+### CV_TREE_NULL_INFLATION: 1.3 was not conservative (FIXED)
+
+Derived from 45 clean datasets: **1.62**, bootstrap 95% CI [1.32, 1.85], which excludes 1.3.
+Coverage at 1.3 was 89% where 95% was claimed; at 1.62 the measured false-alarm rate is 1 of 45.
+A constant is the right form at 10K–60K (per-scale 1.57 / 1.73 / 1.63, overlapping intervals) and
+the sweep **cannot settle the form above 60,000 rows** — 4 to 10 seeds give estimates scattering
+from 0.84 to 2.32. Settling it needs about 50 seeds per scale, roughly eight hours at 1M. Recorded
+as future work; the value is grounded where measured and extrapolated above, and the code says so.
+
+### Two minima, and which one binds
+
+| constraint | minimum |
+|---|---|
+| detector power against a 0.6-strength leak | ~60,000 rows (fires 15/15 from there) |
+| dataset completeness — all eight fraud scenarios | ~170,000 rows |
+
+Completeness binds. The detector is fully powered well before the dataset is structurally complete.
+170,000 is where the *expected* role pool clears its requirement by three standard deviations, not a
+guarantee for every seed: one seed in the sweep was refused at 200,000 rows, and the generator named
+the remedy rather than silently shipping seven scenarios.
+
+### Consequence audit, updated: claims made under the old wide gate
+
+Every "no leakage" statement measured at or above 100,000 rows before this milestone review was made
+under a gate too wide to fail. They are not thereby wrong — they are **unsupported at the precision
+implied**, and the re-measurement is what supports them now:
+
+| claim | status |
+|---|---|
+| "all gate checks pass" at 1,006,249 rows | **Re-established.** Re-measured under the corrected band and the corrected encoding: all gates pass, shortcut detector 0.510 against a band of 0.011 — 91% of it, so a gate that could have failed. |
+| Single-feature AUCs at any scale | **Restated.** All were inflated by the per-row folding; `merchant_category_code` 0.711 → **0.706**. |
+| Shortcut-detector results at 100K–1M before today | **Withdrawn as evidence of precision.** Measured against a 0.03 floor that could not detect a leak between 0.509 and 0.530. The 1M case is re-measured above; the others were development runs and are not quoted. |
+| Sub-100K leakage results | **Unaffected by the floor** — the analytic band exceeded it there, so those gates were the null-sized ones all along. |
+| The sweep's own `single_feature_max` values | **Measured under the old per-row encoding.** The inflation is approximately constant across scales (0.0043 at 300K, 0.0046 at 1M), so the seed-to-seed spread and the size gap stand, but absolute values sit about 0.005 high. |
+
+### Verdict on area 1
+
+The generator does not leak through construction, and that is now backed by a gate that can fail, a
+detector whose power and false-alarm rate are measured rather than assumed, and a negative control
+that shows the detector responds to label correlation rather than to being touched. Two defects that
+would each have invalidated the claim were found and fixed. One residual — the size dependence of
+single-feature AUC — is measured, unexplained, and disclosed as a limitation rather than attributed
+to a mechanism we could not demonstrate.
