@@ -137,3 +137,44 @@ levels are an order-of-magnitude anchor, not a claim about any one market. Each 
 **Nothing derived from a single operator.** MTN Rwanda's published transaction figures would have
 given a Rwandan per-transaction value, but they describe one operator's book rather than the market,
 so they were not used.
+
+## Bloc memberships, read 2026-09-19 (M3)
+
+`corridor_class` is one of the 44 features, so its definition cannot rest on recollection. Each
+regional community's own membership page was read and cited in the country packs.
+
+| Community | What the page said | Affects our five |
+|---|---|---|
+| EAC | Eight Partner States; Somalia became a full member on 4 March 2024, the most recent accession recorded | all five are members |
+| COMESA | Member list names Burundi, Comoros, DRC, Djibouti, Egypt, Eritrea, Eswatini, Ethiopia, Kenya, Libya, Madagascar, Malawi, Mauritius, Rwanda, Seychelles, Somalia, Sudan, Tunisia, Uganda, Zambia, Zimbabwe | RW, KE, UG, CD are members; **Tanzania is not**, having withdrawn |
+| SADC | Sixteen Member States | TZ and CD are members |
+| ECOWAS | Read for the planned West African packs | none of our five |
+
+### A source that contradicts itself is recorded as a property of the source
+
+Two of the four pages disagree with themselves, and both disagreements are preserved in the
+citations rather than silently resolved:
+
+- **COMESA** states nineteen member states in its prose and lists twenty-one names.
+- **ECOWAS** states fifteen member countries in its introductory text while its roster shows
+  twelve. The three absent — Burkina Faso, Mali and Niger — are exactly those that announced
+  withdrawal, so the roster appears current and the prose stale.
+
+Neither discrepancy changes any membership this project relies on, and neither is a reason to
+prefer a secondary source: a community's own page is still the primary record of its membership.
+What it means is that the citation has to say *what the page said when it was read*, not what the
+membership "is". Memberships change — Somalia joined the EAC in 2024, Tanzania left COMESA — so a
+bloc list is only true as of a date. That date is the `accessed` field on each pack's `blocs`
+parameter, and any claim resting on `corridor_class` is a claim as of it.
+
+### Precedence, and why `corridor_class` does not need one
+
+A country commonly belongs to several communities: the DRC is in the EAC, COMESA and SADC at once.
+That would require a precedence rule if the feature named *which* bloc a corridor ran through. It
+does not. `corridor_class` asks whether two countries share **any** bloc — a set intersection — so
+`INTRA_BLOC` is well defined without ranking the communities.
+
+The failure direction follows from that and is worth stating: an omitted membership can only make a
+corridor look **less** connected than it is, never more. A missing bloc can turn an `INTRA_BLOC`
+corridor into `CROSS_BLOC_AFRICA`; it can never invent a connection that does not exist. The
+restriction to ADR 0023's six communities is therefore conservative rather than distorting.

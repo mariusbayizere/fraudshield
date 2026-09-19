@@ -80,6 +80,33 @@ tried and the result, filled in **as each is implemented** rather than assembled
 table lives beside the design it tests (`docs/ml/training_serving_parity.md` for parity). A mutation
 that passes is not a curiosity: it is the specification for a case the test is missing.
 
+### E15 — no test mutates anything outside `tmp_path`, and a check enforces it
+
+Three evidence runs were broken in one session, by three different causes with one shared property:
+**a run's inputs changed from outside the run, and the run could not tell.**
+
+1. Source edited while a suite ran — the suite reflected a tree that no longer existed.
+2. `uv sync --reinstall` run mid-suite — it removed the workspace packages out from under pytest,
+   and the suite died without a single source file changing.
+3. A test inside the suite edited the repository's `geography.yaml`, restoring it in a `finally`
+   that did not run when the body raised. The suite then ran against a country share naming a pack
+   that did not exist.
+
+The third is the one that makes this structural rather than a discipline: the mutation came from
+**inside the suite being measured**, so no amount of care about what the operator does outside it
+would have prevented the failure.
+
+Required:
+
+- **No test may write outside `tmp_path`.** A test needing a different parameter tree copies it into
+  `tmp_path` and loads from there — `load_parameters()` takes a directory for exactly this reason.
+- **Never restore shared state in a `finally`.** A `finally` does not run when the process is killed,
+  and it runs too late when the body raises inside a fixture other tests have already used. Copying
+  has no cleanup path to get wrong.
+- **A session-scoped fixture hashes the parameter and configuration trees before and after the
+  suite and fails if they differ, naming the changed file.** It catches the mutation even when
+  cleanup does not run, which is precisely the case a `finally` cannot cover.
+
 ## Feature pipeline
 
 - **E3** — the 44 engineered features are re-checked against the D-08 single-feature AUC ceiling of

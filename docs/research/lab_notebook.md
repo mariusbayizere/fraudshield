@@ -653,3 +653,59 @@ states how the tests were shown capable of failing.
 turned into an exit criterion, by the same author, in the same session. Knowing the failure mode did
 not prevent repeating it. That is the argument for the structural fix — a precondition the test
 cannot omit — over the habit of remembering.
+
+### 2026-09-19 · An evidence run's inputs can change from outside the run, and the run cannot tell
+
+Three broken runs in one session, three different causes, one shared property.
+
+| # | What changed | From where | How the run failed |
+|---|---|---|---|
+| 1 | `realism/checks.py`, edited mid-run | the operator | the suite reported on a tree that no longer existed; the result read as ordinary green |
+| 2 | the installed workspace packages, via `uv sync --reinstall` | the operator | pytest died with its dependencies removed underneath it; no source file changed |
+| 3 | `geography.yaml`, edited by a test in the suite | **inside the suite being measured** | a `finally` did not run when the body raised, leaving a country share naming a pack that did not exist |
+
+The first two are about operator discipline and were already covered by "an evidence run owns the
+tree and the environment". **The third is the one that makes the rule insufficient**, because the
+mutation came from inside the run. No care about what happens outside the suite would have prevented
+it, and the damage was invisible from within: the suite simply began failing for a reason unrelated
+to what it was measuring.
+
+The test in question was the Country Z portability test. It edited the repository's parameter tree
+to add a synthetic country, and restored it in a `finally`. `finally` is the wrong instrument twice
+over: it does not run if the process is killed, and when the body raises inside something later
+tests depend on, it runs too late to help them. Copying the tree into `tmp_path` has no cleanup path
+to get wrong — there is nothing to restore.
+
+The structural fix is M3 exit criterion E15: no test writes outside `tmp_path`, shared state is
+copied rather than restored, and a session-scoped fixture hashes the parameter and configuration
+trees before and after the suite, failing with the name of whatever changed. That fixture catches
+the case a `finally` cannot, which is the case that actually occurred.
+
+*Why it belongs in the paper:* reproducibility statements pin the code and the environment, and
+treat the test suite as an observer of the system rather than a participant in it. A suite that can
+modify the inputs it is measuring is neither — and the failure does not announce itself as
+contamination, it announces itself as an unrelated test failure, which is how it survives review.
+
+### 2026-09-19 · Writing the hostile case before the feature: Country Z found a defect on its first run
+
+ADR 0023's acceptance criterion is behavioural rather than a lint: *"a synthetic Country Z pack,
+entirely assumed, is added in CI, and the generator, the feature pipeline and the UI must work for it
+with zero code changes. If adding a pack requires touching code, this decision has been violated."*
+
+It was violated, on the first run, and the test said so: generation died with `KeyError('ZZZ')`
+because the FX rate lived in a shared `currencies.rwf_per_unit` table rather than in the pack. ADR
+0023 enumerated what a pack carries — currency, minor units, timezones, population, density, channel
+mix, languages, holidays, KYC tiers, phone formats, blocs — and **omitted the exchange rate**. The
+omission was invisible in the ADR's own prose and obvious the moment a country existed that nothing
+else knew about.
+
+The pack is deliberately hostile: an invented currency, three minor units where every real currency
+in the dataset has zero or two, a +7 offset far outside the +2..+3 range of the simulated countries,
+and a bloc of one sharing membership with nobody. Every value is chosen so that a hard-coded East
+African assumption fails rather than accidentally passes — the same reasoning as the 0.5-strength
+plant in M2's power curve, which exists so that "the gate fired" can be distinguished from "the gate
+fires at anything".
+
+*Why it belongs in the paper:* the generalisability of a synthetic benchmark is usually argued from
+its design. This is the stronger form — a case the design says must work, run in CI, failing loudly
+when it does not. It cost one test and found an incomplete specification immediately.
