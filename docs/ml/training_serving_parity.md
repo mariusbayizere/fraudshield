@@ -5,8 +5,9 @@ features are written does not merely cost rework: it invalidates every model met
 between. M2 supplies the precedent — a fold-assignment defect inflated every single-feature AUC the
 project had reported, and all of them had to be restated once it was found.
 
-This document settles three things the test cannot be written without: **what counts as identical**,
-**what the two paths are fed**, and **how the test is shown to be capable of failing**.
+This document settles four things the test cannot be written without: **what counts as identical**,
+**what the two paths are fed**, **how independence between them is enforced**, and **how the test is
+shown to be capable of failing**.
 
 ## What the test proves
 
@@ -98,7 +99,29 @@ Chosen so that a passing test means something:
 - **Account grouping (M3 exit criterion E1).** Replay is per account; an account's rows never split
   across the comparison, because the unit of history is the account, not the row.
 
-## Decision 4 — proving the test can fail
+## Decision 4 — the two paths must be independent implementations
+
+**A parity test is blind to any bug in code both paths share.** If the online path is the batch path
+behind a different entry point, the test proves only that a function equals itself. The value of the
+test is exactly the size of the surface the two paths do *not* share.
+
+Enforced, not merely intended:
+
+- the batch path lives in `fraudshield_ml.features.batch`, the online path in
+  `fraudshield_ml.features.online`, and **a test asserts neither imports the other**, directly or
+  transitively, by walking the import graph;
+- both import `fraudshield_ml.features.registry` — the *declarative* contract only: name, group,
+  dtype, window, source, NaN rule, template key. The registry computes nothing;
+- any shared primitive must be listed explicitly in the registry module's `SHARED_PRIMITIVES` and
+  carries its own unit tests **with hand-computed expectations**, because the parity test cannot
+  see into it. Haversine distance and the FX conversion table are the expected members; a shared
+  window-aggregation helper would defeat the purpose and is not permitted.
+
+The honest statement of the test's reach: parity proves the two paths agree, and hand-computed
+per-feature tests (Part E.2) prove they are both *right*. Neither substitutes for the other, and the
+shared surface is covered only by the second.
+
+## Decision 5 — proving the test can fail
 
 M2's lesson, twice over: a test that cannot fail proves nothing. The first attempt at the
 fold-grouping test constructed data where both foldings gave identical results, and the shortcut
@@ -108,22 +131,33 @@ correlation rather than to the data having been touched.
 So the parity suite includes **mutation cases**: a deliberately wrong online path that must be
 caught.
 
-| Mutation | What it simulates | Must be caught by |
-|---|---|---|
-| window bound `<` instead of `≤` | classic off-by-one at a boundary | the window-boundary cases |
-| a 24 h window computed over 25 h | silent window drift | count equality |
-| a device feature emitted as 0 rather than NaN for a null fingerprint | the NaN contract collapsing to a number | NaN-position equality |
-| a label used whose `label_available_at` is after the transaction | future leakage in the batch path | prefix replay |
-| a sum accumulated in float32 | precision loss masquerading as reassociation | the relative tolerance |
+Each mutation is applied to the online path, and the parity test is asserted to **fail**. A mutation
+that passes means the parity test is not testing what it claims, and the mutation is then the
+specification for a case the test is missing.
 
-Each mutation is asserted to **fail** the parity test. If a mutation passes, the parity test is not
-testing what it claims.
+| # | Mutation | What it simulates | Caught by | Result |
+|---|---|---|---|---|
+| 1 | reassociate a window sum (accumulate in reverse order) | the benign case the tolerance must *tolerate* | — | **must PASS** (see note) |
+| 2 | window bound `<` instead of `≤` | classic off-by-one at a boundary | window-boundary cases, count equality | pending |
+| 3 | a 24 h window computed over 25 h | silent window drift | count equality | pending |
+| 4 | local time applied in one path only | D-43 timezone handling diverging | `local_hour_sin/cos`, `is_local_night` | pending |
+| 5 | a structural missing emitted as `0.0` rather than NaN | the D-04 contract collapsing to a number | NaN-position equality | pending |
+| 6 | a category encoded from a different fold | the M2 encoding defect, reproduced in serving | exact categorical equality | pending |
+| 7 | a label used whose `label_available_at` is after the transaction | future leakage in the batch path | prefix replay | pending |
+| 8 | a sum accumulated in float32 | precision loss masquerading as reassociation | the relative tolerance | pending |
 
-## Open question for the owner
+**Mutation 1 is the control, and it is the one that must pass.** Without it the suite cannot
+distinguish "the tolerance catches bugs" from "the tolerance catches everything, including honest
+reassociation" — in which case it would be loosened under pressure and stop catching anything. It is
+the same role the 0.5-strength plant played in M2's power curve: without a case that *should not*
+fire, a detector that fires at everything looks identical to one that works.
 
-The specification says `1e-9`, and this document proposes exact equality for integral features and
-`1e-12 + 1e-12 × |value|` for real ones — **stricter than the specification everywhere it is
-satisfiable, and satisfiable where the specification is not**. That is a deviation from a written
-requirement, however favourable, and it is recorded here rather than made silently. If the `1e-9`
-is to be kept literally, the amount-sum features need a documented per-feature exception, because at
-the top of their range the tolerance is below what float64 can represent.
+Results are recorded in this table as the mutations are implemented, not summarised elsewhere.
+
+## Status of the tolerance deviation
+
+**Accepted by the owner, recorded as ADR 0025.** The specified `1e-9` is replaced by the rule in
+Decision 1: it is stricter than the specification everywhere the specification is satisfiable, and
+satisfiable at the top of the amount-sum range where the specification is not. FR-02-02's register
+row cites the ADR, so a reader comparing code against Part E.2 finds the difference explained rather
+than apparently unimplemented.

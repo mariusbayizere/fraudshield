@@ -560,3 +560,52 @@ first will close milestones on requirements it has not met.
 
 *The uncomfortable corollary:* the register only caught it because the rows were there to check. A
 requirement never entered cannot be missed by any amount of review.
+
+---
+
+## M3 — feature engineering
+
+### 2026-09-19 · The pattern caught before the code, for the first time
+
+M2 found the same defect shape three times: a fix addressing the individual case and stopping short
+of the aggregate one. A digest over parameter *values* but not the check *set*. A null-sized band
+that kept the old fixed tolerance as a *floor*. An out-of-fold encoding that folded per *row* rather
+than per *incident*. Each was found after the code was written, and each invalidated results already
+reported.
+
+The fourth instance was caught before a line of the code it concerns exists.
+
+Part E.2 specifies the training/serving skew test as "identical vectors to 1e-9". Checking that
+number against the feature catalogue's actual magnitudes, before writing any feature:
+
+| Feature | Magnitude | One ulp | `1e-9` in ulps |
+|---|---:|---:|---|
+| `round_sum_flag` | 1 | 2.2e-16 | ~4,500,000 — no constraint |
+| `amount_sum_7d` | 1e6 | 1.2e-10 | ~9 |
+| `amount_sum_7d`, heavy user | 1e7 | 1.9e-9 | **< 1 — unsatisfiable** |
+
+A single absolute tolerance across features spanning 0/1 flags and multi-million-RWF sums means
+nothing at one end and is below float64's resolution at the other. That is exactly
+`max(0.03, z × k × SE)` again: one constant spanning regimes where it means different things.
+
+Replaced (ADR 0025) by exact equality for counts, flags, ordinals and categoricals; a relative
+tolerance with an absolute floor for real-valued features; and exact NaN positions, since structural
+NaN is the D-04 contract rather than a numerical detail.
+
+**Why this one is the interesting entry.** The first three cost restatements of published numbers.
+This one cost an afternoon's arithmetic before the first feature was written, because the M2 habit —
+*for every guard, ask what the grouped, floored or aggregated version of the same defect looks like*
+— was applied to a specification rather than to code. The habit was recorded as an M3 exit criterion
+in the expectation that it would catch something during M3; it caught something before M3 started.
+
+*Why it belongs in the paper:* the claim is not that this project found four defects, it is that the
+fourth was cheap because the first three were expensive and were written down. That is the argument
+for a lab notebook being part of the method rather than a record of it.
+
+*Also settled while the design was open, and worth stating because both are easy to get wrong:* a
+parity test is blind to any bug in code the two paths share, so independence is enforced by an
+import-graph test and the shared surface is limited to a declarative registry plus an explicit list
+of primitives that carry their own hand-computed tests. And the mutation suite includes a control
+that must *pass* — an honest reassociation of a window sum — because without a case that should not
+fire, a tolerance that rejects everything looks identical to one that works. That is the 0.5-strength
+plant from M2's power curve, in a new place.
