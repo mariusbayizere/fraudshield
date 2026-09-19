@@ -13,7 +13,7 @@ from functools import cached_property
 
 import numpy as np
 
-from fraudshield_dataset.generator.config import COUNTRIES, SEGMENTS, SimulationConfig
+from fraudshield_dataset.generator.config import SEGMENTS, SimulationConfig
 from fraudshield_dataset.generator.daily import Rhythm, day_weights, month_parts
 from fraudshield_dataset.generator.keys import stream, token
 from fraudshield_dataset.normal import inverse_cdf
@@ -72,9 +72,7 @@ class Population:
         self._country_share = p.mapping("geography.country_share")
         self._segment_share = p.mapping("population.segment_share")
         self._kyc_share = p.mapping("population.kyc_tier_share")
-        self._centres = {
-            k: tuple(v) for k, v in _pairs(p.value("currencies.country_centre")).items()
-        }
+        self._centres = {code: pack.centre for code, pack in config.packs.items()}
         self._activity_sigma = p.number("population.activity_log_sigma")
         self._rhythm = Rhythm(
             p.integer("behaviour.payday_window_days"),
@@ -100,7 +98,7 @@ class Population:
                     total * self._country_share[c] / p.number("population.customers_per_merchant")
                 ),
             )
-            for c in COUNTRIES
+            for c in config.countries
         }
         self.agents_per_country = {
             c: max(
@@ -109,7 +107,7 @@ class Population:
                     total * self._country_share[c] / p.number("population.customers_per_agent")
                 ),
             )
-            for c in COUNTRIES
+            for c in config.countries
         }
         mcc_share = p.mapping("behaviour.merchant_mcc_share")
         self._mcc_codes = list(mcc_share)

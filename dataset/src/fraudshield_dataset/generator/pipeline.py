@@ -128,7 +128,7 @@ def _month_events(
     fraud_events: Iterable[FraudEvent],
 ) -> pa.Table:
     start = month_start_micros(config.months[month])
-    offsets = config.parameters.mapping("currencies.utc_offset_hours")
+    offsets = {c: float(pack.utc_offset_hours) for c, pack in config.packs.items()}
     accounts, kinds, times = [], [], []
     for customer in customers:
         for event in customer.events:

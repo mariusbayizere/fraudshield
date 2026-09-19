@@ -219,16 +219,29 @@ def _problems_for(category: str, name: str, raw: object) -> list[str]:
     return problems
 
 
+def _category_of(path: Path, directory: Path) -> str:
+    """``behaviour.yaml`` is ``behaviour``; ``countries/RW.yaml`` is ``countries.RW``.
+
+    Country packs are separate files so that adding a country is adding a file (ADR 0023). They
+    carry the same provenance rules as every other parameter -- value, unit, provenance, and a
+    citation or a rationale -- because a pack's numbers are no less load-bearing for living in a
+    subdirectory.
+    """
+    if path.parent == directory:
+        return path.stem
+    return f"{path.parent.name}.{path.stem}"
+
+
 def load_parameters(directory: Path = PARAMS_DIR) -> ParameterSet:
-    """Load and validate every ``*.yaml`` file in ``directory``."""
+    """Load and validate every ``*.yaml`` file in ``directory`` and in ``countries/``."""
     parameters: dict[str, Parameter] = {}
     descriptions: dict[str, str] = {}
     problems: list[str] = []
-    files = sorted(directory.glob("*.yaml"))
+    files = sorted(directory.glob("*.yaml")) + sorted((directory / "countries").glob("*.yaml"))
     if not files:
         raise ParameterError(f"no parameter files in {directory}")
     for path in files:
-        category = path.stem
+        category = _category_of(path, directory)
         try:
             document = yaml.safe_load(path.read_text(encoding="utf-8"))
         except yaml.YAMLError as error:

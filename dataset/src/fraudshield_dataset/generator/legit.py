@@ -14,15 +14,21 @@ from decimal import Decimal
 import numpy as np
 
 from fraudshield_dataset.generator.config import CHANNELS, SimulationConfig, seasonal_factor
+from fraudshield_dataset.generator.countries import (
+    minor_units_by_currency,
+    rates_by_currency,
+)
 from fraudshield_dataset.generator.daily import Rhythm, day_weights
 from fraudshield_dataset.generator.keys import stream, token, transaction_uuid
 from fraudshield_dataset.generator.population import Customer, Population
 from fraudshield_dataset.generator.schema import Rows
 
+# Minor units now live in each country pack (ADR 0023) and are read through
+# `minor_units_by_currency`, which refuses two packs that disagree about the same currency.
+# Previously a literal here, which is the kind of country-specific value ADR 0023 moves out of code.
 # ISO 4217 List One, published 2026-09-17: RWF and UGX have no minor unit, KES, TZS and CDF have
 # two (see currencies.currency_by_country for the citation). The Java side asserts the same table
 # against the JDK's ISO data (D-43).
-MINOR_UNITS = {"RWF": 0, "UGX": 0, "KES": 2, "TZS": 2, "CDF": 2}
 P2P_MCC = "4829"
 CASH_MCC = "6011"
 _EPOCH = dt.datetime(1970, 1, 1, tzinfo=dt.UTC)
@@ -44,11 +50,11 @@ class Money:
     """Local amounts in minor units, rounded like a real payment of that currency."""
 
     def __init__(self, config: SimulationConfig) -> None:
-        p = config.parameters
-        self.currency = {
-            k: str(v) for k, v in _mapping(p.value("currencies.currency_by_country")).items()
-        }
-        self.rate = p.mapping("currencies.rwf_per_unit")
+        # Everything here now comes from the country packs rather than a shared parameter table,
+        # so a country can be added without editing this class (ADR 0023).
+        self.currency = {code: pack.currency for code, pack in config.packs.items()}
+        self.rate = rates_by_currency(config.packs)
+        self.minor_units = minor_units_by_currency(config.packs)
 
     def local(
         self, country: str, amount_rwf: float, round_sum: bool
@@ -58,7 +64,7 @@ class Money:
         if round_sum:
             step = 10 ** max(0, int(np.floor(np.log10(max(value, 1.0)))) - 1)
             value = max(step, round(value / step) * step)
-        places = MINOR_UNITS[currency]
+        places = self.minor_units[currency]
         local = Decimal(str(round(value, places))).quantize(Decimal(1).scaleb(-4))
         if local <= 0:
             local = Decimal(1).scaleb(-places).quantize(Decimal(1).scaleb(-4))
@@ -100,7 +106,7 @@ class LegitimateBehaviour:
         self.travel = p.number("behaviour.travel_probability")
         self.jitter = p.number("behaviour.home_jitter_degrees")
         self.p2p_share = p.number("behaviour.p2p_share_of_wallet_payments")
-        self.offset = {k: int(v) for k, v in p.mapping("currencies.utc_offset_hours").items()}
+        self.offset = {c: pack.utc_offset_hours for c, pack in config.packs.items()}
         self.shares = config.channel_share_by_segment
         self.hour_mean = p.number("behaviour.wallet_hour_mean_local")
         self.hour_sd = p.number("behaviour.wallet_hour_sd")

@@ -48,8 +48,8 @@ import pyarrow.parquet as pq
 from numpy.typing import NDArray
 
 from fraudshield_dataset.generator.config import CHANNELS, SimulationConfig
+from fraudshield_dataset.generator.countries import minor_units_by_currency
 from fraudshield_dataset.generator.fraud import NOVEL_VARIANT
-from fraudshield_dataset.generator.legit import MINOR_UNITS
 from fraudshield_dataset.generator.pipeline import peak_rss_bytes
 from fraudshield_dataset.normal import inverse_cdf
 from fraudshield_dataset.params import ParameterSet
@@ -212,11 +212,9 @@ class Dataset:
 
     def __init__(self, root: Path, config: SimulationConfig) -> None:
         self.config = config
-        p = config.parameters
-        self.offsets = p.mapping("currencies.utc_offset_hours")
-        self.country_of_currency = {
-            v: k for k, v in p.texts("currencies.currency_by_country").items()
-        }
+        self.offsets = {c: float(k.utc_offset_hours) for c, k in config.packs.items()}
+        self.minor_units = minor_units_by_currency(config.packs)
+        self.country_of_currency = {pack.currency: code for code, pack in config.packs.items()}
         self.features = Columns()
         self.shortcut = Columns()
         self.observed_parts: list[NDArray[np.bool_]] = []
@@ -490,7 +488,7 @@ class Dataset:
             if not _MCC.match(columns["merchant_category_code"][i]):
                 v["mcc_format"] += 1
             amount = columns["amount"][i]
-            if (amount * 10 ** MINOR_UNITS[columns["currency"][i]]) % 1 != 0:
+            if (amount * 10 ** self.minor_units[columns["currency"][i]]) % 1 != 0:
                 v["amount_scale"] += 1
             if round(columns["latitude"][i], 6) != columns["latitude"][i]:
                 v["coordinate_precision"] += 1

@@ -4,6 +4,7 @@ import ast
 import hashlib
 import json
 import re
+import shutil
 from pathlib import Path
 
 import numpy as np
@@ -26,12 +27,71 @@ from fraudshield_dataset.generator.config import (
     seasonal_factor,
     segment_channel_shares,
 )
+from fraudshield_dataset.generator.countries import load_packs
 from fraudshield_dataset.generator.fraud import NOVEL_VARIANT, SCENARIOS, FraudModel
 from fraudshield_dataset.generator.legit import LegitimateBehaviour, month_start_micros
 from fraudshield_dataset.generator.pipeline import generate
 from fraudshield_dataset.generator.population import Population
 from fraudshield_dataset.generator.schema import ACCOUNT_EVENTS, LABELS, TRANSACTIONS
 from fraudshield_dataset.params import ParameterError, ParameterSet, ScaleError, load_parameters
+from fraudshield_dataset.paths import PARAMS_DIR
+
+# Deliberately hostile to any East African assumption: an invented currency, three minor units
+# where every real currency here has zero or two, an offset far outside +2..+3, and a bloc of one.
+COUNTRY_Z_PACK = """description: >-
+  Synthetic pack for Country Z, entirely assumed. It exists to prove the machinery is not
+  East-Africa-shaped (ADR 0023) and is never presented as a validated country.
+parameters:
+  currency:
+    value: ZZZ
+    unit: ISO 4217 alphabetic code of the local currency
+    provenance: ASSUMED
+    rationale: >-
+      An invented currency for an invented country, so no real market is implied. ZZZ is outside
+      the assigned ISO 4217 range for exactly this purpose.
+  currency_minor_units:
+    value: 3
+    unit: decimal places the currency is quoted to
+    provenance: ASSUMED
+    rationale: >-
+      Three places, unlike every real currency in the dataset, so a hard-coded assumption of zero
+      or two would be caught rather than accidentally satisfied.
+  utc_offset_hours:
+    value: 7
+    unit: hours ahead of UTC used to place local activity hours in UTC timestamps
+    provenance: ASSUMED
+    rationale: >-
+      Far outside the +2 to +3 range of the simulated countries, so an offset hard-coded to that
+      range would be caught.
+  centre:
+    value: [12.5, 101.25]
+    unit: latitude and longitude (degrees) around which this country's customers live
+    provenance: ASSUMED
+    rationale: An invented location, well away from the East African cluster.
+  fx_rate_to_base:
+    value: 4.25
+    unit: base-currency units per one unit of this country's currency
+    provenance: ASSUMED
+    rationale: >-
+      An invented rate. It sits in the pack because a country cannot be generated without one:
+      when the rate lived in a shared table this test failed with a KeyError, which is how ADR
+      0023's enumerated pack contents were found to be incomplete.
+  continent:
+    value: AF
+    unit: continent code, separating an African cross-bloc corridor from an intercontinental one
+    provenance: ASSUMED
+    rationale: >-
+      Country Z is in Africa so a corridor to it is cross-bloc rather than intercontinental, which
+      is the harder case for corridor_class.
+  blocs:
+    value: [ZBLOC]
+    unit: regional economic communities this country belongs to
+    provenance: ASSUMED
+    rationale: >-
+      A bloc of one, sharing membership with no simulated country, so every corridor to Country Z
+      is cross-bloc and a bloc list hard-coded to African communities would be caught.
+"""
+
 
 GENERATOR_SOURCES = Path(config_module.__file__).parent
 
@@ -547,8 +607,9 @@ def test_the_partition_key_is_the_simulation_month_and_its_drift_is_bounded(tmp_
         chunk_size=8,
         allow_missing_scenarios=True,
     )
-    offsets = load_parameters().mapping("currencies.utc_offset_hours")
-    max_offset_micros = int(max(offsets.values())) * 3_600_000_000
+    packs = load_packs(load_parameters())
+    max_offset = max(pack.utc_offset_hours for pack in packs.values())
+    max_offset_micros = max_offset * 3_600_000_000
 
     drift_before = 0
     for directory in sorted((output / "transactions").glob("month=*")):
@@ -565,10 +626,57 @@ def test_the_partition_key_is_the_simulation_month_and_its_drift_is_bounded(tmp_
         earliest = pc.min(stamps).as_py()
         assert earliest >= start - max_offset_micros, (
             f"{month} reaches {(start - earliest) / 3_600_000_000:.1f}h before its start, "
-            f"beyond the {max(offsets.values())}h maximum UTC offset"
+            f"beyond the {max_offset}h maximum UTC offset"
         )
         drift_before += pc.sum(pc.less(stamps, start)).as_py() or 0
 
     # Without this the bound holds vacuously on data where nothing drifts, and the test passes even
     # when the permitted drift is mutated to zero.
     assert drift_before > 0, "no row drifted, so the bound above was not exercised"
+
+
+@pytest.mark.req("ML-DATA-05", "D-08")
+def test_a_new_country_needs_a_pack_and_no_code_change(tmp_path: Path) -> None:
+    """ADR 0023's acceptance test: adding a country is adding a file.
+
+    A synthetic "Country Z", entirely assumed, whose every value is chosen to be hostile to a
+    hard-coded East African assumption -- an invented currency, three minor units where every real
+    currency here has zero or two, a +7 offset far outside the +2..+3 range, and a bloc of one
+    sharing membership with nobody. If the generator needs a code change to accept it, this fails
+    and the decision has been violated.
+
+    It found one on its first run: the FX rate lived in a shared table rather than the pack, so
+    generation died with KeyError('ZZZ') and ADR 0023's enumerated pack contents turned out to be
+    incomplete.
+
+    The parameter tree is **copied** to a temporary directory and edited there. An earlier version
+    edited the repository's own params and restored them in a `finally`; when the body raised before
+    the restore, it left geography.yaml naming a country with no pack and corrupted a suite running
+    at the time. A test that mutates shared state is a test that can break everything around it.
+    """
+    params = tmp_path / "params"
+    shutil.copytree(PARAMS_DIR, params)
+    (params / "countries" / "ZZ.yaml").write_text(COUNTRY_Z_PACK, encoding="utf-8")
+    share = params / "geography.yaml"
+    share.write_text(
+        share.read_text(encoding="utf-8").replace(
+            "value: {RW: 0.42, KE: 0.28, TZ: 0.15, UG: 0.10, CD: 0.05}",
+            "value: {RW: 0.40, KE: 0.26, TZ: 0.14, UG: 0.10, CD: 0.05, ZZ: 0.05}",
+        ),
+        encoding="utf-8",
+    )
+
+    config = build_config(load_parameters(params), seed=13, total_rows=6000)
+    assert "ZZ" in config.countries, "the pack was not picked up"
+    assert config.packs["ZZ"].currency == "ZZZ"
+    assert config.packs["ZZ"].minor_units == 3, (
+        "a minor-unit table hard-coded to 0/2 would show here"
+    )
+
+    generate(config, tmp_path / "z", chunk_size=8, allow_missing_scenarios=True)
+    currencies = pq.read_table(tmp_path / "z" / "transactions", columns=["currency"])[
+        "currency"
+    ].to_pylist()
+
+    # Precondition (E12): Country Z must actually appear, or the test passes by ignoring it.
+    assert "ZZZ" in currencies, "Country Z was configured but produced no rows"

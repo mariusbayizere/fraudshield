@@ -5,10 +5,10 @@ from __future__ import annotations
 import datetime as dt
 from dataclasses import dataclass
 
+from fraudshield_dataset.generator.countries import CountryPack, simulated
 from fraudshield_dataset.params import ParameterError, ParameterSet
 
 CHANNELS = ("MOBILE_MONEY", "USSD", "AGENT_BANKING", "CARD", "ONLINE", "BANK_TRANSFER")
-COUNTRIES = ("RW", "KE", "TZ", "UG", "CD")
 SEGMENTS = ("urban_salaried", "informal_trader", "rural_ussd", "student")
 # Which segments live in towns: the urban share of the customer population is sourced (census
 # usage-weighted), so the assumed split between segments has to add up to it.
@@ -43,6 +43,11 @@ class SimulationConfig:
     customers_total: int
     customers_active: tuple[int, ...]
     parameters: ParameterSet
+    # ISO 3166-1 alpha-2 codes this run simulates, derived from the packs named by
+    # geography.country_share. Never a literal in code: naming a country there is what ADR 0023
+    # forbids, and the Country Z test fails if adding one needs a code change.
+    countries: tuple[str, ...]
+    packs: dict[str, CountryPack]
     channel_share_by_segment: dict[str, dict[str, float]]
     split: SplitPlan
     fraud_rate_by_month: tuple[float, ...]
@@ -122,6 +127,7 @@ def check_urban_share(parameters: ParameterSet) -> None:
 def build_config(
     parameters: ParameterSet, seed: int, total_rows: int | None = None
 ) -> SimulationConfig:
+    packs = simulated(parameters)
     rows = total_rows or parameters.integer("volume.total_rows_target")
     count = parameters.integer("volume.simulation_months")
     start = str(parameters.value("volume.start_month"))
@@ -141,6 +147,8 @@ def build_config(
         customers_total=max(active),
         customers_active=active,
         parameters=parameters,
+        countries=tuple(packs),
+        packs=packs,
         channel_share_by_segment=segment_channel_shares(parameters),
         split=split,
         fraud_rate_by_month=fraud_schedule(parameters, months, volume, split),
