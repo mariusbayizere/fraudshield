@@ -517,3 +517,46 @@ explain the effect; it stops it being mistaken for one.
 by more than its own seed noise is a property of the benchmark worth publishing, whether or not the
 cause is found. Reporting it as an unexplained limitation with a stated containment is more useful
 than a clean number that quietly depends on how much data was generated.
+
+### 2026-09-19 · The fourth instance: a generated check refused a tag six review passes had approved
+
+M2 was ready to tag. A principal dataset review had run and been answered, a delta re-check had
+verified the fixes, a four-area milestone review had found and fixed four MAJORs, the full suite was
+green at 106 tests, and the owner had said to tag.
+
+`fs-traceability check` refused. Four **Must** requirements the register assigns to M2 had not
+reached a final status: `ML-DATA-07` (all 44 features computable), `RES-01` (5M+ transactions and 44
+features), `RES-02` (the datasheet) and `ML-DATA-08` (HuggingFace and Zenodo publication).
+
+On inspection the refusal was substantially right. `RES-02` was genuine bookkeeping staleness — the
+datasheet had existed for days. But `ML-DATA-07` asks for features that are M3's subject and do not
+exist; `RES-01` carries a 5,000,000-row clause blocked on the default branch and the same feature
+clause; `ML-DATA-08` needs the owner's accounts on two external platforms. None of the six review
+passes had noticed, because all six were reading code, measurements and prose — and none was reading
+the register row by row against the milestone it claimed to close.
+
+This is the fourth instance of the day's pattern, and the first where the check that caught it was
+not one a human was performing:
+
+| # | Found by | Missed by |
+|---|---|---|
+| 1 | a delta re-check looking at something else | the guard that digested parameters |
+| 2 | verifying an assumption inside an unrelated derivation | the gate whose band it was |
+| 3 | asking what mechanism explained a residual | the encoding's own out-of-fold fix |
+| 4 | a generated governance check | six review passes, including this one |
+
+The resolution is ADR 0024: `ML-DATA-07` moves to M3, because the build prompt's own milestone
+definitions put feature engineering there and M2's gate never mentions features — a requirement
+filed under the wrong milestone, the same family as D-01. `RES-01` stays in M2 at
+`VERIFIED_AT_REDUCED_SCALE` with its two unsatisfied clauses named. `ML-DATA-08` takes
+`REQUIRES_EXTERNAL_PARTY` rather than a milestone, because publication is not a scheduling problem.
+`RES-02` becomes `DONE`. The hook was not bypassed; the gate passes on its own.
+
+*Why it belongs in the paper:* the argument for machine-checkable governance is usually made about
+consistency or speed. This is the stronger version — the check caught what careful reading did not,
+because it was asking a different question. Reviews ask "is this right?"; the register asks "does
+every row you claimed still hold?" Those are not the same question, and a project that only does the
+first will close milestones on requirements it has not met.
+
+*The uncomfortable corollary:* the register only caught it because the rows were there to check. A
+requirement never entered cannot be missed by any amount of review.

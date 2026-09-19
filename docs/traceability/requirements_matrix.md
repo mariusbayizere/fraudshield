@@ -3,7 +3,7 @@
 
 # FraudShield Requirements Traceability Matrix
 
-Rows: 258. Status counts: DONE 12, DONE_WITH_DEVIATION 1, IN_PROGRESS 10, NOT_STARTED 234, VERIFIED_AT_REDUCED_SCALE 1.
+Rows: 258. Status counts: DONE 13, DONE_WITH_DEVIATION 1, IN_PROGRESS 9, NOT_STARTED 232, REQUIRES_EXTERNAL_PARTY 1, VERIFIED_AT_REDUCED_SCALE 2.
 
 | ID | Priority | Milestone | Status | Title | Implementation | Tests | Evidence | Deviations |
 |---|---|---|---|---|---|---|---|---|
@@ -164,8 +164,8 @@ Rows: 258. Status counts: DONE 12, DONE_WITH_DEVIATION 1, IN_PROGRESS 10, NOT_ST
 | ML-DATA-04 | M | M2 | DONE | Fraud pattern diversity | dataset/src/fraudshield_dataset/generator/fraud.py<br>docs/ml/scenarios/README.md | dataset/tests/test_generator.py:270<br>dataset/tests/test_generator.py:414<br>dataset/tests/test_generator.py:483<br>dataset/tests/test_generator.py:505<br>dataset/tests/test_realism_checks.py:470<br>dataset/tests/test_realism_checks.py:81<br>dataset/tests/test_scenario_notes.py:11<br>dataset/tests/test_scenario_notes.py:11 | dataset/realism_report.md (eight scenario types present, per-scenario rows by month)<br>dataset/tests/test_scenario_notes.py (every scenario has a design note citing existing parameters) | D-08 |
 | ML-DATA-05 | M | M2 | DONE | Geographic coverage | dataset/src/fraudshield_dataset/generator/population.py<br>dataset/generator/params/geography.yaml | dataset/tests/test_generator.py:123<br>dataset/tests/test_generator.py:182<br>dataset/tests/test_generator.py:440<br>dataset/tests/test_normal.py:9<br>dataset/tests/test_normal.py:9<br>dataset/tests/test_normal.py:9<br>dataset/tests/test_realism_checks.py:435 | dataset/realism_report.md (country mix within 0.02 pp)<br>dataset/tests/test_generator.py (every population prefix within one customer of its country quota) | — |
 | ML-DATA-06 | M | M2 | DONE | Temporal coverage | dataset/src/fraudshield_dataset/generator/config.py | dataset/tests/test_generator.py:83 | dataset/realism_report.md (24 months, 2024-01 to 2025-12, with the temporal split)<br>dataset/tests/test_generator.py (month labels cross the year boundary) | D-07 |
-| ML-DATA-07 | M | M2 | NOT_STARTED | Feature completeness | — | — | — | D-04 |
-| ML-DATA-08 | M | M2 | IN_PROGRESS | Dataset release | dataset/src/fraudshield_dataset/release/export.py<br>docs/ml/datasheet.md | dataset/tests/test_export.py:19<br>dataset/tests/test_export.py:19<br>dataset/tests/test_export.py:19<br>dataset/tests/test_export.py:19<br>dataset/tests/test_export.py:19<br>dataset/tests/test_export.py:19<br>dataset/tests/test_export.py:19<br>dataset/tests/test_realism_checks.py:324<br>dataset/tests/test_realism_checks.py:340<br>dataset/tests/test_realism_checks.py:381 | dataset/tests/test_export.py (CSV carries every row, checksums verify, a changed file is reported)<br>dataset/release/README.md (CC BY 4.0 legal code with its source URL and SHA-256) | — |
+| ML-DATA-07 | M | M3 | NOT_STARTED | Feature completeness | — | — | — | D-04 |
+| ML-DATA-08 | M | M2 | REQUIRES_EXTERNAL_PARTY | Dataset release | dataset/src/fraudshield_dataset/release/export.py | dataset/tests/test_export.py:19<br>dataset/tests/test_export.py:19<br>dataset/tests/test_export.py:19<br>dataset/tests/test_export.py:19<br>dataset/tests/test_export.py:19<br>dataset/tests/test_export.py:19<br>dataset/tests/test_export.py:19<br>dataset/tests/test_realism_checks.py:324<br>dataset/tests/test_realism_checks.py:340<br>dataset/tests/test_realism_checks.py:381 | dataset/tests/test_export.py (release assembled, licence verbatim, SHA256SUMS verifiable)<br>dataset/realism_report.md | — |
 | ML-GATE-01 | M | M4 | NOT_STARTED | AUC-ROC (last-3-month test set) | — | — | — | D-07 |
 | ML-GATE-02 | M | M4 | NOT_STARTED | Precision at 1% FPR | — | ml/tests/metrics/test_operating_points.py:16<br>ml/tests/metrics/test_operating_points.py:22 | — | D-01 |
 | ML-GATE-03 | M | M4 | NOT_STARTED | Recall (fraud capture rate) | — | ml/tests/metrics/test_operating_points.py:33 | — | D-02 |
@@ -207,8 +207,8 @@ Rows: 258. Status counts: DONE 12, DONE_WITH_DEVIATION 1, IN_PROGRESS 10, NOT_ST
 | TEST-12 | M | M8 | NOT_STARTED | Frontend: E2E | — | — | — | D-34 |
 | TEST-13 | M | M9 | NOT_STARTED | Security | — | — | — | — |
 | TEST-14 | M | M4 | NOT_STARTED | ML Evaluation Gate | — | — | — | — |
-| RES-01 | M | M2 | NOT_STARTED | FraudShield-EAC-Transactions dataset | — | dataset/tests/test_generator.py:83 | — | D-08<br>D-09 |
-| RES-02 | M | M2 | NOT_STARTED | Dataset datasheet | — | dataset/tests/test_params.py:14<br>dataset/tests/test_params.py:14<br>dataset/tests/test_params.py:14<br>dataset/tests/test_params.py:14<br>dataset/tests/test_params.py:14<br>dataset/tests/test_params.py:14<br>dataset/tests/test_params.py:14<br>dataset/tests/test_params.py:14<br>dataset/tests/test_params.py:14 | — | D-09 |
+| RES-01 | M | M2 | VERIFIED_AT_REDUCED_SCALE | FraudShield-EAC-Transactions dataset | dataset/src/fraudshield_dataset/generator/pipeline.py<br>dataset/src/fraudshield_dataset/release/export.py | dataset/tests/test_generator.py:83 | dataset/realism_report.md (1,006,249 rows, seed 20260917, all gate checks pass)<br>dataset/tests/test_generator.py<br>dataset/tests/test_realism_checks.py<br>dataset/tests/test_export.py | D-08<br>D-09 |
+| RES-02 | M | M2 | DONE | Dataset datasheet | docs/ml/datasheet.md | dataset/tests/test_params.py:14<br>dataset/tests/test_params.py:14<br>dataset/tests/test_params.py:14<br>dataset/tests/test_params.py:14<br>dataset/tests/test_params.py:14<br>dataset/tests/test_params.py:14<br>dataset/tests/test_params.py:14<br>dataset/tests/test_params.py:14<br>dataset/tests/test_params.py:14 | dataset/tests/test_params.py (tagged RES-02)<br>dataset/tests/test_realism_checks.py::test_the_datasheet_quotes_the_committed_report | D-09 |
 | RES-03 | M | M11 | NOT_STARTED | Trained model weights | — | — | — | — |
 | RES-04 | M | M11 | NOT_STARTED | SHAP analysis notebook | — | — | — | — |
 | RES-05 | M | M11 | NOT_STARTED | Training and evaluation pipeline | — | — | — | — |

@@ -233,6 +233,12 @@ SECTION_MILESTONE = {
 }
 
 ROW_MILESTONE_OVERRIDES = {
+    # ADR 0024: the SRS files "all 44 features computable" under the dataset milestone, but the
+    # build prompt's own definitions place feature engineering in M3 ("M3 -- Feature engineering
+    # and feature store (Part E.2)", gate: "all 44 feature unit tests pass for all 6 channels")
+    # while M2's gate names rows, distribution targets, leakage and the datasheet and says nothing
+    # about features. A requirement filed under the wrong milestone, of the same family as D-01.
+    "ML-DATA-07": "M3",
     "NFR-SEC-05": "M1",
     "NFR-SEC-06": "M6",
     "NFR-SEC-03": "M7",  # ADR 0021: vault and tokenisation M6, analyst inspector test M7

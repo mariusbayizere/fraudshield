@@ -2366,7 +2366,7 @@ requirements:
   section: 7.1 Dataset
   title: Feature completeness
   priority: M
-  milestone: M2
+  milestone: M3
   srs_text: 'Specification: All 44 features computable for >= 98% of records; < 2% any missing feature;
     Rationale: Missing features handled by median imputation; completeness verified in pipeline'
   defects:
@@ -2385,15 +2385,19 @@ requirements:
     DOI; Rationale: First public East African financial fraud benchmark dataset — standalone research
     contribution'
   defects: []
-  status: IN_PROGRESS
+  status: REQUIRES_EXTERNAL_PARTY
   verification: test
   implementation:
   - dataset/src/fraudshield_dataset/release/export.py
-  - docs/ml/datasheet.md
   evidence:
-  - dataset/tests/test_export.py (CSV carries every row, checksums verify, a changed file is reported)
-  - dataset/release/README.md (CC BY 4.0 legal code with its source URL and SHA-256)
+  - dataset/tests/test_export.py (release assembled, licence verbatim, SHA256SUMS verifiable)
+  - dataset/realism_report.md
   deviations: []
+  notes: 'Requires two external parties and the owner''s accounts on both: HuggingFace Datasets Hub for
+    hosting and Zenodo for the DOI. The release itself is built and verifiable -- fs-dataset export writes
+    the Parquet partitions, a CSV copy, the licence verbatim with its SHA-256, the datasheet and a SHA256SUMS
+    a recipient checks with one command. Publication is an owner action, not a scheduling problem, so
+    this row is not reassigned to a later milestone (ADR 0024).'
 - id: ML-GATE-01
   section: 7.2 Model deployment gate
   title: AUC-ROC (last-3-month test set)
@@ -3010,11 +3014,24 @@ requirements:
   defects:
   - D-08
   - D-09
-  status: NOT_STARTED
+  status: VERIFIED_AT_REDUCED_SCALE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - dataset/src/fraudshield_dataset/generator/pipeline.py
+  - dataset/src/fraudshield_dataset/release/export.py
+  evidence:
+  - dataset/realism_report.md (1,006,249 rows, seed 20260917, all gate checks pass)
+  - dataset/tests/test_generator.py
+  - dataset/tests/test_realism_checks.py
+  - dataset/tests/test_export.py
   deviations: []
+  notes: See ADR 0024 for why the feature clause is not M2's to satisfy.
+  reduced_scale: 'Verified at 1,006,249 rows against a 5,000,000-row specification. Delivered at this
+    scale: CSV and Parquet output, 8 fraud types, 6 channels, 5 EAC countries, CC BY 4.0, determinism
+    from a seed, and every realism and anti-leakage gate. Carried: the 5,000,000-row count is PB-25, blocked
+    because workflow_dispatch registers only from the default branch, still m0/bootstrap, and the run
+    must not happen on the build laptop. The 44-feature clause moves to M3 with ML-DATA-07, since the
+    build prompt places feature engineering in M3 (ADR 0024).'
 - id: RES-02
   section: 10 Research artifacts
   title: Dataset datasheet
@@ -3024,11 +3041,17 @@ requirements:
     Platform: GitHub fraudshield repo docs/ + arXiv appendix'
   defects:
   - D-09
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - docs/ml/datasheet.md
+  evidence:
+  - dataset/tests/test_params.py (tagged RES-02)
+  - dataset/tests/test_realism_checks.py::test_the_datasheet_quotes_the_committed_report
   deviations: []
+  notes: Gebru template, CC BY 4.0, shipped by fs-dataset export. Its measured figures are guarded against
+    the committed realism report, after they were found to match no run the repository could produce (M2
+    milestone review, MAJOR M-1).
 - id: RES-03
   section: 10 Research artifacts
   title: Trained model weights
