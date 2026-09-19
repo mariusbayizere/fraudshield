@@ -558,7 +558,9 @@ def test_a_run_too_small_for_a_scenario_fails_with_the_minimum_size() -> None:
     assert "mule_account" in message
     assert "parameters are not at fault" in message
     # The minimum must be larger than the size that just failed, or it sends the reader in a circle.
-    quoted = int(re.search(r"Generate at ([\d,]+) rows", message).group(1).replace(",", ""))
+    match = re.search(r"Generate at ([\d,]+) rows", message)
+    assert match is not None, f"the refusal must quote a minimum row count, got: {message}"
+    quoted = int(match.group(1).replace(",", ""))
     assert quoted > 10_000
 
 
@@ -575,11 +577,9 @@ def test_the_minimum_size_is_a_property_of_the_parameters_not_the_run() -> None:
         population = Population(config)
         with pytest.raises(ScaleError) as raised:
             FraudModel(config, population, LegitimateBehaviour(config, population))
-        quoted.append(
-            int(
-                re.search(r"Generate at ([\d,]+) rows", str(raised.value)).group(1).replace(",", "")
-            )
-        )
+        match = re.search(r"Generate at ([\d,]+) rows", str(raised.value))
+        assert match is not None, f"the refusal must quote a minimum row count, got: {raised.value}"
+        quoted.append(int(match.group(1).replace(",", "")))
 
     assert max(quoted) - min(quoted) < 0.05 * min(quoted), quoted
 

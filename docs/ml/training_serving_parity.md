@@ -5,9 +5,10 @@ features are written does not merely cost rework: it invalidates every model met
 between. M2 supplies the precedent — a fold-assignment defect inflated every single-feature AUC the
 project had reported, and all of them had to be restated once it was found.
 
-This document settles four things the test cannot be written without: **what counts as identical**,
-**what the two paths are fed**, **how independence between them is enforced**, and **how the test is
-shown to be capable of failing**.
+This document settles six things the test cannot be written without: **what counts as identical**,
+**what the paths are fed**, **which cases must be covered**, **how independence between them is
+enforced**, **how the test is shown to be capable of failing**, and **how many paths there are** —
+which turned out not to be two.
 
 ## What the test proves
 
@@ -58,12 +59,12 @@ Where an order-dependent aggregation makes (2) genuinely unreachable for a speci
 feature gets a documented per-feature tolerance naming the aggregation and the reason — never a
 blanket loosening.
 
-**Rejected: "the two paths produce the same decision."** That is the weaker check that passes in the
+**Rejected: "the paths produce the same decision."** That is the weaker check that passes in the
 regime where the stronger one would catch something — the floor shape again. Decision equality hides
 feature drift until it crosses a threshold, at which point it is a production incident rather than a
 test failure.
 
-## Decision 2 — what the two paths are fed
+## Decision 2 — what the paths are fed
 
 **Prefix replay, not whole histories.**
 
@@ -89,7 +90,7 @@ Chosen so that a passing test means something:
 - **Zero history.** The first transaction of an account: every window feature at its 0-history value,
   `seconds_since_last_tx` NaN, `velocity_ratio_1h_vs_30d` at its Laplace-smoothed value.
 - **Window boundaries.** An account with transactions placed just inside and just outside each
-  window edge (60 s, 1 h, 24 h, 7 d, 30 d, 90 d). This is where the two paths diverge if either uses
+  window edge (60 s, 1 h, 24 h, 7 d, 30 d, 90 d). This is where the paths diverge if any uses
   an inclusive bound where the other uses exclusive.
 - **All six channels**, so the NaN contract is exercised: USSD (null fingerprint → four device
   features NaN), `AGENT_BANKING` (agent features present), and the four others (agent features NaN).
@@ -98,12 +99,23 @@ Chosen so that a passing test means something:
   the batch path can, and will unless prevented. Prefix replay makes that failure visible.
 - **Account grouping (M3 exit criterion E1).** Replay is per account; an account's rows never split
   across the comparison, because the unit of history is the account, not the row.
+- **Cold cache.** The online store is flushed mid-replay and the vector after the flush is asserted
+  against each feature's declared `fallback_behaviour`. See Decision 6; this is the only case that
+  exercises `history_requirement=DURABLE`.
+- **A configuration change (REQUIRED FIXTURE PROPERTY, ADR 0026).** The replayed history must span
+  at least one threshold or rule change, and the test **asserts `changes > 0` before asserting
+  agreement** (E12). Features declaring `reference_data_basis=AS_OF_EVENT` read mutable operational
+  configuration; the batch path naturally sees today's values and the online path sees what was
+  live. **The two paths agree for every transaction newer than the last configuration change**, so
+  a fixture set without one passes with the bug present — the suite would not be weak here, it
+  would be blind. This is E12's vacuous-precondition failure arriving in a new place, which is why
+  it is a property of the fixture rather than a case in a list.
 
-## Decision 4 — the two paths must be independent implementations
+## Decision 4 — the paths must be independent implementations
 
 **A parity test is blind to any bug in code both paths share.** If the online path is the batch path
 behind a different entry point, the test proves only that a function equals itself. The value of the
-test is exactly the size of the surface the two paths do *not* share.
+test is exactly the size of the surface the paths do *not* share.
 
 Enforced, not merely intended:
 
@@ -117,7 +129,7 @@ Enforced, not merely intended:
   see into it. Haversine distance and the FX conversion table are the expected members; a shared
   window-aggregation helper would defeat the purpose and is not permitted.
 
-The honest statement of the test's reach: parity proves the two paths agree, and hand-computed
+The honest statement of the test's reach: parity proves the paths agree, and hand-computed
 per-feature tests (Part E.2) prove they are both *right*. Neither substitutes for the other, and the
 shared surface is covered only by the second.
 
@@ -145,6 +157,10 @@ specification for a case the test is missing.
 | 6 | a category encoded from a different fold | the M2 encoding defect, reproduced in serving | exact categorical equality | pending |
 | 7 | a label used whose `label_available_at` is after the transaction | future leakage in the batch path | prefix replay | pending |
 | 8 | a sum accumulated in float32 | precision loss masquerading as reassociation | the relative tolerance | pending |
+| 9 | the fallback path serves a bucket-aligned 1 h count as if it were trailing | the degraded path diverging where no warm-path test looks | cold-cache case, `fallback_behaviour` | pending |
+| 10 | `account_first_seen_at` lost on flush, so `OBSERVED_CAPPED` divides by a shorter history | a `DURABLE` field that is not durable | cold-cache case | pending |
+| 11 | the batch path joins current thresholds instead of as-of ones | ADR 0026's configuration drift | the required configuration-change fixture | pending |
+| 12 | a non-account-keyed aggregate computed over all rows rather than training folds | cross-account leakage E1's grouping cannot see | single-feature AUC rises above its clean value | pending |
 
 **Mutation 1 is the control, and it is the one that must pass.** Without it the suite cannot
 distinguish "the tolerance catches bugs" from "the tolerance catches everything, including honest
@@ -153,6 +169,78 @@ the same role the 0.5-strength plant played in M2's power curve: without a case 
 fire, a detector that fires at everything looks identical to one that works.
 
 Results are recorded in this table as the mutations are implemented, not summarised elsewhere.
+
+## Decision 6 — there are three paths, not two
+
+**Added after the first two features were registered, correcting this document's original premise.**
+
+M1 already built the third one. `V10__timescale_policies_and_aggregates.sql` creates a continuous
+aggregate whose own comment names its purpose:
+
+```sql
+-- Hourly activity per account: database fallback for velocity features when Redis is down (C.4).
+CREATE MATERIALIZED VIEW account_activity_hourly ...
+  time_bucket(interval '1 hour', transaction_timestamp) AS bucket,
+  count(*) AS transaction_count, sum(amount_rwf) AS amount_rwf
+```
+
+FR-02-09 requires it — "stale key handled by DB fallback" — and M1's own milestone review already
+recorded the continuous aggregates as **implemented, untested (MAJOR-2)**. So the paths are:
+
+| Path | Reads | When it serves |
+|---|---|---|
+| batch | the dataset, whole histories | training, evaluation |
+| online | Redis feature store | normal serving |
+| **fallback** | `account_activity_hourly` | **Redis down or key stale** |
+
+### Why this is not a third column in the same table
+
+The aggregate buckets to the hour. From hourly buckets, `tx_count_60s` is **not computable at all**,
+and a trailing 1 h count is **not the same number** as a bucket-aligned one: at 10:30 the trailing
+hour covers 09:30–10:30 while the bucket covers 10:00–10:30. Both are defensible; they are not
+equal.
+
+That divergence has a property that makes it worse than an ordinary bug: **it appears only during an
+incident.** Redis goes down, the fallback engages, and the model receives features computed a
+different way — at the exact moment the system is already degraded, and in a regime no warm-path
+test ever visits.
+
+### The rule
+
+Every windowed feature declares `fallback_behaviour` in the registry, and the option that is *not*
+available is "approximately right":
+
+- **`EXACT`** — the fallback reproduces the online value under Decision 1's rule. For a sub-hour
+  window this means reading raw `transactions`, not the aggregate. Costs a heavier query on the
+  degraded path, which is the honest price.
+- **`NAN_UNDER_FALLBACK`** — the feature is declared absent while the fallback serves, and the
+  models' native missing handling (D-04) covers it. The model sees *fewer* features rather than
+  *wrong* ones.
+
+`velocity_ratio_1h_vs_30d` is registered `NAN_UNDER_FALLBACK`; `geo_cell_fraud_rate_30d` is `EXACT`,
+being DB-resident already and reading no bucketed source.
+
+**A bucket-aligned substitute is forbidden.** It passes every warm-path test and diverges only where
+nothing is looking, which is the floor shape a third time.
+
+### Two consequences for the test
+
+1. **The parity suite runs the fallback path too**, under the same prefix replay and the same
+   tolerance rule, with `NAN_UNDER_FALLBACK` features asserted NaN rather than skipped. A skip
+   would let a feature silently become `EXACT`-but-wrong.
+2. **A cold-cache case joins Decision 3's list**: replay an account, flush the online store
+   mid-replay, and assert the vector after the flush matches the declared behaviour — `EXACT`
+   features unchanged, `NAN_UNDER_FALLBACK` features NaN. This is also the only test that exercises
+   `history_requirement=DURABLE`: a `DURABLE` field that does not survive the flush fails here and
+   nowhere else.
+
+### An open defect this exposes
+
+The aggregate's refresh policy is `start_offset => interval '8 days'`, while
+`velocity_ratio_1h_vs_30d` needs a **30-day** basis. Buckets older than 8 days are materialised once
+and never refreshed, so a transaction arriving more than 8 days late is never reflected in them.
+Whether that can happen depends on the ingest path's out-of-order tolerance, which is an M6
+question; it is recorded now so it is not discovered then.
 
 ## Status of the tolerance deviation
 

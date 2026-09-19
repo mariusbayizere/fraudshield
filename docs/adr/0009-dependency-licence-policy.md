@@ -51,6 +51,36 @@ uploads `build/licence-inventory.json` as a CI artifact.
   fixed-seed `SplittableRandom` plus explicit edge cases (build prompt E.12 names jqwik; this is the
   recorded deviation). Hypothesis remains the Python property-testing library.
 
+## Amendment 2026-09-19 — the first runtime dependency of `fraudshield-ml`
+
+`fraudshield-ml` has had `dependencies = []` since M0, so the runtime scope this ADR defines has
+been **empty the whole time it has been enforced**. `geo_cell_fraud_rate_30d` ends that: Part E.2
+specifies the feature on an "H3 resolution 6 cell", and computing an H3 index from a coordinate
+means taking `h3` as a runtime dependency of the ML package.
+
+**Recorded because it was nearly not.** The feature registry is declarative and computes nothing, so
+registering the feature added no import and triggered no licence check — the commitment to H3 lived
+only in a prose definition string. A dependency decision that reaches the repository as prose is
+exactly what this ADR exists to stop, and the inventory would not have caught it until the first
+implementation commit.
+
+- **Expected licence:** Apache-2.0 (both `h3-py` and the underlying H3 C library), which the runtime
+  scope allows outright, so no exception entry is needed.
+- **Not taken on trust.** The licence above is the expectation, not the record. `uv run fs-licences`
+  resolves it from package metadata and **fails the build on a licence it cannot identify**; the
+  inventory it produces is the evidence, and it runs when the dependency lands rather than now.
+- **The alternative was rejected on sight.** Reimplementing H3's icosahedral projection to avoid a
+  permissively licensed dependency would trade a one-line inventory row for a geometry
+  implementation nothing else validates — and `geo_cell_fraud_rate_30d` is a label-derived feature
+  already under the D-08 AUC ceiling, so a home-made cell index would put a bespoke spatial
+  binning inside the feature most able to leak.
+
+**Consequence for the licence check:** this is the first time the runtime scope has been non-empty,
+so `fs-licences` runtime path has never run against real input. The inventory's Python branch is
+therefore itself unverified at the moment the first dependency arrives, and the Maven parser's
+"0 of 18 parsed" precedent above is the reason not to assume it works. Assert the runtime scope
+contains `h3` when the dependency lands, rather than reading a passing check as confirmation.
+
 ## Deviation from D-17 and E.12 (amended during the M0 re-review, finding R-5)
 
 Binding resolution D-17 says decision-engine tests use "JUnit 5 (plus jqwik property tests)", and

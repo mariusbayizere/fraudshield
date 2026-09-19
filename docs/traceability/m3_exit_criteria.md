@@ -107,6 +107,30 @@ Required:
   suite and fails if they differ, naming the changed file.** It catches the mutation even when
   cleanup does not run, which is precisely the case a `finally` cannot cover.
 
+**What the fixture does not do, stated here so nobody later assumes otherwise.** It compares digests
+at session start and session end, so it fires *after* the mutating test and every test that ran
+behind it. It therefore **prevents a bad run being cited, not a bad run happening**: by the time it
+fails, any test that read the mutated file has already produced a result, and those results are
+discarded wholesale rather than individually identified.
+
+This matters because the fixture is the kind of guard that invites a false inference — "shared state
+is checked automatically, so the mutation checks are redundant". The opposite holds. The fixture is a
+**detector of a contaminated run**, and E14's mutation records remain the only evidence that a test
+can fail for the reason it claims. Neither substitutes for the other, and a reviewer who accepts the
+fixture in place of a mutation record has accepted strictly less than before it existed.
+
+**Mutation record (E14), 2026-09-19.** A temporary test that appends a line to
+`dataset/generator/params/geography.yaml` — the exact mutation that broke a real run — was added and
+the suite run. Result: the guard fired, naming `modified: dataset/generator/params/geography.yaml`,
+and the session exited **1**. The mutation was removed and the file restored by copy from a
+pre-image, with `git status` verified clean afterwards rather than trusted to a `finally`.
+
+**One thing that record exposes.** pytest reports a session-fixture teardown failure as an *error*,
+not a failure, so the summary line read `1 passed, 1 error` — the mutating test itself is still
+counted as **passed**. Anyone scanning output for the word "failed" will not find it. The exit code
+is correct and CI is therefore correct; a human reading a terminal may not be. The guard's message
+says results "cannot be cited" for this reason.
+
 ## Feature pipeline
 
 - **E3** — the 44 engineered features are re-checked against the D-08 single-feature AUC ceiling of

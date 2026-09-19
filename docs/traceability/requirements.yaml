@@ -155,9 +155,14 @@ requirements:
   verification: test
   implementation: []
   evidence: []
-  deviations: []
+  deviations:
+  - docs/adr/0023-africa-wide-portability.md
   notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
-    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
+    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.
+    Deviation (owner decision 2026-09-19, ADR 0023): corridor_class is DOMESTIC | INTRA_BLOC | CROSS_BLOC_AFRICA
+    | INTERCONTINENTAL from pack bloc membership, not Part E.2''s DOMESTIC | EAC_CROSS_BORDER | NON_EAC_CROSS_BORDER.
+    The feature keeps its slot and the count stays 44; no EAC special case remains in code. D-03 records
+    that this row''s own group counts sum to 46 while E.2''s catalogue enumerates 44 by name; E.2 is authoritative.'
 - id: FR-02-03
   section: 3.2 FR-02 ML fraud scoring engine
   title: XGBoost + LightGBM probabilities isotonic-regression calibrated; Expected Calibration Error <

@@ -1,0 +1,392 @@
+"""The registry's job is to refuse an underspecified feature. These tests prove it can.
+
+Per E12 every bound-or-absence test asserts its own precondition first: a test that a blank field
+is refused is worthless if the fixture's field was never blank.
+"""
+
+from __future__ import annotations
+
+from collections import Counter
+
+import pytest
+
+from fraudshield_ml.features.registry import (
+    REGISTRY,
+    Dtype,
+    FallbackBehaviour,
+    FeatureSpec,
+    Group,
+    HistoryBasis,
+    HistoryKey,
+    HistoryRequirement,
+    LabelBasis,
+    MinimumHistory,
+    Nesting,
+    PriorSource,
+    ReferenceDataBasis,
+    SelfInclusion,
+    Smoothing,
+    SmoothingPlacement,
+    Source,
+    WindowContract,
+    validate,
+)
+
+CONTRACT_FIELDS = (
+    "self_inclusion",
+    "nesting",
+    "smoothing",
+    "history_basis",
+    "history_requirement",
+    "fallback_behaviour",
+    "label_basis",
+    "minimum_history",
+    "history_key",
+)
+
+
+def _contract(**overrides: object) -> WindowContract:
+    defaults: dict[str, object] = {
+        "self_inclusion": SelfInclusion.EXCLUDED,
+        "nesting": Nesting.NOT_NESTED,
+        "smoothing": None,
+        "history_basis": HistoryBasis.NOT_TIME_NORMALISED,
+        "history_requirement": HistoryRequirement.CACHE_SUFFICIENT,
+        "fallback_behaviour": FallbackBehaviour.EXACT,
+        "label_basis": LabelBasis.NOT_LABEL_DERIVED,
+        "minimum_history": None,
+        "history_key": HistoryKey.ACCOUNT,
+    }
+    defaults.update(overrides)
+    return WindowContract(**defaults)  # type: ignore[arg-type]
+
+
+def _spec(**overrides: object) -> FeatureSpec:
+    defaults: dict[str, object] = {
+        "name": "example_count_24h",
+        "group": Group.VELOCITY,
+        "dtype": Dtype.INT64,
+        "definition": "A count over 24 h.",
+        "source": Source.REDIS,
+        "nan_rule": "Never NaN.",
+        "leakage_note": "Backward-looking only.",
+        "template_id": "velocity.example",
+        "reference_data_basis": ReferenceDataBasis.NOT_REFERENCE_DATA,
+        "window": "24h",
+        "contract": _contract(),
+    }
+    defaults.update(overrides)
+    return FeatureSpec(**defaults)  # type: ignore[arg-type]
+
+
+@pytest.mark.req("FR-02-02")
+def test_a_windowed_feature_without_a_contract_is_refused() -> None:
+    """The validation the seven fields exist for."""
+    with pytest.raises(ValueError, match="no WindowContract"):
+        _spec(contract=None)
+
+
+@pytest.mark.req("FR-02-02")
+def test_a_contract_without_a_window_is_refused() -> None:
+    """The fields describe how a window is read; without one they assert nothing."""
+    with pytest.raises(ValueError, match="declares no window"):
+        _spec(window=None)
+
+
+@pytest.mark.req("FR-02-02")
+@pytest.mark.parametrize("field", ["definition", "nan_rule", "leakage_note", "template_id"])
+def test_a_blank_prose_field_is_refused(field: str) -> None:
+    """Whitespace is not an answer. A blank leakage note is the one that matters most."""
+    assert _spec().__getattribute__(field).strip(), "precondition: the default field is non-blank"
+    with pytest.raises(ValueError, match=f"{field} is blank"):
+        _spec(**{field: "   "})
+
+
+@pytest.mark.req("FR-02-02")
+def test_observed_capped_history_forces_a_durable_first_seen() -> None:
+    """Dividing by observed history needs a first-seen timestamp a cache flush would destroy.
+
+    Without the rule a feature could declare OBSERVED_CAPPED and CACHE_SUFFICIENT together, and
+    after a flush would silently divide by a shorter apparent history — inflating every rate it
+    feeds, in the direction that makes a busy account look normal.
+    """
+    with pytest.raises(ValueError, match="requires history_requirement=DURABLE"):
+        _contract(
+            history_basis=HistoryBasis.OBSERVED_CAPPED,
+            history_requirement=HistoryRequirement.CACHE_SUFFICIENT,
+        )
+
+
+@pytest.mark.req("FR-02-02")
+def test_the_durable_rule_permits_the_combination_it_is_meant_to_permit() -> None:
+    """The control, per the mutation table: a rule that refuses everything is not a rule."""
+    contract = _contract(
+        history_basis=HistoryBasis.OBSERVED_CAPPED,
+        history_requirement=HistoryRequirement.DURABLE,
+    )
+    assert contract.history_basis is HistoryBasis.OBSERVED_CAPPED
+
+
+@pytest.mark.req("FR-02-02")
+@pytest.mark.parametrize("alpha", [0.0, -1.0])
+def test_a_non_positive_smoothing_alpha_is_refused(alpha: float) -> None:
+    """alpha=0 is no smoothing at all, and would divide by zero on a zero-history account."""
+    with pytest.raises(ValueError, match="alpha must be positive"):
+        Smoothing(alpha=alpha, placement=SmoothingPlacement.BOTH_TERMS, prior=1.0)
+
+
+@pytest.mark.req("FR-02-02")
+def test_a_registry_key_must_match_its_spec_name() -> None:
+    spec = _spec()
+    with pytest.raises(ValueError, match="does not match spec name"):
+        validate({"a_different_key": spec})
+
+
+@pytest.mark.req("FR-02-02", "ML-DATA-07")
+def test_every_registered_feature_answers_every_contract_field() -> None:
+    """E13: exercise the registry non-trivially — it must hold features, not be empty."""
+    assert REGISTRY, "precondition: the registry is not empty"
+    windowed = {n: s for n, s in REGISTRY.items() if s.window is not None}
+    assert windowed, "precondition: at least one registered feature is windowed"
+    for name, spec in windowed.items():
+        assert spec.contract is not None
+        for field in CONTRACT_FIELDS:
+            assert hasattr(spec.contract, field), f"{name} is missing {field}"
+
+
+@pytest.mark.req("FR-02-02")
+def test_the_velocity_ratio_returns_one_for_a_zero_history_account_by_construction() -> None:
+    """The settled convention, asserted as a registry fact before either path computes it.
+
+    Equal alpha on both terms with prior 1.0 is what makes 0-history return exactly 1.0 rather
+    than 0.0 (which reads as suspiciously quiet) or NaN (which discards the row).
+    """
+    contract = REGISTRY["velocity_ratio_1h_vs_30d"].contract
+    assert contract is not None
+    smoothing = contract.smoothing
+    assert smoothing is not None, "precondition: the feature declares smoothing"
+    assert smoothing.placement is SmoothingPlacement.BOTH_TERMS
+    assert smoothing.prior == 1.0
+    assert contract.nesting is Nesting.SHORT_EXCLUDED
+    assert contract.self_inclusion is SelfInclusion.EXCLUDED
+
+
+@pytest.mark.req("FR-02-02")
+def test_the_label_derived_feature_declares_its_lag_and_a_fitted_prior() -> None:
+    """A fraud rate shrunk toward 1.0 would make every unseen cell certain fraud."""
+    contract = REGISTRY["geo_cell_fraud_rate_30d"].contract
+    assert contract is not None
+    assert contract.label_basis is LabelBasis.AVAILABLE_AT_LAG
+    smoothing = contract.smoothing
+    assert smoothing is not None, "precondition: the feature declares smoothing"
+    assert smoothing.prior is PriorSource.GLOBAL_TRAIN_RATE, (
+        "a fitted prior must not be a literal: it is scale-dependent (E2) and computing it over "
+        "all rows would leak validation labels into every cell"
+    )
+
+
+@pytest.mark.req("FR-02-02")
+@pytest.mark.parametrize("observations", [0, -3])
+def test_a_minimum_history_below_one_observation_is_refused(observations: int) -> None:
+    """A threshold of zero is not a threshold; it declares a cliff that can never be reached."""
+    with pytest.raises(ValueError, match="at least 1"):
+        MinimumHistory(minimum_observations=observations, below_threshold_value=0.0)
+
+
+@pytest.mark.req("FR-02-02")
+def test_emitting_zero_below_the_threshold_is_representable_and_distinct_from_nan() -> None:
+    """The two options must be distinguishable in the contract, because they are not equivalent.
+
+    A z-score of 0.0 is the *most normal possible value*, so a thin-history account emitting 0.0 is
+    scored as perfectly typical; emitting NaN scores it as unknown and lets the models' native
+    missing handling decide. E.2's prose ("NaN->0 with < 5 history") admits both readings, which is
+    exactly why the registry has to pick one out loud.
+    """
+    emits_zero = MinimumHistory(minimum_observations=5, below_threshold_value=0.0)
+    emits_nan = MinimumHistory(minimum_observations=5, below_threshold_value=None)
+    assert emits_zero != emits_nan, "precondition: the two readings are distinct contract values"
+    assert emits_zero.below_threshold_value == 0.0
+    assert emits_nan.below_threshold_value is None
+
+
+@pytest.mark.req("FR-02-02")
+@pytest.mark.parametrize(
+    "key", [HistoryKey.COUNTERPARTY, HistoryKey.GEO_CELL, HistoryKey.DEVICE, HistoryKey.MERCHANT]
+)
+def test_a_non_account_history_key_without_a_stated_control_is_refused(key: HistoryKey) -> None:
+    """E1's account-grouped folds are blind to a leak that does not travel through the account.
+
+    A fraud ring moving money from ten victim accounts into one mule gives ten rows whose
+    counterparty-keyed aggregate is the same object. Split those accounts across folds and the
+    validation rows are inside the feature the training rows saw. The grouping rule cannot see it,
+    so the registry refuses the feature until something else is named that can.
+    """
+    assert key is not HistoryKey.ACCOUNT, "precondition: the key aggregates across accounts"
+    with pytest.raises(ValueError, match="cross_account_control must state"):
+        _contract(history_key=key)
+
+
+@pytest.mark.req("FR-02-02")
+def test_an_account_keyed_feature_may_not_claim_a_cross_account_control() -> None:
+    """A control on an already-isolated feature describes something that is not doing anything."""
+    with pytest.raises(ValueError, match="not doing anything"):
+        _contract(history_key=HistoryKey.ACCOUNT, cross_account_control="folds are grouped")
+
+
+@pytest.mark.req("FR-02-02")
+def test_the_non_account_rule_accepts_a_stated_control() -> None:
+    """The control case: a rule that refuses every non-account feature would be unusable."""
+    contract = _contract(
+        history_key=HistoryKey.COUNTERPARTY,
+        cross_account_control=(
+            "Aggregates computed from training-fold rows only, grouped by account. Detected by the "
+            "mutation that computes them over all rows and asserts the single-feature AUC rises."
+        ),
+    )
+    assert contract.history_key is HistoryKey.COUNTERPARTY
+
+
+@pytest.mark.req("FR-02-02", "ML-DATA-07")
+def test_every_non_account_keyed_registered_feature_names_its_control() -> None:
+    """E13: the assertion is worthless unless a non-account-keyed feature is actually registered."""
+    non_account = {
+        n: s
+        for n, s in REGISTRY.items()
+        if s.contract is not None and s.contract.history_key is not HistoryKey.ACCOUNT
+    }
+    assert non_account, (
+        "precondition: at least one registered feature aggregates across accounts; without one "
+        "this test passes vacuously (E12)"
+    )
+    for name, spec in non_account.items():
+        assert spec.contract is not None
+        control = (spec.contract.cross_account_control or "").strip()
+        assert control, f"{name} aggregates across accounts without a stated control"
+
+
+@pytest.mark.req("FR-02-02")
+def test_a_cross_account_control_that_only_asserts_safety_is_refused() -> None:
+    """The exact shape of the defect this field was created by, refused at construction.
+
+    geo_cell_fraud_rate_30d's first leakage note asserted that account-grouped folds kept
+    validation labels out of cell estimates. The claim was false and a reader auditing the note
+    would have been reassured by it — which is worse than an omission, because it consumes the
+    reviewer attention that would otherwise have found the gap. A control must therefore name the
+    mutation that would detect the leak if the control failed.
+    """
+    plausible_but_unfalsifiable = (
+        "Cell estimates are computed from training-fold rows only, with folds grouped by account, "
+        "so no validation label reaches any estimate."
+    )
+    assert "mutation" not in plausible_but_unfalsifiable.lower(), (
+        "precondition: the control reads as a safety claim and names no falsification test"
+    )
+    with pytest.raises(ValueError, match="must name the mutation"):
+        _contract(
+            history_key=HistoryKey.GEO_CELL,
+            cross_account_control=plausible_but_unfalsifiable,
+        )
+
+
+@pytest.mark.req("FR-02-02")
+def test_the_feature_reading_mutable_config_declares_as_of_event() -> None:
+    """ADR 0026: thresholds in force at the transaction, never today's."""
+    spec = REGISTRY["just_below_limit_flag"]
+    assert spec.window is None, (
+        "precondition: this feature declares no window, which is why reference_data_basis lives on "
+        "FeatureSpec and not on WindowContract"
+    )
+    assert spec.reference_data_basis is ReferenceDataBasis.AS_OF_EVENT
+
+
+@pytest.mark.req("FR-02-02")
+def test_the_thin_history_zscore_emits_nan_not_zero() -> None:
+    """Owner deviation from E.2, recorded in the nan_rule: 0.0 claims 'exactly average'."""
+    contract = REGISTRY["amount_zscore_90d"].contract
+    assert contract is not None
+    threshold = contract.minimum_history
+    assert threshold is not None, "precondition: the feature declares a minimum-history cliff"
+    assert threshold.minimum_observations == 5
+    assert threshold.below_threshold_value is None, (
+        "0.0 is the most normal possible z-score; emitting it scores a thin-history account as "
+        "perfectly typical, and new accounts are disproportionately fraud-relevant"
+    )
+
+
+EXPECTED_GROUP_COUNTS = {
+    Group.VELOCITY: 8,
+    Group.AMOUNT_BEHAVIOUR: 5,
+    Group.TEMPORAL: 6,
+    Group.GEOGRAPHIC: 5,
+    Group.COUNTERPARTY: 5,
+    Group.DEVICE_AND_CHANNEL: 5,
+    Group.ACCOUNT_PROFILE: 4,
+    Group.AGENT: 4,
+    Group.CORRIDOR: 1,
+    Group.SYNTHETIC_IDENTITY: 1,
+}
+
+
+@pytest.mark.req("FR-02-02", "ML-DATA-07")
+def test_the_catalogue_is_complete_and_its_groups_match_part_e2() -> None:
+    """44, and 44 in the right places.
+
+    D-03 records that FR-02-02's own register row lists group counts summing to 46 — temporal (7)
+    and account profile (5) where E.2's catalogue names 6 and 4. E.2 enumerates every feature by
+    name, so it is authoritative, and this test pins the registry to it. A bare `len == 44` would
+    pass with a temporal feature miscounted as account profile, which is exactly the confusion D-03
+    is about.
+    """
+    assert sum(EXPECTED_GROUP_COUNTS.values()) == 44, "precondition: the expectation sums to 44"
+    actual = Counter(spec.group for spec in REGISTRY.values())
+    assert dict(actual) == EXPECTED_GROUP_COUNTS
+    assert len(REGISTRY) == 44
+
+
+@pytest.mark.req("FR-02-02", "D-04")
+def test_exactly_four_device_features_and_four_agent_features_are_structurally_nan() -> None:
+    """D-04 fixes the counts at four and four; the parity suite asserts NaN positions match.
+
+    synthetic_identity_score deliberately does NOT propagate NaN from its device-sharing component:
+    if it did, a USSD transaction would lose five features and the D-04 contract would be wrong by
+    one wherever it is asserted.
+    """
+    device_nan = [n for n, s in REGISTRY.items() if "null device fingerprint" in s.nan_rule]
+    agent_nan = [n for n, s in REGISTRY.items() if "outside AGENT_BANKING" in s.nan_rule]
+    assert len(device_nan) == 4, f"expected 4 device NaN features, got {sorted(device_nan)}"
+    assert len(agent_nan) == 4, f"expected 4 agent NaN features, got {sorted(agent_nan)}"
+    assert "synthetic_identity_score" not in device_nan
+
+
+@pytest.mark.req("FR-02-02")
+def test_every_feature_reading_mutable_configuration_declares_its_as_of_rule() -> None:
+    """ADR 0026. E12: vacuous unless at least one feature actually reads mutable config."""
+    as_of = [
+        n for n, s in REGISTRY.items() if s.reference_data_basis is ReferenceDataBasis.AS_OF_EVENT
+    ]
+    assert as_of, "precondition: at least one registered feature reads mutable operational config"
+    assert "just_below_limit_flag" in as_of
+    assert "kyc_tier" in as_of, (
+        "kyc_tier is the feature proving reference_data_basis is not a one-feature field: tiers "
+        "are upgraded, and the upgrade often follows the very activity being scored"
+    )
+
+
+@pytest.mark.req("FR-02-02")
+def test_no_durable_feature_is_silently_served_by_a_rolling_window() -> None:
+    """Every DURABLE feature must say in its leakage note what a cache flush would do to it.
+
+    The cold-cache parity case is the only test that exercises DURABLE, so a DURABLE feature whose
+    flush behaviour was never reasoned about is one the suite will assert nothing useful about.
+    """
+    durable = {
+        n: s
+        for n, s in REGISTRY.items()
+        if s.contract is not None and s.contract.history_requirement is HistoryRequirement.DURABLE
+    }
+    assert durable, "precondition: at least one registered feature is DURABLE"
+    for name, spec in durable.items():
+        note = spec.leakage_note.lower()
+        assert "flush" in note or "durable" in note, (
+            f"{name} is DURABLE but its leakage note does not say what a cache flush would do"
+        )
