@@ -332,3 +332,18 @@ the decision engine M6, staff identity, admin and audit M7).
 - **Acceptance:** the report is regenerated and the test passes. Regeneration is a **1,006,249-row
   generation at seed 20260917** — a citable evidence run, so it owns the tree and the environment for
   its duration and its commit/tree hash is recorded beside it.
+
+### PB-40 · The generator never shares a device between accounts, so two features are dead
+- **Source:** E1's component-size measurement on the regenerated 1M dataset, 2026-09-19 ·
+  **Priority:** high · **Due:** M3, before the device features are implemented
+- **Observed:** 5,484 distinct device fingerprints across 5,920 accounts, and **zero** used by more
+  than one account (max accounts per device: 1). Measured at tree `d85385f`,
+  `docs/research/component_sizes.json`.
+- **Consequence:** `accounts_per_device_7d` is identically 1 — zero variance, no signal. The
+  "shared device and phone attributes across accounts" term of `synthetic_identity_score`, which
+  Part E.2 names explicitly, is dead with it. ML-DATA-07 requires all 44 features computable; two
+  are computable but meaningless, which the completeness check would not catch.
+- **Acceptance:** the generator shares devices between accounts at a rate carrying provenance, so
+  that `accounts_per_device_7d` has a distribution and the synthetic-identity ring scenario has the
+  mechanism Part E.2 describes. A test asserts the feature is non-constant on a generated dataset
+  (E13: a feature whose tests never see sharing proves nothing about the feature).

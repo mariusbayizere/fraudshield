@@ -880,3 +880,156 @@ guards. The credible version has to distinguish guards that failed by omission f
 failed by asserting a protection that never existed, and say that the second was caught by a
 mechanical check rather than by a careful reader — because the careful reader was the author, and
 the author had just finished writing about this exact failure mode.
+
+### 2026-09-19 · The prediction register: four recorded, one partially right
+
+Four falsifiable predictions have now been written down **before** the evidence that would settle
+them, each with its mechanism and its test. Consolidated here because the register is the
+methodological claim, not any individual entry.
+
+| # | Milestone | Prediction | Outcome |
+|---|---|---|---|
+| 1 | M2 | The shortcut detector's power against a 0.6-strength plant would not carry from seven-scenario to eight-scenario datasets, dipping around 200,000 rows | **Refuted.** Power rose monotonically; fired on every planted leak from 60,000 rows up, 100% throughout, no dip even directionally |
+| 2 | M2 | The detector's positive offset was a real effect, not noise | **Refuted.** The t-statistic used an analytic SE of 0.00346 where the empirical sd was 0.0079 — the wrong denominator produced a confident three-sigma reading of nothing |
+| 3 | M3 | `counterparty_unique_senders_24h` would force an eighth contract field, its window being keyed by the counterparty while every field assumed the account | **Confirmed on mechanism, refuted on sequence.** `minimum_history` arrived eighth from the amount group; `history_key` arrived ninth, from the named feature, for the stated reason |
+| 4 | M3 | `accounts_per_device_7d` would be the first feature whose fold-safety requirement and purpose genuinely conflict, needing an owner decision | **Refuted.** Component folding resolves it: grouping accounts that share a device into one fold makes the cross-account count both complete and leak-free. The conflict exists only for the training-fold restriction, which that feature does not need |
+
+**One partially right out of four.** That is the point worth making, and it is a stronger record than
+four hits would be.
+
+Four confirmed predictions would be consistent with two explanations that the data cannot separate:
+that the reasoning is good, or that the predictions were safe, vague, or written once the answer was
+already visible. A register with one partial hit and three refutations cannot be that. It is evidence
+that the predictions were **genuinely at risk** — and each refutation cost one paragraph rather than
+a wrong result shipped and defended.
+
+The refutations were also individually productive, which is the part that would be lost by recording
+only the score. Prediction 2's refutation found the central methodological error of M2, an analytic
+null used where the empirical spread applied, and that error is now a standing rule about
+standardising against theoretical nulls. Prediction 3's near-miss found the real content: the unit of
+history is an undeclared assumption. Prediction 4's refutation produced the distinction between
+component folding and the training-fold restriction, and therefore the density threshold in E1 —
+which would not exist if the prediction had simply been right.
+
+*Why it belongs in the paper:* a methods section claiming that predictions were recorded in advance
+is only credible with the misses in it. The register is reproduced whole, including the scoring, and
+the two M2 refutations are the ones that make the two M3 entries believable.
+
+**Standing rule.** A prediction is recorded before the evidence exists, with its mechanism and its
+test, and **its outcome is reported in the same place whether it is confirmed or refuted.** A
+refuted prediction is never edited away or quietly dropped; prediction 4 stays in this notebook with
+its refutation beside it.
+
+### 2026-09-19 · Measuring cell density on a lat/lon grid, and declining a dependency to do it
+
+E1's amendment turns on whether the account-to-entity graph is sparse enough for component folding.
+For `geo_cell_fraud_rate_30d` the entity is an H3 resolution-6 cell, and computing H3 indices means
+taking the `h3` dependency — which the ML package does not yet have, and which would be its first
+runtime dependency ever (ADR 0009).
+
+**Decision: measure on a lat/lon grid of comparable area, labelled as an approximation.**
+
+H3 resolution 6 averages about 36 km² per cell. A 0.05° grid gives roughly 5.5 km x 5.5 km at these
+latitudes, about 30 km² — the same order, and the same order is what the question needs. The question
+is **"how many accounts share a cell of roughly this size?"**, and the answer is a distribution over
+an equal-area-ish tiling. It does not depend on the tiling being hexagonal, on cells being H3's
+cells, or on any particular cell's identity.
+
+**Why the approximation is adequate here specifically:** the measurement exists to decide whether the
+largest connected component exceeds a **10% threshold that is itself a judgement**, not a derived
+constant. Spending a first-ever runtime dependency to make an input exact when the decision rule it
+feeds is a considered opinion gets the precision budget backwards. If the measured largest component
+lands near 10%, the right response is to argue about the threshold, not to re-measure the input more
+precisely.
+
+**What would require the exact computation.** Any claim about **specific cells** rather than about
+the distribution: that a named cell is high-risk, that a particular cluster spans a given number of
+cells, that the feature's value for a transaction is such-and-such. Those are claims about H3's
+actual tiling and a lat/lon grid cannot support them. The moment `geo_cell_fraud_rate_30d` is
+*implemented* rather than *characterised*, H3 is required and ADR 0009's inventory applies — and
+that is also the first time the licence check's runtime path will ever have run against real input.
+
+The grid's own distortion is recorded and bounded: cell area shrinks with cos(latitude), and across
+the simulated countries (roughly 4 deg S to 4 deg N) that is under 0.3%, far below the resolution
+this decision needs.
+
+### 2026-09-19 · Why three refutations are worth more than four confirmations (discussion section)
+
+Intended as a **discussion-section paragraph in the paper**, not a footnote, and written out here so
+the argument survives in the form it should be made.
+
+Four predictions were recorded in advance, each with its mechanism and its test, before the evidence
+that would settle it existed. One was partially right. Three were refuted.
+
+A register of four confirmations would be consistent with two explanations the reader cannot
+separate: that the reasoning was sound, or that the predictions were safe, vague, or written once the
+answer was already visible. Nothing in a list of hits distinguishes foresight from hindsight, and a
+reader is right to suspect the second — pre-registration is only as good as the reader's ability to
+tell that the registration was genuinely at risk. **Three refutations cannot be manufactured.** A
+record that is mostly wrong is evidence that the predictions were real, in a way that a record that
+is entirely right can never be.
+
+The refutations were also the productive part, which is lost if only the score is reported. One found
+the central methodological error of M2 — an analytic null used where the empirical spread applied —
+and produced a standing rule about standardising against theoretical nulls. One found that the unit
+of history is an undeclared assumption, which became the `history_key` field and then E1's amendment.
+One produced the distinction between component folding and the training-fold restriction, and hence
+E1's density threshold, which would not exist had the prediction simply been correct.
+
+So the claim the paper should make is not "we predicted well". It is: **we recorded falsifiable
+predictions before the evidence, we were mostly wrong, each refutation cost a paragraph rather than a
+shipped result, and three of the guards now in the system exist because of what the refutations
+found.** That is a claim about method, and it is checkable — the register is reproduced whole,
+including the scoring, and the predictions are in the commit history with timestamps preceding the
+runs that settled them.
+
+### 2026-09-19 · The density measurement refuted the fold plan I had just written, and found a dead feature
+
+E1's amendment assigned component folding to `counterparty`, `device` and `agent`, and the spatial
+block split to `geo_cell`. I wrote that table from reasoning about which graphs "should" be sparse.
+The measurement, on 1,012,522 rows at tree `d85385f` (`docs/research/component_sizes.json`):
+
+| Key | Components | Largest share of accounts | Component folding |
+|---|---:|---:|---|
+| `counterparty` | **1** | **100%** | **invalid** |
+| `agent` | 250 | **38.0%** | **invalid** |
+| `geo_cell` | **1** | **100%** | invalid (as predicted) |
+| `device` | 5,920 | 0.0169% | valid — see below |
+
+Verified independently of the script: 5,920 accounts, 8,621 counterparties of which 6,616 are shared
+by more than one account (max 162), 199 agents of which **all 199** are shared, and 5,484 devices of
+which **zero** are shared. Max accounts on one device: **1**.
+
+**Three of four keys are degenerate.** The one that is not is degenerate in the other direction.
+
+**`accounts_per_device_7d` is identically 1 in this dataset.** No device is ever used by two accounts,
+so a feature whose entire purpose is detecting device sharing has zero variance. That also kills the
+"shared device and phone attributes across accounts" term of `synthetic_identity_score`, which Part
+E.2 names explicitly. This is a **generator gap, not a feature defect**: the simulation has no
+device-sharing mechanism, and ML-DATA-07 requires all 44 features computable. The device graph's
+"sparsity" is therefore not evidence that component folding works there — it is evidence that there
+is nothing to fold.
+
+**What this says about the method, which is the part worth keeping.** The intuition was not sloppy:
+counterparty and agent graphs plausibly *look* sparse, and in a real institution with millions of
+accounts they might be. At 5,920 accounts sharing 199 agents, every account is a few hops from every
+other, and the counterparty graph is fully connected. **Density is a property of the dataset's scale
+and structure, not of the entity type**, which is exactly why the threshold had to be measured per
+dataset rather than decided once per key. Had the E1 table shipped as written, six features would
+have carried a control that does not work, each with a `cross_account_control` string asserting
+fold-safety — the `geo_cell` leakage-note failure reproduced six times, by the author who had just
+written the entry about it.
+
+The measurement cost one script and twenty minutes. It was demanded precisely because assertion had
+already failed once here.
+
+**Consequence for E1, not yet resolved:** with component folding unavailable for `counterparty`,
+`agent` and `geo_cell`, the remaining controls are the training-fold restriction (which trades
+leakage for training/serving skew) or **temporal separation**. The dataset already has a temporal
+split with an embargo, and for a strictly backward-looking aggregate a validation row reading earlier
+cross-account rows is not leakage at all — it is what serving does. The exposure is narrower than
+first thought and sits in **out-of-fold target encoding within the training period**, where folds are
+random and account-grouped rather than temporal. That is where M-8 lived, and it is where a
+counterparty-keyed or cell-keyed aggregate still crosses folds. Recorded as the open question; the
+plausible answer is that out-of-fold encodings must be computed over rows strictly earlier in time
+than the row being encoded, not over random folds.

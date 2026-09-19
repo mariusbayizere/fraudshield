@@ -8,7 +8,7 @@ definition of done: each is checkable, and the first two exist because M2 paid f
 Numbered E1, E2 and E12–E14. The identifiers are stable references, so they are not renumbered when
 a rule is added; E12–E14 arrived after the feature-pipeline criteria were written.
 
-### E1 — every fold, split, sample and target encoding is account-grouped and time-respecting
+### E1 — every fold, split, sample and target encoding groups by the feature's unit of history
 
 M2 found the same defect three times, each a correct fix that stopped one step short of the
 structural form of the problem (`docs/research/lab_notebook.md`, "The pattern"). The third instance
@@ -28,6 +28,126 @@ Required of every feature, metric and model in M3:
 
 A test that passes under both groupings tests nothing; M2's first attempt at this test did exactly
 that, because the constructed categories were purely fraud or purely legitimate.
+
+#### Amendment 2026-09-19 — "by account" was the right rule for the wrong reason
+
+The rule above says **account**, because the incident shares an account. Declaring `history_key` on
+all 44 features showed that is true of 37 of them and false of seven. **Account grouping does not
+isolate a feature whose aggregate is keyed by something other than the account**, because the leak
+does not travel through the account: a ring moving money from ten victims into one mule produces ten
+rows reading one counterparty-keyed object, and splitting those accounts across folds puts
+validation rows inside the feature the training rows saw.
+
+This is M2's M-8 defect one level up — M-8 folded per row when the unit was the incident; grouping by
+account folds per account when the unit is the counterparty, the device, the agent or the cell. The
+generalised rule is therefore stated **per `history_key`**, not globally:
+
+| `history_key` | Grouping required | Why |
+|---|---|---|
+| `ACCOUNT` (37 features) | account-grouped folds, as originally written | the incident shares an account and nothing wider |
+| `COUNTERPARTY`, `DEVICE`, `AGENT` (6) | ~~component folding~~ **see the correction below — measurement refuted this for two of the three** | the reasoning held; the measurement did not |
+| `GEO_CELL` (1) | **component folding is NOT valid.** Use a **spatial-block split**: cells are assigned to blocks, blocks to folds, and a cell's estimate is computed only from rows outside the validation block | the account-cell graph is dense — every account in one city shares cells — so components degenerate toward the whole dataset and no validation set survives |
+
+**Component folding and the training-fold restriction are not interchangeable, and the choice is not
+a matter of taste.** Component folding preserves the feature's value exactly and fails when the graph
+is dense. The training-fold restriction always works and changes the feature's value, because an
+aggregate computed over a fold's rows is not the aggregate computed over all history that serving
+will see — trading leakage for training/serving skew, which is the defect the parity suite exists to
+prevent. Pick by graph density, and measure the density rather than asserting it.
+
+#### CORRECTION 2026-09-19 — the measurement refuted the table above
+
+The table was written from reasoning about which entity graphs *should* be sparse. Measured on
+1,012,522 rows at tree `d85385f` (`docs/research/component_sizes.json`), against the 10% threshold:
+
+| Key | Largest component | Component folding |
+|---|---:|---|
+| `counterparty` | **100%** (one component) | **invalid** |
+| `agent` | **38.0%** | **invalid** |
+| `geo_cell` | **100%** | invalid, as predicted |
+| `device` | 0.0169% | valid — but **no device in this dataset is used by more than one account**, so there is nothing to fold |
+
+**Component folding is available for at most one of four relational keys, and that one has no
+sharing to protect.** Density turns out to be a property of the dataset's scale and structure rather
+than of the entity type: at 5,920 accounts sharing 199 agents, every account is a few hops from
+every other, and the counterparty graph is fully connected. This is exactly why the rule is that the
+decision is made against a measured distribution — the reasoning above was not careless, and it was
+still wrong.
+
+**Open, and not to be resolved by assertion a second time.** With component folding unavailable, the
+candidates are the training-fold restriction (leakage traded for training/serving skew) or
+**temporal separation**. The dataset already has a temporal split with an embargo, and for a strictly
+backward-looking aggregate a validation row reading earlier cross-account rows is **not leakage** —
+it is what serving does. The real exposure is narrower: **out-of-fold target encoding within the
+training period**, where folds are random and account-grouped rather than temporal, which is where
+M-8 lived. The likely rule is that out-of-fold encodings are computed over rows strictly earlier in
+time than the row being encoded. Not adopted here pending an owner decision, because it changes M4's
+evaluation design.
+
+**Separately: `accounts_per_device_7d` has zero variance in this dataset** and the device-sharing
+term of `synthetic_identity_score` is dead with it. That is a generator gap against ML-DATA-07, not
+a feature defect, and is recorded as PB-40.
+
+#### The density threshold is measured, not judged
+
+**Required before any fold decision ships:** compute the **component-size distribution** for each
+relational key (`counterparty`, `device`, `agent`, `geo_cell`) on the 1,006,249-row dataset, and
+record it in `docs/research/lab_notebook.md` with the tree hash of the run, per E2's scale rule.
+Report at minimum the largest component as a fraction of accounts, the median and the 99th
+percentile.
+
+**The threshold: component folding is invalid once the largest component exceeds 10% of accounts.**
+
+The argument, stated here rather than only in the notebook, because this is where a future reader
+will hit it. Component folding requires every account in a component to sit in the same fold. Once
+one component holds more than a tenth of accounts, holding out a fold leaves exactly two options:
+**split the component**, which is precisely the leak the grouping existed to prevent, or **place the
+whole component on one side**, which surrenders at least a tenth of the data from training or
+produces a validation set dominated by a single component. Neither is a fold. Below that share both
+problems stay small enough to absorb.
+
+**The 10% is a judgement, not a derived constant.** Nothing measures it; it is a considered opinion
+about where the two failure modes above become intolerable, and a later reader is entitled to argue
+with it — with an argument, and preferably with the component-size distribution in hand. What is
+*not* negotiable is that the decision is made against **a measured distribution** rather than against
+an author's sense of whether a graph "feels" sparse. That intuition is what produced the
+`geo_cell_fraud_rate_30d` leakage note asserting a protection that did not exist.
+
+#### The spatial-block split must be spatially contiguous
+
+A "block" that is an arbitrary partition of cells is not a spatial block, it is a random cell
+partition wearing the name — and it leaks, because **adjacent cells are highly correlated**. A fraud
+cluster straddling two neighbouring cells lands partly in training and partly in validation, and the
+validation estimate is optimistic by exactly the amount the split was meant to remove.
+
+Required:
+
+- **Blocks are contiguous by construction**, formed by coarse spatial tiling: cells are assigned to
+  blocks by a grid an order of magnitude coarser than the cells themselves, so every cell in a block
+  is spatially adjacent to others in it. Contiguity is then a property of the construction rather
+  than something to verify afterwards.
+- **A one-cell buffer is excluded at block boundaries.** Cells immediately across a held-out block's
+  edge are dropped from training for that fold. Without it the split is contiguous but still leaks
+  across the seam, which is the one place a contiguous split does not help.
+- **Mutation (E14): assign cells to blocks at random rather than by tile, and assert the geographic
+  feature's apparent AUC rises.** A rise is the correlation between adjacent cells being converted
+  into validation optimism, and it is the only observable signature of losing contiguity. If the AUC
+  does *not* rise, either the buffer is doing the work or the spatial correlation is weaker than
+  assumed — both worth knowing, and both reportable rather than quietly passing.
+
+#### Every non-`ACCOUNT` feature names its control and a mutation
+
+A feature whose `history_key` is not `ACCOUNT` must declare `cross_account_control` in the registry,
+naming **both** what makes it fold-safe **and the mutation that would detect the leak if that control
+failed**. `WindowContract.__post_init__` refuses the contract otherwise, and refuses a control that
+only asserts safety.
+
+That enforcement exists because of a specific failure: `geo_cell_fraud_rate_30d`'s first leakage note
+claimed account-grouped folds kept validation labels out of cell estimates. The claim was false, it
+cited the right requirement while drawing a conclusion the requirement does not support, and **a
+reviewer auditing it would have been reassured**. An omission invites scrutiny; a confident wrong
+answer consumes it. The check is deliberately crude — it requires the word "mutation" — because a
+check that could be satisfied by writing a more convincing sentence is how the original note passed.
 
 ### E2 — every reported metric states the scale it was measured at
 

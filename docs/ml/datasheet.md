@@ -113,11 +113,11 @@ from the calibrated volume and reported with measured counts:
 
 | Split | Rows | True fraud rate | Span (days) |
 |---|---:|---:|---:|
-| train | 792,162 | 0.862% | 602.34 |
-| validation | 101,332 | 0.883% | 57.69 |
-| calibration (last part of validation) | 40,701 | 0.909% | 25.36 |
-| embargo (excluded) | 10,914 | 1.008% | 6.99 |
-| test | 101,841 | 0.905% | 63.97 |
+| train | 797,013 | 0.861% | 602.34 |
+| validation | 101,986 | 0.881% | 57.69 |
+| calibration (last part of validation) | 40,877 | 0.881% | 25.37 |
+| embargo (excluded) | 10,981 | 0.883% | 7.0 |
+| test | 102,542 | 0.927% | 63.98 |
 
 The seven-day embargo between validation and test exists so that a model cannot see the days
 immediately before the test period. One fraud sub-variant occurs only in the test period, so that
