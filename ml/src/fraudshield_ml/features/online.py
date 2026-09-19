@@ -15,12 +15,13 @@ means operationally. Calling `observe` first would fold the scored transaction i
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from fraudshield_ml.features.primitives import h3_cell
-from fraudshield_ml.features.registry import smoothing_for
-from fraudshield_ml.features.types import Outcome, Transaction
+from fraudshield_ml.features.registry import categories_for, smoothing_for
+from fraudshield_ml.features.types import CountryFacts, Outcome, Transaction
 
 _SHORT = timedelta(hours=1)
 _LONG = timedelta(days=30)
@@ -64,6 +65,13 @@ class OnlineFeatures:
         self._accounts: dict[str, AccountState] = {}
         self._cells: dict[str, CellState] = {}
         self._outcomes: dict[str, Outcome] = {}
+        #: A memo of corridor classifications, keyed by the ordered country pair. Serving resolves
+        #: this on every request and the answer depends on nothing but two packs, so it is the one
+        #: thing in this class that is genuinely cacheable. It is also the one new way this feature
+        #: can be wrong online and not in batch, which is why it is here rather than in a comment:
+        #: a memo keyed on one country instead of the pair returns the previous corridor's class,
+        #: and every hand-computed test would still pass because each computes a pair once.
+        self._corridors: dict[tuple[str, str], str] = {}
 
     # ---- state ------------------------------------------------------------------------------
 
@@ -113,6 +121,10 @@ class OnlineFeatures:
         """
         self._accounts.clear()
         self._cells.clear()
+        # Cleared too, though it is a memo of version-controlled pack data rather than history:
+        # a cache that survives a flush because someone judged it safe is a claim, and the cheaper
+        # thing is to drop it and assert the value does not move.
+        self._corridors.clear()
 
     # ---- features ---------------------------------------------------------------------------
 
@@ -177,3 +189,56 @@ class OnlineFeatures:
             fraud += int(outcome.is_fraud)
 
         return (fraud + alpha * prior) / (total + alpha)
+
+    def corridor_class(self, scored: Transaction, countries: Mapping[str, CountryFacts]) -> str:
+        """See `registry`'s contract and ADR 0023. Classified per request, memoised by pair.
+
+        **Stated plainly: parity is close to tautological for this feature.** It reads the scored
+        transaction and two static pack records, with no history and no state, so the two paths
+        cannot disagree about a window, a bound or an arrival order — the disagreements the parity
+        design exists to surface. The evidence that this feature is *right* is the hand-computed
+        table in `test_corridor.py`, not the parity replay; saying so here is cheaper than letting
+        a reader infer more assurance from a green parity run than it contains.
+
+        What parity does still cover is the memo below, which batch has no equivalent of.
+        """
+        domestic, intra_bloc, cross_bloc, intercontinental = categories_for("corridor_class")
+
+        sender_code = _required(scored.account_country, "account_country", scored)
+        recipient_code = _required(scored.counterparty_country, "counterparty_country", scored)
+
+        cached = self._corridors.get((sender_code, recipient_code))
+        if cached is not None:
+            return cached
+
+        sender = _pack(countries, sender_code, scored)
+        recipient = _pack(countries, recipient_code, scored)
+
+        if sender_code == recipient_code:
+            corridor = domestic
+        elif sender.blocs.isdisjoint(recipient.blocs):
+            corridor = cross_bloc if sender.continent == recipient.continent else intercontinental
+        else:
+            corridor = intra_bloc
+
+        self._corridors[(sender_code, recipient_code)] = corridor
+        return corridor
+
+
+def _required(code: str | None, field_name: str, scored: Transaction) -> str:
+    """The country code, or a refusal. Serving must not invent one."""
+    if code is None:
+        raise ValueError(
+            f"{scored.transaction_id}: corridor_class needs {field_name}; the scoring request did "
+            "not carry it and there is no value that could stand in for it"
+        )
+    return code
+
+
+def _pack(countries: Mapping[str, CountryFacts], code: str, scored: Transaction) -> CountryFacts:
+    if code not in countries:
+        raise KeyError(
+            f"{scored.transaction_id}: {code!r} has no country pack. Under ADR 0023 a country is "
+            "a pack file, so a missing one is a deployment carrying packs it does not serve"
+        )
+    return countries[code]

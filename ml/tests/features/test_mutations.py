@@ -11,6 +11,11 @@ in as each is implemented rather than assembled at the end.
 Rows 9 (bucket-aligned fallback), 1, 5 and 8 are **not runnable yet** — they need the DB fallback
 path, an amount-sum feature and a structural-NaN feature, none of which exists. They stay `pending`
 rather than being marked passed by omission.
+
+Categorical rows are asserted differently and deliberately so: ADR 0025 allows a categorical **no
+tolerance at all**, so the detection criterion is inequality rather than a gap exceeding a bound.
+Reusing `assert_detected` for them would silently reintroduce a tolerance where the ADR removed
+one.
 """
 
 from __future__ import annotations
@@ -20,8 +25,9 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from fraudshield_ml.features import batch
-from fraudshield_ml.features.registry import smoothing_for
-from fraudshield_ml.features.types import Outcome, Transaction
+from fraudshield_ml.features.online import OnlineFeatures
+from fraudshield_ml.features.registry import categories_for, smoothing_for
+from fraudshield_ml.features.types import CountryFacts, Outcome, Transaction
 
 T = datetime(2025, 6, 1, 12, 0, tzinfo=UTC)
 KIGALI = (-1.9441, 30.0619)
@@ -39,6 +45,16 @@ def _tx(offset: timedelta, *, tid: str, account: str = "A") -> Transaction:
 
 
 SCORED = _tx(timedelta(0), tid="scored")
+
+
+def assert_detected_exactly(correct: str, mutated: str, mutation: str) -> None:
+    """For a categorical, where ADR 0025 permits no tolerance: any difference at all is detected,
+    and the thing worth asserting is that the mutation actually produced one."""
+    assert correct != mutated, (
+        f"mutation {mutation!r} left the category unchanged at {correct!r}. Exact equality cannot "
+        "catch a divergence that does not occur, so this is the specification for a fixture that "
+        "would make it occur, not evidence that the check works."
+    )
 
 
 def assert_detected(correct: float, mutated: float, mutation: str) -> None:
@@ -221,3 +237,83 @@ def test_mutation_12_cell_rate_over_all_rows_rather_than_training_folds_is_detec
         "the held-out fold's fraud must raise the rate, or the fixture is flat"
     )
     assert_detected(correct, mutated, "cell rate computed over all rows, not training folds")
+
+
+# --- categorical rows: corridor_class ------------------------------------------------------------
+
+#: Two packs sharing a bloc, and the same pair after one of them leaves it. Bloc membership is a
+#: SOURCED pack fact with an accessed date, and memberships do change — Somalia joined the EAC in
+#: 2024, Tanzania left COMESA — so "the packs the other path read" is not a hypothetical.
+_PACKS_TODAY = {
+    "RW": CountryFacts("RW", "AF", frozenset({"EAC", "COMESA"})),
+    "TZ": CountryFacts("TZ", "AF", frozenset({"EAC", "SADC"})),
+}
+_PACKS_STALE = {
+    "RW": CountryFacts("RW", "AF", frozenset({"COMESA"})),
+    "TZ": CountryFacts("TZ", "AF", frozenset({"SADC"})),
+}
+
+
+def _corridor_tx(sender: str, recipient: str) -> Transaction:
+    return Transaction(
+        transaction_id="scored",
+        account_id="A",
+        timestamp=T,
+        amount_rwf=1000.0,
+        latitude=KIGALI[0],
+        longitude=KIGALI[1],
+        account_country=sender,
+        counterparty_country=recipient,
+    )
+
+
+@pytest.mark.req("FR-02-02", "D-03")
+def test_mutation_6_a_category_computed_from_a_different_population_is_detected() -> None:
+    """Row 6, in the form the suite can actually run today.
+
+    The row's stated cause — "a category encoded from a different fold" — needs M4's target
+    encoder, which does not exist; what it names structurally is a category whose value depends on
+    **which reference population the path consulted**, and that is reachable now. One path reads
+    the current packs and the other a revision in which the pair's shared bloc is absent, which is
+    a real event rather than an invented one: memberships carry an accessed date precisely because
+    they change.
+
+    Detected by exact categorical equality, with no tolerance to absorb it.
+    """
+    scored = _corridor_tx("RW", "TZ")
+    correct = batch.corridor_class(scored, _PACKS_TODAY)
+    mutated = OnlineFeatures().corridor_class(scored, _PACKS_STALE)
+
+    domestic, intra_bloc, cross_bloc, _ = categories_for("corridor_class")
+    assert correct == intra_bloc, "precondition: the pair shares a bloc under the current packs"
+    assert mutated == cross_bloc, "precondition: and shares none under the stale ones"
+    assert correct != domestic
+    assert_detected_exactly(correct, mutated, "category computed from a different pack revision")
+
+
+@pytest.mark.req("FR-02-02", "D-03")
+def test_mutation_13_testing_the_shared_bloc_before_the_same_country_is_detected() -> None:
+    """Row 13, added when `corridor_class` was implemented (E14: recorded as it was tried).
+
+    A country shares every one of its blocs with itself, so asking "do they share a bloc?" before
+    "is it the same country?" reclassifies **every domestic transaction** as INTRA_BLOC. It is
+    worth its own row because of where it lands: domestic rows are the overwhelming majority, so
+    the mutation makes the feature nearly constant — and a nearly constant feature reads as a
+    feature with no signal, which is a conclusion someone might accept rather than investigate.
+
+    Detected by exact categorical equality on a domestic pair.
+    """
+    scored = _corridor_tx("RW", "RW")
+    domestic, intra_bloc, _, _ = categories_for("corridor_class")
+
+    sender = _PACKS_TODAY["RW"]
+    assert sender.blocs, "precondition: the sender belongs to a bloc, or the mutation is inert"
+
+    correct = batch.corridor_class(scored, _PACKS_TODAY)
+    # The two tests swapped: the bloc intersection is non-empty for a country and itself.
+    mutated = intra_bloc if sender.blocs & sender.blocs else domestic
+
+    assert correct == domestic
+    assert_detected_exactly(
+        correct, mutated, "shared-bloc test placed before the same-country test"
+    )

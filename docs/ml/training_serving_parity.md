@@ -154,13 +154,14 @@ specification for a case the test is missing.
 | 3 | a 24 h window computed over 25 h | silent window drift | count equality | **DETECTED** 2026-09-19 (run as 30 d over 31 d) |
 | 4 | local time applied in one path only | D-43 timezone handling diverging | `local_hour_sin/cos`, `is_local_night` | pending |
 | 5 | a structural missing emitted as `0.0` rather than NaN | the D-04 contract collapsing to a number | NaN-position equality | pending |
-| 6 | a category encoded from a different fold | the M2 encoding defect, reproduced in serving | exact categorical equality | pending |
+| 6 | a category encoded from a different fold | the M2 encoding defect, reproduced in serving | exact categorical equality | **DETECTED** 2026-09-19, in the runnable form — see note |
 | 7 | a label used whose `label_available_at` is after the transaction | future leakage in the batch path | prefix replay | **DETECTED** 2026-09-19: 1.5/59 → 2.5/60 |
 | 8 | a sum accumulated in float32 | precision loss masquerading as reassociation | the relative tolerance | pending |
 | 9 | the fallback path serves a bucket-aligned 1 h count as if it were trailing | the degraded path diverging where no warm-path test looks | cold-cache case, `fallback_behaviour` | pending |
 | 10 | `account_first_seen_at` lost on flush, so `OBSERVED_CAPPED` divides by a shorter history | a `DURABLE` field that is not durable | cold-cache case | **DETECTED** 2026-09-19 — see note |
 | 11 | the batch path joins current thresholds instead of as-of ones | ADR 0026's configuration drift | the required configuration-change fixture | pending |
 | 12 | a non-account-keyed aggregate computed over all rows rather than training folds | cross-account leakage E1's grouping cannot see | single-feature AUC rises above its clean value | **DETECTED** 2026-09-19, one step earlier: the value changes at all |
+| 13 | the shared-bloc test placed before the same-country test | a corridor rule whose branch order silently reclassifies every domestic row | exact categorical equality | **DETECTED** 2026-09-19 |
 
 **Mutation 1 is the control, and it is the one that must pass.** Without it the suite cannot
 distinguish "the tolerance catches bugs" from "the tolerance catches everything, including honest
@@ -168,14 +169,31 @@ reassociation" — in which case it would be loosened under pressure and stop ca
 the same role the 0.5-strength plant played in M2's power curve: without a case that *should not*
 fire, a detector that fires at everything looks identical to one that works.
 
-**Five rows executed 2026-09-19** in `ml/tests/features/test_mutations.py`, against the two
+**Seven rows executed 2026-09-19** in `ml/tests/features/test_mutations.py`, against the three
 implemented features. Each applies the divergence and asserts the values disagree by more than ADR
 0025's tolerance — a mutation that slips inside the tolerance is the specification for a missing
 case, not a curiosity.
 
-**Seven rows stay `pending` and are not marked passed by omission.** Rows 1, 5 and 8 need an
-amount-sum or structural-NaN feature; row 4 a temporal feature; row 6 a categorical; row 9 the DB
-fallback path; row 11 `just_below_limit_flag`. None exists yet.
+**The categorical rows are asserted differently, and must be.** ADR 0025 allows a categorical no
+tolerance at all, so their detection criterion is inequality, and what the assertion has to prove
+is that the mutation produced a difference in the first place. `assert_detected` would have
+reintroduced a tolerance where the ADR removed one, so the categorical rows use their own helper.
+
+**Row 6 is recorded as detected in the form the suite can run, which is narrower than the row's
+stated cause.** "Encoded from a different fold" needs M4's target encoder. What the row names
+structurally is a category whose value depends on *which reference population the path consulted*,
+and that is reachable now: one path classifies against the current country packs, the other
+against a revision in which the pair's shared bloc is absent. That is not a contrived population —
+bloc memberships are SOURCED with an accessed date because they change, Somalia having joined the
+EAC in 2024 and Tanzania having left COMESA. **The fold half of the row remains untested** and is
+carried into M4 with the encoder rather than closed here.
+
+**Row 13 was added when `corridor_class` was implemented**, per E14's requirement that mutations
+are recorded as they are tried rather than assembled at the end.
+
+**Five rows stay `pending` and are not marked passed by omission.** Rows 1, 5 and 8 need an
+amount-sum or structural-NaN feature; row 4 a temporal feature; row 9 the DB fallback path; row 11
+`just_below_limit_flag`. None exists yet.
 
 **Note on row 10, because the obvious version of it is the wrong one.** Two flush scenarios behave
 oppositely. *Everything lost* — arrivals and first-seen re-derived together — shrinks numerator and

@@ -397,6 +397,13 @@ class FeatureSpec:
     window: str | None = None
     contract: WindowContract | None = None
     tolerance_note: str | None = None
+    #: The permitted values of a categorical feature, in a fixed order. Declared rather than left
+    #: to the two paths because ADR 0025 requires EXACT equality for a categorical: there is no
+    #: tolerance to absorb a disagreement, so the two paths must not be free to spell a class
+    #: differently, and a class one path can emit and the other cannot is a contract violation
+    #: rather than a numerical difference. The order is fixed so a later encoder's codes are
+    #: reproducible; the registry still computes nothing, and assigns no codes.
+    categories: tuple[str, ...] | None = None
     #: Set when the feature is *computable but carries no signal on the current dataset*, naming
     #: the backlog item and what would clear it. Unlike the ten contract fields this has a default,
     #: and deliberately: it records an observed property of the data, not a fork two independent
@@ -424,6 +431,27 @@ class FeatureSpec:
                 "fields have no meaning without one"
             )
 
+        # A categorical with undeclared values is the same class of silence the ten contract
+        # fields exist to close, in the one place where no tolerance can cover the disagreement.
+        if self.dtype is Dtype.CATEGORICAL and not self.categories:
+            raise ValueError(
+                f"{self.name}: dtype is categorical, so its permitted values must be declared. "
+                "ADR 0025 requires exact equality for a categorical, so the two paths cannot be "
+                "left free to name the classes for themselves"
+            )
+        if self.dtype is not Dtype.CATEGORICAL and self.categories is not None:
+            raise ValueError(
+                f"{self.name}: declares categories but its dtype is {self.dtype.value}; the "
+                "field would describe permitted values nothing reads"
+            )
+        if self.categories is not None:
+            duplicates = [c for c in self.categories if self.categories.count(c) > 1]
+            if duplicates:
+                raise ValueError(f"{self.name}: duplicate category {duplicates[0]!r}")
+            blank = [c for c in self.categories if not c.strip()]
+            if blank:
+                raise ValueError(f"{self.name}: a category is blank")
+
 
 def contract_for(name: str) -> WindowContract:
     """The declared window contract, or a refusal naming the feature.
@@ -436,6 +464,20 @@ def contract_for(name: str) -> WindowContract:
     if spec.contract is None:
         raise ValueError(f"{name} declares no window contract, so it has no window semantics")
     return spec.contract
+
+
+def categories_for(name: str) -> tuple[str, ...]:
+    """The declared permitted values of a categorical feature, or a refusal. A lookup.
+
+    Both paths read this, for the same reason both read ``smoothing_for``: it is a declared
+    answer, not a computation, so reading it cannot make the two paths share a bug. What each path
+    must decide for itself is **which** of these values a transaction belongs to, and that is the
+    surface the parity test covers.
+    """
+    spec = REGISTRY[name]
+    if spec.categories is None:
+        raise ValueError(f"{name} is not categorical, so it has no permitted values")
+    return spec.categories
 
 
 def smoothing_for(name: str) -> Smoothing:
@@ -1320,6 +1362,14 @@ for _spec_ in (
         ),
         template_id="device.channel",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        categories=(
+            "MOBILE_MONEY",
+            "CARD",
+            "AGENT_BANKING",
+            "USSD",
+            "ONLINE",
+            "BANK_TRANSFER",
+        ),
     ),
     FeatureSpec(
         name="device_is_new_for_account",
@@ -1700,6 +1750,20 @@ for _spec_ in (
         ),
         template_id="corridor.corridor_class",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        categories=("DOMESTIC", "INTRA_BLOC", "CROSS_BLOC_AFRICA", "INTERCONTINENTAL"),
+        degeneracy=(
+            "TWO OF FOUR CLASSES ARE UNREACHABLE ON THE CURRENT DATASET (PB-43). Every simulated "
+            "country is in the EAC and on the same continent, and behaviour.remittance_corridors "
+            "sends every cross-border transfer to another simulated country, so a generated row "
+            "is DOMESTIC or INTRA_BLOC and never CROSS_BLOC_AFRICA or INTERCONTINENTAL. The "
+            "feature is correct and its four-way rule is tested; what the dataset cannot do is "
+            "exercise half of it, so a model fitted on this benchmark learns nothing about the "
+            "two absent classes and an encoder fitted on it has no cell for them. Unlike PB-40 "
+            "this is not a generator defect: ADR 0023's owner direction is explicitly that the "
+            "simulated country set is NOT to be broadened. Cleared only by a deliberate decision "
+            "to simulate a corridor leaving the validated core, which is a dataset-draw change "
+            "and an owner's call."
+        ),
     ),
     FeatureSpec(
         name="synthetic_identity_score",

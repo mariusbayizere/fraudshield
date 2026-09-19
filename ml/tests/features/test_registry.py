@@ -6,6 +6,7 @@ is refused is worthless if the fixture's field was never blank.
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 
 import pytest
@@ -29,6 +30,7 @@ from fraudshield_ml.features.registry import (
     SmoothingPlacement,
     Source,
     WindowContract,
+    categories_for,
     validate,
 )
 
@@ -396,19 +398,32 @@ def test_no_durable_feature_is_silently_served_by_a_rolling_window() -> None:
 def test_a_feature_with_no_signal_on_this_dataset_declares_it() -> None:
     """PB-40. ML-DATA-07's completeness check cannot catch this class, so the registry must.
 
-    A degenerate feature is *computable* — `accounts_per_device_7d` returns 1 for every row, and
-    `synthetic_identity_score` returns a number in [0, 1] with one of its four terms constant.
-    "All 44 computable for >= 98% of records" is satisfied by both. Nothing downstream emits a NaN
-    or raises, so the loss is silent until someone asks why a feature has zero importance.
+    A degenerate feature is *computable* — `accounts_per_device_7d` returns 1 for every row,
+    `synthetic_identity_score` returns a number in [0, 1] with one of its four terms constant, and
+    `corridor_class` returns a valid class that is only ever one of two of its four.
+    "All 44 computable for >= 98% of records" is satisfied by all three. Nothing downstream emits
+    a NaN or raises, so the loss is silent until someone asks why a feature has zero importance.
+
+    The three are not degenerate for the same *kind* of reason, which is why the backlog item is
+    read out of the declaration rather than fixed at PB-40: the first two are a generator gap that
+    will be closed before M4 training, while `corridor_class` is degenerate because the owner has
+    ruled that the simulated country set is not to be broadened (ADR 0023). A gap someone has
+    decided to keep still has to be declared; what it must not do is look like the other kind.
     """
     degenerate = {n: s.degeneracy for n, s in REGISTRY.items() if s.degeneracy}
     assert degenerate, (
         "precondition: at least one feature is declared degenerate; without one this test passes "
         "vacuously (E12)"
     )
-    assert set(degenerate) == {"accounts_per_device_7d", "synthetic_identity_score"}
+    assert set(degenerate) == {
+        "accounts_per_device_7d",
+        "synthetic_identity_score",
+        "corridor_class",
+    }
     for name, note in degenerate.items():
-        assert "PB-40" in note, f"{name} must name the backlog item tracking its degeneracy"
+        assert re.search(r"PB-\d+", note), (
+            f"{name} must name the backlog item tracking its degeneracy"
+        )
         assert "Cleared" in note, (
             f"{name} must say what would clear the degeneracy, so it is a scheduled gap rather "
             "than a permanent property"
@@ -420,7 +435,63 @@ def test_no_other_feature_silently_claims_to_be_fine() -> None:
     """The control: `degeneracy` defaults to None, so the test above proves nothing on its own.
 
     If every feature were accidentally marked degenerate the test above would still pass its
-    membership check only by luck. This asserts the default actually applies to the other 42.
+    membership check only by luck. This asserts the default actually applies to the other 41.
     """
     healthy = [n for n, s in REGISTRY.items() if s.degeneracy is None]
-    assert len(healthy) == 42, f"expected 42 non-degenerate features, got {len(healthy)}"
+    assert len(healthy) == 41, f"expected 41 non-degenerate features, got {len(healthy)}"
+
+
+@pytest.mark.req("FR-02-02")
+def test_a_categorical_without_declared_values_is_refused() -> None:
+    """ADR 0025 admits no tolerance for a categorical, so an open value set is unfalsifiable.
+
+    Per E12 the precondition is asserted first: the accepted spec really does declare categories,
+    so the refusal below is about the blank and not about some other difference.
+    """
+    accepted = _spec(dtype=Dtype.CATEGORICAL, window=None, contract=None, categories=("A", "B"))
+    assert accepted.categories == ("A", "B"), "precondition: the accepted spec declares values"
+
+    with pytest.raises(ValueError, match="permitted values must be declared"):
+        _spec(dtype=Dtype.CATEGORICAL, window=None, contract=None)
+    with pytest.raises(ValueError, match="permitted values must be declared"):
+        _spec(dtype=Dtype.CATEGORICAL, window=None, contract=None, categories=())
+
+
+@pytest.mark.req("FR-02-02")
+def test_categories_on_a_non_categorical_feature_are_refused() -> None:
+    """The control for the test above. Without it the field could be accepted anywhere and mean
+    nothing, which is how a declared field becomes decoration."""
+    with pytest.raises(ValueError, match="dtype is int64"):
+        _spec(dtype=Dtype.INT64, categories=("A", "B"))
+
+
+@pytest.mark.req("FR-02-02")
+def test_a_duplicated_or_blank_category_is_refused() -> None:
+    """A duplicate makes the declared order ambiguous, which is the thing both paths index by."""
+    with pytest.raises(ValueError, match="duplicate category"):
+        _spec(dtype=Dtype.CATEGORICAL, window=None, contract=None, categories=("A", "B", "A"))
+    with pytest.raises(ValueError, match="a category is blank"):
+        _spec(dtype=Dtype.CATEGORICAL, window=None, contract=None, categories=("A", " "))
+
+
+@pytest.mark.req("FR-02-02")
+def test_every_categorical_feature_declares_its_values_and_no_other_does() -> None:
+    """The registry-wide form, so a categorical added later cannot skip the declaration."""
+    categorical = {n for n, s in REGISTRY.items() if s.dtype is Dtype.CATEGORICAL}
+    assert categorical == {"channel", "corridor_class"}, (
+        "Part E.2 has exactly two categorical features; a change here is a contract change"
+    )
+    for name in categorical:
+        values = categories_for(name)
+        assert len(values) >= 2, f"{name}: a categorical with one value is a constant"
+    for name, spec in REGISTRY.items():
+        if name not in categorical:
+            assert spec.categories is None, f"{name} declares categories but is not categorical"
+
+
+@pytest.mark.req("FR-02-02")
+def test_categories_for_refuses_a_feature_that_is_not_categorical() -> None:
+    """A lookup that returned an empty tuple would let a caller iterate over nothing and conclude
+    the feature has no permitted values, rather than that the question does not apply."""
+    with pytest.raises(ValueError, match="not categorical"):
+        categories_for("tx_count_24h")

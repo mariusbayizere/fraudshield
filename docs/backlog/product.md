@@ -247,6 +247,15 @@ the decision engine M6, staff identity, admin and audit M7).
   INTERCONTINENTAL` with bloc membership (EAC, ECOWAS, SADC, COMESA, CEMAC, AMU) read from the packs,
   a country may hold several memberships, the feature count stays 44, and no EAC special case remains
   in code.
+- **CLOSED 2026-09-19 (M3).** The packs carried `blocs` and `continent` from PB-29; this implemented
+  the feature on both paths. The four classes are declared in the registry as `categories` — a new
+  declarative field, because ADR 0025 allows a categorical no tolerance and so the two paths must
+  not be free to name the classes for themselves — and both paths read them from there while each
+  decides for itself which class a pair falls into. No country, currency, bloc or continent is named
+  in either path, asserted by a source scan and, behaviourally, by an invented country in an invented
+  bloc classifying correctly with no code change. Two findings came out of it: PB-42 (the class name
+  says AFRICA while the rule tests continent equality) and PB-43 (two of the four classes are
+  unreachable on the generated dataset, now declared as a `degeneracy`).
 
 ### PB-31 · Three assumed generalisation packs, kept out of every validated claim
 - **Source:** owner direction 2026-09-18, ADR 0023 · **Priority:** medium · **Due:** with PB-29
@@ -404,3 +413,42 @@ the decision engine M6, staff identity, admin and audit M7).
 - **Note:** the parameter digest is kept alongside it. The two answer different questions and one
   does not replace the other: the digest localises *why* a report went stale, the fingerprint
   detects *that* it did.
+
+### PB-42 · `CROSS_BLOC_AFRICA` names a continent the rule does not test
+- **Source:** implementing `corridor_class` (PB-30), 2026-09-19 · **Priority:** low · **Due:** with
+  the first non-African country pack, if there ever is one
+- **Problem:** the class is implemented as "same continent, no shared bloc", comparing the two
+  packs' `continent` codes for equality and never against a literal — which is what keeps ADR
+  0023's "no country, currency or bloc named in code" true and is what the pack field's own
+  rationale describes. For every pack that exists the two readings coincide, since all are African.
+  For a hypothetical pair of *non-African* countries sharing no bloc, the rule is still right and
+  the class **name** is a misnomer.
+- **Why it is not fixed now:** the alternative is testing the continent code against `AF` in feature
+  code, which reintroduces exactly the hard-coding ADR 0023 removed, in order to improve a label
+  that no row in any dataset can currently carry. The fix, when it is worth making, is to rename the
+  class — which is a contract change to a declared categorical and moves an encoder's cell.
+- **Acceptance:** either the class is renamed (registry `categories`, ADR 0023, Part E.2 deviation
+  note, and any fitted encoder) or this entry records the decision to keep the name with the
+  mismatch stated.
+
+### PB-43 · Two of `corridor_class`'s four classes are unreachable on the dataset
+- **Source:** implementing `corridor_class` (PB-30), 2026-09-19 · **Priority:** medium · **Due:**
+  **owner decision, before any claim rests on the feature's four-way structure**
+- **Observed:** every simulated country is in the EAC and on the same continent, and
+  `behaviour.remittance_corridors` sends every cross-border transfer to another simulated country
+  (`{RW: [UG, KE, CD], KE: [UG, TZ], TZ: [KE, UG], UG: [KE, RW], CD: [RW, UG]}`). So a generated row
+  is `DOMESTIC` or `INTRA_BLOC`, never `CROSS_BLOC_AFRICA` or `INTERCONTINENTAL`.
+- **Consequence:** a model fitted on this benchmark learns nothing about the two absent classes, and
+  an encoder fitted on it has no cell for them — so the first real cross-bloc transaction in serving
+  meets an unseen category. The feature is correct and its four-way rule is tested against invented
+  packs; what the *dataset* cannot do is exercise half of it. ML-DATA-07's completeness check cannot
+  catch this: the feature is computable for 100% of rows.
+- **Unlike PB-40, this is not a generator defect.** ADR 0023's owner direction is explicit that the
+  simulated country set is not to be broadened, and the three assumed portability packs (PB-31)
+  exist to prove the machinery generalises, not to be simulated. Producing the two absent classes
+  means simulating a corridor that leaves the validated core, which is a change to the dataset draw.
+- **Acceptance:** an owner decision, recorded either way. Either a cross-bloc corridor is simulated
+  (a draw change, with its own provenance and a regenerated benchmark), or the paper and the claims
+  register state that `corridor_class` is evaluated over two of its four classes and that the other
+  two are untested in evaluation. Declared meanwhile in the registry's `degeneracy` field, with
+  `test_a_feature_with_no_signal_on_this_dataset_declares_it` asserting the declaration.
