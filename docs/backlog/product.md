@@ -277,3 +277,58 @@ the decision engine M6, staff identity, admin and audit M7).
   over the assumed non-EAC packs, reported as a portability probe on assumed data; (c) a fine-tuning
   variant that adapts on a small labelled sample from the held-out country and reports how much target
   data recovers performance.
+
+### PB-35 · CLOSED — duplicate of D-03
+- **Closed:** 2026-09-19, bookkeeping. FR-02-02's register row lists group counts summing to 46
+  (temporal 7, account profile 5) where Part E.2 enumerates 6 and 4. This is **D-03**, already in the
+  defect register and already carried on FR-02-02's own row, and the build prompt resolves it: E.2's
+  catalogue names every feature and sums to 44, so E.2 is authoritative. The arithmetic was never in
+  question and this entry should not have been opened as though it were. No work item remains; the
+  wording fix belongs to D-03.
+
+### PB-36 · The DB fallback is a third feature path, and it is untested
+- **Source:** found writing the parity design's coverage cases, 2026-09-19 · **Priority:** high ·
+  **Due:** M3, with the parity suite
+- **Acceptance:** the parity suite exercises the `account_activity_hourly` fallback path alongside
+  batch and online, under prefix replay and ADR 0025's tolerance; every windowed feature declares
+  `fallback_behaviour`; the cold-cache case asserts `EXACT` features unchanged and
+  `NAN_UNDER_FALLBACK` features NaN across a flush. M1's milestone review already recorded the
+  continuous aggregates as implemented-but-untested (MAJOR-2); this is that defect reaching the
+  feature layer, where it becomes a training/serving skew that appears only during an incident.
+  Bucket-aligned substitution for a trailing window is not an acceptable resolution.
+
+### PB-37 · `account_first_seen_at` has no table, and `OBSERVED_CAPPED` needs one
+- **Source:** checking M1's schema for a durable first-seen, 2026-09-19 · **Priority:** high ·
+  **Due:** M6 migration, declared in M3
+- **Acceptance:** a migration adds durable per-account first-seen state. M1 has **no per-account
+  table at all** — accounts appear only as `account_token` columns on `transactions` and its
+  aggregates — so there is nowhere for a `DURABLE` field to live. `velocity_ratio_1h_vs_30d` is
+  registered `history_basis=OBSERVED_CAPPED`, which divides by observed history and therefore needs
+  a first-seen timestamp that survives a cache flush; the registry refuses the combination without
+  `history_requirement=DURABLE`. Related: `transactions` has a compression policy (30 days) but **no
+  retention policy**, so first-seen is currently recoverable by scan — which is not a contract.
+
+### PB-38 · `account_activity_hourly` refreshes 8 days, but a 30-day feature reads it
+- **Source:** reading V10's refresh policy against the registry, 2026-09-19 · **Priority:** medium ·
+  **Due:** M6
+- **Acceptance:** either the refresh window covers the longest window any feature reads from the
+  aggregate, or the ingest path's out-of-order tolerance is documented as shorter than 8 days and a
+  test asserts it. `add_continuous_aggregate_policy(start_offset => interval '8 days')` means buckets
+  older than 8 days are materialised once and never refreshed, so a transaction arriving more than 8
+  days late is never reflected in a 30-day basis.
+
+### PB-39 · The committed realism report describes a superseded parameter set
+- **Source:** full dataset suite over `5855386`, 2026-09-19 · **Priority:** high · **Due:** M3, before
+  any M3 result is cited
+- **Observed:** `test_the_committed_report_describes_the_current_parameters` fails. The committed
+  `dataset/realism_report.md` carries parameter digest `aa0ec909…`; the current parameters digest to
+  `58f314e4…`.
+- **Cause:** PB-29 (`dce89fe`) moved every country fact into packs, changing the parameter set. The
+  report was last regenerated at `984351d`, before that refactor. The report's own footer still says
+  "of 81" parameters, a count that predates the packs.
+- **This is the guard working, not failing.** It is the guard M2 built for MAJOR 4.1, whose defect
+  was a shipped report describing a superseded parameter set. It caught the recurrence on the first
+  full run after the refactor, which is exactly what it was built to do.
+- **Acceptance:** the report is regenerated and the test passes. Regeneration is a **1,006,249-row
+  generation at seed 20260917** — a citable evidence run, so it owns the tree and the environment for
+  its duration and its commit/tree hash is recorded beside it.

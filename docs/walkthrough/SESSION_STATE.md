@@ -1,151 +1,210 @@
-# Session state — M2 closed, M3 not started
+# Session state — M3 in progress, feature contract settled
 
-Written 2026-09-19 so the session can be cleared without losing the thread. Facts only; where
-something is unverified or unexplained it says so.
+Rewritten 2026-09-19. The previous version of this file described M2's close and said "M3 not
+started"; by then five M3 commits existed and none of their decisions were written down anywhere.
+That gap is the reason this file is rewritten whenever a decision is settled, not at session end.
+
+Facts only; where something is unverified, assumed or awaiting your answer it says so.
 
 ## Where the work is
 
-- **Branch:** `m2/generator`
-- **Tag:** **`m2-complete`** is at `ed7a8d9`, the governance commit that closed the milestone.
-  This handover note is the commit immediately after it, so the branch head is one ahead of the
-  tag — deliberately: the tag marks M2's state, not the note describing it. It is annotated with the four MAJORs found after
-  the dataset review closed, how each was found, the four measurements the no-leakage claim rests
-  on, and a statement that the list is not assumed complete. Read it with `git show m2-complete`.
+- **Branch:** `m3/features`, ahead of `m2-complete` (at `ed7a8d9` on `m2/generator`).
 - **Milestone register:** `current: M3`, `completed: [M0, M1, M2]`.
-- **Governance gate:** passes on its own — 258 rows, 281 tagged tests, **0 errors, 0 warnings**.
-  The hook was not bypassed.
-- **Dataset suite at close:** **106 passed, 94.51% coverage.**
+- **Commits so far, oldest first:**
 
-## Open owner actions
-
-- **Default branch is still `m0/bootstrap`** (verify with `git ls-remote --symref origin HEAD`).
-  Until it is `main`, no `workflow_dispatch` workflow registers, so PB-25 stays blocked.
-- **`gh` has no credentials in this session.** CI is read through the unauthenticated REST API;
-  workflows cannot be dispatched; the `protect-main` ruleset cannot be verified (GOV-9).
-- **ML-DATA-08 needs your accounts** on HuggingFace Datasets Hub and Zenodo. It is recorded as
-  `REQUIRES_EXTERNAL_PARTY`, deliberately not moved to a later milestone: publication is an access
-  problem, not a scheduling one (ADR 0024).
-
-## M2 final state
-
-The generator, its realism and anti-leakage gates, provenance for all 81 parameters and the release
-export. Verified at 1,006,249 rows, seed 20260917: **all gate checks pass**; fraud rate 0.870%
-overall and 0.905% in the test period; 24 of 24 monthly intervals covering target; channel mix
-within 0.16 pp; country mix within 0.01 pp; zero duplicate identifiers.
-
-**The milestone review found six defects after the dataset review had already closed, four of them
-MAJOR. None was found by the guard it concerned.**
-
-| # | Defect | Found by | State |
-|---|---|---|---|
-| M-1 | The datasheet's figures matched no run the repository could produce | a delta re-check looking elsewhere | FIXED, with a guard |
-| M-4 | Below ~170,000 rows a dataset silently lacked a fraud scenario | auditing what a refusal message meant | FIXED, refuses and names the size |
-| M-7 | The null band reverted to a fixed 0.03 floor above ~100,000 rows — 2.8x too permissive at release scale | verifying an assumption in an unrelated derivation | FIXED, floor removed |
-| M-8 | The categorical encoding folded per row, not per incident, inflating every single-feature AUC | asking what explained a residual M-7's fix exposed | FIXED, folds by account |
-| M-2/3/5/6 | MINORs: `SOURCED` conflates stated with derived; determinism tested only at 6,000 rows; a size limit reported as a parameter error; a docstring claiming to be scale-free | — | Logged |
-
-Also corrected: `CV_TREE_NULL_INFLATION` 1.3 → **1.62**, derived from 45 clean datasets; and the
-claim that out-of-fold encoding removed the size dependence, which measurement **refutes**.
-
-**Numbers to quote:**
-
-| Figure | Value |
+| Commit | What |
 |---|---|
-| Strongest single transaction feature | **0.706** (`merchant_category_code`) |
-| Strongest channel overall | **0.758** (event-to-transaction delay, via the `account_events` join) |
-| Shortcut detector at 1M | 0.510 against a null-sized band of **0.011** — 91% of it |
-| False alarms on clean data | **1 of 45** (2.2%), nominal 5% |
-| Power against a 0.6-strength planted leak | fires **15/15 from 60,000 rows** |
-| Minimum for all eight fraud scenarios | **~170,000 rows** |
+| `be6fce4` | the parity test design, written before any feature exists |
+| `67b5beb` | ADR 0025 — the `1e-9` tolerance replaced by a scale-aware rule |
+| `71a1cf5` | PB-26 — the `month=` partition key pinned and documented |
+| `683b7b6` | E12–E14 — tests must assert the precondition they depend on |
+| `dce89fe` | PB-29 — every country fact moved into packs (ADR 0023) |
+| `5855386` | E15 — tests may not mutate shared state; bloc sources recorded |
+| `5f0a8a1` | **all 44 features declared against a ten-field contract; E15's guard implemented and mutation-proved** |
 
-## Three limitations carried out of M2
+SESSION_STATE's old "exact first three steps of M3" — parity design, PB-26, country packs — are
+**all done**. Do not redo them.
 
-1. **Single-feature AUC depends on dataset size by more than seed noise, and the cause is unknown.**
-   Ten seeds at 300,000 rows give a seed-to-seed sd of 0.0055; the range across scales is 0.065,
-   twelve times that. **This is the open scientific question** — see below.
-2. **`CV_TREE_NULL_INFLATION = 1.62` is grounded at ≤ 60,000 rows and extrapolated above.** Four to
-   ten seeds above that give estimates from 0.84 to 2.32. Settling the form needs ~50 seeds per
-   scale, about eight hours at 1M.
-3. **ML-DATA-01 is `VERIFIED_AT_REDUCED_SCALE`.** The 5,000,000-row run has never happened (PB-25),
-   blocked on the default branch; the run must not happen on the build laptop.
+## The feature contract (the core of this session)
 
-## The open scientific question
+`ml/src/fraudshield_ml/features/registry.py`. Declarative only, computes nothing, and is the single
+module both feature paths import (parity Decision 4).
 
-Single-feature AUC is higher and far more variable at smaller scales: ten seeds at 300,000 rows span
-0.7107–0.7298 while five at 1,000,000 cluster 0.7091–0.7139.
+Part E.2 gives nine descriptive fields. **Seven more describe how a window is read**, and exist
+because each is a fork where two independent implementations can disagree while both look correct
+in review. Validation **refuses to leave any of them blank** on a feature that declares a window,
+and refuses a contract on a feature that declares none.
 
-**It is not the fold-grouping defect.** Account-grouped folds remove the same amount at both scales
-(0.0043 at 300,000, 0.0046 at 1,000,000) and for the one seed measured at both there is no gap at
-all. Sibling leakage does not account for it.
+| Field | Values | Settled convention |
+|---|---|---|
+| `self_inclusion` | `EXCLUDED` / `INCLUDED` | **`EXCLUDED`** — the scored transaction is not in its own window |
+| `nesting` | `SHORT_EXCLUDED` / `SHORT_INCLUDED` / `NOT_NESTED` | **`SHORT_EXCLUDED`** — the 1 h numerator is removed from the 30 d denominator, so the baseline does not move with the burst it measures |
+| `smoothing` | `alpha`, `placement`, `prior` | **equal alpha on both terms**; the prior is what zero evidence returns |
+| `history_basis` | `OBSERVED_CAPPED` / `ASSUMED_FULL` / `NOT_TIME_NORMALISED` | **`OBSERVED_CAPPED`** — divide by history actually observed, capped at the window |
+| `history_requirement` | `DURABLE` / `CACHE_SUFFICIENT` | `OBSERVED_CAPPED` **forces `DURABLE`**, enforced in `__post_init__` |
+| `fallback_behaviour` | `EXACT` / `NAN_UNDER_FALLBACK` | see the third path, below |
+| `label_basis` | `NOT_LABEL_DERIVED` / `AVAILABLE_AT_LAG` | label-derived features filter on `label_available_at`, never `confirmed_at` |
+| `minimum_history` | observations + below-threshold value | a hard cliff, distinct from smoothing: a MAD over four points is meaningless, not imprecise |
+| `history_key` | `ACCOUNT` / `COUNTERPARTY` / `DEVICE` / `GEO_CELL` / `AGENT` / `MERCHANT` | **the one with teeth** — see below |
+| `reference_data_basis` | `AS_OF_EVENT` / `CURRENT` / `NOT_REFERENCE_DATA` | on `FeatureSpec`, not the contract, because `just_below_limit_flag` has no window (ADR 0026) |
 
-Three candidate causes, each separable by experiment and none needing new generator code, are
-written out in `docs/research/lab_notebook.md`: per-category sample size, incident concentration, and
-fold count interacting with n. **Do not investigate in M3.** It is contained by M3 exit criterion E2
-and belongs to M4 evaluation as a control.
+**Why `OBSERVED_CAPPED` matters:** `ASSUMED_FULL` scores a three-day-old account as though it had
+been quiet for 27 days — indistinguishable from dormancy, and wrong in the direction that makes new
+accounts look safe.
 
-## M3 exit criteria
+**Why equal alpha on both terms:** a zero-history account returns exactly `1.0` — "this account
+looks like its own baseline" — rather than `0.0` (reads as suspiciously quiet) or NaN (discards the
+row).
 
-Full list in `docs/traceability/m3_exit_criteria.md`. Two exist because M2 paid for them:
+**`prior`, `NOT_TIME_NORMALISED` and `label_basis` were added by the second feature**, which broke a
+schema fitted to the first in three places. Written up in the lab notebook; it is the strongest
+methodological result of this session.
 
-- **E1** — every fold, split, sample and target encoding groups by **account** and respects time,
-  each with a test that **fails if the grouping is removed**. A test that passes under both
-  groupings tests nothing; M2's first attempt at exactly this test did that.
-- **E2** — every reported metric states the scale it was measured at, and comparisons between
-  feature sets, models or ablations use the same dataset size. A metric quoted without its scale is
-  not admissible as evidence.
+## E1 IS INSUFFICIENT FOR 7 OF THE 44 — the open item needing your decision
 
-M3 also inherits `ML-DATA-07` and RES-01's 44-feature clause, reassigned from M2 by ADR 0024.
+E1 requires account-grouped folds because fraud arrives as incidents sharing an account. **That
+assumes the thing a feature aggregates over is the account.** For seven features it is not, and for
+those, account grouping isolates nothing.
 
-## Exact first three steps of M3
+| Key | Features | Control that works |
+|---|---|---|
+| `counterparty` | `counterparty_unique_senders_24h`, `counterparty_confirmed_fraud_90d` | component folding |
+| `device` | `accounts_per_device_7d`, `device_age_days` | component folding |
+| `agent` | `agent_cashout_count_1h`, `agent_unique_customers_1h` | component folding |
+| `geo_cell` | `geo_cell_fraud_rate_30d` | training-fold restriction |
 
-1. **Design the batch/online parity test, before any of the 44 features is written.** A divergence
-   found later invalidates every model metric measured in between — the same retroactive damage
-   M-8's fold defect did to every AUC this project had reported. Two decisions to settle first:
-   *what counts as identical* (bit-identical by default; a derived tolerance only where an
-   order-dependent aggregation makes that impossible; never "same decision" alone, which is the
-   floor-shaped weaker check that passes where the stronger one would catch something); and *what
-   the paths are fed* — replay an account's events in order, snapshot the online features after
-   each, and compare each snapshot against the batch path computed **on that prefix only**. Handing
-   both a completed history proves they agree on a situation the online path never meets, and hides
-   future-leakage in a batch window.
-2. **Fix PB-26 before any feature reads the partitions.** The `month=` partition key is the local
-   month while timestamps are UTC, so 11 rows in 40,213 land one UTC month early. M3's time-window
-   features read those partitions; a wrong key distorts them silently.
-3. **Land ADR 0023's country packs and `corridor_class` in this same branch.** They are a
-   prerequisite for M3 features rather than a separate milestone, and splitting them would cost a
-   full review cycle. No country, currency or bloc hard-coded in feature code (E8).
+**The two controls are not interchangeable.** Component folding — grouping folds by connected
+component of the account-device (or -counterparty, -agent) graph — gives complete aggregates inside
+a fold with no leak and no skew, but only while the graph is sparse. The account-geo-cell graph is
+**dense**: every account in one city shares cells, so components degenerate toward the whole dataset
+and validation becomes impossible. Geo-cell must therefore use the training-fold restriction and
+accept that a cell rate estimated on training rows differs from the serving-time value.
+
+Each feature is registered with the control that works for it, and a non-`ACCOUNT` key is refused at
+construction unless it names **both** its control and the mutation that would detect the leak if the
+control failed. **E1's text still says "group by account" and needs amending to say what the unit of
+history actually is.**
+
+## The two features registered, and why these two
+
+Chosen as the hardest available, so the contract is attacked rather than confirmed:
+
+- **`velocity_ratio_1h_vs_30d`** — nested windows, a ratio, Laplace smoothing, a zero-history case,
+  and the only feature so far needing durable state. Registered `NAN_UNDER_FALLBACK`.
+- **`geo_cell_fraud_rate_30d`** — label-derived, so it is the feature most able to leak: subject to
+  the D-08 AUC ceiling of 0.80, to E1's account-grouped folds for its fitted prior, and to E.2's
+  `label_available_at` rule. Registered `EXACT`. Its prior is `PriorSource.GLOBAL_TRAIN_RATE`, never
+  a literal — a literal would be scale-dependent (E2) and computing it over all rows would leak
+  validation labels into every cell.
+
+Tests: `ml/tests/features/test_registry.py`, 14 tests, **100% branch coverage** on the registry,
+each asserting its precondition per E12.
+
+## There are three feature paths, not two
+
+**This corrects the parity design's original premise.** M1 already built the third:
+`account_activity_hourly`, a continuous aggregate whose own comment names it the "database fallback
+for velocity features when Redis is down (C.4)". FR-02-09 requires it, and M1's milestone review
+already recorded the continuous aggregates as **implemented, untested (MAJOR-2)**.
+
+It buckets to the hour, so `tx_count_60s` is not computable from it at all, and a trailing 1 h count
+is not the same number as a bucket-aligned one. **The divergence appears only during an incident** —
+Redis down, fallback serving, features computed a different way, in a regime no warm-path test
+visits. Hence `fallback_behaviour`, and hence the rule that a bucket-aligned substitute for a
+trailing window is forbidden: it passes every warm-path test and diverges only where nothing is
+looking.
+
+Recorded as Decision 6 in `docs/ml/training_serving_parity.md`, with mutations 9 and 10 and a
+cold-cache coverage case — the only case that exercises `history_requirement=DURABLE`.
+
+## Recorded prediction — REPORTED, and a new one open
+
+**Before writing any further feature:** `counterparty_unique_senders_24h` will force an **eighth**
+contract field, because its window is keyed by the *counterparty* while every field currently in the
+contract silently assumes the account is the unit of history.
+
+**Outcome: confirmed on mechanism, refuted on sequence.** Field 8 (`minimum_history`) arrived first,
+from the amount group, not the counterparty group. Field 9 (`history_key`) then arrived from
+`counterparty_unique_senders_24h` exactly as predicted and for the stated reason — and immediately
+exposed a false claim in `geo_cell_fraud_rate_30d`'s leakage note, which asserted that
+account-grouped folds kept validation labels out of cell estimates. They do not. Full account in the
+lab notebook.
+
+**New prediction, open:** `accounts_per_device_7d` will be the first feature whose fold-safety
+requirement and whose purpose are in genuine conflict — cross-account aggregation *is* the signal —
+and will need an owner decision rather than an implementation.
+
+## Open, and needing your answer
+
+- **`fallback_behaviour` for `velocity_ratio_1h_vs_30d` is my choice, not yours.** I registered it
+  `NAN_UNDER_FALLBACK` (feature absent under fallback, D-04 missing handling covers it) rather than
+  `EXACT` (fallback reads raw `transactions`, heavier query on the degraded path). Changing the enum
+  value later is cheap; adding the field later would have meant revisiting all 44, which is why I
+  did not block on it.
+
+## The pack-refactor suite: 107 passed, 1 FAILED — and exit code 0 was a lie
+
+The full dataset suite over `5855386` ran 53 minutes and reported **1 failed, 107 passed**. The
+background command piped through `tail -12`, so the *pipeline* exited 0 — `tail`'s status, not
+pytest's. A red suite looked green. **Never read an exit code from a piped pytest**; use
+`${PIPESTATUS[0]}` or drop the pipe.
+
+The failure is **PB-39**, and it is the guard working, not failing:
+`test_the_committed_report_describes_the_current_parameters` — the guard M2 built for MAJOR 4.1,
+whose defect was a shipped report describing a superseded parameter set. PB-29's pack refactor
+changed the parameters, so `dataset/realism_report.md` (last regenerated at `984351d`) is stale:
+committed digest `aa0ec909…`, current `58f314e4…`, and its footer still says "of 81" parameters.
+
+**Fixing it is a 1,006,249-row generation at seed 20260917** — a citable evidence run that owns the
+tree and the environment for its duration. Not started; it is an owner call.
+
+## Defects found this session, all logged not chased
+
+- **PB-35** — FR-02-02's register row lists group counts summing to **46**, not 44. E.2 enumerates
+  every feature and sums to 44, so the row is wrong. It matters because FR-02-02's acceptance
+  criterion is itself a count.
+- **PB-36** — the DB fallback path is untested (high; due with the parity suite).
+- **PB-37** — **M1 has no per-account table at all**, so `account_first_seen_at` has nowhere to live;
+  `OBSERVED_CAPPED` needs it. M6 migration, declared now so it is not a surprise then. Related:
+  `transactions` has a compression policy but **no retention policy**, so first-seen is currently
+  recoverable by scan — which is not a contract.
+- **PB-38** — `account_activity_hourly` refreshes only 8 days while a 30-day feature reads it.
+
+## Exact next steps
+
+1. **Amend E1** to say the unit of history, not "the account" — see the seven features above. This
+   blocks nothing yet, but every fold decision after this point depends on it.
+2. **PB-39 — regenerate the realism report.** A 1M-row evidence run; decide when.
+3. **Write the two chosen features end-to-end** — `batch` and `online` modules, independent, with
+   the import-graph test asserting neither imports the other, and hand-computed unit tests per E.2.
+   The registry's contracts are now the specification for both.
+4. **Then the parity suite**: prefix replay, the fallback path, the cold-cache case and the
+   required configuration-change fixture, working the 12-row mutation table from `pending`.
+5. **PB-30 — `corridor_class`** is declared in the registry but not implemented.
+6. Only then the other 42 implementations.
+
+**Done this session and not needing repeating:** E15's fixture is implemented, tested and
+mutation-proved; all 44 features are declared; ADRs 0025 and 0026 are accepted.
 
 ## Things that will bite whoever picks this up
 
-- **An evidence run owns the tree *and* the environment.** Editing source mid-run voids it; so does
-  `uv sync --reinstall`, which removes the workspace packages out from under a running pytest. Use
-  `uv sync --all-packages` to repair. Size timeouts for a loaded machine: a 13-minute suite took over
-  33 under load average 7, and `timeout` kills with SIGTERM, which reads like an ordinary failure.
-- **A single three-sigma reading is not evidence; repeated seeds are.** An analytic null was used
-  where the empirical spread applied, and it produced a confident, wrong hypothesis. Any figure
-  standardised against a theoretical null must say so.
-- **A run conclusion is not evidence** (GOV-10). `stack` and `devcontainer` are path-filtered and
-  conclude "success" with their real job skipped. Quote jobs. The `ci` and `stack` citations in
-  `gate-evidence.md` are pinned to *different* commits on purpose.
-- **The traceability register is generated.** Milestone assignments live in
-  `ROW_MILESTONE_OVERRIDES` in `traceability_seed.py`, not in `requirements.yaml`. Run
-  `fs-traceability-seed` then `fs-traceability render`; `pre-commit` stashes unstaged changes, so
-  the rendered matrix must be staged with any test whose tags changed.
-- **`git add -A` sweeps the agent worktrees into the commit** as gitlinks. It happened twice this
-  session. `.claude/` is now gitignored.
-- **The commit-message hook wraps at 72 characters** and rejects a longer line; use `git commit -F`.
-- **Scratch directories do not survive a session.** 163 sweep records and a harness were lost that
-  way. Anything that will be cited belongs in the repository, committed.
-- **This laptop is shared.** Check `uptime` and `ps --sort=-rss` before assuming it is free.
+- **An evidence run owns the tree *and* the environment**, and that includes **commits**:
+  `pre-commit` stashes unstaged changes, which moves files under a running suite. Hold commits, not
+  just edits, while a citable run is in flight.
+- **`uv run --project <member>` can sync the workspace venv.** Use `.venv/bin/python` directly while
+  a suite runs; it cannot sync.
+- **`ml` has `--cov-fail-under=90` with branch coverage.** A new module ships with tests or the ml
+  suite fails.
+- Everything else from M2 still applies: `git add -A` sweeps agent worktrees; the commit-message
+  hook wraps at 72 characters, so use `git commit -F`; the traceability matrix is generated and must
+  be staged; scratch directories do not survive a session, so anything citable belongs in the repo;
+  this laptop is shared, so check `uptime` first.
 
 ## Where the evidence lives
 
-- `docs/reviews/M2/milestone-review.md` — the review, all four areas.
-- `docs/reviews/M2/delta-recheck.md` — the re-check of the dataset review's fixes.
-- `docs/reviews/M2/shortcut_diagnosis.jsonl` — 273 sweep records, every one labelled
-  `categorical_encoding: per_row_folds`: they predate M-8's fix, so their `single_feature_max` sits
-  about 0.005 high. Re-run with `uv run python -m fraudshield_dataset.shortcut_diagnosis`.
-- `docs/research/figures/power_curve.svg` — from a committed script and that data.
-- `docs/research/lab_notebook.md` — decisions, rejected approaches, two refuted predictions, and the
-  mistakes, including the t-denominator error.
-- `docs/adr/0024-feature-requirements-belong-to-m3.md` — why M2 could close.
+- `docs/ml/training_serving_parity.md` — six decisions, ten mutations, the three paths.
+- `docs/adr/0025-parity-tolerance-replaces-the-specified-1e-9.md` — the ulp arithmetic.
+- `docs/traceability/m3_exit_criteria.md` — E1–E15.
+- `docs/research/lab_notebook.md` — including this session's contract-fitted-to-one-example result
+  and its recorded prediction about `counterparty_unique_senders_24h`.
+- `docs/reviews/M2/` — the M2 record, unchanged.

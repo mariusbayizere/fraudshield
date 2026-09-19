@@ -709,3 +709,174 @@ fires at anything".
 *Why it belongs in the paper:* the generalisability of a synthetic benchmark is usually argued from
 its design. This is the stronger form — a case the design says must work, run in CI, failing loudly
 when it does not. It cost one test and found an incomplete specification immediately.
+
+### 2026-09-19 · A contract fitted to one example is not a contract: the second feature found three gaps
+
+The feature registry exists because writing the first windowed feature exposed questions Part E.2
+does not answer — whether the scored transaction counts toward its own window, whether a 1 h
+numerator is also inside its own 30 d denominator, what a zero-history account returns, whether the
+denominator divides by elapsed time or observed history, whether that state must survive a cache
+flush, and what the feature emits when the online store is down. Each is a fork where two
+independent implementations can disagree while both look correct in review. Making them **declared
+fields that validation refuses to leave blank** closes the fork once, before either path is written.
+
+Six fields, derived from `velocity_ratio_1h_vs_30d`. The schema looked complete. Registering the
+**second** feature, `geo_cell_fraud_rate_30d`, broke it in three places within minutes:
+
+1. **`Smoothing` had `alpha` and `placement` but no `prior`.** A ratio smooths toward 1.0; a rate
+   smooths toward the base rate. With no prior field the "shrink toward 1.0" was not a declared
+   value but an assumption baked into the arithmetic — and applied to a fraud rate it would make
+   every unseen H3 cell read as certain fraud.
+2. **`history_basis` had no value for a proportion.** Its two values, `OBSERVED_CAPPED` and
+   `ASSUMED_FULL`, both answer "what does the denominator divide by *in time*". A cell's fraud
+   proportion divides by a count of transactions seen, so the question does not apply. It needed
+   `NOT_TIME_NORMALISED` — the same escape hatch `Nesting` already had as `NOT_NESTED`, which I had
+   written for the first feature and failed to generalise from.
+3. **Nothing declared label availability.** E.2's rule is unambiguous — only labels whose
+   `label_available_at` precedes the transaction — and the fork is still real, because the two paths
+   are asymmetric by construction: the online path *cannot* see an unarrived label, the batch path
+   *can* and will unless stopped. A batch implementation filtering on `confirmed_at` instead looks
+   correct and leaks the investigation delay straight into the feature. That became `label_basis`.
+
+**The lesson is not "seven fields rather than six".** It is that a schema extracted from a single
+example encodes that example's assumptions as structure, invisibly, and no amount of reading detects
+it — the gaps were obvious the instant a second, differently-shaped feature had to fill the fields
+in, and not before.
+
+This is the same result as Country Z, in a different medium. ADR 0023 enumerated what a country pack
+carries and omitted the exchange rate; the omission was invisible in the ADR's prose and immediate
+the moment a country existed that nothing else knew about. Here the omission was invisible in a
+schema with full test coverage and immediate the moment a feature existed that the schema had not
+been fitted to.
+
+*Why it belongs in the paper:* the methods section will claim the feature contract prevents
+training/serving skew by construction. The honest version of that claim has to say how the contract
+was arrived at, and "we wrote it against one feature and the second one broke it three times" is
+both true and the reason to trust the seventh field more than the sixth. The generalisable claim is
+the procedure — **derive a contract from one case, then immediately attack it with the most
+differently-shaped case available, before the contract has any dependents.** Two features cost
+minutes. Forty-four would have cost a schema migration across all of them.
+
+**Still untested:** the contract was attacked with two features, not forty-four. Features drawing on
+counterparty aggregates, device sharing and the agent float ratio may each break it again. The
+prediction, recorded before writing them: **`counterparty_unique_senders_24h` will need an eighth
+field**, because its window is keyed by the *counterparty*, not the account, and every field in the
+contract silently assumes the account is the unit of history.
+
+### 2026-09-19 · PREDICTION OUTCOME: confirmed in substance, wrong in sequence — and it found a live defect
+
+**The prediction, recorded before the remaining 42 were written:** `counterparty_unique_senders_24h`
+will force an eighth contract field, because its window is keyed by the *counterparty* while every
+field then in the contract silently assumed the account is the unit of history.
+
+**Outcome: the mechanism was right and the bookkeeping was wrong.** Two fields arrived, not one, and
+the first came from somewhere I had not predicted:
+
+- **Field 8, `minimum_history`, arrived from the amount group**, not the counterparty group.
+  `amount_zscore_90d` is specified as "robust: median/MAD; NaN->0 with < 5 history" — a sentence
+  containing three forks and settling none: whether 5 counts transactions or days, whether the
+  scored transaction is one of them, and whether the output below the threshold is `0.0` or NaN (the
+  arrow reads as "NaN becomes 0" to one implementer and "emit NaN, or 0" to another). It is a
+  distinct mechanism from smoothing and cannot be folded into it: smoothing degrades gracefully
+  toward a prior and is defined at zero evidence, while a minimum-history rule is a hard cliff
+  refusing an estimate the statistic cannot support. A MAD over four points is not imprecise, it is
+  meaningless.
+- **Field 9, `history_key`, arrived exactly as predicted**, from `counterparty_unique_senders_24h`,
+  for exactly the stated reason.
+
+**So the prediction is confirmed on mechanism and refuted on sequence.** I predicted the next field;
+what I got was the field after next. Recording the distinction rather than claiming a hit, because
+"the unit of history is an undeclared assumption" was the falsifiable content and "it surfaces from
+this particular feature" was not the part that mattered.
+
+**And then field 9 found a defect in a feature registered two hours earlier.**
+
+`history_key` is E1 at one level up. E1 requires every fold, split, sample and target encoding to
+group by **account**, because fraud arrives as incidents sharing an account. That rule assumes the
+thing a feature aggregates over *is* the account. `counterparty_unique_senders_24h` aggregates over
+the counterparty: a ring moving money from ten victim accounts into one mule produces ten rows whose
+feature values come from one counterparty-keyed object. Split those accounts across folds and the
+validation rows sit inside the feature the training rows saw — **cross-account leakage that
+account-grouped folds are blind to by construction, because the leak does not travel through the
+account.**
+
+The moment that was written down it was obvious that `geo_cell_fraud_rate_30d`, registered earlier
+the same session, has the same property: an H3 cell aggregates across accounts. Its leakage note
+claimed *"the prior is fitted on training folds grouped by account (E1), so no validation label
+reaches any cell estimate."* **That sentence is false.** Account-grouped folds do not stop a
+validation account's transactions entering a cell's rate. The note asserted a protection the design
+did not have, in the feature I had myself described as "the one most able to leak", in a session
+whose whole subject was that kind of omission.
+
+**This is the M-8 shape for the fifth time**, and the first four are in this notebook under "The
+pattern": a fix that is correct for the case in front of it and stops short of the structural form.
+M-8 folded per row when the unit was the incident. This folds per account when the unit is the
+counterparty or the cell. Same defect, one level up, found the same way — by asking what the
+grouping is actually grouping.
+
+**What changed as a result, so this is structural and not a correction:** `history_key` is a required
+field, and a contract whose key is not `ACCOUNT` is **refused at construction** unless it also
+carries `cross_account_control` naming what makes it fold-safe. There is no default, because there
+is no safe default. `geo_cell_fraud_rate_30d` now states that every cell estimate *and* the fitted
+prior are computed from training-fold rows only, and names the mutation that would detect the leak —
+computing cell rates over all rows and asserting the single-feature AUC rises, which is its only
+observable signature.
+
+*Why it belongs in the paper:* the anti-leakage section will claim account-grouped folds as the
+defence. The honest claim is narrower — **account grouping defends only features whose unit of
+history is the account** — and the benchmark contains features for which it is not. Stating the
+limit is worth more than the guarantee, and a reviewer who knows the M-8 story will ask this exact
+question.
+
+**Next prediction, recorded now:** the device group will need `history_key=DEVICE` and will find that
+`accounts_per_device_7d` is *defined* by cross-account aggregation — a device shared by many
+accounts is the entire signal — so it cannot be made fold-safe by restricting to training rows
+without destroying the feature. If that holds, it is the first feature where the contract's
+requirements and the feature's purpose are in genuine conflict, and it needs an owner decision
+rather than an implementation.
+
+### 2026-09-19 · The fifth instance is not the fourth: an asserted protection is worse than a missing one
+
+The pattern in this notebook — a fix correct for the case in front of it, stopping short of the
+structural form — now has five instances. **The fifth is a different failure mode and is recorded
+separately, because treating it as more of the same would lose what makes it dangerous.**
+
+The first four were **omissions**. A guard digested values but not the check set. A band kept its
+old constant as a floor. An encoding folded per row when the unit was the incident. A tolerance
+spanned regimes where it meant different things. In each case the code did less than it should, and
+nothing in the repository claimed otherwise. A reviewer reading them had no false statement to
+detect — only an absence, which is what made them hard to see.
+
+The fifth is an **assertion**. `geo_cell_fraud_rate_30d`'s leakage note said:
+
+> the prior is fitted on training folds grouped by account (E1), so no validation label reaches any
+> cell estimate
+
+That is false. An H3 cell aggregates across accounts, so account-grouped folds do not keep a
+validation account's transactions out of a cell's rate. The sentence names the right mechanism (E1),
+cites the right requirement, and draws a conclusion the mechanism does not support.
+
+**Why that is worse than an omission.** An absent leakage note invites scrutiny; a present, specific,
+confident one *consumes* it. A reviewer auditing that feature would have read a note that answered
+the question they came to ask, and moved on — the note actively redirects the attention that would
+otherwise have found the gap. The four omissions survived review by being invisible. This one would
+have survived review by being **reassuring**, which is a stronger form of survival.
+
+The aggravating detail, recorded because it is the useful part: **I wrote that note myself, in the
+same session, about the feature I had myself labelled "the one most able to leak", in a work stream
+whose entire subject was this class of omission.** Knowing the failure mode, having just written it
+up, and being on guard for it were all insufficient. That is evidence about what does not work as a
+control, and it is worth more than the fix.
+
+**So the control cannot be attention.** `cross_account_control` is now refused at construction
+unless it **names the mutation that would detect the leak if the control failed**. A control that
+only asserts safety raises `ValueError`. The check is crude — it looks for the word "mutation" — and
+crude is the point: it cannot be satisfied by writing a more convincing sentence, which is exactly
+how the original note passed. Every non-account-keyed feature now ships with its own falsification
+test rather than with a claim.
+
+*Why it belongs in the paper:* the threats-to-validity section will describe the anti-leakage
+guards. The credible version has to distinguish guards that failed by omission from a guard that
+failed by asserting a protection that never existed, and say that the second was caught by a
+mechanical check rather than by a careful reader — because the careful reader was the author, and
+the author had just finished writing about this exact failure mode.
