@@ -17,6 +17,7 @@ fs-compose-budget = "fraudshield_tools.compose_budget:main"
 fs-seed-demo = "fraudshield_tools.seed_demo:main"
 fs-migration-guard = "fraudshield_tools.migration_guard:main"
 fs-readme-status = "fraudshield_tools.readme_status:main"
+fs-exit-criteria = "fraudshield_tools.exit_criteria:main"
 
 [project.entry-points.pytest11]
 fraudshield-requires-docker = "fraudshield_tools.pytest_docker"

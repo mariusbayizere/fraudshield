@@ -581,6 +581,22 @@ the decision engine M6, staff identity, admin and audit M7).
   evidence resolving, and when the rendered table disagrees with the register; the M3 table is
   regenerated from the register; a mutation proves it — mark a criterion met with a missing
   artefact and assert the check exits non-zero. It joins `make governance`.
+- **CLOSED 2026-09-20, before M4's criteria were written**, which was the point of the due date.
+  `fs-exit-criteria` resolves three kinds mechanically — a test that exists in a tracked test file,
+  a gate the `governance` target runs, an artefact that names the commit it was produced at — and
+  refuses `judgement` in **both** directions: a judgement may only be `author_asserted`, and a
+  criterion whose evidence *is* mechanisable may not hide behind that label. The M3 table is now
+  generated between markers, so the prose around it survives while the rows cannot drift.
+- **It found something on its first run**: the M3 milestone review named no commit, so the row
+  claiming it as evidence could have pointed at any version of the file. The review now names the
+  commit its findings were fixed at.
+- **What it deliberately does not do.** It checks that a gate is *wired into* `make governance`
+  rather than running it, because running it would double what CI does and — since the checker is
+  itself part of `governance` — recurse. `--run-gates` executes them when someone wants that.
+- **Three M3 rows remain author-asserted and say so in the table**: E2 (every metric states its
+  scale), E12 (preconditions asserted first) and E13 (features exercised non-trivially). None is
+  mechanically decidable, and two of them describe habits this milestone twice failed to keep — so
+  the label is accurate rather than modest.
 
 ### PB-46 · Five engineered features exceed the D-08 single-feature ceiling
 - **Source:** M3 exit criterion E3, measured at commit `fad43dd` and restated at `2c80ef6` after
