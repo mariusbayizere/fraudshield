@@ -292,17 +292,45 @@ dataset has.** Since no timestamps collide, the strictly-earlier bound excludes 
 should be; but any claim resting on it is a claim about a few hundred rows at this scale, and it
 should be quoted with that count rather than with an overall rate.
 
-**Which of the 44 features can this dataset actually feed?** Thirty-six. Eight read reference
-data that neither the dataset nor M1's schema holds — account and counterparty opening dates, KYC
-tier histories, agent float and registered premises, and the currency's round denominations — so
-they return NaN for every row until that data exists (PB-44). They are implemented and tested on
-both paths; what is missing is the input. `days_since_sim_swap` is **not** among them:
-`account_events` already carries `SIM_SWAP` rows, so it is computable as soon as the join is
-wired.
+**Which of the 44 features can this dataset actually feed? Thirty-eight.** Six read reference
+data that neither the dataset nor M1's schema holds, so they return NaN for every row until it
+exists (PB-44): `account_age_days`, `counterparty_account_age_days`, `kyc_tier`,
+`agent_float_utilisation_ratio`, `agent_distance_from_registered_km` and `round_sum_flag`. Each is
+implemented and tested on both paths; what is missing is the input, and `docs/features.md` lists
+what each needs and which milestone supplies it.
+
+The number is **measured, not estimated** — `fs-features computability` computes all 44 over the
+benchmark and fails if a feature declared computable is NaN for every row, or if one declared
+without source data is not. An earlier revision of this datasheet said eight, from reasoning about
+which inputs were missing rather than from running the features. That is why the check exists.
+
+`days_since_sim_swap` is **not** among the six: `account_events` carries `SIM_SWAP` rows, so it is
+computable once joined — and the check reports it as dead if the join is forgotten, which is a
+case the test suite runs deliberately.
+
+**The dataset does not carry the account's own country.** Six features need it — the five
+local-time features for a UTC offset, and `corridor_class` for the corridor's origin — and
+`transactions` has only `counterparty_country`. The pipeline recovers it from the transaction's
+currency, which inverts exactly while currencies are distinct across the simulated packs, and
+refuses rather than tie-breaking when two packs share one. A consumer relying on those six should
+know the inference is there; the honest fix is an `account_country` column.
 
 This matters for reading any result computed here, because a feature that is NaN for every row is
-indistinguishable in a training run from one that is merely often missing. A result quoted as
-using "44 features" should say how many of them carried information.
+indistinguishable in a training run from one that is merely often missing. **A result quoted as
+using "44 features" must say how many carried information.**
+
+**`corridor_class` is evaluated over two of its four classes.** `CROSS_BLOC_AFRICA` and
+`INTERCONTINENTAL` are implemented and unit-tested against a synthetic pack, and **no row of this
+dataset produces either**: every simulated country is in the EAC and on one continent, and
+`behaviour.remittance_corridors` sends every cross-border transfer to another simulated country. A
+model trained here has therefore never observed those two classes, and an encoder fitted here has
+no cell for them — the first real cross-bloc transaction in serving meets an unseen category.
+
+This is a **stated limitation and not a defect awaiting a fix**. ADR 0023's owner direction is that
+the simulated country set is not to be broadened; the portability packs exist to prove the code is
+not EAC-specific, not to be simulated. Producing those two classes would mean simulating a corridor
+that leaves the validated core, which is a change to the dataset draw. **No claim that a model
+generalises across corridor classes can rest on this benchmark** (PB-43).
 
 **What does `implied_speed_kmh` mean at its cap?** Not "fast". The cap is 1,000 km/h, above
 commercial cruising speed, so a value at the cap says one person cannot have been in both places

@@ -162,7 +162,11 @@ requirements:
     Deviation (owner decision 2026-09-19, ADR 0023): corridor_class is DOMESTIC | INTRA_BLOC | CROSS_BLOC_AFRICA
     | INTERCONTINENTAL from pack bloc membership, not Part E.2''s DOMESTIC | EAC_CROSS_BORDER | NON_EAC_CROSS_BORDER.
     The feature keeps its slot and the count stays 44; no EAC special case remains in code. D-03 records
-    that this row''s own group counts sum to 46 while E.2''s catalogue enumerates 44 by name; E.2 is authoritative.'
+    that this row''s own group counts sum to 46 while E.2''s catalogue enumerates 44 by name; E.2 is authoritative.
+    M3 (2026-09-20): all 44 implemented on both paths; batch and online do not import each other, and
+    test_completeness asserts the registry''s list and the implemented list are the same list. Twelve
+    of the thirteen parity mutation rows are executed; row 9 needs the DB fallback path (PB-36). Six features
+    have no source data on this benchmark (PB-44) and corridor_class reaches two of its four classes (PB-43).'
 - id: FR-02-03
   section: 3.2 FR-02 ML fraud scoring engine
   title: XGBoost + LightGBM probabilities isotonic-regression calibrated; Expected Calibration Error <
@@ -2390,6 +2394,13 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M3 measurement (PB-44, 2026-09-20): all 44 features are implemented on both paths, and SIX cannot
+    be computed on this benchmark because the data they read does not exist - account_age_days, counterparty_account_age_days,
+    kyc_tier, agent_float_utilisation_ratio, agent_distance_from_registered_km, round_sum_flag. They return
+    NaN for every row, which D-04''s missing handling covers, so nothing raises and the count still reads
+    44. The ''>= 98% computable'' clause is therefore satisfied in the sense of not raising while six
+    features carry nothing. The registry declares computable per feature and ''fs-features computability''
+    fails if a COMPUTABLE feature is NaN for 100% of rows or a NO_SOURCE_DATA one is not. See docs/features.md.'
 - id: ML-DATA-08
   section: 7.1 Dataset
   title: Dataset release
@@ -2434,7 +2445,18 @@ requirements:
     earlier cross-account rows is what serving does, not leakage. The live exposure is OUT-OF-FOLD TARGET
     ENCODING INSIDE THE TRAINING PERIOD, where folds are random and account-grouped - where M-8 lived.
     Required: out-of-fold encodings are computed over rows strictly EARLIER IN TIME than the row being
-    encoded, never over random folds. This is settled, not open; M4 must not be designed as if it were.'
+    encoded, never over random folds. This is settled, not open; M4 must not be designed as if it were.
+    M4 EVALUATION CAVEATS carried from M3 (2026-09-20). (1) Train on the features that carry information
+    and report that number with every metric - never ''44 features'' where fewer were used; six have no
+    source data (PB-44), and if one becomes computable later that is a documented change to the model''s
+    input and a reason to restate earlier numbers. (2) corridor_class is evaluated over two of its four
+    classes: CROSS_BLOC_AFRICA and INTERCONTINENTAL are implemented and unit-tested but no row of this
+    dataset produces either, so a model trained here has never seen them and an encoder fitted here has
+    no cell for them. No claim that a model generalises across corridor classes can rest on this benchmark
+    (PB-43, owner decision: keep the classes, do not broaden the simulated set). (3) accounts_per_device_7d
+    is constant and synthetic_identity_score is one term short until PB-40 is fixed before training. (4)
+    The synthetic-identity composite''s equal weights are a documented choice, not a derived optimum;
+    M4 may revisit them with evidence and must say so if it does.'
 - id: ML-GATE-02
   section: 7.2 Model deployment gate
   title: Precision at 1% FPR

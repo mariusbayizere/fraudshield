@@ -479,6 +479,14 @@ the decision engine M6, staff identity, admin and audit M7).
   register state that `corridor_class` is evaluated over two of its four classes and that the other
   two are untested in evaluation. Declared meanwhile in the registry's `degeneracy` field, with
   `test_a_feature_with_no_signal_on_this_dataset_declares_it` asserting the declaration.
+- **DECIDED 2026-09-20 (owner): keep the classes, do not broaden the simulated set.** ADR 0023
+  forbids it for good reason and the packs exist so the code is not EAC-specific. Recorded as a
+  stated limitation rather than a defect: `CROSS_BLOC_AFRICA` and `INTERCONTINENTAL` are
+  implemented and unit-tested through the synthetic Country Z pack, and unexercised by the shipped
+  dataset, so **a model trained here has never seen them** and an encoder fitted here has no cell
+  for them. Written into the datasheet, `docs/features.md` and the model card, and carried into
+  M4's evaluation caveats: no claim that a model generalises across corridor classes can rest on
+  this benchmark. The registry keeps its `degeneracy` declaration, which the existing test asserts.
 
 ### PB-44 · Eight features read reference data the dataset does not carry
 - **Source:** implementing the remaining 42 features, 2026-09-20 · **Priority:** high · **Due:**
@@ -512,5 +520,64 @@ the decision engine M6, staff identity, admin and audit M7).
   should be done together, in one evidence run, rather than costing two.
 - **Acceptance:** either the data exists and the features are measured on it, or the datasheet and
   the claims register state which of the 44 were evaluated and which were constant-NaN, with the
-  count. A feature set reported as "44 features" when eight of them carried no information would
-  be a claim about a model that was never fitted.
+  count. A feature set reported as "44 features" when some of them carried no information would be
+  a claim about a model that was never fitted.
+- **Owner direction 2026-09-20, and the count corrected to six.** The entry above estimated eight
+  from reasoning about which inputs were missing. Computing the features says **six**:
+  `account_age_days`, `counterparty_account_age_days`, `kyc_tier`,
+  `agent_float_utilisation_ratio`, `agent_distance_from_registered_km`, `round_sum_flag`.
+  `days_since_sim_swap` is computable, because `account_events` carries `SIM_SWAP` rows; and
+  `synthetic_identity_score` is computable because its terms contribute zero rather than NaN when
+  their evidence is absent — impaired, which is a degeneracy and already declared, not a source
+  gap. The correction is the point: the estimate was made by the same kind of reasoning that
+  produced the first `geo_cell` leakage note.
+  1. **Done — the gap is structural, not a note.** `computable: COMPUTABLE | NO_SOURCE_DATA` is an
+     eleventh registry field with no default, `source_data_gap` must name the data and the
+     milestone, and `fs-features computability` fails in both directions: a COMPUTABLE feature NaN
+     for 100% of rows, and a NO_SOURCE_DATA feature that is not. The second direction is what
+     stops the register drifting into pessimism once somebody wires the data.
+  2. **Done — named in `docs/features.md` and the datasheet**, each with what it needs, where it
+     comes from and which milestone supplies it.
+  3. **Carried to M4:** train on the features that carry information and report that number with
+     every metric, never "44 features" where fewer were used. If one of the six becomes computable
+     later, that is a documented change to the model's input and a reason to restate earlier
+     numbers, not a silent improvement.
+  4. **Not yet wired into CI.** `fs-features computability` needs a generated dataset, so it
+     belongs in the `dataset` workflow beside the realism checks rather than in `make governance`,
+     which runs without data. That workflow cannot be dispatched until the default branch moves
+     (PB-25), so the check runs as part of an evidence run until then and the wiring goes in with
+     PB-25's CI-only commit.
+- **Also found while measuring:** the dataset carries no **account-country** column, which six
+  features need (five local-time features for a UTC offset, and `corridor_class` for the origin).
+  The pipeline recovers it from the transaction's currency — exact while currencies are distinct
+  across simulated packs, and `fs-features` refuses rather than tie-breaking when two share one.
+  The honest fix is the column. It does not change the draw, but it does change the schema.
+
+### PB-45 · The exit-criteria table has no checker, so "met" is an author's edit
+- **Source:** the M3 exit-criteria table claimed E3 was met and cited an evidence run that did not
+  exist, 2026-09-20 · **Priority:** high · **Due:** before the M4 exit criteria are written, so the
+  next milestone starts with the mechanism rather than retrofitting it
+- **Problem:** `docs/traceability/m3_exit_criteria.md` is the only record in the repository that
+  asserts a milestone's completeness, and nothing checks it. Every other record-accuracy guard here
+  watches a generated artefact: the parameter digest and the dataset fingerprint for the realism
+  report, `fs-readme-status` for the README's status line. The criteria table is hand-written, and
+  it drifted in the flattering direction within a day of being written.
+- **Third instance of the family.** The stale realism report (M2 MAJOR 4.1, then PB-39) and the
+  README status line (M2 milestone review) were each fixed as a bug in one file. Three instances
+  make it a property of how this project records things.
+- **The design, which is tractable because the criteria sort into four kinds of evidence:** a
+  register (`m3_exit_criteria.yaml`, beside `milestones.yaml`) in which each criterion declares how
+  it is evidenced, with the markdown table **rendered** from it as `requirements_matrix.md` already
+  is:
+  - `test: <node id>` — the test exists and is collected. `fs-traceability` already resolves tagged
+    tests, so the mechanism exists.
+  - `gate: <command>` — the command exits 0.
+  - `artifact: <path>` — the file exists **and names the commit it was produced at**, which is the
+    standing rule that a figure is quoted with its tree hash rather than only its scale.
+  - `judgement` — **never auto-met.** Must carry prose and a named human. A checker that marked a
+    judgement criterion met would be worse than no checker: it would lend a machine's authority to
+    a claim no machine made.
+- **Acceptance:** `fs-exit-criteria --check` fails when a criterion claims `met` without its
+  evidence resolving, and when the rendered table disagrees with the register; the M3 table is
+  regenerated from the register; a mutation proves it — mark a criterion met with a missing
+  artefact and assert the check exits non-zero. It joins `make governance`.

@@ -292,3 +292,55 @@ says results "cannot be cited" for this reason.
   rendered matrix is current.
 - **E11** — a milestone review covering: leakage under the new features, determinism, the grouping
   rules above, and whether every claim in the M3 walkthrough is backed by a test or a measurement.
+
+## Status at the M3 close, 2026-09-20
+
+Recorded here rather than in a review, because a criterion's status is a fact about the repository
+and the review is an opinion about it.
+
+**A warning about this table, written into it because the table is where it will mislead.** Two
+rows below said **Met** on 2026-09-20 while the evidence they cited did not exist: E3 pointed at
+"the evidence run below" and no run had completed, and E6 claimed a measurement that rides on it.
+Nothing generated those cells — an author typed them, in the same edit that wrote the machinery,
+and the table read as a record of results while it was a record of intentions. Corrected the same
+day, but the shape is the point and it is the **third** instance in this project after the stale
+realism report and the README status line. **A status table must derive "met" from an evidence
+artifact's existence, not from an author's edit.** Until this one does, every cell in it is a
+claim by a person and should be read as one.
+
+| Criterion | Status |
+|---|---|
+| E1 — grouping by the unit of history | **Met**, with the rule restated per `history_key` and the component-folding measurement that refuted the first version |
+| E2 — every metric states its scale | **Met as a rule**, and applied by `fs-features auc`, which prints the corpus size, the scored-row count and the fraud count before any figure |
+| E3 — the 44 re-checked against the 0.80 ceiling | **NOT YET RUN.** The machinery exists (`fs-features auc`, account-grouped out-of-fold encoding, the interval reported beside every figure) and has unit tests, but no measurement over the benchmark has completed. This row said **Met** and cited an evidence run that did not exist — see the warning above this table. |
+| E4 — deterministic, byte-identical across batch sizes | **Met**; `test_e4_the_vector_is_byte_identical_across_batch_sizes` compares through `float.hex()` at batch sizes 1, 5 and 17 |
+| E5 — no feature reads an excluded column | **Met**, behaviourally rather than by a source scan; see below |
+| E6 — the `account_events` join is available and measured | **Partly.** The join is available and used: `fs-features` reads `SIM_SWAP` from `account_events` and `days_since_sim_swap` is computed from it, with the forgotten-join case run deliberately in the suite. The **measurement** alongside the transaction features rides on E3's run and has not completed. |
+| E7 — PB-26 before any feature reads the partitions | **Met** (closed in M3, second option: documented, carried in `release.json`, pinned by a test) |
+| E8 — packs and `corridor_class` land here | **Met** (PB-29, PB-30) |
+| E9 — parameter provenance | **Met**; `fs-dataset provenance --check` passes |
+| E10 — the register covers every M3 requirement | **Met**; 258 rows, 0 errors, 0 warnings, matrix rendered |
+| E11 — milestone review | **Not started**, and deliberately: held for the reviewer |
+| E12–E15 — the rules M2 paid for | **Applied throughout**; see the parity mutation table and the E15 fixture |
+
+### E5, and what "excluded by construction" turned out to need
+
+A source scan would prove only that today's spelling avoids the excluded columns. The tests change
+the excluded quantity and assert the vector does not move:
+
+- **identifier bytes** — every identifier is relabelled through a bijection, including the keys of
+  the labels and the SIM-swap map. Identity survives, every byte changes, and the vector is
+  bit-identical.
+- **row position** — rows from accounts, counterparties, devices and cells that appear nowhere else
+  are prepended, so every scored row sits at a new index with an identical history.
+- **sub-second timestamp parts** — a label-correlated signal is planted in the microseconds, and
+  the set of features that move must equal a declared set of six. Five are elapsed-time quantities,
+  where sub-second sensitivity is physics; the sixth is `geo_cell_fraud_rate_30d`, which moves
+  because a **label gate** can flip when `available_at` and the scored timestamp coincide to the
+  second. That is worth knowing and is not a signal — it is recorded rather than excused.
+- **label delay** — every label's arrival is moved earlier while staying visible, and only the two
+  label-derived features move. `Outcome` carries no `confirmed_at` at all, so the batch path cannot
+  make the mistake its asymmetry invites.
+
+This is a structural check, not a statistical one. Whether any feature's residual correlates with
+an excluded quantity on the full benchmark is a leakage measurement and belongs to M4.

@@ -275,3 +275,28 @@ def test_a_row_without_a_counterparty_is_refused_on_both_paths() -> None:
         batch.unique_counterparties_24h([anonymous], SCORED)
     with pytest.raises(ValueError, match="counterparty"):
         warm([anonymous]).unique_counterparties_24h(SCORED)
+
+
+@pytest.mark.req("FR-02-02", "ML-GATE-01")
+def test_the_velocity_ratio_ignores_other_accounts_rows() -> None:
+    """Found by `test_the_corpus_index_changes_no_value`, not by any test of this feature.
+
+    The ratio filtered nothing: given a history containing other accounts it counted their
+    transactions as this account's burst. Every hand-computed test here passes a single-account
+    history, so none of them could produce it, and the online path cannot make the mistake at all
+    because its state is keyed by account — so the defect lived in exactly the gap between the two.
+
+    The intruders sit inside the trailing hour and outnumber the account's own rows, so a path
+    that counts them reads a burst where there is none.
+    """
+    first_seen = T - timedelta(hours=25)
+    own = [tx(1_800, amount=1000.0, counterparty="M1")]
+    intruders = [tx(60 * (i + 1), amount=1000.0, counterparty="M1", account="B") for i in range(20)]
+    assert len(intruders) > len(own), "precondition: the strangers dominate the window"
+
+    clean = batch.velocity_ratio_1h_vs_30d(own, SCORED, first_seen_at=first_seen)
+    mixed = batch.velocity_ratio_1h_vs_30d(own + intruders, SCORED, first_seen_at=first_seen)
+    assert clean == mixed, (
+        "another account's transactions entered this account's velocity ratio; the value is "
+        "plausible at every magnitude, which is what makes it dangerous"
+    )

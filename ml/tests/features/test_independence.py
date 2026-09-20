@@ -92,3 +92,20 @@ def test_no_shared_window_aggregation_helper_exists() -> None:
             f"primitives exports {offenders}, which looks like shared window aggregation; that is "
             "the one surface the parity test cannot cover"
         )
+
+
+@pytest.mark.req("FR-02-02")
+def test_neither_feature_path_imports_the_vector_assembler() -> None:
+    """`vector` calls `batch`; `batch` must never call `vector`.
+
+    A feature path importing its own caller would make the parity test circular — the assembler
+    exists to run the paths, and a path that reached back into it could reach the other one
+    through it. The rule is not "one direction is tidier": it is that Decision 4's guarantee is
+    exactly the size of the surface the two paths do not share, and this would be a back door
+    into it.
+    """
+    for module in ("batch", "online"):
+        assert "vector" not in _imports(module), (
+            f"{module} imports the vector assembler, which is its caller; the parity suite's "
+            "independence guarantee runs through that import"
+        )

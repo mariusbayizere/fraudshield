@@ -6,7 +6,14 @@ requires-python = "==3.12.*"
 license = "Apache-2.0"
 dependencies = [
     "h3==4.5.0",
+    # Reads the dataset's published Parquet. The feature pipeline consumes the interchange format
+    # rather than importing fraudshield-dataset: a pipeline that imported the producer could read
+    # values the published format does not carry, and would work here and fail on a release.
+    "pyarrow==25.0.1",
 ]
+
+[project.scripts]
+fs-features = "fraudshield_ml.cli:main"
 
 [build-system]
 requires = ["hatchling==1.32.0"]

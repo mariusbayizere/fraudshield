@@ -177,10 +177,14 @@ version = "0.1.0"
 source = { editable = "ml" }
 dependencies = [
     { name = "h3" },
+    { name = "pyarrow" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "h3", specifier = "==4.5.0" }]
+requires-dist = [
+    { name = "h3", specifier = "==4.5.0" },
+    { name = "pyarrow", specifier = "==25.0.1" },
+]
 
 [[package]]
 name = "fraudshield-tools"

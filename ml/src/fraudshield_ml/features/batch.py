@@ -65,8 +65,14 @@ def velocity_ratio_1h_vs_30d(
     t = scored.timestamp
     short_start, long_start = t - SHORT_WINDOW, t - LONG_WINDOW
 
-    short_count = sum(1 for x in history if short_start < x.timestamp < t)
-    long_count = sum(1 for x in history if long_start < x.timestamp <= short_start)
+    # Filtered here rather than trusted to the caller, as every other account-keyed feature does.
+    # It was not, until `test_the_corpus_index_changes_no_value` fed this the whole corpus prefix
+    # and the ratio counted strangers' transactions as this account's burst — a number that is
+    # plausible at every magnitude, that no single-account test could produce, and that the online
+    # path cannot make because its state is keyed by account.
+    own = [x for x in history if x.account_id == scored.account_id]
+    short_count = sum(1 for x in own if short_start < x.timestamp < t)
+    long_count = sum(1 for x in own if long_start < x.timestamp <= short_start)
 
     observed = min(LONG_WINDOW, t - first_seen_at)
     baseline_hours = observed.total_seconds() / 3600.0 - SHORT_WINDOW.total_seconds() / 3600.0

@@ -680,3 +680,36 @@ def test_a_new_country_needs_a_pack_and_no_code_change(tmp_path: Path) -> None:
 
     # Precondition (E12): Country Z must actually appear, or the test passes by ignoring it.
     assert "ZZZ" in currencies, "Country Z was configured but produced no rows"
+
+
+@pytest.mark.req("ML-DATA-08")
+def test_the_packs_command_publishes_the_facts_a_consumer_needs(tmp_path: Path) -> None:
+    """`fs-dataset packs` is how the feature pipeline learns a country's offset and blocs.
+
+    It exists so that ml never imports this package: ADR 0023 puts every country-specific value in
+    a pack, and a second reader of those YAML files would be a second place for the schema to
+    drift. The consumer reads the published output, exactly as it reads Parquet rather than
+    calling the generator.
+
+    Provenance is deliberately **not** published. A citation is a claim about where a number came
+    from and belongs beside the parameters; a machine-read sidecar carrying it would invite a
+    consumer to quote a source it has not checked.
+    """
+    output = tmp_path / "packs.json"
+    assert cli.main(["packs", "--output", str(output)]) == 0
+
+    facts = json.loads(output.read_text(encoding="utf-8"))
+    assert set(facts) == set(load_packs(load_parameters())), "every pack is published"
+    for code, entry in facts.items():
+        assert entry["alpha2"] == code
+        assert entry["blocs"] == sorted(entry["blocs"]), "blocs are ordered, so the file is stable"
+        assert isinstance(entry["utc_offset_hours"], int)
+        assert entry["currency"]
+        assert isinstance(entry["currency_minor_units"], int)
+        assert "citation" not in entry
+        assert "provenance" not in entry
+
+    # Stable across runs: a consumer diffing two releases must see a change only when one happened.
+    again = tmp_path / "again.json"
+    assert cli.main(["packs", "--output", str(again)]) == 0
+    assert again.read_bytes() == output.read_bytes()

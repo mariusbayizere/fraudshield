@@ -23,6 +23,7 @@ importing it cannot make the two paths share a bug.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from enum import Enum
 
@@ -414,6 +415,28 @@ class ReferenceDataBasis(Enum):
     NOT_REFERENCE_DATA = "not_reference_data"
 
 
+class Computability(Enum):
+    """Whether the benchmark holds the data this feature reads (PB-44).
+
+    The eleventh field the registry refuses to leave blank, and it exists because of a failure mode
+    the other ten cannot see. A feature whose inputs do not exist returns NaN for **every row**, and
+    D-04's native missing handling covers that — so nothing raises, nothing warns, and the feature
+    count still reads 44. **In a training run a feature that is NaN everywhere is indistinguishable
+    from one that is merely often missing.** ML-DATA-07's completeness check cannot catch it for the
+    same reason it could not catch PB-40: the feature *is* computable, in the sense of not raising.
+
+    The declaration is only worth having because something checks it. ``fs-features computability``
+    computes all 44 over a generated dataset and fails when a ``COMPUTABLE`` feature is NaN for
+    100% of rows, **and when a ``NO_SOURCE_DATA`` feature is not** — the second direction matters
+    as much as the first, because it is the one that fires when someone wires the missing data and
+    forgets to change the declaration, leaving the register saying a feature is dead when it is
+    alive.
+    """
+
+    COMPUTABLE = "computable"
+    NO_SOURCE_DATA = "no_source_data"
+
+
 @dataclass(frozen=True)
 class FeatureSpec:
     """One feature's declared contract. Nothing here computes anything."""
@@ -431,6 +454,14 @@ class FeatureSpec:
     #: the false positive at source rather than teaching the scanner to ignore a class of finding.
     template_id: str
     reference_data_basis: ReferenceDataBasis
+    #: Whether the benchmark can feed this feature at all (PB-44). No default: a default of
+    #: COMPUTABLE is the silent-wrong-answer direction, and a default of NO_SOURCE_DATA would
+    #: excuse every feature from being checked.
+    computable: Computability
+    #: For a NO_SOURCE_DATA feature: what it needs and which milestone supplies it. Refused when
+    #: blank, and refused when it names no milestone, because "this needs data" without a date is
+    #: a note rather than a plan.
+    source_data_gap: str | None = None
     window: str | None = None
     contract: WindowContract | None = None
     tolerance_note: str | None = None
@@ -468,8 +499,41 @@ class FeatureSpec:
                 "fields have no meaning without one"
             )
 
-        # A categorical with undeclared values is the same class of silence the ten contract
-        # fields exist to close, in the one place where no tolerance can cover the disagreement.
+        self._validate_source_data_gap()
+        self._validate_categories()
+
+    def _validate_source_data_gap(self) -> None:
+        """Refuse a declared gap that says nothing, and an undeclared one that says something.
+
+        Split out of ``__post_init__`` rather than inlined: the validations are independent rules
+        and reading them as one function is how a later one gets added to the wrong branch.
+        """
+        # Refused rather than defaulted, on the same terms as cross_account_control: there is no
+        # safe default, and a blank is exactly the omission that turns a known gap into a surprise
+        # at training time.
+        if self.computable is Computability.NO_SOURCE_DATA:
+            gap = (self.source_data_gap or "").strip()
+            if not gap:
+                raise ValueError(
+                    f"{self.name}: computable=NO_SOURCE_DATA must say what data it needs and "
+                    "which milestone supplies it. A feature that is NaN for every row is "
+                    "invisible in a training run, so the declaration is the only place it shows"
+                )
+            if not re.search(r"\bM\d+\b", gap):
+                raise ValueError(
+                    f"{self.name}: source_data_gap must name the milestone that supplies the "
+                    "data (M4, M6, ...). 'This needs a table' without a date is a note, not a "
+                    "plan, and it is how a gap survives three milestones"
+                )
+        elif self.source_data_gap is not None:
+            raise ValueError(
+                f"{self.name}: computable=COMPUTABLE with a source_data_gap describes a gap that "
+                "is not blocking anything; say what it is or drop it"
+            )
+
+    def _validate_categories(self) -> None:
+        """A categorical with undeclared values is the same class of silence the contract fields
+        exist to close, in the one place where no tolerance can cover the disagreement."""
         if self.dtype is Dtype.CATEGORICAL and not self.categories:
             raise ValueError(
                 f"{self.name}: dtype is categorical, so its permitted values must be declared. "
@@ -565,6 +629,7 @@ _VELOCITY_RATIO = FeatureSpec(
     ),
     template_id="velocity.ratio_1h_vs_30d",
     reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+    computable=Computability.COMPUTABLE,
     window="1h/30d",
     contract=WindowContract(
         self_inclusion=SelfInclusion.EXCLUDED,
@@ -611,6 +676,7 @@ _GEO_CELL_FRAUD_RATE = FeatureSpec(
     ),
     template_id="geographic.cell_fraud_rate_30d",
     reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+    computable=Computability.COMPUTABLE,
     window="30d",
     contract=WindowContract(
         self_inclusion=SelfInclusion.EXCLUDED,
@@ -680,6 +746,7 @@ def _count(name: str, window: str, definition: str) -> FeatureSpec:
         leakage_note=_BACKWARD_ONLY,
         template_id=f"velocity.{name}",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        computable=Computability.COMPUTABLE,
         window=window,
         contract=_TRAILING_ACCOUNT_AGGREGATE,
     )
@@ -734,6 +801,7 @@ for _spec_ in (
         ),
         template_id="velocity.amount_sum_24h",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        computable=Computability.COMPUTABLE,
         window="24h",
         contract=_TRAILING_ACCOUNT_AGGREGATE,
         tolerance_note=_AMOUNT_SUM_TOLERANCE,
@@ -751,6 +819,7 @@ for _spec_ in (
         leakage_note=_BACKWARD_ONLY,
         template_id="velocity.amount_sum_7d",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        computable=Computability.COMPUTABLE,
         window="7d",
         contract=_TRAILING_ACCOUNT_AGGREGATE,
         tolerance_note=_AMOUNT_SUM_TOLERANCE,
@@ -767,6 +836,7 @@ for _spec_ in (
         leakage_note=_BACKWARD_ONLY,
         template_id="velocity.unique_counterparties_24h",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        computable=Computability.COMPUTABLE,
         window="24h",
         contract=_TRAILING_ACCOUNT_AGGREGATE,
         tolerance_note=(
@@ -807,6 +877,7 @@ for _spec_ in (
         ),
         template_id="amount.log1p",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        computable=Computability.COMPUTABLE,
     ),
     FeatureSpec(
         name="amount_zscore_90d",
@@ -838,6 +909,7 @@ for _spec_ in (
         ),
         template_id="amount.zscore_90d",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        computable=Computability.COMPUTABLE,
         window="90d",
         contract=WindowContract(
             self_inclusion=SelfInclusion.EXCLUDED,
@@ -873,6 +945,7 @@ for _spec_ in (
         leakage_note=_BACKWARD_ONLY,
         template_id="amount.to_max_90d_ratio",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        computable=Computability.COMPUTABLE,
         window="90d",
         contract=WindowContract(
             self_inclusion=SelfInclusion.EXCLUDED,
@@ -907,6 +980,13 @@ for _spec_ in (
         ),
         template_id="amount.round_sum_flag",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        computable=Computability.NO_SOURCE_DATA,
+        source_data_gap=(
+            "A round_denominations field in the country packs, keyed by currency (ADR 0023). "
+            "Supplied in M3 together with PB-41's pending report regeneration, because adding a "
+            "parameter makes the committed realism report stale anyway and the two then cost one "
+            "evidence run rather than two."
+        ),
     ),
     FeatureSpec(
         name="just_below_limit_flag",
@@ -943,6 +1023,7 @@ for _spec_ in (
         ),
         template_id="amount.just_below_limit_flag",
         reference_data_basis=ReferenceDataBasis.AS_OF_EVENT,
+        computable=Computability.COMPUTABLE,
     ),
 ):
     REGISTRY[_spec_.name] = _spec_
@@ -1002,6 +1083,7 @@ for _spec_ in (
         leakage_note=_LOCAL_TIME_LEAKAGE,
         template_id="temporal.local_hour_sin",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        computable=Computability.COMPUTABLE,
     ),
     FeatureSpec(
         name="local_hour_cos",
@@ -1017,6 +1099,7 @@ for _spec_ in (
         leakage_note=_LOCAL_TIME_LEAKAGE,
         template_id="temporal.local_hour_cos",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        computable=Computability.COMPUTABLE,
     ),
     FeatureSpec(
         name="local_day_of_week",
@@ -1028,6 +1111,7 @@ for _spec_ in (
         leakage_note=_LOCAL_TIME_LEAKAGE,
         template_id="temporal.local_day_of_week",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        computable=Computability.COMPUTABLE,
     ),
     FeatureSpec(
         name="is_local_night",
@@ -1039,6 +1123,7 @@ for _spec_ in (
         leakage_note=_LOCAL_TIME_LEAKAGE,
         template_id="temporal.is_local_night",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        computable=Computability.COMPUTABLE,
     ),
     FeatureSpec(
         name="is_month_end_window",
@@ -1054,6 +1139,7 @@ for _spec_ in (
         leakage_note=_LOCAL_TIME_LEAKAGE,
         template_id="temporal.is_month_end_window",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        computable=Computability.COMPUTABLE,
     ),
     FeatureSpec(
         name="seconds_since_last_tx",
@@ -1075,6 +1161,7 @@ for _spec_ in (
         ),
         template_id="temporal.seconds_since_last_tx",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        computable=Computability.COMPUTABLE,
         window="unbounded",
         contract=_UNBOUNDED_ACCOUNT_HISTORY,
     ),
@@ -1117,6 +1204,7 @@ for _spec_ in (
         ),
         template_id="geographic.distance_from_last_tx_km",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        computable=Computability.COMPUTABLE,
         window="unbounded",
         contract=_UNBOUNDED_ACCOUNT_HISTORY,
     ),
@@ -1149,6 +1237,7 @@ for _spec_ in (
         ),
         template_id="geographic.implied_speed_kmh",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        computable=Computability.COMPUTABLE,
         window="unbounded",
         contract=_UNBOUNDED_ACCOUNT_HISTORY,
         tolerance_note=(
@@ -1171,6 +1260,7 @@ for _spec_ in (
         leakage_note=_BACKWARD_ONLY,
         template_id="geographic.distance_from_home_centroid_km",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        computable=Computability.COMPUTABLE,
         window="90d",
         contract=_NINETY_DAY_ACCOUNT_LOCATION,
         tolerance_note=(
@@ -1209,6 +1299,7 @@ for _spec_ in (
         ),
         template_id="geographic.is_new_country_for_account",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        computable=Computability.COMPUTABLE,
         window="unbounded",
         contract=WindowContract(
             self_inclusion=SelfInclusion.EXCLUDED,
@@ -1262,6 +1353,7 @@ for _spec_ in (
         ),
         template_id="counterparty.is_new_for_account",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        computable=Computability.COMPUTABLE,
         window="unbounded",
         contract=WindowContract(
             self_inclusion=SelfInclusion.EXCLUDED,
@@ -1295,6 +1387,13 @@ for _spec_ in (
         ),
         template_id="counterparty.account_age_days",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        computable=Computability.NO_SOURCE_DATA,
+        source_data_gap=(
+            "The counterparty account's opening date, from the same per-account table (PB-37). "
+            "Supplied by M6. The tempting substitute - the counterparty's earliest transaction "
+            "in the data - is bounded below by the dataset's own start, so it would report the "
+            "whole population as no older than the benchmark."
+        ),
     ),
     FeatureSpec(
         name="counterparty_unique_senders_24h",
@@ -1315,6 +1414,7 @@ for _spec_ in (
         ),
         template_id="counterparty.unique_senders_24h",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        computable=Computability.COMPUTABLE,
         window="24h",
         contract=WindowContract(
             self_inclusion=SelfInclusion.EXCLUDED,
@@ -1354,6 +1454,7 @@ for _spec_ in (
         ),
         template_id="counterparty.confirmed_fraud_90d",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        computable=Computability.COMPUTABLE,
         window="90d",
         contract=WindowContract(
             self_inclusion=SelfInclusion.EXCLUDED,
@@ -1391,6 +1492,7 @@ for _spec_ in (
         ),
         template_id="counterparty.tx_count_to_counterparty_30d",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        computable=Computability.COMPUTABLE,
         window="30d",
         contract=_TRAILING_ACCOUNT_AGGREGATE,
     ),
@@ -1428,6 +1530,7 @@ for _spec_ in (
         ),
         template_id="device.channel",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        computable=Computability.COMPUTABLE,
         categories=(
             "MOBILE_MONEY",
             "CARD",
@@ -1453,6 +1556,7 @@ for _spec_ in (
         ),
         template_id="device.is_new_for_account",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        computable=Computability.COMPUTABLE,
         window="unbounded",
         contract=WindowContract(
             self_inclusion=SelfInclusion.EXCLUDED,
@@ -1487,6 +1591,7 @@ for _spec_ in (
         ),
         template_id="device.accounts_per_device_7d",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        computable=Computability.COMPUTABLE,
         window="7d",
         contract=WindowContract(
             self_inclusion=SelfInclusion.EXCLUDED,
@@ -1535,6 +1640,7 @@ for _spec_ in (
         leakage_note=_BACKWARD_ONLY + " Keyed by the ACCOUNT.",
         template_id="device.device_changes_24h",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        computable=Computability.COMPUTABLE,
         window="24h",
         contract=_TRAILING_ACCOUNT_AGGREGATE,
     ),
@@ -1558,6 +1664,7 @@ for _spec_ in (
         ),
         template_id="device.device_age_days",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        computable=Computability.COMPUTABLE,
         window="unbounded",
         contract=WindowContract(
             self_inclusion=SelfInclusion.EXCLUDED,
@@ -1607,6 +1714,13 @@ for _spec_ in (
         ),
         template_id="profile.account_age_days",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        computable=Computability.NO_SOURCE_DATA,
+        source_data_gap=(
+            "The account's opening date. M1 has no per-account table at all (PB-37), so there is "
+            "nowhere it lives and no column to join. Distinct from the first-seen-in-data "
+            "timestamp: an account may be opened long before it transacts. Supplied by M6's "
+            "per-account migration, which must carry both."
+        ),
     ),
     FeatureSpec(
         name="kyc_tier",
@@ -1628,6 +1742,14 @@ for _spec_ in (
         ),
         template_id="profile.kyc_tier",
         reference_data_basis=ReferenceDataBasis.AS_OF_EVENT,
+        computable=Computability.NO_SOURCE_DATA,
+        source_data_gap=(
+            "Per-account tier assignments carrying effective_at (ADR 0026). M1 has neither the "
+            "table nor the history, and the current tier is not a substitute: upgrades are "
+            "frequently triggered by investigation, so today's tier of an investigated account "
+            "is a consequence of the fraud being scored. Supplied by M6 with the per-account "
+            "migration."
+        ),
     ),
     FeatureSpec(
         name="days_since_sim_swap",
@@ -1651,6 +1773,7 @@ for _spec_ in (
         ),
         template_id="profile.days_since_sim_swap",
         reference_data_basis=ReferenceDataBasis.AS_OF_EVENT,
+        computable=Computability.COMPUTABLE,
     ),
     FeatureSpec(
         name="dormancy_reactivation_flag",
@@ -1673,6 +1796,7 @@ for _spec_ in (
         ),
         template_id="profile.dormancy_reactivation_flag",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        computable=Computability.COMPUTABLE,
         window="60d",
         contract=WindowContract(
             self_inclusion=SelfInclusion.EXCLUDED,
@@ -1705,6 +1829,12 @@ for _spec_ in (
         ),
         template_id="agent.float_utilisation_ratio",
         reference_data_basis=ReferenceDataBasis.AS_OF_EVENT,
+        computable=Computability.NO_SOURCE_DATA,
+        source_data_gap=(
+            "An agent standing table carrying float balance and limit with effective_at. Neither "
+            "the dataset nor M1 holds agent state; agents appear only as a token column. "
+            "Supplied by M6, when the agent-facing ingest path exists."
+        ),
     ),
     FeatureSpec(
         name="agent_cashout_count_1h",
@@ -1719,6 +1849,7 @@ for _spec_ in (
         ),
         template_id="agent.cashout_count_1h",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        computable=Computability.COMPUTABLE,
         window="1h",
         contract=WindowContract(
             self_inclusion=SelfInclusion.EXCLUDED,
@@ -1749,6 +1880,7 @@ for _spec_ in (
         ),
         template_id="agent.unique_customers_1h",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        computable=Computability.COMPUTABLE,
         window="1h",
         contract=WindowContract(
             self_inclusion=SelfInclusion.EXCLUDED,
@@ -1785,6 +1917,12 @@ for _spec_ in (
         ),
         template_id="agent.distance_from_registered_km",
         reference_data_basis=ReferenceDataBasis.AS_OF_EVENT,
+        computable=Computability.NO_SOURCE_DATA,
+        source_data_gap=(
+            "The agent's registered premises, as-of, from the same agent standing table. "
+            "Supplied by M6. Reading a current address would place an agent that relocated after "
+            "an incident at its new premises for every earlier transaction."
+        ),
     ),
     # -----------------------------------------------------------------------------------------
     # Corridor (1) and synthetic identity (1).
@@ -1816,6 +1954,7 @@ for _spec_ in (
         ),
         template_id="corridor.corridor_class",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        computable=Computability.COMPUTABLE,
         categories=("DOMESTIC", "INTRA_BLOC", "CROSS_BLOC_AFRICA", "INTERCONTINENTAL"),
         degeneracy=(
             "TWO OF FOUR CLASSES ARE UNREACHABLE ON THE CURRENT DATASET (PB-43). Every simulated "
@@ -1839,7 +1978,19 @@ for _spec_ in (
             "A deterministic, documented composite in [0, 1] of low KYC tier, account age under "
             "30 d, shared device and phone attributes across accounts, and rapid volume ramp. "
             "Computed WITHOUT labels, per Part E.2 — it is a hand-specified heuristic, not a "
-            "sub-model, so it carries no fitted quantity and no fold dependence of its own."
+            "sub-model, so it carries no fitted quantity and no fold dependence of its own. "
+            "THE FORM IS DELEGATED BY PART E.2 AND IS SETTLED HERE: the unweighted mean of four "
+            "terms each in [0, 1], so the score is in range by construction rather than by "
+            "clipping and is readable — 0.25 is exactly one term at its maximum. "
+            "EQUAL WEIGHTS ARE A DOCUMENTED CHOICE, NOT A DERIVED OPTIMUM (owner direction "
+            "2026-09-20). They are equal because the composite carries no fitted quantity and "
+            "there was no evidence from which to argue any other weighting; any other would be a "
+            "fitted quantity smuggled into a heuristic. M4 may revisit them with evidence and "
+            "must say so if it does. "
+            "A MISSING TERM CONTRIBUTES ZERO, never NaN, which the nan_rule fixes for the device "
+            "term and which is applied to all four: the composite accumulates evidence, so absent "
+            "evidence adds none. The cost is that a score of 0 means 'no evidence' and not "
+            "'checked and clean', and the two are indistinguishable in the output."
         ),
         source=Source.REDIS,
         nan_rule=(
@@ -1862,6 +2013,7 @@ for _spec_ in (
         ),
         template_id="synthetic.identity_score",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
+        computable=Computability.COMPUTABLE,
         window="30d",
         contract=WindowContract(
             self_inclusion=SelfInclusion.EXCLUDED,

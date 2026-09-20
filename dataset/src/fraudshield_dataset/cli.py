@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from collections.abc import Sequence
 from pathlib import Path
 
 from fraudshield_dataset.generator.config import build_config
+from fraudshield_dataset.generator.countries import load_packs
 from fraudshield_dataset.generator.pipeline import generate
 from fraudshield_dataset.params import ParameterError, load_parameters
 from fraudshield_dataset.paths import PROVENANCE_MD, REALISM_REPORT_MD
@@ -15,6 +17,36 @@ from fraudshield_dataset.provenance_report import render
 from fraudshield_dataset.realism.checks import run_checks
 from fraudshield_dataset.realism.report import render as render_report
 from fraudshield_dataset.release.export import export
+
+
+def _packs(output: Path) -> int:
+    """Publish the pack facts a consumer of the dataset needs, as data rather than as code.
+
+    The feature pipeline reads the country a transaction belongs to, its UTC offset and its bloc
+    memberships, and it must not import this package to get them: ADR 0023 puts every
+    country-specific value in a pack, and a second reader of those YAML files would be a second
+    place for the schema to drift. Publishing them alongside the dataset is the same arrangement
+    as publishing Parquet — the consumer reads the output format, never the producer's code.
+
+    Only the facts a consumer needs, not the provenance: a citation is a claim about where a
+    number came from, and it belongs with the parameters rather than in a machine-read sidecar.
+    """
+    packs = load_packs(load_parameters())
+    facts = {
+        code: {
+            "alpha2": pack.alpha2,
+            "continent": pack.continent,
+            "blocs": sorted(pack.blocs),
+            "utc_offset_hours": pack.utc_offset_hours,
+            "currency": pack.currency,
+            "currency_minor_units": pack.minor_units,
+        }
+        for code, pack in sorted(packs.items())
+    }
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(facts, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print(f"wrote {output} ({len(facts)} country packs)")
+    return 0
 
 
 def _provenance(check: bool) -> int:
@@ -69,6 +101,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     report.add_argument("--rows", type=int)
     report.add_argument("--full", action="store_true")
     report.add_argument("--output", type=Path, default=REALISM_REPORT_MD)
+    packs_command = commands.add_parser(
+        "packs", help="write the country packs' facts as JSON, for consumers of the dataset"
+    )
+    packs_command.add_argument("--output", type=Path, required=True)
     export_command = commands.add_parser("export", help="assemble a verifiable release")
     export_command.add_argument("dataset", type=Path)
     export_command.add_argument("--output", type=Path, required=True)
@@ -83,6 +119,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         "dataset's fingerprint or the export refuses (PB-41)",
     )
     args = parser.parse_args(argv)
+    if args.command == "packs":
+        return _packs(args.output)
     if args.command == "export":
         release = export(args.dataset, args.output, csv_tables=not args.no_csv, report=args.report)
         rows = release.rows["transactions"]

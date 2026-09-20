@@ -13,6 +13,7 @@ import pytest
 
 from fraudshield_ml.features.registry import (
     REGISTRY,
+    Computability,
     Dtype,
     FallbackBehaviour,
     FeatureSpec,
@@ -74,6 +75,7 @@ def _spec(**overrides: object) -> FeatureSpec:
         "leakage_note": "Backward-looking only.",
         "template_id": "velocity.example",
         "reference_data_basis": ReferenceDataBasis.NOT_REFERENCE_DATA,
+        "computable": Computability.COMPUTABLE,
         "window": "24h",
         "contract": _contract(),
     }
@@ -495,3 +497,57 @@ def test_categories_for_refuses_a_feature_that_is_not_categorical() -> None:
     the feature has no permitted values, rather than that the question does not apply."""
     with pytest.raises(ValueError, match="not categorical"):
         categories_for("tx_count_24h")
+
+
+@pytest.mark.req("FR-02-02", "ML-DATA-07")
+def test_a_feature_with_no_source_data_must_say_what_it_needs_and_when() -> None:
+    """PB-44. A feature that is NaN for every row is invisible in a training run, so the
+    declaration is the only place it shows — and a declaration that says nothing is not one.
+
+    The milestone is required for the same reason the mutation is required in
+    `cross_account_control`: a crude check, because a check that could be satisfied by writing a
+    more convincing sentence is how the original geo_cell note passed. "This needs a table"
+    without a date is how a gap survives three milestones.
+    """
+    accepted = _spec(
+        computable=Computability.NO_SOURCE_DATA,
+        source_data_gap="A per-account table, supplied by M6.",
+    )
+    assert accepted.source_data_gap, "precondition: the accepted spec declares a gap"
+
+    with pytest.raises(ValueError, match="which milestone supplies it"):
+        _spec(computable=Computability.NO_SOURCE_DATA)
+    with pytest.raises(ValueError, match="which milestone supplies it"):
+        _spec(computable=Computability.NO_SOURCE_DATA, source_data_gap="   ")
+    with pytest.raises(ValueError, match="name the milestone"):
+        _spec(computable=Computability.NO_SOURCE_DATA, source_data_gap="Needs a table one day.")
+
+
+@pytest.mark.req("FR-02-02", "ML-DATA-07")
+def test_a_computable_feature_may_not_carry_a_source_data_gap() -> None:
+    """The control. Without it the field could be set anywhere and mean nothing, which is how a
+    declared field becomes decoration."""
+    with pytest.raises(ValueError, match="not blocking anything"):
+        _spec(computable=Computability.COMPUTABLE, source_data_gap="Needs a table in M6.")
+
+
+@pytest.mark.req("FR-02-02", "ML-DATA-07")
+def test_every_feature_declares_its_computability_and_six_have_no_source_data() -> None:
+    """The registry-wide form, with the count asserted so that a change has to be deliberate.
+
+    The six are the measured set, not an estimate: an earlier session's note said eight, from
+    reasoning about which inputs were missing rather than from computing the features. The
+    computability check exists because that kind of arithmetic is exactly what gets it wrong.
+    """
+    gaps = {n: s.source_data_gap for n, s in REGISTRY.items() if s.source_data_gap}
+    assert set(gaps) == {
+        "account_age_days",
+        "counterparty_account_age_days",
+        "kyc_tier",
+        "agent_float_utilisation_ratio",
+        "agent_distance_from_registered_km",
+        "round_sum_flag",
+    }
+    assert len(REGISTRY) - len(gaps) == 38, "38 of the 44 have data to read"
+    for name, gap in gaps.items():
+        assert re.search(r"\bM\d+\b", gap or ""), f"{name}: no milestone named"

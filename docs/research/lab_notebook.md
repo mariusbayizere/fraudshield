@@ -1267,3 +1267,131 @@ evidence once it has been executed.** Row 1 was written from the design document
 correct as reasoning, and described arithmetic the interpreter stopped doing in 3.12. Rows filled
 in from a design are a plan. The table's value is that it records results, and a result can
 contradict the design that predicted it.
+
+### 2026-09-20 · The estimate said eight; computing it said six
+
+PB-44 was opened with a count in it: eight of the 44 features could not be fed by the benchmark. The
+number came from reading each feature's inputs and asking whether the dataset held them — careful
+reasoning, done once, by the same method that produced the first `geo_cell` leakage note.
+
+**It was wrong, in both directions.** `days_since_sim_swap` was on the list and is computable:
+`account_events` carries `SIM_SWAP` rows, and the feature needs a join rather than a schema change.
+`synthetic_identity_score` was on it too, and is computable because its terms contribute **zero**
+when their evidence is absent — impaired rather than dead, which is a degeneracy and was already
+declared as one. Two others were not on the list and should have been examined:
+`corridor_class` and the five local-time features need the account's country, which the dataset
+does not carry at all.
+
+The measured answer is **six**: `account_age_days`, `counterparty_account_age_days`, `kyc_tier`,
+`agent_float_utilisation_ratio`, `agent_distance_from_registered_km`, `round_sum_flag`.
+
+**The owner's instruction is what made this checkable**: make "NaN everywhere" structurally
+visible rather than a backlog note. `computable: COMPUTABLE | NO_SOURCE_DATA` is an eleventh
+registry field with no default, and `fs-features computability` computes all 44 over the benchmark
+and fails **in both directions** — a COMPUTABLE feature NaN for 100% of rows, and a NO_SOURCE_DATA
+feature that is not. The second direction is the one that keeps the register from drifting into
+pessimism once somebody wires the data, and pessimism is no more true than optimism while being
+considerably more trusted.
+
+**100% and not a threshold.** Four device features are NaN on every USSD row and four agent
+features on every non-agent one, correctly; a cut-off would mean deciding how dead is dead, and
+would have reported nine healthy features as gaps.
+
+*The generalisation, which is the fourth time this session has produced it:* **a count obtained by
+reasoning about code is a prediction, and predictions belong in the register with their outcomes.**
+The parameter digest could not see a changed draw, mutation 1 described arithmetic the interpreter
+had stopped doing, and this count was off by four in two directions at once. In each case the
+reasoning was sound and the world had moved.
+
+### 2026-09-20 · The country the dataset does not record, and the inference that recovers it
+
+Six features need the country a transaction happened in: five local-time features need a UTC offset
+and `corridor_class` needs the corridor's origin. **`transactions` has `counterparty_country` and
+nothing for the sender.**
+
+The pipeline recovers it from the transaction's **currency**, which inverts exactly because the
+generator derives the currency *from* the customer's country — but only while currencies are
+distinct across the simulated packs. So `fs-features` **refuses** when two packs share one rather
+than tie-breaking. XOF across West Africa is the case that would trigger it, and PB-31's assumed
+packs are meant to include exactly that.
+
+Worth recording as a shape rather than as a fact about this schema: **an inference that is exact
+today and ambiguous after a data change is more dangerous than one that is approximate**, because
+nothing about it looks provisional. A silent tie-break would have placed transactions in the wrong
+country and shifted every local-time feature by hours, on the run after someone added a pack. The
+honest fix is an `account_country` column and it is recorded in PB-44.
+
+### 2026-09-20 · A performance change found a correctness defect
+
+Computing 44 features per row by scanning the whole corpus is quadratic, and the corpus has to be
+large for the window features to mean anything: at 5,920 accounts, a ten-thousand-row slice of the
+benchmark gives under two rows per account, so every window would be empty and the measurement
+would be of the sample rather than of the dataset. So the corpus is indexed by `history_key` and
+each feature is handed the rows that share its key — the same rows that survive its own filter.
+
+The equivalence is exact, so it is asserted bit for bit: `test_the_corpus_index_changes_no_value`
+compares all 44 slots through `float.hex()` for every sampled row, on the grounds that an unchecked
+performance change applied to the computation behind every figure the milestone reports is not a
+performance change, it is a rewrite.
+
+**It failed, and the index was right.** `velocity_ratio_1h_vs_30d` never filtered by account:
+handed a mixed history it counted strangers' transactions as the scored account's burst. Every
+hand-computed test for that feature passes a single-account history, so none could produce it, and
+the online path cannot make the mistake at all because its state is keyed by account. The defect
+lived exactly in the gap between the two — reachable only by a caller that passed a mixed corpus,
+which is what the batch pipeline does and what no test had done.
+
+*The useful part:* the parity suite is blind to this class by construction. Both paths were
+"correct" in the sense that each agreed with the other on every fixture either was given, because
+the fixtures were single-account. **A parity test proves the paths agree on the inputs they are
+given, and says nothing about the inputs nobody thought to give them.**
+
+### 2026-09-20 · The status table said "met" and cited a run that did not exist
+
+The M3 exit-criteria table was written in the same edit as the machinery it describes. E3 read
+**Met**, followed by "see the evidence run below", and no evidence run had completed — the
+measurement was killed for memory pressure an hour later and had never produced a figure. E6 read
+**Met** for a measurement that rides on E3's run.
+
+Caught by re-reading before committing, so nothing was published; the shape is what matters.
+**Nothing generated those cells.** An author typed "Met" while writing the code that would one day
+justify it, and a reader of the table would have found a record of results where there was a record
+of intentions.
+
+**This is the third instance of the same family in this project:**
+
+1. the committed realism report describing a superseded parameter set for two commits (M2, MAJOR
+   4.1, and again as PB-39);
+2. the README status line saying "M0 — bootstrap and governance" through two merged milestones,
+   because every other record-accuracy guard watches a *generated* artefact and the README is
+   written by hand;
+3. this table.
+
+All three are hand-written records of machine-checkable facts. The first two were each fixed with a
+guard that compares the hand-written claim against the thing it describes — a parameter digest, and
+`fs-readme-status`. The third has no guard, and is currently the only record in the repository that
+asserts a milestone's completeness.
+
+**The rule, stated so it outlives this instance: a status table must derive "met" from the
+existence of an evidence artefact, not from an author's edit.** The corollary is sharper and worth
+saying: *writing the checker is not optional politeness, it is what makes the table a record.*
+Until one exists, every cell is a claim by a person, and the table now says so in its own header.
+
+**Can it be mechanised, the way `milestones.yaml` is?** Yes, and the criteria sort into four kinds
+of evidence, which is what makes it tractable rather than a matter of parsing prose:
+
+| Evidence | Criteria | Check |
+|---|---|---|
+| a named test that exists and passes | E4, E5, E12–E15 | the test id is collected, as `fs-traceability` already resolves tagged tests |
+| an existing gate | E9, E10 | the gate command exits 0 |
+| an artefact on disk with a tree hash | E3, E6, E11 | the file exists and names the commit it was produced at |
+| judgement | E1, E2, E7, E8 | **never auto-met**; must carry prose and a human's initials |
+
+The fourth row is the load-bearing one. A checker that quietly marked judgement criteria "met"
+would be worse than no checker, because it would carry the authority of a machine over a claim no
+machine made. Logged as PB-45.
+
+*Why this belongs in the notebook and not only in the backlog:* the first two instances were each
+treated as a bug in one file. Three instances make it a property of how this project records
+things — hand-written summaries of machine-checkable facts drift, always in the flattering
+direction, and always in the document a reader trusts most.
