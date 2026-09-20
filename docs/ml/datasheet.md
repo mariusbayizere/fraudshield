@@ -292,6 +292,18 @@ dataset has.** Since no timestamps collide, the strictly-earlier bound excludes 
 should be; but any claim resting on it is a claim about a few hundred rows at this scale, and it
 should be quoted with that count rather than with an overall rate.
 
+**Which of the 44 features can this dataset actually feed?** Thirty-six. Eight read reference
+data that neither the dataset nor M1's schema holds — account and counterparty opening dates, KYC
+tier histories, agent float and registered premises, and the currency's round denominations — so
+they return NaN for every row until that data exists (PB-44). They are implemented and tested on
+both paths; what is missing is the input. `days_since_sim_swap` is **not** among them:
+`account_events` already carries `SIM_SWAP` rows, so it is computable as soon as the join is
+wired.
+
+This matters for reading any result computed here, because a feature that is NaN for every row is
+indistinguishable in a training run from one that is merely often missing. A result quoted as
+using "44 features" should say how many of them carried information.
+
 **What does `implied_speed_kmh` mean at its cap?** Not "fast". The cap is 1,000 km/h, above
 commercial cruising speed, so a value at the cap says one person cannot have been in both places
 in that time — a proxy for a shared account, a credential used elsewhere, or a spoofed location.

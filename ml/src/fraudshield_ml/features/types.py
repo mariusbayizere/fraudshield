@@ -53,6 +53,20 @@ class Transaction:
     currency: str | None = None
     #: The channel, one of the values `registry.categories_for("channel")` declares.
     channel: str | None = None
+    #: The device fingerprint, or ``None`` when the channel has no device — which every USSD
+    #: transaction does. ``None`` here is **data**, not a missing input: it is the structural NaN
+    #: D-04 fixes at exactly four device features, so it must not be confused with a caller
+    #: forgetting to supply a value. That is why the device features return NaN for it rather than
+    #: raising, while a missing counterparty or currency raises.
+    device_fingerprint: str | None = None
+    #: The agent's token, or ``None`` when the transaction was not at an agent. Like a null device
+    #: fingerprint this is **data**: D-04 fixes exactly four agent features as NaN together
+    #: outside ``AGENT_BANKING``, so the agent features return NaN for it rather than raising.
+    agent_id: str | None = None
+    #: The merchant category code. ``agent_cashout_count_1h`` needs it to tell a cash disbursement
+    #: from any other agent transaction, and the codes are reference data the caller supplies
+    #: rather than literals here.
+    merchant_category_code: str | None = None
 
     def __post_init__(self) -> None:
         if self.timestamp.tzinfo is None:
@@ -156,3 +170,83 @@ class OperationalLimit:
                 f"{self.dimension.value}/{self.applies_to}: a limit of {self.amount_rwf} is not a "
                 "limit; a band below it would cover every amount or none"
             )
+
+
+@dataclass(frozen=True)
+class TierAssignment:
+    """A KYC tier and the moment it took effect (ADR 0026).
+
+    A separate record from ``OperationalLimit`` although both are as-of lookups, because they are
+    as-of over different things: a limit is institution-wide configuration, a tier is an attribute
+    of one account. Merging them would mean one of the two carried a field the other never uses,
+    and the join a caller has to get right is different in each case.
+
+    The asymmetry ADR 0026 is about bites hardest here. Tier upgrades are frequently triggered by
+    investigation, so the current tier of an account that was investigated **is a consequence of
+    the fraud being scored**. Reading it for an eight-month-old transaction is not merely
+    anachronistic, it is the label arriving through a profile column.
+    """
+
+    tier: int
+    effective_at: datetime
+
+    def __post_init__(self) -> None:
+        if self.effective_at.tzinfo is None:
+            raise ValueError(
+                f"tier {self.tier}: effective_at must be timezone-aware; an as-of comparison "
+                "against a naive timestamp is the ambiguity ADR 0026 removes"
+            )
+
+
+@dataclass(frozen=True)
+class AgentStanding:
+    """An agent's float, limit and registered premises as they stood at a moment (ADR 0026).
+
+    Every field here is mutable operational data, which is why the whole record carries an
+    ``effective_at`` rather than being a static attribute like an account's opening date. The
+    registered location is the one that catches people out: an agent that relocated after an
+    incident would otherwise appear to have been at its new premises all along, and
+    ``agent_distance_from_registered_km`` would report a short distance for exactly the
+    transactions that were far from where the agent actually was.
+    """
+
+    float_balance_rwf: float
+    float_limit_rwf: float
+    latitude: float
+    longitude: float
+    effective_at: datetime
+
+    def __post_init__(self) -> None:
+        if self.effective_at.tzinfo is None:
+            raise ValueError("AgentStanding.effective_at must be timezone-aware (ADR 0026)")
+        if self.float_limit_rwf <= 0.0:
+            raise ValueError(
+                f"float_limit_rwf is {self.float_limit_rwf}; a utilisation ratio against a "
+                "non-positive limit is not a fraction of anything"
+            )
+
+
+@dataclass(frozen=True)
+class IdentityEvidence:
+    """The non-transactional inputs `synthetic_identity_score` reads, as one record.
+
+    Grouped rather than passed as four arguments because they are one thing: what is known about
+    this account that is not in its transaction history. Each is allowed to be absent, and an
+    absent one contributes **zero** to the composite rather than NaN — the composite accumulates
+    evidence, so missing evidence adds none. The consequence is worth stating where a caller will
+    see it: a score of 0 means "no evidence", not "checked and clean".
+
+    ``accounts_on_device`` is the value of ``accounts_per_device_7d``, passed in rather than
+    recomputed. The registry already records that this composite "inherits accounts_per_device_7d's
+    exposure at reduced weight", so they are the same cross-account read and computing it twice
+    would give two places for it to be wrong.
+    """
+
+    #: The KYC tier in force at the transaction, or NaN when it is unknown.
+    kyc_tier: float
+    #: The lowest and highest tiers the country pack declares (ADR 0023: never a literal in code).
+    kyc_tier_range: tuple[int, int]
+    #: The account's opening date, or None when the institution has no record of it (PB-37).
+    opened_at: datetime | None
+    #: ``accounts_per_device_7d`` for this transaction, NaN for a null fingerprint.
+    accounts_on_device: float

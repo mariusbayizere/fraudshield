@@ -30,6 +30,7 @@ from fraudshield_ml.features import batch
 from fraudshield_ml.features.online import OnlineFeatures
 from fraudshield_ml.features.registry import categories_for, smoothing_for
 from fraudshield_ml.features.types import (
+    AgentStanding,
     CountryFacts,
     LimitDimension,
     OperationalLimit,
@@ -605,3 +606,115 @@ def test_the_cap_does_not_fire_for_a_journey_that_is_merely_fast() -> None:
     speed = batch.implied_speed_kmh([previous], scored)
     assert speed < batch.MAX_IMPLIED_SPEED_KMH
     assert speed == pytest.approx(754.9, abs=0.1)
+
+
+# --- structural NaN ------------------------------------------------------------------------------
+
+
+@pytest.mark.req("FR-02-02", "D-04")
+def test_mutation_5_a_structural_missing_emitted_as_zero_is_detected() -> None:
+    """The D-04 contract collapsing to a number, caught by NaN-position equality.
+
+    `0.0` is the dangerous substitute rather than an arbitrary one. For `device_is_new_for_account`
+    it reads as "a familiar device"; for `accounts_per_device_7d` as "no account uses this device",
+    which is not a state any device can be in; for `device_changes_24h` as "no change". Every one
+    of them is the reassuring end of its own scale, so a USSD transaction — which has no device by
+    construction, not by accident — would be scored as a well-behaved one on four features at
+    once.
+
+    The tolerance cannot catch this and is not asked to: `abs(nan - 0.0)` is NaN, and every
+    comparison against NaN is False, so a tolerance-based check would report "within tolerance" for
+    a value that is not a number. NaN positions are therefore compared as positions, which is what
+    ADR 0025's third rule says and why it is a separate rule rather than a tighter bound.
+    """
+    ussd = Transaction(
+        transaction_id="ussd",
+        account_id="A",
+        timestamp=T,
+        amount_rwf=1_000.0,
+        latitude=KIGALI[0],
+        longitude=KIGALI[1],
+        channel="USSD",
+        device_fingerprint=None,
+    )
+    assert ussd.device_fingerprint is None, "precondition: a USSD transaction has no device"
+
+    history = [
+        Transaction(
+            transaction_id="prior",
+            account_id="A",
+            timestamp=T - timedelta(hours=2),
+            amount_rwf=1_000.0,
+            latitude=KIGALI[0],
+            longitude=KIGALI[1],
+            device_fingerprint="D1",
+        )
+    ]
+    correct = {
+        "device_is_new_for_account": batch.device_is_new_for_account(history, ussd),
+        "accounts_per_device_7d": batch.accounts_per_device_7d(history, ussd),
+        "device_changes_24h": batch.device_changes_24h(history, ussd),
+        "device_age_days": batch.device_age_days(ussd, T - timedelta(days=5)),
+    }
+    assert set(correct) == set(batch.DEVICE_FEATURES), (
+        "precondition: the four features under test are the four D-04 names"
+    )
+    assert all(math.isnan(value) for value in correct.values()), (
+        f"precondition: all four are NaN for a null fingerprint, got {correct}"
+    )
+
+    for name, value in correct.items():
+        mutated = 0.0
+        assert math.isnan(value), f"{name}: the correct value must be NaN"
+        assert not math.isnan(mutated), (
+            f"{name}: the mutation must move it to a number, which is a contract violation "
+            "rather than a numerical difference"
+        )
+        # The point of the row, stated as an assertion: a tolerance would not catch it.
+        assert not abs(value - mutated) > 1e-12 + 1e-12 * abs(value), (
+            f"{name}: a tolerance comparison against NaN is False, so it reports agreement; only "
+            "comparing NaN positions catches this"
+        )
+
+
+@pytest.mark.req("FR-02-02", "D-04")
+def test_the_agent_structural_nan_collapses_the_same_way() -> None:
+    """The second structural-NaN set, for the same reason and with the same substitute.
+
+    A zero float-utilisation ratio reads as an agent with an untouched float, and a zero distance
+    from registered premises as an agent sitting exactly where it is registered. Both are the
+    reassuring end, on every transaction that was not at an agent at all — which is most of them.
+    """
+    not_at_an_agent = Transaction(
+        transaction_id="wallet",
+        account_id="A",
+        timestamp=T,
+        amount_rwf=1_000.0,
+        latitude=KIGALI[0],
+        longitude=KIGALI[1],
+        channel="MOBILE_MONEY",
+    )
+    assert not_at_an_agent.agent_id is None, "precondition: not an agent transaction"
+    standing = (
+        AgentStanding(
+            float_balance_rwf=500_000.0,
+            float_limit_rwf=1_000_000.0,
+            latitude=KIGALI[0],
+            longitude=KIGALI[1],
+            effective_at=T - timedelta(days=30),
+        ),
+    )
+    values = {
+        "agent_float_utilisation_ratio": batch.agent_float_utilisation_ratio(
+            not_at_an_agent, standing
+        ),
+        "agent_cashout_count_1h": batch.agent_cashout_count_1h(
+            [], not_at_an_agent, frozenset({"6011"})
+        ),
+        "agent_unique_customers_1h": batch.agent_unique_customers_1h([], not_at_an_agent),
+        "agent_distance_from_registered_km": batch.agent_distance_from_registered_km(
+            not_at_an_agent, standing
+        ),
+    }
+    assert set(values) == set(batch.AGENT_FEATURES)
+    assert all(math.isnan(value) for value in values.values()), values

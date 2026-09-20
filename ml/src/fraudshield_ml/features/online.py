@@ -29,10 +29,13 @@ from fraudshield_ml.features.registry import (
     smoothing_for,
 )
 from fraudshield_ml.features.types import (
+    AgentStanding,
     CountryFacts,
+    IdentityEvidence,
     LimitDimension,
     OperationalLimit,
     Outcome,
+    TierAssignment,
     Transaction,
 )
 
@@ -61,26 +64,33 @@ def window_of(name: str) -> timedelta:
     return timedelta(seconds=int(match.group(1)) * _UNIT_SECONDS[match.group(2)])
 
 
-def _account_horizon() -> timedelta:
-    """How far back per-account arrivals are kept: the longest window any account-keyed feature
-    reads.
+def _horizon(key: HistoryKey) -> timedelta:
+    """How far back arrivals keyed by `key` are kept: the longest window any such feature reads.
 
     Derived from the registry rather than written as a constant, so that registering a feature with
-    a longer window cannot leave the store quietly evicting rows that feature needs. Features whose
-    window is unbounded are **not** covered by this — they need durable state rather than a longer
-    rolling window, which is what `history_requirement=DURABLE` says.
+    a longer window cannot leave the store quietly evicting rows that feature needs — a defect that
+    would show up as a feature reading low rather than as an error. Features whose window is
+    unbounded are **not** covered: they need durable state rather than a longer rolling window,
+    which is exactly what `history_requirement=DURABLE` says.
     """
-    spans = []
-    for name, spec in REGISTRY.items():
-        contract = spec.contract
-        if contract is None or contract.history_key is not HistoryKey.ACCOUNT:
-            continue
-        if _WINDOW.match(spec.window or ""):
-            spans.append(window_of(name))
+    spans = [
+        window_of(name)
+        for name, spec in REGISTRY.items()
+        if spec.contract is not None
+        and spec.contract.history_key is key
+        and _WINDOW.match(spec.window or "")
+    ]
+    if not spans:
+        raise ValueError(
+            f"no windowed feature is keyed by {key.value}, so there is nothing to keep"
+        )
     return max(spans)
 
 
-_ACCOUNT_HORIZON = _account_horizon()
+_ACCOUNT_HORIZON = _horizon(HistoryKey.ACCOUNT)
+_COUNTERPARTY_HORIZON = _horizon(HistoryKey.COUNTERPARTY)
+_DEVICE_HORIZON = _horizon(HistoryKey.DEVICE)
+_AGENT_HORIZON = _horizon(HistoryKey.AGENT)
 
 #: The MAD-to-sigma constant, so the robust z-score is on the standard-deviation scale under
 #: normality. The same number as the batch path's, because it is a property of the estimator
@@ -94,6 +104,16 @@ _LIMIT_BAND = 0.05
 #: at the cap is a proxy for a shared account, a credential used elsewhere or a spoofed location,
 #: never for travel. It saturates so that nothing can split inside the impossible range.
 _MAX_IMPLIED_SPEED_KMH = 1000.0
+
+#: Part E.2's "account age under 30 d", a threshold rather than a ramp because the specification
+#: names a cliff and smoothing it would hide a second modelling decision inside a heuristic.
+_NEW_ACCOUNT_DAYS = 30.0
+
+#: The composite's internal "recent" window, and the share of its 30 d window that a
+#: constant-rate account puts in it. The ramp term measures departure from that share, so an even
+#: account scores 0 and the term means "faster than its own baseline" rather than "recent".
+_RAMP_SHORT_WINDOW = timedelta(days=7)
+_EVEN_RATE_SHARE = _RAMP_SHORT_WINDOW / timedelta(days=30)
 
 
 def _minimum_observations(name: str) -> int:
@@ -134,6 +154,7 @@ class Arrival:
     counterparty_id: str | None
     latitude: float
     longitude: float
+    device_fingerprint: str | None = None
 
 
 @dataclass
@@ -164,10 +185,71 @@ class AccountState:
     #: corridor look new on every established account simultaneously — the same shape as PB-37's
     #: first-seen, in a different field.
     countries: set[str] = field(default_factory=set)
+    #: Every counterparty this account has ever paid. `DURABLE` and unbounded, for the same reason
+    #: as `countries`: a flush that lost it would report every established payee as new, across
+    #: the whole account base, at the moment the system is recovering.
+    counterparties: set[str] = field(default_factory=set)
+    #: Every device fingerprint this account has ever used. The fifth durable field, unbounded for
+    #: the same reason as the other two sets: a flush would report every familiar handset as new.
+    devices: set[str] = field(default_factory=set)
     arrivals: deque[Arrival] = field(default_factory=deque)
 
     def evict_before(self, cutoff: datetime) -> None:
         while self.arrivals and self.arrivals[0].at <= cutoff:
+            self.arrivals.popleft()
+
+
+@dataclass
+class CounterpartyState:
+    """Per-counterparty online state: who sent, when, and which transaction it was.
+
+    Keyed by the **counterparty**, so E1's account-grouped folds do not isolate the features that
+    read it — a ring moving money from ten victims into one mule produces ten rows reading this
+    one object. Each such feature declares `cross_account_control` in the registry, and the store
+    being separate from `AccountState` is what makes that visible in the code rather than only in
+    the contract.
+    """
+
+    arrivals: deque[tuple[datetime, str, str]] = field(default_factory=deque)
+
+    def evict_before(self, cutoff: datetime) -> None:
+        while self.arrivals and self.arrivals[0][0] <= cutoff:
+            self.arrivals.popleft()
+
+
+@dataclass
+class DeviceState:
+    """Per-device online state: which accounts used it and when, plus its durable first sighting.
+
+    `first_seen_at` is held separately and is **not** set by `observe`, on exactly PB-37's
+    reasoning: after a flush the earliest arrival is the rolling window's edge rather than the
+    device's first sighting, so inferring it would report every device in the estate as a few days
+    old at the moment the store came back — which is the direction that reads as suspicious, for
+    the entire estate at once.
+    """
+
+    first_seen_at: datetime | None = None
+    arrivals: deque[tuple[datetime, str]] = field(default_factory=deque)
+
+    def evict_before(self, cutoff: datetime) -> None:
+        while self.arrivals and self.arrivals[0][0] <= cutoff:
+            self.arrivals.popleft()
+
+
+@dataclass
+class AgentState:
+    """Per-agent online state: who transacted, when, and under which category code.
+
+    Keyed by the AGENT, so customers of one agent read one object and E1's account grouping does
+    not isolate it. The category code is kept because `agent_cashout_count_1h` counts cash
+    disbursements rather than every transaction — a distinction the current dataset does not make,
+    which is precisely why the store must be able to.
+    """
+
+    arrivals: deque[tuple[datetime, str, str | None]] = field(default_factory=deque)
+
+    def evict_before(self, cutoff: datetime) -> None:
+        while self.arrivals and self.arrivals[0][0] <= cutoff:
             self.arrivals.popleft()
 
 
@@ -187,6 +269,9 @@ class OnlineFeatures:
 
     def __init__(self) -> None:
         self._accounts: dict[str, AccountState] = {}
+        self._counterparties: dict[str, CounterpartyState] = {}
+        self._devices: dict[str, DeviceState] = {}
+        self._agents: dict[str, AgentState] = {}
         self._cells: dict[str, CellState] = {}
         self._outcomes: dict[str, Outcome] = {}
         #: A memo of corridor classifications, keyed by the ordered country pair. Serving resolves
@@ -214,6 +299,7 @@ class OnlineFeatures:
             counterparty_id=transaction.counterparty_id,
             latitude=transaction.latitude,
             longitude=transaction.longitude,
+            device_fingerprint=transaction.device_fingerprint,
         )
         account.arrivals.append(arrival)
         # Monotone rather than assigned: a replay that delivers an out-of-order arrival must not
@@ -225,6 +311,33 @@ class OnlineFeatures:
         # Evicted at the longest window any account-keyed feature reads, not at any one feature's:
         # a store that forgot what the 90 d features need would leave them silently short.
         account.evict_before(transaction.timestamp - _ACCOUNT_HORIZON)
+
+        if transaction.counterparty_id is not None:
+            account.counterparties.add(transaction.counterparty_id)
+            counterparty = self._counterparties.setdefault(
+                transaction.counterparty_id, CounterpartyState()
+            )
+            counterparty.arrivals.append(
+                (transaction.timestamp, transaction.account_id, transaction.transaction_id)
+            )
+            counterparty.evict_before(transaction.timestamp - _COUNTERPARTY_HORIZON)
+
+        if transaction.device_fingerprint is not None:
+            account.devices.add(transaction.device_fingerprint)
+            device = self._devices.setdefault(transaction.device_fingerprint, DeviceState())
+            device.arrivals.append((transaction.timestamp, transaction.account_id))
+            device.evict_before(transaction.timestamp - _DEVICE_HORIZON)
+
+        if transaction.agent_id is not None:
+            agent = self._agents.setdefault(transaction.agent_id, AgentState())
+            agent.arrivals.append(
+                (
+                    transaction.timestamp,
+                    transaction.account_id,
+                    transaction.merchant_category_code,
+                )
+            )
+            agent.evict_before(transaction.timestamp - _AGENT_HORIZON)
 
         cell = self._cells.setdefault(
             h3_cell(transaction.latitude, transaction.longitude), CellState()
@@ -279,6 +392,33 @@ class OnlineFeatures:
         state = self._accounts.setdefault(account_id, AccountState())
         state.countries = set(countries)
 
+    def restore_counterparties(self, account_id: str, counterparties: set[str]) -> None:
+        """Load the account's lifetime set of counterparties after a flush.
+
+        The fourth durable field. Same shape as `restore_countries`, and worth its own method
+        rather than a combined "restore everything": each durable field is a separate schema
+        commitment, and a caller that can supply one and not another should fail on the one it
+        cannot rather than silently supply an empty set for it.
+        """
+        state = self._accounts.setdefault(account_id, AccountState())
+        state.counterparties = set(counterparties)
+
+    def restore_devices(self, account_id: str, devices: set[str]) -> None:
+        """Load the account's lifetime set of device fingerprints after a flush."""
+        state = self._accounts.setdefault(account_id, AccountState())
+        state.devices = set(devices)
+
+    def restore_device_first_seen(self, fingerprint: str, first_seen_at: datetime) -> None:
+        """Load a device's first sighting anywhere in the institution, from durable storage.
+
+        Required after a flush and on any replay that does not start at the device's very first
+        appearance. `observe` will not infer it: the inference is the one that made `DURABLE`
+        decorative for the account's first-seen, and it fails the same way here — the earliest
+        arrival is the window's edge, not the device's beginning.
+        """
+        state = self._devices.setdefault(fingerprint, DeviceState())
+        state.first_seen_at = first_seen_at
+
     def observe_outcome(self, outcome: Outcome) -> None:
         """Record a label. It becomes visible only from its `available_at`, not on arrival here."""
         self._outcomes[outcome.transaction_id] = outcome
@@ -290,6 +430,9 @@ class OnlineFeatures:
         it is a contract violation, and this is the only place that becomes visible.
         """
         self._accounts.clear()
+        self._counterparties.clear()
+        self._devices.clear()
+        self._agents.clear()
         self._cells.clear()
         # Cleared too, though it is a memo of version-controlled pack data rather than history:
         # a cache that survives a flush because someone judged it safe is a claim, and the cheaper
@@ -349,7 +492,18 @@ class OnlineFeatures:
         state = self._accounts.get(scored.account_id)
         if state is None:
             return []
-        start = scored.timestamp - window_of(name)
+        return self._in_span(scored, window_of(name))
+
+    def _in_span(self, scored: Transaction, span: timedelta) -> list[Arrival]:
+        """The same open interval against an explicit span, for the composite's internal window.
+
+        The composite's 7 d "recent" window is part of its own documented form rather than a
+        declared window of any feature, so it has no name to look up.
+        """
+        state = self._accounts.get(scored.account_id)
+        if state is None:
+            return []
+        start = scored.timestamp - span
         return [a for a in state.arrivals if start < a.at < scored.timestamp]
 
     def tx_count(self, scored: Transaction, name: str) -> int:
@@ -612,6 +766,293 @@ class OnlineFeatures:
             return True
         return country not in state.countries
 
+    # ---- counterparty --------------------------------------------------------------------------
+
+    def counterparty_is_new_for_account(self, scored: Transaction) -> bool:
+        """True when this account has never paid this counterparty. Unbounded, so `DURABLE`."""
+        counterparty = _counterparty_of(scored)
+        state = self._accounts.get(scored.account_id)
+        if state is None:
+            return True
+        return counterparty not in state.counterparties
+
+    def counterparty_unique_senders_24h(self, scored: Transaction) -> int:
+        """Distinct accounts that sent to this counterparty in the trailing 24 h — the mule signal.
+
+        `history_key=COUNTERPARTY`: this reads other accounts' rows by construction, which is the
+        whole content of the feature. A legitimate recipient rarely acquires many unrelated senders
+        at once; a mule does, and the senders are exactly the accounts a per-account view cannot
+        see. That is also why the feature needs `cross_account_control` in the registry — E1's
+        account-grouped folds do not isolate a leak that travels through the counterparty.
+        """
+        counterparty = _counterparty_of(scored)
+        state = self._counterparties.get(counterparty)
+        if state is None:
+            return 0
+        start = scored.timestamp - window_of("counterparty_unique_senders_24h")
+        return len({account for at, account, _ in state.arrivals if start < at < scored.timestamp})
+
+    def counterparty_confirmed_fraud_90d(self, scored: Transaction) -> int:
+        """Confirmed-fraud transactions involving this counterparty in the prior 90 d.
+
+        Gated on `label_available_at`, never on confirmation: counting a label that had not
+        arrived imports the investigation delay straight into the feature, and the online path
+        structurally cannot do it — which is why the batch path has to be stopped from doing it.
+        """
+        counterparty = _counterparty_of(scored)
+        state = self._counterparties.get(counterparty)
+        if state is None:
+            return 0
+        start = scored.timestamp - window_of("counterparty_confirmed_fraud_90d")
+        confirmed = 0
+        for at, _, transaction_id in state.arrivals:
+            if not (start < at < scored.timestamp) or transaction_id == scored.transaction_id:
+                continue
+            outcome = self._outcomes.get(transaction_id)
+            if outcome is None or outcome.available_at >= scored.timestamp:
+                continue
+            confirmed += int(outcome.is_fraud)
+        return confirmed
+
+    def tx_count_to_counterparty_30d(self, scored: Transaction) -> int:
+        """Transactions from this account to this counterparty in the trailing 30 d.
+
+        Keyed by the ACCOUNT, not the counterparty: it is a statement about this pair's
+        relationship, so it reads the account's own arrivals and filters them. Low for a first
+        transfer to a new payee, which is the established-relationship signal.
+        """
+        counterparty = _counterparty_of(scored)
+        window = self._in_window(scored, "tx_count_to_counterparty_30d")
+        return sum(1 for arrival in window if arrival.counterparty_id == counterparty)
+
+    def counterparty_account_age_days(
+        self, scored: Transaction, opened_at: datetime | None
+    ) -> float:
+        """Days since the counterparty account was opened, NaN when that is unknown.
+
+        Supplied rather than accumulated: this is a static attribute of the counterparty, and the
+        store holds arrivals. Deriving it from the earliest arrival the cache has seen would bound
+        every counterparty's age by the cache's own age and report the entire population as young
+        — a plausible number that moves with how recently the store was flushed.
+        """
+        if opened_at is None:
+            return float("nan")
+        return (scored.timestamp - opened_at).total_seconds() / 86_400.0
+
+    # ---- device and channel ----------------------------------------------------------------
+
+    def channel(self, scored: Transaction) -> str:
+        """The transaction's channel, checked against the registry's declared values."""
+        value = scored.channel
+        if value is None:
+            raise ValueError(
+                f"{scored.transaction_id}: channel is mandatory and constrained at ingestion"
+            )
+        if value not in categories_for("channel"):
+            raise ValueError(
+                f"{scored.transaction_id}: channel {value!r} is undeclared; it would reach the "
+                "model as an unseen level rather than as an error"
+            )
+        return value
+
+    def device_is_new_for_account(self, scored: Transaction) -> float:
+        """1.0 for an unfamiliar device, 0.0 for a familiar one, NaN when there is no device."""
+        device = scored.device_fingerprint
+        if device is None:
+            return float("nan")
+        state = self._accounts.get(scored.account_id)
+        if state is None:
+            return 1.0
+        return 0.0 if device in state.devices else 1.0
+
+    def accounts_per_device_7d(self, scored: Transaction) -> float:
+        """Distinct accounts on this device in the trailing 7 d, NaN when there is no device.
+
+        `fallback_behaviour=NAN_UNDER_FALLBACK`: cross-account device state lives only in the
+        online store, so the DB fallback has nothing to read and the feature is declared absent
+        rather than approximated. Identically 1 on the current dataset (PB-40).
+        """
+        device = scored.device_fingerprint
+        if device is None:
+            return float("nan")
+        state = self._devices.get(device)
+        accounts = {scored.account_id}
+        if state is not None:
+            start = scored.timestamp - window_of("accounts_per_device_7d")
+            accounts |= {a for at, a in state.arrivals if start < at < scored.timestamp}
+        return float(len(accounts))
+
+    def device_changes_24h(self, scored: Transaction) -> float:
+        """Distinct devices on this account in 24 h minus one, NaN when there is no device."""
+        device = scored.device_fingerprint
+        if device is None:
+            return float("nan")
+        devices = {
+            arrival.device_fingerprint
+            for arrival in self._in_window(scored, "device_changes_24h")
+            if arrival.device_fingerprint is not None
+        }
+        devices.add(device)
+        return float(len(devices) - 1)
+
+    def device_age_days(self, scored: Transaction) -> float:
+        """Days since this device was first seen anywhere, NaN without a durable first sighting.
+
+        Fails closed on the same terms as the account's first-seen (PB-37): without the durable
+        value there is no age, only a guess bounded by however long the cache has been warm.
+        """
+        device = scored.device_fingerprint
+        if device is None:
+            return float("nan")
+        state = self._devices.get(device)
+        if state is None or state.first_seen_at is None:
+            return float("nan")
+        return (scored.timestamp - state.first_seen_at).total_seconds() / 86_400.0
+
+    # ---- account profile -----------------------------------------------------------------------
+
+    def account_age_days(self, scored: Transaction, opened_at: datetime | None) -> float:
+        """Days since the account was opened, NaN when that is unknown.
+
+        Supplied, not accumulated, and distinct from the first-seen-in-data timestamp: an account
+        may be opened long before it transacts, so the store's earliest arrival is a different
+        quantity that happens to have similar units.
+        """
+        if opened_at is None:
+            return float("nan")
+        return (scored.timestamp - opened_at).total_seconds() / 86_400.0
+
+    def kyc_tier(self, scored: Transaction, assignments: Sequence[TierAssignment]) -> float:
+        """The tier in force at the transaction, NaN when none had taken effect (ADR 0026).
+
+        At scoring time "as of the transaction" and "as of now" coincide, which is exactly why the
+        batch path carries the same resolution rather than trusting the two to agree: they diverge
+        on replay and in training, and nowhere else.
+        """
+        in_force = [a for a in assignments if a.effective_at <= scored.timestamp]
+        if not in_force:
+            return float("nan")
+        return float(max(in_force, key=lambda a: a.effective_at).tier)
+
+    def days_since_sim_swap(self, scored: Transaction, swaps: Sequence[datetime]) -> float:
+        """Days since the most recent swap strictly before the transaction, NaN when there is none.
+
+        NaN covers both "no MNO signal" and "signal, no swap". Both are the absence of a date, and
+        a large sentinel would read as "a swap long ago" — the safe end of a signal whose
+        dangerous end is "a swap an hour ago".
+        """
+        earlier = [when for when in swaps if when < scored.timestamp]
+        if not earlier:
+            return float("nan")
+        return (scored.timestamp - max(earlier)).total_seconds() / 86_400.0
+
+    def dormancy_reactivation_flag(self, scored: Transaction) -> bool:
+        """Silent for 60 d having transacted before, from the durable previous transaction.
+
+        Reads `last_transaction` rather than the rolling window, and that is the whole feature: a
+        60-day window can see that an account has been quiet and cannot tell a dormant account
+        from a new one. After a flush the durable record is gone, every established account looks
+        new, and the flag reads False across the estate — the quiet direction, during a recovery.
+        """
+        previous = self._previous(scored)
+        if previous is None:
+            return False
+        return previous.at <= scored.timestamp - window_of("dormancy_reactivation_flag")
+
+    # ---- agent ----------------------------------------------------------------------------------
+
+    def agent_float_utilisation_ratio(
+        self, scored: Transaction, standing: Sequence[AgentStanding]
+    ) -> float:
+        """Float drawn down over the limit, both as of the transaction, NaN off an agent."""
+        if scored.agent_id is None:
+            return float("nan")
+        current = _standing_at(standing, scored.timestamp)
+        if current is None:
+            return float("nan")
+        return current.float_balance_rwf / current.float_limit_rwf
+
+    def agent_cashout_count_1h(self, scored: Transaction, cash_out_codes: frozenset[str]) -> float:
+        """Cash disbursements at this agent in the trailing 1 h, NaN off an agent."""
+        agent = scored.agent_id
+        if agent is None:
+            return float("nan")
+        state = self._agents.get(agent)
+        if state is None:
+            return 0.0
+        start = scored.timestamp - window_of("agent_cashout_count_1h")
+        return float(
+            sum(
+                1
+                for at, _, code in state.arrivals
+                if code in cash_out_codes and start < at < scored.timestamp
+            )
+        )
+
+    def agent_unique_customers_1h(self, scored: Transaction) -> float:
+        """Distinct accounts at this agent in the trailing 1 h, including the scored one."""
+        agent = scored.agent_id
+        if agent is None:
+            return float("nan")
+        accounts = {scored.account_id}
+        state = self._agents.get(agent)
+        if state is not None:
+            start = scored.timestamp - window_of("agent_unique_customers_1h")
+            accounts |= {a for at, a, _ in state.arrivals if start < at < scored.timestamp}
+        return float(len(accounts))
+
+    def agent_distance_from_registered_km(
+        self, scored: Transaction, standing: Sequence[AgentStanding]
+    ) -> float:
+        """Distance from the agent's registered premises as of the transaction, NaN off an agent."""
+        if scored.agent_id is None:
+            return float("nan")
+        current = _standing_at(standing, scored.timestamp)
+        if current is None:
+            return float("nan")
+        return haversine_km(current.latitude, current.longitude, scored.latitude, scored.longitude)
+
+    # ---- synthetic identity ------------------------------------------------------------------
+
+    def synthetic_identity_score(self, scored: Transaction, evidence: IdentityEvidence) -> float:
+        """The four-term composite in [0, 1]. See `batch` and the registry for the form.
+
+        Written from the arrivals the store holds rather than from a filtered history, and with
+        its own term functions: the composite is four independent judgements averaged, so four
+        places where the two paths could disagree, and sharing the terms would leave parity
+        checking only the mean.
+        """
+        lowest, highest = evidence.kyc_tier_range
+        if highest <= lowest:
+            raise ValueError(
+                f"kyc_tier_range {evidence.kyc_tier_range} has no span, so 'low tier' has no "
+                "meaning; the range comes from the country pack"
+            )
+
+        tier = evidence.kyc_tier
+        low_tier = (
+            0.0 if math.isnan(tier) else min(1.0, max(0.0, (highest - tier) / (highest - lowest)))
+        )
+
+        if evidence.opened_at is None:
+            new_account = 0.0
+        else:
+            age_days = (scored.timestamp - evidence.opened_at).total_seconds() / 86_400.0
+            new_account = 1.0 if age_days < _NEW_ACCOUNT_DAYS else 0.0
+
+        shared = evidence.accounts_on_device
+        device_sharing = 0.0 if math.isnan(shared) else min(1.0, max(0.0, (shared - 1.0) / 2.0))
+
+        recent = len(self._in_span(scored, _RAMP_SHORT_WINDOW))
+        month = len(self._in_span(scored, window_of("synthetic_identity_score")))
+        if month == 0:
+            ramp = 0.0
+        else:
+            share = recent / month
+            ramp = min(1.0, max(0.0, (share - _EVEN_RATE_SHARE) / (1.0 - _EVEN_RATE_SHARE)))
+
+        return (low_tier + new_account + device_sharing + ramp) / 4.0
+
     def geo_cell_fraud_rate_30d(self, scored: Transaction, prior: float) -> float:
         """See `registry`'s contract. Labels are gated on `available_at`, never on confirmation."""
         alpha = smoothing_for("geo_cell_fraud_rate_30d").alpha
@@ -687,3 +1128,30 @@ def _pack(countries: Mapping[str, CountryFacts], code: str, scored: Transaction)
             "a pack file, so a missing one is a deployment carrying packs it does not serve"
         )
     return countries[code]
+
+
+def _counterparty_of(scored: Transaction) -> str:
+    """The scored transaction's counterparty, or a refusal.
+
+    Rows without one must not share an identity: they would look like repeated payments to a
+    single payee, so the second would read as an established relationship and the mule count would
+    lump unrelated recipients together.
+    """
+    if scored.counterparty_id is None:
+        raise ValueError(
+            f"{scored.transaction_id}: the counterparty features need counterparty_id; rows "
+            "without one would share an identity and read as an established relationship"
+        )
+    return scored.counterparty_id
+
+
+def _standing_at(standing: Sequence[AgentStanding], at: datetime) -> AgentStanding | None:
+    """The agent's latest standing effective by `at`, or None when it had none.
+
+    None rather than the earliest on record: applying a float limit that did not yet exist to a
+    transaction that predates it is ADR 0026's defect with the arrow pointing backwards.
+    """
+    in_force = [record for record in standing if record.effective_at <= at]
+    if not in_force:
+        return None
+    return max(in_force, key=lambda record: record.effective_at)

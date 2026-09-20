@@ -19,6 +19,7 @@ from fraudshield_ml.features import batch
 from fraudshield_ml.features.online import OnlineFeatures
 from fraudshield_ml.features.primitives import h3_cell, haversine_km
 from fraudshield_ml.features.types import (
+    IdentityEvidence,
     LimitDimension,
     OperationalLimit,
     Outcome,
@@ -560,3 +561,122 @@ def test_the_geographic_and_gap_features_agree_at_every_prefix() -> None:
         "no prefix saturated the speed cap, so the cap is untested by this replay"
     )
     assert novelty == {True, False}, "every country was new, so the novelty flag was constant"
+
+
+def _mixed_history(n: int = 70, seed: int = 20260921) -> list[Transaction]:
+    """Arrivals from several accounts through agents, devices and counterparties.
+
+    One replay for the four remaining groups, because they share a store and a bug in eviction or
+    in the arrival record would show up in all of them at once. Several accounts, because three of
+    the features are keyed by something other than the account and a single-account replay cannot
+    exercise a cross-account aggregate at all.
+    """
+    rng = random.Random(seed)  # noqa: S311 - fixture shape, not a security context
+    rows: list[Transaction] = []
+    when = START
+    for i in range(n):
+        when += timedelta(minutes=rng.choice([4, 25, 200, 1_500, 20_000]))
+        at_agent = rng.random() < 0.4
+        on_ussd = not at_agent and rng.random() < 0.25
+        rows.append(
+            Transaction(
+                transaction_id=f"x{i}",
+                account_id=f"A{rng.randrange(4)}",
+                timestamp=when,
+                amount_rwf=float(rng.randrange(1_000, 400_000)),
+                latitude=-1.9441,
+                longitude=30.0619,
+                counterparty_id=f"C{rng.randrange(5)}",
+                counterparty_country=("AA", "BB", "CC")[rng.randrange(3)],
+                channel="AGENT_BANKING" if at_agent else ("USSD" if on_ussd else "MOBILE_MONEY"),
+                device_fingerprint=None if on_ussd else f"D{rng.randrange(3)}",
+                agent_id=f"AG{rng.randrange(2)}" if at_agent else None,
+                merchant_category_code="6011" if at_agent else "5411",
+            )
+        )
+    return rows
+
+
+@pytest.mark.req("FR-02-02", "D-04")
+def test_the_counterparty_device_agent_and_identity_features_agree_at_every_prefix() -> None:
+    """Prefix replay for the last four groups, with NaN positions compared as positions.
+
+    Counts and flags are compared exactly, reals under ADR 0025's relative rule, and the
+    structurally-missing features by whether they are missing — which is a different question from
+    whether two numbers are close, and is why `_agree_including_nan` exists.
+    """
+    rows = _mixed_history()
+    cash_out = frozenset({"6011"})
+    identity = IdentityEvidence(
+        kyc_tier=2.0,
+        kyc_tier_range=(1, 3),
+        opened_at=START - timedelta(days=400),
+        accounts_on_device=1.0,
+    )
+
+    # The three ways this replay could be vacuous, asserted before anything is compared (E12).
+    assert any(row.device_fingerprint is None for row in rows), (
+        "precondition: some row has no device, or the device NaN contract is never exercised"
+    )
+    assert any(row.agent_id is not None for row in rows), (
+        "precondition: some row is at an agent, or the agent features are NaN throughout"
+    )
+    assert len({row.account_id for row in rows}) >= 3, (
+        "precondition: several accounts, or the counterparty- and agent-keyed aggregates are "
+        "indistinguishable from account-keyed ones"
+    )
+
+    online = OnlineFeatures()
+    nan_devices = 0
+    agent_values: set[float] = set()
+    for k, scored in enumerate(rows):
+        prefix = rows[:k]
+        pairs = [
+            (
+                batch.accounts_per_device_7d(prefix, scored),
+                online.accounts_per_device_7d(scored),
+            ),
+            (batch.device_changes_24h(prefix, scored), online.device_changes_24h(scored)),
+            (
+                batch.device_is_new_for_account(prefix, scored),
+                online.device_is_new_for_account(scored),
+            ),
+            (
+                batch.agent_cashout_count_1h(prefix, scored, cash_out),
+                online.agent_cashout_count_1h(scored, cash_out),
+            ),
+            (
+                batch.agent_unique_customers_1h(prefix, scored),
+                online.agent_unique_customers_1h(scored),
+            ),
+            (
+                batch.synthetic_identity_score(prefix, scored, identity),
+                online.synthetic_identity_score(scored, identity),
+            ),
+        ]
+        for batch_value, online_value in pairs:
+            assert _agree_including_nan(batch_value, online_value), (
+                f"prefix {k} ({scored.transaction_id}): {batch_value!r} vs {online_value!r}"
+            )
+        assert batch.counterparty_is_new_for_account(
+            prefix, scored
+        ) == online.counterparty_is_new_for_account(scored), f"prefix {k}: counterparty novelty"
+        assert batch.counterparty_unique_senders_24h(
+            prefix, scored
+        ) == online.counterparty_unique_senders_24h(scored), f"prefix {k}: senders"
+        assert batch.tx_count_to_counterparty_30d(
+            prefix, scored
+        ) == online.tx_count_to_counterparty_30d(scored), f"prefix {k}: pair count"
+        assert batch.dormancy_reactivation_flag(
+            prefix, scored
+        ) == online.dormancy_reactivation_flag(scored), f"prefix {k}: dormancy"
+
+        if math.isnan(batch.device_changes_24h(prefix, scored)):
+            nan_devices += 1
+        agent_values.add(batch.agent_unique_customers_1h(prefix, scored))
+        online.observe(scored)
+
+    assert nan_devices > 3, f"only {nan_devices} prefixes exercised the device NaN contract"
+    assert len({v for v in agent_values if not math.isnan(v)}) > 1, (
+        "the agent customer count was constant where it was defined, so parity proved nothing"
+    )

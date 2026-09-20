@@ -479,3 +479,38 @@ the decision engine M6, staff identity, admin and audit M7).
   register state that `corridor_class` is evaluated over two of its four classes and that the other
   two are untested in evaluation. Declared meanwhile in the registry's `degeneracy` field, with
   `test_a_feature_with_no_signal_on_this_dataset_declares_it` asserting the declaration.
+
+### PB-44 · Eight features read reference data the dataset does not carry
+- **Source:** implementing the remaining 42 features, 2026-09-20 · **Priority:** high · **Due:**
+  **before M4 training** for the evaluation to cover all 44, and before M6 for the online path
+- **Observed:** the features are implemented and tested on both paths, and their inputs are
+  supplied by the caller — as `prior` and `first_seen_at` already were. What no caller can supply
+  today is the data itself, because neither M1's schema nor the generated dataset holds it:
+
+  | Feature | Needs | Where it would come from |
+  |---|---|---|
+  | `account_age_days` | the account's opening date | a per-account table (PB-37) |
+  | `counterparty_account_age_days` | the counterparty account's opening date | the same table |
+  | `kyc_tier` | tier assignments with `effective_at` | a per-account tier history (ADR 0026) |
+  | `days_since_sim_swap` | SIM swaps before the transaction | **available**: `account_events` carries `SIM_SWAP` |
+  | `agent_float_utilisation_ratio` | float balance and limit, as-of | an agent standing table |
+  | `agent_distance_from_registered_km` | registered premises, as-of | the same table |
+  | `round_sum_flag` | the currency's common denominations | a `round_denominations` pack field |
+  | `synthetic_identity_score` | the KYC tier range, plus the four terms' inputs | the pack, plus the rows above |
+
+- **Consequence:** each returns NaN when its input is absent, which D-04's native missing handling
+  covers, so nothing breaks — and that is exactly the danger. **A feature that is NaN for every row
+  is indistinguishable in a training run from one that is merely often missing**, and the model
+  simply learns nothing from it while the feature count still reads 44. ML-DATA-07's completeness
+  check cannot catch it for the same reason it could not catch PB-40: the feature is computable.
+- **`days_since_sim_swap` is the exception and is worth stating separately**, because it shows the
+  gap is not uniform: `account_events` already carries `SIM_SWAP` rows with timestamps, so that
+  feature is fully computable on the current dataset as soon as the join is wired.
+- **`round_sum_flag` is the cheapest to close and is a parameter change**, which is why it is not
+  done here: adding `round_denominations` to the packs changes `parameter_digest`, which makes the
+  committed realism report stale and requires the regeneration PB-41 already has pending. The two
+  should be done together, in one evidence run, rather than costing two.
+- **Acceptance:** either the data exists and the features are measured on it, or the datasheet and
+  the claims register state which of the 44 were evaluated and which were constant-NaN, with the
+  count. A feature set reported as "44 features" when eight of them carried no information would
+  be a claim about a model that was never fitted.

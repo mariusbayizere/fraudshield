@@ -153,7 +153,7 @@ specification for a case the test is missing.
 | 2 | window bound `<` instead of `≤` | classic off-by-one at a boundary | window-boundary cases, count equality | **DETECTED** 2026-09-19: 0.96 → 2.0 |
 | 3 | a 24 h window computed over 25 h | silent window drift | count equality | **DETECTED** 2026-09-19 (run as 30 d over 31 d) |
 | 4 | local time applied in one path only | D-43 timezone handling diverging | `local_hour_sin/cos`, `is_local_night` | **DETECTED** 2026-09-19: local midnight in a +2 pack, sin 0.0 vs -0.5, night True vs False |
-| 5 | a structural missing emitted as `0.0` rather than NaN | the D-04 contract collapsing to a number | NaN-position equality | pending |
+| 5 | a structural missing emitted as `0.0` rather than NaN | the D-04 contract collapsing to a number | NaN-position equality | **DETECTED** 2026-09-20, for both structural-NaN sets |
 | 6 | a category encoded from a different fold | the M2 encoding defect, reproduced in serving | exact categorical equality | **DETECTED** 2026-09-19, in the runnable form — see note |
 | 7 | a label used whose `label_available_at` is after the transaction | future leakage in the batch path | prefix replay | **DETECTED** 2026-09-19: 1.5/59 → 2.5/60 |
 | 8 | a sum accumulated in float32 | precision loss masquerading as reassociation | the relative tolerance | **DETECTED** 2026-09-19: 1.0000197e7 vs 1.0000198e7, a gap of 1.33 against a tolerance of 1.0e-5 |
@@ -191,7 +191,7 @@ admits a correct implementation differing in the last bits; row 8 says it reject
 lost seven significant digits. A suite holding only row 1's reasoning — "the paths accumulate
 differently, so small differences are fine" — has no rule separating 7.5e-9 from 1.33.
 
-**Twelve rows executed 2026-09-19** in `ml/tests/features/test_mutations.py`, against the ten
+**Thirteen rows executed, 2026-09-19 and 2026-09-20,** in `ml/tests/features/test_mutations.py`, against the ten
 implemented features. Each applies the divergence and asserts the values disagree by more than ADR
 0025's tolerance — a mutation that slips inside the tolerance is the specification for a missing
 case, not a curiosity.
@@ -213,10 +213,18 @@ carried into M4 with the encoder rather than closed here.
 **Row 13 was added when `corridor_class` was implemented**, per E14's requirement that mutations
 are recorded as they are tried rather than assembled at the end.
 
-**Two rows stay `pending` and are not marked passed by omission.** Row 5 needs a structural-NaN
-feature and row 9 the DB fallback path. Rows 1 and 8 became runnable with the amount-sum
-features, row 11 with `just_below_limit_flag` and row 4 with the temporal group; all four were
-run as they arrived.
+**One row stays `pending` and is not marked passed by omission.** Row 9 needs the DB fallback
+path, which does not exist (PB-36). Every other row has been run: rows 1 and 8 became runnable
+with the amount-sum features, row 11 with `just_below_limit_flag`, row 4 with the temporal group
+and row 5 with the device group, and each was run as it arrived rather than at the end.
+
+**Row 5 is the one the tolerance structurally cannot catch, which is why ADR 0025 states NaN
+positions as a separate rule rather than a tighter bound.** `abs(nan - 0.0)` is NaN and every
+comparison against NaN is False, so a tolerance-based check reports *agreement* for a value that
+is not a number — it fails open. The row is executed against both structural-NaN sets, the four
+device features and the four agent features, and `0.0` is the substitute used because it is the
+reassuring end of every one of those scales at once: a familiar device, no device change, an
+untouched float, an agent at its registered address.
 
 **Row 4 turns on the fixture, like row 11.** At local noon the two readings coincide in every
 positive offset, so a temporal fixture built from working hours would pass with the offset ignored
