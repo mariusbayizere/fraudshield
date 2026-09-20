@@ -312,10 +312,10 @@ claim by a person and should be read as one.
 |---|---|
 | E1 — grouping by the unit of history | **Met**, with the rule restated per `history_key` and the component-folding measurement that refuted the first version |
 | E2 — every metric states its scale | **Met as a rule**, and applied by `fs-features auc`, which prints the corpus size, the scored-row count and the fraud count before any figure |
-| E3 — the 44 re-checked against the 0.80 ceiling | **RUN. The re-check is done; the ceiling is NOT met.** Five features exceed it at commit `fad43dd`: `velocity_ratio_1h_vs_30d` 0.894, `tx_count_1h` 0.826, `counterparty_is_new_for_account` 0.816, `implied_speed_kmh` 0.812, `seconds_since_last_tx` 0.811, each ±0.04 on 166 fraud of 20,000 scored from a 200,000-row corpus. **Owner decision 2026-09-20 (PB-46): the benchmark is declared velocity-separable.** The ceiling stands as written and is recorded as breached; the resolution is a reporting gate — no model metric may be quoted without its single-feature baseline beside it — not a change to the data or to the control. So the *criterion* (perform the re-check, at a stated scale, with account-grouped encoding) is **met**, and its *finding* is a standing limitation carried into M4. Artefact: `docs/benchmarks/m3_single_feature_auc_fad43dd.txt`; statement: `docs/benchmarks/single_feature_baseline.md` |
+| E3 — the 44 re-checked against the 0.80 ceiling | **RUN. The re-check is done; the ceiling is NOT met.** Five features exceed it at commit `2c80ef6`: `velocity_ratio_1h_vs_30d` 0.894, `counterparty_is_new_for_account` 0.851, `tx_count_1h` 0.826, `implied_speed_kmh` 0.812, `seconds_since_last_tx` 0.811, each ±0.04 on 166 fraud of 20,000 scored from a 200,000-row corpus. **Owner decision 2026-09-20 (PB-46): the benchmark is declared velocity-separable.** The ceiling stands as written and is recorded as breached; the resolution is a reporting gate — no model metric may be quoted without its single-feature baseline beside it — not a change to the data or to the control. So the *criterion* (perform the re-check, at a stated scale, with account-grouped encoding) is **met**, and its *finding* is a standing limitation carried into M4. Artefact: `docs/benchmarks/m3_single_feature_auc_2c80ef6.txt`; statement: `docs/benchmarks/single_feature_baseline.md` |
 | E4 — deterministic, byte-identical across batch sizes | **Met**; `test_e4_the_vector_is_byte_identical_across_batch_sizes` compares through `float.hex()` at batch sizes 1, 5 and 17 |
 | E5 — no feature reads an excluded column | **Met**, behaviourally rather than by a source scan; see below |
-| E6 — the `account_events` join is available and measured | **Met.** `fs-features` reads `SIM_SWAP` from `account_events`; `days_since_sim_swap` separates at **0.577 ±0.177** on 11 fraud of 2,193 usable rows (commit `fad43dd`), reported in the same table as the transaction features. The interval is wide because the feature is defined for 11.3% of rows, and that is stated rather than hidden behind the point estimate. Artefact: `docs/benchmarks/m3_single_feature_auc_fad43dd.txt` |
+| E6 — the `account_events` join is available and measured | **Met.** `fs-features` reads `SIM_SWAP` from `account_events`; `days_since_sim_swap` separates at **0.577 ±0.177** on 11 fraud of 2,193 usable rows (commit `2c80ef6`), reported in the same table as the transaction features. The interval is wide because the feature is defined for 11.3% of rows, and that is stated rather than hidden behind the point estimate. Artefact: `docs/benchmarks/m3_single_feature_auc_2c80ef6.txt` |
 | E7 — PB-26 before any feature reads the partitions | **Met** (closed in M3, second option: documented, carried in `release.json`, pinned by a test) |
 | E8 — packs and `corridor_class` land here | **Met** (PB-29, PB-30) |
 | E9 — parameter provenance | **Met**; `fs-dataset provenance --check` passes |
@@ -352,12 +352,13 @@ an excluded quantity on the full benchmark is a leakage measurement and belongs 
 ## E3 failed, and what the measurement says
 
 Raw output, unedited and carrying the commit it was produced at:
-`docs/benchmarks/m3_single_feature_auc_fad43dd.txt`. The computability run that accompanies it is
+`docs/benchmarks/m3_single_feature_auc_2c80ef6.txt`, with the superseded first run retained
+alongside it as `m3_single_feature_auc_fad43dd.txt`. The computability run that accompanies it is
 `docs/benchmarks/m3_computability_fad43dd.txt`. **These two rows are the only ones in the table
 above whose status is derivable from a file** — the rest are still an author's edit, which is what
 PB-45 exists to fix.
 
-Run at commit `fad43dd` on a 1,006,249-row dataset (seed 20260917): corpus 200,000 transactions,
+Run at commit `2c80ef6` on a 1,006,249-row dataset (seed 20260917): corpus 200,000 transactions,
 20,000 scored, **166 confirmed fraud**. Every figure is `max(AUC, 1 − AUC)` with folds grouped by
 whole accounts (E1), and carries a Hanley–McNeil 95% interval, which at this fraud count is about
 **±0.04** around the ceiling.
@@ -367,8 +368,8 @@ whole accounts (E1), and carries a Hanley–McNeil 95% interval, which at this f
 | Feature | Separation | Interval |
 |---|---:|---|
 | `velocity_ratio_1h_vs_30d` | **0.894** | ±0.032 |
+| `counterparty_is_new_for_account` | **0.851** | ±0.037 |
 | `tx_count_1h` | **0.826** | ±0.039 |
-| `counterparty_is_new_for_account` | **0.816** | ±0.040 |
 | `implied_speed_kmh` | **0.812** | ±0.040 |
 | `seconds_since_last_tx` | **0.811** | ±0.040 |
 
@@ -387,13 +388,14 @@ the ceiling is a property of what a model can be given.
 backward-looking, exclude the scored transaction, and are the same code the parity suite replays.
 The separation is in the data.
 
-**Two caveats on the measurement, stated because they bound the numbers rather than excuse them.**
-The corpus is the last 200,000 rows, so an account's first-seen is its first row *in that window*;
-`OBSERVED_CAPPED` caps the denominator at 30 days, so only accounts appearing solely in the final
-month are affected, and the bias inflates `velocity_ratio_1h_vs_30d` specifically. And truncation
-makes counterparties look newer than they are, which would **understate**
-`counterparty_is_new_for_account` rather than inflate it. Neither moves a figure by the 0.09 that
-would bring the largest back under the ceiling.
+**The truncation caveat that used to sit here has been measured and removed.** An earlier run
+(`fad43dd`) was taken while five unbounded features derived durable state from the corpus, and this
+section argued that the 30-day cap bounded the resulting bias. The milestone review called that
+argued-not-measured and raised it as MAJOR M3-1; the fix (M3-2) removed the inference, and the
+re-run says the argument was right. Exactly three figures moved —
+`counterparty_is_new_for_account` 0.816 → **0.851** (truncation had been *suppressing* it),
+`device_age_days` 0.752 → 0.743, `is_new_country_for_account` 0.502 → 0.501 — and
+`velocity_ratio_1h_vs_30d` did not move at all.
 
 **Resolved by owner decision, 2026-09-20 — option three of the three available.**
 

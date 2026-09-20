@@ -12,7 +12,8 @@ provenance), `dataset/realism_report.md` (the gate checks on a generated run) an
 
 **This benchmark is velocity-separable.** A single feature —
 `velocity_ratio_1h_vs_30d` — reaches `max(AUC, 1−AUC)` of **0.894 ±0.032** on it (commit
-`fad43dd`, 20,000 scored rows holding 166 confirmed fraud). Four more single features exceed 0.80.
+`2c80ef6`, 20,000 scored rows holding 166 confirmed fraud). Four more single features exceed 0.80,
+the next being `counterparty_is_new_for_account` at 0.851.
 
 It is stated here, ahead of every other section, because it changes what every result on this
 dataset means: **a model reported at AUC 0.94 is 0.046 better than one threshold on one feature,
@@ -260,9 +261,9 @@ the study of a novel fraud variant that appears only in the test period.
   `d85385f`) the strongest transaction column is `merchant_category_code` at **0.707**.
   **The engineered features are a different matter and the claim does not extend to them.** Five
   of the 44 exceed the ceiling on this benchmark — `velocity_ratio_1h_vs_30d` **0.894**,
-  `tx_count_1h` 0.826, `counterparty_is_new_for_account` 0.816, `implied_speed_kmh` 0.812 and
+  `counterparty_is_new_for_account` 0.851, `tx_count_1h` 0.826, `implied_speed_kmh` 0.812 and
   `seconds_since_last_tx` 0.811, each ±0.04 at 166 confirmed-fraud rows of 20,000 scored (commit
-  `fad43dd`). The planted fraud is burst-shaped, so burst and recency features find it: the
+  `2c80ef6`). The planted fraud is burst-shaped, so burst and recency features find it: the
   strongest single feature alone comes within 0.05 of the 0.940 AUC that ML-GATE-01 asks of a
   whole model. **A result on this benchmark is therefore not evidence that a model learned
   anything a one-line rule could not**, and any headline figure should be reported beside the

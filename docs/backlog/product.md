@@ -583,13 +583,14 @@ the decision engine M6, staff identity, admin and audit M7).
   artefact and assert the check exits non-zero. It joins `make governance`.
 
 ### PB-46 · Five engineered features exceed the D-08 single-feature ceiling
-- **Source:** M3 exit criterion E3, measured at commit `fad43dd`, 2026-09-20 · **Priority:**
+- **Source:** M3 exit criterion E3, measured at commit `fad43dd` and restated at `2c80ef6` after
+  the milestone review's M3-2 fix, 2026-09-20 · **Priority:**
   **high — this is the control D-08 exists to enforce** · **Due:** an owner decision before M4
   reports any model metric
 - **Observed:** on a 1,006,249-row dataset (seed 20260917), corpus 200,000, 20,000 scored holding
   166 confirmed fraud, with folds grouped by whole accounts and `max(AUC, 1 − AUC)` throughout:
-  `velocity_ratio_1h_vs_30d` **0.894** ±0.032, `tx_count_1h` **0.826** ±0.039,
-  `counterparty_is_new_for_account` **0.816** ±0.040, `implied_speed_kmh` **0.812** ±0.040,
+  `velocity_ratio_1h_vs_30d` **0.894** ±0.032, `counterparty_is_new_for_account` **0.851** ±0.037,
+  `tx_count_1h` **0.826** ±0.039, `implied_speed_kmh` **0.812** ±0.040,
   `seconds_since_last_tx` **0.811** ±0.040. Four more within the interval of the ceiling:
   `amount_sum_24h` 0.776, `tx_count_24h` 0.765, `unique_counterparties_24h` 0.759,
   `synthetic_identity_score` 0.759.

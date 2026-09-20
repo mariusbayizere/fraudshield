@@ -2466,7 +2466,7 @@ requirements:
     The synthetic-identity composite''s equal weights are a documented choice, not a derived optimum;
     M4 may revisit them with evidence and must say so if it does. M3 -> M4 REPORTING GATE (owner decision
     2026-09-20, PB-46). This benchmark is VELOCITY-SEPARABLE: a single feature, velocity_ratio_1h_vs_30d,
-    reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit fad43dd (docs/benchmarks/single_feature_baseline.md).
+    reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit 2c80ef6 (docs/benchmarks/single_feature_baseline.md).
     NO MODEL METRIC MAY BE REPORTED WITHOUT ITS SINGLE-FEATURE BASELINE BESIDE IT - the best single feature
     and the best trivial rule (one threshold on one feature), on the same split, at the same scale, with
     the same account-grouped folds - and the comparison is reported as the MARGIN over that baseline.
@@ -2504,7 +2504,7 @@ requirements:
     Required: out-of-fold encodings are computed over rows strictly EARLIER IN TIME than the row being
     encoded, never over random folds. This is settled, not open; M4 must not be designed as if it were.
     M3 -> M4 REPORTING GATE (owner decision 2026-09-20, PB-46). This benchmark is VELOCITY-SEPARABLE:
-    a single feature, velocity_ratio_1h_vs_30d, reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit fad43dd
+    a single feature, velocity_ratio_1h_vs_30d, reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit 2c80ef6
     (docs/benchmarks/single_feature_baseline.md). NO MODEL METRIC MAY BE REPORTED WITHOUT ITS SINGLE-FEATURE
     BASELINE BESIDE IT - the best single feature and the best trivial rule (one threshold on one feature),
     on the same split, at the same scale, with the same account-grouped folds - and the comparison is
@@ -2535,7 +2535,7 @@ requirements:
     Required: out-of-fold encodings are computed over rows strictly EARLIER IN TIME than the row being
     encoded, never over random folds. This is settled, not open; M4 must not be designed as if it were.
     M3 -> M4 REPORTING GATE (owner decision 2026-09-20, PB-46). This benchmark is VELOCITY-SEPARABLE:
-    a single feature, velocity_ratio_1h_vs_30d, reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit fad43dd
+    a single feature, velocity_ratio_1h_vs_30d, reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit 2c80ef6
     (docs/benchmarks/single_feature_baseline.md). NO MODEL METRIC MAY BE REPORTED WITHOUT ITS SINGLE-FEATURE
     BASELINE BESIDE IT - the best single feature and the best trivial rule (one threshold on one feature),
     on the same split, at the same scale, with the same account-grouped folds - and the comparison is
@@ -2566,7 +2566,7 @@ requirements:
     Required: out-of-fold encodings are computed over rows strictly EARLIER IN TIME than the row being
     encoded, never over random folds. This is settled, not open; M4 must not be designed as if it were.
     M3 -> M4 REPORTING GATE (owner decision 2026-09-20, PB-46). This benchmark is VELOCITY-SEPARABLE:
-    a single feature, velocity_ratio_1h_vs_30d, reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit fad43dd
+    a single feature, velocity_ratio_1h_vs_30d, reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit 2c80ef6
     (docs/benchmarks/single_feature_baseline.md). NO MODEL METRIC MAY BE REPORTED WITHOUT ITS SINGLE-FEATURE
     BASELINE BESIDE IT - the best single feature and the best trivial rule (one threshold on one feature),
     on the same split, at the same scale, with the same account-grouped folds - and the comparison is
@@ -2615,7 +2615,7 @@ requirements:
   evidence: []
   deviations: []
   notes: 'M3 -> M4 REPORTING GATE (owner decision 2026-09-20, PB-46). This benchmark is VELOCITY-SEPARABLE:
-    a single feature, velocity_ratio_1h_vs_30d, reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit fad43dd
+    a single feature, velocity_ratio_1h_vs_30d, reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit 2c80ef6
     (docs/benchmarks/single_feature_baseline.md). NO MODEL METRIC MAY BE REPORTED WITHOUT ITS SINGLE-FEATURE
     BASELINE BESIDE IT - the best single feature and the best trivial rule (one threshold on one feature),
     on the same split, at the same scale, with the same account-grouped folds - and the comparison is
@@ -2643,7 +2643,7 @@ requirements:
   evidence: []
   deviations: []
   notes: 'M3 -> M4 REPORTING GATE (owner decision 2026-09-20, PB-46). This benchmark is VELOCITY-SEPARABLE:
-    a single feature, velocity_ratio_1h_vs_30d, reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit fad43dd
+    a single feature, velocity_ratio_1h_vs_30d, reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit 2c80ef6
     (docs/benchmarks/single_feature_baseline.md). NO MODEL METRIC MAY BE REPORTED WITHOUT ITS SINGLE-FEATURE
     BASELINE BESIDE IT - the best single feature and the best trivial rule (one threshold on one feature),
     on the same split, at the same scale, with the same account-grouped folds - and the comparison is
@@ -2671,7 +2671,7 @@ requirements:
   evidence: []
   deviations: []
   notes: 'M3 -> M4 REPORTING GATE (owner decision 2026-09-20, PB-46). This benchmark is VELOCITY-SEPARABLE:
-    a single feature, velocity_ratio_1h_vs_30d, reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit fad43dd
+    a single feature, velocity_ratio_1h_vs_30d, reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit 2c80ef6
     (docs/benchmarks/single_feature_baseline.md). NO MODEL METRIC MAY BE REPORTED WITHOUT ITS SINGLE-FEATURE
     BASELINE BESIDE IT - the best single feature and the best trivial rule (one threshold on one feature),
     on the same split, at the same scale, with the same account-grouped folds - and the comparison is
@@ -2752,7 +2752,7 @@ requirements:
   evidence: []
   deviations: []
   notes: 'M3 -> M4 REPORTING GATE (owner decision 2026-09-20, PB-46). This benchmark is VELOCITY-SEPARABLE:
-    a single feature, velocity_ratio_1h_vs_30d, reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit fad43dd
+    a single feature, velocity_ratio_1h_vs_30d, reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit 2c80ef6
     (docs/benchmarks/single_feature_baseline.md). NO MODEL METRIC MAY BE REPORTED WITHOUT ITS SINGLE-FEATURE
     BASELINE BESIDE IT - the best single feature and the best trivial rule (one threshold on one feature),
     on the same split, at the same scale, with the same account-grouped folds - and the comparison is

@@ -10,23 +10,49 @@ honest.
 
 ## The measurement
 
-Commit `fad43dd`, dataset of 1,006,249 rows at seed 20260917, corpus 200,000 transactions, 20,000
+Commit `2c80ef6`, dataset of 1,006,249 rows at seed 20260917, corpus 200,000 transactions, 20,000
 scored, **166 confirmed fraud**. `max(AUC, 1−AUC)` throughout, categoricals target-encoded
 out-of-fold with folds grouped by **whole accounts** (E1). Hanley–McNeil 95% intervals; at this
 fraud count that is about ±0.04. Raw output:
-`docs/benchmarks/m3_single_feature_auc_fad43dd.txt`.
+`docs/benchmarks/m3_single_feature_auc_2c80ef6.txt`.
 
 | Feature | Separation | Interval |
 |---|---:|---|
 | `velocity_ratio_1h_vs_30d` | **0.894** | ±0.032 |
+| `counterparty_is_new_for_account` | 0.851 | ±0.037 |
 | `tx_count_1h` | 0.826 | ±0.039 |
-| `counterparty_is_new_for_account` | 0.816 | ±0.040 |
 | `implied_speed_kmh` | 0.812 | ±0.040 |
 | `seconds_since_last_tx` | 0.811 | ±0.040 |
 | `amount_sum_24h` | 0.776 | ±0.042 |
 | `tx_count_24h` | 0.765 | ±0.043 |
 | `unique_counterparties_24h` | 0.759 | ±0.043 |
 | `synthetic_identity_score` | 0.759 | ±0.043 |
+
+### An earlier version of this table was measured under a bias, now removed
+
+The first measurement (`fad43dd`, retained as
+`docs/benchmarks/m3_single_feature_auc_fad43dd.txt`) was taken before the M3 milestone review found
+that five features declaring **unbounded** history were deriving their durable state from the
+corpus they were handed. Because that corpus is the last 200,000 rows of a million, an account's
+"first transaction" was the corpus's edge, and "never used this payee before" meant "not in this
+window".
+
+The review expected the headline to be inflated. **It was not.** Exactly three figures moved and
+none was the one under suspicion:
+
+| Feature | Before | After | Why |
+|---|---:|---:|---|
+| `counterparty_is_new_for_account` | 0.816 | **0.851** | truncation made legitimate payees look new too, suppressing the feature |
+| `device_age_days` | 0.752 | 0.743 | devices looked younger than they were |
+| `is_new_country_for_account` | 0.502 | 0.501 | negligible |
+| `velocity_ratio_1h_vs_30d` | 0.894 | **0.894** | unchanged — `OBSERVED_CAPPED` caps the denominator at thirty days, so only accounts appearing solely in the final month were affected |
+
+The last row is the useful one: the earlier record *argued* that the cap bounded the bias, and the
+argument was right. It is now measured rather than argued, which is the difference between a caveat
+and a result. A reader comparing the two versions of this page should read the movement as a
+correction of method, not of conclusion — the benchmark was velocity-separable before the fix and
+is velocity-separable after it, and the strongest single feature is the same one at the same
+value.
 
 Every figure is at that stated scale (E2), because single-feature AUC on this benchmark moves with
 dataset size by more than seed noise and the cause is unexplained.

@@ -1,106 +1,106 @@
-# Session state — M3, all 44 features implemented on both paths
+# Session state — M3 closed, held for the owner's tag
 
 Rewritten 2026-09-20. Facts only; where something is unverified, assumed or open it says so.
 
 ## Where the work is
 
 - **Branch:** `m3/features`, pushed. **Tag `m2-complete`** is at `ed7a8d9` on `m2/generator`.
-- **Milestone register:** `current: M3`, `completed: [M0, M1, M2]`.
+- **Milestone register:** `current: M3`, `completed: [M0, M1, M2]`. **M3 is not tagged** — the owner
+  holds that.
 
 | Commit | What |
 |---|---|
-| `654c6d8` | fail closed without a durable first-seen; every gate reports its size |
 | `65c8351` | `corridor_class` from the packs (PB-30); the `categories` contract field |
-| `ae41c88` | the dataset fingerprint (PB-41), and export refuses a report about other data |
-| `01af5b6` | velocity, amount behaviour, temporal and geographic — 21 features |
-| `083f92e` | counterparty, device, account profile, agent, synthetic identity — 19 features |
+| `ae41c88` | the dataset fingerprint (PB-41); export refuses a report about other data |
+| `01af5b6` | velocity, amount, temporal, geographic — 21 features |
+| `083f92e` | counterparty, device, profile, agent, synthetic identity — 19 features |
+| `fad43dd` | `computable` declarations and the computability check (PB-44, PB-43) |
+| `4e16e11` | E3 run, and failed — five features beat the D-08 ceiling |
+| `2c80ef6` | five unbounded features stopped asking a corpus what it cannot know (M3-2) |
 
-**Verified state at `083f92e`:** ml suite **222 passed, 96.80%** branch coverage; `mypy` clean over
-24 ml files and 110 across the workspace; ruff clean; governance **258 rows, 573 tagged tests, 0
-errors, 0 warnings**; scope guard 406 files. The **full dataset suite passed at `ae41c88`: 125
-passed in 66 minutes, 93.98%**, and nothing since has touched `dataset/`.
+**Verified at `2c80ef6`:** ml **270 passed**, 96.30% branch; dataset **126 passed** in 30 minutes,
+94.01% (at `fad43dd`, unchanged since); tools 177; contracts 490; `mypy` clean over 122 files; ruff
+clean; governance **258 rows, 655 tagged tests, 0 errors, 0 warnings**; scope guard 422 files;
+gitleaks clean.
 
-## All 44 are implemented. What that does and does not mean
+## The two things a reader must know before anything else
 
-`fraudshield_ml.features.batch` and `.online` implement every registered feature, neither imports
-the other, and `test_completeness` asserts the registry's list and the implemented list are the
-same list — which nothing else did, because every other test tests the features it names.
+**1. The benchmark is velocity-separable, and that is now a reported result rather than a caveat.**
+`velocity_ratio_1h_vs_30d` reaches `max(AUC, 1−AUC)` of **0.894 ±0.032**; four more single features
+exceed the D-08 ceiling of 0.80. The generator injects fraud as incidents, so recency and rate
+features find it. **Owner decision (PB-46): keep the data, keep the ceiling, change what is
+reported.** No model metric may be quoted without its single-feature baseline and best trivial rule
+beside it, as a margin — a gate on ML-GATE-01 to -04, -07 to -09 and -13, inadmissible on the same
+terms as a metric without its scale. Full statement:
+`docs/benchmarks/single_feature_baseline.md`.
 
-**It does not mean 44 features can be computed on this dataset.** Thirty-six can. The other eight
-read reference data neither the dataset nor M1's schema holds (**PB-44**), so they return NaN for
-every row — which D-04 covers, and that is the danger: a feature NaN everywhere is
-indistinguishable in a training run from one merely often missing, while the count still reads 44.
+**2. Implemented is not the same as fed.** All 44 features exist on both paths; **38** can be
+computed on this benchmark. Six read reference data nothing produces (PB-44) and two are constant
+(PB-47). `fs-features computability` fails when a declaration disagrees with the data in any of six
+directions.
 
-**Three features are declared degenerate** in the registry, for two different reasons that must
-not be confused: `accounts_per_device_7d` and `synthetic_identity_score` by a generator gap due to
-be fixed (PB-40), `corridor_class` because the owner has ruled the simulated country set is not to
-be broadened (PB-43, ADR 0023) — two of its four classes are unreachable here.
+## What M4 must start from
 
-## The parity mutation table: twelve of thirteen rows executed
-
-Only **row 9** is pending, needing the DB fallback path (PB-36). Three rows changed what they mean
-when they were run, which is the table's value:
-
-- **Row 1, the control that must pass, failed its own precondition.** Both paths sum with the
-  built-in `sum()`, and since CPython 3.12 that is Neumaier-compensated, so the reassociation the
-  tolerance exists to permit does not occur between them. Not deleted as vacuous: the production
-  online path will keep an incrementally updated running total, which cannot be compensated, so
-  the difference arrives at M6 unchanged. Now measured against a naive running total — 7.5e-9
-  against a tolerance of 1.0e-5.
-- **Row 5 is the row the tolerance structurally cannot catch.** `abs(nan - 0.0)` is NaN and every
-  comparison against NaN is False, so a tolerance check reports *agreement* — it fails open. That
-  is why ADR 0025 states NaN positions as a separate rule rather than a tighter bound.
-- **Rows 4 and 11 turn on their fixtures, not their values.** At local noon the local and UTC
-  readings coincide; the two paths agree on thresholds for every transaction newer than the last
-  configuration change. Both assert their precondition before comparing anything.
-
-## Two owner decisions, recorded in the registry entries
-
-- **`is_new_country_for_account` reads the counterparty's country.** "The scored transaction's
-  country" is not computable: nothing records where a transaction happened, and resolving
-  coordinates would put a geocoder in the feature path.
-- **A predecessor is strictly earlier**, so the zero-elapsed clause for `implied_speed_kmh` is
-  withdrawn and its branch deleted as unreachable. Strictly-earlier is the only bound the online
-  path can implement, since a transaction stamped the same instant may not have arrived.
-  Measured consequence: **zero of 201,243 rows share an (account, timestamp) pair**, so the
-  silence costs nothing here, and `tx_count_60s` — whose job simultaneous bursts are — is non-zero
-  for about **0.13%** of rows (6 pairs under a second, 261 under a minute).
+- **Train on the features that carry information and report that number with every metric.** Never
+  "44 features" where fewer were used.
+- **Leave-one-country-out and the novel SIM-swap sub-variant carry the weight the headline AUC no
+  longer can**, and the register rows say so. Burstiness is not country-specific, so a velocity
+  threshold transfers trivially; a variant absent from training separates a model that learned the
+  shape of fraud from one that learned its rate.
+- **`corridor_class` is evaluated over two of its four classes** and a model trained here has never
+  seen the other two (PB-43, owner decision: keep them, do not broaden the simulated set).
+- **PB-40 is due before training** — no device is shared, so `accounts_per_device_7d` is constant
+  and `synthetic_identity_score` is a term short.
 
 ## Open items
 
-- **PB-44** — eight features have no data to read. Before M4 training.
-- **PB-41's remainder** — the committed `realism_report.md` describes a 1,012,522-row run and
-  carries no fingerprint until its next regeneration. Export refuses to bundle it with any other
-  dataset meanwhile, and a test asserts that. **Do it together with adding `round_denominations`
-  to the packs (PB-44)**: a parameter change makes the report stale anyway, so the two cost one
-  evidence run instead of two.
-- **PB-40** — the generator shares no device. Before M4 training, deliberately not during M3.
-- **PB-43** — two `corridor_class` classes are unreachable. Needs an owner decision, either way.
-- **PB-42** — `CROSS_BLOC_AFRICA` names a continent the rule does not test. Low.
-- **PB-36/37/38** — untested DB fallback; no per-account durable table; the 8-day refresh under a
-  30-day feature.
-- **PB-25** — the 5M run, still blocked on the default branch being `m0/bootstrap`.
-- **E3, E6, E11** — the single-feature AUC re-check, the `account_events` join measurement, and
-  the milestone review. None started.
+| Item | What |
+|---|---|
+| **PB-44** | six features have no source data; `round_sum_flag` is the cheapest and pairs with PB-41's regeneration |
+| **PB-41** | the committed `realism_report.md` carries no fingerprint until its next regeneration; export refuses to bundle it meanwhile |
+| **PB-45** | the exit-criteria table has no checker; "met" is still an author's edit except for E3 and E6 |
+| **PB-46** | velocity separability — resolved by reporting gate, carried into M4 |
+| **PB-47** | `CONSTANT` shipped; `dormancy_reactivation_flag` measured and **not** constant |
+| **PB-36/37/38** | untested DB fallback; no per-account durable table; 8-day refresh under a 30-day feature |
+| **PB-25** | the 5M run, still blocked on the default branch being `m0/bootstrap` |
+| **E11** | review done, `docs/reviews/M3/milestone-review.md`; both MAJOR findings fixed in place |
+
+## What this session learned that outlives it
+
+Four entries in `docs/research/lab_notebook.md` are worth reading before touching M4:
+
+- **A control measured on the inputs is not a control on the system** — fourth instance. The test
+  that finds it: name the object the check ranges over, then read the sentence it justifies; if the
+  nouns differ, it does not justify it.
+- **A true comment can defend a wrong value.** `_first_seen`'s docstring was correct about complete
+  corpora and attached to a function only ever called with truncated ones. Second written claim of
+  safety with nothing behind it. The rule: *an aggregate over a window is corpus-derivable; a
+  statement about all of history is not.*
+- **Fixtures built to be small rather than built to contain the condition** — three instances, and
+  then I made a fourth while writing the entry about it. Name the property first, construct for it,
+  let size follow.
+- **Knowing a failure mode does not immunise against it**, which is why every lesson should carry
+  the question *what would enforce this?*, and the ones with no answer are known-weak rather than
+  settled.
 
 ## Things that will bite whoever picks this up
 
-- **An evidence run owns the tree**, and `pre-commit` stashes unstaged changes — so **do not commit
-  while a suite runs**. Two commits in this session were entangled through
-  `requirements_matrix.md`: the hook regenerates it with unstaged work stashed, so the matrix
-  disagreed with the reduced tree and governance failed. Fix: `git stash push -u` the unrelated
-  work, re-render, commit, pop.
-- **An exit code from a piped pytest is `tail`'s, not pytest's.** Use `${PIPESTATUS[0]}` or drop
-  the pipe.
-- **`uv run --project <member>` can sync the workspace venv.** Use `.venv/bin/python` while a suite
-  runs.
-- **Hand-editing `requirements.yaml` breaks the seed check.** Run
-  `python -m fraudshield_tools.traceability_seed` to normalise.
-- **gitleaks flags `*_key` assignments** with entropy; remove the trigger, never allowlist a
-  pattern.
-- **Fast subset during development** (`ml/tests` + ruff + mypy, ~10 s); the dataset suite is
-  **66 minutes** under load and only needs running when `dataset/` changes.
-- **The commit hook wraps at 72 characters and caps the subject at 72** — use `git commit -F` with
-  a body rewrapped per paragraph, not per line, or words end up orphaned.
-- `git add -A` sweeps agent worktrees; scratch directories do not survive a session; this laptop is
-  shared, so check `uptime` first.
+- **One heavy job at a time.** Five evidence runs were lost this session to five different causes:
+  source edited mid-run, `uv sync --reinstall` mid-run, a test mutating shared parameters, memory
+  pressure from two runs started in parallel, and an **invented scratch path** that was reaped. An
+  evidence run owns its tree, its environment, its machine and its output location — put artefacts
+  in the scratchpad the harness names, never a path you compose.
+- **Do not commit while a suite runs.** `pre-commit` stashes unstaged changes and regenerates the
+  traceability matrix against the reduced tree, so it disagrees and governance fails. Recovery:
+  `git stash push -u` the unrelated work, re-render, commit, pop.
+- **Clear `.mypy_cache` after adding or removing an `__init__.py`.** A transient one poisoned the
+  cache and produced five plausible, unrelated errors in the dataset package.
+- **`ml/tests` must not be a package** — a top-level `tests` module collides with `dataset/tests`
+  under the workspace's single mypy invocation. Shared fixtures go in `conftest.py`.
+- **An exit code from a piped pytest is `tail`'s.** Use `${PIPESTATUS[0]}` or drop the pipe.
+- **The commit hook caps the subject at 72 and wraps the body at 72** — rewrap per paragraph, not
+  per line, or words end up orphaned.
+- **The feature pipeline is O(corpus) per feature without the index.** `CorpusIndex` makes a
+  meaningful corpus affordable; `test_the_corpus_index_changes_no_value` asserts it changes nothing.
+- Fast subset ~10 s (`ml/tests` + ruff + mypy); dataset suite **30 minutes**; a 1M generation ~35;
+  `fs-features auc` at 200k/20k ~20.

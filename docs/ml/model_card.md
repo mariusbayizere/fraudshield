@@ -39,7 +39,8 @@ silent improvement. `docs/features.md` lists what each needs and which milestone
 ### The benchmark is velocity-separable, and this governs every metric below
 
 A single feature, `velocity_ratio_1h_vs_30d`, reaches `max(AUC, 1−AUC)` of **0.894 ±0.032** on this
-benchmark; four more exceed 0.80 (commit `fad43dd`,
+benchmark; four more exceed 0.80, the next being `counterparty_is_new_for_account` at 0.851
+(commit `2c80ef6`,
 `docs/benchmarks/single_feature_baseline.md`). The generator injects fraud as incidents — drains,
 velocity runs, mule fan-out — so recency and rate features find it.
 
