@@ -1411,11 +1411,28 @@ given**, and a model is given the engineered features — so the claim was true 
 and false of the thing it was quoted about. C-9 is marked refuted as stated; C-14 carries the new
 measurement; the datasheet's bullet now says "column" where it said "feature".
 
-*The generalisation:* **a control measured on the inputs is not a control on the system.** The
-parameter digest checked parameters and not the draw. The licence check ran over an empty scope.
-The fold guard folded per row when the unit was the incident. Each time the check was real, ran
-green, and was about a narrower object than the sentence it justified. This one is the same shape
-with three milestones between the claim and its refutation.
+*The generalisation, and this is the **fourth instance of the family**:* **a control measured on
+the inputs is not a control on the system.**
+
+1. the **parameter digest** checked parameter values and not the draw, so a re-drawn dataset
+   passed it (PB-41);
+2. the **licence check** ran green over an empty scope for three milestones (ADR 0009's
+   generalisation);
+3. the **fold guard** removed a row's own label and folded per row, when the unit was the incident
+   (M-8);
+4. the **D-08 ceiling** was measured over the dataset's columns and quoted as a property of the
+   features a model is given.
+
+Each time the check was real, ran green, and was about a narrower object than the sentence it
+justified. What makes the fourth the worst of them is the gap: **three milestones passed between
+the claim and its refutation**, and in that time it was quoted in the datasheet, the walkthrough
+and the defence questions. A control's scope is part of the control, and a scope narrower than the
+claim is not a weaker control — it is a different one, with the claim resting on nothing.
+
+The practical test, which would have caught all four at the point of writing: **name the object the
+check ranges over, and then read the sentence the check is supposed to justify.** If the two nouns
+differ — parameters against draws, scanned files against all files, rows against incidents, columns
+against features — the check does not justify the sentence.
 
 **What the failure is, and what it is not.** It is not a leak in the features: all five are
 strictly backward-looking, exclude the scored transaction, and are the code the parity suite
@@ -1458,3 +1475,273 @@ than care:** an evidence run owns its tree, its environment, its machine and its
 and each of those is a thing to be *chosen deliberately at the start* rather than defaulted into.
 The harness names a scratchpad; using it is not a convenience, it is the only location with a
 stated lifetime.
+
+### 2026-09-20 · Option 3, and why the other two were worse
+
+The owner's decision on PB-46: **declare the benchmark velocity-separable, report every model
+metric beside the single-feature baseline, and make the baseline a first-class result rather than a
+caveat.**
+
+The reasoning is worth keeping because both rejected options are tempting in a way that this one is
+not.
+
+**Changing the draw to suppress the burst structure would make the benchmark less realistic.** Real
+SIM-swap drains and real mule fan-out *are* bursty. A generator whose fraud was evenly spread would
+pass D-08 and be the weaker artifact — and the thing that failed would have been fixed by making
+the data less like the world. That is tuning the fixture until the test passes, at dataset scale.
+
+**Restating D-08's ceiling as a claim about columns would be redefining a control so that it
+passes.** The ceiling would then be true and useless: a benchmark can be trivially solvable by a
+feature while no column exceeds 0.80, which is exactly the state this one is in. This project
+exists in large part to catch that move, and it is available here precisely because the original
+wording was ambiguous about its object — the same ambiguity that let the claim stand for three
+milestones.
+
+What is left is to say the true thing plainly and carry it everywhere a result appears: **on this
+benchmark a single velocity feature reaches 0.894, so an ensemble is judged against that floor and
+not against 0.5.** It costs nothing except the comfort of a large-looking number.
+
+*The part worth generalising:* when a control fails, there are usually three moves — change the
+system, change the control, or change what you report. The third is the only one that adds
+information, and it is the one that feels like giving up.
+
+### 2026-09-20 · A missing distribution, and the check that could not see it
+
+PB-47, accepted and built: **`CONSTANT` is now a third computability state.** A feature that
+produces a number for every row and always the same number is as dead as one that produces none,
+and until today nothing in this project could see it.
+
+The asymmetry is the point. `NaN`-everywhere is a **missing input**, and D-04's native missing
+handling exists for exactly that — the model is told. Constant-everywhere is a **missing
+distribution**: the column is present, complete, well-typed and carries one value, so every
+completeness count reports it as working, the model trains on it, and it contributes nothing.
+Nothing covered that case.
+
+`just_below_limit_flag` is the instance. It is constant `False` **by construction** on this
+benchmark, because no channel or KYC-tier limit configuration exists, so the band test runs over an
+empty set. It was declared `COMPUTABLE`, the computability check passed it, and it would have been
+counted among the features a model was given.
+
+**How it was found is the uncomfortable part.** The computability run passed cleanly. The E3 run
+passed a separation beside every feature. Neither found it; reading the two outputs **side by
+side** did, because three features sat at exactly 0.500 and a separation of exactly one half is
+what a constant looks like. *A check that answers one question well will be read as answering the
+neighbouring one*, and the neighbour here was one column away in a different file.
+
+Two smaller findings came out of implementing the variance check, both about fixtures rather than
+features:
+
+- The unit fixture made **eight** features constant because its transaction gaps were all in the
+  same order of magnitude. The check was right and the fixture was wrong; gaps now span 25 seconds
+  to sixty-four days, chosen so that each window feature has something to see and the dormancy flag
+  has a silence to notice.
+- The CLI fixture built rows round-robin across accounts, which put eight other accounts' gaps
+  between an account's own consecutive rows — so every per-account window was empty and nine
+  features read constant. Built per account and sorted afterwards, they vary.
+
+Both are the same mistake as measuring E3 on a ten-thousand-row slice of a 5,920-account dataset:
+**a fixture that cannot exercise a feature will report the feature as broken, and the report will
+be believed.**
+
+### 2026-09-20 · Fixtures built to be small instead of built to contain the thing
+
+Three instances now, and they are the same mistake each time.
+
+1. **Seed 11 with no drifting rows.** The partition-drift test bounded how far a row may drift from
+   its month, on a 6,000-row fixture whose seed produced **zero** drifting rows. The bound held
+   over an empty set. Mutating the permitted drift to zero left the test passing, which is how the
+   vacuity was found — not by reading it (PB-26).
+2. **The geo fixture with no shared cells.** `geo_cell_fraud_rate_30d`'s first parity replay used a
+   **single account**, so every row in the cell belonged to the scored account and a cell-keyed
+   aggregate was indistinguishable from an account-keyed one. That is the feature whose leakage
+   note was already wrong for exactly the same reason.
+3. **Both PB-47 fixtures, too uniform to vary.** The unit fixture spaced every transaction by tens
+   of hours, so eight features took one value and the new variance check reported them as constant.
+   The CLI fixture built rows round-robin across eight accounts, putting seven other accounts'
+   gaps between an account's own consecutive rows, so every per-account window was empty and nine
+   features read constant. In both cases the check was right and the fixture was wrong.
+
+**The common cause is not carelessness about preconditions. It is that each fixture was built to be
+small, and its content was whatever fell out of being small.** Six thousand rows, one account, one
+order of magnitude of spacing, a tidy round-robin loop — every one of those is a decision about
+*size or shape*, taken first, with the property under test left to chance. Then the test is written
+against whatever the fixture happens to contain, and it passes.
+
+E12 already requires the precondition to be asserted, and that rule is doing real work — it turns a
+vacuous pass into a loud failure without a mutation run. But it is a **catch**, and it only fires
+when someone thinks to write the assertion. Twice here the assertion existed and the fixture still
+did not contain the condition, because the assertion was written after the fixture and phrased to
+match it.
+
+**The stronger habit, stated as a construction rule rather than a check:**
+
+> When writing a fixture, **first name the property the test needs it to have. Then construct for
+> that property. Let size follow.**
+
+"Six accounts sharing three H3 cells, one of them used by four of them" is a property; "sixty rows"
+is not. "Gaps spanning 25 seconds to sixty-four days, so every window opens and closes and one
+silence exceeds sixty days" is a property; "fourteen transactions each" is not. Written that way
+the precondition assertion is a transcription of the sentence that produced the fixture, rather
+than a guess about what it ended up holding — and when it fails, it fails at the fixture rather
+than at the assertion.
+
+*Why this belongs beside the guard-with-two-doors family rather than inside it:* that family is
+about a check whose **scope** is narrower than the claim it justifies. This one is about a check
+whose **input** does not contain the case it tests. Both produce a green result that means nothing,
+and both are invisible to review, but the remedies differ — name the object for the first, name the
+property for the second.
+
+### 2026-09-20 · Counting NaN as a value hid the feature the check was built to find
+
+The variance check was built, run on the benchmark, and passed — and passing was wrong.
+
+`accounts_per_device_7d` is NaN on every USSD row (38.5% of them) and the number **1** on every
+other row. It carries nothing: no device in this dataset is shared, so wherever it is defined it is
+1. The first implementation counted NaN as a value, so it saw **two distinct values** and reported
+the feature as varying. The check built to find dead columns declared this one alive.
+
+Counting only **non-NaN** values fixed it, and the fix was larger than the bug. The three
+computability states turn out to be a **partition on a single measured number**:
+
+| Distinct non-NaN values | State |
+|---:|---|
+| 0 | `NO_SOURCE_DATA` — the inputs are absent |
+| 1 | `CONSTANT` — present, complete, carrying nothing |
+| ≥ 2 | `COMPUTABLE` |
+
+That replaced four hand-enumerated lists — *dead*, *flat*, *revived*, *varied* — with one
+comparison of declared state against observed state. The lists were each correct and, between
+them, incomplete: two of the six possible declared-versus-observed pairs had no list at all
+(`CONSTANT` observed as absent, `NO_SOURCE_DATA` observed as constant), and nobody would have
+noticed until one occurred.
+
+*The generalisable point:* **a state machine derived from one measurement is checkable in a way a
+hand-enumerated list of failures is not.** The list can only contain the cases its author thought
+of, and its coverage is invisible — it looks complete because each entry is right. Deriving the
+states from a single quantity makes exhaustiveness a property of the arithmetic: every value of the
+number maps to exactly one state, so every mismatch is reachable and named by construction. The
+same shape as replacing a `assert x is not None` with a lookup that raises: the question stops
+being *did we remember this case* and becomes *what does this value mean*.
+
+Missingness is deliberately not variation, and the reason is worth keeping: a feature that is NaN
+on USSD and constant elsewhere is separated only by the channel, `channel` already carries that,
+and counting the NaN as a second value credits this feature with the other one's signal.
+
+### 2026-09-20 · I wrote the entry about fixtures shaped by the answer, then shaped one
+
+The entry above it in this notebook — *"Fixtures built to be small instead of built to contain the
+thing"* — was written in response to three instances, and closes with a construction rule: name the
+property the test needs, construct for that property, let size follow.
+
+Within the same hour, implementing the variance check, I made the fourth instance. The 70-row unit
+fixture reported two agent features as constant. I widened the fixture. That made five *other*
+features constant. I had started tuning a fixture until a check returned the verdict I expected,
+which is precisely the failure the entry describes — and I was doing it while the entry was open in
+the same file.
+
+The correct move, once seen, was not a better fixture: it was noticing that whole-registry
+agreement is a property of the **benchmark** and does not belong in a unit test at all. The unit
+tests now assert the check's logic directly, plus an **exact set** of the mismatches 70 rows cannot
+avoid, so a new one still fails while the known ones do not mask it.
+
+**This is the same recurrence shape as the t-denominator mistake**, which used an analytic null to
+standardise a single reading *in the same investigation, within the same hour* as correcting
+exactly that error one level down. Two instances of the same thing: the correction was understood,
+written down, and then not applied to the next instance a few minutes later.
+
+*Why it belongs in the discussion rather than as an anecdote:* **knowing a failure mode does not
+immunise against it.** Both times the author had just finished articulating the rule — the
+articulation was fresh, correct, and did not transfer. Recognition happens after the fact, when the
+result looks wrong, not while the choice is being made; at the moment of choosing, the tempting
+option does not present itself as an instance of the general error, it presents itself as a
+reasonable local fix.
+
+The consequence for how this project defends itself is concrete: **a defence that depends on
+remembering a rule at the moment of temptation is not a defence.** The rules that have actually
+held here are the ones with machinery behind them — a registry that refuses a blank field, a check
+that fails when a declaration disagrees with data, a hook that rejects a malformed commit message,
+a guard that hashes the parameter tree before and after a suite. The rules that have failed twice
+are the ones carried as understanding. Every lesson in this notebook should therefore be read with
+the question *what would enforce this?* attached, and the ones with no answer should be treated as
+known-weak rather than as settled.
+
+### 2026-09-20 · The comment was true, and that is what made it dangerous
+
+The M3 milestone review's most important finding, and the one worth the most space.
+
+`fraudshield_ml.features.vector._first_seen` returned an account's earliest row **in the supplied
+corpus**. The online path is explicitly forbidden from that inference: `observe()` does not set
+`first_seen_at`, and `device_age_days` fails closed to NaN without a durable value, because the
+earliest arrival is the rolling window's edge rather than the account's beginning (PB-37, with two
+tests whose names say so). The batch caller did it anyway, and then divided by it — the feature is
+`history_basis=OBSERVED_CAPPED`, so a short denominator inflates the ratio for exactly the accounts
+that look newest.
+
+**The defect is not the inference. The defect is the docstring underneath it**, which said: over a
+*complete* dataset the earliest row genuinely is the account's first.
+
+That sentence is **true**. It is also a statement about complete corpora, attached to a function
+that has only ever been called with truncated ones — every run this repository has performed passes
+the last 200,000 rows of a million. The justification and the usage were about different objects,
+and the justification was the more visible of the two.
+
+**A wrong value with a plausible justification attached survives review in a way a bare wrong value
+does not.** A bare `min(timestamps)` invites the question "which timestamps?". The same line under a
+paragraph explaining why it is sound does not: the reader's attention has already been answered.
+The comment did not merely fail to prevent the defect, it actively defended it — and it would have
+defended it against me, in a month, reading my own file.
+
+**This is the second time a written claim of safety had nothing behind it.** The first was
+`geo_cell_fraud_rate_30d`'s original leakage note, which asserted that account-grouped folds kept
+validation labels out of cell estimates. False, and it cited the right requirement while drawing a
+conclusion the requirement does not support. The registry's response was to make every
+non-`ACCOUNT` feature declare **the mutation that would detect the leak if its control failed** —
+because a control that only asserts safety is the claim-with-nothing-behind-it this field exists to
+prevent. The same disease, in the same repository, five days apart. The difference is that the
+geo-cell note was wrong; this one was *right*, about something else.
+
+So the earlier six guard-with-two-doors instances are a milder family than this. There, a check
+ranged over a narrower object than the sentence it justified — a scope error, findable by asking
+what the check ranges over. Here, a **correct statement** was placed where a reader would take it
+as a warrant for a different statement. No amount of reading the sentence finds it, because the
+sentence is fine. The only question that finds it is: *is this claim about the situation the code
+is actually in?*
+
+#### What would catch this class
+
+The owner's proposal: forbid any helper that derives a durable fact from a passed-in corpus, by the
+same rule that enforces path independence, on the grounds that the corpus cannot know what it does
+not contain.
+
+The principle is exactly right and I would implement it differently, because the import-graph rule
+detects *imports* and a corpus arrives as a **parameter**. The same machinery — AST inspection in
+`test_independence.py`, which already greps `primitives` for banned shapes — applies to
+**signatures** instead: no function in the vector module may take a `Sequence[Transaction]` and
+return a `datetime`, which is precisely the shape of both deleted helpers.
+
+But the signature rule is narrower than the class, and that matters, because looking for the class
+found three more instances the review had missed. `counterparty_is_new_for_account`,
+`is_new_country_for_account` and `device_is_new_for_account` all declare unbounded history and all
+answered "never before" from the corpus prefix — the same defect returning a **boolean** instead of
+a timestamp, so a signature rule keyed on `datetime` would have passed them. They reported every
+long-standing payee, corridor and handset as new, most strongly for the accounts with the longest
+histories, and `counterparty_is_new_for_account` was one of the five features measured over the
+D-08 ceiling.
+
+The rule that covers all five, stated as a property rather than a type:
+
+> **An aggregate over a window is corpus-derivable. A statement about all of history is not.**
+> Anything a feature declares as unbounded — `window="unbounded"`, or
+> `history_requirement=DURABLE` — must arrive as an input, and a corpus may never be asked for it.
+
+That is checkable from the registry rather than from a signature, which makes it the better
+mechanism: for every feature declaring DURABLE or unbounded, assert that the vector obtains its
+durable input from `FeatureContext` and not from a corpus argument. It is registry-driven, so a new
+unbounded feature is covered the day it is declared, and it does not depend on anyone remembering
+the rule — which is the standard the previous entry set.
+
+All five now take their durable state from `FeatureContext`; the CLI reads first-seen over every
+partition and the prior sets over every partition earlier than the corpus;
+`test_truncating_the_corpus_changes_no_unbounded_feature` scores the same row against the full
+corpus and a truncated one and requires all five to be identical, with a control proving the
+truncated corpus really does hide the history.

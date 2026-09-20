@@ -11,13 +11,19 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from fraudshield_ml.features import vector
+from fraudshield_ml.features import batch, vector
 from fraudshield_ml.features.registry import REGISTRY, Computability
 from fraudshield_ml.features.types import Transaction
 from fraudshield_ml.features.vector import FeatureContext
+
+#: Defined here rather than imported from `conftest`: a test module importing a conftest is not a
+#: package import mypy can resolve, and the value is a literal either way.
+START = datetime(2025, 1, 1, tzinfo=UTC)
+
 
 # --- the vector -----------------------------------------------------------------------------
 
@@ -55,90 +61,129 @@ def test_the_vector_reads_only_rows_before_the_one_it_scores(
 # --- the computability check ---------------------------------------------------------------------
 
 
+#: Features this 70-row fixture cannot make vary, with the reason. Asserted as an **exact set**,
+#: so a new mismatch is still a failure while the known ones do not mask it.
+#:
+#: Whether the whole registry agrees with the data is a property of the **benchmark**, and it is
+#: checked there by an evidence run (`docs/benchmarks/m3_computability_fad43dd.txt`). Demanding it
+#: of a toy corpus would be asking a fixture to be a benchmark — and tuning one until the verdict
+#: read zero would shape the fixture by the answer.
+FIXTURE_CANNOT_VARY = {"agent_cashout_count_1h", "agent_unique_customers_1h"}
+
+
 @pytest.mark.req("FR-02-02", "ML-DATA-07")
-def test_the_benchmarks_context_leaves_exactly_the_declared_six_without_data(
+def test_the_only_mismatches_are_the_ones_this_fixture_cannot_avoid(
     corpus: list[Transaction], sample: list[int], context: FeatureContext
 ) -> None:
-    """The run that mirrors the dataset: `account_events` supplies SIM swaps, and nothing supplies
-    opening dates, tier histories, agent standing or denominations.
+    """The check runs over all 44 and disagrees only where 70 rows cannot show variation.
 
-    Every declared NO_SOURCE_DATA feature is NaN for every row, and **nothing else is** — which is
-    the assertion that makes the registry's six a measured set rather than an estimate. An earlier
-    note in this repository said eight, from reasoning about which inputs were missing instead of
-    computing the features.
+    Accounts are staggered by days so that the month-end and novelty flags vary, which means an
+    agent never serves two of them within an hour and the two agent counts are constant. Starting
+    the accounts hours apart instead fixes those two and makes five others constant. Neither is a
+    fact about the data, so both are recorded rather than tuned away.
     """
     result = vector.computability(corpus, context, sample=sample)
-    assert result.ok, vector.describe(result)
+    assert {name for name, _, _ in result.mismatched} == FIXTURE_CANNOT_VARY, vector.describe(
+        result
+    )
 
-    all_nan = {name for name, rate in result.nan_rate.items() if rate == 1.0}
+
+@pytest.mark.req("FR-02-02", "ML-DATA-07")
+def test_the_six_without_source_data_are_dead_at_any_size(
+    corpus: list[Transaction], sample: list[int], context: FeatureContext
+) -> None:
+    """A property of the data's *shape* rather than its size, so it must hold here too.
+
+    Opening dates, tier histories, agent standing and denominations are absent from this fixture
+    for the same reason they are absent from the benchmark: nothing produces them. Every declared
+    NO_SOURCE_DATA feature must therefore produce no value at all, and none may appear among the
+    mismatches — one that did would mean the fixture supplies something the benchmark does not.
+    """
+    result = vector.computability(corpus, context, sample=sample)
     declared = {
         name for name, spec in REGISTRY.items() if spec.computable is Computability.NO_SOURCE_DATA
     }
-    assert all_nan == declared, (
-        f"NaN for every row: {sorted(all_nan)}; declared NO_SOURCE_DATA: {sorted(declared)}"
-    )
     assert len(declared) == 6
+    for name in declared:
+        assert result.distinct[name] == 0, f"{name} produced a value"
+        assert result.nan_rate[name] == 1.0
+        assert name not in {n for n, _, _ in result.mismatched}
 
 
 @pytest.mark.req("FR-02-02", "ML-DATA-07")
-def test_a_partially_missing_feature_is_not_treated_as_dead(
+def test_the_three_states_are_decided_by_the_distinct_count_alone() -> None:
+    """`observed_state` is the whole rule, so it is tested directly rather than through a corpus.
+
+    Zero values means the inputs are absent; one means present and carrying nothing; two or more
+    means it varies. Testing it here rather than only through fixtures is what lets the fixture
+    tests be about fixtures.
+    """
+    assert vector.observed_state(0) is Computability.NO_SOURCE_DATA
+    assert vector.observed_state(1) is Computability.CONSTANT
+    assert vector.observed_state(2) is Computability.COMPUTABLE
+    assert vector.observed_state(9_999) is Computability.COMPUTABLE
+
+
+@pytest.mark.req("FR-02-02", "ML-DATA-07")
+def test_missingness_is_not_counted_as_variation(
     corpus: list[Transaction], sample: list[int], context: FeatureContext
 ) -> None:
-    """100%, not a threshold, and this is the case that makes the distinction matter.
+    """The choice that makes the check work, asserted on the feature that exposed it.
 
-    Three of five accounts have a SIM swap, so `days_since_sim_swap` is NaN for a large minority
-    of rows and alive. So are the structural NaNs: four device features on every USSD row, four
-    agent features on every non-agent one. Picking a cut-off would mean deciding how dead is dead,
-    and would report all nine of these as gaps.
+    `accounts_per_device_7d` is NaN on every USSD row and 1 on all the others. Counting the NaN as
+    a second value reported it as varying, when what separates those rows is the channel and
+    `channel` already carries it. It is declared CONSTANT and must be observed as CONSTANT despite
+    being NaN a third of the time.
     """
     result = vector.computability(corpus, context, sample=sample)
-    partial = result.nan_rate["days_since_sim_swap"]
-    assert 0.0 < partial < 1.0, f"precondition: the feature is partly missing, got {partial:.1%}"
-    assert "days_since_sim_swap" not in result.dead
-
-    for name in ("device_age_days", "agent_unique_customers_1h"):
-        rate = result.nan_rate[name]
-        assert 0.0 < rate < 1.0, f"precondition: {name} is structurally NaN on some rows"
-        assert name not in result.dead
+    assert result.nan_rate["accounts_per_device_7d"] >= 0.15, (
+        "precondition: the feature is NaN on a large minority of rows, or this proves nothing"
+    )
+    assert result.distinct["accounts_per_device_7d"] == 1
+    assert vector.observed_state(result.distinct["accounts_per_device_7d"]) is (
+        Computability.CONSTANT
+    )
 
 
 @pytest.mark.req("FR-02-02", "ML-DATA-07")
 def test_a_dead_feature_is_reported_even_though_nothing_raises(
     corpus: list[Transaction],
     sample: list[int],
-    context: FeatureContext,
     make_context: Callable[..., FeatureContext],
 ) -> None:
-    """The first direction, and the reason the check exists.
+    """Withhold the `account_events` join and `days_since_sim_swap` goes NaN for every row.
 
-    `days_since_sim_swap` is declared COMPUTABLE because `account_events` carries SIM_SWAP rows.
-    Withhold them — which is exactly what a pipeline that forgot the join would do — and the
-    feature is NaN for every row while nothing raises, nothing warns, and the vector still has 44
-    slots. That is the state PB-44 is about, produced deliberately.
+    Nothing raises, nothing warns, the vector still has 44 slots, and D-04's missing handling
+    covers it — which is the state PB-44 is about, produced deliberately. The mismatch must name
+    the feature, both states, and why it matters.
     """
-    assert vector.computability(corpus, context, sample=sample).ok, (
-        "precondition: with the join wired the feature is alive, so the failure below is about "
-        "the missing join and not about the feature"
-    )
-
     forgot_the_join = vector.computability(corpus, make_context(sim_swaps={}), sample=sample)
-    assert forgot_the_join.dead == ("days_since_sim_swap",)
-    assert not forgot_the_join.ok
-    assert "NaN for every row" in vector.describe(forgot_the_join)
+    mismatches = {name: (d, o) for name, d, o in forgot_the_join.mismatched}
+    assert "days_since_sim_swap" in mismatches
+    declared, observed = mismatches["days_since_sim_swap"]
+    assert declared is Computability.COMPUTABLE
+    assert observed is Computability.NO_SOURCE_DATA
+    assert "D-04's missing handling hides it" in vector.describe(forgot_the_join)
 
 
 @pytest.mark.req("FR-02-02", "ML-DATA-07")
 def test_a_revived_feature_is_reported_so_the_register_cannot_drift_into_pessimism(
-    corpus: list[Transaction], sample: list[int], make_context: Callable[..., FeatureContext]
+    corpus: list[Transaction],
+    sample: list[int],
+    make_context: Callable[..., FeatureContext],
 ) -> None:
-    """The second direction. Without it, wiring the data and forgetting the declaration would
-    leave the register saying a feature is dead while it is alive — stale in the direction a
-    reader has no reason to question."""
-    context = make_context(denominations={"AAA": (1_000, 5_000)})
-    result = vector.computability(corpus, context, sample=sample)
-    assert "round_sum_flag" in result.revived
-    assert not result.ok
-    assert "register is stale" in vector.describe(result)
+    """Supply the denominations and `round_sum_flag` comes alive while the register says it is dead.
+
+    Without this direction, wiring the data and forgetting the declaration would leave the register
+    stale in a way a reader has no reason to question — pessimism reads as caution.
+    """
+    with_denominations = vector.computability(
+        corpus, make_context(denominations={"AAA": (1_000, 5_000)}), sample=sample
+    )
+    mismatches = {name: (d, o) for name, d, o in with_denominations.mismatched}
+    assert "round_sum_flag" in mismatches
+    assert mismatches["round_sum_flag"][0] is Computability.NO_SOURCE_DATA
+    assert "still says it is dead" in vector.describe(with_denominations)
 
 
 @pytest.mark.req("FR-02-02", "ML-DATA-07")
@@ -218,3 +263,183 @@ def test_the_index_groups_every_key_and_keeps_each_in_time_order(
     with_device = sum(1 for row in corpus if row.device_fingerprint is not None)
     assert sum(len(rows) for rows in index.by_device.values()) == with_device
     assert with_device < len(corpus), "precondition: some rows have no device"
+
+
+@pytest.mark.req("FR-02-02", "D-04")
+def test_the_vector_never_infers_a_durable_first_seen(
+    corpus: list[Transaction], sample: list[int], make_context: Callable[..., FeatureContext]
+) -> None:
+    """Milestone review M3-2: the batch caller must not make the inference `observe()` is forbidden.
+
+    Taking an account's earliest row *in the supplied corpus* is the same mistake PB-37 removed
+    from the online path — a truncated corpus's earliest row is the window's edge, not the
+    account's beginning, and `velocity_ratio_1h_vs_30d` divides by observed history, so the error
+    inflates the ratio for exactly the accounts that look newest. Every run this repository has
+    performed passed a truncated corpus.
+
+    Withhold the durable maps and both features must be NaN for every row, not computed from
+    whatever the corpus happens to start at.
+    """
+    without = vector.computability(
+        corpus, make_context(first_seen={}, device_first_seen={}), sample=sample
+    )
+    for name in ("velocity_ratio_1h_vs_30d", "device_age_days"):
+        assert without.distinct[name] == 0, f"{name} was inferred from the corpus"
+        assert without.nan_rate[name] == 1.0
+
+    # And the control: with them supplied the features are alive, so the NaN above is about the
+    # missing durable state and not about the features being broken.
+    with_durable = vector.computability(corpus, make_context(), sample=sample)
+    for name in ("velocity_ratio_1h_vs_30d", "device_age_days"):
+        assert with_durable.distinct[name] > 1, f"{name} is dead even with durable state supplied"
+
+
+@pytest.mark.req("FR-02-02", "D-04")
+def test_a_truncated_corpus_does_not_change_the_ratio(
+    corpus: list[Transaction], context: FeatureContext
+) -> None:
+    """The consequence that made this a MAJOR finding rather than a tidiness one.
+
+    The same scored row, computed against the whole corpus and against a corpus that begins
+    part-way through the account's life, must give the **same** ratio — because the denominator
+    comes from the durable first-seen and not from whichever row the corpus happens to start at.
+    Under the old inference these differed, and the truncated one read higher.
+    """
+    # Score the last row of an account that is active on both sides of the cut, so truncation
+    # genuinely hides part of its history rather than none of it.
+    cut = len(corpus) // 2
+    early = {row.account_id for row in corpus[:cut]}
+    candidates = [i for i, row in enumerate(corpus) if i >= cut and row.account_id in early]
+    assert candidates, "precondition: some account spans the cut"
+    index = candidates[-1]
+    scored = corpus[index]
+    full = vector.compute(corpus, index, context)["velocity_ratio_1h_vs_30d"]
+
+    truncated = corpus[cut:]
+    truncated_index = truncated.index(scored)
+    assert any(row.account_id == scored.account_id for row in corpus[:cut]), (
+        "precondition: the scored account has rows before the cut, so truncation really does "
+        "hide part of its history"
+    )
+    partial = vector.compute(truncated, truncated_index, context)["velocity_ratio_1h_vs_30d"]
+
+    assert isinstance(full, float)
+    assert isinstance(partial, float)
+    assert not math.isnan(full), "precondition: the ratio is defined on the full corpus"
+    assert full == partial, (
+        f"truncating the corpus moved the ratio from {full!r} to {partial!r}, so the denominator "
+        "is coming from the corpus rather than from the durable first-seen"
+    )
+
+
+@pytest.mark.req("FR-02-02", "D-04")
+def test_truncating_the_corpus_changes_no_unbounded_feature(
+    corpus: list[Transaction], context: FeatureContext
+) -> None:
+    """The whole class, not the two instances the review named.
+
+    Five features declare **unbounded** history: the velocity ratio and the device age through a
+    timestamp, and three novelty flags through a set. Every one of them asks a question about all
+    of an account's life, and **a corpus cannot know what it does not contain** — so computing any
+    of them from a passed-in corpus is wrong whenever that corpus is truncated, which is every run
+    this repository has performed.
+
+    The test is the same for all five: score a row against the full corpus and against a corpus
+    beginning part-way through that account's life, having told the second what came before, and
+    require the values to be identical. Under the old code the timestamps moved and the flags
+    flipped to "new".
+    """
+    cut = len(corpus) // 2
+    early = corpus[:cut]
+    later = corpus[cut:]
+    spanning = {row.account_id for row in early} & {row.account_id for row in later}
+    assert spanning, "precondition: some account is active on both sides of the cut"
+
+    index = max(i for i, row in enumerate(corpus) if row.account_id in spanning)
+    scored = corpus[index]
+    account = scored.account_id
+    assert any(row.account_id == account for row in early), (
+        "precondition: the scored account has history the truncated corpus cannot see"
+    )
+
+    truncated_context = FeatureContext(
+        countries=context.countries,
+        outcomes=context.outcomes,
+        sim_swaps=context.sim_swaps,
+        first_seen=context.first_seen,
+        device_first_seen=context.device_first_seen,
+        counterparties_before={
+            account: frozenset(
+                r.counterparty_id for r in early if r.account_id == account and r.counterparty_id
+            )
+        },
+        countries_before={
+            account: frozenset(
+                r.counterparty_country
+                for r in early
+                if r.account_id == account and r.counterparty_country
+            )
+        },
+        devices_before={
+            account: frozenset(
+                r.device_fingerprint
+                for r in early
+                if r.account_id == account and r.device_fingerprint
+            )
+        },
+        cash_out_codes=context.cash_out_codes,
+        cell_rate_prior=context.cell_rate_prior,
+    )
+
+    full = vector.compute(corpus, index, context)
+    partial = vector.compute(later, later.index(scored), truncated_context)
+    unbounded = (
+        "velocity_ratio_1h_vs_30d",
+        "device_age_days",
+        "counterparty_is_new_for_account",
+        "is_new_country_for_account",
+        "device_is_new_for_account",
+    )
+    for name in unbounded:
+        a, b = full[name], partial[name]
+        if isinstance(a, float) and isinstance(b, float) and math.isnan(a) and math.isnan(b):
+            continue
+        assert a == b, (
+            f"{name} moved from {a!r} to {b!r} when the corpus was truncated, so it is answering "
+            "an unbounded question from a bounded corpus"
+        )
+
+
+@pytest.mark.req("FR-02-02", "D-04")
+def test_a_truncated_corpus_without_prior_knowledge_reports_everything_as_new() -> None:
+    """The control: the defect is real and this fixture can produce it.
+
+    Without `known_before` the same truncated corpus reports a payee the account has used for
+    months as new. If this did not happen, the test above would be passing over a corpus that hid
+    nothing.
+    """
+    earlier = Transaction(
+        transaction_id="old",
+        account_id="A",
+        timestamp=START,
+        amount_rwf=1_000.0,
+        latitude=-1.9441,
+        longitude=30.0619,
+        counterparty_id="PAYEE",
+        counterparty_country="AA",
+    )
+    scored = Transaction(
+        transaction_id="now",
+        account_id="A",
+        timestamp=START + timedelta(days=200),
+        amount_rwf=1_000.0,
+        latitude=-1.9441,
+        longitude=30.0619,
+        counterparty_id="PAYEE",
+        counterparty_country="AA",
+    )
+    assert batch.counterparty_is_new_for_account([earlier], scored) is False
+    assert batch.counterparty_is_new_for_account([], scored) is True, (
+        "precondition: a corpus that hides the earlier payment reports the payee as new"
+    )
+    assert batch.counterparty_is_new_for_account([], scored, known_before={"PAYEE"}) is False

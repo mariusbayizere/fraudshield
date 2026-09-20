@@ -36,6 +36,26 @@ silent improvement. `docs/features.md` lists what each needs and which milestone
 
 ## Limitations that are known before any training run
 
+### The benchmark is velocity-separable, and this governs every metric below
+
+A single feature, `velocity_ratio_1h_vs_30d`, reaches `max(AUC, 1−AUC)` of **0.894 ±0.032** on this
+benchmark; four more exceed 0.80 (commit `fad43dd`,
+`docs/benchmarks/single_feature_baseline.md`). The generator injects fraud as incidents — drains,
+velocity runs, mule fan-out — so recency and rate features find it.
+
+**[M4] every metric in this card must appear beside the best single feature and the best trivial
+rule, on the same split and scale, reported as the margin over that baseline.** A metric quoted
+alone is inadmissible. This is a gate in the traceability register on ML-GATE-01 to -04, -07 to -09
+and -13, not a stylistic preference: 0.94 against a 0.894 baseline and 0.94 against chance are
+different claims and only the first is true here.
+
+**[M4] the evidence that the model learned something has moved.** Leave-one-country-out and the
+novel SIM-swap sub-variant confined to the test period are where a velocity threshold cannot
+follow — burstiness is not country-specific, and a variant never seen in training separates a model
+that learned the shape of fraud from one that learned its rate. Those results, with their margins,
+carry the weight the headline AUC no longer can.
+
+
 ### The model will never have seen two of `corridor_class`'s four values
 
 `corridor_class` is `DOMESTIC | INTRA_BLOC | CROSS_BLOC_AFRICA | INTERCONTINENTAL`. The last two

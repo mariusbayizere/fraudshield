@@ -135,6 +135,12 @@ def test_e5_no_feature_reads_identifier_bytes(
             for k, v in context.outcomes.items()
         },
         sim_swaps={account_map[k]: v for k, v in context.sim_swaps.items()},
+        # The durable first-seen maps are keyed by account and by device, so the bijection has to
+        # reach them too — otherwise this stops being a relabelling and becomes a test that
+        # withholding durable state changes the answer, which it does and which is a different
+        # fact (PB-37).
+        first_seen={account_map[k]: v for k, v in context.first_seen.items()},
+        device_first_seen={device_map[k]: v for k, v in context.device_first_seen.items()},
         cash_out_codes=context.cash_out_codes,
         cell_rate_prior=context.cell_rate_prior,
     )
@@ -201,19 +207,23 @@ def test_e5_no_feature_reads_row_position(
 #: The first five are elapsed-time quantities: a gap, a speed derived from it, a ratio dividing by
 #: observed history, and two ages. Sub-second sensitivity there is physics, not an artefact.
 #:
-#: `geo_cell_fraud_rate_30d` is the interesting one and is included on different grounds. It does
-#: not read the sub-second part at all; it gates labels on `available_at < t`, and moving `t` by
-#: microseconds can flip a label across that boundary when the two coincide to the second. That is
-#: a **boundary** sensitivity rather than a signal, and in this fixture it is reachable because
-#: `available_at` is exactly two days after the transaction. Worth knowing precisely because it
-#: shows where a label gate can turn on a quantity nobody intended it to depend on.
+#: All five are elapsed-time quantities: a gap, a speed derived from it, a ratio dividing by
+#: observed history, and two ages.
+#:
+#: **`geo_cell_fraud_rate_30d` was a sixth member under an earlier, evenly-spaced fixture, and is
+#: not one here.** It never reads the sub-second part; it gates labels on `available_at < t`, and
+#: moving `t` by microseconds can flip a label across that boundary *when the two coincide to the
+#: second*. The old fixture spaced transactions in whole hours with `available_at` exactly two days
+#: later, so the coincidence was systematic. Widening the gaps removed it. The possibility is real
+#: and is recorded here rather than in the set, because a set is a claim about what this fixture
+#: showed: **a label gate can turn on a quantity nobody intended it to depend on**, and the way to
+#: find out is to vary the spacing rather than to assume either answer.
 TIME_RESOLUTION_SENSITIVE = {
     "seconds_since_last_tx",
     "implied_speed_kmh",
     "velocity_ratio_1h_vs_30d",
     "device_age_days",
     "days_since_sim_swap",
-    "geo_cell_fraud_rate_30d",
 }
 
 
@@ -336,6 +346,8 @@ def test_e5_no_feature_reads_the_label_delay(
         countries=context.countries,
         outcomes=tightened,
         sim_swaps=context.sim_swaps,
+        first_seen=context.first_seen,
+        device_first_seen=context.device_first_seen,
         cash_out_codes=context.cash_out_codes,
         cell_rate_prior=context.cell_rate_prior,
     )

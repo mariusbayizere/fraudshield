@@ -406,11 +406,13 @@ def test_a_feature_with_no_signal_on_this_dataset_declares_it() -> None:
     "All 44 computable for >= 98% of records" is satisfied by all three. Nothing downstream emits
     a NaN or raises, so the loss is silent until someone asks why a feature has zero importance.
 
-    The three are not degenerate for the same *kind* of reason, which is why the backlog item is
-    read out of the declaration rather than fixed at PB-40: the first two are a generator gap that
-    will be closed before M4 training, while `corridor_class` is degenerate because the owner has
-    ruled that the simulated country set is not to be broadened (ADR 0023). A gap someone has
-    decided to keep still has to be declared; what it must not do is look like the other kind.
+    The four are not degenerate for the same *kind* of reason, which is why the backlog item is
+    read out of the declaration rather than fixed at PB-40: two are a generator gap that will be
+    closed before M4 training; `corridor_class` is degenerate because the owner has ruled that the
+    simulated country set is not to be broadened (ADR 0023); and `just_below_limit_flag` is
+    constant because the benchmark holds no limit configuration at all, so the feature is complete,
+    well-typed and carries one value. A gap someone has decided to keep still has to be declared;
+    what it must not do is look like the other kind.
     """
     degenerate = {n: s.degeneracy for n, s in REGISTRY.items() if s.degeneracy}
     assert degenerate, (
@@ -421,6 +423,7 @@ def test_a_feature_with_no_signal_on_this_dataset_declares_it() -> None:
         "accounts_per_device_7d",
         "synthetic_identity_score",
         "corridor_class",
+        "just_below_limit_flag",
     }
     for name, note in degenerate.items():
         assert re.search(r"PB-\d+", note), (
@@ -437,10 +440,10 @@ def test_no_other_feature_silently_claims_to_be_fine() -> None:
     """The control: `degeneracy` defaults to None, so the test above proves nothing on its own.
 
     If every feature were accidentally marked degenerate the test above would still pass its
-    membership check only by luck. This asserts the default actually applies to the other 41.
+    membership check only by luck. This asserts the default actually applies to the other 40.
     """
     healthy = [n for n, s in REGISTRY.items() if s.degeneracy is None]
-    assert len(healthy) == 41, f"expected 41 non-degenerate features, got {len(healthy)}"
+    assert len(healthy) == 40, f"expected 40 non-degenerate features, got {len(healthy)}"
 
 
 @pytest.mark.req("FR-02-02")
@@ -551,3 +554,61 @@ def test_every_feature_declares_its_computability_and_six_have_no_source_data() 
     assert len(REGISTRY) - len(gaps) == 38, "38 of the 44 have data to read"
     for name, gap in gaps.items():
         assert re.search(r"\bM\d+\b", gap or ""), f"{name}: no milestone named"
+
+
+@pytest.mark.req("FR-02-02", "ML-DATA-07")
+def test_a_constant_feature_must_also_declare_its_degeneracy() -> None:
+    """PB-47. A column that is present, complete and carries one value is invisible everywhere else.
+
+    D-04's native missing handling exists for NaN and nothing exists for this, so the declaration
+    is the only place it shows — and a declaration that says "constant" without saying why or what
+    would clear it is a label rather than a record.
+    """
+    accepted = _spec(
+        computable=Computability.CONSTANT,
+        degeneracy="Constant on this benchmark (PB-47). Cleared when the limits exist.",
+    )
+    assert accepted.degeneracy, "precondition: the accepted spec declares one"
+
+    with pytest.raises(ValueError, match="must also declare degeneracy"):
+        _spec(computable=Computability.CONSTANT)
+    with pytest.raises(ValueError, match="wrong problem"):
+        _spec(
+            computable=Computability.CONSTANT,
+            degeneracy="Constant (PB-47). Cleared in M6.",
+            source_data_gap="Needs a table in M6.",
+        )
+
+
+@pytest.mark.req("FR-02-02", "ML-DATA-07")
+def test_the_three_computability_states_partition_the_registry() -> None:
+    """Every feature holds exactly one state, and each state's obligations differ.
+
+    Asserted as a partition rather than per feature, so that adding a state without deciding what
+    it requires fails here instead of being quietly accepted by the field's type.
+
+    Both CONSTANT members are constant for different reasons, and both were found by measurement
+    rather than by reading: `just_below_limit_flag` because the benchmark holds no limit
+    configuration, `accounts_per_device_7d` because no device is shared (PB-40) so it is
+    identically 1 wherever it is defined. The second only surfaced once the check stopped counting
+    NaN as a value — it is NaN on every USSD row, which read as a second distinct value and hid a
+    feature that carries nothing.
+    """
+    by_state: dict[Computability, set[str]] = {state: set() for state in Computability}
+    for name, spec in REGISTRY.items():
+        by_state[spec.computable].add(name)
+    assert sum(len(names) for names in by_state.values()) == len(REGISTRY) == 44
+
+    for name in by_state[Computability.NO_SOURCE_DATA]:
+        assert REGISTRY[name].source_data_gap, f"{name}: no gap declared"
+    for name in by_state[Computability.CONSTANT]:
+        assert REGISTRY[name].degeneracy, f"{name}: no degeneracy declared"
+        assert REGISTRY[name].source_data_gap is None
+    for name in by_state[Computability.COMPUTABLE]:
+        assert REGISTRY[name].source_data_gap is None
+
+    assert by_state[Computability.CONSTANT] == {
+        "just_below_limit_flag",
+        "accounts_per_device_7d",
+    }
+    assert len(by_state[Computability.NO_SOURCE_DATA]) == 6

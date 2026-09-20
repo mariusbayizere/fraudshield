@@ -193,6 +193,81 @@ def read_outcomes(root: Path, keep: set[str]) -> dict[str, Outcome]:
     return outcomes
 
 
+def read_first_seen(root: Path) -> tuple[dict[str, datetime], dict[str, datetime]]:
+    """Each account's first transaction and each device's first sighting, over **all** partitions.
+
+    This is the batch equivalent of consulting the durable store (PB-37), and it is read from the
+    whole dataset rather than from the corpus the features are computed on. The distinction is the
+    entire point: a truncated corpus's earliest row for an account is the window's edge, and
+    `velocity_ratio_1h_vs_30d` divides by observed history, so inferring first-seen from it
+    inflates the ratio for exactly the accounts that look newest.
+
+    Cheap despite reading everything: three columns, a running minimum, nothing retained per row.
+    An account absent here has no first-seen and its ratio is NaN, which is the honest output and
+    the same one the online path gives.
+    """
+    first_seen: dict[str, datetime] = {}
+    device_first_seen: dict[str, datetime] = {}
+    columns = ["account_id", "device_fingerprint", "transaction_timestamp"]
+    for part in sorted((root / "transactions").glob("month=*/part-*.parquet")):
+        table = pq.read_table(part, columns=columns)
+        accounts = table.column("account_id").to_pylist()
+        devices = table.column("device_fingerprint").to_pylist()
+        stamps = table.column("transaction_timestamp").to_pylist()
+        for account, device, when in zip(accounts, devices, stamps, strict=True):
+            key = str(account)
+            if key not in first_seen or when < first_seen[key]:
+                first_seen[key] = when
+            if device is not None:
+                fingerprint = str(device)
+                if fingerprint not in device_first_seen or when < device_first_seen[fingerprint]:
+                    device_first_seen[fingerprint] = when
+    return first_seen, device_first_seen
+
+
+def read_known_before(
+    root: Path, corpus_start: datetime
+) -> tuple[dict[str, frozenset[str]], dict[str, frozenset[str]], dict[str, frozenset[str]]]:
+    """What each account had already used before `corpus_start`: payees, corridors, devices.
+
+    The three novelty flags declare **unbounded** history, so a corpus that begins part-way through
+    an account's life cannot answer them: every long-standing payee, corridor and handset looks
+    new, and it looks newest for the accounts with the longest histories. That is the same defect
+    as inferring a first-seen timestamp from a truncated corpus, in a boolean.
+
+    Read from every partition earlier than the corpus, which is what the online path's durable
+    sets hold and what `restore_counterparties`, `restore_countries` and `restore_devices` exist
+    to reload after a flush.
+    """
+    counterparties: dict[str, set[str]] = {}
+    countries: dict[str, set[str]] = {}
+    devices: dict[str, set[str]] = {}
+    columns = [
+        "account_id",
+        "counterparty_id",
+        "counterparty_country",
+        "device_fingerprint",
+        "transaction_timestamp",
+    ]
+    for part in sorted((root / "transactions").glob("month=*/part-*.parquet")):
+        table = pq.read_table(part, columns=columns)
+        values = {name: table.column(name).to_pylist() for name in columns}
+        for i in range(table.num_rows):
+            if values["transaction_timestamp"][i] >= corpus_start:
+                continue
+            account = str(values["account_id"][i])
+            counterparties.setdefault(account, set()).add(str(values["counterparty_id"][i]))
+            countries.setdefault(account, set()).add(str(values["counterparty_country"][i]))
+            device = values["device_fingerprint"][i]
+            if device is not None:
+                devices.setdefault(account, set()).add(str(device))
+    return (
+        {k: frozenset(v) for k, v in counterparties.items()},
+        {k: frozenset(v) for k, v in countries.items()},
+        {k: frozenset(v) for k, v in devices.items()},
+    )
+
+
 def read_sim_swaps(root: Path) -> dict[str, list[datetime]]:
     """SIM swaps per account, from `account_events`.
 
@@ -219,10 +294,17 @@ def run_computability(root: Path, packs: Path, corpus_rows: int, sample_rows: in
             f"read {len(rows)} transactions, too few to score {sample_rows} with history behind "
             "them; raise --corpus-rows or lower --sample-rows"
         )
+    first_seen, device_first_seen = read_first_seen(root)
+    payees, corridors, handsets = read_known_before(root, rows[0].timestamp)
     context = FeatureContext(
         countries=load_packs(packs),
         outcomes=read_outcomes(root, {row.transaction_id for row in rows}),
         sim_swaps=read_sim_swaps(root),
+        first_seen=first_seen,
+        device_first_seen=device_first_seen,
+        counterparties_before=payees,
+        countries_before=corridors,
+        devices_before=handsets,
         cash_out_codes=frozenset({CASH_DISBURSEMENT_MCC}),
         cell_rate_prior=0.0087,
     )
@@ -247,10 +329,17 @@ def run_auc(root: Path, packs: Path, corpus_rows: int, sample_rows: int) -> int:
             "them; raise --corpus-rows or lower --sample-rows"
         )
     outcomes = read_outcomes(root, {row.transaction_id for row in rows})
+    first_seen, device_first_seen = read_first_seen(root)
+    payees, corridors, handsets = read_known_before(root, rows[0].timestamp)
     context = FeatureContext(
         countries=load_packs(packs),
         outcomes=outcomes,
         sim_swaps=read_sim_swaps(root),
+        first_seen=first_seen,
+        device_first_seen=device_first_seen,
+        counterparties_before=payees,
+        countries_before=corridors,
+        devices_before=handsets,
         cash_out_codes=frozenset({CASH_DISBURSEMENT_MCC}),
         cell_rate_prior=0.0087,
     )

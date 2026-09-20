@@ -18,7 +18,7 @@ exactly on `t - 1h` belongs to the long window, so the partition has no gap and 
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from datetime import datetime, timedelta
 
 from fraudshield_ml.features.primitives import h3_cell, haversine_km
@@ -705,7 +705,12 @@ def distance_from_home_centroid_km(history: Sequence[Transaction], scored: Trans
     return haversine_km(centre_lat, centre_lon, scored.latitude, scored.longitude)
 
 
-def is_new_country_for_account(history: Sequence[Transaction], scored: Transaction) -> bool:
+def is_new_country_for_account(
+    history: Sequence[Transaction],
+    scored: Transaction,
+    *,
+    known_before: Collection[str] = (),
+) -> bool:
     """True when this account has never sent to the counterparty's country before.
 
     **Unbounded history**: a corridor used once two years ago is not new. That is the feature's
@@ -721,6 +726,9 @@ def is_new_country_for_account(history: Sequence[Transaction], scored: Transacti
 
     No country is named here: the comparison is between two values that came out of the data, so a
     new country is a new pack and no code (ADR 0023).
+
+    `known_before` carries the corridors used before `history` begins, for the same reason as the
+    other two novelty flags: a truncated history makes every established corridor look new.
     """
     country = scored.counterparty_country
     if country is None:
@@ -729,6 +737,8 @@ def is_new_country_for_account(history: Sequence[Transaction], scored: Transacti
             "Treating a missing one as a country of its own would make every such row share a "
             "destination, so the second would read as familiar"
         )
+    if country in known_before:
+        return False
     seen = {
         row.counterparty_country
         for row in history
@@ -754,14 +764,28 @@ def counterparty_of(scored: Transaction) -> str:
     return scored.counterparty_id
 
 
-def counterparty_is_new_for_account(history: Sequence[Transaction], scored: Transaction) -> bool:
+def counterparty_is_new_for_account(
+    history: Sequence[Transaction],
+    scored: Transaction,
+    *,
+    known_before: Collection[str] = (),
+) -> bool:
     """True when this account has never transacted with this counterparty, over all history.
 
     Unbounded on purpose: a payee used once three years ago is not new, and a windowed version
     would fire on every dormant relationship — on exactly the accounts whose behaviour has not
     changed.
+
+    `known_before` is what the account was already known to have used **before `history` begins**;
+    an empty one asserts that `history` is complete. It exists because **a corpus cannot know what
+    it does not contain**: computing "never before" from a truncated history reports every
+    long-standing payee as new, and does so most for the accounts with the longest histories. The
+    online path holds this as durable state with a restore method (PB-37); this is its batch
+    counterpart, and the milestone review found the version that lacked it (M3-2).
     """
     counterparty = counterparty_of(scored)
+    if counterparty in known_before:
+        return False
     return not any(
         row.account_id == scored.account_id
         and row.timestamp < scored.timestamp
@@ -895,7 +919,12 @@ def channel(scored: Transaction) -> str:
     return value
 
 
-def device_is_new_for_account(history: Sequence[Transaction], scored: Transaction) -> float:
+def device_is_new_for_account(
+    history: Sequence[Transaction],
+    scored: Transaction,
+    *,
+    known_before: Collection[str] = (),
+) -> float:
     """1.0 when this account has not used this device before, 0.0 when it has, NaN with no device.
 
     Returned as a float rather than a bool so the structural NaN has somewhere to live: a
@@ -905,6 +934,8 @@ def device_is_new_for_account(history: Sequence[Transaction], scored: Transactio
     device = scored.device_fingerprint
     if device is None:
         return float("nan")
+    if device in known_before:
+        return 0.0
     seen = any(
         row.account_id == scored.account_id
         and row.timestamp < scored.timestamp
@@ -962,6 +993,8 @@ def device_age_days(scored: Transaction, first_seen_at: datetime | None) -> floa
 
     A device first seen an hour ago is the signal; scoping it to the account would make every
     device new on its first use there, which is what `device_is_new_for_account` already says.
+
+    `known_before` carries the devices this account used before `history` begins.
 
     `DURABLE`, and supplied rather than derived, on the same reasoning as PB-37's account
     first-seen: after a cache flush the earliest arrival is the rolling window's edge, not the

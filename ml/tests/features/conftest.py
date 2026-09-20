@@ -29,6 +29,17 @@ PACKS = {
 }
 
 
+#: Gaps between an account's consecutive transactions, in seconds. Chosen rather than drawn, and
+#: spanning five orders of magnitude on purpose: a burst inside a minute so `tx_count_60s` and
+#: `tx_count_1h` can be non-zero, and gaps of days so the windows empty again. A fixture whose
+#: gaps are all hours makes four velocity features constant, which the variance check would then
+#: report as a property of the benchmark rather than of the fixture. The 5,500,000-second gap
+#: is about sixty-four days and is there for `dormancy_reactivation_flag`, which needs a
+#: silence longer than sixty days followed by a return; without it that feature is constant
+#: False and the fixture, not the data, is what says so.
+_GAPS_SECONDS = (25, 40, 900, 7_200, 50_000, 260_000, 95, 43_000, 610_000, 55, 5_500_000, 20_000)
+
+
 def _corpus(accounts: int = 5, per_account: int = 14) -> list[Transaction]:
     """A corpus with everything the 44 read from transaction columns.
 
@@ -36,12 +47,26 @@ def _corpus(accounts: int = 5, per_account: int = 14) -> list[Transaction]:
     feature, and a fixture whose coverage varies by seed would make the answer vary with it.
     Every account transacts through agents and on USSD, so both structural-NaN sets are exercised
     and neither is NaN for *every* row.
+
+    Built so that **no feature is constant for a reason that belongs to the fixture**: gaps range
+    from 25 seconds to a week, the span crosses month ends, and an account's counterparty countries
+    arrive late enough that `is_new_country_for_account` is still True partway through. The one
+    feature that is constant here is constant on the benchmark too, for the same reason — no limit
+    configuration exists — and the registry declares it.
     """
     rows: list[Transaction] = []
     for a in range(accounts):
-        when = START + timedelta(hours=a)
+        # Staggered starts land accounts on different month boundaries, so `is_month_end_window`
+        # and the country and device novelty flags all vary inside the scored half.
+        #
+        # The cost is that agents never serve two accounts within an hour, so the two agent
+        # count features are constant here. That is a limit of 70 rows rather than a fact about
+        # the benchmark, and `test_the_only_mismatches_are_the_ones_this_fixture_cannot_avoid`
+        # names them — interleaving the accounts to fix it made five other features constant
+        # instead, which is the same trade in the other direction.
+        when = START + timedelta(days=24 * a, hours=a)
         for i in range(per_account):
-            when += timedelta(hours=1 + (i * 7) % 53)
+            when += timedelta(seconds=_GAPS_SECONDS[(i + a) % len(_GAPS_SECONDS)])
             on_ussd = i % 5 == 0
             at_agent = i % 3 == 0 and not on_ussd
             rows.append(
@@ -53,9 +78,15 @@ def _corpus(accounts: int = 5, per_account: int = 14) -> list[Transaction]:
                     latitude=-1.9441 + 0.01 * ((i + a) % 7),
                     longitude=30.0619 + 0.01 * ((i * 3 + a) % 5),
                     account_country=("AA", "BB")[a % 2],
-                    counterparty_country=("AA", "BB", "CC")[i % 3],
+                    # A third country only from the ninth transaction, so the novelty flag is
+                    # still firing inside the scored half rather than settling before it starts.
+                    counterparty_country=("AA", "BB")[i % 2] if i < 9 else "CC",
                     counterparty_id=f"C{i % 4}",
-                    amount_minor=1_000 * (1 + i % 3),
+                    # Every fourth amount is deliberately not a multiple of a thousand, so that a
+                    # denomination table makes `round_sum_flag` vary rather than fire on every
+                    # row. Without it the feature is constant True, which is a different finding
+                    # from the one the test means to make.
+                    amount_minor=1_000 * (1 + i % 3) + (7 if i % 4 == 0 else 0),
                     currency="AAA",
                     channel="USSD" if on_ussd else ("AGENT_BANKING" if at_agent else "CARD"),
                     device_fingerprint=None if on_ussd else f"D{a}{i % 2}",
@@ -80,9 +111,25 @@ SAMPLE = list(range(len(CORPUS) // 2, len(CORPUS)))
 SWAPS = {f"A{a}": [START + timedelta(days=5 + a)] for a in range(3)}
 
 
+#: The true first transaction of each account and first sighting of each device. This fixture's
+#: corpus is **complete** — every row of every account is in it — so the earliest row genuinely is
+#: the first, and a caller may establish them. A truncated corpus may not, which is why the vector
+#: takes them as input rather than inferring them (milestone review M3-2).
+FIRST_SEEN = {
+    account: min(r.timestamp for r in CORPUS if r.account_id == account)
+    for account in {row.account_id for row in CORPUS}
+}
+DEVICE_FIRST_SEEN = {
+    device: min(r.timestamp for r in CORPUS if r.device_fingerprint == device)
+    for device in {row.device_fingerprint for row in CORPUS if row.device_fingerprint}
+}
+
+
 def _context(**overrides: object) -> FeatureContext:
     defaults: dict[str, object] = {
         "countries": PACKS,
+        "first_seen": FIRST_SEEN,
+        "device_first_seen": DEVICE_FIRST_SEEN,
         "sim_swaps": SWAPS,
         "outcomes": {
             row.transaction_id: Outcome(

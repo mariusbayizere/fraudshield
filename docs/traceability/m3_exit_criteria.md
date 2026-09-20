@@ -312,7 +312,7 @@ claim by a person and should be read as one.
 |---|---|
 | E1 — grouping by the unit of history | **Met**, with the rule restated per `history_key` and the component-folding measurement that refuted the first version |
 | E2 — every metric states its scale | **Met as a rule**, and applied by `fs-features auc`, which prints the corpus size, the scored-row count and the fraud count before any figure |
-| E3 — the 44 re-checked against the 0.80 ceiling | **RUN, AND NOT MET.** Five features exceed the ceiling at commit `fad43dd`: `velocity_ratio_1h_vs_30d` 0.894, `tx_count_1h` 0.826, `counterparty_is_new_for_account` 0.816, `implied_speed_kmh` 0.812, `seconds_since_last_tx` 0.811, each ±0.04 on 166 fraud of 20,000 scored from a 200,000-row corpus. The criterion is **failed, not waived** — see below and PB-46. Artefact: `docs/benchmarks/m3_single_feature_auc_fad43dd.txt` |
+| E3 — the 44 re-checked against the 0.80 ceiling | **RUN. The re-check is done; the ceiling is NOT met.** Five features exceed it at commit `fad43dd`: `velocity_ratio_1h_vs_30d` 0.894, `tx_count_1h` 0.826, `counterparty_is_new_for_account` 0.816, `implied_speed_kmh` 0.812, `seconds_since_last_tx` 0.811, each ±0.04 on 166 fraud of 20,000 scored from a 200,000-row corpus. **Owner decision 2026-09-20 (PB-46): the benchmark is declared velocity-separable.** The ceiling stands as written and is recorded as breached; the resolution is a reporting gate — no model metric may be quoted without its single-feature baseline beside it — not a change to the data or to the control. So the *criterion* (perform the re-check, at a stated scale, with account-grouped encoding) is **met**, and its *finding* is a standing limitation carried into M4. Artefact: `docs/benchmarks/m3_single_feature_auc_fad43dd.txt`; statement: `docs/benchmarks/single_feature_baseline.md` |
 | E4 — deterministic, byte-identical across batch sizes | **Met**; `test_e4_the_vector_is_byte_identical_across_batch_sizes` compares through `float.hex()` at batch sizes 1, 5 and 17 |
 | E5 — no feature reads an excluded column | **Met**, behaviourally rather than by a source scan; see below |
 | E6 — the `account_events` join is available and measured | **Met.** `fs-features` reads `SIM_SWAP` from `account_events`; `days_since_sim_swap` separates at **0.577 ±0.177** on 11 fraud of 2,193 usable rows (commit `fad43dd`), reported in the same table as the transaction features. The interval is wide because the feature is defined for 11.3% of rows, and that is stated rather than hidden behind the point estimate. Artefact: `docs/benchmarks/m3_single_feature_auc_fad43dd.txt` |
@@ -320,7 +320,7 @@ claim by a person and should be read as one.
 | E8 — packs and `corridor_class` land here | **Met** (PB-29, PB-30) |
 | E9 — parameter provenance | **Met**; `fs-dataset provenance --check` passes |
 | E10 — the register covers every M3 requirement | **Met**; 258 rows, 0 errors, 0 warnings, matrix rendered |
-| E11 — milestone review | **Not started**, and deliberately: held for the reviewer |
+| E11 — milestone review | **Done** — `docs/reviews/M3/milestone-review.md`, one pass, BLOCKER and MAJOR only |
 | E12–E15 — the rules M2 paid for | **Applied throughout**; see the parity mutation table and the E15 fixture |
 
 ### E5, and what "excluded by construction" turned out to need
@@ -334,10 +334,13 @@ the excluded quantity and assert the vector does not move:
 - **row position** — rows from accounts, counterparties, devices and cells that appear nowhere else
   are prepended, so every scored row sits at a new index with an identical history.
 - **sub-second timestamp parts** — a label-correlated signal is planted in the microseconds, and
-  the set of features that move must equal a declared set of six. Five are elapsed-time quantities,
-  where sub-second sensitivity is physics; the sixth is `geo_cell_fraud_rate_30d`, which moves
-  because a **label gate** can flip when `available_at` and the scored timestamp coincide to the
-  second. That is worth knowing and is not a signal — it is recorded rather than excused.
+  the set of features that move must equal a declared set of **five**, all elapsed-time quantities
+  where sub-second sensitivity is physics. `geo_cell_fraud_rate_30d` was a sixth under an earlier
+  fixture that spaced transactions in whole hours with `available_at` exactly two days later: it
+  never reads the sub-second part, but a **label gate** flips when `available_at` and the scored
+  timestamp coincide to the second, and that coincidence was systematic. Widening the gaps removed
+  it. The possibility is recorded in the test rather than asserted in the set, because it is a real
+  way for a label gate to depend on a quantity nobody intended.
 - **label delay** — every label's arrival is moved earlier while staying visible, and only the two
   label-derived features move. `Outcome` carries no `confirmed_at` at all, so the batch path cannot
   make the mistake its asymmetry invites.
@@ -392,7 +395,27 @@ makes counterparties look newer than they are, which would **understate**
 `counterparty_is_new_for_account` rather than inflate it. Neither moves a figure by the 0.09 that
 would bring the largest back under the ceiling.
 
-**Not waived.** The criterion is failed and PB-46 carries it. Whether the resolution is a generator
-change, a restatement of D-08's scope to columns, or an explicit "the benchmark is
-velocity-separable and results must be reported against that baseline" is an owner decision, and
-recording the failure is not the same as choosing one.
+**Resolved by owner decision, 2026-09-20 — option three of the three available.**
+
+- *Change the draw to suppress the burst structure* — **rejected.** Real SIM-swap drains and real
+  mule fan-out are bursty; a generator whose fraud was evenly spread would pass D-08 and be the
+  weaker artifact. That is tuning the fixture until the test passes, at dataset scale.
+- *Restate D-08's ceiling as a claim about columns* — **rejected.** It would be redefining a
+  control so that it passes, and it is available only because the original wording was ambiguous
+  about its object — the same ambiguity that let the claim stand for three milestones.
+- *Declare the benchmark velocity-separable and report every metric against the baseline* —
+  **adopted.** It is the only one of the three that adds information rather than removing an
+  obligation.
+
+**What that means in practice.** The ceiling is not waived and not moved: it stands, it is
+breached, and the breach is carried into every result. `docs/benchmarks/single_feature_baseline.md`
+states the floor as a first-class result; the datasheet and model card open with it as the
+**principal limitation**, ahead of anything else, so a reader meets it before any model figure; and
+the traceability rows on ML-GATE-01 to -04, -07 to -09 and -13 make it a gate — **no model metric
+may be reported without its single-feature baseline and best trivial rule beside it, as a margin**,
+inadmissible on the same terms as a metric quoted without its scale.
+
+**And the evidence has moved.** If one velocity threshold reaches 0.894, the headline AUC is no
+longer where a model shows it learned anything. Leave-one-country-out and the novel SIM-swap
+sub-variant are — burstiness is not country-specific, and a variant absent from training separates
+a model that learned the shape of fraud from one that learned its rate. Those rows now say so.

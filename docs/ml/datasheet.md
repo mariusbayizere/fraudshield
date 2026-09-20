@@ -8,6 +8,30 @@ The companion documents are `dataset/params_provenance.md` (every generator para
 provenance), `dataset/realism_report.md` (the gate checks on a generated run) and
 `docs/ml/scenarios/` (one design note per fraud scenario).
 
+## The principal limitation, before anything else
+
+**This benchmark is velocity-separable.** A single feature —
+`velocity_ratio_1h_vs_30d` — reaches `max(AUC, 1−AUC)` of **0.894 ±0.032** on it (commit
+`fad43dd`, 20,000 scored rows holding 166 confirmed fraud). Four more single features exceed 0.80.
+
+It is stated here, ahead of every other section, because it changes what every result on this
+dataset means: **a model reported at AUC 0.94 is 0.046 better than one threshold on one feature,
+not 0.44 better than chance.** A reader who meets a model figure without meeting this first will
+draw a conclusion the data does not support.
+
+**The mechanism.** The generator injects fraud as **incidents** — a SIM-swap drain, a velocity
+run, a mule fan-out, a bust-out — and each is a rapid sequence of transactions on one account. So
+recency and rate features find it, because that is what it is.
+
+**This is not a defect awaiting a fix, and the alternatives were rejected deliberately** (owner
+decision 2026-09-20, PB-46). Suppressing the burst structure would make the benchmark *less*
+realistic: real drains and real fan-out are genuinely bursty. Restating D-08's 0.80 ceiling as a
+claim about dataset columns would be redefining a control so that it passes. Instead the ceiling
+stands, it is recorded as **not met by the engineered features**, and every model metric measured
+here must be reported beside its single-feature baseline — the full statement is
+`docs/benchmarks/single_feature_baseline.md`, and the claims register carries the refutation as
+C-9/C-14.
+
 ## Motivation
 
 **For what purpose was the dataset created?** To train and evaluate the FraudShield fraud

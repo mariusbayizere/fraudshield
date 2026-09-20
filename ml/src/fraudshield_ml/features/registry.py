@@ -426,15 +426,32 @@ class Computability(Enum):
     same reason it could not catch PB-40: the feature *is* computable, in the sense of not raising.
 
     The declaration is only worth having because something checks it. ``fs-features computability``
-    computes all 44 over a generated dataset and fails when a ``COMPUTABLE`` feature is NaN for
-    100% of rows, **and when a ``NO_SOURCE_DATA`` feature is not** — the second direction matters
-    as much as the first, because it is the one that fires when someone wires the missing data and
-    forgets to change the declaration, leaving the register saying a feature is dead when it is
-    alive.
+    computes all 44 over a generated dataset and compares the declaration against what the data
+    produced, in **every** direction: a ``COMPUTABLE`` feature that is NaN for 100% of rows or that
+    takes a single value, a ``NO_SOURCE_DATA`` feature that produced a number, a ``CONSTANT``
+    feature that varied. The directions that fire when a gap is *closed* matter as much as the
+    ones that fire when it opens — they are what stops the register saying a feature is dead while
+    it is alive, and a stale register is trusted exactly as much as a fresh one.
     """
 
     COMPUTABLE = "computable"
     NO_SOURCE_DATA = "no_source_data"
+    CONSTANT = "constant"
+    """The feature produces a number for every row, and always **the same** number.
+
+    Added 2026-09-20 on owner direction, after the E3 run put a separation beside every feature and
+    three of them read 0.500 — which is what a constant looks like. The computability check could
+    not see them, because it asks whether a feature ever produces a number and a constant always
+    does.
+
+    **A missing distribution is as invisible to training as a missing input, and less covered.**
+    D-04's native missing handling exists for NaN; nothing at all exists for a column that is
+    present, well-typed, complete, and carries one value. It is trained on, it contributes nothing,
+    and in every completeness count it looks exactly like a working feature.
+
+    A CONSTANT feature must also declare ``degeneracy``, naming the backlog item and what would
+    clear it — the two fields are not redundant: this one is a mechanically checked observation
+    about the benchmark, and ``degeneracy`` is the prose that says why and for how long."""
 
 
 @dataclass(frozen=True)
@@ -524,6 +541,19 @@ class FeatureSpec:
                     f"{self.name}: source_data_gap must name the milestone that supplies the "
                     "data (M4, M6, ...). 'This needs a table' without a date is a note, not a "
                     "plan, and it is how a gap survives three milestones"
+                )
+        elif self.computable is Computability.CONSTANT:
+            if not (self.degeneracy or "").strip():
+                raise ValueError(
+                    f"{self.name}: computable=CONSTANT must also declare degeneracy, naming the "
+                    "backlog item and what would clear it. A column that is present, complete and "
+                    "carries one value is invisible in every completeness count, so the "
+                    "declaration is the only place it shows"
+                )
+            if self.source_data_gap is not None:
+                raise ValueError(
+                    f"{self.name}: a CONSTANT feature has its data and no distribution; a "
+                    "source_data_gap would describe the wrong problem"
                 )
         elif self.source_data_gap is not None:
             raise ValueError(
@@ -1023,7 +1053,19 @@ for _spec_ in (
         ),
         template_id="amount.just_below_limit_flag",
         reference_data_basis=ReferenceDataBasis.AS_OF_EVENT,
-        computable=Computability.COMPUTABLE,
+        computable=Computability.CONSTANT,
+        degeneracy=(
+            "CONSTANT FALSE ON THIS BENCHMARK (PB-47). Not a defect in the feature: the dataset "
+            "carries no channel or KYC-tier limit configuration at all, so there is no band to "
+            "fall below and the flag is false for every row. It is CONSTANT rather than "
+            "NO_SOURCE_DATA because the absence produces a defined value rather than a NaN - "
+            "'no limit in force' is an answer - and that is exactly what makes it invisible: a "
+            "column that is present, complete, well-typed and carries one value looks in every "
+            "completeness count like a working feature, and D-04's missing handling never sees "
+            "it. Found by reading the E3 separation run beside the computability run, where it "
+            "sat at exactly 0.500. Cleared when the limit configuration exists (PB-44's table, "
+            "M6), at which point the variance check will fail until this declaration changes."
+        ),
     ),
 ):
     REGISTRY[_spec_.name] = _spec_
@@ -1591,7 +1633,7 @@ for _spec_ in (
         ),
         template_id="device.accounts_per_device_7d",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
-        computable=Computability.COMPUTABLE,
+        computable=Computability.CONSTANT,
         window="7d",
         contract=WindowContract(
             self_inclusion=SelfInclusion.EXCLUDED,

@@ -25,7 +25,7 @@ from datetime import datetime
 
 from fraudshield_ml.features import batch
 from fraudshield_ml.features.primitives import h3_cell
-from fraudshield_ml.features.registry import REGISTRY
+from fraudshield_ml.features.registry import REGISTRY, Computability
 from fraudshield_ml.features.types import (
     AgentStanding,
     CountryFacts,
@@ -68,6 +68,26 @@ class FeatureContext:
     denominations: Mapping[str, Sequence[int]] = field(default_factory=dict)
     #: Merchant category codes that mean a cash disbursement.
     cash_out_codes: frozenset[str] = frozenset()
+    #: Each account's **true** first transaction, and each device's first sighting, from a source
+    #: that can see all of history. Absent means "this cannot be established", and the features
+    #: that need it are NaN — they are not inferred from the corpus.
+    #:
+    #: This is the batch counterpart of `restore_first_seen` (PB-37). Taking an account's earliest
+    #: row *in the supplied corpus* is the same inference the online path is forbidden to make: a
+    #: truncated corpus's earliest row is the window's edge, not the account's beginning, and
+    #: `velocity_ratio_1h_vs_30d` divides by observed history, so the error inflates the ratio for
+    #: exactly the accounts that look newest. Every run this repository has performed passed a
+    #: truncated corpus, so the inference was always wrong and never visibly so.
+    first_seen: Mapping[str, datetime] = field(default_factory=dict)
+    device_first_seen: Mapping[str, datetime] = field(default_factory=dict)
+    #: What each account had already used **before the corpus begins**: counterparties, corridor
+    #: countries, devices. Same reason as the timestamps above and the same failure if omitted —
+    #: the three novelty flags declare unbounded history, so computing "never before" from a
+    #: truncated corpus reports every long-standing payee, corridor and handset as new, and does
+    #: so most for the accounts with the longest histories. Empty asserts the corpus is complete.
+    counterparties_before: Mapping[str, frozenset[str]] = field(default_factory=dict)
+    countries_before: Mapping[str, frozenset[str]] = field(default_factory=dict)
+    devices_before: Mapping[str, frozenset[str]] = field(default_factory=dict)
     #: The fitted training-fold base rate the cell rate shrinks toward, and the declared tier range.
     cell_rate_prior: float = 0.0
     kyc_tier_range: tuple[int, int] = (1, 3)
@@ -170,7 +190,7 @@ def compute(
     counterparty_history = slices["counterparty"]
     cell_history = slices["cell"]
 
-    first_seen = _first_seen(account_history, scored)
+    first_seen = context.first_seen.get(account)
     values["velocity_ratio_1h_vs_30d"] = (
         batch.velocity_ratio_1h_vs_30d(history, scored, first_seen_at=first_seen)
         if first_seen is not None
@@ -205,13 +225,21 @@ def compute(
     values["distance_from_last_tx_km"] = batch.distance_from_last_tx_km(history, scored)
     values["implied_speed_kmh"] = batch.implied_speed_kmh(history, scored)
     values["distance_from_home_centroid_km"] = batch.distance_from_home_centroid_km(history, scored)
-    values["is_new_country_for_account"] = float(batch.is_new_country_for_account(history, scored))
+    values["is_new_country_for_account"] = float(
+        batch.is_new_country_for_account(
+            history, scored, known_before=context.countries_before.get(account, frozenset())
+        )
+    )
     values["geo_cell_fraud_rate_30d"] = batch.geo_cell_fraud_rate_30d(
         cell_history, dict(context.outcomes), scored, prior=context.cell_rate_prior
     )
 
     values["counterparty_is_new_for_account"] = float(
-        batch.counterparty_is_new_for_account(account_history, scored)
+        batch.counterparty_is_new_for_account(
+            account_history,
+            scored,
+            known_before=context.counterparties_before.get(account, frozenset()),
+        )
     )
     values["counterparty_account_age_days"] = batch.counterparty_account_age_days(
         scored, context.opened_at.get(_counterparty(scored))
@@ -278,11 +306,16 @@ def _device_and_agent(
     standing = context.agent_standing.get(scored.agent_id or "", ())
     return {
         "channel": batch.channel(scored),
-        "device_is_new_for_account": batch.device_is_new_for_account(account_history, scored),
+        "device_is_new_for_account": batch.device_is_new_for_account(
+            account_history,
+            scored,
+            known_before=context.devices_before.get(scored.account_id, frozenset()),
+        ),
         "accounts_per_device_7d": batch.accounts_per_device_7d(device_history, scored),
         "device_changes_24h": batch.device_changes_24h(account_history, scored),
         "device_age_days": batch.device_age_days(
-            scored, _device_first_seen(device_history, scored)
+            scored,
+            context.device_first_seen.get(scored.device_fingerprint or ""),
         ),
         "agent_float_utilisation_ratio": batch.agent_float_utilisation_ratio(scored, standing),
         "agent_cashout_count_1h": batch.agent_cashout_count_1h(
@@ -346,27 +379,12 @@ def _tier_ordinal(scored: Transaction, context: FeatureContext) -> int | None:
     return None if math.isnan(tier) else int(tier)
 
 
-def _first_seen(history: Sequence[Transaction], scored: Transaction) -> datetime | None:
-    """The account's earliest transaction in the corpus, or None when it has none.
-
-    **This is the durable first-seen a caller must consult a store for**, and in a batch run over a
-    complete dataset the corpus *is* that store: the earliest row is the account's first, because
-    the dataset starts at the beginning. The online path may not infer it (PB-37), and the reason
-    the two differ is that a rolling cache's earliest arrival is the window's edge while a
-    complete history's earliest row is the account's start.
-    """
-    earliest = [row.timestamp for row in history if row.account_id == scored.account_id]
-    if not earliest:
-        return scored.timestamp
-    return min(earliest)
-
-
-def _device_first_seen(history: Sequence[Transaction], scored: Transaction) -> datetime | None:
-    """The device's earliest sighting anywhere in the corpus, on the same reasoning."""
-    if scored.device_fingerprint is None:
-        return None
-    seen = [row.timestamp for row in history if row.device_fingerprint == scored.device_fingerprint]
-    return min(seen) if seen else scored.timestamp
+# `_first_seen` and `_device_first_seen` used to live here, each returning the earliest row in the
+# supplied corpus and falling back to the scored transaction's own timestamp. Both were removed
+# after the M3 milestone review (M3-2): that is exactly the inference `observe()` is forbidden to
+# make, and the docstring defending it described a complete-dataset usage that no run in this
+# repository has ever performed. The values now come from `FeatureContext`, supplied by a caller
+# that can see all of history, and are NaN when nobody can establish them.
 
 
 @dataclass(frozen=True)
@@ -375,16 +393,41 @@ class ComputabilityResult:
 
     rows: int
     nan_rate: dict[str, float]
-    #: Declared COMPUTABLE and NaN for every row: the feature is dead and the register says it
-    #: is fine.
-    dead: tuple[str, ...]
-    #: Declared NO_SOURCE_DATA and not NaN for every row: someone wired the data and the register
-    #: is now stale in the other direction.
-    revived: tuple[str, ...]
+    #: Distinct values each feature took over the sample, counting NaN as one value. A feature
+    #: that took one value carries nothing, whether that value is a number or NaN.
+    distinct: dict[str, int]
+    #: Every feature whose declared state disagrees with the one the data produced, as
+    #: `(name, declared, observed)`. One list rather than four: the three states are decided by a
+    #: single measured number, so a mismatch is a mismatch whichever way it points, and
+    #: enumerating the cases invites leaving one out.
+    mismatched: tuple[tuple[str, Computability, Computability], ...]
 
     @property
     def ok(self) -> bool:
-        return not self.dead and not self.revived
+        return not self.mismatched
+
+
+def observed_state(distinct_values: int) -> Computability:
+    """The state the data says a feature is in, from one number.
+
+    The three states are a **partition** on the count of distinct non-NaN values, which is what
+    makes the check exhaustive rather than a list of cases somebody thought of:
+
+    * **0** — it never produced a number, so its inputs are absent (``NO_SOURCE_DATA``);
+    * **1** — it always produced the same one: present, complete, carrying nothing (``CONSTANT``);
+    * **2 or more** — it varies (``COMPUTABLE``).
+
+    **Missingness is deliberately not variation.** A feature that is NaN on every USSD row and `1`
+    on all the others is constant: what separates those rows is the channel, `channel` already
+    carries it, and counting the NaN as a second value would credit this feature with that one's
+    signal. Counting it that way is exactly what hid `accounts_per_device_7d`, which is
+    identically 1 wherever it is defined (PB-40) and read as two distinct values.
+    """
+    if distinct_values == 0:
+        return Computability.NO_SOURCE_DATA
+    if distinct_values == 1:
+        return Computability.CONSTANT
+    return Computability.COMPUTABLE
 
 
 def computability(
@@ -418,28 +461,56 @@ def computability(
 
     corpus_index = CorpusIndex.build(corpus)
     produced_a_number = dict.fromkeys(REGISTRY, 0)
+    seen: dict[str, set[str]] = {name: set() for name in REGISTRY}
     for index in sample:
         for name, value in compute(corpus, index, context, corpus_index).items():
             if isinstance(value, str) or not math.isnan(value):
                 produced_a_number[name] += 1
+                # Compared as text, because `nan != nan` would make a set of floats report a
+                # feature as having as many values as it has rows.
+                seen[name].add(value if isinstance(value, str) else repr(value))
 
     rows = len(sample)
     nan_rate = {name: 1.0 - produced / rows for name, produced in produced_a_number.items()}
-    dead = tuple(
-        sorted(
-            name
-            for name, spec in REGISTRY.items()
-            if spec.computable.value == "computable" and produced_a_number[name] == 0
-        )
+    distinct = {name: len(values) for name, values in seen.items()}
+    mismatched = tuple(
+        (name, spec.computable, observed_state(distinct[name]))
+        for name, spec in sorted(REGISTRY.items())
+        if spec.computable is not observed_state(distinct[name])
     )
-    revived = tuple(
-        sorted(
-            name
-            for name, spec in REGISTRY.items()
-            if spec.computable.value == "no_source_data" and produced_a_number[name] > 0
-        )
+    return ComputabilityResult(
+        rows=rows, nan_rate=nan_rate, distinct=distinct, mismatched=mismatched
     )
-    return ComputabilityResult(rows=rows, nan_rate=nan_rate, dead=dead, revived=revived)
+
+
+#: What each mismatch means, so the error says why it matters rather than only that it happened.
+#: A table because every pair is reachable and each has a different consequence — and because a
+#: default message would be the one a reader saw most often.
+_MISMATCH: dict[tuple[Computability, Computability], str] = {
+    (Computability.COMPUTABLE, Computability.NO_SOURCE_DATA): (
+        "trained on and produced nothing; D-04's missing handling hides it"
+    ),
+    (Computability.COMPUTABLE, Computability.CONSTANT): (
+        "present, complete, well-typed and carrying one value, so every completeness count "
+        "reports it as working"
+    ),
+    (Computability.NO_SOURCE_DATA, Computability.CONSTANT): (
+        "its inputs arrived but give no variation; the gap moved rather than closed"
+    ),
+    (Computability.NO_SOURCE_DATA, Computability.COMPUTABLE): (
+        "somebody wired the data and the register still says it is dead"
+    ),
+    (Computability.CONSTANT, Computability.COMPUTABLE): (
+        "the degeneracy has cleared and the declaration has not"
+    ),
+    (Computability.CONSTANT, Computability.NO_SOURCE_DATA): (
+        "it is not constant, it is absent; the inputs went away"
+    ),
+}
+
+
+def _why(declared: Computability, observed: Computability) -> str:
+    return _MISMATCH[(declared, observed)]
 
 
 def describe(result: ComputabilityResult) -> str:
@@ -450,18 +521,16 @@ def describe(result: ComputabilityResult) -> str:
     """
     lines = [f"computability: {len(REGISTRY)} features over {result.rows} scored rows"]
     for name in sorted(result.nan_rate):
-        spec = REGISTRY[name]
-        marker = "" if spec.computable.value == "computable" else "  [declared NO_SOURCE_DATA]"
-        lines.append(f"  {name:38s} NaN {result.nan_rate[name]:6.1%}{marker}")
-    if result.dead:
+        state = REGISTRY[name].computable
+        marker = "" if state.value == "computable" else f"  [declared {state.name}]"
         lines.append(
-            "ERROR declared COMPUTABLE but NaN for every row, so trained on and carrying "
-            f"nothing: {', '.join(result.dead)}"
+            f"  {name:38s} NaN {result.nan_rate[name]:6.1%}"
+            f"  {result.distinct[name]:>5d} distinct{marker}"
         )
-    if result.revived:
+    for name, declared, observed in result.mismatched:
         lines.append(
-            "ERROR declared NO_SOURCE_DATA but produced numbers, so the register is stale: "
-            f"{', '.join(result.revived)}"
+            f"ERROR {name}: declared {declared.name}, observed {observed.name} "
+            f"({result.distinct[name]} distinct non-NaN values) - {_why(declared, observed)}"
         )
     if result.ok:
         lines.append("OK every feature's computability declaration matches the data")

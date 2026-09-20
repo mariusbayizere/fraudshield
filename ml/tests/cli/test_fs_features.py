@@ -37,6 +37,18 @@ PACKS = {
         "currency": "BBB",
         "currency_minor_units": 2,
     },
+    # A third pack on another continent, reached only late in the corpus. It gives
+    # `is_new_country_for_account` something still to discover inside the scored half, and gives
+    # `corridor_class` an INTERCONTINENTAL value so it is not constant either. No account is
+    # domiciled here, so it never appears as a currency and the inversion stays unambiguous.
+    "CC": {
+        "alpha2": "CC",
+        "continent": "YY",
+        "blocs": ["BLOC2"],
+        "utc_offset_hours": -4,
+        "currency": "CCC",
+        "currency_minor_units": 0,
+    },
 }
 
 TRANSACTIONS = pa.schema(
@@ -82,39 +94,62 @@ def _write(root: Path, table: str, data: pa.Table) -> None:
 @pytest.fixture
 def dataset(tmp_path: Path) -> Path:
     """Enough rows, with fraud, agents and USSD, for every feature to be reachable."""
+    # Gaps spanning five orders of magnitude, including a sixty-four-day silence: a fixture whose
+    # transactions are all tens of minutes apart makes eight features constant, and the variance
+    # check then reports the fixture's shape as the dataset's.
+    gaps = (25, 40, 900, 7_200, 50_000, 260_000, 95, 43_000, 610_000, 55, 5_500_000, 20_000)
     rows, labels, events = [], [], []
-    when = START
-    for i in range(240):
-        when += timedelta(minutes=17 + (i * 11) % 91)
-        account = f"A{i % 8}"
-        on_ussd = i % 5 == 0
-        at_agent = i % 3 == 0 and not on_ussd
-        fraud = i % 17 == 0
-        rows.append(
-            {
-                "transaction_id": f"t{i:04d}",
-                "account_id": account,
-                "counterparty_id": f"C{i % 6}",
-                "amount": Decimal(f"{1000 + (i * 37) % 9000}.0000"),
-                "currency": "AAA" if i % 2 == 0 else "BBB",
-                "amount_rwf": Decimal(f"{1000 + (i * 37) % 9000}.0000"),
-                "channel": "USSD" if on_ussd else ("AGENT_BANKING" if at_agent else "CARD"),
-                "merchant_category_code": "6011" if at_agent else "5411",
-                "latitude": -1.9441 + 0.01 * (i % 7),
-                "longitude": 30.0619 + 0.01 * (i % 5),
-                "device_fingerprint": None if on_ussd else f"D{i % 4}",
-                "agent_id": f"AG{i % 2}" if at_agent else None,
-                "counterparty_country": ("AA", "BB")[i % 2],
-                "transaction_timestamp": when,
-            }
-        )
-        labels.append(
-            {
-                "transaction_id": f"t{i:04d}",
-                "is_fraud_observed": fraud,
-                "label_available_at": when + timedelta(days=1),
-            }
-        )
+    # Built per account and sorted afterwards, not round-robin by index. Round-robin puts eight
+    # other accounts' gaps between an account's own consecutive rows, so every per-account window
+    # is empty and nine features read constant — a property of the loop, not of the data.
+    for a in range(8):
+        # Accounts start hours apart rather than days, so they interleave in time and an agent
+        # serves several of them inside an hour. Staggering by days makes every agent feature
+        # constant at one customer, which is a property of the loop and not of the data.
+        when = START + timedelta(hours=3 * a)
+        for j in range(30):
+            i = a * 30 + j
+            when += timedelta(seconds=gaps[(j + a) % len(gaps)])
+            account = f"A{a}"
+            on_ussd = j % 5 == 0
+            at_agent = j % 3 == 0 and not on_ussd
+            fraud = i % 17 == 0
+            rows.append(
+                {
+                    "transaction_id": f"t{i:04d}",
+                    "account_id": account,
+                    # Every seventh payee is one this account has never used, so
+                    # `counterparty_is_new_for_account` is neither always True nor always False in
+                    # the scored half. Six recurring payees alone leave it constant by then.
+                    "counterparty_id": f"C{j % 6}" if j % 7 else f"NEW{a}-{j}",
+                    "amount": Decimal(f"{1000 + (i * 37) % 9000}.0000"),
+                    "currency": "AAA" if a % 2 == 0 else "BBB",
+                    "amount_rwf": Decimal(f"{1000 + (i * 37) % 9000}.0000"),
+                    "channel": "USSD" if on_ussd else ("AGENT_BANKING" if at_agent else "CARD"),
+                    "merchant_category_code": "6011" if at_agent else "5411",
+                    "latitude": -1.9441 + 0.01 * (j % 7),
+                    "longitude": 30.0619 + 0.01 * (j % 5),
+                    # Devices are per account, as in the benchmark, where no fingerprint is
+                    # shared (PB-40). A fixture that shared them would make
+                    # `accounts_per_device_7d` vary here and constant there, so the check would
+                    # disagree with the registry for a reason belonging to the fixture.
+                    "device_fingerprint": None if on_ussd else f"D{a}-{j % 3}",
+                    "agent_id": f"AG{j % 2}" if at_agent else None,
+                    # A third country only late in each account's life, so the novelty flag is
+                    # still firing inside the scored half rather than settling before it starts.
+                    "counterparty_country": ("AA", "BB")[j % 2] if j < 22 else "CC",
+                    "transaction_timestamp": when,
+                }
+            )
+            labels.append(
+                {
+                    "transaction_id": f"t{i:04d}",
+                    "is_fraud_observed": fraud,
+                    "label_available_at": when + timedelta(days=1),
+                }
+            )
+    rows.sort(key=lambda row: str(row["transaction_timestamp"]))
+    labels.sort(key=lambda row: str(row["transaction_id"]))
     for a in range(4):
         events.append(
             {
@@ -142,10 +177,17 @@ def packs(tmp_path: Path) -> Path:
 def test_computability_runs_against_the_published_format(
     dataset: Path, packs: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """The whole path: Parquet in, 44 features computed, declarations checked.
+    """The whole path: Parquet in, 44 features computed, declarations compared against the data.
 
-    Exits 0 because the six declared NO_SOURCE_DATA features are exactly the ones this dataset
-    cannot feed — which is the same answer the benchmark gives, reached through the same code.
+    **The verdict is expected to be non-zero here, and that is the correct behaviour.** The
+    registry's `computable` states describe the *benchmark*; this fixture is 240 rows built to
+    exercise the reader, and a few features it cannot make vary at this size are declared
+    COMPUTABLE because they vary on a million rows. A fixture tuned until the verdict read 0 would
+    be a fixture shaped by the answer, which is the failure the E3 corpus-size work ran into from
+    the other direction.
+
+    What is asserted is the mechanism: every feature computed, the scan's size reported, each
+    mismatch named with its observed state and the reason it matters.
     """
     code = cli.main(
         [
@@ -162,7 +204,46 @@ def test_computability_runs_against_the_published_format(
     output = capsys.readouterr().out
     assert "over 60 scored rows" in output
     assert "44 features" in output
-    assert code == 0, output
+    assert "distinct" in output, "the distinct-value count must be reported per feature"
+    assert code == 1, output
+    assert "declared COMPUTABLE, observed CONSTANT" in output
+    assert "carrying one value" in output, "a mismatch must say why it matters, not only that"
+
+
+@pytest.mark.req("FR-02-02", "ML-DATA-07")
+def test_the_six_features_without_source_data_are_dead_here_too(
+    dataset: Path, packs: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The part of the profile that is a property of the data's *shape*, not of its size.
+
+    Opening dates, tier histories, agent standing and denominations are absent from this fixture
+    for the same reason they are absent from the benchmark: nothing produces them. So the six
+    declared NO_SOURCE_DATA features must be NaN here at any size, and none of them may appear as
+    a mismatch — if one did, this fixture would be supplying data the benchmark does not.
+    """
+    cli.main(
+        [
+            "computability",
+            str(dataset),
+            "--packs",
+            str(packs),
+            "--corpus-rows",
+            "240",
+            "--sample-rows",
+            "60",
+        ]
+    )
+    output = capsys.readouterr().out
+    for name in (
+        "account_age_days",
+        "counterparty_account_age_days",
+        "kyc_tier",
+        "agent_float_utilisation_ratio",
+        "agent_distance_from_registered_km",
+        "round_sum_flag",
+    ):
+        assert f"{name} " in output
+        assert f"ERROR {name}:" not in output, f"{name} produced a value the benchmark cannot"
 
 
 @pytest.mark.req("FR-02-02", "ML-DATA-07")

@@ -2346,6 +2346,14 @@ requirements:
   - dataset/realism_report.md (eight scenario types present, per-scenario rows by month)
   - dataset/tests/test_scenario_notes.py (every scenario has a design note citing existing parameters)
   deviations: []
+  notes: 'CARRIES THE WEIGHT THE HEADLINE AUC NO LONGER CAN (2026-09-20, PB-46). Since a single velocity
+    threshold reaches 0.894 on this benchmark, the headline discrimination metrics are no longer where
+    a model shows it learned anything. Leave-one-country-out (ADR 0023 section 4, PB-34) and the novel
+    SIM-swap sub-variant confined to the test period are: burstiness is not country-specific, so a threshold
+    transfers trivially and LOCO measures what it cannot fake; and a variant never seen in training separates
+    a model that learned the shape of fraud from one that learned its rate. These were supporting experiments
+    and are now the primary evidence. Report each with its single-feature baseline, as the gate above
+    requires.'
 - id: ML-DATA-05
   section: 7.1 Dataset
   title: Geographic coverage
@@ -2456,7 +2464,22 @@ requirements:
     (PB-43, owner decision: keep the classes, do not broaden the simulated set). (3) accounts_per_device_7d
     is constant and synthetic_identity_score is one term short until PB-40 is fixed before training. (4)
     The synthetic-identity composite''s equal weights are a documented choice, not a derived optimum;
-    M4 may revisit them with evidence and must say so if it does.'
+    M4 may revisit them with evidence and must say so if it does. M3 -> M4 REPORTING GATE (owner decision
+    2026-09-20, PB-46). This benchmark is VELOCITY-SEPARABLE: a single feature, velocity_ratio_1h_vs_30d,
+    reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit fad43dd (docs/benchmarks/single_feature_baseline.md).
+    NO MODEL METRIC MAY BE REPORTED WITHOUT ITS SINGLE-FEATURE BASELINE BESIDE IT - the best single feature
+    and the best trivial rule (one threshold on one feature), on the same split, at the same scale, with
+    the same account-grouped folds - and the comparison is reported as the MARGIN over that baseline.
+    ''AUC 0.94'' against a 0.894 baseline is a different claim from ''AUC 0.94'' against chance, and only
+    the first is honest. A metric quoted alone is inadmissible on the same terms as a metric quoted without
+    its scale (E2). CARRIES THE WEIGHT THE HEADLINE AUC NO LONGER CAN (2026-09-20, PB-46). Since a single
+    velocity threshold reaches 0.894 on this benchmark, the headline discrimination metrics are no longer
+    where a model shows it learned anything. Leave-one-country-out (ADR 0023 section 4, PB-34) and the
+    novel SIM-swap sub-variant confined to the test period are: burstiness is not country-specific, so
+    a threshold transfers trivially and LOCO measures what it cannot fake; and a variant never seen in
+    training separates a model that learned the shape of fraud from one that learned its rate. These were
+    supporting experiments and are now the primary evidence. Report each with its single-feature baseline,
+    as the gate above requires.'
 - id: ML-GATE-02
   section: 7.2 Model deployment gate
   title: Precision at 1% FPR
@@ -2479,7 +2502,15 @@ requirements:
     earlier cross-account rows is what serving does, not leakage. The live exposure is OUT-OF-FOLD TARGET
     ENCODING INSIDE THE TRAINING PERIOD, where folds are random and account-grouped - where M-8 lived.
     Required: out-of-fold encodings are computed over rows strictly EARLIER IN TIME than the row being
-    encoded, never over random folds. This is settled, not open; M4 must not be designed as if it were.'
+    encoded, never over random folds. This is settled, not open; M4 must not be designed as if it were.
+    M3 -> M4 REPORTING GATE (owner decision 2026-09-20, PB-46). This benchmark is VELOCITY-SEPARABLE:
+    a single feature, velocity_ratio_1h_vs_30d, reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit fad43dd
+    (docs/benchmarks/single_feature_baseline.md). NO MODEL METRIC MAY BE REPORTED WITHOUT ITS SINGLE-FEATURE
+    BASELINE BESIDE IT - the best single feature and the best trivial rule (one threshold on one feature),
+    on the same split, at the same scale, with the same account-grouped folds - and the comparison is
+    reported as the MARGIN over that baseline. ''AUC 0.94'' against a 0.894 baseline is a different claim
+    from ''AUC 0.94'' against chance, and only the first is honest. A metric quoted alone is inadmissible
+    on the same terms as a metric quoted without its scale (E2).'
 - id: ML-GATE-03
   section: 7.2 Model deployment gate
   title: Recall (fraud capture rate)
@@ -2502,7 +2533,15 @@ requirements:
     earlier cross-account rows is what serving does, not leakage. The live exposure is OUT-OF-FOLD TARGET
     ENCODING INSIDE THE TRAINING PERIOD, where folds are random and account-grouped - where M-8 lived.
     Required: out-of-fold encodings are computed over rows strictly EARLIER IN TIME than the row being
-    encoded, never over random folds. This is settled, not open; M4 must not be designed as if it were.'
+    encoded, never over random folds. This is settled, not open; M4 must not be designed as if it were.
+    M3 -> M4 REPORTING GATE (owner decision 2026-09-20, PB-46). This benchmark is VELOCITY-SEPARABLE:
+    a single feature, velocity_ratio_1h_vs_30d, reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit fad43dd
+    (docs/benchmarks/single_feature_baseline.md). NO MODEL METRIC MAY BE REPORTED WITHOUT ITS SINGLE-FEATURE
+    BASELINE BESIDE IT - the best single feature and the best trivial rule (one threshold on one feature),
+    on the same split, at the same scale, with the same account-grouped folds - and the comparison is
+    reported as the MARGIN over that baseline. ''AUC 0.94'' against a 0.894 baseline is a different claim
+    from ''AUC 0.94'' against chance, and only the first is honest. A metric quoted alone is inadmissible
+    on the same terms as a metric quoted without its scale (E2).'
 - id: ML-GATE-04
   section: 7.2 Model deployment gate
   title: F1 Score
@@ -2525,7 +2564,15 @@ requirements:
     earlier cross-account rows is what serving does, not leakage. The live exposure is OUT-OF-FOLD TARGET
     ENCODING INSIDE THE TRAINING PERIOD, where folds are random and account-grouped - where M-8 lived.
     Required: out-of-fold encodings are computed over rows strictly EARLIER IN TIME than the row being
-    encoded, never over random folds. This is settled, not open; M4 must not be designed as if it were.'
+    encoded, never over random folds. This is settled, not open; M4 must not be designed as if it were.
+    M3 -> M4 REPORTING GATE (owner decision 2026-09-20, PB-46). This benchmark is VELOCITY-SEPARABLE:
+    a single feature, velocity_ratio_1h_vs_30d, reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit fad43dd
+    (docs/benchmarks/single_feature_baseline.md). NO MODEL METRIC MAY BE REPORTED WITHOUT ITS SINGLE-FEATURE
+    BASELINE BESIDE IT - the best single feature and the best trivial rule (one threshold on one feature),
+    on the same split, at the same scale, with the same account-grouped folds - and the comparison is
+    reported as the MARGIN over that baseline. ''AUC 0.94'' against a 0.894 baseline is a different claim
+    from ''AUC 0.94'' against chance, and only the first is honest. A metric quoted alone is inadmissible
+    on the same terms as a metric quoted without its scale (E2).'
 - id: ML-GATE-05
   section: 7.2 Model deployment gate
   title: False Positive Rate at threshold 0.85
@@ -2567,6 +2614,21 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M3 -> M4 REPORTING GATE (owner decision 2026-09-20, PB-46). This benchmark is VELOCITY-SEPARABLE:
+    a single feature, velocity_ratio_1h_vs_30d, reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit fad43dd
+    (docs/benchmarks/single_feature_baseline.md). NO MODEL METRIC MAY BE REPORTED WITHOUT ITS SINGLE-FEATURE
+    BASELINE BESIDE IT - the best single feature and the best trivial rule (one threshold on one feature),
+    on the same split, at the same scale, with the same account-grouped folds - and the comparison is
+    reported as the MARGIN over that baseline. ''AUC 0.94'' against a 0.894 baseline is a different claim
+    from ''AUC 0.94'' against chance, and only the first is honest. A metric quoted alone is inadmissible
+    on the same terms as a metric quoted without its scale (E2). CARRIES THE WEIGHT THE HEADLINE AUC NO
+    LONGER CAN (2026-09-20, PB-46). Since a single velocity threshold reaches 0.894 on this benchmark,
+    the headline discrimination metrics are no longer where a model shows it learned anything. Leave-one-country-out
+    (ADR 0023 section 4, PB-34) and the novel SIM-swap sub-variant confined to the test period are: burstiness
+    is not country-specific, so a threshold transfers trivially and LOCO measures what it cannot fake;
+    and a variant never seen in training separates a model that learned the shape of fraud from one that
+    learned its rate. These were supporting experiments and are now the primary evidence. Report each
+    with its single-feature baseline, as the gate above requires.'
 - id: ML-GATE-08
   section: 7.2 Model deployment gate
   title: USSD channel AUC-ROC
@@ -2580,6 +2642,21 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M3 -> M4 REPORTING GATE (owner decision 2026-09-20, PB-46). This benchmark is VELOCITY-SEPARABLE:
+    a single feature, velocity_ratio_1h_vs_30d, reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit fad43dd
+    (docs/benchmarks/single_feature_baseline.md). NO MODEL METRIC MAY BE REPORTED WITHOUT ITS SINGLE-FEATURE
+    BASELINE BESIDE IT - the best single feature and the best trivial rule (one threshold on one feature),
+    on the same split, at the same scale, with the same account-grouped folds - and the comparison is
+    reported as the MARGIN over that baseline. ''AUC 0.94'' against a 0.894 baseline is a different claim
+    from ''AUC 0.94'' against chance, and only the first is honest. A metric quoted alone is inadmissible
+    on the same terms as a metric quoted without its scale (E2). CARRIES THE WEIGHT THE HEADLINE AUC NO
+    LONGER CAN (2026-09-20, PB-46). Since a single velocity threshold reaches 0.894 on this benchmark,
+    the headline discrimination metrics are no longer where a model shows it learned anything. Leave-one-country-out
+    (ADR 0023 section 4, PB-34) and the novel SIM-swap sub-variant confined to the test period are: burstiness
+    is not country-specific, so a threshold transfers trivially and LOCO measures what it cannot fake;
+    and a variant never seen in training separates a model that learned the shape of fraud from one that
+    learned its rate. These were supporting experiments and are now the primary evidence. Report each
+    with its single-feature baseline, as the gate above requires.'
 - id: ML-GATE-09
   section: 7.2 Model deployment gate
   title: AGENT_BANKING channel AUC-ROC
@@ -2593,6 +2670,21 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M3 -> M4 REPORTING GATE (owner decision 2026-09-20, PB-46). This benchmark is VELOCITY-SEPARABLE:
+    a single feature, velocity_ratio_1h_vs_30d, reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit fad43dd
+    (docs/benchmarks/single_feature_baseline.md). NO MODEL METRIC MAY BE REPORTED WITHOUT ITS SINGLE-FEATURE
+    BASELINE BESIDE IT - the best single feature and the best trivial rule (one threshold on one feature),
+    on the same split, at the same scale, with the same account-grouped folds - and the comparison is
+    reported as the MARGIN over that baseline. ''AUC 0.94'' against a 0.894 baseline is a different claim
+    from ''AUC 0.94'' against chance, and only the first is honest. A metric quoted alone is inadmissible
+    on the same terms as a metric quoted without its scale (E2). CARRIES THE WEIGHT THE HEADLINE AUC NO
+    LONGER CAN (2026-09-20, PB-46). Since a single velocity threshold reaches 0.894 on this benchmark,
+    the headline discrimination metrics are no longer where a model shows it learned anything. Leave-one-country-out
+    (ADR 0023 section 4, PB-34) and the novel SIM-swap sub-variant confined to the test period are: burstiness
+    is not country-specific, so a threshold transfers trivially and LOCO measures what it cannot fake;
+    and a variant never seen in training separates a model that learned the shape of fraud from one that
+    learned its rate. These were supporting experiments and are now the primary evidence. Report each
+    with its single-feature baseline, as the gate above requires.'
 - id: ML-GATE-10
   section: 7.2 Model deployment gate
   title: SHAP coverage
@@ -2659,6 +2751,14 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M3 -> M4 REPORTING GATE (owner decision 2026-09-20, PB-46). This benchmark is VELOCITY-SEPARABLE:
+    a single feature, velocity_ratio_1h_vs_30d, reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit fad43dd
+    (docs/benchmarks/single_feature_baseline.md). NO MODEL METRIC MAY BE REPORTED WITHOUT ITS SINGLE-FEATURE
+    BASELINE BESIDE IT - the best single feature and the best trivial rule (one threshold on one feature),
+    on the same split, at the same scale, with the same account-grouped folds - and the comparison is
+    reported as the MARGIN over that baseline. ''AUC 0.94'' against a 0.894 baseline is a different claim
+    from ''AUC 0.94'' against chance, and only the first is honest. A metric quoted alone is inadmissible
+    on the same terms as a metric quoted without its scale (E2).'
 - id: OPS-CI-01
   section: 8.1 CI/CD pipeline
   title: Lint + Static Analysis

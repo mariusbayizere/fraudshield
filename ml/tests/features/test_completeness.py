@@ -177,6 +177,7 @@ def test_no_feature_is_implemented_by_a_name_the_registry_does_not_know() -> Non
     }
     # Imported symbols are not this module's surface.
     imported = {
+        "Collection",
         "Mapping",
         "Sequence",
         "datetime",
