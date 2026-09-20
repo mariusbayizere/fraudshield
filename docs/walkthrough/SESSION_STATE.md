@@ -1,6 +1,6 @@
-# Session state — M3, feature contract complete, implementation next
+# Session state — M3, all 44 features implemented on both paths
 
-Rewritten 2026-09-19. Facts only; where something is unverified, assumed or open it says so.
+Rewritten 2026-09-20. Facts only; where something is unverified, assumed or open it says so.
 
 ## Where the work is
 
@@ -9,103 +9,98 @@ Rewritten 2026-09-19. Facts only; where something is unverified, assumed or open
 
 | Commit | What |
 |---|---|
-| `5855386` | E15 — tests may not mutate shared state; bloc sources recorded |
-| `5f0a8a1` | all 44 features declared against a ten-field contract; E15's guard implemented and mutation-proved |
-| `d85385f` | session findings, the prediction register, PB-36 to PB-38 |
-| `a36d252` | PB-39 — report regenerated; E1's density measured and its table corrected |
-| `7a6fc90` | the re-draw's consequences resolved across the record; E1 resolved; PB-40/41 |
+| `654c6d8` | fail closed without a durable first-seen; every gate reports its size |
+| `65c8351` | `corridor_class` from the packs (PB-30); the `categories` contract field |
+| `ae41c88` | the dataset fingerprint (PB-41), and export refuses a report about other data |
+| `01af5b6` | velocity, amount behaviour, temporal and geographic — 21 features |
+| `083f92e` | counterparty, device, account profile, agent, synthetic identity — 19 features |
 
-**Verified state:** ml suite 47 passed, 100% branch coverage. Governance gate 258 rows, 320 tagged
-tests, 0 errors, 0 warnings. `mypy` clean across 95 files. Dataset suite's two report guards pass.
+**Verified state at `083f92e`:** ml suite **222 passed, 96.80%** branch coverage; `mypy` clean over
+24 ml files and 110 across the workspace; ruff clean; governance **258 rows, 573 tagged tests, 0
+errors, 0 warnings**; scope guard 406 files. The **full dataset suite passed at `ae41c88`: 125
+passed in 66 minutes, 93.98%**, and nothing since has touched `dataset/`.
 
-## The thing that cost this session, and the rule it produced
+## All 44 are implemented. What that does and does not mean
 
-**PB-29 changed no parameter value and re-drew the entire benchmark.** `countries.simulated()`
-sorts, so country iteration went from declaration order to alphabetical and every downstream draw
-shifted. The pack FX rates are byte-identical to the table they replaced. Every gate still passes
-and every rank order holds; absolute figures moved — event delay 0.758 → **0.746**,
-`merchant_category_code` 0.706 → **0.707**, rows 1,006,249 → **1,012,522**.
+`fraudshield_ml.features.batch` and `.online` implement every registered feature, neither imports
+the other, and `test_completeness` asserts the registry's list and the implemented list are the
+same list — which nothing else did, because every other test tests the features it names.
 
-**No guard saw it for three commits.** The report digests parameter *values*, so a changed draw with
-unchanged values is invisible to it **by construction**. It caught PB-39 only because the refactor
-also moved the parameter *structure*. Sixth instance of the guard-with-two-doors shape.
+**It does not mean 44 features can be computed on this dataset.** Thirty-six can. The other eight
+read reference data neither the dataset nor M1's schema holds (**PB-44**), so they return NaN for
+every row — which D-04 covers, and that is the danger: a feature NaN everywhere is
+indistinguishable in a training run from one merely often missing, while the count still reads 44.
 
-- **Standing rule: a figure is quoted with its tree hash, not only its scale.** "Deterministic from
-  a seed" was true throughout and was not sufficient.
-- **PB-41 is the structural fix** and is **not yet implemented**: a dataset fingerprint over output
-  rows, in `release.json` and the report, keeping the parameter digest alongside.
+**Three features are declared degenerate** in the registry, for two different reasons that must
+not be confused: `accounts_per_device_7d` and `synthetic_identity_score` by a generator gap due to
+be fixed (PB-40), `corridor_class` because the owner has ruled the simulated country set is not to
+be broadened (PB-43, ADR 0023) — two of its four classes are unreachable here.
 
-## The feature contract — complete
+## The parity mutation table: twelve of thirteen rows executed
 
-`ml/src/fraudshield_ml/features/registry.py`. Declarative, computes nothing, the only module both
-paths import. All **44 declared**, group counts matching Part E.2 exactly (8/5/6/5/5/5/4/4/1/1).
+Only **row 9** is pending, needing the DB fallback path (PB-36). Three rows changed what they mean
+when they were run, which is the table's value:
 
-Ten contract fields, none of which validation will leave blank on a windowed feature:
-`self_inclusion` (EXCLUDED), `nesting` (SHORT_EXCLUDED), `smoothing` (equal alpha both terms, with
-an explicit `prior`), `history_basis` (OBSERVED_CAPPED forces DURABLE), `history_requirement`,
-`fallback_behaviour`, `label_basis`, `minimum_history`, `history_key`, `reference_data_basis`.
+- **Row 1, the control that must pass, failed its own precondition.** Both paths sum with the
+  built-in `sum()`, and since CPython 3.12 that is Neumaier-compensated, so the reassociation the
+  tolerance exists to permit does not occur between them. Not deleted as vacuous: the production
+  online path will keep an incrementally updated running total, which cannot be compensated, so
+  the difference arrives at M6 unchanged. Now measured against a naive running total — 7.5e-9
+  against a tolerance of 1.0e-5.
+- **Row 5 is the row the tolerance structurally cannot catch.** `abs(nan - 0.0)` is NaN and every
+  comparison against NaN is False, so a tolerance check reports *agreement* — it fails open. That
+  is why ADR 0025 states NaN positions as a separate rule rather than a tighter bound.
+- **Rows 4 and 11 turn on their fixtures, not their values.** At local noon the local and UTC
+  readings coincide; the two paths agree on thresholds for every transaction newer than the last
+  configuration change. Both assert their precondition before comparing anything.
 
-Six of the ten arrived by attacking the schema, not designing it. **The lesson, for the paper:**
-derive a contract from one case, then immediately attack it with the most differently-shaped case
-available, before it has dependents.
+## Two owner decisions, recorded in the registry entries
 
-## E1 — resolved
-
-E1 now states the rule **per `history_key`**, not globally. Account grouping isolates 37 features
-and not the other seven.
-
-**Component folding was measured and rejected** (`docs/research/component_sizes.json`, tree
-`d85385f`): counterparty and geo-cell graphs are single components spanning **100%** of accounts,
-agent reaches **38%**. It is available for one of four relational keys, and that one —
-device — only because nothing is shared.
-
-**The adopted rule: out-of-fold encodings are computed over rows strictly earlier in time than the
-row being encoded, never over random folds.** The split is already temporal with an embargo, and a
-validation row reading earlier cross-account rows is what serving does, not leakage. The live
-exposure was only out-of-fold target encoding *inside* the training period — where M-8 lived.
-Carried to `ML-GATE-01`–`04`, `ML-GATE-11` and `FR-02-03` so M4 cannot be designed as if open.
+- **`is_new_country_for_account` reads the counterparty's country.** "The scored transaction's
+  country" is not computable: nothing records where a transaction happened, and resolving
+  coordinates would put a geocoder in the feature path.
+- **A predecessor is strictly earlier**, so the zero-elapsed clause for `implied_speed_kmh` is
+  withdrawn and its branch deleted as unreachable. Strictly-earlier is the only bound the online
+  path can implement, since a transaction stamped the same instant may not have arrived.
+  Measured consequence: **zero of 201,243 rows share an (account, timestamp) pair**, so the
+  silence costs nothing here, and `tx_count_60s` — whose job simultaneous bursts are — is non-zero
+  for about **0.13%** of rows (6 pairs under a second, 261 under a minute).
 
 ## Open items
 
-- **PB-41** — the dataset fingerprint. Designed, not built.
-- **PB-40** — no device is shared, so `accounts_per_device_7d` is identically 1 and
-  `synthetic_identity_score` loses a term. Both **declare `degeneracy`** in the registry with tests.
-  The generator fix is scheduled **before M4 training, deliberately not during M3**: changing it
-  re-draws the dataset again.
-- **PB-36/37/38** — untested DB fallback path; no per-account table for `account_first_seen_at`;
-  `account_activity_hourly` refreshes 8 days under a 30-day feature.
-- **PB-30** — `corridor_class` declared, not implemented.
+- **PB-44** — eight features have no data to read. Before M4 training.
+- **PB-41's remainder** — the committed `realism_report.md` describes a 1,012,522-row run and
+  carries no fingerprint until its next regeneration. Export refuses to bundle it with any other
+  dataset meanwhile, and a test asserts that. **Do it together with adding `round_denominations`
+  to the packs (PB-44)**: a parameter change makes the report stale anyway, so the two cost one
+  evidence run instead of two.
+- **PB-40** — the generator shares no device. Before M4 training, deliberately not during M3.
+- **PB-43** — two `corridor_class` classes are unreachable. Needs an owner decision, either way.
+- **PB-42** — `CROSS_BLOC_AFRICA` names a continent the rule does not test. Low.
+- **PB-36/37/38** — untested DB fallback; no per-account durable table; the 8-day refresh under a
+  30-day feature.
 - **PB-25** — the 5M run, still blocked on the default branch being `m0/bootstrap`.
-
-## Predictions, four recorded
-
-One partially right. Full register in the lab notebook, including why three refutations are worth
-more than four confirmations. **Outcomes are reported in the same place, confirmed or refuted, and
-a refuted prediction is never edited away.**
-
-## Exact next steps
-
-1. **The two features end-to-end** — `fraudshield_ml.features.batch` and `.online`, independent,
-   with the import-graph test asserting neither imports the other, and hand-computed unit tests per
-   E.2. The registry's contracts are the specification for both.
-2. **The parity suite** — prefix replay, the fallback path, the cold-cache case and the required
-   configuration-change fixture, working the 12-row mutation table from `pending`.
-3. **PB-41**, before the next release export.
-4. Then the other 42 implementations.
+- **E3, E6, E11** — the single-feature AUC re-check, the `account_events` join measurement, and
+  the milestone review. None started.
 
 ## Things that will bite whoever picks this up
 
-- **An exit code from a piped pytest is `tail`'s, not pytest's.** A 53-minute suite reported
-  1 failed / 107 passed while its pipeline exited 0. Use `${PIPESTATUS[0]}` or drop the pipe.
-- **An evidence run owns the tree, the environment and commits** — `pre-commit` stashes unstaged
-  changes, which moves files under a running suite.
+- **An evidence run owns the tree**, and `pre-commit` stashes unstaged changes — so **do not commit
+  while a suite runs**. Two commits in this session were entangled through
+  `requirements_matrix.md`: the hook regenerates it with unstaged work stashed, so the matrix
+  disagreed with the reduced tree and governance failed. Fix: `git stash push -u` the unrelated
+  work, re-render, commit, pop.
+- **An exit code from a piped pytest is `tail`'s, not pytest's.** Use `${PIPESTATUS[0]}` or drop
+  the pipe.
 - **`uv run --project <member>` can sync the workspace venv.** Use `.venv/bin/python` while a suite
   runs.
 - **Hand-editing `requirements.yaml` breaks the seed check.** Run
-  `python -m fraudshield_tools.traceability_seed` to normalise; progress fields survive.
-- **gitleaks flags `*_key` assignments** with entropy. The config allowlists exact values only,
-  never patterns, so remove the trigger rather than the finding.
-- **Fast subset during development** (`ml/tests` + ruff + mypy, ~30 s); full dataset runs only at
-  commit boundaries — 53 minutes under load.
-- `git add -A` sweeps agent worktrees; the commit hook wraps at 72 characters, so use `git commit -F`;
-  scratch directories do not survive a session; this laptop is shared, so check `uptime` first.
+  `python -m fraudshield_tools.traceability_seed` to normalise.
+- **gitleaks flags `*_key` assignments** with entropy; remove the trigger, never allowlist a
+  pattern.
+- **Fast subset during development** (`ml/tests` + ruff + mypy, ~10 s); the dataset suite is
+  **66 minutes** under load and only needs running when `dataset/` changes.
+- **The commit hook wraps at 72 characters and caps the subject at 72** — use `git commit -F` with
+  a body rewrapped per paragraph, not per line, or words end up orphaned.
+- `git add -A` sweeps agent worktrees; scratch directories do not survive a session; this laptop is
+  shared, so check `uptime` first.
