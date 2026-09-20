@@ -231,9 +231,19 @@ the study of a novel fraud variant that appears only in the test period.
 - The fraud rate is calibrated to a target of 0.87% overall and 0.91% in the test period, not
   measured from any institution.
 - Amounts and locations are simulated; they carry no commercial or geographic information.
-- **No single feature separates the classes beyond AUC 0.80** (D-08), measured as
+- **No single dataset COLUMN separates the classes beyond AUC 0.80** (D-08), measured as
   `max(AUC, 1 − AUC)` with out-of-fold encoding for categoricals. At 1,012,522 rows (tree
-  `d85385f`) the strongest transaction column is `merchant_category_code` at **0.707**. The
+  `d85385f`) the strongest transaction column is `merchant_category_code` at **0.707**.
+  **The engineered features are a different matter and the claim does not extend to them.** Five
+  of the 44 exceed the ceiling on this benchmark — `velocity_ratio_1h_vs_30d` **0.894**,
+  `tx_count_1h` 0.826, `counterparty_is_new_for_account` 0.816, `implied_speed_kmh` 0.812 and
+  `seconds_since_last_tx` 0.811, each ±0.04 at 166 confirmed-fraud rows of 20,000 scored (commit
+  `fad43dd`). The planted fraud is burst-shaped, so burst and recency features find it: the
+  strongest single feature alone comes within 0.05 of the 0.940 AUC that ML-GATE-01 asks of a
+  whole model. **A result on this benchmark is therefore not evidence that a model learned
+  anything a one-line rule could not**, and any headline figure should be reported beside the
+  strongest single feature. Tracked as PB-46; C-9 in the claims register is marked refuted as
+  stated, with C-14 carrying the measurement. The
   strongest channel in the dataset as a whole is **0.746**, and it is not a transaction column:
   joining `account_events` to the transactions by account token — which this datasheet invites
   above — gives the time from a SIM swap or device change to that account's next transaction, and

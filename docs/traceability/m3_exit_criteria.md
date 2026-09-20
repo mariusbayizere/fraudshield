@@ -312,10 +312,10 @@ claim by a person and should be read as one.
 |---|---|
 | E1 — grouping by the unit of history | **Met**, with the rule restated per `history_key` and the component-folding measurement that refuted the first version |
 | E2 — every metric states its scale | **Met as a rule**, and applied by `fs-features auc`, which prints the corpus size, the scored-row count and the fraud count before any figure |
-| E3 — the 44 re-checked against the 0.80 ceiling | **NOT YET RUN.** The machinery exists (`fs-features auc`, account-grouped out-of-fold encoding, the interval reported beside every figure) and has unit tests, but no measurement over the benchmark has completed. This row said **Met** and cited an evidence run that did not exist — see the warning above this table. |
+| E3 — the 44 re-checked against the 0.80 ceiling | **RUN, AND NOT MET.** Five features exceed the ceiling at commit `fad43dd`: `velocity_ratio_1h_vs_30d` 0.894, `tx_count_1h` 0.826, `counterparty_is_new_for_account` 0.816, `implied_speed_kmh` 0.812, `seconds_since_last_tx` 0.811, each ±0.04 on 166 fraud of 20,000 scored from a 200,000-row corpus. The criterion is **failed, not waived** — see below and PB-46. Artefact: `docs/benchmarks/m3_single_feature_auc_fad43dd.txt` |
 | E4 — deterministic, byte-identical across batch sizes | **Met**; `test_e4_the_vector_is_byte_identical_across_batch_sizes` compares through `float.hex()` at batch sizes 1, 5 and 17 |
 | E5 — no feature reads an excluded column | **Met**, behaviourally rather than by a source scan; see below |
-| E6 — the `account_events` join is available and measured | **Partly.** The join is available and used: `fs-features` reads `SIM_SWAP` from `account_events` and `days_since_sim_swap` is computed from it, with the forgotten-join case run deliberately in the suite. The **measurement** alongside the transaction features rides on E3's run and has not completed. |
+| E6 — the `account_events` join is available and measured | **Met.** `fs-features` reads `SIM_SWAP` from `account_events`; `days_since_sim_swap` separates at **0.577 ±0.177** on 11 fraud of 2,193 usable rows (commit `fad43dd`), reported in the same table as the transaction features. The interval is wide because the feature is defined for 11.3% of rows, and that is stated rather than hidden behind the point estimate. Artefact: `docs/benchmarks/m3_single_feature_auc_fad43dd.txt` |
 | E7 — PB-26 before any feature reads the partitions | **Met** (closed in M3, second option: documented, carried in `release.json`, pinned by a test) |
 | E8 — packs and `corridor_class` land here | **Met** (PB-29, PB-30) |
 | E9 — parameter provenance | **Met**; `fs-dataset provenance --check` passes |
@@ -344,3 +344,55 @@ the excluded quantity and assert the vector does not move:
 
 This is a structural check, not a statistical one. Whether any feature's residual correlates with
 an excluded quantity on the full benchmark is a leakage measurement and belongs to M4.
+
+
+## E3 failed, and what the measurement says
+
+Raw output, unedited and carrying the commit it was produced at:
+`docs/benchmarks/m3_single_feature_auc_fad43dd.txt`. The computability run that accompanies it is
+`docs/benchmarks/m3_computability_fad43dd.txt`. **These two rows are the only ones in the table
+above whose status is derivable from a file** — the rest are still an author's edit, which is what
+PB-45 exists to fix.
+
+Run at commit `fad43dd` on a 1,006,249-row dataset (seed 20260917): corpus 200,000 transactions,
+20,000 scored, **166 confirmed fraud**. Every figure is `max(AUC, 1 − AUC)` with folds grouped by
+whole accounts (E1), and carries a Hanley–McNeil 95% interval, which at this fraud count is about
+**±0.04** around the ceiling.
+
+**Five of the 44 exceed 0.80:**
+
+| Feature | Separation | Interval |
+|---|---:|---|
+| `velocity_ratio_1h_vs_30d` | **0.894** | ±0.032 |
+| `tx_count_1h` | **0.826** | ±0.039 |
+| `counterparty_is_new_for_account` | **0.816** | ±0.040 |
+| `implied_speed_kmh` | **0.812** | ±0.040 |
+| `seconds_since_last_tx` | **0.811** | ±0.040 |
+
+Four more sit within the interval of the ceiling and are named rather than absorbed into a pass:
+`amount_sum_24h` 0.776, `tx_count_24h` 0.765, `unique_counterparties_24h` 0.759,
+`synthetic_identity_score` 0.759.
+
+**What it means.** Every one of the five is a burst or recency indicator, and the generator's fraud
+scenarios are burst-shaped by construction — a drain, a velocity run, a bust-out are all rapid
+sequences. So the benchmark is substantially solvable by one feature: the strongest comes within
+0.05 of the 0.940 AUC that ML-GATE-01 asks of an entire model. **That is the condition D-08 exists
+to forbid**, and E3 existed to detect it, because M2 could only measure the dataset's columns and
+the ceiling is a property of what a model can be given.
+
+**What it does not mean.** It is not a leak in the feature implementations: all five are strictly
+backward-looking, exclude the scored transaction, and are the same code the parity suite replays.
+The separation is in the data.
+
+**Two caveats on the measurement, stated because they bound the numbers rather than excuse them.**
+The corpus is the last 200,000 rows, so an account's first-seen is its first row *in that window*;
+`OBSERVED_CAPPED` caps the denominator at 30 days, so only accounts appearing solely in the final
+month are affected, and the bias inflates `velocity_ratio_1h_vs_30d` specifically. And truncation
+makes counterparties look newer than they are, which would **understate**
+`counterparty_is_new_for_account` rather than inflate it. Neither moves a figure by the 0.09 that
+would bring the largest back under the ceiling.
+
+**Not waived.** The criterion is failed and PB-46 carries it. Whether the resolution is a generator
+change, a restatement of D-08's scope to columns, or an explicit "the benchmark is
+velocity-separable and results must be reported against that baseline" is an owner decision, and
+recording the failure is not the same as choosing one.

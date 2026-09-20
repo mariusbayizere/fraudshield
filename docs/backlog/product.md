@@ -581,3 +581,57 @@ the decision engine M6, staff identity, admin and audit M7).
   evidence resolving, and when the rendered table disagrees with the register; the M3 table is
   regenerated from the register; a mutation proves it — mark a criterion met with a missing
   artefact and assert the check exits non-zero. It joins `make governance`.
+
+### PB-46 · Five engineered features exceed the D-08 single-feature ceiling
+- **Source:** M3 exit criterion E3, measured at commit `fad43dd`, 2026-09-20 · **Priority:**
+  **high — this is the control D-08 exists to enforce** · **Due:** an owner decision before M4
+  reports any model metric
+- **Observed:** on a 1,006,249-row dataset (seed 20260917), corpus 200,000, 20,000 scored holding
+  166 confirmed fraud, with folds grouped by whole accounts and `max(AUC, 1 − AUC)` throughout:
+  `velocity_ratio_1h_vs_30d` **0.894** ±0.032, `tx_count_1h` **0.826** ±0.039,
+  `counterparty_is_new_for_account` **0.816** ±0.040, `implied_speed_kmh` **0.812** ±0.040,
+  `seconds_since_last_tx` **0.811** ±0.040. Four more within the interval of the ceiling:
+  `amount_sum_24h` 0.776, `tx_count_24h` 0.765, `unique_counterparties_24h` 0.759,
+  `synthetic_identity_score` 0.759.
+- **Why it matters more than a threshold being crossed.** The strongest single feature comes within
+  0.05 of the 0.940 AUC that ML-GATE-01 asks of an entire model. A headline result on this
+  benchmark would therefore not be evidence that the model learned anything a one-line rule could
+  not, which is precisely the reading D-08 was written to prevent.
+- **It is not a leak in the features.** All five are strictly backward-looking, exclude the scored
+  transaction, and are the code the parity suite replays. The separation is in the data: the
+  generator's fraud scenarios are burst-shaped by construction — a drain, a velocity run and a
+  bust-out are all rapid sequences — so burst and recency features find them.
+- **Why M2 did not catch it.** M2 measured the dataset's **columns** and found 0.707. The ceiling
+  is a property of what a model can be given, and a model is given the engineered features. E3
+  exists for exactly this gap, and this is the first time it has been run.
+- **Acceptance:** an owner decision, recorded either way, among: (a) the generator spreads fraud
+  scenarios in time so that velocity alone does not separate them — a dataset-draw change with its
+  own provenance and a regenerated benchmark; (b) D-08 is restated as a claim about dataset
+  columns, and the datasheet, claims register and paper say so wherever the ceiling is quoted;
+  (c) the benchmark is declared velocity-separable and every model metric is reported beside the
+  strongest single-feature baseline, so a reader can see what the model added. Whichever is chosen,
+  C-9 stays marked refuted-as-stated and C-14 keeps the measurement.
+
+### PB-47 · The computability check cannot see a constant feature
+- **Source:** reading the E3 run beside the computability run, 2026-09-20 · **Priority:** high ·
+  **Due:** with PB-44's remaining work, before M4 training
+- **Problem:** `fs-features computability` asks whether a feature ever produces a number. A feature
+  that always produces **the same** number passes it and carries exactly as little. Three features
+  sit at a separation of 0.500 or 0.502 on the E3 run, which is what a constant looks like:
+  - `just_below_limit_flag` — **constant `False` by construction**, certain from the code path: the
+    benchmark supplies no channel or KYC-tier limits, `_applicable_limits` returns nothing and the
+    band test is over an empty set. It is declared `COMPUTABLE` and is not.
+  - `accounts_per_device_7d` — constant 1, already declared degenerate (PB-40).
+  - `dormancy_reactivation_flag` — 0.500, consistent with constant `False`: accounts transact about
+    once every four days here, so a 60-day silence is rare or absent. **Not verified**, and the
+    check cannot currently tell "constant" from "uninformative".
+- **Why the two directions are not the same check.** NaN-everywhere is a *missing input*;
+  constant-everywhere is a *missing distribution*. D-04's native missing handling covers the first
+  and nothing covers the second — a constant column is trained on, contributes nothing, and looks
+  in every completeness count exactly like a working feature.
+- **Acceptance:** `fs-features computability` reports each feature's distinct-value count over the
+  sample and fails when a `COMPUTABLE` feature that is not declared `degenerate` takes one value;
+  `just_below_limit_flag` is re-declared (either `NO_SOURCE_DATA` naming the limit configuration
+  and the milestone that supplies it, or `degeneracy` if a deployment genuinely has no limits);
+  `dormancy_reactivation_flag` is measured rather than guessed. Mutation-proved: declare a constant
+  feature `COMPUTABLE` and assert the check exits non-zero.

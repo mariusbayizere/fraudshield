@@ -1395,3 +1395,66 @@ machine made. Logged as PB-45.
 treated as a bug in one file. Three instances make it a property of how this project records
 things — hand-written summaries of machine-checkable facts drift, always in the flattering
 direction, and always in the document a reader trusts most.
+
+### 2026-09-20 · E3 ran and failed, which is the first thing it has ever done
+
+The first measurement of the D-08 ceiling over the **engineered** features, at commit `fad43dd`:
+corpus 200,000 rows, 20,000 scored, 166 confirmed fraud, folds grouped by whole accounts.
+
+**Five of the 44 exceed 0.80.** `velocity_ratio_1h_vs_30d` 0.894, `tx_count_1h` 0.826,
+`counterparty_is_new_for_account` 0.816, `implied_speed_kmh` 0.812, `seconds_since_last_tx` 0.811,
+each ±0.04. Four more sit within the interval of the ceiling.
+
+M2 measured 0.707 and reported the benchmark as comfortably inside D-08. That measurement was of
+the dataset's **columns**, and it was correct. The ceiling is a property of **what a model can be
+given**, and a model is given the engineered features — so the claim was true of the thing measured
+and false of the thing it was quoted about. C-9 is marked refuted as stated; C-14 carries the new
+measurement; the datasheet's bullet now says "column" where it said "feature".
+
+*The generalisation:* **a control measured on the inputs is not a control on the system.** The
+parameter digest checked parameters and not the draw. The licence check ran over an empty scope.
+The fold guard folded per row when the unit was the incident. Each time the check was real, ran
+green, and was about a narrower object than the sentence it justified. This one is the same shape
+with three milestones between the claim and its refutation.
+
+**What the failure is, and what it is not.** It is not a leak in the features: all five are
+strictly backward-looking, exclude the scored transaction, and are the code the parity suite
+replays. The separation is in the data. Every one of the five is a burst or recency indicator, and
+the generator's fraud scenarios are burst-shaped by construction — a drain, a velocity run and a
+bust-out are all rapid sequences. The strongest single feature reaches within 0.05 of the 0.940 AUC
+that ML-GATE-01 asks of an entire model, so a headline result here would not be evidence that the
+model learned anything a one-line rule could not.
+
+I have recorded it as failed rather than choosing a resolution. Three are available — change the
+draw, restate D-08's scope to columns, or declare the benchmark velocity-separable and report every
+metric beside the single-feature baseline — and which one is right is an owner's call, not a
+consequence of the measurement. PB-46.
+
+**A second finding fell out of reading the two runs side by side.** Three features sit at a
+separation of exactly 0.500–0.502, which is what a constant looks like. `just_below_limit_flag` is
+constant `False` **by construction** — the benchmark supplies no limit configuration, so the band
+test runs over an empty set — and it is declared `COMPUTABLE`. The computability check could not
+see it, because it asks whether a feature ever produces a number and this one always produces the
+same number. **NaN-everywhere is a missing input; constant-everywhere is a missing distribution**,
+D-04 covers the first and nothing covers the second, and a constant column looks in every
+completeness count exactly like a working feature. PB-47.
+
+*Worth noting about the order of discovery:* the computability check passed cleanly, and the thing
+it missed was visible only once a second measurement put a number beside each feature. A check
+that answers one question well will be read as answering the neighbouring one.
+
+### 2026-09-20 · The fifth evidence run lost, and the first one lost to a path I invented
+
+The 1M benchmark was generated into `/tmp/claude-1000/.../d9f158ee-…-850/scratch` — a directory I
+composed myself rather than the session scratchpad the harness names. It was reaped, and with it
+the dataset, the packs sidecar and a completed computability run. Regenerating cost thirty-five
+minutes; nothing else was lost, because the dataset is deterministic from its seed and the tree was
+already frozen.
+
+Five evidence runs now, five different causes: source edited mid-run, `uv sync --reinstall` mid-run,
+a test mutating the repository's parameters, memory pressure from two heavy runs started in
+parallel, and now an invented scratch path. **The rule that covers all five is about custody rather
+than care:** an evidence run owns its tree, its environment, its machine and its output location,
+and each of those is a thing to be *chosen deliberately at the start* rather than defaulted into.
+The harness names a scratchpad; using it is not a convenience, it is the only location with a
+stated lifetime.
