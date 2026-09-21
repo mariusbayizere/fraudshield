@@ -26,6 +26,7 @@ from fraudshield_ml.features.types import CountryFacts, Outcome, Transaction
 from fraudshield_ml.features.vector import (
     CorpusIndex,
     FeatureContext,
+    FeatureValue,
     computability,
     compute,
     describe,
@@ -466,6 +467,56 @@ class EvaluationRun:
     train_rows: int
     test_rows: int
     seed: int
+    #: Where to keep the computed feature matrix. Everything M4 still owes — calibration, SHAP,
+    #: baselines, ablations, the per-country and per-channel breakdowns, leave-one-country-out —
+    #: refits models on the **same** features, and the feature pass is the only expensive part.
+    cache: Path | None = None
+
+
+def _feature_matrix(
+    run: EvaluationRun,
+    rows: list[Transaction],
+    sample: list[int],
+    context: FeatureContext,
+) -> tuple[list[dict[str, FeatureValue]], list[bool], list[str]]:
+    """The computed features for the scored rows, from the cache when one matches.
+
+    The cache key names everything that decides the matrix: which dataset, how much corpus, which
+    split, and how many rows from each period. Everything M4 still owes — calibration, SHAP,
+    baselines, ablations, the per-country and per-channel breakdowns, leave-one-country-out —
+    refits models on the *same* features, and the feature pass is the only expensive part of this
+    command. Recomputing it per experiment would make the cheap work look expensive.
+    """
+    key = {
+        **smoke.cache_key(str(run.dataset), run.corpus_rows, len(sample)),
+        "split": str(run.split),
+        "train_rows": str(run.train_rows),
+        "test_rows": str(run.test_rows),
+    }
+    cached = smoke.cache_read(run.cache, key) if run.cache else None
+    if cached is not None:
+        print(f"reusing {len(cached[0])} cached feature rows from {run.cache}")
+        return cached
+
+    corpus_index = CorpusIndex.build(rows)
+    print(f"computing {len(smoke.trainable_features())} features for {len(sample)} rows...")
+    started = time.monotonic()
+    vectors = []
+    for done, i in enumerate(sample, start=1):
+        vectors.append(compute(rows, i, context, corpus_index))
+        if done % 2000 == 0 or done == len(sample):
+            rate = done / (time.monotonic() - started)
+            print(
+                f"  {done}/{len(sample)} rows  {rate:.0f}/s  "
+                f"~{(len(sample) - done) / rate / 60:.1f} min left",
+                flush=True,
+            )
+    labels = [bool(context.outcomes[rows[i].transaction_id].is_fraud) for i in sample]
+    accounts = [rows[i].account_id for i in sample]
+    if run.cache:
+        smoke.cache_write(run.cache, key, vectors, labels, accounts)
+        print(f"wrote the feature matrix to {run.cache}")
+    return vectors, labels, accounts
 
 
 def run_evaluate(run: EvaluationRun) -> int:
@@ -505,21 +556,7 @@ def run_evaluate(run: EvaluationRun) -> int:
     test_index = evaluation.spread(test_pool, run.test_rows)
 
     sample = train_index + test_index
-    corpus_index = CorpusIndex.build(rows)
-    print(f"computing {len(smoke.trainable_features())} features for {len(sample)} rows...")
-    started = time.monotonic()
-    vectors = []
-    for done, i in enumerate(sample, start=1):
-        vectors.append(compute(rows, i, context, corpus_index))
-        if done % 500 == 0 or done == len(sample):
-            rate = done / (time.monotonic() - started)
-            print(
-                f"  {done}/{len(sample)} rows  {rate:.0f}/s  "
-                f"~{(len(sample) - done) / rate / 60:.1f} min left",
-                flush=True,
-            )
-    labels = [bool(context.outcomes[rows[i].transaction_id].is_fraud) for i in sample]
-    accounts = [rows[i].account_id for i in sample]
+    vectors, labels, accounts = _feature_matrix(run, rows, sample, context)
     train = list(range(len(train_index)))
     test = list(range(len(train_index), len(sample)))
     for name, part in (("train", train), ("test", test)):
@@ -729,6 +766,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     evaluate_command.add_argument("--train-rows", type=int, default=12_000)
     evaluate_command.add_argument("--test-rows", type=int, default=8_000)
     evaluate_command.add_argument("--seed", type=int, default=20260917)
+    evaluate_command.add_argument(
+        "--cache",
+        type=Path,
+        default=None,
+        help="reuse the computed feature matrix here when it was computed for this dataset, "
+        "corpus, split and sample sizes; write it there otherwise",
+    )
     smoke_command = commands.add_parser(
         "smoke",
         help="train one model on the computable features and report it against the "
@@ -759,6 +803,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     train_rows=args.train_rows,
                     test_rows=args.test_rows,
                     seed=args.seed,
+                    cache=args.cache,
                 )
             )
         if args.command == "smoke":
