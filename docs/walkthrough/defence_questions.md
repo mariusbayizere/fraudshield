@@ -140,7 +140,7 @@ than the phenomenon: the lead is drawn from `fraud.takeover_lead_minutes = [5, 6
 `ASSUMED`, so every enabling event is followed by its drain in a tight uniform window with no long
 tail and no unexploited swap, which real life does not guarantee. And the separation grows with
 sample size — 0.709 at 60,000 rows, 0.758 at 1,006,249 — so it must be quoted at release scale.
-(Every figure in this answer is from the dataset with fingerprint `40a77bb6`, regenerated
+(Every figure in this answer is from the dataset with fingerprint `c8856a0e`, regenerated
 2026-09-21. It replaces a set quoted from a 1,012,522-row report that this tree does not
 reproduce; see PB-52. The 60,000-row figure is from an earlier run and has not been re-measured,
 so the two ends of that comparison are not from the same draw — the direction holds, the gap is
