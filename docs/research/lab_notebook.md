@@ -1846,3 +1846,56 @@ record of intention. Provenance has to be taken from the system at the moment th
 it records what someone meant to do.** That is the same principle as deriving a status table from
 its evidence rather than from an author's edit — the entry from two days ago — applied to the
 evidence itself.
+
+### 2026-09-21 · Three runs of one measurement, and only the third was about the model
+
+The first M4 metric on D-07's published split took three runs. The model barely changed. What
+changed was what the numbers were about.
+
+**Run 1** printed: model AUC 0.998, best single feature **1.000** (`days_since_sim_swap`), margin
+**−0.002**. I wrote a backlog item saying the benchmark had a second perfect separator.
+
+**Run 2** printed the denominator. Those 1.000s were over **660 rows holding two confirmed fraud**.
+`auc` drops NaN with its labels — right, a structurally missing value is not a low value — so the
+feature was scored on the accounts that had a SIM swap while the model was scored on all of them.
+Two numbers over different populations had been subtracted and called a margin.
+
+**Run 3** made the sample representative: an even stride across each period instead of its tail.
+The feature stopped being the strongest at any coverage. The strongest became
+`velocity_ratio_1h_vs_30d` at 0.871 on 100% of rows — the baseline PB-46 already knew about — and
+the model's margin came out at **+0.115**. The finding from run 1 did not shrink; it evaporated.
+
+Two separate defects, and it is worth keeping them apart.
+
+**The comparison was cross-population.** PB-46's rule is "report every metric as a margin over the
+single-feature baseline". The code implemented that rule literally, and "the baseline" silently
+meant "over whatever rows that feature happens to be defined on". A rule followed to the letter and
+broken in substance is the same shape as a guard that checks the input it was written for rather
+than the output it protects — and that shape appeared three times in three days: in the parameter
+digest (PB-41), in the fingerprint that replaced it (PB-54), and here.
+
+**The sample was the tail.** Both early runs took the last N rows of each period, so they trained
+on about a week no matter how deep the corpus read — the sample size decided the window and the
+corpus depth did nothing. Deepening the corpus from 400,000 to 560,000 rows changed the answer not
+at all, which should have been the tell. A stride over a pool already in timestamp order costs the
+same, spans 235 days, and needs no seed.
+
+#### The habit
+
+**The first version of a measurement is the one most likely to be about its sampling rather than
+about its subject.** Not wrong arithmetic — the AUCs were all computed correctly. The question
+"what rows is this over?" simply had a different answer for each number being compared, and
+nothing in the output said so.
+
+So the report prints coverage and fraud count beside every baseline, and refuses to subtract a
+partial-coverage feature from the model at all. The denominator arrives *with* the number rather
+than after it, which is the only arrangement under which a reader can catch this before a backlog
+item gets written about it.
+
+#### And the guard reintroduced a solved problem
+
+`fs-evidence`, built the same afternoon to stamp provenance, captures its child's output instead of
+streaming it. A 34-minute run is now completely silent — which is the failure the notebook already
+has an entry about, from the 106-minute run that printed nothing. Recorded as PB-57. Fourth
+instance of *knowing a failure mode does not immunise against it*, and the second where the
+immunity was expected to come from having just written about it.

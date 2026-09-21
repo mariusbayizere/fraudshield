@@ -960,10 +960,35 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
   delay channel reads 0.758. The right response is to widen the measurement, not to quote the
   1.000: score enough test rows that the defined subset holds tens of fraud rather than two.
 - **PB-46's velocity separability is still the larger, better-measured finding**:
-  `seconds_since_last_tx` reaches **0.887 on every held-out row**, which is what the model's
+  `velocity_ratio_1h_vs_30d` reaches **0.871 on every held-out row**, which is what the model's
   margin is taken against.
+- **Closed 2026-09-21 by a third run, and it was never a finding at all.** The first two runs
+  sampled the *tail* of each period. With the sample spread across the periods instead, the
+  held-out rows hold 63 fraud rather than 40, and `days_since_sim_swap` is no longer the strongest
+  feature at any coverage — the strongest is `velocity_ratio_1h_vs_30d`, defined on 100% of rows.
+  The 1.000 was an artefact of a tail sample over two positives, twice over.
+- **What to keep from it.** Nothing about SIM swaps; something about method. A figure was printed,
+  written into the backlog as a finding, corrected once when its denominator was printed, and
+  withdrawn entirely when the sample was made representative. **The first version of a measurement
+  is the one most likely to be about the sampling.** The report now prints coverage and fraud
+  counts beside every baseline so the denominator arrives with the number rather than after it.
 - **Acceptance:** state it in the datasheet, the model card and the paper's limitations with the
   same prominence as the velocity separability and with the mechanism named; report it beside
   every model metric as the evaluation command now does; and decide whether
   `takeover_lead_minutes` should carry a long tail, which **changes the dataset draw** and is
   therefore an owner decision rather than one to take while closing a backlog item.
+
+### PB-57 · `fs-evidence` captures its command's output instead of streaming it
+- **Source:** the first `fs-features evaluate` run, 2026-09-21 · **Priority:** medium · **Due:**
+  before the next long evidence run
+- **Problem:** `evidence_run` uses `subprocess.run(..., capture_output=True)`, so nothing appears
+  until the command exits. A 35-minute run is completely silent, and a silent run cannot be told
+  apart from a hung one.
+- **Why it is worth its own item.** The lab notebook already carries an entry on exactly this —
+  106 minutes spent on a run that printed nothing because the progress line sat outside the loop —
+  and the conclusion was that an expensive stage must report progress. The guard written three
+  hours later reintroduced the silence for every run that goes through it. **Knowing a failure
+  mode does not immunise against it**, which is the notebook's other standing lesson, and this is
+  its fourth instance.
+- **Acceptance:** tee rather than capture — stream the child's output to this process's stdout as
+  it arrives *and* accumulate it for the artefact. The artefact's content must not change.
