@@ -68,7 +68,15 @@ def test_the_vector_reads_only_rows_before_the_one_it_scores(
 #: checked there by an evidence run (`docs/benchmarks/m3_computability_fad43dd.txt`). Demanding it
 #: of a toy corpus would be asking a fixture to be a benchmark — and tuning one until the verdict
 #: read zero would shape the fixture by the answer.
-FIXTURE_CANNOT_VARY = {"agent_cashout_count_1h", "agent_unique_customers_1h"}
+FIXTURE_CANNOT_VARY = {
+    "agent_cashout_count_1h",
+    "agent_unique_customers_1h",
+    # Every account in this fixture has its own device, so the count is 1 wherever it is defined.
+    # That was true of the benchmark too until PB-40 gave the generator a device-sharing
+    # mechanism; it is now a property of these 70 rows alone, and giving the fixture shared
+    # devices to make the mismatch disappear would be shaping it by the answer.
+    "accounts_per_device_7d",
+}
 
 
 @pytest.mark.req("FR-02-02", "ML-DATA-07")

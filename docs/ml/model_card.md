@@ -24,21 +24,22 @@ figure appears in it.
 
 ## Features
 
-44 are declared and implemented; **39 carry information on this benchmark**, of which 37 also
-vary. Five read reference data that neither the dataset nor M1's schema holds and are NaN for every
-row (PB-44): `account_age_days`, `counterparty_account_age_days`, `kyc_tier`,
-`agent_float_utilisation_ratio`, `agent_distance_from_registered_km`. Two more are present and
-constant (PB-47).
+44 are declared and implemented; **38 carry information and vary on this benchmark**. Five read
+reference data that neither the dataset nor M1's schema holds and are NaN for every row (PB-44):
+`account_age_days`, `counterparty_account_age_days`, `kyc_tier`,
+`agent_float_utilisation_ratio`, `agent_distance_from_registered_km`. One more is present and
+constant: `just_below_limit_flag`, because the benchmark carries no limit configuration (PB-47).
 
 It was six until 2026-09-20, when `round_denominations` became a country-pack field and
-`round_sum_flag` became computable. The five that remain all wait on a table that does not exist,
-which is why that one could close alone.
+`round_sum_flag` became computable; and `accounts_per_device_7d` was constant until 2026-09-21,
+when the generator began sharing devices (PB-40). The five that remain all wait on a table that
+does not exist, which is why the other two could close alone.
 
 **[M4] must state the number of features that carried information alongside every metric**, and
 must not report "44 features" where fewer were used. If one of the five becomes computable later,
 that is a documented change to the model's input and a reason to restate earlier numbers — not a
 silent improvement: **the pipeline smoke test of 2026-09-20 trained on 36 and stays a figure
-measured on 36.** `docs/features.md` lists what each needs and which milestone supplies it.
+measured on 36**, and any figure measured between then and 2026-09-21 was measured on 37. `docs/features.md` lists what each needs and which milestone supplies it.
 
 ## Limitations that are known before any training run
 

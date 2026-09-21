@@ -1631,7 +1631,12 @@ for _spec_ in (
         ),
         template_id="device.accounts_per_device_7d",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
-        computable=Computability.CONSTANT,
+        # CONSTANT until 2026-09-21, when PB-40 gave the generator a device-sharing mechanism.
+        # Measured on the regenerated benchmark: **7 distinct values** over 20,000 scored rows,
+        # NaN on the 42.3% of rows with no device (USSD), fingerprint c8856a0e. The declaration
+        # follows the measurement and not the other way round -- the computability check failed on
+        # this feature first, saying "the degeneracy has cleared and the declaration has not".
+        computable=Computability.COMPUTABLE,
         window="7d",
         contract=WindowContract(
             self_inclusion=SelfInclusion.EXCLUDED,
@@ -1656,15 +1661,6 @@ for _spec_ in (
             "state exists solely in the online store. M1 built account_activity_hourly and "
             "merchant_activity_15m and no device aggregate at all, so the database genuinely "
             "cannot answer this question — as opposed to answering it inconveniently."
-        ),
-        degeneracy=(
-            "DEGENERATE ON THE CURRENT DATASET (PB-40). Measured at tree d85385f: 5,484 distinct "
-            "device fingerprints across 5,920 accounts, and zero used by more than one account "
-            "(max accounts per device: 1). The feature is therefore identically 1 and has no "
-            "variance. The generator has no device-sharing mechanism; this is a data gap, not a "
-            "feature defect, and the feature ships computing correctly over data that does not "
-            "exercise it. Cleared when the generator shares devices between accounts, scheduled "
-            "before M4 training so the feature is non-degenerate when the model using it is fitted."
         ),
     ),
     FeatureSpec(
@@ -2065,14 +2061,6 @@ for _spec_ in (
             label_basis=LabelBasis.NOT_LABEL_DERIVED,
             minimum_history=None,
             history_key=HistoryKey.ACCOUNT,
-        ),
-        degeneracy=(
-            "PARTIALLY DEGENERATE ON THE CURRENT DATASET (PB-40). Part E.2 defines this composite "
-            "over four terms, one being 'shared device and phone attributes across accounts'. "
-            "No device in the dataset is shared, so that term contributes a constant and the score "
-            "is effectively a composite of three terms, not four. The score remains in [0, 1] and "
-            "emits no NaN, so nothing downstream signals the loss — which is why it is declared "
-            "here. Cleared with accounts_per_device_7d, before M4 training."
         ),
     ),
 ):

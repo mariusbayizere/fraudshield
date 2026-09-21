@@ -347,7 +347,8 @@ dataset has.** Since no timestamps collide, the strictly-earlier bound excludes 
 should be; but any claim resting on it is a claim about a few hundred rows at this scale, and it
 should be quoted with that count rather than with an overall rate.
 
-**Which of the 44 features can this dataset actually feed? Thirty-nine.** Five read reference
+**Which of the 44 features can this dataset actually feed? Thirty-nine, of which
+thirty-eight also vary.** Five read reference
 data that neither the dataset nor M1's schema holds, so they return NaN for every row until it
 exists (PB-44): `account_age_days`, `counterparty_account_age_days`, `kyc_tier`,
 `agent_float_utilisation_ratio` and `agent_distance_from_registered_km`. Each is implemented and
