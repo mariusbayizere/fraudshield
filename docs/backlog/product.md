@@ -1003,3 +1003,23 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
   its fourth instance.
 - **Acceptance:** tee rather than capture — stream the child's output to this process's stdout as
   it arrives *and* accumulate it for the artefact. The artefact's content must not change.
+
+### PB-58 · Recall at 1% FPR charged nothing for ties
+- **Source:** the M4 battery's keep-one-only ablation, 2026-09-22 · **Priority:** high ·
+  **Resolved:** same day, before any gate quoted it
+- **What it printed:** `agent alone (2)` — AUC **0.551**, recall at 1% FPR **0.904**. That is
+  arithmetically impossible, and impossible figures are the useful kind: they cannot be argued
+  with.
+- **Cause:** the agent features are NaN for every non-agent row, so a model given only them scores
+  almost the whole population identically. The threshold was the 99th percentile of negatives and
+  recall counted positives **at or above** it, which admits every negative tied *on* the threshold
+  for free. The realised false-positive rate was near 1.0, not 0.01.
+- **Why it matters beyond one silly row:** ML-GATE-02 and ML-GATE-03 are defined at this operating
+  point. The error is invisible on a well-separated model — every figure the project has quoted so
+  far is unaffected, because ties are rare when a model works — and appears exactly when a model
+  is degenerate, which is when a gate most needs to fail.
+- **Fix:** count positives **strictly above** the threshold. That is the operating point a rule
+  engine could actually run, it never claims a rate the scores cannot deliver, and a degenerate
+  model now reports a recall near zero.
+- **The general shape:** a metric that is correct on good inputs and wrong on bad ones is worse
+  than one that is wrong on both, because nothing exercises it until the day it matters.

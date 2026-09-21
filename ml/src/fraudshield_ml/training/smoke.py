@@ -176,11 +176,22 @@ def encode_categoricals(
 
 
 def recall_at_fpr(scores: Sequence[float], labels: Sequence[bool], fpr: float) -> float:
-    """Recall at a false-positive rate, by choosing the threshold on the negatives.
+    """Recall at a false-positive rate, at the **realised** rate rather than the requested one.
 
     The operating point the decision engine cares about (ML-GATE-03 reports recall; ML-GATE-02
-    precision at 1% FPR). Reported here as a second number so the smoke test says something about
-    the low-FPR regime, where AUC is least informative.
+    precision at 1% FPR), so it has to mean what it says.
+
+    **Ties are why this is not two lines.** Picking the score at the 99th percentile of negatives
+    and counting every row at or above it charges nothing for the negatives tied *on* the
+    threshold — and when a feature set is mostly constant, that is most of them. An M4 ablation
+    reported recall **0.904 at "1% FPR" for a model with AUC 0.551**, which is arithmetically
+    impossible: the realised false-positive rate was near 1.0, because the agent features are NaN
+    for every non-agent row and the whole population tied.
+
+    So the threshold is raised past the tie: recall counts positives **strictly above** it, which
+    is the operating point a rule engine could actually run, and never claims a rate the scores
+    cannot deliver. A degenerate model now reports a recall near zero, which is the truth about
+    it.
     """
     negatives = sorted((s for s, y in zip(scores, labels, strict=True) if not y), reverse=True)
     positives = [s for s, y in zip(scores, labels, strict=True) if y]
@@ -188,7 +199,9 @@ def recall_at_fpr(scores: Sequence[float], labels: Sequence[bool], fpr: float) -
         return math.nan
     index = min(len(negatives) - 1, max(0, int(len(negatives) * fpr) - 1))
     threshold = negatives[index]
-    return sum(1 for s in positives if s >= threshold) / len(positives)
+    # Strictly above: a negative sitting exactly on the threshold is a false positive the budget
+    # has not paid for, and there may be thousands of them tied there.
+    return sum(1 for s in positives if s > threshold) / len(positives)
 
 
 def summarise(result: SmokeResult) -> str:

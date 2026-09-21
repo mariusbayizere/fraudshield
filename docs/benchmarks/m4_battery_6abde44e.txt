@@ -1,4 +1,4 @@
-# evidence-commit: a7c55422c8c53bdf087cec0ccf3568ae2f3b5c65
+# evidence-commit: 18aeacf3a923e2506e5245de61b2d9502348bcf4
 # evidence-tree-state: clean
 # command: .venv/bin/python -u -m fraudshield_ml.cli battery dataset/output/features_full.parquet
 # exit: 0
@@ -49,7 +49,7 @@ EXPLANATIONS — exact TreeSHAP from XGBoost's own pred_contribs, no new depende
   tx_count_to_counterparty_30d       0.2205
   amount_log1p                       0.2118
 
-ABLATIONS — one feature group removed, refitted. A negative margin is the group's worth.
+ABLATIONS, ONE GROUP REMOVED — a negative margin is what that group was worth.
                                      AUC           margin  R@1%      rows fraud
   without counterparty (4)           0.960 +/-0.011  -0.031  0.789    60000   551
   without temporal (6)               0.989 +/-0.006  -0.001  0.940    60000   551
@@ -61,6 +61,19 @@ ABLATIONS — one feature group removed, refitted. A negative margin is the grou
   without device_and_channel (5)     0.990 +/-0.006  -0.000  0.918    60000   551
   without amount_behaviour (4)       0.991 +/-0.006  -0.000  0.946    60000   551
   without synthetic_identity (1)     0.991 +/-0.006  +0.000  0.946    60000   551
+
+ABLATIONS, ONE GROUP ONLY — what each group can do by itself.
+                                     AUC           margin  R@1%      rows fraud
+  counterparty alone (4)             0.949 +/-0.013  -0.042  0.488    60000   551
+  velocity alone (8)                 0.871 +/-0.019  -0.120  0.630    60000   551
+  temporal alone (6)                 0.861 +/-0.020  -0.130  0.525    60000   551
+  geographic alone (5)               0.845 +/-0.020  -0.146  0.401    60000   551
+  device_and_channel alone (5)       0.764 +/-0.023  -0.227  0.352    60000   551
+  synthetic_identity alone (1)       0.730 +/-0.024  -0.260  0.047    60000   551
+  amount_behaviour alone (4)         0.660 +/-0.025  -0.331  0.044    60000   551
+  account_profile alone (2)          0.561 +/-0.025  -0.430  0.096    60000   551
+  agent alone (2)                    0.551 +/-0.025  -0.440  0.904    60000   551
+  corridor alone (1)                 0.491 +/-0.024  -0.499  0.982    60000   551
 
 BY COUNTRY — the same model and the same scores, sliced.
                                      AUC           margin  R@1%      rows fraud

@@ -17,6 +17,7 @@ from fraudshield_ml.training.battery import (
     score,
 )
 from fraudshield_ml.training.report import table
+from fraudshield_ml.training.smoke import recall_at_fpr
 
 pytestmark = pytest.mark.req("ML-GATE-11")
 
@@ -131,3 +132,28 @@ def test_additivity_is_measured_rather_than_assumed() -> None:
 def test_an_empty_contribution_set_is_not_an_importance_of_zero() -> None:
     assert mean_absolute_shap([], ["a"]) == []
     assert math.isnan(expected_calibration_error([]))
+
+
+@pytest.mark.req("ML-GATE-03")
+def test_recall_at_a_false_positive_rate_does_not_charge_nothing_for_ties() -> None:
+    """The defect an M4 ablation printed: recall 0.904 at "1% FPR" with AUC 0.551 (PB-58).
+
+    Arithmetically impossible, and the cause is ties. The agent features are NaN for every
+    non-agent row, so a model given only them scores almost the whole population identically.
+    Taking the 99th percentile of negatives and counting rows *at or above* it then admits every
+    tied negative for free, and the realised false-positive rate is near 1.0 rather than 0.01.
+
+    A degenerate model must report a recall near zero, because that is the operating point a rule
+    engine could actually run.
+    """
+    tied = [0.5] * 1000
+    labels = [i < 50 for i in range(1000)]
+    assert recall_at_fpr(tied, labels, 0.01) == 0.0, (
+        "a model that scores every row identically catches nothing within any FPR budget"
+    )
+
+    # A model that genuinely separates still reports what it earns: ten negatives above the
+    # threshold out of a thousand is the 1% budget, and the positives above it are the recall.
+    scores = [0.9] * 40 + [0.5] * 10 + [0.1] * 950
+    labels = [True] * 40 + [False] * 10 + [False] * 950
+    assert recall_at_fpr(scores, labels, 0.02) == pytest.approx(1.0)
