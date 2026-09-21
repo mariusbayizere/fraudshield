@@ -130,17 +130,21 @@ and in a one-microsecond label delay — and every leakage number stayed bit-ide
 Evidence: `dataset/realism_report.md`, `dataset/tests/test_realism_checks.py`.
 
 **Q: What is the strongest single signal in the dataset, and is it a leak?**
-0.758, and no. It is the time from a SIM swap or device change to that account's next transaction,
+0.730, and no. It is the time from a SIM swap or device change to that account's next transaction,
 reached by joining `account_events` to the transactions on the account token. It is above the
 strongest transaction column, `merchant_category_code` at 0.706, and both are inside the 0.80 D-08
-ceiling — the delay by 0.042. It is not a leak: a SIM swap before a takeover is how that fraud
+ceiling — the delay by 0.070. It is not a leak: a SIM swap before a takeover is how that fraud
 works, and a model is meant to learn it, which is why it is measured and reported but deliberately
 not gated. Two caveats belong with the number. Part of it is an artefact of the generator rather
-than the phenomenon: the lead is drawn from `fraud.takeover_lead_minutes = [5, 60]`, provenance
-`ASSUMED`, so every enabling event is followed by its drain in a tight uniform window with no long
-tail and no unexploited swap, which real life does not guarantee. And the separation grows with
-sample size — 0.709 at 60,000 rows, 0.758 at 1,006,249 — so it must be quoted at release scale.
-(Every figure in this answer is from the dataset with fingerprint `c8856a0e`, regenerated
+than the phenomenon, and as of 2026-09-22 we know how much. The lead was
+`fraud.takeover_lead_minutes = [5, 60]` drawn uniformly — every enabling event drained inside the
+hour. Giving it a real tail (a clipped lognormal, median 45 minutes, 2.7% beyond a day) dropped
+this channel from 0.758 to **0.730**, so about **11% of the excess over 0.5 was the assumed
+schedule and the rest is the scenario**. The fall was predicted before the draw existed and the
+prediction held. And the separation grows with
+sample size — 0.709 at 60,000 rows on an older draw, 0.730 at 1,006,249 — so it must be quoted at
+release scale.
+(Every figure in this answer is from the dataset with fingerprint `6abde44e`, regenerated
 2026-09-21. It replaces a set quoted from a 1,012,522-row report that this tree does not
 reproduce; see PB-52. The 60,000-row figure is from an earlier run and has not been re-measured,
 so the two ends of that comparison are not from the same draw — the direction holds, the gap is

@@ -1985,3 +1985,42 @@ window.
    effect.
 
 The first is the one to hold me to.
+
+### 2026-09-22 · The prediction held, and the number it produced is more interesting than the prediction
+
+Predicted before the draw existed (committed at `0138099`): giving `takeover_lead_minutes` a long
+tail would drop the event-delay channel from **0.758**, into **0.68–0.74**, and a fall of less
+than 0.01 would refute the mechanism claim C-11 has carried since M2.
+
+Measured on the regenerated draw (`6abde44e`): **0.730**. Inside the band, at its top. The
+mechanism claim is confirmed — part of that separation *was* the assumed window — and the single
+-feature gate is untouched at 0.706, because it measures columns and the lead is not one.
+
+#### What the residual says, which is the part I did not predict
+
+The channel fell by 0.028. Against a baseline of 0.5 that is **11% of the excess**, so roughly
+nine tenths of the delay separation is the *scenario* and one tenth was the window. I had written
+the prediction expecting to learn "how much of this is an artefact"; the answer is "much less than
+the framing implied".
+
+That reframes four days of hedging. C-11 said the interpretation was "part designed causal signal,
+part artefact of an assumed schedule" and could not say in what proportion. It can now: the
+artefact was the small part. A SIM swap shortly before a drain is the scenario working, and saying
+so is now a measurement rather than a hope.
+
+It also means the hedge was **doing work in the wrong direction**. Every quotation of the delay
+channel has carried a caveat implying the figure might be mostly artefact. It was not, and the
+caveat was free to write and cost nothing to leave in place, which is exactly how a caveat becomes
+permanent. The test for keeping one: *what measurement would remove it?* If there is no answer,
+the caveat is a decoration. If there is — and here it was one parameter and one regeneration —
+then leaving it unmeasured is a choice, and four days is a long time to choose that.
+
+#### On the prediction landing at the top of the band
+
+0.730 against 0.68–0.74 is confirmed but poorly centred: I expected a larger fall than I got. The
+error is legible. I reasoned from the *fraction of fraud leads moved past an hour* (43.6%) and not
+from what the channel actually measures, which is fraud leads against **legitimate** next-
+transaction delays. Those are mostly hours to days, so moving a fraud lead from 20 minutes to 90
+minutes leaves it well inside the fraud end of the ordering; only the 2.7% beyond a day cross into
+the legitimate mass in a way that changes a rank. The right predictor was the tail weight past a
+day, not the weight past an hour — and it was in the rationale I had just written.

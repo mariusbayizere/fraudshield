@@ -3217,7 +3217,7 @@ requirements:
   - dataset/src/fraudshield_dataset/generator/pipeline.py
   - dataset/src/fraudshield_dataset/release/export.py
   evidence:
-  - dataset/realism_report.md (1,006,249 rows, seed 20260917, fingerprint c8856a0e, all gate checks pass)
+  - dataset/realism_report.md (1,006,249 rows, seed 20260917, fingerprint 6abde44e, all gate checks pass)
   - dataset/tests/test_generator.py
   - dataset/tests/test_realism_checks.py
   - dataset/tests/test_export.py

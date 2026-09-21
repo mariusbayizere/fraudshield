@@ -977,6 +977,17 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
   every model metric as the evaluation command now does; and decide whether
   `takeover_lead_minutes` should carry a long tail, which **changes the dataset draw** and is
   therefore an owner decision rather than one to take while closing a backlog item.
+- **Closed 2026-09-22 (owner decision).** The lead is now a clipped lognormal: bounds `[5, 43200]`
+  minutes, median 45, log-sigma 1.8 — a quarter inside 13 minutes, 43.6% beyond an hour, 2.7%
+  beyond a day, all ASSUMED and the pack rationale says why a lognormal and why not a mixture.
+  Regenerated at fingerprint `6abde44e`; all gate checks pass.
+- **The prediction was recorded first and held.** Committed at `0138099` before the draw existed:
+  the event-delay channel would fall from 0.758 into 0.68–0.74, and a fall under 0.01 would refute
+  C-11's mechanism claim. Measured **0.730**.
+- **And the residual is the finding.** A fall of 0.028 is **11% of the excess over 0.5**, so nine
+  tenths of that channel's separation is the scenario and one tenth was the window. C-11 moves
+  from PARTLY ASSUMED to MEASURED. The hedge that has ridden along with every quotation of this
+  figure for four days implied it might be mostly artefact; it was not.
 
 ### PB-57 · `fs-evidence` captures its command's output instead of streaming it
 - **Source:** the first `fs-features evaluate` run, 2026-09-21 · **Priority:** medium · **Due:**

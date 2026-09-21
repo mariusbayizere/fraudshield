@@ -7,7 +7,7 @@
 > the tree named below produces that draw and not the 1,012,522-row one. Country iteration order
 > also changes nothing: `Population._apportioned` sorts internally, which is why PB-41's "reverse
 > the pack order" mutation produced a byte-identical dataset. What produced the 1,012,522-row draw
-> is unexplained. Current values: `dataset/realism_report.md`, fingerprint `c8856a0e`.
+> is unexplained. Current values: `dataset/realism_report.md`, fingerprint `6abde44e`.
 
 > **Note added 2026-09-19 — the figures below are from a superseded draw, not from an error.**
 > PB-29 moved every country fact into packs, and `countries.simulated()` sorts, so country

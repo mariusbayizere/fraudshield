@@ -62,7 +62,7 @@ months (2024-01 to 2025-12). The verification run documented in `dataset/realism
 come from that run unless stated otherwise.
 
 **Which run, exactly (rewritten 2026-09-21).** Every figure here comes from the dataset with
-fingerprint `c8856a0ecb2d76a114495a66c09a6b56296133c11dd92065d15237e21654496f` — 1,006,249 rows,
+fingerprint `6abde44e5e952f4f5c6b86aac0fb934cd4de023b53ec1f2cfe9dc01cf0a3e420` — 1,006,249 rows,
 seed 20260917, kept at `dataset/output/bench1m` and described by `dataset/realism_report.md`, which
 carries that fingerprint. The dataset is identified by the hash of its rows rather than by a commit,
 because the commit is what this paragraph got wrong.
@@ -160,7 +160,7 @@ from the calibrated volume and reported with measured counts:
 |---|---:|---:|---:|
 | train | 792,162 | 0.862% | 602.34 |
 | validation | 101,332 | 0.883% | 57.69 |
-| calibration (last part of validation) | 40,701 | 0.909% | 25.36 |
+| calibration (last part of validation) | 40,700 | 0.907% | 25.36 |
 | embargo (excluded) | 10,914 | 1.008% | 6.99 |
 | test | 101,841 | 0.905% | 63.97 |
 
@@ -277,7 +277,7 @@ the study of a novel fraud variant that appears only in the test period.
 - Amounts and locations are simulated; they carry no commercial or geographic information.
 - **No single dataset COLUMN separates the classes beyond AUC 0.80** (D-08), measured as
   `max(AUC, 1 − AUC)` with out-of-fold encoding for categoricals. At 1,006,249 rows
-  (fingerprint `c8856a0e`) the strongest transaction column is `merchant_category_code` at
+  (fingerprint `6abde44e`) the strongest transaction column is `merchant_category_code` at
   **0.706**.
   **The engineered features are a different matter and the claim does not extend to them.** Five
   of the 44 exceed the ceiling on this benchmark — `velocity_ratio_1h_vs_30d` **0.894**,
