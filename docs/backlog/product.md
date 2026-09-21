@@ -388,6 +388,28 @@ the decision engine M6, staff identity, admin and audit M7).
   would clear it, with `test_a_feature_with_no_signal_on_this_dataset_declares_it` asserting the
   declaration and `test_no_other_feature_silently_claims_to_be_fine` as its control. Clearing PB-40
   must also delete those declarations, which the second test will force.
+- **Closed 2026-09-21 (M4), two mechanisms.** A **ring** of synthetic identities transacts from one
+  handset, which is the "shared device and phone attributes across accounts" term Part E.2 names
+  and the scenario had no way to produce; and a share of ordinary customers use a **handed-down**
+  handset, so that a device seen on several accounts is not by itself a fraud signal. The second
+  is load-bearing: without it the ring device would be a shortcut and the realism gate would refuse
+  the dataset, correctly. Both rates are `ASSUMED` and the packs say why — the 2026-09-18 sourcing
+  pass established that no publication gives handset-sharing rates for these markets.
+  `test_devices_are_shared_between_accounts` asserts the **distribution**, not the existence of one
+  shared device, because a single shared handset would satisfy "sharing happens" while leaving the
+  feature constant for every row that matters. A shared handset has no device-change generation of
+  its own: two people using one phone are using one phone, so a sharer keeps the token and the
+  owner moves off it when they replace their own — which is how a device comes to be seen on two
+  accounts and later on one. The predicate deciding who is a synthetic identity is duplicated
+  between `Population` and `FraudModel` (factoring it out would move the bust-out draw that follows
+  it in the same stream) and pinned by
+  `test_the_population_and_the_fraud_model_agree_on_who_is_synthetic`.
+- **Measured before it was believed.** The first ring assignment bucketed consecutive customer
+  indices, and synthetic identities are about a ninth of the population, so four consecutive
+  indices held less than one of them: it produced a single device with four accounts where it
+  should have produced some two hundred. Ring membership is drawn from a sized pool instead. The
+  check that caught it took seconds and ran before the 20-minute regeneration, which is the only
+  reason it was not found afterwards.
 
 ### PB-41 · The report's digest covers parameters, so a changed draw is invisible to it
 - **Source:** PB-39's root cause, 2026-09-19 · **Priority:** high · **Due:** M3, before the next
@@ -703,6 +725,22 @@ the decision engine M6, staff identity, admin and audit M7).
   published format, never `fraudshield_dataset` — and assign each scored row to train, validation,
   calibration or test by the published boundaries, excluding the embargo. No M4 headline metric is
   reported on anything else.
+- **Closed 2026-09-21 (M4).** `fraudshield_ml.training.split` reads the published `split.json` —
+  the interchange format, never `fraudshield_dataset` — and `fs-features evaluate` fits on the
+  train period and scores the test period. The embargo is unreachable by construction rather than
+  by remembering: `FITTABLE` names the two segments a model may be fitted on and the embargo is
+  not one of them. **Calibration overlaps validation and the reader says so**: `segment_of`
+  returns one of four disjoint periods and `in_calibration` is asked separately, because a
+  `segment_of` returning one of five names would silently remove the calibration rows from
+  validation and a model would be tuned on a period it had also calibrated on.
+- **A separate command rather than a flag on `smoke`.** The smoke test stays exactly what it is —
+  a pipeline check that cuts its own holdout and says so in its first three lines. Teaching it to
+  produce a real metric under a flag would have made one report either caveat a result or promote
+  a check, and the caveat is the part that gets dropped when a figure is quoted.
+- **Stated limit, not a hidden one:** the corpus is read newest-first and bounded, so the training
+  rows are the *tail* of the train period rather than a draw from all of it. The report prints the
+  number of days covered beside every figure. A figure from here is comparable with the gates in
+  its split and not in its training volume.
 
 ### PB-50 · The milestone register cannot advance to M4, and that is a finding
 - **Source:** starting M4, 2026-09-20 · **Priority:** high · **Due:** before the register records

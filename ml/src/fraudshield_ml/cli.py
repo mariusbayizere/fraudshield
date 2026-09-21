@@ -15,6 +15,7 @@ import math
 import sys
 import time
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -36,7 +37,8 @@ from fraudshield_ml.metrics.single_feature import (
     out_of_fold_target_encoding,
     separation,
 )
-from fraudshield_ml.training import smoke
+from fraudshield_ml.training import evaluation, smoke
+from fraudshield_ml.training import split as split_module
 
 #: Columns the vector needs from each table. Named rather than read wholesale so that a schema
 #: change removing one fails here, with the column named, instead of somewhere inside a feature.
@@ -429,6 +431,135 @@ def run_auc(root: Path, packs: Path, corpus_rows: int, sample_rows: int) -> int:
     return 0
 
 
+def _build_context(root: Path, packs: Path, rows: list[Transaction]) -> FeatureContext:
+    """Everything the 44 features read that is not a transaction column.
+
+    Extracted because three commands built it identically and a fourth would have been a fourth
+    place to forget a field — which is precisely how `denominations` went missing from two tests
+    and read as a leak.
+    """
+    first_seen, device_first_seen = read_first_seen(root)
+    payees, corridors, handsets = read_known_before(root, rows[0].timestamp)
+    return FeatureContext(
+        countries=load_packs(packs),
+        outcomes=read_outcomes(root, {row.transaction_id for row in rows}),
+        sim_swaps=read_sim_swaps(root),
+        first_seen=first_seen,
+        device_first_seen=device_first_seen,
+        counterparties_before=payees,
+        countries_before=corridors,
+        devices_before=handsets,
+        cash_out_codes=frozenset({CASH_DISBURSEMENT_MCC}),
+        denominations=denominations_by_currency(packs),
+        cell_rate_prior=0.0087,
+    )
+
+
+@dataclass(frozen=True)
+class EvaluationRun:
+    """What decides an evaluation's figures, in one object (PB-49)."""
+
+    dataset: Path
+    packs: Path
+    split: Path
+    corpus_rows: int
+    train_rows: int
+    test_rows: int
+    seed: int
+
+
+def run_evaluate(run: EvaluationRun) -> int:
+    """Fit on the train period, score on the test period, never touch the embargo (PB-49).
+
+    The sample is the **tail** of each period rather than a draw from all of it: the corpus is
+    bounded, the feature pass is the whole cost of this command, and a uniform draw over the train
+    period would need every row of it in the index. That is a limit on training volume, not on the
+    split, and the report states it beside every figure rather than leaving it to be assumed.
+    """
+    boundaries = split_module.load(run.split)
+    rows = read_transactions(run.dataset, run.packs, limit=run.corpus_rows)
+    context = _build_context(run.dataset, run.packs, rows)
+
+    by_segment: dict[split_module.Segment, list[int]] = {}
+    for index, row in enumerate(rows):
+        by_segment.setdefault(boundaries.segment_of(row.timestamp), []).append(index)
+    train_pool = by_segment.get(split_module.Segment.TRAIN, [])
+    test_pool = by_segment.get(split_module.Segment.TEST, [])
+    for name, pool, wanted in (
+        ("train", train_pool, run.train_rows),
+        ("test", test_pool, run.test_rows),
+    ):
+        if len(pool) < wanted:
+            raise DatasetGapError(
+                f"the corpus holds {len(pool)} rows in the {name} period and {wanted} were asked "
+                f"for. Raise --corpus-rows so the read reaches further back, or lower "
+                f"--{name}-rows. The corpus is read newest-first, so the train period is the part "
+                "that runs out first"
+            )
+    train_index = train_pool[-run.train_rows :]
+    test_index = test_pool[-run.test_rows :]
+
+    sample = train_index + test_index
+    corpus_index = CorpusIndex.build(rows)
+    print(f"computing {len(smoke.trainable_features())} features for {len(sample)} rows...")
+    started = time.monotonic()
+    vectors = []
+    for done, i in enumerate(sample, start=1):
+        vectors.append(compute(rows, i, context, corpus_index))
+        if done % 500 == 0 or done == len(sample):
+            rate = done / (time.monotonic() - started)
+            print(
+                f"  {done}/{len(sample)} rows  {rate:.0f}/s  "
+                f"~{(len(sample) - done) / rate / 60:.1f} min left",
+                flush=True,
+            )
+    labels = [bool(context.outcomes[rows[i].transaction_id].is_fraud) for i in sample]
+    accounts = [rows[i].account_id for i in sample]
+    train = list(range(len(train_index)))
+    test = list(range(len(train_index), len(sample)))
+    for name, part in (("train", train), ("test", test)):
+        if not any(labels[i] for i in part):
+            raise DatasetGapError(
+                f"the {name} sample holds no confirmed fraud, so the model would be fitted or "
+                f"scored against a single class; raise --{name}-rows"
+            )
+
+    names = smoke.trainable_features()
+    encoded = smoke.encode_categoricals(vectors, labels, accounts, train)
+    matrix = [
+        [encoded[name][i] if name in encoded else float(vectors[i][name]) for name in names]
+        for i in range(len(vectors))
+    ]
+    scores = smoke.fit_and_score(matrix, labels, train, test, seed=run.seed)
+    test_labels = [labels[i] for i in test]
+    model_auc, error, recall = smoke.evaluate(scores, test_labels)
+
+    def on_test(feature: str) -> float:
+        column = names.index(feature)
+        return smoke.floor_from([matrix[i][column] for i in test], test_labels)
+
+    best_feature = max(names, key=on_test)
+    best_trivial = max(evaluation.TRIVIAL_FEATURES, key=on_test)
+    span = rows[train_index[-1]].timestamp - rows[train_index[0]].timestamp
+    result = evaluation.Evaluation(
+        features=len(names),
+        train=evaluation.SegmentCounts("train", *evaluation.counts([labels[i] for i in train])),
+        test=evaluation.SegmentCounts("test", *evaluation.counts(test_labels)),
+        corpus_rows=len(rows),
+        train_covers_days=span.total_seconds() / 86_400,
+        model_auc=model_auc,
+        model_auc_error=error,
+        recall_at_1pct_fpr=recall,
+        baseline_auc=on_test(best_feature),
+        baseline_feature=best_feature,
+        trivial_auc=on_test(best_trivial),
+        trivial_feature=best_trivial,
+        boundaries=boundaries,
+    )
+    print(evaluation.summarise(result))
+    return 0
+
+
 def run_smoke(run: smoke.SmokeRun) -> int:
     """Train one model on the computable features and report it against the single-feature floor.
 
@@ -558,6 +689,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     auc_command.add_argument("--packs", type=Path, required=True)
     auc_command.add_argument("--corpus-rows", type=int, default=40_000)
     auc_command.add_argument("--sample-rows", type=int, default=2_000)
+    evaluate_command = commands.add_parser(
+        "evaluate",
+        help="fit on D-07's train period and score its test period, using the published split",
+    )
+    evaluate_command.add_argument("dataset", type=Path)
+    evaluate_command.add_argument("--packs", type=Path, required=True)
+    evaluate_command.add_argument(
+        "--split",
+        type=Path,
+        required=True,
+        help="split.json from fs-dataset split. Required: an evaluation on any other split is "
+        "not comparable with the gates, and defaulting would hide that",
+    )
+    evaluate_command.add_argument("--corpus-rows", type=int, default=400_000)
+    evaluate_command.add_argument("--train-rows", type=int, default=12_000)
+    evaluate_command.add_argument("--test-rows", type=int, default=8_000)
+    evaluate_command.add_argument("--seed", type=int, default=20260917)
     smoke_command = commands.add_parser(
         "smoke",
         help="train one model on the computable features and report it against the "
@@ -578,6 +726,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
+        if args.command == "evaluate":
+            return run_evaluate(
+                EvaluationRun(
+                    dataset=args.dataset,
+                    packs=args.packs,
+                    split=args.split,
+                    corpus_rows=args.corpus_rows,
+                    train_rows=args.train_rows,
+                    test_rows=args.test_rows,
+                    seed=args.seed,
+                )
+            )
         if args.command == "smoke":
             return run_smoke(
                 smoke.SmokeRun(

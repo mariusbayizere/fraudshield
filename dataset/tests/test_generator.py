@@ -112,6 +112,18 @@ def _files(root: Path) -> dict[str, str]:
 
 
 @pytest.fixture(scope="module")
+def sharing(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """A run large enough for device sharing to have a distribution rather than an instance."""
+    output = tmp_path_factory.mktemp("sharing")
+    generate(
+        build_config(load_parameters(), seed=20260917, total_rows=40_000),
+        output,
+        allow_missing_scenarios=True,
+    )
+    return output
+
+
+@pytest.fixture(scope="module")
 def small(tmp_path_factory: pytest.TempPathFactory) -> Path:
     output = tmp_path_factory.mktemp("small")
     generate(
@@ -721,3 +733,67 @@ def test_the_packs_command_publishes_the_facts_a_consumer_needs(tmp_path: Path) 
     again = tmp_path / "again.json"
     assert cli.main(["packs", "--output", str(again)]) == 0
     assert again.read_bytes() == output.read_bytes()
+
+
+@pytest.mark.req("ML-DATA-07", "D-08")
+def test_devices_are_shared_between_accounts(sharing: Path) -> None:
+    """PB-40: no device was ever seen on two accounts, so two features were dead by construction.
+
+    `accounts_per_device_7d` was identically 1 — zero variance, no signal — and the "shared device
+    across accounts" term of `synthetic_identity_score`, which Part E.2 names explicitly, was dead
+    with it. Neither is visible to a completeness check: both features computed, returned a
+    number, and carried nothing.
+
+    The assertion is on the **distribution**, not on the existence of one shared device. A single
+    shared handset would satisfy "sharing happens" while leaving the feature constant for every
+    row that matters, which is the shape E13 warns about. It runs at 40,000 rows rather than on
+    the 6,000-row fixture because a population of a few dozen customers cannot show a
+    distribution, and a test that asserted one there would be asserting a property of its own size.
+    """
+    devices: dict[str, set[str]] = {}
+    for path in sorted((sharing / "transactions").glob("month=*/*.parquet")):
+        table = pq.read_table(path, columns=["account_id", "device_fingerprint"])
+        for account, device in zip(
+            table.column("account_id").to_pylist(),
+            table.column("device_fingerprint").to_pylist(),
+            strict=True,
+        ):
+            if device is not None:
+                devices.setdefault(device, set()).add(account)
+
+    assert devices, "precondition: the run must produce devices at all"
+    counts = sorted(len(accounts) for accounts in devices.values())
+    shared = [n for n in counts if n > 1]
+    assert shared, "no device is used by more than one account, which is PB-40 unfixed"
+    assert max(counts) >= 3, (
+        f"the largest device serves {max(counts)} accounts; a ring shares one handset, so a "
+        "maximum of two means only the hand-me-down path fired and the ring path did not"
+    )
+    assert len(shared) / len(devices) < 0.5, (
+        "more than half of devices are shared, which would make 'device seen on two accounts' "
+        "ordinary enough to carry no information in the other direction"
+    )
+
+
+@pytest.mark.req("ML-DATA-07")
+def test_the_population_and_the_fraud_model_agree_on_who_is_synthetic() -> None:
+    """The one duplicated predicate in the generator, pinned (PB-40).
+
+    `Population._shared_device` needs to know whether a customer is a synthetic identity, and
+    `FraudModel._bust_out_month` decides it. The predicate is duplicated rather than shared,
+    because the fraud side draws the bust-out month from the *same* stream immediately afterwards
+    and factoring out the first draw would move the second. Duplication is only safe with a test
+    that fails when the two drift, and this is it.
+    """
+    config = build_config(load_parameters(), seed=20260917, total_rows=40_000)
+    population = Population(config)
+    fraud = FraudModel(config, population, LegitimateBehaviour(config, population))
+
+    verdicts = [
+        (population._is_synthetic_identity(i), fraud._bust_out_month(i) is not None)
+        for i in range(config.customers_total)
+    ]
+    assert any(mine for mine, _ in verdicts), "precondition: some customer must be synthetic"
+    assert not all(mine for mine, _ in verdicts), "precondition: and some must not be"
+    disagreements = [i for i, (mine, theirs) in enumerate(verdicts) if mine != theirs]
+    assert not disagreements, f"the two predicates disagree on customers {disagreements[:5]}"

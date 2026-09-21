@@ -17,6 +17,7 @@ import pyarrow.parquet as pq
 import pytest
 
 from fraudshield_ml import cli
+from fraudshield_ml.training.split import SplitUnavailableError
 
 START = datetime(2025, 1, 1, tzinfo=UTC)
 
@@ -355,3 +356,80 @@ def test_the_auc_command_refuses_a_sample_with_no_fraud(
     )
     assert code == 2
     assert "no confirmed fraud" in capsys.readouterr().err
+
+
+def _split_file(path: Path, boundary: datetime) -> Path:
+    """A published split placing `boundary` between train and validation.
+
+    Written by hand rather than produced by `fs-dataset split`, on purpose: `fraudshield_ml` reads
+    the published format and never imports the producer, so the test reads what a consumer reads.
+    The embargo is a real gap here, not a formality — a test whose embargo were empty would not
+    exercise the rule that excludes it.
+    """
+    micros = int(boundary.timestamp() * 1_000_000)
+    day = 86_400_000_000
+    path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "boundaries_micros": {
+                    "validation_start": micros,
+                    "calibration_start": micros + day // 2,
+                    "embargo_start": micros + day,
+                    "test_start": micros + 2 * day,
+                    "end": micros + 400 * day,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+@pytest.mark.req("D-07")
+def test_evaluate_refuses_a_corpus_that_does_not_reach_the_train_period(
+    dataset: Path, packs: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The failure mode this command is most likely to hit, so it gets a message and not a crash.
+
+    The corpus is read newest-first, so the train period is the part that runs out first: ask for
+    more training rows than the read reaches and you get a silently tiny training set unless
+    something refuses. Something refuses.
+    """
+    split = _split_file(tmp_path / "split.json", START - timedelta(days=365))
+    code = cli.main(
+        [
+            "evaluate",
+            str(dataset),
+            "--packs",
+            str(packs),
+            "--split",
+            str(split),
+            "--corpus-rows",
+            "240",
+            "--train-rows",
+            "50",
+            "--test-rows",
+            "20",
+        ]
+    )
+    assert code == 2
+    assert "rows in the train period" in capsys.readouterr().err
+
+
+@pytest.mark.req("D-07")
+def test_evaluate_refuses_a_split_that_was_never_published(
+    dataset: Path, packs: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A default split would be a split nobody chose, and its number would look like every other."""
+    with pytest.raises(SplitUnavailableError, match="does not exist"):
+        cli.main(
+            [
+                "evaluate",
+                str(dataset),
+                "--packs",
+                str(packs),
+                "--split",
+                str(tmp_path / "absent.json"),
+            ]
+        )
