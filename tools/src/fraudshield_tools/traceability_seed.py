@@ -192,7 +192,10 @@ DEFECT_MILESTONES: dict[str, str] = {
 FR_MILESTONE_OVERRIDES: dict[str, str] = {
     "FR-01-07": "M1",
     "FR-02-02": "M3",
-    "FR-02-09": "M3",
+    # ADR 0027: the build prompt's M5 gate reads "FR-02-01, 02-04 ... 02-10 tests pass", which
+    # includes FR-02-09, while the register filed the Redis feature store under M3. There is no
+    # feature store, no Redis and no Prometheus; M5 is the milestone that builds them.
+    "FR-02-09": "M5",
     "FR-02-03": "M4",
     "FR-02-04": "M4",
     "FR-06-01": "M7",
@@ -238,13 +241,19 @@ ROW_MILESTONE_OVERRIDES = {
     # and feature store (Part E.2)", gate: "all 44 feature unit tests pass for all 6 channels")
     # while M2's gate names rows, distribution targets, leakage and the datasheet and says nothing
     # about features. A requirement filed under the wrong milestone, of the same family as D-01.
-    "ML-DATA-07": "M3",
+    # ADR 0027: a completeness requirement cannot be judged before the data it counts exists.
+    # Six of the 44 are missing for 100% of records; kyc_tier and the two agent features need
+    # tables M6 builds, and the two account-age features need the per-account durable table
+    # PB-37 records as absent. M6 is the last of the enabling milestones.
+    "ML-DATA-07": "M6",
     "NFR-SEC-05": "M1",
     "NFR-SEC-06": "M6",
     "NFR-SEC-03": "M7",  # ADR 0021: vault and tokenisation M6, analyst inspector test M7
     "ML-GATE-12": "M5",
     "ML-GATE-13": "M5",
-    "TEST-01": "M3",
+    # ADR 0027: three of TEST-01's four named scenarios are covered; the fourth needs
+    # round_sum_flag, whose source-data gap the registry schedules for M4.
+    "TEST-01": "M4",
     "TEST-02": "M4",
     "TEST-03": "M6",
     "TEST-04": "M7",

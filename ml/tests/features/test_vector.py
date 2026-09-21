@@ -94,16 +94,21 @@ def test_the_six_without_source_data_are_dead_at_any_size(
 ) -> None:
     """A property of the data's *shape* rather than its size, so it must hold here too.
 
-    Opening dates, tier histories, agent standing and denominations are absent from this fixture
-    for the same reason they are absent from the benchmark: nothing produces them. Every declared
+    Opening dates, tier histories and agent standing are absent from this fixture for the same
+    reason they are absent from the benchmark: nothing produces them. Every declared
     NO_SOURCE_DATA feature must therefore produce no value at all, and none may appear among the
     mismatches — one that did would mean the fixture supplies something the benchmark does not.
+
+    Denominations used to be on that list and are not any more: they became a pack field on
+    2026-09-20, so the fixture supplies them exactly as the benchmark does. The count below is
+    asserted rather than derived so that a sixth feature quietly losing its source, or a fifth
+    quietly gaining one, has to be a deliberate edit here.
     """
     result = vector.computability(corpus, context, sample=sample)
     declared = {
         name for name, spec in REGISTRY.items() if spec.computable is Computability.NO_SOURCE_DATA
     }
-    assert len(declared) == 6
+    assert len(declared) == 5
     for name in declared:
         assert result.distinct[name] == 0, f"{name} produced a value"
         assert result.nan_rate[name] == 1.0
@@ -172,18 +177,27 @@ def test_a_revived_feature_is_reported_so_the_register_cannot_drift_into_pessimi
     sample: list[int],
     make_context: Callable[..., FeatureContext],
 ) -> None:
-    """Supply the denominations and `round_sum_flag` comes alive while the register says it is dead.
+    """Supply the opening dates and `account_age_days` comes alive while the register calls it
+    dead.
 
     Without this direction, wiring the data and forgetting the declaration would leave the register
     stale in a way a reader has no reason to question — pessimism reads as caution.
+
+    This test used to make its point with `round_sum_flag` and a denomination table. It could not
+    keep doing so: `round_denominations` became a pack field on 2026-09-20 and the feature is now
+    declared COMPUTABLE, so supplying the table is no longer a revival. The property is unchanged
+    and the case moved to a feature that is still waiting for its source — which is the shape this
+    test will keep needing, since a revived feature is by definition one whose declaration is about
+    to change.
     """
-    with_denominations = vector.computability(
-        corpus, make_context(denominations={"AAA": (1_000, 5_000)}), sample=sample
-    )
-    mismatches = {name: (d, o) for name, d, o in with_denominations.mismatched}
-    assert "round_sum_flag" in mismatches
-    assert mismatches["round_sum_flag"][0] is Computability.NO_SOURCE_DATA
-    assert "still says it is dead" in vector.describe(with_denominations)
+    opened = {t.account_id: t.timestamp - timedelta(days=400) for t in corpus}
+    assert opened, "precondition: the corpus must name accounts, or nothing is revived"
+    revived = vector.computability(corpus, make_context(opened_at=opened), sample=sample)
+    mismatches = {name: (d, o) for name, d, o in revived.mismatched}
+    assert "account_age_days" in mismatches
+    assert mismatches["account_age_days"][0] is Computability.NO_SOURCE_DATA
+    assert mismatches["account_age_days"][1] is Computability.COMPUTABLE
+    assert "still says it is dead" in vector.describe(revived)
 
 
 @pytest.mark.req("FR-02-02", "ML-DATA-07")

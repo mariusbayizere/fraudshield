@@ -1745,3 +1745,40 @@ partition and the prior sets over every partition earlier than the corpus;
 `test_truncating_the_corpus_changes_no_unbounded_feature` scores the same row against the full
 corpus and a truncated one and requires all five to be identical, with a control proving the
 truncated corpus really does hide the history.
+
+### 2026-09-20 · Eleven minutes of feature computation to discover a missing import
+
+The M4 pipeline smoke test computed 36 features for 20,000 rows — eleven minutes — and then died
+on the first line of the model half:
+
+```
+ImportError: sklearn needs to be installed in order to use this module
+```
+
+`xgboost.XGBClassifier` is the scikit-learn wrapper and imports scikit-learn, which this package
+does not depend on. The fix was to use the booster API instead, which is four lines and the right
+dependency footprint. The cost was the whole feature pass, thrown away.
+
+What makes this worth an entry is not the import. It is the **shape of the command**: an expensive
+irreversible stage followed by a cheap fragile one, with nothing between them. Every minute of the
+expensive stage is wagered on the cheap stage being correct, and the wager is settled only at the
+end. The same shape produced the earlier loss today, where a 30,000-row run spent 106 minutes
+printing nothing at all, because the progress line came before the loop rather than inside it.
+
+Three changes, and the third is the general one:
+
+1. **The model half is a function with a test.** `fit_and_score` trains a booster on 200 synthetic
+   rows with one planted signal column, in under a second. The failing import fails there now, and
+   a column of pure NaN is exercised beside it (D-04), because that is what the benchmark hands it.
+2. **The expensive stage writes its output.** `--cache` stores the computed matrix keyed on the
+   dataset, the corpus size, the sample size and the feature list, so a failure after it costs
+   seconds rather than the pass. The key matters as much as the cache: one keyed on nothing is a
+   way to report one run's numbers under another run's settings, and each field is asserted to
+   invalidate on its own.
+3. **The expensive stage reports progress.** Rate and estimated time, every 500 rows. A silent
+   hour and a hang are the same observation, and I spent 106 minutes not distinguishing them.
+
+The habit to carry: **when a pipeline has an expensive stage and a cheap one, test the cheap one
+first and persist the expensive one's output.** Neither is a new idea; what is new is noticing that
+"run the whole thing and see" is the default shape and costs a working session's worth of machine
+time before it teaches anything.

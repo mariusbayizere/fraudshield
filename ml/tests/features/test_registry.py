@@ -535,12 +535,17 @@ def test_a_computable_feature_may_not_carry_a_source_data_gap() -> None:
 
 
 @pytest.mark.req("FR-02-02", "ML-DATA-07")
-def test_every_feature_declares_its_computability_and_six_have_no_source_data() -> None:
+def test_every_feature_declares_its_computability_and_five_have_no_source_data() -> None:
     """The registry-wide form, with the count asserted so that a change has to be deliberate.
 
-    The six are the measured set, not an estimate: an earlier session's note said eight, from
-    reasoning about which inputs were missing rather than from computing the features. The
-    computability check exists because that kind of arithmetic is exactly what gets it wrong.
+    The set is measured, not estimated: an earlier session's note said eight, from reasoning about
+    which inputs were missing rather than from computing the features. The computability check
+    exists because that kind of arithmetic is exactly what gets it wrong.
+
+    It was six until `round_denominations` became a pack field (PB-44, 2026-09-20). The five that
+    remain all need tables that do not exist — a per-account durable table for the two account
+    ages and `kyc_tier`, an agent standing table for the two agent features — which is why
+    `round_sum_flag` was the one that could close alone.
     """
     gaps = {n: s.source_data_gap for n, s in REGISTRY.items() if s.source_data_gap}
     assert set(gaps) == {
@@ -549,9 +554,8 @@ def test_every_feature_declares_its_computability_and_six_have_no_source_data() 
         "kyc_tier",
         "agent_float_utilisation_ratio",
         "agent_distance_from_registered_km",
-        "round_sum_flag",
     }
-    assert len(REGISTRY) - len(gaps) == 38, "38 of the 44 have data to read"
+    assert len(REGISTRY) - len(gaps) == 39, "39 of the 44 have data to read"
     for name, gap in gaps.items():
         assert re.search(r"\bM\d+\b", gap or ""), f"{name}: no milestone named"
 
@@ -611,4 +615,4 @@ def test_the_three_computability_states_partition_the_registry() -> None:
         "just_below_limit_flag",
         "accounts_per_device_7d",
     }
-    assert len(by_state[Computability.NO_SOURCE_DATA]) == 6
+    assert len(by_state[Computability.NO_SOURCE_DATA]) == 5

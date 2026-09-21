@@ -1,4 +1,4 @@
 # Milestone gate state (build prompt D.3). A milestone is listed in "completed" only
 # after its gate passed and its milestone review verdict was APPROVED or APPROVED_WITH_MINORS.
-current: M3
-completed: [M0, M1, M2]
+current: M4
+completed: [M0, M1, M2, M3]

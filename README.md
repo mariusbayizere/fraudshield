@@ -4,11 +4,13 @@ Real-time explainable fraud detection and analyst intelligence platform for East
 digital payments: mobile money, USSD, agent banking, cards, online and bank transfers across
 Rwanda, Kenya, Tanzania, Uganda and the DRC.
 
-> **Project status: M3 — the feature pipeline.** M0 (bootstrap and governance), M1 (contracts
-> and database) and M2 (the synthetic dataset generator, verified at 1,006,249 rows) are
-> complete. No fraud model or running service is implemented yet. This README states only
-> what exists and has been verified; measured results are given with their scale and the run
-> that produced them.
+> **Project status: M4 — models, calibration and evaluation.** M0 (bootstrap and governance),
+> M1 (contracts and database), M2 (the synthetic dataset generator, verified at 1,006,249 rows)
+> and M3 (44 features on two independent paths, 36 of them computable on this benchmark) are
+> complete. No fraud model is trained and no running service is implemented yet: the only model
+> figure this repository holds is a pipeline smoke test, labelled as such. This README states
+> only what exists and has been verified; measured results are given with their scale and the
+> run that produced them.
 > FraudShield is an independent research project. It is not deployed at, endorsed by, or
 > validated with any financial institution or regulator.
 

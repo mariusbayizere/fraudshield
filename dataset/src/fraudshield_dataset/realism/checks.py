@@ -62,6 +62,7 @@ from fraudshield_dataset.realism.stats import (
     separation,
     wilson_interval,
 )
+from fraudshield_dataset.release.split import SEGMENT_LABELS, segment_counts
 
 SINGLE_FEATURE_AUC_LIMIT = 0.80
 SHORTCUT_TOLERANCE = 0.03
@@ -996,25 +997,11 @@ def run_checks(
 
 
 def split_counts(data: Dataset, config: SimulationConfig) -> dict[str, dict[str, float]]:
-    s = config.split
-    t = data.timestamps
-    true, observed = data.true, data.observed
-    masks = {
-        "train": t < s.validation_start,
-        "validation": (t >= s.validation_start) & (t < s.embargo_start),
-        "calibration (last part of validation)": (t >= s.calibration_start) & (t < s.embargo_start),
-        "embargo (excluded)": (t >= s.embargo_start) & (t < s.test_start),
-        "test": t >= s.test_start,
-    }
-    out = {}
-    for name, mask in masks.items():
-        count = int(mask.sum())
-        out[name] = {
-            "rows": count,
-            "true_fraud_rate": float(true[mask].mean()) if count else 0.0,
-            "observed_fraud_rate": float(observed[mask].mean()) if count else 0.0,
-            "span_days": round(float(t[mask].max() - t[mask].min()) / _MICROS_PER_DAY, 2)
-            if count
-            else 0.0,
-        }
-    return out
+    """The report's split table, computed by the same code that publishes `split.json` (PB-48).
+
+    Keyed by the label the report prints rather than by the machine key, which is the only
+    difference between the two: the definition of who belongs to which segment has one home, in
+    `release.split`, so the report and the release cannot drift apart.
+    """
+    counts = segment_counts(data.timestamps, data.true, data.observed, config.split)
+    return {SEGMENT_LABELS[key]: counts[key] for key in SEGMENT_LABELS}

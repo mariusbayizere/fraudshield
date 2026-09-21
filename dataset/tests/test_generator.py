@@ -90,6 +90,14 @@ parameters:
     rationale: >-
       A bloc of one, sharing membership with no simulated country, so every corridor to Country Z
       is cross-bloc and a bloc list hard-coded to African communities would be caught.
+  round_denominations:
+    value: [7, 343]
+    unit: common denominations of this country's currency, in minor units
+    provenance: ASSUMED
+    rationale: >-
+      Powers of seven rather than of ten, so a denomination table hard-coded to decimal steps --
+      or a feature that tested roundness by counting trailing zeros instead of by taking a
+      remainder -- would be caught here rather than in a currency where the two agree.
 """
 
 

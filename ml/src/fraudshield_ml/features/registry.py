@@ -1010,13 +1010,11 @@ for _spec_ in (
         ),
         template_id="amount.round_sum_flag",
         reference_data_basis=ReferenceDataBasis.NOT_REFERENCE_DATA,
-        computable=Computability.NO_SOURCE_DATA,
-        source_data_gap=(
-            "A round_denominations field in the country packs, keyed by currency (ADR 0023). "
-            "Supplied in M3 together with PB-41's pending report regeneration, because adding a "
-            "parameter makes the committed realism report stale anyway and the two then cost one "
-            "evidence run rather than two."
-        ),
+        # Closed 2026-09-20 (PB-44): `round_denominations` is now a pack field, published by
+        # `fs-dataset packs` and read by `denominations_by_currency`. It declared NO_SOURCE_DATA
+        # for the whole of M3 while being fully implemented on both paths — the gap was never the
+        # code, it was that nothing supplied the table.
+        computable=Computability.COMPUTABLE,
     ),
     FeatureSpec(
         name="just_below_limit_flag",

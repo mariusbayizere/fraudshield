@@ -128,8 +128,12 @@ def test_e5_no_feature_reads_identifier_bytes(
     # The bijection has to reach the context too, or this stops being a relabelling and becomes a
     # test that withholding labels and SIM swaps changes the answer — which it does, and which is
     # a different fact. `outcomes` is keyed by transaction and `sim_swaps` by account.
-    renamed_context = FeatureContext(
-        countries=context.countries,
+    # `replace` carries every other field across unchanged. Listing them by hand made the claim
+    # "only the identifiers moved" depend on the list staying complete, and it did not: adding
+    # `denominations` to the context dropped it here and `round_sum_flag` went NaN under the
+    # relabelling, which reads as a leak and is a missing keyword argument.
+    renamed_context = replace(
+        context,
         outcomes={
             relabel[k]: Outcome(relabel[k], v.is_fraud, v.available_at)
             for k, v in context.outcomes.items()
@@ -141,8 +145,6 @@ def test_e5_no_feature_reads_identifier_bytes(
         # fact (PB-37).
         first_seen={account_map[k]: v for k, v in context.first_seen.items()},
         device_first_seen={device_map[k]: v for k, v in context.device_first_seen.items()},
-        cash_out_codes=context.cash_out_codes,
-        cell_rate_prior=context.cell_rate_prior,
     )
 
     original = [{k: _bits(v) for k, v in compute(corpus, i, context).items()} for i in sample]
@@ -342,15 +344,11 @@ def test_e5_no_feature_reads_the_label_delay(
         if spec.contract is not None and spec.contract.label_basis.value == "available_at_lag"
     } == label_readers, "precondition: the registry still names these two as label-derived"
 
-    halved = FeatureContext(
-        countries=context.countries,
-        outcomes=tightened,
-        sim_swaps=context.sim_swaps,
-        first_seen=context.first_seen,
-        device_first_seen=context.device_first_seen,
-        cash_out_codes=context.cash_out_codes,
-        cell_rate_prior=context.cell_rate_prior,
-    )
+    # `replace` rather than a fresh FeatureContext listing the fields by hand. The claim under
+    # test is "only the labels changed", and re-specifying the context makes that claim depend on
+    # the list being complete: when `denominations` was added to the context, the hand-written
+    # version silently dropped it and `round_sum_flag` "changed when the label delay changed".
+    halved = replace(context, outcomes=tightened)
     for i in sample:
         before = compute(corpus, i, context)
         after = compute(corpus, i, halved)

@@ -13,6 +13,7 @@ import argparse
 import json
 import math
 import sys
+import time
 from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
@@ -35,6 +36,7 @@ from fraudshield_ml.metrics.single_feature import (
     out_of_fold_target_encoding,
     separation,
 )
+from fraudshield_ml.training import smoke
 
 #: Columns the vector needs from each table. Named rather than read wholesale so that a schema
 #: change removing one fails here, with the column named, instead of somewhere inside a feature.
@@ -89,6 +91,32 @@ def minor_units_by_currency(path: Path) -> dict[str, int]:
     """
     facts = json.loads(path.read_text(encoding="utf-8"))
     return {str(entry["currency"]): int(entry["currency_minor_units"]) for entry in facts.values()}
+
+
+def denominations_by_currency(path: Path) -> dict[str, tuple[int, ...]]:
+    """Common denominations in minor units, keyed by currency, from the published packs (PB-44).
+
+    `round_sum_flag` was NO_SOURCE_DATA for the whole of M3 not because it was unimplemented — it
+    has been on both paths since the group landed — but because nothing supplied this table. It is
+    read from `packs.json` rather than from the generator's YAML for the reason every other pack
+    fact is: the feature pipeline consumes the published interchange format and never imports
+    `fraudshield_dataset`.
+
+    Two packs sharing a currency must agree, and disagreement is refused rather than resolved:
+    picking one would make the flag depend on which pack was read first.
+    """
+    facts = json.loads(path.read_text(encoding="utf-8"))
+    table: dict[str, tuple[int, ...]] = {}
+    for code, entry in sorted(facts.items()):
+        currency = str(entry["currency"])
+        steps = tuple(int(v) for v in entry["round_denominations"])
+        existing = table.setdefault(currency, steps)
+        if existing != steps:
+            raise DatasetGapError(
+                f"{currency} has two denomination tables in the packs ({list(existing)} and "
+                f"{list(steps)} from {code}); roundness would depend on which pack was read first"
+            )
+    return table
 
 
 def country_by_currency(path: Path) -> dict[str, str]:
@@ -306,6 +334,7 @@ def run_computability(root: Path, packs: Path, corpus_rows: int, sample_rows: in
         countries_before=corridors,
         devices_before=handsets,
         cash_out_codes=frozenset({CASH_DISBURSEMENT_MCC}),
+        denominations=denominations_by_currency(packs),
         cell_rate_prior=0.0087,
     )
     sample = list(range(len(rows) - sample_rows, len(rows)))
@@ -341,6 +370,7 @@ def run_auc(root: Path, packs: Path, corpus_rows: int, sample_rows: int) -> int:
         countries_before=corridors,
         devices_before=handsets,
         cash_out_codes=frozenset({CASH_DISBURSEMENT_MCC}),
+        denominations=denominations_by_currency(packs),
         cell_rate_prior=0.0087,
     )
 
@@ -399,6 +429,114 @@ def run_auc(root: Path, packs: Path, corpus_rows: int, sample_rows: int) -> int:
     return 0
 
 
+def run_smoke(run: smoke.SmokeRun) -> int:
+    """Train one model on the computable features and report it against the single-feature floor.
+
+    A pipeline check. Everything about it is chosen for speed and legibility rather than for
+    evaluation quality, and `summarise` says so in its own first three lines so the caveat travels
+    with the number instead of living in a docstring nobody pastes.
+    """
+    root, packs = run.dataset, run.packs
+    corpus_rows, sample_rows, seed, cache = (
+        run.corpus_rows,
+        run.sample_rows,
+        run.seed,
+        run.cache,
+    )
+    rows = read_transactions(root, packs, limit=corpus_rows)
+    if len(rows) < sample_rows * 2:
+        raise DatasetGapError(
+            f"read {len(rows)} transactions, too few to score {sample_rows} with history behind "
+            "them; raise --corpus-rows or lower --sample-rows"
+        )
+    outcomes = read_outcomes(root, {row.transaction_id for row in rows})
+    first_seen, device_first_seen = read_first_seen(root)
+    payees, corridors, handsets = read_known_before(root, rows[0].timestamp)
+    context = FeatureContext(
+        countries=load_packs(packs),
+        outcomes=outcomes,
+        sim_swaps=read_sim_swaps(root),
+        first_seen=first_seen,
+        device_first_seen=device_first_seen,
+        counterparties_before=payees,
+        countries_before=corridors,
+        devices_before=handsets,
+        cash_out_codes=frozenset({CASH_DISBURSEMENT_MCC}),
+        denominations=denominations_by_currency(packs),
+        cell_rate_prior=0.0087,
+    )
+
+    sample = list(range(len(rows) - sample_rows, len(rows)))
+    cached = smoke.cache_read(cache, run.key) if cache else None
+    if cached is not None:
+        vectors, labels, accounts = cached
+        print(f"reusing {len(vectors)} cached feature rows from {cache}")
+    else:
+        corpus_index = CorpusIndex.build(rows)
+        print(f"computing {len(smoke.trainable_features())} features for {len(sample)} rows...")
+        # Progress, because the feature pass is the expensive half and a silent hour cannot be
+        # told apart from a hang — which is exactly how the first attempt at this run was spent.
+        started = time.monotonic()
+        vectors = []
+        for done, i in enumerate(sample, start=1):
+            vectors.append(compute(rows, i, context, corpus_index))
+            if done % 500 == 0 or done == len(sample):
+                rate = done / (time.monotonic() - started)
+                left = (len(sample) - done) / rate
+                print(
+                    f"  {done}/{len(sample)} rows  {rate:.0f}/s  ~{left / 60:.1f} min left",
+                    flush=True,
+                )
+        labels = [bool(outcomes[rows[i].transaction_id].is_fraud) for i in sample]
+        accounts = [rows[i].account_id for i in sample]
+        if cache:
+            smoke.cache_write(cache, run.key, vectors, labels, accounts)
+            print(f"wrote the feature matrix to {cache}")
+
+    # A time-ordered holdout: the sample is already in timestamp order, so the last 30% is later
+    # than the first 70%. This is A temporal split, not D-07's, which has an embargo and different
+    # boundaries — the report says so rather than leaving it to be assumed.
+    cut = int(len(sample) * 0.7)
+    train, test = list(range(cut)), list(range(cut, len(sample)))
+    if not any(labels[i] for i in train) or not any(labels[i] for i in test):
+        raise DatasetGapError(
+            "one side of the holdout holds no confirmed fraud, so the model would train or be "
+            "scored against a single class; raise --sample-rows"
+        )
+
+    names = smoke.trainable_features()
+    encoded = smoke.encode_categoricals(vectors, labels, accounts, train)
+    # One row per scored transaction, one column per trainable feature, in a fixed order. The two
+    # categoricals come from `encoded`; everything else is already a float, including the
+    # structural NaNs, which XGBoost splits on natively (D-04) rather than having them imputed.
+    matrix = [
+        [encoded[name][i] if name in encoded else float(vectors[i][name]) for name in names]
+        for i in range(len(vectors))
+    ]
+
+    scores = smoke.fit_and_score(matrix, labels, train, test, seed=seed)
+    test_labels = [labels[i] for i in test]
+
+    model_auc, error, recall = smoke.evaluate(scores, test_labels)
+    floor_index = names.index(smoke.FLOOR_FEATURE)
+    floor = smoke.floor_from([matrix[i][floor_index] for i in test], test_labels)
+
+    result = smoke.SmokeResult(
+        features=len(names),
+        train_rows=len(train),
+        test_rows=len(test),
+        train_fraud=sum(1 for i in train if labels[i]),
+        test_fraud=sum(1 for i in test if labels[i]),
+        model_auc=model_auc,
+        model_auc_error=error,
+        recall_at_1pct_fpr=recall,
+        baseline_auc=floor,
+        baseline_feature=smoke.FLOOR_FEATURE,
+    )
+    print(smoke.summarise(result))
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="fs-features", description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -420,9 +558,37 @@ def main(argv: Sequence[str] | None = None) -> int:
     auc_command.add_argument("--packs", type=Path, required=True)
     auc_command.add_argument("--corpus-rows", type=int, default=40_000)
     auc_command.add_argument("--sample-rows", type=int, default=2_000)
+    smoke_command = commands.add_parser(
+        "smoke",
+        help="train one model on the computable features and report it against the "
+        "single-feature floor. A PIPELINE CHECK, not a result",
+    )
+    smoke_command.add_argument("dataset", type=Path)
+    smoke_command.add_argument("--packs", type=Path, required=True)
+    smoke_command.add_argument("--corpus-rows", type=int, default=200_000)
+    smoke_command.add_argument("--sample-rows", type=int, default=30_000)
+    smoke_command.add_argument("--seed", type=int, default=20260917)
+    smoke_command.add_argument(
+        "--cache",
+        type=Path,
+        default=None,
+        help="reuse the computed feature matrix here when it was computed for this dataset, "
+        "corpus size, sample size and feature set; write it there otherwise",
+    )
     args = parser.parse_args(argv)
 
     try:
+        if args.command == "smoke":
+            return run_smoke(
+                smoke.SmokeRun(
+                    dataset=args.dataset,
+                    packs=args.packs,
+                    corpus_rows=args.corpus_rows,
+                    sample_rows=args.sample_rows,
+                    seed=args.seed,
+                    cache=args.cache,
+                )
+            )
         if args.command == "auc":
             return run_auc(args.dataset, args.packs, args.corpus_rows, args.sample_rows)
         return run_computability(args.dataset, args.packs, args.corpus_rows, args.sample_rows)

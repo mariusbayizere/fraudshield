@@ -29,6 +29,7 @@ from fraudshield_dataset.generator.keys import SHARDS, shard_of, stream
 from fraudshield_dataset.generator.legit import LegitimateBehaviour, month_start_micros
 from fraudshield_dataset.generator.population import Customer, Population
 from fraudshield_dataset.generator.schema import ACCOUNT_EVENTS, LABELS, TRANSACTIONS, Rows
+from fraudshield_dataset.release.split import planned_block
 
 ROW_GROUP_SIZE = 65_536
 _WRITE_OPTIONS = {
@@ -280,6 +281,10 @@ def generate(
         "rows_by_month": rows_by_month,
         "rows_by_day": dict(sorted(daily.items())),
         "rows_dropped_after_simulation_end": dropped_after_end,
+        # The four D-07 boundaries, recorded by the only code that knows them for certain (PB-48).
+        # They are planned from the target row count, which nothing else in the output carries, so
+        # a consumer cannot recompute them and this is their only home outside the planner.
+        "split": planned_block(config),
         # Empty for any dataset worth releasing. Non-empty means the run was too small to stage
         # these scenarios and said so was acceptable, so the dataset identifies its own gap rather
         # than looking like a small release (M2 milestone review, MAJOR M-4).

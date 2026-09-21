@@ -137,6 +137,11 @@ def _context(**overrides: object) -> FeatureContext:
             )
             for i, row in enumerate(CORPUS)
         },
+        # The denominations the benchmark's packs now carry (PB-44, 2026-09-20). The corpus was
+        # already built for them -- every fourth amount is 7 minor units off a multiple of a
+        # thousand -- so the flag varies here as it does on the benchmark. Before the pack field
+        # existed this was absent, and `round_sum_flag` was NO_SOURCE_DATA in both places.
+        "denominations": {"AAA": (1_000,)},
         "cash_out_codes": frozenset({"6011"}),
         "cell_rate_prior": 0.0087,
     }

@@ -28,6 +28,9 @@ PACKS = {
         "utc_offset_hours": 2,
         "currency": "AAA",
         "currency_minor_units": 0,
+        # Powers of three, not of ten, so a denomination table hard-coded to decimal steps or a
+        # roundness test that counted trailing zeros would be caught here.
+        "round_denominations": [3, 9, 27],
     },
     "BB": {
         "alpha2": "BB",
@@ -36,6 +39,7 @@ PACKS = {
         "utc_offset_hours": 3,
         "currency": "BBB",
         "currency_minor_units": 2,
+        "round_denominations": [500, 1000],
     },
     # A third pack on another continent, reached only late in the corpus. It gives
     # `is_new_country_for_account` something still to discover inside the scored half, and gives
@@ -48,6 +52,7 @@ PACKS = {
         "utc_offset_hours": -4,
         "currency": "CCC",
         "currency_minor_units": 0,
+        "round_denominations": [7],
     },
 }
 

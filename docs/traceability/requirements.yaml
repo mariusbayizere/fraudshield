@@ -151,12 +151,22 @@ requirements:
   defects:
   - D-03
   - D-04
-  status: NOT_STARTED
+  status: DONE_WITH_DEVIATION
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - ml/src/fraudshield_ml/features/registry.py
+  - ml/src/fraudshield_ml/features/batch.py
+  - ml/src/fraudshield_ml/features/online.py
+  - ml/src/fraudshield_ml/features/vector.py
+  evidence:
+  - ml/tests/features/test_completeness.py (all 44 computed for every channel, including USSD with a null
+    device_fingerprint)
+  - ml/tests/features/test_parity.py (the batch and online paths agree within ADR 0025's tolerance)
+  - docs/features.md
+  - docs/benchmarks/m3_computability_fad43dd.txt
   deviations:
   - docs/adr/0023-africa-wide-portability.md
+  - docs/adr/0027-m3-must-rows-filed-under-a-milestone-that-cannot-meet-them.md
   notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
     never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.
     Deviation (owner decision 2026-09-19, ADR 0023): corridor_class is DOMESTIC | INTRA_BLOC | CROSS_BLOC_AFRICA
@@ -277,7 +287,7 @@ requirements:
   title: Redis feature store pre-computes and updates velocity features for every account within 100ms
     of transaction completion
   priority: M
-  milestone: M3
+  milestone: M5
   srs_text: 'Acceptance criterion: Redis key TTL set to 30 days; stale key handled by DB fallback; update
     latency measured by Prometheus; p99 < 100ms'
   defects: []
@@ -2392,7 +2402,7 @@ requirements:
   section: 7.1 Dataset
   title: Feature completeness
   priority: M
-  milestone: M3
+  milestone: M6
   srs_text: 'Specification: All 44 features computable for >= 98% of records; < 2% any missing feature;
     Rationale: Missing features handled by median imputation; completeness verified in pipeline'
   defects:
@@ -2422,15 +2432,21 @@ requirements:
   verification: test
   implementation:
   - dataset/src/fraudshield_dataset/release/export.py
+  - dataset/src/fraudshield_dataset/release/split.py
   evidence:
   - dataset/tests/test_export.py (release assembled, licence verbatim, SHA256SUMS verifiable)
+  - dataset/tests/test_split.py (the published split reproduces the realism report's table)
   - dataset/realism_report.md
   deviations: []
   notes: 'Requires two external parties and the owner''s accounts on both: HuggingFace Datasets Hub for
     hosting and Zenodo for the DOI. The release itself is built and verifiable -- fs-dataset export writes
     the Parquet partitions, a CSV copy, the licence verbatim with its SHA-256, the datasheet and a SHA256SUMS
     a recipient checks with one command. Publication is an owner action, not a scheduling problem, so
-    this row is not reassigned to a later milestone (ADR 0024).'
+    this row is not reassigned to a later milestone (ADR 0024). SELF-DESCRIBING AS OF 2026-09-20 (PB-48):
+    manifest.json records the four D-07 boundaries the generator planned, fs-dataset split writes them
+    with measured segment counts, and release.json carries the same block -- a consumer holding only the
+    release can now say which rows are training rows, which it could not before. Datasets generated earlier
+    carry no block and the tooling refuses them rather than reconstructing boundaries it cannot recover.'
 - id: ML-GATE-01
   section: 7.2 Model deployment gate
   title: AUC-ROC (last-3-month test set)
@@ -2972,7 +2988,7 @@ requirements:
   section: 9 Testing requirements
   title: 'Unit: Feature Engineering'
   priority: M
-  milestone: M3
+  milestone: M4
   srs_text: 'Framework: pytest; Coverage Target: All 44 features; all 6 channel types; edge cases; Key
     Scenarios: USSD: 40 features computed without device_fingerprint; AGENT_BANKING: agent-specific features
     only computed for AGENT channel; round_sum_flag: correct for EAC cultural norms; velocity: correct
@@ -3201,13 +3217,13 @@ requirements:
   - dataset/src/fraudshield_dataset/generator/pipeline.py
   - dataset/src/fraudshield_dataset/release/export.py
   evidence:
-  - dataset/realism_report.md (1,012,522 rows, seed 20260917, tree d85385f, all gate checks pass)
+  - dataset/realism_report.md (1,006,249 rows, seed 20260917, fingerprint 40a77bb6, all gate checks pass)
   - dataset/tests/test_generator.py
   - dataset/tests/test_realism_checks.py
   - dataset/tests/test_export.py
   deviations: []
   notes: See ADR 0024 for why the feature clause is not M2's to satisfy.
-  reduced_scale: 'Verified at 1,012,522 rows against a 5,000,000-row specification. Delivered at this
+  reduced_scale: 'Verified at 1,006,249 rows against a 5,000,000-row specification. Delivered at this
     scale: CSV and Parquet output, 8 fraud types, 6 channels, 5 EAC countries, CC BY 4.0, determinism
     from a seed, and every realism and anti-leakage gate. Carried: the 5,000,000-row count is PB-25, blocked
     because workflow_dispatch registers only from the default branch, still m0/bootstrap, and the run
@@ -3339,11 +3355,20 @@ requirements:
   defects: []
   affects:
   - FR-02-02
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - ml/src/fraudshield_ml/features/registry.py
+  evidence:
+  - ml/tests/features/test_registry.py (the catalogue is 44 and its groups match Part E.2 group by group,
+    not just in total)
+  - ml/tests/features/test_completeness.py (every registry name has an implementation on both paths)
   deviations: []
+  notes: 'RESOLVED (M3, 2026-09-20): FR-02-02''s own register row lists group counts summing to 46 --
+    temporal (7) and account profile (5) where Part E.2''s catalogue names 6 and 4. E.2 enumerates every
+    feature by name, so it is authoritative and the registry is pinned to it group by group. A bare len
+    == 44 would pass with a temporal feature miscounted as account profile, which is the confusion this
+    defect is about, so the test asserts the group counts rather than the total.'
 - id: D-04
   section: Build prompt Part B defect register
   title: '"USSD: 40 features computed without device_fingerprint" is undefined.'
@@ -3356,10 +3381,15 @@ requirements:
   - FR-01-04
   - ML-DATA-07
   - TEST-01
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - ml/src/fraudshield_ml/features/registry.py
+  - ml/src/fraudshield_ml/features/vector.py
+  evidence:
+  - ml/tests/features/test_registry.py (the four device features and the four agent features are NaN together,
+    and nothing else is)
+  - ml/tests/metrics/test_single_feature.py (NaN scores are dropped with their labels, not scored as zero)
   deviations: []
   notes: 'M3 test case (owner, 2026-09-17): a transaction with a null device_fingerprint (USSD, and any
     channel) yields a 44-slot vector whose 4 device-derived features (device_is_new_for_account, accounts_per_device_7d,
@@ -3415,10 +3445,19 @@ requirements:
   implementation:
   - dataset/src/fraudshield_dataset/generator/config.py
   - dataset/generator/params/split.yaml
+  - dataset/src/fraudshield_dataset/release/split.py
   evidence:
   - dataset/realism_report.md (train, validation, calibration, 7-day embargo and test, with measured rates)
   - dataset/tests/test_generator.py (the split plan's boundaries and the embargo width)
+  - dataset/tests/test_split.py (the boundaries are published, ordered, and reproduce the report)
   deviations: []
+  notes: 'PUBLISHED AS OF 2026-09-20 (PB-48). The boundaries used to exist only inside the generator:
+    plan_split computed them from the calibrated volume and nothing carried them to a consumer, so a reader
+    holding the Parquet could not say which rows were training rows and any evaluation they computed was
+    incomparable with these gates without saying so. They are now recorded into manifest.json at generation
+    -- the only point where the target row count the planner scales by is still known -- and travel into
+    split.json and release.json from one function. The realism report''s split table is computed by that
+    same function, so the report and the release cannot drift.'
 - id: D-08
   section: Build prompt Part B defect register
   title: Results on synthetic data can look perfect and prove nothing.

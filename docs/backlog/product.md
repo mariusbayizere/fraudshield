@@ -652,3 +652,136 @@ the decision engine M6, staff identity, admin and audit M7).
   and the milestone that supplies it, or `degeneracy` if a deployment genuinely has no limits);
   `dormancy_reactivation_flag` is measured rather than guessed. Mutation-proved: declare a constant
   feature `COMPUTABLE` and assert the check exits non-zero.
+
+### PB-48 · The dataset does not publish its temporal split boundaries
+- **Source:** writing the M4 pipeline smoke test, 2026-09-20 · **Priority:** high · **Due:** before
+  any M4 metric is reported, because every one of them is defined on this split
+- **Problem:** D-07 specifies a temporal train/validation/calibration/test split with a seven-day
+  embargo, and `plan_split` computes its four boundaries from the row count and the calibrated
+  volume. **None of them reaches the published output.** `manifest.json` carries rows, checksums,
+  seed and per-month counts; `release.json` adds the partitioning convention and the fingerprint.
+  A consumer holding the Parquet cannot say which rows are training rows.
+- **Why it matters more than it looks.** The boundaries are not a convenience: an evaluation
+  computed on a different split is not comparable with the gates, and the embargo is the thing
+  standing between a validation row and a training row of the same incident. A consumer who has to
+  reconstruct them will reconstruct them slightly differently, and nothing will say so — the same
+  shape as PB-26's partition key, where a convention that lived only in the generator made
+  pruning unsound for everyone else.
+- **Why the smoke test did not just import the planner.** `fraudshield_ml` must not import
+  `fraudshield_dataset`: the feature pipeline consumes the published interchange format so that it
+  cannot read values a release does not carry (the arrangement `fs-dataset packs` already
+  establishes for country facts). Re-implementing `plan_split` inside ml would duplicate a
+  non-trivial algorithm and give it two places to drift.
+- **Acceptance:** `fs-dataset split --output split.json` publishes the four boundaries as
+  timestamps, alongside the row counts and observed fraud rate of each segment; `release.json`
+  carries the same block so a release is self-describing; a test asserts the published boundaries
+  reproduce the segment row counts the realism report states. The smoke test's time-ordered
+  holdout is replaced by the real split the day it exists.
+- **Interim, and stated in the smoke test's own output:** it uses a 70/30 time-ordered holdout of
+  its scored sample, which is *a* temporal split and not *the* one, so its numbers are not
+  comparable with anything M4 will report.
+- **Closed 2026-09-20 (M4).** `planned_block` records the four boundaries into `manifest.json` at
+  generation, where the target row count the planner scaled by is still known; `fs-dataset split
+  --output split.json` adds the measured segment counts and fraud rates; `release.json` carries the
+  same block from the same function. `realism.checks.split_counts` now delegates to
+  `release.split.segment_counts`, so the report's table and the published sidecar have one
+  definition, and `test_the_published_split_reproduces_the_realism_report` parses the rendered
+  markdown and compares it with `split.json` — the comparison happens where a reader reads.
+  A dataset generated before this **refuses** rather than reconstructing: the target row count is
+  recorded nowhere else, and a boundary guessed from the realised count lands within hours of the
+  right answer, which is the error that would never be noticed. The existing 1M benchmark draw is
+  one of those datasets, so consuming the split in `fraudshield_ml` waits on the regeneration
+  PB-41 and PB-44 already require (PB-49).
+
+### PB-49 · The feature pipeline still cuts its own holdout
+- **Source:** closing PB-48, 2026-09-20 · **Priority:** high · **Due:** with the first M4 metric
+- **Problem:** the split is published now, but `fs-features smoke` still takes a 70/30 time-ordered
+  holdout of its scored sample, because the benchmark draw in use predates the block and refuses to
+  reconstruct it. Every number it prints is therefore computed on a split no gate is defined on.
+- **Acceptance:** regenerate the benchmark (which PB-41's fingerprint and PB-44's
+  `round_sum_flag` gap already require), then teach the feature CLI to read `split.json` — the
+  published format, never `fraudshield_dataset` — and assign each scored row to train, validation,
+  calibration or test by the published boundaries, excluding the embargo. No M4 headline metric is
+  reported on anything else.
+
+### PB-50 · The milestone register cannot advance to M4, and that is a finding
+- **Source:** starting M4, 2026-09-20 · **Priority:** high · **Due:** before the register records
+  M3 as completed
+- **Problem:** setting `current: M4` and `completed: [M0, M1, M2, M3]` makes `fs-traceability
+  check` fail with nine errors across six requirements — FR-02-02, FR-02-09, ML-DATA-07, TEST-01,
+  D-03 and D-04 are Must rows assigned to M3 whose `status` still reads `NOT_STARTED` and whose
+  `implementation` and `evidence` lists are **empty**. The work exists for most of them: 239
+  tagged feature tests, `test_completeness.py`, the four device features NaN together for D-04,
+  the 46-versus-44 count settled as bookkeeping for D-03. The record does not say so.
+- **Why it is not just bookkeeping.** Two of the six cannot be marked done at all.
+  **FR-02-09** (a Redis feature store refreshing velocity features within 100 ms) is M5 work
+  carrying an M3 milestone, and **FR-02-02** carries a `< 10ms` latency claim which ADR 0010 says
+  may only be measured on the dedicated machine in `docs/benchmarks/hardware.md` — so it reaches
+  `VERIFIED_AT_REDUCED_SCALE` at best. A register that advanced anyway would be asserting a gate
+  passed that did not.
+- **Held deliberately:** `milestones.yaml` still reads `current: M3`, and the README follows it.
+  The tag `m3-complete` records the owner's judgement; the register records the gate, and the two
+  disagree until this is closed. That disagreement is the accurate state, not a bug to paper over.
+- **Acceptance:** fill `implementation` and `evidence` for the four rows the work covers and set
+  their status from the evidence; reassign FR-02-09 to the milestone that will build it; decide
+  FR-02-02's status against ADR 0010's hardware rule. Then advance the register and the README in
+  one commit, with `fs-traceability check` green.
+- **Closed 2026-09-20 (M4), ADR 0027**, on the owner's direction to treat a requirement filed under
+  a milestone that cannot satisfy it as a specification error rather than a deviation — the same
+  reasoning ADR 0024 used at M2 close. **FR-02-09 → M5**, because the build prompt's own M5 gate
+  reads "FR-02-01, 02-04 … 02-10 tests pass" and there is no feature store, no Redis and no
+  Prometheus. **ML-DATA-07 → M6**, because a completeness requirement cannot be judged before the
+  data it counts exists, and the note claiming "≥ 98% computable" was satisfied "in the sense of
+  not raising while six features carry nothing" is withdrawn as a fudge. **TEST-01 → M4**, because
+  its fourth named scenario needs `round_sum_flag`, whose gap the registry schedules for M4.
+  **D-03 and D-04 are DONE** with evidence; only their register fields were unfilled.
+  **FR-02-02 stays in M3 as DONE_WITH_DEVIATION** — its acceptance criterion ("unit tests confirm
+  all 44 computed for all 6 channel types; USSD handles missing device_fingerprint gracefully") was
+  met, and only the `< 10 ms` in its specification line is carried, to M10 under ADR 0010's
+  dedicated-hardware condition (PB-51). Moving the whole row would have taken the 44-feature
+  requirement out of the milestone that delivered it. `milestones.yaml` now reads `current: M4`,
+  `completed: [M0, M1, M2, M3]`, and `fs-traceability check` passes on its own with the hook
+  intact.
+
+### PB-51 · FR-02-02's `< 10 ms` is carried to M10 and needs the dedicated machine
+- **Source:** ADR 0027, 2026-09-20 · **Priority:** medium · **Due:** M10, the verification campaign
+- **Problem:** FR-02-02 specifies 44 features per transaction **within < 10 ms**. The acceptance
+  criterion is met and the row is closed on it, but the latency figure has never been measured.
+  ADR 0010 forbids taking it from a shared CI runner, where CPU model, neighbours and I/O vary
+  between runs, and the reference laptop cannot host the stack.
+- **What is known:** the batch path computes 36 features for 20,000 rows at about 28 rows/second
+  with a 200,000-row corpus index — roughly 36 ms per row, and that is the *offline* path scanning
+  a corpus, not the online path reading prepared state. The online path has never been timed and
+  the two are not comparable; quoting the batch figure against a `< 10 ms` serving budget would be
+  a category error.
+- **Acceptance:** `benchmark.py features` p95 on the machine named in `docs/benchmarks/hardware.md`,
+  with the run recorded there, reported against the 10 ms budget, and FR-02-02's carried clause
+  given a final status in M10's matrix — `VERIFIED_AT_REDUCED_SCALE` at best until then.
+
+### PB-52 · A committed report described a draw this tree does not produce
+- **Source:** regenerating the 1M benchmark for PB-41/PB-49, 2026-09-21 · **Priority:** high ·
+  **Due:** before any figure from the M2 era is quoted again
+- **Problem:** `dataset/realism_report.md` described **1,012,522 rows**, and the claims register
+  attributed that draw to tree `d85385f` and its difference from M2's published numbers to PB-29
+  changing the country iteration order. Regenerating produced **1,006,249 rows**, twice, with
+  identical fingerprints — and `git diff d85385f HEAD -- dataset/generator/params
+  dataset/src/fraudshield_dataset/generator` is **empty**, so that tree's code is this tree's code
+  and it does not produce 1,012,522 rows.
+- **And the stated mechanism is independently false.** Country iteration order does not change the
+  draw: `Population._apportioned` sorts internally, which is why PB-41's prescribed mutation
+  (reversing the pack order) yielded a byte-identical dataset and had to be replaced with a
+  `_GOLDEN` constant mutation. PB-29 cannot have re-drawn anything.
+- **What is not in doubt:** the current dataset. It is reproducible from the seed, its fingerprint
+  `40a77bb6` is published in the report that describes it, and every gate passes. The defect is a
+  provenance sentence, not data.
+- **The suspicious part:** the regenerated figures (`merchant_category_code` 0.706, event delay
+  0.758, event type 0.537) are *exactly* M2's published ones. So the 1,012,522-row run is the
+  outlier, not the current one, and whatever produced it was present for one measurement and is
+  absent now.
+- **Acceptance:** find what produced the 1,012,522-row draw — check whether the run used a
+  different `--rows`, an uncommitted change, or a different parameter file — and either reproduce
+  it or record that it cannot be reproduced and why. Then state the rule the episode teaches: a
+  generated artefact must be regenerated by the tree that commits it, or the commit is not its
+  provenance. `fs-exit-criteria`'s artefact kind already checks that a cited artefact names its
+  commit; it does not check that the artefact was produced *at* that commit, and this is the case
+  that distinguishes them.
