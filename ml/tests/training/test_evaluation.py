@@ -11,6 +11,7 @@ from fraudshield_ml.training.evaluation import (
     Baseline,
     Evaluation,
     SegmentCounts,
+    spread,
     summarise,
 )
 from fraudshield_ml.training.split import Boundaries
@@ -82,3 +83,19 @@ def test_a_velocity_feature_is_never_called_trivial() -> None:
     assert "seconds_since_last_tx" not in TRIVIAL_FEATURES
     assert "velocity_ratio_1h_vs_30d" not in TRIVIAL_FEATURES
     assert TRIVIAL_FEATURES, "precondition: the trivial set is not empty"
+
+
+def test_the_sample_spreads_across_the_period_rather_than_taking_its_tail() -> None:
+    """Why the first two runs both trained on about a week whatever the corpus reached.
+
+    Taking the last N rows of the train pool trains on the days immediately before the boundary
+    however deep the corpus goes: the sample size decided the window, not the corpus. A stride
+    over a pool already in timestamp order is a stratified sample over time and needs no seed.
+    """
+    pool = list(range(1000))
+    sample = spread(pool, 10)
+    assert sample == sorted(sample), "the sample must stay in timestamp order"
+    assert len(sample) == 10
+    assert sample[0] < 100, "the sample must start near the beginning of the period"
+    assert sample[-1] > 800, "and reach near its end, which a tail sample would not"
+    assert spread(pool, 5000) == pool, "asking for more than exists takes everything"

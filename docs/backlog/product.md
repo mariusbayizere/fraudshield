@@ -941,16 +941,27 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 ### PB-56 · `days_since_sim_swap` separates perfectly where it is defined
 - **Source:** the first `fs-features evaluate` run, 2026-09-21 · **Priority:** high · **Due:**
   before any M4 headline metric is published
-- **Measured:** `max(AUC, 1-AUC)` of **1.000** on the held-out rows where it is defined.
+- **Measured, and immediately overstated by me.** The first run reported `max(AUC, 1-AUC)` of
+  **1.000** on the rows where it is defined, and this entry was first written as though that
+  settled something. The corrected run prints the denominator: those are **660 held-out rows
+  holding 2 confirmed fraud**. An AUC of 1.000 over two positives is not evidence of perfect
+  separation; it is evidence of a subsample too small to say anything. The entry is kept with its
+  correction rather than rewritten, because "the figure looked decisive until its denominator was
+  printed" is the finding.
 - **It is not a leak, and that is why it matters.** A SIM swap before a takeover is how that fraud
   works and a model is meant to learn it (C-11). But the *degree* is an artefact of the generator:
   `fraud.takeover_lead_minutes = [5, 60]`, provenance **ASSUMED**, so every enabling event is
   followed by its drain inside a tight uniform window with no long tail and no unexploited swap.
   Among accounts that had a swap, "days since" therefore orders fraud from legitimate perfectly.
-- **This is the second benchmark-separability finding and it is larger than the first.** PB-46
-  recorded that one velocity feature reaches 0.894 and made every metric a margin over it. This
-  one reaches 1.000 on its own subset. The dataset-level gate does not see it: D-08 measures
-  *columns* over *all* rows, and the event-delay channel reads 0.758 there.
+- **What survives the correction.** Not "a feature separates perfectly" — two positives cannot
+  support that. What survives is the *mechanism*: the lead window is tight, uniform and ASSUMED,
+  so among accounts with a swap the ordering is near-deterministic by construction, and the
+  dataset-level gate cannot see it because D-08 measures *columns* over *all* rows, where the
+  delay channel reads 0.758. The right response is to widen the measurement, not to quote the
+  1.000: score enough test rows that the defined subset holds tens of fraud rather than two.
+- **PB-46's velocity separability is still the larger, better-measured finding**:
+  `seconds_since_last_tx` reaches **0.887 on every held-out row**, which is what the model's
+  margin is taken against.
 - **Acceptance:** state it in the datasheet, the model card and the paper's limitations with the
   same prominence as the velocity separability and with the mechanism named; report it beside
   every model metric as the evaluation command now does; and decide whether

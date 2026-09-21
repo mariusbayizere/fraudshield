@@ -170,5 +170,22 @@ def summarise(result: Evaluation) -> str:
     return "\n".join(lines)
 
 
+def spread(pool: Sequence[int], wanted: int) -> list[int]:
+    """`wanted` rows spread evenly across `pool`, in order.
+
+    A sampling decision and therefore part of the evaluation's design, not a CLI detail. Evenly
+    rather than randomly: the pool is already in timestamp order, so a stride is a stratified
+    sample over time by construction and needs no seed to be reproducible.
+
+    The first two runs of this command took the pool's **tail** and both trained on about a week,
+    at 400,000 and at 560,000 corpus rows — the sample size decided the window and the corpus
+    depth did nothing. A stride costs the same and covers the period.
+    """
+    if wanted >= len(pool):
+        return list(pool)
+    stride = len(pool) / wanted
+    return [pool[int(i * stride)] for i in range(wanted)]
+
+
 def counts(labels: Sequence[bool]) -> tuple[int, int]:
     return len(labels), sum(1 for y in labels if y)

@@ -496,8 +496,13 @@ def run_evaluate(run: EvaluationRun) -> int:
                 f"--{name}-rows. The corpus is read newest-first, so the train period is the part "
                 "that runs out first"
             )
-    train_index = train_pool[-run.train_rows :]
-    test_index = test_pool[-run.test_rows :]
+    # Spread across the period rather than taken from its tail. Taking the last N rows of the
+    # train pool trains on the days immediately before the boundary however deep the corpus
+    # reaches — the first run at 400,000 rows and the second at 560,000 both trained on about a
+    # week, because the sample size and not the corpus decided the window. An even stride covers
+    # the whole available period at the same cost, and the report prints the days it spans.
+    train_index = evaluation.spread(train_pool, run.train_rows)
+    test_index = evaluation.spread(test_pool, run.test_rows)
 
     sample = train_index + test_index
     corpus_index = CorpusIndex.build(rows)
