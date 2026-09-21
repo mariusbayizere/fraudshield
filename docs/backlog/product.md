@@ -918,3 +918,41 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
   nothing about any column.
 - **Consequence for the record:** every fingerprint published before 2026-09-21 is a version 1
   value. `40a77bb6` (v1) is `b896b632` under v2; the current dataset is `c8856a0e`.
+
+### PB-55 · The first real metric compared two numbers over different populations
+- **Source:** the first `fs-features evaluate` run, 2026-09-21 · **Priority:** high ·
+  **Resolved:** same day, before the figure was quoted anywhere
+- **What it printed:** model AUC 0.998, best single feature **1.000** (`days_since_sim_swap`),
+  margin **-0.002**. The margin is meaningless. `auc` drops NaN scores with their labels — which
+  is correct, a structurally missing value is not a low value — so `days_since_sim_swap` was
+  scored on the accounts that had a SIM swap while the model was scored on all 8,000 held-out
+  rows. Subtracting them compares different populations.
+- **Fix:** a baseline now carries the rows it was measured on. The **margin** is taken against the
+  strongest feature defined on *every* held-out row; the strongest feature of any coverage is
+  reported separately, with its coverage, and the report says in as many words that the two cannot
+  be subtracted.
+- **The shape, which is the part worth keeping.** PB-46 established the rule "report every metric
+  as a margin over the single-feature baseline". The rule was implemented and the implementation
+  did not satisfy it, because "the baseline" silently meant "over whatever rows that feature
+  happens to be defined on". A rule that is followed literally and violated in substance is the
+  same failure as a guard that checks the input it was written for — the seventh and eighth
+  instances of that family are three days apart.
+
+### PB-56 · `days_since_sim_swap` separates perfectly where it is defined
+- **Source:** the first `fs-features evaluate` run, 2026-09-21 · **Priority:** high · **Due:**
+  before any M4 headline metric is published
+- **Measured:** `max(AUC, 1-AUC)` of **1.000** on the held-out rows where it is defined.
+- **It is not a leak, and that is why it matters.** A SIM swap before a takeover is how that fraud
+  works and a model is meant to learn it (C-11). But the *degree* is an artefact of the generator:
+  `fraud.takeover_lead_minutes = [5, 60]`, provenance **ASSUMED**, so every enabling event is
+  followed by its drain inside a tight uniform window with no long tail and no unexploited swap.
+  Among accounts that had a swap, "days since" therefore orders fraud from legitimate perfectly.
+- **This is the second benchmark-separability finding and it is larger than the first.** PB-46
+  recorded that one velocity feature reaches 0.894 and made every metric a margin over it. This
+  one reaches 1.000 on its own subset. The dataset-level gate does not see it: D-08 measures
+  *columns* over *all* rows, and the event-delay channel reads 0.758 there.
+- **Acceptance:** state it in the datasheet, the model card and the paper's limitations with the
+  same prominence as the velocity separability and with the mechanism named; report it beside
+  every model metric as the evaluation command now does; and decide whether
+  `takeover_lead_minutes` should carry a long tail, which **changes the dataset draw** and is
+  therefore an owner decision rather than one to take while closing a backlog item.

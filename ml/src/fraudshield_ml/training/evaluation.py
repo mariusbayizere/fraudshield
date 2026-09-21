@@ -55,6 +55,31 @@ class SegmentCounts:
 
 
 @dataclass(frozen=True)
+class Baseline:
+    """A single feature's separation on the held-out rows, **with the rows it was measured on**.
+
+    The coverage is not decoration. `auc` drops NaN scores with their labels, which is right — a
+    structurally missing value is not a low value — but it means a feature defined on a tenth of
+    the rows is scored on a tenth of the rows, while the model is scored on all of them. Reporting
+    the two as a margin without saying so compares numbers over different populations.
+
+    The first run of this command did exactly that and produced a headline of -0.002 against
+    `days_since_sim_swap` at 1.000, which is defined only on the accounts that had a SIM swap.
+    """
+
+    feature: str
+    separation: float
+    rows: int
+    fraud: int
+    covered: float
+
+    @property
+    def partial(self) -> bool:
+        """Whether the feature was scored on fewer rows than the model."""
+        return self.covered < 1.0
+
+
+@dataclass(frozen=True)
 class Evaluation:
     """A model's figures on the published split, with everything needed to read them honestly."""
 
@@ -66,19 +91,23 @@ class Evaluation:
     model_auc: float
     model_auc_error: float
     recall_at_1pct_fpr: float
-    baseline_auc: float
-    baseline_feature: str
-    trivial_auc: float
-    trivial_feature: str
+    #: The strongest single feature defined on **every** held-out row, so the margin below
+    #: compares two numbers over one population.
+    baseline: Baseline
+    #: The strongest single feature of any coverage. When it is a partial one this is the more
+    #: interesting number and the less comparable one, so it is reported separately rather than
+    #: substituted for the baseline.
+    strongest: Baseline
+    trivial: Baseline
     boundaries: Boundaries
 
     @property
     def margin(self) -> float:
-        return self.model_auc - self.baseline_auc
+        return self.model_auc - self.baseline.separation
 
     @property
     def trivial_margin(self) -> float:
-        return self.model_auc - self.trivial_auc
+        return self.model_auc - self.trivial.separation
 
 
 def summarise(result: Evaluation) -> str:
@@ -97,12 +126,30 @@ def summarise(result: Evaluation) -> str:
         f"  test rows / fraud            {result.test.rows} / {result.test.fraud} "
         f"({result.test.rate:.3%})",
         "",
-        f"  best single feature          {result.baseline_auc:.3f}  ({result.baseline_feature})",
-        f"  best trivial rule            {result.trivial_auc:.3f}  ({result.trivial_feature})",
+        f"  best single feature          {result.baseline.separation:.3f}  "
+        f"({result.baseline.feature}, defined on every row)",
+        f"  best trivial rule            {result.trivial.separation:.3f}  "
+        f"({result.trivial.feature})",
         f"  model AUC                    {result.model_auc:.3f} +/-{interval:.3f}",
         f"  MARGIN OVER THE FEATURE      {result.margin:+.3f}",
         f"  MARGIN OVER THE TRIVIAL RULE {result.trivial_margin:+.3f}",
         f"  recall at 1% FPR             {result.recall_at_1pct_fpr:.3f}",
+        "",
+        f"  strongest feature of any     {result.strongest.separation:.3f}  "
+        f"({result.strongest.feature})",
+        f"  ...defined on                {result.strongest.covered:.1%} of held-out rows "
+        f"({result.strongest.rows} rows, {result.strongest.fraud} fraud)",
+        "",
+    ]
+    if result.strongest.partial:
+        lines += [
+            "  THE STRONGEST FEATURE IS NOT THE BASELINE, and the difference is the point. It is",
+            "  scored only on the rows where it is defined, so its figure and the model's are over",
+            "  different populations and the two cannot be subtracted. It is printed because a",
+            "  benchmark on which one partial feature separates that well is a fact about the",
+            "  benchmark, not a detail of this run.",
+        ]
+    lines += [
         "",
         f"  TRAINED ON THE LAST {result.train_covers_days:.0f} DAYS of the train period, not all",
         "  of it: the corpus is bounded and the feature pass is its cost. A figure from here is",

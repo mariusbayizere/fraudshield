@@ -534,12 +534,31 @@ def run_evaluate(run: EvaluationRun) -> int:
     test_labels = [labels[i] for i in test]
     model_auc, error, recall = smoke.evaluate(scores, test_labels)
 
-    def on_test(feature: str) -> float:
-        column = names.index(feature)
-        return smoke.floor_from([matrix[i][column] for i in test], test_labels)
+    def on_test(feature: str) -> evaluation.Baseline:
+        """One feature's separation on the held-out rows, with the rows it was measured on.
 
-    best_feature = max(names, key=on_test)
-    best_trivial = max(evaluation.TRIVIAL_FEATURES, key=on_test)
+        The coverage is carried because `auc` drops NaN scores with their labels: a feature
+        defined on a tenth of the rows is scored on a tenth of them while the model is scored on
+        all of them, and subtracting the two would compare different populations.
+        """
+        column = names.index(feature)
+        values = [matrix[i][column] for i in test]
+        defined = [(v, y) for v, y in zip(values, test_labels, strict=True) if not math.isnan(v)]
+        return evaluation.Baseline(
+            feature=feature,
+            separation=smoke.floor_from(values, test_labels),
+            rows=len(defined),
+            fraud=sum(1 for _, y in defined if y),
+            covered=len(defined) / len(values) if values else 0.0,
+        )
+
+    measured = [on_test(name) for name in names]
+    complete = [b for b in measured if not b.partial]
+    if not complete:
+        raise DatasetGapError(
+            "no feature is defined on every held-out row, so there is no baseline the model can "
+            "be compared against over one population"
+        )
     span = rows[train_index[-1]].timestamp - rows[train_index[0]].timestamp
     result = evaluation.Evaluation(
         features=len(names),
@@ -550,10 +569,9 @@ def run_evaluate(run: EvaluationRun) -> int:
         model_auc=model_auc,
         model_auc_error=error,
         recall_at_1pct_fpr=recall,
-        baseline_auc=on_test(best_feature),
-        baseline_feature=best_feature,
-        trivial_auc=on_test(best_trivial),
-        trivial_feature=best_trivial,
+        baseline=max(complete, key=lambda b: b.separation),
+        strongest=max(measured, key=lambda b: b.separation),
+        trivial=max((on_test(n) for n in evaluation.TRIVIAL_FEATURES), key=lambda b: b.separation),
         boundaries=boundaries,
     )
     print(evaluation.summarise(result))
