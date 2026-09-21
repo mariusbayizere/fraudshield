@@ -1899,3 +1899,89 @@ streaming it. A 34-minute run is now completely silent — which is the failure 
 has an entry about, from the 106-minute run that printed nothing. Recorded as PB-57. Fourth
 instance of *knowing a failure mode does not immunise against it*, and the second where the
 immunity was expected to come from having just written about it.
+
+### 2026-09-21 · The fingerprint read three columns of fourteen — seventh instance
+
+Recorded separately from the run that found it, because it belongs to a family and the family is
+now long enough to be the point.
+
+`dataset_fingerprint` exists to answer one question: *is this report still about this dataset?*
+PB-40 gave the generator a device-sharing mechanism, which rewrote `device_fingerprint` for 504
+devices and changed nothing else. The fingerprint returned **the identical value** for the old
+draw and the new one. `SAMPLED_COLUMNS` hashed three columns per table and `device_fingerprint`
+was not among them.
+
+#### The family, in order
+
+1. A licence check that ran over an empty scope and passed for three milestones.
+2. E1's grouping check, which ranged over folds rather than over units of history.
+3. D-08's ceiling, measured on the dataset's **columns** and quoted as a claim about the
+   **features** — the fourth instance was the one that made E3 fail.
+4. …and two more of the same "control on inputs" shape recorded at M3.
+5. **PB-41:** the parameter digest answered "did the parameters change?" while the report needed
+   "is this about this dataset?". The fix was a second digest over the output rows.
+6. **PB-54, this one:** that second digest then sampled three columns of fourteen.
+7. **PB-55, the next morning:** "a margin over the single-feature baseline" implemented as a
+   margin over a feature measured on a *different set of rows* from the model.
+
+#### What is new at seven
+
+The early instances were scope errors findable by reading: name the object the check ranges over,
+name the object the claim is about, compare the nouns. Five and six are not findable that way,
+because the check's scope is not written down anywhere near the claim — it is in a constant two
+files away, and the claim is in a docstring that is *correct about the check* and silent about the
+gap.
+
+So the question that finds the early ones — *what does this range over?* — has to become a
+question about distance: **how far apart are the definition of the check and the statement of the
+claim, and is anything keeping them in step?** For PB-54 the answer was "a tuple in another
+module, and nothing". The fix is not a better list of columns; it is removing the list, so that
+the sample is the row and there is no scope left to get wrong.
+
+That generalises better than "check more things": **prefer a guard with no scope parameter to a
+guard with a well-chosen one.** A scope that can be set correctly can be set incorrectly, and
+usually will be, one refactor after the person who chose it stopped looking.
+
+### 2026-09-22 · Prediction, recorded before the draw exists
+
+The owner has directed that `fraud.takeover_lead_minutes` gain a long tail (PB-56). It is `[5, 60]`
+drawn uniformly: every SIM swap or device change that enables a takeover is followed by the drain
+inside the hour, with no long tail and no unexploited event. C-11 has said since M2 that part of
+the event-delay channel's separation is an artefact of that window rather than of the scenario.
+
+This entry is written and committed **before** the regeneration, so the prediction cannot be
+adjusted to the result.
+
+#### The change
+
+`takeover_lead_minutes` becomes the **bounds** `[5, 43200]` — five minutes to thirty days — with
+the draw a lognormal of median `takeover_lead_median_minutes = 45` and
+`takeover_lead_log_sigma = 1.8`, clipped to those bounds. Measured over 200,000 draws: 25% inside
+13 minutes, median 45, **43.6% beyond an hour**, 95% inside 14 hours, **2.7% beyond a day**, 99%
+inside two days. Provenance stays ASSUMED and says so: no publication read in the 2026-09-18
+sourcing pass gives takeover-to-drain delays for these markets, and a lognormal is chosen because
+it is the ordinary shape for a delay — a mode early, a tail that does not end — and not because
+any source supports these two numbers.
+
+A mixture of "fast" and "slow" leads was considered and rejected: two clusters would be structure
+of its own, and a model could learn the gap between them as readily as it learns the old tight
+window.
+
+#### The predictions
+
+1. **The event-delay channel falls from 0.758.** It is `max(AUC, 1−AUC)` for "seconds from an
+   account event to that account's next transaction", and it separates because fraud is *fast*
+   while a legitimate account's next transaction lands whenever it lands. Moving 44% of fraud
+   leads past an hour and 2.7% past a day puts that much of the fraud distribution inside the
+   legitimate one. **I predict 0.68–0.74.** A fall of less than 0.01 refutes the mechanism claim
+   C-11 has carried for four days — it would mean the separation never came from the window.
+2. **`days_since_sim_swap` stops being a candidate for the strongest partial feature.** It already
+   stopped when the sample was made representative, so this is the weaker prediction; what it
+   adds is that the effect should now survive a tail-sampled run too.
+3. **The single-feature ceiling gate still passes**, because it measures columns and the delay
+   channel is reported rather than gated; and **the model's margin over the velocity baseline does
+   not move materially**, because none of this touches velocity. If the margin moves by more than
+   its interval, something other than the lead window changed and I have mis-attributed the
+   effect.
+
+The first is the one to hold me to.
