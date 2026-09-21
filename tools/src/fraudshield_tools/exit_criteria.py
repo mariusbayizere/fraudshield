@@ -37,6 +37,7 @@ from typing import Any
 import yaml
 
 from fraudshield_tools import REPO_ROOT
+from fraudshield_tools.provenance import parse as parse_stamp
 from fraudshield_tools.repo import tracked_files
 
 KINDS = {"test", "gate", "artifact", "judgement"}
@@ -66,6 +67,10 @@ class Sources:
 @dataclass
 class Report:
     errors: list[str] = field(default_factory=list)
+    #: Things a reader should know that are not grounds to fail a milestone. Kept separate rather
+    #: than folded into errors, because a checker that fails on everything it notices gets its
+    #: threshold lowered until it fails on nothing (PB-53's un-stamped artefacts are the case).
+    warnings: list[str] = field(default_factory=list)
     checked: int = 0
 
     @property
@@ -186,15 +191,53 @@ def _resolve(
         report.errors.append(f"{identifier}: artefact {ref} does not exist")
         return
     commit = str(evidence.get("commit", "")).strip()
+    text = path.read_text(encoding="utf-8")
     if not commit:
         report.errors.append(
             f"{identifier}: artefact {ref} names no commit. A figure is quoted with the tree that "
             "produced it, not only with its scale"
         )
-    elif commit not in path.read_text(encoding="utf-8"):
+        return
+    if commit not in text:
         report.errors.append(
             f"{identifier}: artefact {ref} does not name commit {commit}, so it may describe a "
             "different run than the one this row claims"
+        )
+        return
+    _check_stamp(identifier, ref, commit, text, report)
+
+
+def _check_stamp(identifier: str, ref: str, commit: str, text: str, report: Report) -> None:
+    """Naming a commit is a claim; the stamp is the evidence for it (PB-53).
+
+    An artefact can name any commit its author types. What it cannot fake is a stamp written by
+    `fs-evidence` at the moment it ran, carrying the commit **and** whether the working tree was
+    clean. PB-52 is the case these two answers differ on: a report naming `d85385f`, produced from
+    uncommitted code that no commit contains, correct on the first check and wrong on this one.
+
+    A missing stamp is a **warning**, not an error, and deliberately so: every artefact predating
+    `fs-evidence` lacks one, and failing them would either block the milestone or invite the
+    stamps to be pasted in by hand — which is the disease, not the cure. A stamp that is *present
+    and contradicts the row* is an error, because that can only happen to a run made after the
+    guard existed.
+    """
+    stamp = parse_stamp(text)
+    if stamp is None:
+        report.warnings.append(
+            f"{identifier}: artefact {ref} carries no fs-evidence stamp, so the commit it names "
+            "is the author's claim rather than the tree that ran (PB-53). Runs made before "
+            "2026-09-21 have none; regenerate it through fs-evidence when it is next produced"
+        )
+        return
+    if not stamp.clean:
+        report.errors.append(
+            f"{identifier}: artefact {ref} was produced on a modified working tree "
+            f"(tree-state {stamp.tree_state}), so it belongs to no commit and cannot be evidence"
+        )
+    if not stamp.commit.startswith(commit) and not commit.startswith(stamp.commit):
+        report.errors.append(
+            f"{identifier}: artefact {ref} is stamped {stamp.commit[:12]} but the row cites "
+            f"{commit}. The stamp is what ran"
         )
 
 
@@ -330,10 +373,12 @@ def main(argv: list[str] | None = None) -> int:
 
     for error in report.errors:
         print(f"ERROR {error}", file=sys.stderr)
+    for warning in report.warnings:
+        print(f"WARN  {warning}", file=sys.stderr)
     milestone = register.get("milestone", "?")
     print(
         f"exit-criteria: {milestone}, {report.checked} criteria checked, "
-        f"{len(report.errors)} errors"
+        f"{len(report.errors)} errors, {len(report.warnings)} warnings"
     )
     return 0 if report.ok else 1
 

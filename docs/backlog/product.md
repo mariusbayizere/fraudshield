@@ -785,3 +785,71 @@ the decision engine M6, staff identity, admin and audit M7).
   provenance. `fs-exit-criteria`'s artefact kind already checks that a cited artefact names its
   commit; it does not check that the artefact was produced *at* that commit, and this is the case
   that distinguishes them.
+
+#### Investigated 2026-09-21, 30-minute box. Cause: a dirty working tree. Change: unrecoverable.
+
+Three candidate causes, tested in order of cheapness:
+
+1. **A different `--rows`.** Refuted from the artefact itself. The split boundaries are planned
+   from the *target* row count, so a different target moves them; the 1,012,522-row report and the
+   current one state the **same test start (2025-10-28 22:02 UTC)** and the same segment spans to
+   two decimals. Same target, different rows.
+2. **A committed generator change.** Refuted from the history. The 1,012,522 figure appears
+   **exactly once** in the report's entire history, at `a36d252` (2026-09-19 15:16); every other
+   committed report, before and after, says 1,006,249. The only commit touching
+   `dataset/generator` or `dataset/generator/params` in the window between the last 1,006,249
+   report and that one is `dce89fe`, the pack refactor itself.
+3. **The pack refactor.** Refuted by measurement, which is the part worth keeping. Generating
+   200,000 rows at seed 20260917 on `683b7b6` (the commit *before* the refactor) and on the
+   current tree gives **201,243 rows on both** and the **identical fingerprint**
+   `9525c27fe636ce7ed5964215d700886ea15233cbbc4357f7c98f8d95937c5d6c`. The planned volume,
+   `customers_total` and `customers_active` are also identical. **PB-29 did not re-draw anything**,
+   and the explanation that stood in six documents for two days was never true.
+
+What remains is that the run was made on a **dirty working tree**: code that is in no commit. The
+commit message for `a36d252` says the run was "over tree `d85385f`", and `d85385f`'s committed
+generator is byte-identical to today's, which produces 1,006,249. The specific uncommitted change
+is **unrecoverable** — it was never committed, stashed or described, and no artefact from the run
+records anything but the commit hash it was *believed* to be at.
+
+**That last sentence is the whole finding, and it is why the fix is a guard rather than an
+answer.** A hash recorded by hand records an intention.
+
+**Closed 2026-09-21 as UNEXPLAINED-WITH-GUARD.** The cause is established (a dirty working tree);
+the specific change is not, and cannot be — it exists in no object this repository holds. PB-53
+supplies the guard so the next one is detected at the moment it happens rather than two days
+later. Every quotation of the 1,012,522-row figure is corrected or annotated.
+
+### PB-53 · An evidence run records the commit it believed it was at
+- **Source:** PB-52's investigation, 2026-09-21 · **Priority:** high · **Due:** immediately; it is
+  the only thing standing between this project and a second PB-52
+- **Problem:** every evidence artefact here names a commit, and that name is written by hand or
+  passed as a flag. It therefore records what the author *believed* the tree was, not what it was.
+  PB-52 is exactly that failure: a report was produced from uncommitted code, labelled with a
+  commit whose generator does not produce it, and six documents then explained the discrepancy
+  with a mechanism that measurement has since refuted. Nothing detected it for two days, and the
+  code that produced it is gone.
+- **Why naming a commit is not enough.** A commit hash identifies a tree in the object database.
+  It says nothing about the files the interpreter actually imported, which are the working tree.
+  The two agree only when the working tree is clean, and nothing checked that.
+- **Acceptance:**
+  1. A shared provenance stamp: the commit, **and** a hash of `git status --porcelain`, which is a
+     constant for a clean tree and varies with any modification. Both go into every evidence
+     artefact's header.
+  2. Evidence runs **refuse to start** on a dirty tree, with an explicit escape that stamps the
+     artefact `DIRTY` so an unciteable run is unciteable on its face rather than by omission.
+  3. `fs-exit-criteria`'s `artifact` kind checks the header: the artefact must carry a stamp, its
+     commit must match the one cited, and its tree state must be clean. That closes the gap
+     between "names a commit" and "was produced at that commit".
+- **Not in scope:** proving the interpreter imported the working tree rather than an installed
+  copy. `uv run` from the repo makes that true here, and a guard for it would be a different
+  mechanism.
+- **Closed 2026-09-21.** `fraudshield_tools.provenance` supplies the stamp: the commit plus a
+  digest of `git status --porcelain`, which is `clean` for an unmodified tree and varies with any
+  modification, **including untracked files** — the archetypal accident is a new module imported
+  and not yet added, which a tracked-content diff would call clean. `fs-evidence --output <file>
+  -- <command>` refuses on a dirty tree and stamps `NOT CITABLE` under `--allow-dirty`; it is a
+  wrapper rather than a flag on each producer so that `fraudshield_dataset` and `fraudshield_ml`
+  do not acquire a dependency on the governance package. `fs-exit-criteria` reads the stamp:
+  absent is a **warning** (every artefact predating the guard lacks one, and failing them would
+  get the threshold lowered until nothing failed), present-and-contradicting is an **error**.

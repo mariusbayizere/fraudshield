@@ -1782,3 +1782,67 @@ The habit to carry: **when a pipeline has an expensive stage and a cheap one, te
 first and persist the expensive one's output.** Neither is a new idea; what is new is noticing that
 "run the whole thing and see" is the default shape and costs a working session's worth of machine
 time before it teaches anything.
+
+### 2026-09-21 · The explanation was wrong for two days, and the artefact could not say so
+
+`dataset/realism_report.md` said **1,012,522 rows**. Regenerating it said **1,006,249**. The gap
+had a published explanation — PB-29 moved country facts into packs, `countries.simulated()` sorts,
+so iteration went from declaration order to alphabetical and the draw shifted — and that
+explanation had been copied into the datasheet, the claims register, the walkthrough and four M2
+review documents. It was wrong, and so was the commit it was attached to.
+
+Three candidates, tested cheapest first:
+
+1. **A different `--rows`.** Refuted from the artefact. The split boundaries are planned from the
+   *target* row count, so a different target moves them. Both reports state the same test start
+   and the same spans to two decimals.
+2. **A committed generator change.** Refuted from the history. The figure appears exactly once in
+   the report's whole history, and the only commit touching the generator or its parameters in the
+   window is the pack refactor itself.
+3. **The pack refactor.** Refuted by measurement. Generating 200,000 rows at the same seed on the
+   commit before the refactor and on the current tree gives 201,243 rows **and the identical
+   fingerprint**. PB-29 did not re-draw anything.
+
+So the run was made on a **dirty working tree**, and the change is unrecoverable: never committed,
+never stashed, never described.
+
+#### What is actually interesting here
+
+Not that someone ran a job on uncommitted code — that is ordinary. It is that **the mistake was
+undetectable by construction**, and then the project reasoned around it with great care for two
+days. The explanation was not lazy: it named a specific mechanism, in a specific function, with a
+plausible causal story, and it was repeated in six places by someone checking their work. Detail
+and confidence are not evidence, and a wrong explanation that survives scrutiny does more damage
+than an unexplained gap, because it closes the question.
+
+The earlier entry about `_first_seen` said *a true comment can defend a wrong value*. This is the
+same shape one level up: **a plausible mechanism can defend a wrong provenance**. In both cases
+the defence was written by someone trying to be careful, and in both cases the thing that finally
+settled it was a measurement nobody had thought to take because the story already accounted for
+the facts.
+
+#### What would catch this class
+
+The commit hash on an artefact is written by hand or passed as a flag, so it records what the
+author *believed* the tree was. A commit identifies a tree in the object database; the interpreter
+imports the **working** tree; the two coincide only when it is clean, and nothing checked that.
+
+So the stamp carries two values (`fs-evidence`, PB-53): the commit, and a hash of
+`git status --porcelain` — `clean` for an unmodified tree, and varying with any modification,
+staged or not, **tracked or not**. Untracked files count as dirty deliberately: the archetypal
+accident is a new module that is imported and not yet added, and a guard diffing tracked content
+would call exactly that case clean. An evidence run refuses to start on a dirty tree;
+`--allow-dirty` runs anyway and stamps the artefact `NOT CITABLE`, so a development run stays
+possible and can never be mistaken for evidence.
+
+`fs-exit-criteria` now reads the stamp rather than only the prose hash. A missing stamp is a
+**warning**, not an error — every artefact predating the guard lacks one, and failing them would
+either block the milestone or invite the stamps to be pasted in by hand, which is the disease and
+not the cure. A stamp that is present and contradicts the row is an error, because that can only
+happen to a run made after the guard existed.
+
+The general rule, which is the one to carry: **a record of provenance that the author writes is a
+record of intention. Provenance has to be taken from the system at the moment the work happens, or
+it records what someone meant to do.** That is the same principle as deriving a status table from
+its evidence rather than from an author's edit — the entry from two days ago — applied to the
+evidence itself.
