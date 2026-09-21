@@ -22,6 +22,11 @@ from fraudshield_ml.features.registry import REGISTRY, Computability, Dtype
 from fraudshield_ml.features.vector import FeatureValue
 from fraudshield_ml.metrics.single_feature import hash_fold
 from fraudshield_ml.training.smoke import (
+    CACHE_ACCOUNT,
+    CACHE_CHANNEL,
+    CACHE_COUNTRY,
+    CACHE_LABEL,
+    CACHE_SEGMENT,
     FLOOR_FEATURE,
     SINGLE_FEATURE_FLOOR,
     SmokeResult,
@@ -327,18 +332,25 @@ def test_the_cache_is_reused_only_under_the_settings_it_was_written_for(tmp_path
         {name: ("card" if name in {"channel", "corridor_class"} else float(i)) for name in names}
         for i in range(4)
     ]
-    labels = [True, False, True, False]
-    accounts = ["a", "b", "c", "d"]
+    extras: dict[str, list[object]] = {
+        CACHE_LABEL: ["True", "False", "True", "False"],
+        CACHE_ACCOUNT: ["a", "b", "c", "d"],
+        CACHE_SEGMENT: ["train", "train", "test", "calibration"],
+        CACHE_COUNTRY: ["AA", "AA", "BB", "CC"],
+        CACHE_CHANNEL: ["USSD", "CARD", "AGENT_BANKING", "USSD"],
+    }
     key = cache_key("/data/bench", 1000, 4)
     path = tmp_path / "matrix.parquet"
 
     assert cache_read(path, key) is None, "an absent cache must not be a match"
-    cache_write(path, key, rows, labels, accounts)
+    cache_write(path, key, rows, extras)
     got = cache_read(path, key)
     assert got is not None
-    assert got[1] == labels
-    assert got[2] == accounts
+    assert got[1] == {k: [str(v) for v in vs] for k, vs in extras.items()}
     assert got[0][2]["velocity_ratio_1h_vs_30d"] == rows[2]["velocity_ratio_1h_vs_30d"]
+
+    with pytest.raises(ValueError, match="alongside the features"):
+        cache_write(tmp_path / "partial.parquet", key, rows, {CACHE_LABEL: ["True"] * 4})
 
     assert cache_read(path, cache_key("/data/other", 1000, 4)) is None
     assert cache_read(path, cache_key("/data/bench", 2000, 4)) is None

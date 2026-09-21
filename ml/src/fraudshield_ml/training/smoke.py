@@ -25,7 +25,7 @@ negative — especially then.
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -289,6 +289,13 @@ def floor_from(scores: Sequence[float], labels: Sequence[bool]) -> float:
 #: Columns the cache adds beside the features. Prefixed so they cannot collide with a feature name.
 CACHE_LABEL = "_is_fraud"
 CACHE_ACCOUNT = "_account_id"
+#: Per-row facts that are not features but that the M4 battery needs: which D-07 period the row
+#: belongs to, and the country and channel a breakdown groups by. They ride in the cache because
+#: recomputing them would mean re-reading the corpus, which is the thing the cache exists to avoid.
+CACHE_SEGMENT = "_segment"
+CACHE_COUNTRY = "_country"
+CACHE_CHANNEL = "_channel"
+CACHE_EXTRAS = (CACHE_LABEL, CACHE_ACCOUNT, CACHE_SEGMENT, CACHE_COUNTRY, CACHE_CHANNEL)
 
 
 def cache_key(dataset: str, corpus_rows: int, sample_rows: int) -> dict[str, str]:
@@ -312,34 +319,56 @@ def cache_write(
     path: Path,
     key: dict[str, str],
     rows: Sequence[dict[str, FeatureValue]],
-    labels: Sequence[bool],
-    accounts: Sequence[str],
+    extras: Mapping[str, Sequence[object]],
 ) -> None:
+    """The feature matrix plus the per-row facts a breakdown needs, under a key that names them."""
+    missing = set(CACHE_EXTRAS) - set(extras)
+    if missing:
+        raise ValueError(f"the cache needs {sorted(missing)} alongside the features")
     names = trainable_features()
-    columns = {name: [row[name] for row in rows] for name in names}
+    columns: dict[str, list[object]] = {name: [row[name] for row in rows] for name in names}
     table = pa.table(
-        {**columns, CACHE_LABEL: list(labels), CACHE_ACCOUNT: list(accounts)},
+        {**columns, **{k: list(extras[k]) for k in CACHE_EXTRAS}},
         metadata={k.encode(): v.encode() for k, v in key.items()},
     )
     path.parent.mkdir(parents=True, exist_ok=True)
     pq.write_table(table, path)
 
 
+def cache_read_any(
+    path: Path,
+) -> tuple[list[dict[str, FeatureValue]], dict[str, list[str]]] | None:
+    """The cached matrix whatever it was computed for, for a reader that is not re-running it.
+
+    `cache_read` refuses a key mismatch because a *run* must not report one configuration's
+    numbers under another's. A reader of the cache has no configuration of its own to mismatch:
+    it reports what the matrix says, and the matrix carries its own segment labels.
+    """
+    return _read(path, key=None)
+
+
 def cache_read(
     path: Path, key: dict[str, str]
-) -> tuple[list[dict[str, FeatureValue]], list[bool], list[str]] | None:
-    """The cached matrix, or None if there is none or it was computed under other settings."""
+) -> tuple[list[dict[str, FeatureValue]], dict[str, list[str]]] | None:
+    """The cached matrix and its per-row facts, or None if it was computed under other settings."""
+    return _read(path, key=key)
+
+
+def _read(
+    path: Path, key: dict[str, str] | None
+) -> tuple[list[dict[str, FeatureValue]], dict[str, list[str]]] | None:
     if not path.exists():
         return None
     table = pq.read_table(path)
     stored = {k.decode(): v.decode() for k, v in (table.schema.metadata or {}).items()}
-    if any(stored.get(field) != value for field, value in key.items()):
+    if key is not None and any(stored.get(field) != value for field, value in key.items()):
+        return None
+    if any(name not in table.schema.names for name in CACHE_EXTRAS):
         return None
     names = trainable_features()
+    if any(name not in table.schema.names for name in names):
+        return None
     columns = {name: table.column(name).to_pylist() for name in names}
     rows = [{name: columns[name][i] for name in names} for i in range(table.num_rows)]
-    return (
-        rows,
-        [bool(v) for v in table.column(CACHE_LABEL).to_pylist()],
-        [str(v) for v in table.column(CACHE_ACCOUNT).to_pylist()],
-    )
+    extras = {k: [str(v) for v in table.column(k).to_pylist()] for k in CACHE_EXTRAS}
+    return rows, extras

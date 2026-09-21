@@ -38,7 +38,7 @@ from fraudshield_ml.metrics.single_feature import (
     out_of_fold_target_encoding,
     separation,
 )
-from fraudshield_ml.training import evaluation, smoke
+from fraudshield_ml.training import battery, evaluation, report, smoke
 from fraudshield_ml.training import split as split_module
 
 #: Columns the vector needs from each table. Named rather than read wholesale so that a schema
@@ -466,6 +466,9 @@ class EvaluationRun:
     corpus_rows: int
     train_rows: int
     test_rows: int
+    #: Rows from D-07's calibration period, which is the tail of validation. Zero leaves the
+    #: period unused and the model uncalibrated, which is what the earlier runs did and said.
+    calibration_rows: int
     seed: int
     #: Where to keep the computed feature matrix. Everything M4 still owes — calibration, SHAP,
     #: baselines, ablations, the per-country and per-channel breakdowns, leave-one-country-out —
@@ -478,7 +481,8 @@ def _feature_matrix(
     rows: list[Transaction],
     sample: list[int],
     context: FeatureContext,
-) -> tuple[list[dict[str, FeatureValue]], list[bool], list[str]]:
+    segments: list[str],
+) -> tuple[list[dict[str, FeatureValue]], dict[str, list[str]]]:
     """The computed features for the scored rows, from the cache when one matches.
 
     The cache key names everything that decides the matrix: which dataset, how much corpus, which
@@ -498,6 +502,8 @@ def _feature_matrix(
         print(f"reusing {len(cached[0])} cached feature rows from {run.cache}")
         return cached
 
+    country_of = country_by_currency(run.packs)
+
     corpus_index = CorpusIndex.build(rows)
     print(f"computing {len(smoke.trainable_features())} features for {len(sample)} rows...")
     started = time.monotonic()
@@ -511,12 +517,218 @@ def _feature_matrix(
                 f"~{(len(sample) - done) / rate / 60:.1f} min left",
                 flush=True,
             )
-    labels = [bool(context.outcomes[rows[i].transaction_id].is_fraud) for i in sample]
-    accounts = [rows[i].account_id for i in sample]
+    extras = {
+        smoke.CACHE_LABEL: [
+            str(bool(context.outcomes[rows[i].transaction_id].is_fraud)) for i in sample
+        ],
+        smoke.CACHE_ACCOUNT: [rows[i].account_id for i in sample],
+        smoke.CACHE_SEGMENT: segments,
+        # The dataset does not carry the account's own country, so it is recovered from the
+        # currency exactly as the feature path does — and `country_by_currency` refuses when two
+        # packs share one, rather than tie-breaking a breakdown into the wrong country.
+        smoke.CACHE_COUNTRY: [country_of.get(rows[i].currency or "", "?") for i in sample],
+        smoke.CACHE_CHANNEL: [rows[i].channel or "?" for i in sample],
+    }
     if run.cache:
-        smoke.cache_write(run.cache, key, vectors, labels, accounts)
+        smoke.cache_write(run.cache, key, vectors, extras)
         print(f"wrote the feature matrix to {run.cache}")
-    return vectors, labels, accounts
+    return vectors, extras
+
+
+def _fit(
+    matrix: list[list[float]], labels: list[bool], train: list[int], test: list[int], seed: int
+) -> list[float]:
+    return smoke.fit_and_score(matrix, labels, train, test, seed=seed)
+
+
+@dataclass(frozen=True)
+class Battery:
+    """The cached matrix, decoded once, so each section reads rather than re-derives."""
+
+    names: tuple[str, ...]
+    matrix: list[list[float]]
+    labels: list[bool]
+    country: list[str]
+    channel: list[str]
+    train: list[int]
+    test: list[int]
+    calibration: list[int]
+    seed: int
+
+    def fit(self, train: list[int], test: list[int]) -> list[float]:
+        return smoke.fit_and_score(self.matrix, self.labels, train, test, seed=self.seed)
+
+    def labels_of(self, rows: list[int]) -> list[bool]:
+        return [self.labels[i] for i in rows]
+
+
+def _battery_calibration(bench: Battery, scores: list[float]) -> list[str]:
+    """Platt on the calibration period, which is neither fitted on nor scored (ML-GATE-11)."""
+    if not bench.calibration:
+        return ["", "CALIBRATION — skipped: the cache holds no calibration-period rows."]
+    held = bench.labels_of(bench.test)
+    fit = battery.fit_platt(
+        bench.fit(bench.train, bench.calibration), bench.labels_of(bench.calibration)
+    )
+    mapped = battery.apply_platt(scores, fit)
+    bins = battery.reliability(mapped, held)
+    return report.reliability_table(
+        bins,
+        battery.expected_calibration_error(bins),
+        battery.brier(scores, held),
+        battery.brier(mapped, held),
+    )
+
+
+def _battery_shap(bench: Battery, top: int) -> list[str]:
+    import xgboost as xgb  # noqa: PLC0415 - heavy, and only this path needs it
+
+    booster = xgb.train(
+        {**smoke.MODEL_PARAMETERS, "seed": bench.seed},
+        xgb.DMatrix(
+            [bench.matrix[i] for i in bench.train],
+            label=[float(bench.labels[i]) for i in bench.train],
+            missing=float("nan"),
+        ),
+        smoke.BOOSTING_ROUNDS,
+    )
+    held = xgb.DMatrix([bench.matrix[i] for i in bench.test], missing=float("nan"))
+    contributions = [[float(v) for v in row] for row in booster.predict(held, pred_contribs=True)]
+    margins = [float(v) for v in booster.predict(held, output_margin=True)]
+    return report.shap_table(
+        battery.mean_absolute_shap(contributions, bench.names),
+        battery.additivity_error(contributions, margins),
+        top,
+    )
+
+
+def _battery_ablations(bench: Battery, headline: float) -> list[str]:
+    """One registry group removed at a time. A negative margin is what the group was worth."""
+    groups: dict[str, list[str]] = {}
+    for name in bench.names:
+        groups.setdefault(REGISTRY[name].group.name.lower(), []).append(name)
+    rows = []
+    for group, members in sorted(groups.items()):
+        kept = [i for i, n in enumerate(bench.names) if n not in members]
+        if not kept:
+            continue
+        reduced = [[row[i] for i in kept] for row in bench.matrix]
+        scores = smoke.fit_and_score(
+            reduced, bench.labels, bench.train, bench.test, seed=bench.seed
+        )
+        rows.append(
+            battery.score(f"without {group} ({len(members)})", scores, bench.labels_of(bench.test))
+        )
+    return report.table(
+        "ABLATIONS — one feature group removed, refitted. A negative margin is the group's worth.",
+        sorted(rows, key=lambda item: item.auc),
+        headline,
+    )
+
+
+def _battery_breakdowns(bench: Battery, scores: list[float], headline: float) -> list[str]:
+    """The same model and the same scores, sliced. No refit: a breakdown is not an experiment."""
+    position = {row: i for i, row in enumerate(bench.test)}
+    lines: list[str] = []
+    for label, values in (("COUNTRY", bench.country), ("CHANNEL", bench.channel)):
+        cells = []
+        for key in sorted({values[i] for i in bench.test}):
+            rows_in = [i for i in bench.test if values[i] == key]
+            if not any(bench.labels[i] for i in rows_in):
+                continue
+            cells.append(
+                battery.score(key, [scores[position[i]] for i in rows_in], bench.labels_of(rows_in))
+            )
+        lines += report.table(
+            f"BY {label} — the same model and the same scores, sliced.", cells, headline
+        )
+    return lines
+
+
+def _battery_loco(bench: Battery) -> list[str]:
+    """Leave-one-country-out: the generalisation experiment PB-46 says carries the weight."""
+    rows = []
+    for held_out in sorted({bench.country[i] for i in bench.test}):
+        inner_train = [i for i in bench.train if bench.country[i] != held_out]
+        inner_test = [i for i in bench.test if bench.country[i] == held_out]
+        if not inner_train or not any(bench.labels[i] for i in inner_test):
+            continue
+        rows.append(
+            battery.score(
+                f"{held_out} unseen in training",
+                bench.fit(inner_train, inner_test),
+                bench.labels_of(inner_test),
+            )
+        )
+    return report.table(
+        "LEAVE-ONE-COUNTRY-OUT — the country is removed from training entirely, then scored.\n"
+        "  Compare each row against the same country in BY COUNTRY, not against the headline: a\n"
+        "  country's own difficulty and the cost of never having seen it are different things.",
+        rows,
+    )
+
+
+def run_battery(cache: Path, seed: int, top: int) -> int:
+    """M4's experiments, all off one cached feature matrix (Part E.5).
+
+    Reads what `fs-features evaluate --cache` wrote. Every table reports the fraud count beside
+    the figure, because each of these slices the held-out rows and a slice runs out of positives
+    long before it runs out of rows.
+    """
+    loaded = smoke.cache_read_any(cache)
+    if loaded is None:
+        raise DatasetGapError(
+            f"{cache} holds no usable feature matrix. Produce one with: fs-features evaluate "
+            "<dataset> --packs <packs> --split <split> --cache <path>"
+        )
+    vectors, extras = loaded
+    names = smoke.trainable_features()
+    labels = [v == "True" for v in extras[smoke.CACHE_LABEL]]
+    segment = extras[smoke.CACHE_SEGMENT]
+    by = {
+        name: [i for i, s_ in enumerate(segment) if s_ == name]
+        for name in ("train", "test", "calibration")
+    }
+    if not by["train"] or not by["test"]:
+        raise DatasetGapError(
+            f"the cache holds {len(by['train'])} train and {len(by['test'])} test rows; the "
+            "battery needs both"
+        )
+    encoded = smoke.encode_categoricals(vectors, labels, extras[smoke.CACHE_ACCOUNT], by["train"])
+    bench = Battery(
+        names=names,
+        matrix=[
+            [encoded[n][i] if n in encoded else float(vectors[i][n]) for n in names]
+            for i in range(len(vectors))
+        ],
+        labels=labels,
+        country=extras[smoke.CACHE_COUNTRY],
+        channel=extras[smoke.CACHE_CHANNEL],
+        train=by["train"],
+        test=by["test"],
+        calibration=by["calibration"],
+        seed=seed,
+    )
+
+    scores = bench.fit(bench.train, bench.test)
+    headline = battery.score(
+        f"full model, {len(names)} features", scores, bench.labels_of(bench.test)
+    )
+    lines = [
+        "M4 BATTERY — every figure on D-07's test period, every model fitted on its train period,",
+        "nothing tuned. Margins are against the full model unless a table says otherwise.",
+        f"  cache {cache}",
+        f"  rows train/test/calibration "
+        f"{len(bench.train)}/{len(bench.test)}/{len(bench.calibration)}",
+    ]
+    lines += report.table("HEADLINE", [headline])
+    lines += _battery_calibration(bench, scores)
+    lines += _battery_shap(bench, top)
+    lines += _battery_ablations(bench, headline.auc)
+    lines += _battery_breakdowns(bench, scores, headline.auc)
+    lines += _battery_loco(bench)
+    print("\n".join(lines))
+    return 0
 
 
 def run_evaluate(run: EvaluationRun) -> int:
@@ -532,13 +744,17 @@ def run_evaluate(run: EvaluationRun) -> int:
     context = _build_context(run.dataset, run.packs, rows)
 
     by_segment: dict[split_module.Segment, list[int]] = {}
+    calibration_pool: list[int] = []
     for index, row in enumerate(rows):
         by_segment.setdefault(boundaries.segment_of(row.timestamp), []).append(index)
+        if boundaries.in_calibration(row.timestamp):
+            calibration_pool.append(index)
     train_pool = by_segment.get(split_module.Segment.TRAIN, [])
     test_pool = by_segment.get(split_module.Segment.TEST, [])
     for name, pool, wanted in (
         ("train", train_pool, run.train_rows),
         ("test", test_pool, run.test_rows),
+        ("calibration", calibration_pool, run.calibration_rows),
     ):
         if len(pool) < wanted:
             raise DatasetGapError(
@@ -554,11 +770,21 @@ def run_evaluate(run: EvaluationRun) -> int:
     # the whole available period at the same cost, and the report prints the days it spans.
     train_index = evaluation.spread(train_pool, run.train_rows)
     test_index = evaluation.spread(test_pool, run.test_rows)
+    # Calibration rows sit inside validation, so they are neither fitted on nor scored here. They
+    # are computed and cached so the battery can calibrate on the period D-07 set aside for it.
+    calibration_index = evaluation.spread(calibration_pool, run.calibration_rows)
 
-    sample = train_index + test_index
-    vectors, labels, accounts = _feature_matrix(run, rows, sample, context)
+    sample = train_index + test_index + calibration_index
+    segments = (
+        ["train"] * len(train_index)
+        + ["test"] * len(test_index)
+        + ["calibration"] * len(calibration_index)
+    )
+    vectors, extras = _feature_matrix(run, rows, sample, context, segments)
+    labels = [v == "True" for v in extras[smoke.CACHE_LABEL]]
+    accounts = extras[smoke.CACHE_ACCOUNT]
     train = list(range(len(train_index)))
-    test = list(range(len(train_index), len(sample)))
+    test = list(range(len(train_index), len(train_index) + len(test_index)))
     for name, part in (("train", train), ("test", test)):
         if not any(labels[i] for i in part):
             raise DatasetGapError(
@@ -660,7 +886,9 @@ def run_smoke(run: smoke.SmokeRun) -> int:
     sample = list(range(len(rows) - sample_rows, len(rows)))
     cached = smoke.cache_read(cache, run.key) if cache else None
     if cached is not None:
-        vectors, labels, accounts = cached
+        vectors, extras = cached
+        labels = [v == "True" for v in extras[smoke.CACHE_LABEL]]
+        accounts = extras[smoke.CACHE_ACCOUNT]
         print(f"reusing {len(vectors)} cached feature rows from {cache}")
     else:
         corpus_index = CorpusIndex.build(rows)
@@ -681,7 +909,21 @@ def run_smoke(run: smoke.SmokeRun) -> int:
         labels = [bool(outcomes[rows[i].transaction_id].is_fraud) for i in sample]
         accounts = [rows[i].account_id for i in sample]
         if cache:
-            smoke.cache_write(cache, run.key, vectors, labels, accounts)
+            country_of = country_by_currency(packs)
+            smoke.cache_write(
+                cache,
+                run.key,
+                vectors,
+                {
+                    smoke.CACHE_LABEL: [str(v) for v in labels],
+                    smoke.CACHE_ACCOUNT: accounts,
+                    smoke.CACHE_SEGMENT: ["smoke"] * len(sample),
+                    smoke.CACHE_COUNTRY: [
+                        country_of.get(rows[i].currency or "", "?") for i in sample
+                    ],
+                    smoke.CACHE_CHANNEL: [rows[i].channel or "?" for i in sample],
+                },
+            )
             print(f"wrote the feature matrix to {cache}")
 
     # A time-ordered holdout: the sample is already in timestamp order, so the last 30% is later
@@ -765,6 +1007,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     evaluate_command.add_argument("--corpus-rows", type=int, default=400_000)
     evaluate_command.add_argument("--train-rows", type=int, default=12_000)
     evaluate_command.add_argument("--test-rows", type=int, default=8_000)
+    evaluate_command.add_argument(
+        "--calibration-rows",
+        type=int,
+        default=0,
+        help="rows from D-07's calibration period, computed and cached but neither fitted on nor "
+        "scored here; the battery calibrates on them",
+    )
     evaluate_command.add_argument("--seed", type=int, default=20260917)
     evaluate_command.add_argument(
         "--cache",
@@ -773,6 +1022,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="reuse the computed feature matrix here when it was computed for this dataset, "
         "corpus, split and sample sizes; write it there otherwise",
     )
+    battery_command = commands.add_parser(
+        "battery",
+        help="M4's experiments off a cached feature matrix: calibration, SHAP, ablations, "
+        "breakdowns and leave-one-country-out",
+    )
+    battery_command.add_argument("cache", type=Path)
+    battery_command.add_argument("--seed", type=int, default=20260917)
+    battery_command.add_argument("--top", type=int, default=15, help="features to list by |SHAP|")
     smoke_command = commands.add_parser(
         "smoke",
         help="train one model on the computable features and report it against the "
@@ -793,6 +1050,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
+        if args.command == "battery":
+            return run_battery(args.cache, args.seed, args.top)
         if args.command == "evaluate":
             return run_evaluate(
                 EvaluationRun(
@@ -802,6 +1061,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     corpus_rows=args.corpus_rows,
                     train_rows=args.train_rows,
                     test_rows=args.test_rows,
+                    calibration_rows=args.calibration_rows,
                     seed=args.seed,
                     cache=args.cache,
                 )
