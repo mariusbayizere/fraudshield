@@ -296,11 +296,13 @@ class Dataset:
         gated construction pair at 0.544. The delay figure is the larger channel and is the one the
         earlier "0.537 on its own" wording did not measure.
 
-        The delay is not purely a consequence of the scenario: ``fraud.takeover_lead_minutes`` is
-        ``[5, 60]`` and ``provenance: ASSUMED``, so every enabling event is followed by its drain
-        inside a tight uniform window with no long tail and no unexploited swaps. Part designed
-        causal signal, part artefact of an assumed schedule, and reporting it keeps that visible
-        rather than asserted.
+        The delay is not purely a consequence of the scenario: the lead is drawn from parameters
+        whose provenance is ASSUMED, so part of the separation is the assumed schedule. It was a
+        uniform ``[5, 60]`` minutes until 2026-09-22 — every enabling event drained inside the
+        hour, with no long tail and no unexploited swap — and is now a clipped lognormal with a
+        real tail (PB-56). Reporting the figure keeps the residual visible rather than asserted,
+        and the wording no longer names the numbers, because a docstring quoting a parameter goes
+        stale the first time the parameter moves.
 
         Delay is measured to the account's next transaction **within the same month**, which keeps
         the one-month-at-a-time memory property; an event with no later transaction in its own
@@ -549,7 +551,9 @@ def _reported_event_auc(
     return measured
 
 
-def _reported_event_results(measured: dict[str, float]) -> list[CheckResult]:
+def _reported_event_results(
+    measured: dict[str, float], config: SimulationConfig
+) -> list[CheckResult]:
     """The two excluded event channels, reported and never gated.
 
     See :func:`_reported_event_auc` for why they are measured at all.
@@ -566,7 +570,10 @@ def _reported_event_results(measured: dict[str, float]) -> list[CheckResult]:
             value("event_delay_seconds"),
             "reported, not gated: seconds from an event to that account's next transaction",
             "excluded from the event gate as the scenario's own signal, so it is tracked here "
-            "instead. The lead is drawn from fraud.takeover_lead_minutes = [5, 60], which is "
+            f"instead. The lead is drawn from a lognormal with median "
+            f"{config.parameters.number('fraud.takeover_lead_median_minutes'):.0f} minutes and "
+            f"sigma {config.parameters.number('fraud.takeover_lead_log_sigma')}, clipped to "
+            f"{[int(v) for v in config.parameters.numbers('fraud.takeover_lead_minutes')]}, all "
             "ASSUMED, so part of this separation is the assumed schedule rather than the scenario",
         ),
         CheckResult(
@@ -641,7 +648,7 @@ def _leakage_checks(
 
     reported_event_auc = _reported_event_auc(data, event_labels, config)
     measures["event_reported_auc"] = reported_event_auc
-    reported_event_results = _reported_event_results(reported_event_auc)
+    reported_event_results = _reported_event_results(reported_event_auc, config)
 
     file_order = separation(np.concatenate(data.file_index_parts), observed)
     measures["file_order_auc"] = file_order

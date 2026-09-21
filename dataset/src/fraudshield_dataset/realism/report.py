@@ -186,7 +186,7 @@ def render(
             )
             or "too few events at this size to measure either"
         )
-        + ". The delay reflects fraud.takeover_lead_minutes = [5, 60], which is ASSUMED, so part "
+        + ". The delay reflects the ASSUMED lead distribution (fraud.takeover_lead_*), so part "
         "of that separation is the assumed schedule rather than the scenario itself.",
         f"- File (month) order alone: AUC {measures['file_order_auc']:.3f}.",
         f"- Identifier construction over every character of the distinct tokens. Each band is "

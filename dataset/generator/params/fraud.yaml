@@ -127,10 +127,39 @@ parameters:
     provenance: ASSUMED
     rationale: Mules move proceeds across borders more often than ordinary customers remit (behaviour.cross_border_share); the share is a modelling choice.
   takeover_lead_minutes:
-    value: [5, 60]
-    unit: inclusive range of minutes between the enabling SIM swap or device change and the first fraudulent transaction
+    value: [5, 43200]
+    unit: >-
+      bounds, in minutes, on the delay between the enabling SIM swap or device change and the
+      first fraudulent transaction; the draw is lognormal and clipped to these
     provenance: ASSUMED
-    rationale: Takeovers are exploited quickly once control is gained; a modelling choice.
+    rationale: >-
+      Five minutes to thirty days. This was [5, 60] drawn uniformly until 2026-09-22, which meant
+      every enabling event was followed by its drain inside the hour, with no long tail and no
+      unexploited event -- and C-11 recorded since M2 that part of the event-delay channel's
+      separation was an artefact of that window rather than of the scenario (PB-56, owner
+      decision, because widening it changes the draw). The bounds are a floor and a cap on a
+      lognormal, not a uniform range: a drain twelve seconds after a swap is implausible, and a
+      lead of months would be a different scenario rather than a slow takeover.
+  takeover_lead_median_minutes:
+    value: 45
+    unit: median minutes from the enabling event to the first fraudulent transaction
+    provenance: ASSUMED
+    rationale: >-
+      Takeovers are usually exploited quickly once control is gained, so the mode stays in the
+      first hour. 45 minutes is the centre of the range this replaced, chosen so the change is
+      visible in the tail rather than in a shifted body.
+  takeover_lead_log_sigma:
+    value: 1.8
+    unit: sigma of the lognormal from which the lead is drawn, in log-minutes
+    provenance: ASSUMED
+    rationale: >-
+      The tail's weight, and the whole point of the change. Measured over 200,000 draws: a quarter
+      inside 13 minutes, half inside 45, 43.6% beyond an hour, 95% inside 14 hours and 2.7% beyond
+      a day. A lognormal is chosen because it is the ordinary shape for a delay -- a mode early
+      and a tail that does not end -- and not because any source supports 1.8; the 2026-09-18
+      sourcing pass established that no publication found gives takeover-to-drain delays for these
+      markets. A two-component fast/slow mixture was rejected: two clusters are structure of their
+      own, and a model could learn the gap between them as readily as the old tight window.
   drain_to_mule_probability:
     value: 0.7
     unit: probability that a drained or forwarded transfer goes to a known mule account rather than a one-off new account

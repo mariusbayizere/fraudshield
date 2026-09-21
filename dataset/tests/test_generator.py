@@ -797,3 +797,59 @@ def test_the_population_and_the_fraud_model_agree_on_who_is_synthetic() -> None:
     assert not all(mine for mine, _ in verdicts), "precondition: and some must not be"
     disagreements = [i for i, (mine, theirs) in enumerate(verdicts) if mine != theirs]
     assert not disagreements, f"the two predicates disagree on customers {disagreements[:5]}"
+
+
+@pytest.mark.req("ML-DATA-02", "D-08")
+def test_the_takeover_lead_has_a_tail_rather_than_a_window() -> None:
+    """PB-56: every enabling event used to be followed by its drain inside the hour.
+
+    That made "seconds since this account's last event" separate fraud from legitimate almost by
+    construction, and C-11 recorded since M2 that part of the event-delay channel's separation was
+    the assumed window rather than the scenario.
+
+    The assertions are on the **shape** and not on a quantile, because the quantiles are
+    parameters and a test that restated them would fail every time the owner tuned one without
+    ever testing anything. What must hold whatever the parameters say: the draw respects its
+    declared bounds, the body stays early, and a real fraction lands beyond an hour — a tail that
+    only one draw in ten thousand reaches is not a tail, it is a rounding error with a long name.
+    """
+    config = build_config(load_parameters(), seed=20260917, total_rows=40_000)
+    model = FraudModel(config, Population(config), LegitimateBehaviour(config, Population(config)))
+    low, high = model.lead
+
+    rng = np.random.default_rng(99)
+    minutes = [model._lead_micros(rng) / 60_000_000 for _ in range(20_000)]
+
+    assert min(minutes) >= low, "a lead below the declared floor"
+    assert max(minutes) <= high, "a lead above the declared cap"
+    assert float(np.median(minutes)) < 120, "the body must stay in the first hours"
+    beyond_an_hour = sum(1 for m in minutes if m > 60) / len(minutes)
+    assert 0.1 < beyond_an_hour < 0.9, (
+        f"{beyond_an_hour:.1%} of leads exceed an hour; outside this range the draw is either the "
+        "tight window PB-56 removed or a tail with no body left"
+    )
+    beyond_a_day = sum(1 for m in minutes if m > 1440) / len(minutes)
+    assert beyond_a_day > 0.005, (
+        f"only {beyond_a_day:.2%} of leads exceed a day, which is not a tail a model can be "
+        "confused by"
+    )
+
+
+@pytest.mark.req("ML-DATA-02")
+def test_the_lead_is_clipped_at_both_ends_rather_than_resampled() -> None:
+    """Clipping is the declared behaviour and the bounds are load-bearing at both ends.
+
+    A drain twelve seconds after a swap is implausible, and a lead of months is a different
+    scenario rather than a slow takeover. Resampling until the draw fell inside would change the
+    distribution's shape near the bounds without saying so.
+    """
+    config = build_config(load_parameters(), seed=20260917, total_rows=40_000)
+    model = FraudModel(config, Population(config), LegitimateBehaviour(config, Population(config)))
+    rng = np.random.default_rng(7)
+    minutes = [model._lead_micros(rng) / 60_000_000 for _ in range(20_000)]
+    low, high = model.lead
+
+    assert sum(1 for m in minutes if m == low) > 0, (
+        "precondition: some draw must fall below the floor, or clipping is untested there"
+    )
+    assert all(low <= m <= high for m in minutes)

@@ -18,7 +18,7 @@ import calendar
 from bisect import bisect_left
 from dataclasses import dataclass
 from functools import cached_property
-from math import ceil, sqrt
+from math import ceil, log, sqrt
 
 import numpy as np
 
@@ -110,6 +110,8 @@ class FraudModel:
         self.burst = (int(low), int(high))
         lead_low, lead_high = p.numbers("fraud.takeover_lead_minutes")
         self.lead = (int(lead_low), int(lead_high))
+        self.lead_median = p.number("fraud.takeover_lead_median_minutes")
+        self.lead_sigma = p.number("fraud.takeover_lead_log_sigma")
         self.night = p.number("fraud.night_probability")
         self.new_device = p.number("fraud.new_device_probability")
         self.mule_fraction = p.number("fraud.mule_account_fraction")
@@ -614,10 +616,24 @@ class FraudModel:
 
     # --- the eight scenarios (signals: docs/ml/scenarios/) ------------------------------------
 
+    def _lead_micros(self, rng: np.random.Generator) -> int:
+        """Minutes from the enabling event to the drain, as microseconds (PB-56).
+
+        Lognormal rather than uniform. Until 2026-09-22 this was `rng.integers(5, 61)`, so every
+        takeover was drained inside the hour — which made "seconds since this account's last
+        event" separate fraud from legitimate almost by construction, and C-11 had recorded since
+        M2 that part of the event-delay channel's 0.758 was that window rather than the scenario.
+
+        Clipped to the declared bounds at both ends: a drain twelve seconds after a swap is
+        implausible, and a lead of months is a different scenario rather than a slow takeover.
+        """
+        drawn = rng.lognormal(log(self.lead_median), self.lead_sigma)
+        return int(min(max(drawn, self.lead[0]), self.lead[1])) * _MINUTE
+
     def _sim_swap(self, incident: Incident, rows: Rows, events: list[FraudEvent]) -> None:
         rng, customer = incident.rng, incident.customer
         start = self._start(incident)
-        lead = int(rng.integers(self.lead[0], self.lead[1] + 1)) * _MINUTE
+        lead = self._lead_micros(rng)
         novel = start - lead >= self.config.split.test_start and rng.random() < self.novelty_share
         if novel:
             # Novel sub-variant, test period only: re-provisioning seen as a device change, and a
@@ -648,7 +664,7 @@ class FraudModel:
     def _account_takeover(self, incident: Incident, rows: Rows, events: list[FraudEvent]) -> None:
         rng, customer = incident.rng, incident.customer
         start = self._start(incident)
-        lead = int(rng.integers(self.lead[0], self.lead[1] + 1)) * _MINUTE
+        lead = self._lead_micros(rng)
         events.append(FraudEvent(customer.account, "DEVICE_CHANGE", start - lead))
         for timestamp in self._times(incident, start):
             channel = ("ONLINE", "MOBILE_MONEY", "BANK_TRANSFER")[int(rng.integers(0, 3))]
