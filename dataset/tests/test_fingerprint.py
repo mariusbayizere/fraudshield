@@ -12,8 +12,12 @@ from __future__ import annotations
 
 import math
 import shutil
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 
+import pyarrow as pa
+import pyarrow.parquet as pq
 import pytest
 
 from fraudshield_dataset.fingerprint import (
@@ -208,3 +212,81 @@ def test_the_sample_is_the_first_rows_under_a_total_order(dataset: Path) -> None
         "precondition: an account id repeats in the sample, which is what makes a whole-row "
         "ordering key necessary rather than tidy"
     )
+
+
+@pytest.mark.req("ML-DATA-08")
+def test_every_column_of_a_sampled_row_reaches_the_fingerprint(
+    dataset: Path, tmp_path: Path
+) -> None:
+    """The defect version 1 had, as a test that fails against version 1 and passes against 2.
+
+    PB-40 gave the generator a device-sharing mechanism. It rewrote `device_fingerprint` for
+    hundreds of accounts and changed nothing else — and the fingerprint **did not move**, because
+    the sample hashed three columns per table and `device_fingerprint` was not one of them. A
+    guard that reads three columns of fourteen cannot answer "is this report still about this
+    dataset?", which is the only question it exists to answer.
+
+    The assertion is per column, over every column the table has rather than over a chosen few:
+    choosing which columns to check would reproduce the original mistake inside the test written
+    to prevent it.
+
+    The row perturbed is one the sample actually contains. The first attempt at this test edited
+    row 0 of the first partition and failed for all fourteen columns — the sample is the 1,024
+    rows that sort first by identifier, and row 0 of a partition is almost never among them. A
+    test that edits an unsampled row proves nothing about any column.
+    """
+    original = dataset_fingerprint(dataset)
+    sampled_id = table_fingerprint(dataset, "transactions")["sample"][0][0]
+
+    for partition in sorted((dataset / "transactions").glob("month=*/*.parquet")):
+        table = pq.read_table(partition)
+        identifiers = table.column("transaction_id").to_pylist()
+        if sampled_id in identifiers:
+            row = identifiers.index(sampled_id)
+            break
+    else:
+        raise AssertionError(f"{sampled_id} is in the sample but in no partition")
+
+    unmoved = []
+    for column in table.schema.names:
+        changed = tmp_path / f"only-{column}"
+        if changed.exists():
+            shutil.rmtree(changed)
+        shutil.copytree(dataset, changed)
+        kind = table.schema.field(column).type
+        values = table.column(column).to_pylist()
+        values[row] = _perturb(kind, values[row])
+        edited = table.set_column(
+            table.schema.get_field_index(column), column, pa.array(values, type=kind)
+        )
+        pq.write_table(edited, changed / partition.relative_to(dataset))
+        if dataset_fingerprint(changed) == original:
+            unmoved.append(column)
+
+    assert not unmoved, (
+        f"changing {unmoved} in a sampled row leaves the fingerprint identical, so a draw that "
+        "moved only those columns would ship under a report that no longer describes it"
+    )
+
+
+def _perturb(kind: pa.DataType, value: object) -> object:
+    """A different value of the same type, so the edit is a change and not a type error.
+
+    Every Arrow type the tables use has a case, and an unknown one raises rather than returning
+    the value unchanged: a silent no-op would leave that column untested while the loop above
+    reported it as passing.
+    """
+    if pa.types.is_string(kind):
+        return "perturbed" if value != "perturbed" else "perturbed-2"
+    if pa.types.is_decimal(kind):
+        return (value if isinstance(value, Decimal) else Decimal(0)) + Decimal("1.0000")
+    if pa.types.is_timestamp(kind):
+        base = value if isinstance(value, datetime) else datetime(2024, 1, 1, tzinfo=UTC)
+        return base + timedelta(seconds=1)
+    if pa.types.is_boolean(kind):
+        return not value
+    if pa.types.is_floating(kind):
+        return (value if isinstance(value, float) else 0.0) + 1.0
+    if pa.types.is_integer(kind):
+        return (value if isinstance(value, int) else 0) + 1
+    raise AssertionError(f"no perturbation defined for {kind}, so the column would go unchecked")

@@ -891,3 +891,30 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
   do not acquire a dependency on the governance package. `fs-exit-criteria` reads the stamp:
   absent is a **warning** (every artefact predating the guard lacks one, and failing them would
   get the threshold lowered until nothing failed), present-and-contradicting is an **error**.
+
+### PB-54 · The fingerprint read three columns of fourteen
+- **Source:** regenerating for PB-40, 2026-09-21 · **Priority:** high · **Resolved:** same day
+- **What happened:** PB-40 gave the generator a device-sharing mechanism. It rewrote
+  `device_fingerprint` for 504 devices and changed nothing else — and `dataset_fingerprint`
+  returned **the identical value** for the old draw and the new one. Measured, not suspected: the
+  new dataset holds devices serving up to seven accounts and the old one held none serving two.
+- **Cause:** `SAMPLED_COLUMNS` hashed three columns per table, and `device_fingerprint` was not
+  among them. The fingerprint exists to answer "is this report still about this dataset?" and
+  could not see a change to eleven of the fourteen transaction columns.
+- **Why it matters more than an ordinary bug.** PB-41 built this guard *because* the parameter
+  digest checked the input it was written for rather than the output it exists to protect — the
+  sixth instance of that shape in the notebook. The fingerprint then made the same mistake one
+  level down, in the module whose own docstring names the pattern. **A guard is not exempt from
+  the failure it was built to catch.**
+- **Fix:** version 2 hashes **every** column of each sampled row. `ORDERING_COLUMN` now names only
+  the column the sample is *ordered* by, which decides which rows are sampled and nothing else.
+  `FINGERPRINT_VERSION` is bumped so a version 1 value is never compared with a version 2 one —
+  which is what that constant was for.
+- **The test is per column, over every column the table has**, because choosing which columns to
+  check would reproduce the original mistake inside the test written to prevent it. It perturbs a
+  row the sample actually contains: the first attempt edited row 0 of the first partition and
+  failed for all fourteen columns, since the sample is the 1,024 rows that sort first by
+  identifier and row 0 is almost never among them. A test that edits an unsampled row proves
+  nothing about any column.
+- **Consequence for the record:** every fingerprint published before 2026-09-21 is a version 1
+  value. `40a77bb6` (v1) is `b896b632` under v2; the current dataset is `c8856a0e`.
