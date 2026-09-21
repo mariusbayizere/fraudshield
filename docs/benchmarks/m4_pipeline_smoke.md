@@ -33,7 +33,7 @@ population.
 ## The run
 
 `fs-features smoke <dataset> --packs <packs.json> --corpus-rows 200000 --sample-rows 20000`,
-2026-09-20, on the working tree committed as the change that introduced this file. 13.5 minutes:
+2026-09-20, on the working tree committed as `49b2bcb`. 13.5 minutes:
 **the feature pass is the entire cost** — 20,000 rows at 28 rows/second, about twelve minutes —
 and the model fit is seconds. Raw output: `docs/benchmarks/m4_pipeline_smoke.txt`.
 

@@ -1,6 +1,7 @@
 # fs-features computability dataset/output/bench1m --packs <packs.json> --corpus-rows 200000 --sample-rows 20000
 # 2026-09-21, dataset fingerprint 40a77bb66868777f81c2cc72b5d23cf900c41c1d86c2fb84620b2d589b4f42a1
-# 1,006,249 rows at seed 20260917. Produced at the tree committed as the change that adds this file.
+# 1,006,249 rows at seed 20260917. Produced at commit 49b2bcb, which is the commit that adds
+# this file -- stated as a hash because PB-52 is about the difference between those two claims.
 
 corpus: 200000 transactions from dataset/output/bench1m
 computability: 44 features over 20000 scored rows

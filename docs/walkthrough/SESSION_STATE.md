@@ -13,7 +13,7 @@ precisely so that clearing a session cannot cost another 20-minute run.
 | Rows | 1,006,249, 24 months, 2024-01 to 2025-12 |
 | Seed | 20260917, `--rows 1000000` |
 | Fingerprint | `40a77bb66868777f81c2cc72b5d23cf900c41c1d86c2fb84620b2d589b4f42a1` |
-| Generated at | the tree committed as the M4-opening change on `m3/features`, 2026-09-21 |
+| Generated at | commit `49b2bcb` on `m3/features`, 2026-09-21 |
 | Published packs | regenerate with `fs-dataset packs --output <path>`; the feature CLI needs them |
 | Describes it | `dataset/realism_report.md`, which now carries that fingerprint (PB-41 closed) |
 
