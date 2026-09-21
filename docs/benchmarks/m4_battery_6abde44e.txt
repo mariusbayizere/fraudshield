@@ -1,0 +1,94 @@
+# evidence-commit: a7c55422c8c53bdf087cec0ccf3568ae2f3b5c65
+# evidence-tree-state: clean
+# command: .venv/bin/python -u -m fraudshield_ml.cli battery dataset/output/features_full.parquet
+# exit: 0
+
+M4 BATTERY — every figure on D-07's test period, every model fitted on its train period,
+nothing tuned. Margins are against the full model unless a table says otherwise.
+  cache dataset/output/features_full.parquet
+  rows train/test/calibration 30000/60000/20000
+
+HEADLINE
+                                     AUC           margin  R@1%      rows fraud
+  full model, 38 features            0.991 +/-0.006         0.947    60000   551
+
+CALIBRATION — Platt scaling fitted on D-07's calibration period, which is neither
+fitted on nor scored. AUC is unchanged by construction: a monotone map cannot reorder.
+  Brier before 0.00187  ->  after 0.00186
+  expected calibration error 0.0005
+
+  predicted       rows   predicted   observed
+  [0.0, 0.1)     59345    0.001      0.001
+  [0.1, 0.2)        66    0.140      0.152
+  [0.2, 0.3)        52    0.247      0.327
+  [0.3, 0.4)        28    0.351      0.464
+  [0.4, 0.5)        25    0.453      0.320
+  [0.5, 0.6)        19    0.559      0.737
+  [0.6, 0.7)        30    0.653      0.600
+  [0.7, 0.8)        22    0.757      0.773
+  [0.8, 0.9)        56    0.861      0.929
+  [0.9, 1.0)       357    0.980      0.978
+
+EXPLANATIONS — exact TreeSHAP from XGBoost's own pred_contribs, no new dependency.
+  additivity error 1.28e-05 (contributions must sum to the model's margin)
+
+  top 15 features by mean |SHAP|
+  counterparty_is_new_for_account    1.1901
+  velocity_ratio_1h_vs_30d           0.8445
+  counterparty_confirmed_fraud_90d   0.6797
+  device_age_days                    0.5278
+  seconds_since_last_tx              0.4323
+  round_sum_flag                     0.3559
+  distance_from_home_centroid_km     0.2741
+  amount_sum_24h                     0.2651
+  channel                            0.2618
+  local_hour_cos                     0.2325
+  implied_speed_kmh                  0.2298
+  amount_zscore_90d                  0.2280
+  local_hour_sin                     0.2232
+  tx_count_to_counterparty_30d       0.2205
+  amount_log1p                       0.2118
+
+ABLATIONS — one feature group removed, refitted. A negative margin is the group's worth.
+                                     AUC           margin  R@1%      rows fraud
+  without counterparty (4)           0.960 +/-0.011  -0.031  0.789    60000   551
+  without temporal (6)               0.989 +/-0.006  -0.001  0.940    60000   551
+  without corridor (1)               0.990 +/-0.006  -0.001  0.947    60000   551
+  without agent (2)                  0.990 +/-0.006  -0.001  0.944    60000   551
+  without velocity (8)               0.990 +/-0.006  -0.001  0.938    60000   551
+  without account_profile (2)        0.990 +/-0.006  -0.001  0.949    60000   551
+  without geographic (5)             0.990 +/-0.006  -0.000  0.942    60000   551
+  without device_and_channel (5)     0.990 +/-0.006  -0.000  0.918    60000   551
+  without amount_behaviour (4)       0.991 +/-0.006  -0.000  0.946    60000   551
+  without synthetic_identity (1)     0.991 +/-0.006  +0.000  0.946    60000   551
+
+BY COUNTRY — the same model and the same scores, sliced.
+                                     AUC           margin  R@1%      rows fraud
+  CD                                 0.999 +/-0.015  +0.008  1.000     2948     7
+  KE                                 0.996 +/-0.007  +0.006  0.968    16822   156
+  RW                                 0.994 +/-0.007  +0.003  0.951    25239   247
+  TZ                                 0.981 +/-0.020  -0.010  0.906     8982    85
+  UG                                 0.975 +/-0.029  -0.016  0.911     6009    56
+  ^ CD rest on fewer than 30 fraud rows; read those as direction
+    rather than as measurement.
+
+BY CHANNEL — the same model and the same scores, sliced.
+                                     AUC           margin  R@1%      rows fraud
+  AGENT_BANKING                      0.988 +/-0.016  -0.003  0.924     8361    92
+  BANK_TRANSFER                      0.998 +/-0.007  +0.007  0.957     3690    69
+  CARD                               0.994 +/-0.012  +0.003  0.917     7208    84
+  MOBILE_MONEY                       0.993 +/-0.011  +0.002  0.952    24518   124
+  ONLINE                             0.981 +/-0.020  -0.009  0.905     5578    84
+  USSD                               0.994 +/-0.011  +0.003  0.939    10645    98
+
+LEAVE-ONE-COUNTRY-OUT — the country is removed from training entirely, then scored.
+  Compare each row against the same country in BY COUNTRY, not against the headline: a
+  country's own difficulty and the cost of never having seen it are different things.
+                                     AUC           margin  R@1%      rows fraud
+  CD unseen in training              0.999 +/-0.014         1.000     2948     7
+  KE unseen in training              0.996 +/-0.007         0.962    16822   156
+  RW unseen in training              0.993 +/-0.008         0.955    25239   247
+  TZ unseen in training              0.979 +/-0.021         0.918     8982    85
+  UG unseen in training              0.976 +/-0.028         0.911     6009    56
+  ^ CD unseen in training rest on fewer than 30 fraud rows; read those as direction
+    rather than as measurement.

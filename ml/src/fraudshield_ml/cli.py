@@ -602,28 +602,48 @@ def _battery_shap(bench: Battery, top: int) -> list[str]:
     )
 
 
-def _battery_ablations(bench: Battery, headline: float) -> list[str]:
-    """One registry group removed at a time. A negative margin is what the group was worth."""
+def _groups(names: Sequence[str]) -> dict[str, list[str]]:
     groups: dict[str, list[str]] = {}
-    for name in bench.names:
+    for name in names:
         groups.setdefault(REGISTRY[name].group.name.lower(), []).append(name)
-    rows = []
+    return groups
+
+
+def _refit_on(bench: Battery, kept: list[int]) -> list[float]:
+    reduced = [[row[i] for i in kept] for row in bench.matrix]
+    return smoke.fit_and_score(reduced, bench.labels, bench.train, bench.test, seed=bench.seed)
+
+
+def _battery_ablations(bench: Battery, headline: float) -> list[str]:
+    """Each group removed, and then each group **alone**. The pair is the point.
+
+    Leave-one-out alone cannot see redundancy: if two groups each suffice, removing either costs
+    nothing and both look worthless. Keep-one-only says what a group can do by itself. Read
+    together they separate "this group carries nothing" from "this group carries something several
+    others also carry", which are opposite conclusions with the same leave-one-out signature.
+    """
+    groups = _groups(bench.names)
+    held = bench.labels_of(bench.test)
+    without, only = [], []
     for group, members in sorted(groups.items()):
         kept = [i for i, n in enumerate(bench.names) if n not in members]
-        if not kept:
-            continue
-        reduced = [[row[i] for i in kept] for row in bench.matrix]
-        scores = smoke.fit_and_score(
-            reduced, bench.labels, bench.train, bench.test, seed=bench.seed
-        )
-        rows.append(
-            battery.score(f"without {group} ({len(members)})", scores, bench.labels_of(bench.test))
-        )
-    return report.table(
-        "ABLATIONS — one feature group removed, refitted. A negative margin is the group's worth.",
-        sorted(rows, key=lambda item: item.auc),
+        if kept:
+            without.append(
+                battery.score(f"without {group} ({len(members)})", _refit_on(bench, kept), held)
+            )
+        alone = [i for i, n in enumerate(bench.names) if n in members]
+        only.append(battery.score(f"{group} alone ({len(members)})", _refit_on(bench, alone), held))
+    lines = report.table(
+        "ABLATIONS, ONE GROUP REMOVED — a negative margin is what that group was worth.",
+        sorted(without, key=lambda item: item.auc),
         headline,
     )
+    lines += report.table(
+        "ABLATIONS, ONE GROUP ONLY — what each group can do by itself.",
+        sorted(only, key=lambda item: item.auc, reverse=True),
+        headline,
+    )
+    return lines
 
 
 def _battery_breakdowns(bench: Battery, scores: list[float], headline: float) -> list[str]:
