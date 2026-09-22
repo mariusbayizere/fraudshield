@@ -12,6 +12,9 @@ Verdict: **not yet given.** This record collects evidence step by step; the mile
 | d8e269f | `pnpm test:coverage --maxWorkers=1` | 243 tests pass; 100% statements, branches, functions, lines |
 | d8e269f | `pnpm build-storybook` | 44 stories built, the same 44 that `stories.test.tsx` axe-checks |
 | d8e269f | CI `ci` 35719973368, `frontend` job | success |
+| 2d374f2 | CI `ci` 35771102331, `frontend-e2e` 35771102320 (Chromium, Firefox, WebKit), `stack`, `devcontainer` | success |
+| 98acac4 | CI `ci` 35758074849 | **failure**: `pnpm build-storybook`. Storybook builds with the app's vite.config.ts, so vite-plugin-pwa ran there and failed on Storybook's 3.3 MB manager bundle. Fixed in a904662. |
+| 1c9bd00 | CI `ci` 35763389660 | **failure**: `pnpm lint`, a spread-on-Storage error committed in d160b3b and fixed in 2d374f2. The same run's `java` job also failed, on a tree whose backend is identical to a green run; it passed again on 2d374f2. |
 
 ## Mutation spot checks (what was broken → which test failed)
 
@@ -92,6 +95,30 @@ progressbar. That fails all 8 gauge stories with `serious aria-progressbar-name`
 | `?dir=` override ignored | caught (rtl.spec.ts) |
 | RTL cache without `stylis-plugin-rtl` | caught (rtl.spec.ts) |
 | Navigation links straight inside `<ul>` | caught by the AppShell axe test. The first attempt replaced only the opening tag and did not compile, so it proved nothing; it was redone with both tags replaced. |
+
+### Auth (at 2d374f2, 754b7e5)
+
+39 mutants across the session, sign-in, registration, password policy and recovery.
+Caught after the fixes below; the survivors are recorded because each was a gap in the tests,
+not in the code:
+
+| Survivor | Why it survived | Fixed by |
+|---|---|---|
+| Token read from localStorage | No test asserted the token never reaches storage | `tokens.test.tsx` (d160b3b) |
+| Authorization header dropped | No test asserted the header is sent | `tokens.test.tsx` (d160b3b) |
+| Guard renders the console to an anonymous visitor | The test asserted the redirect, not that content stayed hidden | `session.test.tsx` (d160b3b) |
+| Password length in UTF-16 units | The shared vectors reach past the BMP only through byte counts | `password.test.ts` (dd0cb84) |
+| Employee ID pattern widened | No test rejected a malformed ID | `fields.test.ts` (dd0cb84) |
+| "Code is on its way" echoes the address | The assertion was a substring match | `recovery.test.tsx` (13ad126) |
+| Six-digit code widened to any digits | That test left the email empty, so the button was disabled anyway | `recovery.test.tsx` (13ad126) |
+| Reset sends a constant token | The fixture token was that same constant | `recovery.test.tsx` (5877a4f) |
+
+Two notes on method:
+
+- An early "links straight inside `<ul>`" mutant replaced only the opening tag, so the file did
+  not compile and the "catch" proved nothing. Mutants must compile; it was redone.
+- At 754b7e5 the mutation loop's `git checkout --` discarded uncommitted improvements to the
+  same files, which had to be redone. The rule stands: commit before any mutation run.
 
 ## Findings
 
