@@ -2255,3 +2255,57 @@ counterparty patterns) is untested and out of scope for this entry.
 
 The 2026-09-22 pre-registration entry above is unedited. This entry supersedes nothing in it; it
 reports the measurement that entry said would follow.
+
+### 2026-09-22 · The m2-complete tag sits on a commit whose python CI job fails
+
+Found when `main` was fast-forwarded from the M1 merge (`a7e6896`) to `m2-complete` (`ed7a8d9`),
+the first time either M2 or M3 reached `main`. The `ci` run that push triggered failed at
+`mypy --strict`, before pytest ran:
+
+```
+dataset/tests/test_generator.py:501: error: Item "None" of "Match[str] | None" has no attribute "group"  [union-attr]
+dataset/tests/test_generator.py:520: error: Item "None" of "Match[str] | None" has no attribute "group"  [union-attr]
+```
+
+Reproduced locally at the same commit with the lockfile's own mypy (2.3.1). The calls are
+`re.search(...).group(1)` with no `None` check, introduced by `1ff1d2f` ("refuse a run too small to
+stage every fraud scenario", 2026-09-18) — seventeen commits into M2's review work and one day
+before the tag.
+
+**What the record said.** `docs/reviews/M2/gate-evidence.md` cites `ci` run 35323956798 as green
+on every job, at `817db76`, which it calls "the current branch head". It also states the rule
+this breaks, in its own words: the `ci` citation "should be moved forward whenever the head moves
+— otherwise the tag rests on a commit that is not the one being tagged". The head then moved
+seventeen commits, including `1ff1d2f`, and the tag went on `ed7a8d9` with the citation still at
+`817db76`.
+
+**What CI actually recorded on the tagged commit.** Before 2026-09-22, no `ci` check-run exists on
+`ed7a8d9` at all — the python, java, frontend and governance jobs never ran there, although `ci`
+triggers on every push; why is not established from the API alone (the per-ref
+`cancel-in-progress` concurrency group is one candidate, not a verified cause). The `stack` and
+`devcontainer` workflows did run on 2026-09-19, starting at 08:35 UTC — ten minutes *after* the
+tag (10:25 +0200, 08:25 UTC), so they could not have informed it: stack succeeded, and **`build
+devcontainer, post-create make ci, smoke test inside` failed**. So the tag was placed with no CI
+result on its commit at all, and the first two results that commit ever received included a
+failure nobody read.
+
+**How it was fixed, and why that did not surface it either.** The `None` checks were added in
+`5f0a8a1` (2026-09-19), a `feat(ml)` commit declaring the 44 features, whose message does not
+mention the fix. M3's CI went green, `m3-complete` is green on every job including the
+devcontainer, and nothing pointed back at the tag.
+
+**Not fixed forward on `main`.** A commit on `main` at `m2-complete` would break the ancestry, and
+`main` could then no longer fast-forward to `m3-complete`. `main` was red at `m2-complete` only
+transiently and was fast-forwarded to the green `m3-complete` the same morning. The tag is not
+moved or re-cut: it records what was signed off, and this entry records what that was.
+
+**The pattern.** The same one PB-52 and PB-53 were about, on a tag instead of an artefact: the
+record ran ahead of the facts. A citation written when a commit was the head was left standing
+after the head moved, and the tag inherited a green it never had. It was caught only because
+`main` made the tagged commit build again.
+
+**The structural fix.** PB-53's `fs-evidence` stamp already makes an evidence artefact carry the
+commit and tree state it was produced from, rather than the one its author believed. The same
+rule belongs on a milestone tag: **a milestone tag requires a green run of every CI job on the
+exact commit being tagged**, cited by run ID against that SHA, not a green run on an ancestor.
+A citation to any other commit is evidence about a different tree.
