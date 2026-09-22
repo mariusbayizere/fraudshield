@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { contrastRatio } from './color/contrast';
 import { colourPairs } from './contrastPairs';
 import { renderCssVariables, renderTailwindTheme } from './css';
@@ -88,7 +89,7 @@ describe('the generated CSS', () => {
     ['tokens.css', renderCssVariables],
     ['tailwind-theme.css', renderTailwindTheme],
   ] as const)('%s is what the tokens produce, so it cannot drift by hand', (file, render) => {
-    const committed = readFileSync(new URL(`generated/${file}`, import.meta.url), 'utf8');
+    const committed = readFileSync(join(import.meta.dirname, 'generated', file), 'utf8');
     expect(committed).toBe(render(tokens));
   });
 });

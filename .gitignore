@@ -40,6 +40,7 @@ target/
 node_modules/
 .pnpm-store/
 dist/
+storybook-static/
 coverage/
 .vite/
 playwright-report/
