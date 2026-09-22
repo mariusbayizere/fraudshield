@@ -244,6 +244,31 @@ paths:
         "429": { $ref: "#/components/responses/TooManyRequests" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
 
+  /system/status:
+    get:
+      tags: [health]
+      operationId: getSystemStatus
+      summary: Degraded modes in force, for the console's system banners (FR-04-12, E.9)
+      description: >-
+        The list of degraded modes currently in force, and nothing else: no component names,
+        versions, hostnames, metrics or queue depths. Any authenticated staff role may read it,
+        because the console shows these banners above every screen; the detail behind them stays
+        on GET /admin/health, which only an administrator may read. An empty list means the system
+        is running normally.
+      x-required-roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER, ADMIN]
+      responses:
+        "200":
+          description: Degraded modes in force
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SystemStatus" }
+              examples:
+                healthy: { $ref: "#/components/examples/SystemStatusHealthy" }
+                mlDown: { $ref: "#/components/examples/SystemStatusMlUnavailable" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
   /actuator/health:
     servers:
       - url: "{scheme}://{instance}:{managementPort}"
@@ -2655,6 +2680,14 @@ components:
           schema: { $ref: "#/components/schemas/Problem" }
 
   examples:
+    SystemStatusHealthy:
+      summary: Nothing degraded
+      value:
+        degraded_modes: []
+    SystemStatusMlUnavailable:
+      summary: Rules are deciding while the model is unavailable
+      value:
+        degraded_modes: [ML_UNAVAILABLE]
     IngestMobileMoney:
       summary: MOBILE_MONEY domestic P2P transfer (Kigali)
       value:
@@ -4210,6 +4243,17 @@ components:
         started_at: { $ref: "#/components/schemas/Timestamp" }
         candidate_model_version: { type: [string, "null"] }
         evaluation_passed: { type: [boolean, "null"] }
+    SystemStatus:
+      description: >-
+        What the staff console needs to show its degraded-mode banners, and nothing more. The
+        values are the same as SystemHealth.degraded_modes; a contract test keeps them identical.
+      type: object
+      required: [degraded_modes]
+      additionalProperties: false
+      properties:
+        degraded_modes:
+          type: array
+          items: { type: string, enum: [ML_UNAVAILABLE, DEGRADED_MODE, KAFKA_SPOOLING, REALTIME_PAUSED] }
     SystemHealth:
       type: object
       required:

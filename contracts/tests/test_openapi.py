@@ -536,3 +536,21 @@ def test_person_name_schema_defers_to_the_shared_unicode_rule() -> None:
     accepted = [v["normalised"] for v in vectors["accept"]]
     assert all(unicodedata.is_normalized("NFC", value) for value in accepted)
     assert any(not unicodedata.is_normalized("NFC", v["input"]) for v in vectors["accept"])
+
+
+@pytest.mark.req("FR-04-12", "FR-06-05")
+def test_degraded_modes_are_the_same_list_for_staff_and_for_admins() -> None:
+    """The console's banners (E.9) read /system/status; the detail stays on /admin/health."""
+    status = SCHEMAS["SystemStatus"]
+    assert status["properties"].keys() == {"degraded_modes"}, "no component detail for analysts"
+    assert status["additionalProperties"] is False
+    assert status["required"] == ["degraded_modes"]
+    banners = status["properties"]["degraded_modes"]["items"]["enum"]
+    health = SCHEMAS["SystemHealth"]["properties"]["degraded_modes"]["items"]["enum"]
+    assert banners == health, "the two lists must stay identical"
+
+    operation = DOC["paths"]["/system/status"]["get"]
+    assert operation["x-required-roles"] == list(SCHEMAS["Role"]["enum"]), (
+        "every staff role sees the banners"
+    )
+    assert "x-required-scopes" not in operation, "staff endpoint, not a machine one"
