@@ -53,6 +53,49 @@ M7 adopted a hybrid persistence layer, and **M6 must follow the same rule**:
   statements as well.
 - Guard listing endpoints against N + 1 with a Hibernate-statistics test, as `QueryCountTest` does.
 
+### The owner's full statement of the rule (2026-09-22, for M6)
+
+The owner restated this directly for M6, as an ADR on M6's branch in M6's ADR range. Recorded here
+because it reached the M7 session; M6 owns the work and the ADR. Read
+`origin/m7/staff-auth:docs/adr/0071-hybrid-persistence-jpa-and-explicit-sql.md` first and follow
+the same pattern, so both backends match.
+
+1. **JPA with Hibernate for M6's CRUD and configuration data:** thresholds and their versions,
+   circuit-breaker settings, rules, alert queue entries, batch jobs, institutions, and anything an
+   administrator edits.
+2. **Explicit SQL only where it is required**, with each case justified in the ADR:
+   - the audit hash chain and every append-only table (change tracking can emit UPDATEs and
+     reorder writes; chain correctness depends on write order);
+   - the synchronous decision hot path (per-request latency);
+   - TimescaleDB hypertables, continuous aggregates and batched `COPY`;
+   - the PII vault;
+   - PostgreSQL features with no clean JPA expression: `set_config` for tenant isolation, ARRAY
+     columns, `ON CONFLICT`.
+
+   Any JPA entity over an append-only table is `@Immutable`.
+3. **Hibernate configuration, each with a test:** `ddl-auto=validate` (Flyway owns the schema),
+   `open-in-view=false`, no N + 1 queries (fetch joins or `@EntityGraph`, with a
+   Hibernate-statistics test), and row-level security still enforced by setting the institution per
+   transaction on the same connection Hibernate uses.
+4. **`DemoDataSeeder`:** convert its user, institution and risk-configuration inserts to JPA
+   repositories; keep its audit insert as explicit SQL, with the reason in the ADR.
+5. **All existing tests stay green**, and the mutation checks are re-run on anything converted.
+
+`DemoDataSeeder` is in `backend/persistence`, which neither M6 nor M7 owns outright. M7 changed
+only that module's migrations. Whoever converts the seeder should say so in their updates file, so
+the other milestone sees it at merge.
+
+What M7 learned doing this, which M6 can reuse (all in ADR 0071):
+
+- lock a row with `refresh(entity, PESSIMISTIC_WRITE)`, never a locking query: a locking query
+  returns a copy the transaction already holds, or rejects the row outright when its version moved
+  (§4);
+- bulk JPQL updates bypass `@Version`, so advance it explicitly where a trigger used to (§3);
+- flush after every JPA write that explicit SQL later reads in the same transaction (§4);
+- `JpaTransactionManager` shares its connection with `JdbcTemplate`, which is what keeps
+  `set_config` applying to Hibernate's statements (§3);
+- anchor any cache TTL before its database read, so the bound does not include the read (§6).
+
 ## Files outside the M7 modules that this branch touches
 
 M7 owns `backend/{audit,auth,admin}`. These edits outside those modules could not be avoided:
