@@ -2425,7 +2425,9 @@ actually supplies:
 Measured twice, independently: by the author and by the independent Principal Reviewer, who raised
 it (`docs/reviews/M5/principal-review.md`, finding 1).
 
-**The point.** **AUC fell by 0.009, comfortably inside the gate's own 95% interval (±0.0075), while
+**The point.** **AUC fell by 0.0089 — about one half-width of the gate's own 95% interval
+(±0.0075), so the two intervals overlap heavily and the drop would not be called a regression —
+while
 162 of 725 frauds stopped reaching the 0.60 flag threshold: a 22% fall in detections at the
 operating point the system actually decides on.** A ranking metric averages over every pair of
 rows; a threshold reads one row at a time. Degrading a feature that matters near the threshold and

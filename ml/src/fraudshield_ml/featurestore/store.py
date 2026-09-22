@@ -95,6 +95,11 @@ W_RAMP_MONTH = _window_micros("synthetic_identity_score")
 W_RAMP_RECENT = 7 * SECONDS_PER_DAY * MICROS
 #: The longest window any account-keyed read needs: everything older is trimmed on write.
 ACCOUNT_HORIZON = max(W_90D, W_30D, W_7D, W_RAMP_MONTH)
+#: How long a verdict may take before its absence means a missing producer rather than the normal
+#: wait. E.3's label delay is log-normal with a 72-hour median and log-sigma 1.2
+#: (`dataset/generator/params/labels.yaml`), so ~95% of verdicts have arrived by three weeks.
+#: Under it, an unlabelled row is a label in flight; over it, nobody is writing them (ADR 0034).
+LABEL_LATENCY = 21 * SECONDS_PER_DAY * MICROS
 
 
 def micros(moment: datetime) -> int:
@@ -448,7 +453,7 @@ class FeatureStore:
         if tx.agent_id is not None:
             self._agent(ctx, tx, snap)
         self._cell(ctx, tx, snap.cell_rows, t)
-        self._count_missing_producers(snap, ctx)
+        self._count_missing_producers(snap, ctx, t, degraded=degraded and not self.authoritative)
         month = sum(1 for _, s in snap.rows if s > t - W_RAMP_MONTH)
         if month:
             recent = sum(1 for _, s in snap.rows if s > t - W_RAMP_RECENT)
@@ -458,19 +463,38 @@ class FeatureStore:
             context=ctx, exact_ages=exact, degraded=degraded and not self.authoritative
         )
 
-    def _count_missing_producers(self, snap: _Snapshot, ctx: pb.AccountContext) -> None:
+    def _count_missing_producers(
+        self, snap: _Snapshot, ctx: pb.AccountContext, t: int, *, degraded: bool
+    ) -> None:
         """Count the features that fell back to a constant for want of a producer (ADR 0034).
 
-        Only where the state could have applied: a counterparty with no prior rows is not evidence
-        that outcomes are missing, while one with rows and no verdict on any of them is.
+        Only where the state could have applied, so the counter means "no producer" and nothing
+        else — it is what M9's page fires on, and a page that also fires on ordinary operation is
+        a page that gets silenced (re-review N5):
+
+        - **outcomes**: the counterparty must have a row old enough that a verdict would have
+          arrived by now (`LABEL_LATENCY`). A counterparty seen only this morning, with the labels
+          consumer deployed and healthy, is a label in flight, not a missing producer.
+        - **reference state**: the account must already be known to the store. A first-ever
+          transaction has no tier or opening date for any producer to have written, so its absence
+          says nothing.
+        - A degraded read is counted by `degraded` itself; its constants are the fallback's
+          shortfall, not a producer's.
         """
-        if snap.cp_rows and not any(m[2] != UNLABELLED for m, _ in snap.cp_rows):
+        if degraded:
+            return
+        if (
+            snap.cp_rows
+            and any(s < t - LABEL_LATENCY for _, s in snap.cp_rows)
+            and not any(m[2] != UNLABELLED for m, _ in snap.cp_rows)
+        ):
             self.metrics.missing_producer.labels("outcomes").inc()
         if not ctx.HasField("days_since_sim_swap"):
             self.metrics.missing_producer.labels("sim_swaps").inc()
-        if not ctx.HasField("kyc_tier"):
+        known = bool(snap.rows) or snap.first is not None
+        if known and not ctx.HasField("kyc_tier"):
             self.metrics.missing_producer.labels("kyc_tier").inc()
-        if not ctx.HasField("account_age_days"):
+        if known and not ctx.HasField("account_age_days"):
             self.metrics.missing_producer.labels("account_opened_at").inc()
 
     def _read(self, tx: Transaction, t: int) -> _Snapshot:

@@ -211,33 +211,79 @@ merge, nothing here replaces M9's own content.
 M5's feature store exports a counter for every read where a feature fell back to a constant because
 no deployed component writes the state it reads. In production this must page, because the cost is
 invisible in AUC and large in decisions: on M4's gate model, 162 of 725 frauds stopped reaching the
-0.60 flag threshold (a 22% fall) while AUC moved 0.009.
+0.60 flag threshold (a 22% fall) while AUC moved 0.0089.
+
+**Two states, two lifetimes** — the first draft of this rule had one arm over every state, which
+would have paged continuously from the day it was deployed, and a rule that always fires is a rule
+that gets silenced (found by the M5 re-review, N5):
+
+- `state="outcomes"` **should be silent today** and must page if it starts. M5 changed the counter
+  so it counts only reads where a verdict could have arrived and none had: the counterparty has a
+  transaction older than three weeks (the ~95th percentile of E.3's label delay, median 72 h,
+  log-sigma 1.2) and not one of its rows carries a verdict. Ordinary label latency no longer
+  increments it, so once PB-70's consumer is deployed this arm goes to zero and stays there. It is
+  the signal that the consumer has stopped.
+- `state=~"sim_swaps|kyc_tier|account_opened_at"` **fires on essentially every read** and will
+  until PB-71 lands, because no contract exists for that state. Deploy it **inhibited** (or as a
+  ticket, not a page) and turn it into a page in the same change that deploys the producer. Its
+  value before then is the dashboard panel and the number in the runbook, not the page.
+
+The counter no longer increments on a first-ever transaction (nothing to have written yet) or on a
+degraded read (the `feature_store_degraded` flag already carries that), so both arms mean "a
+producer is missing" and nothing else.
 
 ```yaml
 # infrastructure/prometheus/rules/ (M9 owns the file and the routing)
-- alert: FeatureServedFromConstant
-  # Any state at all: outcomes, sim_swaps, kyc_tier, account_opened_at.
-  expr: sum by (state) (rate(fs_feature_store_missing_producer_reads_total[15m])) > 0
-  for: 15m
+- alert: LabelsConsumerNotWritingOutcomes
+  # Verdicts are not reaching the feature store: PB-70's consumer is down, stopped or not deployed.
+  expr: sum(rate(fs_feature_store_missing_producer_reads_total{state="outcomes"}[30m])) > 0.01
+  for: 30m
   labels:
     severity: page
   annotations:
-    summary: "Scoring is serving {{ $labels.state }} as a constant (ADR 0034)"
+    summary: "Scoring is serving fraud outcomes as constants (ADR 0034)"
     description: >
-      The model was trained on real values for this state and nothing is writing it, so the
-      served model is not the evaluated one. On the gate model this cost 22% of detections at
-      the 0.60 operating point with AUC moving only 0.009. Runbook: check the fs.labels consumer
-      (carry 1) and the account reference-state producer (carry 2).
+      counterparty_confirmed_fraud_90d and geo_cell_fraud_rate_30d are being read as constants on
+      counterparties old enough to have been adjudicated, so the served model is not the evaluated
+      one. On the gate model this state cost 235 risk-tier changes and 140 of 725 flagged frauds.
+      Check the fs.labels consumer (PB-70, owner M6) before anything else.
+    runbook_url: https://…/runbooks/labels-consumer-not-writing-outcomes
+
+- alert: AccountReferenceStateHasNoProducer
+  # Expected to fire until PB-71 lands: deploy inhibited, promote to `page` with the producer.
+  expr: sum by (state) (
+          rate(fs_feature_store_missing_producer_reads_total{
+            state=~"sim_swaps|kyc_tier|account_opened_at"}[30m])) > 0.01
+  for: 2h
+  labels:
+    severity: ticket   # becomes `page` in the change that deploys PB-71's producer
+  annotations:
+    summary: "{{ $labels.state }} has no producer; scoring serves it as a constant (ADR 0034)"
+    description: >
+      Known and accepted while PB-71 (owner M6) is open: no contract carries SIM swaps, KYC tier or
+      account opening, so days_since_sim_swap is NaN, kyc_tier and account_age_days are absent and
+      synthetic_identity_score loses two of its four terms. This arm is the record that the carry
+      is still open; it is not an incident until the producer exists.
+    runbook_url: https://…/runbooks/account-reference-state-has-no-producer
 ```
 
 The metric is `fs_feature_store_missing_producer_reads_total{state=...}`, incremented in
-`ml/src/fraudshield_ml/featurestore/store.py`. "Outcomes" is counted only where the counterparty
-had prior transactions and none of them carried a verdict, so an account's first transaction does
-not fire it.
+`ml/src/fraudshield_ml/featurestore/store.py` (`_count_missing_producers`, with the rules above in
+its docstring and `ml/tests/featurestore/test_ingest.py` asserting both sides of each). Two
+runbooks are needed, one per alert, as M9's `rule_conventions.py` requires.
 
-### The two carries, if M9 rather than M6 deploys them
+### The two carries: M6 builds them, M9 deploys and watches them
+
+Both are owned by **M6** (it owns the decision-side services and their database); the owner's
+condition 2 left the choice between M6 and M9 open, and this is the assignment M5 proposes for
+confirmation at integration. M9's part is the deployment and the two alerts above.
+
+| Id | Carry | Owner | M9's part |
+|---|---|---|---|
+| PB-70 | a consumer of `fs.labels` calling `fraudshield_ml.featurestore.ingest.apply_label` | M6 | deploy it; `LabelsConsumerNotWritingOutcomes` goes to `page` |
+| PB-71 | a contract **and** producer for account reference state (none exists today) | M6 | deploy it; `AccountReferenceStateHasNoProducer` goes from `ticket` to `page` |
+| PB-72 | re-measure the skew end to end and require it to be **zero** | M10 | supply the production figures the measurement needs |
 
 The full statements, with their acceptance tests, are in `docs/parallel/M6_updates.md` under "From
-M5": (1) a consumer of `fs.labels` calling `fraudshield_ml.featurestore.ingest.apply_label`;
-(2) a contract and producer for account reference state, which does not exist today. **M10's
-end-to-end verification must re-measure the skew and require it to be zero.**
+M5"; PB-72 is carried in `docs/parallel/M10_updates.md`. The backlog numbers are proposals: M5 does
+not edit `docs/backlog/`, and PB-68 is already taken by the frontier write-up item.

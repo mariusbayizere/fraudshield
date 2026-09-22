@@ -294,6 +294,13 @@ def start_worker(config: WorkerConfig) -> Worker:
         watcher.start()
     server.start()
     LOG.info("scoring on %s (pid %d)", config.address, os.getpid())
+    LOG.warning(
+        "ADR 0034: no deployed component writes %s, so these trained features are served as "
+        "constants until PB-70 and PB-71 close: counterparty_confirmed_fraud_90d, "
+        "geo_cell_fraud_rate_30d, days_since_sim_swap, kyc_tier, account_age_days. "
+        "Watch fs_feature_store_missing_producer_reads_total{state}",
+        "fraud outcomes or account reference state",
+    )
     return Worker(server, health_servicer, holder, port, watcher, writer, shadow)
 
 

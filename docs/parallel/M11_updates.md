@@ -230,7 +230,8 @@ of state with what the deployed system actually supplies):
 | SIM swaps missing (no topic exists) | 0.9699 | 25 | 712 |
 | **both, as M5 ships** | **0.9611** | **254** | **563** |
 
-**What may be claimed:** AUC fell 0.009, inside the gate's own ±0.0075 interval, while 162 of 725
+**What may be claimed:** AUC fell 0.0089 — about one half-width of the gate's own 95% interval
+(±0.0075), overlapping it heavily, and not a drop any AUC-expressed gate would refuse — while 162 of 725
 frauds (22%) stopped reaching the 0.60 flag threshold. Four *trained* features were served as
 constants because nothing deployed writes the state they read. Measured independently twice.
 

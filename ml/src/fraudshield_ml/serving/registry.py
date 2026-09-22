@@ -487,7 +487,15 @@ class AliasWatcher:
                 self.metrics.failures.labels(alias).inc()
                 LOG.error("@%s -> v%s not swapped in: %s", alias, current, error)
                 continue
-            self._on[alias](bundle)
+            try:
+                # The callback warms the new model (ONNX sessions) before swapping it in; a
+                # failure there must not end the polling thread, or the scorer would go on
+                # serving the old model with nothing left watching for the next alias move.
+                self._on[alias](bundle)
+            except Exception:
+                self.metrics.failures.labels(alias).inc()
+                LOG.exception("@%s -> v%s failed during the swap; still watching", alias, current)
+                continue
             self.loaded[alias] = current
             self.metrics.swaps.labels(alias).inc()
             LOG.info("@%s now v%s (%s)", alias, current, bundle.model_version)

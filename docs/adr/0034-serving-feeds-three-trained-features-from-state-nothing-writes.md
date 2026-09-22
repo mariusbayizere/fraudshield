@@ -1,8 +1,7 @@
 # 0034 — Three trained features are fed from state no deployed component writes
 
-- **Status:** Proposed. The measurement and the two halves of the fix are settled; **which option
-  closes it is the owner's decision**, and M5 must not be tagged with FR-02-09 marked DONE until
-  it is taken.
+- **Status:** Accepted, 2026-09-22 (owner). Option 3, carry, with the five conditions in
+  `## Decision`. FR-02-09 stays NOT DONE at M5 close and closes in M10, not here.
 - **Date:** 2026-09-22
 - **Raised by:** the independent Principal Review of M5 (`docs/reviews/M5/principal-review.md`,
   finding 1, BLOCKER), and reproduced independently by the author.
@@ -42,8 +41,9 @@ supplies:
 | SIM swaps missing (no topic) | 0.9699 | 25 | 712 | 0.926 |
 | **both, i.e. as M5 shipped** | **0.9611** | **254** | **563** | 0.980 |
 
-The reviewer measured the same figures independently. AUC moves by 0.009, inside the gate's
-interval; **the decisions do not**: 162 frauds that the evaluated model flags at 0.60 are not
+The reviewer measured the same figures independently. AUC moves by 0.0089, about the half-width
+of the gate's 95% interval (±0.0075) and well inside its width, so no AUC-expressed gate would
+catch it; **the decisions do not**: 162 frauds that the evaluated model flags at 0.60 are not
 flagged by the served one, a 22% fall in flagged fraud. This is the difference between a metric
 and a decision, and it is why the gate's numbers cannot be said to describe production.
 
@@ -77,13 +77,57 @@ and a decision, and it is why the gate's numbers cannot be said to describe prod
 
 ## Decision
 
-**Not taken.** The author recommends option 3, with one addition that is cheap and belongs in M5
-whatever the owner chooses: the scorer should make the gap visible rather than silent — a metric
-counting how many scored transactions were computed with an outcome-free counterparty or cell, and
-a startup log line naming the producers that are absent.
+**Option 3: carry, with the cost recorded and the rows honest.** Taken by the owner on 2026-09-22,
+on the author's recommendation, under five conditions. Each is discharged in the artefact named
+beside it; none of them is a note.
 
-## Consequences (of the recommendation)
+1. **FR-02-09 stays NOT DONE, and its row carries the measured skew.** The row proposed in
+   `docs/parallel/M5_updates.md` §12 records served AUC **0.9611** against **0.9700**, **254** risk
+   tier changes, and **162 of 725** frauds no longer reaching the flag threshold — a **22%** fall in
+   detections at the operating point. The figures are the table above, reproduced independently by
+   the re-review (`docs/reviews/M5/principal-re-review.md`).
+2. **Two carries with acceptance tests, each with one owning milestone and a backlog row.**
+   - **PB-70 — a consumer of `fs.labels` that calls `apply_label`. Owner: M6** (it owns the
+     decision-side services and their database); M9 deploys it and M10 verifies it. *Acceptance:*
+     a verdict published to `fs.labels` reaches the feature store and the affected features change
+     — `counterparty_confirmed_fraud_90d` rises for the counterparty, `geo_cell_fraud_rate_30d`
+     for the cell — with E.2's `label_available_at` honoured. The seam exists and is tested in M5
+     (`featurestore/ingest.apply_label`, `ml/tests/featurestore/test_ingest.py`); the consumer does
+     not.
+   - **PB-71 — a contract and a producer for account reference state. Owner: M6.** KYC tier,
+     SIM-swap events and account opening have no contract today, so nothing can publish them.
+     *Acceptance:* a published change to an account's tier, a SIM swap and an opening date reach
+     the store, and a read afterwards returns them — `days_since_sim_swap` finite where a swap was
+     published, `kyc_tier` and `account_age_days` from the producer rather than a constant.
+   - Both are written into `docs/parallel/M6_updates.md` and `docs/parallel/M9_updates.md` with
+     these criteria. **PB-72 (owner: M10)** requires M10's end-to-end verification to re-measure
+     the skew on the served model and to require it to be **zero** before FR-02-09 may read DONE;
+     it is carried in `docs/parallel/M10_updates.md` so the milestone that must close it sees it.
+3. **The shortfall stays visible.** `fs_feature_store_missing_producer_reads_total{state}` counts
+   reads served from a constant, and M9's rules get an alert over it
+   (`docs/parallel/M9_updates.md` §"From M5"). The alert distinguishes a producer that is absent
+   from a label that has not arrived yet, and its `sim_swaps`/`kyc_tier`/`account_opened_at` arms
+   stay inhibited until PB-71 lands — a rule that fires continuously is a rule that gets silenced.
+4. **It belongs in the paper.** The lab notebook carries the measurement and its reading; M11 takes
+   the four-row table into the discussion and limitations, with what may not be claimed from the
+   gate figures (`docs/parallel/M11_updates.md`).
+5. **The fixes were re-reviewed independently**, in a fresh worktree, at `2afbb0e`
+   (`docs/reviews/M5/principal-re-review.md`): every figure in the table above reproduced to the
+   digit, and its seven new findings are answered on this branch.
 
-- FR-02-09 cannot read DONE at M5 close; the review's finding 1 stays open against it.
-- Whoever deploys the labels consumer closes half 1 with no code change in `ml/`.
-- M11's paper must not describe the gate figures as production behaviour while this stands.
+The addition the author recommended is in M5: the metric above, and a startup line naming the
+producers no deployed component writes.
+
+## Consequences
+
+- FR-02-09 cannot read DONE at M5 close; finding 1 stays open against it, and against PB-70,
+  PB-71 and PB-72.
+- The ML-GATE rows describe the **trained** model. Until PB-70 and PB-71 close, production differs
+  by the table above, and no gate figure may be quoted as production behaviour — M11's paper
+  included.
+- Half 1 (PB-70) closes with no code change in `ml/`: the seam is built and tested.
+- Half 2 (PB-71) cannot start until a contract exists, which is why it is carried rather than
+  scheduled inside M5 or M6's current scope.
+- The skew is measured at the operating point on the gate's test period; production skew is
+  **larger**, because the gate cache has no `kyc_tier`/`account_age_days` columns and
+  `synthetic_identity_score` could not be degraded in the measurement.

@@ -158,11 +158,15 @@ rows, 985 frauds), reproduced independently by the M5 agent and by the independe
 | SIM swaps missing | 0.9699 | 25 | 712 |
 | **both, as M5 ships today** | **0.9611** | **254** | **563** |
 
-AUC moves 0.009, inside the gate's interval. **162 of 725 frauds that the evaluated model flags at
+AUC moves 0.0089, just outside the ±0.0075 half-width of the gate's own 95% interval. **162 of 725 frauds that the evaluated model flags at
 0.60 are not flagged by the served one: a 22% fall in detections at the operating point.** The
 owner chose ADR 0034's option 3 (carry) with the conditions below.
 
-### Carry 1 (M6 or M9): deploy a consumer of `fs.labels` that calls `apply_label`
+### Carry 1 — PB-70, **owner M6**: deploy a consumer of `fs.labels` that calls `apply_label`
+
+**Owning milestone: M6** (it owns the decision-side services and their database). M9 deploys it and
+supplies the alert; M10 verifies it under PB-72. The backlog numbers are proposals — M5 does not
+edit `docs/backlog/`, and PB-68 is already taken — so confirm them at integration.
 
 - **What exists in `ml/`:** `fraudshield_ml.featurestore.ingest.apply_label(store, event)` applies
   one `fs.labels` event to the Redis feature store; `apply_labels` applies a batch and counts
@@ -180,7 +184,10 @@ owner chose ADR 0034's option 3 (carry) with the conditions below.
 - **Until it exists:** `fs_feature_store_missing_producer_reads_total{state="outcomes"}` counts
   every affected read.
 
-### Carry 2 (M6 or M9, needs a contract first): account reference state
+### Carry 2 — PB-71, **owner M6** (needs a contract first): account reference state
+
+**Owning milestone: M6.** It cannot start until the contract exists; that contract is part of this
+carry, not a precondition someone else supplies.
 
 - **What is missing:** nothing in `contracts/kafka/topics.yaml` carries SIM swaps, KYC tier
   changes, account opening or agent standing, so `days_since_sim_swap` is always NaN, `kyc_tier`
@@ -199,11 +206,11 @@ owner chose ADR 0034's option 3 (carry) with the conditions below.
 - **The scoring contract changed** (ADR 0033, owner-approved): `ScoreRequest.context` is removed;
   read `ScoringResult.feature_store_degraded` and persist `account_context`. Do not implement
   `AccountContext` assembly in Java.
-- **The database fallback is PB-68**, with its acceptance test already written
+- **The database fallback is PB-69**, with its acceptance test already written
   (`ml/tests/featurestore/test_db_fallback.py`, the `m6-postgresql` parameter).
 
-### M10 must re-measure
+### M10 must re-measure — PB-72, owner M10
 
-The owner's condition: **M10's end-to-end verification re-measures this skew and requires it to be
-zero** — the served features must equal the trained ones for every row of the verification set, not
+Carried where M10 will see it: `docs/parallel/M10_updates.md`. The owner's condition:
+**M10's end-to-end verification re-measures this skew and requires it to be zero** — the served features must equal the trained ones for every row of the verification set, not
 merely be close on AUC.

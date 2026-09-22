@@ -168,22 +168,39 @@ def test_a_malformed_event_is_refused(mutate: object, message: str) -> None:
 @pytest.mark.req("FR-02-09")
 def test_the_store_counts_features_left_constant_for_want_of_a_producer() -> None:
     """ADR 0034: serving these as constants is silent otherwise, and costs 162 flagged frauds on
-    the gate model."""
+    the gate model. The counter is what M9's page fires on, so it must mean "no producer" and
+    nothing else (re-review N5)."""
     s = store()
-    earlier = transaction(1, T0)
+
+    def states() -> dict[str, float]:
+        return {
+            state: s.metrics.missing_producer.labels(state)._value.get()
+            for state in ("outcomes", "sim_swaps", "kyc_tier", "account_opened_at")
+        }
+
+    earlier = transaction(1, T0)  # account A1, counterparty C1
     s.observe(earlier)
-    scored = transaction(2, T0 + timedelta(days=1))
+
+    s.context_for(transaction(2, T0 + timedelta(days=1)))  # A2: the store has never seen it
+    assert states() == {"outcomes": 0, "sim_swaps": 1, "kyc_tier": 0, "account_opened_at": 0}, (
+        "a first-ever transaction has no tier or opening date for any producer to have written"
+    )
+
+    s.context_for(transaction(4, T0 + timedelta(days=1)))  # A1, known, a day after its first row
+    assert states() == {"outcomes": 0, "sim_swaps": 2, "kyc_tier": 1, "account_opened_at": 1}, (
+        "a verdict a day old is a label in flight, not a producer that is missing"
+    )
+
+    scored = transaction(7, T0 + timedelta(days=30))  # A1, C1, past the label-delay horizon
     s.context_for(scored)
-    counted = {
-        state: s.metrics.missing_producer.labels(state)._value.get()
-        for state in ("outcomes", "sim_swaps", "kyc_tier", "account_opened_at")
-    }
-    assert counted == {"outcomes": 1, "sim_swaps": 1, "kyc_tier": 1, "account_opened_at": 1}
+    assert states() == {"outcomes": 1, "sim_swaps": 3, "kyc_tier": 2, "account_opened_at": 2}
 
     apply_label(s, label_event(earlier.transaction_id, "FRAUD", T0 + timedelta(hours=1)))
     s.record_sim_swap(scored.account_id, T0 - timedelta(days=2))
     s.set_kyc_tier(scored.account_id, 2, T0 - timedelta(days=30))
     s.set_opened_at(scored.account_id, T0 - timedelta(days=90))
-    s.context_for(transaction(5, T0 + timedelta(days=2)))  # the same account as `scored`
-    assert s.metrics.missing_producer.labels("outcomes")._value.get() == 1, "not counted again"
-    assert s.metrics.missing_producer.labels("sim_swaps")._value.get() == 1
+    s.context_for(transaction(10, T0 + timedelta(days=31)))  # the same account again
+    assert states() == {"outcomes": 1, "sim_swaps": 3, "kyc_tier": 2, "account_opened_at": 2}, (
+        "with every producer writing, the page falls silent — which is how carry 1 and carry 2 "
+        "are seen to have closed"
+    )
