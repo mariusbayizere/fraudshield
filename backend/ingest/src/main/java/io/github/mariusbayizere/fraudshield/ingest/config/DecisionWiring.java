@@ -45,7 +45,12 @@ import io.github.mariusbayizere.fraudshield.ingest.idempotency.IdempotencyStore;
 import io.github.mariusbayizere.fraudshield.ingest.idempotency.JdbcIdempotency;
 import io.github.mariusbayizere.fraudshield.ingest.idempotency.RedisIdempotency;
 import io.github.mariusbayizere.fraudshield.ingest.idempotency.ResilientIdempotency;
+import io.github.mariusbayizere.fraudshield.ingest.ratelimit.LocalRateLimiter;
+import io.github.mariusbayizere.fraudshield.ingest.ratelimit.RateLimiter;
+import io.github.mariusbayizere.fraudshield.ingest.ratelimit.RedisRateLimiter;
+import io.github.mariusbayizere.fraudshield.ingest.ratelimit.ResilientRateLimiter;
 import io.github.mariusbayizere.fraudshield.ingest.web.ApiKeyFilter;
+import io.github.mariusbayizere.fraudshield.ingest.web.RateLimitFilter;
 import io.github.mariusbayizere.fraudshield.notify.sms.CustomerSmsPolicy;
 import io.github.mariusbayizere.fraudshield.notify.verification.UnblockReconciler;
 import io.github.mariusbayizere.fraudshield.notify.verification.VerificationService;
@@ -390,6 +395,59 @@ public class DecisionWiring {
   VerificationService verifications(
       DataSource dataSource, DecisionTransitionService transitions, Clock clock) {
     return new VerificationService(dataSource, transitions, clock);
+  }
+
+  /**
+   * The per-key request budget (E.1), shared in Redis with this instance's own as the fallback.
+   *
+   * @param redis shared connection
+   * @param mode the degraded-mode flag
+   * @param properties configuration
+   * @param clock clock
+   * @param registry meters
+   * @return the limiter
+   */
+  @Bean
+  RateLimiter rateLimiter(
+      StatefulRedisConnection<String, String> redis,
+      DegradedMode mode,
+      FraudShieldProperties properties,
+      Clock clock,
+      MeterRegistry registry) {
+    FraudShieldProperties.RateLimit budget =
+        properties.rateLimit() == null
+            ? FraudShieldProperties.RateLimit.DEFAULT
+            : properties.rateLimit();
+    Counter degraded =
+        Counter.builder("fs_rate_limit_decisions_total")
+            .description("Rate-limit decisions, by which limiter answered")
+            .tag("limiter", "local")
+            .register(registry);
+    Counter shared =
+        Counter.builder("fs_rate_limit_decisions_total")
+            .description("Rate-limit decisions, by which limiter answered")
+            .tag("limiter", "redis")
+            .register(registry);
+    return new ResilientRateLimiter(
+        new RedisRateLimiter(
+            redis, budget.requestsPerSecond(), budget.burst(), properties.redisTimeout(), clock),
+        new LocalRateLimiter(budget.requestsPerSecond(), budget.burst(), clock),
+        mode,
+        wasDegraded -> (wasDegraded ? degraded : shared).increment());
+  }
+
+  /**
+   * The rate-limit filter, after the API-key filter so a budget belongs to a key.
+   *
+   * @param limiter the limiter
+   * @return the registration
+   */
+  @Bean
+  FilterRegistrationBean<RateLimitFilter> rateLimitFilter(RateLimiter limiter) {
+    FilterRegistrationBean<RateLimitFilter> registration =
+        new FilterRegistrationBean<>(new RateLimitFilter(limiter));
+    registration.setOrder(1);
+    return registration;
   }
 
   @Bean

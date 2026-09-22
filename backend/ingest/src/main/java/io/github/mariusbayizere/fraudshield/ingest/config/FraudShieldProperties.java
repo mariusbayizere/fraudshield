@@ -24,6 +24,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param batchThreads threads deciding batch jobs
  * @param sms SMS provider, when customer SMS is enabled
  * @param vault the PII vault, when customer SMS is enabled (D-20)
+ * @param rateLimit per-API-key request budget (E.1)
  * @param institutions per-institution SMS settings by institution id
  */
 @ConfigurationProperties(prefix = "fraudshield")
@@ -44,6 +45,7 @@ public record FraudShieldProperties(
     int batchThreads,
     Sms sms,
     Vault vault,
+    RateLimit rateLimit,
     Map<String, Institution> institutions) {
 
   /**
@@ -110,6 +112,27 @@ public record FraudShieldProperties(
     @Override
     public String toString() {
       return "Vault[url=" + url + ", username=" + username + ", keys=<redacted>]";
+    }
+  }
+
+  /**
+   * The per-API-key request budget (E.1).
+   *
+   * @param requestsPerSecond sustained requests per second per key
+   * @param burst how many may arrive at once
+   */
+  public record RateLimit(int requestsPerSecond, int burst) {
+
+    /** The default budget, used when none is configured. */
+    public static final RateLimit DEFAULT = new RateLimit(200, 400);
+
+    /** Validates the budget. */
+    public RateLimit {
+      if (requestsPerSecond < 1 || burst < requestsPerSecond) {
+        throw new IllegalArgumentException(
+            "fraudshield.rate-limit.requests-per-second must be at least 1 and burst at least"
+                + " requests-per-second");
+      }
     }
   }
 

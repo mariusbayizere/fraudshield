@@ -1,4 +1,4 @@
-package io.github.mariusbayizere.fraudshield.persistence.schema;
+package io.github.mariusbayizere.fraudshield.decision.adapter.jpa;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -16,7 +16,7 @@ import org.hibernate.annotations.Immutable;
  * One version of an institution's MCC circuit-breaker settings (V6 {@code
  * mcc_circuit_breaker_settings_versions}), append-only and therefore {@link Immutable}.
  */
-@Entity(name = "SeedBreakerSettings")
+@Entity
 @Immutable
 @Table(name = "mcc_circuit_breaker_settings_versions")
 @IdClass(BreakerSettingsEntity.Key.class)
@@ -71,34 +71,6 @@ public class BreakerSettingsEntity {
 
   /** For Hibernate. */
   protected BreakerSettingsEntity() {}
-
-  /**
-   * A new version of the settings. Append-only: written once, never changed.
-   *
-   * @param institutionId institution
-   * @param version the version number
-   * @param fraudRateThreshold the rate the breaker opens above
-   * @param windowMinutes the window
-   * @param minimumTransactions the minimum volume
-   * @param cleanResetMinutes how long a clean window closes it after
-   * @param effectiveAt when it takes effect
-   */
-  public BreakerSettingsEntity(
-      UUID institutionId,
-      long version,
-      BigDecimal fraudRateThreshold,
-      int windowMinutes,
-      int minimumTransactions,
-      int cleanResetMinutes,
-      Instant effectiveAt) {
-    this.institutionId = institutionId;
-    this.version = version;
-    this.fraudRateThreshold = fraudRateThreshold;
-    this.windowMinutes = windowMinutes;
-    this.minimumTransactions = minimumTransactions;
-    this.cleanResetMinutes = cleanResetMinutes;
-    this.effectiveAt = effectiveAt;
-  }
 
   /**
    * The version.

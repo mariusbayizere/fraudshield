@@ -1,4 +1,4 @@
-package io.github.mariusbayizere.fraudshield.persistence.schema;
+package io.github.mariusbayizere.fraudshield.decision.adapter.jpa;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -16,7 +16,7 @@ import org.hibernate.annotations.Immutable;
  * therefore {@link Immutable}. It carries the time the version takes effect, which is what decides
  * the version in force.
  */
-@Entity(name = "SeedRiskThresholdVersion")
+@Entity
 @Immutable
 @Table(name = "risk_threshold_versions")
 @IdClass(RiskThresholdVersionEntity.Key.class)
@@ -59,19 +59,6 @@ public class RiskThresholdVersionEntity {
 
   /** For Hibernate. */
   protected RiskThresholdVersionEntity() {}
-
-  /**
-   * A new version. Append-only: a version is written once and never changed.
-   *
-   * @param institutionId institution
-   * @param version the version number
-   * @param effectiveAt when it takes effect
-   */
-  public RiskThresholdVersionEntity(UUID institutionId, long version, Instant effectiveAt) {
-    this.institutionId = institutionId;
-    this.version = version;
-    this.effectiveAt = effectiveAt;
-  }
 
   /**
    * The version.

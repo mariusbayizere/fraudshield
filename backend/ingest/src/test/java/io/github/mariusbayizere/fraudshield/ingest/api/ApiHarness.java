@@ -51,6 +51,15 @@ public final class ApiHarness {
   /** A second active key of the same institution, as during a 24-hour rotation overlap. */
   public static final String ROTATED_KEY = "fsk_test_cccccccccccc_" + "n".repeat(43);
 
+  /** Keys with budgets of their own, so a rate-limit test cannot spend another test's (E.1). */
+  public static final String BUDGET_KEY_ONE = "fsk_test_dddddddddddd_" + "b".repeat(43);
+
+  /** A second key with its own budget. */
+  public static final String BUDGET_KEY_TWO = "fsk_test_eeeeeeeeeeee_" + "c".repeat(43);
+
+  /** A third key with its own budget. */
+  public static final String BUDGET_KEY_THREE = "fsk_test_ffffffffffff_" + "d".repeat(43);
+
   /** The api_keys row id of {@link #KEY}. */
   public static final UUID KEY_ID = UUID.fromString("5b1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a5b");
 
@@ -174,7 +183,16 @@ public final class ApiHarness {
                   new ApiPrincipal(KEY_ID, Fixtures.INSTITUTION, Set.of(ApiScope.values())),
               READ_ONLY_KEY,
                   new ApiPrincipal(
-                      UUID.randomUUID(), Fixtures.INSTITUTION, Set.of(ApiScope.DECISIONS_READ)));
+                      UUID.randomUUID(), Fixtures.INSTITUTION, Set.of(ApiScope.DECISIONS_READ)),
+              BUDGET_KEY_ONE,
+                  new ApiPrincipal(
+                      UUID.randomUUID(), Fixtures.INSTITUTION, Set.of(ApiScope.values())),
+              BUDGET_KEY_TWO,
+                  new ApiPrincipal(
+                      UUID.randomUUID(), Fixtures.INSTITUTION, Set.of(ApiScope.values())),
+              BUDGET_KEY_THREE,
+                  new ApiPrincipal(
+                      UUID.randomUUID(), Fixtures.INSTITUTION, Set.of(ApiScope.values())));
       return raw -> Optional.ofNullable(raw == null ? null : keys.get(raw));
     }
 

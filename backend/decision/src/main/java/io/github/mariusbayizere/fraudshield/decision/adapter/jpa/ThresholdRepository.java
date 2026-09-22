@@ -1,6 +1,5 @@
 package io.github.mariusbayizere.fraudshield.decision.adapter.jpa;
 
-import io.github.mariusbayizere.fraudshield.persistence.schema.RiskThresholdEntity;
 import java.time.Instant;
 import java.util.List;
 import org.springframework.data.jpa.repository.Query;

@@ -6,10 +6,6 @@ import io.github.mariusbayizere.fraudshield.common.config.CircuitBreakerSettings
 import io.github.mariusbayizere.fraudshield.common.config.MediumTimeoutPolicy;
 import io.github.mariusbayizere.fraudshield.common.transaction.Channel;
 import io.github.mariusbayizere.fraudshield.decision.application.port.ConfigurationPort;
-import io.github.mariusbayizere.fraudshield.persistence.schema.AlertRuleEntity;
-import io.github.mariusbayizere.fraudshield.persistence.schema.AlertRuleVersionEntity;
-import io.github.mariusbayizere.fraudshield.persistence.schema.BreakerSettingsEntity;
-import io.github.mariusbayizere.fraudshield.persistence.schema.RiskThresholdEntity;
 import io.github.mariusbayizere.fraudshield.rules.dsl.CompiledRule;
 import io.github.mariusbayizere.fraudshield.rules.dsl.InvalidRuleException;
 import io.github.mariusbayizere.fraudshield.rules.dsl.RuleSet;
