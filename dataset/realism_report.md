@@ -9,12 +9,12 @@ institution's data (D-08).
 | Item | Value |
 |---|---|
 | Seed | 20260917 |
-| Rows | 1,006,249 |
+| Rows | 1,006,317 |
 | Mode | development (size and distribution targets reported) |
-| Generator peak RSS | 181 MiB (limit 2048 MiB) |
-| Checks peak RSS | 290 MiB |
-| Parameter values SHA-256 | `c14583ed351963e94c09c7a8cc764ff19e53236768d5a5a7ed53e0b504d56582` |
-| Dataset fingerprint SHA-256 | `6abde44e5e952f4f5c6b86aac0fb934cd4de023b53ec1f2cfe9dc01cf0a3e420` |
+| Generator peak RSS | 170 MiB (limit 2048 MiB) |
+| Checks peak RSS | 261 MiB |
+| Parameter values SHA-256 | `0a58480ddbd1a511598b8f09da27937de0829134ceb63fd9752c0f5061304d94` |
+| Dataset fingerprint SHA-256 | `d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32` |
 | Check set SHA-256 | `e61f5e97d3a70a5a3c167cdb6179835e249438a105b8915e387d30a3b9d5de6e` |
 | Chunk size (shards per batch) | 8 |
 | Machine | cpus 4, numpy 2.5.3, platform Linux-7.0.0-31-generic-x86_64-with-glibc2.39, processor x86_64, pyarrow 25.0.1, python 3.12.14 |
@@ -32,27 +32,27 @@ report generated before a check existed cannot pass as one that ran it.
 
 | Check | Result | Gate | Measured | Requirement |
 |---|---|---|---|---|
-| single-feature AUC | pass | yes | max 0.706 (merchant_category_code) | every feature <= 0.8 (D-08) |
-| shortcut detector | pass | yes | AUC 0.510 (band +/-0.011) on 48597 rows | within its null band around 0.5 (owner direction) |
-| event construction | pass | yes | AUC 0.512 (band +/-0.038) on 2424 events, 1410 on fraud accounts | an account event's construction does not reveal a victim's account (D-08) |
-| event delay (reported) | pass | no | AUC 0.730 | reported, not gated: seconds from an event to that account's next transaction |
+| single-feature AUC | pass | yes | max 0.709 (merchant_category_code) | every feature <= 0.8 (D-08) |
+| shortcut detector | pass | yes | AUC 0.503 (band +/-0.011) on 48665 rows | within its null band around 0.5 (owner direction) |
+| event construction | pass | yes | AUC 0.533 (band +/-0.038) on 2424 events, 1421 on fraud accounts | an account event's construction does not reveal a victim's account (D-08) |
+| event delay (reported) | pass | no | AUC 0.726 | reported, not gated: seconds from an event to that account's next transaction |
 | event type (reported) | pass | no | AUC 0.537 | reported, not gated: SIM swap versus device change |
-| file order | pass | yes | AUC 0.505 | file (month) index alone within 0.5 + 0.03 |
-| identifier construction | pass | yes | account_id 0.510 (band +/-0.031), counterparty_id 0.509 (band +/-0.026), device_fingerprint 0.504 (band +/-0.035) | token characters do not identify fraud tokens, within the null band |
+| file order | pass | yes | AUC 0.508 | file (month) index alone within 0.5 + 0.03 |
+| identifier construction | pass | yes | account_id 0.515 (band +/-0.031), counterparty_id 0.511 (band +/-0.026), device_fingerprint 0.490 (band +/-0.035) | token characters do not identify fraud tokens, within the null band |
 | trivial rule baseline | pass | no | AUC 0.606 | reported (amount >= rule threshold, or local hour before 05:00) |
-| label noise | pass | no | missed 1.54%, false 1.66% of true fraud | each direction 1-2% of true fraud labels (D-08) |
+| label noise | pass | no | missed 1.55%, false 1.64% of true fraud | each direction 1-2% of true fraud labels (D-08) |
 | novel sub-variant placement | pass | yes | 73 rows, 0 before the test start | never outside the temporal hold-out test period (D-08) |
 | novel sub-variant present | pass | no | 73 rows | at least one novel sub-variant row in a release run (D-08) |
-| identifier uniqueness | pass | yes | 0 duplicate transaction ids in 1006249 rows | every transaction id occurs once (ingestion contract) |
+| identifier uniqueness | pass | yes | 0 duplicate transaction ids in 1006317 rows | every transaction id occurs once (ingestion contract) |
 | value formats | pass | yes | 0 violations | tokens, MCC, amount scale and coordinate precision valid for every row |
 | null signatures per channel | pass | yes | every fraud null pattern also occurs in legitimate rows | identical null patterns per channel for fraud and legitimate rows |
-| fraud rate | pass | no | overall 0.870% (95% CI 0.852%-0.888%), test 0.905% (95% CI 0.849%-0.965%) | 0.87% overall, 0.91% test, +/- 0.5 pp (ML-DATA-02) |
+| fraud rate | pass | no | overall 0.877% (95% CI 0.859%-0.895%), test 0.971% (95% CI 0.913%-1.034%) | 0.87% overall, 0.91% test, +/- 0.5 pp (ML-DATA-02) |
 | monthly fraud rate | pass | no | 24 of 24 months cover their target within a 95% CI | each month's Wilson 95% CI covers its calibrated intensity target |
 | fraud scenarios | pass | no | 8 types | 8 distinct scenario types (ML-DATA-04) |
 | channel mix | pass | no | max deviation 0.16 pp | SRS channel mix +/- 0.5 pp (ML-DATA-03) |
 | country mix | pass | no | max deviation 0.01 pp | SRS country mix +/- 0.5 pp (ML-DATA-05) |
-| size | not met | no | 1006249 rows | >= 5,000,000 rows in a release run (ML-DATA-01) |
-| generator peak memory | pass | yes | 181 MiB | < 2 GiB peak RSS (owner direction) |
+| size | not met | no | 1006317 rows | >= 5,000,000 rows in a release run (ML-DATA-01) |
+| generator peak memory | pass | yes | 170 MiB | < 2 GiB peak RSS (owner direction) |
 
 ## Temporal split (D-07)
 
@@ -65,7 +65,7 @@ counts and rates are measured.
 | validation | 101,332 | 0.883% | 0.877% | 57.69 |
 | calibration (last part of validation) | 40,700 | 0.907% | 0.907% | 25.36 |
 | embargo (excluded) | 10,914 | 1.008% | 1.008% | 6.99 |
-| test | 101,841 | 0.905% | 0.902% | 63.97 |
+| test | 101,909 | 0.971% | 0.967% | 63.97 |
 
 The temporal hold-out test set starts 2025-10-28 22:02 UTC.
 
@@ -76,7 +76,7 @@ The temporal hold-out test set starts 2025-10-28 22:02 UTC.
 | MOBILE_MONEY | 41.0% | 40.84% |
 | USSD | 18.0% | 18.08% |
 | AGENT_BANKING | 14.0% | 13.96% |
-| CARD | 12.0% | 12.03% |
+| CARD | 12.0% | 12.02% |
 | ONLINE | 9.0% | 9.08% |
 | BANK_TRANSFER | 6.0% | 6.01% |
 
@@ -84,11 +84,11 @@ The temporal hold-out test set starts 2025-10-28 22:02 UTC.
 |---|---:|---:|
 | RW | 42.0% | 42.01% |
 | KE | 28.0% | 27.99% |
-| TZ | 15.0% | 15.01% |
+| TZ | 15.0% | 15.00% |
 | UG | 10.0% | 10.00% |
 | CD | 5.0% | 4.99% |
 
-Overall fraud rate 95% CI: 0.852% to 0.888%; test period: 0.849% to 0.965%.
+Overall fraud rate 95% CI: 0.859% to 0.895%; test period: 0.913% to 1.034%.
 
 ## Monthly fraud rate against the calibrated schedule (ML-DATA-02)
 
@@ -121,9 +121,9 @@ covers the target) from bias (it does not).
 | 2025-07 | 44,023 | 373 | 0.847% | 0.766% - 0.937% | 0.848% | yes |
 | 2025-08 | 44,910 | 397 | 0.884% | 0.802% - 0.975% | 0.884% | yes |
 | 2025-09 | 59,556 | 538 | 0.903% | 0.830% - 0.983% | 0.903% | yes |
-| 2025-10 | 46,713 | 406 | 0.869% | 0.789% - 0.957% | 0.870% | yes |
-| 2025-11 | 47,665 | 441 | 0.925% | 0.843% - 1.015% | 0.924% | yes |
-| 2025-12 | 48,600 | 435 | 0.895% | 0.815% - 0.983% | 0.900% | yes |
+| 2025-10 | 46,719 | 412 | 0.882% | 0.801% - 0.971% | 0.870% | yes |
+| 2025-11 | 47,694 | 470 | 0.985% | 0.901% - 1.078% | 0.924% | yes |
+| 2025-12 | 48,633 | 468 | 0.962% | 0.879% - 1.053% | 0.900% | yes |
 
 24 of 24 monthly intervals cover their target.
 
@@ -131,35 +131,35 @@ covers the target) from bias (it does not).
 
 | Feature | AUC |
 |---|---:|
-| merchant_category_code | 0.706 |
+| merchant_category_code | 0.709 |
 | amount_rwf | 0.653 |
 | device_missing | 0.602 |
 | local_hour | 0.597 |
-| channel | 0.592 |
-| round_amount | 0.575 |
+| channel | 0.588 |
+| round_amount | 0.574 |
+| currency | 0.530 |
 | day_of_month | 0.519 |
 | agent_present | 0.513 |
-| currency | 0.509 |
 | cross_border | 0.508 |
-| latitude | 0.504 |
+| latitude | 0.503 |
 | day_of_week | 0.502 |
-| longitude | 0.501 |
+| longitude | 0.502 |
 
 These are raw and cheap per-row features. The 44 engineered features are
 re-checked against the same limit in M3.
 
 ## Shortcut and identifier checks
 
-- Shortcut detector (depth-3 tree, 5-fold CV grouped by account, on 19 non-behavioural columns): AUC 0.510, band +/-0.011. Columns: transaction_id_byte_00, transaction_id_byte_01, transaction_id_byte_02, transaction_id_byte_03, transaction_id_byte_04, transaction_id_byte_05, transaction_id_byte_06, transaction_id_byte_07, transaction_id_byte_08, transaction_id_byte_09, transaction_id_byte_10, transaction_id_byte_11, transaction_id_byte_12, transaction_id_byte_13, transaction_id_byte_14, transaction_id_byte_15, timestamp_microseconds, row_position_in_file, label_delay_micros.
-- Account event construction (event_sub_second, event_day_of_month): AUC 0.512, band +/-0.038, over 2,424 events of which 1,410 sit on an account that carries fraud. How soon a transaction follows an event, and which kind of event it is, are the scenario's own signals and are not gated. They are measured rather than assumed: event_delay_seconds AUC 0.730, event_type_code AUC 0.537. The delay reflects the ASSUMED lead distribution (fraud.takeover_lead_*), so part of that separation is the assumed schedule rather than the scenario itself.
-- File (month) order alone: AUC 0.505.
-- Identifier construction over every character of the distinct tokens. Each band is this statistic's own null band: a family-wise 5% level over the columns tested, times 1.62 for the extra spread a cross-validated tree has over a single feature. account_id 0.510 (+/-0.031, 1,839 of 5,883 tokens used by fraud), counterparty_id 0.509 (+/-0.026, 2,555 of 8,506 tokens used by fraud), device_fingerprint 0.504 (+/-0.035, 1,556 of 4,499 tokens used by fraud).
+- Shortcut detector (depth-3 tree, 5-fold CV grouped by account, on 19 non-behavioural columns): AUC 0.503, band +/-0.011. Columns: transaction_id_byte_00, transaction_id_byte_01, transaction_id_byte_02, transaction_id_byte_03, transaction_id_byte_04, transaction_id_byte_05, transaction_id_byte_06, transaction_id_byte_07, transaction_id_byte_08, transaction_id_byte_09, transaction_id_byte_10, transaction_id_byte_11, transaction_id_byte_12, transaction_id_byte_13, transaction_id_byte_14, transaction_id_byte_15, timestamp_microseconds, row_position_in_file, label_delay_micros.
+- Account event construction (event_sub_second, event_day_of_month): AUC 0.533, band +/-0.038, over 2,424 events of which 1,421 sit on an account that carries fraud. How soon a transaction follows an event, and which kind of event it is, are the scenario's own signals and are not gated. They are measured rather than assumed: event_delay_seconds AUC 0.726, event_type_code AUC 0.537. The delay reflects the ASSUMED lead distribution (fraud.takeover_lead_*), so part of that separation is the assumed schedule rather than the scenario itself.
+- File (month) order alone: AUC 0.508.
+- Identifier construction over every character of the distinct tokens. Each band is this statistic's own null band: a family-wise 5% level over the columns tested, times 1.62 for the extra spread a cross-validated tree has over a single feature. account_id 0.515 (+/-0.031, 1,878 of 5,883 tokens used by fraud), counterparty_id 0.511 (+/-0.026, 2,618 of 8,506 tokens used by fraud), device_fingerprint 0.490 (+/-0.035, 1,578 of 4,499 tokens used by fraud).
 - Trivial rule baseline (amount at or above the rule threshold, or local night): AUC 0.606.
 
 ## Labels
 
-- Missed fraud (true fraud labelled legitimate): 1.54% of true fraud.
-- False fraud (legitimate labelled fraud): 1.66% of true fraud.
+- Missed fraud (true fraud labelled legitimate): 1.55% of true fraud.
+- False fraud (legitimate labelled fraud): 1.64% of true fraud.
 
 ## Novel sub-variant placement (D-08)
 
@@ -190,10 +190,10 @@ re-checked against the same limit in M3.
 | 2025-07 | 44,023 | 59 | 43 | 50 | 29 | 47 | 66 | 38 | 41 |
 | 2025-08 | 44,910 | 63 | 47 | 55 | 31 | 47 | 66 | 37 | 51 |
 | 2025-09 | 59,556 | 85 | 64 | 75 | 44 | 64 | 88 | 55 | 63 |
-| 2025-10 | 46,713 | 65 | 48 | 57 | 32 | 48 | 66 | 38 | 52 |
-| 2025-11 | 47,665 | 69 | 51 | 62 | 35 | 55 | 74 | 43 | 52 |
-| 2025-12 | 48,600 | 70 | 52 | 60 | 34 | 56 | 67 | 44 | 52 |
+| 2025-10 | 46,719 | 65 | 48 | 57 | 32 | 54 | 66 | 38 | 52 |
+| 2025-11 | 47,694 | 69 | 51 | 62 | 35 | 84 | 74 | 43 | 52 |
+| 2025-12 | 48,633 | 70 | 52 | 60 | 34 | 89 | 67 | 44 | 52 |
 
 ## Parameter provenance
 
-SOURCED: 33, ASSUMED: 74, CALIBRATED_TO_SRS_TARGET: 15 (of 122). Details: `dataset/params_provenance.md`.
+SOURCED: 33, ASSUMED: 76, CALIBRATED_TO_SRS_TARGET: 15 (of 124). Details: `dataset/params_provenance.md`.
