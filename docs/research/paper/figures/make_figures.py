@@ -140,7 +140,9 @@ def variants(v: dict[str, str]) -> str:
         + r"""\begin{tikzpicture}
   \begin{axis}[
       width=0.8\linewidth, height=5.5cm,
-      xmin=0, xmax=100, xlabel={Recall at the 1\% false-positive budget (\%), Wilson interval},
+      xmin=0, xmax=100, xlabel={Recall at the """
+        + v["nFPRBudget"]
+        + r""" false-positive budget (\%), Wilson interval},
       symbolic y coords={"""
         + names
         + r"""},
