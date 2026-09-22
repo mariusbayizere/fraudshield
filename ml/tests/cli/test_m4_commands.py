@@ -12,6 +12,7 @@ comparison would compare zero with zero and pass whatever the code did.
 
 from __future__ import annotations
 
+import json
 import math
 import re
 from pathlib import Path
@@ -21,13 +22,13 @@ import pytest
 
 from fraudshield_ml import cli
 from fraudshield_ml.features.registry import REGISTRY, Dtype
+from fraudshield_ml.training import access, gate, smoke
 from fraudshield_ml.training import battery as battery_module
-from fraudshield_ml.training import smoke
 from fraudshield_ml.training.battery import NOVEL_VARIANT
 
 REVERSAL = "reversal_scam_social_engineering"
 COUNTRIES = ("AA", "BB", "CC")
-CHANNELS = ("MOBILE_MONEY", "USSD", "CARD")
+CHANNELS = ("MOBILE_MONEY", "USSD", "CARD", "AGENT_BANKING")
 #: Features that carry the fraud signal, one from each of four groups, so an ablation that removes
 #: any one group still leaves signal behind — the redundancy shape PB-60 measured.
 SIGNAL = (
@@ -59,12 +60,15 @@ def _write_cache(
     segments: dict[str, int],
     variants: bool = True,
     seed: int = 7,
+    mcc: bool = False,
 ) -> dict[str, int]:
     """Rows in each named segment, 20% fraud. Returns the fraud count per segment."""
     rng = np.random.default_rng(seed)
     names = smoke.trainable_features()
     rows: list[dict[str, object]] = []
     extras: dict[str, list[object]] = {k: [] for k in smoke.CACHE_EXTRAS}
+    if mcc:
+        extras[smoke.CACHE_MCC] = []
     fraud_in: dict[str, int] = {}
     for segment, count in segments.items():
         fraud_in[segment] = 0
@@ -86,6 +90,8 @@ def _write_cache(
             extras[smoke.CACHE_COUNTRY].append(COUNTRIES[i % len(COUNTRIES)])
             extras[smoke.CACHE_CHANNEL].append(CHANNELS[(i // 3) % len(CHANNELS)])
             extras[smoke.CACHE_VARIANT].append(variant)
+            if mcc:
+                extras[smoke.CACHE_MCC].append("4829" if i % 4 == 0 else "5411")
     smoke.cache_write(path, {"dataset": "fixture"}, rows, extras)  # type: ignore[arg-type]
     return fraud_in
 
@@ -267,3 +273,86 @@ def test_the_calibrator_is_fitted_on_the_calibration_period_and_never_on_test(
     assert platt_labels == [[False, True]], (
         "the calibrator saw labels that are not the calibration period's"
     )
+
+
+GATE_SEGMENTS = {"train": 500, "validation": 250, "calibration": 250, "test": 500}
+
+
+@pytest.fixture(scope="module")
+def gate_cache(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    path = tmp_path_factory.mktemp("gate") / "features.parquet"
+    _write_cache(path, segments=GATE_SEGMENTS, mcc=True)
+    return path
+
+
+@pytest.mark.req("TEST-14", "ML-GATE-01", "ML-GATE-10", "ML-GATE-11")
+def test_the_gate_reports_every_metric_and_writes_its_artefacts(
+    gate_cache: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    private_access_log: Path,
+) -> None:
+    """All eleven M4 gate metrics, the floor, baselines, ablations, seeds, and E.5's outputs."""
+    before = private_access_log.read_text().count('"gate"') if private_access_log.exists() else 0
+    out = tmp_path / "gate"
+    code = cli.main(
+        [
+            "gate",
+            str(gate_cache),
+            "--out",
+            str(out),
+            "--seeds",
+            "1",
+            "2",
+            "--resamples",
+            "30",
+            "--ablate",
+        ]
+    )
+    assert code == 0, "without --enforce a failing metric is reported, not an error (D.3)"
+    printed = capsys.readouterr().out
+    for spec in gate.SPECS:
+        assert spec.id in printed
+    for heading in ("floor: strongest single feature", "BASELINES", "ABLATIONS", "SEEDS"):
+        assert heading in printed
+    for baseline in ("status-quo rule engine", "logistic regression", "random forest"):
+        assert baseline in printed
+    assert "card-style features only" in printed
+
+    metrics = json.loads((out / "metrics.json").read_text())
+    assert [g["id"] for g in metrics["gate"]] == [s.id for s in gate.SPECS]
+    for g in metrics["gate"]:
+        assert isinstance(g["pass"], bool)
+        assert len(g["ci95"]) == 2
+    assert metrics["rows"]["test"]["rows"] == GATE_SEGMENTS["test"]
+    assert len(metrics["seeds"]["ML-GATE-01"]) == 2
+    for table in ("gate", "baselines", "ablations"):
+        assert (out / "tables" / f"{table}.tex").read_text().startswith(r"\begin{tabular}")
+    for figure in ("reliability", "roc"):
+        assert (out / "figures" / f"{figure}.svg").read_text().startswith("<svg")
+    assert private_access_log.read_text().count('"gate"') == before + 1, "the run was not logged"
+
+
+def test_enforce_exits_one_when_a_gate_metric_misses_its_threshold(
+    gate_cache: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The CI gate (E.5 item 9) fails on a missed threshold only when asked to."""
+    impossible = (gate.Spec("ML-GATE-01", "AUC-ROC", 2.0, True), *gate.SPECS[1:])
+    monkeypatch.setattr(gate, "SPECS", impossible)
+    args = ["gate", str(gate_cache), "--out", str(tmp_path), "--seeds", "1", "--resamples", "5"]
+    assert cli.main(args) == 0
+    assert cli.main([*args, "--enforce"]) == 1
+
+
+def test_the_gate_refuses_a_cache_without_all_four_row_sets(
+    cache: tuple[Path, dict[str, int]], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A cache from before D-05 has no validation rows to stop on; refuse and say how to fix it."""
+    assert cli.main(["gate", str(cache[0]), "--out", str(tmp_path)]) == 2
+    err = capsys.readouterr().err
+    assert "no validation rows" in err
+    assert "--validation-rows" in err
+
+
+def test_no_test_writes_to_the_committed_access_log() -> None:
+    assert access.log_path() != access.DEFAULT

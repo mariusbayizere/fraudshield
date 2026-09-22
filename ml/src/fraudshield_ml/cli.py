@@ -18,6 +18,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import pyarrow.parquet as pq
 
@@ -38,7 +39,17 @@ from fraudshield_ml.metrics.single_feature import (
     out_of_fold_target_encoding,
     separation,
 )
-from fraudshield_ml.training import battery, ensemble, evaluation, frontier, report, smoke
+from fraudshield_ml.training import (
+    access,
+    battery,
+    ensemble,
+    evaluation,
+    frontier,
+    gate_report,
+    gate_run,
+    report,
+    smoke,
+)
 from fraudshield_ml.training import split as split_module
 
 #: Columns the vector needs from each table. Named rather than read wholesale so that a schema
@@ -489,6 +500,9 @@ class EvaluationRun:
     #: period unused and the model uncalibrated, which is what the earlier runs did and said.
     calibration_rows: int
     seed: int
+    #: Rows from validation *outside* its calibration tail, for D-05's early stopping. Zero keeps
+    #: the cache as the battery-era runs wrote it, with no rows to stop on.
+    validation_rows: int = 0
     #: Where to keep the computed feature matrix. Everything M4 still owes — calibration, SHAP,
     #: baselines, ablations, the per-country and per-channel breakdowns, leave-one-country-out —
     #: refits models on the **same** features, and the feature pass is the only expensive part.
@@ -515,6 +529,7 @@ def _feature_matrix(
         "split": str(run.split),
         "train_rows": str(run.train_rows),
         "test_rows": str(run.test_rows),
+        "validation_rows": str(run.validation_rows),
     }
     cached = smoke.cache_read(run.cache, key) if run.cache else None
     if cached is not None:
@@ -549,6 +564,7 @@ def _feature_matrix(
         smoke.CACHE_COUNTRY: [country_of.get(rows[i].currency or "", "?") for i in sample],
         smoke.CACHE_CHANNEL: [rows[i].channel or "?" for i in sample],
         smoke.CACHE_VARIANT: [variants.get(rows[i].transaction_id, "") for i in sample],
+        smoke.CACHE_MCC: [rows[i].merchant_category_code or "" for i in sample],
     }
     if run.cache:
         smoke.cache_write(run.cache, key, vectors, extras)
@@ -786,6 +802,7 @@ def run_frontier(cache: Path, seed: int, requests: int, repeats: int) -> int:
         print(f"  {trees} trees, depth {depth}: done", flush=True)
 
     print("\n".join(report.frontier_table(points, len(timed_rows) * repeats)))
+    access.record("frontier", cache, len(test), purpose="latency-accuracy frontier (D-16)")
     return 0
 
 
@@ -827,6 +844,7 @@ def run_seed_variance(cache: Path, seeds: tuple[int, ...]) -> int:
         for name in ("xgboost", "lightgbm", "ensemble")
     }
     print("\n".join(report.seed_variance_table(runs, summaries, ("xgboost", "lightgbm"))))
+    access.record("seed-variance", cache, len(test), purpose="C-6 seed variance")
     return 0
 
 
@@ -892,7 +910,34 @@ def run_battery(cache: Path, seed: int, top: int) -> int:
     lines += _battery_novel_variant(bench, scores)
     lines += _battery_loco(bench)
     print("\n".join(lines))
+    access.record("battery", cache, len(bench.test), purpose="M4 evaluation battery")
     return 0
+
+
+def run_gate(cache: Path, out: Path, seeds: tuple[int, ...], resamples: int, flags: str) -> int:
+    """The declared M4 gate evaluation (E.5): D-05's model against ML-GATE-01 to ML-GATE-11.
+
+    Writes `metrics.json`, LaTeX tables and SVG figures under `out`, and records the test-set
+    access. `flags` holds `ablate` and/or `enforce`: `enforce` exits 1 when any gate metric misses
+    its threshold, which is what a CI gate needs; without it the measured values are reported
+    and the command succeeds, which is what D.3 asks of a failing metric (record, do not tune).
+    """
+    loaded = smoke.cache_read_any(cache)
+    if loaded is None:
+        raise DatasetGapError(f"{cache} holds no usable feature matrix")
+    try:
+        data = gate_run.load(*loaded)
+    except ValueError as gap:
+        raise DatasetGapError(str(gap)) from gap
+    result = gate_run.run(
+        data, seed=seeds[0], seeds=seeds, resamples=resamples, ablate="ablate" in flags
+    )
+    print("\n".join(gate_report.summary(result)))
+    for path in gate_report.write(result, out):
+        print(f"  wrote {path}")
+    access.record("gate", cache, len(data.test), purpose="declared M4 gate evaluation")
+    failed = [g for g in result.gates if not g.passed]
+    return 1 if failed and "enforce" in flags else 0
 
 
 def run_evaluate(run: EvaluationRun) -> int:
@@ -915,10 +960,17 @@ def run_evaluate(run: EvaluationRun) -> int:
             calibration_pool.append(index)
     train_pool = by_segment.get(split_module.Segment.TRAIN, [])
     test_pool = by_segment.get(split_module.Segment.TEST, [])
+    calibrating = set(calibration_pool)
+    # Validation outside its calibration tail: D-05 stops early on these and calibrates on the
+    # tail, so the two must not share a row.
+    validation_pool = [
+        i for i in by_segment.get(split_module.Segment.VALIDATION, []) if i not in calibrating
+    ]
     for name, pool, wanted in (
         ("train", train_pool, run.train_rows),
         ("test", test_pool, run.test_rows),
         ("calibration", calibration_pool, run.calibration_rows),
+        ("validation", validation_pool, run.validation_rows),
     ):
         if len(pool) < wanted:
             raise DatasetGapError(
@@ -937,12 +989,14 @@ def run_evaluate(run: EvaluationRun) -> int:
     # Calibration rows sit inside validation, so they are neither fitted on nor scored here. They
     # are computed and cached so the battery can calibrate on the period D-07 set aside for it.
     calibration_index = evaluation.spread(calibration_pool, run.calibration_rows)
+    validation_index = evaluation.spread(validation_pool, run.validation_rows)
 
-    sample = train_index + test_index + calibration_index
+    sample = train_index + test_index + calibration_index + validation_index
     segments = (
         ["train"] * len(train_index)
         + ["test"] * len(test_index)
         + ["calibration"] * len(calibration_index)
+        + ["validation"] * len(validation_index)
     )
     vectors, extras = _feature_matrix(run, rows, sample, context, segments)
     labels = [v == "True" for v in extras[smoke.CACHE_LABEL]]
@@ -1007,6 +1061,7 @@ def run_evaluate(run: EvaluationRun) -> int:
         boundaries=boundaries,
     )
     print(evaluation.summarise(result))
+    access.record("evaluate", run.dataset, len(test), purpose="first evaluation and cache build")
     return 0
 
 
@@ -1138,6 +1193,28 @@ def run_smoke(run: smoke.SmokeRun) -> int:
     return 0
 
 
+def _add_gate_command(commands: Any) -> None:
+    gate_command = commands.add_parser(
+        "gate",
+        help="the M4 gate: D-05's ensemble against ML-GATE-01..11 with bootstrap CIs, baselines, "
+        "ablations and seeds; writes metrics.json, LaTeX tables and figures",
+    )
+    gate_command.add_argument("cache", type=Path)
+    gate_command.add_argument("--out", type=Path, required=True)
+    gate_command.add_argument(
+        "--seeds",
+        type=int,
+        nargs="+",
+        default=list(ensemble.SEEDS),
+        help="the first fits the reported model; all are refitted for mean and SD (E.5.2)",
+    )
+    gate_command.add_argument("--resamples", type=int, default=1000)
+    gate_command.add_argument("--ablate", action="store_true", help="E.5.4's ablations")
+    gate_command.add_argument(
+        "--enforce", action="store_true", help="exit 1 if any gate metric misses its threshold"
+    )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="fs-features", description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -1182,6 +1259,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="rows from D-07's calibration period, computed and cached but neither fitted on nor "
         "scored here; the battery calibrates on them",
     )
+    evaluate_command.add_argument(
+        "--validation-rows",
+        type=int,
+        default=0,
+        help="rows from validation outside its calibration tail, cached for D-05's early "
+        "stopping in fs-features gate; neither fitted on nor scored here",
+    )
     evaluate_command.add_argument("--seed", type=int, default=20260917)
     evaluate_command.add_argument(
         "--cache",
@@ -1206,6 +1290,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     frontier_command.add_argument("--seed", type=int, default=20260917)
     frontier_command.add_argument("--requests", type=int, default=300)
     frontier_command.add_argument("--repeats", type=int, default=3)
+    _add_gate_command(commands)
     seed_variance_command = commands.add_parser(
         "seed-variance",
         help="C-6: XGBoost alone, LightGBM alone and the D-05 ensemble, over fixed seeds",
@@ -1246,6 +1331,13 @@ def main(argv: Sequence[str] | None = None) -> int:
 #: One entry per subcommand. A table rather than a chain of returns, so adding the eighth does not
 #: make `main` too long to read — the same arrangement `fs-dataset` already uses.
 COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
+    "gate": lambda a: run_gate(
+        a.cache,
+        a.out,
+        tuple(a.seeds),
+        a.resamples,
+        " ".join(f for f, on in (("ablate", a.ablate), ("enforce", a.enforce)) if on),
+    ),
     "frontier": lambda a: run_frontier(a.cache, a.seed, a.requests, a.repeats),
     "seed-variance": lambda a: run_seed_variance(a.cache, tuple(a.seeds)),
     "battery": lambda a: run_battery(a.cache, a.seed, a.top),
@@ -1258,6 +1350,7 @@ COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
             train_rows=a.train_rows,
             test_rows=a.test_rows,
             calibration_rows=a.calibration_rows,
+            validation_rows=a.validation_rows,
             seed=a.seed,
             cache=a.cache,
         )

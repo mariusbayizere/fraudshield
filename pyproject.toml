@@ -50,8 +50,9 @@ ignore_missing_imports = true
 module = ["pyarrow", "pyarrow.*"]
 ignore_missing_imports = true
 
-# scikit-learn ships no type information (no py.typed); it is used for D-06's Isolation Forest,
-# D-05's isotonic calibration and E.5's baselines, each behind a narrow typed wrapper.
+# scikit-learn and scipy ship no type information (no py.typed). scikit-learn is used for D-06's
+# Isolation Forest, D-05's isotonic calibration and E.5's baselines; scipy for the gate's ranks and
+# DeLong's normal tail. Each sits behind a narrow typed wrapper.
 [[tool.mypy.overrides]]
-module = ["sklearn", "sklearn.*"]
+module = ["sklearn", "sklearn.*", "scipy", "scipy.*"]
 ignore_missing_imports = true

@@ -320,6 +320,10 @@ CACHE_EXTRAS = (
     CACHE_CHANNEL,
     CACHE_VARIANT,
 )
+#: The merchant category code, for E.5's rule-engine baseline. Optional so that a cache written
+#: before it was carried still reads; a reader that needs it says what it did without it.
+CACHE_MCC = "_mcc"
+CACHE_OPTIONAL = (CACHE_MCC,)
 
 
 def cache_key(dataset: str, corpus_rows: int, sample_rows: int) -> dict[str, str]:
@@ -351,8 +355,9 @@ def cache_write(
         raise ValueError(f"the cache needs {sorted(missing)} alongside the features")
     names = trainable_features()
     columns: dict[str, list[object]] = {name: [row[name] for row in rows] for name in names}
+    carried = CACHE_EXTRAS + tuple(k for k in CACHE_OPTIONAL if k in extras)
     table = pa.table(
-        {**columns, **{k: list(extras[k]) for k in CACHE_EXTRAS}},
+        {**columns, **{k: list(extras[k]) for k in carried}},
         metadata={k.encode(): v.encode() for k, v in key.items()},
     )
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -394,5 +399,6 @@ def _read(
         return None
     columns = {name: table.column(name).to_pylist() for name in names}
     rows = [{name: columns[name][i] for name in names} for i in range(table.num_rows)]
-    extras = {k: [str(v) for v in table.column(k).to_pylist()] for k in CACHE_EXTRAS}
+    carried = CACHE_EXTRAS + tuple(k for k in CACHE_OPTIONAL if k in table.schema.names)
+    extras = {k: [str(v) for v in table.column(k).to_pylist()] for k in carried}
     return rows, extras
