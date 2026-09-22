@@ -10,7 +10,22 @@ export default mergeConfig(
       projects: [
         {
           extends: true,
-          test: { name: 'unit', environment: 'node', include: ['src/**/*.test.ts'] },
+          test: {
+            name: 'unit',
+            environment: 'node',
+            include: ['src/**/*.test.ts'],
+            exclude: ['src/**/*.build.test.ts'],
+          },
+        },
+        {
+          // One production build, checked for what must never ship (ADR 0080).
+          extends: true,
+          test: {
+            name: 'build',
+            environment: 'node',
+            include: ['src/**/*.build.test.ts'],
+            testTimeout: 300_000,
+          },
         },
         {
           extends: true,
@@ -31,6 +46,10 @@ export default mergeConfig(
           'src/test/**',
           'src/api/generated/**',
           'src/**/*.d.ts',
+          // Start-up glue and development-only mocks; the shell they start is tested, and the
+          // Playwright journeys run main.tsx itself.
+          'src/main.tsx',
+          'src/mocks/**',
         ],
         // Enforced front-end thresholds (build prompt E.11).
         thresholds: { lines: 90, functions: 90, branches: 85, statements: 90 },

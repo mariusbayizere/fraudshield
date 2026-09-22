@@ -1,5 +1,50 @@
 {
   "app": {
     "name": "FraudShield"
+  },
+  "nav": {
+    "alerts": "Alerts",
+    "anomalies": "Anomalies",
+    "escalations": "Escalations",
+    "search": "Search",
+    "performance": "My performance",
+    "portfolio": "Portfolio",
+    "modelPerformance": "Model performance",
+    "campaigns": "Campaigns",
+    "rules": "Rules",
+    "thresholds": "Thresholds",
+    "sar": "SAR reports",
+    "overrides": "Overrides",
+    "users": "Users",
+    "approvals": "Approvals",
+    "models": "Models",
+    "datasets": "Datasets",
+    "health": "System health",
+    "audit": "Audit log",
+    "apiKeys": "API keys",
+    "circuitBreakers": "Circuit breakers",
+    "ipAllowlist": "IP allowlist",
+    "settings": "Settings",
+    "login": "Sign in",
+    "register": "Register",
+    "forgotPassword": "Forgot password",
+    "resetPassword": "Reset password",
+    "unlock": "Unlock account",
+    "pendingApproval": "Pending approval"
+  },
+  "shell": {
+    "navigation": "Main navigation",
+    "primaryNavigation": "Primary destinations",
+    "skipToContent": "Skip to main content",
+    "openMenu": "Open menu",
+    "language": "Language",
+    "notBuiltTitle": "Not built yet",
+    "notBuiltDescription": "This screen arrives in a later M8 step. Nothing here is real data.",
+    "group": {
+      "analyst": "Analysis",
+      "riskOfficer": "Risk",
+      "admin": "Administration",
+      "settings": "You"
+    }
   }
 }

@@ -1,5 +1,50 @@
 {
   "app": {
     "name": "FraudShield"
+  },
+  "nav": {
+    "alerts": "Tahadhari",
+    "anomalies": "Hitilafu",
+    "escalations": "Upandishaji",
+    "search": "Tafuta",
+    "performance": "Utendaji wangu",
+    "portfolio": "Jalada",
+    "modelPerformance": "Utendaji wa modeli",
+    "campaigns": "Kampeni",
+    "rules": "Kanuni",
+    "thresholds": "Viwango",
+    "sar": "Ripoti za SAR",
+    "overrides": "Ubatilishaji",
+    "users": "Watumiaji",
+    "approvals": "Idhini",
+    "models": "Modeli",
+    "datasets": "Seti za data",
+    "health": "Afya ya mfumo",
+    "audit": "Kumbukumbu za ukaguzi",
+    "apiKeys": "Funguo za API",
+    "circuitBreakers": "Vivunja mzunguko",
+    "ipAllowlist": "Orodha ya IP zinazoruhusiwa",
+    "settings": "Mipangilio",
+    "login": "Ingia",
+    "register": "Jisajili",
+    "forgotPassword": "Umesahau nenosiri",
+    "resetPassword": "Weka upya nenosiri",
+    "unlock": "Fungua akaunti",
+    "pendingApproval": "Inasubiri idhini"
+  },
+  "shell": {
+    "navigation": "Urambazaji mkuu",
+    "primaryNavigation": "Maeneo makuu",
+    "skipToContent": "Ruka hadi maudhui makuu",
+    "openMenu": "Fungua menyu",
+    "language": "Lugha",
+    "notBuiltTitle": "Bado haijajengwa",
+    "notBuiltDescription": "Skrini hii itakuja katika hatua ya baadaye ya M8. Hakuna data halisi hapa.",
+    "group": {
+      "analyst": "Uchambuzi",
+      "riskOfficer": "Hatari",
+      "admin": "Utawala",
+      "settings": "Wewe"
+    }
   }
 }

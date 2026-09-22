@@ -1,5 +1,50 @@
 {
   "app": {
     "name": "FraudShield"
+  },
+  "nav": {
+    "alerts": "Imenyesha",
+    "anomalies": "Ibidasanzwe",
+    "escalations": "Ibyoherejwe hejuru",
+    "search": "Gushakisha",
+    "performance": "Umusaruro wanjye",
+    "portfolio": "Portefeuille",
+    "modelPerformance": "Imikorere ya moderi",
+    "campaigns": "Ubukangurambaga",
+    "rules": "Amategeko",
+    "thresholds": "Imbibi",
+    "sar": "Raporo za SAR",
+    "overrides": "Ibyahinduwe",
+    "users": "Abakoresha",
+    "approvals": "Ibyemezo",
+    "models": "Moderi",
+    "datasets": "Amakuru y'ibanze",
+    "health": "Ubuzima bwa sisitemu",
+    "audit": "Igitabo cy'igenzura",
+    "apiKeys": "Imfunguzo za API",
+    "circuitBreakers": "Ibihagarika umuyoboro",
+    "ipAllowlist": "Urutonde rwa IP zemewe",
+    "settings": "Igenamiterere",
+    "login": "Injira",
+    "register": "Iyandikishe",
+    "forgotPassword": "Wibagiwe ijambobanga",
+    "resetPassword": "Hindura ijambobanga",
+    "unlock": "Fungura konti",
+    "pendingApproval": "Gutegereza kwemezwa"
+  },
+  "shell": {
+    "navigation": "Inzira nyamukuru",
+    "primaryNavigation": "Aho ujya cyane",
+    "skipToContent": "Simbukira ku bikubiyemo by'ingenzi",
+    "openMenu": "Fungura menu",
+    "language": "Ururimi",
+    "notBuiltTitle": "Ntiriraremwa",
+    "notBuiltDescription": "Iyi paji izaza mu cyiciro gikurikira cya M8. Nta makuru nyayo ari hano.",
+    "group": {
+      "analyst": "Isesengura",
+      "riskOfficer": "Ibyago",
+      "admin": "Ubuyobozi",
+      "settings": "Wowe"
+    }
   }
 }

@@ -1,0 +1,10 @@
+/*
+ * D-37: Tailwind's theme and utilities, but not its Preflight reset; MUI's CssBaseline owns
+ * resets. Utilities sit in a later layer, so they can override component styles.
+ */
+@layer theme, base, components, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+@import '../design-system/generated/tailwind-theme.css';
+@import '../design-system/generated/tokens.css';
+@import './fonts.css';
