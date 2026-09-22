@@ -4,6 +4,7 @@ import io.github.mariusbayizere.fraudshield.common.money.Money;
 import io.github.mariusbayizere.fraudshield.decision.application.DecisionService;
 import io.github.mariusbayizere.fraudshield.decision.application.IngestDecision;
 import io.github.mariusbayizere.fraudshield.decision.application.event.DecisionEvent;
+import io.github.mariusbayizere.fraudshield.decision.application.port.DecisionMetrics;
 import io.github.mariusbayizere.fraudshield.decision.application.port.EventRecorder;
 import io.github.mariusbayizere.fraudshield.decision.application.port.FxRatePort;
 import io.github.mariusbayizere.fraudshield.decision.domain.Transaction;
@@ -94,6 +95,7 @@ public final class IngestService {
   private final EventRecorder recorder;
   private final Clock clock;
   private final Duration duplicateWait;
+  private final DecisionMetrics metrics;
 
   /**
    * Creates the service.
@@ -112,12 +114,35 @@ public final class IngestService {
       EventRecorder recorder,
       Clock clock,
       Duration duplicateWait) {
+    this(decisions, idempotency, rates, recorder, clock, duplicateWait, DecisionMetrics.NONE);
+  }
+
+  /**
+   * Creates the service with stage metrics.
+   *
+   * @param decisions the decision path
+   * @param idempotency idempotency records
+   * @param rates FX rates to RWF
+   * @param recorder durable events, for the idempotency-conflict audit
+   * @param clock clock
+   * @param duplicateWait how long a duplicate waits for the first submission's result
+   * @param metrics stage metrics
+   */
+  public IngestService(
+      DecisionService decisions,
+      IdempotencyStore idempotency,
+      FxRatePort rates,
+      EventRecorder recorder,
+      Clock clock,
+      Duration duplicateWait,
+      DecisionMetrics metrics) {
     this.decisions = Objects.requireNonNull(decisions, "decisions");
     this.idempotency = Objects.requireNonNull(idempotency, "idempotency");
     this.rates = Objects.requireNonNull(rates, "rates");
     this.recorder = Objects.requireNonNull(recorder, "recorder");
     this.clock = Objects.requireNonNull(clock, "clock");
     this.duplicateWait = Objects.requireNonNull(duplicateWait, "duplicateWait");
+    this.metrics = Objects.requireNonNull(metrics, "metrics");
   }
 
   /**
@@ -159,8 +184,10 @@ public final class IngestService {
     byte[] fingerprint = Fingerprints.of(request);
     long deadline = System.nanoTime() + duplicateWait.toNanos();
     while (true) {
+      long mark = System.nanoTime();
       IdempotencyStore.Claim claim =
           idempotency.claim(institution, request.transactionId(), fingerprint);
+      metrics.stage("idempotency_claim", System.nanoTime() - mark);
       switch (claim) {
         case IdempotencyStore.Replay replay -> {
           return new Decided(replay.response(), true);
@@ -216,7 +243,9 @@ public final class IngestService {
               received);
       IngestDecision decision = decisions.decide(transaction, fingerprint, receivedNanos);
       byte[] body = DecisionResponses.render(decision);
+      long mark = System.nanoTime();
       idempotency.complete(institution, r.transactionId(), body);
+      metrics.stage("idempotency_complete", System.nanoTime() - mark);
       return new Decided(body, false);
     } catch (RuntimeException failed) {
       idempotency.release(institution, r.transactionId());

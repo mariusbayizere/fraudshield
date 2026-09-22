@@ -64,6 +64,15 @@ public final class MicrometerDecisionMetrics implements DecisionMetrics {
   }
 
   @Override
+  public void stage(String stage, long nanos) {
+    Timer.builder("fs_decision_stage")
+        .tag("stage", stage)
+        .publishPercentiles(0.5, 0.95, 0.99)
+        .register(registry)
+        .record(nanos, TimeUnit.NANOSECONDS);
+  }
+
+  @Override
   public void timeoutRelease(String channel) {
     Counter.builder("fs_alert_timeout_release_total")
         .tag("channel", channel)

@@ -227,7 +227,8 @@ public class DecisionWiring {
       DecisionMetrics metrics,
       DegradedMode mode,
       FraudShieldProperties properties,
-      Clock clock) {
+      Clock clock,
+      ExecutorService afterResponse) {
     JdbcAccountProfiles profiles = new JdbcAccountProfiles(dataSource);
     return new DecisionService(
         configuration,
@@ -246,7 +247,8 @@ public class DecisionWiring {
         metrics,
         new DecisionSettings(
             properties.reviewWindow(), properties.anomalyReviewThreshold(), FallbackRules.DEFAULTS),
-        clock);
+        clock,
+        afterResponse);
   }
 
   @Bean
@@ -304,9 +306,16 @@ public class DecisionWiring {
       FxRatePort rates,
       EventRecorder recorder,
       Clock clock,
-      FraudShieldProperties properties) {
+      FraudShieldProperties properties,
+      DecisionMetrics metrics) {
     return new IngestService(
-        decisions, idempotency, rates, recorder, clock, properties.duplicateWait());
+        decisions, idempotency, rates, recorder, clock, properties.duplicateWait(), metrics);
+  }
+
+  /** Work done after the response (C.2): feature-store updates and MCC counts. */
+  @Bean(destroyMethod = "close")
+  ExecutorService afterResponse() {
+    return Executors.newVirtualThreadPerTaskExecutor();
   }
 
   @Bean(destroyMethod = "shutdown")
