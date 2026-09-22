@@ -21,6 +21,7 @@ import pytest
 
 from fraudshield_ml import cli
 from fraudshield_ml.features.registry import REGISTRY, Dtype
+from fraudshield_ml.training import battery as battery_module
 from fraudshield_ml.training import smoke
 from fraudshield_ml.training.battery import NOVEL_VARIANT
 
@@ -221,3 +222,48 @@ def test_the_frontier_walks_the_whole_grid_and_disowns_its_milliseconds(
         line.split() for line in out.splitlines() if line.strip()[:1].isdigit() and "+/-" in line
     ]
     assert [(int(r[0]), int(r[1])) for r in table] == list(cli.FRONTIER_GRID)
+
+
+@pytest.mark.req("ML-GATE-11", "D-07")
+def test_the_calibrator_is_fitted_on_the_calibration_period_and_never_on_test(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D-07 sets calibration rows aside so the calibrator never sees a scored row.
+
+    Fitting it on the test rows instead passed the whole suite until this test (M4 review, M4-6):
+    the output is plausible either way, so only the rows it was given can tell.
+    """
+    scored: list[list[int]] = []
+    platt_labels: list[list[bool]] = []
+
+    def record_fit(self: cli.Battery, train: list[int], test: list[int]) -> list[float]:
+        scored.append(list(test))
+        return [0.5] * len(test)
+
+    def record_platt(scores: list[float], labels: list[bool]) -> tuple[float, float]:
+        platt_labels.append(list(labels))
+        return (1.0, 0.0)
+
+    monkeypatch.setattr(cli.Battery, "fit", record_fit)
+    monkeypatch.setattr(battery_module, "fit_platt", record_platt)
+    bench = cli.Battery(
+        names=("a",),
+        matrix=[[0.0]] * 6,
+        labels=[False, True, True, False, False, True],
+        country=[""] * 6,
+        channel=[""] * 6,
+        variant=[""] * 6,
+        train=[0, 1],
+        test=[2, 3],
+        calibration=[4, 5],
+        seed=1,
+    )
+    cli._battery_calibration(bench, [0.5, 0.5])
+
+    assert scored == [[4, 5]], (
+        "the calibrator was fitted on scores for rows outside the calibration period"
+    )
+    assert not set(scored[0]) & set(bench.test)
+    assert platt_labels == [[False, True]], (
+        "the calibrator saw labels that are not the calibration period's"
+    )

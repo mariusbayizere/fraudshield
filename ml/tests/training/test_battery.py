@@ -314,3 +314,18 @@ def test_an_unseen_shape_caught_less_often_is_not_reported_as_caught_as_often() 
 def test_an_unseen_shape_caught_significantly_more_often_gets_a_verdict() -> None:
     rendered = "\n".join(variant_table(_variants(200, 200), threshold=0.5, fpr=0.01))
     assert "caught MORE often than base" in rendered
+
+
+def test_a_variant_positive_tied_on_the_threshold_is_not_caught() -> None:
+    """The PB-58 tie defect, in the variant table behind the PB-61 headline (M4 review, M4-7).
+
+    Ten legitimate rows sit exactly on the 1% threshold. A positive tied with them is not above
+    the alert line, and counting it would report a recall the budget has not paid for.
+    """
+    scores = [0.9] * 5 + [0.95] * 5 + [0.9] * 10 + [0.1] * 990
+    labels = [True] * 10 + [False] * 1000
+    variants = ["base"] * 10 + [""] * 1000
+
+    results, threshold = by_variant(scores, labels, variants, fpr=0.01)
+    assert threshold == pytest.approx(0.9), "precondition: the threshold sits on the tie"
+    assert results[0].detected == 5, "positives tied on the threshold were counted as caught"
