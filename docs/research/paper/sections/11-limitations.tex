@@ -30,6 +30,14 @@ decision region; leave-one-country-out on real, country-labelled fraud; and dete
 documented non-burst typologies such as the reversal scam. It would require data access agreements,
 a data protection impact assessment, and hosting in a permitted location (Section~\ref{sec:ethics}).
 
+\paragraph{What the benchmark cannot exercise.} Two of the four corridor classes never occur, so
+the models have never scored a cross-bloc or intercontinental transfer (Section~\ref{sec:setting}).
+The pre-registered reversal-scam variant sends the victim's transfer to a known counterparty, a
+modelling choice that differs from the documented form of the scam, whose recipient is usually new
+(Section~\ref{sec:generalisation}); the result bounds the harder case and says nothing about the
+documented one. And because a single XGBoost model ranks as well as the specified ensemble here, the
+benchmark cannot show what the ensemble adds.
+
 \paragraph{Scale and volume.} Results are at about one million rows, not the five million the
 specification requires (\notyet{M10}), and the models were trained on \nTrainUsed{} rows rather than
 the full training period. Single-feature AUC moves with dataset size by more than seed noise, and the

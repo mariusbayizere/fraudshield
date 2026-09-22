@@ -13,9 +13,9 @@ on the same test rows. Four disjoint feature groups each reach at least \nGroupG
 so ablations on this benchmark measure redundancy, not importance. Both generalisation
 experiments we planned (leave-one-country-out and a novel fraud variant held out in time) are
 null, for one reason: the generator encodes fraud as bursts, and every country and variant is a
-view of that structure. A pre-registered, typology-grounded variant without burst structure, a
-single victim-initiated transfer to an established counterparty, is the one genuine failure we
-found: it is caught at \nRevRecall{} \nRevCI{} against \nBaseVarRecall{} \nBaseVarCI{} for the
+view of that structure. A pre-registered variant based on a documented scam, modelled as a single
+victim-initiated transfer to a counterparty the victim already knows, so that it has neither burst
+structure nor counterparty novelty, is the one genuine failure we found: it is caught at \nRevRecall{} \nRevCI{} against \nBaseVarRecall{} \nBaseVarCI{} for the
 base scenarios. The most robust quantitative result is a cost the benchmark cannot weaken: across
 tree complexity, the median cost of an exact TreeSHAP explanation grows about
 \nFrontRatio-fold while accuracy stays within its interval.
