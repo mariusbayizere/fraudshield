@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import shutil
 import threading
@@ -47,9 +48,15 @@ POLL_SECONDS = 5.0
 MAX_POLL_SECONDS = 10.0
 ARTIFACT_SCHEME = "mlflow-artifacts:/"
 #: Written by `promote` when it points `production` at a version, and read back to decide whether
-#: a later move to that version is a rollback. Only this module writes it.
+#: a later move to that version is a rollback. `fs-model` writes it nowhere else and offers no way
+#: to set it, but it is an ordinary MLflow version tag: the exemption is therefore only as strong
+#: as the tracking server's own access control (adversarial MAJOR 2).
 SERVED_TAG = "fraudshield.served_as_production"
 LOG = logging.getLogger(__name__)
+
+
+def _now() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
 class RegistryError(RuntimeError):
@@ -64,13 +71,21 @@ class PromotionRefused(RegistryError):  # noqa: N818 - a refusal, named as one
 MAX_ECE = 0.05
 
 
+def _finite(value: float | None) -> bool:
+    """A figure the gate can actually compare. NaN is not one: every D-11 clause is a `<` or a
+    `>=`, and NaN passes all of them, so an absent figure and a NaN figure are the same thing —
+    a clause that was not applied (adversarial pass, BLOCKER 1)."""
+    return value is not None and math.isfinite(value)
+
+
 def _d11_recheck(gate: GateDecision, manifest: dict[str, Any]) -> list[str]:
     """D-11's clauses re-derived from the decision's own numbers.
 
     The in-house `shadow.promotion_gate` always names a reason when it refuses, but the design
     hands this file a *report*, which an external comparator writes. A report is not trusted to
     have applied D-11 correctly: its `promote` flag is checked against the figures beside it, and
-    a figure it leaves out is a clause it did not apply, not a clause that passed (re-review V2).
+    a figure it leaves out — or writes as NaN, which `json` both accepts and emits — is a clause
+    it did not apply, not a clause that passed (re-review V2, adversarial BLOCKER 1).
 
     All five of D-11's clauses are checked here, and the report must name the model it measured:
     a decision about one shadow model is not a decision about whatever version is being promoted.
@@ -78,19 +93,23 @@ def _d11_recheck(gate: GateDecision, manifest: dict[str, Any]) -> list[str]:
     problems: list[str] = []
     if gate.scored < shadow.MIN_SCORED:
         problems.append(f"{gate.scored} shadow scores, need {shadow.MIN_SCORED} (D-11)")
-    if gate.label_coverage < shadow.MIN_LABEL_COVERAGE:
+    if not _finite(gate.label_coverage):
+        problems.append("the gate report carries no usable label coverage (D-11)")
+    elif gate.label_coverage < shadow.MIN_LABEL_COVERAGE:
         problems.append(f"label coverage {gate.label_coverage:.1%} is under 30% (D-11)")
-    elif gate.auc_delta is None:
-        problems.append("the gate report carries no AUC delta (D-11)")
-    if gate.auc_delta is not None and gate.auc_delta < shadow.MIN_AUC_DELTA:
+    elif not _finite(gate.auc_delta):
+        problems.append("the gate report carries no usable AUC delta (D-11)")
+    elif gate.auc_delta is not None and gate.auc_delta < shadow.MIN_AUC_DELTA:
         problems.append(f"AUC delta {gate.auc_delta:+.4f} is below {shadow.MIN_AUC_DELTA} (D-11)")
-    if gate.psi is None:
-        problems.append("the gate report carries no score PSI (D-11)")
-    elif gate.psi >= shadow.MAX_PSI:
+    if not _finite(gate.psi):
+        problems.append("the gate report carries no usable score PSI (D-11)")
+    elif gate.psi is not None and gate.psi >= shadow.MAX_PSI:
         problems.append(f"score PSI {gate.psi:.3f} is not below {shadow.MAX_PSI} (D-11)")
-    if gate.window_hours is None:
-        problems.append("the gate report carries no shadow window (D-11 needs 24 h)")
-    elif gate.window_hours < shadow.MIN_DURATION.total_seconds() / 3600:
+    if not _finite(gate.window_hours):
+        problems.append("the gate report carries no usable shadow window (D-11 needs 24 h)")
+    elif gate.window_hours is not None and (
+        gate.window_hours < shadow.MIN_DURATION.total_seconds() / 3600
+    ):
         problems.append(f"shadow window {gate.window_hours:.1f} h is under 24 h (D-11)")
     served = str(manifest.get("model_version", ""))
     if gate.shadow_version is None:
@@ -109,7 +128,7 @@ def _gate_problems(
     `SERVED_TAG` this module writes, not by where an alias happens to point (D-50, re-review V1).
     """
     if gate is None:
-        if override is None:
+        if not (override or "").strip():
             return [
                 "no shadow-gate decision (D-11): pass the comparator's report, or an override "
                 "reason for a first deployment. A rollback to a version that has served needs "
@@ -226,9 +245,11 @@ class MlflowRegistry:
         already served needs no shadow decision. "Has already served" is not "is pointed at by
         `previous_production`": that alias can be moved by anyone with `fs-model alias`, and taking
         it as proof made the gate a two-command formality (re-review V1). The proof is
-        `SERVED_TAG`, which only this method writes, and only at the moment it points `production`
-        at a version. The calibration block still applies — a bundle that cannot be loaded and
-        checked is never pointed at by `production`, whichever direction it is moving.
+        `SERVED_TAG`, which `fs-model` writes only here, and only at the moment it points
+        `production` at a version (it is an ordinary MLflow tag, so the proof is as strong as the
+        tracking server's own access control). The calibration block still applies — a bundle
+        that cannot be loaded and checked is never pointed at by `production`, whichever
+        direction it is moving.
         """
         if alias != PRODUCTION:
             self.set_alias(name, alias, version)
@@ -237,13 +258,25 @@ class MlflowRegistry:
         manifest = json.loads((bundle / MANIFEST).read_text())
         problems = promotion_problems(manifest)
         previous = self.by_alias(name, PREVIOUS)
-        rollback = (
-            previous is not None and previous.version == version and self.has_served(name, version)
-        )
+        rollback = False
+        if previous is not None and previous.version == version:
+            rollback = self.has_served(name, version)
+            if not rollback and gate is None and not (override or "").strip():
+                # Mid-incident, "the gate refused you" is the wrong thing to read when the real
+                # answer is "this version has no record of ever serving" (adversarial MAJOR 2).
+                problems.append(
+                    f"v{version} is @{PREVIOUS} but carries no {SERVED_TAG} tag, so it cannot be "
+                    "taken as a rollback: either it never served, or the tag was lost. If it did "
+                    "serve, promote it with --override saying so"
+                )
         if not rollback:
             problems.extend(_gate_problems(gate, override, manifest))
         if problems:
             raise PromotionRefused("; ".join(problems))
+        # Written *before* the alias moves, and not best effort: this tag is what a later
+        # rollback relies on, so `production` must never point at a version that cannot be
+        # rolled back to (adversarial MAJOR 2).
+        self.set_version_tag(name, version, SERVED_TAG, _now())
         outgoing = self.by_alias(name, PRODUCTION)
         if outgoing is not None and outgoing.version != version:
             self.set_alias(name, PREVIOUS, outgoing.version)
@@ -265,10 +298,11 @@ class MlflowRegistry:
         recorded. Tagging is best effort: a tracking server that refuses the tag must not leave
         `production` pointing at nothing, so the failure is logged and the move goes ahead.
         """
-        now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        # Written here and nowhere else: the record that this version was served, which is what a
-        # later rollback to it is allowed to rely on.
-        tags = {"fraudshield.promoted_at": now, SERVED_TAG: now}
+        # `SERVED_TAG` is not written here: `promote` writes it before the alias moves, because a
+        # promotion that cannot record it must not happen at all. What is left is the narrative,
+        # which is best effort — a tracking server that refuses it must not leave `production`
+        # pointing at nothing.
+        tags = {"fraudshield.promoted_at": _now()}
         if rollback:
             tags["fraudshield.promotion_gate"] = "rollback to a version that served (D-50)"
         elif gate is not None:
@@ -292,7 +326,13 @@ class MlflowRegistry:
         return {str(t["key"]): str(t.get("value", "")) for t in tags}
 
     def has_served(self, name: str, version: str) -> bool:
-        """Whether `promote` has ever pointed `production` at this version (`SERVED_TAG`)."""
+        """Whether `promote` has ever pointed `production` at this version (`SERVED_TAG`).
+
+        A registry that will not answer is not evidence that the version served, so this is
+        `False` — and `promote` says which of the two it is in its refusal, because an operator
+        mid-incident must not read "the gate refused you" when the answer is "no record"
+        (adversarial MAJOR 2).
+        """
         try:
             return SERVED_TAG in self.version_tags(name, version)
         except RegistryError as error:
@@ -448,6 +488,9 @@ class MlflowRegistry:
         )
         if alias is not None:
             if alias == PRODUCTION:
+                # Same order as `promote`: the record that this version served is written first,
+                # and a failure to write it refuses the promotion.
+                self.set_version_tag(name, version, SERVED_TAG, _now())
                 outgoing = self.by_alias(name, PRODUCTION)
                 if outgoing is not None and outgoing.version != version:
                     self.set_alias(name, PREVIOUS, outgoing.version)
@@ -516,7 +559,12 @@ class AliasWatcher:
                 continue
             if version is None:
                 if alias == SHADOW:
-                    self._on[SHADOW](None)  # type: ignore[arg-type]
+                    try:
+                        self._on[SHADOW](None)  # type: ignore[arg-type]
+                    except Exception:
+                        self.metrics.failures.labels(SHADOW).inc()
+                        LOG.exception("shadow teardown failed; still watching")
+                        continue
                     self.loaded[SHADOW] = None
                 # A removed production alias keeps the loaded model: never serve nothing.
                 continue

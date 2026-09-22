@@ -21,11 +21,17 @@ from fraudshield_ml.serving.registry import (
 from fraudshield_ml.serving.shadow import GateDecision
 
 
+def _refuse_constant(token: str) -> float:
+    """`json` accepts and emits bare `NaN`/`Infinity`, and every D-11 clause is a comparison that
+    NaN passes. A report carrying one is refused here, before it can become a decision."""
+    raise ValueError(f"the gate report contains {token}, which is not a measurement")
+
+
 def _gate(path: Path | None) -> GateDecision | None:
     """A shadow comparator's decision, as JSON. Its own fields, nothing inferred."""
     if path is None:
         return None
-    report = json.loads(path.read_text())
+    report = json.loads(path.read_text(), parse_constant=_refuse_constant)
     return GateDecision(
         promote=bool(report["promote"]),
         reasons=tuple(report.get("reasons", ())),
@@ -55,7 +61,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     publish.add_argument("--name", default="fraudshield-ensemble")
     publish.add_argument("--alias", choices=[PRODUCTION, SHADOW], help="point this alias at it")
     publish.add_argument("--gate", type=Path, help="the shadow comparator's decision, JSON (D-11)")
-    publish.add_argument("--override", help="promote without a shadow gate, and why (recorded)")
+    publish.add_argument(
+        "--override", help="promote without a shadow gate, and why (recorded; may not be blank)"
+    )
 
     alias = commands.add_parser(
         "alias",
@@ -67,14 +75,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     alias.add_argument("alias", choices=[PRODUCTION, SHADOW, PREVIOUS])
     alias.add_argument("--cache", type=Path, default=Path(tempfile.gettempdir()) / "fs-models")
     alias.add_argument("--gate", type=Path, help="the shadow comparator's decision, JSON (D-11)")
-    alias.add_argument("--override", help="promote without a shadow gate, and why (recorded)")
+    alias.add_argument(
+        "--override", help="promote without a shadow gate, and why (recorded; may not be blank)"
+    )
     alias.add_argument("version")
 
     args = parser.parse_args(argv)
+    if getattr(args, "override", None) is not None and not args.override.strip():
+        parser.error("--override records why the gate was skipped; it may not be blank")
     try:
         return _run(args)
     except PromotionRefused as refusal:
         print(f"refused: {refusal}", file=sys.stderr)
+        return 1
+    except ValueError as bad_report:
+        print(f"refused: {bad_report}", file=sys.stderr)
         return 1
 
 

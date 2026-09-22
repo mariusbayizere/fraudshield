@@ -230,7 +230,7 @@ class _Snapshot:
     swap: list[str] = field(default_factory=list)
     tier: list[str] = field(default_factory=list)
     opened: str | None = None
-    cell_rows: list[list[Any]] = field(default_factory=list)
+    cell_rows: list[tuple[list[Any], int]] = field(default_factory=list)
     cp_rows: list[tuple[list[Any], int]] = field(default_factory=list)
     cp_opened: str | None = None
     device_rows: list[list[Any]] = field(default_factory=list)
@@ -453,7 +453,9 @@ class FeatureStore:
         if tx.agent_id is not None:
             self._agent(ctx, tx, snap)
         self._cell(ctx, tx, snap.cell_rows, t)
-        self._count_missing_producers(snap, ctx, t, degraded=degraded and not self.authoritative)
+        self._count_missing_producers(
+            snap, ctx, tx, t, degraded=degraded and not self.authoritative
+        )
         month = sum(1 for _, s in snap.rows if s > t - W_RAMP_MONTH)
         if month:
             recent = sum(1 for _, s in snap.rows if s > t - W_RAMP_RECENT)
@@ -464,7 +466,7 @@ class FeatureStore:
         )
 
     def _count_missing_producers(
-        self, snap: _Snapshot, ctx: pb.AccountContext, t: int, *, degraded: bool
+        self, snap: _Snapshot, ctx: pb.AccountContext, tx: Transaction, t: int, *, degraded: bool
     ) -> None:
         """Count the features that fell back to a constant for want of a producer (ADR 0034).
 
@@ -472,28 +474,38 @@ class FeatureStore:
         else — it is what M9's page fires on, and a page that also fires on ordinary operation is
         a page that gets silenced (re-review N5):
 
-        - **outcomes**: the counterparty must have a row old enough that a verdict would have
-          arrived by now (`LABEL_LATENCY`). A counterparty seen only this morning, with the labels
-          consumer deployed and healthy, is a label in flight, not a missing producer.
+        - **outcomes**: both features PB-70 feeds, on the two keys they read. A counterparty (or a
+          cell) must hold a row old enough that a verdict would have arrived by now
+          (`LABEL_LATENCY`) and carry none. A counterparty seen only this morning, with the labels
+          consumer healthy, is a label in flight; and a cash-out with no counterparty at all still
+          has a cell, which is why the cell is counted separately (adversarial MAJOR 4).
         - **reference state**: the account must already be known to the store. A first-ever
           transaction has no tier or opening date for any producer to have written, so its absence
           says nothing.
         - A degraded read is the *account's* own Redis state being absent (`snap.first is None`),
-          which is the fallback's shortfall and not a producer's, so the three account-state arms
-          stand down for it. The counterparty arm does not: it reads a different key, and a new
-          account paying an established counterparty is an ordinary shape whose outcome features
-          are exactly as constant as anyone else's (re-review V4).
+          which is the fallback's shortfall and not a producer's, so the account-state arms stand
+          down for it. The outcome arms do not: they read different keys, and a new account paying
+          an established counterparty is an ordinary shape (re-review V4).
+
+        **No `sim_swaps` arm.** Most accounts never had a SIM swap and the store writes no
+        "checked, none found" sentinel, so an absent swap is indistinguishable from an absent
+        producer: the arm fired on ordinary traffic and could never fall silent, even after
+        PB-71 ships (adversarial MAJOR 5). The SIM-swap producer's own liveness is M9's to watch;
+        `days_since_sim_swap` being constant is recorded in ADR 0034 and logged at startup.
         """
-        if (
-            snap.cp_rows
-            and any(s < t - LABEL_LATENCY for _, s in snap.cp_rows)
+        ripe_unlabelled = (
+            bool(snap.cp_rows)
+            and any(s < t - LABEL_LATENCY for m, s in snap.cp_rows if m[0] != tx.transaction_id)
             and not any(m[2] != UNLABELLED for m, _ in snap.cp_rows)
-        ):
+        ) or (
+            bool(snap.cell_rows)
+            and any(s < t - LABEL_LATENCY for m, s in snap.cell_rows if m[0] != tx.transaction_id)
+            and not any(m[1] != UNLABELLED for m, _ in snap.cell_rows)
+        )
+        if ripe_unlabelled:
             self.metrics.missing_producer.labels("outcomes").inc()
         if degraded:
             return
-        if not ctx.HasField("days_since_sim_swap"):
-            self.metrics.missing_producer.labels("sim_swaps").inc()
         known = bool(snap.rows) or snap.first is not None
         if known and not ctx.HasField("kyc_tier"):
             self.metrics.missing_producer.labels("kyc_tier").inc()
@@ -523,7 +535,10 @@ class FeatureStore:
         pipe.zrevrangebyscore(a("a", account, "tier"), t, "-inf", start=0, num=1)
         pipe.hget(a("a", account, "prof"), "opened_at")
         pipe.zrangebyscore(
-            a("h", h3_cell(tx.latitude, tx.longitude), "tx"), f"({t - W_CELL}", before
+            a("h", h3_cell(tx.latitude, tx.longitude), "tx"),
+            f"({t - W_CELL}",
+            before,
+            withscores=True,
         )
         if cp is not None:
             pipe.zrangebyscore(a("c", cp, "tx"), f"({t - W_CP_FRAUD}", before, withscores=True)
@@ -549,7 +564,7 @@ class FeatureStore:
             set(next(replies)),
         )
         snap.swap, snap.tier, snap.opened = next(replies), next(replies), next(replies)
-        snap.cell_rows = [json.loads(m) for m in next(replies)]
+        snap.cell_rows = [(json.loads(m), int(score)) for m, score in next(replies)]
         if cp is not None:
             snap.cp_rows = [(json.loads(m), int(s)) for m, s in next(replies)]
             snap.cp_opened = next(replies)
@@ -666,12 +681,16 @@ class FeatureStore:
             )
 
     def _cell(
-        self, ctx: pb.AccountContext, tx: Transaction, cell_rows: list[list[Any]], t: int
+        self,
+        ctx: pb.AccountContext,
+        tx: Transaction,
+        cell_rows: list[tuple[list[Any], int]],
+        t: int,
     ) -> None:
         alpha = smoothing_for("geo_cell_fraud_rate_30d").alpha
         labelled = [
             r
-            for r in cell_rows
+            for r, _ in cell_rows
             if r[0] != tx.transaction_id and r[1] != UNLABELLED and r[2] is not None and r[2] < t
         ]
         fraud = sum(1 for r in labelled if r[1] == 1)

@@ -630,3 +630,27 @@ but not executed by any test.
 `W_90D`, so the fetch bound and `_amounts`' own 90 d comparison are redundant with each other.
 Flipping either alone is an *equivalent* mutant; flipping both fails the suite (checked). That is
 a property of the code, not a hole in the corpus, and it is noted in `_window_edges`' docstring.
+
+## 18. Adversarial pass over the promotion path, and the blocker it found (2026-09-22)
+
+The promotion path had now been broken twice by its own fixes, so a **fourth** reviewer took that
+path alone, adversarially: probes against `FakeMlflow` rather than a reading of the code, plus
+mutation of each new assertion. It confirmed the V1 fix holds against every alias sequence it
+tried, that the `shadow_version` binding does not break re-publishing an identical bundle, and
+that round 3's assertions are load-bearing (three mutations of them caught). Verdict:
+**CHANGES_REQUIRED**, one BLOCKER and five MAJOR. All are fixed.
+
+| # | What it found | Answered by |
+|---|---|---|
+| **BLOCKER 1** | **NaN defeats the whole gate.** Every D-11 clause is a `<` or `>=`, and NaN fails all of them, so `fs-model alias production 2 --gate nan.json` returned 0, promoted a never-shadowed version and recorded `promotion_gate = "D-11 passed: … coverage nan%, auc_delta nan, psi nan"`. `json` accepts *and emits* the bare `NaN` token, so a comparator serialising its own dataclass writes exactly that file. The in-house gate can produce one too: `auc()` drops non-finite scores, so a shadow model scoring NaN over a whole class yields a NaN delta and `promote=True` | Three layers. `models/cli._gate` parses with a `parse_constant` that raises, so `NaN`/`Infinity` never becomes a decision. `_d11_recheck` tests `math.isfinite` for every figure — absent and NaN are the same thing, a clause that was not applied. `shadow.promotion_gate` names a non-finite delta as a reason. Tested at both layers, parametrised over all four figures |
+| **MAJOR 2** | the rollback's only proof was written best-effort: a `set-tag` failure during publish left production on a version whose emergency rollback was then **refused**, telling the operator that the model which had been serving all along had never served | The tag is written **before** the alias moves and its failure refuses the promotion, so production never points at a version that cannot be rolled back to. When `previous_production` points at a version with no tag, the refusal says exactly that and offers `--override`; a test covers the refusal, the wording and the way through. The docstring's "only this module writes it" is corrected: it is an ordinary MLflow tag, so the proof is as strong as the tracking server's ACLs |
+| **MAJOR 3** | `--override ''` promoted in one command and recorded a blank reason — one unset shell variable away in any CI step written as `--override "$REASON"` | Blank and whitespace-only overrides are refused at the CLI and in `_gate_problems` |
+| **MAJOR 4** | `geo_cell_fraud_rate_30d` — the other feature PB-70 feeds, and the **only** one an agent cash-out with no counterparty has — was served from the smoothing prior and counted nowhere, although the startup log promised the metric covered it | The `outcomes` arm now reads both keys with the same `LABEL_LATENCY` reasoning. Two tests: the cash-out shape, and one verdict in the cell being enough to fall silent |
+| **MAJOR 5** | the `sim_swaps` arm fired on ordinary traffic and **could never fall silent**: most accounts never had a swap and the store writes no "checked, none found" sentinel, so absence of a swap and absence of a producer are the same reading — a page that would be silenced even after PB-71 | The arm is removed, with the reason in the code, in ADR 0034 and in `M9_updates.md`: M9 watches the SIM-swap producer's own liveness once PB-71 gives it one. A test asserts the arm does not exist |
+| **MAJOR 6** | `poll_once`'s shadow-teardown callback sat outside the `try` that the swap callback got, so an M6/M9 teardown that raised would still kill the watcher thread | Moved inside the same guard, counted as a failure |
+
+Not filed by the reviewer but fixed with MAJOR 4: the outcomes arm now ignores the scored
+transaction's own row, so a replay does not count `outcomes` off itself.
+
+**Suite after this round:** ml 537 passed, 3 skipped, coverage 94.31%; ruff, mypy (162 source
+files) and `fs-traceability check` clean.

@@ -214,7 +214,12 @@ def promotion_gate(comparison: Comparison, labels: dict[str, bool], now: datetim
             delta = auc([shadow[i] for i in labelled], y) - auc(
                 [production[i] for i in labelled], y
             )
-            if delta < MIN_AUC_DELTA:
+            if not math.isfinite(delta):
+                # `auc` drops non-finite scores, so a shadow model that returns NaN over a whole
+                # class yields a NaN delta -- which passes `<` and would promote in silence
+                # (adversarial BLOCKER 1).
+                reasons.append("the AUC delta is not a number: the shadow model scored NaN")
+            elif delta < MIN_AUC_DELTA:
                 reasons.append(f"AUC delta {delta:+.4f} is below -0.010")
         else:
             reasons.append("Insufficient labels: the labelled rows hold only one class")

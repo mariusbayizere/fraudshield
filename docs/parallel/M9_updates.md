@@ -223,14 +223,23 @@ that gets silenced (found by the M5 re-review, N5):
   log-sigma 1.2) and not one of its rows carries a verdict. Ordinary label latency no longer
   increments it, so once PB-70's consumer is deployed this arm goes to zero and stays there. It is
   the signal that the consumer has stopped.
-- `state=~"sim_swaps|kyc_tier|account_opened_at"` **fires on essentially every read** and will
+- `state=~"kyc_tier|account_opened_at"` **fires on essentially every read** and will
   until PB-71 lands, because no contract exists for that state. Deploy it **inhibited** (or as a
   ticket, not a page) and turn it into a page in the same change that deploys the producer. Its
   value before then is the dashboard panel and the number in the runbook, not the page.
 
-The counter no longer increments on a first-ever transaction (nothing to have written yet) or on a
-degraded read (the `feature_store_degraded` flag already carries that), so both arms mean "a
-producer is missing" and nothing else.
+The counter no longer increments on a first-ever transaction (nothing to have written yet), and
+the account-state arms stand down on a degraded read (the `feature_store_degraded` flag already
+carries that), so both arms mean "a producer is missing" and nothing else.
+
+**There is deliberately no `sim_swaps` arm.** Most accounts never had a SIM swap and the store
+writes no "checked, none found" sentinel, so an absent swap cannot be told apart from an absent
+producer: the arm fired on ordinary traffic and could never have fallen silent, even after PB-71
+ships. `days_since_sim_swap` being constant is recorded in ADR 0034 and logged by every worker at
+startup; **M9 should watch the SIM-swap producer's own liveness** once PB-71 gives it one, rather
+than inferring it from scoring reads. The `outcomes` arm covers both features PB-70 feeds --
+`counterparty_confirmed_fraud_90d` on the counterparty key and `geo_cell_fraud_rate_30d` on the
+cell key, the latter being the only one an agent cash-out with no counterparty has at all.
 
 ```yaml
 # infrastructure/prometheus/rules/ (M9 owns the file and the routing)
@@ -253,7 +262,7 @@ producer is missing" and nothing else.
   # Expected to fire until PB-71 lands: deploy inhibited, promote to `page` with the producer.
   expr: sum by (state) (
           rate(fs_feature_store_missing_producer_reads_total{
-            state=~"sim_swaps|kyc_tier|account_opened_at"}[30m])) > 0.01
+            state=~"kyc_tier|account_opened_at"}[30m])) > 0.01
   for: 2h
   labels:
     severity: ticket   # becomes `page` in the change that deploys PB-71's producer
