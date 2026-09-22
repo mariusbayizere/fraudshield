@@ -9,6 +9,10 @@ imports no producer. A wrapper keeps the rule in one place and the packages inde
 
     uv run fs-evidence --output docs/benchmarks/x.txt -- uv run fs-features computability ...
 
+Every artefact also names the machine it ran on — CPU, cores, memory and OS — because runs now
+happen on more than one: accuracy results are admissible from any of them, and ADR 0010 restricts
+only latency, but a reader must be able to tell which machine produced which number.
+
 It refuses on a dirty tree, because an artefact produced from uncommitted code belongs to no
 commit and nothing downstream can tell. ``--allow-dirty`` runs anyway and stamps the artefact
 **NOT CITABLE**, so a development run is possible and is never mistaken for evidence.
@@ -17,6 +21,8 @@ commit and nothing downstream can tell. ``--allow-dirty`` runs anyway and stamps
 from __future__ import annotations
 
 import argparse
+import os
+import platform
 import subprocess
 import sys
 from collections.abc import Sequence
@@ -24,6 +30,36 @@ from pathlib import Path
 
 from fraudshield_tools import REPO_ROOT
 from fraudshield_tools.provenance import DirtyTreeError, require_clean
+
+MACHINE_FIELD = "# evidence-machine:"
+
+
+def _read(path: str) -> str:
+    try:
+        return Path(path).read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
+def machine() -> str:
+    """CPU model, logical cores, total memory and OS, read from the machine rather than typed."""
+    cpu = next(
+        (
+            line.split(":", 1)[1].strip()
+            for line in _read("/proc/cpuinfo").splitlines()
+            if line.startswith("model name")
+        ),
+        platform.processor() or platform.machine() or "unknown CPU",
+    )
+    total = next(
+        (
+            f"{int(line.split()[1]) / 1024 / 1024:.1f} GiB"
+            for line in _read("/proc/meminfo").splitlines()
+            if line.startswith("MemTotal:")
+        ),
+        "unknown memory",
+    )
+    return f"{cpu}; {os.cpu_count()} logical cores; {total}; {platform.platform()}"
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -56,6 +92,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
         stamp.header()
+        + f"{MACHINE_FIELD} {machine()}\n"
         + f"# command: {' '.join(command)}\n"
         + f"# exit: {finished.returncode}\n\n"
         + finished.stdout,

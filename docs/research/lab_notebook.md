@@ -2403,3 +2403,26 @@ at 30K). More training data should sharpen confident fraud a little without chan
   stays "at the volumes measured", with the largest volume named.
 
 This entry will not be edited after the runs.
+
+### 2026-09-22 · PB-67's design changes: three points here, 240K in a Codespace
+
+The pre-registered design (`d071147`, the entry above) built one 240,000-row cache from a
+520,000-row corpus. On this laptop (7.6 GiB, 4 cores, shared with other sessions) the build was
+stopped by the system for low memory before it finished: the corpus alone is about 2 KB a row in
+memory, and swap was already full. Nothing was written and nothing was scored. **The
+pre-registration is unchanged, its prediction included.** What changes, on the owner's decision:
+
+- **30K, 60K and 120K run here**, one at a time, under a memory watchdog. They come from one cache
+  built from a **360,000-row corpus** (a train-period pool of about 146,000 rows) holding 120,000
+  training rows spread across it, with the same 20,000 validation, 20,000 calibration and 101,909
+  test rows as the declared gate run. 30K and 60K are spread within the cached 120K.
+- **240K runs in a GitHub Codespace** (16 GB) with the pre-registered design as written: its own
+  520,000-row corpus and 240,000 training rows. Every artefact now names its machine
+  (`# evidence-machine:`), since accuracy results are admissible from any machine and ADR 0010
+  restricts only latency.
+- **The two pools differ.** The laptop's three points sample the last ~146,000 train-period rows;
+  the Codespace's 240K samples the last ~306,000. The 240K point therefore also reaches further
+  back in time, and the curve's last step changes both volume and span. That is stated beside the
+  result rather than discovered later.
+- **Nothing is concluded until all four points exist.** The three laptop points are reported as an
+  interim result against the prediction; ADR 0031 and the paper's contribution wait for 240K.

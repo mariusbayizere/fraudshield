@@ -131,6 +131,23 @@ def test_a_failing_command_still_leaves_its_artefact(
     assert "# exit: 1" in output.read_text(encoding="utf-8")
 
 
+def test_an_artefact_names_the_machine_it_ran_on(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Accuracy runs happen on more than one machine now; each artefact says which (ADR 0010)."""
+    root = _repo(tmp_path / "repo")
+    monkeypatch.setattr("fraudshield_tools.evidence_run.REPO_ROOT", root)
+    output = tmp_path / "artefact.txt"
+    assert evidence_main(["--output", str(output), "--", "true"]) == 0
+    line = next(
+        entry
+        for entry in output.read_text(encoding="utf-8").splitlines()
+        if entry.startswith("# evidence-machine:")
+    )
+    assert "logical cores" in line
+    assert "GiB" in line
+
+
 def _criterion(**evidence: object) -> dict[str, object]:
     return {
         "milestone": "MX",
