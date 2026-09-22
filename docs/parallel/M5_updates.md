@@ -253,3 +253,60 @@ implementation of the parity-critical window arithmetic. The proposal
 Data JPA for M7's CRUD domain, explicit SQL for the audit chain, `M7_updates.md`) arrived in the M5
 session. M5 owns `ml/` only and did not act on it. If the M7 agent has not received it, it needs
 resending there.
+
+## 10. The separate-trainer duplication, caught at rebase time
+
+**What happened.** M4 and M5 ran in parallel. M4 built the production model in
+`training/model.py`: XGBoost and LightGBM with class-imbalance weighting (`scale_pos_weight`,
+`is_unbalance`), early stopping on validation average precision, the 0.55/0.45 combination and
+isotonic calibration. It also built its Isolation Forest (`training/anomaly.py`), its SHAP
+(`training/explain.py`) and an ONNX export whose LightGBM thresholds are made float32-exact
+(`training/onnx_export.py`, `model.float32_exact`). Without seeing that work, M5 wrote
+`models/build.py` to train its own copy: the same weights and calibration, but no imbalance
+weighting and no early stopping, at fixed rounds and later at the 50 × 3 frontier size.
+
+**How it was caught.** Rebasing onto `m4-complete` conflicted in `ml/pyproject.toml`, where M4 had
+added scikit-learn and ONNX Runtime. Reading why showed that M4's docstring names its ONNX export
+as "what M5's scoring service runs".
+
+**Why serving the evaluated model matters.**
+- ML-GATE-01 to 11 and the paper's figures are measurements of M4's model. Serve anything else and
+  those figures describe no system in production: the gate passes on a model nobody runs, and the
+  model that runs was never gated.
+- Two models with the same calibration can still differ in the decisions that matter. Imbalance
+  weighting and early stopping change the score distribution at 0.60 and 0.85, the thresholds that
+  hold or decline payments, and the recall and FNR rows (ML-GATE-03 and 06) that M4 recorded as
+  missed.
+- The owner decided (2026-09-22) that production is the evaluated model, packaged without pickle.
+
+**What changed.**
+- The merge, not a rebase, is 2f83fac: no history rewrite. The regenerated `uv.lock` and matrix
+  and M4's scikit-learn 1.8.0 pin were taken, and at that commit the ml suite ran 501 passed with
+  coverage at 94.27%.
+- d64b6a8: `fs-model build` runs M4's gate functions on the gate cache and seed. M5's trainer, its
+  own forest and isotonic fitting, its duplicate ONNX module, the complexity options and the
+  whole-day training view are deleted.
+- The gate bundle reproduces M4: 191 and 342 rounds, AUC 0.970, recall 0.871 at 1% FPR,
+  equal-width ECE 0.0014.
+- ONNX against Treelite on M4's model (ADR 0032, amended): both exact to within 1e-5, ONNX about
+  4.8× faster, so ONNX is served and Treelite removed. **The three pending licence exceptions in
+  section 9 (`treelite`, `skl2onnx`, `flatbuffers`) are withdrawn.** M4 had already added
+  `skl2onnx` and `flatbuffers`, and `treelite` is no longer a dependency, so the licences job
+  needs nothing further from M5.
+- 894fbb4: the build bounds E.4 parity on the boosters' probabilities (8.3e-7 measured) and
+  requires no risk-tier change. The calibrated gap, 1.97e-4 on 37 rows from the calibrator's own
+  steepness, is recorded in the bundle, not bounded at 1e-5.
+- eca66a6: M4's model was trained on fractional day ages, and the contract carries whole days.
+  Flooring moved 10 test transactions across a risk tier, so the store's read now returns full
+  precision for a scorer that reads the store itself (ADR 0033).
+
+**Corrections to earlier sections.**
+- Section 4's model numbers (0.9659, 50 × 3 and so on) describe the deleted trainer. The served
+  figures are M4's.
+- Section 5's first contract gap (whole-day ages) is now handled on the store-read path, not by
+  retraining.
+- Section 7's latency run used the deleted model. The current figures are in ADR 0032's
+  amendment: 288 requests/s at 200 in flight, 1.35 ms p50 unflagged, 8.36 ms on the SHAP path.
+
+**Generated files in these commits:** `uv.lock` and the matrix in 2f83fac and d64b6a8; the matrix
+in 894fbb4 and eca66a6.

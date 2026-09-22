@@ -1,6 +1,7 @@
 # 0032 — The scoring latency gate is a throughput requirement; serve the smallest frontier model
 
-- **Status:** Accepted
+- **Status:** Accepted; amended 2026-09-22 (below). Decisions 1 to 3 are superseded by the
+  amendment; decision 4 and the hardware analysis stand.
 - **Date:** 2026-09-22
 - **Decided by:** the owner (2026-09-22): serve the smallest configuration on M4's frontier whose
   AUC is inside the best one's interval, evaluate compiling it, re-measure on the laptop labelled
@@ -108,3 +109,61 @@ both and needs no compiler.
   `onnxmltools` and `onnxruntime` become test dependencies.
 - The served model is smaller and explains faster. On this benchmark it costs no measurable
   accuracy; on a harder one the frontier must be re-measured before this rule selects again.
+
+
+## Amendment, 2026-09-22: M4's model, served through ONNX, unchanged in size
+
+**What changed.** Merging `m4-complete` showed that M4 had built the production model in parallel
+(`training/model.py`: imbalance weighting, early stopping on validation average precision, the
+0.55/0.45 combination, isotonic calibration) together with its Isolation Forest, its SHAP and an
+ONNX export. The gate figures ML-GATE-01 to 11 and the paper describe that model. M5's bundle had
+been trained separately, so the owner decided (2026-09-22):
+
+1. **Serve M4's evaluated model.** `fs-model build` now runs M4's gate functions on the gate's cache
+   and seed and packages what they return. It reproduces the gate's figures: 191 and 342 rounds,
+   test AUC 0.970, recall 0.871 at 1% FPR, equal-width ECE 0.0014.
+2. **Tree size unchanged.** Decision 1 above (50 × 3) is withdrawn. Changing the model would
+   invalidate the gate evidence for no measured need. A smaller configuration is revisited only if
+   M10's dedicated-hardware measurement misses the budget, and then the gate is re-run on it.
+3. **Inference through ONNX Runtime, not Treelite.** Decision 2 above is withdrawn, on a
+   measurement.
+
+**The claim this ADR made about ONNX was wrong, and M4's construction is the fix.** The original
+text says ONNX cannot carry LightGBM at E.4's 1e-5, because the converter accepts float32 input
+against double thresholds. That was true of the raw boosters measured then. M4 had already
+removed the cause: `training.model.float32_exact` rounds every input to float32 and moves each
+LightGBM threshold to the largest float32 not above it, so `x <= t` is unchanged for every
+float32 `x` and the threshold survives export without moving. The credit is M4's.
+
+**Measured on M4's model, over the whole test period (101,909 rows):**
+
+| | XGBoost max difference | LightGBM max difference | Both models per row, p50 |
+|---|---|---|---|
+| ONNX Runtime (M4's export) | 8.9e-8 | 8.3e-7 | 0.073 ms (repeat 0.072) |
+| Treelite 4.7.2 | 0.0 | 0.0 | 0.357 ms (repeat 0.330) |
+
+Both pass E.4's 1e-5 against the native boosters. ONNX is about 4.8× faster, beyond noise, so it
+is served. Treelite is removed, and so is its pending licence exception; ONNX needs no new one.
+
+**A calibrated-score finding.** E.4's parity is on the boosters' probabilities, and it holds. The
+isotonic calibrator fitted on the gate model is, however, near-vertical on one segment (slope
+about 1.2e5). A 4e-7 raw difference can therefore move a *calibrated* score by up to 1.97e-4:
+37 of 101,909 test rows exceed 1e-5 there, and none crosses a risk tier. `models.build` bounds raw
+parity at 1e-5, requires no tier change, and records the calibrated gap in the bundle.
+
+**A skew finding, fixed.** M4's model was trained on fractional `device_age_days` and
+`days_since_sim_swap`, and today's `AccountContext` carries whole days. Flooring them moves 22 test
+scores by more than 0.1 (at most 0.93) and 10 transactions across a risk tier, with AUC unchanged.
+The store's read now returns the ages at full precision, so a scorer that reads the store itself
+(ADR 0033) feeds the model what it was trained on. Only a request that carries its own context
+still sees whole days.
+
+**Re-measured on M4's model** (commit eca66a6, dev-laptop-01, load average 7–12, not gate evidence):
+- **Single process:** 1.35 ms p50 unflagged, 8.36 ms p50 on the SHAP path (TreeSHAP over
+  191 + 342 trees), about 665 requests/s per worker.
+- **200 in flight on three workers:** 288 requests/s, server-side p50 6 ms and p99 25 ms, 0 errors
+  (`docs/benchmarks/m5_serve_laptop_eca66a6.json`, `m5_service_time_laptop_eca66a6.txt`).
+
+The hardware estimate above changes only in its per-core figure: about 665/s per core gives **at
+least 20 dedicated cores of this class** for 13,300 requests/s, against 15 with the smaller model.
+The gate stays as written, for M10.
