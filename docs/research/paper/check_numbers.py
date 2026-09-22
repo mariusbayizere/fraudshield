@@ -39,7 +39,7 @@ FORBIDDEN = re.compile(r"\d+\.\d+|\d+\s*\\%|\d{1,3}\{,\}\d{3}|\d{1,3},\d{3}")
 
 
 def findings(path: Path) -> list[str]:
-    found = []
+    found: list[str] = []
     for number, line in enumerate(path.read_text().splitlines(), start=1):
         text = line
         for pattern in STRIP:

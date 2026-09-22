@@ -15,9 +15,11 @@ the intentional `TODO-verify` citations, which render as `[?]` until verified re
 - Sections never type a result. Each number is a macro in `numbers.tex`, whose comment names the
   file, commit and draw it comes from. `python3 check_numbers.py` fails on a decimal, percentage
   or grouped integer typed into a section.
-- `\meas{}`: M2/M3 results on `main`.
-  `\prov{}`: M4 results from `m4/generalisation` pinned at `a6b0c9e`, printed with a dagger and
-  **PROVISIONAL** until `m4-complete` exists; each is then re-verified against the tag.
+- `\meas{}`: measured results (M2 to M4, tag `m4-complete`, `72e7790`).
+  `\prov{}`: a result from a milestone not yet tagged, printed with a dagger. **None is in use**:
+  every M4 value was re-verified at `m4-complete` and moved to `\meas{}` on 2026-09-22.
+- `python3 audit_numbers.py` checks every macro against its evidence file at the tag and writes
+  `number_audit.md`; it must report zero problems before a commit.
   `\notyet{Mx}`: a result a later milestone produces, printed as "NOT YET MEASURED -- Mx".
 - No reference is invented. `\cite{TODO-verify}` marks every place one is needed;
   `references.bib` stays empty until the author has read and verified each source.
