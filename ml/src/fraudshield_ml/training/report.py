@@ -216,16 +216,17 @@ def seed_variance_table(
         "train/test rows throughout. Not calibrated: this measures how much a model's own random",
         "state moves its AUC, not the calibrated ensemble's error rate.",
         "",
-        f"  {'seed':>5s}  {'xgboost':>9s}  {'lightgbm':>9s}  {'ensemble':>9s}",
+        f"  {'seed':>5s}  {'xgboost':>10s}  {'lightgbm':>10s}  {'ensemble':>10s}",
     ]
     for r in runs:
         lines.append(
-            f"  {r.seed:>5d}  {r.xgboost_auc:>9.4f}  {r.lightgbm_auc:>9.4f}  {r.ensemble_auc:>9.4f}"
+            f"  {r.seed:>5d}  {r.xgboost_auc:>10.6f}  {r.lightgbm_auc:>10.6f}  "
+            f"{r.ensemble_auc:>10.6f}"
         )
-    lines += ["", f"  {'':<9s}  {'mean':>9s}  {'stdev':>9s}"]
+    lines += ["", f"  {'':<9s}  {'mean':>10s}  {'stdev':>10s}"]
     for name in ("xgboost", "lightgbm", "ensemble"):
         s = summaries[name]
-        lines.append(f"  {name:<9s}  {s.mean:>9.4f}  {s.stdev:>9.4f}")
+        lines.append(f"  {name:<9s}  {s.mean:>10.6f}  {s.stdev:>10.6f}")
     lines.append("")
     ensemble = summaries["ensemble"]
     for base in baselines:
