@@ -1,0 +1,42 @@
+\section{Problem setting}
+\label{sec:setting}
+
+\paragraph{Channels.} The specification covers six channels: \texttt{MOBILE\_MONEY},
+\texttt{USSD}, \texttt{AGENT\_BANKING}, \texttt{CARD}, \texttt{ONLINE} and
+\texttt{BANK\_TRANSFER}. They differ in what a fraud system can observe, and those differences are
+built into the feature contract rather than handled as missing data after the fact.
+
+\paragraph{USSD.} USSD sessions run on basic handsets and carry no device fingerprint. Every
+transaction still yields a feature vector with the same slots; the four features derived from a
+device fingerprint are structurally missing (NaN) for USSD and handled by the models' native
+missing-value logic, so the remaining features are computed from data (resolution D-04). The
+parity suite requires the NaN positions to match exactly on both computation paths
+(Section~\ref{sec:features}), because a NaN on one path and a number on the other is a contract
+violation rather than a numerical difference.
+
+\paragraph{Agents.} Agent banking, where a registered agent handles cash-in and cash-out on a
+customer's behalf, has its own fraud (float manipulation, fake cash-outs) and its own signals: the
+agent's float utilisation, cash-out counts, distinct customers and distance from the registered
+location. Those features are defined only for \texttt{AGENT\_BANKING} and are NaN on every other
+channel, again by contract.
+
+\paragraph{Corridors.} Transfers within a country, within the East African Community (EAC), and
+to countries outside it are different populations: regional remittances, including cross-border
+salary and family transfers, are routine and must not be treated like arbitrary foreign
+transfers. A categorical \texttt{corridor\_class} feature separates the three.
+
+\paragraph{Currencies, time and money.} Five currencies with different minor units, amounts
+normalised to Rwandan francs by a dated exchange-rate table, local time derived from coordinates
+(the Democratic Republic of the Congo spans two time zones), and amounts carried as decimals,
+never binary floating point.
+
+\paragraph{Decision path.} The system returns a decision (approve, decline, or hold for review)
+synchronously to core banking, with a server-side latency target of 40~ms at the 95th percentile
+for flagged transactions (build prompt Part C.2). A decision that holds a transaction for an
+analyst is resolved by webhook, not by an open request. Scores are calibrated probabilities from
+a weighted XGBoost and LightGBM ensemble, and every flagged decision carries an exact TreeSHAP
+explanation. The scoring service and decision engine are milestones M5 and M6; their measured
+latency is \notyet{M5, M6 and M10}.
+
+\paragraph{What is not in scope.} Graph-based features (the specification's later phases),
+real customer data of any kind, and any claim about a real institution, regulator or deployment.

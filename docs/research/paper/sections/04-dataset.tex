@@ -1,0 +1,112 @@
+\section{The FraudShield-EAC benchmark}
+\label{sec:dataset}
+
+\subsection{Generator}
+
+FraudShield-EAC is produced by an agent-based, seeded simulator. Its entities are customers
+(with a KYC tier and a home location drawn from district population weights in Rwanda, Kenya,
+Tanzania, Uganda and the Democratic Republic of the Congo), accounts, devices (absent for
+USSD-only users), SIM events, agents with float and a registered location, merchants, and
+counterparties. Legitimate behaviour includes salary cycles, market days, school-fee periods,
+family remittances along EAC corridors, round-sum transfers, and agent cash-in and cash-out
+peaks; volume grows over 24 simulated months. Eight fraud scenarios are injected, each with
+randomised parameters and temporal evolution: SIM-swap takeover, account takeover through a
+credential or device change, agent fraud, velocity fraud, card-not-present fraud, mule accounts
+(fan-in and fan-out), merchant fraud and synthetic identity. Adversarial adaptation moves amounts
+just below published rule thresholds after simulated month 12, and one sub-variant appears only
+in the test period.
+
+Unless stated otherwise, results use seed \nSeed{} at about one million rows: the draw with
+fingerprint \texttt{6abde44e} (\nRowsDrawA{} rows) for the single-feature measurements, and the
+draw \texttt{d8083dbc} (\nRowsDrawB{} rows), which adds the pre-registered variant of
+Section~\ref{sec:generalisation}, for the model evaluation. The specification asks for at least
+five million rows; that scale is \notyet{M10} (it waits for a dedicated run, and the one-million
+row results are reported at their stated scale).
+
+\subsection{What the parameters rest on}
+
+A sourcing pass read \nSourceDocs{} documents in full (central bank payment system reports for
+Tanzania and Rwanda, a Rwandan census and financial inclusion survey, official exchange rates,
+the IANA time zone database, a national school calendar and the ISO 4217 list) and raised the
+number of sourced generator parameters from none to \nParamsSourced{} of \nParamsTotal{};
+\nParamsAssumed{} remain modelling choices and \nParamsCalibrated{} are calibrated to targets in
+the specification. The sourced parameters fix population and volume structure (transactions per
+active customer, agents and merchant acceptance points per customer, urban share, per-channel
+mean amounts, the person-to-person share, cross-border share, volume growth, exchange rates,
+currencies, time zones and school terms). Because Tanzania publishes value and volume by
+transaction category and Rwanda does not, per-transaction levels come from Tanzanian aggregates
+while the country mix is Rwanda-weighted; they are order-of-magnitude anchors, not claims about
+one market.
+
+\textbf{No fraud parameter is sourced.} Of the \nFraudParams{} fraud parameters,
+\nFraudParamsChoice{} are modelling choices (scenario prevalence and mix, incident length, burst
+timing, adaptation, mule structure, the novel variant) and \nFraudParamsCalibrated{} are
+calibrated to specification targets. No central bank publication read gives fraud incidence by
+type for these markets; sourcing those figures from vendor reports or global aggregates presented
+as regional would make the paper look better and be less honest. Every result that depends on the
+\emph{level} of fraud inherits this assumption (Section~\ref{sec:limitations}).
+
+\subsection{Realism and anti-leakage controls}
+
+Every generated dataset is checked by a report that fails the build when a gated control fails.
+The controls, and why each exists:
+\begin{itemize}
+  \item \textbf{Single-column separation.} No dataset column may separate the classes beyond an
+        AUC of \nCeiling{} (resolution D-08). The strongest column is the merchant category at
+        \nColumnMaxAUC{}. Section~\ref{sec:features} shows why this control, true of the columns,
+        is false of the engineered features.
+  \item \textbf{A shortcut detector} trained on non-behavioural columns (identifiers, file order,
+        construction artefacts) must stay within its own null band around chance; on the
+        evaluation draw it reads \nShortcutAUC{}.
+  \item \textbf{Construction checks}: account events, identifier characters, file order and
+        per-channel null signatures must not reveal the label. These exist because the first
+        version of the account-events table put nearly every event on a fraud account, a leak
+        found in a secondary table rather than in the feature matrix
+        (Section~\ref{sec:discussion}).
+  \item \textbf{Label noise} in both directions, measured at \nLabelNoiseMissed{} missed and
+        \nLabelNoiseFalse{} false labels as a share of true fraud on the evaluation draw.
+  \item \textbf{Temporal placement}: the novel sub-variant occurs only in the test period
+        (\nNovelRows{} rows, none before the test start).
+  \item \textbf{Distribution targets} from the specification (fraud rate, channel and country
+        mix) are met by construction: overall fraud rate \nFraudRateAll{}, test-period rate
+        \nFraudRateTest{}, largest channel-mix deviation \nChannelMixDev{} percentage points and
+        country-mix deviation \nCountryMixDev{}. These are requirements the generator was built
+        to meet, not observations about East African payments.
+\end{itemize}
+
+One reported (not gated) channel deserves its own sentence: the delay between an account event
+(a SIM swap or device change) and that account's next transaction separates the classes at
+\nEventDelayAUC{}. When the takeover lead time was changed from a narrow uniform window to a
+long-tailed distribution, the channel fell from \nEventDelayBefore{} to \nEventDelayAfter{},
+inside a band of \nEventDelayBandLow{}--\nEventDelayBandHigh{} predicted before the regenerated
+draw existed. About \nEventDelayShare{} of the separation above chance was therefore an artefact
+of the assumed schedule and the rest is the scenario.
+
+\subsection{The minimum viable scale}
+
+Below about \nMinRows{} rows the generator cannot stage all eight scenarios: the mule role pool
+is usually empty, and a scenario that cannot be staged has its share reallocated to those that
+can, so the fraud \emph{rate} is still met exactly while the scenario \emph{mix} is wrong. Until
+this was found, runs below that size silently lacked \texttt{mule\_account}. The minimum is not
+obtainable by reasoning alone: two plausible closed-form derivations were wrong, and both failed
+the same sanity check by returning a minimum below a size that had already failed. The derivation
+used solves $E[\text{holders}](n) \ge \text{needed}(n) + 3\sqrt{\text{needed}(n)}$ numerically;
+a test requires the same answer from four scales (\nMinRowsA{}, \nMinRowsB{}, \nMinRowsC{} and
+\nMinRowsD{}). A separate minimum, about \nDetectorMinRows{} rows, is where the shortcut detector
+has full power against a planted leak; completeness binds first. The generator now refuses a run
+too small to stage every scenario, and a waived development run records the missing scenarios in
+its manifest.
+
+\subsection{Split and provenance}
+
+The split is strictly temporal (resolution D-07): on the evaluation draw, \nTrainRows{} training
+rows, \nValRows{} validation rows (whose chronologically last \nCalRows{} form the calibration
+split), a \nEmbargoDays{}-day embargo of \nEmbargoRows{} rows excluded to model label delay, and a
+test period of \nTestRows{} rows spanning \nTestSpanDays{} days. Every access to the test set is
+logged.
+
+A dataset is identified by a \textbf{fingerprint over its output rows}, not only by a digest of
+its parameters, because a draw can change with every parameter value identical. Every evidence
+file records the commit \textbf{and the working-tree state} it was produced from, because a hash
+written by hand records an intention: one earlier report, attributed to a commit, turned out to
+have been produced from a dirty working tree (Section~\ref{sec:discussion}).

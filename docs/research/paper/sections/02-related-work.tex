@@ -1,0 +1,42 @@
+\section{Related work}
+\label{sec:related}
+
+\emph{Draft note.} This section names the bodies of work the paper must be positioned against
+and cites none of them yet. The build prompt's rule is that only papers read in full are cited
+and that no reference is invented; every citation below is \cite{TODO-verify} until the author
+has read and verified the source. No claim about what a cited work reports is made here.
+
+\paragraph{Fraud detection on payment transactions.} Supervised gradient-boosted trees on
+engineered behavioural features are a common approach to card and payment fraud
+\cite{TODO-verify}, as is the treatment of class imbalance by reweighting rather than resampling
+\cite{TODO-verify}. Our method follows this line (Section~\ref{sec:method}) and does not claim
+novelty in it.
+
+\paragraph{Mobile money and East African payments.} Work on fraud in mobile money ecosystems,
+SIM-swap takeover, and agent networks \cite{TODO-verify}; regulatory and industry reports on
+payment volumes in the region \cite{TODO-verify}. Where this paper uses a regional statistic it
+is taken from a document read in full and recorded in the project's sourcing pass
+(Section~\ref{sec:dataset}); vendor or news figures are not used.
+
+\paragraph{Synthetic financial datasets and simulators.} Agent-based simulators of payment and
+mobile money transactions, and public synthetic fraud datasets \cite{TODO-verify}. The question
+this paper adds is not how to generate such data but what a generated benchmark can and cannot
+support, and how to find out before trusting it.
+
+\paragraph{Leakage and shortcut learning.} Target leakage through preprocessing and encoding,
+shortcut features that separate classes for reasons unrelated to the task, and grouped or
+temporal cross-validation as defences \cite{TODO-verify}. Several of our failure modes
+(Section~\ref{sec:discussion}) are instances of these.
+
+\paragraph{Calibration and explanation.} Isotonic and Platt calibration \cite{TODO-verify};
+expected calibration error and its dependence on binning \cite{TODO-verify}; exact TreeSHAP for
+tree ensembles and its additivity property \cite{TODO-verify}. We use these methods as specified
+and report their cost (Section~\ref{sec:evaluation}).
+
+\paragraph{Evaluation under imbalance and generalisation.} Recall at a fixed false-positive rate,
+DeLong's test for correlated AUCs, bootstrap and Wilson intervals \cite{TODO-verify}; temporal
+hold-outs and leave-one-group-out designs for distribution shift \cite{TODO-verify}.
+
+\paragraph{Novelty claims.} The specification asks whether FraudShield-EAC is the first public
+East African financial fraud benchmark. That claim is unverified (claims register, C-8) and is
+not made here; it requires a documented dataset search by the author.
