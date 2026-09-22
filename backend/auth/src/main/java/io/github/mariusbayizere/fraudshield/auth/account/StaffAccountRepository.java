@@ -74,7 +74,7 @@ public final class StaffAccountRepository {
   }
 
   /**
-   * The institution of an account ID, before any tenant is known (V12).
+   * The institution of an account ID, before any tenant is known (V70).
    *
    * @param userId account ID
    * @return the institution
@@ -85,7 +85,7 @@ public final class StaffAccountRepository {
   }
 
   /**
-   * Whether an employee ID is registered in any institution (V12).
+   * Whether an employee ID is registered in any institution (V70).
    *
    * @param employeeId employee ID
    * @return whether it is taken

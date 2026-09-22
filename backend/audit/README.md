@@ -22,7 +22,7 @@ command.
   tampering found, 2 means a usage error.
 
 **Boundaries.** The root package is framework-free (`ArchitectureTest`); `jdbc`, `anchor`, `cli`
-and `config` are adapters. The anchor job and the verifier read hashes only, through the V12
+and `config` are adapters. The anchor job and the verifier read hashes only, through the V70
 functions `audit_chain_head` and `audit_chain_hashes`.
 
 **Test.** `./mvnw -pl audit verify`. Database tests are tagged `requires-docker` and use a

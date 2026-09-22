@@ -4,11 +4,13 @@ import io.github.mariusbayizere.fraudshield.audit.jdbc.TenantTransactions;
 import io.github.mariusbayizere.fraudshield.auth.account.StaffAccountRepository;
 import io.github.mariusbayizere.fraudshield.auth.jwt.StaffClaims;
 import io.github.mariusbayizere.fraudshield.auth.support.SafeRedis;
+import java.time.Clock;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 import java.util.function.LongSupplier;
 
 /**
@@ -18,9 +20,22 @@ import java.util.function.LongSupplier;
  *
  * <p>Three tiers, each with a short time to live: an in-process map (default 1 s), Redis (default 2
  * s) and the database. A change is written through to Redis and announced on a pub/sub channel
- * after its transaction commits, so every instance forgets it at once. If the announcement or the
- * Redis write is lost, the two time-to-live values still bound the delay (3 s by default, inside
- * the 5 s required). When Redis is down, the database answers.
+ * after its transaction commits, so every instance forgets it at once. When Redis is down, the
+ * database answers.
+ *
+ * <p>If the announcement and the Redis write are both lost, the delay is bounded analytically by
+ * {@link #worstCaseStaleness()}: {@code max(redisTtl, localTtl)} (2 s by default) plus the clock
+ * skew between instances, whatever the machine load (ADR 0071 §6). Both tiers are anchored to a
+ * time taken <em>before</em> the database read, so a slow read cannot extend them:
+ *
+ * <ul>
+ *   <li>a value loaded from the database lives in process until {@code start + localTtl};
+ *   <li>the Redis value carries the wall-clock deadline {@code start + redisTtl}, after which no
+ *       instance trusts it, and an in-process copy of it never outlives that deadline.
+ * </ul>
+ *
+ * <p>A stale value was read before the change committed, so every copy of it has expired by the
+ * commit time plus that bound, and the next check reads the database.
  */
 public final class SessionStateCache {
 
@@ -40,6 +55,7 @@ public final class SessionStateCache {
   private final Duration redisTtl;
   private final long localTtlNanos;
   private final LongSupplier nanoTime;
+  private final Clock clock;
   private final Map<UUID, Cached<Long>> versions = new ConcurrentHashMap<>();
   private final Map<UUID, Cached<Boolean>> sessions = new ConcurrentHashMap<>();
 
@@ -55,6 +71,7 @@ public final class SessionStateCache {
    * @param redisTtl Redis time to live
    * @param localTtl in-process time to live
    * @param nanoTime monotonic clock (System::nanoTime outside tests)
+   * @param clock wall clock, for the Redis deadline shared between instances
    */
   public SessionStateCache(
       SafeRedis redis,
@@ -63,7 +80,8 @@ public final class SessionStateCache {
       RefreshTokenRepository tokens,
       Duration redisTtl,
       Duration localTtl,
-      LongSupplier nanoTime) {
+      LongSupplier nanoTime,
+      Clock clock) {
     this.redis = Objects.requireNonNull(redis, "redis");
     this.tenants = Objects.requireNonNull(tenants, "tenants");
     this.accounts = Objects.requireNonNull(accounts, "accounts");
@@ -71,6 +89,19 @@ public final class SessionStateCache {
     this.redisTtl = Objects.requireNonNull(redisTtl, "redisTtl");
     this.localTtlNanos = localTtl.toNanos();
     this.nanoTime = Objects.requireNonNull(nanoTime, "nanoTime");
+    this.clock = Objects.requireNonNull(clock, "clock");
+  }
+
+  /**
+   * The longest an instance can keep answering from a value read before a change committed, when
+   * the change's announcement and Redis write are both lost, excluding clock skew between instances
+   * (ADR 0071 §6).
+   *
+   * @return {@code max(redisTtl, localTtl)}
+   */
+  public Duration worstCaseStaleness() {
+    Duration local = Duration.ofNanos(localTtlNanos);
+    return redisTtl.compareTo(local) >= 0 ? redisTtl : local;
   }
 
   /**
@@ -93,30 +124,45 @@ public final class SessionStateCache {
   private record State(Long version, boolean active) {}
 
   private Long cachedVersion(UUID userId) {
-    Cached<Long> local = versions.get(userId);
-    if (local != null && local.expiresAtNanos() - nanoTime.getAsLong() > 0) {
-      return local.value();
-    }
-    Long remote = redis.get(VERSION_KEY + userId).map(Long::valueOf).orElse(null);
-    if (remote != null) {
-      putLocal(versions, userId, remote);
-    }
-    return remote;
+    return cached(versions, userId, VERSION_KEY, Long::valueOf);
   }
 
   private Boolean cachedSession(UUID sessionId) {
-    Cached<Boolean> local = sessions.get(sessionId);
-    if (local != null && local.expiresAtNanos() - nanoTime.getAsLong() > 0) {
+    return cached(sessions, sessionId, SESSION_KEY, "1"::equals);
+  }
+
+  private <T> T cached(
+      Map<UUID, Cached<T>> map, UUID key, String prefix, Function<String, T> parse) {
+    long now = nanoTime.getAsLong();
+    Cached<T> local = map.get(key);
+    if (local != null && local.expiresAtNanos() - now > 0) {
       return local.value();
     }
-    Boolean remote = redis.get(SESSION_KEY + sessionId).map("1"::equals).orElse(null);
-    if (remote != null) {
-      putLocal(sessions, sessionId, remote);
+    String raw = redis.get(prefix + key).orElse(null);
+    int separator = raw == null ? -1 : raw.lastIndexOf('|');
+    if (separator < 0) {
+      return null; // absent, or written without a deadline: not trusted
     }
-    return remote;
+    long remainingMillis;
+    T value;
+    try {
+      remainingMillis = Long.parseLong(raw.substring(separator + 1)) - clock.millis();
+      value = parse.apply(raw.substring(0, separator));
+    } catch (NumberFormatException e) {
+      return null;
+    }
+    if (remainingMillis <= 0) {
+      return null; // past its deadline: the database answers
+    }
+    long life = Math.min(localTtlNanos, Duration.ofMillis(remainingMillis).toNanos());
+    putLocal(map, key, value, now + life);
+    return value;
   }
 
   private State load(StaffClaims claims) {
+    // Anchored before the read: a slow read or a stalled thread cannot extend either tier.
+    long startNanos = nanoTime.getAsLong();
+    long deadline = clock.millis() + redisTtl.toMillis();
     State state =
         tenants.inTenant(
             claims.institutionId(),
@@ -124,21 +170,34 @@ public final class SessionStateCache {
                 new State(
                     accounts.tokenVersion(claims.userId()).orElse(null),
                     tokens.familyActive(claims.sessionId())));
+    boolean redisUseful = deadline - clock.millis() > 0;
     if (state.version() != null) {
-      redis.set(VERSION_KEY + claims.userId(), state.version().toString(), redisTtl);
-      putLocal(versions, claims.userId(), state.version());
+      if (redisUseful) {
+        redis.set(
+            VERSION_KEY + claims.userId(), stamped(state.version().toString(), deadline), redisTtl);
+      }
+      putLocal(versions, claims.userId(), state.version(), startNanos + localTtlNanos);
     }
-    redis.set(SESSION_KEY + claims.sessionId(), state.active() ? "1" : "0", redisTtl);
-    putLocal(sessions, claims.sessionId(), state.active());
+    if (redisUseful) {
+      redis.set(
+          SESSION_KEY + claims.sessionId(),
+          stamped(state.active() ? "1" : "0", deadline),
+          redisTtl);
+    }
+    putLocal(sessions, claims.sessionId(), state.active(), startNanos + localTtlNanos);
     return state;
   }
 
-  private <T> void putLocal(Map<UUID, Cached<T>> map, UUID key, T value) {
+  private static String stamped(String value, long deadlineMillis) {
+    return value + "|" + deadlineMillis;
+  }
+
+  private <T> void putLocal(Map<UUID, Cached<T>> map, UUID key, T value, long expiresAtNanos) {
     long now = nanoTime.getAsLong();
     if (map.size() >= MAX_LOCAL_ENTRIES) {
       map.values().removeIf(entry -> entry.expiresAtNanos() - now <= 0);
     }
-    map.put(key, new Cached<>(value, now + localTtlNanos));
+    map.put(key, new Cached<>(value, expiresAtNanos));
   }
 
   /**
@@ -149,7 +208,10 @@ public final class SessionStateCache {
    */
   public void versionChanged(UUID userId, long version) {
     versions.remove(userId);
-    redis.set(VERSION_KEY + userId, Long.toString(version), redisTtl);
+    redis.set(
+        VERSION_KEY + userId,
+        stamped(Long.toString(version), clock.millis() + redisTtl.toMillis()),
+        redisTtl);
     redis.publish(CHANNEL, VERSION_MESSAGE + userId);
   }
 
@@ -160,7 +222,8 @@ public final class SessionStateCache {
    */
   public void sessionEnded(UUID sessionId) {
     sessions.remove(sessionId);
-    redis.set(SESSION_KEY + sessionId, "0", redisTtl);
+    redis.set(
+        SESSION_KEY + sessionId, stamped("0", clock.millis() + redisTtl.toMillis()), redisTtl);
     redis.publish(CHANNEL, SESSION_MESSAGE + sessionId);
   }
 

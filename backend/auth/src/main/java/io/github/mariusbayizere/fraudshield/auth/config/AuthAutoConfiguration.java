@@ -183,7 +183,8 @@ public class AuthAutoConfiguration {
       TenantTransactions tenants,
       StaffAccountRepository accounts,
       RefreshTokenRepository tokens,
-      AuthProperties properties) {
+      AuthProperties properties,
+      Clock clock) {
     return new SessionStateCache(
         redis,
         tenants,
@@ -191,7 +192,8 @@ public class AuthAutoConfiguration {
         tokens,
         properties.session().cacheTtl(),
         properties.session().localCacheTtl(),
-        System::nanoTime);
+        System::nanoTime,
+        clock);
   }
 
   @Bean

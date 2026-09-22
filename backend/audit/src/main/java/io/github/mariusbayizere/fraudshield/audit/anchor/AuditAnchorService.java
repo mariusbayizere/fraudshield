@@ -33,7 +33,7 @@ public final class AuditAnchorService {
   /**
    * Creates the service.
    *
-   * @param jdbc JDBC template of a role with EXECUTE on the V12 chain functions and INSERT on
+   * @param jdbc JDBC template of a role with EXECUTE on the V70 chain functions and INSERT on
    *     audit_anchors
    * @param transactions transaction template of the same data source
    * @param signer anchor signer

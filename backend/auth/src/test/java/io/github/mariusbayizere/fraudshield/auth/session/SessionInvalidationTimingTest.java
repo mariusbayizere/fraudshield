@@ -6,6 +6,7 @@ import io.github.mariusbayizere.fraudshield.audit.testing.TestDatabase;
 import io.github.mariusbayizere.fraudshield.auth.account.StaffAccountRepository;
 import io.github.mariusbayizere.fraudshield.auth.jwt.StaffClaims;
 import io.github.mariusbayizere.fraudshield.auth.support.SafeRedis;
+import io.github.mariusbayizere.fraudshield.auth.testing.FakeTime;
 import io.github.mariusbayizere.fraudshield.auth.testing.Instances;
 import io.github.mariusbayizere.fraudshield.auth.testing.JpaTestStack;
 import io.github.mariusbayizere.fraudshield.common.config.StaffRole;
@@ -68,7 +69,8 @@ class SessionInvalidationTimingTest {
         new RefreshTokenRepository(app.jdbc()),
         redisTtl,
         localTtl,
-        System::nanoTime);
+        System::nanoTime,
+        java.time.Clock.systemUTC());
   }
 
   private static StaffClaims signedIn() throws Exception {
@@ -141,6 +143,66 @@ class SessionInvalidationTimingTest {
     }
     java.util.Arrays.sort(millis);
     return millis;
+  }
+
+  /**
+   * The worst case stated analytically (ADR 0071 §6): with the announcement and the Redis write
+   * both lost, an instance answers from a value read before the change for at most {@code
+   * max(redisTtl, localTtl)} after its read began, however long the read took. The read is made
+   * slow for real (a table lock) while fake time moves, so the bound is asserted to the
+   * millisecond, independent of machine load.
+   */
+  @Test
+  void staleAnswersEndWithinTheAnalyticBoundHoweverSlowTheRead() throws Exception {
+    for (Duration stall :
+        List.of(
+            Duration.ZERO,
+            Duration.ofMillis(500),
+            Duration.ofMillis(1500),
+            Duration.ofMillis(2500))) {
+      FakeTime time = new FakeTime();
+      SessionStateCache a =
+          new SessionStateCache(
+              Instances.safe(redisA),
+              app.tenants(),
+              new StaffAccountRepository(app.jdbc(), app.users(), app.entities()),
+              new RefreshTokenRepository(app.jdbc()),
+              Duration.ofSeconds(2),
+              Duration.ofSeconds(1),
+              time::nanos,
+              time);
+      Duration bound = a.worstCaseStaleness();
+      assertThat(bound).isEqualTo(Duration.ofSeconds(2));
+      StaffClaims claims = signedIn();
+      long anchor = time.now();
+      try (Connection lock = db.superuser();
+          Connection observer = db.superuser()) {
+        assertThat(
+                time.withSlowRead(
+                    lock, observer, "fraudshield.users", stall, () -> a.isCurrent(claims)))
+            .isTrue();
+      }
+      // Another instance ends every session; its announcement and its Redis write are both lost.
+      app.tenants()
+          .inTenant(
+              bank,
+              () ->
+                  new StaffAccountRepository(app.jdbc(), app.users(), app.entities())
+                      .bumpTokenVersion(claims.userId()));
+      long end = anchor + bound.toMillis();
+      if (stall.compareTo(bound) < 0) {
+        time.set(end - 1);
+        assertThat(a.isCurrent(claims))
+            .as("stale answer just inside the bound (read took %s)", stall)
+            .isTrue();
+      }
+      for (long at = end; at <= end + 2000; at += 250) {
+        time.set(at);
+        assertThat(a.isCurrent(claims))
+            .as("refused %d ms after the read began (read took %s)", at - anchor, stall)
+            .isFalse();
+      }
+    }
   }
 
   @Test

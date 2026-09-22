@@ -9,6 +9,7 @@ import io.github.mariusbayizere.fraudshield.audit.jdbc.JdbcAuditLog;
 import io.github.mariusbayizere.fraudshield.audit.testing.TestDatabase;
 import io.github.mariusbayizere.fraudshield.auth.crypto.Crypto;
 import io.github.mariusbayizere.fraudshield.auth.crypto.SecretBox;
+import io.github.mariusbayizere.fraudshield.auth.testing.FakeTime;
 import io.github.mariusbayizere.fraudshield.auth.testing.Instances;
 import io.github.mariusbayizere.fraudshield.auth.testing.JpaTestStack;
 import io.github.mariusbayizere.fraudshield.auth.testing.MutableClock;
@@ -71,6 +72,11 @@ class ApiKeyLifecycleTest {
   }
 
   private ApiKeyAuthenticator authenticator(StringRedisTemplate redis, String environment) {
+    return authenticator(redis, environment, System::nanoTime);
+  }
+
+  private ApiKeyAuthenticator authenticator(
+      StringRedisTemplate redis, String environment, java.util.function.LongSupplier nanoTime) {
     return new ApiKeyAuthenticator(
         new ApiKeyRepository(app.jdbc(), app.apiKeys(), app.entities(), clock),
         app.tenants(),
@@ -79,7 +85,7 @@ class ApiKeyLifecycleTest {
         environment,
         Duration.ofSeconds(2),
         clock,
-        System::nanoTime,
+        nanoTime,
         DIRECT);
   }
 
@@ -239,6 +245,53 @@ class ApiKeyLifecycleTest {
       Thread.sleep(20);
     }
     throw new AssertionError("the rotations never waited for the row lock");
+  }
+
+  /**
+   * FR-06-07 stated analytically (ADR 0071 §6): with the announcement lost, a revoked key is
+   * admitted for at most the cache TTL after the read that cached it began, however long that read
+   * took. Fake time, so the bound holds to the millisecond whatever the machine load.
+   */
+  @Test
+  @Tag("FR-06-07")
+  void revokedKeyIsRefusedWithinTheAnalyticBoundHoweverSlowTheRead() throws Exception {
+    for (Duration stall :
+        List.of(Duration.ZERO, Duration.ofMillis(1500), Duration.ofMillis(2500))) {
+      FakeTime time = new FakeTime();
+      ApiKeyAuthenticator deaf = authenticator(null, "test", time::nanos);
+      Duration bound = deaf.worstCaseStaleness();
+      assertThat(bound).isEqualTo(Duration.ofSeconds(2));
+      ApiKeyService other = service(authenticator(redisB, "test"));
+      ApiKeyService.Issued key =
+          other.create(
+              bank, name(), List.of(ApiKeyScope.INGEST_WRITE), null, admin, RequestContext.SYSTEM);
+      long anchor = time.now();
+      try (Connection lock = db.superuser();
+          Connection observer = db.superuser()) {
+        assertThat(
+                time.withSlowRead(
+                    lock,
+                    observer,
+                    "fraudshield.api_keys",
+                    stall,
+                    () -> deaf.authenticate(key.rawKey())))
+            .isPresent();
+      }
+      other.revoke(bank, key.record().keyId(), admin, RequestContext.SYSTEM); // deaf never hears
+      long end = anchor + bound.toMillis();
+      if (stall.compareTo(bound) < 0) {
+        time.set(end - 1);
+        assertThat(deaf.authenticate(key.rawKey()))
+            .as("still cached just inside the bound (read took %s)", stall)
+            .isPresent();
+      }
+      for (long at = end; at <= end + 2000; at += 250) {
+        time.set(at);
+        assertThat(deaf.authenticate(key.rawKey()))
+            .as("refused %d ms after the read began (read took %s)", at - anchor, stall)
+            .isEmpty();
+      }
+    }
   }
 
   @Test

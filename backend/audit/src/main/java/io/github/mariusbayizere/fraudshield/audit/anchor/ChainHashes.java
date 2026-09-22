@@ -7,7 +7,7 @@ import java.util.Objects;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * Streams one partition's row hashes in sequence order through {@code audit_chain_hashes} (V12),
+ * Streams one partition's row hashes in sequence order through {@code audit_chain_hashes} (V70),
  * checking that sequence numbers are contiguous and each {@code prev_hash} is the previous row's
  * hash, and folds them into a Merkle root. Row content is never read.
  */

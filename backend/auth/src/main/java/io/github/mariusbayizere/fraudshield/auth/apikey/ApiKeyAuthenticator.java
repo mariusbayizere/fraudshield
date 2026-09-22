@@ -139,7 +139,7 @@ public final class ApiKeyAuthenticator {
 
   private Optional<ApiKeyRepository.Credential> credential(String keyId) {
     Cached cached = cache.get(keyId);
-    long now = nanoTime.getAsLong();
+    long now = nanoTime.getAsLong(); // before the read: anchors the analytic bound
     if (cached != null && cached.expiresAtNanos() - now > 0) {
       return cached.credential();
     }
@@ -156,6 +156,18 @@ public final class ApiKeyAuthenticator {
       cache.put(keyId, new Cached(loaded, now + cacheTtlNanos));
     }
     return loaded;
+  }
+
+  /**
+   * The longest this instance can keep admitting a key after its revocation committed, when the
+   * announcement is lost (ADR 0071 §6). A record is cached until the time taken <em>before</em> its
+   * database read plus the cache TTL, and a record read before the revocation committed was read
+   * after that time, so it expires no later than the commit plus the TTL, however slow the read.
+   *
+   * @return the cache time to live
+   */
+  public Duration worstCaseStaleness() {
+    return Duration.ofNanos(cacheTtlNanos);
   }
 
   private void touch(ApiKeyRepository.Credential credential) {

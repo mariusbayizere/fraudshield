@@ -3,8 +3,9 @@
 
 -- Optimistic locking for administrator edits (StaffUserUpdate.version, FR-06-02). The JPA entity's
 -- @Version owns this column (ADR 0071): Hibernate increments it on every entity update and checks it
--- in the WHERE clause. Sign-in bookkeeping (failure count, last sign-in, token version) uses bulk
--- statements that leave it alone, so a sign-in never makes an administrator's edit stale.
+-- in the WHERE clause. Sign-in bookkeeping uses bulk statements that advance it only when the status
+-- changes (a lock, an unlock), so an ordinary sign-in never makes an administrator's edit stale.
+-- Numbered V70 in M7's range V70-V79 (it was V12 before merge; ADR 0071).
 ALTER TABLE users ADD COLUMN version bigint NOT NULL DEFAULT 0 CHECK (version >= 0);
 
 GRANT SELECT (version) ON users TO fs_app_readonly;

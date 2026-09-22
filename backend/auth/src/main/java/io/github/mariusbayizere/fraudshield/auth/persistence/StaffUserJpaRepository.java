@@ -17,7 +17,7 @@ import org.springframework.data.repository.query.Param;
  * so row-level security confines it to one institution. Bulk updates bypass the persistence
  * context; they flush before and clear after, so no managed entity is left stale. They advance the
  * optimistic version exactly when the status changes (a failure lock, an unlock, a sign-in or
- * password change that lifts a lock), as the removed V12 trigger did, and leave it alone for
+ * password change that lifts a lock), as the removed V70 trigger did, and leave it alone for
  * bookkeeping (failure count, last sign-in, token version, email verification, Google link), so a
  * sign-in never makes an administrator's edit stale but a status change the administrator has not
  * seen does.
