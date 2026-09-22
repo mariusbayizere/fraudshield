@@ -53,6 +53,7 @@
     <protobuf-maven-plugin.version>5.1.10</protobuf-maven-plugin.version>
     <!-- gRPC 1.83.1 needs 2.50.0; Guava and Gson ask for older ones (dependencyConvergence). -->
     <error-prone-annotations.version>2.50.0</error-prone-annotations.version>
+    <json-schema-validator.version>3.0.7</json-schema-validator.version>
 
     <!-- SRS 8.1: Java unit coverage >= 85%. -->
     <coverage.line.minimum>0.85</coverage.line.minimum>
@@ -69,6 +70,11 @@
         <groupId>com.google.errorprone</groupId>
         <artifactId>error_prone_annotations</artifactId>
         <version>${error-prone-annotations.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.networknt</groupId>
+        <artifactId>json-schema-validator</artifactId>
+        <version>${json-schema-validator.version}</version>
       </dependency>
       <dependency>
         <groupId>io.github.resilience4j</groupId>

@@ -104,6 +104,12 @@
       <artifactId>archunit-junit5</artifactId>
       <scope>test</scope>
     </dependency>
+    <!-- Validates rendered Kafka envelopes against contracts/kafka (test only). -->
+    <dependency>
+      <groupId>com.networknt</groupId>
+      <artifactId>json-schema-validator</artifactId>
+      <scope>test</scope>
+    </dependency>
     <dependency>
       <groupId>io.grpc</groupId>
       <artifactId>grpc-inprocess</artifactId>
@@ -161,19 +167,15 @@
           <sourceDirectories>
             <sourceDirectory>${maven.multiModuleProjectDirectory}/../contracts/proto</sourceDirectory>
           </sourceDirectories>
-          <binaryMavenPlugins>
-            <binaryMavenPlugin>
+          <plugins>
+            <plugin kind="binary-maven">
               <groupId>io.grpc</groupId>
               <artifactId>protoc-gen-grpc-java</artifactId>
               <version>${grpc-java.version}</version>
-            </binaryMavenPlugin>
-          </binaryMavenPlugins>
+            </plugin>
+          </plugins>
         </configuration>
-        <executions>
-          <execution>
-            <goals><goal>generate</goal></goals>
-          </execution>
-        </executions>
+        <!-- The generate execution is inherited from spring-boot-starter-parent. -->
       </plugin>
       <!-- Generated code is the contract's, not ours: excluded from coverage and static analysis. -->
       <plugin>

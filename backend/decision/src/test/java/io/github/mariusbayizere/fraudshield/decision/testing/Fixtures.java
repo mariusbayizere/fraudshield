@@ -85,7 +85,7 @@ public final class Fixtures {
         -1.9441,
         30.0619,
         channel == Channel.USSD ? null : "tok_DeviceHhhhIiiiJjjjKkkk01",
-        channel == Channel.AGENT_BANKING ? "tok_AgentLlllMmmmNnnnOooo01" : null,
+        channel == Channel.AGENT_BANKING ? "tok_AgentLlllMmmmNnnnOoooPp01" : null,
         "RW",
         NOW,
         NOW);
