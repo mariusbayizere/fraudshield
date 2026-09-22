@@ -37,7 +37,8 @@ the method they define. "Result" says what the citing sentence was checked again
 
 | Key | Checked against | Result |
 |---|---|---|
-| `dogan2025grift` | Crossref 10.1145/3715335.3736315: Doğan, Gilbert, Kotut; COMPASS '25; pp. 694-699 | **Metadata verified; text not accessible** (ACM DL returns 403; OpenAlex: closed, no open copy; no abstract registered). The Section 8 description (forged M-PESA message, recipient usually new) is the owner's reading of the paper and is flagged for the author to confirm before submission |
+| `dogan2025grift` | Full text read on 2026-09-22 (6 pp., the third author's copy at faculty.washington.edu/kotut/papers/COMPASS-2025-Financial-Grift.pdf, SHA-256 `0d5c5a2d…ecef46`); Crossref 10.1145/3715335.3736315 | **Verified from the source.** Title, authors, venue (COMPASS '25, Toronto), pp. 694-699 and DOI printed on its pages. Section 8 cites it only for what it states: forged M-PESA confirmation messages, the most common scam type its Kenyan respondents reported (§5.1.1, "M-PESA impersonation"); malicious reversal requests (§2, Background); users asking the sender to reverse a mistaken transfer (§5.3.3). It does not narrate the "sent by mistake, please return it" story, and says nothing about whether the victim knows the recipient |
+| `star2025mpesa` | The article read in full on 2026-09-22 at https://www.the-star.co.ke/news/2025-03-27-explainer-what-you-need-to-know-about-m-pesa-fraud-schemes: headline, byline Felix Kipkemoi, 27 March 2025 13:58, News | **Verified from the source.** Under "Fake/Old M-PESA messages": a fake M-PESA message showing LOCKED instead of a balance; scammers claim they sent the money by mistake, with an emotional story; victims send it back and find no money was deposited; Safaricom quoted: "Do not refund the money, instead request the sender to forward the message to 456 or call Safaricom for assistance." The article does not say whether the victim knows the claimed sender; the paper states the "new counterparty" reading as its own |
 | `lopezrojas2016paysim` | The paper's PDF (msc-les.org), read: title, authors, pages 249-255, ISBN 978-88-97999-76-8, editors | Verified. The paper describes each log record as the client, the action, the recipient, the sum and the change in balances, at an hourly step; no channel, device, geography or corridor field. Agents have a position in a simulated space, which the paper does not put in the record. **"Larnaca" is not printed in the paper and is omitted** |
 | `phipps2018thinsim` | Crossref 10.1145/3209811.3209817; abstract | Verified |
 | `razaq2021scams` | Crossref 10.1145/3449115 (title and subtitle, PACM HCI 5(CSCW1), pp. 1-30); abstract: SMS and call fraud in Pakistan, 96 interviews | Verified |
@@ -79,7 +80,8 @@ the method they define. "Result" says what the citing sentence was checked again
 | SADC "Member States" page (https://www.sadc.int/member-states), cited by `dataset/params_provenance.md` for Tanzania's and the DRC's bloc memberships | Could not be opened on 2026-09-22 (connection refused, then timed out). Under the rule "verify or remove", it is not cited; the paper cites only the EAC and COMESA pages for bloc membership |
 | Platt (1999), "Probabilistic outputs for support vector machines and comparisons to regularized likelihood methods", in *Advances in Large Margin Classifiers* | No DOI; not in Crossref; the publisher's page (MIT Press) refused automated access on 2026-09-22. Not confirmed, so not added. Platt scaling is cited through Niculescu-Mizil and Caruana (2005), which describes and evaluates it |
 
-## 4. Not added
+## 4. Added after the third pass
 
-`star2025mpesa`, named in an earlier brief from the revised draft (v2): the draft never reached this
-machine, the entry was not in the owner's final list, and it has not been read or added.
+`star2025mpesa` was added on 2026-09-22 once the article had been read (Section 2). Safaricom's
+fraud-awareness page, the named fallback, was not needed and is not cited. `dogan2025grift` moved
+from metadata-only to verified once its full text was read.
