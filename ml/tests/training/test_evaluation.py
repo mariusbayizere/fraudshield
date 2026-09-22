@@ -99,3 +99,9 @@ def test_the_sample_spreads_across_the_period_rather_than_taking_its_tail() -> N
     assert sample[0] < 100, "the sample must start near the beginning of the period"
     assert sample[-1] > 800, "and reach near its end, which a tail sample would not"
     assert spread(pool, 5000) == pool, "asking for more than exists takes everything"
+
+
+def test_asking_for_no_rows_from_a_period_gives_none_rather_than_dividing_by_zero() -> None:
+    """`--calibration-rows` and `--validation-rows` default to 0; a non-empty pool must survive."""
+    assert spread(list(range(10)), 0) == []
+    assert spread([], 0) == []
