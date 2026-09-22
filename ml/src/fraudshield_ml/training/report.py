@@ -12,6 +12,7 @@ from fraudshield_ml.training.battery import (
     Scored,
     VariantResult,
 )
+from fraudshield_ml.training.ensemble import SeedRun, SeedVarianceSummary
 from fraudshield_ml.training.frontier import Point
 
 
@@ -199,4 +200,44 @@ def frontier_table(points: Sequence[Point], requests: int) -> list[str]:
             f" {first.explanation_cost:.2f} -> {last.explanation_cost:.2f} ms.",
             "  Complexity buys no accuracy on this benchmark and costs explanation latency.",
         ]
+    return lines
+
+
+def seed_variance_table(
+    runs: Sequence[SeedRun],
+    summaries: dict[str, SeedVarianceSummary],
+    baselines: tuple[str, ...],
+) -> list[str]:
+    """C-6, measured: does the ensemble's AUC move less across seeds than either model alone?"""
+    lines = [
+        "",
+        "C-6 — SEED VARIANCE: XGBoost alone, LightGBM alone and the 0.55/0.45 ensemble (D-05),",
+        f"at {len(runs)} fixed seeds ({', '.join(str(r.seed) for r in runs)}), on the same",
+        "train/test rows throughout. Not calibrated: this measures how much a model's own random",
+        "state moves its AUC, not the calibrated ensemble's error rate.",
+        "",
+        f"  {'seed':>5s}  {'xgboost':>9s}  {'lightgbm':>9s}  {'ensemble':>9s}",
+    ]
+    for r in runs:
+        lines.append(
+            f"  {r.seed:>5d}  {r.xgboost_auc:>9.4f}  {r.lightgbm_auc:>9.4f}  {r.ensemble_auc:>9.4f}"
+        )
+    lines += ["", f"  {'':<9s}  {'mean':>9s}  {'stdev':>9s}"]
+    for name in ("xgboost", "lightgbm", "ensemble"):
+        s = summaries[name]
+        lines.append(f"  {name:<9s}  {s.mean:>9.4f}  {s.stdev:>9.4f}")
+    lines.append("")
+    ensemble = summaries["ensemble"]
+    for base in baselines:
+        reduction = ensemble.reduction_from(summaries[base])
+        verdict = "REDUCED" if reduction > 0 else "DID NOT REDUCE"
+        lines.append(
+            f"  ensemble stdev vs {base} alone: {reduction:+.1f}% ({verdict} seed variance"
+            f" relative to {base})"
+        )
+    lines += [
+        "",
+        "  C-6 claims a 12% reduction with no citation (D-09). The figures above are the",
+        "  replacement measurement, reported as measured whichever way they come out.",
+    ]
     return lines

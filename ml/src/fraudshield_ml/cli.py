@@ -38,7 +38,7 @@ from fraudshield_ml.metrics.single_feature import (
     out_of_fold_target_encoding,
     separation,
 )
-from fraudshield_ml.training import battery, evaluation, frontier, report, smoke
+from fraudshield_ml.training import battery, ensemble, evaluation, frontier, report, smoke
 from fraudshield_ml.training import split as split_module
 
 #: Columns the vector needs from each table. Named rather than read wholesale so that a schema
@@ -789,6 +789,47 @@ def run_frontier(cache: Path, seed: int, requests: int, repeats: int) -> int:
     return 0
 
 
+def run_seed_variance(cache: Path, seeds: tuple[int, ...]) -> int:
+    """C-6: does the ensemble move less across seeds than either model alone (D-09, D-05)?
+
+    Reads the same cache `fs-features evaluate --cache` and `fs-features battery` read. Train and
+    test rows are held fixed across every seed, so the only thing varying between rows of the
+    table is a model's own random state.
+    """
+    loaded = smoke.cache_read_any(cache)
+    if loaded is None:
+        raise DatasetGapError(
+            f"{cache} holds no usable feature matrix. Produce one with: fs-features evaluate "
+            "<dataset> --packs <packs> --split <split> --cache <path>"
+        )
+    vectors, extras = loaded
+    names = smoke.trainable_features()
+    labels = [v == "True" for v in extras[smoke.CACHE_LABEL]]
+    segment = extras[smoke.CACHE_SEGMENT]
+    train = [i for i, s_ in enumerate(segment) if s_ == "train"]
+    test = [i for i, s_ in enumerate(segment) if s_ == "test"]
+    if not train or not test:
+        raise DatasetGapError(
+            f"the cache holds {len(train)} train and {len(test)} test rows; C-6 needs both"
+        )
+    encoded = smoke.encode_categoricals(vectors, labels, extras[smoke.CACHE_ACCOUNT], train)
+    matrix = [
+        [encoded[n][i] if n in encoded else float(vectors[i][n]) for n in names]
+        for i in range(len(vectors))
+    ]
+
+    runs = ensemble.run_seeds(matrix, labels, train, test, seeds=seeds)
+    summaries = {
+        name: ensemble.summarise(
+            name,
+            [getattr(r, f"{name}_auc") for r in runs],
+        )
+        for name in ("xgboost", "lightgbm", "ensemble")
+    }
+    print("\n".join(report.seed_variance_table(runs, summaries, ("xgboost", "lightgbm"))))
+    return 0
+
+
 def run_battery(cache: Path, seed: int, top: int) -> int:
     """M4's experiments, all off one cached feature matrix (Part E.5).
 
@@ -1165,6 +1206,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     frontier_command.add_argument("--seed", type=int, default=20260917)
     frontier_command.add_argument("--requests", type=int, default=300)
     frontier_command.add_argument("--repeats", type=int, default=3)
+    seed_variance_command = commands.add_parser(
+        "seed-variance",
+        help="C-6: XGBoost alone, LightGBM alone and the D-05 ensemble, over fixed seeds",
+    )
+    seed_variance_command.add_argument("cache", type=Path)
+    seed_variance_command.add_argument(
+        "--seeds",
+        type=int,
+        nargs="+",
+        default=list(ensemble.SEEDS),
+        help="fixed seeds to fit at, default the five the SRS asks for",
+    )
     smoke_command = commands.add_parser(
         "smoke",
         help="train one model on the computable features and report it against the "
@@ -1194,6 +1247,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 #: make `main` too long to read — the same arrangement `fs-dataset` already uses.
 COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
     "frontier": lambda a: run_frontier(a.cache, a.seed, a.requests, a.repeats),
+    "seed-variance": lambda a: run_seed_variance(a.cache, tuple(a.seeds)),
     "battery": lambda a: run_battery(a.cache, a.seed, a.top),
     "evaluate": lambda a: run_evaluate(
         EvaluationRun(
