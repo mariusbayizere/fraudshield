@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+# Pinned, checksum-verified promtool launcher: checks and unit-tests Prometheus rules (Apache-2.0).
+# Trust model and cache layout: infrastructure/bin/lib/pinned.sh.
+set -eu
+. "$(dirname "$0")/lib/pinned.sh"
+pinned_exec promtool "3.14.0" \
+  "https://github.com/prometheus/prometheus/releases/download/v3.14.0/prometheus-3.14.0.linux-amd64.tar.gz" \
+  "f665c6da19eb7ba399c915d30c7d9793c9b417bf8a749b504bc470678631478d" \
+  "prometheus-3.14.0.linux-amd64/promtool" \
+  "9c752bb87eec945b2d7797d20815e2dc54b0d3fed2d2f17df019dbd74560f743" \
+  -- "$@"
