@@ -1,0 +1,21 @@
+# evidence-commit: 6fe4bf06b681284bfc1850e7ab17115ddd434c23
+# evidence-tree-state: clean
+# command: python docs/research/paper/evidence/reversal_labels.py /home/marius/fraudshield/dataset/output/bench1m
+# exit: 0
+
+HELD-OUT SUB-VARIANTS BY LABEL — rows the generator wrote, and rows the evaluation
+scores as fraud (it reads is_fraud_observed, the label a model would be given).
+  dataset fingerprint: d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32 (function at m4-complete)
+  rows: 1006317   test period from 2025-10-28T22:02:00.337485+00:00
+  reversal_scam_social_engineering
+    rows written: 68
+    in the test period: 68
+    fraud by true label: 68
+    fraud by observed label: 66
+    true fraud labelled legitimate (missed-fraud noise): 2
+  novel_esim_delayed_drain
+    rows written: 73
+    in the test period: 73
+    fraud by true label: 73
+    fraud by observed label: 73
+    true fraud labelled legitimate (missed-fraud noise): 0
