@@ -1,0 +1,69 @@
+\section{Method}
+\label{sec:method}
+
+\subsection{The production model (resolution D-05)}
+
+XGBoost and LightGBM are trained with native handling of missing values and categories, class
+imbalance addressed by weighting (no oversampling), and early stopping on the validation split.
+Their raw probabilities are combined as $\nWeightXGB\,p_{\mathrm{xgb}} +
+\nWeightLGB\,p_{\mathrm{lgb}}$, and \textbf{one} isotonic regression is fitted on the combined
+score using the calibration split, which is chronologically later than the validation data and
+never used for fitting or scoring otherwise. The calibrated ensemble score is the quantity the
+decision thresholds and the calibration error are measured on; calibrating the two models
+separately and averaging them does not yield a calibrated ensemble. In the evaluated run the
+early-stopped models used \nGateXGBRounds{} (XGBoost) and \nGateLGBRounds{} (LightGBM) rounds,
+with a positive-class weight of \nGateSPW{}.
+
+An Isolation Forest is fitted on imputed features (it cannot take NaN) and its score is mapped to
+a percentile of its training reference distribution, so that the anomaly score lies in $[0, 1]$
+(resolution D-06). The specification routes transactions flagged only by the anomaly score to a
+separate review queue that does not hold the payment; that routing belongs to the decision
+engine (M6) and is not evaluated here.
+
+\paragraph{Training volume.} The evaluated models were trained on \nTrainUsed{} rows holding
+\nGateTrainFraud{} confirmed fraud, a subset of the \nTrainRows{} rows in the training period,
+because of the development machine (Section~\ref{sec:repro}). Every figure in
+Section~\ref{sec:evaluation} is at that training volume; full-volume training is
+\notyet{M10}.
+
+\subsection{Explanations}
+
+Exact TreeSHAP is computed per model in log-odds (margin) space, where additivity is exact, and
+the analyst-facing contribution is the weighted combination $\nWeightXGB\,\phi_{\mathrm{xgb}} +
+\nWeightLGB\,\phi_{\mathrm{lgb}}$ in margin space, annotated with its base value and final
+margin. We never claim that SHAP values sum to the calibrated probability: isotonic calibration is
+monotone but not additive. The specification requires plain-language explanations to come from
+deterministic, localised templates per feature and never from a language model; the templates
+belong to the serving and console milestones (M5, M8).
+
+\subsection{The diagnostic battery}
+
+The analyses of feature groups, slices, variants and countries (Sections~\ref{sec:evaluation}
+and~\ref{sec:generalisation}) use a separate, deliberately simple model: one untuned XGBoost
+booster on \nTrainUsed{} training rows, calibrated with two-parameter Platt scaling. It is a
+diagnostic of the benchmark, not the production model, and its figures are labelled as such
+(ADR 0029). Ablations of the production ensemble are reported with the gate.
+
+\subsection{Evaluation protocol}
+
+\begin{itemize}
+  \item \textbf{Operating points} (resolutions D-01, D-02): recall at a \nFPRBudget{}
+        false-positive rate replaces the specification's precision at that rate, which is
+        mathematically unreachable at this base rate; recall, F1 and the false-negative rate are
+        read at the flag threshold \nFlagThreshold{}, the false-positive rate at the block
+        threshold \nBlockThreshold{}.
+  \item \textbf{Uncertainty}: \nResamples{} stratified bootstrap resamples for gate metrics,
+        Hanley--McNeil intervals for AUCs of single features and baselines, Wilson intervals for
+        recall on small variant counts, DeLong's test for AUC differences, and the mean and
+        standard deviation over \nSeeds{} refits.
+  \item \textbf{The floor}: every ranking metric is reported beside the best single feature and
+        the best trivial rule (one threshold on one feature) on the same rows, as a margin
+        (Section~\ref{sec:floor}).
+  \item \textbf{Test discipline}: nothing is tuned on the test period; every read of the test set
+        is logged with a counter; the calibrator is guarded by a test that fails if it sees a
+        test-period row.
+  \item \textbf{Scale}: every figure states the rows and fraud count it rests on, because
+        single-feature AUC on this benchmark moves with dataset size by more than seed noise
+        (spread \nSizeSeriesSpan{} across sizes against a seed-to-seed standard deviation of
+        \nSeedSdSizeSeries{}), for a reason that remains unexplained.
+\end{itemize}
