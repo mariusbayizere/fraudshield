@@ -122,7 +122,13 @@ def _whole_days(delta_micros: int) -> int | None:
 
 @dataclass(frozen=True)
 class Durable:
-    """What a fallback source knows about an account that Redis does not hold."""
+    """Everything an account's Redis keys held, as the database knows it before a given time.
+
+    The fallback must return all of it, because the acceptance test for the carried DB fallback
+    (`ml/tests/featurestore/test_db_fallback.py`, owned by M6) requires the features read through
+    it to be **identical** to the Redis path's: the windowed transactions as well as the durable
+    facts, the SIM swaps, the tier history and the opening date.
+    """
 
     first_seen: datetime | None = None
     last_at: datetime | None = None
@@ -130,15 +136,26 @@ class Durable:
     counterparties: frozenset[str] = frozenset()
     countries: frozenset[str] = frozenset()
     devices: frozenset[str] = frozenset()
+    #: The account's own transactions strictly before the scored time (at least the 90-day
+    #: horizon); the store filters to its windows.
+    transactions: tuple[Transaction, ...] = ()
+    sim_swaps: tuple[datetime, ...] = ()
+    tiers: tuple[tuple[int, datetime], ...] = ()
+    opened_at: datetime | None = None
 
 
 class Fallback(Protocol):
-    """The database side of C.4's "Redis down or key expired -> DB fallback". Owned by M6."""
+    """The database side of C.4's "Redis down or key expired -> DB fallback".
 
-    def account(self, account_id: str) -> Durable | None:
-        """The account's durable state, or None if the institution has never seen it."""
+    Carried to M6, which owns the tables (`account_velocity_cache`, the transactions hypertable and
+    PB-37's per-account durable table). `featurestore.fallback.ReplayFallback` is the reference
+    implementation the acceptance test holds a PostgreSQL one to.
+    """
 
-    def device_first_seen(self, device: str) -> datetime | None: ...
+    def account(self, account_id: str, before: datetime) -> Durable | None:
+        """The account's state strictly before `before`, or None if it has never been seen."""
+
+    def device_first_seen(self, device: str, before: datetime) -> datetime | None: ...
 
 
 @dataclass
@@ -241,20 +258,7 @@ class FeatureStore:
                 pipe.zremrangebyscore(key, "-inf", f"({ts - trim}")
             touched.append(key)
 
-        zadd(
-            self._k("a", account, "tx"),
-            [
-                tx.transaction_id,
-                tx.amount_rwf,
-                tx.counterparty_id,
-                tx.counterparty_country,
-                tx.device_fingerprint,
-                tx.latitude,
-                tx.longitude,
-            ],
-            ts,
-            trim=ACCOUNT_HORIZON,
-        )
+        zadd(self._k("a", account, "tx"), _member(tx), ts, trim=ACCOUNT_HORIZON)
         first = self._k("a", account, "first")
         pipe.zadd(first, {"first": ts}, lt=True)
         last = self._k("a", account, "last")
@@ -507,7 +511,7 @@ class FeatureStore:
         """
         if snap.first is not None:
             return int(snap.first), True
-        durable = self._fallback_account(account)
+        durable = self._fallback_account(account, from_micros(t))
         if durable is None and not (self.fallback is not None or self.authoritative):
             self.metrics.unknown_state.labels("account").inc()
             return None, False
@@ -519,9 +523,30 @@ class FeatureStore:
             snap.cps |= durable.counterparties
             snap.countries |= durable.countries
             snap.devices |= durable.devices
+            self._restore_windows(snap, durable, t)
         # No earlier transaction anywhere: this one is the first, as the batch path's true
         # first-seen would say.
         return (first_seen if first_seen is not None else t), True
+
+    @staticmethod
+    def _restore_windows(snap: _Snapshot, durable: Durable, t: int) -> None:
+        """Rebuild the account's expired keys from the fallback, as Redis would have read them."""
+        rows = [
+            (_member(row), micros(row.timestamp))
+            for row in durable.transactions
+            if t - ACCOUNT_HORIZON < micros(row.timestamp) < t
+        ]
+        # Redis orders equal scores by member bytes; the same order keeps sums identical.
+        rows.sort(key=lambda r: (r[1], json.dumps(r[0], separators=(",", ":"))))
+        snap.rows = [(json.loads(json.dumps(m, separators=(",", ":"))), s) for m, s in rows]
+        swaps = sorted(micros(at) for at in durable.sim_swaps if micros(at) < t)
+        if swaps and not snap.swap:
+            snap.swap = [str(swaps[-1])]
+        tiers = sorted((micros(at), tier) for tier, at in durable.tiers if micros(at) <= t)
+        if tiers and not snap.tier:
+            snap.tier = [json.dumps([tiers[-1][1], tiers[-1][0]])]
+        if durable.opened_at is not None and snap.opened is None:
+            snap.opened = str(micros(durable.opened_at))
 
     @staticmethod
     def _counterparty(ctx: pb.AccountContext, tx: Transaction, snap: _Snapshot, t: int) -> None:
@@ -549,7 +574,7 @@ class FeatureStore:
         first = int(snap.device_first) if snap.device_first is not None else None
         if first is None and self.fallback is not None:
             self.metrics.fallbacks.labels("device").inc()
-            found = self.fallback.device_first_seen(device)
+            found = self.fallback.device_first_seen(device, from_micros(t))
             first = micros(found) if found is not None else None
         if first is None and (self.authoritative or self.fallback is not None):
             first = t
@@ -595,11 +620,11 @@ class FeatureStore:
             len(labelled) + alpha
         )
 
-    def _fallback_account(self, account: str) -> Durable | None:
+    def _fallback_account(self, account: str, before: datetime) -> Durable | None:
         if self.fallback is None:
             return None
         self.metrics.fallbacks.labels("account").inc()
-        return self.fallback.account(account)
+        return self.fallback.account(account, before)
 
     @staticmethod
     def _velocity(
@@ -662,6 +687,19 @@ class FeatureStore:
         ctx.last_location.CopyFrom(pb.GeoPoint(latitude=location[0], longitude=location[1]))
         ctx.last_transaction_at.FromMicroseconds(at)
         _set_days(ctx, "days_since_previous_activity", t - at)
+
+
+def _member(tx: Transaction) -> list[Any]:
+    """An account-window row, identical whether written by `observe` or rebuilt from a fallback."""
+    return [
+        tx.transaction_id,
+        tx.amount_rwf,
+        tx.counterparty_id,
+        tx.counterparty_country,
+        tx.device_fingerprint,
+        tx.latitude,
+        tx.longitude,
+    ]
 
 
 def _days(delta_micros: int) -> float:

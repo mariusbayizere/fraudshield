@@ -119,11 +119,11 @@ class RecordingFallback:
         self.device_first = device_first
         self.asked: list[str] = []
 
-    def account(self, account_id: str) -> Durable | None:
+    def account(self, account_id: str, before: datetime) -> Durable | None:
         self.asked.append(account_id)
         return self.durable
 
-    def device_first_seen(self, device: str) -> datetime | None:
+    def device_first_seen(self, device: str, before: datetime) -> datetime | None:
         self.asked.append(device)
         return self.device_first
 
