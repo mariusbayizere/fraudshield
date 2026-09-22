@@ -10,7 +10,7 @@
 %                 in use: every M4 value was re-verified at m4-complete (72e7790) on 2026-09-22 by
 %                 audit_numbers.py and moved to \meas.
 %   \srcd{x}      A value fixed by the specification (a threshold or target), not a result.
-%   \notyet{Mx}   A result a later milestone produces. Printed as "NOT YET MEASURED -- Mx".
+%   \notyet{Mx}   A result a later milestone produces. Printed in italics as "not yet measured (Mx)".
 %
 % Data draws (seed 20260917 throughout):
 %   6abde44e  1,006,249 rows (claims register header; M3 and the first M4 battery)
@@ -24,7 +24,7 @@
 % requirement or threshold, not a result.
 \newcommand{\srcd}[1]{#1}
 \newcommand{\prov}[1]{#1\textsuperscript{\dag}}
-\newcommand{\notyet}[1]{\textbf{NOT YET MEASURED -- #1}}
+\newcommand{\notyet}[1]{\emph{not yet measured (#1)}}
 
 % ---------------------------------------------------------------------------------------------
 % Dataset (M2), main
@@ -377,3 +377,10 @@
 % Evaluation draw d8083dbc (dataset/realism_report.md at m4-complete): the same two channels.
 \newcommand{\nColumnMaxAUCB}{\meas{0.709}}
 \newcommand{\nEventDelayAUCB}{\meas{0.726}}
+
+% Interval level used throughout (m4_gate_d8083dbc_v3.txt: "95% CI" column; Wilson intervals in
+% m4_battery_d8083dbc_e1.txt are "[95% CI]" too).
+\newcommand{\nIntervalLevel}{\meas{95\%}}
+% Features the models are trained on: the 44 of the catalogue less the six that carry no source data
+% on this benchmark (m4_battery_d8083dbc_e1.txt: "full model, 38 features").
+\newcommand{\nTrainableFeatures}{\meas{38}}

@@ -2,7 +2,7 @@
 
 Every macro in `numbers.tex` checked against its evidence file at `m4-complete` (`72e7790`), read with `git show`, by `audit_numbers.py`. Values are compared as printed: rounding, sign and interval bounds included. Regenerate with `python3 docs/research/paper/audit_numbers.py`; do not edit by hand.
 
-**305 macros, 305 MATCH, 0 not matching.**
+**307 macros, 307 MATCH, 0 not matching.**
 
 | Macro | Value in paper | Value in evidence | File | Note | Result |
 |---|---|---|---|---|---|
@@ -311,3 +311,5 @@ Every macro in `numbers.tex` checked against its evidence file at `m4-complete` 
 | `\nCoRowsCD` | `5{,}065` | `5065` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
 | `\nColumnMaxAUCB` | `0.709` | `0.709` | `dataset/realism_report.md` |  | MATCH |
 | `\nEventDelayAUCB` | `0.726` | `0.726` | `dataset/realism_report.md` |  | MATCH |
+| `\nIntervalLevel` | `95\%` | `95%` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nTrainableFeatures` | `38` | `38` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |

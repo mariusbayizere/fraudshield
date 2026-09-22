@@ -1,5 +1,5 @@
-% FraudShield paper draft (build prompt Part E.13, milestone M11).
-% Status: DRAFT. Not reviewed. See README.md in this directory for the rules every number obeys.
+% FraudShield-EAC paper (milestone M11). See README.md in this directory for the rules every number
+% and reference obeys; REVIEW.md records the paper's history.
 \documentclass[11pt]{article}
 
 \usepackage[utf8]{inputenc}
@@ -7,35 +7,69 @@
 \usepackage[a4paper,margin=2.5cm]{geometry}
 \usepackage{amsmath}
 \usepackage{booktabs}
-\usepackage{hyperref}
+\usepackage{longtable}
 \usepackage{xcolor}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
 \usepackage[numbers,sort]{natbib}
 \usepackage{url}
+\usepackage{hyperref}
 
 \input{numbers}
 
-% A place where a scholarly reference is needed and none has been verified yet. Printed visibly;
-% never a citation key, so the bibliography holds only sources that were read (references.bib).
+% Kept until every placeholder is replaced by a verified citation.
 \newcommand{\refneeded}{\textsuperscript{[reference needed]}}
 
-% Title from the SRS ("Research Paper" row, SRS front matter).
-\title{FraudShield-EAC: A Real-Time Explainable Fraud Detection System for East Africa\\[0.5em]
-\large DRAFT --- results on the FraudShield-EAC synthetic benchmark only}
-\author{Marius Bayizere\\Independent Researcher, Kigali, Rwanda}
-\date{Draft of 2026-09-22}
+\newcommand{\papertitle}{FraudShield-EAC: What a Synthetic East African Mobile-Money Fraud Benchmark
+Can and Cannot Show}
+
+\hypersetup{pdftitle={FraudShield-EAC: What a Synthetic East African Mobile-Money Fraud Benchmark
+Can and Cannot Show}, pdfauthor={Marius Bayizere}, colorlinks=true, linkcolor=black,
+  citecolor=blue!50!black, urlcolor=blue!50!black}
 
 \begin{document}
-\maketitle
 
-\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{\small
-\textbf{Status of the numbers in this draft.} Every figure is measured on the FraudShield-EAC
-synthetic benchmark; none describes a real institution. Every figure comes from milestones M2 to
-M4 as tagged on \texttt{main} (\texttt{m4-complete}, commit \texttt{72e7790}) and was checked
-against its evidence file at that tag; none is provisional. ``NOT YET MEASURED'' marks results a
-later milestone produces; no value is estimated in their place. The source of every number is
-listed in \texttt{numbers.tex}, and the check in \texttt{number\_audit.md}; \texttt{numbers.tex}.}}
+% ----------------------------------------------------------------------------------------------
+% Cover page
+% ----------------------------------------------------------------------------------------------
+\begin{titlepage}
+\centering
+\vspace*{2cm}
+{\LARGE\bfseries \papertitle\par}
+\vspace{1.5cm}
+{\large Marius Bayizere\par}
+\vspace{0.3cm}
+Independent Researcher, Kigali, Rwanda\par
+\texttt{bayizeremarius119@gmail.com}\par
+\vspace{0.8cm}
+22 September 2026\par
+\vspace{0.3cm}
+Repository: \url{https://github.com/mariusbayizere/fraudshield}\par
+\vspace{1.2cm}
+\begin{minipage}{0.85\linewidth}
+\small\textbf{Keywords:} fraud detection; mobile money; synthetic benchmarks; East Africa;
+gradient boosting; calibration; explainability; leakage; pre-registration; negative results.
+\end{minipage}
+\vspace{1.2cm}
+
+\noindent\fbox{\parbox{\dimexpr0.85\linewidth-2\fboxsep-2\fboxrule}{\small
+\textbf{How to read the numbers.} Every figure is measured on the FraudShield-EAC synthetic
+benchmark; none describes a real institution, customer or regulator. Every figure comes from the
+repository at milestone tag \texttt{m4-complete} (commit \texttt{72e7790}) and was checked against its
+evidence file at that tag; the source of each is listed in \texttt{numbers.tex} and the check in
+\texttt{number\_audit.md}. Model metrics are reported as margins over the best single feature on
+the same rows, not over chance. Intervals are \nIntervalLevel{} unless stated otherwise. Results a
+later milestone will produce are marked \emph{not yet measured}, with the milestone; no value is
+estimated in their place.}}
+\vfill
+\end{titlepage}
 
 \input{sections/00-abstract}
+
+\clearpage
+\tableofcontents
+\clearpage
+
 \input{sections/01-introduction}
 \input{sections/02-related-work}
 \input{sections/03-problem-setting}

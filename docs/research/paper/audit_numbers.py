@@ -528,6 +528,8 @@ SOURCES: dict[str, Src | Derived] = {
         REAL, r"single-feature AUC \| pass \| yes \| max ([\d.]+) \(merchant_category_code\)"
     ),
     "nEventDelayAUCB": Src(REAL, r"event delay \(reported\) \| pass \| no \| AUC ([\d.]+)"),
+    "nIntervalLevel": Src(GATE, r"value  (\d+%) CI"),
+    "nTrainableFeatures": Src(BAT, r"full model, (\d+) features"),
     # ---- hardware ----
     "nHwCPU": Src(HARDWARE, r"\| CPU \| (Intel Core i5-6200U @ 2\.30 GHz, 2 cores / 4 threads) \|"),
     "nHwMem": Src(HARDWARE, r"\| Memory \| ([\d.]+ GiB) total"),
