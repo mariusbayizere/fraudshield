@@ -43,6 +43,14 @@ public interface DecisionMetrics {
    */
   default void featureStoreDegraded() {}
 
+  /**
+   * A fast-state write after the decision was durable failed on Redis and its fallback; the
+   * decision stands and PostgreSQL covers the state.
+   *
+   * @param what {@code decision_state} or {@code hold_schedule}
+   */
+  default void stateWriteFailed(String what) {}
+
   /** Metrics that record nothing, for callers that have none. */
   DecisionMetrics NONE =
       new DecisionMetrics() {

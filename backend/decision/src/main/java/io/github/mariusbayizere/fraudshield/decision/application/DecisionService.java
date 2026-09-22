@@ -11,6 +11,8 @@ import io.github.mariusbayizere.fraudshield.decision.application.port.DecisionSt
 import io.github.mariusbayizere.fraudshield.decision.application.port.EventRecorder;
 import io.github.mariusbayizere.fraudshield.decision.application.port.FreezePort;
 import io.github.mariusbayizere.fraudshield.decision.application.port.HoldSchedulePort;
+import io.github.mariusbayizere.fraudshield.decision.application.port.RecorderOutcomeUnknownException;
+import io.github.mariusbayizere.fraudshield.decision.application.port.RecorderUnavailableException;
 import io.github.mariusbayizere.fraudshield.decision.application.port.ScorerUnavailableException;
 import io.github.mariusbayizere.fraudshield.decision.application.port.ScoringPort;
 import io.github.mariusbayizere.fraudshield.decision.domain.Decision;
@@ -158,9 +160,10 @@ public final class DecisionService {
    * @param requestFingerprint SHA-256 of the canonical request (FR-01-03)
    * @param receivedNanos {@link System#nanoTime()} when the request arrived
    * @return the machine response
-   * @throws
-   *     io.github.mariusbayizere.fraudshield.decision.application.port.RecorderUnavailableException
-   *     when the decision could not be made durable; nothing is returned to the client as decided
+   * @throws RecorderUnavailableException when the decision could not be made durable; nothing was
+   *     recorded, as with every exception from this method other than the next
+   * @throws RecorderOutcomeUnknownException when the spool took the events but did not confirm them
+   *     in time; the decision may still become durable
    */
   public IngestDecision decide(
       Transaction transaction, byte[] requestFingerprint, long receivedNanos) {
@@ -237,15 +240,26 @@ public final class DecisionService {
     recorder.record(events);
     mark = stage("spool", mark);
 
-    states.save(state);
+    // The decision is durable from here on and stands: a failed fast-state write must not turn it
+    // into an error the client would retry (ADR 0067). PostgreSQL covers both writes: decision
+    // states are read from it on a miss, and overdue holds are reconciled from it (V62).
+    try {
+      states.save(state);
+    } catch (RuntimeException failed) {
+      metrics.stateWriteFailed("decision_state");
+    }
     if (outcome.decision() == Decision.HOLD) {
-      holds.schedule(
-          new HoldSchedulePort.DueHold(
-              institution,
-              transaction.transactionId(),
-              transaction.channel().name(),
-              threshold.timeoutPolicy(),
-              outcome.reviewDeadlineAt()));
+      try {
+        holds.schedule(
+            new HoldSchedulePort.DueHold(
+                institution,
+                transaction.transactionId(),
+                transaction.channel().name(),
+                threshold.timeoutPolicy(),
+                outcome.reviewDeadlineAt()));
+      } catch (RuntimeException failed) {
+        metrics.stateWriteFailed("hold_schedule");
+      }
     }
     stage("fast_state_writes", mark);
     // After the response (C.2): the MCC counts are not needed to answer this request. The feature

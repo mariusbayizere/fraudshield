@@ -48,6 +48,8 @@ public final class JdbcFreezes implements FreezePort {
       try {
         Tenant.use(c, institutionId);
         try (PreparedStatement s = c.prepareStatement(COUNT_BLOCKS)) {
+          // On the hot path while Redis is down: bounded well inside the idempotency lease.
+          s.setQueryTimeout(1);
           s.setString(1, accountToken);
           s.setString(2, accountToken);
           s.setObject(3, Tenant.utc(decidedAt.minus(FreezePolicy.WINDOW)));

@@ -48,6 +48,7 @@ public final class JdbcAccountStatus implements AccountStatusPort {
       try {
         Tenant.use(c, institutionId);
         try (PreparedStatement s = c.prepareStatement(SELECT_LATEST_FREEZE_EVENT)) {
+          s.setQueryTimeout(1);
           s.setString(1, accountToken);
           try (ResultSet row = s.executeQuery()) {
             boolean frozen = row.next() && row.getBoolean(1);

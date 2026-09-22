@@ -81,6 +81,15 @@ public final class MicrometerDecisionMetrics implements DecisionMetrics {
   }
 
   @Override
+  public void stateWriteFailed(String what) {
+    Counter.builder("fs_decision_state_write_failures_total")
+        .description("Fast-state writes that failed after the decision was durable")
+        .tag("state", what)
+        .register(registry)
+        .increment();
+  }
+
+  @Override
   public void timeoutRelease(String channel) {
     Counter.builder("fs_alert_timeout_release_total")
         .tag("channel", channel)
