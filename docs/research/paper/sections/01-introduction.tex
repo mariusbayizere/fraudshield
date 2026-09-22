@@ -1,0 +1,56 @@
+\section{Introduction}
+\label{sec:introduction}
+
+Digital payments in East Africa run largely over mobile money: person-to-person transfers,
+agent cash-in and cash-out, merchant payments and USSD sessions on basic handsets, alongside
+cards and bank transfers. The fraud that accompanies them (SIM-swap account takeover, agent float
+manipulation, mule accounts, social-engineering scams) is shaped by those channels. Systems
+designed around card fraud in other markets assume device fingerprints, card-present signals and
+merchant structures that many of these transactions do not have \cite{TODO-verify}. We do not
+repeat the frequently quoted figures about the growth of mobile money fraud in the region: the
+claims register of this project lists each of them as unverified or replaced, and this paper
+states none of them as fact (Section~\ref{sec:limitations}).
+
+FraudShield is a fraud detection system built to a written specification (a software
+requirements specification, SRS, corrected by a register of 51 binding resolutions) for this
+setting: a synchronous decision path that returns a decision to core banking with a server-side
+latency target, an explainable scoring model, and an analyst console. Building it required data
+on which the model could be trained and evaluated. No public, labelled, East African
+transaction dataset was available to us, so we built one: FraudShield-EAC, an agent-based,
+seeded simulator of customers, agents, merchants and eight fraud scenarios across Rwanda, Kenya,
+Tanzania, Uganda and the Democratic Republic of the Congo.
+
+A synthetic benchmark invites a particular failure. It is easy to generate one on which a model
+scores highly and hard to know whether the score measures learning or the generator. Much of this
+project's effort went into interrogating the benchmark until it gave up its structure, and
+publishing each interrogation whether or not it flattered the dataset. That record, not the
+benchmark, is the first contribution.
+
+\paragraph{Contributions.} We claim four things, each of which a reader can check against the
+repository and disagree with:
+\begin{enumerate}
+  \item \textbf{A benchmark-construction methodology and its measured failure modes}
+        (Sections~\ref{sec:dataset}, \ref{sec:evaluation} and \ref{sec:discussion}). A single
+        feature reaches \nFloorM{}, so a model AUC quoted against chance overstates the quantity
+        that matters; four disjoint feature groups each nearly solve the task alone; and the
+        record of controls that failed, how each failure was found, and what now enforces it.
+  \item \textbf{A detection failure on a pre-registered non-burst variant}
+        (Section~\ref{sec:generalisation}): recall \nRevRecall{} \nRevCI{} against
+        \nBaseVarRecall{} \nBaseVarCI{}, measured on a held-out shape rather than inferred from
+        ablation margins.
+  \item \textbf{Two generalisation nulls, and why this benchmark could not make them
+        informative} (Section~\ref{sec:generalisation}): leave-one-country-out and a novel
+        variant held out in time both fail to test generalisation, because the benchmark
+        encodes fraud as bursts and its fraud mechanisms are country-invariant by construction.
+  \item \textbf{The latency--explainability frontier} (Section~\ref{sec:evaluation}): the cost
+        of an exact TreeSHAP explanation across tree complexity, reported at the median only,
+        because the development machine cannot produce a repeatable 99th percentile.
+\end{enumerate}
+The redundancy finding (item 1) is stated separately in Section~\ref{sec:evaluation} because it
+is a result about how scenario-driven generators encode signal, not a detail of one table.
+
+The system itself, \nFeatures{} features computed on two independent paths with a parity suite, a
+published temporal split, and a governance apparatus that refuses stale evidence, is the setting
+of these results and is not claimed as a research contribution. Its deviations from the
+specification are recorded as architecture decision records (ADRs), which we cite where they
+matter.
