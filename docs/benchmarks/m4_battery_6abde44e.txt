@@ -1,4 +1,4 @@
-# evidence-commit: 33cb827f5f958f117b43da6d75d67747ceedb300
+# evidence-commit: d15f165e52f0e1365d4101f7083129eba14138a9
 # evidence-tree-state: clean
 # command: .venv/bin/python -u -m fraudshield_ml.cli battery dataset/output/features_full.parquet
 # exit: 0
@@ -116,8 +116,13 @@ never seen it. All variants scored against the same legitimate rows at one thres
   adapted_below_threshold            0.988 +/-0.076  0.750         3      4
   base                               0.994 +/-0.005  0.951       481    506
 
-  The unseen shape is caught at 100.0% against 95.1% for the shape the model
-  trained on (base). The gap is the cost of never having seen it.
+  The unseen shape is caught at 100.0%; the shape the model trained on (base)
+  at 95.1%.
+  **The unseen shape is caught at least as often as the familiar one, so this
+  experiment does not measure generalisation on this benchmark.** The novelty is
+  in the lead time, not in the transaction pattern: the drain is still a burst,
+  and a model that detects bursts catches it without having seen the variant.
+  Reported as a null result rather than dropped (PB-59, PB-61).
 
 LEAVE-ONE-COUNTRY-OUT — the country is removed from training entirely, then scored.
   Compare each row against the same country in BY COUNTRY, not against the headline: a

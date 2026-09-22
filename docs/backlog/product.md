@@ -1042,6 +1042,43 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
   was omitted for being unflattering. State in the paper that geographic generalisation is easy on
   this benchmark and says nothing. Then make the **novel sub-variant** experiment the load-bearing
   one, since a temporal hold-out is the only one of the two that can still fail.
+- **Closed 2026-09-22 (owner decision).** LOCO is accepted as a null result and the generator is
+  **not** changed to make countries differ: engineering country-specific fraud so the experiment
+  becomes informative would be tuning the benchmark to produce a result. The mechanism is
+  confirmed and now tested — `test_no_fraud_parameter_is_keyed_by_country` asserts that no fraud
+  parameter is keyed by a country code, so country enters only as a lookup for *which* mule,
+  merchant, agent, currency or offset an incident uses. Recorded in the datasheet, the claims
+  register and the paper's limitations; removed from the contribution list. Country-level
+  generalisation belongs to the real-data validation plan, not to a benchmark whose fraud
+  mechanisms are country-invariant.
+- **And the replacement failed the same way (PB-61).** The novel sub-variant was promoted to
+  load-bearing on 2026-09-22 and measured the same evening: the unseen shape is caught at **100%**
+  (38 of 38) against 95.1% for the shape the model trained on. Both of PB-46's generalisation
+  experiments are null, for one reason — see PB-61.
+
+### PB-61 · Both generalisation experiments are null, and the cause is the same
+- **Source:** the novel-variant hold-out, 2026-09-22 · **Priority:** high · **Due:** before the
+  paper's evaluation section is written
+- **Measured:** the novel sub-variant (`novel_esim_delayed_drain`, present only in the test period
+  so the model has provably never seen it) is caught at **100.0%** on 38 fraud rows, AUC 0.999,
+  against **95.1%** and 0.994 for the base variant at the same threshold and against the same
+  legitimate rows. The unseen shape is *easier*, not harder.
+- **Why, and it is the same reason as PB-59 and PB-60.** The benchmark encodes fraud as **bursts**.
+  The novel variant's novelty is in the *lead time* — a drain delayed by days rather than minutes
+  after the enabling event — and not in the transaction pattern, which is still a burst. A model
+  that detects bursts catches it without ever having seen the variant. Equally, four disjoint
+  feature groups each reach ≥0.845 alone because each is a different view of the same burst, and
+  removing a country removes no mechanism because every country's fraud is the same burst.
+- **The honest statement:** this benchmark supports **no** generalisation claim. Not geographic,
+  not temporal-to-an-unseen-variant. It supports claims about detection *given* burst-structured
+  fraud, and about the cost of computing and explaining that detection.
+- **Acceptance:** report both experiments as null results with the shared cause named; remove
+  generalisation from the paper's contribution list; and state in the datasheet and the model card
+  that a variant differing only in timing is not an out-of-distribution test. If a future draw
+  wants a real one, it needs a variant whose **transaction pattern** differs — which changes the
+  draw and is an owner decision.
+- **Not a reason to engineer one now.** The same argument as PB-59: designing a variant until the
+  experiment fails would be tuning the benchmark to produce a result.
 - **Not in scope here:** making the generator's scenarios country-specific. That would change the
   draw and is an owner decision; it would also be a claim about how fraud differs between these
   markets, which the 2026-09-18 sourcing pass established no publication supports.
