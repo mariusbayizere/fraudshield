@@ -101,7 +101,9 @@ def corpus(rows: int = 260, seed: int = 20260922) -> tuple[list[Transaction], di
                 is_fraud=rng.random() < 0.4,
                 available_at=when + timedelta(seconds=rng.choice([60, 3_600, 200_000])),
             )
-    out.extend(_window_edges(len(out)))
+    edges, edge_outcomes = _window_edges(len(out))
+    out.extend(edges)
+    outcomes.update(edge_outcomes)
     out.sort(key=lambda tx: (tx.timestamp, tx.transaction_id))
     return out, outcomes
 
@@ -117,12 +119,21 @@ EDGE_SPANS = (
 )
 
 
-def _window_edges(start_index: int) -> list[Transaction]:
-    """One account whose history lands exactly on each window edge, and a microsecond either side.
+def _window_edges(start_index: int) -> tuple[list[Transaction], dict[str, Outcome]]:
+    """History that lands exactly on each window edge, and a microsecond either side.
 
     The batch path takes `start < row.timestamp < scored` and the store takes `s > t - span`: an
     inclusive/exclusive flip at either end changes a count only when a row sits exactly on the
     edge, which a random gap set never produces (review finding 7).
+
+    A7's own rows reach the account-velocity windows and the amount statistics. The store has two
+    further copies of the same arithmetic, on keys A7's rows do not decide (re-review N4): the
+    geo-cell 30 d range and the counterparty 90 d and 24 h ranges. Those are reached by rows from
+    *other* accounts sharing the scored transaction's cell and counterparty, and by verdicts that
+    have arrived before it is scored — `geo_cell_fraud_rate_30d` and
+    `counterparty_confirmed_fraud_90d` count nothing without them. The senders window is a set of
+    accounts rather than a count, so a neighbouring row would mask the edge: each of its three
+    positions gets a sender of its own.
     """
     anchor = START + timedelta(days=200)
     account, rows = "A7", []
@@ -171,7 +182,54 @@ def _window_edges(start_index: int) -> list[Transaction]:
             merchant_category_code="5411",
         )
     )
-    return rows
+
+    # Rows other accounts contribute to the cell and the counterparty the scored row uses.
+    outcomes: dict[str, Outcome] = {}
+    micro = timedelta(microseconds=1)
+    shared = [
+        (f"cell{j}", "A9", "C3", at, True)
+        for j, at in enumerate(_around(anchor - timedelta(days=30), micro))
+    ]
+    shared += [
+        (f"cpfraud{j}", "A9", "C0", at, True)
+        for j, at in enumerate(_around(anchor - timedelta(days=90), micro))
+    ]
+    # One sender per position: `counterparty_unique_senders_24h` is a set, so a row on the inside
+    # would hide an edge row whichever way the comparison went.
+    shared += [
+        (f"sender{j}", sender, "C0", at, False)
+        for j, (sender, at) in enumerate(
+            zip(("A9", "A10", "A11"), _around(anchor - timedelta(hours=24), micro), strict=True)
+        )
+    ]
+    for tid, sender, counterparty, at, fraud in shared:
+        rows.append(
+            Transaction(
+                transaction_id=tid,
+                account_id=sender,
+                timestamp=at,
+                amount_rwf=2_500.0,
+                latitude=-1.95,
+                longitude=30.06,
+                account_country="RW",
+                counterparty_country="RW",
+                counterparty_id=counterparty,
+                amount_minor=2_500,
+                currency="RWF",
+                channel="MOBILE_MONEY",
+                device_fingerprint="D0",
+                merchant_category_code="5411",
+            )
+        )
+        if fraud:
+            # The verdict is in before the scored row, so it counts at scoring time (E.2).
+            outcomes[tid] = Outcome(tid, is_fraud=True, available_at=at + timedelta(hours=1))
+    return rows, outcomes
+
+
+def _around(edge: datetime, micro: timedelta) -> tuple[datetime, datetime, datetime]:
+    """Exactly on the edge, a microsecond inside it, a microsecond outside it."""
+    return edge, edge + micro, edge - micro
 
 
 def reference_data() -> dict[str, object]:

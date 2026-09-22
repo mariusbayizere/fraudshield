@@ -57,6 +57,7 @@ class FakeMlflow:
         self.experiments: dict[str, str] = {}
         self.runs: dict[str, dict[str, Any]] = {}
         self.requests: list[tuple[str, str]] = []
+        self.tags: dict[tuple[str, str], dict[str, str]] = {}
 
     def handle(  # noqa: PLR0911 - one return per endpoint and error
         self, method: str, path: str, query: dict[str, str], body: bytes
@@ -82,6 +83,9 @@ class FakeMlflow:
             version = str(len(model["versions"]) + 1)
             model["versions"][version] = data["source"]
             return 200, {"model_version": {"version": version, "source": data["source"]}}
+        if path == "/api/2.0/mlflow/model-versions/set-tag":
+            self.tags.setdefault((data["name"], data["version"]), {})[data["key"]] = data["value"]
+            return 200, {}
         if path == "/api/2.0/mlflow/model-versions/get":
             source = self.models[query["name"]]["versions"][query["version"]]
             return 200, {"model_version": {"version": query["version"], "source": source}}
@@ -571,3 +575,75 @@ def _gate(path: Path) -> GateDecision:
     decision = read_gate(path)
     assert decision is not None
     return decision
+
+
+@pytest.mark.req("ML-GATE-13", "D-11")
+def test_a_report_that_refuses_without_a_reason_does_not_promote(
+    mlflow: tuple[FakeMlflow, str], bundle_dirs: tuple[Path, Path], tmp_path: Path
+) -> None:
+    """The gate is a report an external comparator writes, so its `promote` flag is checked
+    against the figures beside it, not trusted (re-review N1)."""
+    fake, url = mlflow
+    registry = MlflowRegistry(url)
+    registry.publish(NAME, bundle_dirs[0], alias=PRODUCTION, override=FIRST)
+    registry.publish(NAME, bundle_dirs[1])
+
+    silent = _gate_report(tmp_path / "silent.json", promote=False, reasons=[])
+    with pytest.raises(PromotionRefused, match="named no reason"):
+        registry.promote(NAME, PRODUCTION, "2", tmp_path / "c", gate=_gate(silent))
+
+    for field, value, expected in [
+        ("scored", 3, "need 50000"),
+        ("label_coverage", 0.01, "under 30%"),
+        ("auc_delta", -0.5, "below -0.01"),
+        ("psi", 0.9, "not below 0.2"),
+        ("auc_delta", None, "no AUC delta"),
+    ]:
+        lying = _gate_report(tmp_path / f"{field}.json", promote=True, reasons=[], **{field: value})
+        with pytest.raises(PromotionRefused, match=expected):
+            registry.promote(NAME, PRODUCTION, "2", tmp_path / "c", gate=_gate(lying))
+    assert fake.models[NAME]["aliases"][PRODUCTION] == "1", "no refusal moved the alias"
+
+
+@pytest.mark.req("ML-GATE-13", "D-11")
+def test_an_override_is_recorded_on_the_version_it_promoted(
+    mlflow: tuple[FakeMlflow, str], bundle_dirs: tuple[Path, Path], tmp_path: Path
+) -> None:
+    """`--override` says "(recorded)"; this is the record (re-review N1b)."""
+    fake, url = mlflow
+    registry = MlflowRegistry(url)
+    registry.publish(NAME, bundle_dirs[0], alias=PRODUCTION, override=FIRST)
+    assert fake.tags[(NAME, "1")]["fraudshield.promotion_override"] == FIRST
+    assert "fraudshield.promoted_at" in fake.tags[(NAME, "1")]
+
+    registry.publish(NAME, bundle_dirs[1])
+    registry.promote(
+        NAME, PRODUCTION, "2", tmp_path / "c", gate=_gate(_gate_report(tmp_path / "ok.json"))
+    )
+    recorded = fake.tags[(NAME, "2")]
+    assert "fraudshield.promotion_override" not in recorded, "the gate passed; nothing was skipped"
+    assert "60000 scores" in recorded["fraudshield.promotion_gate"]
+
+
+@pytest.mark.req("FR-02-10", "D-50")
+def test_a_rollback_through_fs_model_alias_needs_no_shadow_gate(
+    mlflow: tuple[FakeMlflow, str], bundle_dirs: tuple[Path, Path], tmp_path: Path
+) -> None:
+    """D-50: rollback is one alias move. The version `previous_production` holds has already
+    served, so mid-incident nobody is asked for a 24-hour shadow window (re-review N2)."""
+    fake, url = mlflow
+    registry = MlflowRegistry(url)
+    registry.publish(NAME, bundle_dirs[0], alias=PRODUCTION, override=FIRST)
+    registry.publish(NAME, bundle_dirs[1])
+    registry.promote(
+        NAME, PRODUCTION, "2", tmp_path / "c", gate=_gate(_gate_report(tmp_path / "ok.json"))
+    )
+    assert fake.models[NAME]["aliases"] == {PRODUCTION: "2", PREVIOUS: "1"}
+
+    argv = ["alias", "--mlflow", url, PRODUCTION, "1", "--cache", str(tmp_path / "c")]
+    assert model_cli.main(argv) == 0, "the rollback an operator runs, with no --gate"
+    assert fake.models[NAME]["aliases"][PRODUCTION] == "1"
+    assert fake.models[NAME]["aliases"][PREVIOUS] == "2", "and it can be rolled forward again"
+    assert fake.tags[(NAME, "1")]["fraudshield.promotion_gate"].startswith("rollback")
+    forward = ["alias", "--mlflow", url, PRODUCTION, "2", "--cache", str(tmp_path)]
+    assert model_cli.main(forward) == 0, "rolling forward again is the same one move"

@@ -56,7 +56,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     publish.add_argument("--override", help="promote without a shadow gate, and why (recorded)")
 
     alias = commands.add_parser(
-        "alias", help="move an alias: promote, roll back, or switch shadow mode on (D-50)"
+        "alias",
+        help="move an alias: promote, roll back, or switch shadow mode on (D-50). Rolling "
+        "production back to the version previous_production holds needs no --gate: it has served",
     )
     alias.add_argument("--mlflow", required=True)
     alias.add_argument("--name", default="fraudshield-ensemble")
