@@ -4,6 +4,7 @@ import { App } from './app/App';
 import { rememberedLanguage } from './app/preferences';
 import { createAppRouter } from './app/router';
 import { directionOverride } from './i18n/direction';
+import { installAuthInterceptor } from './auth/tokens';
 import { createI18n } from './i18n/i18n';
 import { preferredLanguage } from './i18n/languages';
 import { regionFor } from './region/packs';
@@ -12,6 +13,7 @@ import './styles/app.css';
 async function start(root: HTMLElement): Promise<void> {
   // The deployment names its country; there is no default country (ADR 0023).
   const region = regionFor(import.meta.env['VITE_FS_COUNTRY'] as string | undefined);
+  installAuthInterceptor();
   const i18n = await createI18n(rememberedLanguage() ?? preferredLanguage(navigator.languages));
   if (import.meta.env.MODE === 'development' && import.meta.env['VITE_FS_MOCKS'] !== 'off') {
     // Development only: this branch, and the mocks with it, do not exist in a production build

@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { bodyOf } from '../api/body';
 import { getSystemStatus } from '../api/generated/sdk.gen';
 import { checked } from '../api/validate';
 import {
@@ -10,15 +11,12 @@ import {
 export const SYSTEM_STATUS_POLL_MS = 60_000;
 
 export async function fetchSystemConditions(): Promise<SystemCondition[]> {
-  const { data, error } = await getSystemStatus();
-  // The generated types promise a body, but a proxy, a 204 or a truncated response can deliver
-  // none, and production does not run the schema check (ADR 0080 §3).
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-  if (error !== undefined || data === undefined) {
+  const status = bodyOf(await getSystemStatus());
+  if (status === undefined) {
     throw new Error('the system status could not be read');
   }
-  await checked('zSystemStatus', data);
-  return SYSTEM_CONDITIONS.filter((condition) => data.degraded_modes.includes(condition));
+  await checked('zSystemStatus', status);
+  return SYSTEM_CONDITIONS.filter((condition) => status.degraded_modes.includes(condition));
 }
 
 /**

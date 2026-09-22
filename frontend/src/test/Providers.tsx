@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { i18n as I18n } from 'i18next';
 import { useState, type ReactNode } from 'react';
 import { I18nextProvider } from 'react-i18next';
+import { SessionProvider, type SessionStatus } from '../auth/session';
 import { ThemeRoot } from '../design-system/ThemeRoot';
 import type { ColourMode } from '../design-system/tokens';
 import type { Direction } from '../i18n/direction';
@@ -21,6 +22,8 @@ export interface ProviderOptions {
   region?: Region;
   i18n?: I18n;
   queryClient?: QueryClient;
+  /** The session the component renders inside; 'restoring' tries the refresh cookie. */
+  session?: SessionStatus;
 }
 
 const ENGLISH = testI18n();
@@ -32,6 +35,7 @@ export function Providers({
   region = COUNTRY_Z,
   i18n = ENGLISH,
   queryClient,
+  session = 'authenticated',
   children,
 }: ProviderOptions & { children: ReactNode }) {
   const [client] = useState(() => queryClient ?? testQueryClient());
@@ -40,7 +44,7 @@ export function Providers({
       <RegionProvider region={region}>
         <QueryClientProvider client={client}>
           <ThemeRoot mode={mode} direction={direction}>
-            {children}
+            <SessionProvider initial={session}>{children}</SessionProvider>
           </ThemeRoot>
         </QueryClientProvider>
       </RegionProvider>

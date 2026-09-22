@@ -45,6 +45,7 @@
       "riskOfficer": "Risque",
       "admin": "Administration",
       "settings": "Vous"
-    }
+    },
+    "restoringSession": "Restauration de votre session"
   }
 }

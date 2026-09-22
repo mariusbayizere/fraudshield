@@ -15,7 +15,13 @@ describe('App', () => {
       history: createMemoryHistory({ initialEntries: ['/search'] }),
     });
     render(
-      <App i18n={testI18n()} region={COUNTRY_Z} router={router} directionOverride={override} />,
+      <App
+        i18n={testI18n()}
+        region={COUNTRY_Z}
+        router={router}
+        directionOverride={override}
+        sessionStatus="authenticated"
+      />,
     );
     // The shell is a lazy route (ADR 0080 §10); its first import takes longer than the default.
     const heading = await screen.findByRole(

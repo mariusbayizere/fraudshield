@@ -40,7 +40,8 @@
       "shell.group.analyst": "machine_draft",
       "shell.group.riskOfficer": "machine_draft",
       "shell.group.admin": "machine_draft",
-      "shell.group.settings": "machine_draft"
+      "shell.group.settings": "machine_draft",
+      "shell.restoringSession": "machine_draft"
     },
     "designSystem": {
       "tier.high": "machine_draft",
@@ -67,6 +68,21 @@
       "banner.DEGRADED_MODE": "machine_draft",
       "banner.KAFKA_SPOOLING": "machine_draft",
       "banner.REALTIME_PAUSED": "machine_draft"
+    },
+    "auth": {
+      "login.title": "machine_draft",
+      "login.email": "machine_draft",
+      "login.password": "machine_draft",
+      "login.showPassword": "machine_draft",
+      "login.hidePassword": "machine_draft",
+      "login.signIn": "machine_draft",
+      "login.signingIn": "machine_draft",
+      "login.forgotPassword": "machine_draft",
+      "login.register": "machine_draft",
+      "login.error.invalidCredentials": "machine_draft",
+      "login.error.locked": "machine_draft",
+      "login.error.tooManyAttempts": "machine_draft",
+      "login.error.unavailable": "machine_draft"
     }
   },
   "fr": {
@@ -110,7 +126,8 @@
       "shell.group.analyst": "machine_draft",
       "shell.group.riskOfficer": "machine_draft",
       "shell.group.admin": "machine_draft",
-      "shell.group.settings": "machine_draft"
+      "shell.group.settings": "machine_draft",
+      "shell.restoringSession": "machine_draft"
     },
     "designSystem": {
       "tier.high": "machine_draft",
@@ -138,6 +155,21 @@
       "banner.DEGRADED_MODE": "machine_draft",
       "banner.KAFKA_SPOOLING": "machine_draft",
       "banner.REALTIME_PAUSED": "machine_draft"
+    },
+    "auth": {
+      "login.title": "machine_draft",
+      "login.email": "machine_draft",
+      "login.password": "machine_draft",
+      "login.showPassword": "machine_draft",
+      "login.hidePassword": "machine_draft",
+      "login.signIn": "machine_draft",
+      "login.signingIn": "machine_draft",
+      "login.forgotPassword": "machine_draft",
+      "login.register": "machine_draft",
+      "login.error.invalidCredentials": "machine_draft",
+      "login.error.locked": "machine_draft",
+      "login.error.tooManyAttempts": "machine_draft",
+      "login.error.unavailable": "machine_draft"
     }
   },
   "sw": {
@@ -181,7 +213,8 @@
       "shell.group.analyst": "machine_draft",
       "shell.group.riskOfficer": "machine_draft",
       "shell.group.admin": "machine_draft",
-      "shell.group.settings": "machine_draft"
+      "shell.group.settings": "machine_draft",
+      "shell.restoringSession": "machine_draft"
     },
     "designSystem": {
       "tier.high": "machine_draft",
@@ -208,6 +241,21 @@
       "banner.DEGRADED_MODE": "machine_draft",
       "banner.KAFKA_SPOOLING": "machine_draft",
       "banner.REALTIME_PAUSED": "machine_draft"
+    },
+    "auth": {
+      "login.title": "machine_draft",
+      "login.email": "machine_draft",
+      "login.password": "machine_draft",
+      "login.showPassword": "machine_draft",
+      "login.hidePassword": "machine_draft",
+      "login.signIn": "machine_draft",
+      "login.signingIn": "machine_draft",
+      "login.forgotPassword": "machine_draft",
+      "login.register": "machine_draft",
+      "login.error.invalidCredentials": "machine_draft",
+      "login.error.locked": "machine_draft",
+      "login.error.tooManyAttempts": "machine_draft",
+      "login.error.unavailable": "machine_draft"
     }
   }
 }
