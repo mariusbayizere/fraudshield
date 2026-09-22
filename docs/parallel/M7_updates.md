@@ -158,3 +158,18 @@ Final branch state: `2dc718c`, pushed.
 No merge to `main`, no `m7-complete` tag, no milestone walkthrough status block in
 `SESSION_STATE.md`. M7's HTTP surface runs only in the test application until M6 assembles the API
 application.
+
+## Hybrid persistence (ADR 0071), 2026-09-22
+
+- Commits `11cadf6` (migration), `24016f9` (review fixes) and `f1e9d48` (ADR).
+- Evidence: `docs/benchmarks/m7_evidence_f1e9d48.md`. Review: addendum in
+  `docs/reviews/M7/staff-auth.md` (2 MAJOR, both fixed; 12 of 13 mutations killed, and the
+  survivor is covered by a second defence).
+- **V12 changed in place:** the `users_bump_version` trigger is removed and JPA `@Version` owns
+  `users.version`. V12 exists only on this branch. A developer database that already ran the old
+  V12 needs `flyway repair` or a rebuild before integration.
+- **Licence exceptions** extend the owner's earlier approval for Jakarta Mail/Angus Mail to the
+  same ADR 0020 case: `jakarta.persistence-api` 3.2.0 (EPL-2.0 OR BSD-3-Clause) and
+  `jakarta.transaction-api` 2.0.1 (EPL-2.0 OR GPL-2.0 with Classpath exception), version-pinned
+  in `tools/src/fraudshield_tools/licences.py`. **Please confirm at integration.**
+- The rule for M6 is under "Persistence rule for M6 and later milestones" above.

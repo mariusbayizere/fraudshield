@@ -116,3 +116,62 @@ R-8. In short:
 - per-instance limits while Redis is down;
 - the client IP depends on the proxy configuration;
 - only logout-all is raced against rotation in a test.
+
+## Addendum: hybrid persistence (ADR 0071), commits `11cadf6`..`f1e9d48`
+
+After approval, the owner asked for the staff CRUD domain to move to Spring Data JPA/Hibernate.
+The audit chain, refresh tokens, one-time codes, verification tokens and pre-tenant lookups stay
+in explicit SQL. An independent reviewer agent, which had no part in writing the change, reviewed
+`c693160..11cadf6` for BLOCKER and MAJOR findings only. It read the code and ran no builds, for the
+same memory reason as above.
+
+Verdict of that review: **CHANGES_REQUIRED**, with 2 MAJOR findings and no BLOCKER. Both were fixed
+in `24016f9`; the author checked the fixes and killed their mutations (below).
+
+| # | Severity | Location | Finding | Resolution | Status |
+|---|---|---|---|---|---|
+| P1 | MAJOR | `StaffAccountRepository.findByIdForUpdate`, `applyAdminEdit`; `ApiKeyRepository.findForUpdate` | A locking query returns the instance the persistence context already holds without refreshing it. If an admin edited their own profile while their password changed, the full-row flush wrote the old hash and token version back, bringing revoked sessions and the old password back to life | Locked reads refresh after the lock; both entities are `@DynamicUpdate` | Fixed `24016f9`; `lockedReadReloadsSoAnEditCannotWriteBackStaleState`; K2 killed |
+| P2 | MAJOR | `StaffUserJpaRepository` bulk updates | With the V12 trigger removed, status changes made by sign-in and lockout (failure lock, unlock, lock lifted) no longer advanced the ETag version, so an admin could unlock a brute-force lock they had never seen | Bulk updates advance `version` exactly when the status changes | Fixed `24016f9`; `statusChangesAdvanceTheVersionAsTheRemovedTriggerDid`; K3 killed |
+
+The reviewer checked and found sound:
+
+- row-level security through `JpaTransactionManager`'s shared connection, failing closed without a
+  tenant;
+- the bulk JPQL equivalent to the old SQL;
+- flush-before-JDBC write order;
+- the mappings;
+- no test weakened.
+
+The V12 checksum change is safe because V12 exists only on this branch. Any persistent developer
+database that ran the old V12 needs `flyway repair` or a rebuild.
+
+### Checks re-run
+
+- `-pl common,persistence,audit,auth,admin install` at `11cadf6` → BUILD SUCCESS. Tests: 1,131 /
+  60 / 50 / 131 / 27, with 0 failures, and all gates met.
+- `-pl common,persistence,audit,auth,admin verify` at `f1e9d48` → BUILD SUCCESS. Tests: 1,131 / 60
+  / 50 / 133 / 27, with 0 failures; Checkstyle 0, SpotBugs 0, all coverage gates met.
+
+  This includes the 756-call matrix, `RefreshRaceTest` and the timing tests. Record:
+  `docs/benchmarks/m7_evidence_f1e9d48.md`.
+
+### Mutation spot checks on the migrated repositories (at `24016f9`)
+
+| # | Mutation | Test | Result |
+|---|---|---|---|
+| J1 | `@EntityGraph` removed from the office-range listing | `QueryCountTest.listingOfficeRangesWithTheirCreatorsIsOneQueryWhateverTheCount` | killed |
+| J2 | `@Lock` removed from `findForUpdate` | `RefreshRaceTest.signOutEverywhereRacingRotationLeavesNoLiveToken` | killed |
+| J3 | `@Lock` removed from `lockActiveAdmins` | `UserAdministrationTest.concurrentMutualDemotionLeavesOneActiveAdmin` | killed |
+| J4 | No flush after `insert` | `RegistrationTest.registrationCreatesPendingAccountWithRequestedRoleButNoGrantedRole` | killed |
+| J5 | `@Version` removed | `HybridPersistenceTest.versionIsJpaOptimisticLock` | killed |
+| J6 | The token-version bulk update also bumps `version` | `HybridPersistenceTest.signInBookkeepingDoesNotAdvanceTheVersion` | killed |
+| J7 | The tenant `set_config` sets the wrong key | `HybridPersistenceTest` (5 of 6 tests error) | killed |
+| J8 | The guard allows `ddl-auto=update` | `PersistenceSettingsTest.refusesSchemaGenerationAndOpenInView` | killed |
+| J9 | Open-in-view on by default | `PersistenceSettingsTest.defaultsValidateSchemaAndDisableOpenInView` | killed |
+| J10 | `clearAutomatically` removed from `incrementFailures` | `LoginTest.fifthFailureLocksTheAccount…`, `failedSignInLockLiftsByItself…` | killed |
+| K1 | Refresh after the lock removed (`@DynamicUpdate` kept) | `lockedReadReloadsSoAnEditCannotWriteBackStaleState` | survived, by design: `@DynamicUpdate` alone still prevents the stale write-back |
+| K2 | Refresh and `@DynamicUpdate` both removed | same | killed |
+| K3 | A failure lock does not advance `version` | `statusChangesAdvanceTheVersionAsTheRemovedTriggerDid` | killed |
+
+Script: one mutation at a time, then `git checkout` of the file; the tree was clean after the
+batch.
