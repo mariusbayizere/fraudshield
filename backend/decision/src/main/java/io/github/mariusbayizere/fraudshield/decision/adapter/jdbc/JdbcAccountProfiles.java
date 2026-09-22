@@ -22,12 +22,15 @@ public final class JdbcAccountProfiles {
    *
    * @param firstSeenAt first transaction in FraudShield
    * @param openedAt opening date, if supplied
+   * @param frozen whether the latest freeze event is FROZEN (V5 {@code account_freeze_events})
    */
-  public record Profile(Instant firstSeenAt, Instant openedAt) {}
+  public record Profile(Instant firstSeenAt, Instant openedAt, boolean frozen) {}
 
   private static final String SELECT_ACCOUNT_PROFILES =
       """
-      SELECT first_seen_at, opened_at FROM account_profiles WHERE account_token = ?
+      SELECT p.first_seen_at, p.opened_at, coalesce((SELECT e.event = 'FROZEN' FROM
+      account_freeze_events e WHERE e.account_token = p.account_token ORDER BY e.occurred_at DESC
+      LIMIT 1), false) FROM account_profiles p WHERE p.account_token = ?
       """;
 
   private final DataSource dataSource;
@@ -65,7 +68,8 @@ public final class JdbcAccountProfiles {
                   Optional.of(
                       new Profile(
                           row.getObject(1, OffsetDateTime.class).toInstant(),
-                          opened == null ? null : opened.toInstant()));
+                          opened == null ? null : opened.toInstant(),
+                          row.getBoolean(3)));
             }
             c.commit();
             return profile;

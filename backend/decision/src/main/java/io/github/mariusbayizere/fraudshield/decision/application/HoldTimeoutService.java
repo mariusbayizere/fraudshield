@@ -5,6 +5,7 @@ import io.github.mariusbayizere.fraudshield.decision.application.port.DecisionMe
 import io.github.mariusbayizere.fraudshield.decision.application.port.DecisionStatePort;
 import io.github.mariusbayizere.fraudshield.decision.application.port.EventRecorder;
 import io.github.mariusbayizere.fraudshield.decision.application.port.HoldSchedulePort;
+import io.github.mariusbayizere.fraudshield.decision.application.port.OverdueHoldsPort;
 import io.github.mariusbayizere.fraudshield.decision.domain.DecisionState;
 import io.github.mariusbayizere.fraudshield.decision.domain.DecisionValue;
 import io.github.mariusbayizere.fraudshield.decision.domain.HoldTimeout;
@@ -79,6 +80,31 @@ public final class HoldTimeoutService {
         }
       }
     } while (due.size() == BATCH);
+    return resolved;
+  }
+
+  /**
+   * The safety net (E.6, D-14): times out persisted holds whose deadline passed more than {@code
+   * grace} ago with no later state, whatever happened to their schedule entry. Leader only. A hold
+   * the scheduler already resolved is skipped because its latest state is no longer HOLD; when the
+   * fast-path state was lost too, a repeated timeout carries the same sequence and decision, which
+   * receivers ignore (ADR 0011 section 9).
+   *
+   * @param overdue durable overdue holds
+   * @param grace how long after a deadline the sweep waits for the scheduler
+   * @return holds timed out by the sweep
+   */
+  public int reconcile(OverdueHoldsPort overdue, Duration grace) {
+    if (!holds.acquireLeadership(instanceId)) {
+      return 0;
+    }
+    int resolved = 0;
+    for (HoldSchedulePort.DueHold hold : overdue.overdue(clock.instant().minus(grace), BATCH)) {
+      holds.cancel(hold.institutionId(), hold.transactionId());
+      if (timeOut(hold).isPresent()) {
+        resolved++;
+      }
+    }
     return resolved;
   }
 
