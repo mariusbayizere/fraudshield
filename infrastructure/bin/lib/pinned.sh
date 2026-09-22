@@ -9,7 +9,8 @@
 # Usage (from a launcher):
 #   . "$(dirname "$0")/lib/pinned.sh"
 #   pinned_exec NAME VERSION URL ARTIFACT_SHA256 MEMBER BINARY_SHA256 -- "$@"
-# MEMBER is the path of the binary inside a .tar.gz, or "-" when URL is the binary itself.
+# MEMBER is the path of the binary inside a .tar.gz or .zip (by URL suffix), or "-" when URL is
+# the binary itself.
 
 pinned_exec() {
   name="$1" version="$2" url="$3" artifact_sha="$4" member="$5" binary_sha="$6"
@@ -36,7 +37,10 @@ pinned_exec() {
     if [ "$member" = "-" ]; then
       mv "$download" "$binary"
     else
-      tar -xzf "$download" -C "$cache_dir" "$member"
+      case "$url" in
+        *.zip) unzip -q -o "$download" "$member" -d "$cache_dir" ;;
+        *) tar -xzf "$download" -C "$cache_dir" "$member" ;;
+      esac
       if [ "$cache_dir/$member" != "$binary" ]; then
         mv "$cache_dir/$member" "$binary"
       fi

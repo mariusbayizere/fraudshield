@@ -1,0 +1,23 @@
+# Loki ruler alert rules (tenant directory "fraudshield"). Evaluated by the Loki ruler and sent to
+# the same Alertmanager as the Prometheus rules.
+#
+# SRS 8.2 Structured Logs: "Any ERROR log triggers PagerDuty". Java services log JSON through
+# Logback with "level": "ERROR"; Python services through structlog with "level": "error", hence
+# the case-insensitive match. Alertmanager groups these per service (alertmanager.yml) so a burst
+# of errors becomes one page, not one page per line.
+groups:
+  - name: fraudshield-error-logs
+    interval: 30s
+    rules:
+      - alert: FraudShieldErrorLogged
+        expr: |
+          sum by (namespace, app) (
+            count_over_time({namespace=~"fraudshield.*"} | json | level=~"(?i)error" [1m])
+          ) > 0
+        labels:
+          severity: page
+          team: sre
+        annotations:
+          summary: '{{ $labels.app }} logged ERROR'
+          description: '{{ $value }} ERROR log lines from {{ $labels.app }} in {{ $labels.namespace }} in the last minute.'
+          runbook_url: https://github.com/mariusbayizere/fraudshield/blob/main/docs/runbooks/FraudShieldErrorLogged.md
