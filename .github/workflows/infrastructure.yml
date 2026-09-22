@@ -1,0 +1,46 @@
+# Infrastructure validation (M9): Prometheus rules and their unit tests, Alertmanager routing,
+# Loki rules, blackbox modules, Kubernetes overlays (render, strict schema validation, Pod Security
+# "restricted" and policy checks), the Argo Rollouts canary queries, the dashboards generator and
+# the Part E.10 metric catalogue. No Docker and no cluster: every tool is a checksum-pinned
+# launcher in infrastructure/bin, the same command a developer runs locally.
+name: infrastructure
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - infrastructure/**
+      - docs/runbooks/**
+      - docs/prompts/FraudShield_Master_Build_Prompt.md
+      - contracts/openapi/**
+      - contracts/kafka/topics.yaml
+      - .github/workflows/**
+      - uv.lock
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: infrastructure-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: infrastructure (rules, routing, k8s, dashboards, metric catalogue)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: "0.12.15"
+      - run: uv sync --all-packages --locked
+      - name: validate.sh (full, including the week-long alert tests)
+        run: infrastructure/checks/validate.sh
+      - name: actionlint (every workflow)
+        run: infrastructure/bin/actionlint -color

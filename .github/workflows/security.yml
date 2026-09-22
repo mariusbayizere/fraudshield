@@ -33,81 +33,22 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # A separate step, so a registry outage or rate limit reads as a download failure rather than
-      # as findings. Trivy already falls back from mirror.gcr.io to ghcr.io.
-      - name: Download the vulnerability database (3 attempts)
-        run: |
-          for attempt in 1 2 3; do
-            infrastructure/bin/trivy fs --download-db-only --no-progress && exit 0
-            echo "::warning::trivy DB download attempt $attempt failed"
-            sleep $((attempt * 20))
-          done
-          exit 1
-      # Trivy resolves Maven parent POMs one request at a time and Maven Central answers 429 to
-      # that pattern; resolving through Maven first (cached by setup-java) gives Trivy a local
-      # ~/.m2 to read instead.
-      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
-        with:
-          distribution: temurin
-          java-version: "21.0.12"
-          cache: maven
-      - name: Resolve Maven dependencies into ~/.m2
-        working-directory: backend
-        run: ./mvnw -B -ntp -q dependency:go-offline
       - name: Scan lockfiles (uv.lock, pnpm-lock.yaml, Maven poms)
         run: |
-          infrastructure/bin/trivy fs --skip-db-update --no-progress --scanners vuln --format json \
-            --output trivy-dependencies.json .
-          infrastructure/bin/trivy convert --scanners vuln --format table trivy-dependencies.json \
-            | tee -a "$GITHUB_STEP_SUMMARY"
-      - name: Gate on HIGH/CRITICAL vulnerabilities that have a fix
-        run: |
-          gated=$(jq '[.Results[]? | .Vulnerabilities[]?
-                       | select((.Severity == "HIGH" or .Severity == "CRITICAL")
-                                and (.FixedVersion // "") != "")] | length' trivy-dependencies.json)
-          echo "HIGH/CRITICAL with a fix: $gated" | tee -a "$GITHUB_STEP_SUMMARY"
-          jq -r '.Results[]? | .Target as $t | .Vulnerabilities[]?
-                 | select((.Severity == "HIGH" or .Severity == "CRITICAL") and (.FixedVersion // "") != "")
-                 | "\($t)\t\(.PkgName) \(.InstalledVersion) -> \(.FixedVersion)\t\(.VulnerabilityID)"' \
-            trivy-dependencies.json | tee -a "$GITHUB_STEP_SUMMARY"
-          test "$gated" -eq 0
+          infrastructure/bin/trivy fs --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed \
+            --exit-code 1 --format table .
+      - name: Full report (all severities) for the artifact
+        if: always()
+        run: infrastructure/bin/trivy fs --scanners vuln --format json --output trivy-dependencies.json .
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: trivy-dependencies
           path: trivy-dependencies.json
-          if-no-files-found: ignore
           retention-days: 30
-
-  # Guarded until M9 merges (owner, 2026-10-20). Trivy's configuration scan detects Kubernetes
-  # manifests and Dockerfiles, among other IaC types this repository does not use; it has no
-  # checks for compose files or GitHub workflows (on m9/infra it detected only the 15 Kubernetes
-  # files). Main has neither yet, so the scan would check nothing and pass. Until
-  # infrastructure/k8s/ exists the job is SKIPPED (shown as skipped, never as passed) and
-  # `trivy-configuration-target` says why.
-  trivy-configuration-target:
-    name: trivy (is there configuration to scan?)
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    outputs:
-      present: ${{ steps.detect.outputs.present }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - id: detect
-        run: |
-          if [ -d infrastructure/k8s ]; then
-            echo "present=true" >>"$GITHUB_OUTPUT"
-          else
-            echo "present=false" >>"$GITHUB_OUTPUT"
-            msg="Trivy configuration scan NOT RUN: infrastructure/k8s/ does not exist on this tree (M9)."
-            echo "::warning title=trivy configuration scan not run::$msg"
-            echo "$msg" >>"$GITHUB_STEP_SUMMARY"
-          fi
 
   trivy-configuration:
     name: trivy (misconfiguration in Kubernetes manifests and Dockerfiles)
-    needs: trivy-configuration-target
-    if: needs.trivy-configuration-target.outputs.present == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
