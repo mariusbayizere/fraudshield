@@ -1,9 +1,9 @@
 # 0031 — How M4's rows close, and the two gate metrics that fail
 
-- **Status:** Accepted for the rows it settles; **the two failing gate metrics await the owner**
+- **Status:** Accepted; amended 2026-09-22 with the owner's decision on the two failing gate metrics
 - **Date:** 2026-09-22
-- **Decided by:** author, after the M4 milestone review and its fixes; the owner decides ML-GATE-03
-  and ML-GATE-06 and may overrule anything here
+- **Decided by:** author for the rows it settles; **the owner**, 2026-09-22, for ML-GATE-03 and
+  ML-GATE-06 (below)
 - **Requirements affected:** FR-02-03, FR-02-04, ML-GATE-01 … ML-GATE-11, TEST-01, TEST-02,
   TEST-14, D-01, D-02, D-05, D-06, D-09
 - **ADRs referenced:** 0027 (the M3 precedent), 0029 (Platt stays in the battery), 0030 (MLflow)
@@ -36,7 +36,8 @@ done that is not.**
 | D-09 | moved to **M11** | C-6 is measured and the card-style ablation behind C-4 now exists, but C-1, C-3, C-5, C-7 and C-8 need primary sources only the author can supply, and D-09's resolution closes when the paper states each claim. That is M11 |
 
 `milestones.yaml` keeps `current: M4` and M4 stays out of `completed` until the owner decides
-ML-GATE-03 and ML-GATE-06. The `m4-complete` tag waits on the same decision.
+ML-GATE-03 and ML-GATE-06. The `m4-complete` tag waits on the same decision. **Superseded for
+those two rows by the owner's amendment below; the text is kept as it was decided.**
 
 ## Consequences
 
@@ -51,9 +52,54 @@ ML-GATE-03 and ML-GATE-06. The `m4-complete` tag waits on the same decision.
 
 - **Mark ML-GATE-03 and 06 `DONE_WITH_DEVIATION`** so the milestone closes. A deviation status on a
   threshold that was missed reads as "met, with a difference", which it was not. ADR 0027 rejected
-  the same move for ML-DATA-07.
+  the same move for ML-DATA-07. **Overruled by the owner** (amendment below), on the condition that
+  each row records the miss itself — value, interval and cause — so the status cannot be read as
+  "met", and that the miss is published as a finding.
 - **Lower D-02's flag threshold until recall reaches 0.88.** A threshold chosen after seeing test
   metrics is tuning on test (D.3), and at the 1% FPR budget recall is 0.871, so no threshold this
   run shows would meet the gate anyway.
 - **Move the two rows to a later milestone.** They are M4's by every reading of the prompt; moving
   them would file a failure under a milestone that has not started.
+
+## Amendment 2026-09-22 — the owner's decision on ML-GATE-03 and ML-GATE-06
+
+The owner's rule, applied to each failing gate metric: a metric that **cannot be measured until a
+later milestone** is deferred to it with a traceability row, not failed; a **genuine miss on this
+benchmark** is recorded with its value, interval and cause, marked `DONE_WITH_DEVIATION` with an
+ADR, and goes into the paper as a finding, with no threshold moved and nothing tuned on the test
+set; and a failure that **points to a defect in code or measurement** blocks M4 until it is fixed.
+
+**Both are genuine misses.** They are one shortfall stated twice (FNR = 1 − recall at 0.60):
+
+| Row | Measured (declared run, `d40fca2`) | Threshold |
+|---|---|---|
+| ML-GATE-03, recall at 0.60 | **0.736** [0.707, 0.765]; five seeds 0.744 ± 0.041 | ≥ 0.880 |
+| ML-GATE-06, FNR at 0.60 | **0.264** [0.235, 0.293]; five seeds 0.256 ± 0.041 | < 0.120 |
+
+**Not deferrable.** Both were measured in M4, with intervals and seeds; neither needs later
+hardware or a later service, unlike ML-GATE-12 (dedicated hardware, ADR 0010) and ML-GATE-13
+(M5's shadow scoring), which are already filed under M5.
+
+**Not a defect, on every check available without another look at the test set.** The threshold is
+D-02's and half-open as E.6 defines tiers, pinned by a test a mutation proved has teeth. FNR is
+read at 0.60, which D-02 binds over the SRS's "at threshold 0.85" wording. The score is calibrated
+(ECE 0.001) and at 0.60 its precision is 0.927. The model has no bug that moves this number that
+the review, fifteen fixed findings and sixteen mutation checks found.
+
+**The cause, as far as the evidence reaches:**
+
+- **Ranking, not the threshold.** At the 1% FPR budget — a threshold far below 0.60, flagging 0.96%
+  of legitimate rows — recall is 0.871. No threshold the run shows reaches 0.88 at an FPR anywhere
+  near D-02's reference point of about 0.28%.
+- **Not the reversal-scam variant.** About 725 fraud rows are flagged at 0.60 (0.736 × 985). Even
+  if every one were among the 919 fraud rows that are not the variant, recall on those would be at
+  most 725 / 919 ≈ 0.789.
+- **A candidate cause, untested:** the model is trained on 30,000 rows and 260 frauds of a train
+  period holding 792,162 (PB-67). Testing it means a larger training sample reported beside this
+  run, whichever way it lands.
+
+**Decision.** Both rows become `DONE_WITH_DEVIATION` against this ADR, carrying the measured value,
+its interval and the cause above. D-02's thresholds are not changed and nothing is tuned on the
+test period. The shortfall is a finding in `docs/research/paper/contributions.md`. M4 is listed as
+completed, and `m4-complete` is tagged on the first commit carrying this decision whose CI is green
+on that exact commit.

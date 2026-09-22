@@ -1,19 +1,22 @@
-# Session state — M4 reviewed and approved; the gate passes 9 of 11 and M4 is not yet closed
+# Session state — M4 closed with two gate metrics missed and recorded; M8 next
 
 Rewritten 2026-09-22 (evening). Facts only; where something is unverified, assumed or open it says
 so.
 
 ## Read this first
 
-**One decision is waiting for the owner: whether M4 closes with two gate metrics failing.** The
-declared gate run (`docs/benchmarks/m4_gate_d8083dbc_v3.txt`) passes 9 of 11. **ML-GATE-03 (recall
-at 0.60, 0.736 against 0.88) and ML-GATE-06 (FNR at 0.60, 0.264 against 0.12) fail.** D.3 says
-record, do not tune. The rows stay `IN_PROGRESS`, M4 is not in `milestones.yaml`'s `completed`,
-and `m4-complete` is not tagged (ADR 0031). PB-62 lists the three options.
+**M4 is complete.** The declared gate run (`docs/benchmarks/m4_gate_d8083dbc_v3.txt`) passes 9 of
+11. **ML-GATE-03 (recall at 0.60, 0.736 against 0.88) and ML-GATE-06 (FNR at 0.60, 0.264 against
+0.12) are missed**, and on the owner's decision they are `DONE_WITH_DEVIATION` against ADR 0031's
+amendment: a genuine miss on this benchmark, not deferrable and not a defect, recorded with value,
+interval and cause, reported in the paper, D-02's threshold unchanged. PB-67 (a larger training
+sample) is the open test of the candidate cause.
 
-**The M4 milestone review is APPROVED_WITH_MINORS** (`docs/reviews/M4/milestone-review.md`). The
-first pass found 5 BLOCKERs and 5 MAJORs; five more were found while fixing them. All fifteen are
-fixed. The reviewer is the author, and the record says so.
+**The M4 milestone review is APPROVED_WITH_MINORS** (`docs/reviews/M4/milestone-review.md`):
+fifteen BLOCKER and MAJOR findings, all fixed. The reviewer is the author, and the record says so.
+
+**Next is M8 (front-end), as the owner planned**, in its own worktree. M5–M7 are not complete;
+`backend/` belongs to the M7 agent.
 
 ## Branches and CI
 
@@ -51,13 +54,13 @@ fixed. The reviewer is the author, and the record says so.
 
 | Item | What |
 |---|---|
-| **Owner** | ML-GATE-03/06 (PB-62), then the M4 tag; ADR 0030 (MLflow) awaits confirmation |
+| **Owner** | ADR 0030 (MLflow deferred to M5) awaits confirmation |
 | PB-67 | a larger training sample, reported beside the current run |
 | PB-63 | the CI ML gate needs a dataset in CI (M9) |
 | PB-64, 65 | clauses carried to M5 and M6 |
 | PB-66 | E.5 items beyond the gate |
 | PB-68 | frontier and battery prose at `d8083dbc` |
-| M8 | the owner's next milestone once M4 is settled |
+| M8 | next, in its own worktree |
 
 ## Things that will bite whoever picks this up
 

@@ -1127,6 +1127,9 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
   way it lands; (b) D-02's operating point revisited as a defect resolution, argued from the
   validation period and D-10's alert budget, not from the test period; (c) the shortfall accepted
   and carried into the paper as measured. The choice is the owner's.
+- **Decided 2026-09-22 (owner): option (c).** Both rows are `DONE_WITH_DEVIATION` against ADR 0031's
+  amendment, the miss recorded in each and in the paper as a finding. Option (a) stays open as
+  PB-67.
 
 ### PB-63 · The CI ML gate has no dataset to run on
 - **Source:** M4 milestone review, TEST-14, 2026-09-22 · **Priority:** medium · **Due:** M9
