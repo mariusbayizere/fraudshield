@@ -62,7 +62,8 @@ class RefreshRaceTest extends AuthIntegrationTest {
       }
       assertThat(
               query(
-                  "SELECT count(*) FROM fraudshield.refresh_tokens WHERE user_id = ? AND revoked_at IS NULL",
+                  "SELECT count(*) FROM fraudshield.refresh_tokens WHERE user_id = ?"
+                      + " AND revoked_at IS NULL",
                   account.id()))
           .as("round %d: no live refresh token survives", round)
           .isEqualTo(0L);

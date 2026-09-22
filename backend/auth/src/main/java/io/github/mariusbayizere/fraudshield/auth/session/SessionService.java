@@ -150,9 +150,7 @@ public final class SessionService {
 
   private static final int MAX_USER_AGENT = 1024;
 
-  /**
-   * refresh_tokens.user_agent is at most 1,024 characters; a longer header must not fail sign-in.
-   */
+  /** Truncates the user agent to the 1,024 characters refresh_tokens allows (finding 8). */
   private static String truncate(String userAgent) {
     return userAgent == null || userAgent.length() <= MAX_USER_AGENT
         ? userAgent
