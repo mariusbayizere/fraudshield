@@ -503,3 +503,43 @@ production. Reproduced independently on M4's gate model over 101,909 test rows:
 
 **Still open before tagging:** CI green (M5-1), the owner's ADR 0034 decision, and a re-review of
 the fixes. The latest full `ml` suite is 521 passed, 3 skipped, coverage 94.31% at bb4ece4.
+
+## 15. ADR 0034: option 3, carry (owner decision, 2026-09-22)
+
+**FR-02-09 stays NOT DONE.** The exact row text for `requirements.yaml`, which M5 does not edit:
+
+```yaml
+- id: FR-02-09
+  status: IN_PROGRESS          # not DONE: the store is built and tested; production is not fed
+  notes: >
+    The Redis feature store, its parity with the batch path, the 30-day TTL, the update latency
+    metric and the scorer's read are done and tested (M5). The row is NOT done because four
+    trained features are served from state no deployed component writes (ADR 0034, option 3,
+    owner decision 2026-09-22): outcomes (no fs.labels consumer) and account reference state
+    (no topic exists). Measured on M4's gate model over the whole test period, 101,909 rows and
+    985 frauds, twice and independently: served AUC 0.9611 against 0.9700 as trained; 254
+    transactions change risk tier; 162 of 725 frauds no longer reach the 0.60 flag threshold, a
+    22% fall in detections at the operating point. Carried with acceptance tests to M6/M9
+    (docs/parallel/M6_updates.md, M9_updates.md) and PB-68 for the DB fallback; M10's end-to-end
+    verification must re-measure this skew and require it to be zero.
+```
+
+**The other conditions, applied:**
+1. The row above.
+2. Two carries with acceptance tests, written into `docs/parallel/M6_updates.md` and
+   `docs/parallel/M9_updates.md`: (a) a consumer of `fs.labels` calling `apply_label`, with an
+   acceptance test proving a verdict reaches the store and the affected features change, including
+   the leakage case; (b) a contract and producer for account reference state, with an as-of tier
+   test. Both state that **M10 re-measures the skew and requires zero**.
+3. The fallback-to-constant metric stays, and a `FeatureServedFromConstant` Prometheus rule is
+   written out for the M9 agent in `M9_updates.md` (M9 owns the rules file and the routing).
+4. The lab notebook has "2026-09-22 · AUC moved 0.009; a fifth of the detections disappeared", and
+   `docs/parallel/M11_updates.md` carries the four-row table for the discussion and limitations,
+   with what may and may not be claimed from it.
+5. The re-review of the six fixes and the blocker handling runs in a fresh subagent; the owner
+   confirms CI afterwards so the tag lands on the final commit.
+
+**A collision to expect at merge:** `M6_updates.md`, `M9_updates.md` and `M11_updates.md` exist on
+`m6/decision`, `m9/infra` and `m11/paper` as well. Each file here is that branch's content plus one
+appended "From M5" section, so a merge should keep both sides; if git reports a conflict, keep
+both.

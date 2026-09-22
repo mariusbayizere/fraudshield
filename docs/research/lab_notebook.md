@@ -2404,3 +2404,44 @@ is.
 split (20,000 rows, 172 frauds). A different draw or a larger split will have its own steepest
 segment, and possibly a threshold inside it, which is why the tier check runs on every build rather
 than being argued once here.
+
+### 2026-09-22 · AUC moved 0.009; a fifth of the detections disappeared
+
+**What was measured.** M5 serves M4's evaluated ensemble. Four of its trained features read state
+that no deployed component writes — transaction outcomes and account reference state — so in
+production they are constants: `counterparty_confirmed_fraud_90d` is 0, `geo_cell_fraud_rate_30d`
+is the prior, `days_since_sim_swap` is NaN, and `synthetic_identity_score` silently loses terms.
+The gate model was rebuilt from `features_gate_d8083dbc.parquet` at seed 1 and scored over the
+whole test period (101,909 rows, 985 frauds), replacing each piece of state with what serving
+actually supplies:
+
+| Serving state | Test AUC | Risk-tier changes | Frauds reaching 0.60 |
+|---|---|---|---|
+| as trained | 0.9700 | — | 725 |
+| outcomes missing (no labels consumer) | 0.9619 | 235 | 585 |
+| SIM swaps missing (no topic exists) | 0.9699 | 25 | 712 |
+| **both, as M5 ships** | **0.9611** | **254** | **563** |
+
+Measured twice, independently: by the author and by the independent Principal Reviewer, who raised
+it (`docs/reviews/M5/principal-review.md`, finding 1).
+
+**The point.** **AUC fell by 0.009, comfortably inside the gate's own 95% interval (±0.0075), while
+162 of 725 frauds stopped reaching the 0.60 flag threshold: a 22% fall in detections at the
+operating point the system actually decides on.** A ranking metric averages over every pair of
+rows; a threshold reads one row at a time. Degrading a feature that matters near the threshold and
+nowhere else moves the second and barely touches the first. A gate expressed in AUC will pass a
+system whose decisions have materially changed, and the closer a model's AUC is to 1, the less room
+there is for such a change to show up in it at all.
+
+**Why it was invisible.** Nothing failed. Every feature had a defined value, the parity tests
+compared serving against the batch path with the *same* inputs, and the store answered every read.
+The skew lives between "the store returns a feature" and "something writes what the feature reads",
+which no per-feature test covers. It was found by asking who calls the store's writers — the
+question "where does this data come from in production?" rather than "does this code compute the
+right thing?".
+
+**What follows for reporting.** Any claim of the form "serving matches training" needs to name the
+quantity it holds for. Parity within 1e-9 on the same inputs says nothing about whether the inputs
+are the same in production. The honest statement is the table above, and the M5 rows say so: the
+owner carried the gap (ADR 0034, option 3) with acceptance tests against M6/M9, a metric counting
+every affected read, an alert on it, and M10 required to re-measure the skew and find zero.
