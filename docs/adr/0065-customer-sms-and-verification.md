@@ -23,9 +23,10 @@ one GSM-7 segment in four languages.
 3. **Local time** follows the transaction currency's country (CAT, EAT; the DRC is split at 22.5°E
    between Kinshasa WAT and Lubumbashi CAT, an approximation of the provincial boundary); USD and
    EUR carry no country and are shown in UTC rather than a guessed zone.
-4. **Contract gap**: `notification-customer.parameters.masked_account` must be a masked account,
-   but the API has only tokens. The intent carries the token's last four characters; the sender
-   uses the vault's masked account number when it renders the message.
+4. **Contract gap, now closed by the vault**: `notification-customer.parameters.masked_account`
+   must be a masked account, but the API has only tokens. The intent carries the token's last four
+   characters; the sender uses the vault's masked account number when it renders the message. The
+   vault exists since ADR 0069, so what the customer reads is the account number they know.
 5. **Templates** are GSM-7, fit one segment at worst-case lengths with a verification link of at
    most 54 characters (`https://` + a 21-character domain + `/v/` + token), never ask for a PIN or
    password, and are all `machine_draft` (D-43): none has had native-speaker review.
@@ -41,5 +42,6 @@ one GSM-7 segment in four languages.
 ## Consequences
 
 `SmsPolicyTest`, `VerificationFlowTest` (including an answer whose transition fails, applied by the
-sweep), `ResilienceApiTest` (page over HTTP, block lifted and webhook delivered within 10 s). The PII-vault `ContactDirectory` is not built (no vault schema
-exists); without it the SMS channel does not start and intents stay on Kafka.
+sweep), `ResilienceApiTest` (page over HTTP, block lifted and webhook delivered within 10 s). The PII-vault `ContactDirectory` is `VaultContacts` (ADR 0069). Without
+`fraudshield.vault.url` the SMS channel still does not start and intents stay on Kafka; with it,
+sending waits on contacts being enrolled (M7's onboarding) and on the MNO SIM-swap signal.
