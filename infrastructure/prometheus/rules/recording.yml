@@ -55,3 +55,19 @@ groups:
         expr: |
           sum by (channel) (rate(fs_alert_timeout_release_total[15m]))
             / sum by (channel) (rate(fs_decisions_total{decision="HOLD"}[15m]))
+
+  - name: fraudshield-model-signals
+    interval: 1m
+    rules:
+      # ADR 0091: live AUC of @production, kept only while label coverage is at least 0.30 (the
+      # D-11 floor below which live labels are too sparse to judge a model). Below it the series is
+      # absent, so a low-coverage hour neither fires the alert nor enters the baseline.
+      - record: fraudshield:model_auc_roc:production_covered
+        expr: |
+          max(fs_model_auc_roc{alias="production"})
+          and on () max(fs_model_label_coverage{alias="production"}) >= 0.30
+      # Baseline: mean of covered hourly values over 30 days, and how many covered hours it has.
+      - record: fraudshield:model_auc_roc:baseline_30d
+        expr: avg_over_time(fraudshield:model_auc_roc:production_covered[30d:1h])
+      - record: fraudshield:model_auc_roc:baseline_hours_30d
+        expr: count_over_time(fraudshield:model_auc_roc:production_covered[30d:1h])

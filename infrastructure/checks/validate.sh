@@ -4,7 +4,7 @@
 # (.github/workflows/infrastructure.yml).
 #
 # Usage: infrastructure/checks/validate.sh [--quick]
-#   --quick skips the week-long promtool tests (about 2.5 minutes on one core).
+#   --quick skips the multi-day promtool tests (about 4 minutes on one core).
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -32,6 +32,7 @@ step "Prometheus rule unit tests"
 "$bin/promtool" test rules infrastructure/prometheus/tests/platform_test.yml
 if [[ "$quick" == false ]]; then
   "$bin/promtool" test rules infrastructure/prometheus/tests/risk_test.yml
+  "$bin/promtool" test rules infrastructure/prometheus/tests/ml_test.yml
 fi
 
 step "Blackbox exporter modules"

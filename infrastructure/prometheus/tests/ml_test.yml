@@ -1,0 +1,76 @@
+# promtool unit tests for the live AUC-drop alert (ADR 0091, SRS 8.2 ML drift monitoring).
+# Gauges are sampled every 3 minutes and rules evaluated every 3 minutes (below the 5-minute
+# lookback, as in risk_test.yml). 1,680 samples = 84 hours of baseline at AUC 0.94.
+rule_files:
+  - ../rules/recording.yml
+  - ../rules/alerts.yml
+  - ../rules/thresholds.yml
+evaluation_interval: 3m
+
+tests:
+  # Baseline 0.94, then 0.905 (a drop of 0.035) at 50% coverage: fires after the 2-hour hold.
+  - name: a 0.035 drop with enough labels raises a ticket after 2 hours
+    interval: 3m
+    input_series:
+      - {series: 'fs_model_auc_roc{alias="production"}', values: '0.94x1679 0.905x60'}
+      - {series: 'fs_model_label_coverage{alias="production"}', values: '0.5x1740'}
+    alert_rule_test:
+      - eval_time: 85h
+        alertname: FraudShieldModelAucDrop
+        exp_alerts: []
+      - eval_time: 87h
+        alertname: FraudShieldModelAucDrop
+        exp_alerts:
+          - exp_labels: {severity: ticket, team: ml}
+            exp_annotations:
+              summary: Live AUC-ROC of the production model is more than 0.03 below its baseline
+              description: Live AUC-ROC on labels available so far is 0.905 with label coverage of at least 30%. Start a retraining evaluation (SRS 8.2).
+
+  - name: a 0.025 drop stays silent
+    interval: 3m
+    input_series:
+      - {series: 'fs_model_auc_roc{alias="production"}', values: '0.94x1679 0.915x60'}
+      - {series: 'fs_model_label_coverage{alias="production"}', values: '0.5x1740'}
+    alert_rule_test:
+      - eval_time: 87h
+        alertname: FraudShieldModelAucDrop
+        exp_alerts: []
+
+  # D-11: at 20% coverage live AUC is noise; even a drop of 0.09 must not fire.
+  - name: a large drop at low label coverage stays silent
+    interval: 3m
+    input_series:
+      - {series: 'fs_model_auc_roc{alias="production"}', values: '0.94x1679 0.85x60'}
+      - {series: 'fs_model_label_coverage{alias="production"}', values: '0.5x1679 0.2x60'}
+    alert_rule_test:
+      - eval_time: 87h
+        alertname: FraudShieldModelAucDrop
+        exp_alerts: []
+    promql_expr_test:
+      - expr: fraudshield:model_auc_roc:production_covered
+        eval_time: 87h
+        exp_samples: []
+
+  # Only 24 covered hours of baseline (the metric starts at hour 60): below the 72-hour minimum.
+  - name: a drop without 72 covered baseline hours stays silent
+    interval: 3m
+    input_series:
+      - {series: 'fs_model_auc_roc{alias="production"}', values: '_x1200 0.94x479 0.905x60'}
+      - {series: 'fs_model_label_coverage{alias="production"}', values: '_x1200 0.5x540'}
+    alert_rule_test:
+      - eval_time: 87h
+        alertname: FraudShieldModelAucDrop
+        exp_alerts: []
+
+  # Shadow-model AUC never feeds the production baseline or the alert.
+  - name: the shadow alias is ignored
+    interval: 3m
+    input_series:
+      - {series: 'fs_model_auc_roc{alias="production"}', values: '0.94x1740'}
+      - {series: 'fs_model_auc_roc{alias="shadow"}', values: '0.94x1679 0.80x60'}
+      - {series: 'fs_model_label_coverage{alias="production"}', values: '0.5x1740'}
+      - {series: 'fs_model_label_coverage{alias="shadow"}', values: '0.5x1740'}
+    alert_rule_test:
+      - eval_time: 87h
+        alertname: FraudShieldModelAucDrop
+        exp_alerts: []

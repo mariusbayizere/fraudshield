@@ -296,9 +296,23 @@ MODEL_HEALTH = Dashboard(
     panels=[
         Panel(
             "Model versions by alias",
-            [("fs_model_version_info", "{{alias}}")],
+            [("fs_model_version_info", "{{alias}} {{version}}")],
             kind="table",
             description="One series per MLflow alias (@production, @shadow, @previous_production).",
+        ),
+        Panel(
+            "Live AUC-ROC (production) and alert level",
+            [('max(fs_model_auc_roc{alias="production"})', "live AUC-ROC"),
+             ("fraudshield:model_auc_roc:production_covered", "counted (coverage >= 30%)"),
+             ("fraudshield:model_auc_roc:baseline_30d - 0.03", "alert level (baseline - 0.03)")],
+            description="ADR 0091: only hours with label coverage of at least 30% count.",
+        ),
+        Panel(
+            "Label coverage by alias",
+            [("max by (alias) (fs_model_label_coverage)", "{{alias}}")],
+            unit="percentunit",
+            thresholds=[(0.30, "green")],
+            description="Below 30% (D-11) live AUC is not judged and the AUC alert is silent.",
         ),
         Panel(
             "Top 10 features by PSI",

@@ -12,5 +12,5 @@
 The compose stack is defined in the root `docker-compose.yml`.
 
 **Validate everything:** `infrastructure/checks/validate.sh` (add `--quick` to skip the
-week-long alert tests, about 2.5 minutes). Needs `uv` and network access to download the pinned
+multi-day alert tests, about 4 minutes). Needs `uv` and network access to download the pinned
 tools and schemas once; no Docker, no cluster.
