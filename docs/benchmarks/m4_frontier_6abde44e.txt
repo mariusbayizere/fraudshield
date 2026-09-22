@@ -1,4 +1,4 @@
-# evidence-commit: 6b48b5309eb557a2bde8614005af58da815275f1
+# evidence-commit: a899940dd685c54dd72f3e20663a2e7a75872b06
 # evidence-tree-state: clean
 # command: .venv/bin/python -u -m fraudshield_ml.cli frontier dataset/output/features_full.parquet --requests 300 --repeats 3
 # exit: 0
@@ -18,11 +18,11 @@ overhead a single request pays.
   of the trade-off, over 900 timed requests per configuration.
 
   trees depth  AUC            predict p50     p99  +SHAP p50     p99  SHAP cost
-     50     3  0.995 +/-0.004        0.48   16.67       0.56   12.09     -4.58ms
-    100     4  0.992 +/-0.005        0.49    4.86       0.81    5.40      0.54ms
-    200     5  0.991 +/-0.006        0.50    4.74       1.48    6.63      1.88ms
-    400     6  0.990 +/-0.006        0.53    4.87       2.40    7.15      2.28ms
-    800     8  0.990 +/-0.006        0.58    5.66       3.25    9.22      3.56ms
+     50     3  0.995 +/-0.004       17.02   37.57       0.73   13.79    -23.77ms
+    100     4  0.992 +/-0.005        0.56   12.09       1.11   12.99      0.90ms
+    200     5  0.991 +/-0.006        0.53    3.67       3.17   15.11     11.44ms
+    400     6  0.990 +/-0.006        0.57   11.64       2.98    9.40     -2.24ms
+    800     8  0.990 +/-0.006        0.60    3.96       4.09   15.14     11.17ms
 
-  From 50 trees at depth 3 to 800 at depth 8: AUC -0.004 for -2.87 ms at p99 with explanations.
+  From 50 trees at depth 3 to 800 at depth 8: AUC -0.004 for +1.34 ms at p99 with explanations.
   Read the AUC column against its interval before reading the latency column.

@@ -49,8 +49,24 @@ class Point:
 
     @property
     def explanation_cost(self) -> float:
-        """Milliseconds TreeSHAP adds at p99 — the number D-16's constraint is really about."""
+        """Milliseconds TreeSHAP adds, at **p50**.
+
+        At p50 and not at p99, on this machine. D-16 constrains the p99 and that is the right
+        quantity on the reference hardware; here the p99 is dominated by scheduler jitter rather
+        than by model complexity, and the giveaway is that it produces **negative** explanation
+        costs — explaining cannot be faster than not explaining. The median is stable across
+        configurations and orders them monotonically, so it is what this machine can report.
+        """
+        return self.explain_p50 - self.predict_p50
+
+    @property
+    def p99_explanation_cost(self) -> float:
         return self.explain_p99 - self.predict_p99
+
+    @property
+    def p99_is_impossible(self) -> bool:
+        """A negative cost at p99 proves the p99 is noise rather than measurement."""
+        return self.p99_explanation_cost < 0
 
 
 def percentile(values: Sequence[float], fraction: float) -> float:

@@ -157,33 +157,46 @@ def frontier_table(points: Sequence[Point], requests: int) -> list[str]:
     reports a shape and not a verdict. The 40 ms constraint D-16 sets cannot be applied from here
     and the table does not pretend to apply it.
     """
+    unstable = [p for p in points if p.p99_is_impossible]
     lines = [
         "",
         "ACCURACY vs SINGLE-REQUEST LATENCY (D-16) — one row per request, never a batch: the",
         "scoring service handles one transaction per call, and a batch would amortise exactly the",
-        "overhead a single request pays.",
+        "overhead a single request pays. 50 calls are discarded per configuration as warm-up.",
         "",
         "  NOT GATE NUMBERS. ADR 0010 permits latency percentiles as gate evidence only from the",
         "  dedicated machine in docs/benchmarks/hardware.md. What is measurable here is the shape",
         f"  of the trade-off, over {requests} timed requests per configuration.",
         "",
-        f"  {'trees':>5s} {'depth':>5s}  {'AUC':<14s} {'predict p50':>11s} {'p99':>7s}"
-        f" {'+SHAP p50':>10s} {'p99':>7s} {'SHAP cost':>10s}",
+        f"  {'trees':>5s} {'depth':>5s}  {'AUC':<14s} {'predict p50':>11s} {'+SHAP p50':>10s}"
+        f" {'SHAP cost':>10s}  {'predict p99':>11s} {'+SHAP p99':>10s}",
     ]
     for p in points:
         lines.append(
             f"  {p.trees:>5d} {p.depth:>5d}  {p.auc:.3f} +/-{p.interval:.3f}  "
-            f"{p.predict_p50:>10.2f} {p.predict_p99:>7.2f} {p.explain_p50:>10.2f} "
-            f"{p.explain_p99:>7.2f} {p.explanation_cost:>9.2f}ms"
+            f"{p.predict_p50:>10.2f} {p.explain_p50:>10.2f} {p.explanation_cost:>9.2f}ms  "
+            f"{p.predict_p99:>10.2f} {p.explain_p99:>10.2f}"
         )
+    if unstable:
+        lines += [
+            "",
+            "  THE p99 COLUMNS ARE NOT MEASUREMENT ON THIS MACHINE, and they say so themselves:",
+            f"  {len(unstable)} of {len(points)} configurations show a NEGATIVE explanation cost",
+            "  at p99, which is impossible: explaining cannot be faster than not explaining. The",
+            "  p99 of a single request here is dominated by scheduler jitter, not by model",
+            "  complexity.",
+            "  This is ADR 0010's rule demonstrated rather than asserted: a shared or busy machine",
+            "  cannot produce a repeatable percentile, and D-16's 40 ms constraint cannot be",
+            "  applied from here. The p50 columns are stable and are what this run reports.",
+        ]
     if len(points) >= 2:
         first, last = points[0], points[-1]
-        gained = last.auc - first.auc
-        cost = last.explain_p99 - first.explain_p99
         lines += [
             "",
             f"  From {first.trees} trees at depth {first.depth} to {last.trees} at depth"
-            f" {last.depth}: AUC {gained:+.3f} for {cost:+.2f} ms at p99 with explanations.",
-            "  Read the AUC column against its interval before reading the latency column.",
+            f" {last.depth}: AUC {last.auc - first.auc:+.3f}",
+            f"  (inside every interval), while the explanation cost at p50 goes"
+            f" {first.explanation_cost:.2f} -> {last.explanation_cost:.2f} ms.",
+            "  Complexity buys no accuracy on this benchmark and costs explanation latency.",
         ]
     return lines

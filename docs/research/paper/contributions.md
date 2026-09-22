@@ -1,0 +1,104 @@
+# What this paper can claim, and what it cannot
+
+**Status: the evidence-backed contribution list, rewritten 2026-09-22 after M4's battery.** The
+LaTeX draft (E.13, M11) has not been started; this is what it must be built from. Every entry
+names the artefact that supports it, and every entry that was on this list and is no longer says
+why.
+
+The rule this list is kept under: a contribution is something a reader could disagree with and
+check. "We built a system" is not one.
+
+---
+
+## 1. A benchmark-construction methodology, and its measured failure modes
+
+**The contribution is the failure modes, not the benchmark.** Anyone can generate synthetic
+transactions. What this project has that a reader cannot get elsewhere is a record of a synthetic
+benchmark being interrogated until it gave up its structure, with each interrogation published
+whether or not it flattered the dataset.
+
+| Finding | Evidence |
+|---|---|
+| A single engineered feature reaches `max(AUC, 1−AUC)` **0.893** — so a model AUC quoted against 0.5 overstates by four times the quantity that matters | `docs/benchmarks/single_feature_baseline.md`, PB-46 |
+| **Four disjoint feature groups each reach ≥ 0.845 alone**, so leave-one-out ablation reports every group as free and cannot say which features matter | `docs/benchmarks/m4_battery.md`, PB-60 |
+| **Leave-one-country-out is null**: removing a country from training entirely costs ≤ 0.002 AUC | PB-59 |
+| **The novel-variant temporal hold-out is null too**: the unseen shape is caught at 100% against 95.1% for the familiar one | PB-61 |
+| One cause explains all three: the benchmark encodes fraud as **bursts**, and every variant, every country and every feature group is a view of that one structure | PB-61 |
+| The dataset carries a **fingerprint over its output rows**, because a parameter digest cannot see a changed draw | PB-41, PB-54 |
+| Evidence artefacts carry the commit **and the working-tree state**, because a hash written by hand records an intention | PB-52, PB-53 |
+
+**Why this is publishable as a negative-results contribution.** The literature on synthetic fraud
+benchmarks reports what its generators produce. This reports what one generator's benchmark
+*cannot support*, with the measurements that establish it. A reader building a synthetic benchmark
+learns which experiments to run before trusting theirs.
+
+## 2. The latency–explainability frontier
+
+Accuracy against **single-request** p99, with and without exact TreeSHAP, across tree complexity
+(D-16). One row per request, never a batch, because the scoring service handles one transaction
+per call and a batch amortises exactly the overhead a single request pays.
+
+**This is the most defensible quantitative contribution left, and the reason is everything above.**
+Every accuracy claim on this benchmark is weakened by the benchmark. The cost of explaining a
+decision is not: it is a property of the model and the SHAP algorithm, and a tree twice as deep
+costs what it costs whether the fraud is easy or hard to find.
+
+Evidence: `docs/benchmarks/m4_frontier_6abde44e.txt`. **The absolute milliseconds are not gate
+numbers** — ADR 0010 permits latency percentiles as gate evidence only from the dedicated machine
+— so the paper reports the *shape* and says on which machine it was measured.
+
+## 3. The redundancy finding, stated on its own
+
+Four disjoint feature groups each reaching ≥ 0.845 alone is a result about **how a scenario-driven
+generator encodes signal**, not a detail of one ablation table. A generator that plants fraud as
+incidents writes the same structure into velocity, counterparty, temporal and geographic views
+simultaneously, so feature-importance and ablation analyses on such a benchmark measure
+redundancy rather than importance.
+
+This retires C-4's planned measurement (below) and is worth more than the measurement would have
+been.
+
+## 4. A system built to a specification, with its deviations recorded
+
+Not a research contribution and not claimed as one. It belongs in the paper as the setting: 44
+features on two independent paths with a parity suite, a published D-07 split, a governance
+apparatus that refuses stale records. The ADRs are the interesting part for a reader building
+something similar.
+
+---
+
+## Removed from the contribution list
+
+**Cross-country generalisation (LOCO).** Removed 2026-09-22. The benchmark's fraud mechanisms are
+country-invariant by construction — no fraud parameter is keyed by a country code, and
+`test_no_fraud_parameter_is_keyed_by_country` asserts it. Country enters only as a lookup for
+*which* mule, merchant, agent, currency or UTC offset an incident uses. **Country-level
+generalisation cannot be evaluated on this benchmark and belongs to the real-data validation
+plan.** It is reported as a null result rather than dropped, because a reader who saw it omitted
+would assume it was unflattering.
+
+The generator was **not** changed to make countries differ. Engineering country-specific fraud so
+that the experiment becomes informative would be tuning the benchmark to produce a result, which
+is the failure this project spent M2 and M3 learning to avoid (owner decision, 2026-09-22).
+
+**Generalisation to an unseen fraud variant.** Removed the same day, for the same reason one level
+along: the novel sub-variant differs in *timing*, not in transaction pattern, so it is not an
+out-of-distribution test. A real one needs a variant whose pattern differs, which changes the draw
+and is an owner decision — and designing one until the experiment fails would be the same error.
+
+**"Western models achieve 0.72–0.78 on East African data" and its planned replacement (C-4).**
+The claim is unverified and the replacement — "card-style feature set only vs full EAC feature
+set" — is defeated by the redundancy finding: on a benchmark where four disjoint groups each reach
+0.85 alone, any subset comparison shows a small difference whatever is true of real systems.
+Reporting it as evidence would be a control narrower than the claim it justifies.
+
+---
+
+## Still owed before the draft is written
+
+- **Seed variance** (C-6): every figure here is one seed.
+- **Per-month performance** (C-5), which is measurable and currently unmeasured.
+- **Precision at a fixed alert budget**, which is the operational number and is not yet reported.
+- **ONNX export parity**, and the LaTeX tables themselves.
+- A **related-work** section. The prompt's instruction stands: cite only papers read in full, and
+  leave `\cite{TODO-verify}` rather than inventing a reference.
