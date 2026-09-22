@@ -183,3 +183,8 @@ owner's email address in the User-Agent header (Crossref's "polite pool" convent
 stopped at once; later requests carried no personal data.
 
 **Page count:** 35 pages (cover, abstract, contents, 14 sections, references, Appendices A-D).
+
+**Update, later on 2026-09-22.** Departures 3 and 5 are resolved. Doğan et al. was read in full
+from the third author's copy and is now VERIFIED-SOURCE; The Star's explainer of 27 March 2025 was
+read and added as `star2025mpesa`. Section 8 attributes each claim to the source that states it;
+the reading that the documented scam pays a new counterparty is marked as the paper's own.

@@ -23,12 +23,12 @@ measured" markers. This file records every change to what the paper states, with
 | 2026-09-22 | Dataset-at-a-glance and per-channel and per-country test-slice tables | `number_audit.md` |
 | 2026-09-22 | Bibliography of 10 generator sources, each checked against the document itself | `reference_audit.md` §1 |
 | 2026-09-22 | Revision "v2" applied by hand (its archive was never delivered): new title, cover page, contents; 34 scholarly references verified from DOI or publisher pages, every "[reference needed]" replaced; related work rewritten; reversal-scam section cites Doğan et al. and states the variant as a modelling choice; corridor classes; ensemble and frontier cautions; three figures generated from `numbers.tex`; conclusion, availability statement and Appendices A–D; `\notyet` printed in italics | `reference_audit.md` §2–4, `number_audit.md` |
+| 2026-09-22 | Doğan et al. read in full and upgraded to verified; The Star (27 March 2025) read and added as `star2025mpesa`. Section 8 rewritten sentence by sentence: forged confirmation messages, malicious reversal requests and disputed mistaken transfers attributed to Doğan et al. (§5.1.1, §2, §5.3.3); the "sent by mistake, please return it" story and Safaricom's do-not-refund advice attributed to The Star; "the recipient is a new counterparty" stated as the paper's reading, since neither source says it. Related work, Section 11 and the conclusion follow; `check_numbers.py` accepts a citation's locator | `reference_audit.md` §2, §4 |
 
 ## Open review points
 
-- Doğan et al. (COMPASS '25) is cited for the documented form of the reversal scam, but its full
-  text could not be opened from here (`reference_audit.md`): the author must confirm the
-  description of the forged-message form against the paper before submission.
+- The documented form's recipient being a new counterparty is the paper's reading of the two
+  sources, not a statement in either; a source that says it would strengthen Section 8.
 - The novelty claim (C-8) is not made and needs a documented dataset search.
 - Not yet measured: the learning curve (PB-67), the 99th-percentile frontier, serving and
   end-to-end latency, five-million-row scale (M5, M6, M10), and the M4 follow-ups listed in
