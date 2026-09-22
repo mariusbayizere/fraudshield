@@ -167,6 +167,80 @@ class ApiKeyLifecycleTest {
     assertThat(issued.webhookSigningSecret()).isNull();
   }
 
+  /**
+   * Two administrators rotating the same key at once: the key row lock serialises them, and the
+   * second sees the key already ROTATING (ADR 0071 §4). A held row lock forces the interleaving.
+   */
+  @Test
+  @Tag("FR-06-07")
+  void concurrentRotationsOfOneKeyIssueOneReplacement() throws Exception {
+    ApiKeyService service = service(authenticator(redisA, "test"));
+    String name = name();
+    ApiKeyService.Issued original =
+        service.create(
+            bank, name, List.of(ApiKeyScope.INGEST_WRITE), null, admin, RequestContext.SYSTEM);
+    String keyId = original.record().keyId();
+    java.util.List<Object> outcomes;
+    // The pool is declared first so it closes last: the holder's lock is released before the pool
+    // waits for its tasks.
+    try (var pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+        Connection holder = db.superuser();
+        Connection observer = db.superuser()) {
+      holder.setAutoCommit(false);
+      try (PreparedStatement lock =
+          holder.prepareStatement(
+              "SELECT 1 FROM fraudshield.api_keys WHERE key_id = ? FOR UPDATE")) {
+        lock.setString(1, keyId);
+        lock.executeQuery().close();
+      }
+      java.util.concurrent.Callable<Object> rotate =
+          () -> {
+            try {
+              return service.rotate(bank, keyId, admin, RequestContext.SYSTEM);
+            } catch (ProblemException e) {
+              return e.status();
+            }
+          };
+      var first = pool.submit(rotate);
+      var second = pool.submit(rotate);
+      awaitWaitingOnLocks(observer, 2);
+      holder.commit();
+      outcomes = java.util.List.of(first.get(), second.get());
+    }
+    assertThat(outcomes).filteredOn(ApiKeyService.Issued.class::isInstance).hasSize(1);
+    assertThat(outcomes).as("the second sees ROTATING").contains(409);
+    try (Connection superuser = db.superuser();
+        PreparedStatement live =
+            superuser.prepareStatement(
+                "SELECT count(*) FROM fraudshield.api_keys WHERE name = ?"
+                    + " AND state <> 'REVOKED'")) {
+      live.setString(1, name);
+      try (var rows = live.executeQuery()) {
+        rows.next();
+        assertThat(rows.getLong(1)).as("the old key and one replacement").isEqualTo(2);
+      }
+    }
+  }
+
+  /** Polls from an autocommit connection: inside a transaction the view is a frozen snapshot. */
+  private static void awaitWaitingOnLocks(Connection observer, int waiters) throws Exception {
+    long deadline = System.nanoTime() + Duration.ofSeconds(20).toNanos();
+    while (System.nanoTime() < deadline) {
+      try (var rows =
+          observer
+              .createStatement()
+              .executeQuery(
+                  "SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock'")) {
+        rows.next();
+        if (rows.getLong(1) >= waiters) {
+          return;
+        }
+      }
+      Thread.sleep(20);
+    }
+    throw new AssertionError("the rotations never waited for the row lock");
+  }
+
   @Test
   @Tag("FR-06-07")
   void rotationKeepsTheOldKeyForTwentyFourHours() {

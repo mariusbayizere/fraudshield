@@ -300,8 +300,9 @@ class UserAdministrationTest extends AuthIntegrationTest {
     Account admin = createAccount(institution, "ADMIN", "ACTIVE");
     Session session = issueSession(admin);
     long seen = version(session, admin.id());
-    try (java.sql.Connection holder = DB.superuser();
-        var pool = java.util.concurrent.Executors.newSingleThreadExecutor()) {
+    // The pool closes last, after the holder has released its lock.
+    try (var pool = java.util.concurrent.Executors.newSingleThreadExecutor();
+        java.sql.Connection holder = DB.superuser()) {
       holder.setAutoCommit(false);
       try (var lock =
           holder.prepareStatement("SELECT 1 FROM fraudshield.users WHERE id = ? FOR UPDATE")) {
