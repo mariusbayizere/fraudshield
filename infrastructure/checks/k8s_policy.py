@@ -11,6 +11,8 @@ project's own rules (build prompt D.3 M9, H.1, A.3 rule 10):
 * **Images**: third-party images are pinned by digest; FraudShield images carry no tag in the
   manifests, because the deploy workflow pins them by digest.
 * **Service account tokens** are not mounted except where a workload calls the Kubernetes API.
+* **API spool** (ADR 0090): the ``spool`` volume of ``fraudshield-api`` is a PersistentVolumeClaim
+  with ReadWriteMany access, never ``emptyDir`` or other storage deleted with the pod.
 * **Namespace**: enforces the restricted profile; has a default-deny NetworkPolicy; every
   workload is selected by an allow policy, covered by a PodDisruptionBudget and, for the
   serving components in ``HPA_REQUIRED``, scaled by a HorizontalPodAutoscaler.
@@ -42,6 +44,7 @@ ALLOWED_VOLUMES = frozenset(
 )  # fmt: skip
 ALLOWED_ADDED_CAPABILITIES = frozenset({"NET_BIND_SERVICE"})
 SECCOMP_TYPES = frozenset({"RuntimeDefault", "Localhost"})
+SPOOL_OWNER, SPOOL_VOLUME = "fraudshield-api", "spool"
 
 
 def name_of(manifest: Manifest) -> str:
@@ -175,8 +178,24 @@ def namespace_problems(manifests: list[Manifest]) -> Iterator[str]:
             yield f"{name_of(workload)}: needs a HorizontalPodAutoscaler"
 
 
+def spool_problems(manifests: list[Manifest]) -> Iterator[str]:
+    api = [
+        m for m in manifests if m["kind"] in WORKLOAD_KINDS and m["metadata"]["name"] == SPOOL_OWNER
+    ]
+    claims = {m["metadata"]["name"]: m for m in manifests if m["kind"] == "PersistentVolumeClaim"}
+    for workload in api:
+        volumes = {v["name"]: v for v in workload["spec"]["template"]["spec"].get("volumes", [])}
+        spool = volumes.get(SPOOL_VOLUME)
+        if spool is None or "persistentVolumeClaim" not in spool:
+            yield f"{name_of(workload)}: spool must be a PVC, not ephemeral (ADR 0090)"
+            continue
+        claim = claims.get(spool["persistentVolumeClaim"]["claimName"])
+        if claim is None or "ReadWriteMany" not in claim["spec"].get("accessModes", []):
+            yield f"{name_of(workload)}: spool claim must exist with ReadWriteMany (ADR 0090)"
+
+
 def problems(manifests: list[Manifest]) -> list[str]:
-    found = list(namespace_problems(manifests))
+    found = list(namespace_problems(manifests)) + list(spool_problems(manifests))
     for manifest in manifests:
         if manifest["kind"] in WORKLOAD_KINDS:
             found.extend(pod_problems(manifest))

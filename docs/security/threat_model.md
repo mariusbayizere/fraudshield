@@ -117,7 +117,7 @@ Controls are in `infrastructure/k8s/` and are checked on every change by
 | T | A mutable tag deploys an unreviewed image | Third-party images pinned by digest; FraudShield images untagged in manifests and pinned by digest at deploy; the policy check fails on any tag | implemented (manifests); deploy step planned |
 | D | Voluntary disruption (node drain, upgrade) takes a component down | PodDisruptionBudgets for every workload, HPAs for serving components, spread across nodes and zones | implemented (manifests) |
 | D/T | A bad release degrades decisions | Argo Rollouts canary: 10% for 30 minutes, background analysis on canary pods only, rollback on 5xx > 0.5% or p99 > 80 ms, fail-closed when metrics are missing (`test_canary_analysis.py`) | implemented (manifests) |
-| R/I | Decisions spooled on an API pod are lost when the pod is deleted during a Kafka outage (D-15) | Spool on the pod's `emptyDir` survives container restarts, not pod deletion; 120 s grace for draining; runbook forbids draining nodes with a non-zero spool | partial: see R-5 |
+| R/I | Decisions spooled on an API pod are lost when the pod is deleted during a Kafka outage (D-15) | Spool on a shared ReadWriteMany volume, one directory per pod; any live API pod claims and replays the directories of dead pods (ADR 0090); `k8s_policy.py` rejects ephemeral spool storage | manifests implemented; replayer M6; latency and chaos proof M10 (R-5) |
 
 ### 3.7 Observability and alerting (M9)
 
@@ -148,7 +148,7 @@ Controls are in `infrastructure/k8s/` and are checked on every change by
 | R-2 | Audit anchors unsigned until the audit service exists | Audit service milestone |
 | R-3 | Application role `fs_app` necessarily reads credential hashes of its tenant; a SQL injection in the API would expose them | Parameterised queries only (M5/M6 persistence layer), static analysis in CI |
 | R-4 | Third-party penetration test | REQUIRES_EXTERNAL_PARTY (D-28) |
-| R-5 | API spool on `emptyDir` is lost if the pod is deleted before Kafka accepts it (D-15 requires surviving the pod's death); Argo Rollouts cannot manage the StatefulSet that per-pod volumes need | Owner and M6 decision, options in `docs/parallel/M9_updates.md` |
+| R-5 | ADR 0090 (spool on a shared volume with orphan replay) holds only if spool append p95 on the shared volume fits the 2 ms step-10 budget; until M10 measures it and runs the pod-deletion chaos case, D-15 is unverified | M10 benchmark and chaos case; fallback per ADR 0090: StatefulSet with per-pod volumes |
 | R-6 | Alerting has no high availability and no dead-man's switch: if Prometheus or Alertmanager stops, nothing pages | M9 follow-up: Watchdog alert to an external heartbeat service; HA pair |
 | R-7 | Cluster admission does not verify image signatures | M9 follow-up with the cluster's admission controller |
 | R-8 | Data stores and Loki are not in the Kubernetes manifests; their NetworkPolicies and at-rest encryption (D-20) are unverified | M9 follow-up (CloudNativePG, D-49) |

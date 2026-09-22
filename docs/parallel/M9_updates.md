@@ -42,20 +42,11 @@ week-long alert tests). It needs `uv` and network access for the first download 
 
 ## 3. Decisions the owner needs to make
 
-1. **D-15 spool versus the Argo Rollouts canary (highest risk, R-5).** D-15 requires the API's
-   disk spool to survive the API pod's death. Per-pod persistent volumes need a StatefulSet, and
-   Argo Rollouts cannot manage StatefulSets. The manifests currently use an `emptyDir` spool
-   (survives container restarts, not pod deletion) with a 120 s grace period, so a pod deleted
-   during a Kafka outage loses its spooled decisions. Options:
-   - (a) API as a StatefulSet with per-pod PVCs; canary by `partition` rolling updates plus the
-     same Prometheus analysis in the deploy workflow instead of Argo Rollouts (deviation from the
-     M9 gate wording, not from its intent);
-   - (b) keep the Rollout; spool on a shared RWX volume in per-pod directories, with a
-     leader-elected replayer in the API that drains directories of pods that no longer exist (M6
-     work; needs fsync latency on the RWX storage measured against the 2 ms step 10 budget);
-   - (c) keep the Rollout; make Kafka acknowledgement part of the synchronous path when the spool
-     is not durable (costs latency, changes D-13).
-   Recommendation: (b) if the storage latency holds, otherwise (a). Needs an ADR.
+1. **D-15 spool versus the Argo Rollouts canary. Decided 2026-09-22: ADR 0090.** Per-pod
+   directories on a shared ReadWriteMany volume plus a replayer that recovers the spools of dead
+   pods, conditional on spool append p95 fitting the 2 ms step-10 budget on target hardware (M10).
+   Fallback: StatefulSet with per-pod volumes and a partitioned canary. Ephemeral spool storage is
+   prohibited and `k8s_policy.py` enforces it. M6's contract is in section 6 below.
 2. **SRS 8.2 "AUC-ROC drop > 0.03" has no alert.** Part E.10 defines no live AUC metric, and the
    metric-catalogue check (as instructed) rejects anything outside E.10. Proposal: add
    `fs_model_auc_roc{alias}` (AUC on labels available so far, with `fs_label_coverage_ratio`) to
@@ -122,6 +113,48 @@ All `IN_PROGRESS` until review and merge; evidence paths are on `m9/infra`.
   alert to `max`.
 - `fs_spool_depth`: per API pod, number of decisions not yet acknowledged by Kafka.
 - No account, device or counterparty tokens as label values (threat model 3.7).
+
+**M6: spool layout and replayer contract (ADR 0090).** Binding on the M6 spool module unless
+changed by a new ADR. The manifests provide the volume and two variables; everything else is M6's.
+
+- **Where.** `$FRAUDSHIELD_SPOOL_DIR` (`/var/lib/fraudshield/spool`) is a ReadWriteMany volume
+  shared by all API pods. Each pod owns `$FRAUDSHIELD_SPOOL_DIR/$FRAUDSHIELD_SPOOL_INSTANCE/`
+  (`FRAUDSHIELD_SPOOL_INSTANCE` is the pod name, unique per pod lifetime) and writes nowhere else
+  except while replaying a claimed directory.
+- **Files in a pod directory.**
+  - `segment-<20-digit zero-padded sequence>.log`: append-only; records written in decision order;
+    fsync batched every 5 ms (D-15); a segment is closed at a size bound and never modified after.
+  - Each record is self-delimiting and checksummed (length + CRC32C or equivalent) so a torn tail
+    written at the moment of a crash is detected and ignored, never replayed as garbage.
+  - Each record carries the Kafka topic, key, the envelope `event_id` and the `transaction_id`, so
+    replay needs nothing but the file.
+  - `heartbeat`: its mtime is refreshed at least every 1 s by the owning pod.
+  - `acked`: the highest sequence position acknowledged by Kafka (`acks=all`), updated after
+    acknowledgement; replay starts after it. Fully acknowledged segments may be deleted by the
+    owner.
+- **Orphan detection.** A directory is orphaned when its `heartbeat` is older than 30 s
+  (configurable, named constant with units). No Kubernetes API access is needed; API pods have no
+  service account token (threat model 3.6).
+- **Claiming.** A live pod claims an orphan by an atomic `rename` of the directory to
+  `$FRAUDSHIELD_SPOOL_DIR/.claimed/<original name>.<claimer pod name>`. Only the pod whose rename
+  succeeds replays it. A claimed directory whose claimer's own heartbeat goes stale can be claimed
+  again the same way (the claimer died mid-replay).
+- **Owner fencing.** An owner that finds its directory renamed (checked on every fsync batch) has
+  been presumed dead: it stops accepting decisions (readiness DOWN) and exits, so no decision is
+  written to a directory that is no longer its own.
+- **Replay.** Segments in sequence order, records in file order, from after `acked`, through the
+  same idempotent producer (`enable.idempotence=true`, `acks=all`). Duplicates are expected; every
+  consumer is idempotent on `event_id` (ADR 0012).
+- **Deletion.** A claimed directory is deleted only after every record is acknowledged **and** no
+  byte has been appended for at least the orphan timeout (a fenced owner's last batch may land
+  late).
+- **Bound and back-pressure.** The spool has a configured size bound per pod; at the bound the pod
+  answers decisions with the degraded behaviour M6 defines (never silently drops a decision).
+- **Metrics.** `fs_spool_depth` per pod counts unacknowledged records in its own directory;
+  records being replayed from claimed directories are counted by the claimer.
+- **Tests M6 owns.** Torn-tail record ignored; replay order; concurrent claim by two pods (one
+  wins); fenced owner stops; deletion waits for quiescence. The pod-deletion chaos case is M10's
+  (ADR 0090 decision 5).
 
 **M5, M6, M8: deployment interface.** Ports, probe paths, UID 10001, read-only root filesystem,
 writable paths and the spool directory are in the table in `infrastructure/k8s/README.md`. In
