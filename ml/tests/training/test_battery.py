@@ -7,9 +7,12 @@ import math
 import pytest
 
 from fraudshield_ml.training.battery import (
+    NOVEL_VARIANT,
     additivity_error,
     apply_platt,
     brier,
+    by_variant,
+    decision_region,
     expected_calibration_error,
     fit_platt,
     mean_absolute_shap,
@@ -157,3 +160,99 @@ def test_recall_at_a_false_positive_rate_does_not_charge_nothing_for_ties() -> N
     scores = [0.9] * 40 + [0.5] * 10 + [0.1] * 950
     labels = [True] * 40 + [False] * 10 + [False] * 950
     assert recall_at_fpr(scores, labels, 0.02) == pytest.approx(1.0)
+
+
+def test_the_overall_ece_hides_what_the_decision_region_shows() -> None:
+    """Why both are reported, with a model that is right where nobody looks and wrong where
+    everybody does.
+
+    At a 0.9% base rate a good model puts almost every row in the lowest bin, so the row-weighted
+    ECE is an average over predictions nobody acts on. Here the low-score mass is perfectly
+    calibrated and the alert region claims 0.9 while observing 0.5 — a model that would waste half
+    its analyst time. The overall ECE must stay small and the decision-region ECE must be large,
+    or one of the two numbers is not doing its job.
+    """
+    scores = [0.001] * 9900 + [0.9] * 100
+    labels = [False] * 9900 + [True] * 50 + [False] * 50
+
+    overall = expected_calibration_error(reliability(scores, labels))
+    region = decision_region(scores, labels)
+
+    assert overall < 0.01, "precondition: the bulk is well calibrated, so the average looks fine"
+    assert region.rows == 100
+    assert region.fraud == 50
+    assert region.ece > 0.35, "the decision region is badly calibrated and must say so"
+    assert region.ece > overall * 30
+
+
+def test_the_decision_region_carries_its_own_counts() -> None:
+    """A region metric over forty rows and over four hundred are different claims, and the
+    restriction is what makes that easy to forget.
+    """
+    scores = [0.1] * 1000 + [0.8] * 40
+    labels = [False] * 1000 + [True] * 30 + [False] * 10
+    region = decision_region(scores, labels)
+    assert (region.rows, region.fraud) == (40, 30)
+    assert region.threshold == pytest.approx(0.60)
+
+
+def test_an_empty_decision_region_is_not_a_calibration_of_zero() -> None:
+    """A model that never scores above the threshold has no decision region, which is a fact
+    about it and not an error — and reporting 0.0 would read as perfectly calibrated.
+    """
+    region = decision_region([0.01] * 100, [False] * 100)
+    assert region.rows == 0
+    assert math.isnan(region.ece)
+    assert math.isnan(region.brier)
+
+
+def test_every_variant_is_scored_against_the_same_negatives_and_one_threshold() -> None:
+    """The novel-variant hold-out only means something if both halves are held fixed (PB-59).
+
+    Give each variant its own threshold and a shape looks detectable because its own negatives
+    were easy; give each its own negatives and two different problems are being compared. Here
+    the novel shape scores lower than the base shape against identical legitimate rows, and the
+    recall gap is the cost of never having seen it.
+    """
+    # Five legitimate rows sit above the novel shape and none above the base shape, so the two
+    # differ in AUC while both stay above the 1% threshold. Recall and AUC pull in opposite
+    # directions here on purpose: at a 1% budget a shape must beat the 99th percentile of
+    # legitimate rows to be caught at all, so "detected" and "perfectly ranked" are close
+    # together and the fixture has to thread between them.
+    scores = [0.95] * 40 + [0.80] * 10 + [0.85] * 5 + [0.30] * 945
+    labels = [True] * 50 + [False] * 950
+    variants = ["base"] * 40 + [NOVEL_VARIANT] * 10 + [""] * 950
+
+    results, threshold = by_variant(scores, labels, variants, fpr=0.01)
+    assert threshold < 0.80, "precondition: both shapes must be above the alert threshold"
+
+    by_name = {r.variant: r for r in results}
+    assert set(by_name) == {"base", NOVEL_VARIANT}
+    assert by_name["base"].fraud == 40
+    assert by_name[NOVEL_VARIANT].fraud == 10
+    assert by_name["base"].recall == pytest.approx(1.0)
+    assert by_name[NOVEL_VARIANT].recall == pytest.approx(1.0)
+    assert by_name["base"].auc == pytest.approx(1.0)
+    assert by_name[NOVEL_VARIANT].auc == pytest.approx(1 - 5 / 950)
+    assert by_name["base"].auc > by_name[NOVEL_VARIANT].auc, (
+        "the base shape outranks the novel one against the same negatives"
+    )
+    assert results[0].variant == NOVEL_VARIANT, "the novel variant is reported first"
+
+
+def test_an_undetected_novel_variant_reports_zero_recall_not_a_missing_row() -> None:
+    """The failure this test exists to catch must be visible, not absent.
+
+    A model that never scores the unseen shape above the alert threshold has a recall of zero on
+    it. Omitting the row — because there is nothing to report — would read as "not measured".
+    """
+    scores = [0.95] * 40 + [0.05] * 10 + [0.30] * 950
+    labels = [True] * 50 + [False] * 950
+    variants = ["base"] * 40 + [NOVEL_VARIANT] * 10 + [""] * 950
+
+    results, _ = by_variant(scores, labels, variants, fpr=0.01)
+    novel = next(r for r in results if r.variant == NOVEL_VARIANT)
+    assert novel.fraud == 10
+    assert novel.detected == 0
+    assert novel.recall == 0.0
+    assert novel.auc < 0.5, "scored below the legitimate rows, which is worse than chance"

@@ -14,7 +14,7 @@ import json
 import math
 import sys
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -38,7 +38,7 @@ from fraudshield_ml.metrics.single_feature import (
     out_of_fold_target_encoding,
     separation,
 )
-from fraudshield_ml.training import battery, evaluation, report, smoke
+from fraudshield_ml.training import battery, evaluation, frontier, report, smoke
 from fraudshield_ml.training import split as split_module
 
 #: Columns the vector needs from each table. Named rather than read wholesale so that a schema
@@ -205,6 +205,25 @@ def read_transactions(root: Path, packs: Path, limit: int) -> list[Transaction]:
 
 def _optional_text(value: object) -> str | None:
     return None if value is None else str(value)
+
+
+def read_variants(root: Path, keep: set[str]) -> dict[str, str]:
+    """Each kept transaction's fraud sub-variant, empty for a legitimate row.
+
+    Read from `labels.scenario_variant`, which is published in the interchange format like every
+    other label column. It is not a feature and no model sees it: it names *which kind* of fraud a
+    row is, so that the novel-variant hold-out can ask how well a model detects a shape absent
+    from its training period (PB-59).
+    """
+    variants: dict[str, str] = {}
+    for part in sorted((root / "labels").glob("month=*/part-*.parquet")):
+        table = pq.read_table(part, columns=["transaction_id", "scenario_variant"])
+        ids = table.column("transaction_id").to_pylist()
+        kinds = table.column("scenario_variant").to_pylist()
+        for transaction_id, kind in zip(ids, kinds, strict=True):
+            if transaction_id in keep:
+                variants[str(transaction_id)] = "" if kind is None else str(kind)
+    return variants
 
 
 def read_outcomes(root: Path, keep: set[str]) -> dict[str, Outcome]:
@@ -503,6 +522,7 @@ def _feature_matrix(
         return cached
 
     country_of = country_by_currency(run.packs)
+    variants = read_variants(run.dataset, {rows[i].transaction_id for i in sample})
 
     corpus_index = CorpusIndex.build(rows)
     print(f"computing {len(smoke.trainable_features())} features for {len(sample)} rows...")
@@ -528,6 +548,7 @@ def _feature_matrix(
         # packs share one, rather than tie-breaking a breakdown into the wrong country.
         smoke.CACHE_COUNTRY: [country_of.get(rows[i].currency or "", "?") for i in sample],
         smoke.CACHE_CHANNEL: [rows[i].channel or "?" for i in sample],
+        smoke.CACHE_VARIANT: [variants.get(rows[i].transaction_id, "") for i in sample],
     }
     if run.cache:
         smoke.cache_write(run.cache, key, vectors, extras)
@@ -550,6 +571,7 @@ class Battery:
     labels: list[bool]
     country: list[str]
     channel: list[str]
+    variant: list[str]
     train: list[int]
     test: list[int]
     calibration: list[int]
@@ -571,13 +593,7 @@ def _battery_calibration(bench: Battery, scores: list[float]) -> list[str]:
         bench.fit(bench.train, bench.calibration), bench.labels_of(bench.calibration)
     )
     mapped = battery.apply_platt(scores, fit)
-    bins = battery.reliability(mapped, held)
-    return report.reliability_table(
-        bins,
-        battery.expected_calibration_error(bins),
-        battery.brier(scores, held),
-        battery.brier(mapped, held),
-    )
+    return report.reliability_table(battery.calibrate(scores, mapped, held))
 
 
 def _battery_shap(bench: Battery, top: int) -> list[str]:
@@ -665,6 +681,16 @@ def _battery_breakdowns(bench: Battery, scores: list[float], headline: float) ->
     return lines
 
 
+def _battery_novel_variant(bench: Battery, scores: list[float]) -> list[str]:
+    """The generalisation test that can still fail here (PB-59)."""
+    held = bench.labels_of(bench.test)
+    variants = [bench.variant[i] for i in bench.test]
+    results, threshold = battery.by_variant(scores, held, variants)
+    if not results:
+        return ["", "NOVEL SUB-VARIANT — skipped: the held-out rows carry no labelled variants."]
+    return report.variant_table(results, threshold, 0.01)
+
+
 def _battery_loco(bench: Battery) -> list[str]:
     """Leave-one-country-out: the generalisation experiment PB-46 says carries the weight."""
     rows = []
@@ -686,6 +712,81 @@ def _battery_loco(bench: Battery) -> list[str]:
         "  country's own difficulty and the cost of never having seen it are different things.",
         rows,
     )
+
+
+#: Tree configurations the frontier walks. Chosen to span an order of magnitude in both
+#: dimensions rather than to bracket any particular answer: the figure is the *shape*, and a grid
+#: centred on the current model would only show that the current model is fine.
+FRONTIER_GRID = ((50, 3), (100, 4), (200, 5), (400, 6), (800, 8))
+
+
+def run_frontier(cache: Path, seed: int, requests: int, repeats: int) -> int:
+    """Accuracy against single-request latency, with and without exact TreeSHAP (D-16).
+
+    **The absolute milliseconds are not gate numbers.** ADR 0010 permits latency percentiles as
+    gate evidence only from the dedicated machine in `docs/benchmarks/hardware.md`; this runs
+    wherever it is invoked and says so in its own output. What it establishes is the trade-off's
+    shape, which is the part that does not depend on the machine.
+    """
+    import xgboost as xgb  # noqa: PLC0415 - heavy, and only this command needs it
+
+    loaded = smoke.cache_read_any(cache)
+    if loaded is None:
+        raise DatasetGapError(f"{cache} holds no usable feature matrix")
+    vectors, extras = loaded
+    names = smoke.trainable_features()
+    labels = [v == "True" for v in extras[smoke.CACHE_LABEL]]
+    segment = extras[smoke.CACHE_SEGMENT]
+    train = [i for i, s_ in enumerate(segment) if s_ == "train"]
+    test = [i for i, s_ in enumerate(segment) if s_ == "test"]
+    encoded = smoke.encode_categoricals(vectors, labels, extras[smoke.CACHE_ACCOUNT], train)
+    matrix = [
+        [encoded[n][i] if n in encoded else float(vectors[i][n]) for n in names]
+        for i in range(len(vectors))
+    ]
+    test_labels = [labels[i] for i in test]
+    timed_rows = [matrix[i] for i in test[:requests]]
+
+    points = []
+    for trees, depth in FRONTIER_GRID:
+        booster = xgb.train(
+            {**smoke.MODEL_PARAMETERS, "seed": seed, "max_depth": depth},
+            xgb.DMatrix(
+                [matrix[i] for i in train],
+                label=[float(labels[i]) for i in train],
+                missing=float("nan"),
+            ),
+            trees,
+        )
+        scores = [
+            float(p)
+            for p in booster.predict(xgb.DMatrix([matrix[i] for i in test], missing=float("nan")))
+        ]
+
+        def predict_one(rows: list[list[float]], model: object = booster) -> None:
+            model.predict(xgb.DMatrix(rows, missing=float("nan")))  # type: ignore[attr-defined]
+
+        def explain_one(rows: list[list[float]], model: object = booster) -> None:
+            model.predict(  # type: ignore[attr-defined]
+                xgb.DMatrix(rows, missing=float("nan")), pred_contribs=True
+            )
+
+        points.append(
+            frontier.summarise(
+                trees,
+                depth,
+                scores,
+                test_labels,
+                frontier.Timings(
+                    predict=frontier.time_single_requests(predict_one, timed_rows, repeats),
+                    explain=frontier.time_single_requests(explain_one, timed_rows, repeats),
+                ),
+            )
+        )
+        print(f"  {trees} trees, depth {depth}: done", flush=True)
+
+    print("\n".join(report.frontier_table(points, len(timed_rows) * repeats)))
+    return 0
 
 
 def run_battery(cache: Path, seed: int, top: int) -> int:
@@ -724,6 +825,7 @@ def run_battery(cache: Path, seed: int, top: int) -> int:
         labels=labels,
         country=extras[smoke.CACHE_COUNTRY],
         channel=extras[smoke.CACHE_CHANNEL],
+        variant=extras[smoke.CACHE_VARIANT],
         train=by["train"],
         test=by["test"],
         calibration=by["calibration"],
@@ -746,6 +848,7 @@ def run_battery(cache: Path, seed: int, top: int) -> int:
     lines += _battery_shap(bench, top)
     lines += _battery_ablations(bench, headline.auc)
     lines += _battery_breakdowns(bench, scores, headline.auc)
+    lines += _battery_novel_variant(bench, scores)
     lines += _battery_loco(bench)
     print("\n".join(lines))
     return 0
@@ -930,6 +1033,7 @@ def run_smoke(run: smoke.SmokeRun) -> int:
         accounts = [rows[i].account_id for i in sample]
         if cache:
             country_of = country_by_currency(packs)
+            smoke_variants = read_variants(root, {rows[i].transaction_id for i in sample})
             smoke.cache_write(
                 cache,
                 run.key,
@@ -942,6 +1046,9 @@ def run_smoke(run: smoke.SmokeRun) -> int:
                         country_of.get(rows[i].currency or "", "?") for i in sample
                     ],
                     smoke.CACHE_CHANNEL: [rows[i].channel or "?" for i in sample],
+                    smoke.CACHE_VARIANT: [
+                        smoke_variants.get(rows[i].transaction_id, "") for i in sample
+                    ],
                 },
             )
             print(f"wrote the feature matrix to {cache}")
@@ -1050,6 +1157,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     battery_command.add_argument("cache", type=Path)
     battery_command.add_argument("--seed", type=int, default=20260917)
     battery_command.add_argument("--top", type=int, default=15, help="features to list by |SHAP|")
+    frontier_command = commands.add_parser(
+        "frontier",
+        help="accuracy against single-request latency with and without exact TreeSHAP (D-16)",
+    )
+    frontier_command.add_argument("cache", type=Path)
+    frontier_command.add_argument("--seed", type=int, default=20260917)
+    frontier_command.add_argument("--requests", type=int, default=300)
+    frontier_command.add_argument("--repeats", type=int, default=3)
     smoke_command = commands.add_parser(
         "smoke",
         help="train one model on the computable features and report it against the "
@@ -1068,41 +1183,48 @@ def main(argv: Sequence[str] | None = None) -> int:
         "corpus size, sample size and feature set; write it there otherwise",
     )
     args = parser.parse_args(argv)
-
     try:
-        if args.command == "battery":
-            return run_battery(args.cache, args.seed, args.top)
-        if args.command == "evaluate":
-            return run_evaluate(
-                EvaluationRun(
-                    dataset=args.dataset,
-                    packs=args.packs,
-                    split=args.split,
-                    corpus_rows=args.corpus_rows,
-                    train_rows=args.train_rows,
-                    test_rows=args.test_rows,
-                    calibration_rows=args.calibration_rows,
-                    seed=args.seed,
-                    cache=args.cache,
-                )
-            )
-        if args.command == "smoke":
-            return run_smoke(
-                smoke.SmokeRun(
-                    dataset=args.dataset,
-                    packs=args.packs,
-                    corpus_rows=args.corpus_rows,
-                    sample_rows=args.sample_rows,
-                    seed=args.seed,
-                    cache=args.cache,
-                )
-            )
-        if args.command == "auc":
-            return run_auc(args.dataset, args.packs, args.corpus_rows, args.sample_rows)
-        return run_computability(args.dataset, args.packs, args.corpus_rows, args.sample_rows)
+        return _dispatch(args)
     except DatasetGapError as gap:
         print(f"ERROR {gap}", file=sys.stderr)
         return 2
+
+
+#: One entry per subcommand. A table rather than a chain of returns, so adding the eighth does not
+#: make `main` too long to read — the same arrangement `fs-dataset` already uses.
+COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
+    "frontier": lambda a: run_frontier(a.cache, a.seed, a.requests, a.repeats),
+    "battery": lambda a: run_battery(a.cache, a.seed, a.top),
+    "evaluate": lambda a: run_evaluate(
+        EvaluationRun(
+            dataset=a.dataset,
+            packs=a.packs,
+            split=a.split,
+            corpus_rows=a.corpus_rows,
+            train_rows=a.train_rows,
+            test_rows=a.test_rows,
+            calibration_rows=a.calibration_rows,
+            seed=a.seed,
+            cache=a.cache,
+        )
+    ),
+    "smoke": lambda a: run_smoke(
+        smoke.SmokeRun(
+            dataset=a.dataset,
+            packs=a.packs,
+            corpus_rows=a.corpus_rows,
+            sample_rows=a.sample_rows,
+            seed=a.seed,
+            cache=a.cache,
+        )
+    ),
+    "auc": lambda a: run_auc(a.dataset, a.packs, a.corpus_rows, a.sample_rows),
+    "computability": lambda a: run_computability(a.dataset, a.packs, a.corpus_rows, a.sample_rows),
+}
+
+
+def _dispatch(args: argparse.Namespace) -> int:
+    return COMMANDS[args.command](args)
 
 
 if __name__ == "__main__":  # pragma: no cover - module entry point

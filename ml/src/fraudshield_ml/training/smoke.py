@@ -308,7 +308,18 @@ CACHE_ACCOUNT = "_account_id"
 CACHE_SEGMENT = "_segment"
 CACHE_COUNTRY = "_country"
 CACHE_CHANNEL = "_channel"
-CACHE_EXTRAS = (CACHE_LABEL, CACHE_ACCOUNT, CACHE_SEGMENT, CACHE_COUNTRY, CACHE_CHANNEL)
+#: The fraud sub-variant, from `labels.scenario_variant`. Empty for a legitimate row. It is in the
+#: cache because the novel-variant hold-out is now M4's main generalisation evidence (PB-59), and
+#: it is a property of the row rather than of any feature.
+CACHE_VARIANT = "_variant"
+CACHE_EXTRAS = (
+    CACHE_LABEL,
+    CACHE_ACCOUNT,
+    CACHE_SEGMENT,
+    CACHE_COUNTRY,
+    CACHE_CHANNEL,
+    CACHE_VARIANT,
+)
 
 
 def cache_key(dataset: str, corpus_rows: int, sample_rows: int) -> dict[str, str]:

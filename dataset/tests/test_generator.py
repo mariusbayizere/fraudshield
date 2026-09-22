@@ -853,3 +853,40 @@ def test_the_lead_is_clipped_at_both_ends_rather_than_resampled() -> None:
         "precondition: some draw must fall below the floor, or clipping is untested there"
     )
     assert all(low <= m <= high for m in minutes)
+
+
+@pytest.mark.req("ML-DATA-02", "D-08")
+def test_no_fraud_parameter_is_keyed_by_country() -> None:
+    """The mechanism behind PB-59's null result, asserted rather than described.
+
+    Leave-one-country-out measures nothing on this benchmark: removing a country from training
+    entirely changes its AUC by at most 0.002. The reason is that fraud here is **country-
+    invariant by construction** — every scenario share, burst length, amount multiplier, lead
+    distribution and adaptation parameter is global. Country enters only as a lookup for *which*
+    mule, merchant, agent, currency or UTC offset an incident uses, so the identities differ and
+    the mechanism does not.
+
+    This is a test rather than a sentence because the sentence would otherwise be the only thing
+    standing behind a published negative result, and a later parameter keyed by country would
+    quietly make that result wrong. **It is deliberately not a reason to make fraud
+    country-specific**: engineering a difference so that the experiment becomes informative would
+    be tuning the benchmark to produce a result (owner decision, 2026-09-22).
+    """
+    parameters = load_parameters()
+    codes = set(load_packs(parameters))
+    assert len(codes) >= 2, "precondition: more than one country pack, or nothing can be keyed"
+
+    fraud_keys = [k for k in parameters.parameters if k.startswith("fraud.")]
+    assert fraud_keys, "precondition: the fraud category has parameters to check"
+
+    offenders = []
+    for key in fraud_keys:
+        value = parameters.value(key)
+        if isinstance(value, dict) and codes & set(value):
+            offenders.append((key, sorted(codes & set(value))))
+
+    assert not offenders, (
+        f"fraud parameters keyed by country: {offenders}. Country-specific fraud would make "
+        "leave-one-country-out informative, and PB-59 records that as a change to the benchmark "
+        "rather than a fix to the experiment"
+    )

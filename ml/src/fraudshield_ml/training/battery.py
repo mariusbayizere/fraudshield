@@ -143,9 +143,82 @@ def reliability(scores: Sequence[float], labels: Sequence[bool], bins: int = 10)
 
 
 def expected_calibration_error(table: Sequence[Bin]) -> float:
-    """Row-weighted mean gap between predicted and observed. ML-GATE-11's quantity."""
+    """Row-weighted mean gap between predicted and observed. ML-GATE-11's quantity.
+
+    **Row-weighted is what makes it nearly useless on its own here.** At a 0.9% base rate a good
+    model puts 99% of rows in the lowest bin, predicting ~0.001 and observing ~0.001, so the
+    weighted mean is dominated by rows nobody will ever act on and reads 0.0005 whatever the
+    model does at the top. Report it with `decision_region` below, which is where the number
+    matters: an alert is raised or not raised on the confident end.
+    """
     total = sum(b.rows for b in table)
     return sum(b.rows * abs(b.predicted - b.observed) for b in table) / total if total else math.nan
+
+
+#: Where a decision is actually made. Scores below this never reach an analyst under any alert
+#: budget this project contemplates, so calibration there is arithmetic rather than a property
+#: anyone relies on.
+DECISION_THRESHOLD = 0.60
+
+
+@dataclass(frozen=True)
+class Region:
+    """Calibration over one slice of the score range, with the counts it rests on."""
+
+    threshold: float
+    bins: list[Bin]
+    ece: float
+    brier: float
+    rows: int
+    fraud: int
+
+
+@dataclass(frozen=True)
+class Calibration:
+    """What the calibration section reports: the whole range, and the part decisions use."""
+
+    bins: list[Bin]
+    ece: float
+    brier_before: float
+    brier_after: float
+    region: Region
+
+
+def decision_region(
+    scores: Sequence[float], labels: Sequence[bool], threshold: float = DECISION_THRESHOLD
+) -> Region:
+    """Reliability, ECE and Brier restricted to scores at or above `threshold`.
+
+    Returns the bins, the ECE over them, the Brier score over them, and the rows and fraud the
+    region holds — because a decision-region metric over forty rows is a different claim from the
+    same number over four hundred, and the restriction is what makes that easy to forget.
+    """
+    kept = [(p, y) for p, y in zip(scores, labels, strict=True) if p >= threshold]
+    if not kept:
+        return Region(threshold, [], math.nan, math.nan, 0, 0)
+    region_scores = [p for p, _ in kept]
+    region_labels = [y for _, y in kept]
+    table = reliability(region_scores, region_labels)
+    return Region(
+        threshold=threshold,
+        bins=table,
+        ece=expected_calibration_error(table),
+        brier=brier(region_scores, region_labels),
+        rows=len(kept),
+        fraud=sum(1 for y in region_labels if y),
+    )
+
+
+def calibrate(raw: Sequence[float], mapped: Sequence[float], labels: Sequence[bool]) -> Calibration:
+    """Everything the calibration section needs, measured once."""
+    bins = reliability(mapped, labels)
+    return Calibration(
+        bins=bins,
+        ece=expected_calibration_error(bins),
+        brier_before=brier(raw, labels),
+        brier_after=brier(mapped, labels),
+        region=decision_region(mapped, labels),
+    )
 
 
 # --- explanations ---------------------------------------------------------------------------
@@ -189,3 +262,76 @@ def additivity_error(contributions: Sequence[Sequence[float]], margins: Sequence
     for row, margin in zip(contributions, margins, strict=True):
         worst = max(worst, abs(sum(row) - margin))
     return worst
+
+
+# --- generalisation to an unseen fraud shape -------------------------------------------------
+
+#: The sub-variant the generator places only in the test period (D-08). A model trained on the
+#: train period has, by construction, never seen it.
+NOVEL_VARIANT = "novel_esim_delayed_drain"
+
+
+@dataclass(frozen=True)
+class VariantResult:
+    """One fraud shape's detectability, against the same legitimate rows and the same threshold."""
+
+    variant: str
+    fraud: int
+    detected: int
+    auc: float
+    error: float
+
+    @property
+    def recall(self) -> float:
+        return self.detected / self.fraud if self.fraud else math.nan
+
+    @property
+    def interval(self) -> float:
+        return 1.96 * self.error
+
+
+def by_variant(
+    scores: Sequence[float],
+    labels: Sequence[bool],
+    variants: Sequence[str],
+    fpr: float = 0.01,
+) -> tuple[list[VariantResult], float]:
+    """Each fraud shape scored against **the same** legitimate rows at **one** threshold.
+
+    This is the comparison the novel-variant hold-out exists to make, and it only means anything
+    if both halves are held fixed. Giving each variant its own threshold would let a shape look
+    detectable because its own negatives happened to be easy; giving each its own negatives would
+    compare two different problems. So the threshold is chosen once, from all legitimate rows, at
+    the budget an alert queue would actually run.
+
+    Returns the per-variant results and the threshold, because a recall without the operating
+    point that produced it is not reproducible.
+    """
+    legitimate = sorted((s for s, y in zip(scores, labels, strict=True) if not y), reverse=True)
+    if not legitimate:
+        return [], math.nan
+    index = min(len(legitimate) - 1, max(0, int(len(legitimate) * fpr) - 1))
+    threshold = legitimate[index]
+
+    kinds = sorted(
+        {v for v, y in zip(variants, labels, strict=True) if y and v},
+        key=lambda v: (v != NOVEL_VARIANT, v),
+    )
+    results = []
+    for kind in kinds:
+        positives = [s for s, y, v in zip(scores, labels, variants, strict=True) if y and v == kind]
+        if not positives:
+            continue
+        paired = positives + [s for s, y in zip(scores, labels, strict=True) if not y]
+        paired_labels = [True] * len(positives) + [False] * (len(paired) - len(positives))
+        value = auc(paired, paired_labels)
+        results.append(
+            VariantResult(
+                variant=kind,
+                fraud=len(positives),
+                detected=sum(1 for s in positives if s > threshold),
+                auc=value,
+                error=auc_standard_error(value, len(positives), len(paired) - len(positives)),
+            )
+        )
+    return results, threshold

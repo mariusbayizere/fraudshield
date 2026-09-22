@@ -27,6 +27,7 @@ from fraudshield_ml.training.smoke import (
     CACHE_COUNTRY,
     CACHE_LABEL,
     CACHE_SEGMENT,
+    CACHE_VARIANT,
     FLOOR_FEATURE,
     SINGLE_FEATURE_FLOOR,
     SmokeResult,
@@ -338,6 +339,7 @@ def test_the_cache_is_reused_only_under_the_settings_it_was_written_for(tmp_path
         CACHE_SEGMENT: ["train", "train", "test", "calibration"],
         CACHE_COUNTRY: ["AA", "AA", "BB", "CC"],
         CACHE_CHANNEL: ["USSD", "CARD", "AGENT_BANKING", "USSD"],
+        CACHE_VARIANT: ["base", "", "novel_esim_delayed_drain", ""],
     }
     key = cache_key("/data/bench", 1000, 4)
     path = tmp_path / "matrix.parquet"
