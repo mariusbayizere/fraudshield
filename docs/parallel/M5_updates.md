@@ -587,3 +587,8 @@ what they replaced.
 
 **Not changed, deliberately:** the latency figures stay laptop-only and out of the gate (ADR 0032),
 and FR-02-09 stays NOT DONE. Neither is affected by the seven findings.
+
+**Generated files touched by this section** (the owner's rule: name each commit, regenerate on
+merge, never hand-resolve): `docs/traceability/requirements_matrix.md` re-rendered in the commit
+below the N5-N7 fixes — 258 rows, 990 tagged tests, `fs-traceability check` 0 errors 0 warnings.
+`requirements.yaml` is untouched, as throughout.
