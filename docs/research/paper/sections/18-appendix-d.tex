@@ -1,0 +1,38 @@
+\section{Evidence index}
+\label{app:evidence}
+
+Every evidence file the paper's numbers come from, with the commit that produced it; all are read
+at the tag \texttt{m4-complete} (\texttt{72e7790}) by \texttt{audit\_numbers.py}, and the paper's
+macro-by-macro map is \texttt{numbers.tex}. Paths are relative to the repository root; \texttt{bm/}
+stands for \texttt{docs/benchmarks/}.
+
+\begin{small}
+\begin{longtable}{p{0.44\linewidth}p{0.14\linewidth}p{0.32\linewidth}}
+\toprule
+File & Commit & Used for \\
+\midrule
+\endhead
+\texttt{bm/m4\_gate\_d8083dbc\_v3.txt} & \texttt{d40fca2} & Gate metrics and margins (Table~\ref{tab:gate}) \\
+\texttt{bm/m4\_battery\_d8083dbc\_e1.txt} & \texttt{d40fca2} & Baselines, groups, countries, variants \\
+\texttt{bm/m4\_seed\_variance\_d8083dbc\_e1.txt} & \texttt{d40fca2} & Seed variance (C-6) \\
+\texttt{bm/m4\_battery\_pb61.txt} & \texttt{dbda585} & First reversal-scam run, superseded \\
+\texttt{bm/m4\_battery\_6abde44e.txt}, \texttt{bm/m4\_battery.md} & \texttt{d15f165} & Earlier-draw battery \\
+\texttt{bm/m4\_frontier\_6abde44e.txt}, \texttt{bm/m4\_frontier.md} & \texttt{95b722c} & Accuracy--explanation frontier (Table~\ref{tab:frontier}) \\
+\texttt{bm/m3\_single\_feature\_auc\_2c80ef6.txt}, \texttt{bm/single\_feature\_baseline.md} & \texttt{2c80ef6} & Single-feature floor (Table~\ref{tab:floor}) \\
+\texttt{dataset/realism\_report.md} & draw \texttt{d8083dbc} & Dataset at a glance, scenarios, mixes \\
+\texttt{dataset/params\_provenance.md} & tag & Parameter provenance counts \\
+\texttt{docs/ml/datasheet.md} & tag & Dataset documentation \\
+\texttt{docs/ml/training\_serving\_parity.md} & tag & Parity tolerance (ADR 0025) \\
+\texttt{docs/research/claims\_register.md} & tag & Claims C-4 to C-8 and their status \\
+\texttt{docs/research/lab\_notebook.md} & tag & Predictions and their outcomes (Table~\ref{tab:predictions}) \\
+\texttt{docs/research/sourcing\_pass.md} & tag & Sources of the calibrated parameters \\
+\texttt{bm/hardware.md} & tag & Hardware of the measurements \\
+\texttt{bm/test\_set\_access.jsonl} & tag & Log of every read of the test set \\
+\texttt{docs/reviews/M2/}, \texttt{docs/reviews/M3/} & tag & Milestone review findings \\
+\bottomrule
+\end{longtable}
+\end{small}
+
+The commit column gives the evidence commit stamped in the file where it has one; the single-feature
+file carries no stamp and is identified by the commit in its name. ``Tag'' means the file as it stands
+at \texttt{m4-complete}.

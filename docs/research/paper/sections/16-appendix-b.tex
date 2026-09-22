@@ -1,0 +1,81 @@
+\section{Feature catalogue}
+\label{app:features}
+
+The \nFeatures{} features of the registry at \texttt{m4-complete}, by group, with the first sentence
+of each definition (shortened where it carries parameters; the registry, \texttt{ml/src/\allowbreak fraudshield\_ml/\allowbreak features/\allowbreak registry.py},
+holds the full definitions). The models train on \nTrainableFeatures{}: the six marked below are
+either constant on this benchmark or have no source column in the generated data.
+
+\begin{small}
+\begin{longtable}{p{0.36\linewidth}p{0.56\linewidth}}
+\toprule
+Feature & Definition \\
+\midrule
+\endhead
+\multicolumn{2}{l}{\textbf{Velocity}} \\*
+\texttt{velocity\_\allowbreak ratio\_\allowbreak 1h\_\allowbreak vs\_\allowbreak 30d} & Transactions in the trailing hour divided by the mean hourly count over the prior thirty days, both Laplace-smoothed so an account with no history scores one. \\
+\texttt{tx\_\allowbreak count\_\allowbreak 60s} & Transactions on this account in the trailing sixty seconds before the scored transaction. \\
+\texttt{tx\_\allowbreak count\_\allowbreak 1h} & Transactions on this account in the trailing hour before the scored transaction. \\
+\texttt{tx\_\allowbreak count\_\allowbreak 24h} & Transactions on this account in the trailing day before the scored transaction. \\
+\texttt{tx\_\allowbreak count\_\allowbreak 7d} & Transactions on this account in the trailing seven days before the scored transaction. \\
+\texttt{amount\_\allowbreak sum\_\allowbreak 24h} & Sum of transaction amounts on this account in the trailing day, each converted to RWF at the FX rate for its own transaction date, not the scored transaction's date. \\
+\texttt{amount\_\allowbreak sum\_\allowbreak 7d} & Sum of transaction amounts on this account in the trailing seven days, each converted to RWF at the FX rate for its own transaction date. \\
+\texttt{unique\_\allowbreak counterparties\_\allowbreak 24h} & Distinct counterparty tokens this account transacted with in the trailing day. \\
+\addlinespace
+\multicolumn{2}{l}{\textbf{Temporal}} \\*
+\texttt{local\_\allowbreak hour\_\allowbreak sin} & Sine of the integer local hour on the daily circle, so late evening and midnight are adjacent. \\
+\texttt{local\_\allowbreak hour\_\allowbreak cos} & Cosine partner of the local-hour sine, computed from the same integer hour. \\
+\texttt{local\_\allowbreak day\_\allowbreak of\_\allowbreak week} & Local day of week, from local time rather than UTC. \\
+\texttt{is\_\allowbreak local\_\allowbreak night} & True for local times from midnight to just before five in the morning. \\
+\texttt{is\_\allowbreak month\_\allowbreak end\_\allowbreak window} & True on the last three and first two local days of a month, the salary period. \\
+\texttt{seconds\_\allowbreak since\_\allowbreak last\_\allowbreak tx} & Seconds between this account's previous transaction and the scored one, with no window bound: the previous transaction counts however old it is. \\
+\addlinespace
+\multicolumn{2}{l}{\textbf{Geographic}} \\*
+\texttt{geo\_\allowbreak cell\_\allowbreak fraud\_\allowbreak rate\_\allowbreak 30d} & Confirmed-fraud proportion of the transaction's H3 resolution-6 cell over the prior thirty days, counting only labels whose label\_available\_at precedes the transaction timestamp, shrunk toward the training-fold base rate with a pseudo-count of 50. \\
+\texttt{distance\_\allowbreak from\_\allowbreak last\_\allowbreak tx\_\allowbreak km} & Great-circle distance from this account's previous transaction location to the scored one, via the shared haversine primitive. \\
+\texttt{implied\_\allowbreak speed\_\allowbreak kmh} & Distance from the previous transaction divided by the elapsed hours, capped above commercial cruising speed. \\
+\texttt{distance\_\allowbreak from\_\allowbreak home\_\allowbreak centroid\_\allowbreak km} & Great-circle distance from the component-wise median of this account's prior ninety days of transaction locations to the scored one. \\
+\texttt{is\_\allowbreak new\_\allowbreak country\_\allowbreak for\_\allowbreak account} & True when the account has never before sent to the counterparty's country, over unbounded history. \\
+\addlinespace
+\multicolumn{2}{l}{\textbf{Amount behaviour}} \\*
+\texttt{amount\_\allowbreak log1p} & log1p of the scored transaction's amount in RWF, converted at the FX rate for its own transaction date. \\
+\texttt{amount\_\allowbreak zscore\_\allowbreak 90d} & Robust z-score of the amount against the account's prior ninety days, using the median and the scaled median absolute deviation. \\
+\texttt{amount\_\allowbreak to\_\allowbreak max\_\allowbreak 90d\_\allowbreak ratio} & Scored amount divided by the largest amount on this account in the prior ninety days, both in RWF at their own transaction dates. \\
+\texttt{round\_\allowbreak sum\_\allowbreak flag} & True when the amount is an exact multiple of one of the transaction currency's common denominations, read from the country pack rather than hard-coded (ADR 0023). \\
+\texttt{just\_\allowbreak below\_\allowbreak limit\_\allowbreak flag} & True when the amount falls just below a channel or KYC-tier limit in force at the transaction's timestamp (ADR 0026): the structuring signal. \emph{(not trained: constant)} \\
+\addlinespace
+\multicolumn{2}{l}{\textbf{Counterparty}} \\*
+\texttt{counterparty\_\allowbreak is\_\allowbreak new\_\allowbreak for\_\allowbreak account} & True when this account has never transacted with this counterparty before, over unbounded history. \\
+\texttt{counterparty\_\allowbreak account\_\allowbreak age\_\allowbreak days} & Days between the counterparty account's opening date and the scored transaction. \emph{(not trained: no source)} \\
+\texttt{counterparty\_\allowbreak unique\_\allowbreak senders\_\allowbreak 24h} & Distinct accounts that sent to this counterparty in the trailing day---the mule signal, since a legitimate recipient rarely acquires many unrelated senders at once. \\
+\texttt{counterparty\_\allowbreak confirmed\_\allowbreak fraud\_\allowbreak 90d} & Confirmed-fraud transactions involving this counterparty in the prior ninety days, counting only labels whose label\_available\_at precedes the scored transaction. \\
+\texttt{tx\_\allowbreak count\_\allowbreak to\_\allowbreak counterparty\_\allowbreak 30d} & Transactions from this account to this counterparty in the trailing thirty days---an established-relationship signal, low for a first transfer to a new payee. \\
+\addlinespace
+\multicolumn{2}{l}{\textbf{Device and channel}} \\*
+\texttt{channel} & The transaction's channel, passed to native categorical handling rather than one-hot encoded. \\
+\texttt{device\_\allowbreak is\_\allowbreak new\_\allowbreak for\_\allowbreak account} & True when this account has not used this device fingerprint before. \\
+\texttt{accounts\_\allowbreak per\_\allowbreak device\_\allowbreak 7d} & Distinct accounts that transacted from this device fingerprint in the trailing seven days---the device-sharing signal behind synthetic-identity rings. \\
+\texttt{device\_\allowbreak changes\_\allowbreak 24h} & Distinct device fingerprints the account used in the trailing day, minus one. \\
+\texttt{device\_\allowbreak age\_\allowbreak days} & Days since this device fingerprint was first seen anywhere in the institution, not merely on this account: a device first seen an hour ago is the signal, and scoping it to the account would make every device new on its first use there. \\
+\addlinespace
+\multicolumn{2}{l}{\textbf{Account profile}} \\*
+\texttt{account\_\allowbreak age\_\allowbreak days} & Days between the account's opening date and the scored transaction. \emph{(not trained: no source)} \\
+\texttt{kyc\_\allowbreak tier} & The account's KYC tier in force at the transaction's timestamp (ADR 0026), as an ordinal. \emph{(not trained: no source)} \\
+\texttt{days\_\allowbreak since\_\allowbreak sim\_\allowbreak swap} & Days since the most recent SIM swap on the account's registered MSISDN, from the MNO signal, counting only swaps before the scored transaction. \\
+\texttt{dormancy\_\allowbreak reactivation\_\allowbreak flag} & True when this account had no transaction in the sixty days before the scored one, having had at least one before that---reactivation after dormancy, not a new account. \\
+\addlinespace
+\multicolumn{2}{l}{\textbf{Agent}} \\*
+\texttt{agent\_\allowbreak float\_\allowbreak utilisation\_\allowbreak ratio} & The agent's float drawn down as a fraction of its limit, as they stood at the transaction's timestamp (ADR 0026). \emph{(not trained: no source)} \\
+\texttt{agent\_\allowbreak cashout\_\allowbreak count\_\allowbreak 1h} & Cash-out transactions at this agent in the trailing hour. \\
+\texttt{agent\_\allowbreak unique\_\allowbreak customers\_\allowbreak 1h} & Distinct accounts transacting at this agent in the trailing hour. \\
+\texttt{agent\_\allowbreak distance\_\allowbreak from\_\allowbreak registered\_\allowbreak km} & Great-circle distance from the agent's registered premises to the transaction location, via the shared haversine primitive---an agent transacting far from its registered site. \emph{(not trained: no source)} \\
+\addlinespace
+\multicolumn{2}{l}{\textbf{Corridor}} \\*
+\texttt{corridor\_\allowbreak class} & Domestic, intra-bloc, cross-bloc within Africa, or intercontinental, from the two countries' bloc memberships (ADR 0023; Section~\ref{sec:setting}). \\
+\addlinespace
+\multicolumn{2}{l}{\textbf{Synthetic identity}} \\*
+\texttt{synthetic\_\allowbreak identity\_\allowbreak score} & A deterministic, hand-specified composite of low KYC tier, young account age, shared device and phone attributes, and rapid volume ramp, computed without labels. \\
+\addlinespace
+\bottomrule
+\end{longtable}
+\end{small}

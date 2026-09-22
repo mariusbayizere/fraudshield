@@ -1,0 +1,46 @@
+\appendix
+\section{Identifiers used in this paper}
+\label{app:identifiers}
+
+Every identifier below is defined in the repository at \texttt{m4-complete}. Resolutions D-xx are the
+binding corrections to the specification (\texttt{docs/srs/defect\_register.md}); ADRs are architecture
+decision records (\texttt{docs/adr/}); C-n are claims in \texttt{docs/research/claims\_register.md}; PB-n
+are backlog items (\texttt{docs/backlog/product.md}).
+
+\begin{longtable}{p{0.14\linewidth}p{0.78\linewidth}}
+\toprule
+Identifier & Meaning \\
+\midrule
+\endhead
+D-01 & The specified precision target at the false-positive budget is mathematically impossible at this base rate; the gate reports precision beside its ceiling. \\
+D-02 & The recall, F1 and false-negative targets lacked a defined operating point; the resolution defines the flag and block thresholds. \\
+D-04 & The specified USSD feature count without a device fingerprint was undefined; device features are structurally missing for USSD. \\
+D-05 & Calibrating two models separately and averaging does not yield a calibrated ensemble, and SHAP additivity is exact only in each model's margin space. \\
+D-06 & The Isolation Forest score range and threshold conflicted. \\
+D-07 & The temporal split definitions disagreed; the resolution fixes one split with a calibration tail and an embargo. \\
+D-08 & Results on synthetic data can look perfect and prove nothing; the resolution sets the realism and anti-leakage controls. \\
+D-16 & Python in the scoring hot path at the specified throughput; the resolution makes tree complexity a latency-constrained hyperparameter. \\
+D-20 & The specified PostgreSQL transparent data encryption does not exist in community PostgreSQL; personal data goes to a separate encrypted vault. \\
+D-21 & Data residency: the specified hosting region lies outside the EAC. \\
+D-22 & The regulatory mapping is unverified and needs a compliance professional. \\
+D-25 & Customer verification by SMS link defeats itself in SIM-swap fraud, because the fraudster holds the victim's SIM. \\
+ADR 0010 & Container stack verified in CI, not on the author's laptop; latency percentiles only from a dedicated machine. \\
+ADR 0023 & Africa-wide portability: corridor classes derived from bloc memberships. \\
+ADR 0025 & The parity tolerance that replaces the specification's absolute $10^{-9}$. \\
+ADR 0026 & Operational thresholds are read as of the transaction. \\
+ADR 0028 & One pre-registered non-burst fraud variant. \\
+ADR 0029 & Platt scaling stays in the diagnostic battery; the production model is calibrated as D-05 says. \\
+ADR 0030 & The M4 evidence is recorded without MLflow tracking. \\
+ADR 0031 & How M4's requirements close, including the two gate metrics that miss. \\
+C-4 & Claim that models built elsewhere reach far lower AUC on East African mobile-money data: unverified. \\
+C-5 & Claim that model accuracy degrades by a fixed share per year without retraining: unverified. \\
+C-6 & Claim that the ensemble reduces variance against a single model: measured, mixed; it does not against XGBoost alone. \\
+C-8 & Claim that the dataset is the first public East African fraud benchmark: unverified, not made. \\
+E1 & Every fold, split, sample and target encoding groups by account, because fraud arrives as incidents sharing an account. \\
+PB-43 & Two of the four corridor classes are unreachable on this dataset. \\
+PB-67 & The gate model trains on a subset of the training period; the learning curve over training volume. \\
+M2, M3, M4 & Milestones: the dataset generator; the features and feature store; the models, calibration and evaluation. \\
+M5, M6, M8 & Milestones: the scoring service; ingestion and the decision engine; the analyst console. \\
+M10, M11 & Milestones: the verification campaign on dedicated hardware; the research artefacts including this paper. \\
+\bottomrule
+\end{longtable}
