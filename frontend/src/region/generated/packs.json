@@ -1,0 +1,32 @@
+{
+  "CD": {
+    "country": "CD",
+    "currency": "CDF",
+    "currencyMinorUnits": 2,
+    "utcOffsetHours": 2
+  },
+  "KE": {
+    "country": "KE",
+    "currency": "KES",
+    "currencyMinorUnits": 2,
+    "utcOffsetHours": 3
+  },
+  "RW": {
+    "country": "RW",
+    "currency": "RWF",
+    "currencyMinorUnits": 0,
+    "utcOffsetHours": 2
+  },
+  "TZ": {
+    "country": "TZ",
+    "currency": "TZS",
+    "currencyMinorUnits": 2,
+    "utcOffsetHours": 3
+  },
+  "UG": {
+    "country": "UG",
+    "currency": "UGX",
+    "currencyMinorUnits": 0,
+    "utcOffsetHours": 3
+  }
+}

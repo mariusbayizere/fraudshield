@@ -52,13 +52,16 @@ describe('RiskCard (D-34)', () => {
     expect(screen.getByRole('article')).not.toHaveClass(PULSE_CLASS);
   });
 
-  it('leads with the tier in words and a 3 px tier border', () => {
-    renderThemed(<RiskCard tier="high" aria-label="alert" />);
-    const card = screen.getByRole('article');
-    expect(card.textContent).toMatch(/^HIGH RISK/);
-    expect(card).toHaveStyle({
-      borderLeftWidth: '3px',
-      borderColor: tokens.color.light.risk.high.border,
-    });
-  });
+  it.each(['ltr', 'rtl'] as const)(
+    'leads with the tier in words and a 3 px border on its inline-start edge (%s)',
+    (direction) => {
+      renderThemed(<RiskCard tier="high" aria-label="alert" />, { direction });
+      const card = screen.getByRole('article');
+      expect(card.textContent).toMatch(/^HIGH RISK/);
+      expect(card).toHaveStyle({ borderColor: tokens.color.light.risk.high.border });
+      // A logical property, so it sits on the right in right-to-left without being flipped.
+      expect(getComputedStyle(card).getPropertyValue('border-inline-start-width')).toBe('3px');
+      expect(document.documentElement.dir).toBe(direction);
+    },
+  );
 });

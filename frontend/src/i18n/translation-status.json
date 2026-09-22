@@ -1,0 +1,96 @@
+{
+  "rw": {
+    "common": {
+      "app.name": "machine_draft"
+    },
+    "designSystem": {
+      "tier.high": "machine_draft",
+      "tier.medium": "machine_draft",
+      "tier.low": "machine_draft",
+      "channel.MOBILE_MONEY": "machine_draft",
+      "channel.CARD": "machine_draft",
+      "channel.USSD": "machine_draft",
+      "channel.AGENT_BANKING": "machine_draft",
+      "channel.ONLINE": "machine_draft",
+      "channel.BANK_TRANSFER": "machine_draft",
+      "gauge.name": "machine_draft",
+      "gauge.valueText": "machine_draft",
+      "gauge.explanation": "machine_draft",
+      "countdown.label_one": "machine_draft",
+      "countdown.label_other": "machine_draft",
+      "countdown.short": "machine_draft",
+      "states.retry": "machine_draft",
+      "states.reference": "machine_draft",
+      "states.lastUpdated": "machine_draft",
+      "states.deniedTitle": "machine_draft",
+      "states.deniedDescription": "machine_draft",
+      "banner.ML_UNAVAILABLE": "machine_draft",
+      "banner.DEGRADED_MODE": "machine_draft",
+      "banner.KAFKA_SPOOLING": "machine_draft",
+      "banner.REALTIME_PAUSED": "machine_draft"
+    }
+  },
+  "fr": {
+    "common": {
+      "app.name": "machine_draft"
+    },
+    "designSystem": {
+      "tier.high": "machine_draft",
+      "tier.medium": "machine_draft",
+      "tier.low": "machine_draft",
+      "channel.MOBILE_MONEY": "machine_draft",
+      "channel.CARD": "machine_draft",
+      "channel.USSD": "machine_draft",
+      "channel.AGENT_BANKING": "machine_draft",
+      "channel.ONLINE": "machine_draft",
+      "channel.BANK_TRANSFER": "machine_draft",
+      "gauge.name": "machine_draft",
+      "gauge.valueText": "machine_draft",
+      "gauge.explanation": "machine_draft",
+      "countdown.label_one": "machine_draft",
+      "countdown.label_many": "machine_draft",
+      "countdown.label_other": "machine_draft",
+      "countdown.short": "machine_draft",
+      "states.retry": "machine_draft",
+      "states.reference": "machine_draft",
+      "states.lastUpdated": "machine_draft",
+      "states.deniedTitle": "machine_draft",
+      "states.deniedDescription": "machine_draft",
+      "banner.ML_UNAVAILABLE": "machine_draft",
+      "banner.DEGRADED_MODE": "machine_draft",
+      "banner.KAFKA_SPOOLING": "machine_draft",
+      "banner.REALTIME_PAUSED": "machine_draft"
+    }
+  },
+  "sw": {
+    "common": {
+      "app.name": "machine_draft"
+    },
+    "designSystem": {
+      "tier.high": "machine_draft",
+      "tier.medium": "machine_draft",
+      "tier.low": "machine_draft",
+      "channel.MOBILE_MONEY": "machine_draft",
+      "channel.CARD": "machine_draft",
+      "channel.USSD": "machine_draft",
+      "channel.AGENT_BANKING": "machine_draft",
+      "channel.ONLINE": "machine_draft",
+      "channel.BANK_TRANSFER": "machine_draft",
+      "gauge.name": "machine_draft",
+      "gauge.valueText": "machine_draft",
+      "gauge.explanation": "machine_draft",
+      "countdown.label_one": "machine_draft",
+      "countdown.label_other": "machine_draft",
+      "countdown.short": "machine_draft",
+      "states.retry": "machine_draft",
+      "states.reference": "machine_draft",
+      "states.lastUpdated": "machine_draft",
+      "states.deniedTitle": "machine_draft",
+      "states.deniedDescription": "machine_draft",
+      "banner.ML_UNAVAILABLE": "machine_draft",
+      "banner.DEGRADED_MODE": "machine_draft",
+      "banner.KAFKA_SPOOLING": "machine_draft",
+      "banner.REALTIME_PAUSED": "machine_draft"
+    }
+  }
+}

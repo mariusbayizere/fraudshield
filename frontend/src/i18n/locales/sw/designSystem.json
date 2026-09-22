@@ -1,0 +1,38 @@
+{
+  "tier": {
+    "high": "HATARI KUBWA",
+    "medium": "KAGUA",
+    "low": "IMEIDHINISHWA"
+  },
+  "channel": {
+    "MOBILE_MONEY": "Pesa kwa simu",
+    "CARD": "Kadi",
+    "USSD": "USSD",
+    "AGENT_BANKING": "Wakala wa benki",
+    "ONLINE": "Mtandaoni",
+    "BANK_TRANSFER": "Uhamisho wa benki"
+  },
+  "gauge": {
+    "name": "Alama ya ulaghai",
+    "valueText": "{{percent}}%, {{tier}}",
+    "explanation": "Mkusanyiko wa XGBoost + LightGBM. {{block, number}} na zaidi = kiwango cha kuzuia kiotomatiki kwa hatari KUBWA."
+  },
+  "countdown": {
+    "label_one": "Sekunde {{count}} imebaki kukagua",
+    "label_other": "Sekunde {{count}} zimebaki kukagua",
+    "short": "{{count}} s"
+  },
+  "states": {
+    "retry": "Jaribu tena",
+    "reference": "Kumbukumbu:",
+    "lastUpdated": "Ilisasishwa mwisho {{time}}",
+    "deniedTitle": "Huna ruhusa ya kufikia ukurasa huu",
+    "deniedDescription": "Jukumu lako halijumuishi ukurasa huu. Msimamizi anaweza kubadilisha ruhusa zako."
+  },
+  "banner": {
+    "ML_UNAVAILABLE": "Modeli ya kutathmini haipatikani. Kanuni zinaamua kwa sasa; miamala hii itatathminiwa upya itakaporejea.",
+    "DEGRADED_MODE": "Mfumo unaendeshwa kwa hali pungufu. Maamuzi yanaendelea, polepole kuliko kawaida.",
+    "KAFKA_SPOOLING": "Uwasilishaji wa matukio umechelewa. Maamuzi hayaathiriki; tahadhari na ripoti zinaweza kufika kwa kuchelewa.",
+    "REALTIME_PAUSED": "Muda halisi umesitishwa — inasasisha kila sekunde 60"
+  }
+}

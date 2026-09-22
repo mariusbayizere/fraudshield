@@ -2,10 +2,8 @@ import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { TIER_LABEL, tierOf } from '../../risk';
-
-export const GAUGE_EXPLANATION =
-  'XGBoost + LightGBM ensemble. 0.85+ = HIGH risk auto-block threshold.';
+import { useTranslation } from 'react-i18next';
+import { BLOCK_THRESHOLD, tierOf } from '../../risk';
 
 /**
  * The whole percentage a score shows. It rounds down, so the number never reaches a band the
@@ -27,17 +25,18 @@ export interface RiskScoreGaugeProps {
  * never the only signal.
  */
 export function RiskScoreGauge({ score, size = 48 }: RiskScoreGaugeProps) {
+  const { t } = useTranslation('designSystem');
   const tier = tierOf(score);
   const percent = scorePercent(score);
   return (
-    <Tooltip title={GAUGE_EXPLANATION}>
+    <Tooltip title={t('gauge.explanation', { block: BLOCK_THRESHOLD })}>
       <Box
         role="meter"
-        aria-label="Fraud score"
+        aria-label={t('gauge.name')}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={percent}
-        aria-valuetext={`${String(percent)}%, ${TIER_LABEL[tier]}`}
+        aria-valuetext={t('gauge.valueText', { percent, tier: t(`tier.${tier}`) })}
         // The explanation tooltip must be reachable from the keyboard, not by hover alone
         // (WCAG 2.1.1, 1.4.13).
         tabIndex={0}

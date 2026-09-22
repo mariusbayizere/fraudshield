@@ -1,27 +1,18 @@
 import { screen } from '@testing-library/react';
 import { renderThemed } from '../../../test/render';
-import { formatMoney, Money } from './Money';
-
-// Intl separates the code from the number with a no-break space, so it never wraps apart.
-const NBSP = ' ';
-
-describe('formatMoney', () => {
-  it.each([
-    [1_250_000, 'RWF', `RWF${NBSP}1,250,000`],
-    [0, 'RWF', `RWF${NBSP}0`],
-    [999.6, 'RWF', `RWF${NBSP}1,000`],
-    [1234.5, 'USD', `USD${NBSP}1,234.50`],
-  ])('writes %d %s as %s', (amount, currency, text) => {
-    expect(formatMoney(amount, currency)).toBe(text);
-  });
-});
+import { Money } from './Money';
 
 describe('Money', () => {
-  it('renders in tabular numerals', () => {
-    renderThemed(<Money amount={1_250_000} />);
-    // Testing Library normalises the no-break space to a space before matching.
-    expect(screen.getByText('RWF 1,250,000')).toHaveStyle({
+  it("writes the amount at the region's minor units, in tabular numerals", () => {
+    // Country Z's currency has three minor units, unlike any real currency in the packs.
+    renderThemed(<Money amount="1250000.5" currency="ZZZ" />);
+    // Testing Library normalises the no-break space after the code to a space before matching.
+    expect(screen.getByText('ZZZ 1,250,000.500')).toHaveStyle({
       fontVariantNumeric: 'tabular-nums',
     });
+  });
+
+  it('refuses an amount that is not a decimal string', () => {
+    expect(() => renderThemed(<Money amount="1e6" currency="ZZZ" />)).toThrow(RangeError);
   });
 });

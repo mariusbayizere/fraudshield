@@ -1,13 +1,7 @@
 import { screen } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import { renderThemed } from '../../../test/render';
-import {
-  EmptyState,
-  ErrorState,
-  formatLastUpdated,
-  PermissionDeniedState,
-  StaleNotice,
-} from './ScreenStates';
+import { EmptyState, ErrorState, PermissionDeniedState, StaleNotice } from './ScreenStates';
 
 describe('screen states (E.9)', () => {
   it('says what an empty view means, under a heading, with its next action', () => {
@@ -38,17 +32,15 @@ describe('screen states (E.9)', () => {
     expect(screen.queryByRole('button')).toBeNull();
   });
 
-  it.each([
-    ['2026-09-22T12:02:00Z', 'Last updated 14:02 CAT'],
-    ['2026-01-15T22:30:00Z', 'Last updated 00:30 CAT'],
-    ['2026-07-01T00:00:00Z', 'Last updated 02:00 CAT'],
-  ])('writes %s as "%s", Kigali time', (iso, text) => {
-    expect(formatLastUpdated(new Date(iso))).toBe(text);
+  it("writes when a stale view was updated in the region's time, with its offset", () => {
+    // Country Z is UTC+7: 12:02 UTC is 19:02 there.
+    renderThemed(<StaleNotice lastUpdated={new Date('2026-09-22T12:02:00Z')} />);
+    expect(screen.getByRole('status')).toHaveTextContent('Last updated 19:02 UTC+7');
   });
 
-  it('announces a stale view politely', () => {
-    renderThemed(<StaleNotice lastUpdated={new Date('2026-09-22T12:02:00Z')} />);
-    expect(screen.getByRole('status')).toHaveTextContent('Last updated 14:02 CAT');
+  it('crosses midnight into the next local day without a date slip in the label', () => {
+    renderThemed(<StaleNotice lastUpdated={new Date('2026-01-15T22:30:00Z')} />);
+    expect(screen.getByRole('status')).toHaveTextContent('Last updated 05:30 UTC+7');
   });
 
   it('explains a permission denial without naming the hidden content', () => {

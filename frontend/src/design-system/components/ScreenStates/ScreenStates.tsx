@@ -4,6 +4,9 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
+import { formatClock } from '../../../region/region';
+import { useFormatLocale, useRegion } from '../../../region/RegionContext';
 
 // The reusable parts of E.9's screen state contract. Loading skeletons are per layout, so each
 // view draws its own, matching its final shape (CLS < 0.1).
@@ -42,13 +45,14 @@ export interface ErrorStateProps {
 
 /** Error: a plain message, a retry, and the correlation ID support needs. */
 export function ErrorState({ message, correlationId, onRetry }: ErrorStateProps) {
+  const { t } = useTranslation('designSystem');
   return (
     <Alert
       severity="error"
       action={
         onRetry === undefined ? undefined : (
           <Button color="inherit" size="small" onClick={onRetry} sx={{ minHeight: 48 }}>
-            Try again
+            {t('states.retry')}
           </Button>
         )
       }
@@ -56,7 +60,7 @@ export function ErrorState({ message, correlationId, onRetry }: ErrorStateProps)
       {message}
       {correlationId === undefined ? null : (
         <Typography variant="body2" component="p" sx={{ mt: 0.5 }}>
-          Reference:{' '}
+          {t('states.reference')}{' '}
           <Box component="code" sx={{ fontFamily: 'monospace', userSelect: 'all' }}>
             {correlationId}
           </Box>
@@ -66,33 +70,23 @@ export function ErrorState({ message, correlationId, onRetry }: ErrorStateProps)
   );
 }
 
-const KIGALI_TIME = new Intl.DateTimeFormat('en-GB', {
-  timeZone: 'Africa/Kigali',
-  hour: '2-digit',
-  minute: '2-digit',
-  hourCycle: 'h23',
-});
-
-/** Rwanda keeps Central Africa Time, UTC+2 all year, so the label never changes with DST. */
-export function formatLastUpdated(at: Date): string {
-  return `Last updated ${KIGALI_TIME.format(at)} CAT`;
-}
-
-/** Stale or offline: the data shown is a cached copy, and from when. */
+/**
+ * Stale or offline: the data shown is a cached copy, and from when, in the region's time with
+ * its zone ("Last updated 14:02 UTC+2"; D-43).
+ */
 export function StaleNotice({ lastUpdated }: { lastUpdated: Date }) {
+  const { t } = useTranslation('designSystem');
+  const { region } = useRegion();
+  const locale = useFormatLocale();
   return (
     <Alert severity="info" icon={<CloudOffOutlined aria-hidden />} role="status">
-      {formatLastUpdated(lastUpdated)}
+      {t('states.lastUpdated', { time: formatClock(lastUpdated, region.utcOffsetHours, locale) })}
     </Alert>
   );
 }
 
 /** Permission denied: what happened and who can change it, without naming what is hidden. */
 export function PermissionDeniedState() {
-  return (
-    <EmptyState
-      title="You don't have access to this page"
-      description="Your role doesn't include it. An administrator can change your access."
-    />
-  );
+  const { t } = useTranslation('designSystem');
+  return <EmptyState title={t('states.deniedTitle')} description={t('states.deniedDescription')} />;
 }

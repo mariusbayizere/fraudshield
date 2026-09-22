@@ -2,7 +2,7 @@ import CheckCircleOutlineRounded from '@mui/icons-material/CheckCircleOutlineRou
 import ScheduleRounded from '@mui/icons-material/ScheduleRounded';
 import WarningRounded from '@mui/icons-material/WarningRounded';
 import Chip from '@mui/material/Chip';
-import { TIER_LABEL } from '../../risk';
+import { useTranslation } from 'react-i18next';
 import type { RiskTier } from '../../tokens';
 
 const ICON: Record<RiskTier, typeof WarningRounded> = {
@@ -22,11 +22,12 @@ export interface RiskBadgeProps {
  * D-33 measures, not white on the SRS badge hue, which fails AA for MEDIUM and LOW.
  */
 export function RiskBadge({ tier, size = 'medium' }: RiskBadgeProps) {
+  const { t } = useTranslation('designSystem');
   const Icon = ICON[tier];
   return (
     <Chip
       icon={<Icon aria-hidden />}
-      label={TIER_LABEL[tier]}
+      label={t(`tier.${tier}`)}
       size={size}
       variant="outlined"
       sx={(theme) => ({

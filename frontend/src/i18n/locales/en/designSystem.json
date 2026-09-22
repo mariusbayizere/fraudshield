@@ -1,0 +1,38 @@
+{
+  "tier": {
+    "high": "HIGH RISK",
+    "medium": "REVIEW",
+    "low": "APPROVED"
+  },
+  "channel": {
+    "MOBILE_MONEY": "Mobile money",
+    "CARD": "Card",
+    "USSD": "USSD",
+    "AGENT_BANKING": "Agent banking",
+    "ONLINE": "Online",
+    "BANK_TRANSFER": "Bank transfer"
+  },
+  "gauge": {
+    "name": "Fraud score",
+    "valueText": "{{percent}}%, {{tier}}",
+    "explanation": "XGBoost + LightGBM ensemble. {{block, number}}+ = HIGH risk auto-block threshold."
+  },
+  "countdown": {
+    "label_one": "{{count}} second left to review",
+    "label_other": "{{count}} seconds left to review",
+    "short": "{{count}} s"
+  },
+  "states": {
+    "retry": "Try again",
+    "reference": "Reference:",
+    "lastUpdated": "Last updated {{time}}",
+    "deniedTitle": "You don't have access to this page",
+    "deniedDescription": "Your role doesn't include it. An administrator can change your access."
+  },
+  "banner": {
+    "ML_UNAVAILABLE": "The scoring model is unavailable. Rules are deciding for now; these transactions will be re-scored when it recovers.",
+    "DEGRADED_MODE": "Running in degraded mode. Decisions continue, more slowly than usual.",
+    "KAFKA_SPOOLING": "Event delivery is delayed. Decisions are unaffected; alerts and reports may arrive late.",
+    "REALTIME_PAUSED": "Real-time paused — refreshing every 60 s"
+  }
+}
