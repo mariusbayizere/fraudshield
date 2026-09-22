@@ -1,0 +1,14 @@
+# blackbox_exporter probe modules (SRS 8.2 uptime). A probe succeeds only when the endpoint answers
+# 200 with {"status": "UP"} (Spring Boot actuator health shape, ADR 0014 section 6): a 200 that
+# reports DOWN, or any other status, is a failed probe.
+modules:
+  http_status_up:
+    prober: http
+    timeout: 5s
+    http:
+      method: GET
+      valid_status_codes: [200]
+      fail_if_body_not_matches_regexp:
+        - '"status"\s*:\s*"UP"'
+      preferred_ip_protocol: ip4
+      follow_redirects: false

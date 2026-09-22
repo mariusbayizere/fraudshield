@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+# Pinned, checksum-verified blackbox_exporter launcher: checks the probe module configuration (Apache-2.0).
+# Trust model and cache layout: infrastructure/bin/lib/pinned.sh.
+set -eu
+. "$(dirname "$0")/lib/pinned.sh"
+pinned_exec blackbox_exporter "0.28.0" \
+  "https://github.com/prometheus/blackbox_exporter/releases/download/v0.28.0/blackbox_exporter-0.28.0.linux-amd64.tar.gz" \
+  "caf5d242fb1cf6d5cb678f3f799f22703d4fafea26b03dcbbd7e1f1825e06329" \
+  "blackbox_exporter-0.28.0.linux-amd64/blackbox_exporter" \
+  "b79da51dce26afbc787917a3bf884ac84dcf1af8862c4ab215ca23b7c327ca04" \
+  -- "$@"
