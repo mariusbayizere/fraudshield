@@ -159,12 +159,20 @@ class MlflowRegistry:
             return target
         if version.source.startswith(ARTIFACT_SCHEME):
             prefix = version.source[len(ARTIFACT_SCHEME) :].strip("/")
-            staging = target.with_name(f".{version.version}.partial")
+            # Per-process staging: every worker of a scorer shares the cache and sees the alias
+            # move at about the same moment, so a shared staging path would be written by several
+            # processes at once. Whoever renames first wins; the others use its copy.
+            staging = target.with_name(f".{version.version}.{os.getpid()}.partial")
             shutil.rmtree(staging, ignore_errors=True)
             staging.mkdir(parents=True)
             for name in (MANIFEST, *FILES):
                 (staging / name).write_bytes(self.download(f"{prefix}/{name}"))
-            staging.rename(target)
+            try:
+                staging.rename(target)
+            except OSError:
+                if not (target / MANIFEST).exists():
+                    raise
+                shutil.rmtree(staging, ignore_errors=True)
             return target
         local = Path(version.source.removeprefix("file://"))
         if (local / MANIFEST).exists():

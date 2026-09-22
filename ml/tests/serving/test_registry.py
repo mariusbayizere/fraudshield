@@ -9,6 +9,7 @@ for the CI stack, where the compose MLflow server runs.
 from __future__ import annotations
 
 import json
+import shutil
 import socket
 import subprocess
 import threading
@@ -404,3 +405,29 @@ def _healthy(url: str) -> bool:
             return True
     except OSError:
         return False
+
+
+def test_a_second_worker_downloading_the_same_version_uses_the_first_copy(
+    mlflow: tuple[FakeMlflow, str],
+    bundle_dirs: tuple[Path, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Another worker finishes the same download first: this one's rename fails because the
+    target now exists, and it must use that copy rather than report a failed swap."""
+    _, url = mlflow
+    registry = MlflowRegistry(url)
+    registry.publish(NAME, bundle_dirs[0], alias=PRODUCTION)
+    version = registry.by_alias(NAME, PRODUCTION)
+    assert version is not None
+    real_rename = Path.rename
+
+    def raced(self: Path, target: Path) -> Path:
+        shutil.copytree(self, target)  # the other worker's copy lands first
+        raise OSError(39, "Directory not empty")
+
+    monkeypatch.setattr(Path, "rename", raced)
+    fetched = registry.fetch_bundle(version, tmp_path)
+    monkeypatch.setattr(Path, "rename", real_rename)
+    assert Bundle.load(fetched).model_version == Bundle.load(bundle_dirs[0]).model_version
+    assert not list(fetched.parent.glob(".*.partial")), "the loser's staging copy is removed"
