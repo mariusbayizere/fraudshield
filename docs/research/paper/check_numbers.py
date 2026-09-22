@@ -10,7 +10,8 @@ section, which would bypass that record:
 Identifiers that merely look numeric are allowed: requirement and defect IDs (``D-15``,
 ``ML-GATE-01``, ``PB-61``), ADR numbers, SRS and build-prompt section references (``SRS 8.2``,
 ``Part E.13``), milestone names (``M4``), and anything inside ``\\texttt{}`` (commit hashes, file
-names). Integers written as words in prose are the author's responsibility.
+names) or a citation's locator (``\\cite[Section~5.1]{key}``). Integers written as words
+in prose are the author's responsibility.
 
 Usage: ``python3 docs/research/paper/check_numbers.py`` (exit 1 on any finding).
 """
@@ -26,7 +27,7 @@ SECTIONS = sorted((HERE / "sections").glob("*.tex"))
 
 STRIP = [
     re.compile(r"(?<!\\)%.*$", re.M),  # comments
-    re.compile(r"\\(?:texttt|url|href|cite|ref|label|input|notyet)\{[^}]*\}"),
+    re.compile(r"\\(?:texttt|url|href|cite|ref|label|input|notyet)(?:\[[^\]]*\])?\{[^}]*\}"),
     re.compile(r"\\n[A-Z][A-Za-z]*"),  # number macros from numbers.tex
     re.compile(r"\b(?:SRS|Part|section|Section|Sections|E|B|C|D|A|H|I)\s?[A-J]?\.?\d+(?:\.\d+)*"),
     re.compile(r"\b[A-Z]{1,4}(?:-[A-Z]{1,6})*-\d+[a-z]?\b"),  # D-15, ML-GATE-01, PB-61, C-6

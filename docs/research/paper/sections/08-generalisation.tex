@@ -66,15 +66,23 @@ claim about generalisation, geographic or temporal.
 
 \subsection{A pre-registered non-burst variant: the one failure found}
 
-A generalisation test needs a mechanism that actually differs, and one is documented: the
-``sent by mistake'' reversal scam among Kenyan M-PESA users \cite{dogan2025grift}. In its common
-documented form the victim receives a forged M-PESA confirmation message, so no money has in fact
-arrived, and is persuaded to return the ``mistaken'' amount with a single transfer, usually to a
-counterparty the victim has never paid before.
+A generalisation test needs a mechanism that actually differs, and the ``sent by mistake'' reversal
+scam is one. Its ingredients are documented among Kenyan M-PESA users. In a survey of them,
+forged M-PESA confirmation messages were the most common scam reported \cite[Section~5.1.1]{dogan2025grift};
+the same study notes that M-PESA's business services block reversals to foil opportunistic and
+malicious reversal requests \cite[Section~2]{dogan2025grift}, and one respondent reported asking
+the sender to reverse an apparently mistaken transfer \cite[Section~5.3.3]{dogan2025grift}. The scam itself
+is described in the Kenyan press: the victim receives a fake M-PESA message that shows ``LOCKED''
+where the balance should be, the scammer claims to have sent the money by mistake, often with an
+emotional story, and the victim sends it back, only to find that no money was ever deposited;
+Safaricom's advice, quoted there, is not to refund the money \cite{star2025mpesa}. The victim's
+loss is therefore a single transfer that the victim initiates, to the number of the claimed sender.
+Neither source says whether the victim has paid that number before; since it is the scammer's own
+number, we read the documented form as a transfer to a new counterparty.
 
 The benchmark's variant keeps the single, victim-initiated transfer and departs from that form in
 one deliberate respect: its recipient is a counterparty the victim already knows. That is a
-modelling choice, not a property of the documented scam (ADR 0028). It removes both axes this
+modelling choice, not a property the sources describe (ADR 0028). It removes both axes this
 benchmark's detection relies on at once, burst structure and counterparty novelty, which makes the
 variant the harder case of the two: the documented form, with its new recipient, keeps counterparty
 novelty. The generator stages each such row as a \texttt{mule\_account} row with its own sub-variant
