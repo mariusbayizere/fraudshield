@@ -75,10 +75,12 @@ describe('forgetting a password (FR-07-06)', { timeout: 30_000 }, () => {
 });
 
 describe('resetting a password (FR-07-06)', { timeout: 30_000 }, () => {
+  // A token only the server could have produced, so a page that invented one would fail.
+  const RESET_TOKEN = `server-issued-${'7Kq2'.repeat(8)}`;
   const verified = {
     '/auth/password-reset/verify': {
       status: 200,
-      body: { reset_token: 'a'.repeat(40), expires_at: '2026-09-22T12:00:00Z' },
+      body: { reset_token: RESET_TOKEN, expires_at: '2026-09-22T12:00:00Z' },
     },
   };
 
@@ -99,7 +101,7 @@ describe('resetting a password (FR-07-06)', { timeout: 30_000 }, () => {
       '/auth/password-reset/complete',
     ]);
     expect(sent[1]?.body).toEqual({
-      reset_token: 'a'.repeat(40),
+      reset_token: RESET_TOKEN,
       new_password: 'Str0ng!passphrase',
     });
   });
