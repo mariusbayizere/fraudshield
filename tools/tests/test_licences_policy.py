@@ -37,6 +37,8 @@ def _dep(scope: str, *declared: str, combine: str = "any", name: str = "lib") ->
         ("This is not MIT licensed", None),
         ("UNLICENSED", None),
         ("SEE LICENSE IN LICENSE.md", None),
+        ("SIL Open Font License 1.1", "OFL-1.1"),
+        ("OFL-1.1", "OFL-1.1"),
     ],
 )
 def test_normalise(raw: str, spdx: str | None) -> None:
@@ -137,3 +139,26 @@ def test_violation_messages_distinguish_unidentified_from_not_allowed() -> None:
         "python:lib@1.0 (runtime): ('LGPL-2.1-only',) not allowed for runtime",
         "python:vague@1.0 (dev): unidentified licence ('BSD',)",
     ]
+
+
+@pytest.mark.parametrize(
+    ("ecosystem", "name", "scope", "expected"),
+    [
+        # ADR 0080: OFL-1.1 is allowed for font packages, in either scope.
+        ("npm", "@fontsource-variable/inter", "runtime", True),
+        ("npm", "@fontsource/inter", "dev", True),
+        # Anywhere else it is recognised and not allowed, never unidentified.
+        ("npm", "inter-font-loader", "runtime", False),
+        ("npm", "@fontsource-variable/inter/../evil", "runtime", False),
+        ("python", "fontsource-variable-inter", "runtime", False),
+        ("maven", "org.example:fonts", "runtime", False),
+    ],
+)
+def test_ofl_is_allowed_for_font_packages_only(
+    ecosystem: str, name: str, scope: str, expected: bool
+) -> None:
+    dependency = Dependency(ecosystem, name, "5.3.0", scope, ("OFL-1.1",))
+    assert evaluate(dependency) is expected
+    # A font package still needs every other licence it declares to be allowed.
+    mixed = Dependency(ecosystem, name, "5.3.0", scope, ("OFL-1.1", "GPL-3.0-only"), "all")
+    assert evaluate(mixed) is False
