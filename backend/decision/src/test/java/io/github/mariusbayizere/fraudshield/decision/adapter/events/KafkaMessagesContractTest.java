@@ -42,7 +42,7 @@ class KafkaMessagesContractTest {
   void everyRenderedEnvelopeSatisfiesItsTopicContract() {
     List<DecisionEvent> events = everyKindOfFact();
     Set<Class<?>> kinds = events.stream().map(Object::getClass).collect(Collectors.toSet());
-    assertThat(kinds).hasSize(8);
+    assertThat(kinds).hasSize(9);
     List<KafkaMessage> messages = renderer.render(events);
     Set<String> topics = messages.stream().map(KafkaMessage::topic).collect(Collectors.toSet());
     assertThat(topics)

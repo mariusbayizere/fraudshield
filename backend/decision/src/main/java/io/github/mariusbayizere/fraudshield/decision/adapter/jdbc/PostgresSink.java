@@ -263,6 +263,9 @@ public final class PostgresSink implements SpoolDrainer.Sink {
         case DecisionEvent.DecisionChanged e -> decisionChanged(c, e);
         case DecisionEvent.LabelRecorded e -> label(c, e);
         case DecisionEvent.CircuitBreakerChanged e -> breaker(c, e);
+        case DecisionEvent.IdempotencyConflict e -> {
+          // Audited through Kafka only; nothing to persist here.
+        }
       }
     }
   }

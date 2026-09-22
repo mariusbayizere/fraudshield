@@ -231,6 +231,20 @@ public final class KafkaMessages {
                   e.institutionId(),
                   e.availableAt(),
                   label(e)));
+      case DecisionEvent.IdempotencyConflict e -> {
+        ObjectNode after = FactCodec.JSON.createObjectNode();
+        after.put("api_key_id", e.apiKeyId().toString());
+        out.add(
+            audit(
+                "AUTH",
+                "IDEMPOTENCY_CONFLICT",
+                "transaction",
+                e.transactionId(),
+                e.eventId().toString(),
+                e.institutionId(),
+                e.at(),
+                after));
+      }
       case DecisionEvent.CircuitBreakerChanged e -> {
         ObjectNode after = FactCodec.JSON.createObjectNode();
         after.put("merchant_category_code", e.merchantCategoryCode());

@@ -108,6 +108,9 @@ public final class FactScenarios {
 
     List<DecisionEvent> events = new ArrayList<>(ports.events);
     events.add(
+        new DecisionEvent.IdempotencyConflict(
+            UUID.randomUUID(), INSTITUTION, UUID.randomUUID(), UUID.randomUUID(), NOW));
+    events.add(
         new DecisionEvent.CircuitBreakerChanged(
             INSTITUTION,
             "6051",

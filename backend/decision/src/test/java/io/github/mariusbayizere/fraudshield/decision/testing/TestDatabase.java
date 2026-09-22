@@ -134,6 +134,16 @@ public final class TestDatabase {
   }
 
   /**
+   * The generated password of a role.
+   *
+   * @param role for example {@code fs_app}
+   * @return its password
+   */
+  public String password(String role) {
+    return PASSWORDS.get(role);
+  }
+
+  /**
    * The container, for chaos tests that pause it.
    *
    * @return the container

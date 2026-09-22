@@ -254,6 +254,20 @@ public sealed interface DecisionEvent {
       implements DecisionEvent {}
 
   /**
+   * A transaction id was resubmitted within 24 hours with a different request fingerprint; nothing
+   * was scored (FR-01-03). Audited as {@code AUTH/IDEMPOTENCY_CONFLICT}; no rows are written.
+   *
+   * @param eventId event id
+   * @param institutionId institution
+   * @param transactionId the transaction id
+   * @param apiKeyId the key that submitted it
+   * @param at when
+   */
+  record IdempotencyConflict(
+      UUID eventId, UUID institutionId, UUID transactionId, UUID apiKeyId, Instant at)
+      implements DecisionEvent {}
+
+  /**
    * The full scoring result as persisted (FR-02-01, D-12); features and SHAP are for staff APIs
    * only and never reach the ingest response.
    *

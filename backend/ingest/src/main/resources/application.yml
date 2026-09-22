@@ -1,0 +1,50 @@
+# FraudShield API. Connection values and secrets come from the environment; nothing secret is
+# committed. The API connects to PostgreSQL as fs_app (ADR 0017).
+spring:
+  application:
+    name: fraudshield-api
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${FRAUDSHIELD_DB_URL:jdbc:postgresql://127.0.0.1:5432/fraudshield_db}
+    username: ${FRAUDSHIELD_DB_APP_USER:fs_app}
+    password: ${FRAUDSHIELD_DB_APP_PASSWORD:}
+    hikari:
+      maximum-pool-size: ${FRAUDSHIELD_DB_POOL:20}
+      connection-timeout: 2000
+  flyway:
+    enabled: false
+
+server:
+  port: ${FRAUDSHIELD_API_PORT:8080}
+
+management:
+  server:
+    port: ${FRAUDSHIELD_MANAGEMENT_PORT:8081}
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+
+fraudshield:
+  instance-id: ${HOSTNAME:fraudshield-api-local}
+  redis-uri: ${FRAUDSHIELD_REDIS_URI:redis://127.0.0.1:6379}
+  redis-timeout: 50ms
+  kafka-bootstrap-servers: ${FRAUDSHIELD_KAFKA_BOOTSTRAP:127.0.0.1:9092}
+  spool-directory: ${FRAUDSHIELD_SPOOL_DIR:/var/lib/fraudshield/spool}
+  spool-max-bytes: 1073741824
+  scorer:
+    target: ${FRAUDSHIELD_SCORER_TARGET:127.0.0.1:9090}
+    plaintext: ${FRAUDSHIELD_SCORER_PLAINTEXT:false}
+    trust-certificate: ${FRAUDSHIELD_SCORER_CA:}
+    client-certificate: ${FRAUDSHIELD_SCORER_CERT:}
+    client-key: ${FRAUDSHIELD_SCORER_KEY:}
+    deadline: 35ms
+  review-window: 30s
+  anomaly-review-threshold: 0.995
+  audit-writer-partition: ${FRAUDSHIELD_AUDIT_PARTITION:0}
+  default-locale: en
+  idempotency-lease: 10s
+  duplicate-wait: 1s
+  batch-threads: 16

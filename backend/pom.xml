@@ -31,6 +31,7 @@
     <module>rules</module>
     <module>decision</module>
     <module>notify</module>
+    <module>ingest</module>
   </modules>
 
   <properties>

@@ -161,6 +161,14 @@ public final class FactCodec {
         putInstant(node, "transaction_timestamp", e.transactionTimestamp());
         putInstant(node, "available_at", e.availableAt());
       }
+      case DecisionEvent.IdempotencyConflict e -> {
+        node.put("type", "idempotency_conflict");
+        node.put("event_id", e.eventId().toString());
+        node.put("institution_id", e.institutionId().toString());
+        node.put("transaction_id", e.transactionId().toString());
+        node.put("api_key_id", e.apiKeyId().toString());
+        putInstant(node, "at", e.at());
+      }
       case DecisionEvent.CircuitBreakerChanged e -> {
         node.put("type", "circuit_breaker_changed");
         node.put("institution_id", e.institutionId().toString());
@@ -252,6 +260,13 @@ public final class FactCodec {
               new MccCircuitBreaker.WindowCounts(
                   node.get("transactions").asLong(), node.get("fraud").asLong()),
               node.get("settings_version").asLong(),
+              instant(node, "at"));
+      case "idempotency_conflict" ->
+          new DecisionEvent.IdempotencyConflict(
+              uuid(node, "event_id"),
+              uuid(node, "institution_id"),
+              uuid(node, "transaction_id"),
+              uuid(node, "api_key_id"),
               instant(node, "at"));
       default -> throw new IllegalArgumentException("unknown fact type " + type);
     };
