@@ -79,7 +79,13 @@ banners) and the banner area stays empty against a real backend.
    plainer schema for generators. The same generator also drops unknown fields instead of
    rejecting them, so `additionalProperties: false` is enforced by the contract tests, not by the
    generated Zod.
-2. **Country packs: a zone abbreviation.** D-43 asks the UI to show "CAT"; the packs carry
+2. **Contract: the CSRF cookie has no name.** D-27's double-submit needs the console to read a
+   cookie and echo it in `X-CSRF-Token`, which refresh and logout require. The contract names the
+   header (`CsrfToken`) and the refresh cookie (`fs_refresh`) but never the CSRF cookie. The
+   console reads **`fs_csrf`**, which is what M7's server sets (`backend/`, branch
+   `m7/staff-auth`). Proposal: document it in the contract, so the two sides are not agreeing by
+   coincidence.
+3. **Country packs: a zone abbreviation.** D-43 asks the UI to show "CAT"; the packs carry
    `utc_offset_hours` but no abbreviation, so the console shows "UTC+2". Proposal: a
    `timezone_abbreviation` parameter with the packs' usual provenance.
 
