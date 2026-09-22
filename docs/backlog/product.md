@@ -1473,3 +1473,24 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 - **Source:** review of M7 round 2, finding 7, 2026-10-17 · **Priority:** medium · **Due:** M8
 - **Problem:** NFR-REL-06 says the Google button shows "Temporarily unavailable" while Google is down; the server answers 503 with `Retry-After` (proved), but the console clause had no owner while the row stays with M7 (PB-112).
 - **Acceptance:** the console shows the state on a 503 from `/auth/google`, with a component test.
+### PB-69 · Training rows near the corpus's start see truncated history; test rows do not
+- **Source:** PB-67's laptop cache, 2026-09-22 · **Priority:** high · **Due:** before the paper's
+  results, and before PB-67 is concluded
+- **Measured:** the laptop learning-curve cache (340,000-row corpus) and the declared gate cache
+  (400,000 rows) carry the same 20,000 validation rows, and four features differ between them:
+  `amount_to_max_90d_ratio`, `amount_zscore_90d`, `counterparty_confirmed_fraud_90d` and
+  `distance_from_home_centroid_km`. Test and calibration rows are identical. The only difference
+  between the caches is how far back the corpus reaches.
+- **Why it matters:** windowed features see only rows inside the corpus. A training row within 90
+  days of the corpus's start has its 90-day history truncated. Test rows, which sit at the newest
+  end, always have full history. So every M4 model — the declared gate run included — trained on
+  some rows whose features were computed differently from the rows it is scored on. M3-1 found the
+  same mechanism for `velocity_ratio_1h_vs_30d`; this is its general form. It is a candidate
+  contributor to the recall shortfall at 0.60, not a demonstrated one.
+- **It also confounds PB-67.** Sizes drawn from one pool share one truncation profile, so the
+  laptop's 30K, 60K and 120K compare with each other. The declared gate's 30K (400,000-row corpus)
+  and the Codespace's 240K (520,000) have different ones, so the curve's last step changes volume,
+  time span and truncation together.
+- **Acceptance:** measure the share of training rows whose windows reach before the corpus start,
+  and either build training features from a corpus that reaches at least 90 days before the
+  earliest training row, or report every model figure with that share stated. The owner decides.
