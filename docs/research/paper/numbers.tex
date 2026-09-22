@@ -37,7 +37,6 @@
 \newcommand{\nParamsSourced}{\meas{12}}
 \newcommand{\nParamsAssumed}{\meas{55}}
 \newcommand{\nParamsCalibrated}{\meas{14}}
-\newcommand{\nParamsBefore}{\meas{79}}
 \newcommand{\nSourceDocs}{\meas{8}}
 % docs/research/limitations.md: fraud.yaml parameters.
 \newcommand{\nFraudParams}{\meas{25}}
@@ -53,7 +52,6 @@
 % claims_register.md C-9 (draw 6abde44e): strongest dataset column and the event-delay channel.
 \newcommand{\nColumnMaxAUC}{\meas{0.706}}
 \newcommand{\nEventDelayAUC}{\meas{0.730}}
-\newcommand{\nTrivialRuleColumns}{\meas{0.604}}
 % claims_register.md C-12: account-grouped folds lower merchant_category_code by 0.005.
 \newcommand{\nSiblingLeak}{\meas{0.005}}
 % claims_register.md C-13: ten seeds at 300,000 rows; residual size dependence.
@@ -103,7 +101,7 @@
 % single_feature_baseline.md: the truncation correction (fad43dd -> 2c80ef6).
 \newcommand{\nCounterpartyNewBefore}{\meas{0.816}}
 % ADR 0025 / docs/ml/training_serving_parity.md Decision 1.
-\newcommand{\nParityRel}{\meas{10^{-12}}}
+\newcommand{\nParityRel}{\meas{\ensuremath{10^{-12}}}}
 % docs/reviews/M3/milestone-review.md "Determinism".
 \newcommand{\nBatchSizes}{\meas{1, 5 and 17}}
 
@@ -140,8 +138,8 @@
 \newcommand{\nGatePass}{\prov{9 of 11}}
 \newcommand{\nGatePrecFPR}{\prov{0.471}}
 \newcommand{\nGatePrecCeiling}{\prov{0.494}}
-\newcommand{\nGateOnnx}{\prov{4.06 \times 10^{-7}}}
-\newcommand{\nGateSeedAUC}{\prov{0.9667 \pm 0.0040}}
+\newcommand{\nGateOnnx}{\prov{\ensuremath{4.06 \times 10^{-7}}}}
+\newcommand{\nGateSeedAUC}{\prov{\ensuremath{0.9667 \pm 0.0040}}}
 % Baselines (same file): AUC and DeLong p against the ensemble.
 \newcommand{\nBaseRules}{\prov{0.707}}
 \newcommand{\nBaseLR}{\prov{0.965}}
@@ -151,7 +149,6 @@
 \newcommand{\nBaseIF}{\prov{0.943}}
 \newcommand{\nBaseRFp}{\prov{0.21}}
 \newcommand{\nBaseXGBp}{\prov{0.67}}
-\newcommand{\nCardOnly}{\prov{0.928}}
 
 % Battery, E1-corrected: docs/benchmarks/m4_battery_d8083dbc_e1.txt (evidence commit d40fca2),
 % one untuned XGBoost, 38 features, trained on 30,000 rows.
@@ -159,7 +156,7 @@
 \newcommand{\nBatECEAll}{\prov{0.0012}}
 \newcommand{\nBatECEDecision}{\prov{0.0185}}
 \newcommand{\nBatDecisionRows}{\prov{767}}
-\newcommand{\nBatAdditivity}{\prov{1.13 \times 10^{-5}}}
+\newcommand{\nBatAdditivity}{\prov{\ensuremath{1.13 \times 10^{-5}}}}
 \newcommand{\nGroupCounterparty}{\prov{0.925}}
 \newcommand{\nGroupVelocity}{\prov{0.860}}
 \newcommand{\nGroupTemporal}{\prov{0.856}}
@@ -230,7 +227,6 @@
 \newcommand{\nFlagThreshold}{\srcd{0.60}}      % D-02 flag threshold
 \newcommand{\nBlockThreshold}{\srcd{0.85}}     % D-02 block threshold
 \newcommand{\nFPRBudget}{\srcd{1\%}}           % D-01 operating point
-\newcommand{\nTargetAUC}{\srcd{0.940}}         % SRS 7.2 / ML-GATE-01
 \newcommand{\nTargetRecall}{\srcd{0.880}}      % D-02 recall at 0.60
 \newcommand{\nTargetFNR}{\srcd{12\%}}          % D-02 FNR at 0.60
 \newcommand{\nResamples}{\srcd{1{,}000}}       % E.5 item 2 bootstrap resamples
@@ -248,11 +244,11 @@
 \newcommand{\nGateFPRBlock}{\prov{0.000}}
 \newcommand{\nGateShapCov}{\prov{1.000}}
 \newcommand{\nGatePrecSix}{\prov{0.927}}
-\newcommand{\nGateSeedRecallSix}{\prov{0.7440 \pm 0.0410}}
-\newcommand{\nBaseRulesp}{\prov{1.2 \times 10^{-223}}}
+\newcommand{\nGateSeedRecallSix}{\prov{\ensuremath{0.7440 \pm 0.0410}}}
+\newcommand{\nBaseRulesp}{\prov{\ensuremath{1.2 \times 10^{-223}}}}
 \newcommand{\nBaseLRp}{\prov{0.0049}}
-\newcommand{\nBaseLGBp}{\prov{2.7 \times 10^{-8}}}
-\newcommand{\nBaseIFp}{\prov{4.8 \times 10^{-20}}}
+\newcommand{\nBaseLGBp}{\prov{\ensuremath{2.7 \times 10^{-8}}}}
+\newcommand{\nBaseIFp}{\prov{\ensuremath{4.8 \times 10^{-20}}}}
 \newcommand{\nBaseRulesR}{\prov{0.019}}
 \newcommand{\nBaseLRR}{\prov{0.815}}
 \newcommand{\nBaseRFR}{\prov{0.874}}
@@ -260,16 +256,11 @@
 \newcommand{\nBaseLGBR}{\prov{0.826}}
 \newcommand{\nBaseIFR}{\prov{0.619}}
 % Production-ensemble ablations (E.5.4), same file: AUC and delta vs the full model.
-\newcommand{\nAblAgent}{\prov{0.966}}
 \newcommand{\nAblAgentD}{\prov{-0.0038}}
-\newcommand{\nAblCorridor}{\prov{0.966}}
 \newcommand{\nAblCorridorD}{\prov{-0.0041}}
-\newcommand{\nAblRound}{\prov{0.968}}
 \newcommand{\nAblRoundD}{\prov{-0.0025}}
-\newcommand{\nAblMonth}{\prov{0.969}}
 \newcommand{\nAblMonthD}{\prov{-0.0008}}
 \newcommand{\nAblCardD}{\prov{-0.0420}}
-\newcommand{\nAblUSSD}{\prov{0.970}}
 \newcommand{\nAblUSSDD}{\prov{-0.0004}}
 % Battery groups alone, remaining rows (m4_battery_d8083dbc_e1.txt).
 \newcommand{\nGroupDevice}{\prov{0.720}}
@@ -301,7 +292,6 @@
 \newcommand{\nAdaptRecall}{\prov{90.9\%}}
 \newcommand{\nAdaptCI}{\prov{[62.3\%, 98.4\%]}}
 \newcommand{\nAdaptFraud}{\prov{11}}
-\newcommand{\nVariantThreshold}{\prov{0.009995}}
 % First reversal-scam run (m4_battery_pb61.txt, dbda585): caught 4 of 66, AUC 0.656.
 \newcommand{\nRevCaughtFirst}{\prov{4}}
 \newcommand{\nRevAUCFirst}{\prov{0.656}}
