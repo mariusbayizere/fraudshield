@@ -3,6 +3,7 @@ package io.github.mariusbayizere.fraudshield.decision.adapter.spool;
 import io.github.mariusbayizere.fraudshield.decision.adapter.events.FactCodec;
 import io.github.mariusbayizere.fraudshield.decision.application.event.DecisionEvent;
 import io.github.mariusbayizere.fraudshield.decision.application.port.EventRecorder;
+import io.github.mariusbayizere.fraudshield.decision.application.port.RecorderOutcomeUnknownException;
 import io.github.mariusbayizere.fraudshield.decision.application.port.RecorderUnavailableException;
 import java.time.Duration;
 import java.util.List;
@@ -34,6 +35,8 @@ public final class SpoolingEventRecorder implements EventRecorder {
       spool.appendAndWait(FactCodec.encode(events), timeout);
     } catch (SpoolFullException e) {
       throw new RecorderUnavailableException(e.getMessage(), e);
+    } catch (SpoolOutcomeUnknownException e) {
+      throw new RecorderOutcomeUnknownException(e.getMessage(), e);
     }
   }
 }

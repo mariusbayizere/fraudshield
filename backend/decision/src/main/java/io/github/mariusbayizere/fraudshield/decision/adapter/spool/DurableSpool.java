@@ -26,6 +26,7 @@ import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.zip.CRC32C;
 import org.slf4j.Logger;
@@ -91,7 +92,15 @@ public final class DurableSpool implements AutoCloseable {
   private FileChannel active;
   private volatile long activeBase;
 
-  private record Pending(byte[] payload, CompletableFuture<Long> done) {}
+  /** Queued, taken by the writer, or withdrawn by a caller that stopped waiting. */
+  private record Pending(byte[] payload, CompletableFuture<Long> done, AtomicInteger state) {
+    static final int QUEUED = 0;
+    static final int TAKEN = 1;
+    static final int WITHDRAWN = 2;
+  }
+
+  /** How long a caller keeps waiting for a record the writer has already taken. */
+  static final Duration TAKEN_GRACE = Duration.ofSeconds(5);
 
   /**
    * Opens (and recovers) a spool.
@@ -101,6 +110,14 @@ public final class DurableSpool implements AutoCloseable {
    * @param consumers names of the consumers that must pass a record before it is deleted
    */
   public DurableSpool(Path directory, Settings settings, Set<String> consumers) {
+    this(directory, settings, consumers, true);
+  }
+
+  /**
+   * Opens a spool, optionally without starting its writer (tests start it with {@link
+   * #startWriter()} to hold records in the queue).
+   */
+  DurableSpool(Path directory, Settings settings, Set<String> consumers, boolean startWriter) {
     this.directory = Objects.requireNonNull(directory, "directory");
     this.settings = Objects.requireNonNull(settings, "settings");
     this.consumers = Set.copyOf(consumers);
@@ -115,7 +132,14 @@ public final class DurableSpool implements AutoCloseable {
       throw new UncheckedIOException("could not open the spool at " + directory, e);
     }
     this.writer = Thread.ofPlatform().name("spool-writer").daemon(true).unstarted(this::writeLoop);
-    this.writer.start();
+    if (startWriter) {
+      this.writer.start();
+    }
+  }
+
+  /** Starts the writer of a spool opened without one. */
+  void startWriter() {
+    writer.start();
   }
 
   /**
@@ -136,13 +160,18 @@ public final class DurableSpool implements AutoCloseable {
     if (durableEnd.get() + pendingBytes.get() + size - minimumCommitted() > settings.maxBytes()) {
       throw new SpoolFullException("the spool holds its maximum of unconsumed bytes");
     }
-    Pending pending = new Pending(payload.clone(), new CompletableFuture<>());
+    return enqueue(payload, size).done();
+  }
+
+  private Pending enqueue(byte[] payload, long size) {
+    Pending pending =
+        new Pending(payload.clone(), new CompletableFuture<>(), new AtomicInteger(Pending.QUEUED));
     pendingBytes.addAndGet(size);
     if (!queue.offer(pending)) {
       pendingBytes.addAndGet(-size);
       throw new SpoolFullException("the in-memory buffer in front of the spool is full");
     }
-    return pending.done();
+    return pending;
   }
 
   /**
@@ -154,13 +183,45 @@ public final class DurableSpool implements AutoCloseable {
    * @throws SpoolFullException when the record was not made durable in time
    */
   public long appendAndWait(byte[] payload, Duration timeout) {
+    if (payload.length == 0 || payload.length > MAX_RECORD) {
+      throw new IllegalArgumentException("record size out of range: " + payload.length);
+    }
+    if (closed) {
+      throw new SpoolFullException("the spool is closed");
+    }
+    long size = (long) payload.length + HEADER;
+    if (durableEnd.get() + pendingBytes.get() + size - minimumCommitted() > settings.maxBytes()) {
+      throw new SpoolFullException("the spool holds its maximum of unconsumed bytes");
+    }
+    Pending pending = enqueue(payload, size);
     try {
-      return append(payload).get(timeout.toNanos(), TimeUnit.NANOSECONDS);
+      return pending.done().get(timeout.toNanos(), TimeUnit.NANOSECONDS);
+    } catch (TimeoutException late) {
+      // Withdrawn before the writer took it: the record will never be written, so the caller may
+      // treat it as not recorded. Taken already: its write is in progress and is waited for.
+      if (pending.state().compareAndSet(Pending.QUEUED, Pending.WITHDRAWN)) {
+        pendingBytes.addAndGet(-size);
+        throw new SpoolFullException("the spool did not take the record in time; it was withdrawn");
+      }
+      return awaitTaken(pending);
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
-      throw new SpoolFullException("interrupted while waiting for the spool");
-    } catch (ExecutionException | TimeoutException e) {
-      throw new SpoolFullException("the spool did not make the record durable: " + e);
+      throw new SpoolOutcomeUnknownException("interrupted while the record may be written", e);
+    } catch (ExecutionException e) {
+      throw new SpoolFullException("the spool did not make the record durable: " + e.getCause());
+    }
+  }
+
+  private long awaitTaken(Pending pending) {
+    try {
+      return pending.done().get(TAKEN_GRACE.toNanos(), TimeUnit.NANOSECONDS);
+    } catch (ExecutionException e) {
+      throw new SpoolFullException("the spool did not make the record durable: " + e.getCause());
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new SpoolOutcomeUnknownException("interrupted while the record may be written", e);
+    } catch (TimeoutException e) {
+      throw new SpoolOutcomeUnknownException("the record's fsync did not finish in time", e);
     }
   }
 
@@ -343,6 +404,10 @@ public final class DurableSpool implements AutoCloseable {
         break;
       }
       queue.drainTo(batch);
+      batch.removeIf(pending -> !pending.state().compareAndSet(Pending.QUEUED, Pending.TAKEN));
+      if (batch.isEmpty()) {
+        continue;
+      }
       long start = durableEnd.get();
       try {
         final long end = writeBatch(batch);

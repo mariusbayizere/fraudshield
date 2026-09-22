@@ -14,6 +14,8 @@ public interface EventRecorder {
    *
    * @param events the events of one decision
    * @throws RecorderUnavailableException when the spool is full or failing; nothing was recorded
+   * @throws RecorderOutcomeUnknownException when the spool took the events but did not confirm them
+   *     in time; they may or may not be recorded
    */
   void record(List<DecisionEvent> events);
 }
