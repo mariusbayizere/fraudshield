@@ -91,7 +91,7 @@ public final class HistoryCalculator {
         last == null ? null : (int) Duration.between(last.at(), now).toDays(),
         prior.stream().noneMatch(a -> a.counterparty().equals(t.counterpartyToken())),
         null,
-        distinct(in.counterpartySenders24h(), now, DAY, t.accountToken()),
+        in.counterpartyOtherSenders24h(),
         0,
         (int)
             within(prior, now, MONTH).stream()
@@ -100,7 +100,7 @@ public final class HistoryCalculator {
         device(t, prior, in, now),
         agent(t, in, now),
         null,
-        Math.max(0, distinct(in.deviceAccounts7d(), now, WEEK, t.accountToken())),
+        in.deviceOtherAccounts7d(),
         null);
   }
 
@@ -150,8 +150,7 @@ public final class HistoryCalculator {
         in.deviceFirstSeenAt() == null || in.deviceFirstSeenAt().isAfter(now)
             ? null
             : (int) Duration.between(in.deviceFirstSeenAt(), now).toDays();
-    return new AccountHistory.DeviceHistory(
-        isNew, distinct(in.deviceAccounts7d(), now, WEEK, null), changes, age);
+    return new AccountHistory.DeviceHistory(isNew, in.deviceAccounts7d(), changes, age);
   }
 
   private static AccountHistory.AgentHistory agent(Transaction t, HistoryInputs in, Instant now) {

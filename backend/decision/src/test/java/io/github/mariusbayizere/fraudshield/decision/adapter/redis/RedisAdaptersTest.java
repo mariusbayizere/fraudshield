@@ -138,6 +138,40 @@ class RedisAdaptersTest {
 
   @Test
   @Tag("FR-02-09")
+  void counterpartyAndDeviceSetsCountDistinctOtherAccountsInOpenWindows() {
+    RedisAccountState store =
+        new RedisAccountState(
+            connection,
+            new JdbcAccountProfiles(db.dataSource("fs_app")),
+            TIMEOUT,
+            Duration.ofSeconds(5));
+    final String sender = "tok_SenderBbbbCcccDdddEeee01";
+    final Instant day = NOW.minus(Duration.ofDays(1));
+    // Many payments from one sender count once, whatever order they are recorded in.
+    store.record(at(sender, NOW.minusSeconds(10), "1", Channel.MOBILE_MONEY));
+    for (int i = 1; i <= 5; i++) {
+      store.record(at(sender, NOW.minus(Duration.ofHours(i)), "1", Channel.MOBILE_MONEY));
+    }
+    store.record(
+        at("tok_SenderCcccDdddEeeeFfff01", day.minusSeconds(3600), "1", Channel.MOBILE_MONEY));
+    store.record(at("tok_SenderDdddEeeeFfffGggg01", day, "1", Channel.MOBILE_MONEY));
+    store.record(at("tok_SenderEeeeFfffGgggHhhh01", NOW.plusSeconds(5), "1", Channel.MOBILE_MONEY));
+    store.record(at("tok_SenderFfffGgggHhhhIiii01", day.plusMillis(1), "1", Channel.MOBILE_MONEY));
+    store.record(at(NOW.minus(Duration.ofHours(1)), "1", Channel.MOBILE_MONEY));
+
+    AccountStatePort.Snapshot snapshot = store.read(at(NOW, "1", Channel.MOBILE_MONEY));
+    // B and F: C is older than 24 h, D sits exactly on the open edge, E is later, A is the payer.
+    assertThat(snapshot.history().counterpartyUniqueSenders24h()).isEqualTo(2);
+    // Over 7 days the device saw A, B, C, D and F; E is later than the scored transaction.
+    assertThat(snapshot.history().device().accountsPerDevice7d()).isEqualTo(5);
+    assertThat(snapshot.history().accountsSharingDeviceOrPhone()).isEqualTo(4);
+    assertThat(connection.sync().zcard(RedisKeys.counterparty(INSTITUTION, Fixtures.COUNTERPARTY)))
+        .as("one member per sender, not per payment; E's write trimmed C and D")
+        .isEqualTo(4L);
+  }
+
+  @Test
+  @Tag("FR-02-09")
   @Tag("FR-03-06")
   void flushesRestoreFirstSeenAndTheFreezeFromPostgres() throws Exception {
     PostgresSink sink =

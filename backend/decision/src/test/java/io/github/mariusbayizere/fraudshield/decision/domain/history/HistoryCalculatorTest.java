@@ -40,8 +40,7 @@ class HistoryCalculatorTest {
   }
 
   private static HistoryInputs inputs(List<Arrival> arrivals, Instant firstSeen) {
-    return new HistoryInputs(
-        arrivals, null, firstSeen, null, List.of(), List.of(), null, List.of());
+    return new HistoryInputs(arrivals, null, firstSeen, null, 0, 0, 0, null, List.of());
   }
 
   private static final Transaction MOBILE = Fixtures.transaction("1000");
@@ -139,8 +138,9 @@ class HistoryCalculatorTest {
             null,
             null,
             null,
-            List.of(),
-            List.of(),
+            0,
+            0,
+            0,
             null,
             List.of(
                 Map.entry("tok_CustomerOneAaaaBbbbCccc01", NOW.minusSeconds(100)),
@@ -162,17 +162,7 @@ class HistoryCalculatorTest {
             arrival(Duration.ofHours(2), "1", COUNTERPARTY, "tok_OldDeviceAaaaBbbbCccc02"));
     HistoryInputs in =
         new HistoryInputs(
-            arrivals,
-            null,
-            null,
-            null,
-            List.of(),
-            List.of(
-                Map.entry(ACCOUNT, NOW.minus(Duration.ofDays(1))),
-                Map.entry("tok_SomeoneElseAaaaBbbbCccc1", NOW.minus(Duration.ofDays(2))),
-                Map.entry("tok_LongAgoAaaaBbbbCcccDddd1", NOW.minus(Duration.ofDays(8)))),
-            NOW.minus(Duration.ofDays(3)),
-            List.of());
+            arrivals, null, null, null, 0, 2, 1, NOW.minus(Duration.ofDays(3)), List.of());
     AccountHistory h = HistoryCalculator.compute(Fixtures.transaction("1"), in);
     assertThat(h.device().newForAccount()).isTrue();
     assertThat(h.device().deviceChanges24h()).isEqualTo(2);
@@ -191,16 +181,15 @@ class HistoryCalculatorTest {
             old,
             NOW.minus(Duration.ofDays(300)),
             NOW.minus(Duration.ofDays(400)),
-            List.of(
-                Map.entry("tok_SenderAaaaBbbbCcccDddd01", NOW.minusSeconds(10)),
-                Map.entry(ACCOUNT, NOW.minusSeconds(20))),
-            List.of(),
+            1,
+            0,
+            0,
             null,
             List.of());
     AccountHistory h = HistoryCalculator.compute(MOBILE, in);
     assertThat(h.lastTransactionAt()).isEqualTo(old.at());
     assertThat(h.daysSincePreviousActivity()).isEqualTo(200);
     assertThat(h.accountAgeDays()).isEqualTo(400);
-    assertThat(h.counterpartyUniqueSenders24h()).as("other senders only").isEqualTo(1);
+    assertThat(h.counterpartyUniqueSenders24h()).isEqualTo(1);
   }
 }

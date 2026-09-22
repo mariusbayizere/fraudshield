@@ -60,8 +60,9 @@ public final class JdbcAccountHistory implements AccountStatePort {
               null,
               profile.map(JdbcAccountProfiles.Profile::firstSeenAt).orElse(null),
               profile.map(JdbcAccountProfiles.Profile::openedAt).orElse(null),
-              List.of(),
-              List.of(),
+              0,
+              0,
+              0,
               null,
               List.of());
       return new Snapshot(

@@ -29,6 +29,14 @@ public interface DecisionMetrics {
    */
   void holdLateness(long lateMillis);
 
+  /**
+   * Time spent in one stage of the synchronous path ({@code fs_decision_stage_seconds}).
+   *
+   * @param stage stage name
+   * @param nanos duration
+   */
+  default void stage(String stage, long nanos) {}
+
   /** Metrics that record nothing, for callers that have none. */
   DecisionMetrics NONE =
       new DecisionMetrics() {

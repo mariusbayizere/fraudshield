@@ -54,6 +54,7 @@ public final class DecisionService {
   private final DecisionMetrics metrics;
   private final DecisionSettings settings;
   private final Clock clock;
+  private final java.util.concurrent.Executor afterResponse;
 
   /**
    * Creates the service.
@@ -84,6 +85,53 @@ public final class DecisionService {
       DecisionMetrics metrics,
       DecisionSettings settings,
       Clock clock) {
+    this(
+        configuration,
+        accounts,
+        scorer,
+        freezes,
+        breakers,
+        holds,
+        states,
+        recorder,
+        notifications,
+        metrics,
+        settings,
+        clock,
+        Runnable::run);
+  }
+
+  /**
+   * Creates the service with an executor for the work done after the response.
+   *
+   * @param configuration thresholds, rules and breaker settings
+   * @param accounts online feature store
+   * @param scorer ML scorer
+   * @param freezes account freeze counter
+   * @param breakers MCC circuit breakers
+   * @param holds hold deadline schedule
+   * @param states latest decision state per transaction
+   * @param recorder durable event spool
+   * @param notifications customer SMS composer
+   * @param metrics metrics
+   * @param settings decision settings
+   * @param clock clock
+   * @param afterResponse runs the feature-store update and MCC counting off the request path
+   */
+  public DecisionService(
+      ConfigurationPort configuration,
+      AccountStatePort accounts,
+      ScoringPort scorer,
+      FreezePort freezes,
+      CircuitBreakerPort breakers,
+      HoldSchedulePort holds,
+      DecisionStatePort states,
+      EventRecorder recorder,
+      CustomerNotificationPolicy notifications,
+      DecisionMetrics metrics,
+      DecisionSettings settings,
+      Clock clock,
+      java.util.concurrent.Executor afterResponse) {
     this.configuration = Objects.requireNonNull(configuration, "configuration");
     this.accounts = Objects.requireNonNull(accounts, "accounts");
     this.scorer = Objects.requireNonNull(scorer, "scorer");
@@ -96,6 +144,7 @@ public final class DecisionService {
     this.metrics = Objects.requireNonNull(metrics, "metrics");
     this.settings = Objects.requireNonNull(settings, "settings");
     this.clock = Objects.requireNonNull(clock, "clock");
+    this.afterResponse = Objects.requireNonNull(afterResponse, "afterResponse");
   }
 
   /**
@@ -112,14 +161,18 @@ public final class DecisionService {
   public IngestDecision decide(
       Transaction transaction, byte[] requestFingerprint, long receivedNanos) {
     UUID institution = transaction.institutionId();
+    long mark = System.nanoTime();
     ConfigurationPort.Thresholds thresholds = configuration.thresholds(institution);
     ChannelThreshold threshold = thresholds.thresholds().byChannel().get(transaction.channel());
+    mark = stage("configuration", mark);
     AccountStatePort.Snapshot snapshot = accounts.read(transaction);
+    mark = stage("account_read", mark);
 
     Scores scores = score(transaction, snapshot, threshold);
     final Scoring scoring = scores.scoring();
     final DecisionEvent.ScoringRecord record = scores.record();
 
+    mark = stage("score", mark);
     RuleSet.Evaluation rules =
         configuration.rules(institution).evaluate(new FeatureSubject(transaction, scoring));
     boolean breakerOpen = breakers.isOpen(institution, transaction.merchantCategoryCode());
@@ -177,7 +230,9 @@ public final class DecisionService {
       addAutoBlock(events, transaction, record, outcome, scoring, snapshot, decidedAt);
     }
 
+    mark = stage("decide", mark);
     recorder.record(events);
+    mark = stage("spool", mark);
 
     states.save(state);
     if (outcome.decision() == Decision.HOLD) {
@@ -189,8 +244,20 @@ public final class DecisionService {
               threshold.timeoutPolicy(),
               outcome.reviewDeadlineAt()));
     }
-    breakers.count(institution, transaction.merchantCategoryCode(), decidedAt, outcome.autoBlock());
-    accounts.record(transaction);
+    stage("fast_state_writes", mark);
+    // After the response (C.2): the feature-store update (FR-02-09, p99 < 100 ms) and the MCC
+    // counts are not needed to answer this request and are rebuilt from PostgreSQL if lost.
+    afterResponse.execute(
+        () -> {
+          long started = System.nanoTime();
+          try {
+            breakers.count(
+                institution, transaction.merchantCategoryCode(), decidedAt, outcome.autoBlock());
+            accounts.record(transaction);
+          } finally {
+            metrics.stage("feature_store_update", System.nanoTime() - started);
+          }
+        });
     metrics.decided(transaction, outcome, System.nanoTime() - receivedNanos);
 
     return new IngestDecision(
@@ -203,6 +270,12 @@ public final class DecisionService {
         latencyMs,
         outcome.reviewDeadlineAt(),
         outcome.fallback());
+  }
+
+  private long stage(String name, long since) {
+    long now = System.nanoTime();
+    metrics.stage(name, now - since);
+    return now;
   }
 
   private record Scores(Scoring scoring, DecisionEvent.ScoringRecord record) {}

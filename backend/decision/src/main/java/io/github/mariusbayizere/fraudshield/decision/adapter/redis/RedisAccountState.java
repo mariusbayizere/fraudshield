@@ -10,6 +10,7 @@ import io.github.mariusbayizere.fraudshield.decision.domain.history.HistoryInput
 import io.lettuce.core.Range;
 import io.lettuce.core.ScoredValue;
 import io.lettuce.core.ScriptOutputType;
+import io.lettuce.core.ZAddArgs;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.api.async.RedisAsyncCommands;
 import java.math.BigDecimal;
@@ -37,6 +38,7 @@ public final class RedisAccountState implements AccountStatePort {
   private static final Duration DEVICE = Duration.ofDays(7);
   private static final Duration AGENT = Duration.ofHours(1);
   private static final String SEPARATOR = "|";
+  private static final ZAddArgs LATEST = ZAddArgs.Builder.gt();
 
   private static final String SET_LAST =
       """
@@ -98,16 +100,19 @@ public final class RedisAccountState implements AccountStatePort {
     var last = redis.hget(RedisKeys.account(inst, t.accountToken(), "last"), "arrival");
     var profile = redis.hgetall(RedisKeys.account(inst, t.accountToken(), "profile"));
     var frozen = redis.exists(RedisKeys.account(inst, t.accountToken(), "frozen"));
-    var senders =
-        redis.zrangebyscoreWithScores(
-            RedisKeys.counterparty(inst, t.counterpartyToken()),
-            Range.create(now - SENDERS.toMillis() + 1, now - 1));
-    CompletionStage<List<ScoredValue<String>>> deviceAccounts =
-        t.deviceToken() == null
-            ? CompletableFuture.completedFuture(List.of())
-            : redis.zrangebyscoreWithScores(
-                RedisKeys.device(inst, t.deviceToken(), "accounts"),
-                Range.create(now - DEVICE.toMillis() + 1, now - 1));
+    String sendersKey = RedisKeys.counterparty(inst, t.counterpartyToken());
+    Range<Long> day = Range.create(now - SENDERS.toMillis() + 1, now - 1);
+    var senders = redis.zcount(sendersKey, day);
+    var ownSend = redis.zscore(sendersKey, t.accountToken());
+    String deviceKey =
+        t.deviceToken() == null ? null : RedisKeys.device(inst, t.deviceToken(), "accounts");
+    Range<Long> week = Range.create(now - DEVICE.toMillis() + 1, now - 1);
+    CompletionStage<Long> deviceAccounts =
+        deviceKey == null ? CompletableFuture.completedFuture(0L) : redis.zcount(deviceKey, week);
+    CompletionStage<Double> ownDevice =
+        deviceKey == null
+            ? CompletableFuture.completedFuture(null)
+            : redis.zscore(deviceKey, t.accountToken());
     CompletionStage<String> deviceFirst =
         t.deviceToken() == null
             ? CompletableFuture.completedFuture(null)
@@ -146,8 +151,9 @@ public final class RedisAccountState implements AccountStatePort {
             Optional.ofNullable(await(last)).map(RedisAccountState::decode).orElse(null),
             firstSeen,
             opened,
-            pairs(await(senders)),
-            pairs(await(deviceAccounts)),
+            (int) (await(senders) - (within(await(ownSend), day) ? 1 : 0)),
+            Math.toIntExact(await(deviceAccounts)),
+            (int) (await(deviceAccounts) - (within(await(ownDevice), week) ? 1 : 0)),
             instant(await(deviceFirst)),
             pairs(await(agent)));
     return new Snapshot(HistoryCalculator.compute(t, inputs), isFrozen, firstTransaction);
@@ -177,14 +183,15 @@ public final class RedisAccountState implements AccountStatePort {
         redis.hsetnx(
             RedisKeys.account(inst, t.accountToken(), "profile"), "first_seen", Long.toString(at)));
     String senders = RedisKeys.counterparty(inst, t.counterpartyToken());
-    writes.add(redis.zadd(senders, at, t.accountToken() + SEPARATOR + t.transactionId()));
+    // One member per account holding its latest time, so the store counts distinct accounts.
+    writes.add(redis.zadd(senders, LATEST, at, t.accountToken()));
     writes.add(
         redis.zremrangebyscore(
             senders, Range.create(Double.NEGATIVE_INFINITY, (double) (at - SENDERS.toMillis()))));
     writes.add(redis.pexpire(senders, SENDERS.toMillis() * 2));
     if (t.deviceToken() != null) {
       String accounts = RedisKeys.device(inst, t.deviceToken(), "accounts");
-      writes.add(redis.zadd(accounts, at, t.accountToken() + SEPARATOR + t.transactionId()));
+      writes.add(redis.zadd(accounts, LATEST, at, t.accountToken()));
       writes.add(
           redis.zremrangebyscore(
               accounts, Range.create(Double.NEGATIVE_INFINITY, (double) (at - DEVICE.toMillis()))));
@@ -235,14 +242,15 @@ public final class RedisAccountState implements AccountStatePort {
     }
   }
 
+  /** Writes the durable values back without waiting: the next read finds them in Redis. */
   private void restore(Transaction t, JdbcAccountProfiles.Profile profile) {
     String key = RedisKeys.account(t.institutionId(), t.accountToken(), "profile");
-    await(redis.hset(key, "first_seen", Long.toString(profile.firstSeenAt().toEpochMilli())));
+    redis.hsetnx(key, "first_seen", Long.toString(profile.firstSeenAt().toEpochMilli()));
     if (profile.openedAt() != null) {
-      await(redis.hset(key, "opened", Long.toString(profile.openedAt().toEpochMilli())));
+      redis.hset(key, "opened", Long.toString(profile.openedAt().toEpochMilli()));
     }
     if (profile.frozen()) {
-      await(redis.set(RedisKeys.account(t.institutionId(), t.accountToken(), "frozen"), "1"));
+      redis.set(RedisKeys.account(t.institutionId(), t.accountToken(), "frozen"), "1");
     }
   }
 
@@ -284,6 +292,12 @@ public final class RedisAccountState implements AccountStatePort {
                     m.getValue().substring(0, m.getValue().indexOf(SEPARATOR)),
                     Instant.ofEpochMilli((long) m.getScore())))
         .toList();
+  }
+
+  private static boolean within(Double score, Range<Long> range) {
+    return score != null
+        && score >= range.getLower().getValue()
+        && score <= range.getUpper().getValue();
   }
 
   private static Instant instant(String epochMillis) {
