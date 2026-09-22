@@ -289,3 +289,19 @@
 % SRS 2.3 claim, UNVERIFIED (claims register C-6); quoted only to report the measurement that
 % replaces it.
 \newcommand{\nSpecVarianceClaim}{\srcd{12\%}}
+
+% Leave-one-country-out and variants, m4_battery_d8083dbc_e1.txt (evidence commit d40fca2):
+% country AUC in-sample (BY COUNTRY) and with the country removed from training (LOCO), fraud rows.
+\newcommand{\nLocoKEin}{\prov{0.980}}\newcommand{\nLocoKEout}{\prov{0.977}}\newcommand{\nLocoKEf}{\prov{264}}
+\newcommand{\nLocoRWin}{\prov{0.969}}\newcommand{\nLocoRWout}{\prov{0.964}}\newcommand{\nLocoRWf}{\prov{445}}
+\newcommand{\nLocoTZin}{\prov{0.967}}\newcommand{\nLocoTZout}{\prov{0.964}}\newcommand{\nLocoTZf}{\prov{152}}
+\newcommand{\nLocoUGin}{\prov{0.967}}\newcommand{\nLocoUGout}{\prov{0.961}}\newcommand{\nLocoUGf}{\prov{110}}
+\newcommand{\nLocoCDin}{\prov{0.989}}\newcommand{\nLocoCDout}{\prov{0.988}}\newcommand{\nLocoCDf}{\prov{14}}
+\newcommand{\nNovelCaught}{\prov{72}}
+\newcommand{\nAdaptRecall}{\prov{90.9\%}}
+\newcommand{\nAdaptCI}{\prov{[62.3\%, 98.4\%]}}
+\newcommand{\nAdaptFraud}{\prov{11}}
+\newcommand{\nVariantThreshold}{\prov{0.009995}}
+% First reversal-scam run (m4_battery_pb61.txt, dbda585): caught 4 of 66, AUC 0.656.
+\newcommand{\nRevCaughtFirst}{\prov{4}}
+\newcommand{\nRevAUCFirst}{\prov{0.656}}
