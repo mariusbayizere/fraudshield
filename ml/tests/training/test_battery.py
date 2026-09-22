@@ -8,6 +8,7 @@ import pytest
 
 from fraudshield_ml.training.battery import (
     NOVEL_VARIANT,
+    VariantResult,
     additivity_error,
     apply_platt,
     brier,
@@ -256,3 +257,31 @@ def test_an_undetected_novel_variant_reports_zero_recall_not_a_missing_row() -> 
     assert novel.detected == 0
     assert novel.recall == 0.0
     assert novel.auc < 0.5, "scored below the legitimate rows, which is worse than chance"
+
+
+def test_the_recall_interval_is_wide_at_the_sample_size_a_thin_variant_actually_has() -> None:
+    """PB-61's reversal-scam variant: 4 of 66 caught. The point estimate alone (6.1%) reads as
+    settled; the interval is what says the true rate could plausibly be anywhere up to 14.6%.
+    """
+    result = VariantResult(
+        variant="reversal_scam_social_engineering", fraud=66, detected=4, auc=0.656, error=0.037
+    )
+    lo, hi = result.recall_interval
+    assert lo == pytest.approx(0.0238, abs=1e-4)
+    assert hi == pytest.approx(0.1457, abs=1e-4)
+    assert lo < result.recall < hi
+
+
+def test_the_recall_interval_does_not_exceed_one_at_perfect_recall() -> None:
+    """The normal approximation would overshoot 1.0 here; Wilson must not."""
+    result = VariantResult(variant="base", fraud=10, detected=10, auc=1.0, error=0.0)
+    lo, hi = result.recall_interval
+    assert hi == pytest.approx(1.0)
+    assert 0.0 < lo < 1.0
+
+
+def test_the_recall_interval_is_undefined_without_any_fraud_rows() -> None:
+    result = VariantResult(variant="empty", fraud=0, detected=0, auc=math.nan, error=math.nan)
+    lo, hi = result.recall_interval
+    assert math.isnan(lo)
+    assert math.isnan(hi)

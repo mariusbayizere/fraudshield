@@ -117,37 +117,55 @@ def variant_table(results: Sequence[VariantResult], threshold: float, fpr: float
         "never seen it. All variants scored against the same legitimate rows at one threshold",
         f"({threshold:.6f}, the {fpr:.0%} false-positive budget over all legitimate rows).",
         "",
-        f"  {'variant':<34s} {'AUC':<5s}         {'recall':<6s}  {'caught':>9s}  {'fraud':>5s}",
+        f"  {'variant':<34s} {'AUC':<5s}         {'recall':<6s} {'[95% CI]':<15s} "
+        f"{'caught':>7s}  {'fraud':>5s}",
     ]
     for item in results:
+        lo, hi = item.recall_interval
+        ci = f"[{lo:.3f}, {hi:.3f}]" if not math.isnan(lo) else "[n/a]"
         lines.append(
             f"  {item.variant:<34s} {item.auc:.3f} +/-{item.interval:.3f}  "
-            f"{item.recall:.3f}   {item.detected:>7d}  {item.fraud:>5d}"
+            f"{item.recall:.3f} {ci:<15s} {item.detected:>7d}  {item.fraud:>5d}"
         )
-    novel = next((r for r in results if r.variant == NOVEL_VARIANT), None)
-    base = [r for r in results if r.variant != NOVEL_VARIANT]
-    if novel and base:
-        seen = max(base, key=lambda r: r.fraud)
-        lines += [
-            "",
-            f"  The unseen shape is caught at {novel.recall:.1%}; the shape the model trained on"
-            f" ({seen.variant})",
-            f"  at {seen.recall:.1%}.",
-        ]
-        if novel.recall < seen.recall:
-            lines.append("  The gap is the cost of never having seen it.")
-        else:
+
+    base_list = [r for r in results if r.variant == "base"]
+    base = base_list[0] if base_list else None
+    if base:
+        for item in results:
+            if item is base:
+                continue
+            lo, hi = item.recall_interval
+            base_lo, base_hi = base.recall_interval
+            separated = hi < base_lo or lo > base_hi
             lines += [
-                "  **The unseen shape is caught at least as often as the familiar one, so this",
-                "  experiment does not measure generalisation on this benchmark.** The novelty is",
-                "  in the lead time, not in the transaction pattern: the drain is still a burst,",
-                "  and a model that detects bursts catches it without having seen the variant.",
-                "  Reported as a null result rather than dropped (PB-59, PB-61).",
+                "",
+                f"  {item.variant}: recall {item.recall:.1%} [{lo:.1%}, {hi:.1%}] on "
+                f"{item.fraud} fraud rows, against",
+                f"  base at {base.recall:.1%} [{base_lo:.1%}, {base_hi:.1%}] on {base.fraud} rows.",
             ]
-        if novel.fraud < 30:
-            lines.append(
-                f"  It rests on {novel.fraud} fraud rows, so read it as direction, not measurement."
-            )
+            if item.variant == NOVEL_VARIANT and not separated:
+                lines += [
+                    "  **The unseen shape is caught at least as often as the familiar one, so",
+                    "  this experiment does not measure generalisation on this benchmark.** The",
+                    "  novelty is in the lead time, not the transaction pattern: the drain is",
+                    "  still a burst, and a model that detects bursts catches it without having",
+                    "  seen the variant. Reported as a null result rather than dropped (PB-61).",
+                ]
+            elif separated and item.recall < base.recall:
+                lines.append(
+                    "  The intervals do not overlap: this is a supported finding, not noise at"
+                    " this sample size."
+                )
+            elif not separated:
+                lines.append(
+                    "  The intervals overlap, so this comparison alone does not establish a"
+                    " difference."
+                )
+            if item.fraud < 30:
+                lines.append(
+                    f"  Rests on {item.fraud} fraud rows; read the interval, not the point"
+                    " estimate alone."
+                )
     return lines
 
 

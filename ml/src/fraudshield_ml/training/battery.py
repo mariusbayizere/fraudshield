@@ -289,6 +289,24 @@ class VariantResult:
     def interval(self) -> float:
         return 1.96 * self.error
 
+    @property
+    def recall_interval(self) -> tuple[float, float]:
+        """Wilson 95% interval on `recall`, because it is a proportion and `detected` is often
+        small enough that the point estimate alone invites exactly the over-reading this project
+        has already paid for once today: a rate quoted without the count behind it reads as more
+        settled than it is. Wilson rather than the normal approximation because it stays inside
+        [0, 1] and does not degenerate at `recall` near 0 or 1, both of which happen here.
+        """
+        if self.fraud == 0:
+            return math.nan, math.nan
+        z = 1.96
+        n, k = self.fraud, self.detected
+        p = k / n
+        denom = 1 + z**2 / n
+        centre = p + z**2 / (2 * n)
+        spread = z * math.sqrt(p * (1 - p) / n + z**2 / (4 * n**2))
+        return (centre - spread) / denom, (centre + spread) / denom
+
 
 def by_variant(
     scores: Sequence[float],
