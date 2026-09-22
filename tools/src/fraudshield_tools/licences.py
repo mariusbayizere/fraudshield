@@ -121,6 +121,18 @@ EXCEPTIONS: dict[str, tuple[str, str]] = {
         "POM lists 'EPL 2.0' and 'GPL2 w/ CPE'; the jar's META-INF/NOTICE.md declares "
         "SPDX 'EPL-2.0 OR GPL-2.0-only with Classpath-exception-2.0' (verified 2026-09-17)",
     ),
+    "maven:jakarta.mail:jakarta.mail-api@2.1.5": (
+        "EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0",
+        "POM lists 'EDL 1.0', 'EPL 2.0' and 'GPL2 w/ CPE'; the jar's META-INF/NOTICE.md declares "
+        "SPDX 'EPL-2.0 OR GPL-2.0-only with Classpath-exception-2.0'. Runtime dependency of the "
+        "M7 staff mailer via spring-boot-starter-mail; allowed by ADR 0020 (verified 2026-09-22)",
+    ),
+    "maven:org.eclipse.angus:angus-mail@2.0.5": (
+        "EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0",
+        "POM lists 'EDL 1.0', 'EPL 2.0' and 'GPL2 w/ CPE'; the jar's META-INF/NOTICE.md declares "
+        "SPDX 'EPL-2.0 OR GPL-2.0 WITH Classpath-exception-2.0'. Jakarta Mail implementation "
+        "used by the M7 staff mailer; allowed by ADR 0020 (verified 2026-09-22)",
+    ),
     "maven:com.tngtech.archunit:archunit@1.5.0": (
         "Apache-2.0 AND BSD-3-Clause",
         "POM declares Apache-2.0 and 'BSD'; the BSD part is shaded ASM, whose bundled "
