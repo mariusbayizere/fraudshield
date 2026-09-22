@@ -61,6 +61,9 @@ expect_route pagerduty-sre team=sre severity=page alertname=FraudShieldErrorLogg
 expect_route pagerduty-sre alertname=AnythingUnlabelled
 echo "routing: 5 cases as expected"
 
+step "Grafana dashboards match their generator"
+uv run --frozen python infrastructure/grafana/generate_dashboards.py --check
+
 step "Metric catalogue (Part E.10) and alert conventions (runbooks)"
 uv run --frozen python infrastructure/checks/metric_catalogue.py
 uv run --frozen python infrastructure/checks/rule_conventions.py
