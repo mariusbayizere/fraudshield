@@ -143,7 +143,7 @@ def variant_table(results: Sequence[VariantResult], threshold: float, fpr: float
                 f"{item.fraud} fraud rows, against",
                 f"  base at {base.recall:.1%} [{base_lo:.1%}, {base_hi:.1%}] on {base.fraud} rows.",
             ]
-            if item.variant == NOVEL_VARIANT and not separated:
+            if item.variant == NOVEL_VARIANT and not separated and item.recall >= base.recall:
                 lines += [
                     "  **The unseen shape is caught at least as often as the familiar one, so",
                     "  this experiment does not measure generalisation on this benchmark.** The",
@@ -156,7 +156,12 @@ def variant_table(results: Sequence[VariantResult], threshold: float, fpr: float
                     "  The intervals do not overlap: this is a supported finding, not noise at"
                     " this sample size."
                 )
-            elif not separated:
+            elif separated:
+                lines.append(
+                    "  The intervals do not overlap, and this shape is caught MORE often than"
+                    " base: a supported finding."
+                )
+            else:
                 lines.append(
                     "  The intervals overlap, so this comparison alone does not establish a"
                     " difference."

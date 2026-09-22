@@ -305,7 +305,9 @@ class VariantResult:
         denom = 1 + z**2 / n
         centre = p + z**2 / (2 * n)
         spread = z * math.sqrt(p * (1 - p) / n + z**2 / (4 * n**2))
-        return (centre - spread) / denom, (centre + spread) / denom
+        # Exact Wilson bounds lie in [0, 1]; at k = 0 or k = n the subtraction lands a rounding
+        # error outside, which prints as -0.000.
+        return max(0.0, (centre - spread) / denom), min(1.0, (centre + spread) / denom)
 
 
 def by_variant(

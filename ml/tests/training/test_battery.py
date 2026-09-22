@@ -20,7 +20,7 @@ from fraudshield_ml.training.battery import (
     reliability,
     score,
 )
-from fraudshield_ml.training.report import table
+from fraudshield_ml.training.report import table, variant_table
 from fraudshield_ml.training.smoke import recall_at_fpr
 
 pytestmark = pytest.mark.req("ML-GATE-11")
@@ -285,3 +285,32 @@ def test_the_recall_interval_is_undefined_without_any_fraud_rows() -> None:
     lo, hi = result.recall_interval
     assert math.isnan(lo)
     assert math.isnan(hi)
+
+
+def test_the_recall_interval_is_never_negative_when_nothing_is_caught() -> None:
+    """Exact Wilson bounds lie in [0, 1]; unclamped, k = 0 printed as -0.000."""
+    lo, hi = VariantResult(variant="x", fraud=20, detected=0, auc=0.5, error=0.1).recall_interval
+    assert lo == 0.0
+    assert f"{lo:.3f}" == "0.000"
+    assert 0.0 < hi < 1.0
+
+
+def _variants(novel_detected: int, novel_fraud: int) -> list[VariantResult]:
+    return [
+        VariantResult(NOVEL_VARIANT, novel_fraud, novel_detected, 0.9, 0.05),
+        VariantResult("base", 400, 360, 0.99, 0.01),
+    ]
+
+
+def test_an_unseen_shape_caught_less_often_is_not_reported_as_caught_as_often() -> None:
+    """Overlapping intervals do not mean "at least as often" — the null-result prose is PB-61's
+    finding for a shape caught *more* often, and printing it for one caught less would invert it.
+    """
+    rendered = "\n".join(variant_table(_variants(17, 20), threshold=0.5, fpr=0.01))
+    assert "at least as often" not in rendered
+    assert "The intervals overlap" in rendered
+
+
+def test_an_unseen_shape_caught_significantly_more_often_gets_a_verdict() -> None:
+    rendered = "\n".join(variant_table(_variants(200, 200), threshold=0.5, fpr=0.01))
+    assert "caught MORE often than base" in rendered
