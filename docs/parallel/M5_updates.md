@@ -158,3 +158,14 @@ This is D-16 measured. The levers are E.4's latency-constrained tree complexity 
 compiled model path (ONNX, which the M4 gate lists as unverified), or both, then a run on the
 dedicated machine. Proposed status: VERIFIED_AT_REDUCED_SCALE for memory; the latency rows stay
 open with this analysis attached.
+
+## 8. The ml suite on this branch
+
+At c8ce5c8, clean tree, dev-laptop-01: **429 passed, 2 skipped, 0 failed**. The two skipped tests
+are `requires_docker` (real Redis, real MLflow) and print the explicit message. **The coverage gate
+fails at 89.08% against 90%.** The M5 modules sit at 86–99% each, about 97% together (the protoc
+output is omitted by config). The shortfall is M4's `cli.py` (51%), `training/report.py` (22%) and
+`training/frontier.py` (52%). At 4af4e5e, before the M5 entry-point tests, the total was 85.69%,
+and the non-M5 code alone is below 90%, which matches M4's red CI. `origin/m4/generalisation` has
+commits after this branch's base that test those commands; the rebase onto `m4-complete` will
+show whether they close it.
