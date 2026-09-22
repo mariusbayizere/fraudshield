@@ -36,6 +36,7 @@ from fraudshield_ml.models.bundle import (
     Encoding,
     feature_registry_version,
 )
+from fraudshield_ml.serving.features import WHOLE_DAY_FEATURES
 from fraudshield_ml.training import battery, smoke
 from fraudshield_ml.training.ensemble import (
     BOOSTING_ROUNDS,
@@ -109,6 +110,23 @@ def fit_boosters(
     return booster, light
 
 
+def serving_view(values: Mapping[str, float | str]) -> dict[str, float | str]:
+    """A feature row as the scoring contract can deliver it.
+
+    `AccountContext` carries the four ages in whole days (`uint32`), so the model is trained on
+    whole days: floor for a non-negative age, NaN for a negative one, which is a data error the
+    contract has no encoding for. Training on the fractional value would teach thresholds serving
+    can never reproduce.
+    """
+    out = dict(values)
+    for name in WHOLE_DAY_FEATURES:
+        if name in out:
+            value = float(out[name])
+            if not math.isnan(value):
+                out[name] = float(math.floor(value)) if value >= 0 else math.nan
+    return out
+
+
 def git_revision(root: Path) -> str:
     try:
         return subprocess.run(
@@ -130,6 +148,7 @@ def build(
     provenance: Mapping[str, Any] | None = None,
 ) -> tuple[Bundle, Report]:
     names = smoke.trainable_features()
+    vectors = [serving_view(v) for v in vectors]
     labels = [v == "True" for v in extras[smoke.CACHE_LABEL]]
     segment = extras[smoke.CACHE_SEGMENT]
     by = {s: [i for i, g in enumerate(segment) if g == s] for s in ("train", "calibration", "test")}
@@ -200,6 +219,7 @@ def build(
         provenance={
             **(provenance or {}),
             "seed": seed,
+            "whole_day_features": list(WHOLE_DAY_FEATURES),
             "boosting_rounds": BOOSTING_ROUNDS,
             "xgboost_parameters": XGBOOST_PARAMETERS,
             "lightgbm_parameters": LIGHTGBM_PARAMETERS,

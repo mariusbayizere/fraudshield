@@ -202,3 +202,12 @@ def test_the_report_states_the_floor_beside_the_model() -> None:
     text = "\n".join(report.lines())
     assert "floor" in text
     assert "+0.0900" in text
+
+
+def test_the_model_is_trained_on_the_whole_days_the_contract_carries() -> None:
+    row = builder.serving_view(
+        {"device_age_days": 2.9, "days_since_sim_swap": -0.5, "account_age_days": float("nan")}
+    )
+    assert row["device_age_days"] == 2.0
+    assert math.isnan(float(row["days_since_sim_swap"])), "a negative age has no encoding"
+    assert math.isnan(float(row["account_age_days"]))
