@@ -3,8 +3,10 @@
 - **Method:** STRIDE per component and per data flow (build prompt D-28, I.3). S = spoofing,
   T = tampering, R = repudiation, I = information disclosure, D = denial of service, E = elevation of
   privilege.
-- **Version:** M1 (database, contracts, demo seeding). Updated at every milestone that adds a component
-  or a data flow; each milestone review checks this file against the change (M0 review condition M-1).
+- **Version:** M1 (database, contracts, demo seeding), plus the M9 delta (Kubernetes platform,
+  observability and alerting, supply chain: sections 3.6 to 3.8, risks R-5 to R-9). Updated at
+  every milestone that adds a component or a data flow; each milestone review checks this file
+  against the change (M0 review condition M-1).
 - **Status legend:** *implemented* (control exists and is tested), *contracted* (fixed in the
   OpenAPI, Kafka or proto contract, implemented later), *planned* (milestone named).
 
@@ -100,6 +102,44 @@ developer machine ↔ public repository.
 | `fs_migrator` credential | T/R: the schema owner can disable or drop append-only triggers and rewrite decisions, blocks, labels or configuration versions | Owner used only by the migration job, never by services (M9); audit log tamper-evident through the hash chain and signed anchors (M7) | Non-audit append-only tables have no tamper evidence beyond grants and triggers |
 | Devcontainer | E: Docker-in-Docker privileged | Base image by digest | Feature versions not digest-pinned |
 
+### 3.6 Kubernetes platform (M9: manifests validated offline, not yet applied to a cluster)
+
+Controls are in `infrastructure/k8s/` and are checked on every change by
+`infrastructure/checks/validate.sh`: kubeconform (strict, Kubernetes 1.34 schemas) and
+`infrastructure/checks/k8s_policy.py`, whose tests break each rule once and expect a failure.
+
+| STRIDE | Threat | Control | Status |
+|---|---|---|---|
+| E | A compromised container escalates to the node | Namespace enforces Pod Security `restricted`; every pod non-root, `allowPrivilegeEscalation: false`, all capabilities dropped, RuntimeDefault seccomp, read-only root filesystem, no host namespaces or hostPath; checked offline so a violation fails CI, not admission | implemented (manifests) |
+| S/E | A stolen service account token calls the Kubernetes API | One service account per workload, token not mounted except Prometheus, whose Role allows only get/list/watch on pods in its own namespace | implemented (manifests) |
+| I/T | Lateral movement between workloads | Default-deny ingress and egress; one allow policy per flow of section 2. The management port (health detail, metrics) admits only Prometheus and the blackbox exporter (ADR 0014); the PII vault is reachable from the API only, never from the scorer or ML worker | implemented (manifests) |
+| I | The API's internet egress (webhooks, SMS, email, OAuth) used to reach internal services | Egress on 443 and 587 only, with RFC 1918, CGNAT and link-local ranges excluded | implemented (manifests) |
+| T | A mutable tag deploys an unreviewed image | Third-party images pinned by digest; FraudShield images untagged in manifests and pinned by digest at deploy; the policy check fails on any tag | implemented (manifests); deploy step planned |
+| D | Voluntary disruption (node drain, upgrade) takes a component down | PodDisruptionBudgets for every workload, HPAs for serving components, spread across nodes and zones | implemented (manifests) |
+| D/T | A bad release degrades decisions | Argo Rollouts canary: 10% for 30 minutes, background analysis on canary pods only, rollback on 5xx > 0.5% or p99 > 80 ms, fail-closed when metrics are missing (`test_canary_analysis.py`) | implemented (manifests) |
+| R/I | Decisions spooled on an API pod are lost when the pod is deleted during a Kafka outage (D-15) | Spool on the pod's `emptyDir` survives container restarts, not pod deletion; 120 s grace for draining; runbook forbids draining nodes with a non-zero spool | partial: see R-5 |
+
+### 3.7 Observability and alerting (M9)
+
+| STRIDE | Threat | Control | Status |
+|---|---|---|---|
+| I | Dashboards expose fraud data to anyone who finds Grafana | No anonymous access, no sign-up; reachable only from the API's authenticated proxy by NetworkPolicy (E.8); update checks, reporting and news feed disabled, so Grafana makes no outbound calls | implemented (manifests) |
+| I | Personal data in metric labels | Queries may use only the labels Part E.10 defines (no account, device or counterparty tokens); `metric_catalogue.py` fails on any other label | implemented (for queries); emitting services must follow E.10 |
+| I | Personal data in log-based alerts and incident notes | Alerts carry counts and service names only; runbooks forbid copying log lines or payloads and treat a PII-bearing log line as a privacy incident | implemented |
+| T/R | An alert is weakened or removed silently | Rules and thresholds are reviewed code; promtool unit tests fix every threshold from both sides; `rule_conventions.py` fails when a page alert loses its runbook; the one operator-set level (D-10) lives in its own file | implemented |
+| S/I | PagerDuty routing keys leak or are forged | Keys only in the Secret `fraudshield-alertmanager-pagerduty`, mounted as files; never in the repository | implemented (manifests) |
+| D | The alerting path itself fails unnoticed | Single Prometheus and Alertmanager with persistent volumes; no high availability and no external dead-man's switch yet | open: R-6 |
+
+### 3.8 Supply chain (M9)
+
+| STRIDE | Threat | Control | Status |
+|---|---|---|---|
+| T | A tampered validator or scanner binary | Every tool (kustomize, kubeconform, promtool, amtool, lokitool, blackbox_exporter, actionlint, trivy, syft, cosign) runs through a launcher that checks the release checksum and re-checks the binary's SHA-256 on every run | implemented |
+| T | Vulnerable dependencies reach a release | Trivy on lockfiles and on images fails on HIGH/CRITICAL with a fix; configuration scanned for misconfiguration | implemented (CI) |
+| T/S | An image or SBOM is replaced after the build | Keyless cosign signatures bound to the supply-chain workflow identity, verified in the same job; CycloneDX SBOMs attested to image digests | implemented (CI); images pending Dockerfiles |
+| T | An unsigned image is admitted to the cluster anyway | Admission-time signature verification (for example Sigstore policy-controller or Kyverno) is not configured | open: R-7 |
+| I | Signing publishes build metadata | Rekor entries show the workflow, commit and repository, all of which are public already | accepted |
+
 ## 4. Open risks
 
 | # | Risk | Owner action or milestone |
@@ -108,3 +148,8 @@ developer machine ↔ public repository.
 | R-2 | Audit anchors unsigned until the audit service exists | Audit service milestone |
 | R-3 | Application role `fs_app` necessarily reads credential hashes of its tenant; a SQL injection in the API would expose them | Parameterised queries only (M5/M6 persistence layer), static analysis in CI |
 | R-4 | Third-party penetration test | REQUIRES_EXTERNAL_PARTY (D-28) |
+| R-5 | API spool on `emptyDir` is lost if the pod is deleted before Kafka accepts it (D-15 requires surviving the pod's death); Argo Rollouts cannot manage the StatefulSet that per-pod volumes need | Owner and M6 decision, options in `docs/parallel/M9_updates.md` |
+| R-6 | Alerting has no high availability and no dead-man's switch: if Prometheus or Alertmanager stops, nothing pages | M9 follow-up: Watchdog alert to an external heartbeat service; HA pair |
+| R-7 | Cluster admission does not verify image signatures | M9 follow-up with the cluster's admission controller |
+| R-8 | Data stores and Loki are not in the Kubernetes manifests; their NetworkPolicies and at-rest encryption (D-20) are unverified | M9 follow-up (CloudNativePG, D-49) |
+| R-9 | The ZAP baseline and image signing jobs have not executed: the compose stack has no API service and no service Dockerfile exists yet | Runs automatically once M6/M5/M8 add them |
