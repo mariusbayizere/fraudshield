@@ -39,6 +39,7 @@ dev = [
 
 [project.scripts]
 fs-features = "fraudshield_ml.cli:main"
+fs-model = "fraudshield_ml.models.cli:main"
 
 [build-system]
 requires = ["hatchling==1.32.0"]
