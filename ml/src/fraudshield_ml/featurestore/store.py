@@ -478,17 +478,20 @@ class FeatureStore:
         - **reference state**: the account must already be known to the store. A first-ever
           transaction has no tier or opening date for any producer to have written, so its absence
           says nothing.
-        - A degraded read is counted by `degraded` itself; its constants are the fallback's
-          shortfall, not a producer's.
+        - A degraded read is the *account's* own Redis state being absent (`snap.first is None`),
+          which is the fallback's shortfall and not a producer's, so the three account-state arms
+          stand down for it. The counterparty arm does not: it reads a different key, and a new
+          account paying an established counterparty is an ordinary shape whose outcome features
+          are exactly as constant as anyone else's (re-review V4).
         """
-        if degraded:
-            return
         if (
             snap.cp_rows
             and any(s < t - LABEL_LATENCY for _, s in snap.cp_rows)
             and not any(m[2] != UNLABELLED for m, _ in snap.cp_rows)
         ):
             self.metrics.missing_producer.labels("outcomes").inc()
+        if degraded:
+            return
         if not ctx.HasField("days_since_sim_swap"):
             self.metrics.missing_producer.labels("sim_swaps").inc()
         known = bool(snap.rows) or snap.first is not None

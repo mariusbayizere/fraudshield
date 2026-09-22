@@ -33,6 +33,8 @@ def _gate(path: Path | None) -> GateDecision | None:
         label_coverage=float(report["label_coverage"]),
         auc_delta=report.get("auc_delta"),
         psi=report.get("psi"),
+        window_hours=report.get("window_hours"),
+        shadow_version=report.get("shadow_version"),
     )
 
 
@@ -58,7 +60,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     alias = commands.add_parser(
         "alias",
         help="move an alias: promote, roll back, or switch shadow mode on (D-50). Rolling "
-        "production back to the version previous_production holds needs no --gate: it has served",
+        "production back to a version that has already served needs no --gate",
     )
     alias.add_argument("--mlflow", required=True)
     alias.add_argument("--name", default="fraudshield-ensemble")

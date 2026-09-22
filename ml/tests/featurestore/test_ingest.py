@@ -15,7 +15,7 @@ from fraudshield_contracts import events
 from fraudshield_ml.features.types import CountryFacts, Transaction
 from fraudshield_ml.featurestore.ingest import EventError, apply_label, apply_labels
 from fraudshield_ml.featurestore.reference import Reference
-from fraudshield_ml.featurestore.store import FeatureStore, StoreMetrics
+from fraudshield_ml.featurestore.store import LABEL_LATENCY, FeatureStore, StoreMetrics
 
 T0 = datetime(2025, 8, 1, 9, tzinfo=UTC)
 REFERENCE = Reference(
@@ -204,3 +204,41 @@ def test_the_store_counts_features_left_constant_for_want_of_a_producer() -> Non
         "with every producer writing, the page falls silent — which is how carry 1 and carry 2 "
         "are seen to have closed"
     )
+
+
+@pytest.mark.req("FR-02-09")
+def test_a_new_account_paying_an_old_counterparty_still_counts_as_a_missing_producer() -> None:
+    """The counterparty arm reads the counterparty's key, not the account's, so a degraded read
+    of the account must not hide it — that shape is a routine one, and it is the arm by which
+    carry 1 is seen to have closed (re-review V4)."""
+    s = FeatureStore(
+        fakeredis.FakeRedis(decode_responses=True),
+        REFERENCE,
+        authoritative=False,  # the production shape: an absent account is DEGRADED_MODE
+        metrics=StoreMetrics.create(CollectorRegistry()),
+    )
+    s.observe(transaction(1, T0, counterparty="C9"))  # A1 -> C9, never adjudicated
+
+    stranger = transaction(2, T0 + timedelta(days=40), counterparty="C9")  # A2, unknown to Redis
+    read = s.read(stranger)
+    assert read.degraded, "the scored account's own state is absent"
+    assert read.context.counterparty_confirmed_fraud_90d == 0, "served as a constant"
+    assert s.metrics.missing_producer.labels("outcomes")._value.get() == 1
+    assert s.metrics.missing_producer.labels("kyc_tier")._value.get() == 0, (
+        "the account's own state is the fallback's business, not a producer's"
+    )
+
+
+@pytest.mark.req("FR-02-09")
+def test_the_label_horizon_is_where_a_verdict_stops_being_in_flight() -> None:
+    """`LABEL_LATENCY` decides when a silent counterparty becomes a page. Without this the
+    constant was free to move anywhere in [1 d, 30 d) unnoticed (re-review V4)."""
+    horizon = timedelta(microseconds=LABEL_LATENCY)
+    for gap, expected in ((horizon, 0), (horizon + timedelta(microseconds=1), 1)):
+        s = store()
+        s.observe(transaction(1, T0, counterparty="C7"))
+        s.context_for(transaction(4, T0 + gap, counterparty="C7"))
+        assert s.metrics.missing_producer.labels("outcomes")._value.get() == expected, (
+            f"a counterparty row {gap} old: counted={expected}"
+        )
+    assert horizon == timedelta(days=21), "E.3's label delay: 72 h median, log-sigma 1.2, p95 ~21 d"

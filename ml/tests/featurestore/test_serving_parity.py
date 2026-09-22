@@ -119,6 +119,41 @@ EDGE_SPANS = (
 )
 
 
+def _edge_row(
+    tid: str,
+    account: str,
+    at: datetime,
+    counterparty: str,
+    *,
+    device: str | None = "D0",
+    agent: str | None = None,
+    amount: float = 2_500.0,
+) -> Transaction:
+    """One row of the edge corpus, on whichever keys the window under test reads."""
+    return Transaction(
+        transaction_id=tid,
+        account_id=account,
+        timestamp=at,
+        amount_rwf=amount,
+        latitude=-1.95,
+        longitude=30.06,
+        account_country="RW",
+        counterparty_country="RW",
+        counterparty_id=counterparty,
+        amount_minor=int(amount),
+        currency="RWF",
+        channel="AGENT_BANKING" if agent else "MOBILE_MONEY",
+        device_fingerprint=device,
+        agent_id=agent,
+        merchant_category_code="6011" if agent else "5411",
+    )
+
+
+#: Three senders, so a set-valued window (unique senders, accounts per device, unique customers)
+#: cannot have its edge row masked by the neighbour a microsecond inside it.
+EDGE_SENDERS = ("A9", "A10", "A11")
+
+
 def _window_edges(start_index: int) -> tuple[list[Transaction], dict[str, Outcome]]:
     """History that lands exactly on each window edge, and a microsecond either side.
 
@@ -126,104 +161,85 @@ def _window_edges(start_index: int) -> tuple[list[Transaction], dict[str, Outcom
     inclusive/exclusive flip at either end changes a count only when a row sits exactly on the
     edge, which a random gap set never produces (review finding 7).
 
-    A7's own rows reach the account-velocity windows and the amount statistics. The store has two
-    further copies of the same arithmetic, on keys A7's rows do not decide (re-review N4): the
-    geo-cell 30 d range and the counterparty 90 d and 24 h ranges. Those are reached by rows from
-    *other* accounts sharing the scored transaction's cell and counterparty, and by verdicts that
-    have arrived before it is scored — `geo_cell_fraud_rate_30d` and
-    `counterparty_confirmed_fraud_90d` count nothing without them. The senders window is a set of
-    accounts rather than a count, so a neighbouring row would mask the edge: each of its three
-    positions gets a sender of its own.
+    The store holds several copies of that arithmetic, each on a different Redis key, and a row
+    only reaches the copy whose key it is written to (re-review N4, V3). So the corpus is built
+    per *key*, not per window:
+
+    - **the account's own key** — A7's rows on every span in `EDGE_SPANS`, which carry the
+      velocity counts and the 90 d amount statistics;
+    - **the counterparty key** — rows to `C0`, the counterparty the scored row uses: labelled
+      ones on the 90 d edge for `counterparty_confirmed_fraud_90d`, and one sender per position
+      on the 24 h edge for `counterparty_unique_senders_24h`;
+    - **the account's key, filtered by counterparty** — `tx_count_to_counterparty_30d` reads
+      A7's own rows *to C0*, which the spans above never produce;
+    - **the geo-cell key** — labelled rows in the scored cell on the 30 d edge, without which
+      `geo_cell_fraud_rate_30d` counts nothing at all;
+    - **the device key** — three accounts on the scored row's device at the 7 d edge
+      (`accounts_per_device_7d` is a set of accounts);
+    - **the agent key** — a second scored row through an agent, with three customers at the 1 h
+      edge (`agent_unique_customers_1h`).
+
+    `mean_hourly_count_30d` reads a half-open pair, `(t - 30d, t - 1h]`. Flipping *both* of its
+    bounds at once is self-cancelling when exactly one row sits on each edge, so the 1 h edge
+    carries a second row and the two errors can no longer balance.
+
+    One pair resists a single-flip test, and that is a property of the code rather than a gap in
+    the corpus: `ACCOUNT_HORIZON == W_90D`, so the fetch bound `({t - ACCOUNT_HORIZON}` and
+    `_amounts`' own `s > t - W_90D` are redundant with each other. Flipping either alone is an
+    equivalent mutant — a row at exactly `t - 90d` is still excluded by the other — while
+    flipping **both** does fail this suite (checked). Nothing to fix; worth knowing before
+    reading a surviving mutant there as missing coverage.
     """
     anchor = START + timedelta(days=200)
-    account, rows = "A7", []
-    for i, span in enumerate(EDGE_SPANS):
-        for j, at in enumerate(
-            (
-                anchor - span,
-                anchor - span + timedelta(microseconds=1),
-                anchor - span - timedelta(microseconds=1),
-            )
-        ):
-            rows.append(
-                Transaction(
-                    transaction_id=f"edge{i}{j}",
-                    account_id=account,
-                    timestamp=at,
-                    amount_rwf=1_000.0 * (i + 1),
-                    latitude=-1.95,
-                    longitude=30.06,
-                    account_country="RW",
-                    counterparty_country="RW",
-                    counterparty_id=f"C{i % 6}",
-                    amount_minor=1_000 * (i + 1),
-                    currency="RWF",
-                    channel="MOBILE_MONEY",
-                    device_fingerprint="D0",
-                    merchant_category_code="5411",
-                )
-            )
-    # The scored transaction the spans are measured against.
-    rows.append(
-        Transaction(
-            transaction_id="edgescored",
-            account_id=account,
-            timestamp=anchor,
-            amount_rwf=5_000.0,
-            latitude=-1.95,
-            longitude=30.06,
-            account_country="RW",
-            counterparty_country="RW",
-            counterparty_id="C0",
-            amount_minor=5_000,
-            currency="RWF",
-            channel="MOBILE_MONEY",
-            device_fingerprint="D0",
-            merchant_category_code="5411",
-        )
-    )
-
-    # Rows other accounts contribute to the cell and the counterparty the scored row uses.
-    outcomes: dict[str, Outcome] = {}
+    account = "A7"
     micro = timedelta(microseconds=1)
-    shared = [
-        (f"cell{j}", "A9", "C3", at, True)
-        for j, at in enumerate(_around(anchor - timedelta(days=30), micro))
-    ]
-    shared += [
-        (f"cpfraud{j}", "A9", "C0", at, True)
-        for j, at in enumerate(_around(anchor - timedelta(days=90), micro))
-    ]
-    # One sender per position: `counterparty_unique_senders_24h` is a set, so a row on the inside
-    # would hide an edge row whichever way the comparison went.
-    shared += [
-        (f"sender{j}", sender, "C0", at, False)
-        for j, (sender, at) in enumerate(
-            zip(("A9", "A10", "A11"), _around(anchor - timedelta(hours=24), micro), strict=True)
-        )
-    ]
-    for tid, sender, counterparty, at, fraud in shared:
-        rows.append(
-            Transaction(
-                transaction_id=tid,
-                account_id=sender,
-                timestamp=at,
-                amount_rwf=2_500.0,
-                latitude=-1.95,
-                longitude=30.06,
-                account_country="RW",
-                counterparty_country="RW",
-                counterparty_id=counterparty,
-                amount_minor=2_500,
-                currency="RWF",
-                channel="MOBILE_MONEY",
-                device_fingerprint="D0",
-                merchant_category_code="5411",
+    rows: list[Transaction] = []
+    outcomes: dict[str, Outcome] = {}
+
+    for i, span in enumerate(EDGE_SPANS):
+        for j, at in enumerate(_around(anchor - span, micro)):
+            rows.append(
+                _edge_row(f"edge{i}{j}", account, at, f"C{i % 6}", amount=1_000.0 * (i + 1))
             )
-        )
-        if fraud:
-            # The verdict is in before the scored row, so it counts at scoring time (E.2).
-            outcomes[tid] = Outcome(tid, is_fraud=True, available_at=at + timedelta(hours=1))
+    # Three rows on the 1 h edge against two on the 30 d edge (`edge40` and `cp30d0`): the pair
+    # of bounds must not be able to cancel, however the two errors are combined.
+    rows.append(_edge_row("edge1hbis", account, anchor - EDGE_SPANS[1], "C1"))
+    rows.append(_edge_row("edge1hter", account, anchor - EDGE_SPANS[1], "C1"))
+    rows.append(_edge_row("edgescored", account, anchor, "C0", amount=5_000.0))
+
+    #: (id prefix, sender, counterparty, edge, device, verdict before the scored row)
+    groups: list[tuple[str, tuple[str, str, str], datetime, str | None, bool]] = [
+        ("cell", (account, "A9", "C3"), anchor - timedelta(days=30), "D0", True),
+        ("cpfraud", (account, "A9", "C0"), anchor - timedelta(days=90), "D0", True),
+        ("cp30d", (account, account, "C0"), anchor - timedelta(days=30), "D0", False),
+    ]
+    for prefix, (_, sender, counterparty), edge, device, fraud in groups:
+        for j, at in enumerate(_around(edge, micro)):
+            tid = f"{prefix}{j}"
+            rows.append(_edge_row(tid, sender, at, counterparty, device=device))
+            if fraud:
+                # The verdict is in before the scored row, so it counts at scoring time (E.2).
+                outcomes[tid] = Outcome(tid, is_fraud=True, available_at=at + timedelta(hours=1))
+
+    # Set-valued windows: one sender per position, or the neighbour hides the edge.
+    for j, (sender, at) in enumerate(
+        zip(EDGE_SENDERS, _around(anchor - timedelta(hours=24), micro), strict=True)
+    ):
+        # A different device: on D0 these rows would put every sender inside the device's 7 d
+        # window anyway, and mask the device edge below.
+        rows.append(_edge_row(f"sender{j}", sender, at, "C0", device="D8"))
+    for j, (sender, at) in enumerate(
+        zip(EDGE_SENDERS, _around(anchor - timedelta(days=7), micro), strict=True)
+    ):
+        rows.append(_edge_row(f"device{j}", sender, at, "C2"))
+
+    # The agent key needs a scored row that went through an agent.
+    agent_anchor = anchor + timedelta(days=1)
+    for j, (sender, at) in enumerate(
+        zip(EDGE_SENDERS, _around(agent_anchor - timedelta(hours=1), micro), strict=True)
+    ):
+        rows.append(_edge_row(f"agent{j}", sender, at, "C2", agent="G9"))
+    rows.append(_edge_row("edgeagentscored", account, agent_anchor, "C0", agent="G9"))
     return rows, outcomes
 
 
