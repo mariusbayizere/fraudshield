@@ -74,13 +74,20 @@ triggers and a hash-chained audit log.
        pass.
    - **`users.version` is a JPA `@Version`.** Hibernate increments it on every entity update and
      adds it to the `WHERE` clause, so a write based on an old version fails. Administrator edits
-     go through the entity, so they advance it. Sign-in bookkeeping (failure count, lock, last
-     sign-in, token version, email verification, Google link) uses bulk JPQL updates, which leave
-     it alone, so a sign-in never makes an administrator's pending edit stale. The V12 trigger that
-     advanced the column is removed, because two writers of one version column would disagree. The
+     go through the entity and advance it. Sign-in bookkeeping uses bulk JPQL updates:
+     - They advance the version exactly when the status changes: a failure lock, an unlock, or a
+       sign-in or password change that lifts a lock. An administrator can therefore never act on a
+       status they have not seen, such as unlocking a brute-force lock by resending ACTIVE.
+     - They leave it alone for the failure count, last sign-in, token version, email verification
+       and Google link, so an ordinary sign-in never makes an administrator's edit stale.
+
+     This keeps the behaviour of the removed V12 trigger (which fired when an editable column
+     changed); two writers of one version column would disagree. One deliberate difference: an
+     entity edit that only clears the failure count or moves a lock's end also advances it. The
      API still returns the version as an `ETag` (the contract is frozen, ADR 0070 §11). Tests:
      - `HybridPersistenceTest.versionIsJpaOptimisticLock`;
      - `HybridPersistenceTest.signInBookkeepingDoesNotAdvanceTheVersion`;
+     - `HybridPersistenceTest.statusChangesAdvanceTheVersionAsTheRemovedTriggerDid`;
      - `UserAdministrationTest.roleChangeEndsTheOldTokenAndStaleVersionsConflict`.
 4. **Write order in mixed transactions.**
    - The JPA adapters flush at the end of every write, so explicit-SQL statements that follow in
@@ -90,6 +97,17 @@ triggers and a hash-chained audit log.
      left stale.
    - Pessimistic locks (`@Lock(PESSIMISTIC_WRITE)`) keep the account-then-token order of ADR 0070
      finding 1.
+   - **A locked read reloads the row.** A locking query returns the instance the persistence
+     context already holds and does not refresh it. The acting administrator's own account, read
+     earlier in the transaction, would otherwise carry state from before the lock, and a flush
+     would write it back over a concurrent password change, including the old hash and token
+     version. So:
+     - `findByIdForUpdate`, `applyAdminEdit` and the API-key `findForUpdate` refresh after
+       locking;
+     - both entities are `@DynamicUpdate`, so a flush writes only the columns that changed.
+
+     Found by the independent review; test
+     `HybridPersistenceTest.lockedReadReloadsSoAnEditCannotWriteBackStaleState`.
 5. **Rule for M6 and later milestones.**
    - Use JPA for configuration tables: thresholds, rules, rule versions, circuit-breaker settings,
      models and similar.
