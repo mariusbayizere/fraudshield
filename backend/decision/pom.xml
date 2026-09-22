@@ -167,6 +167,17 @@
 
   <build>
     <plugins>
+      <!-- The test harness (TestDatabase, KafkaTestCluster, RedisTestServer, scorer double) is
+           shared with the notify and ingest modules' tests; never a runtime dependency. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <executions>
+          <execution>
+            <goals><goal>test-jar</goal></goals>
+          </execution>
+        </executions>
+      </plugin>
       <!-- Java messages and stubs from the frozen scoring contract (contracts/proto, ADR 0012).
            Generated into target/, never committed, never edited. -->
       <plugin>
