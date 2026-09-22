@@ -87,6 +87,9 @@ jobs:
       - run: pnpm lint
       - run: pnpm format:check
       - run: pnpm test:coverage
+      # Every story is already rendered and axe-checked by vitest; this proves Storybook itself
+      # still builds them.
+      - run: pnpm build-storybook
 
   governance:
     name: traceability-check, defect register, scope guard, commit messages
