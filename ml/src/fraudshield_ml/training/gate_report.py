@@ -54,6 +54,14 @@ def summary(report: Report) -> list[str]:
         f"   at 0.85: precision {_f(c['precision_at_block'][0])}, recall "
         f"{_f(c['recall_at_block'][0])}, F1 {_f(c['f1_at_block'][0])}   (D-02)",
         f"  ECE equal-width {_f(c['ece_equal_width'][0], 4)}, Brier {_f(c['brier'][0], 5)}",
+        (
+            f"  ONNX parity over {report.parity.rows:,} test rows: max |ONNX - native| XGBoost "
+            f"{report.parity.xgboost:.2e}, LightGBM {report.parity.lightgbm:.2e}, combined "
+            f"{report.parity.combined:.2e} -> {'PASS' if report.parity.passed else 'FAIL'}"
+            " (E.4, < 1e-5)"
+            if report.parity
+            else "  ONNX parity: not measured"
+        ),
         "",
         f"  {len(passed)} of {len(report.gates)} gate metrics pass"
         + (f"; FAILED: {', '.join(g.spec.id for g in failed)}" if failed else ""),
@@ -145,6 +153,19 @@ def as_json(report: Report) -> dict[str, object]:
             for a in report.ablations
         ],
         "seeds": {k: [clean(v) for v in values] for k, values in report.seeds.items()},
+        "onnx_parity": (
+            {
+                "rows": report.parity.rows,
+                "max_abs_diff": {
+                    "xgboost": report.parity.xgboost,
+                    "lightgbm": report.parity.lightgbm,
+                    "combined": report.parity.combined,
+                },
+                "pass": report.parity.passed,
+            }
+            if report.parity
+            else None
+        ),
         "passed": all(g.passed for g in report.gates),
     }
 

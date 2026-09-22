@@ -141,6 +141,18 @@ EXCEPTIONS: dict[str, tuple[str, str]] = {
         "confirmed against the tagged source (github.com/scipy/scipy, tag v1.18.1) on 2026-09-22. "
         "A transitive dependency of xgboost and lightgbm, not declared directly",
     ),
+    "python:flatbuffers@25.12.19": (
+        "Apache-2.0",
+        "classifier says only 'Apache Software License' and the wheel ships no licence file; every "
+        "one of the ten installed modules carries Google's 'Licensed under the Apache License, "
+        "Version 2.0' header, read 2026-09-22. A transitive dependency of onnxruntime",
+    ),
+    "python:skl2onnx@1.20.0": (
+        "Apache-2.0",
+        "classifier says only 'Apache Software License'; dist-info/licenses/LICENSE is the full "
+        "Apache License 2.0 text and NOTICE credits Microsoft, both read 2026-09-22. A transitive "
+        "dependency of onnxmltools",
+    ),
     "python:cloudpickle@3.1.2": (
         "BSD-3-Clause",
         "classifier says only 'BSD License' and the policy does not read the old-style 'License: "

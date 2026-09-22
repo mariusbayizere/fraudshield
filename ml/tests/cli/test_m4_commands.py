@@ -326,6 +326,9 @@ def test_the_gate_reports_every_metric_and_writes_its_artefacts(
         assert len(g["ci95"]) == 2
     assert metrics["rows"]["test"]["rows"] == GATE_SEGMENTS["test"]
     assert len(metrics["seeds"]["ML-GATE-01"]) == 2
+    assert metrics["onnx_parity"]["rows"] == GATE_SEGMENTS["test"]
+    assert metrics["onnx_parity"]["pass"] is True
+    assert "ONNX parity over" in printed
     for table in ("gate", "baselines", "ablations"):
         assert (out / "tables" / f"{table}.tex").read_text().startswith(r"\begin{tabular}")
     for figure in ("reliability", "roc"):

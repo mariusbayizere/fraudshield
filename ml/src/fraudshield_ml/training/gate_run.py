@@ -21,7 +21,7 @@ from typing import Any
 from fraudshield_ml.features.registry import REGISTRY
 from fraudshield_ml.features.vector import FeatureValue
 from fraudshield_ml.metrics.single_feature import auc_standard_error
-from fraudshield_ml.training import anomaly, baselines, explain, gate, model, smoke
+from fraudshield_ml.training import anomaly, baselines, explain, gate, model, onnx_export, smoke
 
 #: E.5.4's EAC-specific ablations. Each removes one mechanism the SRS argues a Western card model
 #: lacks. "USSD-aware device handling" is D-04's NaN-as-signal treatment of the four
@@ -110,6 +110,7 @@ class Report:
     reliability: list[tuple[float, float, int]] = field(default_factory=list)
     roc: list[tuple[float, float]] = field(default_factory=list)
     mcc_available: bool = True
+    parity: onnx_export.Parity | None = None
 
 
 def load(vectors: Sequence[dict[str, FeatureValue]], extras: dict[str, list[str]]) -> Loaded:
@@ -321,6 +322,7 @@ def run(data: Loaded, *, seed: int, seeds: Sequence[int], resamples: int, ablate
         reliability=_reliability(rows),
         roc=_roc(rows),
         mcc_available=data.mcc is not None,
+        parity=onnx_export.parity(fitted, test_rows),
     )
     if ablate:
         report.ablations = _ablations(data, seed, scored.ensemble, labels)

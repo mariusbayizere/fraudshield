@@ -20,6 +20,12 @@ dependencies = [
     # random-forest baselines. Four uses the SRS specifies, not one convenience: the booster
     # APIs stay native (smoke.py's reason still holds for them).
     "scikit-learn==1.8.0",
+    # E.4's ONNX exports and their parity test (max absolute probability difference < 1e-5):
+    # onnxmltools converts the XGBoost and LightGBM boosters, onnxruntime runs them. The M4
+    # review found no export at all (M4-4).
+    "onnx==1.23.0",
+    "onnxruntime==1.30.0",
+    "onnxmltools==1.16.0",
 ]
 
 [project.scripts]

@@ -261,3 +261,19 @@ upstream source; the exception says so.
 Run in a worktree without `frontend/node_modules`, `fs-licences` also reports every npm package as
 `Unknown`: the check reads licences from the installed packages, so an uninstalled front-end is
 not a clean result. CI installs it, and CI's result is the one that counts.
+
+## Amendment 2026-09-22 — the ONNX export chain
+
+E.4 requires ONNX exports of the boosters with a parity test, and the M4 review found none (M4-4).
+`onnx==1.23.0`, `onnxruntime==1.30.0` and `onnxmltools==1.16.0` are taken on for that alone: the
+converter, the format, and the runtime the parity test and M5's scoring service run on. They bring
+`skl2onnx`, `flatbuffers` and `ml-dtypes`.
+
+Four resolve from their SPDX fields. Two needed exceptions, both for a bare classifier:
+
+- **`skl2onnx`** bundles the full Apache 2.0 text and a `NOTICE` crediting Microsoft. Apache 2.0
+  §4(d) requires that notice to travel with any redistribution, which matters at M9 when images are
+  built, not here.
+- **`flatbuffers`** ships no licence file in its wheel, the `xgboost` shape. Rather than the
+  upstream repository, the installed artefact itself was read: all ten of its modules carry
+  Google's Apache 2.0 header.
