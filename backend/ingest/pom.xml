@@ -95,6 +95,19 @@
   </dependencies>
 
   <build>
+    <resources>
+      <resource>
+        <directory>src/main/resources</directory>
+      </resource>
+      <!-- FR-01-07: /api/docs serves the frozen contract itself, so it cannot drift from it. -->
+      <resource>
+        <directory>${project.basedir}/../../contracts/openapi</directory>
+        <includes>
+          <include>fraudshield-api.yaml</include>
+        </includes>
+        <targetPath>openapi</targetPath>
+      </resource>
+    </resources>
     <plugins>
       <plugin>
         <groupId>com.github.spotbugs</groupId>
