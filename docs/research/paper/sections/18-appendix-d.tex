@@ -2,7 +2,8 @@
 \label{app:evidence}
 
 Every evidence file the paper's numbers come from, with the commit that produced it; all are read
-at the tag \texttt{m4-complete} (\texttt{72e7790}) by \texttt{audit\_numbers.py}, and the paper's
+at the tag \texttt{m4-complete} (\texttt{72e7790}) by \texttt{audit\_numbers.py}, except the last,
+which was produced for this paper and is read at the commit that added it, and the paper's
 macro-by-macro map is \texttt{numbers.tex}. Paths are relative to the repository root; \texttt{bm/}
 stands for \texttt{docs/benchmarks/}.
 
@@ -29,6 +30,7 @@ File & Commit & Used for \\
 \texttt{bm/hardware.md} & tag & Hardware of the measurements \\
 \texttt{bm/test\_set\_access.jsonl} & tag & Log of every read of the test set \\
 \texttt{docs/reviews/M2/}, \texttt{docs/reviews/M3/} & tag & Milestone review findings \\
+\texttt{evidence/reversal\_labels\_d8083dbc.txt} & \texttt{6fe4bf0} & Held-out variant rows by true and observed label \\
 \bottomrule
 \end{longtable}
 \end{small}

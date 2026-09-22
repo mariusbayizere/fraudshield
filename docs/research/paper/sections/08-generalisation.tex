@@ -96,7 +96,13 @@ say burst structure and counterparty novelty carry nearly all of the benchmark's
 
 \textbf{Result.} \texttt{reversal\_scam\_social\_engineering} is caught at \nRevRecall{}
 (\nRevCaught{} of \nRevFraud{}, Wilson \nRevCI{}), against \nBaseVarRecall{} \nBaseVarCI{} for the
-base scenarios on \nBaseVarFraud{} rows; its AUC is \nRevAUC{}. The intervals do not overlap. The
+base scenarios on \nBaseVarFraud{} rows; its AUC is \nRevAUC{}. The intervals do not overlap.
+The denominator is \nRevFraud{} rather than the \nRevRows{} rows the generator wrote because the
+evaluation reads the observed label, as a deployed model would: all \nRevTrueFraud{} rows are in
+the test period and are fraud by their true label, and \nRevScoredUnlabelled{} of them carry the
+benchmark's missed-fraud label noise (Section~\ref{sec:dataset}), so they are scored as legitimate
+rows (\texttt{evidence/\allowbreak reversal\_\allowbreak labels\_\allowbreak d8083dbc.txt},
+Appendix~\ref{app:evidence}). The
 point estimate is below the pre-registered range; the interval now reaches past the range's lower
 edge, so ``below the predicted range'' holds for the point estimate and not for the whole interval.
 
@@ -111,8 +117,8 @@ model, draw \texttt{d8083dbc}, \texttt{docs/benchmarks/m4\_battery\_d8083dbc\_e1
 
 \textbf{A correction, reported rather than hidden.} The first measurement gave \nRevRecallFirst{}
 \nRevCIFirst{} (\nRevCaughtFirst{} of \nRevFraud{}; AUC \nRevAUCFirst{}) against
-\nBaseVarRecallFirst{} \nBaseVarCIFirst{}. It used a random-fold target encoding that the project's
-encoding rule (E1) forbids; re-running on the same data with the permitted encoding produced the
+\nBaseVarRecallFirst{} \nBaseVarCIFirst{}. It used a random-fold target encoding, which the project's rule that
+every fold, split, sample and encoding groups by account (E1) forbids; re-running on the same data with the permitted encoding produced the
 figures above. The conclusion did not change; the interval did.
 
 \textbf{What this does and does not show.} It confirms, on a held-out shape rather than by inference
