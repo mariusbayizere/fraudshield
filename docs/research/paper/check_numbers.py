@@ -33,6 +33,7 @@ STRIP = [
     re.compile(r"\bADR\s+\d{4}\b"),
     re.compile(r"\bM\d{1,2}\b"),
     re.compile(r"\d+(?:\.\d+)?\\(?:linewidth|textwidth|columnwidth)"),  # layout, not results
+    re.compile(r"\b(?:CC BY|Apache-)\s?\d\.\d\b"),  # licence versions
 ]
 FORBIDDEN = re.compile(r"\d+\.\d+|\d+\s*\\%|\d{1,3}\{,\}\d{3}|\d{1,3},\d{3}")
 

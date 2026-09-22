@@ -1,0 +1,56 @@
+\section{Limitations}
+\label{sec:limitations}
+
+We state these as findings about what the evidence supports, not as disclaimers.
+
+\paragraph{The benchmark is synthetic, and the fraud in it is invented.} It supports comparisons
+between methods under identical conditions. It does not support statements about real fraud rates,
+real detection performance or any institution's customers. Every figure here is a property of this
+generator.
+
+\paragraph{No fraud parameter is sourced.} Of \nFraudParams{} fraud parameters,
+\nFraudParamsChoice{} are modelling choices and \nFraudParamsCalibrated{} are calibrated to
+specification targets. No publication read gives fraud incidence by type for these markets. Any
+result that depends on the level or mix of fraud, rather than on the relative ordering of methods,
+inherits this assumption. The sourced parameters (\nParamsSourced{} of \nParamsTotal{}) fix
+population and volume structure, partly from a neighbouring market's statistics.
+
+\paragraph{The benchmark is burst-separable.} Its fraud is injected as bursts, so a single velocity
+feature reaches \nFloorM{}, four feature groups each nearly solve it alone, leave-one-country-out
+and the novel variant are both null, and the one pre-registered non-burst variant is almost
+invisible to the model. Detection of burst-structured fraud is what the benchmark measures; nothing
+here speaks to fraud with other structure, except as the failure in
+Section~\ref{sec:generalisation}. The specification's distribution targets (overall and test-period
+fraud rate, channel and country mix) are requirements met by construction, not observations.
+
+\paragraph{No real-data validation.} None has been done. A validation on real data would need to
+show, at minimum: the single-feature floor on real engineered features (whether real fraud is as
+burst-separable as this benchmark's); the ensemble's margin over that floor; calibration in the
+decision region; leave-one-country-out on real, country-labelled fraud; and detection of
+documented non-burst typologies such as the reversal scam. It would require data access agreements,
+a data protection impact assessment, and hosting in a permitted location (Section~\ref{sec:ethics}).
+
+\paragraph{Scale and volume.} Results are at about one million rows, not the five million the
+specification requires (\notyet{M10}), and the models were trained on \nTrainUsed{} rows rather than
+the full training period. Single-feature AUC moves with dataset size by more than seed noise, and the
+cause is unexplained; every figure is therefore stated at its scale. The two failing gate metrics
+(recall and false-negative rate at the flag threshold) may depend on training volume; that is a
+candidate cause, not a finding.
+
+\paragraph{Latency.} No latency figure here is a gate figure. The frontier is a median on a shared
+development laptop, where the 99th percentile is not measurable; serving, end-to-end and load
+latencies belong to later milestones.
+
+\paragraph{Small counts.} Variant, country and channel results rest on tens to hundreds of fraud
+rows; intervals are reported for each, and the Democratic Republic of the Congo's rest on fewer than
+30 and give direction only.
+
+\paragraph{Provisional results.} Every figure marked \textsuperscript{\dag} comes from a milestone not
+yet tagged complete and is re-verified before publication. Two of the contribution figures already
+moved between data draws (the redundancy threshold and the leave-one-country-out loss); the findings
+did not.
+
+\paragraph{Claims not made.} The specification's figures on regional fraud growth, payment volume,
+analyst dismissal rates, the accuracy of models built elsewhere on East African data, annual model
+degradation and ensemble variance reduction are unverified, replaced or refuted in the project's
+claims register, and none is stated here as fact.

@@ -1,0 +1,39 @@
+\section{Ethics, fairness and privacy}
+\label{sec:ethics}
+
+\paragraph{Who bears the errors.} A false positive in this system declines or holds a legitimate
+payment. For a customer who depends on a mobile money transfer for wages, school fees or a family
+remittance, a blocked payment is a real harm, and it falls hardest on customers with the least
+slack: low balances, basic handsets, and (because USSD carries no device signals) the channel
+where the model has least to go on. The specification therefore requires a fairness report
+(build prompt E.5 item 7): false-positive rate and blocked legitimate amount by country, channel,
+KYC tier and urban or rural location. That report is \notyet{M4 follow-up}. The per-country and
+per-channel AUCs in Sections~\ref{sec:evaluation} and~\ref{sec:generalisation} are not a fairness
+analysis: they measure ranking, not who is wrongly blocked. On a synthetic benchmark whose
+population structure is partly sourced and whose fraud is assumed, even the fairness report will
+describe the generator's disparities, not a real population's.
+
+\paragraph{Customer verification.} The specification's self-service unblocking by SMS link would
+be defeated by the fraud it targets: in a SIM-swap takeover the attacker holds the victim's SIM and
+receives the link. Self-service is therefore disabled when a SIM swap is recent or its recency is
+unknown, when the device changed in the last day, or when the score is very high, and the customer
+is directed to the institution's official number (resolution D-25). This is specified behaviour of
+a later milestone, not an evaluated result.
+
+\paragraph{Privacy.} The benchmark contains no real personal data. The system is specified to keep
+personal data out of every analytic path: account, device and counterparty identifiers are opaque
+tokens, raw phone and account numbers are rejected at ingestion, and personal data lives only in a
+separate encrypted vault (resolution D-20). Logs are required to pass through redacting processors.
+Explanations shown to analysts and customers are specified to come from deterministic
+templates, never from a language model.
+
+\paragraph{Regulation and residency.} Statements about reporting obligations and data protection
+in Rwanda (for example the data protection law and the financial intelligence reporting framework)
+are unverified and must be confirmed by a compliance professional (resolution D-22); report
+templates carry fields marked as unconfirmed. Production data must reside in a facility that is
+legally permitted for it; the infrastructure code cannot satisfy that requirement, and
+demonstration environments run on synthetic data only, labelled as such (resolution D-21).
+
+\paragraph{What this paper does not claim.} That FraudShield is deployed at, endorsed by, or
+validated with any real institution or regulator, or that any figure here predicts performance on
+real transactions.

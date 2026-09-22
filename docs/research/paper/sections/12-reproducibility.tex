@@ -1,0 +1,28 @@
+\section{Reproducibility statement}
+\label{sec:repro}
+
+\paragraph{Data.} The benchmark is generated, not distributed as a fixed file: seed \nSeed{} and
+the generator code at a stated commit reproduce a draw byte for byte, independently of how the work
+is batched. Each draw is identified by a SHA-256 fingerprint over its output rows (\texttt{6abde44e}
+and \texttt{d8083dbc} in this paper), and its realism report records the parameter hash, the check
+set hash and the fingerprint. The dataset release is licensed CC BY 4.0
+(\texttt{dataset/release/}); the code is Apache-2.0.
+
+\paragraph{Evidence.} Every figure in this paper comes from a raw output file under
+\texttt{docs/benchmarks/} whose header records the command, its exit status, the commit and whether
+the working tree was clean; \texttt{numbers.tex} maps each figure in the text to its file. Every
+read of the test period is logged in \texttt{docs/benchmarks/test\_set\_access.jsonl}. Experiment
+tracking in MLflow was not used for the M4 evidence (ADR 0030); the evidence files carry the
+provenance instead.
+
+\paragraph{Hardware.} All measurements were made on one development laptop (\nHwCPU{},
+\nHwMem{}), recorded in \texttt{docs/benchmarks/hardware.md}. Latency figures from it are reported
+as shapes, not as gate numbers (ADR 0010).
+
+\paragraph{One command.} A single target that regenerates the dataset, trains, evaluates and
+produces the paper's tables and figures from a clean machine, with compute time and hardware
+recorded, is \notyet{M11}. Until it exists, each figure is reproduced by the command recorded in its
+evidence file.
+
+\paragraph{Publication.} Scripts and checklists for publishing the dataset and model, for the author
+to run, are part of this milestone and do not exist yet. No DOI exists, and none is cited.
