@@ -124,3 +124,37 @@ Measured on the bench1m cache (seed 1, laptop, **not** a citable `fs-evidence` r
   ba576f2 fixed it.
 - **Commits touching generated files after 8fd9dde:** 6821af1, ba576f2, 84ac2c0, 8253368, 0900246 and
   the integration-test commit, all touching the matrix only.
+
+## 7. Laptop benchmark: machine dev-laptop-01, commit 4af4e5e, clean tree (not gate evidence)
+
+Raw reports: `docs/benchmarks/m5_serve_laptop_4af4e5e.json` and `m5_memory_laptop_4af4e5e.json`.
+The machine is `dev-laptop-01` (2 cores / 4 threads, recorded in `hardware.md`), shared with two
+other agents; load average 5.4 before, 8.6 after. The bundle was built at the same commit from the
+bench1m cache (seed 1): test AUC 0.9647 against a 0.8789 single-feature floor, ECE 0.0010.
+Requests are the last 10,500 of 40,000 real bench1m transactions, each with the `AccountContext`
+the store assembled on replay.
+
+**TEST-10 memory: passes at the stated scale.** Resident memory grew 0.54 MB over 10,000
+consecutive scorings after a 500-scoring warm-up (limit 50 MB), with the model loaded once.
+
+**FR-02-07 / ML-GATE-12 / TEST-10 latency: fails at 200 concurrent here, and the reason matters.**
+3 worker processes, 200 in flight, 10,000 requests, 0 errors:
+
+| | p50 | p95 | p99 |
+|---|---|---|---|
+| server-side `scoring_duration_ms` | 12 | 27 | 39 |
+| client-observed, 200 in flight | 1,164 | 1,399 | 1,439 |
+| gate | < 15 | < 25 | < 40 |
+
+Throughput was 183 requests/s. By Little's law, 200 in flight at 183/s is about 1.1 s of queueing
+per request, which is exactly what the client saw. **The gate as written is a capacity
+requirement:** p50 < 15 ms with 200 in flight needs about 13,000 requests/s sustained. One worker
+here scores about 61/s, so this Python path at its current cost would need on the order of 200
+cores. The per-request cost is close to the target (server p50 12 ms, p99 39 ms, measured while
+sharing the CPU with the load client), but only 0.38% of requests took the SHAP path, so the p99
+barely includes it.
+
+This is D-16 measured. The levers are E.4's latency-constrained tree complexity (M4/training), a
+compiled model path (ONNX, which the M4 gate lists as unverified), or both, then a run on the
+dedicated machine. Proposed status: VERIFIED_AT_REDUCED_SCALE for memory; the latency rows stay
+open with this analysis attached.
