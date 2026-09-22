@@ -57,6 +57,23 @@ describe('the password policy (FR-07-07, ADR 0014)', () => {
   });
 });
 
+describe('characters are code points, not UTF-16 units', () => {
+  // The shared vectors reach outside the BMP only through byte counts, so these cases pin the
+  // difference: an emoji is one character, two UTF-16 units and four bytes.
+  it.each([
+    // Six characters: too short, though it is eight UTF-16 units.
+    ['Aa1!\u{1F44D}\u{1F44D}', 'LENGTH'],
+    // Forty-four characters, inside the length limit, but far past 72 bytes.
+    [`Aa1!${'\u{1F44D}'.repeat(40)}`, 'BYTES'],
+  ])('reads %j as %s', (password, reason) => {
+    expect(passwordProblem(password)).toBe(reason);
+  });
+
+  it('accepts an eight-character password made mostly of emoji', () => {
+    expect(passwordProblem('Aa1!\u{1F44D}\u{1F44D}\u{1F44D}\u{1F44D}')).toBeUndefined();
+  });
+});
+
 describe('the strength meter (SRS 5.3)', () => {
   it.each([
     ['', 0],
