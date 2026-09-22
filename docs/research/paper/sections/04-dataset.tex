@@ -13,8 +13,9 @@ peaks; volume grows over 24 simulated months. Eight fraud scenarios are injected
 randomised parameters and temporal evolution: SIM-swap takeover, account takeover through a
 credential or device change, agent fraud, velocity fraud, card-not-present fraud, mule accounts
 (fan-in and fan-out), merchant fraud and synthetic identity. Adversarial adaptation moves amounts
-just below published rule thresholds from the thirteenth simulated month (index 12), and one sub-variant appears only
-in the test period.
+just below published rule thresholds from the thirteenth simulated month (index 12). Two
+sub-variants appear only in the test period: a delayed SIM-swap drain, and, in the evaluation draw,
+the pre-registered reversal scam of Section~\ref{sec:generalisation}.
 
 Unless stated otherwise, results use seed \nSeed{} at about one million rows: the draw with
 fingerprint \texttt{6abde44e} (\nRowsDrawA{} rows) for the single-feature measurements, and the
@@ -50,7 +51,9 @@ each re-read for this paper:
   \item the months in which school terms begin: one Rwandan school's 2024--2025 calendar
         \cite{ngaCalendar2425};
   \item regional-bloc membership: the East African Community \cite{eacOverview} and COMESA
-        \cite{comesaMembers} membership pages.
+        \cite{comesaMembers} membership pages. These two are not among the \nSourceDocs{}
+        documents of the sourcing pass: they were read on 2026-09-19 as the sources of the
+        countries' bloc memberships, and are cited in \texttt{dataset/params\_provenance.md}.
 \end{itemize}
 Because Tanzania publishes value and volume by transaction category and Rwanda does not,
 per-transaction levels come from Tanzanian aggregates while the country mix is Rwanda-weighted;
