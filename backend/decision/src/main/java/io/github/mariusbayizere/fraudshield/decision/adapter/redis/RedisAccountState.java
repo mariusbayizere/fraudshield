@@ -50,9 +50,12 @@ public final class RedisAccountState implements AccountStatePort {
   private final RedisAsyncCommands<String, String> redis;
   private final JdbcAccountProfiles profiles;
   private final Duration timeout;
+  private final Duration durableBudget;
+  private final java.util.concurrent.ExecutorService lookups =
+      java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
 
   /**
-   * Creates the adapter.
+   * Creates the adapter with a 50 ms budget for the durable profile lookup.
    *
    * @param connection shared Lettuce connection
    * @param profiles durable profiles, read on a cache miss
@@ -62,9 +65,26 @@ public final class RedisAccountState implements AccountStatePort {
       StatefulRedisConnection<String, String> connection,
       JdbcAccountProfiles profiles,
       Duration timeout) {
+    this(connection, profiles, timeout, Duration.ofMillis(50));
+  }
+
+  /**
+   * Creates the adapter.
+   *
+   * @param connection shared Lettuce connection
+   * @param profiles durable profiles, read on a cache miss
+   * @param timeout how long one read or write may take before the caller falls back
+   * @param durableBudget how long the hot path waits for PostgreSQL on a profile cache miss
+   */
+  public RedisAccountState(
+      StatefulRedisConnection<String, String> connection,
+      JdbcAccountProfiles profiles,
+      Duration timeout,
+      Duration durableBudget) {
     this.redis = connection.async();
     this.profiles = Objects.requireNonNull(profiles, "profiles");
     this.timeout = Objects.requireNonNull(timeout, "timeout");
+    this.durableBudget = Objects.requireNonNull(durableBudget, "durableBudget");
   }
 
   @Override
@@ -105,8 +125,13 @@ public final class RedisAccountState implements AccountStatePort {
     Instant opened = instant(profileFields.get("opened"));
     boolean firstTransaction = false;
     if (firstSeen == null) {
-      Optional<JdbcAccountProfiles.Profile> stored = durable(t);
-      if (stored.isPresent()) {
+      Optional<Optional<JdbcAccountProfiles.Profile>> lookup = durable(t);
+      Optional<JdbcAccountProfiles.Profile> stored = lookup.orElse(Optional.empty());
+      if (lookup.isEmpty()) {
+        // PostgreSQL did not answer within the budget: first-seen stays unknown and the ratio
+        // fails closed (PB-37). The account is not called new, because that is not known either.
+        firstTransaction = false;
+      } else if (stored.isPresent()) {
         firstSeen = stored.get().firstSeenAt();
         opened = stored.get().openedAt();
         isFrozen = isFrozen || stored.get().frozen();
@@ -179,12 +204,33 @@ public final class RedisAccountState implements AccountStatePort {
     }
   }
 
-  private Optional<JdbcAccountProfiles.Profile> durable(Transaction t) {
+  /**
+   * The durable profile, waited for at most the budget so a slow or unreachable PostgreSQL never
+   * stalls a decision.
+   *
+   * @return empty when PostgreSQL did not answer in time; otherwise the lookup's result
+   */
+  private Optional<Optional<JdbcAccountProfiles.Profile>> durable(Transaction t) {
+    CompletableFuture<Optional<JdbcAccountProfiles.Profile>> lookup =
+        CompletableFuture.supplyAsync(
+            () -> {
+              try {
+                return profiles.find(t.institutionId(), t.accountToken());
+              } catch (SQLException e) {
+                throw new java.util.concurrent.CompletionException(e);
+              }
+            },
+            lookups);
     try {
-      return profiles.find(t.institutionId(), t.accountToken());
-    } catch (SQLException e) {
-      // Without the durable store the first-seen stays unknown and the ratio fails closed; the
-      // freeze flag in Redis is still read. Never guess.
+      return Optional.of(
+          lookup.get(durableBudget.toNanos(), java.util.concurrent.TimeUnit.NANOSECONDS));
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      return Optional.empty();
+    } catch (java.util.concurrent.ExecutionException
+        | java.util.concurrent.TimeoutException unavailable) {
+      // Without the durable store first-seen stays unknown and the ratio fails closed; the freeze
+      // flag in Redis is still read. Never guess.
       return Optional.empty();
     }
   }

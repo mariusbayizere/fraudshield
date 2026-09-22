@@ -155,6 +155,72 @@ class ResilienceApiTest {
   }
 
   @Test
+  @Tag("NFR-REL-01")
+  void withTheScorerDownTheFallbackDecidesAndSaysSo() throws Exception {
+    ApiHarness.SCORER.failure = io.grpc.Status.UNAVAILABLE;
+    for (int i = 0; i < 20; i++) {
+      JsonNode decision =
+          JSON.readTree(
+              post(
+                      "/api/v1/transactions/ingest",
+                      IngestApiTest.body(UUID.randomUUID(), "USSD").toString())
+                  .body());
+      assertThat(decision.get("ml_unavailable_fallback").asBoolean()).isTrue();
+      assertThat(decision.get("model_version").asString()).isEqualTo("fallback-rules-1");
+      assertThat(decision.get("reason_codes").toString()).contains("ML_UNAVAILABLE");
+    }
+    ApiHarness.SCORER.failure = null;
+    await()
+        .atMost(Duration.ofSeconds(15))
+        .pollInterval(Duration.ofMillis(500))
+        .until(
+            () ->
+                !JSON.readTree(
+                        post(
+                                "/api/v1/transactions/ingest",
+                                IngestApiTest.body(UUID.randomUUID(), "USSD").toString())
+                            .body())
+                    .get("ml_unavailable_fallback")
+                    .asBoolean());
+  }
+
+  @Test
+  @Tag("NFR-REL-02")
+  @Tag("D-15")
+  void withPostgresDownDecisionsContinueAndArePersistedAfterRecovery() throws Exception {
+    // Warm the configuration cache, then take PostgreSQL away.
+    post("/api/v1/transactions/ingest", IngestApiTest.body(UUID.randomUUID(), "CARD").toString());
+    var docker = org.testcontainers.DockerClientFactory.instance().client();
+    String container =
+        io.github.mariusbayizere.fraudshield.decision.testing.TestDatabase.container()
+            .getContainerId();
+    List<UUID> decided = new ArrayList<>();
+    docker.pauseContainerCmd(container).exec();
+    try {
+      for (int i = 0; i < 20; i++) {
+        UUID id = UUID.randomUUID();
+        HttpResponse<String> response =
+            post("/api/v1/transactions/ingest", IngestApiTest.body(id, "MOBILE_MONEY").toString());
+        assertThat(response.statusCode()).isEqualTo(200);
+        decided.add(id);
+      }
+    } finally {
+      docker.unpauseContainerCmd(container).exec();
+    }
+    String ids =
+        decided.stream().map(id -> "'" + id + "'").reduce((a, b) -> a + "," + b).orElseThrow();
+    await()
+        .atMost(Duration.ofSeconds(60))
+        .pollInterval(Duration.ofSeconds(1))
+        .until(
+            () ->
+                one("SELECT count(*) FROM fraudshield.decision_states WHERE transaction_id IN ("
+                        + ids
+                        + ")")
+                    .equals("20"));
+  }
+
+  @Test
   @Tag("FR-03-05")
   @Tag("D-42")
   void theVerificationPageIsSmallScriptFreeAndLiftsTheBlock() throws Exception {

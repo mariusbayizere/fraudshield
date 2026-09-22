@@ -108,7 +108,7 @@ class RedisOutageTest {
         new DecisionService(
             new JdbcConfiguration(app, clock),
             ResilientPorts.accountState(
-                new RedisAccountState(connection, profiles, TIMEOUT),
+                new RedisAccountState(connection, profiles, TIMEOUT, Duration.ofSeconds(5)),
                 new JdbcAccountHistory(app, profiles),
                 mode),
             scorer,

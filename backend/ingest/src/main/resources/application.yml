@@ -13,6 +13,10 @@ spring:
     hikari:
       maximum-pool-size: ${FRAUDSHIELD_DB_POOL:20}
       connection-timeout: 2000
+      # A PostgreSQL that stops answering must not hold a connection forever (C.4).
+      data-source-properties:
+        socketTimeout: 10
+        connectTimeout: 2
   flyway:
     enabled: false
 

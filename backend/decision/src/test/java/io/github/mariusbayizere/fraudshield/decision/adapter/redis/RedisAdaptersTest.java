@@ -100,7 +100,10 @@ class RedisAdaptersTest {
   void theFeatureStoreSeesEarlierTransactionsAndNotTheScoredOne() {
     RedisAccountState store =
         new RedisAccountState(
-            connection, new JdbcAccountProfiles(db.dataSource("fs_app")), TIMEOUT);
+            connection,
+            new JdbcAccountProfiles(db.dataSource("fs_app")),
+            TIMEOUT,
+            Duration.ofSeconds(5));
     String account =
         "tok_FreshAccount" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
     Transaction first = at(account, NOW.minusSeconds(120), "1000", Channel.AGENT_BANKING);
@@ -147,7 +150,10 @@ class RedisAdaptersTest {
     sink.accept(records);
     RedisAccountState store =
         new RedisAccountState(
-            connection, new JdbcAccountProfiles(db.dataSource("fs_app")), TIMEOUT);
+            connection,
+            new JdbcAccountProfiles(db.dataSource("fs_app")),
+            TIMEOUT,
+            Duration.ofSeconds(5));
     AccountStatePort.Snapshot afterFlush =
         store.read(at(NOW.plus(Duration.ofHours(2)), "10", Channel.MOBILE_MONEY));
     assertThat(afterFlush.firstSeen()).isFalse();
@@ -161,6 +167,33 @@ class RedisAdaptersTest {
                 .hget(RedisKeys.account(INSTITUTION, ACCOUNT, "profile"), "first_seen"))
         .isEqualTo(Long.toString(NOW.toEpochMilli()));
     assertThat(connection.sync().exists(RedisKeys.account(INSTITUTION, ACCOUNT, "frozen"))).isOne();
+  }
+
+  @Test
+  @Tag("FR-02-09")
+  @Tag("NFR-REL-01")
+  void stalledPostgresNeverStallsTheFeatureStoreRead() {
+    javax.sql.DataSource stalled =
+        new org.postgresql.ds.PGSimpleDataSource() {
+          @Override
+          public java.sql.Connection getConnection() throws java.sql.SQLException {
+            try {
+              Thread.sleep(2_000);
+            } catch (InterruptedException e) {
+              Thread.currentThread().interrupt();
+            }
+            throw new java.sql.SQLException("stalled (test)", "08006");
+          }
+        };
+    RedisAccountState store =
+        new RedisAccountState(
+            connection, new JdbcAccountProfiles(stalled), TIMEOUT, Duration.ofMillis(50));
+    long start = System.nanoTime();
+    AccountStatePort.Snapshot snapshot =
+        store.read(at("tok_StalledAccountAaaaBbbbCc1", NOW, "10", Channel.CARD));
+    assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofMillis(500));
+    assertThat(snapshot.firstSeen()).as("unknown, so not called new").isFalse();
+    assertThat(snapshot.history().meanHourlyCount30d()).as("fails closed").isNaN();
   }
 
   @Test
