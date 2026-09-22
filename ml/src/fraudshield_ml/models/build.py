@@ -42,6 +42,7 @@ from fraudshield_ml.training.ensemble import (
     BOOSTING_ROUNDS,
     LIGHTGBM_PARAMETERS,
     XGBOOST_PARAMETERS,
+    auc_interval,
 )
 
 #: `encode_categoricals`' default, repeated so the frozen serving table uses the same shrinkage.
@@ -49,9 +50,36 @@ PRIOR_WEIGHT = 50.0
 
 
 @dataclass(frozen=True)
+class Complexity:
+    """Tree count and depth for both boosters, the quantity D-16 constrains.
+
+    LightGBM gets `num_leaves = 2**depth - 1` so the two models have matched capacity, the rule
+    C-6 used. The default is the configuration C-6 and the first bundles used; the served one is
+    chosen from the frontier (ADR 0030).
+    """
+
+    trees: int = BOOSTING_ROUNDS
+    depth: int = int(XGBOOST_PARAMETERS["max_depth"])  # type: ignore[call-overload]
+
+    def xgboost(self, seed: int) -> dict[str, Any]:
+        return {**XGBOOST_PARAMETERS, "max_depth": self.depth, "seed": seed}
+
+    def lightgbm(self, seed: int) -> dict[str, Any]:
+        return {
+            **LIGHTGBM_PARAMETERS,
+            "num_leaves": 2**self.depth - 1,
+            "max_depth": self.depth,
+            "seed": seed,
+        }
+
+
+@dataclass(frozen=True)
 class Report:
     rows: Mapping[str, int]
     ensemble_auc: float
+    #: Half-width of the ensemble AUC's 95% interval (Hanley-McNeil), so a configuration can be
+    #: judged "within the interval of the best" from the report alone (D-16, ADR 0030).
+    ensemble_auc_interval: float
     xgboost_auc: float
     lightgbm_auc: float
     floor: float
@@ -63,7 +91,8 @@ class Report:
         return [
             f"rows: train {self.rows['train']}, calibration {self.rows['calibration']}, "
             f"test {self.rows['test']}",
-            f"test AUC: ensemble {self.ensemble_auc:.4f}, XGBoost {self.xgboost_auc:.4f}, "
+            f"test AUC: ensemble {self.ensemble_auc:.4f} ±{self.ensemble_auc_interval:.4f}, "
+            f"XGBoost {self.xgboost_auc:.4f}, "
             f"LightGBM {self.lightgbm_auc:.4f}",
             f"single-feature floor ({smoke.FLOOR_FEATURE}, same rows): {self.floor:.4f}; "
             f"margin {self.ensemble_auc - self.floor:+.4f}",
@@ -92,7 +121,11 @@ def full_fit_encoding(
 
 
 def fit_boosters(
-    matrix: Sequence[Sequence[float]], labels: Sequence[bool], train: Sequence[int], seed: int
+    matrix: Sequence[Sequence[float]],
+    labels: Sequence[bool],
+    train: Sequence[int],
+    seed: int,
+    complexity: Complexity = Complexity(),  # noqa: B008 - frozen, immutable default
 ) -> tuple[Any, Any]:
     import lightgbm as lgb  # noqa: PLC0415 - heavy
     import xgboost as xgb  # noqa: PLC0415 - heavy
@@ -100,13 +133,11 @@ def fit_boosters(
     x = np.asarray([matrix[i] for i in train], dtype=np.float64)
     y = np.asarray([float(labels[i]) for i in train])
     booster = xgb.train(
-        {**XGBOOST_PARAMETERS, "seed": seed},
+        complexity.xgboost(seed),
         xgb.DMatrix(x, label=y, missing=math.nan),
-        BOOSTING_ROUNDS,
+        complexity.trees,
     )
-    light = lgb.train(
-        {**LIGHTGBM_PARAMETERS, "seed": seed}, lgb.Dataset(x, label=y), BOOSTING_ROUNDS
-    )
+    light = lgb.train(complexity.lightgbm(seed), lgb.Dataset(x, label=y), complexity.trees)
     return booster, light
 
 
@@ -146,6 +177,7 @@ def build(
     *,
     seed: int,
     provenance: Mapping[str, Any] | None = None,
+    complexity: Complexity = Complexity(),  # noqa: B008 - frozen, immutable default
 ) -> tuple[Bundle, Report]:
     names = smoke.trainable_features()
     vectors = [serving_view(v) for v in vectors]
@@ -166,7 +198,7 @@ def build(
         for i in range(len(vectors))
     ]
 
-    booster, light = fit_boosters(matrix, labels, by["train"], seed)
+    booster, light = fit_boosters(matrix, labels, by["train"], seed, complexity)
 
     def raw_scores(rows: Sequence[int]) -> tuple[list[float], list[float], list[float]]:
         x = np.asarray([matrix[i] for i in rows], dtype=np.float64)
@@ -188,9 +220,12 @@ def build(
     tx, tl, tc = raw_scores(by["test"])
     calibrated = calibration["ensemble"].many(tc)
     floor_column = [float(vectors[i][smoke.FLOOR_FEATURE]) for i in by["test"]]
+    ensemble_auc = auc(calibrated, test_labels)
+    positives = sum(test_labels)
     report = Report(
         rows={k: len(v) for k, v in by.items()},
-        ensemble_auc=auc(calibrated, test_labels),
+        ensemble_auc=ensemble_auc,
+        ensemble_auc_interval=auc_interval(ensemble_auc, positives, len(test_labels) - positives),
         xgboost_auc=auc(tx, test_labels),
         lightgbm_auc=auc(tl, test_labels),
         floor=separation(floor_column, test_labels),
@@ -220,12 +255,14 @@ def build(
             **(provenance or {}),
             "seed": seed,
             "whole_day_features": list(WHOLE_DAY_FEATURES),
-            "boosting_rounds": BOOSTING_ROUNDS,
-            "xgboost_parameters": XGBOOST_PARAMETERS,
-            "lightgbm_parameters": LIGHTGBM_PARAMETERS,
+            "trees": complexity.trees,
+            "depth": complexity.depth,
+            "xgboost_parameters": complexity.xgboost(seed),
+            "lightgbm_parameters": complexity.lightgbm(seed),
             "held_out": {
                 "rows": report.rows,
                 "ensemble_auc": report.ensemble_auc,
+                "ensemble_auc_interval": report.ensemble_auc_interval,
                 "single_feature_floor": report.floor,
                 "floor_feature": smoke.FLOOR_FEATURE,
                 "ece_equal_width_10": report.ece_ensemble,
@@ -236,7 +273,14 @@ def build(
     return bundle, report
 
 
-def build_from_cache(cache: Path, out: Path, *, seed: int, root: Path) -> Report:
+def build_from_cache(
+    cache: Path,
+    out: Path,
+    *,
+    seed: int,
+    root: Path,
+    complexity: Complexity = Complexity(),  # noqa: B008 - frozen, immutable default
+) -> Report:
     import pyarrow.parquet as pq  # noqa: PLC0415
 
     loaded = smoke.cache_read_any(cache)
@@ -254,6 +298,7 @@ def build_from_cache(cache: Path, out: Path, *, seed: int, root: Path) -> Report
             "cache_sha256": hashlib.sha256(cache.read_bytes()).hexdigest(),
             "cache_key": {k.decode(): v.decode() for k, v in metadata.items()},
         },
+        complexity=complexity,
     )
     bundle.save(out)
     return report

@@ -192,6 +192,7 @@ def test_the_report_states_the_floor_beside_the_model() -> None:
     report = builder.Report(
         rows={"train": 1, "calibration": 2, "test": 3},
         ensemble_auc=0.97,
+        ensemble_auc_interval=0.004,
         xgboost_auc=0.96,
         lightgbm_auc=0.95,
         floor=0.88,
