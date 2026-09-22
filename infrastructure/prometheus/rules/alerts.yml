@@ -6,10 +6,8 @@
 #             ticket -> email to the owning team, handled in working hours
 #   team:     sre (platform on-call) | risk (risk officers) | ml (model owners)
 #
-# The SRS 8.2 "Any ERROR log" alert is a log rule, in infrastructure/loki/rules/. The SRS 8.2
-# "AUC-ROC drop > 0.03" alert has no rule: Part E.10 defines no live AUC metric (see
-# docs/parallel/M9_updates.md). Every threshold below is unit-tested from both sides in
-# infrastructure/prometheus/tests/.
+# The SRS 8.2 "Any ERROR log" alert is a log rule, in infrastructure/loki/rules/. Every threshold
+# below is unit-tested from both sides in infrastructure/prometheus/tests/.
 groups:
   - name: fraudshield-platform-alerts
     rules:
@@ -209,3 +207,20 @@ groups:
         annotations:
           summary: 'PSI of {{ $labels.feature }} is above 0.2'
           description: 'Population stability index {{ printf "%.2f" $value }}; review the model (SRS 8.2).'
+
+      - alert: FraudShieldModelAucDrop
+        # SRS 8.2: AUC-ROC drop > 0.03 from baseline triggers retraining evaluation. ADR 0091: only
+        # while label coverage >= 0.30 (D-11), against the covered 30-day mean, which needs at
+        # least 72 covered hours. Held for 2 hours because the drift job publishes hourly.
+        expr: |
+          fraudshield:model_auc_roc:production_covered < fraudshield:model_auc_roc:baseline_30d - 0.03
+          and fraudshield:model_auc_roc:baseline_hours_30d >= 72
+        for: 2h
+        labels:
+          severity: ticket
+          team: ml
+        annotations:
+          summary: Live AUC-ROC of the production model is more than 0.03 below its baseline
+          description: >-
+            Live AUC-ROC on labels available so far is {{ printf "%.3f" $value }} with label
+            coverage of at least 30%. Start a retraining evaluation (SRS 8.2).

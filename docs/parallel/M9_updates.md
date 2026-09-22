@@ -40,23 +40,22 @@ week-long alert tests). It needs `uv` and network access for the first download 
 | Trivy dependency scan | CI `security` | failed on 8d94d9c and e408828: Maven Central 429 while Trivy resolved parent POMs (reproduced locally). Fixed in 9056cc9 by resolving into `~/.m2` first |
 | All workflows on 9056cc9 | CI runs: security 35692117624, supply-chain 35692117608, infrastructure 35692117611, ci 35692117637, stack 35692117616, devcontainer 35692117629 | all success. Executed and passed: Trivy DB download, Maven resolve, dependency scan, HIGH/CRITICAL gate, configuration scan, source SBOM sign + verify. Skipped (shown as skipped, not green): ZAP baseline, image jobs |
 
-## 3. Decisions the owner needs to make
+## 3. Owner decisions (1–4 decided 2026-09-22; 5 open)
 
 1. **D-15 spool versus the Argo Rollouts canary. Decided 2026-09-22: ADR 0090.** Per-pod
    directories on a shared ReadWriteMany volume plus a replayer that recovers the spools of dead
    pods, conditional on spool append p95 fitting the 2 ms step-10 budget on target hardware (M10).
    Fallback: StatefulSet with per-pod volumes and a partitioned canary. Ephemeral spool storage is
    prohibited and `k8s_policy.py` enforces it. M6's contract is in section 6 below.
-2. **SRS 8.2 "AUC-ROC drop > 0.03" has no alert.** Part E.10 defines no live AUC metric, and the
-   metric-catalogue check (as instructed) rejects anything outside E.10. Proposal: add
-   `fs_model_auc_roc{alias}` (AUC on labels available so far, with `fs_label_coverage_ratio`) to
-   E.10; the rule and its test are then a few lines.
-3. **`fs_model_version_info{alias}` carries no version.** With `alias` as its only E.10 label a
-   dashboard can show that `@production` exists, not which version it is. Proposal: add a
-   `version` label in E.10.
-4. **D-10 timeout-release level.** `fraudshield:config:timeout_release_ratio_max` defaults to
-   0.10 in `rules/thresholds.yml`. It is a starting value, not a derived one; replace it with the
-   value from `docs/ml/capacity_model.md` (not yet written).
+2. **AUC-drop alert. Decided 2026-09-22: ADR 0091.** Part E.10 gains `fs_model_auc_roc{alias}`
+   and `fs_model_label_coverage{alias}`, and `fs_model_version_info` gains `version`. The
+   `FraudShieldModelAucDrop` alert (ticket, ml) fires only while coverage is at least 0.30 (D-11),
+   against the covered 30-day mean with at least 72 covered hours. `ml_test.yml` covers the drop,
+   the non-drop, low coverage, a short baseline and the shadow alias.
+3. **`fs_model_version_info` version label.** Decided with 2 (ADR 0091).
+4. **D-10 timeout-release level. Decided 2026-09-22:** 0.10 stays as a placeholder, marked
+   ASSUMED in the alert annotation, `thresholds.yml` and the runbook, to be replaced by the value
+   from `docs/ml/capacity_model.md` when that exists.
 5. **Proposed ADRs** (not written here; `docs/adr/` is not an M9-owned path):
    - lokitool (AGPL-3.0) runs as a CI-only checker and is never shipped;
    - production canary splits by replica count (no service mesh), hence at least 10 API pods;
@@ -83,7 +82,7 @@ All `IN_PROGRESS` until review and merge; evidence paths are on `m9/infra`.
 |---|---|---|
 | OPS-OBS-01 | `infrastructure/prometheus/rules/*.yml`, `infrastructure/grafana/` | `prometheus/tests/*_test.yml`, `checks/tests/test_dashboards.py` |
 | OPS-OBS-02 | `infrastructure/loki/rules/fraudshield/errors.yml` | `lokitool rules lint`; alert not yet exercised against real logs |
-| OPS-OBS-03 | `alerts.yml` FraudShieldFeatureDrift; dashboard `fs-model-health` | `platform_test.yml`; AUC-drop part missing (decision 2) |
+| OPS-OBS-03 | `alerts.yml` FraudShieldFeatureDrift and FraudShieldModelAucDrop; dashboard `fs-model-health` | `platform_test.yml`, `ml_test.yml` (ADR 0091) |
 | OPS-OBS-05 | `prometheus.yml` blackbox jobs, `blackbox.yml`, probe alerts | `platform_test.yml` (two consecutive failures, flapping stays silent) |
 | OPS-OBS-06 | `recording.yml` risk signals, FraudShieldFraudRateAnomaly | `risk_test.yml` (fires, 1σ silent, short history silent) |
 | D-10 (5) | FraudShieldTimeoutReleaseRateHigh, `thresholds.yml` | `risk_test.yml` (above, below, low volume) |
@@ -94,6 +93,11 @@ All `IN_PROGRESS` until review and merge; evidence paths are on `m9/infra`.
 | D-28 | threat model 3.6–3.8, Trivy, SBOM, cosign | CI runs above |
 
 ## 6. Interface requirements for other milestones
+
+**M4/M5 (ML worker): model metrics (ADR 0091).** Publish `fs_model_auc_roc{alias}` and
+`fs_model_label_coverage{alias}` together from the hourly drift job, over the same window, and
+`fs_model_version_info{alias, version}`. `alias` is the MLflow alias without `@`: `production`,
+`shadow`, `previous_production`.
 
 **M6 (API) and M5 (scorer): metrics.** The alerts and dashboards already read these, and
 `metric_catalogue.py` will reject any rename.
@@ -173,7 +177,7 @@ spool on SIGTERM within 120 s.
 |---|---|
 | All 8 CI stages of SRS 8.1 | partial: security (Trivy, ZAP job) and image/SBOM/sign stages added; no integration stage, ML gate, staging or production deploy workflow |
 | Grafana dashboards provisioned as code | done on branch (5 dashboards) |
-| Alert rules for every SRS 8.2 threshold | all but AUC drop (decision 2) |
+| Alert rules for every SRS 8.2 threshold | all, including the AUC drop (ADR 0091); the AUC and coverage gauges are not emitted yet |
 | k8s manifests: namespace, NetworkPolicies, PSA restricted, HPA, PDBs | done on branch for application and observability workloads; data stores not included |
 | Argo Rollouts canary with automated analysis | done on branch; never applied to a cluster |
 | ZAP 0 critical | not run: no API service in compose yet |

@@ -28,9 +28,11 @@ def names(expression: str) -> list[str]:
 
 
 class TestE10Source:
-    def test_parses_all_fifteen_metrics_with_their_labels(self) -> None:
+    def test_parses_all_seventeen_metrics_with_their_labels(self) -> None:
         metrics = mc.e10_metrics(mc.BUILD_PROMPT.read_text())
-        assert len(metrics) == 15
+        assert len(metrics) == 17  # 15 in the build prompt plus two added by ADR 0091
+        assert metrics["fs_model_version_info"] == {"alias", "version"}
+        assert metrics["fs_model_label_coverage"] == {"alias"}
         assert metrics["fs_decisions_total"] == {"tier", "decision", "channel", "fallback"}
         assert metrics["fs_kafka_consumer_lag"] == {"topic", "group"}
         assert metrics["fs_decision_latency_seconds"] == frozenset()
