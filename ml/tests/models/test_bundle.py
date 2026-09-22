@@ -224,7 +224,7 @@ def test_the_bundle_is_m4_s_fitted_model_and_scores_as_it_does(built: Built) -> 
     assert max(abs(a - b) for a, b in zip(served, expected, strict=True)) < 1e-3
 
 
-@pytest.mark.req("FR-02-01")
+@pytest.mark.req("FR-02-01", "D-16")
 def test_onnx_matches_the_native_boosters_on_float32_inputs(built: Built) -> None:
     """ADR 0032 (amended): M4's float32 construction makes the ONNX path exact on both models."""
     bundle, _, vectors, _ = built

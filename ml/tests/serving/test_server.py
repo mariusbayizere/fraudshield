@@ -293,6 +293,7 @@ def _free_port() -> int:
         return int(s.getsockname()[1])
 
 
+@pytest.mark.req("D-16", "FR-02-07")
 def test_several_worker_processes_share_one_port_and_report_to_the_admin_port(
     bundle_dirs: tuple[Path, Path], tmp_path: Path
 ) -> None:

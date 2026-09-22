@@ -310,3 +310,32 @@ as "what M5's scoring service runs".
 
 **Generated files in these commits:** `uv.lock` and the matrix in 2f83fac and d64b6a8; the matrix
 in 894fbb4 and eca66a6.
+
+## 11. M5 milestone review
+
+`docs/reviews/M5/milestone-review.md`, run on ac3aa18 in a clean worktree with a fresh environment.
+
+- **Verdict: CHANGES_REQUIRED**, with three MAJOR findings open and none closable from `ml/`:
+  - M5-1: the two Docker tests have never run and need CI.
+  - M5-2: the contract-only path's whole-day skew needs ADR 0033 approved, or accepted in
+    writing.
+  - M5-3: the DB fallback needs M6's tables, or a carry by owner decision.
+- **Re-run:** ml 502 passed, 2 skipped, coverage 94.23%; contracts 490 passed; traceability 0
+  errors; mypy clean; 0 Python licence violations.
+- **Mutation spot checks:** 12 of 12 caught.
+- **Threat-model delta:** in the review, for integration into `docs/security/threat_model.md`.
+
+**Proposed statuses** (supersede section 3 where they differ):
+- FR-02-01, FR-02-10, D-11 and D-50: `DONE`.
+- FR-02-03: `DONE`, now that PB-64's promotion block exists.
+- FR-02-04: `DONE`, unchanged.
+- FR-02-05: `DONE` for scoring; the routing decision is M6's.
+- FR-02-06, FR-02-08, TEST-08: `DONE_WITH_DEVIATION` or `IN_PROGRESS`, pending M7's admin
+  endpoint and panel and M6/M7's audit consumer.
+- FR-02-09: `IN_PROGRESS`, pending M5-3.
+- FR-02-07, ML-GATE-12 and TEST-10's latency: open, carried to M10 by ADR 0032.
+- TEST-10's memory clause: passes.
+- ML-GATE-13: gate logic done; live evidence needs a deployment.
+- D-16: `DONE` for serving.
+
+**Generated file:** the matrix, in the review commit (D-16 tags).
