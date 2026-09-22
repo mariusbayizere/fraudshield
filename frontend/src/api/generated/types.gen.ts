@@ -1009,6 +1009,13 @@ export type RetrainingJob = {
     evaluation_passed?: boolean | null;
 };
 
+/**
+ * What the staff console needs to show its degraded-mode banners, and nothing more. The values are the same as SystemHealth.degraded_modes; a contract test keeps them identical.
+ */
+export type SystemStatus = {
+    degraded_modes: Array<'ML_UNAVAILABLE' | 'DEGRADED_MODE' | 'KAFKA_SPOOLING' | 'REALTIME_PAUSED'>;
+};
+
 export type SystemHealth = {
     kafka_consumer_lag: Array<{
         topic: string;
@@ -1380,6 +1387,39 @@ export type GetDeploymentEnvironmentResponses = {
 };
 
 export type GetDeploymentEnvironmentResponse = GetDeploymentEnvironmentResponses[keyof GetDeploymentEnvironmentResponses];
+
+export type GetSystemStatusData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/system/status';
+};
+
+export type GetSystemStatusErrors = {
+    /**
+     * Missing, invalid, expired or revoked credentials
+     */
+    401: Problem;
+    /**
+     * Authenticated but not permitted (wrong role, wrong API-key scope, pending approval)
+     */
+    403: Problem;
+    /**
+     * Unexpected error; the correlation ID identifies server logs
+     */
+    default: Problem;
+};
+
+export type GetSystemStatusError = GetSystemStatusErrors[keyof GetSystemStatusErrors];
+
+export type GetSystemStatusResponses = {
+    /**
+     * Degraded modes in force
+     */
+    200: SystemStatus;
+};
+
+export type GetSystemStatusResponse = GetSystemStatusResponses[keyof GetSystemStatusResponses];
 
 export type GetLivenessData = {
     body?: never;

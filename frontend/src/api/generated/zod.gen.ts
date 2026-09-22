@@ -1186,6 +1186,18 @@ export const zRetrainingJob = z.object({
     evaluation_passed: z.boolean().nullish()
 });
 
+/**
+ * What the staff console needs to show its degraded-mode banners, and nothing more. The values are the same as SystemHealth.degraded_modes; a contract test keeps them identical.
+ */
+export const zSystemStatus = z.object({
+    degraded_modes: z.array(z.enum([
+        'ML_UNAVAILABLE',
+        'DEGRADED_MODE',
+        'KAFKA_SPOOLING',
+        'REALTIME_PAUSED'
+    ]))
+});
+
 export const zSystemHealth = z.object({
     kafka_consumer_lag: z.array(z.object({
         topic: z.string(),
@@ -1345,6 +1357,11 @@ export const zGetPublicHealthResponse = zProbeStatus;
  * Deployment environment
  */
 export const zGetDeploymentEnvironmentResponse = zDeploymentEnvironment;
+
+/**
+ * Degraded modes in force
+ */
+export const zGetSystemStatusResponse = zSystemStatus;
 
 /**
  * Up
