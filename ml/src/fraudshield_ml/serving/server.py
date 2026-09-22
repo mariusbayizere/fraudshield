@@ -77,7 +77,7 @@ class ScoringService:
         except RequestError as error:
             context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
         try:
-            return self.store.context_for(tx)  # type: ignore[union-attr]
+            return self.store.read(tx)  # type: ignore[union-attr]
         except Exception as error:
             LOG.warning("feature store unreadable: %s", error)
             context.abort(grpc.StatusCode.UNAVAILABLE, "feature store unavailable")
@@ -88,9 +88,13 @@ class ScoringService:
         if scorer is None:
             context.abort(grpc.StatusCode.UNAVAILABLE, "no production model loaded")
         # Outside the try below: abort() raises, and the broad handler would report it as INTERNAL.
-        account = self._context(request, scorer, context)  # type: ignore[arg-type]
+        read = self._context(request, scorer, context)  # type: ignore[arg-type]
         try:
-            scored = scorer.score(request, account)  # type: ignore[union-attr]
+            scored = scorer.score(  # type: ignore[union-attr]
+                request,
+                read.context if read is not None else None,
+                read.exact_ages if read is not None else None,
+            )
         except RequestError as error:
             context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
         except Exception as error:

@@ -143,29 +143,19 @@ def reference_data() -> dict[str, object]:
     }
 
 
-def _agree(name: str, batch: float | str, served: float | str) -> bool:
+def _agree(name: str, batch: float | str, served: float | str, *, whole_days: bool = False) -> bool:
     if REGISTRY[name].dtype is Dtype.CATEGORICAL:
         return batch == served
     b, s = float(batch), float(served)
-    if name in serving.WHOLE_DAY_FEATURES and not math.isnan(b):
+    if whole_days and name in serving.WHOLE_DAY_FEATURES and not math.isnan(b):
         b = float(math.floor(b)) if b >= 0 else math.nan
     if math.isnan(b) or math.isnan(s):
         return math.isnan(b) and math.isnan(s)
     return abs(b - s) <= TOLERANCE + TOLERANCE * abs(b)
 
 
-def replay(
-    redis: object | None = None,
-) -> tuple[list[dict[str, float | str]], list[dict[str, float | str]]]:
-    """The prefix replay, against fakeredis by default or any Redis client passed in."""
-    rows, outcomes = corpus()
-    extra = reference_data()
-    store = FeatureStore(
-        redis if redis is not None else fakeredis.FakeRedis(decode_responses=True),
-        REFERENCE,
-        authoritative=True,
-        metrics=StoreMetrics.create(CollectorRegistry()),
-    )
+def _seed(store: FeatureStore, extra: dict[str, object]) -> None:
+    """The reference data both paths read, written into the store before the replay."""
     for account, swaps in extra["sim_swaps"].items():  # type: ignore[attr-defined]
         for at in swaps:
             store.record_sim_swap(account, at)
@@ -177,6 +167,25 @@ def replay(
     for agent, standing in extra["standing"].items():  # type: ignore[attr-defined]
         for record in standing:
             store.set_agent_standing(agent, record)
+
+
+def replay(
+    redis: object | None = None, *, exact: bool = True
+) -> tuple[list[dict[str, float | str]], list[dict[str, float | str]]]:
+    """The prefix replay, against fakeredis by default or any Redis client passed in.
+
+    `exact` is the scorer reading the store itself (ADR 0033), ages at full precision; without it,
+    the contract's `AccountContext` alone, whose ages are whole days.
+    """
+    rows, outcomes = corpus()
+    extra = reference_data()
+    store = FeatureStore(
+        redis if redis is not None else fakeredis.FakeRedis(decode_responses=True),
+        REFERENCE,
+        authoritative=True,
+        metrics=StoreMetrics.create(CollectorRegistry()),
+    )
+    _seed(store, extra)
 
     first_seen: dict[str, datetime] = {}
     device_first: dict[str, datetime] = {}
@@ -204,7 +213,13 @@ def replay(
         proto = to_proto(tx)
         domain = serving.domain_transaction(proto, REFERENCE)
         assert domain == tx, "the contract round trip must reproduce the training record"
-        served_rows.append(serving.compute(domain, store.context_for(domain), [], REFERENCE))
+        if exact:
+            read = store.read(domain)
+            served_rows.append(
+                serving.compute(domain, read.context, [], REFERENCE, read.exact_ages)
+            )
+        else:
+            served_rows.append(serving.compute(domain, store.context_for(domain), [], REFERENCE))
         batch_rows.append(batch_vector(rows, i, context, index))
         store.observe(tx)
         if tx.transaction_id in outcomes:
@@ -230,6 +245,20 @@ def test_every_feature_agrees_with_the_batch_path_at_every_prefix(
         if not _agree(name, b[name], s[name])
     ]
     assert not disagreements, f"{len(disagreements)} disagreements, first: {disagreements[:8]}"
+
+
+@pytest.mark.req("FR-02-09")
+def test_the_contract_only_path_agrees_at_whole_day_resolution() -> None:
+    """Without ADR 0033 the API sends AccountContext, whose four ages are whole days: everything
+    else agrees exactly, and those four agree once the batch value is floored."""
+    batch_rows, served_rows = replay(exact=False)
+    bad = [
+        (i, name)
+        for i, (b, s) in enumerate(zip(batch_rows, served_rows, strict=True))
+        for name in REGISTRY
+        if not _agree(name, b[name], s[name], whole_days=True)
+    ]
+    assert not bad, bad[:8]
 
 
 @pytest.mark.req("FR-02-09")

@@ -20,6 +20,7 @@ compares these four at whole-day resolution and says so.
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -143,8 +144,13 @@ def compute(
     ctx: pb.AccountContext,
     limits: list[pb.Money],
     reference: Reference,
+    exact_ages: Mapping[str, float] | None = None,
 ) -> dict[str, FeatureValue]:
-    """All 44 features for one transaction, keyed by registered name."""
+    """All 44 features for one transaction, keyed by registered name.
+
+    `exact_ages` carries the four `WHOLE_DAY_FEATURES` at full precision when the scorer read the
+    store itself (ADR 0033); without it they come from the contract's whole-day fields.
+    """
     if tx.counterparty_country is None:
         raise RequestError(
             "counterparty_country is required by is_new_country_for_account and corridor_class; "
@@ -166,6 +172,9 @@ def compute(
     v |= _device(tx, ctx)
     v |= _profile(tx, ctx, previous_at)
     v |= _agent(tx, ctx)
+    for name, value in (exact_ages or {}).items():
+        if name in WHOLE_DAY_FEATURES and not (name == "device_age_days" and not _has_device(tx)):
+            v[name] = value
     v["corridor_class"] = _corridor(tx, reference)
     v["synthetic_identity_score"] = _synthetic_identity(v, ctx, reference)
     missing = set(REGISTRY) - set(v)
@@ -334,6 +343,10 @@ def _just_below(tx: Transaction, limits: list[pb.Money]) -> bool:
     return flagged
 
 
+def _has_device(tx: Transaction) -> bool:
+    return tx.device_fingerprint is not None
+
+
 def _corridor(tx: Transaction, reference: Reference) -> str:
     sender = reference.countries[tx.account_country or ""]
     recipient = reference.countries.get(tx.counterparty_country or "")
@@ -354,10 +367,9 @@ def _synthetic_identity(
     lowest, highest = reference.kyc_tier_range
     tier = float(v["kyc_tier"])
     kyc = 0.0 if math.isnan(tier) else min(1.0, max(0.0, (highest - tier) / (highest - lowest)))
-    # Whole days: floor(age) < 30 exactly when age < 30, for any non-negative age.
-    new = (
-        1.0 if ctx.HasField("account_age_days") and ctx.account_age_days < NEW_ACCOUNT_DAYS else 0.0
-    )
+    # The exact age when known; otherwise whole days, where floor(age) < 30 exactly when age < 30.
+    age = float(v["account_age_days"])
+    new = 1.0 if not math.isnan(age) and age < NEW_ACCOUNT_DAYS else 0.0
     on_device = float(v["accounts_per_device_7d"])
     sharing = 0.0 if math.isnan(on_device) else min(1.0, max(0.0, (on_device - 1.0) / 2.0))
     even = RAMP_RECENT_DAYS / RAMP_MONTH_DAYS

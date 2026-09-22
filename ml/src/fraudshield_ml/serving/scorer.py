@@ -69,9 +69,14 @@ class Scorer:
     def model_version(self) -> str:
         return self.bundle.model_version
 
-    def score(self, request: pb.ScoreRequest, context: pb.AccountContext | None = None) -> Scored:
-        """Score one request. `context` overrides the request's, for a scorer that read the
-        account's state from the feature store itself (ADR 0033)."""
+    def score(
+        self,
+        request: pb.ScoreRequest,
+        context: pb.AccountContext | None = None,
+        exact_ages: Mapping[str, float] | None = None,
+    ) -> Scored:
+        """Score one request. `context` (and `exact_ages`) override the request's, for a scorer
+        that read the account's state from the feature store itself (ADR 0033)."""
         started = time.perf_counter()
         timings: list[tuple[int, float]] = []
 
@@ -86,6 +91,7 @@ class Scorer:
             context if context is not None else request.context,
             list(request.configured_limits),
             self.reference,
+            exact_ages,
         )
         mark = lap(Stage.STAGE_FEATURES, started)
 

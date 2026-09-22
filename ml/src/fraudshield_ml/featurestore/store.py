@@ -173,6 +173,15 @@ class StoreMetrics:
         )
 
 
+@dataclass(frozen=True)
+class ContextRead:
+    """What one store read returns: the contract's message and the ages it cannot carry."""
+
+    context: pb.AccountContext
+    #: The four `WHOLE_DAY_FEATURES` at full precision, where the store knows them.
+    exact_ages: dict[str, float]
+
+
 @dataclass
 class _Snapshot:
     """The replies to one `context_for` round trip, parsed."""
@@ -380,9 +389,17 @@ class FeatureStore:
 
     def context_for(self, tx: Transaction) -> pb.AccountContext:
         """The contract's `AccountContext` for `tx`, as of `tx.timestamp`, in one round trip."""
+        return self.read(tx).context
+
+    def read(self, tx: Transaction) -> ContextRead:
+        """The context plus the four ages at full precision, for a scorer that reads the store
+        itself (ADR 0033): the contract's `uint32` day fields cannot carry the fraction the model
+        was trained on, and flooring it moved 10 of 101,909 gate-model test transactions across a
+        risk tier."""
         t = micros(tx.timestamp)
         snap = self._read(tx, t)
         first_seen, known = self._resolve_account(tx.account_id, snap, t)
+        exact: dict[str, float] = {}
 
         ctx = pb.AccountContext()
         self._velocity(ctx, snap.rows, t, first_seen if known else None)
@@ -391,13 +408,19 @@ class FeatureStore:
         ctx.countries_seen.extend(sorted(snap.countries))
         if snap.opened is not None:
             _set_days(ctx, "account_age_days", t - int(snap.opened))
+            exact["account_age_days"] = _days(t - int(snap.opened))
         if snap.tier:
             ctx.kyc_tier = int(json.loads(snap.tier[0])[0])
         if snap.swap:
             _set_days(ctx, "days_since_sim_swap", t - int(snap.swap[0]))
+            exact["days_since_sim_swap"] = _days(t - int(snap.swap[0]))
         self._counterparty(ctx, tx, snap, t)
+        if snap.cp_opened is not None:
+            exact["counterparty_account_age_days"] = _days(t - int(snap.cp_opened))
         if tx.device_fingerprint is not None:
-            self._device(ctx, tx, snap, t)
+            first_device = self._device(ctx, tx, snap, t)
+            if first_device is not None:
+                exact["device_age_days"] = _days(t - first_device)
         if tx.agent_id is not None:
             self._agent(ctx, tx, snap)
         self._cell(ctx, tx, snap.cell_rows, t)
@@ -405,7 +428,7 @@ class FeatureStore:
         if month:
             recent = sum(1 for _, s in snap.rows if s > t - W_RAMP_RECENT)
             ctx.volume_ramp_ratio_7d = recent / month
-        return ctx
+        return ContextRead(context=ctx, exact_ages=exact)
 
     def _read(self, tx: Transaction, t: int) -> _Snapshot:
         """Every command `context_for` needs, pipelined into a single round trip."""
@@ -511,7 +534,9 @@ class FeatureStore:
             1 for m, s in snap.rows if s > t - W_30D and cp is not None and m[2] == cp
         )
 
-    def _device(self, ctx: pb.AccountContext, tx: Transaction, snap: _Snapshot, t: int) -> None:
+    def _device(
+        self, ctx: pb.AccountContext, tx: Transaction, snap: _Snapshot, t: int
+    ) -> int | None:
         device = tx.device_fingerprint
         assert device is not None  # noqa: S101 - the caller checked
         first = int(snap.device_first) if snap.device_first is not None else None
@@ -532,6 +557,7 @@ class FeatureStore:
         if first is not None:
             _set_days(ctx.device, "device_age_days", t - first)
         ctx.accounts_sharing_device_or_phone = ctx.device.accounts_per_device_7d
+        return first
 
     @staticmethod
     def _agent(ctx: pb.AccountContext, tx: Transaction, snap: _Snapshot) -> None:
@@ -629,6 +655,11 @@ class FeatureStore:
         ctx.last_location.CopyFrom(pb.GeoPoint(latitude=location[0], longitude=location[1]))
         ctx.last_transaction_at.FromMicroseconds(at)
         _set_days(ctx, "days_since_previous_activity", t - at)
+
+
+def _days(delta_micros: int) -> float:
+    """Fractional days, as the batch path computes them (seconds / 86400), sign kept."""
+    return (delta_micros / MICROS) / SECONDS_PER_DAY
 
 
 def _set_days(message: Any, name: str, delta_micros: int) -> None:
