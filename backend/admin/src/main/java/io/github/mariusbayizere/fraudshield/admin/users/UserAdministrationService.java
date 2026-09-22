@@ -318,8 +318,14 @@ public final class UserAdministrationService {
               }
               // Locking a failure-locked account turns it into an administrator's lock, which never
               // lifts by itself and ends the sessions (review finding 12).
-              Instant lockedUntil =
-                  status == AccountStatus.LOCKED ? StaffAccountRepository.ADMIN_LOCK_UNTIL : null;
+              Instant lockedUntil;
+              if (status != AccountStatus.LOCKED) {
+                lockedUntil = null;
+              } else if (statusChanged || adminLockRequested) {
+                lockedUntil = StaffAccountRepository.ADMIN_LOCK_UNTIL;
+              } else {
+                lockedUntil = current.lockedUntil(); // unchanged lock (re-review N1)
+              }
               boolean endsSessions = roleChanged || statusChanged || adminLockRequested;
               accounts.applyAdminEdit(
                   userId,
