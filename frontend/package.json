@@ -23,7 +23,8 @@
     "api": "node scripts/generate-api.ts",
     "dev": "VITE_FS_COUNTRY=${VITE_FS_COUNTRY:-RW} vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "e2e": "playwright test"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

@@ -10,6 +10,7 @@ import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
 import Link from '@mui/material/Link';
 import List from '@mui/material/List';
+import ListItem from '@mui/material/ListItem';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
 import ListSubheader from '@mui/material/ListSubheader';
@@ -17,7 +18,7 @@ import Toolbar from '@mui/material/Toolbar';
 import Typography from '@mui/material/Typography';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { Link as RouterLink, Outlet, useRouterState } from '@tanstack/react-router';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { tokens } from '../design-system/tokens';
 import { LanguageSwitcher } from './LanguageSwitcher';
@@ -34,31 +35,34 @@ const PRIMARY_ICON: Record<string, ReactNode> = {
 function Navigation({ onNavigate }: { onNavigate?: () => void }) {
   const { t } = useTranslation();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const id = useId();
   return (
     <Box component="nav" aria-label={t('shell.navigation')}>
       {GROUPS.map((group) => (
-        <List
-          key={group}
-          dense
-          subheader={<ListSubheader component="h2">{t(`shell.group.${group}`)}</ListSubheader>}
-        >
-          {SECTIONS.filter((s) => s.group === group).map((section) => {
-            const current = pathname === section.path || pathname.startsWith(`${section.path}/`);
-            return (
-              <ListItemButton
-                key={section.path}
-                component={RouterLink}
-                to={section.path}
-                selected={current}
-                aria-current={current ? 'page' : undefined}
-                onClick={onNavigate}
-                sx={{ minHeight: tokens.touchTargetPx }}
-              >
-                <ListItemText primary={t(section.title)} />
-              </ListItemButton>
-            );
-          })}
-        </List>
+        <Box key={group} sx={{ pb: 1 }}>
+          <ListSubheader component="h2" id={`${id}-${group}`}>
+            {t(`shell.group.${group}`)}
+          </ListSubheader>
+          <List dense disablePadding aria-labelledby={`${id}-${group}`}>
+            {SECTIONS.filter((s) => s.group === group).map((section) => {
+              const current = pathname === section.path || pathname.startsWith(`${section.path}/`);
+              return (
+                <ListItem key={section.path} disablePadding>
+                  <ListItemButton
+                    component={RouterLink}
+                    to={section.path}
+                    selected={current}
+                    aria-current={current ? 'page' : undefined}
+                    onClick={onNavigate}
+                    sx={{ minHeight: tokens.touchTargetPx }}
+                  >
+                    <ListItemText primary={t(section.title)} />
+                  </ListItemButton>
+                </ListItem>
+              );
+            })}
+          </List>
+        </Box>
       ))}
     </Box>
   );
