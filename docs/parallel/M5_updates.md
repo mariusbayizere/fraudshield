@@ -401,3 +401,59 @@ error, amplified: raw parity says nothing after a steep transformation".
 >    what `featurestore.fallback.ReplayFallback` returns. Enable the `m6-postgresql` parameter in
 >    `ml/tests/featurestore/test_db_fallback.py`. The test passes only if the features are
 >    identical to the Redis path's.
+
+## 13. Session state (written for a cleared session to resume from)
+
+**Where M5 stands (2026-09-22).**
+- **Branch and worktree:** `m5/scoring` on origin, worktree `/home/marius/fraudshield-m5`, clean
+  and in sync. It merged `m4-complete` at 2f83fac. It has not been merged to `main` (that is the
+  owner's) and has **no tag**.
+- **Built and tested in `ml/`:**
+  - The served bundle is M4's evaluated model, served through ONNX.
+  - The Redis feature store has batch parity, and the scorer reads it itself (ADR 0033).
+  - The gRPC scorer has mTLS, health checks, hot swap by MLflow alias, and shadow scoring off the
+    hot path.
+  - Also: the store writer, runtime thresholds, the ECE promotion block, the admin port,
+    `fs-model`, `fs-scorer` and `fs-bench`.
+- **Last full ml suite:** 502 passed, 2 skipped (Docker), coverage 94.22%, at c787021. Commits
+  since then add one tested module (the reference fallback) and documents.
+
+**Open before `m5-complete` can be tagged**, in order:
+1. **CI green (M5-1).** The owner is checking the `ml` job for `m5/scoring` on GitHub Actions,
+   including `test_the_replay_agrees_on_the_redis_the_deployment_runs` and
+   `test_publish_and_hot_swap_against_the_mlflow_the_deployment_runs`. `gh` is not logged in on
+   this laptop, so the agent cannot read CI.
+2. **The independent Principal Review.** A fresh subagent reviewing 24a9d1a in its own worktree,
+   BLOCKER and MAJOR only, one pass. Its record goes into `docs/reviews/M5/principal-review.md`
+   verbatim. Any BLOCKER or MAJOR it finds must be fixed and re-reviewed. See section 14 when
+   written.
+3. **Tag `m5-complete` only on a commit whose CI is green**, and after the review is clean.
+
+**Carried, not open:**
+- The DB fallback goes to M6 (PB-68, proposed in section 12, acceptance test in place).
+- The latency gate goes to M10 (ADR 0032).
+- The admin endpoint and panel for thresholds and the shadow switch go to M7/M8.
+- The audit consumer of `fs.ml.shadow` goes to M6/M7.
+
+**For the owner to integrate:**
+- The status proposals in sections 3 and 11.
+- PB-68 from section 12.
+- The M6 block from section 12, for `M6_updates.md`.
+- The threat-model delta in `docs/reviews/M5/milestone-review.md`.
+- `SESSION_STATE.md` still says `main` never merged M2/M3; that is stale.
+
+**Rules this session followed, to keep:**
+- The agent owns `ml/`. Owner-approved exceptions: `contracts/` for ADR 0033, `tools/` for the two
+  licence exceptions, and the lab notebook entry.
+- One full suite at a time, checked by process executable (`ps -eo comm,args`), never by command
+  text.
+- Commits are small and pushed after each.
+- Generated files (`uv.lock`, the matrix) are regenerated, never hand-merged.
+- No `--no-verify`.
+
+**Useful paths:**
+- Gate cache: `/home/marius/fraudshield/dataset/output/features_gate_d8083dbc.parquet`, seed 1.
+- Build the served bundle:
+  `.venv/bin/fs-model build --cache <gate cache> --out <dir> --seed 1`. It reproduces 191/342
+  rounds and AUC 0.970, or refuses on parity.
+- Benchmarks: `fs-bench serve|memory --bundle <dir> --packs <packs.json> --dataset <bench1m>`.
