@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SpotBugs / FindSecBugs exclusions of the admin module, in addition to ../spotbugs-exclude.xml. Every
+  entry is scoped to named classes and one bug pattern and says why the finding does not apply.
+  Adding an entry requires review (build prompt I.2).
+-->
+<FindBugsFilter
+    xmlns="https://github.com/spotbugs/filter/3.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="https://github.com/spotbugs/filter/3.0.0 https://raw.githubusercontent.com/spotbugs/spotbugs/4.10.4/spotbugs/etc/findbugsfilter.xsd">
+
+  <!--
+    Controllers hold Spring-managed collaborators, which are shared by design, and fail fast on a
+    missing one at wiring time (H.1). SPRING_ENDPOINT only marks controllers for manual review, which
+    AuthorisationMatrixTest automates for every handler.
+  -->
+  <Match>
+    <Or>
+      <Class name="io.github.mariusbayizere.fraudshield.admin.users.UserAdminController"/>
+      <Class name="io.github.mariusbayizere.fraudshield.admin.network.IpAllowlistController"/>
+      <Class name="io.github.mariusbayizere.fraudshield.admin.apikeys.ApiKeyAdminController"/>
+      <Class name="io.github.mariusbayizere.fraudshield.admin.audit.AuditSearchController"/>
+    </Or>
+    <Or>
+      <Bug pattern="SPRING_ENDPOINT"/>
+      <Bug pattern="EI_EXPOSE_REP2"/>
+      <Bug pattern="CT_CONSTRUCTOR_THROW"/>
+    </Or>
+  </Match>
+
+  <!--
+    The audit search SQL is assembled only from string constants chosen by which filters are
+    present; every value (user, type, dates, entity, cursor, limit) is a bind parameter. Row-level
+    isolation comes from the tenant view v_audit_events.
+  -->
+  <Match>
+    <Class name="io.github.mariusbayizere.fraudshield.admin.audit.AuditSearchController"/>
+    <Bug pattern="SQL_INJECTION_SPRING_JDBC"/>
+  </Match>
+</FindBugsFilter>

@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SpotBugs / FindSecBugs exclusions of the auth module, in addition to ../spotbugs-exclude.xml. Every
+  entry is scoped to named classes and one bug pattern and says why the finding does not apply.
+  Adding an entry requires review (build prompt I.2).
+-->
+<FindBugsFilter
+    xmlns="https://github.com/spotbugs/filter/3.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="https://github.com/spotbugs/filter/3.0.0 https://raw.githubusercontent.com/spotbugs/spotbugs/4.10.4/spotbugs/etc/findbugsfilter.xsd">
+
+  <!--
+    Spring Security's CSRF protection is session-cookie CSRF. This API is stateless: staff send an
+    in-memory bearer token and machines an API key, which a cross-site page cannot attach. The only
+    cookie-authenticated operation (refresh) and the sign-out and password operations are protected
+    by CsrfDoubleSubmitFilter, driven by the contract's X-CSRF-Token parameter, and the refresh
+    cookie is SameSite=Strict and path-scoped (D-27). SessionTest covers the refusal.
+  -->
+  <Match>
+    <Class name="io.github.mariusbayizere.fraudshield.auth.security.SecurityConfiguration"/>
+    <Bug pattern="SPRING_CSRF_PROTECTION_DISABLED"/>
+  </Match>
+
+  <!-- HttpSecurity.build() declares Exception; the Spring bean methods can only propagate it. -->
+  <Match>
+    <Class name="io.github.mariusbayizere.fraudshield.auth.security.SecurityConfiguration"/>
+    <Bug pattern="THROWS_METHOD_THROWS_CLAUSE_BASIC_EXCEPTION"/>
+  </Match>
+
+  <!--
+    Reading headers and cookies is these classes' purpose, and each treats the value as untrusted:
+    the API key is verified by HMAC, the CSRF token compared in constant time with the cookie, the
+    correlation ID accepted only as a UUID, and the user agent only recorded (truncated) in audit.
+  -->
+  <Match>
+    <Or>
+      <Class name="io.github.mariusbayizere.fraudshield.auth.security.ApiKeyAuthenticationFilter"/>
+      <Class name="io.github.mariusbayizere.fraudshield.auth.security.CsrfDoubleSubmitFilter"/>
+      <Class name="io.github.mariusbayizere.fraudshield.auth.web.CorrelationIdFilter"/>
+      <Class name="io.github.mariusbayizere.fraudshield.auth.web.Requests"/>
+    </Or>
+    <Or>
+      <Bug pattern="SERVLET_HEADER"/>
+      <Bug pattern="SERVLET_HEADER_USER_AGENT"/>
+      <Bug pattern="COOKIE_USAGE"/>
+    </Or>
+  </Match>
+
+  <!-- Informational: marks controllers for manual review, which AuthorisationMatrixTest automates. -->
+  <Match>
+    <Class name="io.github.mariusbayizere.fraudshield.auth.web.AuthController"/>
+    <Bug pattern="SPRING_ENDPOINT"/>
+  </Match>
+
+  <!--
+    Spring-managed collaborators (services, repositories, the Redis template) are shared by design;
+    copying them would be wrong. Constructor null checks that throw are the intended fail-fast
+    wiring (H.1) and the classes are final or not security-sensitive to finalizer attacks.
+  -->
+  <Match>
+    <Or>
+      <Class name="io.github.mariusbayizere.fraudshield.auth.web.AuthController"/>
+      <Class name="io.github.mariusbayizere.fraudshield.auth.support.SafeRedis"/>
+    </Or>
+    <Or>
+      <Bug pattern="EI_EXPOSE_REP2"/>
+      <Bug pattern="CT_CONSTRUCTOR_THROW"/>
+    </Or>
+  </Match>
+
+  <!--
+    Exceptions and authentication tokens are Serializable through their supertypes but are never
+    serialised: requests are stateless and nothing is written to an HTTP session.
+  -->
+  <Match>
+    <Or>
+      <Class name="io.github.mariusbayizere.fraudshield.auth.web.ProblemException"/>
+      <Class name="io.github.mariusbayizere.fraudshield.auth.security.ApiKeyAuthentication"/>
+    </Or>
+    <Bug pattern="SE_TRANSIENT_FIELD_NOT_RESTORED"/>
+  </Match>
+
+  <!--
+    The logged values cannot carry CR or LF: an enum constant and an exception class name
+    (SmtpStaffMailer), and a UUID correlation ID (ProblemHandler).
+  -->
+  <Match>
+    <Or>
+      <Class name="io.github.mariusbayizere.fraudshield.auth.mail.SmtpStaffMailer"/>
+      <Class name="io.github.mariusbayizere.fraudshield.auth.web.ProblemHandler"/>
+    </Or>
+    <Bug pattern="CRLF_INJECTION_LOGS"/>
+  </Match>
+</FindBugsFilter>
