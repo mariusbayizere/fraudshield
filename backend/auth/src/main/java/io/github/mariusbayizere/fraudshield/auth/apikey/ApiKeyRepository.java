@@ -184,7 +184,9 @@ public final class ApiKeyRepository {
    * @return the key
    */
   public Optional<ApiKeyRecord> findForUpdate(String keyId) {
-    return keys.findForUpdate(keyId).map(ApiKeyRepository::record);
+    Optional<ApiKeyEntity> locked = keys.findForUpdate(keyId);
+    locked.ifPresent(entities::refresh); // the lock query does not refresh a managed instance
+    return locked.map(ApiKeyRepository::record);
   }
 
   /**

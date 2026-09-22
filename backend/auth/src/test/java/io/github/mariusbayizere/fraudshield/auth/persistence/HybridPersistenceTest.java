@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.mariusbayizere.fraudshield.audit.testing.TestDatabase;
+import io.github.mariusbayizere.fraudshield.auth.account.StaffAccountRepository;
 import io.github.mariusbayizere.fraudshield.auth.domain.AccountStatus;
 import io.github.mariusbayizere.fraudshield.auth.domain.Department;
 import io.github.mariusbayizere.fraudshield.auth.domain.StaffAccount;
@@ -14,6 +15,7 @@ import java.sql.Connection;
 import java.sql.Statement;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -194,5 +196,71 @@ class HybridPersistenceTest {
       rows.next();
       assertThat(rows.getInt(1)).as("and it did not add the column back").isZero();
     }
+  }
+
+  private static long version(UUID id) {
+    return app.tenants().inTenant(bankA, () -> app.users().findById(id).orElseThrow().getVersion());
+  }
+
+  @Test
+  @Tag("FR-07-04")
+  void statusChangesAdvanceTheVersionAsTheRemovedTriggerDid() {
+    UUID id = insert(bankA);
+    long start = version(id);
+    Instant until = Instant.now().plusSeconds(1800);
+    app.tenants().runInTenant(bankA, () -> app.users().lock(id, until));
+    assertThat(version(id)).as("a failure lock is a status change").isEqualTo(start + 1);
+    app.tenants().runInTenant(bankA, () -> app.users().lock(id, until.plusSeconds(60)));
+    assertThat(version(id)).as("re-locking a locked account is not").isEqualTo(start + 1);
+    app.tenants().runInTenant(bankA, () -> app.users().unlock(id));
+    assertThat(version(id)).as("an unlock is").isEqualTo(start + 2);
+    app.tenants().runInTenant(bankA, () -> app.users().recordLoginSuccess(id, Instant.now()));
+    assertThat(version(id)).as("a sign-in of an active account is not").isEqualTo(start + 2);
+    app.tenants().runInTenant(bankA, () -> app.users().lock(id, until));
+    app.tenants().runInTenant(bankA, () -> app.users().recordLoginSuccess(id, Instant.now()));
+    assertThat(version(id)).as("a sign-in that lifts a lock is").isEqualTo(start + 4);
+    app.tenants().runInTenant(bankA, () -> app.users().lock(id, until));
+    app.tenants().runInTenant(bankA, () -> app.users().changePassword(id, "$2a$12$new"));
+    assertThat(version(id)).as("a password change that lifts a lock is").isEqualTo(start + 6);
+  }
+
+  @Test
+  @Tag("FR-07-09")
+  void lockedReadReloadsSoAnEditCannotWriteBackStaleState() {
+    UUID id = insert(bankA);
+    StaffAccountRepository accounts =
+        new StaffAccountRepository(app.jdbc(), app.users(), app.entities());
+    String newHash = "$2a$12$changedchangedchangedchangedchangedchangedchangedchang";
+    app.tenants()
+        .runInTenant(
+            bankA,
+            () -> {
+              accounts.findById(id).orElseThrow(); // managed, as the acting administrator is
+              CompletableFuture.runAsync(
+                      () ->
+                          app.tenants()
+                              .runInTenant(bankA, () -> accounts.changePassword(id, newHash)))
+                  .join();
+              StaffAccount current = accounts.findByIdForUpdate(id).orElseThrow();
+              accounts.applyAdminEdit(
+                  id,
+                  new StaffAccountRepository.AdminEdit(
+                      "Edited",
+                      current.lastName(),
+                      current.phone(),
+                      current.department(),
+                      current.role(),
+                      current.status(),
+                      current.preferredLocale(),
+                      current.lockedUntil(),
+                      false));
+            });
+    StaffUserEntity stored =
+        app.tenants().inTenant(bankA, () -> app.users().findById(id).orElseThrow());
+    assertThat(stored.getPasswordHash())
+        .as("the concurrent password change survives")
+        .isEqualTo(newHash);
+    assertThat(stored.getTokenVersion()).as("and so does its session invalidation").isEqualTo(1);
+    assertThat(stored.toDomain().firstName()).isEqualTo("Edited");
   }
 }

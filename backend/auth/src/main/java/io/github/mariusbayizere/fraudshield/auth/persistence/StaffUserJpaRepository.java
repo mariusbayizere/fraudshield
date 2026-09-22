@@ -14,9 +14,13 @@ import org.springframework.data.repository.query.Param;
 
 /**
  * Spring Data repository of {@code users} (ADR 0071). Every query runs inside a tenant transaction,
- * so row-level security confines it to one institution. Bulk updates bypass the persistence context
- * and the optimistic version on purpose (sign-in bookkeeping must not make an administrator's edit
- * stale); they flush before and clear after, so no managed entity is left stale.
+ * so row-level security confines it to one institution. Bulk updates bypass the persistence
+ * context; they flush before and clear after, so no managed entity is left stale. They advance the
+ * optimistic version exactly when the status changes (a failure lock, an unlock, a sign-in or
+ * password change that lifts a lock), as the removed V12 trigger did, and leave it alone for
+ * bookkeeping (failure count, last sign-in, token version, email verification, Google link), so a
+ * sign-in never makes an administrator's edit stale but a status change the administrator has not
+ * seen does.
  */
 public interface StaffUserJpaRepository extends JpaRepository<StaffUserEntity, UUID> {
 
@@ -77,7 +81,9 @@ public interface StaffUserJpaRepository extends JpaRepository<StaffUserEntity, U
   @Modifying(flushAutomatically = true, clearAutomatically = true)
   @Query(
       "update StaffUserEntity u set u.failedLoginCount = 0, u.lockedUntil = null,"
-          + " u.lastLoginAt = :at, u.status = case when u.status = io.github.mariusbayizere"
+          + " u.lastLoginAt = :at, u.version = u.version + case when u.status = io.github"
+          + ".mariusbayizere.fraudshield.auth.domain.AccountStatus.LOCKED then 1 else 0 end,"
+          + " u.status = case when u.status = io.github.mariusbayizere"
           + ".fraudshield.auth.domain.AccountStatus.LOCKED then io.github.mariusbayizere"
           + ".fraudshield.auth.domain.AccountStatus.ACTIVE else u.status end where u.id = :id")
   int recordLoginSuccess(@Param("id") UUID id, @Param("at") Instant at);
@@ -103,7 +109,9 @@ public interface StaffUserJpaRepository extends JpaRepository<StaffUserEntity, U
   @Modifying(flushAutomatically = true, clearAutomatically = true)
   @Query(
       "update StaffUserEntity u set u.status = io.github.mariusbayizere.fraudshield.auth.domain"
-          + ".AccountStatus.LOCKED, u.lockedUntil = :until where u.id = :id")
+          + ".AccountStatus.LOCKED, u.lockedUntil = :until, u.version = u.version + case when"
+          + " u.status = io.github.mariusbayizere.fraudshield.auth.domain.AccountStatus.LOCKED"
+          + " then 0 else 1 end where u.id = :id")
   int lock(@Param("id") UUID id, @Param("until") Instant until);
 
   /**
@@ -115,9 +123,9 @@ public interface StaffUserJpaRepository extends JpaRepository<StaffUserEntity, U
   @Modifying(flushAutomatically = true, clearAutomatically = true)
   @Query(
       "update StaffUserEntity u set u.status = io.github.mariusbayizere.fraudshield.auth.domain"
-          + ".AccountStatus.ACTIVE, u.lockedUntil = null, u.failedLoginCount = 0"
-          + " where u.id = :id and u.status = io.github.mariusbayizere.fraudshield.auth.domain"
-          + ".AccountStatus.LOCKED")
+          + ".AccountStatus.ACTIVE, u.lockedUntil = null, u.failedLoginCount = 0,"
+          + " u.version = u.version + 1 where u.id = :id and u.status = io.github.mariusbayizere"
+          + ".fraudshield.auth.domain.AccountStatus.LOCKED")
   int unlock(@Param("id") UUID id);
 
   /**
@@ -130,7 +138,9 @@ public interface StaffUserJpaRepository extends JpaRepository<StaffUserEntity, U
   @Modifying(flushAutomatically = true, clearAutomatically = true)
   @Query(
       "update StaffUserEntity u set u.passwordHash = :hash, u.tokenVersion = u.tokenVersion + 1,"
-          + " u.failedLoginCount = 0, u.lockedUntil = case when u.status = io.github.mariusbayizere"
+          + " u.failedLoginCount = 0, u.version = u.version + case when u.status = io.github"
+          + ".mariusbayizere.fraudshield.auth.domain.AccountStatus.LOCKED then 1 else 0 end,"
+          + " u.lockedUntil = case when u.status = io.github.mariusbayizere"
           + ".fraudshield.auth.domain.AccountStatus.LOCKED then null else u.lockedUntil end,"
           + " u.status = case when u.status = io.github.mariusbayizere.fraudshield.auth.domain"
           + ".AccountStatus.LOCKED then io.github.mariusbayizere.fraudshield.auth.domain"

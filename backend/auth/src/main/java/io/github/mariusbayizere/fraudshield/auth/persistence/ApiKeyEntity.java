@@ -6,6 +6,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
+import org.hibernate.annotations.DynamicUpdate;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -16,6 +17,7 @@ import org.hibernate.type.SqlTypes;
  */
 @Entity
 @Table(name = "api_keys")
+@DynamicUpdate
 public class ApiKeyEntity {
 
   @Id private UUID id;

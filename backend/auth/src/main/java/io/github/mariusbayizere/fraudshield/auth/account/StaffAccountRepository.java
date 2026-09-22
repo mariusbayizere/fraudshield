@@ -111,7 +111,19 @@ public final class StaffAccountRepository {
    * @return the account
    */
   public Optional<StaffAccount> findByIdForUpdate(UUID id) {
-    return users.findForUpdate(id).map(StaffUserEntity::toDomain);
+    return lockCurrent(id).map(StaffUserEntity::toDomain);
+  }
+
+  /**
+   * Locks the row and then reloads it. A locking query returns the instance the persistence context
+   * already holds without refreshing it, so an entity read earlier in the transaction (the acting
+   * administrator, say) would otherwise carry state from before the lock, and a flush could write
+   * it back over a concurrent change such as a password change.
+   */
+  private Optional<StaffUserEntity> lockCurrent(UUID id) {
+    Optional<StaffUserEntity> locked = users.findForUpdate(id);
+    locked.ifPresent(entities::refresh);
+    return locked;
   }
 
   /**
@@ -269,7 +281,7 @@ public final class StaffAccountRepository {
    * @param edit the new values
    */
   public void applyAdminEdit(UUID id, AdminEdit edit) {
-    StaffUserEntity entity = users.findForUpdate(id).orElseThrow();
+    StaffUserEntity entity = lockCurrent(id).orElseThrow();
     entity.edit(
         edit.firstName(),
         edit.lastName(),

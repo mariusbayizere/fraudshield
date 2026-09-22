@@ -14,6 +14,7 @@ import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.time.Instant;
 import java.util.UUID;
+import org.hibernate.annotations.DynamicUpdate;
 
 /**
  * JPA mapping of {@code users} (ADR 0071). Only the staff-identity adapters use it; the rest of the
@@ -23,6 +24,7 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "users")
+@DynamicUpdate
 public class StaffUserEntity {
 
   @Id private UUID id;
