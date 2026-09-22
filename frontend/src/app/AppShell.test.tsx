@@ -1,6 +1,7 @@
 import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/react-router';
 import { act, render, screen, within } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
+import { axeViolations } from '../test/axe';
 import { testI18n } from '../test/i18n';
 import { Providers } from '../test/Providers';
 import type { Direction } from '../i18n/direction';
@@ -44,6 +45,15 @@ afterEach(() => {
 });
 
 describe('AppShell (E.9, 05B A.7)', () => {
+  it.each([
+    ['wide', true],
+    ['phone', false],
+  ])('has no axe violations on a %s screen', async (_name, wide) => {
+    await renderAt('/alerts', { wide });
+    await screen.findByRole('heading', { level: 1, name: 'Alerts' });
+    expect(await axeViolations(document.body)).toEqual([]);
+  });
+
   it('opens / on the alert feed', async () => {
     const { router } = await renderAt('/');
     await screen.findByRole('heading', { level: 1, name: 'Alerts' });
