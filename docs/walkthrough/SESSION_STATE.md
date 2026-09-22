@@ -50,24 +50,26 @@ authorised-push-payment variants are untested).
 Hanley-McNeil interval — a bare recall on ~66 rows was reading as more settled than the sample
 size supports, so the artefact says so itself rather than requiring a reader to compute it.
 
-## Branch hygiene — a wrong premise, corrected
+## Branches, `main`, and CI
 
-**`main` has not merged M2 or M3.** `main`'s HEAD is still `a7e6896`, the M1-close commit;
-`git merge-base --is-ancestor m3-complete origin/main` returns NO. M0 and M1 genuinely were merged
-(linear history, no merge commits), but M2 (`m2/generator`) and M3 (`m3/features`) were not, despite
-being tagged complete. This corrects an assumption stated earlier in the session that every
-milestone had merged after review.
+**`main` is at `m3-complete` (`f8885d6`).** On 2026-09-22 the history was confirmed linear
+(`main` → `m2-complete` → `m3-complete` → `m4/generalisation`, each an ancestor of the next), and
+`main` was fast-forwarded twice, pushed each time, never forced. The tags were not moved.
 
-**This session's M4 work moved off `m3/features`** onto a new branch, **`m4/generalisation`**,
-created from `m3/features`'s tip (129 commits ahead of `main` at the branch point) and pushed to
-origin. All of today's commits — the recall-interval feature, the re-run battery evidence, C-6,
-and the PB-61 writeup — are on this branch, not on `m3/features`.
-
-**Not done, and an owner decision rather than something to resolve unilaterally:** whether/how to
-merge M2, M3 and now M4 into `main`. Three milestones' worth of history would land in one merge if
-done now; whether that happens as one merge, three sequential ones, or `main` is redefined to track
-a later branch is a call for the owner, not something this session should decide by pushing to
-`main` directly.
+- **At `m2-complete` (`ed7a8d9`) `main`'s CI was red**: the python job fails `mypy --strict` on
+  two `re.search(...).group(1)` calls in `dataset/tests/test_generator.py`, and the devcontainer
+  job fails for a reason not yet known (the owner is fetching the log). This was transient —
+  `m3-complete` is green on every job, fixed in `5f0a8a1` — so nothing was fixed forward on
+  `main`, since that would have broken the fast-forward. The tag itself had no CI result on its
+  commit when it was placed; see the lab notebook, 2026-09-22.
+- **The default branch is still `m0/bootstrap`, not `main`** (`git ls-remote --symref origin
+  HEAD`). PB-25 stays blocked until that changes, which is a repository setting for the owner.
+- **The M4 PR is not opened yet**, because `gh` has no credentials. Title and body are drafted for
+  the web UI. It targets `main` and contains only M4's 45 commits.
+- **This branch's python CI was red for much of M4.** `ml` coverage fell to 84% against the 90%
+  floor because `battery`, `frontier` and `seed-variance` had no tests. `bbdc534` adds them
+  (91.95%). They also caught a verdict bug in the variant table, fixed in `e0e52c9`. The
+  committed PB-61 evidence renders byte-identically through the fixed code.
 
 ## The paper
 
@@ -81,7 +83,9 @@ temporal-novel-variant generalisation, and C-4's card-style ablation.
 
 | Item | What |
 |---|---|
-| **Branch/main** | owner decision above — how M2/M3/M4 reach `main`, if at all before M11 |
+| **M4 PR** | paste the drafted PR, then the Principal Review; confirm CI green on its head first |
+| **Default branch** | switch it to `main` (owner setting); unblocks PB-25 |
+| **Devcontainer** | the job failing at `m2-complete`; cause unknown until the log is read |
 | **C-5** | per-month performance, measurable and unmeasured |
 | — | precision at a fixed alert budget: the operational number, not yet reported |
 | **PB-57** | `fs-evidence` captures instead of streaming, so a long run is silent |
@@ -97,6 +101,13 @@ for C-6), and the LaTeX tables.
 
 ## Things that will bite whoever picks this up
 
+- **Read CI on the branch you push to, every time.** This branch's python job was red across
+  much of M4, and every artefact committed in that time said nothing about it. A test suite
+  that is green locally on a subset (`-k`, `--no-cov`, one file) is not the suite CI runs.
+- **Several sessions share this checkout.** Another session switched branches mid-task on
+  2026-09-22, and a test run silently tested the wrong commit. Work in a `git worktree` with its
+  own `UV_PROJECT_ENVIRONMENT`.
+- **Unauthenticated GitHub API: 60 requests an hour.** A per-commit CI scan uses it up quickly.
 - **A null generalisation result is not the end of the question — ask what a genuinely different
   mechanism would show before concluding "this benchmark supports no generalisation claim at
   all."** The two null results (country, timing) never removed the axes the model actually uses;
