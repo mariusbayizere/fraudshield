@@ -43,6 +43,23 @@ measured on 36**, and any figure measured between then and 2026-09-21 was measur
 
 ## Limitations that are known before any training run
 
+### Geographic generalisation is easy here, and says nothing
+
+Measured 2026-09-22 (`docs/benchmarks/m4_battery.md`): removing a country from training
+**entirely** changes that country's AUC by at most 0.002. The generator applies one scenario
+library to every simulated country, so fraud patterns are not country-specific and a country
+hold-out withholds nothing. Leave-one-country-out is reported as a **negative result** rather than
+omitted — a generalisation test that cannot fail is worth saying so about, since a reader would
+otherwise assume it was dropped for being unflattering (PB-59).
+
+The same redundancy defeats feature ablations: four disjoint feature groups each reach 0.845 or
+better **alone**, so removing any one group costs ≤0.031 and an ablation table on this benchmark
+cannot be read as a statement about which features matter in production (PB-60).
+
+**What still carries weight is the novel fraud sub-variant**, which appears only in the test
+period. A temporal hold-out is the one test here that can still fail, because no amount of
+transfer helps a model learn a pattern absent from its training window.
+
 ### The benchmark is velocity-separable, and this governs every metric below
 
 A single feature, `velocity_ratio_1h_vs_30d`, reaches `max(AUC, 1−AUC)` of **0.894 ±0.032** on this

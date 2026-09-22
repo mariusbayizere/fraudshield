@@ -1,4 +1,4 @@
-# evidence-commit: 18aeacf3a923e2506e5245de61b2d9502348bcf4
+# evidence-commit: 8d490cdeb2bd3206f20bbcf07b127062aa5ed182
 # evidence-tree-state: clean
 # command: .venv/bin/python -u -m fraudshield_ml.cli battery dataset/output/features_full.parquet
 # exit: 0
@@ -69,11 +69,11 @@ ABLATIONS, ONE GROUP ONLY — what each group can do by itself.
   temporal alone (6)                 0.861 +/-0.020  -0.130  0.525    60000   551
   geographic alone (5)               0.845 +/-0.020  -0.146  0.401    60000   551
   device_and_channel alone (5)       0.764 +/-0.023  -0.227  0.352    60000   551
-  synthetic_identity alone (1)       0.730 +/-0.024  -0.260  0.047    60000   551
+  synthetic_identity alone (1)       0.730 +/-0.024  -0.260  0.042    60000   551
   amount_behaviour alone (4)         0.660 +/-0.025  -0.331  0.044    60000   551
   account_profile alone (2)          0.561 +/-0.025  -0.430  0.096    60000   551
-  agent alone (2)                    0.551 +/-0.025  -0.440  0.904    60000   551
-  corridor alone (1)                 0.491 +/-0.024  -0.499  0.982    60000   551
+  agent alone (2)                    0.551 +/-0.025  -0.440  0.071    60000   551
+  corridor alone (1)                 0.491 +/-0.024  -0.499  0.000    60000   551
 
 BY COUNTRY — the same model and the same scores, sliced.
                                      AUC           margin  R@1%      rows fraud

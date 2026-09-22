@@ -1023,3 +1023,42 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
   model now reports a recall near zero.
 - **The general shape:** a metric that is correct on good inputs and wrong on bad ones is worse
   than one that is wrong on both, because nothing exercises it until the day it matters.
+
+### PB-59 · Leave-one-country-out measures nothing on this benchmark
+- **Source:** the M4 battery, 2026-09-22 · **Priority:** high · **Due:** before the paper's
+  generalisation section is written
+- **Measured:** removing a country from training entirely changes its AUC by at most 0.002 — KE
+  0.996 → 0.996, RW 0.994 → 0.993, TZ 0.981 → 0.979, UG 0.975 → 0.976.
+- **Why:** the generator applies one scenario library to every country, so fraud patterns are not
+  country-specific and there is nothing for a country hold-out to withhold. The ablation says the
+  same thing one level down: four disjoint feature groups each reach 0.845 or better alone, so
+  removing any one route leaves the others intact.
+- **This refutes half of PB-46.** That decision recorded that "leave-one-country-out and the novel
+  sub-variant carry the weight the headline AUC no longer can". LOCO carries none of it. PB-46
+  also *named the mechanism* — "burstiness is not country-specific, so a velocity threshold
+  transfers trivially" — as a risk, four days before it was measured.
+- **Acceptance:** report LOCO as a **negative result** rather than dropping it — a generalisation
+  test that cannot fail is worth publishing as such, because a reader would otherwise assume it
+  was omitted for being unflattering. State in the paper that geographic generalisation is easy on
+  this benchmark and says nothing. Then make the **novel sub-variant** experiment the load-bearing
+  one, since a temporal hold-out is the only one of the two that can still fail.
+- **Not in scope here:** making the generator's scenarios country-specific. That would change the
+  draw and is an owner decision; it would also be a claim about how fraud differs between these
+  markets, which the 2026-09-18 sourcing pass established no publication supports.
+
+### PB-60 · An ablation on this benchmark cannot say which features matter
+- **Source:** the M4 battery, 2026-09-22 · **Priority:** medium · **Due:** before C-4's ablation
+  is reported
+- **Measured:** removing any one of ten feature groups costs ≤0.031 AUC and eight cost ≤0.001,
+  while four groups each reach ≥0.845 **alone** (counterparty 0.949, velocity 0.871, temporal
+  0.861, geographic 0.845).
+- **Consequence for C-4.** The plan was to replace the unverifiable "Western models achieve
+  0.72–0.78 on East African data" with a measured ablation, "card-style feature set only vs full
+  EAC feature set". On a benchmark where four disjoint groups each reach 0.85 alone, that
+  comparison will show a small difference whatever is true of real systems, and the small
+  difference will mean nothing. Reporting it as evidence for the EAC-specific feature claim would
+  be the D-08 shape again: a control whose scope is narrower than the claim it justifies.
+- **Acceptance:** report the leave-one-out and keep-one-only tables **together**, since either
+  alone is misleading in opposite directions, and state that redundancy is why. Decide what C-4
+  becomes: either withdraw the claim, or replace it with a comparison that redundancy cannot
+  flatten.

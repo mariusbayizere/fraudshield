@@ -2024,3 +2024,58 @@ transaction delays. Those are mostly hours to days, so moving a fraud lead from 
 minutes leaves it well inside the fraud end of the ordering; only the 2.7% beyond a day cross into
 the legitimate mass in a way that changes a rank. The right predictor was the tail weight past a
 day, not the weight past an hour — and it was in the rationale I had just written.
+
+### 2026-09-22 · Leave-one-country-out carries no weight, and the ablation said so first
+
+PB-46's owner decision, four days old, read: "leave-one-country-out and the novel sub-variant
+carry the weight the headline AUC no longer can". The reasoning was sound — once one velocity
+feature reaches 0.894, a headline AUC stops discriminating between a model that learned fraud and
+one that learned a threshold, so the load moves to the generalisation experiments.
+
+Measured, on 60,000 held-out rows with 551 fraud:
+
+| Country | In-sample | Unseen in training |
+|---|---:|---:|
+| KE | 0.996 | 0.996 |
+| RW | 0.994 | 0.993 |
+| TZ | 0.981 | 0.979 |
+| UG | 0.975 | 0.976 |
+
+Removing a country from training **entirely** costs nothing measurable. LOCO is not a demanding
+test on this benchmark, and half of PB-46's plan is refuted.
+
+#### The ablation had already said it
+
+Every one of the ten feature groups can be removed for ≤0.031 AUC, and eight for ≤0.001. Read
+alone that says every group is worthless, which cannot be true of a model at 0.991 — so I added
+the complementary experiment, keeping only one group at a time. **Four disjoint groups each reach
+0.845 or better alone**: counterparty 0.949, velocity 0.871, temporal 0.861, geographic 0.845.
+
+That is the same fact as the LOCO result, one level down. The benchmark can be solved several
+different ways, so removing any one route — a feature group, a country — leaves the others
+intact. A generalisation test works by removing the thing the model relied on; when the model
+relies on four interchangeable things, removing one measures nothing.
+
+#### What I should have predicted and did not
+
+PB-46 *named this mechanism* when it set the plan: "burstiness is not country-specific, so a
+velocity threshold transfers trivially". It was written as a risk to watch. It was in fact a
+prediction, and it was available four days before the measurement — no run required, only the
+observation that the generator draws fraud from one scenario library applied to every country.
+
+So the failure was not the plan; it was reading a mechanism as a caveat. The two are
+distinguishable by one question: **does this sentence say what a measurement would show?** "LOCO
+may transfer trivially" is a hedge. "LOCO will transfer trivially, because the scenarios are not
+country-specific" is a prediction, costs nothing more to write, and would have been recorded and
+tested. The same distinction retired C-11's delay-channel hedge this morning, which is twice in
+one day that a caveat turned out to be a measurable claim nobody had measured.
+
+#### What is left holding the weight
+
+The **novel sub-variant** — a fraud shape present only in the test period. It is a *temporal*
+hold-out, not a geographic one, and no amount of cross-country transfer helps a model learn a
+pattern that does not exist in its training window. That is the experiment M4 still owes, and it
+is now the only one of PB-46's two that is still standing.
+
+The honest summary for the paper: on this benchmark, geographic generalisation is easy and says
+nothing; temporal generalisation to an unseen variant is the test that can fail.
