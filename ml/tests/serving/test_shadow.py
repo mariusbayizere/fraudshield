@@ -83,19 +83,26 @@ def test_every_transaction_is_shadow_scored_and_logged_with_both_scores(
     for i in range(12):
         request, read = kit.request(i), kit.read(burst=i % 3 == 0)
         result = production.score(request, read).result
-        results.append(result)
+        results.append((request, read, result))
         assert shadowing.offer(request, result, read)
     shadowing.drain()
 
     lines = [json.loads(line) for line in log.read_text().splitlines()]
     assert len(lines) == 12
-    for line, result in zip(lines, results, strict=True):
+    differed = 0
+    for line, (request, read, result) in zip(lines, results, strict=True):
         payload = line["value"]["payload"]
         assert line["key"] == result.transaction_id
         assert payload["production_model_version"] == production.model_version
         assert payload["production_ensemble_score"] == result.ensemble_score
         assert payload["shadow_model_version"] == shadow.model_version
+        # The shadow score is the shadow model's own, not a copy of production's: it is what the
+        # comparator and D-11's gate are computed from (review finding 6).
+        expected = shadow.score(request, read).result
+        assert payload["shadow_ensemble_score"] == expected.ensemble_score
+        differed += payload["shadow_ensemble_score"] != payload["production_ensemble_score"]
         assert events.validate_event(topic(), line["value"]) == []
+    assert differed, "two different models scoring the same rows must not agree exactly"
     assert len(shadowing.comparison.production) == 12
     assert shadowing.metrics.scored._value.get() == 12
 
@@ -239,3 +246,77 @@ def test_the_comparison_reports_its_running_metrics() -> None:
     metrics = c.metrics()
     assert metrics["shadow_scored"] == 100
     assert metrics["shadow_mean_abs_score_diff"] > 0.05
+
+
+# ------------------------------------------------------------------ D-11's numbers, at the edge
+
+
+def _windowed(
+    production: list[float], shadow: list[float], labels: list[bool]
+) -> tuple[Comparison, dict[str, bool]]:
+    """A comparison that satisfies every D-11 clause except the ones a test varies."""
+    c = Comparison(started=NOW - timedelta(hours=30), shadow_version="v")
+    marks: dict[str, bool] = {}
+    for i, (p, s, y) in enumerate(zip(production, shadow, labels, strict=True)):
+        c.add(f"t{i}", p, s)
+        marks[f"t{i}"] = y  # full label coverage: the clause under test is the only one failing
+    return c, marks
+
+
+def _ranked(demoted: float) -> tuple[list[float], list[float], list[bool]]:
+    """50,000 rows with 100 frauds. The shadow model demotes `demoted` frauds' worth of ranking,
+    which costs `demoted / 100` of AUC: the gate's bound is 0.010, so 0.6 passes and 1.4 fails."""
+    positives, negatives = 100, 49_900
+    labels = [True] * positives + [False] * negatives
+    production = [0.90 + i / 1e6 for i in range(positives)] + [
+        0.10 + i / 1e6 for i in range(negatives)
+    ]
+    shadow = list(production)
+    whole, part = int(demoted), demoted - int(demoted)
+    for i in range(whole):  # below every negative
+        shadow[i] = 0.01
+    if part:  # one fraud placed so it beats only (1 - part) of the negatives
+        shadow[whole] = 0.10 + (1.0 - part) * negatives / 1e6
+    return production, shadow, labels
+
+
+@pytest.mark.req("ML-GATE-13", "D-11")
+@pytest.mark.parametrize(
+    ("demoted", "promotes"), [(0.6, True), (1.4, False)], ids=["delta -0.006", "delta -0.014"]
+)
+def test_the_auc_delta_bound_is_where_d11_puts_it(demoted: float, promotes: bool) -> None:
+    production, shadow, labels = _ranked(demoted)
+    comparison, marks = _windowed(production, shadow, labels)
+    decision = promotion_gate(comparison, marks, NOW)
+    assert decision.auc_delta is not None
+    assert decision.auc_delta == pytest.approx(-demoted / 100, abs=0.002)
+    assert decision.promote is promotes, decision.reasons
+    if not promotes:
+        assert any("AUC delta" in reason for reason in decision.reasons)
+
+
+@pytest.mark.req("ML-GATE-13", "D-11")
+@pytest.mark.parametrize("shift", [0.088, 0.090], ids=["psi 0.184", "psi 0.205"])
+def test_the_psi_bound_is_where_d11_puts_it(shift: float) -> None:
+    """A monotone shift leaves the ranking, and so the AUC delta, untouched: only PSI moves.
+
+    The scores are spread over [0, 1) rather than the two tight clusters `_ranked` builds, because
+    PSI is a statement about a distribution across equal-mass bins, and any shift empties a
+    degenerate one.
+    """
+    rows = 50_000
+    production = [i / rows for i in range(rows)]
+    labels = [i % 500 == 0 for i in range(rows)]
+    # Affine, not clipped: clipping ties the top rows together and moves the AUC.
+    shadow = [shift + p * (1.0 - shift) for p in production]
+    comparison, marks = _windowed(production, shadow, labels)
+    decision = promotion_gate(comparison, marks, NOW)
+    assert decision.auc_delta == pytest.approx(0.0, abs=1e-9), "the shift is rank-preserving"
+    assert decision.psi is not None
+    # Either side of D-11's 0.2, and close to it: a loosened bound must fail this, not sail past.
+    over = decision.psi >= 0.2
+    assert over is (shift >= 0.089), f"psi {decision.psi:.3f} for shift {shift}"
+    assert decision.psi == pytest.approx(0.2, abs=0.03)
+    assert decision.promote is not over, decision.reasons
+    if over:
+        assert any("PSI" in reason for reason in decision.reasons)

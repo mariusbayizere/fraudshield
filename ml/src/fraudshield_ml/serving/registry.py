@@ -37,6 +37,7 @@ from typing import Any
 from prometheus_client import CollectorRegistry, Counter
 
 from fraudshield_ml.models.bundle import FILES, MANIFEST, Bundle, BundleError
+from fraudshield_ml.serving.shadow import GateDecision
 
 PRODUCTION = "production"
 SHADOW = "shadow"
@@ -57,6 +58,18 @@ class PromotionRefused(RegistryError):  # noqa: N818 - a refusal, named as one
 
 #: FR-02-03: "deployment blocked if ECE > 0.05".
 MAX_ECE = 0.05
+
+
+def _gate_problems(gate: GateDecision | None, override: str | None) -> list[str]:
+    """D-11's shadow gate as a promotion condition: a decision, or a recorded override."""
+    if gate is None and override is None:
+        return [
+            "no shadow-gate decision (D-11): pass the comparator's report, or an override reason "
+            "for a first deployment"
+        ]
+    if gate is not None and not gate.promote:
+        return list(gate.reasons)
+    return []
 
 
 def promotion_problems(manifest: dict[str, Any]) -> list[str]:
@@ -141,15 +154,34 @@ class MlflowRegistry:
         version = reply["model_version"]
         return ModelVersion(name=name, version=str(version["version"]), source=version["source"])
 
-    def promote(self, name: str, alias: str, version: str, cache: Path) -> None:
-        """Move an alias, checking FR-02-03's block before anything becomes production."""
-        if alias == PRODUCTION:
-            bundle = self.fetch_bundle(
-                ModelVersion(name, version, self.source(name, version)), cache
-            )
-            problems = promotion_problems(json.loads((bundle / MANIFEST).read_text()))
-            if problems:
-                raise PromotionRefused("; ".join(problems))
+    def promote(  # noqa: PLR0913 - a promotion's conditions, each named
+        self,
+        name: str,
+        alias: str,
+        version: str,
+        cache: Path,
+        *,
+        gate: GateDecision | None = None,
+        override: str | None = None,
+    ) -> None:
+        """Move an alias. Becoming production means passing FR-02-03's calibration block and
+        D-11's shadow gate, and leaving `previous_production` behind for a one-move rollback.
+
+        `gate` is the decision a shadow comparator produced from `fs.ml.shadow` (M6/M9 deploys it;
+        `shadow.promotion_gate` computes it). `override` is the owner promoting without one, for a
+        first deployment that has no shadow window to show.
+        """
+        if alias != PRODUCTION:
+            self.set_alias(name, alias, version)
+            return
+        bundle = self.fetch_bundle(ModelVersion(name, version, self.source(name, version)), cache)
+        problems = promotion_problems(json.loads((bundle / MANIFEST).read_text()))
+        problems.extend(_gate_problems(gate, override))
+        if problems:
+            raise PromotionRefused("; ".join(problems))
+        outgoing = self.by_alias(name, PRODUCTION)
+        if outgoing is not None and outgoing.version != version:
+            self.set_alias(name, PREVIOUS, outgoing.version)
         self.set_alias(name, alias, version)
 
     def source(self, name: str, version: str) -> str:
@@ -265,15 +297,26 @@ class MlflowRegistry:
 
     # ---------------------------------------------------------------- publishing
 
-    def publish(self, name: str, bundle_dir: Path, *, alias: str | None = None) -> str:
+    def publish(
+        self,
+        name: str,
+        bundle_dir: Path,
+        *,
+        alias: str | None = None,
+        gate: GateDecision | None = None,
+        override: str | None = None,
+    ) -> str:
         """Upload a bundle, register it as a new version, and optionally point an alias at it.
 
         Moving `production` also records the outgoing version as `previous_production`, so a
         rollback is one alias move (D-50).
         """
         manifest = json.loads((bundle_dir / MANIFEST).read_text())
-        if alias == PRODUCTION and (problems := promotion_problems(manifest)):
-            raise PromotionRefused("; ".join(problems))
+        if alias == PRODUCTION:
+            problems = promotion_problems(manifest)
+            problems.extend(_gate_problems(gate, override))
+            if problems:
+                raise PromotionRefused("; ".join(problems))
         prefix = f"bundles/{name}/{manifest['model_version']}"
         for file in (MANIFEST, *FILES):
             self.upload(f"{prefix}/{file}", (bundle_dir / file).read_bytes())

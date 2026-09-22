@@ -237,3 +237,24 @@ def test_micros_round_trip_and_refuse_naive_times() -> None:
     assert from_micros(micros(moment)) == moment
     with pytest.raises(ValueError, match="timezone-aware"):
         micros(datetime(2031, 2, 3))  # noqa: DTZ001 - the naive time is the point
+
+
+@pytest.mark.req("FR-02-09")
+def test_reference_keys_do_not_expire_under_an_active_account(tmp_path: Path) -> None:
+    """They are written once and read on every score, so `observe` must keep them alive: an
+    account transacting daily for 31 days otherwise loses its age, tier and SIM swap (review
+    finding 2)."""
+    s = store(tmp_path, authoritative=True)
+    s.set_opened_at("A", T0 - timedelta(days=200))
+    s.set_kyc_tier("A", 2, T0 - timedelta(days=100))
+    s.record_sim_swap("A", T0 - timedelta(days=3))
+    reference_keys = [f"{s.prefix}a:A:{suffix}" for suffix in ("prof", "tier", "swap")]
+    for key in reference_keys:
+        s.redis.expire(key, 5)  # nearly expired, as after 30 days of writing only transactions
+    s.observe(tx(1, T0))
+    for key in reference_keys:
+        assert s.redis.ttl(key) > 5, f"{key} was not refreshed by observe"
+    context = s.context_for(tx(2, T0 + timedelta(minutes=1)))
+    assert context.HasField("account_age_days")
+    assert context.HasField("kyc_tier")
+    assert context.HasField("days_since_sim_swap")

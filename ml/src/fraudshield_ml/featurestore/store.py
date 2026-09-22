@@ -301,6 +301,12 @@ class FeatureStore:
                 ts,
                 trim=W_AGENT,
             )
+        # Reference keys (profile, tiers, SIM swaps, agent standing) are written once and never
+        # again, so without this they expire under an account that transacts daily (review
+        # finding 2). EXPIRE on a key that does not exist is a no-op.
+        touched += [self._k("a", account, suffix) for suffix in ("prof", "tier", "swap")]
+        if tx.agent_id is not None:
+            touched.append(self._k("g", tx.agent_id, "stand"))
         txn = self._k("t", tx.transaction_id, "where")
         pipe.hset(txn, mapping=where)
         # The label can arrive up to 90 days later and still matter to counterparty reads.

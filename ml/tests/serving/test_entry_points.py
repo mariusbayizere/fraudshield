@@ -181,3 +181,38 @@ def test_the_benchmark_builds_requests_from_a_dataset_replay(
     request, read = requests[-1]
     assert request.transaction.transaction_id == rows[-1].transaction_id
     assert read.context.tx_count_24h == 29, "each context holds every earlier row"
+
+
+@pytest.mark.req("FR-02-05", "D-06")
+def test_the_production_anomaly_profile_is_what_a_worker_serves(packs: Path) -> None:
+    """D-06's 0.7 is the test profile. Serving it routed 31% of the gate model's test period to
+    review (review finding 3), so production (0.995) is the default and the other is explicit."""
+    assert server.WorkerConfig(address="", packs=packs, tls=None).thresholds.anomaly_review == 0.995
+    default = scorer_cli.parse(
+        [
+            "serve",
+            "--bundle",
+            "b",
+            "--packs",
+            str(packs),
+            "--insecure",
+            "--feature-store",
+            "redis://x",
+        ]
+    )
+    assert default.threshold_profile == "production"
+    chosen = scorer_cli.parse(
+        [
+            "serve",
+            "--bundle",
+            "b",
+            "--packs",
+            str(packs),
+            "--insecure",
+            "--feature-store",
+            "redis://x",
+            "--threshold-profile",
+            "test",
+        ]
+    )
+    assert chosen.threshold_profile == "test"

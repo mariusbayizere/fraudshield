@@ -41,7 +41,7 @@ from fraudshield_ml.serving.generated import scoring_pb2 as pb
 from fraudshield_ml.serving.registry import AliasWatcher, MlflowRegistry
 from fraudshield_ml.serving.scorer import ModelHolder, Scorer
 from fraudshield_ml.serving.shadow import JsonLinesSink, MlflowComparisonLog, ShadowRunner
-from fraudshield_ml.serving.thresholds import ThresholdStore
+from fraudshield_ml.serving.thresholds import PRODUCTION, Thresholds, ThresholdStore
 
 SERVICE = "fraudshield.scoring.v1.ScoringService"
 LOG = logging.getLogger(__name__)
@@ -192,6 +192,10 @@ class WorkerConfig:
     feature_store_url: str | None = None
     #: Benchmark only: precomputed contexts on a machine with no Redis (`serving.contexts`).
     static_contexts: Path | None = None
+    #: D-06's profile until the admin API writes the Redis hash. Production (anomaly review at the
+    #: 0.995 percentile) is the default; the 0.7 test profile routed 31% of the gate model's test
+    #: period to review (review finding 3).
+    thresholds: Thresholds = PRODUCTION
     shadow_log: Path | None = None
     #: Each worker writes `<pid>.json` here on every swap, for the admin port (`serving.admin`).
     status_dir: Path | None = None
@@ -221,7 +225,7 @@ class Worker:
 def start_worker(config: WorkerConfig) -> Worker:
     """Load, bind and start serving; separate from `run_worker` so it can be tested in process."""
     reference = Reference.from_packs(config.packs)
-    thresholds = ThresholdStore(_redis(config.redis_url))
+    thresholds = ThresholdStore(_redis(config.redis_url), default=config.thresholds)
     holder = ModelHolder()
     registry = MlflowRegistry(config.mlflow_url) if config.mlflow_url is not None else None
     comparison_log = (
@@ -240,7 +244,9 @@ def start_worker(config: WorkerConfig) -> Worker:
     writer = None
     contexts: ContextSource | None = None
     if config.feature_store_url is not None:
-        store = FeatureStore(_redis(config.feature_store_url, timeout=1.0), reference)
+        # The store read is on the 40 ms hot path: fail fast to the API's breaker (C.4) rather
+        # than holding a worker thread for a second (review, residual risks).
+        store = FeatureStore(_redis(config.feature_store_url, timeout=0.1), reference)
         writer = StoreWriter(store)
         contexts = store
     elif config.static_contexts is not None:
@@ -259,12 +265,17 @@ def start_worker(config: WorkerConfig) -> Worker:
             write_status(config.status_dir, holder)
 
     def production(bundle: Bundle) -> None:
-        holder.swap_production(Scorer(bundle, reference, thresholds))
+        scorer = Scorer(bundle, reference, thresholds)
+        _warm(scorer)
+        holder.swap_production(scorer)
         set_health(health_servicer, True)
         publish()
 
     def shadow_model(bundle: Bundle | None) -> None:
-        holder.swap_shadow(Scorer(bundle, reference, thresholds) if bundle else None)
+        scorer = Scorer(bundle, reference, thresholds) if bundle else None
+        if scorer is not None:
+            _warm(scorer)
+        holder.swap_shadow(scorer)
         publish()
 
     set_health(health_servicer, False)
@@ -299,6 +310,16 @@ def run_worker(config: WorkerConfig) -> None:
     while not stop.wait(0.5):
         pass
     worker.stop()
+
+
+def _warm(scorer: Scorer) -> None:
+    """Build the ONNX sessions before the swap publishes the model.
+
+    `Bundle._sessions` is a cached property built on the first `raw()`, so without this the first
+    request after a hot swap pays for it, and concurrent first requests may each build one
+    (review, residual risks).
+    """
+    scorer.bundle.raw([0.0] * len(scorer.bundle.features))
 
 
 def write_status(directory: Path, holder: ModelHolder) -> None:

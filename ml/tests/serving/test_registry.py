@@ -27,6 +27,7 @@ from prometheus_client import CollectorRegistry
 
 from fraudshield_ml.models import cli as model_cli
 from fraudshield_ml.models.bundle import Bundle
+from fraudshield_ml.models.cli import _gate as read_gate
 from fraudshield_ml.serving.registry import (
     PREVIOUS,
     PRODUCTION,
@@ -41,9 +42,11 @@ from fraudshield_ml.serving.registry import (
     wait_until,
 )
 from fraudshield_ml.serving.scorer import ModelHolder, Scorer
-from fraudshield_ml.serving.shadow import Comparison, MlflowComparisonLog
+from fraudshield_ml.serving.shadow import Comparison, GateDecision, MlflowComparisonLog
 
 NAME = "fraudshield-ensemble"
+#: No shadow window exists for a first deployment; D-11's gate needs one.
+FIRST = "first deployment: no shadow window yet"
 
 
 class FakeMlflow:
@@ -177,7 +180,7 @@ def test_publish_then_serve_then_promote_and_roll_back_by_alias(
     fake, url = mlflow
     registry = MlflowRegistry(url)
     a, b = (Bundle.load(d) for d in bundle_dirs)
-    assert registry.publish(NAME, bundle_dirs[0], alias=PRODUCTION) == "1"
+    assert registry.publish(NAME, bundle_dirs[0], alias=PRODUCTION, override=FIRST) == "1"
     holder = ModelHolder()
     w = watcher(url, holder, kit, tmp_path)
     assert w.poll_once() == {PRODUCTION: "1", SHADOW: None}
@@ -189,7 +192,9 @@ def test_publish_then_serve_then_promote_and_roll_back_by_alias(
     assert holder.shadow is not None
     assert holder.shadow.model_version == b.model_version
 
-    registry.publish(NAME, bundle_dirs[1], alias=PRODUCTION)  # v3, same bundle as v2
+    registry.publish(
+        NAME, bundle_dirs[1], alias=PRODUCTION, override=FIRST
+    )  # v3, same bundle as v2
     assert fake.models[NAME]["aliases"][PREVIOUS] == "1", "rollback is one alias move"
     w.poll_once()
     assert holder.production.model_version == b.model_version
@@ -209,7 +214,7 @@ def test_a_bundle_that_fails_verification_is_not_swapped_in(
 ) -> None:
     fake, url = mlflow
     registry = MlflowRegistry(url)
-    registry.publish(NAME, bundle_dirs[0], alias=PRODUCTION)
+    registry.publish(NAME, bundle_dirs[0], alias=PRODUCTION, override=FIRST)
     holder = ModelHolder()
     w = watcher(url, holder, kit, tmp_path)
     w.poll_once()
@@ -248,7 +253,7 @@ def test_removing_the_shadow_alias_turns_shadow_mode_off(
 ) -> None:
     fake, url = mlflow
     registry = MlflowRegistry(url)
-    registry.publish(NAME, bundle_dirs[0], alias=PRODUCTION)
+    registry.publish(NAME, bundle_dirs[0], alias=PRODUCTION, override=FIRST)
     registry.publish(NAME, bundle_dirs[1], alias=SHADOW)
     holder = ModelHolder()
     w = watcher(url, holder, kit, tmp_path)
@@ -270,13 +275,13 @@ def test_the_background_watcher_sees_an_alias_move_within_its_poll_interval(
 ) -> None:
     _, url = mlflow
     registry = MlflowRegistry(url)
-    registry.publish(NAME, bundle_dirs[0], alias=PRODUCTION)
+    registry.publish(NAME, bundle_dirs[0], alias=PRODUCTION, override=FIRST)
     holder = ModelHolder()
     w = watcher(url, holder, kit, tmp_path, poll=0.2)
     w.start()
     try:
         assert wait_until(lambda: holder.production is not None, 10)
-        registry.publish(NAME, bundle_dirs[1], alias=PRODUCTION)
+        registry.publish(NAME, bundle_dirs[1], alias=PRODUCTION, override=FIRST)
         target = Bundle.load(bundle_dirs[1]).model_version
         assert wait_until(
             lambda: holder.production is not None and holder.production.model_version == target,
@@ -342,7 +347,17 @@ def test_fs_model_publishes_and_moves_aliases(
     fake, url = mlflow
     assert (
         model_cli.main(
-            ["publish", "--bundle", str(bundle_dirs[0]), "--mlflow", url, "--alias", PRODUCTION]
+            [
+                "publish",
+                "--bundle",
+                str(bundle_dirs[0]),
+                "--mlflow",
+                url,
+                "--alias",
+                PRODUCTION,
+                "--override",
+                FIRST,
+            ]
         )
         == 0
     )
@@ -390,12 +405,12 @@ def test_publish_and_hot_swap_against_the_mlflow_the_deployment_runs(
     try:
         assert wait_until(lambda: _healthy(url), 180), "MLflow did not become healthy"
         registry = MlflowRegistry(url)
-        assert registry.publish(NAME, bundle_dirs[0], alias=PRODUCTION) == "1"
+        assert registry.publish(NAME, bundle_dirs[0], alias=PRODUCTION, override=FIRST) == "1"
         holder = ModelHolder()
         w = watcher(url, holder, kit, tmp_path)
         w.poll_once()
         assert holder.production is not None
-        registry.publish(NAME, bundle_dirs[1], alias=PRODUCTION)
+        registry.publish(NAME, bundle_dirs[1], alias=PRODUCTION, override=FIRST)
         w.poll_once()
         assert holder.production.model_version == Bundle.load(bundle_dirs[1]).model_version
         run = registry.start_run(registry.experiment("fs-shadow-it"), "it", {"k": "v"})
@@ -422,7 +437,7 @@ def test_a_second_worker_downloading_the_same_version_uses_the_first_copy(
     target now exists, and it must use that copy rather than report a failed swap."""
     _, url = mlflow
     registry = MlflowRegistry(url)
-    registry.publish(NAME, bundle_dirs[0], alias=PRODUCTION)
+    registry.publish(NAME, bundle_dirs[0], alias=PRODUCTION, override=FIRST)
     version = registry.by_alias(NAME, PRODUCTION)
     assert version is not None
     real_rename = Path.rename
@@ -459,11 +474,11 @@ def test_a_bundle_over_the_ece_limit_cannot_become_production(
     registry = MlflowRegistry(url)
     bad = _badly_calibrated(bundle_dirs[1], tmp_path)
     with pytest.raises(PromotionRefused, match=r"ECE 0\.0800 exceeds 0\.05"):
-        registry.publish(NAME, bad, alias=PRODUCTION)
-    registry.publish(NAME, bundle_dirs[0], alias=PRODUCTION)  # v1, well calibrated
+        registry.publish(NAME, bad, alias=PRODUCTION, override=FIRST)
+    registry.publish(NAME, bundle_dirs[0], alias=PRODUCTION, override=FIRST)  # v1, well calibrated
     registry.publish(NAME, bad, alias=SHADOW)  # v2: shadowing a model is not deploying it
     with pytest.raises(PromotionRefused):
-        registry.promote(NAME, PRODUCTION, "2", tmp_path / "cache")
+        registry.promote(NAME, PRODUCTION, "2", tmp_path / "cache", override=FIRST)
     assert fake.models[NAME]["aliases"][PRODUCTION] == "1"
 
     # Defence in depth: a production alias moved around these checks is still not served.
@@ -480,3 +495,79 @@ def test_a_bundle_over_the_ece_limit_cannot_become_production(
 def test_a_bundle_without_a_measured_ece_is_refused_too() -> None:
     assert promotion_problems({"provenance": {"held_out": {}}})
     assert promotion_problems({"provenance": {"held_out": {"ece_equal_width_10": 0.01}}}) == []
+
+
+def _gate_report(path: Path, **overrides: object) -> Path:
+    """A shadow comparator's decision, in the shape `fs-model --gate` reads."""
+    report = {
+        "promote": True,
+        "reasons": [],
+        "scored": 60_000,
+        "label_coverage": 0.42,
+        "auc_delta": 0.002,
+        "psi": 0.05,
+    }
+    path.write_text(json.dumps(report | overrides))
+    return path
+
+
+@pytest.mark.req("ML-GATE-13", "D-11")
+def test_production_promotion_needs_the_shadow_gate(
+    mlflow: tuple[FakeMlflow, str], bundle_dirs: tuple[Path, Path], tmp_path: Path
+) -> None:
+    fake, url = mlflow
+    registry = MlflowRegistry(url)
+    registry.publish(NAME, bundle_dirs[0], alias=PRODUCTION, override=FIRST)
+    registry.publish(NAME, bundle_dirs[1], alias=SHADOW)
+
+    with pytest.raises(PromotionRefused, match="no shadow-gate decision"):
+        registry.promote(NAME, PRODUCTION, "2", tmp_path / "c")
+    failed = _gate_report(
+        tmp_path / "failed.json",
+        promote=False,
+        reasons=["Insufficient labels: coverage 11.0% is under 30%"],
+    )
+    with pytest.raises(PromotionRefused, match="Insufficient labels"):
+        registry.promote(NAME, PRODUCTION, "2", tmp_path / "c", gate=_gate(failed))
+    assert fake.models[NAME]["aliases"][PRODUCTION] == "1", "neither refusal moved the alias"
+
+    registry.promote(
+        NAME, PRODUCTION, "2", tmp_path / "c", gate=_gate(_gate_report(tmp_path / "ok.json"))
+    )
+    assert fake.models[NAME]["aliases"][PRODUCTION] == "2"
+    assert fake.models[NAME]["aliases"][PREVIOUS] == "1", "rollback is one alias move (D-50)"
+
+
+@pytest.mark.req("D-50", "ML-GATE-13")
+def test_fs_model_alias_reads_the_gate_report(
+    mlflow: tuple[FakeMlflow, str], bundle_dirs: tuple[Path, Path], tmp_path: Path
+) -> None:
+    fake, url = mlflow
+    registry = MlflowRegistry(url)
+    registry.publish(NAME, bundle_dirs[0], alias=PRODUCTION, override=FIRST)
+    registry.publish(NAME, bundle_dirs[1])
+    assert model_cli.main(["alias", "--mlflow", url, PRODUCTION, "2"]) == 1
+    report = _gate_report(tmp_path / "gate.json")
+    assert (
+        model_cli.main(
+            [
+                "alias",
+                "--mlflow",
+                url,
+                PRODUCTION,
+                "2",
+                "--gate",
+                str(report),
+                "--cache",
+                str(tmp_path / "c"),
+            ]
+        )
+        == 0
+    )
+    assert fake.models[NAME]["aliases"][PRODUCTION] == "2"
+
+
+def _gate(path: Path) -> GateDecision:
+    decision = read_gate(path)
+    assert decision is not None
+    return decision

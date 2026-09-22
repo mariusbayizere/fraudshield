@@ -42,6 +42,13 @@ def parse(argv: Sequence[str] | None) -> argparse.Namespace:
     tls.add_argument("--tls-cert", type=Path)
     tls.add_argument("--tls-key", type=Path)
     tls.add_argument("--tls-client-ca", type=Path)
+    serve.add_argument(
+        "--threshold-profile",
+        choices=["production", "test"],
+        default="production",
+        help="D-06's anomaly review threshold until the admin API writes it: production is the "
+        "0.995 percentile, test is 0.7",
+    )
     serve.add_argument("--insecure", action="store_true", help="plaintext; development only")
     args = parser.parse_args(argv)
     if not (args.feature_store or args.static_contexts):
@@ -62,6 +69,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     from prometheus_client import CollectorRegistry, multiprocess  # noqa: PLC0415
 
     from fraudshield_ml.serving import admin, server  # noqa: PLC0415
+    from fraudshield_ml.serving.thresholds import DEFAULT, PRODUCTION  # noqa: PLC0415
 
     status_dir = metrics_dir / "status"
     tls = None if args.insecure else server.Tls(args.tls_cert, args.tls_key, args.tls_client_ca)
@@ -79,6 +87,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         shadow_log=args.shadow_log,
         status_dir=status_dir,
         threads=args.threads,
+        thresholds=PRODUCTION if args.threshold_profile == "production" else DEFAULT,
     )
     processes = server.serve(config, args.workers)
     registry = CollectorRegistry()

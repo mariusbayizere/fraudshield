@@ -101,7 +101,77 @@ def corpus(rows: int = 260, seed: int = 20260922) -> tuple[list[Transaction], di
                 is_fraud=rng.random() < 0.4,
                 available_at=when + timedelta(seconds=rng.choice([60, 3_600, 200_000])),
             )
+    out.extend(_window_edges(len(out)))
+    out.sort(key=lambda tx: (tx.timestamp, tx.transaction_id))
     return out, outcomes
+
+
+#: Every trailing window the store reads, as a span before a scored transaction.
+EDGE_SPANS = (
+    timedelta(seconds=60),
+    timedelta(hours=1),
+    timedelta(hours=24),
+    timedelta(days=7),
+    timedelta(days=30),
+    timedelta(days=90),
+)
+
+
+def _window_edges(start_index: int) -> list[Transaction]:
+    """One account whose history lands exactly on each window edge, and a microsecond either side.
+
+    The batch path takes `start < row.timestamp < scored` and the store takes `s > t - span`: an
+    inclusive/exclusive flip at either end changes a count only when a row sits exactly on the
+    edge, which a random gap set never produces (review finding 7).
+    """
+    anchor = START + timedelta(days=200)
+    account, rows = "A7", []
+    for i, span in enumerate(EDGE_SPANS):
+        for j, at in enumerate(
+            (
+                anchor - span,
+                anchor - span + timedelta(microseconds=1),
+                anchor - span - timedelta(microseconds=1),
+            )
+        ):
+            rows.append(
+                Transaction(
+                    transaction_id=f"edge{i}{j}",
+                    account_id=account,
+                    timestamp=at,
+                    amount_rwf=1_000.0 * (i + 1),
+                    latitude=-1.95,
+                    longitude=30.06,
+                    account_country="RW",
+                    counterparty_country="RW",
+                    counterparty_id=f"C{i % 6}",
+                    amount_minor=1_000 * (i + 1),
+                    currency="RWF",
+                    channel="MOBILE_MONEY",
+                    device_fingerprint="D0",
+                    merchant_category_code="5411",
+                )
+            )
+    # The scored transaction the spans are measured against.
+    rows.append(
+        Transaction(
+            transaction_id="edgescored",
+            account_id=account,
+            timestamp=anchor,
+            amount_rwf=5_000.0,
+            latitude=-1.95,
+            longitude=30.06,
+            account_country="RW",
+            counterparty_country="RW",
+            counterparty_id="C0",
+            amount_minor=5_000,
+            currency="RWF",
+            channel="MOBILE_MONEY",
+            device_fingerprint="D0",
+            merchant_category_code="5411",
+        )
+    )
+    return rows
 
 
 def reference_data() -> dict[str, object]:
