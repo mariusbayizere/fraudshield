@@ -7,6 +7,7 @@ import io.github.mariusbayizere.fraudshield.decision.application.event.DecisionE
 import io.github.mariusbayizere.fraudshield.decision.application.port.DecisionMetrics;
 import io.github.mariusbayizere.fraudshield.decision.application.port.EventRecorder;
 import io.github.mariusbayizere.fraudshield.decision.application.port.FxRatePort;
+import io.github.mariusbayizere.fraudshield.decision.application.port.RecorderOutcomeUnknownException;
 import io.github.mariusbayizere.fraudshield.decision.domain.Transaction;
 import io.github.mariusbayizere.fraudshield.ingest.auth.ApiPrincipal;
 import io.github.mariusbayizere.fraudshield.ingest.idempotency.IdempotencyStore;
@@ -210,7 +211,8 @@ public final class IngestService {
           LockSupport.parkNanos(Duration.ofMillis(2).toNanos());
         }
         case IdempotencyStore.Claimed claimed -> {
-          return decide(institution, request, rate.get(), fingerprint, received, receivedNanos);
+          return decide(
+              institution, request, rate.get(), fingerprint, claimed, received, receivedNanos);
         }
       }
     }
@@ -221,8 +223,10 @@ public final class IngestService {
       IngestRequest r,
       BigDecimal rate,
       byte[] fingerprint,
+      IdempotencyStore.Claimed claim,
       Instant received,
       long receivedNanos) {
+    IngestDecision decision;
     try {
       Transaction transaction =
           new Transaction(
@@ -241,16 +245,24 @@ public final class IngestService {
               r.counterpartyCountry(),
               r.transactionTimestamp(),
               received);
-      IngestDecision decision = decisions.decide(transaction, fingerprint, receivedNanos);
-      byte[] body = DecisionResponses.render(decision);
-      long mark = System.nanoTime();
-      idempotency.complete(institution, r.transactionId(), body);
-      metrics.stage("idempotency_complete", System.nanoTime() - mark);
-      return new Decided(body, false);
-    } catch (RuntimeException failed) {
-      idempotency.release(institution, r.transactionId());
-      return new Unavailable(failed.getClass().getSimpleName());
+      decision = decisions.decide(transaction, fingerprint, receivedNanos);
+    } catch (RecorderOutcomeUnknownException unknown) {
+      // The decision may still become durable: a retry must consult it, never decide afresh.
+      idempotency.uncertain(institution, r.transactionId(), claim);
+      return new Unavailable(unknown.getClass().getSimpleName());
+    } catch (RuntimeException notRecorded) {
+      // DecisionService records nothing unless it returns (or throws the exception above).
+      idempotency.release(institution, r.transactionId(), claim);
+      return new Unavailable(notRecorded.getClass().getSimpleName());
     }
+    // The decision is durable and stands. Completing never fails the request: without Redis the
+    // store falls back and later verifies new claims against PostgreSQL (ADR 0067).
+    long mark = System.nanoTime();
+    byte[] standing =
+        idempotency.complete(
+            institution, r.transactionId(), claim, fingerprint, DecisionResponses.render(decision));
+    metrics.stage("idempotency_complete", System.nanoTime() - mark);
+    return new Decided(standing, false);
   }
 
   /**

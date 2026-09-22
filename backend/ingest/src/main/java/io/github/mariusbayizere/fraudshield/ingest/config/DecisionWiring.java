@@ -48,6 +48,7 @@ import io.lettuce.core.ClientOptions;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.TimeoutOptions;
 import io.lettuce.core.api.StatefulRedisConnection;
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.io.IOException;
@@ -292,11 +293,20 @@ public class DecisionWiring {
       StatefulRedisConnection<String, String> redis,
       DataSource dataSource,
       DegradedMode mode,
-      FraudShieldProperties properties) {
+      FraudShieldProperties properties,
+      Clock clock,
+      MeterRegistry registry) {
+    var unverified =
+        Counter.builder("fs_idempotency_unverified_claims_total")
+            .description("Claims decided without the PostgreSQL verification ADR 0067 asks for")
+            .register(registry);
     return new ResilientIdempotency(
-        new RedisIdempotency(redis, properties.idempotencyLease(), properties.redisTimeout()),
+        new RedisIdempotency(
+            redis, properties.idempotencyLease(), properties.redisTimeout(), clock),
         new JdbcIdempotency(dataSource),
-        mode);
+        mode,
+        clock,
+        unverified::increment);
   }
 
   @Bean

@@ -71,11 +71,13 @@ public final class JdbcIdempotency implements IdempotencyStore {
         tenant.execute();
       }
       try (PreparedStatement s = c.prepareStatement(LOOKUP)) {
+        // On the hot path while Redis is down or verifying: bounded well inside the claim lease.
+        s.setQueryTimeout(1);
         s.setObject(1, transactionId);
         try (ResultSet row = s.executeQuery()) {
           Claim claim =
               !row.next()
-                  ? new Claimed()
+                  ? Claimed.plain()
                   : !Arrays.equals(row.getBytes(1), fingerprint)
                       ? new Conflict()
                       : row.getString(2) == null || row.getObject(5) == null
@@ -105,12 +107,19 @@ public final class JdbcIdempotency implements IdempotencyStore {
   }
 
   @Override
-  public void complete(UUID institutionId, UUID transactionId, byte[] response) {
-    // The decision is persisted by the spool writer; nothing else to store.
+  public byte[] complete(
+      UUID institutionId, UUID transactionId, Claimed claim, byte[] fingerprint, byte[] response) {
+    // The decision is persisted by the spool writer, which keeps the first one (ADR 0067).
+    return response.clone();
   }
 
   @Override
-  public void release(UUID institutionId, UUID transactionId) {
+  public void release(UUID institutionId, UUID transactionId, Claimed claim) {
     // Nothing was written by the claim.
+  }
+
+  @Override
+  public void uncertain(UUID institutionId, UUID transactionId, Claimed claim) {
+    // Nothing was written by the claim; the durable record is what a retry consults.
   }
 }

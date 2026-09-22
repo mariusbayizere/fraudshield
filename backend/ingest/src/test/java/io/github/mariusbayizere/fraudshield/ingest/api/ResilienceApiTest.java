@@ -113,9 +113,11 @@ class ResilienceApiTest {
   void withRedisDownDecisionsContinueAndDuplicatesReplayFromPostgres() throws Exception {
     UUID id = UUID.randomUUID();
     ObjectNode body = IngestApiTest.body(id, "CARD");
+    final String original = body.toString();
+    HttpResponse<String> first;
     ApiHarness.REDIS.pause();
     try {
-      HttpResponse<String> first = post("/api/v1/transactions/ingest", body.toString());
+      first = post("/api/v1/transactions/ingest", body.toString());
       assertThat(first.statusCode()).isEqualTo(200);
       assertThat(degraded.degraded()).isTrue();
       await()
@@ -152,6 +154,15 @@ class ResilienceApiTest {
                 .statusCode())
         .isEqualTo(200);
     assertThat(degraded.degraded()).isFalse();
+
+    // Review finding 2: Redis never saw the outage's decision. Resubmitting it after recovery must
+    // replay the decision PostgreSQL kept, not score and decide it a second time.
+    int scored = ApiHarness.SCORER.calls.get();
+    HttpResponse<String> afterRecovery = post("/api/v1/transactions/ingest", original);
+    assertThat(afterRecovery.statusCode()).isEqualTo(200);
+    assertThat(afterRecovery.headers().firstValue("Idempotent-Replayed")).contains("true");
+    assertThat(JSON.readTree(afterRecovery.body())).isEqualTo(JSON.readTree(first.body()));
+    assertThat(ApiHarness.SCORER.calls.get()).isEqualTo(scored);
   }
 
   @Test
