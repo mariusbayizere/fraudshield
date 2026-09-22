@@ -43,6 +43,17 @@ jobs:
             sleep $((attempt * 20))
           done
           exit 1
+      # Trivy resolves Maven parent POMs one request at a time and Maven Central answers 429 to
+      # that pattern; resolving through Maven first (cached by setup-java) gives Trivy a local
+      # ~/.m2 to read instead.
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "21.0.12"
+          cache: maven
+      - name: Resolve Maven dependencies into ~/.m2
+        working-directory: backend
+        run: ./mvnw -B -ntp -q dependency:go-offline
       - name: Scan lockfiles (uv.lock, pnpm-lock.yaml, Maven poms)
         run: |
           infrastructure/bin/trivy fs --skip-db-update --no-progress --scanners vuln --format json \
