@@ -213,39 +213,25 @@ application.
 - **The surviving mutation was resolved.** A stale-read path existed. It is now tested, and
   finding it also fixed a defect (`8f6bdba`). See the review addendum.
 
-## Merge state — resume from here (written 2026-09-22 at `85aff03`)
+## Merge state — resume from here (rewritten 2026-09-22 at `91ee255`)
 
-**Status:** M7 is approved by the owner, including the hybrid persistence change. It is **not
-merged and not tagged**, by instruction. M7 cannot merge until M6's application exists.
+**Status:** M7 is approved by the owner, including the hybrid persistence change, the analytic
+staleness bounds and the V70 renumbering. It is **not merged and not tagged**, by instruction. M7
+cannot merge until M6's application exists.
 
-**Branch:** `origin/m7/staff-auth`, head `85aff03` (followed only by the docs commit that adds this
-section). It was cut from `main` at `f8885d6`. Every commit is pushed, and the working tree is
-clean.
+**Branch:** `origin/m7/staff-auth`. The last code-and-docs commit is `91ee255`; only the evidence
+commit that rewrites this section follows it. The branch was cut from `main` at `f8885d6`. Every
+commit is pushed and the working tree is clean.
 
-**Last verified state:** `85aff03`, `-pl common,persistence,audit,auth,admin verify`, 1,403 tests
-with 0 failures, all gates met (`docs/benchmarks/m7_evidence_85aff03.md`). The re-run needs:
-- PostgreSQL with TimescaleDB 2.30 and Redis;
-- `FRAUDSHIELD_TEST_POSTGRES_URL` and `FRAUDSHIELD_TEST_REDIS_URL`;
-- or Testcontainers in CI.
+**Last verified state:** `91ee255`, `-pl common,persistence,audit,auth,admin clean install`, 1,406
+tests with 0 failures, all gates met (`docs/benchmarks/m7_evidence_91ee255.md`). **Build with
+`clean`:** a build tree from before the V12 → V70 rename still holds a stale `V12` in
+`persistence/target/classes`, and the persistence tests then fail with "column version already
+exists".
 
-**Blocking the merge (owner decision needed): Flyway ordering.**
-- `origin/m6/decision` adds `V60`–`V63`. `fs-migration-guard` refuses any new migration that
-  sorts at or below the highest merged version (PB-24), because Flyway would skip it on a
-  database already at that version.
-- **If M6 merges first, as now planned, M7's `V12` will fail the guard.** Options:
-  1. **Renumber V12 above M6's highest version before merging** (recommended). For example,
-     `V70__staff_identity_and_audit_anchoring.sql`, pairing with M7's ADR block `0070`–`0079`, or
-     the next free version above whatever M6 merged. This is safe because V12 was never on `main`.
-     - No test depends on the number.
-     - Update about 25 textual references to "V12" in `backend/audit`, `backend/auth`, `docs/adr/0070`,
-       `docs/adr/0071`, the M7 review and evidence files, and this file (`git grep -n V12`).
-     - Run the full verify again.
-     - Check that nothing in M6's V60–V63 depends on V12's objects: `users.version`,
-       `users.employee_id`, `api_keys` columns, `audit_anchors`, the SECURITY DEFINER lookups.
-       Nothing is expected to, since M6 was written against `main`.
-  2. Merge M7 before M6. That contradicts the current plan.
-- The M6 reservation note above ("M6 must use `V13` or above") still holds; the problem is only
-  merge order, not a number clash.
+**The Flyway ordering blocker is resolved.** M7's migration is `V70`, in M7's range `V70`–`V79`,
+above M6's `V60`–`V69`, so either merge order passes `fs-migration-guard`. Nothing in M6's
+`V60`–`V63` references M7's objects. Recheck with `git grep` at merge if M6 has added more.
 
 **At merge (checklist):**
 1. Merge `origin/main` into `m7/staff-auth`, or rebase it, after M6 has merged. Expect conflicts
@@ -253,26 +239,35 @@ with 0 failures, all gates met (`docs/benchmarks/m7_evidence_85aff03.md`). The r
    - `docs/traceability/requirements_matrix.md`: regenerate it with
      `uv run fs-traceability render`;
    - `uv.lock`, if touched: regenerate it;
-   - `tools/src/fraudshield_tools/licences.py` `EXCEPTIONS`: keep both sides' entries.
-2. Resolve the Flyway ordering, as described above.
+   - `tools/src/fraudshield_tools/licences.py` `EXCEPTIONS`: keep both sides' entries;
+   - `docs/research/lab_notebook.md`: append-only, so keep both sides' entries (M7 added one, at
+     the owner's instruction);
+   - `backend/pom.xml` `<modules>`: keep both sides.
+2. Run `uv run fs-migration-guard --against origin/main`. It must report 0 changed; V70 is above
+   every merged version.
 3. Check that M6 followed the persistence rule of this file: JPA for configuration tables;
    explicit SQL or batched `COPY` for the hot path and hypertables; entities registered with
    `@AutoConfigurationPackage`, not `@EnableJpaRepositories`.
-   - If M6 defines its own `PlatformTransactionManager` or `DataSource` transaction manager, it
-     must remain a `JpaTransactionManager`. Otherwise `TenantTransactions`' `set_config` and the
-     Hibernate statements would no longer share a connection.
+   - If M6 defines its own transaction manager, it must remain a `JpaTransactionManager`.
+     Otherwise `TenantTransactions`' `set_config` and Hibernate stop sharing a connection.
    - `HybridPersistenceTest` and `QueryCountTest` detect this.
-4. Run the full `verify` over every backend module on the merged tree, and the governance targets:
-   `make governance` (traceability, defect register, `fs-migration-guard --against origin/main`)
+4. Run `./mvnw clean verify` over every backend module on the merged tree, then `make governance`
    and `make licences`.
-5. Fold the sections of this file into `requirements.yaml`, `docs/backlog/`, `lab_notebook.md`
-   and `SESSION_STATE.md`. That includes the traceability table, the contract-gap proposals, the
-   owner items, the M6 persistence rule and the residual risks of ADR 0070.
-6. Re-measure the M7 timing gates on CI. At `85aff03`, the worst-case token-version invalidation
-   was 4,620 ms on a heavily loaded laptop, against a 5 s gate.
+5. Fold the sections of this file into `requirements.yaml`, `docs/backlog/`, `lab_notebook.md` and
+   `SESSION_STATE.md`. That includes:
+   - the traceability table;
+   - the contract-gap proposals;
+   - the owner items;
+   - the M6 persistence rule;
+   - the **migration ranges**;
+   - the residual risks of ADR 0070.
+6. Re-measure the M7 timing gates on CI. The bounds are analytic and asserted in fake time
+   (ADR 0071 §6), so CI's figures are confirmation, not the basis of the gate.
 7. Tag only on the owner's instruction, after CI is green on the exact merge commit.
 
 **Open items that do not block the merge:**
 - The contract-gap proposals (above), which need a contract change.
 - The residual risks in ADR 0070 and threat model R-5 to R-8.
 - The three pre-existing Python licence flags.
+- σ, the inter-instance clock skew in the session bound, assumes NTP-synchronised hosts. That
+  belongs in the deployment runbook (M9).

@@ -1,0 +1,1 @@
+{"runs": 20, "gate_ms": 5000, "with_pubsub_ms": {"p50": 3, "max": 10}, "announcement_and_redis_write_lost_ms": {"p50": 1966, "max": 2203}, "redis_ttl_ms": 2000, "local_ttl_ms": 1000}
