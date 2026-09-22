@@ -10,7 +10,8 @@ groups:
       # D-10 (5): share of MEDIUM holds released by the review deadline rather than decided by an
       # analyst, per channel, above which FraudShieldTimeoutReleaseRateHigh fires. A timeout
       # release approves a transaction the model rated risky without anyone looking at it.
-      # 0.10 is a starting level, not a derived one: replace it with the value from
-      # docs/ml/capacity_model.md (alert budget vs analysts on shift) once that exists.
+      # ASSUMED (owner decision 2026-09-22): 0.10 is a placeholder, not derived. It is replaced by
+      # the value from docs/ml/capacity_model.md (alert budget vs analysts on shift) once that
+      # exists; the alert's level_basis annotation and the runbook say the same.
       - record: fraudshield:config:timeout_release_ratio_max
         expr: vector(0.10)
