@@ -1,0 +1,112 @@
+\section{Discussion}
+\label{sec:discussion}
+
+The project kept a lab notebook (\texttt{docs/research/lab\_notebook.md}) in which every defect,
+correction and prediction was written down when it happened and never edited afterwards; later
+corrections are new entries. This section is built from it. Its value is not that the benchmark
+is good, but that the ways a careful process still went wrong are recorded, and several recur.
+
+\subsection{Recurring failure patterns}
+
+\paragraph{A control measured on the inputs is not a control on the system.} The most frequent
+pattern, recorded under several names (``a guard with two doors'', ``a fix that keeps the old
+behaviour as a floor''). A parameter digest guarded the generator's inputs while the claim lived
+in its output: the draw could change with every parameter identical, which is why datasets are now
+identified by a fingerprint over their rows. A statistical band kept a fixed floor that, at release
+scale, was several times wider than the band it was meant to bound, so the check could not fail.
+Out-of-fold encoding removed each row's own label but left the other rows of the same fraud
+incident in the estimate, inflating every single-feature AUC by about \nSiblingLeak{} until folds
+were grouped by account; later, account grouping turned out not to protect features whose unit of
+history is a counterparty or a map cell. The D-08 ceiling was true of the columns it measured and
+false of the features it was quoted about. The fingerprint fix itself first hashed only some of
+the columns. In each case the obvious form of the defect (the individual value, the row) was
+fixed and the aggregate form (the set, the group, the regime) was not. The habit that follows,
+now an exit criterion: for every guard, name the object it ranges over and read the sentence it
+is supposed to justify; if the nouns differ, it does not justify the sentence. And prefer a guard
+with no scope parameter to one with a well-chosen scope.
+
+\paragraph{An asserted protection is worse than a missing one.} A documented cross-account control
+that did not in fact control anything, and a code comment explaining why a truncated corpus could
+not bias a feature, both survived review by being reassuring rather than invisible. The comment's
+argument turned out to be right for the feature it named, and was only established once it was
+measured (Section~\ref{sec:floor}); the search it prompted found three further features with the
+flaw the comment had ruled out for its own. Controls must now name the mutation that would detect their failure, and the
+rule recorded is that an aggregate over a window can be derived from a corpus, while a statement
+about all of history cannot.
+
+\paragraph{A test that cannot fail proves nothing.} Fixtures built to be small rather than to
+contain the condition under test passed vacuously: a fold test whose categories were pure, a drift
+test whose fixture had no drifting rows. Tests now assert their precondition before their
+conclusion, and fixtures are specified by the property they must have before their size.
+
+\paragraph{The wrong denominator.} The central methodological error of M2 was standardising a
+detector's offset against a theoretical null rather than the observed seed-to-seed spread; a
+single three-sigma reading turned out to be noise once repeated seeds were run. The first model
+margin in M4 subtracted a feature measured on a few hundred rows holding two frauds from a model
+measured on the full test set. Every baseline now prints the rows and fraud it rests on, and a
+partial-coverage feature is never subtracted from a model.
+
+\paragraph{Records that run ahead of the facts.} A status table marked a gate as met by citing a
+run that did not exist; an evidence file attributed to a commit had been produced from a dirty
+working tree; a milestone tag was placed on a commit whose continuous integration had not passed.
+Each is a hand-written summary of a machine-checkable fact, drifting in the flattering direction.
+Status is now derived from the existence of evidence artefacts, evidence files carry the tree
+state they were produced from, and a tag requires a green run on the exact commit.
+
+\paragraph{Knowing a failure mode does not immunise against it.} Several of these patterns recurred
+after they had been analysed and written up, by the same author in the same session. The lesson
+the notebook draws is that a defence that depends on remembering a rule at the moment of temptation
+is not a defence; each lesson is useful only with the question ``what would enforce this?''
+attached, and most of the rules above are now tests.
+
+\paragraph{A hedge is often an unmeasured claim.} Several caveats (``the delay channel might be
+mostly an artefact'', ``burstiness is not country-specific'') turned out to be measurable, and
+measuring them replaced a hedge with a result: about \nEventDelayShare{} of the delay channel was
+artefact, and leave-one-country-out is null. The test for keeping a caveat is to ask what
+measurement would remove it.
+
+\subsection{Pre-registered predictions}
+
+The notebook recorded \nPredTotal{} falsifiable predictions before the evidence existed, and
+reports each outcome where the prediction was made, whether confirmed or refuted
+(Table~\ref{tab:predictions}).
+
+\begin{table}[h]
+\centering
+\small
+\caption{Pre-registered predictions and outcomes, from the lab notebook.}
+\label{tab:predictions}
+\begin{tabular}{p{0.52\linewidth}p{0.38\linewidth}}
+\toprule
+Prediction & Outcome \\
+\midrule
+Shortcut-detector power dips when the eighth scenario appears above the minimum scale &
+Refuted: power rose monotonically, no dip \\
+The detector's small positive offset is real and constant with scale &
+Refuted: pooled over seeds, the interval straddles chance \\
+A counterparty-keyed feature will force an eighth field into the feature contract &
+Confirmed on mechanism, wrong on sequence \\
+\texttt{accounts\_per\_device\_7d} cannot be made fold-safe without an owner decision &
+Refuted: grouping accounts that share a device resolves it \\
+A long-tailed takeover lead lowers the event-delay channel to
+\nEventDelayBandLow{}--\nEventDelayBandHigh{} &
+Confirmed: \nEventDelayAfter{}, at the top of the band \\
+The reversal scam is caught at \nRevPredLow{}--\nRevPredHigh{} recall &
+Refuted: \nRevRecall{} \nRevCI{}; below the range for the point estimate, not for the whole
+interval \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Of the first \nPredEarly{}, \nPredEarlyRight{} was partly right. The claim this supports is not that
+the author predicted well. It is that falsifiable predictions were recorded before the evidence,
+that most were wrong, that each refutation cost a paragraph rather than a shipped result, and that
+several of the guards now in the system exist because of what the refutations found.
+
+\subsection{What a builder of synthetic benchmarks should take from this}
+
+Run, before trusting a synthetic benchmark: the best single feature on the engineered features, not
+only on the raw columns; a leave-one-group-out \emph{and} a one-group-only ablation, since the first
+alone cannot distinguish redundancy from irrelevance; a check that every generalisation experiment
+withholds a mechanism and not just a label; and at least one pre-registered variant built from an
+independently documented typology. On FraudShield-EAC each of these changed what could be claimed.

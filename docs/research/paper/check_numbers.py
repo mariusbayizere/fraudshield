@@ -32,6 +32,7 @@ STRIP = [
     re.compile(r"\b[A-Z]{1,4}(?:-[A-Z]{1,6})*-\d+[a-z]?\b"),  # D-15, ML-GATE-01, PB-61, C-6
     re.compile(r"\bADR\s+\d{4}\b"),
     re.compile(r"\bM\d{1,2}\b"),
+    re.compile(r"\d+(?:\.\d+)?\\(?:linewidth|textwidth|columnwidth)"),  # layout, not results
 ]
 FORBIDDEN = re.compile(r"\d+\.\d+|\d+\s*\\%|\d{1,3}\{,\}\d{3}|\d{1,3},\d{3}")
 
