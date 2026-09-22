@@ -1,0 +1,12 @@
+\section*{Data and code availability}
+\addcontentsline{toc}{section}{Data and code availability}
+
+All code, the generator, the evidence files and this paper's sources are in the repository at
+\url{https://github.com/mariusbayizere/fraudshield}, licensed Apache-2.0; the dataset release terms are
+CC BY 4.0 (\texttt{dataset/release/}). The dataset is not distributed as a file: seed \nSeed{} and the
+generator at the milestone tag \texttt{m4-complete} regenerate it, and its fingerprint (Table~\ref{tab:glance})
+identifies the draw. Every number in the paper is mapped to its evidence file in \texttt{numbers.tex} and
+checked against it by \texttt{audit\_numbers.py}, whose output is \texttt{number\_audit.md}; every
+reference is checked in \texttt{reference\_audit.md}; the figures are regenerated from the audited
+numbers by \texttt{figures/make\_figures.py}. No real customer, institution or regulator data is used
+anywhere.
