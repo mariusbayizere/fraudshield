@@ -1,6 +1,7 @@
 import TimerOutlined from '@mui/icons-material/TimerOutlined';
 import Chip from '@mui/material/Chip';
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 /** Below this many seconds the chip turns red (SRS 5.4). */
 export const URGENT_BELOW_SECONDS = 10;
@@ -27,6 +28,7 @@ export interface CountdownChipProps {
  * announcing every tick.
  */
 export function CountdownChip({ deadlineMs, onFinalSeconds }: CountdownChipProps) {
+  const { t } = useTranslation('designSystem');
   const [now, setNow] = useState(Date.now);
   const firedFor = useRef<number | null>(null);
   const remaining = secondsLeft(deadlineMs, now);
@@ -51,9 +53,9 @@ export function CountdownChip({ deadlineMs, onFinalSeconds }: CountdownChipProps
   return (
     <Chip
       role="timer"
-      aria-label={`${String(remaining)} seconds left to review`}
+      aria-label={t('countdown.label', { count: remaining })}
       icon={<TimerOutlined aria-hidden />}
-      label={`${String(remaining)} s`}
+      label={t('countdown.short', { count: remaining })}
       size="small"
       variant="outlined"
       data-urgent={tier === 'high'}

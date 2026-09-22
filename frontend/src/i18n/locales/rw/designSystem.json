@@ -1,0 +1,38 @@
+{
+  "tier": {
+    "high": "IBYAGO BIKOMEYE",
+    "medium": "GUSUZUMA",
+    "low": "BYEMEWE"
+  },
+  "channel": {
+    "MOBILE_MONEY": "Amafaranga kuri telefoni",
+    "CARD": "Ikarita",
+    "USSD": "USSD",
+    "AGENT_BANKING": "Umukozi wa banki",
+    "ONLINE": "Kuri interineti",
+    "BANK_TRANSFER": "Kohereza muri banki"
+  },
+  "gauge": {
+    "name": "Amanota y'uburiganya",
+    "valueText": "{{percent}}%, {{tier}}",
+    "explanation": "Ihuriro rya XGBoost + LightGBM. {{block, number}} kuzamura = urugero rwo guhagarika byikora ku byago BIKOMEYE."
+  },
+  "countdown": {
+    "label_one": "Hasigaye isegonda {{count}} yo gusuzuma",
+    "label_other": "Hasigaye amasegonda {{count}} yo gusuzuma",
+    "short": "{{count}} s"
+  },
+  "states": {
+    "retry": "Ongera ugerageze",
+    "reference": "Indango:",
+    "lastUpdated": "Byavuguruwe bwa nyuma {{time}}",
+    "deniedTitle": "Nta burenganzira ufite bwo kugera kuri uru rupapuro",
+    "deniedDescription": "Inshingano yawe ntiyemerera uru rupapuro. Umuyobozi ashobora guhindura uburenganzira bwawe."
+  },
+  "banner": {
+    "ML_UNAVAILABLE": "Moderi itanga amanota ntiboneka. Amategeko ni yo afata ibyemezo ubu; izi ngendo z'amafaranga zizongera gusuzumwa niyongera gukora.",
+    "DEGRADED_MODE": "Sisitemu ikora mu buryo bugabanutse. Ibyemezo birakomeza, ariko buhoro kuruta uko bisanzwe.",
+    "KAFKA_SPOOLING": "Kohereza amakuru y'ibikorwa biratinze. Ibyemezo ntibigirwaho ingaruka; imenyesha na raporo bishobora gutinda.",
+    "REALTIME_PAUSED": "Igihe nyacyo cyahagaritswe — birivugurura buri masegonda 60"
+  }
+}

@@ -1,7 +1,8 @@
 import { screen } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import { renderThemed } from '../../../test/render';
-import { GAUGE_EXPLANATION, RiskScoreGauge, scorePercent } from './RiskScoreGauge';
+import { testI18n } from '../../../test/i18n';
+import { RiskScoreGauge, scorePercent } from './RiskScoreGauge';
 
 describe('RiskScoreGauge', () => {
   it.each([
@@ -35,7 +36,17 @@ describe('RiskScoreGauge', () => {
     // never does; the keyboard-opened tooltip is asserted in the Playwright journeys. Here the
     // pointer shows the same tooltip.
     await userEvent.hover(meter);
-    expect(await screen.findByRole('tooltip')).toHaveTextContent(GAUGE_EXPLANATION);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'XGBoost + LightGBM ensemble. 0.85+ = HIGH risk auto-block threshold.',
+    );
+  });
+
+  it('reads the tier and the threshold in the UI language', async () => {
+    renderThemed(<RiskScoreGauge score={0.9} />, { i18n: testI18n('fr') });
+    const meter = screen.getByRole('meter', { name: 'Score de fraude' });
+    expect(meter).toHaveAttribute('aria-valuetext', '90 %, RISQUE ÉLEVÉ');
+    await userEvent.hover(meter);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('0,85 et plus');
   });
 
   it('refuses a score outside [0, 1]', () => {

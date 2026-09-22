@@ -5,6 +5,7 @@ import jsxA11y from 'eslint-plugin-jsx-a11y';
 import reactHooks from 'eslint-plugin-react-hooks';
 import storybook from 'eslint-plugin-storybook';
 import tseslint from 'typescript-eslint';
+import { hexColour, physicalProperty } from './eslint-rules/restrictions.js';
 
 export default defineConfig(
   { ignores: ['dist/', 'coverage/', 'node_modules/', 'storybook-static/', '!.storybook'] },
@@ -27,28 +28,24 @@ export default defineConfig(
       // Build prompt H.4: no `any`, no unexplained non-null assertions.
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-non-null-assertion': 'error',
-      // D-37: every colour comes from design tokens. A hex literal in a component is a colour
-      // the contrast test has never measured.
-      'no-restricted-syntax': [
-        'error',
-        {
-          selector: 'Literal[value=/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/]',
-          message: 'Use a design token (palette.* or var(--fs-*)), not a raw hex colour (D-37).',
-        },
-        {
-          selector: 'TemplateElement[value.raw=/#[0-9a-fA-F]{6}\\b/]',
-          message: 'Use a design token (palette.* or var(--fs-*)), not a raw hex colour (D-37).',
-        },
-      ],
+      // D-37 (no raw hex colours) and ADR 0080 (logical properties only), with their own tests
+      // in src/lint.test.ts.
+      'no-restricted-syntax': ['error', ...hexColour, ...physicalProperty],
     },
   },
   {
-    // The token sources, the contrast arithmetic and its tests are where hex values belong.
+    // The token sources, the contrast arithmetic and the tests of both rules are where hex
+    // values and physical properties belong; physical properties stay banned there.
     files: [
       'src/design-system/tokens.ts',
       'src/design-system/color/**',
       'src/design-system/tokens.test.ts',
+      'src/lint.test.ts',
     ],
+    rules: { 'no-restricted-syntax': ['error', ...physicalProperty] },
+  },
+  {
+    files: ['src/lint.test.ts'],
     rules: { 'no-restricted-syntax': 'off' },
   },
 );

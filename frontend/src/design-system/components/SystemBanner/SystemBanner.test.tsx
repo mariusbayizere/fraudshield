@@ -2,7 +2,7 @@ import { screen } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { renderThemed } from '../../../test/render';
-import { CONDITION_BANNER, SYSTEM_CONDITIONS, SystemBanners } from './SystemBanner';
+import { CONDITION_SEVERITY, SYSTEM_CONDITIONS, SystemBanners } from './SystemBanner';
 
 describe('SystemBanners', () => {
   it('shows one polite banner per active condition, in contract order', () => {
@@ -28,6 +28,6 @@ describe('SystemBanners', () => {
     const match = /degraded_modes:[\s\S]*?enum: \[([^\]]+)\]/.exec(contract);
     const enumValues = match?.[1]?.split(',').map((v) => v.trim());
     expect(enumValues).toEqual([...SYSTEM_CONDITIONS]);
-    expect(Object.keys(CONDITION_BANNER)).toEqual([...SYSTEM_CONDITIONS]);
+    expect(Object.keys(CONDITION_SEVERITY)).toEqual([...SYSTEM_CONDITIONS]);
   });
 });

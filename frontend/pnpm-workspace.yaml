@@ -1,3 +1,6 @@
 allowBuilds:
   # esbuild ships its binary as an optional platform package; its postinstall only re-checks it.
   esbuild: false
+  # msw's postinstall copies mockServiceWorker.js into public/, which would ship it in production
+  # (ADR 0080 R1). The dev server serves the worker instead; see vite.config.ts.
+  msw: false

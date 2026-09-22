@@ -1,5 +1,6 @@
 import { createTheme, type Theme } from '@mui/material/styles';
 import type { CSSProperties } from 'react';
+import type { Direction } from '../i18n/direction';
 import {
   tokens,
   type ChannelColours,
@@ -49,16 +50,18 @@ declare module '@mui/material/Typography' {
 }
 
 /**
- * The MUI theme for one colour mode, built only from design tokens (E.9, D-36, D-37).
+ * The MUI theme for one colour mode and text direction, built only from design tokens (E.9,
+ * D-36, D-37; ADR 0080 for direction).
  *
  * MUI's semantic colours map onto the SRS's own: primary is brand navy, secondary the accent,
  * error/warning/success the three risk tiers. Text drawn in a risk colour must use the tier's
  * `text` token (D-33), which the palette carries under `palette.risk`.
  */
-export function createFraudShieldTheme(mode: ColourMode): Theme {
+export function createFraudShieldTheme(mode: ColourMode, direction: Direction = 'ltr'): Theme {
   const c = tokens.color[mode];
   const t = tokens.typography;
   return createTheme({
+    direction,
     palette: {
       mode,
       primary: { main: c.brand.navy, contrastText: c.brand.onBrand },

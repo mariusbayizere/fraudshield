@@ -6,7 +6,8 @@ export const BLOCK_THRESHOLD = 0.85;
 
 /**
  * The tier a fraud score falls in: HIGH at or above the block threshold, MEDIUM at or above the
- * flag threshold, LOW below it (D-02; SRS 5.4's gauge bands).
+ * flag threshold, LOW below it (D-02; SRS 5.4's gauge bands). The words for each tier are in
+ * the `designSystem` catalogue under `tier.*` (SRS 5.2: the tier is always written).
  */
 export function tierOf(score: number): RiskTier {
   if (!Number.isFinite(score) || score < 0 || score > 1) {
@@ -16,10 +17,3 @@ export function tierOf(score: number): RiskTier {
   if (score >= FLAG_THRESHOLD) return 'medium';
   return 'low';
 }
-
-/** The words on every tier badge (SRS 5.2). The tier is always written, never only coloured. */
-export const TIER_LABEL: Record<RiskTier, string> = {
-  high: 'HIGH RISK',
-  medium: 'REVIEW',
-  low: 'APPROVED',
-};

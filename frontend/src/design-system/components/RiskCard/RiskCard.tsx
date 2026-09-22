@@ -29,7 +29,7 @@ export interface RiskCardProps {
  * An alert or transaction card that leads with its tier (E.9: the tier is read first).
  *
  * D-34: a HIGH card that has just arrived pulses for three 1.2 s cycles, then settles to a static
- * 3 px border. With reduced motion requested it never pulses; the CSS media query stops the
+ * 3 px border on its inline-start edge (left in LTR, right in RTL). With reduced motion requested it never pulses; the CSS media query stops the
  * animation too, in case the preference changes after the card mounts.
  */
 export function RiskCard({
@@ -61,7 +61,7 @@ export function RiskCard({
         '--fs-pulse-colour': theme.palette.risk.high.border,
         bgcolor: theme.palette.risk[tier].bg,
         borderColor: theme.palette.risk[tier].border,
-        borderLeftWidth: 3,
+        borderInlineStartWidth: 3,
         [`&.${PULSE_CLASS}`]: {
           animation: `${pulse} ${String(tokens.motion.durationMs.pulseCycle)}ms ease-out ${String(tokens.motion.pulseCycles)}`,
         },

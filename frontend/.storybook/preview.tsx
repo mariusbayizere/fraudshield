@@ -1,6 +1,11 @@
 import type { Preview } from '@storybook/react-vite';
-import { ThemeRoot } from '../src/design-system/ThemeRoot';
-import type { ColourMode } from '../src/design-system/tokens';
+import { LANGUAGES, isLanguage, type Language } from '../src/i18n/languages';
+import { Providers } from '../src/test/Providers';
+import { testI18n } from '../src/test/i18n';
+
+const catalogues = Object.fromEntries(
+  LANGUAGES.map((language) => [language, testI18n(language)]),
+) as Record<Language, ReturnType<typeof testI18n>>;
 
 const preview: Preview = {
   globalTypes: {
@@ -8,15 +13,28 @@ const preview: Preview = {
       description: 'Colour scheme',
       toolbar: { title: 'Theme', icon: 'mirror', items: ['light', 'dark'], dynamicTitle: true },
     },
+    language: {
+      description: 'UI language (D-43)',
+      toolbar: { title: 'Language', icon: 'globe', items: [...LANGUAGES], dynamicTitle: true },
+    },
+    direction: {
+      description: 'Text direction (ADR 0023)',
+      toolbar: { title: 'Direction', icon: 'transfer', items: ['ltr', 'rtl'], dynamicTitle: true },
+    },
   },
-  initialGlobals: { theme: 'light' },
+  initialGlobals: { theme: 'light', language: 'en', direction: 'ltr' },
   decorators: [
     (Story, context) => {
-      const mode: ColourMode = context.globals['theme'] === 'dark' ? 'dark' : 'light';
+      const { theme, language, direction } = context.globals;
       return (
-        <ThemeRoot mode={mode}>
+        // Stories render with Country Z's region, the synthetic pack (ADR 0023).
+        <Providers
+          mode={theme === 'dark' ? 'dark' : 'light'}
+          direction={direction === 'rtl' ? 'rtl' : 'ltr'}
+          i18n={catalogues[isLanguage(language) ? language : 'en']}
+        >
           <Story />
-        </ThemeRoot>
+        </Providers>
       );
     },
   ],

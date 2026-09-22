@@ -1,0 +1,39 @@
+{
+  "tier": {
+    "high": "RISQUE ÉLEVÉ",
+    "medium": "À EXAMINER",
+    "low": "APPROUVÉ"
+  },
+  "channel": {
+    "MOBILE_MONEY": "Argent mobile",
+    "CARD": "Carte",
+    "USSD": "USSD",
+    "AGENT_BANKING": "Agent bancaire",
+    "ONLINE": "En ligne",
+    "BANK_TRANSFER": "Virement bancaire"
+  },
+  "gauge": {
+    "name": "Score de fraude",
+    "valueText": "{{percent}} %, {{tier}}",
+    "explanation": "Ensemble XGBoost + LightGBM. {{block, number}} et plus = seuil de blocage automatique du risque ÉLEVÉ."
+  },
+  "countdown": {
+    "label_one": "{{count}} seconde restante pour examiner",
+    "label_many": "{{count}} secondes restantes pour examiner",
+    "label_other": "{{count}} secondes restantes pour examiner",
+    "short": "{{count}} s"
+  },
+  "states": {
+    "retry": "Réessayer",
+    "reference": "Référence :",
+    "lastUpdated": "Dernière mise à jour {{time}}",
+    "deniedTitle": "Vous n’avez pas accès à cette page",
+    "deniedDescription": "Votre rôle ne l’inclut pas. Un administrateur peut modifier vos accès."
+  },
+  "banner": {
+    "ML_UNAVAILABLE": "Le modèle de notation est indisponible. Les règles décident pour l’instant ; ces transactions seront réévaluées à son rétablissement.",
+    "DEGRADED_MODE": "Fonctionnement en mode dégradé. Les décisions continuent, plus lentement que d’habitude.",
+    "KAFKA_SPOOLING": "La transmission des événements est retardée. Les décisions ne sont pas affectées ; les alertes et les rapports peuvent arriver en retard.",
+    "REALTIME_PAUSED": "Temps réel en pause — actualisation toutes les 60 s"
+  }
+}
