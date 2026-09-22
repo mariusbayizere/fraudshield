@@ -16,10 +16,10 @@ import math
 import statistics
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
-from fraudshield_ml.features.registry import REGISTRY
-from fraudshield_ml.features.vector import FeatureValue
+from fraudshield_ml.features.registry import REGISTRY, Dtype
 from fraudshield_ml.metrics.single_feature import auc_standard_error
 from fraudshield_ml.training import anomaly, baselines, explain, gate, model, onnx_export, smoke
 
@@ -128,38 +128,73 @@ class Report:
     parity: onnx_export.Parity | None = None
 
 
-def load(vectors: Sequence[dict[str, FeatureValue]], extras: dict[str, list[str]]) -> Loaded:
-    """Decode a cache. Refuses one without all four of D-07's row sets."""
+def load_cache(path: Path, *, train_rows: int | None = None) -> Loaded:
+    """Decode a cache column-wise into one float matrix. Refuses one without D-07's four sets.
+
+    Column-wise because a release-scale cache is hundreds of thousands of rows: a dict per row, as
+    `smoke.cache_read_any` builds, costs several times the matrix itself. `train_rows`, when given,
+    keeps that many training rows spread evenly across the cached ones — in time order, since the
+    cache is — and the target encoding is fitted on those alone, as if the others did not exist.
+    """
+    import numpy as np  # noqa: PLC0415 - heavy, and only this path needs it
+    import pyarrow.parquet as pq  # noqa: PLC0415 - heavy, and only this path needs it
+
+    from fraudshield_ml.training.evaluation import spread  # noqa: PLC0415
+
+    table = pq.read_table(path)
     names = smoke.trainable_features()
+    missing = [n for n in (*names, *smoke.CACHE_EXTRAS) if n not in table.schema.names]
+    if missing:
+        raise ValueError(f"{path} is not a usable feature cache: it has no {missing[:3]}")
+    extras = {
+        k: [str(v) for v in table.column(k).to_pylist()]
+        for k in (*smoke.CACHE_EXTRAS, *smoke.CACHE_OPTIONAL)
+        if k in table.schema.names
+    }
     labels = [v == "True" for v in extras[smoke.CACHE_LABEL]]
     segment = extras[smoke.CACHE_SEGMENT]
     by = {
         s: tuple(i for i, v in enumerate(segment) if v == s)
         for s in ("train", "validation", "calibration", "test")
     }
-    missing = [s for s, rows in by.items() if not rows]
-    if missing:
+    missing_sets = [s for s, rows in by.items() if not rows]
+    if missing_sets:
         raise ValueError(
-            f"the cache holds no {', '.join(missing)} rows. The gate needs all four of D-07's "
+            f"the cache holds no {', '.join(missing_sets)} rows. The gate needs all four of D-07's "
             "sets; write one with fs-features evaluate --calibration-rows N --validation-rows N"
         )
+    train = by["train"]
+    if train_rows is not None:
+        if train_rows > len(train):
+            raise ValueError(
+                f"{train_rows} training rows were asked for and the cache holds {len(train)}"
+            )
+        train = tuple(spread(list(train), train_rows))
+
+    categorical = [n for n in names if REGISTRY[n].dtype is Dtype.CATEGORICAL]
+    category_rows = [
+        dict(zip(categorical, values, strict=True))
+        for values in zip(*(table.column(n).to_pylist() for n in categorical), strict=True)
+    ]
     encoded = smoke.encode_categoricals(
-        vectors,
+        category_rows,
         labels,
         extras[smoke.CACHE_ACCOUNT],
-        by["train"],
+        train,
     )
-    matrix = [
-        [encoded[n][i] if n in encoded else float(vectors[i][n]) for n in names]
-        for i in range(len(vectors))
-    ]
+    matrix = np.empty((table.num_rows, len(names)), dtype=np.float64)
+    for j, name in enumerate(names):
+        if name in encoded:
+            matrix[:, j] = encoded[name]
+        else:
+            matrix[:, j] = table.column(name).to_numpy(zero_copy_only=False).astype(np.float64)
     return Loaded(
         names=names,
-        matrix=matrix,
+        matrix=matrix,  # type: ignore[arg-type]
         labels=labels,
         channels=extras[smoke.CACHE_CHANNEL],
         mcc=extras.get(smoke.CACHE_MCC),
-        split=model.RowSplit(by["train"], by["validation"], by["calibration"]),
+        split=model.RowSplit(train, by["validation"], by["calibration"]),
         test=by["test"],
     )
 
@@ -251,27 +286,29 @@ def _ablations(
         ("without month-end awareness", lambda n: n == "is_month_end_window"),
         ("card-style features only", lambda n: group[n] not in CARD_STYLE_GROUPS),
     ]
+    import numpy as np  # noqa: PLC0415 - heavy, and only this path needs it
+
     held = _arrays(full, labels)
+    whole = np.asarray(data.matrix, dtype=np.float64)
     results = []
     for name, drop in removals:
         kept = [j for j, n in enumerate(data.names) if not drop(n)]
-        matrix = [[row[j] for j in kept] for row in data.matrix]
-        results.append(_ablate(name, matrix, data, seed, held))
+        results.append(_ablate(name, whole[:, kept], data, seed, held))
     # USSD-unaware: the device features imputed with training medians, so their missingness on
     # USSD rows stops being a value the trees can split on.
-    columns = [j for j, n in enumerate(data.names) if n in DEVICE_FEATURES]
     medians = anomaly.training_medians(data.matrix, data.split.train)
-    matrix = [
-        [medians[j] if j in columns and math.isnan(v) else v for j, v in enumerate(row)]
-        for row in data.matrix
-    ]
+    matrix = whole.copy()
+    for j, name in enumerate(data.names):
+        if name in DEVICE_FEATURES:
+            column = matrix[:, j]
+            column[np.isnan(column)] = medians[j]
     results.append(_ablate("without USSD-aware device handling", matrix, data, seed, held))
     return results
 
 
 def _ablate(
     name: str,
-    matrix: list[list[float]],
+    matrix: Any,
     data: Loaded,
     seed: int,
     held: tuple[Any, Any],
@@ -313,7 +350,42 @@ def _roc(rows: gate.Rows, points: int = 200) -> list[tuple[float, float]]:
     return [(float(fpr[k]), float(tpr[k])) for k in keep]
 
 
-def run(data: Loaded, *, seed: int, seeds: Sequence[int], resamples: int, ablate: bool) -> Report:
+def _baselines(
+    data: Loaded, scored: model.Scores, test_rows: Sequence[Sequence[float]], seed: int
+) -> list[tuple[str, Sequence[float]]]:
+    """E.5's baselines on the test rows, each fitted on the training rows only."""
+    amount = [row[data.names.index("amount_log1p")] for row in data.matrix]
+    rule = baselines.rule_engine(amount, data.mcc, data.labels, data.split.train)
+    forest = anomaly.fit_anomaly(data.matrix, data.split.train, seed=seed)
+    train, test = list(data.split.train), list(data.test)
+    return [
+        ("status-quo rule engine", [rule[i] for i in data.test]),
+        (
+            "logistic regression",
+            baselines.logistic_regression(data.matrix, data.labels, train, test, seed=seed),
+        ),
+        (
+            "random forest",
+            baselines.random_forest(data.matrix, data.labels, train, test, seed=seed),
+        ),
+        ("XGBoost alone", scored.xgboost),
+        ("LightGBM alone", scored.lightgbm),
+        ("Isolation Forest alone", forest.score(test_rows)),
+    ]
+
+
+def run(  # noqa: PLR0913 - every argument is a declared setting of the run
+    data: Loaded,
+    *,
+    seed: int,
+    seeds: Sequence[int],
+    resamples: int,
+    ablate: bool,
+    metrics_only: bool = False,
+) -> Report:
+    """One declared gate run. `metrics_only` skips baselines, ablations and ONNX parity: PB-67's
+    learning curve needs the gate metrics, their intervals and the seeds, and nothing else.
+    """
     labels = [data.labels[i] for i in data.test]
     channels = [data.channels[i] for i in data.test]
     test_rows = [data.matrix[i] for i in data.test]
@@ -324,26 +396,7 @@ def run(data: Loaded, *, seed: int, seeds: Sequence[int], resamples: int, ablate
     point = gate.metrics(rows)
     intervals = gate.bootstrap(rows, resamples=resamples, seed=seed)
 
-    amount = [row[data.names.index("amount_log1p")] for row in data.matrix]
-    rule = baselines.rule_engine(amount, data.mcc, data.labels, data.split.train)
-    forest = anomaly.fit_anomaly(data.matrix, data.split.train, seed=seed)
-    train = list(data.split.train)
-    candidates = [
-        ("status-quo rule engine", [rule[i] for i in data.test]),
-        (
-            "logistic regression",
-            baselines.logistic_regression(
-                data.matrix, data.labels, train, list(data.test), seed=seed
-            ),
-        ),
-        (
-            "random forest",
-            baselines.random_forest(data.matrix, data.labels, train, list(data.test), seed=seed),
-        ),
-        ("XGBoost alone", scored.xgboost),
-        ("LightGBM alone", scored.lightgbm),
-        ("Isolation Forest alone", forest.score(test_rows)),
-    ]
+    candidates = [] if metrics_only else _baselines(data, scored, test_rows, seed)
     counts = {
         name: (len(index), sum(1 for i in index if data.labels[i]))
         for name, index in (
@@ -367,9 +420,9 @@ def run(data: Loaded, *, seed: int, seeds: Sequence[int], resamples: int, ablate
         reliability=_reliability(rows),
         roc=_roc(rows),
         mcc_available=data.mcc is not None,
-        parity=onnx_export.parity(fitted, test_rows),
+        parity=None if metrics_only else onnx_export.parity(fitted, test_rows),
     )
-    if ablate:
+    if ablate and not metrics_only:
         report.ablations = _ablations(data, seed, scored.ensemble, labels)
     for other in seeds:
         refit = (

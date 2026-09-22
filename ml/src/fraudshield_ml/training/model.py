@@ -191,8 +191,12 @@ def fit_ensemble(
     import numpy as np  # noqa: PLC0415 - heavy, and only this path needs it
     import xgboost as xgb  # noqa: PLC0415 - heavy, and only this path needs it
 
+    # Converted once: a release-scale matrix is indexed three times below, and rebuilding it from
+    # Python rows each time costs more than the fit.
+    whole = np.asarray(matrix, dtype=np.float32)
+
     def rows(index: Sequence[int]) -> Any:
-        return np.array([matrix[i] for i in index], dtype=np.float32)
+        return whole[list(index)]
 
     def targets(index: Sequence[int]) -> Any:
         return np.array([1.0 if labels[i] else 0.0 for i in index])

@@ -17,6 +17,7 @@ import pyarrow.parquet as pq
 import pytest
 
 from fraudshield_ml import cli
+from fraudshield_ml.training import smoke
 from fraudshield_ml.training.split import SplitUnavailableError
 
 START = datetime(2025, 1, 1, tzinfo=UTC)
@@ -75,10 +76,15 @@ TRANSACTIONS = pa.schema(
         pa.field("transaction_timestamp", pa.timestamp("us", tz="UTC"), nullable=False),
     ]
 )
+# The published labels schema, all six columns: a fixture carrying fewer let every test here pass
+# while `evaluate`'s feature pass, which reads `scenario_variant`, had never run against it.
 LABELS = pa.schema(
     [
         pa.field("transaction_id", pa.string(), nullable=False),
         pa.field("is_fraud_observed", pa.bool_(), nullable=False),
+        pa.field("is_fraud_true", pa.bool_(), nullable=False),
+        pa.field("fraud_type", pa.string(), nullable=True),
+        pa.field("scenario_variant", pa.string(), nullable=True),
         pa.field("label_available_at", pa.timestamp("us", tz="UTC"), nullable=False),
     ]
 )
@@ -151,6 +157,9 @@ def dataset(tmp_path: Path) -> Path:
                 {
                     "transaction_id": f"t{i:04d}",
                     "is_fraud_observed": fraud,
+                    "is_fraud_true": fraud,
+                    "fraud_type": "mule_account" if fraud else None,
+                    "scenario_variant": "base" if fraud else None,
                     "label_available_at": when + timedelta(days=1),
                 }
             )
@@ -433,3 +442,81 @@ def test_evaluate_refuses_a_split_that_was_never_published(
                 str(tmp_path / "absent.json"),
             ]
         )
+
+
+def _boundary_with_rows_in_every_period(dataset: Path) -> datetime:
+    """A validation start such that train, validation, calibration and test all hold rows.
+
+    `_split_file` gives validation a day (its second half is calibration) and test everything from
+    two days on, so the boundary is read off the fixture's own timestamps rather than guessed.
+    """
+    stamps: list[datetime] = sorted(
+        t
+        for part in (dataset / "transactions").glob("month=*/part-*.parquet")
+        for t in pq.read_table(part).column("transaction_timestamp").to_pylist()
+    )
+    half, day = timedelta(hours=12), timedelta(days=1)
+    for start in stamps[len(stamps) // 4 :]:
+        periods = (
+            [t for t in stamps if t < start],
+            [t for t in stamps if start <= t < start + half],
+            [t for t in stamps if start + half <= t < start + day],
+            [t for t in stamps if t >= start + 2 * day],
+        )
+        if all(len(p) >= 2 for p in periods):
+            return start
+    raise AssertionError("the fixture has no boundary giving every period rows")
+
+
+@pytest.mark.req("D-07")
+def test_cache_only_writes_all_four_periods_and_fits_nothing(
+    dataset: Path,
+    packs: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    private_access_log: Path,
+) -> None:
+    """PB-67's large cache is built without fitting: nothing is scored, so nothing is logged."""
+    before = private_access_log.read_text() if private_access_log.exists() else ""
+    split = _split_file(tmp_path / "split.json", _boundary_with_rows_in_every_period(dataset))
+    cache = tmp_path / "cache.parquet"
+    code = cli.main(
+        [
+            "evaluate",
+            str(dataset),
+            "--packs",
+            str(packs),
+            "--split",
+            str(split),
+            "--corpus-rows",
+            "240",
+            "--train-rows",
+            "2",
+            "--validation-rows",
+            "1",
+            "--calibration-rows",
+            "1",
+            "--test-rows",
+            "2",
+            "--cache",
+            str(cache),
+            "--cache-only",
+        ]
+    )
+    assert code == 0
+    printed = capsys.readouterr().out
+    assert "no model fitted and no test row scored" in printed
+    assert "model AUC" not in printed
+    segments = pq.read_table(cache).column(smoke.CACHE_SEGMENT).to_pylist()
+    assert sorted(set(segments)) == ["calibration", "test", "train", "validation"]
+    after = private_access_log.read_text() if private_access_log.exists() else ""
+    assert after == before, "a cache-only build scored no test row and must not log one"
+
+
+def test_cache_only_without_a_cache_path_is_refused(
+    dataset: Path, packs: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    split = _split_file(tmp_path / "split.json", START - timedelta(days=365))
+    args = ["evaluate", str(dataset), "--packs", str(packs), "--split", str(split), "--cache-only"]
+    assert cli.main(args) == 2
+    assert "--cache-only needs --cache" in capsys.readouterr().err
