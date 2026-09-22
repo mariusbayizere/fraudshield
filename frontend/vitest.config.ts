@@ -25,7 +25,13 @@ export default mergeConfig(
       coverage: {
         provider: 'v8',
         include: ['src/**/*.{ts,tsx}'],
-        exclude: ['src/**/*.test.{ts,tsx}', 'src/**/*.stories.tsx', 'src/test/**'],
+        exclude: [
+          'src/**/*.test.{ts,tsx}',
+          'src/**/*.stories.tsx',
+          'src/test/**',
+          'src/api/generated/**',
+          'src/**/*.d.ts',
+        ],
         // Enforced front-end thresholds (build prompt E.11).
         thresholds: { lines: 90, functions: 90, branches: 85, statements: 90 },
       },

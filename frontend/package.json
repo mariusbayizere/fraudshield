@@ -19,7 +19,8 @@
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build --quiet",
     "region": "node scripts/generate-region-packs.ts",
-    "i18n:status": "node scripts/translation-status.ts"
+    "i18n:status": "node scripts/translation-status.ts",
+    "api": "node scripts/generate-api.ts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

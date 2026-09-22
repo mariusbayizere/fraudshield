@@ -8,7 +8,16 @@ import tseslint from 'typescript-eslint';
 import { hexColour, physicalProperty } from './eslint-rules/restrictions.js';
 
 export default defineConfig(
-  { ignores: ['dist/', 'coverage/', 'node_modules/', 'storybook-static/', '!.storybook'] },
+  {
+    ignores: [
+      'dist/',
+      'coverage/',
+      'node_modules/',
+      'storybook-static/',
+      'src/api/generated/',
+      '!.storybook',
+    ],
+  },
   js.configs.recommended,
   tseslint.configs.strictTypeChecked,
   tseslint.configs.stylisticTypeChecked,
