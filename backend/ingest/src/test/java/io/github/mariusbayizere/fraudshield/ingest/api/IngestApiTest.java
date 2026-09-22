@@ -409,7 +409,6 @@ class IngestApiTest {
   void highRiskTransactionsAreDeclinedBlockedAndTheCustomerIsTexted() throws Exception {
     ApiHarness.SCORER.score = r -> 0.9;
     UUID id = UUID.randomUUID();
-    long start = System.nanoTime();
     HttpResponse<String> response =
         post("/api/v1/transactions/ingest", ApiHarness.KEY, body(id, "MOBILE_MONEY").toString());
     JsonNode decision = JSON.readTree(response.body());
@@ -436,9 +435,20 @@ class IngestApiTest {
                         + id
                         + "' AND n.event = 'SENT'")
                     .equals("1"));
-    assertThat(Duration.ofNanos(System.nanoTime() - start))
-        .as("SMS within 5 s (FR-03-04)")
-        .isLessThan(Duration.ofSeconds(5));
+    // FR-03-04 measures the customer SMS from the block, and both timestamps are the server's
+    // own. Measuring from the client's clock made this assertion fail at host load ~20 while the
+    // product met the requirement (Principal Review finding 14); it is now the database's answer.
+    assertThat(
+            Double.parseDouble(
+                one(
+                    "SELECT EXTRACT(EPOCH FROM (n.occurred_at - b.blocked_at))"
+                        + " FROM fraudshield.customer_notifications n"
+                        + " JOIN fraudshield.auto_block_events b ON b.id = n.auto_block_event_id"
+                        + " WHERE b.transaction_id = '"
+                        + id
+                        + "' AND n.event = 'SENT'")))
+        .as("SMS within 5 s of the block (FR-03-04)")
+        .isLessThan(5.0);
     assertThat(ApiHarness.SMS.getLast()).contains("15000 RWF", "+250788100100");
   }
 

@@ -36,6 +36,15 @@ import tools.jackson.databind.ObjectMapper;
  * D-15 chaos test: Kafka stops answering while decisions continue, then the API process dies with a
  * backlog in its spool. After both come back, every decided transaction is on Kafka, reconciled by
  * {@code transaction_id}.
+ *
+ * <p><b>Limitation (Principal Review finding 11, ADR 0064).</b> "Process death" here is an in-JVM
+ * {@code close()}: the writer thread is joined and {@code KafkaProducer.close()} flushes whatever
+ * it had buffered. That is a clean shutdown with a backlog, not a SIGKILL, so this test shows that
+ * the spool replays from its checkpoints, not that it survives an abrupt kill. What a kill would
+ * add — a torn final frame, an fsync that never returned — is covered by {@code DurableSpoolTest}
+ * (truncated frames, reopen) and {@code SpoolDrainerTest} (a refused sink), but not end to end.
+ * D-15's "kill the pod" remains unproven; running the writer in a forked JVM and destroying it is
+ * the open work.
  */
 @Tag("requires-docker")
 @Tag("D-15")

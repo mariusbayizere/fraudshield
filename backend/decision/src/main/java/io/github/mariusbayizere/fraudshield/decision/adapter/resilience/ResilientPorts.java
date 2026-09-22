@@ -233,8 +233,31 @@ public final class ResilientPorts {
 
     @Override
     public boolean acquireLeadership(String instanceId) {
+      drainLocal();
       // Without Redis there is no lease; every instance times out the holds it holds locally.
       return attempt(mode, () -> redis.acquireLeadership(instanceId), () -> !local.isEmpty());
+    }
+
+    /**
+     * Moves holds scheduled during an outage back into Redis once it answers again.
+     *
+     * <p>Otherwise an instance that is not the leader after recovery never looks at its own local
+     * holds, and they wait for the reconciliation sweep, outside D-18's ±500 ms (Principal Review
+     * finding 19).
+     */
+    private void drainLocal() {
+      if (local.isEmpty() || mode.skipPrimary()) {
+        return;
+      }
+      for (DueHold hold : List.copyOf(local.values())) {
+        try {
+          redis.schedule(hold);
+          local.remove(hold.transactionId());
+        } catch (RuntimeException stillDown) {
+          mode.failed();
+          return;
+        }
+      }
     }
   }
 }

@@ -52,3 +52,9 @@ dead-lettered with its reason and the good record behind it is handled), `KafkaS
 500 reconciled by transaction id), `PostgresAdaptersTest`, `RedisOutageTest` and
 `ResilienceApiTest` (PostgreSQL paused). The spool directory must be on a persistent volume per
 instance.
+
+**What is not proven** (Principal Review finding 11): D-15 asks for the API pod to be *killed*.
+`KafkaSpoolChaosTest` closes the writer in the same JVM, which joins the writer thread and flushes
+the producer — a clean shutdown with a backlog. The replay from checkpoints is real; surviving a
+SIGKILL mid-fsync is not shown end to end. Running the writer in a forked JVM and destroying it is
+open work, recorded in `M6_updates.md`.

@@ -204,6 +204,44 @@ class RedisOutageTest {
   }
 
   @Test
+  @Tag("FR-03-02")
+  @Tag("D-18")
+  void holdsScheduledDuringAnOutageGoBackIntoRedisOnRecovery() throws Exception {
+    IngestDecision held;
+    redis.pause();
+    try {
+      held = decide("tok_HeldWhileRedisIsDownAaaa1", 0.7, Channel.USSD);
+      assertThat(held.decision()).isEqualTo(Decision.HOLD);
+      assertThat(mode.degraded()).isTrue();
+    } finally {
+      redis.unpause();
+    }
+    Thread.sleep(DegradedMode.RETRY_AFTER_NANOS / 1_000_000 + 100);
+
+    // The hold was scheduled in this instance's memory while Redis was down. After recovery it
+    // must be in Redis, where any instance can claim it, instead of waiting for the sweep
+    // (Principal Review finding 19). A second timeout service with its own, empty local schedule
+    // stands in for the instance that claims it.
+    HoldTimeoutService elsewhere =
+        new HoldTimeoutService(
+            ResilientPorts.holds(redisHolds, mode),
+            states,
+            new SpoolingEventRecorder(spool, Duration.ofSeconds(5)),
+            DecisionMetrics.NONE,
+            clock,
+            "api-0");
+    assertThat(timeouts.tick()).as("nothing is due yet; the local hold is drained").isZero();
+    clock.advance(Duration.ofSeconds(30));
+    assertThat(elsewhere.tick()).as("claimed from Redis, not from local memory").isEqualTo(1);
+    await()
+        .atMost(Duration.ofSeconds(10))
+        .until(
+            () ->
+                states.latest(INSTITUTION, held.transactionId()).orElseThrow().decision()
+                    == DecisionValue.TIMEOUT_RELEASE);
+  }
+
+  @Test
   void theSweepTimesOutHoldsWhoseScheduleEntryWasLost() {
     IngestDecision held = decide("tok_LostScheduleAaaaBbbbCcc1", 0.7, Channel.MOBILE_MONEY);
     assertThat(redisHolds.cancel(INSTITUTION, held.transactionId()))
