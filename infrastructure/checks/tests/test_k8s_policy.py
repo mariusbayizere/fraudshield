@@ -51,6 +51,11 @@ def compliant() -> list[Manifest]:
             "spec": {"scaleTargetRef": {"kind": "Deployment", "name": "fraudshield-api"}},
         },
         {
+            "kind": "PersistentVolumeClaim",
+            "metadata": {"name": "spool"},
+            "spec": {"accessModes": ["ReadWriteMany"]},
+        },
+        {
             "kind": "Deployment",
             "metadata": {"name": "fraudshield-api"},
             "spec": {
@@ -64,7 +69,10 @@ def compliant() -> list[Manifest]:
                             "runAsUser": 10001,
                             "seccompProfile": {"type": "RuntimeDefault"},
                         },
-                        "volumes": [{"name": "tmp", "emptyDir": {}}],
+                        "volumes": [
+                            {"name": "tmp", "emptyDir": {}},
+                            {"name": "spool", "persistentVolumeClaim": {"claimName": "spool"}},
+                        ],
                         "containers": [
                             {
                                 "name": "api",
@@ -136,6 +144,11 @@ BREAKS: list[tuple[str, Callable[[list[Manifest]], object], str]] = [
     ("no allow policy", lambda m: m.pop(2), "no NetworkPolicy"),
     ("no PDB", lambda m: m.pop(3), "PodDisruptionBudget"),
     ("no HPA", lambda m: m.pop(4), "HorizontalPodAutoscaler"),
+    ("spool on emptyDir",
+     lambda m: pod(m)["volumes"].__setitem__(1, {"name": "spool", "emptyDir": {}}),
+     "not ephemeral"),
+    ("spool claim RWO", lambda m: m[5]["spec"].update(accessModes=["ReadWriteOnce"]),
+     "ReadWriteMany"),
 ]  # fmt: skip
 
 

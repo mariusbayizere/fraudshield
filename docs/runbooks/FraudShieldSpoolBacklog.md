@@ -5,9 +5,9 @@
 Kafka (`acks=all`); it is replayed in order when Kafka accepts writes again (D-15).
 
 **Impact.** Decisions made during the backlog are not yet in TimescaleDB, alert feeds, audit or
-webhooks. They are not lost while the pod lives. **They are lost if that pod is deleted before the
-spool drains** (the spool is on the pod's volume; see `docs/parallel/M9_updates.md`, open
-decision on spool durability).
+webhooks. The spool is on the shared volume (ADR 0090): if the pod dies, another API pod claims its
+directory and replays it once Kafka accepts writes. Nothing is lost unless the shared volume itself
+is lost or full.
 
 ## Diagnose
 
@@ -20,11 +20,14 @@ decision on spool durability).
 
 ## Mitigate
 
-- Restore Kafka first; the spool replays itself.
-- **Do not delete, evict or drain nodes hosting API pods with a non-zero spool.** Pause any rollout
-  (`kubectl argo rollouts -n fraudshield pause fraudshield-api`) and cordon rather than drain.
-- A pod near its spool bound: scale up the API so new traffic lands on pods with free spool.
+- Restore Kafka first; the spools replay themselves.
+- Check the shared volume: `kubectl -n fraudshield get pvc fraudshield-api-spool` and its usage.
+  A full volume refuses new spool writes on every API pod.
+- Pause any rollout while Kafka is down (`kubectl argo rollouts -n fraudshield pause
+  fraudshield-api`): replay is safe after pod deletion, but there is no reason to add churn.
+- A spool near its bound: scale up the API only if the shared volume has room.
 
 ## Escalate
 
-Engineering lead immediately if any pod with a non-zero spool is at risk of termination.
+Engineering lead immediately if the shared spool volume is unavailable, degraded or near full:
+that is the one case in which decisions can be lost.

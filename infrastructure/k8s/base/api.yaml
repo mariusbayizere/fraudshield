@@ -25,8 +25,8 @@ spec:
     spec:
       serviceAccountName: fraudshield-api
       automountServiceAccountToken: false
-      # Long enough for graceful shutdown to drain the local spool to Kafka (D-15) before the
-      # pod's emptyDir is deleted; see docs/parallel/M9_updates.md on spool durability.
+      # Graceful shutdown tries to drain this pod's spool to Kafka; whatever remains is recovered
+      # from the shared volume by another API pod (ADR 0090).
       terminationGracePeriodSeconds: 120
       securityContext:
         runAsNonRoot: true
@@ -53,7 +53,11 @@ spec:
             - configMapRef: {name: fraudshield-api-config}
             - secretRef: {name: fraudshield-api-secrets}
           env:
+            # ADR 0090: every pod writes <FRAUDSHIELD_SPOOL_DIR>/<FRAUDSHIELD_SPOOL_INSTANCE>/ on the
+            # shared volume and replays directories of pods that no longer exist.
             - {name: FRAUDSHIELD_SPOOL_DIR, value: /var/lib/fraudshield/spool}
+            - name: FRAUDSHIELD_SPOOL_INSTANCE
+              valueFrom: {fieldRef: {fieldPath: metadata.name}}
           resources:
             requests: {cpu: "1", memory: 1Gi}
             limits: {memory: 2Gi}
@@ -80,10 +84,23 @@ spec:
             - {name: spool, mountPath: /var/lib/fraudshield/spool}
             - {name: tmp, mountPath: /tmp}
       volumes:
+        # Never emptyDir or any storage deleted with the pod (ADR 0090); k8s_policy.py enforces it.
         - name: spool
-          emptyDir: {sizeLimit: 2Gi}
+          persistentVolumeClaim: {claimName: fraudshield-api-spool}
         - name: tmp
           emptyDir: {sizeLimit: 256Mi}
+---
+# Shared spool volume (ADR 0090). The StorageClass must provide ReadWriteMany with known fsync
+# latency; overlays set it. Size: a bound on decisions awaiting Kafka across all API pods.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fraudshield-api-spool
+  labels: {app.kubernetes.io/name: fraudshield-api}
+spec:
+  accessModes: [ReadWriteMany]
+  resources:
+    requests: {storage: 20Gi}
 ---
 apiVersion: v1
 kind: Service

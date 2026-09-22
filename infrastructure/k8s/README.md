@@ -20,6 +20,9 @@ NetworkPolicy, PodDisruptionBudget and, for serving components, an HPA for every
 
 - Kubernetes **1.34 or later**, a CNI that enforces NetworkPolicy, a default StorageClass
   (Prometheus 50 Gi, Alertmanager 1 Gi), and a LoadBalancer for the edge Service.
+- A **ReadWriteMany** StorageClass for the API spool claim `fraudshield-api-spool` (20 Gi), set as
+  its `storageClassName` at deployment. ADR 0090 makes its fsync latency an acceptance condition,
+  measured in M10; ephemeral storage for the spool is not allowed.
 - **Argo Rollouts** controller in namespace `argo-rollouts` (production), with the notification
   service `pagerdutyv2` configured so an aborted canary pages (SRS 8.1).
 - Secrets created per environment, never committed: `fraudshield-api-secrets`,
@@ -40,7 +43,7 @@ these through `docs/parallel/M9_updates.md`.
 
 | Workload | Image | Ports | Probes | Other |
 |---|---|---|---|---|
-| `fraudshield-api` | `ghcr.io/mariusbayizere/fraudshield-api` | `http` 8080, `management` 8081 (health and `/actuator/prometheus`) | startup and liveness `GET :8081/actuator/health`; readiness `GET :8080/api/v1/health` (ADR 0014) | UID 10001, read-only root; writable `/tmp` and spool at `/var/lib/fraudshield/spool` (env `FRAUDSHIELD_SPOOL_DIR`); drains the spool on SIGTERM within 120 s; `SPRING_PROFILES_ACTIVE` from the overlay |
+| `fraudshield-api` | `ghcr.io/mariusbayizere/fraudshield-api` | `http` 8080, `management` 8081 (health and `/actuator/prometheus`) | startup and liveness `GET :8081/actuator/health`; readiness `GET :8080/api/v1/health` (ADR 0014) | UID 10001, read-only root; writable `/tmp`; spool on the shared volume at `$FRAUDSHIELD_SPOOL_DIR/$FRAUDSHIELD_SPOOL_INSTANCE` (pod name) with replay of dead pods' directories (ADR 0090, contract in `docs/parallel/M9_updates.md`); `SPRING_PROFILES_ACTIVE` from the overlay |
 | `fraudshield-ml` | `ghcr.io/mariusbayizere/fraudshield-ml` | `grpc` 50051 (mTLS), `admin` 8000 (`/metrics`) | `GET :8000/health/live`, `GET :8000/health/ready` (kubelet gRPC probes cannot present a client certificate) | UID 10001, read-only root, writable `/tmp` |
 | `fraudshield-ml-worker` | `ghcr.io/mariusbayizere/fraudshield-ml-worker` | `metrics` 8000 (`/metrics`) | `GET :8000/health/live`, `GET :8000/health/ready` | UID 10001, read-only root, writable `/tmp` |
 | `fraudshield-frontend` | `ghcr.io/mariusbayizere/fraudshield-frontend` | `http` 8080 | `GET :8080/` | UID 10001, read-only root, writable `/tmp` |
