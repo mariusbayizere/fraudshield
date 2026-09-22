@@ -173,6 +173,48 @@ class MlflowRegistry:
             f"{version.name} v{version.version}: unsupported source {version.source}"
         )
 
+    # ---------------------------------------------------------------- tracking
+
+    def experiment(self, name: str) -> str:
+        """The id of the named experiment, created if absent."""
+        try:
+            reply = self._json(
+                "GET", "/api/2.0/mlflow/experiments/get-by-name", query={"experiment_name": name}
+            )
+            return str(reply["experiment"]["experiment_id"])
+        except RegistryError as error:
+            if "RESOURCE_DOES_NOT_EXIST" not in str(error) and "HTTP 404" not in str(error):
+                raise
+        reply = self._json("POST", "/api/2.0/mlflow/experiments/create", body={"name": name})
+        return str(reply["experiment_id"])
+
+    def start_run(self, experiment_id: str, name: str, tags: dict[str, str]) -> str:
+        reply = self._json(
+            "POST",
+            "/api/2.0/mlflow/runs/create",
+            body={
+                "experiment_id": experiment_id,
+                "run_name": name,
+                "start_time": int(time.time() * 1000),
+                "tags": [{"key": k, "value": v} for k, v in sorted(tags.items())],
+            },
+        )
+        return str(reply["run"]["info"]["run_id"])
+
+    def log_metrics(self, run_id: str, metrics: dict[str, float], step: int) -> None:
+        now = int(time.time() * 1000)
+        self._json(
+            "POST",
+            "/api/2.0/mlflow/runs/log-batch",
+            body={
+                "run_id": run_id,
+                "metrics": [
+                    {"key": k, "value": v, "timestamp": now, "step": step}
+                    for k, v in sorted(metrics.items())
+                ],
+            },
+        )
+
     # ---------------------------------------------------------------- publishing
 
     def publish(self, name: str, bundle_dir: Path, *, alias: str | None = None) -> str:

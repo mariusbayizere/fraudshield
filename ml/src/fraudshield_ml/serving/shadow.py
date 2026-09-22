@@ -227,6 +227,44 @@ def promotion_gate(comparison: Comparison, labels: dict[str, bool], now: datetim
     )
 
 
+class MlflowComparisonLog:
+    """Flushes the running comparison to one MLflow run per shadow model version (FR-02-08).
+
+    `client` is `serving.registry.MlflowRegistry`, or anything with its `experiment`, `start_run`
+    and `log_metrics` methods. A tracking-server failure is logged and skipped: the comparison
+    dashboard going stale must not stop shadow scoring, let alone production.
+    """
+
+    EXPERIMENT = "fraudshield-shadow"
+
+    def __init__(self, client: Any, *, production_version: Callable[[], str]) -> None:
+        self._client = client
+        self._production = production_version
+        self._runs: dict[str, str] = {}
+        self._step = 0
+
+    def flush(self, comparison: Comparison) -> None:
+        if not comparison.shadow_version:
+            return
+        try:
+            run = self._runs.get(comparison.shadow_version)
+            if run is None:
+                run = self._client.start_run(
+                    self._client.experiment(self.EXPERIMENT),
+                    f"shadow {comparison.shadow_version}",
+                    {
+                        "shadow_model_version": comparison.shadow_version,
+                        "production_model_version": self._production(),
+                        "window_started": _timestamp(comparison.started),
+                    },
+                )
+                self._runs[comparison.shadow_version] = run
+            self._step += 1
+            self._client.log_metrics(run, comparison.metrics(), self._step)
+        except Exception:
+            LOG.warning("shadow comparison not logged to MLflow", exc_info=True)
+
+
 @dataclass
 class ShadowMetrics:
     scored: Counter
@@ -257,7 +295,7 @@ class _Job:
 class ShadowRunner:
     """The worker that scores shadow off the hot path. `offer` never blocks."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - keyword-only configuration with defaults
         self,
         shadow: Callable[[], Any],
         sink: ShadowSink,
@@ -265,6 +303,8 @@ class ShadowRunner:
         metrics: ShadowMetrics | None = None,
         queue_size: int = QUEUE_SIZE,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        log: MlflowComparisonLog | None = None,
+        flush_every: timedelta = timedelta(seconds=60),
     ) -> None:
         #: Returns the current shadow `Scorer`, or None when shadow mode is off.
         self._shadow = shadow
@@ -273,6 +313,9 @@ class ShadowRunner:
         self._clock = clock
         self.metrics = metrics or ShadowMetrics.create()
         self.comparison = Comparison(started=clock())
+        self._log = log
+        self._flush_every = flush_every
+        self._flushed = clock()
         self._thread = threading.Thread(target=self._run, name="shadow", daemon=True)
         self._thread.start()
 
@@ -334,3 +377,7 @@ class ShadowRunner:
             ),
         )
         self.metrics.scored.inc()
+        now = self._clock()
+        if self._log is not None and now - self._flushed >= self._flush_every:
+            self._flushed = now
+            self._log.flush(self.comparison)

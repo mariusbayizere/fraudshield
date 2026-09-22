@@ -12,6 +12,7 @@ import json
 import threading
 import urllib.parse
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
@@ -20,6 +21,7 @@ from typing import Any
 import pytest
 from prometheus_client import CollectorRegistry
 
+from fraudshield_ml.models import cli as model_cli
 from fraudshield_ml.models.bundle import Bundle
 from fraudshield_ml.serving.registry import (
     PREVIOUS,
@@ -33,6 +35,7 @@ from fraudshield_ml.serving.registry import (
     wait_until,
 )
 from fraudshield_ml.serving.scorer import ModelHolder, Scorer
+from fraudshield_ml.serving.shadow import Comparison, MlflowComparisonLog
 
 NAME = "fraudshield-ensemble"
 
@@ -42,6 +45,8 @@ class FakeMlflow:
         self.artifacts: dict[str, bytes] = {}
         self.models: dict[str, dict[str, Any]] = {}
         self.fail_downloads = False
+        self.experiments: dict[str, str] = {}
+        self.runs: dict[str, dict[str, Any]] = {}
         self.requests: list[tuple[str, str]] = []
 
     def handle(  # noqa: PLR0911 - one return per endpoint and error
@@ -77,6 +82,25 @@ class FakeMlflow:
             if found is None or alias is None:
                 return 404, {"error_code": "RESOURCE_DOES_NOT_EXIST"}
             return 200, {"model_version": {"version": alias, "source": found["versions"][alias]}}
+        return self.tracking(path, query, data)
+
+    def tracking(self, path: str, query: dict[str, str], data: dict[str, Any]) -> tuple[int, Any]:
+        if path == "/api/2.0/mlflow/experiments/get-by-name":
+            if query["experiment_name"] not in self.experiments:
+                return 404, {"error_code": "RESOURCE_DOES_NOT_EXIST"}
+            return 200, {
+                "experiment": {"experiment_id": self.experiments[query["experiment_name"]]}
+            }
+        if path == "/api/2.0/mlflow/experiments/create":
+            self.experiments[data["name"]] = str(len(self.experiments) + 1)
+            return 200, {"experiment_id": self.experiments[data["name"]]}
+        if path == "/api/2.0/mlflow/runs/create":
+            run = f"run{len(self.runs) + 1}"
+            self.runs[run] = {"tags": data["tags"], "metrics": []}
+            return 200, {"run": {"info": {"run_id": run}}}
+        if path == "/api/2.0/mlflow/runs/log-batch":
+            self.runs[data["run_id"]]["metrics"].extend(data["metrics"])
+            return 200, {}
         return 404, {"error_code": "ENDPOINT_NOT_FOUND"}
 
 
@@ -273,3 +297,47 @@ def test_a_local_source_is_served_in_place(bundle_dirs: tuple[Path, Path], tmp_p
     registry = MlflowRegistry("http://127.0.0.1:9")
     version = ModelVersion(NAME, "1", f"file://{bundle_dirs[0]}")
     assert registry.fetch_bundle(version, tmp_path) == bundle_dirs[0]
+
+
+@pytest.mark.req("FR-02-08", "TEST-08")
+def test_the_shadow_comparison_is_logged_to_mlflow(mlflow: tuple[FakeMlflow, str]) -> None:
+    fake, url = mlflow
+    log = MlflowComparisonLog(MlflowRegistry(url), production_version=lambda: "ensemble-prod")
+    comparison = Comparison(started=datetime(2026, 9, 22, tzinfo=UTC), shadow_version="ens-new")
+    for i in range(20):
+        comparison.add(f"t{i}", i / 20, i / 20 + 0.01)
+    log.flush(comparison)
+    log.flush(comparison)
+    assert fake.experiments == {"fraudshield-shadow": "1"}
+    (run,) = fake.runs.values()
+    assert {"key": "production_model_version", "value": "ensemble-prod"} in run["tags"]
+    keys = {m["key"] for m in run["metrics"]}
+    assert keys == {"shadow_scored", "shadow_mean_abs_score_diff", "shadow_psi"}
+    assert [m["step"] for m in run["metrics"] if m["key"] == "shadow_scored"] == [1, 2]
+
+
+def test_a_tracking_outage_does_not_stop_shadow_scoring() -> None:
+    log = MlflowComparisonLog(MlflowRegistry("http://127.0.0.1:9"), production_version=str)
+    comparison = Comparison(started=datetime(2026, 9, 22, tzinfo=UTC), shadow_version="v")
+    comparison.add("t", 0.1, 0.2)
+    log.flush(comparison)  # logs a warning, raises nothing
+    log.flush(Comparison(started=datetime(2026, 9, 22, tzinfo=UTC)))  # no shadow model: no-op
+
+
+@pytest.mark.req("D-50")
+def test_fs_model_publishes_and_moves_aliases(
+    mlflow: tuple[FakeMlflow, str],
+    bundle_dirs: tuple[Path, Path],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fake, url = mlflow
+    assert (
+        model_cli.main(
+            ["publish", "--bundle", str(bundle_dirs[0]), "--mlflow", url, "--alias", PRODUCTION]
+        )
+        == 0
+    )
+    assert model_cli.main(["publish", "--bundle", str(bundle_dirs[1]), "--mlflow", url]) == 0
+    assert model_cli.main(["alias", "--mlflow", url, SHADOW, "2"]) == 0
+    assert fake.models[NAME]["aliases"] == {PRODUCTION: "1", SHADOW: "2"}
+    assert "@shadow -> v2" in capsys.readouterr().out

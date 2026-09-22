@@ -36,7 +36,7 @@ from fraudshield_ml.serving.features import RequestError
 from fraudshield_ml.serving.generated import scoring_pb2 as pb
 from fraudshield_ml.serving.registry import AliasWatcher, MlflowRegistry
 from fraudshield_ml.serving.scorer import ModelHolder, Scorer
-from fraudshield_ml.serving.shadow import JsonLinesSink, ShadowRunner
+from fraudshield_ml.serving.shadow import JsonLinesSink, MlflowComparisonLog, ShadowRunner
 from fraudshield_ml.serving.thresholds import ThresholdStore
 
 SERVICE = "fraudshield.scoring.v1.ScoringService"
@@ -167,8 +167,17 @@ def run_worker(config: WorkerConfig) -> None:
     reference = Reference.from_packs(config.packs)
     thresholds = ThresholdStore(_redis(config.redis_url))
     holder = ModelHolder()
+    registry = MlflowRegistry(config.mlflow_url) if config.mlflow_url is not None else None
+    comparison_log = (
+        MlflowComparisonLog(
+            registry,
+            production_version=lambda: holder.production.model_version if holder.production else "",
+        )
+        if registry is not None
+        else None
+    )
     shadow = (
-        ShadowRunner(lambda: holder.shadow, JsonLinesSink(config.shadow_log))
+        ShadowRunner(lambda: holder.shadow, JsonLinesSink(config.shadow_log), log=comparison_log)
         if config.shadow_log is not None
         else None
     )
@@ -198,9 +207,9 @@ def run_worker(config: WorkerConfig) -> None:
     watcher: AliasWatcher | None = None
     if config.bundle is not None:
         production(Bundle.load(config.bundle))
-    if config.mlflow_url is not None:
+    if registry is not None:
         watcher = AliasWatcher(
-            MlflowRegistry(config.mlflow_url),
+            registry,
             config.model_name,
             config.cache,
             production,
