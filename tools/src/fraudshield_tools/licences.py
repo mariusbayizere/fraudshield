@@ -68,7 +68,12 @@ DENIED = frozenset(
         "Elastic-2.0",
     }
 )
-KNOWN = PERMISSIVE | DEV_ONLY | DENIED
+# The SIL Open Font License is written for fonts: it allows bundling and redistributing a font
+# with software but not relicensing the font on its own. Allowed in any scope for font packages
+# only (ADR 0080: the staff console self-hosts an Inter subset). Anywhere else it is not allowed.
+FONT_ONLY = frozenset({"OFL-1.1"})
+FONT_PACKAGE = re.compile(r"^@fontsource(-variable)?/[a-z0-9-]+$")
+KNOWN = PERMISSIVE | DEV_ONLY | DENIED | FONT_ONLY
 # Weak copyleft allowed at runtime for unmodified third-party binaries only (ADR 0020): the ASF
 # "Category B" position. Spring Boot's logging and Jakarta APIs are EPL-2.0 (or dual-licensed).
 RUNTIME_WEAK_COPYLEFT = frozenset({"EPL-2.0"})
@@ -215,6 +220,7 @@ _NAME_PATTERNS: tuple[tuple[str, str], ...] = (
     (r"^(server side public licen[cs]e|sspl)( v1| 1\.0)?$", "SSPL-1.0"),
     (r"^(blueoak-1\.0\.0|blue oak model licen[cs]e 1\.0\.0)$", "BlueOak-1.0.0"),
     (r"^(cc0-1\.0|cc0 1\.0 universal)$", "CC0-1.0"),
+    (r"^(sil )?open font licen[cs]e,? (version )?1\.1$", "OFL-1.1"),
 )
 _COMPILED_NAMES = tuple((re.compile(p, re.IGNORECASE), spdx) for p, spdx in _NAME_PATTERNS)
 _DEPRECATED_SPDX = {
@@ -339,6 +345,8 @@ def _evaluate_expression(expression: str, allowed: frozenset[str]) -> bool | Non
 def evaluate(dependency: Dependency) -> bool | None:
     """True if allowed for the dependency's scope, False if not, None if unidentified."""
     allowed = ALLOWED[dependency.scope]
+    if dependency.ecosystem == "npm" and FONT_PACKAGE.match(dependency.name):
+        allowed = allowed | FONT_ONLY
     key = f"{dependency.ecosystem}:{dependency.name}@{dependency.version}"
     if key in EXCEPTIONS:
         return _evaluate_expression(EXCEPTIONS[key][0], allowed)
