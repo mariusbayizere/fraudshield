@@ -24,7 +24,7 @@ whether or not it flattered the dataset.
 | **Leave-one-country-out is null**: removing a country from training entirely costs ≤ 0.002 AUC | PB-59 |
 | **The novel-variant temporal hold-out is null too**: the unseen shape is caught at 100% against 95.1% for the familiar one | PB-61 |
 | One cause explains all three: the benchmark encodes fraud as **bursts**, and every variant, every country and every feature group is a view of that one structure | PB-61 |
-| **A pre-registered, typology-grounded non-burst variant is the one genuine failure found**: `reversal_scam_social_engineering` (single victim-initiated transfer, established counterparty) is caught at **6.1%** (4/66, Wilson 95% CI [2.4%, 14.6%]) against base's 94.2% [92.4%, 95.6%] — confirming, on a held-out shape rather than by inference from ablation margins, that detection power concentrates in burst-structure and counterparty-novelty | PB-61, ADR 0028, `docs/benchmarks/m4_battery_pb61.txt` |
+| **A pre-registered, typology-grounded non-burst variant is the one genuine failure found**: `reversal_scam_social_engineering` (single victim-initiated transfer, established counterparty) is caught at **9.1%** (6/66, Wilson 95% CI [4.2%, 18.4%]) against base's 94.4% [92.7%, 95.8%] (first measured at 6.1% [2.4%, 14.6%] with a target encoding E1 forbids, and restated after the correction; the interval now reaches past the pre-registered range's 0.15 lower edge) — confirming, on a held-out shape rather than by inference from ablation margins, that detection power concentrates in burst-structure and counterparty-novelty | PB-61, ADR 0028, `docs/benchmarks/m4_battery_pb61.txt` |
 | The dataset carries a **fingerprint over its output rows**, because a parameter digest cannot see a changed draw | PB-41, PB-54 |
 | Evidence artefacts carry the commit **and the working-tree state**, because a hash written by hand records an intention | PB-52, PB-53 |
 
@@ -97,7 +97,7 @@ Reporting it as evidence would be a control narrower than the claim it justifies
 
 ## Still owed before the draft is written
 
-- **Seed variance** (C-6): every figure here is one seed.
+- **Seed variance** (C-6): measured over five seeds (`docs/benchmarks/m4_seed_variance_d8083dbc_e1.txt`); the ensemble does not reduce variance against XGBoost alone. The gate reports every gate metric's mean and SD over five refits.
 - **Per-month performance** (C-5), which is measurable and currently unmeasured.
 - **Precision at a fixed alert budget**, which is the operational number and is not yet reported.
 - **ONNX export parity**, and the LaTeX tables themselves.
