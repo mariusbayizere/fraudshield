@@ -1,0 +1,122 @@
+# Security scan (SRS 8.1 stage 4, build prompt D-28, M9 gate): Trivy on dependencies and on
+# configuration, and an OWASP ZAP baseline scan against the compose stack. Gitleaks already runs
+# on every push in ci.yml (job "gitleaks") with the same pinned launcher; it is not repeated here.
+#
+# Gates: Trivy fails on any HIGH or CRITICAL vulnerability that has a fix (--ignore-unfixed; the
+# M9 gate is "0 high/critical unfixed"). ZAP fails on any High-risk alert (ZAP's top risk level;
+# the gate's "0 critical").
+#
+# The ZAP job needs the API in the compose stack. Until a `fraudshield-api` service exists there,
+# the job is SKIPPED (shown as skipped, never as passed) and the `zap-target` job says why.
+name: security
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "23 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  trivy-dependencies:
+    name: trivy (dependency vulnerabilities, HIGH/CRITICAL with a fix)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Scan lockfiles (uv.lock, pnpm-lock.yaml, Maven poms)
+        run: |
+          infrastructure/bin/trivy fs --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed \
+            --exit-code 1 --format table .
+      - name: Full report (all severities) for the artifact
+        if: always()
+        run: infrastructure/bin/trivy fs --scanners vuln --format json --output trivy-dependencies.json .
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: trivy-dependencies
+          path: trivy-dependencies.json
+          retention-days: 30
+
+  trivy-configuration:
+    name: trivy (misconfiguration in k8s, Dockerfiles, compose, workflows)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Rendered overlays are what gets applied; the raw base alone would miss overlay patches.
+      - name: Render the Kubernetes overlays
+        run: |
+          mkdir -p build/k8s
+          for overlay in infrastructure/k8s/overlays/*/; do
+            infrastructure/bin/kustomize build "$overlay" >"build/k8s/$(basename "$overlay").yaml"
+          done
+      - name: Scan configuration
+        run: |
+          infrastructure/bin/trivy config --severity HIGH,CRITICAL --exit-code 1 --format table .
+
+  zap-target:
+    name: zap (is there an API to scan?)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      present: ${{ steps.detect.outputs.present }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: detect
+        run: |
+          if grep -qE '^  fraudshield-api:' docker-compose.yml; then
+            echo "present=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "present=false" >>"$GITHUB_OUTPUT"
+            msg="ZAP baseline NOT RUN: docker-compose.yml has no fraudshield-api service yet."
+            echo "::warning title=zap baseline not run::$msg"
+            echo "$msg" >>"$GITHUB_STEP_SUMMARY"
+          fi
+
+  zap-baseline:
+    name: zap baseline (0 High-risk alerts)
+    needs: zap-target
+    if: needs.zap-target.outputs.present == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      REQUIRE_DOCKER: "1"
+      # ZAP 2.17.0 (zaproxy/zap-stable), pinned by digest.
+      ZAP_IMAGE: zaproxy/zap-stable@sha256:781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: make env
+      - name: Start the stack with the API
+        run: docker compose --profile full up -d --wait fraudshield-api
+      - name: ZAP baseline scan of the API
+        run: |
+          mkdir -p zap && chmod 777 zap
+          # -I: warnings do not fail the step; the High-risk gate below decides.
+          docker run --rm --network host -v "$PWD/zap:/zap/wrk:rw" "$ZAP_IMAGE" \
+            zap-baseline.py -t http://127.0.0.1:8080/ -J zap-baseline.json -r zap-baseline.html -I
+      - name: Gate on High-risk alerts
+        run: |
+          high=$(jq '[.site[].alerts[] | select((.riskcode | tonumber) >= 3)] | length' zap/zap-baseline.json)
+          echo "ZAP High-risk alerts: $high" | tee -a "$GITHUB_STEP_SUMMARY"
+          jq -r '.site[].alerts[] | "\(.riskdesc)\t\(.name)"' zap/zap-baseline.json | sort | uniq -c \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+          test "$high" -eq 0
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: zap-baseline
+          path: zap/
+          retention-days: 30
+      - name: Stop the stack
+        if: always()
+        run: docker compose --profile full down -v
