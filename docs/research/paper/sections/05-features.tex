@@ -11,7 +11,10 @@ speed from the last transaction, distance from a 90-day home centroid, first app
 country, and a lagged, smoothed confirmed-fraud rate per H3 cell), counterparty (novelty, age,
 distinct senders in 24 hours as a mule signal, lagged confirmed fraud), device and channel,
 account profile (including days since a SIM swap), agent-specific, corridor, and a
-label-free synthetic-identity composite. Every label-derived feature uses only labels whose
+label-free synthetic-identity composite. The composite is the mean of four terms (low KYC tier, a
+new account, device sharing and a volume ramp), but this benchmark has no KYC tier or account
+opening date, so two of its terms are always zero and it reads device sharing and the volume ramp
+only (Appendix~\ref{app:features}). Every label-derived feature uses only labels whose
 availability time precedes the transaction. The catalogue in the repository is generated from the
 code's feature registry, so documentation cannot drift from implementation; Appendix~\ref{app:features}
 lists every feature by group.
@@ -56,7 +59,8 @@ dedicated machine (ADR 0010).
 \subsection{The single-feature floor}
 \label{sec:floor}
 
-The D-08 control holds for the dataset's columns and fails for the engineered features.
+The single-column separation control of Section~\ref{sec:dataset} holds for the dataset's columns
+and fails for the engineered features.
 Measured at \nScoredRows{} scored rows holding \nScoredFraud{} confirmed fraud, with categorical
 encodings folded by whole account, \nFeaturesAboveCeiling{} of the \nFeatures{} features exceed
 the \nCeiling{} ceiling alone (Table~\ref{tab:floor}). The strongest,
@@ -64,7 +68,7 @@ the \nCeiling{} ceiling alone (Table~\ref{tab:floor}). The strongest,
 
 \begin{table}[htbp]
 \centering
-\caption{Single features above the D-08 ceiling, $\max(\mathrm{AUC}, 1-\mathrm{AUC})$, draw
+\caption{Single features above the separation ceiling (\nCeiling{}), $\max(\mathrm{AUC}, 1-\mathrm{AUC})$, draw
 \texttt{6abde44e} (\nFloorDrawRows{} rows), \nScoredRows{} scored rows holding \nScoredFraud{} fraud,
 commit \texttt{2c80ef6} (raw output
 \texttt{docs/benchmarks/m3\_single\_feature\_auc\_2c80ef6.txt}).}
@@ -85,7 +89,7 @@ Feature & Separation \\
 All five are burst or recency indicators, and the generator injects fraud as incidents: a
 SIM-swap drain, a velocity run and a mule fan-out are each a rapid sequence of transactions on one
 account. We did not suppress the burst structure, because real drains and fan-outs are bursty and
-a generator whose fraud was not would be the weaker artefact; and we did not restate D-08 as a
+a generator whose fraud was not would be the weaker artefact; and we did not restate the control as a
 claim about columns only, because that would redefine a control so that it passes. The
 consequence is a rule applied to every model metric in this paper: \textbf{a metric is reported
 as a margin over the best single feature and the best trivial rule, measured on the same rows}.

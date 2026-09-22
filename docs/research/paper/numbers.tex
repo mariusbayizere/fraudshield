@@ -135,7 +135,10 @@
 \newcommand{\nGateFone}{\meas{0.821}}
 \newcommand{\nGateFNR}{\meas{0.264}}
 \newcommand{\nGateECE}{\meas{0.001}}
-\newcommand{\nGatePass}{\meas{9 of 11}}
+\newcommand{\nGatePassed}{\meas{9}}        % gate metrics passing, of those measured at M4
+\newcommand{\nGateMeasured}{\meas{11}}      % gate metrics measured at M4 (ML-GATE-01 to 11)
+\newcommand{\nGateTotal}{\meas{13}}         % gate metrics in the specification (requirements.yaml)
+\newcommand{\nGateFPRFlag}{\meas{0.0006}}   % FPR at the flag threshold 0.60
 \newcommand{\nGatePrecFPR}{\meas{0.471}}
 \newcommand{\nGatePrecCeiling}{\meas{0.494}}
 \newcommand{\nGateOnnx}{\meas{\ensuremath{4.06 \times 10^{-7}}}}
@@ -261,6 +264,24 @@
 \newcommand{\nAblRoundD}{\meas{-0.0025}}
 \newcommand{\nAblMonthD}{\meas{-0.0008}}
 \newcommand{\nAblCardD}{\meas{-0.0420}}
+\newcommand{\nAblCardAUC}{\meas{0.928}}
+\newcommand{\nAblCardp}{\meas{\ensuremath{2.6 \times 10^{-23}}}}
+\newcommand{\nAblCardR}{\meas{0.677}}
+% ML-GATE-05 as a count: its unrounded value in metrics.json times the legitimate test rows.
+\newcommand{\nTestLegit}{\meas{100{,}924}}
+\newcommand{\nGateFPRBlockCount}{\meas{32}}
+\newcommand{\nGateFPRBlockPct}{\meas{0.03\%}}
+% The gate run's ROC curve (docs/benchmarks/m4_gate_d8083dbc_v3/figures/roc.svg at the tag, 200
+% plotted vertices): the vertices either side of recall 0.880.
+\newcommand{\nRocPoints}{\meas{200}}
+\newcommand{\nRocLowFPR}{\meas{1.2\%}}
+\newcommand{\nRocLowRecall}{\meas{0.871}}
+\newcommand{\nRocHighFPR}{\meas{1.7\%}}
+\newcommand{\nRocHighRecall}{\meas{0.882}}
+% Reversal-scam rows by label, read from the draw (evidence/reversal_labels_d8083dbc.txt, 3559f8c;
+% script at 6fe4bf0, tree clean, fingerprint d8083dbc recomputed).
+\newcommand{\nRevTrueFraud}{\meas{68}}
+\newcommand{\nRevScoredUnlabelled}{\meas{2}}
 \newcommand{\nAblUSSDD}{\meas{-0.0004}}
 % Battery groups alone, remaining rows (m4_battery_d8083dbc_e1.txt).
 \newcommand{\nGroupDevice}{\meas{0.720}}

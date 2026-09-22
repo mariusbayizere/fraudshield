@@ -47,6 +47,12 @@ PARITY = "docs/ml/training_serving_parity.md"
 HARDWARE = "docs/benchmarks/hardware.md"
 ADR28 = "docs/adr/0028-one-pre-registered-non-burst-fraud-variant.md"
 PROMPT = "docs/prompts/FraudShield_Master_Build_Prompt.md"
+GATE_JSON = "docs/benchmarks/m4_gate_d8083dbc_v3/metrics.json"
+ROC = "docs/benchmarks/m4_gate_d8083dbc_v3/figures/roc.svg"
+REQUIREMENTS = "docs/traceability/requirements.yaml"
+#: Evidence produced for the paper itself, after the tag; read at the commit it was added in.
+REV_LABELS = "docs/research/paper/evidence/reversal_labels_d8083dbc.txt"
+REV_LABELS_REF = "3559f8c"
 
 
 @dataclass(frozen=True)
@@ -56,6 +62,8 @@ class Src:
     path: str
     pattern: str
     note: str = ""
+    #: A git ref to read this file at instead of the audit's --ref (paper-local evidence).
+    ref: str = ""
 
 
 @dataclass(frozen=True)
@@ -74,6 +82,41 @@ def row(label: str, col: int) -> str:
 
 
 WORDS: dict[str, str] = {"one": "1", "two": "2", "three": "3", "four": "4", "five": "5", "six": "6"}
+
+
+def _count(rate: str, rows: str, fraud: str) -> str:
+    legitimate = int(rows.replace(",", "")) - int(fraud.replace(",", ""))
+    exact = Decimal(rate) * legitimate
+    whole = exact.to_integral_value()
+    return str(whole) if abs(exact - whole) < Decimal("1e-6") else f"not whole: {exact}"
+
+
+#: The ROC figure's plot area: origin at (48, 312) in SVG pixels, 264 pixels to 1.0 on each axis.
+ROC_ORIGIN_X, ROC_ORIGIN_Y, ROC_SPAN = 48.0, 312.0, 264.0
+
+
+def _roc(points: str) -> list[tuple[float, float]]:
+    """(FPR, recall) at each vertex of the plotted curve."""
+    pairs = (vertex.split(",") for vertex in points.split())
+    return [
+        ((float(x) - ROC_ORIGIN_X) / ROC_SPAN, (ROC_ORIGIN_Y - float(y)) / ROC_SPAN)
+        for x, y in pairs
+    ]
+
+
+def _crossing(points: str, target: str) -> tuple[str, str, str, str]:
+    """The plotted vertices either side of the first one whose recall reaches `target`."""
+    curve = _roc(points)
+    goal = float(target)
+    first = next(i for i, (_, recall) in enumerate(curve) if recall >= goal)
+    (low_fpr, low_recall), (high_fpr, high_recall) = curve[first - 1], curve[first]
+    return (
+        f"{low_fpr * 100:.1f}%",
+        f"{low_recall:.3f}",
+        f"{high_fpr * 100:.1f}%",
+        f"{high_recall:.3f}",
+    )
+
 
 SOURCES: dict[str, Src | Derived] = {
     # ---- dataset (claims register header, realism report at the tag = draw d8083dbc) ----
@@ -170,7 +213,10 @@ SOURCES: dict[str, Src | Derived] = {
     "nGateAgent": Src(GATE, r"ML-GATE-09  AGENT_BANKING AUC-ROC\s+([\d.]+)"),
     "nGateShapCov": Src(GATE, r"ML-GATE-10  SHAP coverage, HIGH and MEDIUM\s+([\d.]+)"),
     "nGateECE": Src(GATE, r"ML-GATE-11  ECE, 15 equal-mass bins\s+([\d.]+)"),
-    "nGatePass": Src(GATE, r"(\d+ of \d+) gate metrics pass"),
+    "nGatePassed": Src(GATE, r"(\d+) of \d+ gate metrics pass"),
+    "nGateMeasured": Src(GATE, r"\d+ of (\d+) gate metrics pass"),
+    "nGateTotal": Src(REQUIREMENTS, r".*- id: ML-GATE-(\d+)\n", "the last gate id in the file"),
+    "nGateFPRFlag": Src(GATE, r"at 0\.60: precision [\d.]+, FPR ([\d.]+)"),
     "nGatePrecFPR": Src(GATE, r"precision there ([\d.]+) \["),
     "nGatePrecCeiling": Src(GATE, r"and ([\d.]+) at exactly 1% FPR"),
     "nGatePrecSix": Src(GATE, r"at 0\.60: precision ([\d.]+),"),
@@ -226,6 +272,21 @@ SOURCES: dict[str, Src | Derived] = {
     "nAblRoundD": Src(GATE, r"without round-sum awareness\s+\d+ feat  AUC [\d.]+ \(([+-][\d.]+),"),
     "nAblMonthD": Src(GATE, r"without month-end awareness\s+\d+ feat  AUC [\d.]+ \(([+-][\d.]+),"),
     "nAblCardD": Src(GATE, r"card-style features only\s+\d+ feat  AUC [\d.]+ \(([+-][\d.]+),"),
+    "nAblCardAUC": Src(GATE, r"card-style features only\s+\d+ feat  AUC ([\d.]+)"),
+    "nAblCardp": Src(GATE, r"card-style features only\s+.*?, p ([\d.e-]+)\)"),
+    "nAblCardR": Src(GATE, r"card-style features only\s+.*?R@1%FPR ([\d.]+)"),
+    "_GateFPRBlockExact": Src(GATE_JSON, r'"id": "ML-GATE-05",.*?"value": ([\d.eE-]+)'),
+    "_RocPoints": Src(ROC, r'<polyline points="(48\.0,312\.0 48\.0,[^"]*)"'),
+    "nRevScoredUnlabelled": Src(
+        REV_LABELS,
+        r"reversal_scam_social_engineering\n(?:[^\n]*\n){4}[^\n]*missed-fraud noise\): (\d+)",
+        ref=REV_LABELS_REF,
+    ),
+    "nRevTrueFraud": Src(
+        REV_LABELS,
+        r"reversal_scam_social_engineering\n(?:[^\n]*\n){2}\s+fraud by true label: (\d+)",
+        ref=REV_LABELS_REF,
+    ),
     "nAblUSSDD": Src(
         GATE, r"without USSD-aware device handling\s+\d+ feat  AUC [\d.]+ \(([+-][\d.]+),"
     ),
@@ -543,6 +604,45 @@ SOURCES: dict[str, Src | Derived] = {
     "nTargetFNR": Src(PROMPT, r"FNR < ([\d.]+%) are measured at the flag threshold"),
     "nResamples": Src(PROMPT, r"stratified bootstrap \(([\d,]+) resamples\)"),
     "nSeeds": Src(PROMPT, r"mean ± SD over (\d+) seeds", "the paper writes the count as a word"),
+    # ---- values computed from the gate run's metrics file and ROC figure (m4-complete) ----
+    "nTestLegit": Derived(
+        ("nTestRows", "nTestFraud"),
+        lambda rows, fraud: str(int(rows.replace(",", "")) - int(fraud.replace(",", ""))),
+        "test rows minus test fraud",
+    ),
+    "nGateFPRBlockCount": Derived(
+        ("_GateFPRBlockExact", "nTestRows", "nTestFraud"),
+        _count,
+        "ML-GATE-05's unrounded FPR (metrics.json) times the legitimate test rows; must be whole",
+    ),
+    "nGateFPRBlockPct": Derived(
+        ("_GateFPRBlockExact",),
+        lambda rate: f"{Decimal(rate) * 100:.2f}%",
+        "ML-GATE-05's unrounded FPR (metrics.json) as a percentage",
+    ),
+    "nRocPoints": Derived(
+        ("_RocPoints",), lambda points: str(len(_roc(points))), "vertices of the plotted ROC curve"
+    ),
+    "nRocLowFPR": Derived(
+        ("_RocPoints", "nTargetRecall"),
+        lambda points, target: _crossing(points, target)[0],
+        "FPR of the last plotted ROC vertex below the recall target (axes 264 px from x=48, y=312)",
+    ),
+    "nRocLowRecall": Derived(
+        ("_RocPoints", "nTargetRecall"),
+        lambda points, target: _crossing(points, target)[1],
+        "recall of that vertex",
+    ),
+    "nRocHighFPR": Derived(
+        ("_RocPoints", "nTargetRecall"),
+        lambda points, target: _crossing(points, target)[2],
+        "FPR of the first plotted ROC vertex at or above the recall target",
+    ),
+    "nRocHighRecall": Derived(
+        ("_RocPoints", "nTargetRecall"),
+        lambda points, target: _crossing(points, target)[3],
+        "recall of that vertex",
+    ),
 }
 
 
@@ -621,6 +721,19 @@ def write_report(rows: list[tuple[str, str, str, str, str, str]], ref: str, ref_
     (HERE / "number_audit.md").write_text("\n".join(lines) + "\n")
 
 
+def helper_values(ref: str, cache: dict[str, str]) -> dict[str, str]:
+    """The `_`-prefixed sources, which exist only as inputs to derived values."""
+    found: dict[str, str] = {}
+    for name, spec in SOURCES.items():
+        if not (name.startswith("_") and isinstance(spec, Src)):
+            continue
+        at = spec.ref or ref
+        text = cache.setdefault(f"{at}:{spec.path}", git_show(at, spec.path))
+        hit = re.search(spec.pattern, text, re.S | re.M)
+        found[name] = hit.group(1) if hit else ""
+    return found
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--ref", default="m4-complete")
@@ -630,15 +743,10 @@ def main() -> int:
         cwd=ROOT, capture_output=True, text=True, check=True,
     ).stdout.strip()  # fmt: skip
     cache: dict[str, str] = {}
-    found_values: dict[str, str] = {}
     rows: list[tuple[str, str, str, str, str, str]] = []
     problems = 0
     defined = macros()
-    helpers = {k: v for k, v in SOURCES.items() if k.startswith("_") and isinstance(v, Src)}
-    for helper, spec in helpers.items():
-        text = cache.setdefault(spec.path, git_show(args.ref, spec.path))
-        hit = re.search(spec.pattern, text, re.S | re.M)
-        found_values[helper] = hit.group(1) if hit else ""
+    found_values = helper_values(args.ref, cache)
     for name, (_, value) in defined.items():
         source = SOURCES.get(name)
         if source is None:
@@ -647,7 +755,8 @@ def main() -> int:
             continue
         if isinstance(source, Derived):
             continue
-        text = cache.setdefault(source.path, git_show(args.ref, source.path))
+        ref = source.ref or args.ref
+        text = cache.setdefault(f"{ref}:{source.path}", git_show(ref, source.path))
         m = re.search(source.pattern, text, re.S | re.M)
         if not m:
             rows.append((name, value, "—", source.path, source.note, "PATTERN NOT FOUND"))
@@ -661,8 +770,10 @@ def main() -> int:
         else:
             got_cmp = got
         found_values[name] = got
-        where = f"`{source.path}`" + (
-            f" (evidence commit `{c}`)" if (c := evidence_commit(text)) else ""
+        where = (
+            f"`{source.path}`"
+            + (f" at `{source.ref}`" if source.ref else "")
+            + (f" (evidence commit `{c}`)" if (c := evidence_commit(text)) else "")
         )
         ok = normalise(value) == normalise(got_cmp)
         problems += not ok
