@@ -31,38 +31,45 @@ export default defineConfig({
     react(),
     tailwindcss(),
     mockWorkerInDevelopment(),
-    VitePWA({
-      registerType: 'prompt',
-      injectRegister: 'script-defer',
-      manifest: {
-        name: 'FraudShield',
-        short_name: 'FraudShield',
-        description: 'FraudShield staff console',
-        start_url: '/',
-        display: 'standalone',
-        theme_color: brand.navy,
-        background_color: tokens.color.light.surface.background,
-        icons: [
-          { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
-          {
-            src: '/icon-maskable-512.png',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'maskable',
-          },
-          { src: '/icon.svg', sizes: 'any', type: 'image/svg+xml' },
-        ],
-      },
-      workbox: {
-        // The app shell only. API responses are never cached here: offline data is D-29's
-        // masked, encrypted, expiring cache, not the service worker's (ADR 0080 §5, R8).
-        globPatterns: ['**/*.{js,css,html,woff2,svg,png}'],
-        navigateFallback: 'index.html',
-        navigateFallbackDenylist: [/^\/api\//],
-        runtimeCaching: [],
-      },
-    }),
+    // Storybook builds with this config and sets STORYBOOK=true. A component catalogue needs no
+    // service worker, and Workbox fails on Storybook's own manager bundle, which is over its
+    // precache limit.
+    ...(process.env['STORYBOOK'] === 'true'
+      ? []
+      : [
+          VitePWA({
+            registerType: 'prompt',
+            injectRegister: 'script-defer',
+            manifest: {
+              name: 'FraudShield',
+              short_name: 'FraudShield',
+              description: 'FraudShield staff console',
+              start_url: '/',
+              display: 'standalone',
+              theme_color: brand.navy,
+              background_color: tokens.color.light.surface.background,
+              icons: [
+                { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+                { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+                {
+                  src: '/icon-maskable-512.png',
+                  sizes: '512x512',
+                  type: 'image/png',
+                  purpose: 'maskable',
+                },
+                { src: '/icon.svg', sizes: 'any', type: 'image/svg+xml' },
+              ],
+            },
+            workbox: {
+              // The app shell only. API responses are never cached here: offline data is D-29's
+              // masked, encrypted, expiring cache, not the service worker's (ADR 0080 §5, R8).
+              globPatterns: ['**/*.{js,css,html,woff2,svg,png}'],
+              navigateFallback: 'index.html',
+              navigateFallbackDenylist: [/^\/api\//],
+              runtimeCaching: [],
+            },
+          }),
+        ]),
   ],
   // The design tokens live at the repository root, outside this package; the dev server may read
   // them and nothing else above it. (Country packs are generated into src/region/generated/.)
