@@ -960,7 +960,12 @@ def run_gate(  # noqa: PLR0913, PLR0917 - every argument is a declared setting o
     print("\n".join(gate_report.summary(result)))
     for path in gate_report.write(result, out):
         print(f"  wrote {path}")
-    access.record("gate", cache, len(data.test), purpose="declared M4 gate evaluation")
+    purpose = (
+        f"PB-67 learning curve at {len(data.split.train)} training rows"
+        if train_rows is not None or "metrics-only" in flags
+        else "declared M4 gate evaluation"
+    )
+    access.record("gate", cache, len(data.test), purpose=purpose)
     failed = [g for g in result.gates if not g.passed]
     return 1 if failed and "enforce" in flags else 0
 
