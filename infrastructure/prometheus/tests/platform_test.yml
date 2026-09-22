@@ -1,0 +1,181 @@
+# promtool unit tests for the short-horizon alerts (30 s evaluation, like production).
+# Run: infrastructure/bin/promtool test rules infrastructure/prometheus/tests/*_test.yml
+# Each threshold is tested on both sides: just over fires, at or just under stays silent.
+rule_files:
+  - ../rules/recording.yml
+  - ../rules/alerts.yml
+  - ../rules/thresholds.yml
+evaluation_interval: 30s
+
+tests:
+  # --- SRS 8.2 uptime: two consecutive failed probes, 30 s apart --------------------------------
+  - name: api probe pages after the second consecutive failure only
+    interval: 30s
+    input_series:
+      - series: 'probe_success{job="blackbox-api-health", instance="api-mgmt"}'
+        values: '1 1 0 0'
+      - series: 'probe_success{job="blackbox-api-health", instance="api-flapping"}'
+        values: '1 0 1 0'
+    alert_rule_test:
+      - eval_time: 60s
+        alertname: FraudShieldApiHealthProbeFailing
+        exp_alerts: []
+      - eval_time: 90s
+        alertname: FraudShieldApiHealthProbeFailing
+        exp_alerts:
+          - exp_labels: {severity: page, team: sre, priority: P1, job: blackbox-api-health, instance: api-mgmt}
+            exp_annotations:
+              summary: API liveness probe failed twice in a row
+              description: api-mgmt did not answer UP on two consecutive probes.
+              runbook_url: https://github.com/mariusbayizere/fraudshield/blob/main/docs/runbooks/FraudShieldApiHealthProbeFailing.md
+
+  - name: ml probe (60 s apart) pages after the second consecutive failure only
+    interval: 1m
+    input_series:
+      - series: 'probe_success{job="blackbox-ml-health", instance="api-mgmt"}'
+        values: '1 0 0'
+    alert_rule_test:
+      - eval_time: 90s
+        alertname: FraudShieldMlHealthProbeFailing
+        exp_alerts: []
+      - eval_time: 120s
+        alertname: FraudShieldMlHealthProbeFailing
+        exp_alerts:
+          - exp_labels: {severity: page, team: sre, priority: P1, job: blackbox-ml-health, instance: api-mgmt}
+            exp_annotations:
+              summary: ML health probe failed twice in a row
+              description: /actuator/health/ml on api-mgmt did not answer UP on two consecutive probes. Decisions are coming from the rule-based fallback (C.4).
+              runbook_url: https://github.com/mariusbayizere/fraudshield/blob/main/docs/runbooks/FraudShieldMlHealthProbeFailing.md
+
+  # --- SRS 8.2: p99 > 80 ms --------------------------------------------------------------------
+  # 1.5% of decisions above 80 ms: interpolated p99 = 0.08 + 0.02 * 5/15 = 86.7 ms.
+  - name: p99 just above 80 ms pages after 5 minutes
+    interval: 1m
+    input_series:
+      - {series: 'fs_decision_latency_seconds_bucket{le="0.04"}', values: '0+900x20'}
+      - {series: 'fs_decision_latency_seconds_bucket{le="0.08"}', values: '0+985x20'}
+      - {series: 'fs_decision_latency_seconds_bucket{le="0.1"}', values: '0+1000x20'}
+      - {series: 'fs_decision_latency_seconds_bucket{le="+Inf"}', values: '0+1000x20'}
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: FraudShieldDecisionLatencyP99High
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: FraudShieldDecisionLatencyP99High
+        exp_alerts:
+          - exp_labels: {severity: page, team: sre}
+            exp_annotations:
+              summary: Decision latency p99 is above 80 ms
+              description: 'p99 server-side decision latency is 86.67ms over 5 minutes (SLO: p95 < 40 ms flagged, alert at p99 > 80 ms).'
+              runbook_url: https://github.com/mariusbayizere/fraudshield/blob/main/docs/runbooks/FraudShieldDecisionLatencyP99High.md
+
+  # 0.5% above 80 ms: p99 = 0.04 + 0.04 * 90/95 = 77.9 ms.
+  - name: p99 just below 80 ms stays silent
+    interval: 1m
+    input_series:
+      - {series: 'fs_decision_latency_seconds_bucket{le="0.04"}', values: '0+900x20'}
+      - {series: 'fs_decision_latency_seconds_bucket{le="0.08"}', values: '0+995x20'}
+      - {series: 'fs_decision_latency_seconds_bucket{le="0.1"}', values: '0+1000x20'}
+      - {series: 'fs_decision_latency_seconds_bucket{le="+Inf"}', values: '0+1000x20'}
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: FraudShieldDecisionLatencyP99High
+        exp_alerts: []
+    promql_expr_test:
+      - expr: fraudshield:decision_latency_seconds:p99_5m
+        eval_time: 15m
+        exp_samples:
+          - labels: fraudshield:decision_latency_seconds:p99_5m
+            value: 0.0778947368421053
+
+  # --- SRS 8.2: Kafka lag > 5,000, summed over the group's consumer instances -------------------
+  - name: group lag above 5000 pages, exactly 5000 does not
+    interval: 1m
+    input_series:
+      - {series: 'fs_kafka_consumer_lag{topic="fs.alerts.high", group="alerting", pod="api-0"}', values: '3000x10'}
+      - {series: 'fs_kafka_consumer_lag{topic="fs.alerts.high", group="alerting", pod="api-1"}', values: '3000x10'}
+      - {series: 'fs_kafka_consumer_lag{topic="fs.decisions.final", group="webhook-dispatcher", pod="api-0"}', values: '2500x10'}
+      - {series: 'fs_kafka_consumer_lag{topic="fs.decisions.final", group="webhook-dispatcher", pod="api-1"}', values: '2500x10'}
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: FraudShieldKafkaConsumerLagHigh
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: FraudShieldKafkaConsumerLagHigh
+        exp_alerts:
+          - exp_labels: {severity: page, team: sre, topic: fs.alerts.high, group: alerting}
+            exp_annotations:
+              summary: Consumer group alerting is more than 5,000 messages behind on fs.alerts.high
+              description: Lag is 6k messages. Alerts, persistence or notifications fed by this topic are delayed.
+              runbook_url: https://github.com/mariusbayizere/fraudshield/blob/main/docs/runbooks/FraudShieldKafkaConsumerLagHigh.md
+
+  # --- C.4: rule-based fallback deciding --------------------------------------------------------
+  # The alert reads the recording rule, which another group evaluates, so it lags one interval.
+  - name: fallback decisions page after 2 minutes; none stays silent
+    interval: 1m
+    input_series:
+      - {series: 'fs_decisions_total{tier="LOW", decision="APPROVE", channel="USSD", fallback="false"}', values: '0+100x3 300x6'}
+      - {series: 'fs_decisions_total{tier="LOW", decision="APPROVE", channel="USSD", fallback="true"}', values: '0x3 0+100x6'}
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: FraudShieldMlFallbackActive
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: FraudShieldMlFallbackActive
+        exp_alerts:
+          - exp_labels: {severity: page, team: sre}
+            exp_annotations:
+              summary: Decisions are coming from the rule-based fallback
+              description: 100% of decisions in the last 5 minutes used the fallback engine.
+              runbook_url: https://github.com/mariusbayizere/fraudshield/blob/main/docs/runbooks/FraudShieldMlFallbackActive.md
+
+  # --- D-15: spool never drained for 5 minutes --------------------------------------------------
+  - name: spool that never reaches zero in 5 minutes pages; one that drains does not
+    interval: 1m
+    input_series:
+      - {series: 'fs_spool_depth{pod="api-0"}', values: '0 5 3 2 1 4 2 6'}
+      - {series: 'fs_spool_depth{pod="api-1"}', values: '0 5 3 0 1 4 2 6'}
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: FraudShieldSpoolBacklog
+        exp_alerts:
+          - exp_labels: {severity: page, team: sre, pod: api-0}
+            exp_annotations:
+              summary: Spool on api-0 has not drained for 5 minutes
+              description: The spool held at least 1 unpublished decisions throughout the last 5 minutes.
+              runbook_url: https://github.com/mariusbayizere/fraudshield/blob/main/docs/runbooks/FraudShieldSpoolBacklog.md
+
+  # --- SRS 8.2: false positive rate > 5% (ticket) -----------------------------------------------
+  - name: false positive rate above 5% for 30 minutes raises a ticket; exactly 5% does not
+    interval: 1m
+    input_series:
+      - {series: 'fs_false_positive_rate{pod="worker-0"}', values: '0.05x40 0.051x40'}
+    alert_rule_test:
+      - eval_time: 39m
+        alertname: FraudShieldFalsePositiveRateHigh
+        exp_alerts: []
+      - eval_time: 69m
+        alertname: FraudShieldFalsePositiveRateHigh
+        exp_alerts: []
+      - eval_time: 72m
+        alertname: FraudShieldFalsePositiveRateHigh
+        exp_alerts:
+          - exp_labels: {severity: ticket, team: risk}
+            exp_annotations:
+              summary: False positive rate is above 5%
+              description: 5.1% of labelled flagged transactions were legitimate.
+
+  # --- SRS 8.2: PSI > 0.2 (ticket) --------------------------------------------------------------
+  - name: PSI above 0.2 raises a ticket per feature; exactly 0.2 does not
+    interval: 1m
+    input_series:
+      - {series: 'fs_feature_psi{feature="tx_count_60s"}', values: '0.21x5'}
+      - {series: 'fs_feature_psi{feature="amount_log1p"}', values: '0.2x5'}
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: FraudShieldFeatureDrift
+        exp_alerts:
+          - exp_labels: {severity: ticket, team: ml, feature: tx_count_60s}
+            exp_annotations:
+              summary: PSI of tx_count_60s is above 0.2
+              description: Population stability index 0.21; review the model (SRS 8.2).

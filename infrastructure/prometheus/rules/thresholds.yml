@@ -1,0 +1,16 @@
+# Operator-configurable alert levels, one series per level, so an environment can change a level
+# by replacing this one file (the overlay's configMapGenerator entry) without editing the rules.
+#
+# Only levels that the build prompt makes configurable live here. The SRS 8.2 thresholds (p99 80 ms,
+# false positive rate 5%, Kafka lag 5,000, TPS drop 20%, 3x auto-block baseline, 3 sigma fraud
+# rate, PSI 0.2) are fixed by the requirements and written into alerts.yml next to their rule.
+groups:
+  - name: fraudshield-thresholds
+    rules:
+      # D-10 (5): share of MEDIUM holds released by the review deadline rather than decided by an
+      # analyst, per channel, above which FraudShieldTimeoutReleaseRateHigh fires. A timeout
+      # release approves a transaction the model rated risky without anyone looking at it.
+      # 0.10 is a starting level, not a derived one: replace it with the value from
+      # docs/ml/capacity_model.md (alert budget vs analysts on shift) once that exists.
+      - record: fraudshield:config:timeout_release_ratio_max
+        expr: vector(0.10)
