@@ -1,0 +1,137 @@
+/* GENERATED from design-tokens/tokens.json by scripts/generate-tokens.ts. Do not edit. */
+:root {
+  --fs-font-family: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', sans-serif;
+  --fs-font-family-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  --fs-space: 4px;
+  --fs-radius-sm: 4px;
+  --fs-radius-md: 8px;
+  --fs-radius-lg: 12px;
+  --fs-radius-pill: 999px;
+  --fs-duration-short: 150ms;
+  --fs-duration-standard: 250ms;
+  --fs-duration-drawer: 200ms;
+  --fs-duration-pulse-cycle: 1200ms;
+  --fs-touch-target: 48px;
+  --fs-brand-navy: #0A2540;
+  --fs-brand-accent: #1A56DB;
+  --fs-on-brand: #FFFFFF;
+  --fs-focus-ring: #1A56DB;
+  --fs-chip-text: #FFFFFF;
+  --fs-shap-increases-fraud: #DC2626;
+  --fs-shap-decreases-fraud: #059669;
+  --fs-background: #F8FAFC;
+  --fs-paper: #FFFFFF;
+  --fs-divider: #CBD5E1;
+  --fs-text-primary: #0F172A;
+  --fs-text-secondary: #475569;
+  --fs-risk-high-bg: #FEF2F2;
+  --fs-risk-high-border: #DC2626;
+  --fs-risk-high-badge: #DC2626;
+  --fs-risk-high-text: #B91C1C;
+  --fs-risk-medium-bg: #FFFBEB;
+  --fs-risk-medium-border: #D97706;
+  --fs-risk-medium-badge: #D97706;
+  --fs-risk-medium-text: #B45309;
+  --fs-risk-low-bg: #F0FDF4;
+  --fs-risk-low-border: #059669;
+  --fs-risk-low-badge: #059669;
+  --fs-risk-low-text: #047857;
+  --fs-channel-mobile-money-fill: #7C3AED;
+  --fs-channel-mobile-money-chip: #7C3AED;
+  --fs-channel-card-fill: #1A56DB;
+  --fs-channel-card-chip: #1A56DB;
+  --fs-channel-ussd-fill: #D97706;
+  --fs-channel-ussd-chip: #B45309;
+  --fs-channel-agent-banking-fill: #0D9488;
+  --fs-channel-agent-banking-chip: #0F766E;
+  --fs-channel-online-fill: #6B7280;
+  --fs-channel-online-chip: #6B7280;
+  --fs-channel-bank-transfer-fill: #374151;
+  --fs-channel-bank-transfer-chip: #374151;
+}
+[data-theme="dark"] {
+  --fs-brand-navy: #0A2540;
+  --fs-brand-accent: #7DA2F7;
+  --fs-on-brand: #FFFFFF;
+  --fs-focus-ring: #7DA2F7;
+  --fs-chip-text: #FFFFFF;
+  --fs-shap-increases-fraud: #F87171;
+  --fs-shap-decreases-fraud: #34D399;
+  --fs-background: #0B1220;
+  --fs-paper: #111827;
+  --fs-divider: #334155;
+  --fs-text-primary: #F1F5F9;
+  --fs-text-secondary: #A7B4C7;
+  --fs-risk-high-bg: #2A1215;
+  --fs-risk-high-border: #F87171;
+  --fs-risk-high-badge: #DC2626;
+  --fs-risk-high-text: #FCA5A5;
+  --fs-risk-medium-bg: #291D08;
+  --fs-risk-medium-border: #FBBF24;
+  --fs-risk-medium-badge: #D97706;
+  --fs-risk-medium-text: #FCD34D;
+  --fs-risk-low-bg: #0C2418;
+  --fs-risk-low-border: #34D399;
+  --fs-risk-low-badge: #059669;
+  --fs-risk-low-text: #6EE7B7;
+  --fs-channel-mobile-money-fill: #A78BFA;
+  --fs-channel-mobile-money-chip: #6D28D9;
+  --fs-channel-card-fill: #7DA2F7;
+  --fs-channel-card-chip: #1D4ED8;
+  --fs-channel-ussd-fill: #FBBF24;
+  --fs-channel-ussd-chip: #B45309;
+  --fs-channel-agent-banking-fill: #2DD4BF;
+  --fs-channel-agent-banking-chip: #0F766E;
+  --fs-channel-online-fill: #9CA3AF;
+  --fs-channel-online-chip: #4B5563;
+  --fs-channel-bank-transfer-fill: #CBD5E1;
+  --fs-channel-bank-transfer-chip: #374151;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --fs-brand-navy: #0A2540;
+    --fs-brand-accent: #7DA2F7;
+    --fs-on-brand: #FFFFFF;
+    --fs-focus-ring: #7DA2F7;
+    --fs-chip-text: #FFFFFF;
+    --fs-shap-increases-fraud: #F87171;
+    --fs-shap-decreases-fraud: #34D399;
+    --fs-background: #0B1220;
+    --fs-paper: #111827;
+    --fs-divider: #334155;
+    --fs-text-primary: #F1F5F9;
+    --fs-text-secondary: #A7B4C7;
+    --fs-risk-high-bg: #2A1215;
+    --fs-risk-high-border: #F87171;
+    --fs-risk-high-badge: #DC2626;
+    --fs-risk-high-text: #FCA5A5;
+    --fs-risk-medium-bg: #291D08;
+    --fs-risk-medium-border: #FBBF24;
+    --fs-risk-medium-badge: #D97706;
+    --fs-risk-medium-text: #FCD34D;
+    --fs-risk-low-bg: #0C2418;
+    --fs-risk-low-border: #34D399;
+    --fs-risk-low-badge: #059669;
+    --fs-risk-low-text: #6EE7B7;
+    --fs-channel-mobile-money-fill: #A78BFA;
+    --fs-channel-mobile-money-chip: #6D28D9;
+    --fs-channel-card-fill: #7DA2F7;
+    --fs-channel-card-chip: #1D4ED8;
+    --fs-channel-ussd-fill: #FBBF24;
+    --fs-channel-ussd-chip: #B45309;
+    --fs-channel-agent-banking-fill: #2DD4BF;
+    --fs-channel-agent-banking-chip: #0F766E;
+    --fs-channel-online-fill: #9CA3AF;
+    --fs-channel-online-chip: #4B5563;
+    --fs-channel-bank-transfer-fill: #CBD5E1;
+    --fs-channel-bank-transfer-chip: #374151;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --fs-duration-short: 0ms;
+    --fs-duration-standard: 0ms;
+    --fs-duration-drawer: 0ms;
+    --fs-duration-pulse-cycle: 0ms;
+  }
+}

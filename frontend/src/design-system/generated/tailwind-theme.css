@@ -1,0 +1,29 @@
+/* GENERATED from design-tokens/tokens.json by scripts/generate-tokens.ts. Do not edit. */
+@theme {
+  --breakpoint-*: initial;
+  --breakpoint-fp: 240px;
+  --breakpoint-xs: 320px;
+  --breakpoint-sm: 375px;
+  --breakpoint-md: 600px;
+  --breakpoint-lg: 768px;
+  --breakpoint-xl: 1024px;
+  --breakpoint-xxl: 1280px;
+  --breakpoint-xxxl: 1536px;
+  --spacing: 4px;
+  --font-sans: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', sans-serif;
+  --color-brand-navy: var(--fs-brand-navy);
+  --color-brand-accent: var(--fs-brand-accent);
+  --color-on-brand: var(--fs-on-brand);
+  --color-background: var(--fs-background);
+  --color-paper: var(--fs-paper);
+  --color-divider: var(--fs-divider);
+  --color-risk-high-bg: var(--fs-risk-high-bg);
+  --color-risk-high-border: var(--fs-risk-high-border);
+  --color-risk-high-text: var(--fs-risk-high-text);
+  --color-risk-medium-bg: var(--fs-risk-medium-bg);
+  --color-risk-medium-border: var(--fs-risk-medium-border);
+  --color-risk-medium-text: var(--fs-risk-medium-text);
+  --color-risk-low-bg: var(--fs-risk-low-bg);
+  --color-risk-low-border: var(--fs-risk-low-border);
+  --color-risk-low-text: var(--fs-risk-low-text);
+}
