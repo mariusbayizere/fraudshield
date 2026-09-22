@@ -176,7 +176,7 @@ def test_a_row_moved_across_an_edge_changes_the_count_on_both_paths() -> None:
         assert warm(inside).tx_count(SCORED, name) == 1, name
 
 
-@pytest.mark.req("FR-02-02")
+@pytest.mark.req("TEST-01", "FR-02-02")
 def test_an_account_with_no_history_counts_zero_rather_than_nothing() -> None:
     """`nan_rule`: an account that has counted nothing has counted 0, which is not unknown.
 
