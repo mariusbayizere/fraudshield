@@ -29,6 +29,9 @@ import javax.sql.DataSource;
  */
 public final class VerificationService {
 
+  private static final org.slf4j.Logger LOG =
+      org.slf4j.LoggerFactory.getLogger(VerificationService.class);
+
   /** Link lifetime (FR-03-04: expires exactly at 10 minutes). */
   public static final Duration LIFETIME = Duration.ofMinutes(10);
 
@@ -77,6 +80,29 @@ public final class VerificationService {
    * @param localTime local time with zone
    */
   public record View(String maskedAccount, Money amount, String localTime) {}
+
+  /**
+   * The result of an answer.
+   *
+   * @param unusable why the token could not be used, when it could not
+   * @param pending true when the answer is recorded but the decision transition did not run, so the
+   *     block is lifted by {@link UnblockReconciler} within seconds rather than at once
+   */
+  public record Answered(Optional<Unusable> unusable, boolean pending) {
+
+    /** An accepted answer that reached the decision path. */
+    static final Answered APPLIED = new Answered(Optional.empty(), false);
+
+    /**
+     * A token that cannot be used.
+     *
+     * @param why the reason
+     * @return the result
+     */
+    static Answered refused(Unusable why) {
+      return new Answered(Optional.of(why), false);
+    }
+  }
 
   /**
    * A token's state: a view, or why it cannot be used.
@@ -162,20 +188,25 @@ public final class VerificationService {
   /**
    * Records the customer's answer.
    *
+   * <p>The answer and its {@code unblock_events} row commit first; the decision transition follows.
+   * If the transition fails, the answer stands and {@link UnblockReconciler} applies it within
+   * seconds, and the result says so, so the page never promises the customer an unblock that did
+   * not happen and never asks for an answer the token can no longer give (finding 6).
+   *
    * @param token token from the link
    * @param wasMe true for "Yes, this was me"
-   * @return empty when accepted, otherwise why the token cannot be used
+   * @return whether the answer was accepted, and whether the unblock is still pending
    * @throws SQLException when the database is unavailable
    */
-  public Optional<Unusable> answer(String token, boolean wasMe) throws SQLException {
+  public Answered answer(String token, boolean wasMe) throws SQLException {
     Optional<Found> found = find(token);
     if (found.isEmpty()) {
-      return Optional.of(Unusable.UNKNOWN);
+      return Answered.refused(Unusable.UNKNOWN);
     }
     Found f = found.get();
     Optional<Unusable> unusable = unusable(f);
     if (unusable.isPresent()) {
-      return unusable;
+      return Answered.refused(unusable.get());
     }
     Instant now = clock.instant();
     try (Connection c = dataSource.getConnection()) {
@@ -189,7 +220,7 @@ public final class VerificationService {
           s.setObject(4, utc(now));
           if (s.executeUpdate() == 0) {
             c.rollback();
-            return Optional.of(Unusable.USED);
+            return Answered.refused(Unusable.USED);
           }
         }
         if (wasMe) {
@@ -205,7 +236,7 @@ public final class VerificationService {
       } catch (SQLException e) {
         c.rollback();
         if ("P0001".equals(e.getSQLState()) || "23514".equals(e.getSQLState())) {
-          return Optional.of(Unusable.EXPIRED);
+          return Answered.refused(Unusable.EXPIRED);
         }
         throw e;
       }
@@ -215,8 +246,17 @@ public final class VerificationService {
     } catch (DecisionTransitionService.TransitionRefusedException alreadyResolved) {
       // The answer is recorded; the decision had already moved on (for example a senior
       // override), so there is nothing to lift.
+    } catch (RuntimeException failed) {
+      // The answer is durable and the token is spent, so failing the page would strand the
+      // customer. The sweep applies the transition (V64); the page says the unblock is on its way.
+      LOG.warn(
+          "the customer's answer for transaction {} did not reach the decision path; the sweep"
+              + " applies it",
+          f.transaction(),
+          failed);
+      return new Answered(Optional.empty(), wasMe);
     }
-    return Optional.empty();
+    return Answered.APPLIED;
   }
 
   private Optional<Unusable> unusable(Found f) {

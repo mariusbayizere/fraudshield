@@ -6,7 +6,6 @@ import java.sql.SQLException;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -40,6 +39,9 @@ public final class VerificationPageController {
                   "No, this was not me",
                   "lifted",
                   "Thank you. The payment is unblocked.",
+                  "pending",
+                  "Thank you. Your answer is recorded and the payment is being unblocked."
+                      + " This can take a moment.",
                   "fraud",
                   "Thank you. The payment stays blocked. Call your bank on its official number.",
                   "unusable",
@@ -57,6 +59,9 @@ public final class VerificationPageController {
                   "Non, ce n'est pas moi",
                   "lifted",
                   "Merci. Le paiement est débloqué.",
+                  "pending",
+                  "Merci. Votre réponse est enregistrée et le paiement est en cours de"
+                      + " déblocage. Cela peut prendre un instant.",
                   "fraud",
                   "Merci. Le paiement reste bloqué. Appelez votre banque à son numéro officiel.",
                   "unusable",
@@ -74,6 +79,9 @@ public final class VerificationPageController {
                   "Oya, si njye",
                   "lifted",
                   "Murakoze. Ubwishyu bwafunguwe.",
+                  "pending",
+                  "Murakoze. Igisubizo cyawe cyanditswe kandi ubwishyu buri gufungurwa."
+                      + " Bishobora gufata akanya.",
                   "fraud",
                   "Murakoze. Ubwishyu bukomeje guhagarikwa. Hamagara banki yawe.",
                   "unusable",
@@ -90,6 +98,9 @@ public final class VerificationPageController {
                   "Hapana, si mimi",
                   "lifted",
                   "Asante. Malipo yamefunguliwa.",
+                  "pending",
+                  "Asante. Jibu lako limehifadhiwa na malipo yanafunguliwa. Inaweza kuchukua"
+                      + " muda kidogo.",
                   "fraud",
                   "Asante. Malipo yanabaki yamezuiwa. Piga simu benki yako.",
                   "unusable",
@@ -177,12 +188,17 @@ public final class VerificationPageController {
     if (!answer.equals("yes") && !answer.equals("no")) {
       return page(locale, "<p>" + t.get("unusable") + "</p>");
     }
-    Optional<VerificationService.Unusable> refused =
-        verifications.answer(token, answer.equals("yes"));
-    String message =
-        refused.isPresent()
-            ? t.get("unusable")
-            : answer.equals("yes") ? t.get("lifted") : t.get("fraud");
+    VerificationService.Answered answered = verifications.answer(token, answer.equals("yes"));
+    String message;
+    if (answered.unusable().isPresent()) {
+      message = t.get("unusable");
+    } else if (answered.pending()) {
+      // The answer is recorded and the sweep lifts the block within seconds (finding 6): saying
+      // "unblocked" here would promise something that has not happened yet.
+      message = t.get("pending");
+    } else {
+      message = answer.equals("yes") ? t.get("lifted") : t.get("fraud");
+    }
     return page(locale, "<p>" + message + "</p>");
   }
 

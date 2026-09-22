@@ -43,6 +43,7 @@ import io.github.mariusbayizere.fraudshield.ingest.idempotency.RedisIdempotency;
 import io.github.mariusbayizere.fraudshield.ingest.idempotency.ResilientIdempotency;
 import io.github.mariusbayizere.fraudshield.ingest.web.ApiKeyFilter;
 import io.github.mariusbayizere.fraudshield.notify.sms.CustomerSmsPolicy;
+import io.github.mariusbayizere.fraudshield.notify.verification.UnblockReconciler;
 import io.github.mariusbayizere.fraudshield.notify.verification.VerificationService;
 import io.lettuce.core.ClientOptions;
 import io.lettuce.core.RedisClient;
@@ -261,6 +262,16 @@ public class DecisionWiring {
       Clock clock,
       FraudShieldProperties properties) {
     return new HoldTimeoutService(holds, states, recorder, metrics, clock, properties.instanceId());
+  }
+
+  @Bean
+  UnblockReconciler unblockReconciler(
+      DataSource dataSource,
+      DecisionTransitionService transitions,
+      HoldSchedulePort holds,
+      Clock clock,
+      FraudShieldProperties properties) {
+    return new UnblockReconciler(dataSource, transitions, holds, properties.instanceId(), clock);
   }
 
   @Bean

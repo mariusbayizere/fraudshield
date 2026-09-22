@@ -30,8 +30,16 @@ one GSM-7 segment in four languages.
    most 54 characters (`https://` + a 21-character domain + `/v/` + token), never ask for a PIN or
    password, and are all `machine_draft` (D-43): none has had native-speaker review.
 
+6. **The answer is committed before the decision moves** (Principal Review finding 6). The response
+   row and the `unblock_events` row are one transaction; the decision transition follows it and can
+   fail on its own (a full spool, an unknown spool outcome, a refused state write). The answer
+   stands, because the token is single-use and the customer cannot give it again: the page then
+   says the payment "is being unblocked" instead of "is unblocked", and a leader-run sweep (V64,
+   10-second grace) applies the transition. The sweep is idempotent: a decision that has already
+   moved on is refused and skipped.
+
 ## Consequences
 
-`SmsPolicyTest`, `VerificationFlowTest`, `ResilienceApiTest` (page over HTTP, block lifted and
-webhook delivered within 10 s). The PII-vault `ContactDirectory` is not built (no vault schema
+`SmsPolicyTest`, `VerificationFlowTest` (including an answer whose transition fails, applied by the
+sweep), `ResilienceApiTest` (page over HTTP, block lifted and webhook delivered within 10 s). The PII-vault `ContactDirectory` is not built (no vault schema
 exists); without it the SMS channel does not start and intents stay on Kafka.

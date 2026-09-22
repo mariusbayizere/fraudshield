@@ -183,7 +183,7 @@ class VerificationFlowTest {
               assertThat(v.localTime()).isEqualTo("12:00 CAT");
             });
     clock.advance(Duration.ofMinutes(9));
-    assertThat(verifications.answer(token, true)).isEmpty();
+    assertThat(verifications.answer(token, true)).isEqualTo(VerificationService.Answered.APPLIED);
     assertThat(ports.latest.get(blockedTransaction).decision()).isEqualTo(DecisionValue.APPROVE);
     assertThat(ports.latest.get(blockedTransaction).decidedBy())
         .isEqualTo(DecidedBy.CUSTOMER_VERIFICATION);
@@ -192,8 +192,47 @@ class VerificationFlowTest {
         .satisfies(l -> assertThat(l.fraud()).isFalse());
     assertThat(one("SELECT cause FROM fraudshield.unblock_events"))
         .isEqualTo("CUSTOMER_VERIFICATION");
-    assertThat(verifications.answer(token, true)).contains(VerificationService.Unusable.USED);
+    assertThat(verifications.answer(token, true).unusable())
+        .contains(VerificationService.Unusable.USED);
     assertThat(verifications.open(token).unusable()).contains(VerificationService.Unusable.USED);
+  }
+
+  @Test
+  @Tag("NFR-REL-01")
+  void anAnswerThatDidNotReachTheDecisionPathIsAppliedByTheSweep() throws Exception {
+    sender.send(INSTITUTION, intent);
+    String token = token();
+
+    // The spool refuses: the answer and its unblock_events row are already committed, and the
+    // token is spent, so the customer must not be told to try again (Principal Review finding 6).
+    ports.recorderFull = true;
+    VerificationService.Answered answered = verifications.answer(token, true);
+    assertThat(answered.unusable()).isEmpty();
+    assertThat(answered.pending()).isTrue();
+    assertThat(one("SELECT cause FROM fraudshield.unblock_events"))
+        .isEqualTo("CUSTOMER_VERIFICATION");
+    assertThat(ports.latest.get(blockedTransaction).decision()).isEqualTo(DecisionValue.DECLINE);
+
+    UnblockReconciler reconciler =
+        new UnblockReconciler(
+            db.dataSource("fs_app"),
+            new DecisionTransitionService(ports, ports, ports, clock),
+            ports,
+            "instance-1",
+            clock);
+    assertThat(reconciler.reconcile()).as("inside the grace period").isZero();
+    clock.advance(UnblockReconciler.GRACE.plusSeconds(1));
+    assertThat(reconciler.reconcile()).as("the spool is still refusing").isZero();
+
+    ports.recorderFull = false;
+    assertThat(reconciler.reconcile()).isEqualTo(1);
+    assertThat(ports.latest.get(blockedTransaction).decision()).isEqualTo(DecisionValue.APPROVE);
+    assertThat(ports.latest.get(blockedTransaction).decidedBy())
+        .isEqualTo(DecidedBy.CUSTOMER_VERIFICATION);
+    assertThat(ports.eventsOf(DecisionEvent.LabelRecorded.class))
+        .singleElement()
+        .satisfies(l -> assertThat(l.fraud()).isFalse());
+    assertThat(reconciler.reconcile()).as("nothing left to apply").isZero();
   }
 
   @Test
@@ -204,7 +243,8 @@ class VerificationFlowTest {
     assertThat(verifications.open(token).view()).isPresent();
     clock.advance(Duration.ofMillis(1));
     assertThat(verifications.open(token).unusable()).contains(VerificationService.Unusable.EXPIRED);
-    assertThat(verifications.answer(token, true)).contains(VerificationService.Unusable.EXPIRED);
+    assertThat(verifications.answer(token, true).unusable())
+        .contains(VerificationService.Unusable.EXPIRED);
     assertThat(verifications.open("AAAAAAAAAAAAAAAAAAAAAA").unusable())
         .contains(VerificationService.Unusable.UNKNOWN);
     assertThat(verifications.open("'; DROP TABLE x; --").unusable())
@@ -215,7 +255,8 @@ class VerificationFlowTest {
   @Test
   void noThisWasNotMeKeepsTheBlockAndLabelsFraud() throws Exception {
     sender.send(INSTITUTION, intent);
-    assertThat(verifications.answer(token(), false)).isEmpty();
+    assertThat(verifications.answer(token(), false))
+        .isEqualTo(VerificationService.Answered.APPLIED);
     assertThat(ports.latest.get(blockedTransaction).decision()).isEqualTo(DecisionValue.DECLINE);
     assertThat(ports.eventsOf(DecisionEvent.LabelRecorded.class).getFirst().fraud()).isTrue();
     assertThat(one("SELECT count(*) FROM fraudshield.unblock_events")).isEqualTo("0");

@@ -4,6 +4,7 @@ import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcConfigurat
 import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcOverdueHolds;
 import io.github.mariusbayizere.fraudshield.decision.application.CircuitBreakerMonitor;
 import io.github.mariusbayizere.fraudshield.decision.application.HoldTimeoutService;
+import io.github.mariusbayizere.fraudshield.notify.verification.UnblockReconciler;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.Executors;
@@ -16,9 +17,9 @@ import org.springframework.stereotype.Component;
 
 /**
  * The decision path's periodic work (E.6): the MEDIUM deadline poller every 100 ms (leader only),
- * the overdue-hold sweep and the MCC breaker monitor every 5 s, and configuration refresh every 5
- * s, which keeps threshold and rule changes effective well within 60 s. A failing task is logged
- * and runs again on its next tick.
+ * the overdue-hold sweep, the unblock sweep and the MCC breaker monitor every 5 s, and
+ * configuration refresh every 5 s, which keeps threshold and rule changes effective well within 60
+ * s. A failing task is logged and runs again on its next tick.
  */
 @Component
 public final class BackgroundTasks implements SmartLifecycle {
@@ -38,6 +39,7 @@ public final class BackgroundTasks implements SmartLifecycle {
   private final JdbcOverdueHolds overdue;
   private final CircuitBreakerMonitor breakers;
   private final JdbcConfiguration configuration;
+  private final UnblockReconciler unblocks;
   private ScheduledExecutorService scheduler;
 
   /**
@@ -47,16 +49,19 @@ public final class BackgroundTasks implements SmartLifecycle {
    * @param overdue durable overdue holds
    * @param breakers MCC breaker monitor
    * @param configuration risk configuration
+   * @param unblocks customer unblocks that did not reach the decision path
    */
   public BackgroundTasks(
       HoldTimeoutService holds,
       JdbcOverdueHolds overdue,
       CircuitBreakerMonitor breakers,
-      JdbcConfiguration configuration) {
+      JdbcConfiguration configuration,
+      UnblockReconciler unblocks) {
     this.holds = Objects.requireNonNull(holds, "holds");
     this.overdue = Objects.requireNonNull(overdue, "overdue");
     this.breakers = Objects.requireNonNull(breakers, "breakers");
     this.configuration = Objects.requireNonNull(configuration, "configuration");
+    this.unblocks = Objects.requireNonNull(unblocks, "unblocks");
   }
 
   @Override
@@ -68,6 +73,7 @@ public final class BackgroundTasks implements SmartLifecycle {
     every(SLOW_TICK, () -> holds.reconcile(overdue, SWEEP_GRACE));
     every(SLOW_TICK, breakers::evaluate);
     every(SLOW_TICK, configuration::refreshAll);
+    every(SLOW_TICK, unblocks::reconcile);
   }
 
   private void every(Duration period, Runnable task) {
