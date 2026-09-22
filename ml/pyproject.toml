@@ -41,6 +41,7 @@ dev = [
 fs-features = "fraudshield_ml.cli:main"
 fs-model = "fraudshield_ml.models.cli:main"
 fs-scorer = "fraudshield_ml.serving.cli:main"
+fs-bench = "fraudshield_ml.serving.benchmark:main"
 
 [build-system]
 requires = ["hatchling==1.32.0"]
