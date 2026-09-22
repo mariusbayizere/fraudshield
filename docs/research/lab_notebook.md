@@ -2135,3 +2135,82 @@ generalisation belongs to real-data validation and not to this benchmark.
 depend on the data being hard: explanation cost grows 35× from the smallest tree configuration to
 the largest while accuracy moves inside its own interval. That is a claim about the model and the
 SHAP algorithm, and an easy benchmark cannot weaken it.
+
+### 2026-09-22 · Pre-registration: one non-burst fraud variant, before the draw exists
+
+Committed before the dataset is regenerated and before any measurement of it exists (ADR 0028).
+PB-46's two generalisation experiments both came back null today: leave-one-country-out changes an
+AUC by at most 0.002, and the novel sub-variant is *easier* than the familiar one (100.0% recall
+against 95.1%) because it differs from its parent scenario only in timing, not in shape — still a
+burst. One cause explains both and the redundancy finding: this benchmark encodes fraud as bursts,
+and every country, variant and feature group is a view of that structure.
+
+The owner's direction: do not invent country differences (there is no source to ground them in —
+that would be circular, ADR 0028 §Decision 1). Do add one variant whose *mechanism* differs, drawn
+from a real, independently-documented fraud typology rather than from what would defeat this
+model.
+
+#### The variant: `reversal_scam_social_engineering`
+
+**Typology.** "Sent by mistake, please return" scams: a scammer contacts a victim, convinces them
+that a payment was sent in error (a real payment, a fabricated one, or an actual small transfer
+followed by a much larger "correction" request), and asks the victim to send back an amount
+described as the mistake. The transfer is the **victim's own act**, not an attacker's — no
+compromised account, no enabling SIM swap or device change. It is a **single transaction** — the
+whole incident is the one transfer the scam depends on, not a drain. And it typically goes to a
+**counterparty the victim has established contact with** in the course of the scam, which by the
+time of the transfer is not a fresh, unrecognised payee to the account.
+
+**Mechanism, as implemented.** Drawn independently per (customer, test-period month) — not from
+`mule_account`'s own incident budget, whose test-period allocation tops out at ~15 incidents even
+at 100% conversion (measured against the 1,000,000-row plan before any probability was set, a
+sizing calculation and not a result). One row. The counterparty is drawn from the customer's own
+`counterparties` list — the same pool their legitimate P2P transactions already draw from —
+verified directly against `Population.customer(i).counterparties`, not inferred from rows a small
+draw happened to have already written (an earlier check against realised legitimate rows gave a
+false negative for exactly that reason, corrected before this entry was written). The amount uses
+a dedicated multiplier (3.5×, against `mule_account`'s own 2.0×) because the scam's request is
+described as an unusual, specific "overpayment" — notably larger than a habitual transfer — and is
+never a round sum, matching the "return exactly what I mistakenly sent" framing.
+
+**What this removes, stated plainly rather than left implicit.** Burst-structure (one row) and
+counterparty-novelty (an established payee) — the two axes PB-60 and PB-61 found doing the work.
+Amount, channel and timing remain available to a detector. This is not a claim of invisibility on
+every axis; it is a claim about which two axes are absent, chosen because those are the two this
+benchmark's models are shown to rely on, not because the model's SHAP ranking was checked feature
+by feature and a value picked to duck under each one.
+
+**Sizing.** `reversal_scam_probability = 0.005`, chosen against ~17,000 test-period customer-month
+draws to land near 60-70 rows — the same order as `novel_esim_delayed_drain`'s realised 73, and
+well clear of the "fewer than 30 fraud rows, read as direction not measurement" line this project's
+own reporting convention already draws. A power calculation, made before generating: it decides
+how much evidence the experiment produces, not whether the model catches it.
+
+**Verified mechanically before this entry was committed** (`test_the_reversal_scam_variant_is_one_
+transaction_to_a_known_payee_in_the_test_period`, dataset suite; full realism gate check re-run at
+200,000-row scale, all gates still pass): exactly one row per selected incident, every counterparty
+on the account's own established list, every timestamp at or after the test-period boundary, zero
+rows in any earlier month.
+
+#### The prediction, recorded before the draw exists
+
+**I predict the model still detects a meaningful share of this variant, though less well than the
+base scenarios, and the honest range is wide because the removed axes (SHAP-ranked #1 counterparty
+novelty, and the whole velocity/temporal group) carried most of the separation measured today.**
+Concretely: recall at the same 1%-FPR threshold used for the novel-variant comparison, **between
+0.15 and 0.55** — well below `base`'s 95.1% and `novel_esim_delayed_drain`'s 100.0%, but not zero,
+because amount (a 3.5× multiplier is still an unusual amount for the account) and the counterparty-
+confirmed-fraud-90d feature (the account's history, if any prior fraud touched this exact
+counterparty pool) remain live.
+
+**What would refute the mechanism claim in either direction.** Recall above roughly 0.7 would say
+the amount and channel signal alone still catch most of it — a real result, but one saying this
+particular variant did not remove enough of what the model uses, not that non-burst fraud is
+undetectable in general. Recall below roughly 0.10 would say burst-structure and counterparty-
+novelty account for nearly all of this benchmark's detection power on their own, which PB-60's
+redundancy table already makes plausible (four independent groups each ≥0.845 alone means a lot of
+signal is concentrated in a few mechanisms) but has not yet been measured directly on a case built
+to lack both at once.
+
+This entry will not be edited after the measurement. The result — whichever direction it lands —
+follows in its own entry, dated after the regeneration this commit precedes.

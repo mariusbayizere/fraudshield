@@ -126,6 +126,33 @@ parameters:
     unit: fraction of mule-account forwarding transfers sent to another EAC country
     provenance: ASSUMED
     rationale: Mules move proceeds across borders more often than ordinary customers remit (behaviour.cross_border_share); the share is a modelling choice.
+  reversal_scam_probability:
+    value: 0.005
+    unit: probability, per active customer per test-period month, of planting one reversal-scam social-engineering transaction
+    provenance: ASSUMED
+    rationale: >-
+      PB-61's replacement generalisation test (ADR 0028), pre-registered 2026-09-22. Drawn
+      independently per customer per test-period month, not from mule_account's own incident
+      budget: that budget holds at most ~15 incidents in the test period even at 100% conversion
+      (measured directly against the 1,000,000-row plan before this parameter was set), too few
+      for a recall figure to rest on -- the same "a handful of fraud rows is not a measurement"
+      lesson this session already paid for once today (PB-55/PB-56). Sized against the ~17,000
+      customer-month draws the test period actually holds to land near 60-70 rows, the same order
+      as novel_esim_delayed_drain's realised 73. A power calculation made before generating, not a
+      result read back into the design: it decides how much evidence the experiment produces, not
+      whether the model catches it.
+  reversal_scam_amount_multiplier:
+    value: 3.5
+    unit: multiple of the channel's median legitimate amount used as the reversal-scam amount, in place of amount_multiplier.mule_account
+    provenance: ASSUMED
+    rationale: >-
+      Reversal ("sent by mistake, please return") scams work by asking the victim to send back an
+      amount described as an overpayment or a specific mistaken transfer -- typically notably
+      larger than the victim's habitual P2P transfer, since a trivial amount would not motivate
+      the deception. Set above mule_account's own 2.0x so the request reads as the outsized,
+      specific ask the scam depends on, not as an ordinary transfer; a modelling choice, not
+      calibrated to any source, since the sourcing pass of 2026-09-18 found no publication giving
+      reversal-scam amounts for these markets.
   takeover_lead_minutes:
     value: [5, 43200]
     unit: >-

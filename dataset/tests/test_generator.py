@@ -23,16 +23,23 @@ from fraudshield_dataset.generator.config import (
     SimulationConfig,
     build_config,
     check_urban_share,
+    month_bounds,
     month_labels,
     seasonal_factor,
     segment_channel_shares,
 )
 from fraudshield_dataset.generator.countries import load_packs
-from fraudshield_dataset.generator.fraud import NOVEL_VARIANT, SCENARIOS, FraudModel
+from fraudshield_dataset.generator.fraud import (
+    NOVEL_VARIANT,
+    REVERSAL_SCAM_VARIANT,
+    SCENARIOS,
+    FraudModel,
+)
+from fraudshield_dataset.generator.keys import token
 from fraudshield_dataset.generator.legit import LegitimateBehaviour, month_start_micros
 from fraudshield_dataset.generator.pipeline import generate
 from fraudshield_dataset.generator.population import Population
-from fraudshield_dataset.generator.schema import ACCOUNT_EVENTS, LABELS, TRANSACTIONS
+from fraudshield_dataset.generator.schema import ACCOUNT_EVENTS, LABELS, TRANSACTIONS, Rows
 from fraudshield_dataset.params import ParameterError, ParameterSet, ScaleError, load_parameters
 from fraudshield_dataset.paths import PARAMS_DIR
 
@@ -890,3 +897,70 @@ def test_no_fraud_parameter_is_keyed_by_country() -> None:
         "leave-one-country-out informative, and PB-59 records that as a change to the benchmark "
         "rather than a fix to the experiment"
     )
+
+
+@pytest.mark.req("ML-DATA-02", "D-08")
+def test_the_reversal_scam_variant_is_one_transaction_to_a_known_payee_in_the_test_period() -> None:
+    """PB-61's pre-registered generalisation test (ADR 0028), checked against its own definition.
+
+    Three properties make this a genuinely different mechanism from NOVEL_VARIANT, and all three
+    are asserted directly rather than inferred from a row count: **one row per incident**, not a
+    burst — checked by counting produced rows per (customer, month) call, never more than one;
+    **a counterparty already on the account's own payee list**, not a fresh or mule one — checked
+    against `customer.counterparties` itself, not against rows the corpus happens to have written
+    yet (an earlier manual check against realised legitimate rows in a small draw gave a false
+    negative for exactly this reason: the customer's other established counterparties simply had
+    not transacted yet in that draw); and **test period only** — every row's timestamp at or after
+    `config.split.test_start`, and zero rows produced for any earlier month.
+    """
+    config = build_config(load_parameters(), seed=20260917, total_rows=200_000)
+    population = Population(config)
+    legitimate = LegitimateBehaviour(config, population)
+    model = FraudModel(config, population, legitimate, allow_missing_scenarios=True)
+
+    established: dict[str, set[str]] = {}
+    for index in range(config.customers_total):
+        customer = population.customer(index)
+        established[customer.account] = {
+            token(config.seed, "account", other) for other, _ in customer.counterparties
+        }
+
+    produced_per_month: dict[str, int] = {}
+    rows = Rows()
+    for month_index, month in enumerate(config.months):
+        before = len(rows)
+        for index in range(config.customers_total):
+            customer = population.customer(index)
+            one_row_before = len(rows)
+            model._maybe_reversal_scam(customer, month_index, rows)
+            assert len(rows) - one_row_before <= 1, (
+                f"{customer.account} in {month}: more than one row from a single call, which is "
+                "the burst this variant exists to not be"
+            )
+        produced_per_month[month] = len(rows) - before
+
+    assert len(rows) >= 8, (
+        f"only {len(rows)} rows at 200,000 scale; precondition for a test that means to check "
+        "the distribution across accounts and months, not just that the mechanism can fire once"
+    )
+    test_start = config.split.test_start
+    for month, count in produced_per_month.items():
+        _, hi = month_bounds(month)
+        if hi <= test_start:
+            assert count == 0, f"{month} ends before the test period and produced {count} rows"
+
+    accounts = [str(v) for v in rows.columns["account_id"]]
+    counterparties = [str(v) for v in rows.columns["counterparty_id"]]
+    timestamps = [int(v) for v in rows.columns["transaction_timestamp"]]  # type: ignore[call-overload]
+    variants = [str(v) for v in rows.columns["scenario_variant"]]
+    fraud_types = [str(v) for v in rows.columns["fraud_type"]]
+
+    assert all(v == REVERSAL_SCAM_VARIANT for v in variants)
+    assert all(ft == "mule_account" for ft in fraud_types)
+    assert all(t >= test_start for t in timestamps), "a row landed before the test period"
+    assert accounts, "precondition: rows were actually written"
+    for account, counterparty in zip(accounts, counterparties, strict=True):
+        assert counterparty in established[account], (
+            f"{counterparty} is not on {account}'s own established payee list — the mechanism "
+            "must draw from customer.counterparties, not a fresh or mule token"
+        )
