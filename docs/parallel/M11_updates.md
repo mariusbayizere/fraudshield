@@ -188,3 +188,23 @@ stopped at once; later requests carried no personal data.
 from the third author's copy and is now VERIFIED-SOURCE; The Star's explainer of 27 March 2025 was
 read and added as `star2025mpesa`. Section 8 attributes each claim to the source that states it;
 the reading that the documented scam pays a new counterparty is marked as the paper's own.
+
+## 8. Senior review of `801d60b`, 2026-09-22
+
+Thirteen items applied on this branch. Two touch the record upstream owners keep:
+
+1. **Discrepancy 8 of section 6 is resolved** (datasheet says the reversal scam added 68 test-period
+   rows; the battery scores 66). Reading the draw itself: all 68 rows are in the test period and are
+   fraud by their true label; 2 carry the benchmark's missed-fraud label noise, and the evaluation
+   reads `is_fraud_observed`, so those 2 are scored as legitimate rows. Evidence:
+   `docs/research/paper/evidence/reversal_labels_d8083dbc.txt` (script at `6fe4bf0`, clean tree,
+   fingerprint `d8083dbc` recomputed with the generator's function at the tag). No upstream fix is
+   needed; the datasheet and the battery are both right about different labels. [M4]
+2. **ML-GATE-05 reads 0.000 in the gate file at three decimals, and is not zero.** `metrics.json`
+   gives 0.0003170702706987436, which is 32 of the 100,924 legitimate test rows. A reader of the
+   text file alone would conclude no legitimate row is blocked at the block threshold. Suggested
+   fix: print the count, or a fourth decimal. [M4]
+
+The paper now also states that 9 of the **11** gate metrics measurable at this milestone pass, of
+the **13** in `requirements.yaml`; ML-GATE-12 and 13 are filed under M5 (with M10's hardware for the
+latency percentile), as ADR 0031 says.

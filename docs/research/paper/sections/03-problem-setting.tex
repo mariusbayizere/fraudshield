@@ -41,8 +41,8 @@ synchronously to core banking, with a server-side latency target of 40~ms at the
 for flagged transactions (the specification's latency budget). A decision that holds a transaction for an
 analyst is resolved by webhook, not by an open request. Scores are calibrated probabilities from
 a weighted XGBoost and LightGBM ensemble, and every flagged decision carries an exact TreeSHAP
-explanation. The scoring service and decision engine are milestones M5 and M6; their measured
-latency is \notyet{M5, M6 and M10}.
+explanation. The scoring service and the decision engine belong to later milestones, and their measured latency
+is \notyet{M5, M6 and M10}.
 
 \paragraph{What is not in scope.} Graph-based features (the specification's later phases),
 real customer data of any kind, and any claim about a real institution, regulator or deployment.

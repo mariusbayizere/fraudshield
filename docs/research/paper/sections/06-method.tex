@@ -1,13 +1,14 @@
 \section{Method}
 \label{sec:method}
 
-\subsection{The production model (resolution D-05)}
+\subsection{The production model}
 
 XGBoost \cite{chen2016xgboost} and LightGBM \cite{ke2017lightgbm} are trained with native handling of missing values and categories, class
 imbalance addressed by weighting (no oversampling), and early stopping on the validation split.
 Their raw probabilities are combined as $\nWeightXGB\,p_{\mathrm{xgb}} +
 \nWeightLGB\,p_{\mathrm{lgb}}$, and \textbf{one} isotonic regression \cite{zadrozny2002calibration} is fitted on the combined
-score using the calibration split, which is chronologically later than the validation data and
+score using the calibration split (resolution D-05), which is chronologically later than the
+validation data and
 never used for fitting or scoring otherwise. The calibrated ensemble score is the quantity the
 decision thresholds and the calibration error are measured on; calibrating the two models
 separately and averaging them does not yield a calibrated ensemble. In the evaluated run the
