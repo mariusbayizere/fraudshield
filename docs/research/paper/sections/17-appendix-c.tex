@@ -37,6 +37,7 @@ legitimate rows, and incidents follow the victim's daily activity profile, with 
   enabling SIM event by days rather than minutes; \nNovelRows{} rows, test period only.
   \item \texttt{reversal\_scam\_social\_engineering}: the pre-registered non-burst variant
   (ADR 0028); \nRevRows{} rows, test period only, generated as \texttt{mule\_account} rows and
-  paid to a prior contact of the victim. The battery scores \nRevFraud{} fraud rows of it
-  (Section~\ref{sec:generalisation}).
+  paid to a prior contact of the victim. The battery scores \nRevFraud{} of them as fraud: the
+  other \nRevScoredUnlabelled{} are fraud whose observed label says legitimate, the benchmark's
+  missed-fraud noise (Section~\ref{sec:generalisation}).
 \end{itemize}
