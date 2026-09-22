@@ -9,8 +9,9 @@ latency), and every artefact names its machine in `# evidence-machine:`.
 ## Machine
 
 A Codespace on this repository with **4 cores and 16 GB** (the devcontainer's own
-`hostRequirements`). Check out **the commit this runbook was added in**. The code is identical to
-`c59da11`, where the laptop's three points ran.
+`hostRequirements`). Check out **the commit named in the owner's instructions** (the latest commit
+that changed this runbook). Its code differs from `c59da11`, where the laptop's three points ran,
+only in how the access log names a learning-curve run.
 
 ## Expected runtime
 
@@ -28,7 +29,7 @@ Run from the repository root. Each step stops on its first failure.
 
 ```bash
 set -euo pipefail
-git fetch origin && git checkout --detach <the commit this runbook was added in>
+git fetch origin && git checkout --detach <the commit named in the owner's instructions>
 uv sync --all-packages --locked
 
 # 1. Regenerate the draw and prove it is d8083dbc. Not an evidence step: the draw already has one

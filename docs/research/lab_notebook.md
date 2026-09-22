@@ -2426,3 +2426,38 @@ pre-registration is unchanged, its prediction included.** What changes, on the o
   result rather than discovered later.
 - **Nothing is concluded until all four points exist.** The three laptop points are reported as an
   interim result against the prediction; ADR 0031 and the paper's contribution wait for 240K.
+
+### 2026-09-22 · PB-67, INTERIM: three laptop points, 240K still to run
+
+**Interim, and labelled so.** Three of the four pre-registered sizes, from one laptop cache
+(`m4_learning_curve_cache_120k_d8083dbc.txt`: a 340,000-row corpus rather than the 360,000 the
+design entry named, trimmed to widen the memory margin). They are scored on the declared gate
+run's test and calibration rows, which match its cache exactly. ADR 0031 and the paper's
+contribution are **not** updated until the 240K point exists.
+
+| Training rows (fraud) | Recall at 0.60, seed 1 [95% CI] | Five seeds | Recall at the 1% FPR budget (realised FPR) |
+|---|---|---|---|
+| 30,000 (259) | 0.795 [0.766, 0.818] | 0.767 ± 0.025 | 0.869 (0.68%) |
+| 60,000 (532) | 0.799 [0.773, 0.823] | 0.772 ± 0.038 | 0.854 (0.30%) |
+| 120,000 (1,066) | 0.798 [0.772, 0.821] | 0.779 ± 0.023 | 0.878 (0.82%) |
+
+**Against the pre-registered prediction.**
+- *Recall at 0.60 stays below 0.88 at every size:* **so far, yes**, and not narrowly. Every upper
+  bound is at or below 0.823.
+- *It reaches 0.76–0.84 at 240K:* not yet measurable. The 30K–120K points already sit inside that
+  range.
+- *Recall at the 1% FPR budget reaches 0.87–0.91 at 240K:* not yet measurable. The three values
+  are not strictly comparable with each other, because the realised FPR at the budget's threshold
+  swings with isotonic ties (0.30% to 0.82%).
+
+**What the three points show, and what they do not.** Quadrupling the training data, from 259 to
+1,066 frauds, moves recall at 0.60 by +0.003 at seed 1 and +0.012 on the five-seed means — inside
+every interval. That is consistent with the plateau outcome and with the pre-registration's
+reason. It does not decide it: the pre-registered test is the 120K-to-240K step.
+
+**A larger effect than volume, found on the way.** This curve's 30K point (0.795) is 0.059 above
+the declared gate's 30K (0.736), with intervals that only just fail to overlap. Both use 30,000
+training rows; they differ in which rows. The gate's come from a 400,000-row corpus and this
+curve's from a 340,000-row one, so they cover different time spans with different amounts of
+truncated history (PB-69). Which training rows are used moves recall more than quadrupling them
+does. That is a warning about the 240K point too: it comes from a third corpus depth.
