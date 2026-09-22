@@ -503,6 +503,10 @@ class EvaluationRun:
     #: Rows from validation *outside* its calibration tail, for D-05's early stopping. Zero keeps
     #: the cache as the battery-era runs wrote it, with no rows to stop on.
     validation_rows: int = 0
+    #: Build and write the cache, then stop: no model is fitted and no test row is scored. A
+    #: release-scale pass holds the corpus in memory, so it keeps columns rather than a dict per
+    #: row, and leaves fitting to `fs-features gate`, which reads the cache column-wise.
+    cache_only: bool = False
     #: Where to keep the computed feature matrix. Everything M4 still owes — calibration, SHAP,
     #: baselines, ablations, the per-country and per-channel breakdowns, leave-one-country-out —
     #: refits models on the **same** features, and the feature pass is the only expensive part.
@@ -543,8 +547,15 @@ def _feature_matrix(
     print(f"computing {len(smoke.trainable_features())} features for {len(sample)} rows...")
     started = time.monotonic()
     vectors = []
+    names = smoke.trainable_features()
+    columns: dict[str, list[object]] = {name: [] for name in names}
     for done, i in enumerate(sample, start=1):
-        vectors.append(compute(rows, i, context, corpus_index))
+        vector = compute(rows, i, context, corpus_index)
+        if run.cache_only:
+            for name in names:
+                columns[name].append(vector[name])
+        else:
+            vectors.append(vector)
         if done % 2000 == 0 or done == len(sample):
             rate = done / (time.monotonic() - started)
             print(
@@ -566,7 +577,10 @@ def _feature_matrix(
         smoke.CACHE_VARIANT: [variants.get(rows[i].transaction_id, "") for i in sample],
         smoke.CACHE_MCC: [rows[i].merchant_category_code or "" for i in sample],
     }
-    if run.cache:
+    if run.cache and run.cache_only:
+        smoke.cache_write_columns(run.cache, key, columns, extras)
+        print(f"wrote the feature matrix to {run.cache}")
+    elif run.cache:
         smoke.cache_write(run.cache, key, vectors, extras)
         print(f"wrote the feature matrix to {run.cache}")
     return vectors, extras
@@ -914,7 +928,14 @@ def run_battery(cache: Path, seed: int, top: int) -> int:
     return 0
 
 
-def run_gate(cache: Path, out: Path, seeds: tuple[int, ...], resamples: int, flags: str) -> int:
+def run_gate(  # noqa: PLR0913, PLR0917 - every argument is a declared setting of the run
+    cache: Path,
+    out: Path,
+    seeds: tuple[int, ...],
+    resamples: int,
+    flags: str,
+    train_rows: int | None = None,
+) -> int:
     """The declared M4 gate evaluation (E.5): D-05's model against ML-GATE-01 to ML-GATE-11.
 
     Writes `metrics.json`, LaTeX tables and SVG figures under `out`, and records the test-set
@@ -922,15 +943,19 @@ def run_gate(cache: Path, out: Path, seeds: tuple[int, ...], resamples: int, fla
     its threshold, which is what a CI gate needs; without it the measured values are reported
     and the command succeeds, which is what D.3 asks of a failing metric (record, do not tune).
     """
-    loaded = smoke.cache_read_any(cache)
-    if loaded is None:
+    if not cache.exists():
         raise DatasetGapError(f"{cache} holds no usable feature matrix")
     try:
-        data = gate_run.load(*loaded)
+        data = gate_run.load_cache(cache, train_rows=train_rows)
     except ValueError as gap:
         raise DatasetGapError(str(gap)) from gap
     result = gate_run.run(
-        data, seed=seeds[0], seeds=seeds, resamples=resamples, ablate="ablate" in flags
+        data,
+        seed=seeds[0],
+        seeds=seeds,
+        resamples=resamples,
+        ablate="ablate" in flags,
+        metrics_only="metrics-only" in flags,
     )
     print("\n".join(gate_report.summary(result)))
     for path in gate_report.write(result, out):
@@ -940,18 +965,13 @@ def run_gate(cache: Path, out: Path, seeds: tuple[int, ...], resamples: int, fla
     return 1 if failed and "enforce" in flags else 0
 
 
-def run_evaluate(run: EvaluationRun) -> int:
-    """Fit on the train period, score on the test period, never touch the embargo (PB-49).
+def _sample(
+    run: EvaluationRun, rows: list[Transaction], boundaries: split_module.Boundaries
+) -> tuple[list[int], list[str], list[int], list[int]]:
+    """Which rows of the corpus are featurised, and which D-07 period each one belongs to.
 
-    The sample is the **tail** of each period rather than a draw from all of it: the corpus is
-    bounded, the feature pass is the whole cost of this command, and a uniform draw over the train
-    period would need every row of it in the index. That is a limit on training volume, not on the
-    split, and the report states it beside every figure rather than leaving it to be assumed.
+    Returns the sample, its segment labels, and the train and test indices into the corpus.
     """
-    boundaries = split_module.load(run.split)
-    rows = read_transactions(run.dataset, run.packs, limit=run.corpus_rows)
-    context = _build_context(run.dataset, run.packs, rows)
-
     by_segment: dict[split_module.Segment, list[int]] = {}
     calibration_pool: list[int] = []
     for index, row in enumerate(rows):
@@ -998,6 +1018,28 @@ def run_evaluate(run: EvaluationRun) -> int:
         + ["calibration"] * len(calibration_index)
         + ["validation"] * len(validation_index)
     )
+    return sample, segments, train_index, test_index
+
+
+def run_evaluate(run: EvaluationRun) -> int:
+    """Fit on the train period, score on the test period, never touch the embargo (PB-49).
+
+    The sample is the **tail** of each period rather than a draw from all of it: the corpus is
+    bounded, the feature pass is the whole cost of this command, and a uniform draw over the train
+    period would need every row of it in the index. That is a limit on training volume, not on the
+    split, and the report states it beside every figure rather than leaving it to be assumed.
+    """
+    if run.cache_only and run.cache is None:
+        raise DatasetGapError("--cache-only needs --cache: there is nowhere to write it")
+    boundaries = split_module.load(run.split)
+    rows = read_transactions(run.dataset, run.packs, limit=run.corpus_rows)
+    context = _build_context(run.dataset, run.packs, rows)
+
+    sample, segments, train_index, test_index = _sample(run, rows, boundaries)
+    if run.cache_only:
+        _feature_matrix(run, rows, sample, context, segments)
+        print("cache written; no model fitted and no test row scored (--cache-only)")
+        return 0
     vectors, extras = _feature_matrix(run, rows, sample, context, segments)
     labels = [v == "True" for v in extras[smoke.CACHE_LABEL]]
     accounts = extras[smoke.CACHE_ACCOUNT]
@@ -1211,6 +1253,17 @@ def _add_gate_command(commands: Any) -> None:
     gate_command.add_argument("--resamples", type=int, default=1000)
     gate_command.add_argument("--ablate", action="store_true", help="E.5.4's ablations")
     gate_command.add_argument(
+        "--train-rows",
+        type=int,
+        default=None,
+        help="fit on this many of the cached training rows, spread evenly in time (PB-67)",
+    )
+    gate_command.add_argument(
+        "--metrics-only",
+        action="store_true",
+        help="the gate metrics, intervals and seeds only: no baselines, ablations or ONNX parity",
+    )
+    gate_command.add_argument(
         "--enforce", action="store_true", help="exit 1 if any gate metric misses its threshold"
     )
 
@@ -1258,6 +1311,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=0,
         help="rows from D-07's calibration period, computed and cached but neither fitted on nor "
         "scored here; the battery calibrates on them",
+    )
+    evaluate_command.add_argument(
+        "--cache-only",
+        action="store_true",
+        help="write the feature cache and stop: no model is fitted and no test row is scored",
     )
     evaluate_command.add_argument(
         "--validation-rows",
@@ -1336,7 +1394,16 @@ COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
         a.out,
         tuple(a.seeds),
         a.resamples,
-        " ".join(f for f, on in (("ablate", a.ablate), ("enforce", a.enforce)) if on),
+        " ".join(
+            f
+            for f, on in (
+                ("ablate", a.ablate),
+                ("enforce", a.enforce),
+                ("metrics-only", a.metrics_only),
+            )
+            if on
+        ),
+        a.train_rows,
     ),
     "frontier": lambda a: run_frontier(a.cache, a.seed, a.requests, a.repeats),
     "seed-variance": lambda a: run_seed_variance(a.cache, tuple(a.seeds)),
@@ -1351,6 +1418,7 @@ COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
             test_rows=a.test_rows,
             calibration_rows=a.calibration_rows,
             validation_rows=a.validation_rows,
+            cache_only=a.cache_only,
             seed=a.seed,
             cache=a.cache,
         )

@@ -88,7 +88,9 @@ def summary(report: Report) -> list[str]:
         "",
         "BASELINES — AUC with a Hanley-McNeil 95% interval; DeLong p against the ensemble.",
     ]
-    if not report.mcc_available:
+    if not report.baselines:
+        lines.append("  (not run: --metrics-only)")
+    elif not report.mcc_available:
         lines.append(
             "  (the cache carries no MCC column, so the rule engine scores the amount rule alone)"
         )
