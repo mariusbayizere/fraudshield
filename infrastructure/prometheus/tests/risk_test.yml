@@ -1,0 +1,147 @@
+# promtool unit tests for the alerts that compare against days of history (TPS drop, auto-block
+# baseline, fraud-rate anomaly, D-10 timeout release). Inputs are sampled every minute like a
+# scrape, but rules are evaluated every 3 minutes: promtool's cost is per evaluation step, and at
+# 30 s a week of history takes minutes per test on a laptop. The interval must stay below the
+# 5-minute lookback, or an alert reading another group's recording rule finds no sample; eval
+# times are multiples of 3 minutes. These tests pin the threshold logic; 'for' timing at the
+# production interval is covered in platform_test.yml.
+# Counter inputs are written as expanding-notation segments: '0+600x10080 6048470+470x59' is one
+# week at 600 per minute (10/s) followed by an hour at 470 per minute.
+rule_files:
+  - ../rules/recording.yml
+  - ../rules/alerts.yml
+  - ../rules/thresholds.yml
+evaluation_interval: 3m
+
+tests:
+  # --- SRS 8.2: TPS drop > 20% vs the same time last week ---------------------------------------
+  - name: 21.7% below last week pages after 10 minutes
+    interval: 1m
+    input_series:
+      - series: 'fs_ingest_requests_total{channel="USSD", status="200"}'
+        values: '0+600x10080 6048470+470x59'
+    alert_rule_test:
+      - eval_time: 1w9m
+        alertname: FraudShieldTransactionRateDrop
+        exp_alerts: []
+      - eval_time: 1w1h
+        alertname: FraudShieldTransactionRateDrop
+        exp_alerts:
+          - exp_labels: {severity: page, team: sre}
+            exp_annotations:
+              summary: Transaction rate is more than 20% below the same time last week
+              description: Ingest is at 7.833 requests/s, more than 20% below the same period one week ago. Either core banking stopped sending, or requests are failing before they are counted.
+              runbook_url: https://github.com/mariusbayizere/fraudshield/blob/main/docs/runbooks/FraudShieldTransactionRateDrop.md
+
+  - name: 18.3% below last week stays silent
+    interval: 1m
+    input_series:
+      - series: 'fs_ingest_requests_total{channel="USSD", status="200"}'
+        values: '0+600x10080 6048490+490x59'
+    alert_rule_test:
+      - eval_time: 1w1h
+        alertname: FraudShieldTransactionRateDrop
+        exp_alerts: []
+
+  - name: an 80% drop from a near-idle baseline (0.5/s) stays silent
+    interval: 1m
+    input_series:
+      - series: 'fs_ingest_requests_total{channel="USSD", status="200"}'
+        values: '0+30x10080 302406+6x59'
+    alert_rule_test:
+      - eval_time: 1w1h
+        alertname: FraudShieldTransactionRateDrop
+        exp_alerts: []
+
+  # --- SRS 8.2: auto-block rate > 3x its 7-day baseline -----------------------------------------
+  # Baseline 1 block/s for a week, then 3.5/s (fires) or 2.9/s (silent) for 30 minutes.
+  - name: 3.5x the baseline pages the risk officers
+    interval: 1m
+    input_series:
+      - series: 'fs_decisions_total{tier="HIGH", decision="DECLINE", channel="MOBILE_MONEY", fallback="false"}'
+        values: '0+60x10080 605010+210x29'
+    alert_rule_test:
+      - eval_time: 1w30m
+        alertname: FraudShieldAutoBlockRateAnomaly
+        exp_alerts:
+          - exp_labels: {severity: page, team: risk}
+            exp_annotations:
+              summary: Auto-block rate is more than 3x its 7-day baseline
+              description: 3.5 auto-blocks/s over the last 15 minutes. Either a fraud campaign is under way or a model, threshold or rule change is blocking legitimate customers.
+              runbook_url: https://github.com/mariusbayizere/fraudshield/blob/main/docs/runbooks/FraudShieldAutoBlockRateAnomaly.md
+
+  - name: 2.9x the baseline stays silent
+    interval: 1m
+    input_series:
+      - series: 'fs_decisions_total{tier="HIGH", decision="DECLINE", channel="MOBILE_MONEY", fallback="false"}'
+        values: '0+60x10080 604974+174x29'
+    alert_rule_test:
+      - eval_time: 1w30m
+        alertname: FraudShieldAutoBlockRateAnomaly
+        exp_alerts: []
+
+  - name: 9x a tiny baseline stays silent below one block per minute
+    interval: 1m
+    input_series:
+      - series: 'fs_decisions_total{tier="HIGH", decision="DECLINE", channel="MOBILE_MONEY", fallback="false"}'
+        values: '0+0.1x10080 1008.9+0.9x29'
+    alert_rule_test:
+      - eval_time: 1w30m
+        alertname: FraudShieldAutoBlockRateAnomaly
+        exp_alerts: []
+
+  # --- SRS 8.2: hourly fraud rate > 3 sigma from its 30-day mean, per channel -------------------
+  # Eight days alternating 8 and 12 HIGH per 1,000 LOW per minute (about 0.8% and 1.2%), then:
+  #   USSD          90 minutes at 20 per 1,000 (about 5 sigma)  -> fires
+  #   CARD          90 minutes at 12 per 1,000 (about 1 sigma)  -> silent
+  #   AGENT_BANKING the USSD spike, but only 2 days of history  -> silent (needs 7 days)
+  - name: only a channel with 7 days of history and a 3 sigma deviation notifies
+    interval: 1m
+    input_series:
+      - series: 'fs_decisions_total{tier="HIGH", decision="DECLINE", channel="USSD", fallback="false"}'
+        values: '0+8x1440 11532+12x1439 28808+8x1439 40332+12x1439 57608+8x1439 69132+12x1439 86408+8x1439 97932+12x1439 115220+20x89'
+      - series: 'fs_decisions_total{tier="LOW", decision="APPROVE", channel="USSD", fallback="false"}'
+        values: '0+1000x11610'
+      - series: 'fs_decisions_total{tier="HIGH", decision="DECLINE", channel="CARD", fallback="false"}'
+        values: '0+8x1440 11532+12x1439 28808+8x1439 40332+12x1439 57608+8x1439 69132+12x1439 86408+8x1439 97932+12x1439 115212+12x89'
+      - series: 'fs_decisions_total{tier="LOW", decision="APPROVE", channel="CARD", fallback="false"}'
+        values: '0+1000x11610'
+      - series: 'fs_decisions_total{tier="HIGH", decision="DECLINE", channel="AGENT_BANKING", fallback="false"}'
+        values: '_x8640 0+8x1440 11532+12x1439 28820+20x89'
+      - series: 'fs_decisions_total{tier="LOW", decision="APPROVE", channel="AGENT_BANKING", fallback="false"}'
+        values: '_x8640 0+1000x2970'
+    alert_rule_test:
+      - eval_time: 8d1h30m
+        alertname: FraudShieldFraudRateAnomaly
+        exp_alerts:
+          - exp_labels: {severity: page, team: risk, channel: USSD}
+            exp_annotations:
+              summary: USSD fraud rate is more than 3 sigma from its 30-day mean
+              description: HIGH-tier share of USSD decisions over the last hour is 0.966% away from its 30-day mean.
+              runbook_url: https://github.com/mariusbayizere/fraudshield/blob/main/docs/runbooks/FraudShieldFraudRateAnomaly.md
+
+  # --- D-10: MEDIUM holds timing out above the configured level (0.10) --------------------------
+  #   MOBILE_MONEY 12% of 10 holds/min  -> fires after 10 minutes
+  #   USSD          9% of 10 holds/min  -> silent
+  #   CARD         50% of 1 hold/min    -> silent: 15 holds per window is under the 20 minimum
+  - name: timeout releases above the level page per channel with enough holds
+    interval: 1m
+    input_series:
+      - {series: 'fs_decisions_total{tier="MEDIUM", decision="HOLD", channel="MOBILE_MONEY", fallback="false"}', values: '0+10x40'}
+      - {series: 'fs_alert_timeout_release_total{channel="MOBILE_MONEY"}', values: '0+1.2x40'}
+      - {series: 'fs_decisions_total{tier="MEDIUM", decision="HOLD", channel="USSD", fallback="false"}', values: '0+10x40'}
+      - {series: 'fs_alert_timeout_release_total{channel="USSD"}', values: '0+0.9x40'}
+      - {series: 'fs_decisions_total{tier="MEDIUM", decision="HOLD", channel="CARD", fallback="false"}', values: '0+1x40'}
+      - {series: 'fs_alert_timeout_release_total{channel="CARD"}', values: '0+0.5x40'}
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: FraudShieldTimeoutReleaseRateHigh
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: FraudShieldTimeoutReleaseRateHigh
+        exp_alerts:
+          - exp_labels: {severity: page, team: risk, channel: MOBILE_MONEY}
+            exp_annotations:
+              summary: MOBILE_MONEY MEDIUM holds are timing out unreviewed
+              description: 12% of MOBILE_MONEY MEDIUM holds in the last 15 minutes were released by the review deadline without an analyst decision.
+              runbook_url: https://github.com/mariusbayizere/fraudshield/blob/main/docs/runbooks/FraudShieldTimeoutReleaseRateHigh.md

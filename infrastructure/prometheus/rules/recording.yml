@@ -1,0 +1,57 @@
+# Recording rules shared by alerts.yml, the Grafana dashboards and the Argo Rollouts analysis.
+# Naming: level:metric:operations (Prometheus recording-rule convention). Every metric read here is
+# defined in build prompt Part E.10; infrastructure/checks/metric_catalogue.py enforces that.
+groups:
+  - name: fraudshield-traffic
+    rules:
+      # Transactions per second offered to the ingest API, all outcomes (SRS 8.2 "Transaction TPS").
+      - record: fraudshield:ingest_requests:rate5m
+        expr: sum(rate(fs_ingest_requests_total[5m]))
+
+      # Server-side decision latency quantiles (SRS 8.2 "scoring p50/p95/p99"). This is the
+      # end-to-end synchronous path of C.2 that the payment waits for, not scorer time alone.
+      - record: fraudshield:decision_latency_seconds:p50_5m
+        expr: histogram_quantile(0.50, sum by (le) (rate(fs_decision_latency_seconds_bucket[5m])))
+      - record: fraudshield:decision_latency_seconds:p95_5m
+        expr: histogram_quantile(0.95, sum by (le) (rate(fs_decision_latency_seconds_bucket[5m])))
+      - record: fraudshield:decision_latency_seconds:p99_5m
+        expr: histogram_quantile(0.99, sum by (le) (rate(fs_decision_latency_seconds_bucket[5m])))
+
+      # Auto-blocks: HIGH-tier declines (E.6). Frozen-account declines are not model auto-blocks.
+      - record: fraudshield:auto_block:rate15m
+        expr: sum(rate(fs_decisions_total{tier="HIGH", decision="DECLINE"}[15m]))
+
+      # Share of decisions that came from the rule-based fallback because the scorer was
+      # unavailable (C.4, ML_UNAVAILABLE).
+      - record: fraudshield:fallback_decisions:ratio_5m
+        expr: |
+          sum(rate(fs_decisions_total{fallback="true"}[5m]))
+            / sum(rate(fs_decisions_total[5m]))
+
+  - name: fraudshield-risk-signals
+    interval: 1m
+    rules:
+      # Hourly HIGH-tier share of decisions per channel: the real-time fraud-rate signal for SRS 8.2
+      # "Fraud Rate Anomaly". Confirmed-fraud labels arrive hours to weeks later (E.3), so the
+      # live rate is necessarily the model-flagged rate; the labelled rate is reported offline.
+      - record: fraudshield:high_tier:ratio_1h
+        expr: |
+          sum by (channel) (rate(fs_decisions_total{tier="HIGH"}[1h]))
+            / sum by (channel) (rate(fs_decisions_total[1h]))
+
+      # Baselines for the anomaly alerts. Subqueries sample the rate once per window length
+      # (15 min, 1 h) instead of every evaluation: non-overlapping windows are the right sample
+      # for a mean and standard deviation, and 720 points per channel instead of 43,200 keeps
+      # each evaluation cheap. Rules in a group run in order, so these read this cycle's values.
+      - record: fraudshield:auto_block:rate15m:avg_7d
+        expr: avg_over_time(fraudshield:auto_block:rate15m[7d:15m])
+      - record: fraudshield:high_tier:ratio_1h:avg_30d
+        expr: avg_over_time(fraudshield:high_tier:ratio_1h[30d:1h])
+      - record: fraudshield:high_tier:ratio_1h:stddev_30d
+        expr: stddev_over_time(fraudshield:high_tier:ratio_1h[30d:1h])
+
+      # D-10: share of MEDIUM holds that ended in a timeout release, per channel.
+      - record: fraudshield:timeout_release:ratio_15m
+        expr: |
+          sum by (channel) (rate(fs_alert_timeout_release_total[15m]))
+            / sum by (channel) (rate(fs_decisions_total{decision="HOLD"}[15m]))

@@ -1,0 +1,211 @@
+# FraudShield alert rules: every SRS 8.2 alert threshold that can be expressed over the Part E.10
+# metrics, the D-10 timeout-release alert, and two failure-mode alerts from C.4 and D-15.
+#
+# Labels
+#   severity: page   -> PagerDuty, needs a runbook (docs/runbooks/<alert>.md)
+#             ticket -> email to the owning team, handled in working hours
+#   team:     sre (platform on-call) | risk (risk officers) | ml (model owners)
+#
+# The SRS 8.2 "Any ERROR log" alert is a log rule, in infrastructure/loki/rules/. The SRS 8.2
+# "AUC-ROC drop > 0.03" alert has no rule: Part E.10 defines no live AUC metric (see
+# docs/parallel/M9_updates.md). Every threshold below is unit-tested from both sides in
+# infrastructure/prometheus/tests/.
+groups:
+  - name: fraudshield-platform-alerts
+    rules:
+      - alert: FraudShieldTransactionRateDrop
+        # SRS 8.2: TPS drop > 20%. Compared with the same 5 minutes one week earlier, because
+        # payment traffic has strong daily and weekly cycles (salary days, market days) that a
+        # comparison with the previous hour would page on every evening. The baseline must be at
+        # least 1 transaction/s so that near-idle periods cannot page.
+        expr: |
+          fraudshield:ingest_requests:rate5m
+            < 0.8 * (fraudshield:ingest_requests:rate5m offset 1w)
+          and (fraudshield:ingest_requests:rate5m offset 1w) > 1
+        for: 10m
+        labels:
+          severity: page
+          team: sre
+        annotations:
+          summary: Transaction rate is more than 20% below the same time last week
+          description: >-
+            Ingest is at {{ $value | humanize }} requests/s, more than 20% below the same period
+            one week ago. Either core banking stopped sending, or requests are failing before
+            they are counted.
+          runbook_url: https://github.com/mariusbayizere/fraudshield/blob/main/docs/runbooks/FraudShieldTransactionRateDrop.md
+
+      - alert: FraudShieldDecisionLatencyP99High
+        # SRS 8.2: p99 > 80 ms (the same threshold rolls back an Argo Rollouts canary, SRS 8.1).
+        expr: fraudshield:decision_latency_seconds:p99_5m > 0.080
+        for: 5m
+        labels:
+          severity: page
+          team: sre
+        annotations:
+          summary: Decision latency p99 is above 80 ms
+          description: >-
+            p99 server-side decision latency is {{ $value | humanizeDuration }} over 5 minutes
+            (SLO: p95 < 40 ms flagged, alert at p99 > 80 ms).
+          runbook_url: https://github.com/mariusbayizere/fraudshield/blob/main/docs/runbooks/FraudShieldDecisionLatencyP99High.md
+
+      - alert: FraudShieldKafkaConsumerLagHigh
+        # SRS 8.2: Kafka lag > 5,000 messages, per topic and consumer group. Each series of
+        # fs_kafka_consumer_lag is the lag of the partitions one consumer instance owns, so the
+        # group's lag is their sum.
+        expr: sum by (topic, group) (fs_kafka_consumer_lag) > 5000
+        for: 5m
+        labels:
+          severity: page
+          team: sre
+        annotations:
+          summary: 'Consumer group {{ $labels.group }} is more than 5,000 messages behind on {{ $labels.topic }}'
+          description: >-
+            Lag is {{ $value | humanize }} messages. Alerts, persistence or notifications fed by
+            this topic are delayed.
+          runbook_url: https://github.com/mariusbayizere/fraudshield/blob/main/docs/runbooks/FraudShieldKafkaConsumerLagHigh.md
+
+      - alert: FraudShieldApiHealthProbeFailing
+        # SRS 8.2 uptime: probe every 30 s; 2 consecutive failures page as P1. Prometheus 3 range
+        # selectors are left-open, so a 60 s window holds exactly the last two 30 s probes. The
+        # probe reads the management-port liveness endpoint (ADR 0014 section 6).
+        expr: |
+          count_over_time(probe_success{job="blackbox-api-health"}[60s]) >= 2
+          and max_over_time(probe_success{job="blackbox-api-health"}[60s]) == 0
+        labels:
+          severity: page
+          team: sre
+          priority: P1
+        annotations:
+          summary: API liveness probe failed twice in a row
+          description: '{{ $labels.instance }} did not answer UP on two consecutive probes.'
+          runbook_url: https://github.com/mariusbayizere/fraudshield/blob/main/docs/runbooks/FraudShieldApiHealthProbeFailing.md
+
+      - alert: FraudShieldMlHealthProbeFailing
+        # SRS 8.2 uptime: ML health probed every 60 s; 2 consecutive failures page as P1.
+        expr: |
+          count_over_time(probe_success{job="blackbox-ml-health"}[120s]) >= 2
+          and max_over_time(probe_success{job="blackbox-ml-health"}[120s]) == 0
+        labels:
+          severity: page
+          team: sre
+          priority: P1
+        annotations:
+          summary: ML health probe failed twice in a row
+          description: >-
+            /actuator/health/ml on {{ $labels.instance }} did not answer UP on two consecutive
+            probes. Decisions are coming from the rule-based fallback (C.4).
+          runbook_url: https://github.com/mariusbayizere/fraudshield/blob/main/docs/runbooks/FraudShieldMlHealthProbeFailing.md
+
+      - alert: FraudShieldMlFallbackActive
+        # C.4: while the scorer is unavailable every decision comes from the rule-based fallback
+        # (ml_unavailable_fallback=true). Not an SRS 8.2 row; added because it changes every
+        # decision the system makes.
+        expr: fraudshield:fallback_decisions:ratio_5m > 0
+        for: 2m
+        labels:
+          severity: page
+          team: sre
+        annotations:
+          summary: Decisions are coming from the rule-based fallback
+          description: '{{ $value | humanizePercentage }} of decisions in the last 5 minutes used the fallback engine.'
+          runbook_url: https://github.com/mariusbayizere/fraudshield/blob/main/docs/runbooks/FraudShieldMlFallbackActive.md
+
+      - alert: FraudShieldSpoolBacklog
+        # D-15: the local disk spool holds decisions not yet acknowledged by Kafka. A spool that
+        # never drains to zero for 5 minutes means publishing has stalled and the spool is
+        # filling towards its bound. Not an SRS 8.2 row; added for the D-15 zero-loss guarantee.
+        expr: min_over_time(fs_spool_depth[5m]) > 0
+        labels:
+          severity: page
+          team: sre
+        annotations:
+          summary: 'Spool on {{ $labels.pod }} has not drained for 5 minutes'
+          description: >-
+            The spool held at least {{ $value | humanize }} unpublished decisions throughout the
+            last 5 minutes.
+          runbook_url: https://github.com/mariusbayizere/fraudshield/blob/main/docs/runbooks/FraudShieldSpoolBacklog.md
+
+  - name: fraudshield-risk-alerts
+    interval: 1m
+    rules:
+      - alert: FraudShieldAutoBlockRateAnomaly
+        # SRS 8.2: auto-block rate anomaly (> 3x baseline) triggers an immediate risk officer
+        # alert. Baseline: mean auto-block rate over the previous 7 days. At least one auto-block
+        # per minute is required so that a handful of blocks after a quiet week cannot page.
+        expr: |
+          fraudshield:auto_block:rate15m > 3 * fraudshield:auto_block:rate15m:avg_7d
+          and fraudshield:auto_block:rate15m > 1 / 60
+        labels:
+          severity: page
+          team: risk
+        annotations:
+          summary: Auto-block rate is more than 3x its 7-day baseline
+          description: >-
+            {{ $value | humanize }} auto-blocks/s over the last 15 minutes. Either a fraud
+            campaign is under way or a model, threshold or rule change is blocking legitimate
+            customers.
+          runbook_url: https://github.com/mariusbayizere/fraudshield/blob/main/docs/runbooks/FraudShieldAutoBlockRateAnomaly.md
+
+      - alert: FraudShieldFraudRateAnomaly
+        # SRS 8.2: hourly fraud rate per channel more than 3 standard deviations from its 30-day
+        # mean notifies a risk officer within 5 minutes (evaluated every minute, no hold-down).
+        # Both directions: a collapse in flagged share can mean the model or thresholds broke.
+        # Requires 7 days of history so a new deployment's first hours cannot page.
+        expr: |
+          abs(fraudshield:high_tier:ratio_1h - fraudshield:high_tier:ratio_1h:avg_30d)
+            > 3 * fraudshield:high_tier:ratio_1h:stddev_30d
+          and on (channel) (fraudshield:high_tier:ratio_1h offset 7d)
+        labels:
+          severity: page
+          team: risk
+        annotations:
+          summary: '{{ $labels.channel }} fraud rate is more than 3 sigma from its 30-day mean'
+          description: >-
+            HIGH-tier share of {{ $labels.channel }} decisions over the last hour is
+            {{ $value | humanizePercentage }} away from its 30-day mean.
+          runbook_url: https://github.com/mariusbayizere/fraudshield/blob/main/docs/runbooks/FraudShieldFraudRateAnomaly.md
+
+      - alert: FraudShieldTimeoutReleaseRateHigh
+        # D-10 (5): MEDIUM holds released by the deadline instead of an analyst mean the system
+        # is approving risky transactions unseen. Level: rules/thresholds.yml. At least 20 holds
+        # in the 15-minute window are required so one release out of two cannot page.
+        expr: |
+          fraudshield:timeout_release:ratio_15m
+            > on () group_left () fraudshield:config:timeout_release_ratio_max
+          and on (channel) (sum by (channel) (increase(fs_decisions_total{decision="HOLD"}[15m])) >= 20)
+        for: 10m
+        labels:
+          severity: page
+          team: risk
+        annotations:
+          summary: '{{ $labels.channel }} MEDIUM holds are timing out unreviewed'
+          description: >-
+            {{ $value | humanizePercentage }} of {{ $labels.channel }} MEDIUM holds in the last
+            15 minutes were released by the review deadline without an analyst decision.
+          runbook_url: https://github.com/mariusbayizere/fraudshield/blob/main/docs/runbooks/FraudShieldTimeoutReleaseRateHigh.md
+
+      - alert: FraudShieldFalsePositiveRateHigh
+        # SRS 8.2: false positive rate > 5%. Computed from analyst labels, which lag, so this is
+        # a working-hours ticket for risk officers rather than a page.
+        expr: max(fs_false_positive_rate) > 0.05
+        for: 30m
+        labels:
+          severity: ticket
+          team: risk
+        annotations:
+          summary: False positive rate is above 5%
+          description: '{{ $value | humanizePercentage }} of labelled flagged transactions were legitimate.'
+
+  - name: fraudshield-ml-alerts
+    rules:
+      - alert: FraudShieldFeatureDrift
+        # SRS 8.2: PSI > 0.2 on any top-10 feature triggers model review. Alerts on every feature
+        # rather than the top 10: the top 10 change with each model version, and a list fixed
+        # here would go stale silently. This can only add alerts, never miss a top-10 feature.
+        expr: max by (feature) (fs_feature_psi) > 0.2
+        labels:
+          severity: ticket
+          team: ml
+        annotations:
+          summary: 'PSI of {{ $labels.feature }} is above 0.2'
+          description: 'Population stability index {{ printf "%.2f" $value }}; review the model (SRS 8.2).'
