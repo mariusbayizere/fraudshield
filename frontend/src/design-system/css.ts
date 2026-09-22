@@ -54,7 +54,7 @@ export function renderCssVariables(tokens: Tokens): string {
     `--fs-touch-target: ${String(tokens.touchTargetPx)}px;`,
   ];
   return [
-    '/* GENERATED from design-tokens/tokens.json by scripts/generate-tokens.ts. Do not edit. */',
+    '/* GENERATED from design-tokens/*.json by scripts/generate-tokens.ts. Do not edit. */',
     block(':root', [...shared, ...colourVariables(tokens, 'light')]),
     block('[data-theme="dark"]', colourVariables(tokens, 'dark')),
     '@media (prefers-color-scheme: dark) {',
@@ -98,7 +98,7 @@ export function renderTailwindTheme(tokens: Tokens): string {
     ...colours,
   ];
   return [
-    '/* GENERATED from design-tokens/tokens.json by scripts/generate-tokens.ts. Do not edit. */',
+    '/* GENERATED from design-tokens/*.json by scripts/generate-tokens.ts. Do not edit. */',
     block('@theme', lines),
     '',
   ].join('\n');

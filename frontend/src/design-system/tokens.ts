@@ -1,4 +1,5 @@
-import raw from '../../design-tokens/tokens.json' with { type: 'json' };
+import rawBreakpoints from '../../../design-tokens/breakpoints.json' with { type: 'json' };
+import raw from '../../../design-tokens/tokens.json' with { type: 'json' };
 
 /** The two colour schemes. Light is the SRS's; dark exists for long shifts (build prompt E.9). */
 export type ColourMode = 'light' | 'dark';
@@ -85,4 +86,7 @@ export const BREAKPOINT_ORDER: readonly BreakpointName[] = [
   'xxxl',
 ];
 
-export const tokens: Tokens = raw;
+// Named one by one, so a breakpoint missing from the JSON is a type error, not an undefined width.
+const { fp, xs, sm, md, lg, xl, xxl, xxxl } = rawBreakpoints;
+
+export const tokens: Tokens = { ...raw, breakpoints: { fp, xs, sm, md, lg, xl, xxl, xxxl } };
