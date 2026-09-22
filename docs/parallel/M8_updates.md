@@ -83,7 +83,7 @@ banners) and the banner area stays empty against a real backend.
    `utc_offset_hours` but no abbreviation, so the console shows "UTC+2". Proposal: a
    `timezone_abbreviation` parameter with the packs' usual provenance.
 
-## 5. Risks and notes for other agents
+## 6. Risks and notes for other agents
 
 - **Bundle budget (ADR 0080 §10).** The initial JavaScript is **158.3 KB** gzipped against a
   self-imposed 170 KB, itself 30 KB under D-39's 200 KB; no single lazy chunk may exceed 120 KB
