@@ -111,7 +111,11 @@ for the owner to apply, because M5 does not edit `requirements.yaml` (re-review 
      the skew on the served model and to require it to be **zero** before FR-02-09 may read DONE;
      it is carried in `docs/parallel/M10_updates.md` so the milestone that must close it sees it.
 3. **The shortfall stays visible.** `fs_feature_store_missing_producer_reads_total{state}` counts
-   reads served from a constant, and M9's rules get an alert over it
+   reads served from a constant — `outcomes` for both features PB-70 feeds (on the counterparty
+   key and the cell key), `kyc_tier` and `account_opened_at` for PB-71's. There is no `sim_swaps`
+   arm: an account that never had a swap looks exactly like a missing producer, so that arm could
+   never have fallen silent and M9 watches the producer's liveness instead. M9's rules get an
+   alert over the counter
    (`docs/parallel/M9_updates.md` §"From M5"). The alert distinguishes a producer that is absent
    from a label that has not arrived yet, and its `sim_swaps`/`kyc_tier`/`account_opened_at` arms
    stay inhibited until PB-71 lands — a rule that fires continuously is a rule that gets silenced.

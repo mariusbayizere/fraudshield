@@ -298,7 +298,9 @@ def start_worker(config: WorkerConfig) -> Worker:
         "ADR 0034: no deployed component writes %s, so these trained features are served as "
         "constants until PB-70 and PB-71 close: counterparty_confirmed_fraud_90d, "
         "geo_cell_fraud_rate_30d, days_since_sim_swap, kyc_tier, account_age_days. "
-        "Watch fs_feature_store_missing_producer_reads_total{state}",
+        "fs_feature_store_missing_producer_reads_total counts the first two (state=outcomes) "
+        "and the last two (kyc_tier, account_opened_at); an absent SIM swap is indistinguishable "
+        "from an absent producer, so it is not counted and PB-71 must be tracked directly",
         "fraud outcomes or account reference state",
     )
     return Worker(server, health_servicer, holder, port, watcher, writer, shadow)

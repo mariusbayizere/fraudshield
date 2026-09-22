@@ -16,6 +16,7 @@ import threading
 import urllib.parse
 import urllib.request
 from collections.abc import Iterator
+from dataclasses import replace
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -59,8 +60,9 @@ class FakeMlflow:
         self.runs: dict[str, dict[str, Any]] = {}
         self.requests: list[tuple[str, str]] = []
         self.tags: dict[tuple[str, str], dict[str, str]] = {}
+        self.refuse_tags = False
 
-    def handle(  # noqa: PLR0911 - one return per endpoint and error
+    def handle(  # noqa: PLR0911, PLR0912 - one return per endpoint and error
         self, method: str, path: str, query: dict[str, str], body: bytes
     ) -> tuple[int, Any]:
         self.requests.append((method, path))
@@ -84,10 +86,14 @@ class FakeMlflow:
             version = str(len(model["versions"]) + 1)
             model["versions"][version] = data["source"]
             return 200, {"model_version": {"version": version, "source": data["source"]}}
+        if self.refuse_tags and "tag" in path:
+            return 500, {"error_code": "INTERNAL_ERROR"}
         if path == "/api/2.0/mlflow/model-versions/set-tag":
             self.tags.setdefault((data["name"], data["version"]), {})[data["key"]] = data["value"]
             return 200, {}
         if path == "/api/2.0/mlflow/model-versions/get":
+            if self.refuse_tags:
+                return 500, {"error_code": "INTERNAL_ERROR"}
             source = self.models[query["name"]]["versions"][query["version"]]
             tags = self.tags.get((query["name"], query["version"]), {})
             return 200, {
@@ -631,9 +637,9 @@ def test_a_report_that_refuses_without_a_reason_does_not_promote(
         ("label_coverage", 0.01, "under 30%"),
         ("auc_delta", -0.5, "below -0.01"),
         ("psi", 0.9, "not below 0.2"),
-        ("auc_delta", None, "no AUC delta"),
-        ("psi", None, "no score PSI"),
-        ("window_hours", None, "no shadow window"),
+        ("auc_delta", None, "no usable AUC delta"),
+        ("psi", None, "no usable score PSI"),
+        ("window_hours", None, "no usable shadow window"),
         ("window_hours", 3.0, "under 24 h"),
         ("shadow_version", None, "does not name the model"),
         ("shadow_version", "ensemble-somethingelse", "not ensemble-"),
@@ -772,3 +778,119 @@ def test_moving_previous_production_by_hand_does_not_buy_a_promotion(
     assert registry.has_served(NAME, "2"), "read back through the registry, not the fake's dict"
     assert model_cli.main(["alias", "--mlflow", url, PRODUCTION, "1", *cache]) == 0
     assert fake.models[NAME]["aliases"][PRODUCTION] == "1"
+
+
+@pytest.mark.req("ML-GATE-13", "D-11")
+@pytest.mark.parametrize("field", ["label_coverage", "auc_delta", "psi", "window_hours"])
+def test_a_not_a_number_figure_is_a_clause_that_was_not_applied(
+    mlflow: tuple[FakeMlflow, str], bundle_dirs: tuple[Path, Path], tmp_path: Path, field: str
+) -> None:
+    """Every D-11 clause is a `<` or a `>=`, and NaN passes all of them. `json` both accepts the
+    bare `NaN` token and emits it, so a comparator that serialises its own dataclass writes one
+    (adversarial BLOCKER 1)."""
+    fake, url = mlflow
+    registry = MlflowRegistry(url)
+    registry.publish(NAME, bundle_dirs[0], alias=PRODUCTION, override=FIRST)
+    registry.publish(NAME, bundle_dirs[1])
+
+    report = _gate_report(tmp_path / f"nan-{field}.json", bundle_dirs[1])
+    decision = _gate(report)
+    assert decision is not None
+    nan_decision = replace(decision, **{field: float("nan")})  # type: ignore[arg-type]
+    with pytest.raises(PromotionRefused, match="no usable"):
+        registry.promote(NAME, PRODUCTION, "2", tmp_path / "c", gate=nan_decision)
+    assert fake.models[NAME]["aliases"][PRODUCTION] == "1"
+
+    # And the report never becomes a decision in the first place: `fs-model` refuses the file.
+    on_disk = json.loads(report.read_text())
+    on_disk[field] = float("nan")
+    report.write_text(json.dumps(on_disk))
+    argv = [
+        "alias",
+        "--mlflow",
+        url,
+        PRODUCTION,
+        "2",
+        "--gate",
+        str(report),
+        "--cache",
+        str(tmp_path),
+    ]
+    assert model_cli.main(argv) == 1
+    assert fake.models[NAME]["aliases"][PRODUCTION] == "1"
+
+
+@pytest.mark.req("ML-GATE-13", "D-11")
+def test_a_blank_override_is_not_an_override(
+    mlflow: tuple[FakeMlflow, str], bundle_dirs: tuple[Path, Path], tmp_path: Path
+) -> None:
+    """`--override` promotes without a shadow window and records why. An empty string records
+    nothing, and `--override "$REASON"` with REASON unset is one unset variable away from a
+    silent promotion (adversarial MAJOR 3)."""
+    fake, url = mlflow
+    registry = MlflowRegistry(url)
+    registry.publish(NAME, bundle_dirs[0], alias=PRODUCTION, override=FIRST)
+    registry.publish(NAME, bundle_dirs[1])
+
+    with pytest.raises(PromotionRefused, match="no shadow-gate decision"):
+        registry.promote(NAME, PRODUCTION, "2", tmp_path / "c", override="   ")
+    with pytest.raises(SystemExit):
+        model_cli.main(["alias", "--mlflow", url, PRODUCTION, "2", "--override", ""])
+    assert fake.models[NAME]["aliases"][PRODUCTION] == "1"
+
+
+@pytest.mark.req("FR-02-10", "D-50")
+def test_a_promotion_that_cannot_record_itself_does_not_happen(
+    mlflow: tuple[FakeMlflow, str], bundle_dirs: tuple[Path, Path], tmp_path: Path
+) -> None:
+    """The served tag is the rollback's only proof, so it is written before the alias moves and
+    its failure refuses the promotion — otherwise production ends up on a version the operator
+    cannot roll back to, and is told mid-incident that it never served (adversarial MAJOR 2)."""
+    fake, url = mlflow
+    registry = MlflowRegistry(url)
+    registry.publish(NAME, bundle_dirs[0], alias=PRODUCTION, override=FIRST)
+    registry.publish(NAME, bundle_dirs[1])
+
+    fake.refuse_tags = True
+    with pytest.raises(RegistryError):
+        registry.promote(
+            NAME,
+            PRODUCTION,
+            "2",
+            tmp_path / "c",
+            gate=_gate(_gate_report(tmp_path / "ok.json", bundle_dirs[1])),
+        )
+    assert fake.models[NAME]["aliases"][PRODUCTION] == "1", "production did not move"
+
+    fake.refuse_tags = False
+    registry.promote(
+        NAME,
+        PRODUCTION,
+        "2",
+        tmp_path / "c",
+        gate=_gate(_gate_report(tmp_path / "ok.json", bundle_dirs[1])),
+    )
+    assert SERVED_TAG in fake.tags[(NAME, "2")]
+
+    # A version that `previous_production` points at but that carries no record of serving is
+    # refused -- and told so in those words, not "the gate refused you".
+    fake.tags.pop((NAME, "1"))
+    with pytest.raises(PromotionRefused, match=r"carries no fraudshield\.served_as_production"):
+        registry.promote(NAME, PRODUCTION, "1", tmp_path / "c")
+    assert (
+        model_cli.main(
+            [
+                "alias",
+                "--mlflow",
+                url,
+                PRODUCTION,
+                "1",
+                "--cache",
+                str(tmp_path / "c"),
+                "--override",
+                "its served tag was lost with the tracking database",
+            ]
+        )
+        == 0
+    ), "the operator has a way through, and it is recorded"
+    assert fake.tags[(NAME, "1")]["fraudshield.promotion_override"].startswith("its served tag")

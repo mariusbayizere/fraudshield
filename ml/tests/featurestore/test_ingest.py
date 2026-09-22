@@ -36,7 +36,7 @@ def store() -> FeatureStore:
     )
 
 
-def transaction(i: int, at: datetime, counterparty: str = "C1") -> Transaction:
+def transaction(i: int, at: datetime, counterparty: str | None = "C1") -> Transaction:
     return Transaction(
         transaction_id=f"3f8e0c5a-6b1d-4f5e-9a2b-{i:012d}",
         account_id=f"A{i % 3}",
@@ -169,40 +169,66 @@ def test_a_malformed_event_is_refused(mutate: object, message: str) -> None:
 def test_the_store_counts_features_left_constant_for_want_of_a_producer() -> None:
     """ADR 0034: serving these as constants is silent otherwise, and costs 162 flagged frauds on
     the gate model. The counter is what M9's page fires on, so it must mean "no producer" and
-    nothing else (re-review N5)."""
+    nothing else (re-review N5, adversarial MAJOR 4 and 5)."""
     s = store()
 
     def states() -> dict[str, float]:
         return {
             state: s.metrics.missing_producer.labels(state)._value.get()
-            for state in ("outcomes", "sim_swaps", "kyc_tier", "account_opened_at")
+            for state in ("outcomes", "kyc_tier", "account_opened_at")
         }
 
     earlier = transaction(1, T0)  # account A1, counterparty C1
     s.observe(earlier)
 
     s.context_for(transaction(2, T0 + timedelta(days=1)))  # A2: the store has never seen it
-    assert states() == {"outcomes": 0, "sim_swaps": 1, "kyc_tier": 0, "account_opened_at": 0}, (
+    assert states() == {"outcomes": 0, "kyc_tier": 0, "account_opened_at": 0}, (
         "a first-ever transaction has no tier or opening date for any producer to have written"
     )
 
     s.context_for(transaction(4, T0 + timedelta(days=1)))  # A1, known, a day after its first row
-    assert states() == {"outcomes": 0, "sim_swaps": 2, "kyc_tier": 1, "account_opened_at": 1}, (
+    assert states() == {"outcomes": 0, "kyc_tier": 1, "account_opened_at": 1}, (
         "a verdict a day old is a label in flight, not a producer that is missing"
     )
 
     scored = transaction(7, T0 + timedelta(days=30))  # A1, C1, past the label-delay horizon
     s.context_for(scored)
-    assert states() == {"outcomes": 1, "sim_swaps": 3, "kyc_tier": 2, "account_opened_at": 2}
+    assert states() == {"outcomes": 1, "kyc_tier": 2, "account_opened_at": 2}
 
     apply_label(s, label_event(earlier.transaction_id, "FRAUD", T0 + timedelta(hours=1)))
-    s.record_sim_swap(scored.account_id, T0 - timedelta(days=2))
     s.set_kyc_tier(scored.account_id, 2, T0 - timedelta(days=30))
     s.set_opened_at(scored.account_id, T0 - timedelta(days=90))
     s.context_for(transaction(10, T0 + timedelta(days=31)))  # the same account again
-    assert states() == {"outcomes": 1, "sim_swaps": 3, "kyc_tier": 2, "account_opened_at": 2}, (
+    assert states() == {"outcomes": 1, "kyc_tier": 2, "account_opened_at": 2}, (
         "with every producer writing, the page falls silent — which is how carry 1 and carry 2 "
         "are seen to have closed"
+    )
+    assert ("sim_swaps",) not in s.metrics.missing_producer._metrics, (
+        "no sim_swaps arm: most accounts never had a swap and the store writes no sentinel, so "
+        "the arm fired on ordinary traffic and could never fall silent (adversarial MAJOR 5)"
+    )
+
+
+@pytest.mark.req("FR-02-09")
+def test_a_cash_out_with_no_counterparty_still_counts_its_cell() -> None:
+    """`geo_cell_fraud_rate_30d` is fed by the same verdicts and read from a different key. With
+    only a counterparty arm it was served from the smoothing prior, uncounted, on every agent
+    cash-out and every payment to a freshly seen counterparty (adversarial MAJOR 4)."""
+    s = store()
+    for i in range(3):
+        s.observe(transaction(20 + i, T0 + timedelta(hours=i), counterparty=None))
+
+    # Past LABEL_LATENCY (21 d) but inside the cell's own 30 d window.
+    s.context_for(transaction(30, T0 + timedelta(days=25), counterparty=None))
+    assert s.metrics.missing_producer.labels("outcomes")._value.get() == 1, (
+        "unadjudicated cell rows past the horizon: the rate is the prior, and it is counted"
+    )
+
+    s.context_for(transaction(31, T0 + timedelta(days=26), counterparty=None))
+    apply_label(s, label_event(transaction(20, T0).transaction_id, "LEGITIMATE", T0))
+    s.context_for(transaction(32, T0 + timedelta(days=27), counterparty=None))
+    assert s.metrics.missing_producer.labels("outcomes")._value.get() == 2, (
+        "one verdict in the cell is enough: the producer is writing"
     )
 
 
