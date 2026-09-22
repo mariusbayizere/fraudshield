@@ -28,6 +28,7 @@ the values are exact.
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import math
@@ -146,11 +147,36 @@ class Bundle:
         return self.calibrate(*self.raw(row))
 
     def raw(self, row: Sequence[float]) -> tuple[float, float]:
-        """Each booster's uncalibrated probability for one row."""
+        """Each booster's uncalibrated probability for one row, through Treelite (ADR 0030).
+
+        Treelite's tree inference is exact against both boosters to 1e-6 (tested per bundle in
+        `test_treelite_matches_the_native_boosters`) and skips their Python wrappers, which cost
+        more per call than the trees themselves: XGBoost's probes for pandas on every call.
+        """
+        import treelite  # noqa: PLC0415 - loaded with the bundle
+
+        array = np.asarray([row], dtype=np.float64)
+        compiled_xgb, compiled_lgb = self._compiled
+        p_xgb = float(np.ravel(treelite.gtil.predict(compiled_xgb, array, nthread=1))[0])
+        p_lgb = float(np.ravel(treelite.gtil.predict(compiled_lgb, array, nthread=1))[0])
+        return p_xgb, p_lgb
+
+    def native_raw(self, row: Sequence[float]) -> tuple[float, float]:
+        """The boosters' own predictions: the reference Treelite is held to."""
         array = np.asarray([row], dtype=np.float64)
         p_xgb = float(self.xgboost.inplace_predict(array, missing=math.nan)[0])
         p_lgb = float(self.lightgbm.predict(array, num_threads=1)[0])
         return p_xgb, p_lgb
+
+    @functools.cached_property
+    def _compiled(self) -> tuple[Any, Any]:
+        """Treelite models built from the same boosters, once per bundle."""
+        import treelite  # noqa: PLC0415
+
+        return (
+            treelite.frontend.from_xgboost_json(self.xgboost.save_raw("json").decode()),
+            treelite.frontend.from_lightgbm(self.lightgbm),
+        )
 
     def calibrate(self, p_xgb: float, p_lgb: float) -> Prediction:
         """D-05: one isotonic map on the weighted combination, and one per model for display."""

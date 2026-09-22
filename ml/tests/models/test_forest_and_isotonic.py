@@ -32,6 +32,9 @@ def test_the_export_scores_exactly_as_scikit_learn_does() -> None:
     expected = model.score_samples(np.where(np.isnan(probe), exported.medians, probe))
     got = [exported.raw(row) for row in probe]
     assert np.max(np.abs(np.asarray(got) - expected)) < 1e-12
+    walked = [exported.raw_reference(row) for row in probe]
+    # Same leaves; only the summation order differs (numpy is pairwise), so ulps, not exactness.
+    assert np.max(np.abs(np.asarray(got) - np.asarray(walked))) < 1e-12
 
 
 @pytest.mark.req("FR-02-05", "D-06")

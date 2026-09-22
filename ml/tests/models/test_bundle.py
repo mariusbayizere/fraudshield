@@ -13,6 +13,7 @@ import xgboost as xgb
 
 from fraudshield_ml.features.registry import REGISTRY, Dtype, categories_for
 from fraudshield_ml.models import build as builder
+from fraudshield_ml.models import onnx_export
 from fraudshield_ml.models.bundle import (
     LIGHTGBM_WEIGHT,
     XGBOOST_WEIGHT,
@@ -212,3 +213,39 @@ def test_the_model_is_trained_on_the_whole_days_the_contract_carries() -> None:
     assert row["device_age_days"] == 2.0
     assert math.isnan(float(row["days_since_sim_swap"])), "a negative age has no encoding"
     assert math.isnan(float(row["account_age_days"]))
+
+
+def test_treelite_matches_the_native_boosters(built: Built) -> None:
+    """ADR 0030: serving predicts through Treelite, which must equal the boosters themselves."""
+    bundle, _, vectors, _ = built
+    worst = 0.0
+    for values in vectors:
+        row = bundle.row(values)
+        compiled, native = bundle.raw(row), bundle.native_raw(row)
+        worst = max(worst, abs(compiled[0] - native[0]), abs(compiled[1] - native[1]))
+    assert worst < 1e-6
+
+
+def _hundred_thousand_rows(bundle: Bundle, vectors: Vectors) -> np.ndarray:
+    base = np.asarray([bundle.row(v) for v in vectors], dtype=np.float64)
+    rng = np.random.default_rng(3)
+    picked = base[rng.integers(0, len(base), 100_000)]
+    jitter = rng.normal(0.0, 0.05, picked.shape)
+    return np.where(np.isnan(picked), np.nan, picked + jitter)
+
+
+def test_the_xgboost_onnx_export_meets_e4_parity_on_100k_rows(built: Built) -> None:
+    bundle, _, vectors, _ = built
+    rows = _hundred_thousand_rows(bundle, vectors)
+    measured = onnx_export.parity(bundle, rows)
+    assert measured["xgboost"] < onnx_export.PARITY
+
+
+def test_the_lightgbm_converter_accepts_float32_only_so_serving_uses_treelite(built: Built) -> None:
+    """Why LightGBM's ONNX export cannot meet the 1e-5 parity (ADR 0030): double thresholds,
+    float32 input. If the converter ever accepts double input this fails, and it is time to look
+    again."""
+    bundle, _, _, _ = built
+    with pytest.raises(RuntimeError, match="wrong type"):
+        onnx_export.export_lightgbm(bundle, double=True)
+    assert onnx_export.export_lightgbm(bundle)  # the float32 export exists, for interoperability

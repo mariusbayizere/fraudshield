@@ -17,6 +17,7 @@ becomes the feature's training median before the forest sees it, both when fitti
 
 from __future__ import annotations
 
+import functools
 import math
 import warnings
 from bisect import bisect_right
@@ -82,7 +83,47 @@ class Forest:
         return [m if math.isnan(v) else v for v, m in zip(row, self.medians, strict=True)]
 
     def raw(self, row: Sequence[float]) -> float:
-        """scikit-learn's `score_samples` for one row: negative, lower is more anomalous."""
+        """scikit-learn's `score_samples` for one row: negative, lower is more anomalous.
+
+        Every tree is walked at once, one level per step, over padded arrays (`_packed`): about
+        ten numpy steps instead of a Python loop per tree. `path_length` is the per-tree reference
+        the packed walk is tested against.
+        """
+        left, right, feature, threshold, leaf = self._packed
+        filled = np.asarray(self.impute(row), dtype=np.float32).astype(np.float64)
+        rows = np.arange(left.shape[0])
+        node = np.zeros(left.shape[0], dtype=np.int64)
+        while True:
+            children = left[rows, node]
+            active = children != -1
+            if not active.any():
+                break
+            goes_left = filled[feature[rows, node]] <= threshold[rows, node]
+            node = np.where(active, np.where(goes_left, children, right[rows, node]), node)
+        depth = float(leaf[rows, node].sum())
+        denominator = len(self.trees) * average_path_length(self.max_samples)
+        return -(2.0 ** (-depth / denominator)) if denominator else -1.0
+
+    @functools.cached_property
+    def _packed(self) -> tuple[Any, Any, Any, Any, Any]:
+        """The trees as padded [tree, node] arrays, with features mapped to row positions."""
+        width = max(len(t.left) for t in self.trees)
+        shape = (len(self.trees), width)
+        left = np.full(shape, -1, dtype=np.int64)
+        right = np.full(shape, -1, dtype=np.int64)
+        feature = np.zeros(shape, dtype=np.int64)
+        threshold = np.zeros(shape, dtype=np.float64)
+        leaf = np.zeros(shape, dtype=np.float64)
+        for i, t in enumerate(self.trees):
+            n = len(t.left)
+            left[i, :n], right[i, :n] = t.left, t.right
+            # A leaf's feature is -2 in scikit-learn; it is never read, so map it to column 0.
+            feature[i, :n] = [t.features[f] if f >= 0 else 0 for f in t.feature]
+            threshold[i, :n], leaf[i, :n] = t.threshold, t.leaf_value
+        return left, right, feature, threshold, leaf
+
+    def raw_reference(self, row: Sequence[float]) -> float:
+        """The per-tree walk, kept as the oracle the packed walk is tested against."""
         filled = self.impute(row)
         depth = sum(tree.path_length(filled) for tree in self.trees)
         denominator = len(self.trees) * average_path_length(self.max_samples)
