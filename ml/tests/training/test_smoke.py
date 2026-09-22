@@ -20,7 +20,6 @@ import pytest
 
 from fraudshield_ml.features.registry import REGISTRY, Computability, Dtype
 from fraudshield_ml.features.vector import FeatureValue
-from fraudshield_ml.metrics.single_feature import hash_fold
 from fraudshield_ml.training.smoke import (
     CACHE_ACCOUNT,
     CACHE_CHANNEL,
@@ -54,12 +53,11 @@ def obvious_encoding(
     train: Sequence[int],
     *,
     prior_weight: float,
-    folds: int,
 ) -> list[float]:
-    """The same estimate written the slow, obvious way: rescan the kept rows for every row.
+    """E1 written the slow, obvious way: for every training row, rescan the rows before it.
 
-    Independent of the implementation under test — it never subtracts anything — so agreement
-    between the two is evidence the subtraction is right rather than evidence they share a bug.
+    Independent of the implementation under test — it keeps no running totals and subtracts
+    nothing — so agreement is evidence the one-pass form is right rather than a shared bug.
     """
     training = set(train)
     base = sum(1 for i in train if labels[i]) / max(len(train), 1)
@@ -70,12 +68,11 @@ def obvious_encoding(
             seen = sum(1.0 for j in train if values[j] == values[i])
             column.append((fraud + prior_weight * base) / (seen + prior_weight))
             continue
-        fold = hash_fold(accounts[i], folds)
-        kept = [j for j in train if hash_fold(accounts[j], folds) != fold]
-        fold_base = sum(1 for j in kept if labels[j]) / max(len(kept), 1)
-        fraud = sum(1.0 for j in kept if values[j] == values[i] and labels[j])
-        seen = sum(1.0 for j in kept if values[j] == values[i])
-        column.append((fraud + prior_weight * fold_base) / (seen + prior_weight))
+        earlier = [j for j in train if j < i and accounts[j] != accounts[i]]
+        earlier_base = sum(1 for j in earlier if labels[j]) / len(earlier) if earlier else 0.0
+        fraud = sum(1.0 for j in earlier if values[j] == values[i] and labels[j])
+        seen = sum(1.0 for j in earlier if values[j] == values[i])
+        column.append((fraud + prior_weight * earlier_base) / (seen + prior_weight))
     return column
 
 
@@ -120,10 +117,9 @@ def test_the_floor_matches_the_published_baseline() -> None:
 def test_the_fast_encoding_matches_the_obvious_one() -> None:
     """Preconditions, so this cannot pass by both sides seeing nothing.
 
-    The data is built so that **folds actually disagree**: accounts land in at least two folds, the
-    same category carries both labels, and a category appears in one fold only — the case where
-    subtracting a fold empties the category and the prior has to carry the estimate alone. Without
-    that last row the two forms would agree on data that never exercises the subtraction.
+    The data is built so that the subtraction is exercised: accounts repeat, so a row's own
+    account has earlier rows to remove, and the same category carries both labels. Without either
+    the two forms would agree on data that never tests the part that is easy to get wrong.
     """
     accounts = [f"acct-{i % 7}" for i in range(24)]
     channels = ["mobile_money"] * 10 + ["card"] * 10 + ["agent"] * 4
@@ -131,8 +127,7 @@ def test_the_fast_encoding_matches_the_obvious_one() -> None:
     labels = [i % 5 == 0 for i in range(24)]
     train = list(range(18))
 
-    folds_used = {hash_fold(accounts[i], 5) for i in train}
-    assert len(folds_used) >= 2, "precondition: the training rows must span more than one fold"
+    assert len({accounts[i] for i in train}) >= 2, "precondition: more than one account"
     per_category = {
         value: {labels[i] for i in train if channels[i] == value} for value in set(channels[:18])
     }
@@ -143,39 +138,46 @@ def test_the_fast_encoding_matches_the_obvious_one() -> None:
     encoded = encode_categoricals(rows_from(channels, corridors), labels, accounts, train)
     assert set(encoded) == {n for n, s in REGISTRY.items() if s.dtype is Dtype.CATEGORICAL}
     for name, values in (("channel", channels), ("corridor_class", corridors)):
-        expected = obvious_encoding(values, labels, accounts, train, prior_weight=50.0, folds=5)
+        expected = obvious_encoding(values, labels, accounts, train, prior_weight=50.0)
         assert encoded[name] == pytest.approx(expected, abs=1e-12)
 
 
 @pytest.mark.req("D-08", "ML-GATE-01")
 def test_a_training_row_is_scored_without_any_row_of_its_own_account() -> None:
-    """The property E1 asks for, stated directly rather than inferred from agreement.
+    """E1's account rule, stated directly rather than inferred from agreement.
 
-    One account carries every fraud in a category. If its own rows reached its estimate the
-    category would read high for it; held out, the category is left with legitimate rows only and
-    the estimate falls below the prior's pull. A test that only compared two implementations would
-    pass even if both leaked.
+    Eight legitimate rows of other accounts come first; then one account's four fraud rows. Its
+    last row has three earlier rows of its own, all fraud, in the same category. Excluded, the
+    category is legitimate only and the estimate is zero; included, it would not be.
     """
-    # Constructed for the property rather than numbered and hoped over: the other accounts are
-    # chosen *because* they fall outside the leaky account's fold, so holding that fold out holds
-    # out exactly the four fraud rows and nothing else.
-    elsewhere = [
-        f"other-{i}" for i in range(40) if hash_fold(f"other-{i}", 5) != hash_fold("leaky", 5)
-    ][:8]
-    assert len(elsewhere) == 8, "precondition: eight accounts outside the leaky account's fold"
-    accounts = ["leaky"] * 4 + elsewhere
+    accounts = [f"other-{i}" for i in range(8)] + ["leaky"] * 4
     channels = ["agent"] * 12
     corridors = ["domestic"] * 12
-    labels = [True] * 4 + [False] * 8
+    labels = [False] * 8 + [True] * 4
     train = list(range(12))
 
     encoded = encode_categoricals(rows_from(channels, corridors), labels, accounts, train)
-    leaky = encoded["channel"][0]
-    other = encoded["channel"][4]
-    assert leaky < other, "the fraud account's own rows reached its own estimate"
-    assert leaky == pytest.approx(0.0, abs=1e-12), (
-        "held out, the leaky account sees eight legitimate rows and a zero base rate"
+    assert encoded["channel"][11] == pytest.approx(0.0, abs=1e-12), (
+        "the account's own earlier fraud rows reached its estimate"
     )
+
+
+@pytest.mark.req("D-08", "ML-GATE-01", "FR-02-03")
+def test_a_later_training_row_never_informs_an_earlier_one() -> None:
+    """E1's time rule: flipping every label after a row leaves that row's encoding unchanged."""
+    accounts = [f"acct-{i % 9}" for i in range(40)]
+    channels = ["card", "agent", "ussd", "card"] * 10
+    corridors = ["domestic", "intra_bloc"] * 20
+    labels = [i % 3 == 0 for i in range(40)]
+    train = list(range(40))
+    before = encode_categoricals(rows_from(channels, corridors), labels, accounts, train)
+    flipped = labels[:20] + [not y for y in labels[20:]]
+    after = encode_categoricals(rows_from(channels, corridors), flipped, accounts, train)
+    for name in ("channel", "corridor_class"):
+        assert after[name][:21] == pytest.approx(before[name][:21], abs=1e-12)
+        assert after[name][21:] != pytest.approx(before[name][21:], abs=1e-12), (
+            "precondition: the flip must move something, or this test proves nothing"
+        )
 
 
 @pytest.mark.req("D-08", "ML-GATE-01")
