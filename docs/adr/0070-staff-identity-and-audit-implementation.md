@@ -176,3 +176,26 @@ status ADR 0011 prescribes.
   (ADR 0011) answers 422 `password_policy` and 422 `invalid_format`. FR-07-03's "< 3 s" is measured
   against a local fake of Google only.
 - Verified by the tests named in `docs/parallel/M7_updates.md`.
+
+## Residual risks accepted after the principal review
+
+The M7 review record (`docs/reviews/M7/staff-auth.md`) lists these as accepted rather than fixed:
+
+- **Failure counters decay differently (finding 7).** A real account's failure count resets only
+  on success or unlock. The unknown-email counter slides over 30 minutes. Four failures, a
+  31-minute wait and a fifth failure can therefore tell a real account from an unknown one. This
+  is no stronger than the availability endpoint, which ADR 0014 already accepts.
+- **Temporary passwords do not expire and are not forced to change (finding 14).** The contract has
+  no flag for it (§9). M8 should force a change at first sign-in once the contract is opened.
+- **Content re-hashing trusts the database's `verify_audit_chain` (finding 3).** The compliance role
+  cannot read content across institutions, so Java re-checks linkage and signed Merkle roots only.
+  A database owner who replaces that function *and* the anchors is caught only once anchors are
+  exported off-host.
+- **Failed API keys are counted after the database lookup (finding 2, partly fixed).** An address
+  already refused with 429 still costs one indexed lookup per request. The limiter keys on
+  `getRemoteAddr()`, so behind the ingress it needs the deployment's trusted forwarded-header
+  configuration (re-review N3).
+- **Google tokens are held for at most an hour and only while Redis is up (finding 16).** Revocation
+  failures are logged, not audited.
+- **Only logout-all is raced against rotation in a test.** Single logout, password change and
+  administrator edits use the same account-then-token lock order.

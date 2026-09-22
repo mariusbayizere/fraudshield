@@ -273,8 +273,10 @@ public final class UserAdministrationService {
                       : AccountStatus.valueOf(request.status());
               boolean roleChanged = role != current.role();
               boolean statusChanged = status != current.status();
+              // Only an explicit LOCKED in the request converts a failure lock (re-review N1).
               final boolean adminLockRequested =
-                  status == AccountStatus.LOCKED
+                  request.status() != null
+                      && status == AccountStatus.LOCKED
                       && !StaffAccountRepository.ADMIN_LOCK_UNTIL.equals(current.lockedUntil());
               if ((roleChanged || statusChanged) && userId.equals(admin.userId())) {
                 return refused(

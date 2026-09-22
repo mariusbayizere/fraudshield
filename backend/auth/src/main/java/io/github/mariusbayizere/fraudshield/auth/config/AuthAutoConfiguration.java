@@ -176,9 +176,13 @@ public class AuthAutoConfiguration {
 
   @Bean
   io.github.mariusbayizere.fraudshield.auth.security.AccessDeniedAudit accessDeniedAudit(
-      TenantTransactions tenants, StaffAccountRepository accounts, AuditLog audit, Clock clock) {
+      TenantTransactions tenants,
+      StaffAccountRepository accounts,
+      AuditLog audit,
+      Clock clock,
+      RateLimiter limiter) {
     return new io.github.mariusbayizere.fraudshield.auth.security.AccessDeniedAudit(
-        tenants, accounts, audit, clock);
+        tenants, accounts, audit, clock, limiter);
   }
 
   @Bean

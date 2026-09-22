@@ -192,6 +192,43 @@ class UserAdministrationTest extends AuthIntegrationTest {
   }
 
   @Test
+  @Tag("D-26")
+  void profileEditOfFailureLockedAccountKeepsTheFailureLock() {
+    Session admin = issueSession(createAccount(BANK_A, "ADMIN", "ACTIVE"));
+    Account locked = createAccount(BANK_A, "ANALYST", "LOCKED");
+    Http.Response response =
+        patch(
+            admin,
+            locked.id(),
+            Map.of("version", version(admin, locked.id()), "phone", "+250788999000"));
+    assertThat(response.status()).isEqualTo(200);
+    assertThat(
+            query(
+                "SELECT locked_until < now() + interval '1 hour' FROM fraudshield.users"
+                    + " WHERE id = ?",
+                locked.id()))
+        .as("re-review N1: a profile edit keeps the failure lock")
+        .isEqualTo(true);
+  }
+
+  @Test
+  @Tag("FR-06-06")
+  void repeatedDenialsAreAuditedOncePerMinute() {
+    Account analyst = createAccount(BANK_A, "ANALYST", "ACTIVE");
+    Session session = issueSession(analyst);
+    for (int i = 0; i < 5; i++) {
+      assertThat(http.get("/api/v1/admin/api-keys", session.bearer()).status()).isEqualTo(403);
+    }
+    assertThat(
+            query(
+                "SELECT count(*) FROM fraudshield.audit_events WHERE user_id = ?"
+                    + " AND action = 'ACCESS_DENIED'",
+                analyst.id()))
+        .as("re-review N2")
+        .isEqualTo(1L);
+  }
+
+  @Test
   @Tag("FR-07-01")
   void adminDemotedInsideTheCacheWindowCannotAct() {
     Account admin = createAccount(BANK_A, "ADMIN", "ACTIVE");

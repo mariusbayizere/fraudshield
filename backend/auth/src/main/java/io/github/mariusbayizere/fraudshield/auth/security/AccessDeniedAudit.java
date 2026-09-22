@@ -8,6 +8,7 @@ import io.github.mariusbayizere.fraudshield.auth.account.StaffAccountRepository;
 import io.github.mariusbayizere.fraudshield.auth.apikey.ApiKeyPrincipal;
 import io.github.mariusbayizere.fraudshield.auth.jwt.AccessTokens;
 import io.github.mariusbayizere.fraudshield.auth.jwt.StaffClaims;
+import io.github.mariusbayizere.fraudshield.auth.ratelimit.RateLimiter;
 import io.github.mariusbayizere.fraudshield.auth.session.SessionService;
 import io.github.mariusbayizere.fraudshield.auth.web.Requests;
 import jakarta.servlet.http.HttpServletRequest;
@@ -35,6 +36,10 @@ public final class AccessDeniedAudit {
   private final StaffAccountRepository accounts;
   private final AuditLog audit;
   private final Clock clock;
+  private final RateLimiter limiter;
+
+  private static final String SAMPLE_KEY = "access-denied-audit:";
+  private static final java.time.Duration SAMPLE_WINDOW = java.time.Duration.ofMinutes(1);
 
   /**
    * Creates the recorder.
@@ -43,13 +48,19 @@ public final class AccessDeniedAudit {
    * @param accounts account repository
    * @param audit audit log
    * @param clock clock
+   * @param limiter rate limiter sampling the records
    */
   public AccessDeniedAudit(
-      TenantTransactions tenants, StaffAccountRepository accounts, AuditLog audit, Clock clock) {
+      TenantTransactions tenants,
+      StaffAccountRepository accounts,
+      AuditLog audit,
+      Clock clock,
+      RateLimiter limiter) {
     this.tenants = Objects.requireNonNull(tenants, "tenants");
     this.accounts = Objects.requireNonNull(accounts, "accounts");
     this.audit = Objects.requireNonNull(audit, "audit");
     this.clock = Objects.requireNonNull(clock, "clock");
+    this.limiter = Objects.requireNonNull(limiter, "limiter");
   }
 
   /**
@@ -63,6 +74,12 @@ public final class AccessDeniedAudit {
       String operation = request.getMethod() + " " + request.getRequestURI();
       if (operation.length() > MAX_PATH) {
         operation = operation.substring(0, MAX_PATH);
+      }
+      // At most one record per caller and operation per minute, so a misconfigured client cannot
+      // flood the hash chain (re-review N2).
+      String principal = caller == null ? "anonymous" : caller.getName();
+      if (!limiter.attempt(SAMPLE_KEY + principal + ":" + operation, 1, SAMPLE_WINDOW).allowed()) {
+        return;
       }
       Map<String, Object> after = Map.of("method", request.getMethod(), "operation", operation);
       if (caller instanceof JwtAuthenticationToken jwt) {
