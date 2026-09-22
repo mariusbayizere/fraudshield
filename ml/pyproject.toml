@@ -16,6 +16,10 @@ dependencies = [
     # one measurement. C-6 claims the ensemble reduces seed variance by 12% and cannot be
     # settled without it.
     "lightgbm==4.7.0",
+    # D-06's Isolation Forest, D-05's isotonic calibration, and E.5's logistic-regression and
+    # random-forest baselines. Four uses the SRS specifies, not one convenience: the booster
+    # APIs stay native (smoke.py's reason still holds for them).
+    "scikit-learn==1.8.0",
 ]
 
 [project.scripts]

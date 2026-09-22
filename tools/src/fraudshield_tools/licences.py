@@ -141,6 +141,14 @@ EXCEPTIONS: dict[str, tuple[str, str]] = {
         "confirmed against the tagged source (github.com/scipy/scipy, tag v1.18.1) on 2026-09-22. "
         "A transitive dependency of xgboost and lightgbm, not declared directly",
     ),
+    "python:cloudpickle@3.1.2": (
+        "BSD-3-Clause",
+        "classifier says only 'BSD License' and the policy does not read the old-style 'License: "
+        "BSD-3-Clause' field; dist-info/licenses/LICENSE is the full 3-clause text (copyright "
+        "Cloudpickle contributors, Regents of the University of California, PiCloud), read in "
+        "full on 2026-09-22 from the installed wheel, not checked against upstream source. A "
+        "transitive dependency of joblib via scikit-learn, not declared directly",
+    ),
     "python:nvidia-nccl-cu12@2.31.2": (
         "BSD-3-Clause",
         "the wheel's own License-Expression field says 'LicenseRef-NVIDIA-Proprietary', which is "
