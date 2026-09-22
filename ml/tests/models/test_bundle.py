@@ -13,15 +13,16 @@ import xgboost as xgb
 
 from fraudshield_ml.features.registry import REGISTRY, Dtype, categories_for
 from fraudshield_ml.models import build as builder
-from fraudshield_ml.models import onnx_export
 from fraudshield_ml.models.bundle import (
+    FILES,
     LIGHTGBM_WEIGHT,
+    PARITY,
     XGBOOST_WEIGHT,
     Bundle,
     BundleError,
     feature_registry_version,
 )
-from fraudshield_ml.training import smoke
+from fraudshield_ml.training import gate_run, model, smoke
 
 Vectors = list[dict[str, float | str]]
 Built = tuple[Bundle, Path, Vectors, dict[str, list[str]]]
@@ -50,7 +51,13 @@ def synthetic_cache(rows: int, seed: int) -> tuple[Vectors, dict[str, list[str]]
         extras[smoke.CACHE_LABEL].append(str(fraud))
         extras[smoke.CACHE_ACCOUNT].append(f"acc{i % 400}")
         extras[smoke.CACHE_SEGMENT].append(
-            "train" if i < rows * 0.5 else "calibration" if i < rows * 0.75 else "test"
+            "train"
+            if i < rows * 0.4
+            else "validation"
+            if i < rows * 0.6
+            else "calibration"
+            if i < rows * 0.8
+            else "test"
         )
         extras[smoke.CACHE_COUNTRY].append("RW")
         extras[smoke.CACHE_CHANNEL].append("MOBILE_MONEY")
@@ -110,7 +117,7 @@ def test_shap_is_additive_in_margin_space_per_model(built: Built) -> None:
 def test_the_combined_margin_is_the_weighted_sum_of_the_model_margins(built: Built) -> None:
     bundle, _, vectors, _ = built
     row = bundle.row(vectors[3])
-    array = np.asarray([row])
+    array = np.asarray([row], dtype=np.float32)
     margin_x = float(
         bundle.xgboost.predict(xgb.DMatrix(array, missing=math.nan), output_margin=True)[0]
     )
@@ -133,13 +140,7 @@ def test_the_frozen_encoding_is_what_held_out_rows_were_trained_against(built: B
 
 def test_a_tampered_file_is_refused(built: Built, tmp_path: Path) -> None:
     _, path, _, _ = built
-    for name in (
-        "manifest.json",
-        "xgboost.json",
-        "lightgbm.txt",
-        "calibration.json",
-        "forest.json",
-    ):
+    for name in ("manifest.json", *FILES):
         (tmp_path / name).write_bytes((path / name).read_bytes())
     calibration = json.loads((tmp_path / "calibration.json").read_text())
     calibration["ensemble"]["y"][-1] = 0.0
@@ -167,7 +168,7 @@ def test_an_empty_directory_and_a_wrong_format_are_refused(built: Built, tmp_pat
 
 def test_unknown_features_are_refused(built: Built, tmp_path: Path) -> None:
     _, path, _, _ = built
-    for name in ("xgboost.json", "lightgbm.txt", "calibration.json", "forest.json"):
+    for name in FILES:
         (tmp_path / name).write_bytes((path / name).read_bytes())
     manifest = json.loads((path / "manifest.json").read_text())
     manifest["features"] = [*manifest["features"], "not_a_feature"]
@@ -185,67 +186,59 @@ def test_the_registry_version_is_stable_and_shaped() -> None:
 def test_a_build_without_every_split_is_refused() -> None:
     vectors, extras = synthetic_cache(200, 1)
     extras[smoke.CACHE_SEGMENT] = ["train"] * 200
-    with pytest.raises(ValueError, match="no calibration rows"):
+    with pytest.raises(ValueError, match="no validation, calibration, test rows"):
         builder.build(vectors, extras, seed=1)
 
 
 def test_the_report_states_the_floor_beside_the_model() -> None:
     report = builder.Report(
-        rows={"train": 1, "calibration": 2, "test": 3},
+        rows={"train": 1, "validation": 1, "calibration": 2, "test": 3},
+        xgboost_rounds=191,
+        lightgbm_rounds=342,
         ensemble_auc=0.97,
         ensemble_auc_interval=0.004,
-        xgboost_auc=0.96,
-        lightgbm_auc=0.95,
         floor=0.88,
         ece_ensemble=0.001,
-        ece_raw=0.01,
         recall_at_1pct_fpr=0.9,
+        parity=1e-7,
     )
     text = "\n".join(report.lines())
     assert "floor" in text
     assert "+0.0900" in text
 
 
-def test_the_model_is_trained_on_the_whole_days_the_contract_carries() -> None:
-    row = builder.serving_view(
-        {"device_age_days": 2.9, "days_since_sim_swap": -0.5, "account_age_days": float("nan")}
-    )
-    assert row["device_age_days"] == 2.0
-    assert math.isnan(float(row["days_since_sim_swap"])), "a negative age has no encoding"
-    assert math.isnan(float(row["account_age_days"]))
+@pytest.mark.req("FR-02-01", "D-05")
+def test_the_bundle_is_m4_s_fitted_model_and_scores_as_it_does(built: Built) -> None:
+    """Owner decision: the served model is the evaluated one. Same cache, same seed, same fit."""
+    bundle, _, vectors, extras = built
+    data = gate_run.load(vectors, extras)
+    fitted = model.fit_ensemble(data.matrix, data.labels, data.split, seed=3)
+    assert bundle.provenance["xgboost_rounds"] == fitted.xgboost_rounds
+    assert bundle.provenance["lightgbm_rounds"] == fitted.lightgbm_rounds
+    assert bundle.provenance["trained_by"].endswith("(M4)")
+    rows = [data.matrix[i] for i in data.test]
+    expected = fitted.score(rows).ensemble
+    served = [bundle.predict(r).ensemble_score for r in rows]
+    assert max(abs(a - b) for a, b in zip(served, expected, strict=True)) < PARITY
 
 
-def test_treelite_matches_the_native_boosters(built: Built) -> None:
-    """ADR 0032: serving predicts through Treelite, which must equal the boosters themselves."""
+@pytest.mark.req("FR-02-01")
+def test_onnx_matches_the_native_boosters_on_float32_inputs(built: Built) -> None:
+    """ADR 0032 (amended): M4's float32 construction makes the ONNX path exact on both models."""
     bundle, _, vectors, _ = built
-    worst = 0.0
-    for values in vectors:
-        row = bundle.row(values)
-        compiled, native = bundle.raw(row), bundle.native_raw(row)
-        worst = max(worst, abs(compiled[0] - native[0]), abs(compiled[1] - native[1]))
-    assert worst < 1e-6
+    rows = [bundle.row(v) for v in vectors]
+    onnx_x, onnx_l = bundle.onnx_raw(rows)
+    native_x, native_l = bundle.native_raw(rows)
+    assert float(np.max(np.abs(onnx_x - native_x))) < PARITY
+    assert float(np.max(np.abs(onnx_l - native_l))) < PARITY
+    single = bundle.raw(rows[0])
+    assert single == pytest.approx((float(onnx_x[0]), float(onnx_l[0])), abs=1e-12)
 
 
-def _hundred_thousand_rows(bundle: Bundle, vectors: Vectors) -> np.ndarray:
-    base = np.asarray([bundle.row(v) for v in vectors], dtype=np.float64)
-    rng = np.random.default_rng(3)
-    picked = base[rng.integers(0, len(base), 100_000)]
-    jitter = rng.normal(0.0, 0.05, picked.shape)
-    return np.where(np.isnan(picked), np.nan, picked + jitter)
-
-
-def test_the_xgboost_onnx_export_meets_e4_parity_on_100k_rows(built: Built) -> None:
-    bundle, _, vectors, _ = built
-    rows = _hundred_thousand_rows(bundle, vectors)
-    measured = onnx_export.parity(bundle, rows)
-    assert measured["xgboost"] < onnx_export.PARITY
-
-
-def test_the_lightgbm_converter_accepts_float32_only_so_serving_uses_treelite(built: Built) -> None:
-    """Why LightGBM's ONNX export cannot meet the 1e-5 parity (ADR 0032): double thresholds,
-    float32 input. If the converter ever accepts double input this fails, and it is time to look
-    again."""
-    bundle, _, _, _ = built
-    with pytest.raises(RuntimeError, match="wrong type"):
-        onnx_export.export_lightgbm(bundle, double=True)
-    assert onnx_export.export_lightgbm(bundle)  # the float32 export exists, for interoperability
+def test_a_build_whose_served_path_disagrees_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    vectors, extras = synthetic_cache(1500, 5)
+    monkeypatch.setattr(builder, "PARITY", 0.0)  # nothing can be within zero
+    with pytest.raises(builder.ParityError, match=r"bound is 0\.0"):
+        builder.build(vectors, extras, seed=5)

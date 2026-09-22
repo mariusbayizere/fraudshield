@@ -34,8 +34,6 @@ dependencies = [
     # the client is protocol-compatible with it.
     "redis==8.1.0",
     "prometheus-client==0.26.0",
-    # Serving inference candidate (ADR 0032), measured against ONNX on M4's model.
-    "treelite==4.7.2",
     # The admin port (health, model status, shadow switch); never on the hot path.
     "fastapi==0.141.1",
     "uvicorn==0.53.0",

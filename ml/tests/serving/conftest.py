@@ -67,7 +67,13 @@ def _cache(rows: int, seed: int) -> tuple[list[dict[str, float | str]], dict[str
         extras[smoke.CACHE_LABEL].append(str(burst and rng.random() < 0.9))
         extras[smoke.CACHE_ACCOUNT].append(f"a{i % 300}")
         extras[smoke.CACHE_SEGMENT].append(
-            "train" if i < rows * 0.6 else "calibration" if i < rows * 0.85 else "test"
+            "train"
+            if i < rows * 0.45
+            else "validation"
+            if i < rows * 0.65
+            else "calibration"
+            if i < rows * 0.85
+            else "test"
         )
         for key in (smoke.CACHE_COUNTRY, smoke.CACHE_CHANNEL, smoke.CACHE_VARIANT):
             extras[key].append("")

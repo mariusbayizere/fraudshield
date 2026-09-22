@@ -1,29 +1,33 @@
-"""The served model bundle: D-05's calibrated ensemble, D-06's forest, and what they were fed.
+"""The served model bundle: M4's evaluated D-05 ensemble and D-06 forest, packaged without pickle.
+
+**The served model is the evaluated model.** M4's gate figures (ML-GATE-01 to 11) and the paper
+describe `training.model.fit_ensemble` and `training.anomaly.fit_anomaly`. A bundle packages
+exactly those fitted objects (`models.build`), and `models.build` refuses to write one whose scores
+differ from the fitted model's by 1e-5 or more anywhere in the test period.
 
 A bundle is a directory:
 
-    manifest.json     versions, feature order, categorical encodings, weights, file hashes
-    xgboost.json      XGBoost's own JSON model format
-    lightgbm.txt      LightGBM's own text model format
-    calibration.json  three isotonic calibrators: the ensemble's, and one per model (D-05)
-    forest.json       the exported Isolation Forest and its reference distribution (D-06)
+    manifest.json     versions, feature order, categorical encodings, round counts, file hashes
+    xgboost.json      XGBoost, truncated to the rounds early stopping chose (its native format)
+    lightgbm.txt      LightGBM, truncated and float32-exact (M4's construction; its native format)
+    xgboost.onnx      M4's ONNX export of the same XGBoost trees: what `raw` scores with
+    lightgbm.onnx     M4's ONNX export of the same LightGBM trees
+    calibration.json  three isotonic calibrators as knots: the ensemble's, and one per model
+    forest.json       the Isolation Forest's trees, imputation medians and reference distribution
 
-Nothing is pickled, so loading a bundle downloaded from the registry cannot run code; every file's
-SHA-256 is in the manifest and checked on load, so a truncated or substituted file is refused
-rather than served.
+Nothing is pickled, so loading a bundle downloaded from the registry cannot run code, and every
+file's SHA-256 is in the manifest and checked on load.
 
-**D-05, precisely.** Each booster produces a raw probability. The ensemble's raw score is
-`0.55·p_xgb + 0.45·p_lgb`, and **one** isotonic regression, fitted on the chronologically later
-calibration split, maps it to `ensemble_score`. `xgboost_score` and `lightgbm_score` are each
-model's own isotonic-calibrated probability, for display. SHAP is exact TreeSHAP per model in
-log-odds margin space, combined as `0.55·φ_xgb + 0.45·φ_lgb` with the combined base value and final
-margin reported beside it. The combined contributions sum to the combined margin, never to the
-calibrated probability, and nothing here claims otherwise.
+**Inference is ONNX Runtime** (ADR 0032, amended), because M4's float32 construction makes it exact.
+Every input is rounded to float32, as `Ensemble.raw` does, and every LightGBM threshold was moved to
+the largest float32 not above it. Measured on the whole test period, ONNX matches the native
+boosters to 9e-7, and it scores both in 0.07 ms per row against Treelite's 0.35 ms. The native
+boosters stay for exact TreeSHAP and as the parity reference (`native_raw`).
 
-**TreeSHAP implementation.** E.4 names `shap.TreeExplainer`. Both boosters ship the same exact
-TreeSHAP algorithm natively (`pred_contribs` / `pred_contrib`), with no sampling, so the `shap`
-package and its dependencies are not added; the additivity test in margin space is the check that
-the values are exact.
+**D-05, precisely.** `ensemble_score` is one isotonic regression applied to
+`0.55·p_xgb + 0.45·p_lgb`; `xgboost_score` and `lightgbm_score` are each model's own calibrated
+probability, for display. SHAP is exact TreeSHAP per model in margin space, combined as
+`0.55·φ_xgb + 0.45·φ_lgb`. It sums to the combined margin, never to the calibrated probability.
 """
 
 from __future__ import annotations
@@ -43,14 +47,24 @@ from fraudshield_ml.features.registry import REGISTRY
 from fraudshield_ml.models.forest import Forest
 from fraudshield_ml.models.isotonic import Isotonic
 
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 XGBOOST_WEIGHT = 0.55
 LIGHTGBM_WEIGHT = 0.45
 #: E.4 / FR-02-04: exact TreeSHAP is computed only at or above this ensemble score.
 SHAP_THRESHOLD = 0.60
+#: E.4's parity bound between the served inference path and the native boosters.
+PARITY = 1e-5
 
 MANIFEST = "manifest.json"
-FILES = ("xgboost.json", "lightgbm.txt", "calibration.json", "forest.json")
+FILES = (
+    "xgboost.json",
+    "lightgbm.txt",
+    "xgboost.onnx",
+    "lightgbm.onnx",
+    "calibration.json",
+    "forest.json",
+)
+ONNX_INPUT = "input"
 
 #: A feature value as the scorer assembles it: a number, a category, or NaN for missing (D-04).
 FeatureValue = float | str
@@ -113,7 +127,7 @@ class Explanation:
     contributions: Mapping[str, float]
     base_value: float
     final_margin: float
-    #: Per-model additivity residuals |Σφ + bias - margin|, which FR-02-04 bounds at 0.001.
+    #: Per-model additivity residuals |sum(phi) + bias - margin|, which FR-02-04 bounds at 0.001.
     additivity_error: float
 
 
@@ -123,8 +137,12 @@ class Bundle:
     registry_version: str
     features: tuple[str, ...]
     encodings: Mapping[str, Encoding]
+    #: Native boosters, already truncated to the scored rounds: SHAP and the parity reference.
     xgboost: Any
     lightgbm: Any
+    #: M4's ONNX exports of the same trees, serialised: what `raw` scores with.
+    xgboost_onnx: bytes
+    lightgbm_onnx: bytes
     calibration: Mapping[str, Isotonic]
     forest: Forest
     #: Provenance and held-out metrics, carried verbatim from the build.
@@ -147,35 +165,40 @@ class Bundle:
         return self.calibrate(*self.raw(row))
 
     def raw(self, row: Sequence[float]) -> tuple[float, float]:
-        """Each booster's uncalibrated probability for one row, through Treelite (ADR 0032).
-
-        Treelite's tree inference is exact against both boosters to 1e-6 (tested per bundle in
-        `test_treelite_matches_the_native_boosters`) and skips their Python wrappers, which cost
-        more per call than the trees themselves: XGBoost's probes for pandas on every call.
-        """
-        import treelite  # noqa: PLC0415 - loaded with the bundle
-
-        array = np.asarray([row], dtype=np.float64)
-        compiled_xgb, compiled_lgb = self._compiled
-        p_xgb = float(np.ravel(treelite.gtil.predict(compiled_xgb, array, nthread=1))[0])
-        p_lgb = float(np.ravel(treelite.gtil.predict(compiled_lgb, array, nthread=1))[0])
+        """Each booster's uncalibrated probability for one row, through ONNX Runtime."""
+        array = np.asarray([row], dtype=np.float32)
+        session_xgb, session_lgb = self._sessions
+        p_xgb = float(session_xgb.run(None, {ONNX_INPUT: array})[1][0, 1])
+        p_lgb = float(session_lgb.run(None, {ONNX_INPUT: array})[1][0, 1])
         return p_xgb, p_lgb
 
-    def native_raw(self, row: Sequence[float]) -> tuple[float, float]:
-        """The boosters' own predictions: the reference Treelite is held to."""
-        array = np.asarray([row], dtype=np.float64)
-        p_xgb = float(self.xgboost.inplace_predict(array, missing=math.nan)[0])
-        p_lgb = float(self.lightgbm.predict(array, num_threads=1)[0])
-        return p_xgb, p_lgb
+    def native_raw(self, rows: Sequence[Sequence[float]]) -> tuple[Any, Any]:
+        """The boosters' own probabilities on float32 inputs, as `Ensemble.raw` computes them."""
+        array = np.asarray(rows, dtype=np.float32)
+        p_xgb = self.xgboost.inplace_predict(array, missing=math.nan)
+        p_lgb = self.lightgbm.predict(array, num_threads=1)
+        return np.asarray(p_xgb, dtype=np.float64), np.asarray(p_lgb, dtype=np.float64)
+
+    def onnx_raw(self, rows: Sequence[Sequence[float]]) -> tuple[Any, Any]:
+        """The ONNX path over many rows at once, for the parity check."""
+        array = np.asarray(rows, dtype=np.float32)
+        session_xgb, session_lgb = self._sessions
+        return (
+            np.asarray(session_xgb.run(None, {ONNX_INPUT: array})[1][:, 1], dtype=np.float64),
+            np.asarray(session_lgb.run(None, {ONNX_INPUT: array})[1][:, 1], dtype=np.float64),
+        )
 
     @functools.cached_property
-    def _compiled(self) -> tuple[Any, Any]:
-        """Treelite models built from the same boosters, once per bundle."""
-        import treelite  # noqa: PLC0415
+    def _sessions(self) -> tuple[Any, Any]:
+        import onnxruntime as ort  # noqa: PLC0415 - loaded with the bundle
 
-        return (
-            treelite.frontend.from_xgboost_json(self.xgboost.save_raw("json").decode()),
-            treelite.frontend.from_lightgbm(self.lightgbm),
+        options = ort.SessionOptions()
+        # D-16: one thread per inference; throughput comes from worker processes.
+        options.intra_op_num_threads = 1
+        options.inter_op_num_threads = 1
+        return tuple(
+            ort.InferenceSession(model, options, providers=["CPUExecutionProvider"])
+            for model in (self.xgboost_onnx, self.lightgbm_onnx)
         )
 
     def calibrate(self, p_xgb: float, p_lgb: float) -> Prediction:
@@ -193,7 +216,8 @@ class Bundle:
     def explain(self, row: Sequence[float]) -> Explanation:
         import xgboost as xgb  # noqa: PLC0415 - already loaded by the booster
 
-        array = np.asarray([row], dtype=np.float64)
+        # float32, as the boosters score: an explanation of a different routing is not one.
+        array = np.asarray([row], dtype=np.float32)
         # nthread=1 as D-16 requires: the default spins up an OpenMP team for a single row, which
         # measured ten times the cost of the trees on a busy machine.
         matrix = xgb.DMatrix(array, missing=math.nan, nthread=1)
@@ -208,8 +232,6 @@ class Bundle:
         contributions = {name: float(weighted[i]) for i, name in enumerate(self.features)}
         # The margin the models actually produced, not the sum of the contributions: XGBoost
         # accumulates contributions in float32, so their sum differs from its margin by ~1e-6.
-        # FR-02-04's tolerance (0.001) bounds that gap; reporting the true margin keeps the
-        # waterfall honest about where it ends.
         return Explanation(
             contributions=contributions,
             base_value=float(weighted[-1]),
@@ -228,6 +250,8 @@ class Bundle:
         directory.mkdir(parents=True, exist_ok=True)
         self.xgboost.save_model(str(directory / "xgboost.json"))
         self.lightgbm.save_model(str(directory / "lightgbm.txt"))
+        (directory / "xgboost.onnx").write_bytes(self.xgboost_onnx)
+        (directory / "lightgbm.onnx").write_bytes(self.lightgbm_onnx)
         _write_json(
             directory / "calibration.json",
             {name: cal.to_json() for name, cal in sorted(self.calibration.items())},
@@ -244,6 +268,7 @@ class Bundle:
             },
             "weights": {"xgboost": XGBOOST_WEIGHT, "lightgbm": LIGHTGBM_WEIGHT},
             "shap_threshold": SHAP_THRESHOLD,
+            "inference": "onnxruntime",
             "provenance": dict(self.provenance),
             "files": {name: _sha256(directory / name) for name in FILES},
         }
@@ -294,6 +319,8 @@ class Bundle:
             },
             xgboost=booster,
             lightgbm=lgb.Booster(model_file=str(directory / "lightgbm.txt")),
+            xgboost_onnx=(directory / "xgboost.onnx").read_bytes(),
+            lightgbm_onnx=(directory / "lightgbm.onnx").read_bytes(),
             calibration={k: Isotonic.from_json(v) for k, v in calibration.items()},
             forest=Forest.from_json(json.loads((directory / "forest.json").read_text())),
             provenance=dict(manifest.get("provenance", {})),

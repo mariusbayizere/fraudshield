@@ -33,17 +33,11 @@ class Isotonic:
         return Isotonic(tuple(float(v) for v in data["x"]), tuple(float(v) for v in data["y"]))
 
 
-def fit(scores: Sequence[float], labels: Sequence[bool]) -> tuple[Isotonic, Any]:
-    """Fit on the calibration split; returns the estimator too, for the parity test."""
-    from sklearn.isotonic import IsotonicRegression  # noqa: PLC0415
-
-    model = IsotonicRegression(y_min=0.0, y_max=1.0, out_of_bounds="clip").fit(
-        np.asarray(scores, dtype=float), np.asarray(labels, dtype=float)
-    )
-    return (
-        Isotonic(
-            tuple(float(v) for v in model.X_thresholds_),
-            tuple(float(v) for v in model.y_thresholds_),
-        ),
-        model,
+def from_sklearn(model: Any) -> Isotonic:
+    """A fitted `IsotonicRegression` (M4's calibrators, `training.model._isotonic`) as knots."""
+    if getattr(model, "out_of_bounds", None) != "clip":
+        raise ValueError("only a calibrator that clips out-of-range scores is reproduced by interp")
+    return Isotonic(
+        tuple(float(v) for v in model.X_thresholds_),
+        tuple(float(v) for v in model.y_thresholds_),
     )

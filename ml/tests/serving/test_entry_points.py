@@ -154,7 +154,7 @@ def test_fs_model_build_writes_a_loadable_bundle_from_a_cache(
     assert model_cli.main(["build", "--cache", str(cache), "--out", str(out), "--seed", "4"]) == 0
     bundle = Bundle.load(out)
     assert bundle.provenance["cache_key"]["dataset"] == "synthetic"
-    assert bundle.provenance["whole_day_features"]
+    assert bundle.provenance["trained_by"].endswith("(M4)")
     assert "single-feature floor" in capsys.readouterr().out
     with pytest.raises(ValueError, match="no usable feature matrix"):
         builder.build_from_cache(tmp_path / "absent.parquet", out, seed=1, root=tmp_path)

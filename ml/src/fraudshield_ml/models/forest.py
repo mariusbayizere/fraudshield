@@ -12,14 +12,14 @@ training reference distribution, which this module keeps sorted beside the trees
 served too, as `anomaly_raw`.
 
 **Missing values are imputed, not routed.** E.4 fits the forest "on imputed features": each NaN
-becomes the feature's training median before the forest sees it, both when fitting and here.
+becomes the feature's training median before the forest sees it. The medians, like the forest and
+its reference distribution, are M4's (`training.anomaly`): this module fits nothing.
 """
 
 from __future__ import annotations
 
 import functools
 import math
-import warnings
 from bisect import bisect_right
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -27,11 +27,12 @@ from typing import Any
 
 import numpy as np
 
-#: D-06 and E.4: the contamination the forest is fitted with. It moves scikit-learn's own
-#: `decision_function` offset, not `score_samples`, so it changes nothing served here; it is
-#: recorded so the bundle states how the forest was fitted.
-CONTAMINATION = 0.01
-TREES = 100
+from fraudshield_ml.training.anomaly import CONTAMINATION as CONTAMINATION_FITTED
+from fraudshield_ml.training.anomaly import AnomalyModel
+
+#: D-06 and E.4: the contamination M4's forest is fitted with. It moves scikit-learn's own
+#: `decision_function` offset, not `score_samples`, so it changes nothing served here.
+CONTAMINATION = CONTAMINATION_FITTED
 
 
 def average_path_length(n: float) -> float:
@@ -172,24 +173,17 @@ class Forest:
         )
 
 
-def fit(matrix: Sequence[Sequence[float]], seed: int) -> tuple[Forest, Any]:
-    """Fit on the training rows, export, and return the fitted estimator for parity checks."""
-    from sklearn.ensemble import IsolationForest  # noqa: PLC0415
+def export(model: AnomalyModel) -> Forest:
+    """M4's fitted Isolation Forest (`training.anomaly.fit_anomaly`) as plain arrays.
 
-    array = np.asarray(matrix, dtype=float)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", RuntimeWarning)  # an all-NaN column is handled below
-        medians = np.nanmedian(array, axis=0)
-    # A column that is NaN on every training row has no median; it imputes to zero, a constant
-    # the trees can never split on, which is what an all-missing feature should contribute.
-    medians = np.where(np.isnan(medians), 0.0, medians)
-    filled = np.where(np.isnan(array), medians, array)
-    model = IsolationForest(
-        n_estimators=TREES, contamination=CONTAMINATION, random_state=seed, n_jobs=1
-    ).fit(filled)
+    The medians and the reference distribution are M4's, unchanged; the trees are read from the
+    fitted scikit-learn estimator. `test_the_export_scores_exactly_as_m4_s_model_does` holds the
+    exported score equal to `AnomalyModel.raw` to 1e-12.
+    """
+    estimator = model.forest
     trees = []
-    for estimator, features in zip(model.estimators_, model.estimators_features_, strict=True):
-        structure = estimator.tree_
+    for fitted, features in zip(estimator.estimators_, estimator.estimators_features_, strict=True):
+        structure = fitted.tree_
         depths = structure.compute_node_depths()
         trees.append(
             Tree(
@@ -204,11 +198,9 @@ def fit(matrix: Sequence[Sequence[float]], seed: int) -> tuple[Forest, Any]:
                 ),
             )
         )
-    reference = sorted(float(-s) for s in model.score_samples(filled))
-    forest = Forest(
+    return Forest(
         trees=tuple(trees),
-        max_samples=int(model._max_samples),  # the value scoring normalises by
-        medians=tuple(float(m) for m in medians),
-        reference=tuple(reference),
+        max_samples=int(estimator._max_samples),  # the value scoring normalises by
+        medians=tuple(float(m) for m in model.medians),
+        reference=tuple(float(r) for r in model.reference),
     )
-    return forest, model
