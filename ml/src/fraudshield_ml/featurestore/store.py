@@ -163,6 +163,9 @@ class StoreMetrics:
     update_seconds: Histogram
     fallbacks: Counter
     unknown_state: Counter
+    #: ADR 0034: reads whose features fell back to a constant because no producer writes the
+    #: state they read. Silent otherwise, and worth 162 unflagged frauds on the gate model.
+    missing_producer: Counter
 
     @staticmethod
     def create(registry: CollectorRegistry | None = None) -> StoreMetrics:
@@ -178,6 +181,13 @@ class StoreMetrics:
                 "fs_feature_store_fallbacks_total",
                 "Reads that found no Redis state for an entity and asked the fallback source",
                 ["entity"],
+                **kwargs,
+            ),
+            missing_producer=Counter(
+                "fs_feature_store_missing_producer_reads_total",
+                "Reads where a feature fell back to a constant because nothing writes the state "
+                "it reads (ADR 0034): outcomes, SIM swaps, KYC tier, account opening",
+                ["state"],
                 **kwargs,
             ),
             unknown_state=Counter(
@@ -438,6 +448,7 @@ class FeatureStore:
         if tx.agent_id is not None:
             self._agent(ctx, tx, snap)
         self._cell(ctx, tx, snap.cell_rows, t)
+        self._count_missing_producers(snap, ctx)
         month = sum(1 for _, s in snap.rows if s > t - W_RAMP_MONTH)
         if month:
             recent = sum(1 for _, s in snap.rows if s > t - W_RAMP_RECENT)
@@ -446,6 +457,21 @@ class FeatureStore:
         return ContextRead(
             context=ctx, exact_ages=exact, degraded=degraded and not self.authoritative
         )
+
+    def _count_missing_producers(self, snap: _Snapshot, ctx: pb.AccountContext) -> None:
+        """Count the features that fell back to a constant for want of a producer (ADR 0034).
+
+        Only where the state could have applied: a counterparty with no prior rows is not evidence
+        that outcomes are missing, while one with rows and no verdict on any of them is.
+        """
+        if snap.cp_rows and not any(m[2] != UNLABELLED for m, _ in snap.cp_rows):
+            self.metrics.missing_producer.labels("outcomes").inc()
+        if not ctx.HasField("days_since_sim_swap"):
+            self.metrics.missing_producer.labels("sim_swaps").inc()
+        if not ctx.HasField("kyc_tier"):
+            self.metrics.missing_producer.labels("kyc_tier").inc()
+        if not ctx.HasField("account_age_days"):
+            self.metrics.missing_producer.labels("account_opened_at").inc()
 
     def _read(self, tx: Transaction, t: int) -> _Snapshot:
         """Every command `context_for` needs, pipelined into a single round trip."""

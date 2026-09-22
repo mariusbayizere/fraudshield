@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import fakeredis
 import pytest
@@ -54,7 +55,9 @@ def transaction(i: int, at: datetime, counterparty: str = "C1") -> Transaction:
     )
 
 
-def label_event(transaction_id: str, label: str, available_at: datetime, **payload: object) -> dict:
+def label_event(
+    transaction_id: str, label: str, available_at: datetime, **payload: object
+) -> dict[str, Any]:
     return {
         "event_id": "537d91d6-f3ca-5f97-9352-7aa86c5db363",
         "event_type": "label.recorded",
@@ -74,7 +77,7 @@ def label_event(transaction_id: str, label: str, available_at: datetime, **paylo
     }
 
 
-def topic() -> object:
+def topic() -> Any:
     return next(t for t in events.topics() if t.name == "fs.labels")
 
 
@@ -160,3 +163,27 @@ def test_a_malformed_event_is_refused(mutate: object, message: str) -> None:
     mutate(event)  # type: ignore[operator]
     with pytest.raises(EventError, match=message):
         apply_label(store(), event)
+
+
+@pytest.mark.req("FR-02-09")
+def test_the_store_counts_features_left_constant_for_want_of_a_producer() -> None:
+    """ADR 0034: serving these as constants is silent otherwise, and costs 162 flagged frauds on
+    the gate model."""
+    s = store()
+    earlier = transaction(1, T0)
+    s.observe(earlier)
+    scored = transaction(2, T0 + timedelta(days=1))
+    s.context_for(scored)
+    counted = {
+        state: s.metrics.missing_producer.labels(state)._value.get()
+        for state in ("outcomes", "sim_swaps", "kyc_tier", "account_opened_at")
+    }
+    assert counted == {"outcomes": 1, "sim_swaps": 1, "kyc_tier": 1, "account_opened_at": 1}
+
+    apply_label(s, label_event(earlier.transaction_id, "FRAUD", T0 + timedelta(hours=1)))
+    s.record_sim_swap(scored.account_id, T0 - timedelta(days=2))
+    s.set_kyc_tier(scored.account_id, 2, T0 - timedelta(days=30))
+    s.set_opened_at(scored.account_id, T0 - timedelta(days=90))
+    s.context_for(transaction(5, T0 + timedelta(days=2)))  # the same account as `scored`
+    assert s.metrics.missing_producer.labels("outcomes")._value.get() == 1, "not counted again"
+    assert s.metrics.missing_producer.labels("sim_swaps")._value.get() == 1
