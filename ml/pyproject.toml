@@ -54,3 +54,7 @@ packages = ["src/fraudshield_ml"]
 testpaths = ["tests"]
 markers = ["req(*ids): links a test to requirement or defect IDs in docs/traceability/requirements.yaml"]
 addopts = "-rs --strict-markers --import-mode=importlib --cov=fraudshield_ml --cov-branch --cov-report=term-missing:skip-covered --cov-fail-under=90"
+
+[tool.coverage.run]
+# protoc's output, checked for freshness by test rather than exercised line by line.
+omit = ["*/serving/generated/scoring_pb2.py"]

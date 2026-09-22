@@ -164,7 +164,12 @@ def request(
 def kit() -> SimpleNamespace:
     """The builders, as a fixture: test modules are not a package, so they cannot import them."""
     return SimpleNamespace(
-        transaction=transaction, context=context, request=request, t0=T0, reference=REFERENCE
+        transaction=transaction,
+        context=context,
+        request=request,
+        t0=T0,
+        reference=REFERENCE,
+        cache=_cache,
     )
 
 

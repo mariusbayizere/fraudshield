@@ -174,9 +174,27 @@ class WorkerConfig:
     reuse_port: bool = True
 
 
-def run_worker(config: WorkerConfig) -> None:
-    """One scoring process: load, serve, hot-swap until SIGTERM."""
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(process)d %(name)s %(message)s")
+@dataclass
+class Worker:
+    """A started scoring worker: its server, models and watcher, and how to stop them."""
+
+    server: Any
+    health: Any
+    holder: ModelHolder
+    port: int
+    watcher: AliasWatcher | None
+    writer: StoreWriter | None
+    shadow: ShadowRunner | None
+
+    def stop(self, grace: float = 5.0) -> None:
+        set_health(self.health, False)
+        if self.watcher is not None:
+            self.watcher.stop()
+        self.server.stop(grace=grace).wait()
+
+
+def start_worker(config: WorkerConfig) -> Worker:
+    """Load, bind and start serving; separate from `run_worker` so it can be tested in process."""
     reference = Reference.from_packs(config.packs)
     thresholds = ThresholdStore(_redis(config.redis_url))
     holder = ModelHolder()
@@ -199,7 +217,7 @@ def run_worker(config: WorkerConfig) -> None:
         store_redis = _redis(config.feature_store_url, timeout=1.0)
         writer = StoreWriter(FeatureStore(store_redis, reference))
     service = ScoringService(holder, shadow, writer)
-    server, health_servicer, _ = build_server(
+    server, health_servicer, port = build_server(
         service,
         config.address,
         tls=config.tls,
@@ -236,6 +254,13 @@ def run_worker(config: WorkerConfig) -> None:
         watcher.start()
     server.start()
     LOG.info("scoring on %s (pid %d)", config.address, os.getpid())
+    return Worker(server, health_servicer, holder, port, watcher, writer, shadow)
+
+
+def run_worker(config: WorkerConfig) -> None:
+    """One scoring process: start, then serve and hot-swap until SIGTERM."""
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(process)d %(name)s %(message)s")
+    worker = start_worker(config)
     # A threading.Event waited on in short slices: the handler only sets a flag, and the main
     # thread returns to the interpreter often enough for it to run. (A multiprocessing.Event set
     # from the handler could block on the lock its own interrupted wait holds.)
@@ -244,10 +269,7 @@ def run_worker(config: WorkerConfig) -> None:
     signal.signal(signal.SIGINT, lambda *_: stop.set())
     while not stop.wait(0.5):
         pass
-    set_health(health_servicer, False)
-    if watcher is not None:
-        watcher.stop()
-    server.stop(grace=5).wait()
+    worker.stop()
 
 
 def write_status(directory: Path, holder: ModelHolder) -> None:
