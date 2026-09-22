@@ -161,16 +161,7 @@ class SessionInvalidationTimingTest {
             Duration.ofMillis(1500),
             Duration.ofMillis(2500))) {
       FakeTime time = new FakeTime();
-      SessionStateCache a =
-          new SessionStateCache(
-              Instances.safe(redisA),
-              app.tenants(),
-              new StaffAccountRepository(app.jdbc(), app.users(), app.entities()),
-              new RefreshTokenRepository(app.jdbc()),
-              Duration.ofSeconds(2),
-              Duration.ofSeconds(1),
-              time::nanos,
-              time);
+      SessionStateCache a = fakeTimeCache(time);
       Duration bound = a.worstCaseStaleness();
       assertThat(bound).isEqualTo(Duration.ofSeconds(2));
       StaffClaims claims = signedIn();
@@ -203,6 +194,80 @@ class SessionInvalidationTimingTest {
             .isFalse();
       }
     }
+  }
+
+  /**
+   * The version tier must respect the bound on its own. Once another instance has cached a second
+   * session of the same account after the change, instance A's session tier answers "signed in"
+   * from Redis, and only A's version copy can still be stale. That copy was read before the change,
+   * so it must be gone by the bound, however slow its read was.
+   */
+  @Test
+  void staleVersionCannotOutliveTheBoundThroughAnotherSession() throws Exception {
+    FakeTime time = new FakeTime();
+    SessionStateCache a = fakeTimeCache(time);
+    final SessionStateCache c = fakeTimeCache(time);
+    StaffClaims first = signedIn();
+    final StaffClaims second = secondSession(first);
+    long anchor = time.now();
+    try (Connection lock = db.superuser();
+        Connection observer = db.superuser()) {
+      assertThat(
+              time.withSlowRead(
+                  lock,
+                  observer,
+                  "fraudshield.users",
+                  Duration.ofMillis(1500),
+                  () -> a.isCurrent(first)))
+          .isTrue();
+    }
+    app.tenants()
+        .inTenant(
+            bank,
+            () ->
+                new StaffAccountRepository(app.jdbc(), app.users(), app.entities())
+                    .bumpTokenVersion(first.userId()));
+    time.set(anchor + 1900);
+    assertThat(c.isCurrent(second)).as("C reads after the change").isFalse();
+    long end = anchor + a.worstCaseStaleness().toMillis();
+    for (long at = end; at <= end + 1000; at += 100) {
+      time.set(at);
+      assertThat(a.isCurrent(second))
+          .as("A refuses %d ms after its read began", at - anchor)
+          .isFalse();
+    }
+  }
+
+  private static SessionStateCache fakeTimeCache(FakeTime time) {
+    return new SessionStateCache(
+        Instances.safe(redisA),
+        app.tenants(),
+        new StaffAccountRepository(app.jdbc(), app.users(), app.entities()),
+        new RefreshTokenRepository(app.jdbc()),
+        Duration.ofSeconds(2),
+        Duration.ofSeconds(1),
+        time::nanos,
+        time);
+  }
+
+  private static StaffClaims secondSession(StaffClaims first) throws Exception {
+    UUID family = UUID.randomUUID();
+    try (Connection admin = db.superuser();
+        PreparedStatement token =
+            admin.prepareStatement(
+                "INSERT INTO fraudshield.refresh_tokens (institution_id, user_id, family_id,"
+                    + " token_hash, expires_at) VALUES (?, ?, ?, ?, ?)")) {
+      token.setObject(1, bank);
+      token.setObject(2, first.userId());
+      token.setObject(3, family);
+      token.setBytes(
+          4,
+          java.security.MessageDigest.getInstance("SHA-256").digest(family.toString().getBytes()));
+      token.setTimestamp(5, Timestamp.from(Instant.now().plus(Duration.ofDays(1))));
+      token.executeUpdate();
+    }
+    return new StaffClaims(
+        first.userId(), bank, StaffRole.ANALYST, "Timing", "t@bank.rw", 0, family);
   }
 
   @Test
