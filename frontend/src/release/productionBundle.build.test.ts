@@ -7,8 +7,13 @@ import { MOCK_MARKER } from '../mocks/handlers';
 import { PACKS } from '../region/packs';
 
 const ROOT = join(import.meta.dirname, '../..');
-/** D-39: the initial JavaScript, gzipped. */
-const INITIAL_JS_BUDGET = 200 * 1024;
+/**
+ * D-39 allows 200 KB of initial JavaScript, gzipped. The console holds itself to 170 KB, so a
+ * screen cannot spend the last of the budget and leave nothing for the next one (ADR 0080 §10).
+ */
+const INITIAL_JS_BUDGET = 170 * 1024;
+/** No single lazily loaded chunk may exceed this, gzipped (ADR 0080 §10). */
+const CHUNK_BUDGET = 120 * 1024;
 
 let out = '';
 let hostile = '';
@@ -58,6 +63,15 @@ afterAll(() => {
   rmSync(hostile, { recursive: true, force: true });
 });
 
+/** The entry script and everything index.html preloads with it: what a first visit downloads. */
+function initialScripts(): string[] {
+  const html = files.get('index.html') ?? '';
+  return [
+    ...html.matchAll(/<script type="module"[^>]*src="\/([^"]+)"/g),
+    ...html.matchAll(/<link rel="modulepreload"[^>]*href="\/([^"]+)"/g),
+  ].map((m) => m[1] ?? '');
+}
+
 describe('the production build (ADR 0080)', () => {
   it.each([
     ['a release build', files],
@@ -104,12 +118,19 @@ describe('the production build (ADR 0080)', () => {
     expect(sw).toMatch(/NavigationRoute\([^)]*\)[^;]*denylist:\[\/\^\\\/api\\\/\/\]/);
   });
 
-  it('D-39: keeps the initial JavaScript under 200 KB gzipped', () => {
-    const html = files.get('index.html') ?? '';
-    const initial = [
-      ...html.matchAll(/<script type="module"[^>]*src="\/([^"]+)"/g),
-      ...html.matchAll(/<link rel="modulepreload"[^>]*href="\/([^"]+)"/g),
-    ].map((m) => m[1] ?? '');
+  it('D-39: no lazily loaded chunk is larger than its budget, gzipped', () => {
+    // The entry and its preloads are measured together, by the initial-bundle budget below.
+    const initial = new Set(initialScripts());
+    const oversized = [...files]
+      .filter(([name]) => name.endsWith('.js') && !initial.has(name))
+      .map(([name, content]) => [name, gzipSync(content).length] as const)
+      .filter(([, size]) => size > CHUNK_BUDGET)
+      .map(([name, size]) => `${name}: ${String(Math.round(size / 1024))} KB`);
+    expect(oversized).toEqual([]);
+  });
+
+  it('D-39: keeps the initial JavaScript inside the budget, gzipped', () => {
+    const initial = initialScripts();
     expect(initial.length).toBeGreaterThan(0);
     const gzipped = initial.reduce((sum, f) => sum + gzipSync(files.get(f) ?? '').length, 0);
     expect(gzipped).toBeLessThanOrEqual(INITIAL_JS_BUDGET);
