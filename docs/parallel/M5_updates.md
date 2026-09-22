@@ -339,3 +339,65 @@ in 894fbb4 and eca66a6.
 - D-16: `DONE` for serving.
 
 **Generated file:** the matrix, in the review commit (D-16 tags).
+
+## 12. Owner decisions on the three majors, applied (2026-09-22)
+
+**M5-1, the Docker tests: the owner checks CI.** The owner is checking the `ml` job for
+`m5/scoring` on GitHub Actions and will report whether the real-Redis and real-MLflow tests
+passed. **Do not tag `m5-complete` until that is confirmed green.**
+
+**M5-2, ADR 0033: approved and applied (c787021).** `contracts/` was changed on this branch, with
+the freeze lifted by the owner for this one change:
+- `ScoreRequest.context` is removed, with 2 and its name reserved.
+- `ScoringResult.account_context` (18) and `ScoringResult.feature_store_degraded` (19) are added.
+- `buf lint` and `buf breaking` pass against `origin/main`. Two buf self-tests in
+  `contracts/tests/test_proto_breaking.py` moved their injected field from 18 to 90. The contracts
+  suite passes (490).
+- The scorer reads the account's context itself, so the whole-day skew is gone.
+
+**M5-3, the DB fallback: carried to M6 (0ac0491).** The `Fallback` protocol now covers everything
+an expired account's keys held. `featurestore/fallback.py` (`ReplayFallback`) is the reference. The
+acceptance test is `ml/tests/featurestore/test_db_fallback.py::test_a_read_through_the_fallback_equals_the_redis_read`:
+Redis state expired, the fallback reads the database, and the context and full-precision ages are
+identical to the Redis path's. It is parametrised; the `m6-postgresql` parameter is skipped until
+M6 supplies its reader. Three deliberately broken fallbacks were caught.
+
+**Proposed traceability row, for the owner to integrate** (M5 does not edit `requirements.yaml` or
+`docs/backlog/`), following ADR 0027's carry shape:
+
+```yaml
+# ROW_MILESTONE_OVERRIDES / backlog: FR-02-09's DB-fallback clause, carried M5 -> M6
+- id: PB-68            # next free number: check docs/backlog/ before using it
+  title: "FR-02-09 / C.4: feature-store DB fallback over M6's tables"
+  due_milestone: M6
+  carried_from: M5 (milestone review finding M5-3, owner decision 2026-09-22)
+  acceptance: >
+    ml/tests/featurestore/test_db_fallback.py::test_a_read_through_the_fallback_equals_the_redis_read
+    passes with the m6-postgresql parameter enabled: with an account's Redis keys expired, a read
+    served by the PostgreSQL Fallback (account_velocity_cache, the transactions hypertable, PB-37's
+    per-account durable table) yields an AccountContext and exact ages identical to the Redis
+    read, flagged feature_store_degraded.
+  requirement_note: "FR-02-09 stays IN_PROGRESS until PB-68 closes; the rest of the row is met in M5."
+```
+
+**The lab notebook** gained the entry the owner asked for, in 2c54c87, appended only: "A small
+error, amplified: raw parity says nothing after a steep transformation".
+
+### For M6: paste into `docs/parallel/M6_updates.md` (M5 does not edit M6's file)
+
+> **From M5, two things M6 must build against.**
+>
+> 1. **The scoring contract changed, owner-approved (ADR 0033, merged with M5).**
+>    - `ScoreRequest` no longer has `context`: the API sends `transaction` (with
+>      `account_token`), `configured_limits` and `traceparent` only. The scorer reads the account
+>      context from the Redis feature store itself.
+>    - Read `ScoringResult.feature_store_degraded` (19) to raise DEGRADED_MODE. Persist
+>      `ScoringResult.account_context` (18) with the decision, for audit and replay.
+>    - `UNAVAILABLE` also means the feature store is unreadable; the circuit breaker treats it as
+>      a scorer outage.
+>    - **Do not implement `AccountContext` assembly in Java.**
+> 2. **The DB fallback is M6's (PB-68, carried from M5).** Implement the `Fallback` protocol in
+>    `ml/src/fraudshield_ml/featurestore/store.py`, a Python reader over M6's tables, returning
+>    what `featurestore.fallback.ReplayFallback` returns. Enable the `m6-postgresql` parameter in
+>    `ml/tests/featurestore/test_db_fallback.py`. The test passes only if the features are
+>    identical to the Redis path's.
