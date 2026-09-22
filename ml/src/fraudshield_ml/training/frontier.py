@@ -62,15 +62,28 @@ def percentile(values: Sequence[float], fraction: float) -> float:
     return ordered[index]
 
 
+#: Calls made and discarded before timing starts. The first calls into a freshly trained booster
+#: pay for allocation and cache population that a serving process pays once at start-up, not per
+#: request — and they land in the p99 if they are timed.
+WARMUP_CALLS = 50
+
+
 def time_single_requests(
     call: object, rows: Sequence[Sequence[float]], repeats: int
 ) -> list[float]:
-    """Milliseconds per single-row call, one row at a time.
+    """Milliseconds per single-row call, one row at a time, after a warm-up.
 
     One row at a time on purpose. Scoring a batch amortises the per-call overhead that dominates a
     single request, and the scoring service handles one transaction per request — so a batch
     measurement would report a number no request will ever experience.
+
+    **The warm-up is not a nicety.** Without it the first configuration measured showed a predict
+    p99 of 16.67 ms against 4.86 for the next one, and an explanation cost of **minus 4.58 ms** —
+    an impossible figure, and the giveaway. A p99 including first-call allocation is not the p99
+    of a serving process, which pays that cost once at start-up.
     """
+    for row in rows[:WARMUP_CALLS]:
+        call([row])  # type: ignore[operator]
     timings = []
     for _ in range(repeats):
         for row in rows:
