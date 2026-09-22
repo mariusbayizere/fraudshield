@@ -61,6 +61,22 @@ expect_route pagerduty-sre team=sre severity=page alertname=FraudShieldErrorLogg
 expect_route pagerduty-sre alertname=AnythingUnlabelled
 echo "routing: 5 cases as expected"
 
+# Schemas pinned by commit (content-addressed): Kubernetes 1.34 (the minimum supported cluster
+# version, infrastructure/k8s/README.md) and the Argo Rollouts CRDs.
+k8s_schemas=491f6d0bac338516572de67fbd5ec4c510f7e657
+crd_schemas=ad3b08c5045129d7bb1eeffd8e61719b2c8dd1e2
+for overlay in infrastructure/k8s/overlays/*/; do
+  name="$(basename "$overlay")"
+  step "Kubernetes overlay $name: render, schema-validate, policy-check"
+  "$bin/kustomize" build "$overlay" >"$scratch/$name.yaml"
+  "$bin/kubeconform" -strict -summary -cache "${XDG_CACHE_HOME:-$HOME/.cache}/fraudshield" \
+    -kubernetes-version 1.34.11 \
+    -schema-location "https://raw.githubusercontent.com/yannh/kubernetes-json-schema/$k8s_schemas/{{.NormalizedKubernetesVersion}}-standalone-strict/{{.ResourceKind}}{{.KindSuffix}}.json" \
+    -schema-location "https://raw.githubusercontent.com/datreeio/CRDs-catalog/$crd_schemas/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json" \
+    "$scratch/$name.yaml"
+  uv run --frozen python infrastructure/checks/k8s_policy.py <"$scratch/$name.yaml"
+done
+
 step "Grafana dashboards match their generator"
 uv run --frozen python infrastructure/grafana/generate_dashboards.py --check
 

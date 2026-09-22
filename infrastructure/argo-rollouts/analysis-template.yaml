@@ -1,0 +1,43 @@
+# Canary analysis (SRS 8.1): measured on the canary pods only, selected by the pod-template hash
+# that prometheus.yml attaches as rollouts_pod_template_hash. Runs every minute from the first
+# canary step until the rollout completes; one failed measurement aborts the rollout and returns
+# all traffic to the stable version.
+#
+# Both conditions fail closed: a canary that serves no traffic, or whose metrics are missing,
+# yields an empty or NaN result and fails the analysis instead of passing it.
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: fraudshield-api-canary
+spec:
+  args:
+    - name: canary-hash
+    - name: namespace
+  metrics:
+    # Error rate > 0.5%: server errors (5xx) over all ingest requests to the canary. Client errors
+    # (4xx) are the caller's, not the release's. "or vector(0)": no 5xx series means no errors.
+    - name: error-rate
+      interval: 1m
+      initialDelay: 5m
+      failureLimit: 0
+      successCondition: len(result) == 1 && result[0] <= 0.005
+      provider:
+        prometheus:
+          address: http://fraudshield-prometheus.{{args.namespace}}.svc:9090
+          query: |
+            (
+              sum(rate(fs_ingest_requests_total{namespace="{{args.namespace}}", rollouts_pod_template_hash="{{args.canary-hash}}", status=~"5.."}[5m]))
+              or vector(0)
+            )
+            / sum(rate(fs_ingest_requests_total{namespace="{{args.namespace}}", rollouts_pod_template_hash="{{args.canary-hash}}"}[5m]))
+    # p99 > 80 ms: server-side decision latency of the canary pods.
+    - name: p99-decision-latency
+      interval: 1m
+      initialDelay: 5m
+      failureLimit: 0
+      successCondition: len(result) == 1 && result[0] <= 0.080
+      provider:
+        prometheus:
+          address: http://fraudshield-prometheus.{{args.namespace}}.svc:9090
+          query: |
+            histogram_quantile(0.99, sum by (le) (rate(fs_decision_latency_seconds_bucket{namespace="{{args.namespace}}", rollouts_pod_template_hash="{{args.canary-hash}}"}[5m])))

@@ -1,5 +1,5 @@
 # Prometheus configuration for one FraudShield namespace (SRS 08: FraudShield has its own
-# Prometheus; nothing is shared with another project). Mounted at /etc/prometheus by
+# Prometheus; nothing is shared with another project). Mounted at /etc/prometheus/config by
 # infrastructure/prometheus/kustomization.yaml, with the rule files under /etc/prometheus/rules.
 #
 # Scrape targets are the pods of this namespace only (own_namespace), selected by their

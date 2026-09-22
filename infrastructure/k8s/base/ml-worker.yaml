@@ -1,0 +1,67 @@
+# fraudshield-ml-worker (C.1): feature-store updates, labels, drift/PSI, campaigns, retraining.
+# Consumers scale by Kafka partitions, not CPU, so there is no HPA; replicas are set per overlay.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fraudshield-ml-worker
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fraudshield-ml-worker
+  labels: {app.kubernetes.io/name: fraudshield-ml-worker, app.kubernetes.io/component: worker}
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels: {app.kubernetes.io/name: fraudshield-ml-worker}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: fraudshield-ml-worker, app.kubernetes.io/component: worker}
+    spec:
+      serviceAccountName: fraudshield-ml-worker
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: worker
+          image: ghcr.io/mariusbayizere/fraudshield-ml-worker
+          ports:
+            - {name: metrics, containerPort: 8000}
+          envFrom:
+            - secretRef: {name: fraudshield-ml-worker-secrets}
+          resources:
+            requests: {cpu: "1", memory: 2Gi}
+            limits: {memory: 6Gi}
+          livenessProbe:
+            httpGet: {path: /health/live, port: metrics}
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: {path: /health/ready, port: metrics}
+            periodSeconds: 10
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: tmp
+          emptyDir: {sizeLimit: 4Gi}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: fraudshield-ml-worker
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: fraudshield-ml-worker}

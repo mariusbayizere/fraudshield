@@ -1,0 +1,172 @@
+# Prometheus keeps 35 days of samples: the fraud-rate anomaly alert compares each hour with a
+# 30-day baseline (SRS 8.2), so less history silently weakens that alert.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fraudshield-prometheus
+---
+# Pod discovery in this namespace only (kubernetes_sd_configs own_namespace in prometheus.yml).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: fraudshield-prometheus
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: fraudshield-prometheus
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: fraudshield-prometheus}
+subjects:
+  - {kind: ServiceAccount, name: fraudshield-prometheus}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: fraudshield-prometheus
+  labels: {app.kubernetes.io/name: fraudshield-prometheus, app.kubernetes.io/component: monitoring}
+spec:
+  serviceName: fraudshield-prometheus
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: fraudshield-prometheus}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: fraudshield-prometheus, app.kubernetes.io/component: monitoring}
+    spec:
+      serviceAccountName: fraudshield-prometheus
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v3.14.0@sha256:5ce7540c3c00ef4ab0c9d2c995c6a5b9c421f44b4a115d97a2c7af3b1c21cbb0
+          args:
+            - --config.file=/etc/prometheus/config/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --storage.tsdb.retention.time=35d
+            - --web.enable-lifecycle=false
+          ports:
+            - {name: http, containerPort: 9090}
+          resources:
+            requests: {cpu: 500m, memory: 2Gi}
+            limits: {memory: 4Gi}
+          livenessProbe:
+            httpGet: {path: /-/healthy, port: http}
+            periodSeconds: 15
+          readinessProbe:
+            httpGet: {path: /-/ready, port: http}
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: config, mountPath: /etc/prometheus/config}
+            - {name: rules, mountPath: /etc/prometheus/rules}
+            - {name: data, mountPath: /prometheus}
+      volumes:
+        - name: config
+          configMap: {name: fraudshield-prometheus-config}
+        - name: rules
+          configMap: {name: fraudshield-prometheus-rules}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: {storage: 50Gi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fraudshield-prometheus
+  labels: {app.kubernetes.io/name: fraudshield-prometheus}
+spec:
+  selector: {app.kubernetes.io/name: fraudshield-prometheus}
+  ports:
+    - {name: http, port: 9090, targetPort: http}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: fraudshield-prometheus
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: fraudshield-prometheus}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fraudshield-blackbox-exporter
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fraudshield-blackbox-exporter
+  labels: {app.kubernetes.io/name: fraudshield-blackbox-exporter, app.kubernetes.io/component: monitoring}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: fraudshield-blackbox-exporter}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: fraudshield-blackbox-exporter, app.kubernetes.io/component: monitoring}
+    spec:
+      serviceAccountName: fraudshield-blackbox-exporter
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: blackbox-exporter
+          image: prom/blackbox-exporter:v0.28.0@sha256:e753ff9f3fc458d02cca5eddab5a77e1c175eee484a8925ac7d524f04366c2fc
+          args: [--config.file=/etc/blackbox/blackbox.yml]
+          ports:
+            - {name: http, containerPort: 9115}
+          resources:
+            requests: {cpu: 50m, memory: 32Mi}
+            limits: {memory: 64Mi}
+          livenessProbe:
+            httpGet: {path: /-/healthy, port: http}
+          readinessProbe:
+            httpGet: {path: /-/healthy, port: http}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: config, mountPath: /etc/blackbox}
+      volumes:
+        - name: config
+          configMap: {name: fraudshield-blackbox-config}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fraudshield-blackbox-exporter
+  labels: {app.kubernetes.io/name: fraudshield-blackbox-exporter}
+spec:
+  selector: {app.kubernetes.io/name: fraudshield-blackbox-exporter}
+  ports:
+    - {name: http, port: 9115, targetPort: http}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: fraudshield-blackbox-exporter
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: fraudshield-blackbox-exporter}

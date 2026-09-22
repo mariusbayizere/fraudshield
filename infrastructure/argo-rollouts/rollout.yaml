@@ -1,0 +1,46 @@
+# The Rollout takes its pod template from the fraudshield-api Deployment (workloadRef), so the
+# base manifest stays the single definition of the API pod. The production overlay holds that
+# Deployment at 0 replicas: the Rollout owns every API pod, and there is nothing to scale down.
+#
+# SRS 8.1: 10% canary for 30 minutes, automatic rollback if error rate > 0.5% or p99 > 80 ms
+# (analysis-template.yaml), then full rollout. The manual approval before production is the
+# GitHub environment gate of the deploy workflow, not a pause here.
+#
+# Traffic split is by replica count (no service mesh): 10% is exactly one canary pod only when
+# there are 10 replicas, which is why the production HPA keeps at least 10.
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: fraudshield-api
+  labels: {app.kubernetes.io/name: fraudshield-api}
+  annotations:
+    # SRS 8.1: "PagerDuty alert if rollback triggered". Needs the Argo Rollouts notification
+    # service "pagerdutyv2" configured in the controller's namespace (infrastructure/k8s/README.md).
+    notifications.argoproj.io/subscribe.on-rollout-aborted.pagerdutyv2: fraudshield-sre
+spec:
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels: {app.kubernetes.io/name: fraudshield-api}
+  workloadRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: fraudshield-api
+    scaleDown: never
+  strategy:
+    canary:
+      maxSurge: 1
+      maxUnavailable: 0
+      analysis:
+        templates:
+          - templateName: fraudshield-api-canary
+        startingStep: 1
+        args:
+          - name: canary-hash
+            valueFrom:
+              podTemplateHashValue: Latest
+          - name: namespace
+            valueFrom:
+              fieldRef: {fieldPath: metadata.namespace}
+      steps:
+        - setWeight: 10
+        - pause: {duration: 30m}

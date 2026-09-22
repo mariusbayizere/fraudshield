@@ -1,0 +1,7 @@
+# Production canary for fraudshield-api (SRS 8.1 Production Deploy). Used by the production overlay
+# only; staging uses a plain rolling update (SRS 8.1 Staging Deploy).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - rollout.yaml
+  - analysis-template.yaml
