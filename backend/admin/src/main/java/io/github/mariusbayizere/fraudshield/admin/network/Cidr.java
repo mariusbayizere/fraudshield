@@ -6,8 +6,8 @@ import java.util.Optional;
 import java.util.regex.Pattern;
 
 /**
- * Strict CIDR parsing (contract IpAllowlistEntryBase.cidr): an IPv4 or IPv6 literal, a prefix of at
- * most 32 or 128, and no host bits set. Anything else is 422 {@code invalid_cidr}.
+ * Strict CIDR parsing (contract IpAllowlistEntryBase.cidr): an IPv4 or IPv6 literal, a prefix of
+ * 16-32 or 32-128, and no host bits set. Anything else is 422 {@code invalid_cidr}.
  */
 public final class Cidr {
 
@@ -16,6 +16,10 @@ public final class Cidr {
   private static final Pattern PREFIX = Pattern.compile("^[0-9]{1,3}$");
   private static final int IPV4_BITS = 32;
   private static final int IPV6_BITS = 128;
+  // An office egress range is small; a broad one such as 0.0.0.0/0 would lift the sign-in ceiling
+  // for every address (review finding 17).
+  private static final int MIN_IPV4_PREFIX = 16;
+  private static final int MIN_IPV6_PREFIX = 32;
 
   private Cidr() {}
 
@@ -57,7 +61,8 @@ public final class Cidr {
       return Optional.empty(); // an IPv4-mapped IPv6 literal collapses to 4 bytes
     }
     int prefix = Integer.parseInt(prefixText);
-    if (prefix > bits || hasHostBits(bytes, prefix)) {
+    int narrowest = v4 ? MIN_IPV4_PREFIX : MIN_IPV6_PREFIX;
+    if (prefix > bits || prefix < narrowest || hasHostBits(bytes, prefix)) {
       return Optional.empty();
     }
     try {

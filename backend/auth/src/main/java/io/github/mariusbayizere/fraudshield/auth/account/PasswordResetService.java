@@ -47,6 +47,7 @@ public final class PasswordResetService {
   private static final Duration RESET_TOKEN_TTL = Duration.ofMinutes(10);
   private static final int MAX_ATTEMPTS = 5;
   private static final int CODE_SPACE = 1_000_000;
+  private static final int MAX_CODE_GUESSES_PER_DAY = 20;
 
   private final StaffAccountRepository accounts;
   private final TenantTransactions tenants;
@@ -192,13 +193,20 @@ public final class PasswordResetService {
    */
   public ResetToken verify(String email, String code, RequestContext context) {
     throttle.publicEndpoint("reset-verify", context.ipAddress());
-    Optional<StaffAccountRepository.AccountRef> ref =
-        accounts.findRefByEmail(email.toLowerCase(Locale.ROOT));
-    if (ref.isEmpty()) {
-      throw invalidCode();
-    }
+    String normalised = email.toLowerCase(Locale.ROOT);
+    // A daily cap per email bounds cumulative guessing across codes (review finding 15).
+    throttle.limit("reset-verify:email", normalised, MAX_CODE_GUESSES_PER_DAY, Duration.ofDays(1));
+    // Padded, so an unknown email is not answered faster than a known one (review finding 9).
     Optional<ResetToken> token =
-        tenants.inTenant(ref.get().institutionId(), () -> check(ref.get().userId(), code, context));
+        MinimumDuration.atLeast(
+            minimumResponse,
+            () ->
+                accounts
+                    .findRefByEmail(normalised)
+                    .flatMap(
+                        ref ->
+                            tenants.inTenant(
+                                ref.institutionId(), () -> check(ref.userId(), code, context))));
     return token.orElseThrow(PasswordResetService::invalidCode);
   }
 

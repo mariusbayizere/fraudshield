@@ -3,7 +3,11 @@ package io.github.mariusbayizere.fraudshield.audit.anchor;
 import io.github.mariusbayizere.fraudshield.audit.AnchorStatement;
 import java.security.MessageDigest;
 import java.security.PublicKey;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -34,6 +38,10 @@ public final class AuditChainVerifier {
   private final JdbcTemplate jdbc;
   private final TransactionTemplate transactions;
   private final Map<String, PublicKey> publicKeys;
+  private final Clock clock;
+
+  /** The anchor of day D is made at 00:10 on D+1; a day is due once D+1 01:00 has passed. */
+  private static final Duration ANCHOR_GRACE = Duration.ofHours(25);
 
   /**
    * Creates the verifier.
@@ -41,12 +49,17 @@ public final class AuditChainVerifier {
    * @param jdbc JDBC template of the compliance role
    * @param transactions transaction template of the same data source
    * @param publicKeys anchor public keys by key ID
+   * @param clock clock, to know which days must already be anchored
    */
   public AuditChainVerifier(
-      JdbcTemplate jdbc, TransactionTemplate transactions, Map<String, PublicKey> publicKeys) {
+      JdbcTemplate jdbc,
+      TransactionTemplate transactions,
+      Map<String, PublicKey> publicKeys,
+      Clock clock) {
     this.jdbc = Objects.requireNonNull(jdbc, "jdbc");
     this.transactions = Objects.requireNonNull(transactions, "transactions");
     this.publicKeys = Map.copyOf(publicKeys);
+    this.clock = Objects.requireNonNull(clock, "clock");
   }
 
   /**
@@ -159,6 +172,7 @@ public final class AuditChainVerifier {
         afterSeq = anchor.lastSeq();
         afterHash = anchor.lastHash();
       }
+      coverage(partition, anchors, to).ifPresent(problems::add);
       ChainCheck chain = chain(partition, chainStartSeq, chainStartHash);
       rows += chain.checkedRows();
       if (chain.problem() != null) {
@@ -166,6 +180,42 @@ public final class AuditChainVerifier {
       }
     }
     return new Report(rows, checked, recomputed, List.copyOf(problems));
+  }
+
+  /**
+   * Every row recorded before the end of the last day that must already be anchored has to be
+   * covered by a signed anchor dated no later than that day. Without this, deleting the most recent
+   * anchors and rewriting the tail of the chain would verify (review finding 3).
+   */
+  private Optional<Problem> coverage(short partition, List<StoredAnchor> anchors, LocalDate to) {
+    LocalDate due = LocalDate.ofInstant(clock.instant().minus(ANCHOR_GRACE), ZoneOffset.UTC);
+    LocalDate lastDue = to.isBefore(due) ? to : due;
+    Instant endOfDay = lastDue.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+    Long required =
+        jdbc.queryForObject(
+            "SELECT audit_chain_last_seq_before(?, ?)",
+            Long.class,
+            partition,
+            java.sql.Timestamp.from(endOfDay));
+    long anchored =
+        anchors.stream()
+            .filter(a -> !a.date().isAfter(lastDue))
+            .mapToLong(StoredAnchor::lastSeq)
+            .max()
+            .orElse(0);
+    if (required != null && required > anchored) {
+      return Optional.of(
+          new Problem(
+              partition,
+              anchored + 1,
+              "rows up to seq "
+                  + required
+                  + " recorded before "
+                  + endOfDay
+                  + " are not covered by any anchor dated up to "
+                  + lastDue));
+    }
+    return Optional.empty();
   }
 
   private Optional<Problem> recompute(

@@ -46,7 +46,7 @@ class AuditAutoConfigurationTest {
           assertThat(context).hasSingleBean(Clock.class);
           assertThat(context).doesNotHaveBean(AuditAnchorService.class);
           AuditProperties properties = context.getBean(AuditProperties.class);
-          assertThat(properties.writerPartition()).isEqualTo((short) 0);
+          assertThat(properties.writerPartition()).as("spread by thread").isNull();
           assertThat(properties.transactionAttempts()).isEqualTo(5);
         });
   }

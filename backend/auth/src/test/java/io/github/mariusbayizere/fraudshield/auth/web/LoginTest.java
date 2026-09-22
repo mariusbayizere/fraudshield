@@ -156,6 +156,32 @@ class LoginTest extends AuthIntegrationTest {
   }
 
   @Test
+  void overlongUserAgentDoesNotBreakSignIn() {
+    Account account = createAccount(BANK_A, "ANALYST", "ACTIVE");
+    Http.Response response =
+        login(account.email(), PASSWORD, "User-Agent", "Mozilla/5.0 " + "x".repeat(5000));
+    assertThat(response.status()).as("review finding 8").isEqualTo(200);
+  }
+
+  @Test
+  @Tag("FR-07-06")
+  void concurrentSignInsAllSucceed() throws Exception {
+    java.util.List<Account> accounts = new java.util.ArrayList<>();
+    for (int i = 0; i < 8; i++) {
+      accounts.add(createAccount(BANK_A, "ANALYST", "ACTIVE"));
+    }
+    try (var pool = java.util.concurrent.Executors.newFixedThreadPool(8)) {
+      java.util.List<java.util.concurrent.Callable<Integer>> calls = new java.util.ArrayList<>();
+      for (Account account : accounts) {
+        calls.add(() -> login(account.email(), PASSWORD).status());
+      }
+      for (var status : pool.invokeAll(calls)) {
+        assertThat(status.get()).as("review finding 4").isEqualTo(200);
+      }
+    }
+  }
+
+  @Test
   @Tag("FR-07-07")
   void passwordOverSeventyTwoBytesIsInvalidCredentialsNotValidation() {
     Account account = createAccount(BANK_A, "ANALYST", "ACTIVE");

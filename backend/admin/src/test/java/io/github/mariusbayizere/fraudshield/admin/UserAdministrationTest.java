@@ -153,6 +153,40 @@ class UserAdministrationTest extends AuthIntegrationTest {
                 .status())
         .as("own profile fields are fine")
         .isEqualTo(200);
+    assertThat(auditActions(admin.id()))
+        .as("review finding 5: refusals are audited")
+        .contains("USER_ADMIN/USER_CHANGE_REFUSED");
+  }
+
+  @Test
+  @Tag("FR-06-06")
+  void wrongRoleRefusalsAreAudited() {
+    Account analyst = createAccount(BANK_A, "ANALYST", "ACTIVE");
+    Session session = issueSession(analyst);
+    assertThat(http.get("/api/v1/admin/users", session.bearer()).status()).isEqualTo(403);
+    assertThat(
+            query(
+                "SELECT count(*) FROM fraudshield.audit_events WHERE user_id = ? AND action = 'ACCESS_DENIED'",
+                analyst.id()))
+        .isEqualTo(1L);
+  }
+
+  @Test
+  @Tag("D-26")
+  void lockingFailureLockedAccountMakesItAnAdministratorsLock() {
+    Session admin = issueSession(createAccount(BANK_A, "ADMIN", "ACTIVE"));
+    Account locked = createAccount(BANK_A, "ANALYST", "LOCKED");
+    Http.Response response =
+        patch(
+            admin, locked.id(), Map.of("version", version(admin, locked.id()), "status", "LOCKED"));
+    assertThat(response.status()).isEqualTo(200);
+    assertThat(
+            query(
+                "SELECT locked_until > now() + interval '1 year' FROM fraudshield.users WHERE id = ?",
+                locked.id()))
+        .as("review finding 12: an administrator's lock does not lapse after 30 minutes")
+        .isEqualTo(true);
+    assertThat(auditActions(locked.id())).contains("USER_ADMIN/USER_LOCKED");
   }
 
   @Test

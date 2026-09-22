@@ -7,9 +7,11 @@ import io.github.mariusbayizere.fraudshield.audit.RequestContext;
 import io.github.mariusbayizere.fraudshield.audit.jdbc.TenantTransactions;
 import io.github.mariusbayizere.fraudshield.auth.domain.StaffAccount;
 import io.github.mariusbayizere.fraudshield.auth.jwt.StaffClaims;
+import io.github.mariusbayizere.fraudshield.auth.ratelimit.RateLimiter;
 import io.github.mariusbayizere.fraudshield.auth.session.SessionService;
 import io.github.mariusbayizere.fraudshield.auth.web.ProblemException;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
@@ -27,6 +29,11 @@ public final class PasswordChangeService {
   private final SessionService sessions;
   private final AuditLog audit;
   private final Clock clock;
+  private final RateLimiter limiter;
+
+  private static final String GUESS_KEY = "password-change:user:";
+  private static final int MAX_WRONG_CURRENT_PASSWORDS = 5;
+  private static final Duration GUESS_WINDOW = Duration.ofMinutes(15);
 
   /**
    * Creates the service.
@@ -37,6 +44,7 @@ public final class PasswordChangeService {
    * @param sessions session service
    * @param audit audit log
    * @param clock clock
+   * @param limiter rate limiter counting wrong current passwords
    */
   public PasswordChangeService(
       StaffAccountRepository accounts,
@@ -44,13 +52,15 @@ public final class PasswordChangeService {
       PasswordHasher hasher,
       SessionService sessions,
       AuditLog audit,
-      Clock clock) {
+      Clock clock,
+      RateLimiter limiter) {
     this.accounts = Objects.requireNonNull(accounts, "accounts");
     this.tenants = Objects.requireNonNull(tenants, "tenants");
     this.hasher = Objects.requireNonNull(hasher, "hasher");
     this.sessions = Objects.requireNonNull(sessions, "sessions");
     this.audit = Objects.requireNonNull(audit, "audit");
     this.clock = Objects.requireNonNull(clock, "clock");
+    this.limiter = Objects.requireNonNull(limiter, "limiter");
   }
 
   /**
@@ -65,14 +75,22 @@ public final class PasswordChangeService {
   public void change(
       StaffClaims claims, String currentPassword, String newPassword, RequestContext context) {
     String newHash = hasher.hash(newPassword);
+    // bcrypt outside the transaction (review finding 4); the write re-checks the hash it compared.
+    String storedHash =
+        tenants.inTenant(
+            claims.institutionId(), () -> accounts.passwordHash(claims.userId()).orElse(null));
+    boolean matches = hasher.matches(currentPassword, storedHash);
     boolean changed =
         tenants.inTenant(
             claims.institutionId(),
             () -> {
               StaffAccount account = accounts.findByIdForUpdate(claims.userId()).orElseThrow();
               Instant now = clock.instant();
-              if (!hasher.matches(
-                  currentPassword, accounts.passwordHash(account.id()).orElse(null))) {
+              boolean valid =
+                  matches
+                      && Objects.equals(
+                          storedHash, accounts.passwordHash(account.id()).orElse(null));
+              if (!valid) {
                 audit.record(
                     AuditEvent.of(
                             account.institutionId(), AuditEventType.AUTH, "PASSWORD_CHANGE_REFUSED")
@@ -95,8 +113,28 @@ public final class PasswordChangeService {
               return true;
             });
     if (!changed) {
+      stopGuessing(claims, context);
       throw ProblemException.of(
           "unauthorized", 401, "Authentication failed", "The current password is incorrect");
     }
+  }
+
+  /**
+   * A stolen access token must not allow unthrottled guessing of the current password (review
+   * finding 13). The contract has no 429 for this operation, so the fifth wrong guess within the
+   * window ends every session of the account instead, which ends the stolen token too.
+   */
+  private void stopGuessing(StaffClaims claims, RequestContext context) {
+    String key = GUESS_KEY + claims.userId();
+    if (limiter.attempt(key, MAX_WRONG_CURRENT_PASSWORDS - 1, GUESS_WINDOW).allowed()) {
+      return;
+    }
+    tenants.runInTenant(
+        claims.institutionId(),
+        () -> {
+          StaffAccount account = accounts.findByIdForUpdate(claims.userId()).orElseThrow();
+          sessions.endAllSessions(
+              account, "SESSIONS_ENDED_PASSWORD_GUESSING", SessionService.actor(account), context);
+        });
   }
 }

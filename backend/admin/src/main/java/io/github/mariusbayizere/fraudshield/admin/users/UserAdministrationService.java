@@ -242,102 +242,147 @@ public final class UserAdministrationService {
    */
   public StaffAccount update(
       StaffClaims admin, UUID userId, UserRequests.Update request, RequestContext context) {
-    return tenants.inTenant(
-        admin.institutionId(),
-        () -> {
-          // A role or status change may remove an administrator: lock the institution's active
-          // administrators first, in ID order, before any other row, so concurrent edits serialise
-          // without deadlocking and the count used below is exact.
-          boolean mayRemoveAdmin = request.role() != null || request.status() != null;
-          final long otherActiveAdmins = mayRemoveAdmin ? accounts.otherActiveAdmins(userId) : -1;
-          // Resolved before the target is locked: the administrator check must pass first.
-          final AuditActor actor = admins.actor(admin);
-          StaffAccount current =
-              accounts
-                  .findByIdForUpdate(userId)
-                  .orElseThrow(() -> ProblemException.notFound("The account"));
-          if (current.version() != request.version()) {
-            throw ProblemException.of(
-                    "conflict", 409, "Conflict", "The account changed since you loaded it")
-                .with("current", StaffUserView.of(current))
-                .with("version", current.version());
-          }
-          StaffRole role =
-              request.role() == null ? current.role() : StaffRole.valueOf(request.role());
-          AccountStatus status =
-              request.status() == null ? current.status() : AccountStatus.valueOf(request.status());
-          boolean roleChanged = role != current.role();
-          boolean statusChanged = status != current.status();
-          if ((roleChanged || statusChanged) && userId.equals(admin.userId())) {
-            throw ProblemException.of(
-                "self-modification",
-                403,
-                "Forbidden",
-                "Administrators cannot change their own role or status");
-          }
-          if (statusChanged && current.status() == AccountStatus.PENDING_APPROVAL) {
-            throw ProblemException.of(
-                "conflict",
-                409,
-                "Conflict",
-                "A pending account is approved or rejected through approvals");
-          }
-          boolean leavesActiveAdmin =
-              current.role() == StaffRole.ADMIN
-                  && current.status() == AccountStatus.ACTIVE
-                  && (role != StaffRole.ADMIN || status != AccountStatus.ACTIVE);
-          if (leavesActiveAdmin && otherActiveAdmins == 0) {
-            throw ProblemException.of(
-                "last-active-admin",
-                409,
-                "Conflict",
-                "The institution's last active administrator cannot be demoted, locked or"
-                    + " deactivated");
-          }
-          Instant lockedUntil =
-              status == AccountStatus.LOCKED
-                  ? (current.status() == AccountStatus.LOCKED
-                      ? current.lockedUntil()
-                      : StaffAccountRepository.ADMIN_LOCK_UNTIL)
-                  : null;
-          boolean endsSessions = roleChanged || statusChanged;
-          accounts.applyAdminEdit(
-              userId,
-              new StaffAccountRepository.AdminEdit(
-                  request.firstName() == null
-                      ? current.firstName()
-                      : PersonName.parse(request.firstName()).value(),
-                  request.lastName() == null
-                      ? current.lastName()
-                      : PersonName.parse(request.lastName()).value(),
-                  request.phone() == null ? current.phone() : request.phone(),
-                  request.department() == null
-                      ? current.department()
-                      : Department.valueOf(request.department()),
-                  role,
-                  status,
-                  request.preferredLocale() == null
-                      ? current.preferredLocale()
-                      : StaffLocale.valueOf(request.preferredLocale()),
-                  lockedUntil,
-                  endsSessions));
-          StaffAccount updated = accounts.findById(userId).orElseThrow();
-          if (endsSessions) {
-            sessions.revokeAfterVersionChange(userId, updated.tokenVersion());
-          }
-          audit.record(
-              AuditEvent.of(
-                      admin.institutionId(),
-                      AuditEventType.USER_ADMIN,
-                      action(roleChanged, statusChanged, status))
-                  .entity("user", userId)
-                  .actor(actor)
-                  .before(describe(current))
-                  .after(describe(updated))
-                  .context(context)
-                  .at(clock.instant()));
-          return updated;
-        });
+    return tenants
+        .<Outcome>inTenant(
+            admin.institutionId(),
+            () -> {
+              // A role or status change may remove an administrator: lock the institution's active
+              // administrators first, in ID order, before any other row, so concurrent edits
+              // serialise
+              // without deadlocking and the count used below is exact.
+              boolean mayRemoveAdmin = request.role() != null || request.status() != null;
+              final long otherActiveAdmins =
+                  mayRemoveAdmin ? accounts.otherActiveAdmins(userId) : -1;
+              // Resolved before the target is locked: the administrator check must pass first.
+              final AuditActor actor = admins.actor(admin);
+              StaffAccount current =
+                  accounts
+                      .findByIdForUpdate(userId)
+                      .orElseThrow(() -> ProblemException.notFound("The account"));
+              if (current.version() != request.version()) {
+                throw ProblemException.of(
+                        "conflict", 409, "Conflict", "The account changed since you loaded it")
+                    .with("current", StaffUserView.of(current))
+                    .with("version", current.version());
+              }
+              StaffRole role =
+                  request.role() == null ? current.role() : StaffRole.valueOf(request.role());
+              AccountStatus status =
+                  request.status() == null
+                      ? current.status()
+                      : AccountStatus.valueOf(request.status());
+              boolean roleChanged = role != current.role();
+              boolean statusChanged = status != current.status();
+              boolean adminLockRequested =
+                  status == AccountStatus.LOCKED
+                      && !StaffAccountRepository.ADMIN_LOCK_UNTIL.equals(current.lockedUntil());
+              if ((roleChanged || statusChanged) && userId.equals(admin.userId())) {
+                return refused(
+                    actor,
+                    current,
+                    context,
+                    ProblemException.of(
+                        "self-modification",
+                        403,
+                        "Forbidden",
+                        "Administrators cannot change their own role or status"));
+              }
+              if (statusChanged && current.status() == AccountStatus.PENDING_APPROVAL) {
+                return refused(
+                    actor,
+                    current,
+                    context,
+                    ProblemException.of(
+                        "conflict",
+                        409,
+                        "Conflict",
+                        "A pending account is approved or rejected through approvals"));
+              }
+              boolean leavesActiveAdmin =
+                  current.role() == StaffRole.ADMIN
+                      && current.status() == AccountStatus.ACTIVE
+                      && (role != StaffRole.ADMIN || status != AccountStatus.ACTIVE);
+              if (leavesActiveAdmin && otherActiveAdmins == 0) {
+                return refused(
+                    actor,
+                    current,
+                    context,
+                    ProblemException.of(
+                        "last-active-admin",
+                        409,
+                        "Conflict",
+                        "The institution's last active administrator cannot be demoted, locked or"
+                            + " deactivated"));
+              }
+              // Locking a failure-locked account turns it into an administrator's lock, which never
+              // lifts by itself and ends the sessions (review finding 12).
+              Instant lockedUntil =
+                  status == AccountStatus.LOCKED ? StaffAccountRepository.ADMIN_LOCK_UNTIL : null;
+              boolean endsSessions = roleChanged || statusChanged || adminLockRequested;
+              accounts.applyAdminEdit(
+                  userId,
+                  new StaffAccountRepository.AdminEdit(
+                      request.firstName() == null
+                          ? current.firstName()
+                          : PersonName.parse(request.firstName()).value(),
+                      request.lastName() == null
+                          ? current.lastName()
+                          : PersonName.parse(request.lastName()).value(),
+                      request.phone() == null ? current.phone() : request.phone(),
+                      request.department() == null
+                          ? current.department()
+                          : Department.valueOf(request.department()),
+                      role,
+                      status,
+                      request.preferredLocale() == null
+                          ? current.preferredLocale()
+                          : StaffLocale.valueOf(request.preferredLocale()),
+                      lockedUntil,
+                      endsSessions));
+              StaffAccount updated = accounts.findById(userId).orElseThrow();
+              if (endsSessions) {
+                sessions.revokeAfterVersionChange(userId, updated.tokenVersion());
+              }
+              audit.record(
+                  AuditEvent.of(
+                          admin.institutionId(),
+                          AuditEventType.USER_ADMIN,
+                          action(roleChanged, statusChanged || adminLockRequested, status))
+                      .entity("user", userId)
+                      .actor(actor)
+                      .before(describe(current))
+                      .after(describe(updated))
+                      .context(context)
+                      .at(clock.instant()));
+              return new Outcome(updated, null);
+            })
+        .orThrow();
+  }
+
+  /**
+   * The result of an administrator's write: the account, or a refusal whose audit record commits
+   * with the transaction and which is thrown only afterwards (review finding 5).
+   */
+  private record Outcome(StaffAccount account, ProblemException refusal) {
+
+    StaffAccount orThrow() {
+      if (refusal != null) {
+        throw refusal;
+      }
+      return account;
+    }
+  }
+
+  private Outcome refused(
+      AuditActor actor, StaffAccount target, RequestContext context, ProblemException refusal) {
+    audit.record(
+        AuditEvent.of(target.institutionId(), AuditEventType.USER_ADMIN, "USER_CHANGE_REFUSED")
+            .entity("user", target.id())
+            .actor(actor)
+            .after(Map.of("problem", refusal.type(), "detail", refusal.getMessage()))
+            .context(context)
+            .at(clock.instant()));
+    return new Outcome(null, refusal);
   }
 
   private static String action(boolean roleChanged, boolean statusChanged, AccountStatus status) {
@@ -383,53 +428,62 @@ public final class UserAdministrationService {
       throw ProblemException.validation(
           "granted_role", "required", "A granted role is required to approve");
     }
-    return tenants.inTenant(
-        admin.institutionId(),
-        () -> {
-          final AuditActor actor = admins.actor(admin);
-          StaffAccount current =
-              accounts
-                  .findByIdForUpdate(userId)
-                  .orElseThrow(() -> ProblemException.notFound("The account"));
-          if (current.status() != AccountStatus.PENDING_APPROVAL) {
-            throw ProblemException.of(
-                "conflict", 409, "Conflict", "The account is not awaiting approval");
-          }
-          if (approve && !current.emailVerified()) {
-            throw ProblemException.of(
-                "conflict", 409, "Conflict", "The account's email address has not been verified");
-          }
-          StaffRole role = approve ? StaffRole.valueOf(decision.grantedRole()) : current.role();
-          AccountStatus status = approve ? AccountStatus.ACTIVE : AccountStatus.DEACTIVATED;
-          accounts.applyAdminEdit(
-              userId,
-              new StaffAccountRepository.AdminEdit(
-                  current.firstName(),
-                  current.lastName(),
-                  current.phone(),
-                  current.department(),
-                  role,
-                  status,
-                  current.preferredLocale(),
-                  null,
-                  true));
-          StaffAccount updated = accounts.findById(userId).orElseThrow();
-          sessions.revokeAfterVersionChange(userId, updated.tokenVersion());
-          Map<String, Object> after = describe(updated);
-          after.put("reason", decision.reason());
-          audit.record(
-              AuditEvent.of(
-                      admin.institutionId(),
-                      AuditEventType.USER_ADMIN,
-                      approve ? "USER_APPROVED" : "USER_REJECTED")
-                  .entity("user", userId)
-                  .actor(actor)
-                  .before(describe(current))
-                  .after(after)
-                  .context(context)
-                  .at(clock.instant()));
-          return updated;
-        });
+    return tenants
+        .<Outcome>inTenant(
+            admin.institutionId(),
+            () -> {
+              final AuditActor actor = admins.actor(admin);
+              StaffAccount current =
+                  accounts
+                      .findByIdForUpdate(userId)
+                      .orElseThrow(() -> ProblemException.notFound("The account"));
+              if (current.status() != AccountStatus.PENDING_APPROVAL) {
+                throw ProblemException.of(
+                    "conflict", 409, "Conflict", "The account is not awaiting approval");
+              }
+              if (approve && !current.emailVerified()) {
+                return refused(
+                    actor,
+                    current,
+                    context,
+                    ProblemException.of(
+                        "conflict",
+                        409,
+                        "Conflict",
+                        "The account's email address has not been verified"));
+              }
+              StaffRole role = approve ? StaffRole.valueOf(decision.grantedRole()) : current.role();
+              AccountStatus status = approve ? AccountStatus.ACTIVE : AccountStatus.DEACTIVATED;
+              accounts.applyAdminEdit(
+                  userId,
+                  new StaffAccountRepository.AdminEdit(
+                      current.firstName(),
+                      current.lastName(),
+                      current.phone(),
+                      current.department(),
+                      role,
+                      status,
+                      current.preferredLocale(),
+                      null,
+                      true));
+              StaffAccount updated = accounts.findById(userId).orElseThrow();
+              sessions.revokeAfterVersionChange(userId, updated.tokenVersion());
+              Map<String, Object> after = describe(updated);
+              after.put("reason", decision.reason());
+              audit.record(
+                  AuditEvent.of(
+                          admin.institutionId(),
+                          AuditEventType.USER_ADMIN,
+                          approve ? "USER_APPROVED" : "USER_REJECTED")
+                      .entity("user", userId)
+                      .actor(actor)
+                      .before(describe(current))
+                      .after(after)
+                      .context(context)
+                      .at(clock.instant()));
+              return new Outcome(updated, null);
+            })
+        .orThrow();
   }
 
   /**

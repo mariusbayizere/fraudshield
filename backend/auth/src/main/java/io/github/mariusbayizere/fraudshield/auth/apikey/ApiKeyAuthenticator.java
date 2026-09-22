@@ -34,6 +34,7 @@ public final class ApiKeyAuthenticator {
 
   private static final Duration TOUCH_INTERVAL = Duration.ofMinutes(1);
   private static final byte[] DUMMY_HMAC = new byte[32];
+  private static final int MAX_CACHED_KEYS = 10_000;
 
   private final ApiKeyRepository repository;
   private final TenantTransactions tenants;
@@ -143,7 +144,17 @@ public final class ApiKeyAuthenticator {
       return cached.credential();
     }
     Optional<ApiKeyRepository.Credential> loaded = repository.findCredential(keyId);
-    cache.put(keyId, new Cached(loaded, now + cacheTtlNanos));
+    // Only existing keys are cached: caching misses would let random key IDs grow the map without
+    // bound (review finding 2). The map is also capped.
+    if (loaded.isPresent()) {
+      if (cache.size() >= MAX_CACHED_KEYS) {
+        cache.values().removeIf(entry -> entry.expiresAtNanos() - now <= 0);
+        if (cache.size() >= MAX_CACHED_KEYS) {
+          cache.clear();
+        }
+      }
+      cache.put(keyId, new Cached(loaded, now + cacheTtlNanos));
+    }
     return loaded;
   }
 

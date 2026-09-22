@@ -45,12 +45,12 @@ public final class RefreshTokenRepository {
       String oauthProvider) {
 
     /**
-     * Whether this token was already rotated or revoked, so presenting it again is reuse.
+     * Whether this token was already rotated, so presenting it again means it was copied.
      *
-     * @return whether it is spent
+     * @return whether it was replaced
      */
-    public boolean spent() {
-      return revokedAt != null || replacedBy != null;
+    public boolean rotated() {
+      return replacedBy != null;
     }
   }
 
@@ -77,6 +77,22 @@ public final class RefreshTokenRepository {
    * @param institutionId institution
    */
   public record TokenRef(UUID id, UUID institutionId) {}
+
+  /**
+   * The account a token belongs to, without locking (the caller locks the account first).
+   *
+   * @param id row ID
+   * @return the account ID
+   */
+  public Optional<UUID> ownerOf(UUID id) {
+    return jdbc
+        .query(
+            "SELECT user_id FROM refresh_tokens WHERE id = ?",
+            (row, i) -> row.getObject(1, UUID.class),
+            id)
+        .stream()
+        .findFirst();
+  }
 
   /**
    * A token, locked for update so two concurrent refreshes cannot both rotate it.

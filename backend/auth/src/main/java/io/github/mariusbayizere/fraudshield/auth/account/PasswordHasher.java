@@ -35,6 +35,8 @@ public final class PasswordHasher {
    */
   public boolean matches(String submitted, String storedHash) {
     if (!PasswordPolicy.fitsBcrypt(submitted)) {
+      burn(); // same time as a real comparison, so the length does not reveal the account (finding
+      // 6)
       return false;
     }
     boolean matches = encoder.matches(submitted, storedHash == null ? dummyHash : storedHash);

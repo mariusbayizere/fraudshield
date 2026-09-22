@@ -41,6 +41,7 @@ public final class AuditVerifyCommand {
       "usage: fraudshield audit verify --from YYYY-MM-DD --to YYYY-MM-DD";
 
   private final Map<String, String> environment;
+  private final java.time.Clock clock;
   private final Consumer<String> out;
   private final Consumer<String> err;
 
@@ -53,6 +54,23 @@ public final class AuditVerifyCommand {
    */
   public AuditVerifyCommand(
       Map<String, String> environment, Consumer<String> out, Consumer<String> err) {
+    this(environment, out, err, java.time.Clock.systemUTC());
+  }
+
+  /**
+   * Creates the command with a clock (tests).
+   *
+   * @param environment environment variables
+   * @param out receives each line of standard output
+   * @param err receives each line of standard error
+   * @param clock clock deciding which days must already be anchored
+   */
+  public AuditVerifyCommand(
+      Map<String, String> environment,
+      Consumer<String> out,
+      Consumer<String> err,
+      java.time.Clock clock) {
+    this.clock = clock;
     this.environment = Map.copyOf(environment);
     this.out = out;
     this.err = err;
@@ -135,7 +153,8 @@ public final class AuditVerifyCommand {
     return new AuditChainVerifier(
         new JdbcTemplate(dataSource),
         new TransactionTemplate(new DataSourceTransactionManager(dataSource)),
-        publicKeys(environment.getOrDefault("FRAUDSHIELD_AUDIT_ANCHOR_PUBLIC_KEYS", "")));
+        publicKeys(environment.getOrDefault("FRAUDSHIELD_AUDIT_ANCHOR_PUBLIC_KEYS", "")),
+        clock);
   }
 
   static Map<String, PublicKey> publicKeys(String spec) {

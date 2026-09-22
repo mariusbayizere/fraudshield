@@ -54,7 +54,7 @@ class GoogleSignInTest extends AuthIntegrationTest {
     GOOGLE.nextIdentity(sub, email, true, "Aline", "Mukamana");
     Http.Response again = google();
     assertThat(again.status()).as("no access until an administrator approves").isEqualTo(403);
-    assertThat(again.problemType()).isEqualTo("urn:fraudshield:problem:account-not-active");
+    assertThat(again.problemType()).isEqualTo("urn:fraudshield:problem:forbidden");
   }
 
   @Test
@@ -98,6 +98,22 @@ class GoogleSignInTest extends AuthIntegrationTest {
   }
 
   @Test
+  @Tag("FR-07-09")
+  void signOutEverywhereRevokesTheGoogleTokenToo() {
+    Account account = createAccount(BANK_A, "ANALYST", "ACTIVE");
+    GOOGLE.nextIdentity("g-" + UUID.randomUUID(), account.email(), true, "Amani", "Uwase");
+    Session session = session(google());
+    int before = GOOGLE.revoked().size();
+    assertThat(http.post("/api/v1/auth/logout-all", null, session.bearerWithCsrf()).status())
+        .isEqualTo(204);
+    long deadline = System.nanoTime() + java.time.Duration.ofSeconds(5).toNanos();
+    while (GOOGLE.revoked().size() == before && System.nanoTime() < deadline) {
+      Thread.onSpinWait();
+    }
+    assertThat(GOOGLE.revoked()).as("review finding 16").hasSize(before + 1);
+  }
+
+  @Test
   void linkToAnotherGoogleAccountIsRefused() {
     Account account = createAccount(BANK_A, "ANALYST", "ACTIVE");
     GOOGLE.nextIdentity("g-first-" + UUID.randomUUID(), account.email(), true, "Amani", "Uwase");
@@ -113,7 +129,7 @@ class GoogleSignInTest extends AuthIntegrationTest {
     GOOGLE.nextIdentity("g-" + UUID.randomUUID(), account.email(), true, "Amani", "Uwase");
     Http.Response response = google();
     assertThat(response.status()).isEqualTo(403);
-    assertThat(response.problemType()).isEqualTo("urn:fraudshield:problem:account-not-active");
+    assertThat(response.problemType()).isEqualTo("urn:fraudshield:problem:forbidden");
   }
 
   @Test

@@ -23,6 +23,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Email and password sign-in (FR-07-06, FR-07-07, D-26, ADR 0014 decision 8).
@@ -103,7 +104,11 @@ public final class AuthenticationService {
     SUCCESS,
     INVALID,
     LOCKED,
-    NOT_ACTIVE
+    NOT_ACTIVE,
+    /**
+     * Wrong password for a PENDING_APPROVAL or DEACTIVATED account: counted like an unknown email.
+     */
+    INACTIVE_FAILURE
   }
 
   private record Outcome(Result result, IssuedSession session) {}
@@ -128,10 +133,19 @@ public final class AuthenticationService {
       hasher.burn();
       throw phantomFailure(normalised);
     }
+    UUID institution = ref.get().institutionId();
+    UUID userId = ref.get().userId();
+    // bcrypt runs outside any transaction: no row lock or audit-chain position is held for its
+    // ~250 ms, and a transaction retried for a chain serialization failure does not repeat it
+    // (review finding 4).
+    String storedHash =
+        tenants.inTenant(institution, () -> accounts.passwordHash(userId).orElse(null));
+    boolean matches = hasher.matches(password, storedHash);
     Outcome outcome =
-        tenants.inTenant(
-            ref.get().institutionId(),
-            () -> attempt(ref.get().userId(), normalised, password, context));
+        tenants.inTenant(institution, () -> attempt(userId, storedHash, matches, context));
+    if (outcome.result() == Result.INACTIVE_FAILURE) {
+      throw phantomFailure(normalised);
+    }
     return switch (outcome.result()) {
       case SUCCESS -> outcome.session();
       case LOCKED -> throw locked();
@@ -141,17 +155,22 @@ public final class AuthenticationService {
               403,
               "Account not active",
               "This account is awaiting approval or has been deactivated");
-      case INVALID -> throw invalidCredentials();
+      default -> throw invalidCredentials();
     };
   }
 
+  /**
+   * Applies a password check made outside the transaction. If the password changed in between, the
+   * check no longer counts: the attempt is treated as invalid.
+   */
   private Outcome attempt(
-      java.util.UUID userId, String email, String password, RequestContext context) {
+      UUID userId, String checkedHash, boolean matches, RequestContext context) {
     StaffAccount account = accounts.findByIdForUpdate(userId).orElseThrow();
     Instant now = clock.instant();
+    boolean valid =
+        matches && Objects.equals(checkedHash, accounts.passwordHash(userId).orElse(null));
     if (account.status() == AccountStatus.LOCKED) {
       if (!account.lockExpired(now)) {
-        hasher.burn();
         record(account, "LOGIN_REFUSED_LOCKED", Map.of(), context, now);
         return new Outcome(Result.LOCKED, null);
       }
@@ -159,9 +178,8 @@ public final class AuthenticationService {
       record(account, "ACCOUNT_AUTO_UNLOCKED", Map.of(), context, now);
       account = accounts.findByIdForUpdate(userId).orElseThrow();
     }
-    boolean matches = hasher.matches(password, accounts.passwordHash(account.id()).orElse(null));
     if (account.status() != AccountStatus.ACTIVE) {
-      if (matches) {
+      if (valid) {
         record(
             account,
             "LOGIN_REFUSED_NOT_ACTIVE",
@@ -171,11 +189,9 @@ public final class AuthenticationService {
         return new Outcome(Result.NOT_ACTIVE, null);
       }
       record(account, "LOGIN_FAILED", Map.of("status", account.status().name()), context, now);
-      return phantomCounted(email)
-          ? new Outcome(Result.INVALID, null)
-          : new Outcome(Result.LOCKED, null);
+      return new Outcome(Result.INACTIVE_FAILURE, null);
     }
-    if (matches) {
+    if (valid) {
       accounts.recordLoginSuccess(account.id(), now);
       StaffAccount signedIn = accounts.findById(account.id()).orElseThrow();
       IssuedSession session = sessions.start(signedIn, context, null);

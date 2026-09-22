@@ -65,6 +65,19 @@ CREATE FUNCTION audit_chain_hashes(p_writer_partition smallint, p_after_seq bigi
     ORDER BY e.seq
   $$;
 
+-- The last sequence number of a partition recorded before a time: verification requires every such
+-- row to be covered by a signed anchor, so deleting the most recent anchors cannot hide an edited
+-- tail of the chain.
+CREATE FUNCTION audit_chain_last_seq_before(p_writer_partition smallint, p_before timestamptz)
+  RETURNS bigint
+  LANGUAGE sql STABLE SECURITY DEFINER
+  SET search_path = fraudshield, pg_temp
+  AS $$
+    SELECT max(e.seq) FROM fraudshield.audit_events e
+    WHERE e.writer_partition = p_writer_partition AND e.recorded_at < p_before
+  $$;
+
 GRANT EXECUTE ON FUNCTION auth_employee_id_registered(text), auth_find_user_institution(uuid) TO fs_app;
+GRANT EXECUTE ON FUNCTION audit_chain_last_seq_before(smallint, timestamptz) TO fs_compliance_ro;
 GRANT EXECUTE ON FUNCTION audit_chain_head(smallint), audit_chain_hashes(smallint, bigint, bigint)
   TO fs_app, fs_compliance_ro;

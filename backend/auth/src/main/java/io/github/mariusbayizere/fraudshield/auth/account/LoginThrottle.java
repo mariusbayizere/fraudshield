@@ -72,6 +72,21 @@ public final class LoginThrottle {
     check("reset:email:" + digest(email.toLowerCase(Locale.ROOT)), limits.resetPerEmail());
   }
 
+  /**
+   * Counts a request against a custom limit.
+   *
+   * @param name limit name
+   * @param subject what is limited (hashed before use)
+   * @param limit requests per window
+   * @param window window
+   */
+  public void limit(String name, String subject, int limit, java.time.Duration window) {
+    RateLimiter.Decision decision = limiter.attempt(name + ":" + digest(subject), limit, window);
+    if (!decision.allowed()) {
+      throw ProblemException.rateLimited(decision.retryAfterSeconds());
+    }
+  }
+
   private void check(String key, int limit) {
     RateLimiter.Decision decision = limiter.attempt(key, limit, limits.window());
     if (!decision.allowed()) {

@@ -72,6 +72,65 @@ public final class SafeRedis {
   }
 
   /**
+   * Writes a key only if it does not exist (Redis SET NX).
+   *
+   * @param key key
+   * @param value value
+   * @param ttl time to live
+   * @return whether this call created the key, or empty if Redis is unavailable
+   */
+  public Optional<Boolean> setIfAbsent(String key, String value, Duration ttl) {
+    if (redis == null) {
+      return Optional.empty();
+    }
+    try {
+      return Optional.ofNullable(redis.opsForValue().setIfAbsent(key, value, ttl));
+    } catch (DataAccessException | IllegalStateException e) {
+      failed(e);
+      return Optional.empty();
+    }
+  }
+
+  /**
+   * Adds a member to a set and refreshes the set's time to live.
+   *
+   * @param key set key
+   * @param member member
+   * @param ttl time to live
+   */
+  public void addToSet(String key, String member, Duration ttl) {
+    if (redis == null) {
+      return;
+    }
+    try {
+      redis.opsForSet().add(key, member);
+      redis.expire(key, ttl);
+    } catch (DataAccessException | IllegalStateException e) {
+      failed(e);
+    }
+  }
+
+  /**
+   * Removes a set and returns its members.
+   *
+   * @param key set key
+   * @return the members, empty if none or Redis is unavailable
+   */
+  public java.util.Set<String> takeSet(String key) {
+    if (redis == null) {
+      return java.util.Set.of();
+    }
+    try {
+      java.util.Set<String> members = redis.opsForSet().members(key);
+      redis.delete(key);
+      return members == null ? java.util.Set.of() : members;
+    } catch (DataAccessException | IllegalStateException e) {
+      failed(e);
+      return java.util.Set.of();
+    }
+  }
+
+  /**
    * Deletes a key.
    *
    * @param key key

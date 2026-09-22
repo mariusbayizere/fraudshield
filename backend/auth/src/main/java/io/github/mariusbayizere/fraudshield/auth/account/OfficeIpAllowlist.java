@@ -1,6 +1,7 @@
 package io.github.mariusbayizere.fraudshield.auth.account;
 
 import io.github.mariusbayizere.fraudshield.audit.jdbc.TenantTransactions;
+import io.github.mariusbayizere.fraudshield.auth.support.AfterCommit;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.sql.Timestamp;
@@ -186,7 +187,7 @@ public final class OfficeIpAllowlist {
         description,
         createdBy,
         Timestamp.from(at));
-    cache.remove(institutionId);
+    AfterCommit.run(() -> cache.remove(institutionId));
     return find(id).orElseThrow();
   }
 
@@ -209,7 +210,7 @@ public final class OfficeIpAllowlist {
    */
   public boolean remove(UUID institutionId, UUID id) {
     boolean removed = jdbc.update("DELETE FROM office_ip_allowlist WHERE id = ?", id) == 1;
-    cache.remove(institutionId);
+    AfterCommit.run(() -> cache.remove(institutionId));
     return removed;
   }
 }

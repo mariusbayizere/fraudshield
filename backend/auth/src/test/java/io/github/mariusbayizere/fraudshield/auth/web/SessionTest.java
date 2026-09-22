@@ -178,6 +178,29 @@ class SessionTest extends AuthIntegrationTest {
   }
 
   @Test
+  @Tag("FR-07-09")
+  void guessingTheCurrentPasswordEndsEverySession() {
+    Account account = createAccount(BANK_A, "ANALYST", "ACTIVE");
+    Session session = login(account.email());
+    for (int attempt = 1; attempt <= 5; attempt++) {
+      Http.Response wrong =
+          http.send(
+              "PUT",
+              "/api/v1/auth/password",
+              Map.of("current_password", "Wr0ng!Guess" + attempt, "new_password", "N3w!Passw0rd"),
+              session.bearerWithCsrf());
+      assertThat(wrong.status()).isEqualTo(401);
+      if (attempt < 5) {
+        assertThat(me(session).status()).as("after %d wrong guesses", attempt).isEqualTo(200);
+      }
+    }
+    assertThat(me(session).status())
+        .as("review finding 13: the fifth wrong guess ends the session")
+        .isEqualTo(401);
+    assertThat(auditActions(account.id())).contains("AUTH/SESSIONS_ENDED_PASSWORD_GUESSING");
+  }
+
+  @Test
   @Tag("FR-06-02")
   void deactivationEndsTheSessionThroughTheTokenVersion() {
     Account account = createAccount(BANK_A, "ANALYST", "ACTIVE");

@@ -45,6 +45,7 @@ public final class SessionService {
   private final AuditLog audit;
   private final Clock clock;
   private final Duration refreshTtl;
+  private final java.util.function.Consumer<UUID> allSessionsEnded;
 
   /**
    * Creates the service.
@@ -57,6 +58,8 @@ public final class SessionService {
    * @param audit audit log
    * @param clock clock
    * @param refreshTtl absolute lifetime of a sign-in
+   * @param allSessionsEnded called after commit whenever every session of an account ends (revokes
+   *     the account's Google tokens, FR-07-09)
    */
   public SessionService(
       TenantTransactions tenants,
@@ -66,7 +69,8 @@ public final class SessionService {
       SessionStateCache cache,
       AuditLog audit,
       Clock clock,
-      Duration refreshTtl) {
+      Duration refreshTtl,
+      java.util.function.Consumer<UUID> allSessionsEnded) {
     this.tenants = Objects.requireNonNull(tenants, "tenants");
     this.accounts = Objects.requireNonNull(accounts, "accounts");
     this.tokens = Objects.requireNonNull(tokens, "tokens");
@@ -75,6 +79,7 @@ public final class SessionService {
     this.audit = Objects.requireNonNull(audit, "audit");
     this.clock = Objects.requireNonNull(clock, "clock");
     this.refreshTtl = Objects.requireNonNull(refreshTtl, "refreshTtl");
+    this.allSessionsEnded = Objects.requireNonNull(allSessionsEnded, "allSessionsEnded");
   }
 
   /**
@@ -120,7 +125,7 @@ public final class SessionService {
                 refreshExpiresAt,
                 context.ipAddress(),
                 oauthProvider,
-                context.userAgent()));
+                truncate(context.userAgent())));
     String access =
         accessTokens.issue(
             new StaffClaims(
@@ -141,6 +146,17 @@ public final class SessionService {
             familyId,
             account),
         refreshTokenId);
+  }
+
+  private static final int MAX_USER_AGENT = 1024;
+
+  /**
+   * refresh_tokens.user_agent is at most 1,024 characters; a longer header must not fail sign-in.
+   */
+  private static String truncate(String userAgent) {
+    return userAgent == null || userAgent.length() <= MAX_USER_AGENT
+        ? userAgent
+        : userAgent.substring(0, MAX_USER_AGENT);
   }
 
   private enum RefreshOutcome {
@@ -175,13 +191,21 @@ public final class SessionService {
 
   private RefreshResult rotate(UUID tokenId, RequestContext context) {
     Instant now = clock.instant();
+    // Lock order: account, then token. Every path that revokes an account's tokens (sign-out,
+    // sign-out everywhere, password change or reset, administrator edits) locks the account row
+    // first, so a rotation and a revocation of the same account are serialised and the revocation
+    // always sees the token a concurrent rotation inserted (review finding 1).
+    Optional<UUID> owner = tokens.ownerOf(tokenId);
+    if (owner.isEmpty() || accounts.findByIdForUpdate(owner.get()).isEmpty()) {
+      return new RefreshResult(RefreshOutcome.REJECTED, null, null);
+    }
     Optional<RefreshTokenRepository.StoredToken> row = tokens.findForUpdate(tokenId);
     if (row.isEmpty()) {
       return new RefreshResult(RefreshOutcome.REJECTED, null, null);
     }
     RefreshTokenRepository.StoredToken stored = row.get();
     Optional<StaffAccount> found = accounts.findById(stored.userId());
-    if (stored.spent()) {
+    if (stored.rotated()) {
       int revoked = tokens.revokeFamily(stored.familyId(), now);
       found.ifPresent(
           account ->
@@ -196,7 +220,8 @@ public final class SessionService {
       AfterCommit.run(() -> cache.sessionEnded(stored.familyId()));
       return new RefreshResult(RefreshOutcome.REUSED, null, stored.familyId());
     }
-    if (!stored.expiresAt().isAfter(now)
+    if (stored.revokedAt() != null
+        || !stored.expiresAt().isAfter(now)
         || found.isEmpty()
         || !canHoldSession(found.get().status())) {
       return new RefreshResult(RefreshOutcome.REJECTED, null, stored.familyId());
@@ -237,6 +262,7 @@ public final class SessionService {
         claims.institutionId(),
         () -> {
           Instant now = clock.instant();
+          accounts.findByIdForUpdate(claims.userId()); // lock order: account first (see rotate)
           tokens.revokeFamily(claims.sessionId(), now);
           accounts
               .findById(claims.userId())
@@ -290,7 +316,11 @@ public final class SessionService {
             .after(Map.of("token_version", version, "revoked_tokens", revoked))
             .context(context)
             .at(now));
-    AfterCommit.run(() -> cache.versionChanged(account.id(), version));
+    AfterCommit.run(
+        () -> {
+          cache.versionChanged(account.id(), version);
+          allSessionsEnded.accept(account.id());
+        });
     return version;
   }
 
@@ -304,6 +334,10 @@ public final class SessionService {
    */
   public void revokeAfterVersionChange(UUID userId, long newVersion) {
     tokens.revokeAllForUser(userId, clock.instant());
-    AfterCommit.run(() -> cache.versionChanged(userId, newVersion));
+    AfterCommit.run(
+        () -> {
+          cache.versionChanged(userId, newVersion);
+          allSessionsEnded.accept(userId);
+        });
   }
 }

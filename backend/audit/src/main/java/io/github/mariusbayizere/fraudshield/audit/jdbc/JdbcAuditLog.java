@@ -29,18 +29,21 @@ public final class JdbcAuditLog implements AuditLog {
   private static final short MAX_PARTITION = 63;
 
   private final JdbcTemplate jdbc;
-  private final short writerPartition;
+  private static final int PARTITIONS = 64;
+
+  private final Short writerPartition;
   private final JsonMapper json = JsonMapper.builder().build();
 
   /**
    * Creates the writer.
    *
    * @param jdbc JDBC template of the application data source
-   * @param writerPartition this instance's chain partition, 0-63; instances running at the same
-   *     time should use different partitions to avoid contention on one chain head
+   * @param writerPartition a fixed chain partition, 0-63; or null to spread writes over all 64 by
+   *     writing thread, so concurrent transactions rarely contend on one chain head (a transaction
+   *     keeps one thread, hence one partition)
    */
-  public JdbcAuditLog(JdbcTemplate jdbc, short writerPartition) {
-    if (writerPartition < 0 || writerPartition > MAX_PARTITION) {
+  public JdbcAuditLog(JdbcTemplate jdbc, Short writerPartition) {
+    if (writerPartition != null && (writerPartition < 0 || writerPartition > MAX_PARTITION)) {
       throw new IllegalArgumentException("writer partition must be 0-63");
     }
     this.jdbc = Objects.requireNonNull(jdbc, "jdbc");
@@ -57,7 +60,7 @@ public final class JdbcAuditLog implements AuditLog {
     jdbc.update(
         INSERT,
         event.institutionId(),
-        writerPartition,
+        partition(),
         event.type().name(),
         event.action(),
         event.entityType(),
@@ -72,6 +75,12 @@ public final class JdbcAuditLog implements AuditLog {
         event.userAgent(),
         event.correlationId(),
         Timestamp.from(event.eventAt()));
+  }
+
+  private short partition() {
+    return writerPartition != null
+        ? writerPartition
+        : (short) Math.floorMod(Thread.currentThread().threadId(), PARTITIONS);
   }
 
   private String toJson(Map<String, Object> values) {

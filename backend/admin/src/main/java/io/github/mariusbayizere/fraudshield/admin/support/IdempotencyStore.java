@@ -55,11 +55,11 @@ public final class IdempotencyStore {
       String scope, UUID key, String requestFingerprint, Supplier<String> operation) {
     String storageKey = PREFIX + scope + ":" + key;
     String fingerprint = Crypto.base64url(Crypto.sha256(requestFingerprint));
-    Optional<String> existing = read(storageKey);
-    if (existing.isPresent()) {
-      return replay(existing.get(), fingerprint);
+    // Claim the key atomically (SET NX, or putIfAbsent without Redis), so two concurrent requests
+    // with one key can never both run (review finding 11).
+    if (!claim(storageKey, fingerprint + "|" + IN_FLIGHT)) {
+      return replay(read(storageKey).orElse(fingerprint + "|" + IN_FLIGHT), fingerprint);
     }
-    write(storageKey, fingerprint + "|" + IN_FLIGHT);
     String response = null;
     try {
       response = operation.get();
@@ -71,6 +71,17 @@ public final class IdempotencyStore {
         write(storageKey, fingerprint + "|" + response);
       }
     }
+  }
+
+  private boolean claim(String key, String value) {
+    Optional<Boolean> remote = redis.setIfAbsent(key, value, TTL);
+    if (remote.isPresent()) {
+      return remote.get();
+    }
+    Instant now = clock.instant();
+    local.computeIfPresent(
+        key, (k, existing) -> existing.expiresAt().isAfter(now) ? existing : null);
+    return local.putIfAbsent(key, new Local(value, now.plus(TTL))) == null;
   }
 
   private static String replay(String stored, String fingerprint) {

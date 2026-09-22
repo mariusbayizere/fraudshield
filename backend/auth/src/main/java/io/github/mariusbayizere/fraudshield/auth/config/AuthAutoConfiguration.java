@@ -175,6 +175,13 @@ public class AuthAutoConfiguration {
   }
 
   @Bean
+  io.github.mariusbayizere.fraudshield.auth.security.AccessDeniedAudit accessDeniedAudit(
+      TenantTransactions tenants, StaffAccountRepository accounts, AuditLog audit, Clock clock) {
+    return new io.github.mariusbayizere.fraudshield.auth.security.AccessDeniedAudit(
+        tenants, accounts, audit, clock);
+  }
+
+  @Bean
   RateLimiter authRateLimiter(SafeRedis redis, Clock clock) {
     return new RedisRateLimiter(redis, new InMemoryRateLimiter(clock), clock);
   }
@@ -253,7 +260,10 @@ public class AuthAutoConfiguration {
       SessionStateCache cache,
       AuditLog audit,
       Clock clock,
-      AuthProperties properties) {
+      AuthProperties properties,
+      GoogleTokenVault googleTokens,
+      ObjectProvider<GoogleIdentityClient> google,
+      ExecutorService authExecutor) {
     return new SessionService(
         tenants,
         accounts,
@@ -262,7 +272,17 @@ public class AuthAutoConfiguration {
         cache,
         audit,
         clock,
-        properties.session().refreshTtl());
+        properties.session().refreshTtl(),
+        // FR-07-09: when every session of an account ends, its Google tokens are revoked too
+        // (review finding 16), off the request thread.
+        userId ->
+            authExecutor.execute(
+                () -> {
+                  GoogleIdentityClient client = google.getIfAvailable();
+                  if (client != null) {
+                    googleTokens.takeAll(userId).forEach(client::revoke);
+                  }
+                }));
   }
 
   @Bean
@@ -338,8 +358,9 @@ public class AuthAutoConfiguration {
       PasswordHasher hasher,
       SessionService sessions,
       AuditLog audit,
-      Clock clock) {
-    return new PasswordChangeService(accounts, tenants, hasher, sessions, audit, clock);
+      Clock clock,
+      RateLimiter limiter) {
+    return new PasswordChangeService(accounts, tenants, hasher, sessions, audit, clock, limiter);
   }
 
   @Bean

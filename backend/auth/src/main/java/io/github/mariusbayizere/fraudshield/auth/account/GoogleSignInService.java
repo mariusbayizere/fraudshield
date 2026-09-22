@@ -151,7 +151,11 @@ public final class GoogleSignInService {
       // The Google token is kept only for a session that signed in; otherwise (refusal, pending
       // account or any failure) it is revoked at once.
       if (result != null && result.session() != null && tokens.accessToken() != null) {
-        vault.store(result.session().sessionId(), tokens.accessToken(), tokens.expiresInSeconds());
+        vault.store(
+            result.session().account().id(),
+            result.session().sessionId(),
+            tokens.accessToken(),
+            tokens.expiresInSeconds());
       } else {
         revokeQuietly(tokens);
       }
@@ -173,9 +177,10 @@ public final class GoogleSignInService {
               () -> signInExisting(ref.get().userId(), identity, context));
       return switch (outcome.refusal()) {
         case NONE -> new Result(outcome.session(), false);
+        // The contract's 403 for this operation is `forbidden` only (review finding 10).
         case NOT_ACTIVE ->
             throw ProblemException.of(
-                "account-not-active",
+                "forbidden",
                 403,
                 "Account not active",
                 "This account is awaiting approval, locked by an administrator or deactivated");

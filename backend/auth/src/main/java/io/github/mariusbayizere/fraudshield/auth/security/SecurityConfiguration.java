@@ -1,6 +1,7 @@
 package io.github.mariusbayizere.fraudshield.auth.security;
 
 import io.github.mariusbayizere.fraudshield.auth.apikey.ApiKeyAuthenticator;
+import io.github.mariusbayizere.fraudshield.auth.ratelimit.RateLimiter;
 import io.github.mariusbayizere.fraudshield.auth.web.ProblemException;
 import io.github.mariusbayizere.fraudshield.auth.web.ProblemWriter;
 import org.springframework.beans.factory.annotation.Value;
@@ -73,14 +74,21 @@ public class SecurityConfiguration {
    * @param http security builder
    * @param policy contract policy
    * @param apiKeys API-key authenticator
+   * @param limiter rate limiter for failed API keys
    * @param decoder staff JWT decoder
+   * @param deniedAudit records refused authenticated callers
    * @return the chain
    * @throws Exception if the chain cannot be built
    */
   @Bean
   @Order(2)
   public SecurityFilterChain apiSecurity(
-      HttpSecurity http, ContractPolicy policy, ApiKeyAuthenticator apiKeys, JwtDecoder decoder)
+      HttpSecurity http,
+      ContractPolicy policy,
+      ApiKeyAuthenticator apiKeys,
+      RateLimiter limiter,
+      JwtDecoder decoder,
+      AccessDeniedAudit deniedAudit)
       throws Exception {
     JwtGrantedAuthoritiesConverter roles = new JwtGrantedAuthoritiesConverter();
     roles.setAuthoritiesClaimName("role");
@@ -94,19 +102,29 @@ public class SecurityConfiguration {
         .requestCache(cache -> cache.disable())
         .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .addFilterBefore(
-            new ApiKeyAuthenticationFilter(apiKeys), BearerTokenAuthenticationFilter.class)
+            new ApiKeyAuthenticationFilter(apiKeys, limiter), BearerTokenAuthenticationFilter.class)
         .oauth2ResourceServer(
             oauth ->
                 oauth
                     .jwt(jwt -> jwt.decoder(decoder).jwtAuthenticationConverter(converter))
                     .authenticationEntryPoint(entryPoint())
-                    .accessDeniedHandler(denied()))
+                    .accessDeniedHandler(audited(deniedAudit)))
         .authorizeHttpRequests(
             auth -> auth.anyRequest().access(new ContractAuthorizationManager(policy)))
         .addFilterAfter(new CsrfDoubleSubmitFilter(policy), AuthorizationFilter.class)
         .exceptionHandling(
-            e -> e.authenticationEntryPoint(entryPoint()).accessDeniedHandler(denied()))
+            e -> e.authenticationEntryPoint(entryPoint()).accessDeniedHandler(audited(deniedAudit)))
         .build();
+  }
+
+  private static AccessDeniedHandler audited(AccessDeniedAudit deniedAudit) {
+    return (request, response, exception) -> {
+      deniedAudit.record(
+          request,
+          org.springframework.security.core.context.SecurityContextHolder.getContext()
+              .getAuthentication());
+      ProblemWriter.write(ProblemException.forbidden(), request, response);
+    };
   }
 
   private static AuthenticationEntryPoint entryPoint() {

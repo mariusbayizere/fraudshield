@@ -44,7 +44,10 @@ class NetworkAndKeysTest extends AuthIntegrationTest {
             "::ffff:1.2.3.4/32",
             "10.0.0.0",
             "a.b.c.d/8",
-            "010.0.0.0/8")) {
+            "010.0.0.0/8",
+            "0.0.0.0/0",
+            "10.0.0.0/8",
+            "2001::/16")) {
       Http.Response rejected =
           http.post(
               "/api/v1/admin/ip-allowlist",
@@ -169,6 +172,19 @@ class NetworkAndKeysTest extends AuthIntegrationTest {
     assertThat(auditActions(keyId))
         .contains("API_KEY_LIFECYCLE/API_KEY_CREATED", "API_KEY_LIFECYCLE/API_KEY_ROTATED");
     assertThat(auditActions(replacementId)).contains("API_KEY_LIFECYCLE/API_KEY_REVOKED");
+  }
+
+  @Test
+  @Tag("D-19")
+  void repeatedFailedKeysFromOneAddressAreRateLimited() {
+    String unknown = "fsk_test_unknownkey01_" + "a".repeat(43);
+    String job = "/api/v1/jobs/2d1f0f5e-7c1b-4c2a-9d57-3a1c9a4b2e10";
+    for (int i = 0; i < 100; i++) {
+      assertThat(http.get(job, "X-API-Key", unknown).status()).isEqualTo(401);
+    }
+    Http.Response limited = http.get(job, "X-API-Key", unknown);
+    assertThat(limited.status()).as("review finding 2").isEqualTo(429);
+    assertThat(limited.header("Retry-After")).isPresent();
   }
 
   @Test

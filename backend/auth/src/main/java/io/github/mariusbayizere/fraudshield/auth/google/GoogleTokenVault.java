@@ -16,6 +16,7 @@ import java.util.UUID;
 public final class GoogleTokenVault {
 
   private static final String KEY = "fs:auth:gtok:";
+  private static final String USER_KEY = "fs:auth:gtok-user:";
   private static final Duration MAX_TTL = Duration.ofHours(1);
 
   private final SafeRedis redis;
@@ -33,18 +34,39 @@ public final class GoogleTokenVault {
   }
 
   /**
-   * Stores a token for a session.
+   * Stores a token for a session of an account.
    *
+   * @param userId account, indexed so that ending all its sessions revokes every token
    * @param sessionId session ID
    * @param accessToken Google access token
    * @param expiresInSeconds its lifetime
    */
-  public void store(UUID sessionId, String accessToken, long expiresInSeconds) {
+  public void store(UUID userId, UUID sessionId, String accessToken, long expiresInSeconds) {
     Duration ttl = Duration.ofSeconds(Math.max(1, expiresInSeconds));
     if (ttl.compareTo(MAX_TTL) > 0) {
       ttl = MAX_TTL;
     }
     redis.set(KEY + sessionId, Crypto.base64url(box.seal(accessToken, aad(sessionId))), ttl);
+    redis.addToSet(USER_KEY + userId, sessionId.toString(), MAX_TTL);
+  }
+
+  /**
+   * Removes and returns every token held for an account's sessions (sign-out everywhere, password
+   * change, deactivation; review finding 16).
+   *
+   * @param userId account
+   * @return the tokens
+   */
+  public java.util.List<String> takeAll(UUID userId) {
+    java.util.List<String> taken = new java.util.ArrayList<>();
+    for (String sessionId : redis.takeSet(USER_KEY + userId)) {
+      try {
+        take(UUID.fromString(sessionId)).ifPresent(taken::add);
+      } catch (IllegalArgumentException ignored) {
+        // Not a session ID of ours.
+      }
+    }
+    return taken;
   }
 
   /**

@@ -39,6 +39,14 @@ class PasswordHasherTest {
   }
 
   @Test
+  void overlongPasswordStillCostsOneBcrypt() {
+    String hash = hasher.hash("Str0ng!Passw0rd");
+    long start = System.nanoTime();
+    assertThat(hasher.matches("x".repeat(100), hash)).isFalse();
+    assertThat((System.nanoTime() - start) / 1_000_000).as("review finding 6").isGreaterThan(100);
+  }
+
+  @Test
   void missingHashStillCostsOneBcrypt() {
     long start = System.nanoTime();
     hasher.matches("Str0ng!Passw0rd", null);

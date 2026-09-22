@@ -70,7 +70,10 @@ class AuditAnchoringTest {
 
   private AuditChainVerifier verifier() {
     return new AuditChainVerifier(
-        compliance.jdbc(), compliance.transactions(), Map.of("anchor-1", keys.getPublic()));
+        compliance.jdbc(),
+        compliance.transactions(),
+        Map.of("anchor-1", keys.getPublic()),
+        java.time.Clock.systemUTC());
   }
 
   private void superuser(String sql) throws Exception {
@@ -174,7 +177,8 @@ class AuditAnchoringTest {
         .contains("anchor 2026-09-20 has an invalid signature");
 
     AuditChainVerifier unknownKey =
-        new AuditChainVerifier(compliance.jdbc(), compliance.transactions(), Map.of());
+        new AuditChainVerifier(
+            compliance.jdbc(), compliance.transactions(), Map.of(), java.time.Clock.systemUTC());
     assertThat(unknownKey.verify(DAY_1, DAY_1).problems())
         .extracting(AuditChainVerifier.Problem::description)
         .contains("anchor 2026-09-20 is signed by unknown key anchor-1");
@@ -199,5 +203,43 @@ class AuditAnchoringTest {
   void theRangesMustBeOrdered() {
     assertThatThrownBy(() -> verifier().verify(DAY_2, DAY_1))
         .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  private AuditChainVerifier verifierThreeDaysLater() {
+    return new AuditChainVerifier(
+        compliance.jdbc(),
+        compliance.transactions(),
+        Map.of("anchor-1", keys.getPublic()),
+        java.time.Clock.offset(java.time.Clock.systemUTC(), java.time.Duration.ofDays(3)));
+  }
+
+  @Test
+  void rowsOfDueDaysMustBeCoveredSoDeletingTheLatestAnchorsIsDetected() throws Exception {
+    LocalDate today = LocalDate.now(java.time.ZoneOffset.UTC);
+    write((short) 1, bankA, 3);
+    assertThat(verifierThreeDaysLater().verify(today, today.plusDays(1)).problems())
+        .as("no anchor at all for rows of a due day")
+        .extracting(AuditChainVerifier.Problem::description)
+        .anySatisfy(d -> assertThat(d).contains("not covered by any anchor"));
+
+    anchoring.anchorAll(today);
+    assertThat(verifierThreeDaysLater().verify(today, today.plusDays(1)).verified()).isTrue();
+
+    // The attack of review finding 3: rewrite the tail consistently and delete the anchor.
+    superuser(
+        """
+        UPDATE fraudshield.audit_events e SET action = 'TAMPERED' WHERE writer_partition = 1 AND seq = 3;
+        UPDATE fraudshield.audit_events e SET row_hash = fraudshield.audit_row_hash(e)
+          WHERE writer_partition = 1 AND seq = 3;
+        UPDATE fraudshield.audit_chain_heads h SET last_hash = e.row_hash
+          FROM fraudshield.audit_events e WHERE e.writer_partition = 1 AND e.seq = 3
+          AND h.writer_partition = 1;
+        DELETE FROM fraudshield.audit_anchors WHERE writer_partition = 1;
+        """);
+    AuditChainVerifier.Report report = verifierThreeDaysLater().verify(today, today.plusDays(1));
+    assertThat(report.verified()).isFalse();
+    assertThat(report.problems())
+        .extracting(AuditChainVerifier.Problem::description)
+        .anySatisfy(d -> assertThat(d).contains("not covered by any anchor"));
   }
 }
