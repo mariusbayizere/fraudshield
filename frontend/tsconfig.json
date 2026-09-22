@@ -20,7 +20,9 @@
     "checkJs": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["vitest/globals", "node"]
+    "types": ["vitest/globals", "node"],
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true
   },
-  "include": ["src", "eslint.config.js", "vitest.config.ts"]
+  "include": ["src", "scripts", "design-tokens", "eslint.config.js", "vitest.config.ts"]
 }
