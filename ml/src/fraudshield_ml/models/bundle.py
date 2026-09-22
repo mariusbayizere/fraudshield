@@ -194,7 +194,9 @@ class Bundle:
         import xgboost as xgb  # noqa: PLC0415 - already loaded by the booster
 
         array = np.asarray([row], dtype=np.float64)
-        matrix = xgb.DMatrix(array, missing=math.nan)
+        # nthread=1 as D-16 requires: the default spins up an OpenMP team for a single row, which
+        # measured ten times the cost of the trees on a busy machine.
+        matrix = xgb.DMatrix(array, missing=math.nan, nthread=1)
         phi_xgb = self.xgboost.predict(matrix, pred_contribs=True)[0]
         margin_xgb = float(self.xgboost.predict(matrix, output_margin=True)[0])
         phi_lgb = self.lightgbm.predict(array, pred_contrib=True, num_threads=1)[0]
