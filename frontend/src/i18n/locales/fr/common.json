@@ -1,5 +1,50 @@
 {
   "app": {
     "name": "FraudShield"
+  },
+  "nav": {
+    "alerts": "Alertes",
+    "anomalies": "Anomalies",
+    "escalations": "Escalades",
+    "search": "Recherche",
+    "performance": "Mes performances",
+    "portfolio": "Portefeuille",
+    "modelPerformance": "Performance du modèle",
+    "campaigns": "Campagnes",
+    "rules": "Règles",
+    "thresholds": "Seuils",
+    "sar": "Déclarations de soupçon",
+    "overrides": "Dérogations",
+    "users": "Utilisateurs",
+    "approvals": "Approbations",
+    "models": "Modèles",
+    "datasets": "Jeux de données",
+    "health": "État du système",
+    "audit": "Journal d’audit",
+    "apiKeys": "Clés d’API",
+    "circuitBreakers": "Disjoncteurs",
+    "ipAllowlist": "Liste d’adresses IP autorisées",
+    "settings": "Paramètres",
+    "login": "Se connecter",
+    "register": "S’inscrire",
+    "forgotPassword": "Mot de passe oublié",
+    "resetPassword": "Réinitialiser le mot de passe",
+    "unlock": "Débloquer le compte",
+    "pendingApproval": "En attente d’approbation"
+  },
+  "shell": {
+    "navigation": "Navigation principale",
+    "primaryNavigation": "Destinations principales",
+    "skipToContent": "Aller au contenu principal",
+    "openMenu": "Ouvrir le menu",
+    "language": "Langue",
+    "notBuiltTitle": "Pas encore disponible",
+    "notBuiltDescription": "Cet écran arrive dans une étape ultérieure de M8. Rien ici n’est une donnée réelle.",
+    "group": {
+      "analyst": "Analyse",
+      "riskOfficer": "Risque",
+      "admin": "Administration",
+      "settings": "Vous"
+    }
   }
 }

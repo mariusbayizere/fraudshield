@@ -4,7 +4,7 @@ export type SchemaName = {
 }[keyof Schemas];
 
 /** H.4: responses are checked against the contract in development and tests (ADR 0080 §3). */
-const VALIDATE = import.meta.env.DEV || import.meta.env.MODE === 'test';
+const VALIDATE = import.meta.env.MODE === 'development' || import.meta.env.MODE === 'test';
 
 /**
  * Returns `data` unchanged, after checking it against the named generated schema when running in
