@@ -112,6 +112,25 @@ describe('the session (D-27, ADR 0014)', () => {
 });
 
 describe('the shell behind the session', () => {
+  it('shows a busy indicator, not the console, while the session is being restored', async () => {
+    // A refresh that never answers: the guard must not show the console meanwhile.
+    vi.stubGlobal('fetch', () => new Promise(() => undefined));
+    const router = createRouter({
+      routeTree,
+      history: createMemoryHistory({ initialEntries: ['/alerts'] }),
+    });
+    render(
+      <Providers session="restoring">
+        <RouterProvider router={router} />
+      </Providers>,
+    );
+    expect(
+      await screen.findByLabelText('Restoring your session', {}, { timeout: 10_000 }),
+    ).toBeVisible();
+    expect(screen.queryByRole('navigation', { name: 'Main navigation' })).toBeNull();
+    expect(router.state.location.pathname).toBe('/alerts');
+  });
+
   it('sends an anonymous visitor to sign in, remembering the page asked for', async () => {
     const router = createRouter({
       routeTree,
@@ -129,6 +148,9 @@ describe('the shell behind the session', () => {
       { timeout: 10_000 },
     );
     expect(router.state.location.search).toEqual({ next: '/anomalies' });
+    // The console itself never rendered: the guard shows nothing behind it.
+    expect(screen.queryByRole('navigation', { name: 'Main navigation' })).toBeNull();
+    expect(screen.queryByRole('heading', { level: 1, name: 'Anomalies' })).toBeNull();
   });
 
   it('shows the console to a signed-in analyst', async () => {
