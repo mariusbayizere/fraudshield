@@ -6,6 +6,7 @@ import {
   redirect,
   type AnyRoute,
 } from '@tanstack/react-router';
+import { loginSearch } from '../auth/loginSearch';
 import { alertSearch } from './alertSearch';
 import { PUBLIC_PAGES, SECTIONS } from './sections';
 
@@ -15,6 +16,7 @@ const rootRoute = createRootRoute();
 // the shell's navigation, app bar and drawers are not in the initial bundle either.
 const SectionPage = lazyRouteComponent(() => import('./pages/SectionPage'));
 const AppShell = lazyRouteComponent(() => import('./AppShell'), 'AppShell');
+const LoginPage = lazyRouteComponent(() => import('../auth/LoginPage'));
 
 const shell = createRoute({ getParentRoute: () => rootRoute, id: 'shell', component: AppShell });
 
@@ -43,7 +45,14 @@ const alertDetail = createRoute({
   component: () => <SectionPage title="nav.alerts" />,
 });
 
-const publicPages: AnyRoute[] = PUBLIC_PAGES.map((page) =>
+const login = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/login',
+  validateSearch: loginSearch,
+  component: LoginPage,
+});
+
+const publicPages: AnyRoute[] = PUBLIC_PAGES.filter((page) => page.path !== '/login').map((page) =>
   createRoute({
     getParentRoute: () => rootRoute,
     path: page.path,
@@ -53,6 +62,7 @@ const publicPages: AnyRoute[] = PUBLIC_PAGES.map((page) =>
 
 export const routeTree = rootRoute.addChildren([
   shell.addChildren([index, ...sections, alertDetail]),
+  login,
   ...publicPages,
 ]);
 

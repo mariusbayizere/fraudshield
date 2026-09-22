@@ -12,7 +12,7 @@ export const ENDONYM: Record<Language, string> = {
 };
 
 /** Namespaces load lazily, per route (D-39). `common` and `designSystem` load at start. */
-export const NAMESPACES = ['common', 'designSystem'] as const;
+export const NAMESPACES = ['common', 'designSystem', 'auth'] as const;
 export type Namespace = (typeof NAMESPACES)[number];
 
 export function isLanguage(value: unknown): value is Language {

@@ -21,6 +21,7 @@ import { Link as RouterLink, Outlet, useRouterState } from '@tanstack/react-rout
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { tokens } from '../design-system/tokens';
+import { RequireSession } from '../auth/RequireSession';
 import { SystemBanners } from '../design-system/components/SystemBanner/SystemBanner';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { useSystemConditions } from './systemStatus';
@@ -76,6 +77,14 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
  * The drawer is anchored to the inline start, so right-to-left puts it on the right.
  */
 export function AppShell() {
+  return (
+    <RequireSession>
+      <SignedInShell />
+    </RequireSession>
+  );
+}
+
+function SignedInShell() {
   const { t, i18n } = useTranslation();
   const wide = useMediaQuery((theme) => theme.breakpoints.up('md'), { noSsr: true });
   const [menuOpen, setMenuOpen] = useState(false);

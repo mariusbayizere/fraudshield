@@ -1,5 +1,10 @@
 import { http, HttpResponse } from 'msw';
-import type { SystemHealth, SystemStatus } from '../api/generated/types.gen';
+import type {
+  StaffUser,
+  SystemHealth,
+  SystemStatus,
+  TokenResponse,
+} from '../api/generated/types.gen';
 
 /**
  * Searched for by productionBundle.test.ts: if this string is ever in a production build, the
@@ -28,8 +33,35 @@ const status: SystemStatus = {
     .filter((mode) => mode !== '') as SystemStatus['degraded_modes'],
 };
 
+const analyst: StaffUser = {
+  user_id: '4a1f0f3e-5c27-4a1e-9a56-0e0f0a1b2c3d',
+  first_name: 'Test',
+  last_name: 'Analyst',
+  email: 'analyst@example.test',
+  role: 'ANALYST',
+  status: 'ACTIVE',
+  employee_id: 'EMP-0001',
+  department: 'FRAUD_OPERATIONS',
+  preferred_locale: 'en',
+  created_at: '2026-01-05T08:00:00Z',
+};
+
+const session: TokenResponse = {
+  access_token: 'mock-access-token',
+  token_type: 'Bearer',
+  expires_in: 900,
+  user: analyst,
+};
+
 /** Contract-typed responses for services not merged yet (M5–M7), for development and tests. */
 export const handlers = [
+  http.post('/api/v1/auth/login', () =>
+    HttpResponse.json(session, { headers: { 'x-mock': MOCK_MARKER } }),
+  ),
+  http.post('/api/v1/auth/refresh', () =>
+    HttpResponse.json(session, { headers: { 'x-mock': MOCK_MARKER } }),
+  ),
+  http.post('/api/v1/auth/logout', () => new HttpResponse(null, { status: 204 })),
   http.get('/api/v1/system/status', () =>
     HttpResponse.json(status, { headers: { 'x-mock': MOCK_MARKER } }),
   ),
