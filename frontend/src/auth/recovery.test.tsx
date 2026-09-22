@@ -47,9 +47,12 @@ describe('forgetting a password (FR-07-06)', { timeout: 30_000 }, () => {
     await open('/forgot-password', 'Forgot your password?');
     await user.type(screen.getByLabelText(/Work email/), 'someone@example.test');
     await user.click(screen.getByRole('button', { name: 'Send the code' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent(
+    const answer = await screen.findByRole('alert');
+    expect(answer).toHaveTextContent(
       'If that email belongs to an account, a six-digit code is on its way.',
     );
+    // The answer says nothing about this address, so the page cannot be used to test addresses.
+    expect(answer.textContent).not.toContain('someone@example.test');
     expect(sent[0]?.body).toEqual({ email: 'someone@example.test' });
   });
 
@@ -104,11 +107,14 @@ describe('resetting a password (FR-07-06)', { timeout: 30_000 }, () => {
   it('keeps a six-digit code six digits, and refuses to check anything else', async () => {
     server(verified);
     await open('/reset-password', 'Set a new password');
+    await user.type(screen.getByLabelText(/Work email/), 'someone@example.test');
     await user.type(screen.getByLabelText(/Six-digit code/), '12ab34cd56789');
     expect(screen.getByLabelText(/Six-digit code/)).toHaveValue('123456');
     await user.clear(screen.getByLabelText(/Six-digit code/));
     await user.type(screen.getByLabelText(/Six-digit code/), '123');
     expect(screen.getByRole('button', { name: 'Check the code' })).toBeDisabled();
+    await user.type(screen.getByLabelText(/Six-digit code/), '456');
+    expect(screen.getByRole('button', { name: 'Check the code' })).toBeEnabled();
   });
 
   it('says when the code is wrong', async () => {

@@ -43,11 +43,10 @@ export default function ResetPasswordPage() {
     },
   });
 
-  const complete = useMutation<'reset'>({
-    mutationFn: async (): Promise<'reset'> => {
-      if (resetToken === null) throw new Error('no reset token');
+  const complete = useMutation<'reset', Error, string>({
+    mutationFn: async (token: string): Promise<'reset'> => {
       const { response } = await completePasswordReset({
-        body: { reset_token: resetToken, new_password: password },
+        body: { reset_token: token, new_password: password },
       });
       if (response?.status !== 204) {
         throw new Error(response?.status === 410 ? 'expired' : 'refused');
@@ -126,7 +125,7 @@ export default function ResetPasswordPage() {
             noValidate
             onSubmit={(event: { preventDefault: () => void }) => {
               event.preventDefault();
-              if (canComplete) complete.mutate();
+              if (canComplete) complete.mutate(resetToken);
             }}
           >
             <Stack spacing={2}>
