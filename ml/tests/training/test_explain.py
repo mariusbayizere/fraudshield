@@ -29,6 +29,7 @@ def fitted() -> tuple[model.Ensemble, list[list[float]]]:
     return model.fit_ensemble(matrix, labels, split, seed=1), matrix
 
 
+@pytest.mark.req("TEST-02")
 def test_each_models_contributions_sum_to_its_own_margin_within_tolerance(
     fitted: tuple[model.Ensemble, list[list[float]]],
 ) -> None:

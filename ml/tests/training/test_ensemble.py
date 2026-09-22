@@ -53,6 +53,7 @@ def test_xgboost_and_lightgbm_both_fit_and_score_on_the_same_shape() -> None:
     assert all(0.0 <= s <= 1.0 for s in lgb_scores), "binary must return probabilities"
 
 
+@pytest.mark.req("TEST-02")
 def test_the_ensemble_is_the_d05_weighted_combination_and_nothing_else() -> None:
     """D-05: 0.55*p_xgb + 0.45*p_lgb on raw probabilities. Not fitted, not calibrated here."""
     assert pytest.approx(1.0) == XGBOOST_WEIGHT + LIGHTGBM_WEIGHT

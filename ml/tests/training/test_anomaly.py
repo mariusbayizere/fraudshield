@@ -23,6 +23,7 @@ def fitted() -> tuple[anomaly.AnomalyModel, list[list[float]]]:
     return anomaly.fit_anomaly(matrix, list(range(800)), seed=1), matrix
 
 
+@pytest.mark.req("TEST-02")
 def test_the_raw_score_is_scikit_learns_and_lies_in_minus_one_to_zero(
     fitted: tuple[anomaly.AnomalyModel, list[list[float]]],
 ) -> None:

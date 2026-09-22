@@ -85,7 +85,7 @@ def test_the_calibrator_learns_from_the_calibration_rows_and_no_others(
     )
 
 
-@pytest.mark.req("ML-GATE-11")
+@pytest.mark.req("TEST-02", "ML-GATE-11")
 def test_isotonic_calibration_corrects_the_level_the_imbalance_weight_inflated(
     fitted: tuple[model.Ensemble, list[list[float]], list[bool]],
 ) -> None:

@@ -152,3 +152,20 @@ def test_precision_never_exceeds_the_ceiling_at_the_rate_it_was_measured_at() ->
     precision, realised = gate.at_fpr_budget(scores, labels)
     assert realised < gate.FPR_BUDGET, "precondition: ties leave the realised rate under budget"
     assert precision <= gate.precision_ceiling(float(labels.mean()), realised) + 1e-12
+
+
+@pytest.mark.req("ML-GATE-07", "ML-GATE-08", "ML-GATE-09")
+def test_each_channel_auc_is_the_auc_over_exactly_that_channels_rows() -> None:
+    """The three channel gates are AUCs on the channel's own rows, and undefined without them."""
+    scores, labels = _sample(6000)
+    channels = np.array(["MOBILE_MONEY", "USSD", "AGENT_BANKING"] * 2000, dtype=object)
+    values = gate.metrics(gate.Rows(scores, labels, channels, np.ones(len(scores), dtype=bool)))
+    for gate_id, channel in gate.CHANNELS.items():
+        mask = channels == channel
+        assert values[gate_id] == pytest.approx(gate.auc(scores[mask], labels[mask]), abs=1e-12)
+    without_agent = channels.copy()
+    without_agent[without_agent == "AGENT_BANKING"] = "CARD"
+    missing = gate.metrics(
+        gate.Rows(scores, labels, without_agent, np.ones(len(scores), dtype=bool))
+    )
+    assert math.isnan(missing["ML-GATE-09"]), "a channel with no rows has no AUC, not a zero one"

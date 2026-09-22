@@ -187,11 +187,17 @@ requirements:
     deployment blocked if ECE > 0.05'
   defects:
   - D-05
-  status: NOT_STARTED
+  status: DONE_WITH_DEVIATION
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - ml/src/fraudshield_ml/training/model.py
+  evidence:
+  - ml/tests/training/test_model.py
+  - docs/benchmarks/m4_gate_d8083dbc_v3.txt (ECE 0.001 on the calibrated ensemble)
+  - docs/benchmarks/m4_gate_d8083dbc_v3/figures/reliability.svg
+  deviations:
+  - docs/adr/0031-closing-m4s-rows-and-the-two-that-fail.md
+  - docs/adr/0029-platt-scaling-stays-in-the-battery-only.md
   notes: 'M3 evaluation-design constraint (E1, adopted 2026-09-19): seven of the 44 features aggregate
     over an entity other than the account (counterparty, device, agent, geo cell), so account-grouped
     folds do not isolate them, and component folding is unavailable - measured, the counterparty and geo-cell
@@ -200,7 +206,10 @@ requirements:
     earlier cross-account rows is what serving does, not leakage. The live exposure is OUT-OF-FOLD TARGET
     ENCODING INSIDE THE TRAINING PERIOD, where folds are random and account-grouped - where M-8 lived.
     Required: out-of-fold encodings are computed over rows strictly EARLIER IN TIME than the row being
-    encoded, never over random folds. This is settled, not open; M4 must not be designed as if it were.'
+    encoded, never over random folds. This is settled, not open; M4 must not be designed as if it were.
+    M4 (2026-09-22): D-05''s isotonic calibration of the combined score, fitted on the calibration split,
+    disjoint by construction. ''Deployment blocked if ECE > 0.05'' needs M5''s promotion step (PB-64).
+    Training-row target encodings are time-ordered as E1 requires (71a91d9).'
 - id: FR-02-04
   section: 3.2 FR-02 ML fraud scoring engine
   title: SHAP TreeExplainer (exact, no sampling) computes top-5 SHAP features for all transactions with
@@ -211,11 +220,17 @@ requirements:
     unit test; 100% SHAP coverage for HIGH and MEDIUM risk'
   defects:
   - D-05
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - ml/src/fraudshield_ml/training/explain.py
+  evidence:
+  - ml/tests/training/test_explain.py
+  - docs/ml/explainability.md
+  - docs/benchmarks/m4_gate_d8083dbc_v3.txt (SHAP coverage 1.000 for HIGH and MEDIUM)
   deviations: []
+  notes: 'M4 (2026-09-22): additivity is tested per model in margin space at 0.001, where it is exact
+    (D-05); the analyst sees the 0.55/0.45 combination, which does not sum to the calibrated probability.'
 - id: FR-02-05
   section: 3.2 FR-02 ML fraud scoring engine
   title: Isolation Forest anomaly_score computed for every transaction; transactions with anomaly_score
@@ -2456,10 +2471,19 @@ requirements:
     across all thresholds'
   defects:
   - D-07
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation: &id001
+  - ml/src/fraudshield_ml/training/gate.py
+  - ml/src/fraudshield_ml/training/gate_run.py
+  - ml/src/fraudshield_ml/training/gate_report.py
+  - ml/src/fraudshield_ml/training/model.py
+  evidence:
+  - docs/benchmarks/m4_gate_d8083dbc_v3.txt (AUC 0.970 [0.962, 0.977], five seeds 0.967 +/- 0.004; +0.091
+    over velocity_ratio_1h_vs_30d (0.879) and +0.311 over the best trivial rule (0.659), same rows)
+  - docs/benchmarks/m4_gate_d8083dbc_v3/metrics.json
+  - ml/tests/training/test_gate.py
+  - ml/tests/cli/test_m4_commands.py
   deviations: []
   notes: 'M3 evaluation-design constraint (E1, adopted 2026-09-19): seven of the 44 features aggregate
     over an entity other than the account (counterparty, device, agent, geo cell), so account-grouped
@@ -2495,7 +2519,9 @@ requirements:
     a threshold transfers trivially and LOCO measures what it cannot fake; and a variant never seen in
     training separates a model that learned the shape of fraud from one that learned its rate. These were
     supporting experiments and are now the primary evidence. Report each with its single-feature baseline,
-    as the gate above requires.'
+    as the gate above requires. M4 (2026-09-22): declared gate run at d40fca2, AUC 0.970 [0.962, 0.977],
+    five seeds 0.967 +/- 0.004; +0.091 over velocity_ratio_1h_vs_30d (0.879) and +0.311 over the best
+    trivial rule (0.659), same rows.'
 - id: ML-GATE-02
   section: 7.2 Model deployment gate
   title: Precision at 1% FPR
@@ -2505,10 +2531,16 @@ requirements:
     volume to manageable level'
   defects:
   - D-01
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation: *id001
+  evidence:
+  - docs/benchmarks/m4_gate_d8083dbc_v3.txt (recall at the 1% FPR budget 0.871 [0.847, 0.891] at a realised
+    FPR of 0.96%; +0.273 over the best single feature; precision there 0.471 against D-01's ceiling of
+    0.505 at that rate)
+  - docs/benchmarks/m4_gate_d8083dbc_v3/metrics.json
+  - ml/tests/training/test_gate.py
+  - ml/tests/cli/test_m4_commands.py
   deviations: []
   notes: 'M3 evaluation-design constraint (E1, adopted 2026-09-19): seven of the 44 features aggregate
     over an entity other than the account (counterparty, device, agent, geo cell), so account-grouped
@@ -2526,7 +2558,9 @@ requirements:
     on the same split, at the same scale, with the same account-grouped folds - and the comparison is
     reported as the MARGIN over that baseline. ''AUC 0.94'' against a 0.894 baseline is a different claim
     from ''AUC 0.94'' against chance, and only the first is honest. A metric quoted alone is inadmissible
-    on the same terms as a metric quoted without its scale (E2).'
+    on the same terms as a metric quoted without its scale (E2). M4 (2026-09-22): declared gate run at
+    d40fca2, recall at the 1% FPR budget 0.871 [0.847, 0.891] at a realised FPR of 0.96%; +0.273 over
+    the best single feature; precision there 0.471 against D-01''s ceiling of 0.505 at that rate.'
 - id: ML-GATE-03
   section: 7.2 Model deployment gate
   title: Recall (fraud capture rate)
@@ -2536,10 +2570,15 @@ requirements:
     against FPR'
   defects:
   - D-02
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
+  implementation: *id001
+  evidence:
+  - 'docs/benchmarks/m4_gate_d8083dbc_v3.txt (recall at 0.60 0.736 [0.707, 0.765], five seeds 0.744 +/-
+    0.041: FAILS the 0.880 threshold)'
+  - docs/benchmarks/m4_gate_d8083dbc_v3/metrics.json
+  - ml/tests/training/test_gate.py
+  - ml/tests/cli/test_m4_commands.py
   deviations: []
   notes: 'M3 evaluation-design constraint (E1, adopted 2026-09-19): seven of the 44 features aggregate
     over an entity other than the account (counterparty, device, agent, geo cell), so account-grouped
@@ -2557,7 +2596,9 @@ requirements:
     on the same split, at the same scale, with the same account-grouped folds - and the comparison is
     reported as the MARGIN over that baseline. ''AUC 0.94'' against a 0.894 baseline is a different claim
     from ''AUC 0.94'' against chance, and only the first is honest. A metric quoted alone is inadmissible
-    on the same terms as a metric quoted without its scale (E2).'
+    on the same terms as a metric quoted without its scale (E2). M4 (2026-09-22): declared gate run at
+    d40fca2, recall at 0.60 0.736 [0.707, 0.765], five seeds 0.744 +/- 0.041: FAILS the 0.880 threshold.
+    Recorded, not tuned (D.3). Analysis and options in PB-62; the owner decides (ADR 0031).'
 - id: ML-GATE-04
   section: 7.2 Model deployment gate
   title: F1 Score
@@ -2567,10 +2608,14 @@ requirements:
     classes'
   defects:
   - D-02
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation: *id001
+  evidence:
+  - docs/benchmarks/m4_gate_d8083dbc_v3.txt (F1 at 0.60 0.821 [0.800, 0.840], five seeds 0.820 +/- 0.020)
+  - docs/benchmarks/m4_gate_d8083dbc_v3/metrics.json
+  - ml/tests/training/test_gate.py
+  - ml/tests/cli/test_m4_commands.py
   deviations: []
   notes: 'M3 evaluation-design constraint (E1, adopted 2026-09-19): seven of the 44 features aggregate
     over an entity other than the account (counterparty, device, agent, geo cell), so account-grouped
@@ -2588,7 +2633,9 @@ requirements:
     on the same split, at the same scale, with the same account-grouped folds - and the comparison is
     reported as the MARGIN over that baseline. ''AUC 0.94'' against a 0.894 baseline is a different claim
     from ''AUC 0.94'' against chance, and only the first is honest. A metric quoted alone is inadmissible
-    on the same terms as a metric quoted without its scale (E2).'
+    on the same terms as a metric quoted without its scale (E2). M4 (2026-09-22): declared gate run at
+    d40fca2, F1 at 0.60 0.821 [0.800, 0.840], five seeds 0.820 +/- 0.020. It sits at the threshold: 0.819
+    and 0.795 in the two earlier runs (lab notebook, 2026-09-22).'
 - id: ML-GATE-05
   section: 7.2 Model deployment gate
   title: False Positive Rate at threshold 0.85
@@ -2598,11 +2645,16 @@ requirements:
     friction rate'
   defects:
   - D-02
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation: *id001
+  evidence:
+  - docs/benchmarks/m4_gate_d8083dbc_v3.txt (FPR at 0.85 0.0003 [0.000, 0.000])
+  - docs/benchmarks/m4_gate_d8083dbc_v3/metrics.json
+  - ml/tests/training/test_gate.py
+  - ml/tests/cli/test_m4_commands.py
   deviations: []
+  notes: 'M4 (2026-09-22): declared gate run at d40fca2, FPR at 0.85 0.0003 [0.000, 0.000].'
 - id: ML-GATE-06
   section: 7.2 Model deployment gate
   title: False Negative Rate
@@ -2612,11 +2664,17 @@ requirements:
     threshold 0.85'
   defects:
   - D-02
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
+  implementation: *id001
+  evidence:
+  - 'docs/benchmarks/m4_gate_d8083dbc_v3.txt (FNR at 0.60 0.264 [0.235, 0.293]: FAILS the 12.0% threshold)'
+  - docs/benchmarks/m4_gate_d8083dbc_v3/metrics.json
+  - ml/tests/training/test_gate.py
+  - ml/tests/cli/test_m4_commands.py
   deviations: []
+  notes: 'M4 (2026-09-22): declared gate run at d40fca2, FNR at 0.60 0.264 [0.235, 0.293]: FAILS the 12.0%
+    threshold. The same shortfall as ML-GATE-03 (FNR = 1 - recall at 0.60). PB-62; ADR 0031.'
 - id: ML-GATE-07
   section: 7.2 Model deployment gate
   title: MOBILE_MONEY channel AUC-ROC
@@ -2625,10 +2683,15 @@ requirements:
   srs_text: 'Threshold: 0.920; Financial Justification: East African dominant channel requires explicit
     validation'
   defects: []
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation: *id001
+  evidence:
+  - docs/benchmarks/m4_gate_d8083dbc_v3.txt (MOBILE_MONEY AUC 0.953 [0.934, 0.969]; +0.070 over the best
+    single feature on the channel's rows (0.882))
+  - docs/benchmarks/m4_gate_d8083dbc_v3/metrics.json
+  - ml/tests/training/test_gate.py
+  - ml/tests/cli/test_m4_commands.py
   deviations: []
   notes: 'M3 -> M4 REPORTING GATE (owner decision 2026-09-20, PB-46). This benchmark is VELOCITY-SEPARABLE:
     a single feature, velocity_ratio_1h_vs_30d, reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit 2c80ef6
@@ -2644,7 +2707,9 @@ requirements:
     is not country-specific, so a threshold transfers trivially and LOCO measures what it cannot fake;
     and a variant never seen in training separates a model that learned the shape of fraud from one that
     learned its rate. These were supporting experiments and are now the primary evidence. Report each
-    with its single-feature baseline, as the gate above requires.'
+    with its single-feature baseline, as the gate above requires. M4 (2026-09-22): declared gate run at
+    d40fca2, MOBILE_MONEY AUC 0.953 [0.934, 0.969]; +0.070 over the best single feature on the channel''s
+    rows (0.882).'
 - id: ML-GATE-08
   section: 7.2 Model deployment gate
   title: USSD channel AUC-ROC
@@ -2653,10 +2718,15 @@ requirements:
   srs_text: 'Threshold: 0.900; Financial Justification: USSD lacks device fingerprint; harder problem;
     separate validation required'
   defects: []
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation: *id001
+  evidence:
+  - docs/benchmarks/m4_gate_d8083dbc_v3.txt (USSD AUC 0.953 [0.931, 0.972]; +0.049 over the best single
+    feature on the channel's rows (0.904), the narrowest margin)
+  - docs/benchmarks/m4_gate_d8083dbc_v3/metrics.json
+  - ml/tests/training/test_gate.py
+  - ml/tests/cli/test_m4_commands.py
   deviations: []
   notes: 'M3 -> M4 REPORTING GATE (owner decision 2026-09-20, PB-46). This benchmark is VELOCITY-SEPARABLE:
     a single feature, velocity_ratio_1h_vs_30d, reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit 2c80ef6
@@ -2672,7 +2742,9 @@ requirements:
     is not country-specific, so a threshold transfers trivially and LOCO measures what it cannot fake;
     and a variant never seen in training separates a model that learned the shape of fraud from one that
     learned its rate. These were supporting experiments and are now the primary evidence. Report each
-    with its single-feature baseline, as the gate above requires.'
+    with its single-feature baseline, as the gate above requires. M4 (2026-09-22): declared gate run at
+    d40fca2, USSD AUC 0.953 [0.931, 0.972]; +0.049 over the best single feature on the channel''s rows
+    (0.904), the narrowest margin.'
 - id: ML-GATE-09
   section: 7.2 Model deployment gate
   title: AGENT_BANKING channel AUC-ROC
@@ -2681,10 +2753,15 @@ requirements:
   srs_text: 'Threshold: 0.910; Financial Justification: Agent fraud is East African-specific; novel validation
     requirement'
   defects: []
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation: *id001
+  evidence:
+  - docs/benchmarks/m4_gate_d8083dbc_v3.txt (AGENT_BANKING AUC 0.979 [0.960, 0.993]; +0.136 over the best
+    single feature on the channel's rows (0.843))
+  - docs/benchmarks/m4_gate_d8083dbc_v3/metrics.json
+  - ml/tests/training/test_gate.py
+  - ml/tests/cli/test_m4_commands.py
   deviations: []
   notes: 'M3 -> M4 REPORTING GATE (owner decision 2026-09-20, PB-46). This benchmark is VELOCITY-SEPARABLE:
     a single feature, velocity_ratio_1h_vs_30d, reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit 2c80ef6
@@ -2700,7 +2777,9 @@ requirements:
     is not country-specific, so a threshold transfers trivially and LOCO measures what it cannot fake;
     and a variant never seen in training separates a model that learned the shape of fraud from one that
     learned its rate. These were supporting experiments and are now the primary evidence. Report each
-    with its single-feature baseline, as the gate above requires.'
+    with its single-feature baseline, as the gate above requires. M4 (2026-09-22): declared gate run at
+    d40fca2, AGENT_BANKING AUC 0.979 [0.960, 0.993]; +0.136 over the best single feature on the channel''s
+    rows (0.843).'
 - id: ML-GATE-10
   section: 7.2 Model deployment gate
   title: SHAP coverage
@@ -2709,11 +2788,18 @@ requirements:
   srs_text: 'Threshold: 100% for HIGH and MEDIUM risk transactions; Financial Justification: Non-negotiable
     for analyst trust and BNR regulatory explainability requirement'
   defects: []
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation: *id001
+  evidence:
+  - 'docs/benchmarks/m4_gate_d8083dbc_v3.txt (SHAP coverage for HIGH and MEDIUM 1.000: every flagged row''s
+    explanation complete and additive within 0.001)'
+  - docs/benchmarks/m4_gate_d8083dbc_v3/metrics.json
+  - ml/tests/training/test_gate.py
+  - ml/tests/cli/test_m4_commands.py
   deviations: []
+  notes: 'M4 (2026-09-22): declared gate run at d40fca2, SHAP coverage for HIGH and MEDIUM 1.000: every
+    flagged row''s explanation complete and additive within 0.001.'
 - id: ML-GATE-11
   section: 7.2 Model deployment gate
   title: Expected Calibration Error (ECE)
@@ -2723,10 +2809,15 @@ requirements:
     score = ~85% fraud probability'
   defects:
   - D-05
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation: *id001
+  evidence:
+  - docs/benchmarks/m4_gate_d8083dbc_v3.txt (ECE on 15 equal-mass bins 0.001 [0.001, 0.001]; equal-width
+    ECE 0.0014, Brier 0.0027)
+  - docs/benchmarks/m4_gate_d8083dbc_v3/metrics.json
+  - ml/tests/training/test_gate.py
+  - ml/tests/cli/test_m4_commands.py
   deviations: []
   notes: 'M3 evaluation-design constraint (E1, adopted 2026-09-19): seven of the 44 features aggregate
     over an entity other than the account (counterparty, device, agent, geo cell), so account-grouped
@@ -2736,7 +2827,9 @@ requirements:
     earlier cross-account rows is what serving does, not leakage. The live exposure is OUT-OF-FOLD TARGET
     ENCODING INSIDE THE TRAINING PERIOD, where folds are random and account-grouped - where M-8 lived.
     Required: out-of-fold encodings are computed over rows strictly EARLIER IN TIME than the row being
-    encoded, never over random folds. This is settled, not open; M4 must not be designed as if it were.'
+    encoded, never over random folds. This is settled, not open; M4 must not be designed as if it were.
+    M4 (2026-09-22): declared gate run at d40fca2, ECE on 15 equal-mass bins 0.001 [0.001, 0.001]; equal-width
+    ECE 0.0014, Brier 0.0027.'
 - id: ML-GATE-12
   section: 7.2 Model deployment gate
   title: Inference latency p99
@@ -2995,11 +3088,19 @@ requirements:
     with 0 historical transactions'
   defects:
   - D-04
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - ml/src/fraudshield_ml/features/vector.py
+  - ml/src/fraudshield_ml/features/batch.py
+  - ml/src/fraudshield_ml/features/online.py
+  evidence:
+  - ml/tests/features/test_vector.py (all 44 on all six channels with D-04's NaN pattern)
+  - ml/tests/features/test_amount_behaviour.py (round sums by the market's own denominations)
+  - ml/tests/features/test_velocity_group.py (zero history)
   deviations: []
+  notes: 'M4 (2026-09-22): no feature test used BANK_TRANSFER or ONLINE until the M4 review; now every
+    channel is exercised.'
 - id: TEST-02
   section: 9 Testing requirements
   title: 'Unit: ML Scoring'
@@ -3012,11 +3113,23 @@ requirements:
   defects:
   - D-05
   - D-06
-  status: NOT_STARTED
+  status: DONE_WITH_DEVIATION
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - ml/src/fraudshield_ml/training/model.py
+  - ml/src/fraudshield_ml/training/ensemble.py
+  - ml/src/fraudshield_ml/training/anomaly.py
+  - ml/src/fraudshield_ml/training/explain.py
+  - ml/src/fraudshield_ml/training/onnx_export.py
+  evidence:
+  - ml/tests/training/test_ensemble.py
+  - ml/tests/training/test_model.py
+  - ml/tests/training/test_anomaly.py
+  - ml/tests/training/test_explain.py
+  - ml/tests/training/test_onnx_export.py
+  deviations:
+  - docs/adr/0031-closing-m4s-rows-and-the-two-that-fail.md
+  notes: 'M4 (2026-09-22): the fallback rule engine on a 503 needs M5''s scoring service (PB-64).'
 - id: TEST-03
   section: 9 Testing requirements
   title: 'Unit: Risk Decision Engine'
@@ -3195,11 +3308,24 @@ requirements:
   srs_text: 'Framework: evaluate.py; Coverage Target: All 13 metrics in Section 7.2; Key Scenarios: Automated
     CI gate; LaTeX table generated as artifact; shadow mode AUC-ROC delta computed and logged to MLflow'
   defects: []
-  status: NOT_STARTED
+  status: DONE_WITH_DEVIATION
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - ml/src/fraudshield_ml/training/gate.py
+  - ml/src/fraudshield_ml/training/gate_run.py
+  - ml/src/fraudshield_ml/training/gate_report.py
+  - ml/src/fraudshield_ml/cli.py
+  evidence:
+  - docs/benchmarks/m4_gate_d8083dbc_v3.txt
+  - docs/benchmarks/m4_gate_d8083dbc_v3/tables/gate.tex
+  - ml/tests/training/test_gate.py
+  - ml/tests/cli/test_m4_commands.py
+  deviations:
+  - docs/adr/0031-closing-m4s-rows-and-the-two-that-fail.md
+  - docs/adr/0030-m4-evidence-without-mlflow-tracking.md
+  notes: 'M4 (2026-09-22): eleven of thirteen metrics (12 and 13 are M5''s), LaTeX tables and --enforce.
+    The shadow delta and MLflow logging go with M5 (PB-64); running the gate inside CI needs a dataset
+    there (PB-63).'
 - id: RES-01
   section: 10 Research artifacts
   title: FraudShield-EAC-Transactions dataset
@@ -3322,12 +3448,16 @@ requirements:
   defects: []
   affects:
   - ML-GATE-02
-  status: IN_PROGRESS
+  status: DONE
   verification: test
   implementation:
-  - ml/src/fraudshield_ml/metrics/operating_points.py
-  evidence: []
+  - ml/src/fraudshield_ml/training/gate.py
+  evidence:
+  - ml/tests/training/test_gate.py
+  - docs/benchmarks/m4_gate_d8083dbc_v3.txt
   deviations: []
+  notes: 'M4 (2026-09-22): gate.py reports recall at 1% FPR as the gate and precision beside D-01''s ceiling
+    at the realised FPR.'
 - id: D-02
   section: Build prompt Part B defect register
   title: Recall, F1 and FNR thresholds lack a defined operating point.
@@ -3340,12 +3470,16 @@ requirements:
   - ML-GATE-04
   - ML-GATE-05
   - ML-GATE-06
-  status: IN_PROGRESS
+  status: DONE
   verification: test
   implementation:
-  - ml/src/fraudshield_ml/metrics/operating_points.py
-  evidence: []
+  - ml/src/fraudshield_ml/training/gate.py
+  evidence:
+  - ml/tests/training/test_gate.py
+  - docs/benchmarks/m4_gate_d8083dbc_v3.txt
   deviations: []
+  notes: 'M4 (2026-09-22): gate.py measures recall, F1 and FNR at 0.60 and FPR at 0.85, half-open as E.6
+    defines tiers.'
 - id: D-03
   section: Build prompt Part B defect register
   title: The feature breakdown sums to 46, not 44.
@@ -3408,11 +3542,18 @@ requirements:
   - FR-02-04
   - ML-GATE-11
   - TEST-02
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - ml/src/fraudshield_ml/training/model.py
+  - ml/src/fraudshield_ml/training/explain.py
+  evidence:
+  - ml/tests/training/test_model.py
+  - ml/tests/training/test_explain.py
+  - docs/ml/explainability.md
   deviations: []
+  notes: 'M4 (2026-09-22): model.py (ensemble and one isotonic calibrator), explain.py (margin-space SHAP),
+    docs/ml/explainability.md.'
 - id: D-06
   section: Build prompt Part B defect register
   title: Isolation Forest score range and threshold conflict.
@@ -3423,11 +3564,16 @@ requirements:
   affects:
   - FR-02-05
   - TEST-02
-  status: NOT_STARTED
+  status: DONE_WITH_DEVIATION
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - ml/src/fraudshield_ml/training/anomaly.py
+  evidence:
+  - ml/tests/training/test_anomaly.py
+  deviations:
+  - docs/adr/0031-closing-m4s-rows-and-the-two-that-fail.md
+  notes: 'M4 (2026-09-22): anomaly_raw and the percentile anomaly_score exist as D-06 defines them; the
+    routing threshold is M6''s decision-engine configuration (PB-65).'
 - id: D-07
   section: Build prompt Part B defect register
   title: Temporal split definitions disagree
@@ -3482,7 +3628,7 @@ requirements:
   section: Build prompt Part B defect register
   title: Unsupported numeric claims in the SRS
   priority: M
-  milestone: M4
+  milestone: M11
   srs_text: See docs/srs/defect_register.md
   defects: []
   affects:
@@ -3494,6 +3640,9 @@ requirements:
   - docs/research/claims_register.md
   evidence: []
   deviations: []
+  notes: 'M4 (2026-09-22): C-6 measured (docs/benchmarks/m4_seed_variance_d8083dbc_e1.txt); the card-style
+    ablation behind C-4 exists in the gate run. Moved to M11 by ADR 0031: five claims need primary sources
+    only the author can supply.'
 - id: D-10
   section: Build prompt Part B defect register
   title: Alert volume will overwhelm analysts; the 30-second MEDIUM timer then auto-releases most risky
