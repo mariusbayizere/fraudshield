@@ -5,6 +5,7 @@ import io.github.mariusbayizere.fraudshield.audit.AuditEventType;
 import io.github.mariusbayizere.fraudshield.audit.AuditLog;
 import io.github.mariusbayizere.fraudshield.audit.jdbc.TenantTransactions;
 import io.github.mariusbayizere.fraudshield.auth.account.StaffAccountRepository;
+import io.github.mariusbayizere.fraudshield.auth.apikey.ApiKeyPrincipal;
 import io.github.mariusbayizere.fraudshield.auth.jwt.AccessTokens;
 import io.github.mariusbayizere.fraudshield.auth.jwt.StaffClaims;
 import io.github.mariusbayizere.fraudshield.auth.session.SessionService;
@@ -13,6 +14,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.time.Clock;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.core.Authentication;
@@ -84,21 +86,27 @@ public final class AccessDeniedAudit {
                                     .context(Requests.context(request))
                                     .at(clock.instant()))));
       } else if (caller instanceof ApiKeyAuthentication key) {
-        tenants.runInTenant(
-            key.getPrincipal().institutionId(),
-            () ->
-                audit.record(
-                    AuditEvent.of(
-                            key.getPrincipal().institutionId(),
-                            AuditEventType.AUTH,
-                            "ACCESS_DENIED")
-                        .entity("api_key", key.getPrincipal().keyId())
-                        .after(after)
-                        .context(Requests.context(request))
-                        .at(clock.instant())));
+        recordApiKey(key.getPrincipal(), after, request);
       }
     } catch (RuntimeException e) {
       LOG.warn("could not audit a refused request: {}", e.getClass().getSimpleName());
     }
+  }
+
+  private void recordApiKey(
+      ApiKeyPrincipal principal, Map<String, Object> after, HttpServletRequest request) {
+    if (principal == null) {
+      return;
+    }
+    UUID institution = principal.institutionId();
+    tenants.runInTenant(
+        institution,
+        () ->
+            audit.record(
+                AuditEvent.of(institution, AuditEventType.AUTH, "ACCESS_DENIED")
+                    .entity("api_key", principal.keyId())
+                    .after(after)
+                    .context(Requests.context(request))
+                    .at(clock.instant())));
   }
 }

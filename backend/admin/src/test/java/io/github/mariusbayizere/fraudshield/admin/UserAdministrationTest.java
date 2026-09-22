@@ -166,7 +166,8 @@ class UserAdministrationTest extends AuthIntegrationTest {
     assertThat(http.get("/api/v1/admin/users", session.bearer()).status()).isEqualTo(403);
     assertThat(
             query(
-                "SELECT count(*) FROM fraudshield.audit_events WHERE user_id = ? AND action = 'ACCESS_DENIED'",
+                "SELECT count(*) FROM fraudshield.audit_events WHERE user_id = ?"
+                    + " AND action = 'ACCESS_DENIED'",
                 analyst.id()))
         .isEqualTo(1L);
   }
@@ -182,7 +183,8 @@ class UserAdministrationTest extends AuthIntegrationTest {
     assertThat(response.status()).isEqualTo(200);
     assertThat(
             query(
-                "SELECT locked_until > now() + interval '1 year' FROM fraudshield.users WHERE id = ?",
+                "SELECT locked_until > now() + interval '1 year' FROM fraudshield.users"
+                    + " WHERE id = ?",
                 locked.id()))
         .as("review finding 12: an administrator's lock does not lapse after 30 minutes")
         .isEqualTo(true);

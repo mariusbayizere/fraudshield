@@ -273,7 +273,7 @@ public final class UserAdministrationService {
                       : AccountStatus.valueOf(request.status());
               boolean roleChanged = role != current.role();
               boolean statusChanged = status != current.status();
-              boolean adminLockRequested =
+              final boolean adminLockRequested =
                   status == AccountStatus.LOCKED
                       && !StaffAccountRepository.ADMIN_LOCK_UNTIL.equals(current.lockedUntil());
               if ((roleChanged || statusChanged) && userId.equals(admin.userId())) {
