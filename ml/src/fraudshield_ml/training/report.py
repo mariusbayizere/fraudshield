@@ -129,10 +129,20 @@ def variant_table(results: Sequence[VariantResult], threshold: float, fpr: float
         seen = max(base, key=lambda r: r.fraud)
         lines += [
             "",
-            f"  The unseen shape is caught at {novel.recall:.1%} against {seen.recall:.1%} for the"
-            f" shape the model",
-            f"  trained on ({seen.variant}). The gap is the cost of never having seen it.",
+            f"  The unseen shape is caught at {novel.recall:.1%}; the shape the model trained on"
+            f" ({seen.variant})",
+            f"  at {seen.recall:.1%}.",
         ]
+        if novel.recall < seen.recall:
+            lines.append("  The gap is the cost of never having seen it.")
+        else:
+            lines += [
+                "  **The unseen shape is caught at least as often as the familiar one, so this",
+                "  experiment does not measure generalisation on this benchmark.** The novelty is",
+                "  in the lead time, not in the transaction pattern: the drain is still a burst,",
+                "  and a model that detects bursts catches it without having seen the variant.",
+                "  Reported as a null result rather than dropped (PB-59, PB-61).",
+            ]
         if novel.fraud < 30:
             lines.append(
                 f"  It rests on {novel.fraud} fraud rows, so read it as direction, not measurement."
