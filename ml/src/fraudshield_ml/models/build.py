@@ -55,7 +55,7 @@ class Complexity:
 
     LightGBM gets `num_leaves = 2**depth - 1` so the two models have matched capacity, the rule
     C-6 used. The default is the configuration C-6 and the first bundles used; the served one is
-    chosen from the frontier (ADR 0030).
+    chosen from the frontier (ADR 0032).
     """
 
     trees: int = BOOSTING_ROUNDS
@@ -78,7 +78,7 @@ class Report:
     rows: Mapping[str, int]
     ensemble_auc: float
     #: Half-width of the ensemble AUC's 95% interval (Hanley-McNeil), so a configuration can be
-    #: judged "within the interval of the best" from the report alone (D-16, ADR 0030).
+    #: judged "within the interval of the best" from the report alone (D-16, ADR 0032).
     ensemble_auc_interval: float
     xgboost_auc: float
     lightgbm_auc: float

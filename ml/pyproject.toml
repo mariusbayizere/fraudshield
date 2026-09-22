@@ -26,7 +26,7 @@ dependencies = [
     # the client is protocol-compatible with it.
     "redis==8.1.0",
     "prometheus-client==0.26.0",
-    # Serving inference for both boosters (ADR 0030): exact to 1e-6 against the native boosters
+    # Serving inference for both boosters (ADR 0032): exact to 1e-6 against the native boosters
     # on XGBoost and LightGBM alike, without the per-call overhead of their Python wrappers and
     # with no compiler at build time. SHAP stays on the native boosters.
     "treelite==4.7.2",
@@ -39,7 +39,7 @@ dependencies = [
 dev = [
     # In-process Redis for unit tests on a machine without Docker; the real-Redis tests run in CI.
     "fakeredis==2.35.1",
-    # E.4's ONNX export parity test (ADR 0030). Test-only: serving uses Treelite, because the
+    # E.4's ONNX export parity test (ADR 0032). Test-only: serving uses Treelite, because the
     # LightGBM converter accepts float32 input only and cannot meet the 1e-5 parity.
     "onnx==1.23.0",
     "onnxmltools==1.16.0",

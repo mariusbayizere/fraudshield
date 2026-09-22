@@ -216,7 +216,7 @@ def test_the_model_is_trained_on_the_whole_days_the_contract_carries() -> None:
 
 
 def test_treelite_matches_the_native_boosters(built: Built) -> None:
-    """ADR 0030: serving predicts through Treelite, which must equal the boosters themselves."""
+    """ADR 0032: serving predicts through Treelite, which must equal the boosters themselves."""
     bundle, _, vectors, _ = built
     worst = 0.0
     for values in vectors:
@@ -242,7 +242,7 @@ def test_the_xgboost_onnx_export_meets_e4_parity_on_100k_rows(built: Built) -> N
 
 
 def test_the_lightgbm_converter_accepts_float32_only_so_serving_uses_treelite(built: Built) -> None:
-    """Why LightGBM's ONNX export cannot meet the 1e-5 parity (ADR 0030): double thresholds,
+    """Why LightGBM's ONNX export cannot meet the 1e-5 parity (ADR 0032): double thresholds,
     float32 input. If the converter ever accepts double input this fails, and it is time to look
     again."""
     bundle, _, _, _ = built

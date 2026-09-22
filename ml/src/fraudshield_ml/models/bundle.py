@@ -147,7 +147,7 @@ class Bundle:
         return self.calibrate(*self.raw(row))
 
     def raw(self, row: Sequence[float]) -> tuple[float, float]:
-        """Each booster's uncalibrated probability for one row, through Treelite (ADR 0030).
+        """Each booster's uncalibrated probability for one row, through Treelite (ADR 0032).
 
         Treelite's tree inference is exact against both boosters to 1e-6 (tested per bundle in
         `test_treelite_matches_the_native_boosters`) and skips their Python wrappers, which cost

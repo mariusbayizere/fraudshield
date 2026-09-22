@@ -1,4 +1,4 @@
-"""ONNX exports of a bundle's boosters and their parity (E.4; ADR 0030).
+"""ONNX exports of a bundle's boosters and their parity (E.4; ADR 0032).
 
 E.4 lists ONNX exports among the model artefacts, with a parity test: maximum absolute probability
 difference below 1e-5 on 100,000 rows. The result differs by model:
