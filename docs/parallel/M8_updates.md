@@ -43,32 +43,60 @@ blocks.
 3. **Owner-directed:** `tools/src/fraudshield_tools/licences.py` allows OFL-1.1 for
    `@fontsource/*` and `@fontsource-variable/*` npm packages only (922cde8), with tests.
 
-## 4. Proposed, not made (files M8 does not own)
+## 4. For the M6 agent: implement GET /system/status
 
-1. **Contract: analysts cannot see degraded modes.** `degraded_modes` exists only on
-   `GET /admin/health` (`x-required-roles: [ADMIN]`), but E.9 puts the `ML_UNAVAILABLE`,
-   `DEGRADED_MODE` and "Real-time paused" banners above every screen for every role. Proposal: a
-   small read-only `GET /system/status` returning `degraded_modes` to any authenticated staff
-   role, or the same list on the alert WebSocket. Until then, only admins can be shown the
-   banners.
-2. **Contract/generator: the password schema.** `@hey-api/openapi-ts` renders `Password`
-   (`allOf` plus `x-validation`) as an intersection of `unknown`, which validates nothing.
-   Registration will apply `contracts/validation/password-vectors.json` itself; the contract
-   owner may prefer a plainer schema for generators.
-3. **Country packs: a zone abbreviation.** D-43 asks the UI to show "CAT"; the packs carry
+The owner approved a contract change (ADR 0081, commit 46893d7). **M6 owns the server side**,
+because the decision engine owns degraded state (C.4).
+
+**Requirement.** `GET /api/v1/system/status`, staff bearer token, any of ANALYST,
+SENIOR_ANALYST, RISK_OFFICER, ADMIN. Response 200:
+
+```json
+{ "degraded_modes": ["ML_UNAVAILABLE", "DEGRADED_MODE", "KAFKA_SPOOLING", "REALTIME_PAUSED"] }
+```
+
+- The body carries **only** that list: no component names, versions, hostnames, metrics or queue
+  depths. `additionalProperties: false`, `degraded_modes` required, empty array when healthy.
+- The values are the ones the platform already tracks for `GET /admin/health`: the ML circuit
+  breaker open (`ML_UNAVAILABLE`, C.4's Resilience4j path), the Redis-down database fallback
+  (`DEGRADED_MODE`), the Kafka spool in use (`KAFKA_SPOOLING`) and real-time delivery paused
+  (`REALTIME_PAUSED`).
+- Every console polls it every 60 seconds, so it must be cheap: read a cached in-memory flag set,
+  do not fan out health checks per request.
+- 401 and 403 as every staff endpoint; RFC 9457 problem details by default.
+- The contract, its authorisation-matrix row and the test
+  (`test_degraded_modes_are_the_same_list_for_staff_and_for_admins`) are already on
+  `m8/frontend`. `/admin/health` is unchanged.
+
+Until it exists, the console's development mocks serve it (`VITE_FS_DEGRADED` exercises the
+banners) and the banner area stays empty against a real backend.
+
+## 5. Proposed, not made (files M8 does not own)
+
+1. **Generator: the password schema.** `@hey-api/openapi-ts` renders `Password` (`allOf` plus
+   `x-validation`) as an intersection of `unknown`, which validates nothing. Registration will
+   apply `contracts/validation/password-vectors.json` itself; the contract owner may prefer a
+   plainer schema for generators. The same generator also drops unknown fields instead of
+   rejecting them, so `additionalProperties: false` is enforced by the contract tests, not by the
+   generated Zod.
+2. **Country packs: a zone abbreviation.** D-43 asks the UI to show "CAT"; the packs carry
    `utc_offset_hours` but no abbreviation, so the console shows "UTC+2". Proposal: a
    `timezone_abbreviation` parameter with the packs' usual provenance.
 
 ## 5. Risks and notes for other agents
 
-- **Bundle margin.** The initial JavaScript is 194.8 KB gzipped against D-39's 200 KB, with only
-  the shell. It was 224 KB before `zod` became `zod/mini` and the MUI select a native one. Every
-  screen must load lazily; `productionBundle.build.test.ts` fails the build when the budget is
-  exceeded.
-- **Playwright browser cache.** Installing Playwright 1.63's headless Chromium (revision 1243)
-  removed the older `chromium-1223` and `chromium_headless_shell-1223` from the shared
-  `~/.cache/ms-playwright`. A session that used them must reinstall with its own Playwright
-  version.
+- **Bundle budget (ADR 0080 §10).** The initial JavaScript is **158.3 KB** gzipped against a
+  self-imposed 170 KB, itself 30 KB under D-39's 200 KB; no single lazy chunk may exceed 120 KB
+  (the shell is 39.1 KB). The shell's frame is a lazy route, so the initial bundle is the auth
+  shell only. Every screen and every heavy dependency (DataGrid, Recharts, map, graph, Framer
+  Motion, other languages' namespaces) loads per route.
+  `productionBundle.build.test.ts` fails the build when either budget is exceeded.
+- **Playwright browser cache, action needed by other projects.** Installing Playwright 1.63's
+  headless Chromium (revision 1243) **removed** the older `chromium-1223` and
+  `chromium_headless_shell-1223` from the shared `~/.cache/ms-playwright` on this machine:
+  Playwright garbage-collects builds no installed version claims. Any other project or session on
+  this laptop that used them must reinstall its browsers (`npx playwright install`) before its
+  next run.
 - React 19.3, MUI 9.4, Tailwind 4.3 and Vite 8.3 (ADR 0003) are now all installed in `frontend/`.
 - `SystemBanners` renders exactly the OpenAPI `degraded_modes` enum, and `catalogues.test.ts`
   pins the language list to the contract's `Locale` enum. A contract change there needs an M8
