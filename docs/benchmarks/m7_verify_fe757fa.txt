@@ -1,0 +1,28 @@
+[INFO] You have 0 Checkstyle violations.
+[INFO] Tests run: 1131, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BugInstance size is 0
+[INFO] All coverage checks have been met.
+[INFO] You have 0 Checkstyle violations.
+[INFO] Tests run: 60, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BugInstance size is 0
+[INFO] All coverage checks have been met.
+[INFO] You have 0 Checkstyle violations.
+[INFO] Tests run: 50, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BugInstance size is 0
+[INFO] All coverage checks have been met.
+[INFO] You have 0 Checkstyle violations.
+[INFO] Tests run: 124, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BugInstance size is 0
+[INFO] All coverage checks have been met.
+[INFO] You have 0 Checkstyle violations.
+[INFO] Tests run: 22, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BugInstance size is 0
+[INFO] All coverage checks have been met.
+[INFO] FraudShield common domain primitives ............... SUCCESS [ 37.061 s]
+[INFO] FraudShield database schema, security tests and demo seed SUCCESS [ 44.460 s]
+[INFO] FraudShield audit log .............................. SUCCESS [01:25 min]
+[INFO] FraudShield staff identity and API authentication .. SUCCESS [02:58 min]
+[INFO] FraudShield administration API ..................... SUCCESS [ 56.683 s]
+[INFO] BUILD SUCCESS
+commit fe757fa dirty=0 start 2026-09-22T06:20:41Z load 3.13 4.09 4.37
+end 2026-09-22T06:27:26Z load 5.13 4.06 4.26
