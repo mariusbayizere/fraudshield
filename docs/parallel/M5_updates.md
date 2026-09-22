@@ -32,10 +32,19 @@ The scorer needs only a handful of registry REST calls: resolve an alias, downlo
 artifacts, log metrics. So `ml/` talks to the MLflow REST API with the standard library instead,
 which also keeps every serving process lighter.
 
-## 2. `docs/traceability/requirements_matrix.md` is re-rendered on this branch
+## 2. Generated and shared files changed on this branch
 
-The pre-commit governance hook refuses a commit that adds a requirement-tagged test unless the
-generated matrix is re-rendered (`fs-traceability render`). So M5 commits include the re-rendered
-file. It is generated output, not a hand edit, and `requirements.yaml` itself is untouched. The
-diffs only ever add `ml/tests/serving/...` and `ml/tests/featurestore/...` test locations to M5
-rows. If it conflicts with another branch at merge, resolve it by re-rendering, not by hand.
+Owner rule (2026-09-22): `uv.lock` and `docs/traceability/requirements_matrix.md` may change on any
+branch whose inputs changed. They are not ownership violations. On merge, never hand-resolve a
+conflict in either: merge the inputs, then re-run `uv lock` or `fs-traceability render`.
+`requirements.yaml` stays untouched. Never use `--no-verify` (G.6).
+
+Each commit on `m5/scoring` that touches one of them:
+
+| Commit | `uv.lock` | matrix | Input that changed |
+|---|---|---|---|
+| 9e46dfc | yes | | `ml/pyproject.toml`: serving dependencies |
+| 18c92ac | | yes | new tagged test `ml/tests/serving/test_generated.py` |
+| 5552530 | | yes | new tagged tests `ml/tests/models/` |
+| 78dd576 | | yes | new tagged tests `ml/tests/models/` |
+| 57fcf7c | | yes | new tagged tests `ml/tests/featurestore/`, `ml/tests/serving/` |
