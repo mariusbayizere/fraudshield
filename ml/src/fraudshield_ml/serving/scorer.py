@@ -23,6 +23,7 @@ import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from fraudshield_ml.features.types import Transaction
 from fraudshield_ml.featurestore.reference import Reference
 from fraudshield_ml.models.bundle import SHAP_THRESHOLD, Bundle
 from fraudshield_ml.serving import features
@@ -52,6 +53,8 @@ class Scored:
 
     result: pb.ScoringResult
     values: Mapping[str, features.FeatureValue]
+    #: The feature paths' record of the transaction, for the store writer.
+    transaction: Transaction
 
 
 class Scorer:
@@ -113,7 +116,7 @@ class Scorer:
         for stage, ms in timings:
             result.stage_timings.add(stage=stage, milliseconds=ms)
         result.scoring_duration_ms = math.ceil((time.perf_counter() - started) * 1000.0)
-        return Scored(result=result, values=values)
+        return Scored(result=result, values=values, transaction=tx)
 
     def _explain(
         self,

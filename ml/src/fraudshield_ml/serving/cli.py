@@ -29,6 +29,7 @@ def parse(argv: Sequence[str] | None) -> argparse.Namespace:
     serve.add_argument("--workers", type=int, default=os.cpu_count() or 1)
     serve.add_argument("--threads", type=int, default=4, help="gRPC threads per worker")
     serve.add_argument("--redis", help="Redis URL of the threshold config store (FR-02-06)")
+    serve.add_argument("--feature-store", help="Redis URL of the feature store to write (FR-02-09)")
     serve.add_argument("--shadow-log", type=Path, help="JSON-lines sink for fs.ml.shadow events")
     serve.add_argument("--cache", type=Path, default=Path(tempfile.gettempdir()) / "fs-models")
     tls = serve.add_argument_group("mTLS (required unless --insecure)")
@@ -65,6 +66,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         model_name=args.model_name,
         cache=args.cache,
         redis_url=args.redis,
+        feature_store_url=args.feature_store,
         shadow_log=args.shadow_log,
         status_dir=status_dir,
         threads=args.threads,

@@ -31,6 +31,8 @@ import grpc  # type: ignore[import-untyped]
 from grpc_health.v1 import health, health_pb2, health_pb2_grpc  # type: ignore[import-untyped]
 
 from fraudshield_ml.featurestore.reference import Reference
+from fraudshield_ml.featurestore.store import FeatureStore
+from fraudshield_ml.featurestore.writer import StoreWriter
 from fraudshield_ml.models.bundle import Bundle
 from fraudshield_ml.serving.features import RequestError
 from fraudshield_ml.serving.generated import scoring_pb2 as pb
@@ -44,9 +46,15 @@ LOG = logging.getLogger(__name__)
 
 
 class ScoringService:
-    def __init__(self, holder: ModelHolder, shadow: ShadowRunner | None = None) -> None:
+    def __init__(
+        self,
+        holder: ModelHolder,
+        shadow: ShadowRunner | None = None,
+        writer: StoreWriter | None = None,
+    ) -> None:
         self.holder = holder
         self.shadow = shadow
+        self.writer = writer
 
     def Score(self, request: pb.ScoreRequest, context: Any) -> pb.ScoreResponse:  # noqa: N802
         scorer = self.holder.production  # read once: this request stays on this model
@@ -61,6 +69,8 @@ class ScoringService:
             context.abort(grpc.StatusCode.INTERNAL, f"scoring failed: {type(error).__name__}")
         if self.shadow is not None:
             self.shadow.offer(request, scored.result)
+        if self.writer is not None:
+            self.writer.offer(scored.transaction)
         return pb.ScoreResponse(result=scored.result)
 
     def GetModelStatus(  # noqa: N802
@@ -154,6 +164,9 @@ class WorkerConfig:
     model_name: str = "fraudshield-ensemble"
     cache: Path = Path("/tmp/fraudshield-models")  # noqa: S108 - overridden in deployment
     redis_url: str | None = None
+    #: When set, each worker writes every scored transaction to the feature store at this Redis
+    #: URL (FR-02-09; see `featurestore.writer` for why the scorer is the writer).
+    feature_store_url: str | None = None
     shadow_log: Path | None = None
     #: Each worker writes `<pid>.json` here on every swap, for the admin port (`serving.admin`).
     status_dir: Path | None = None
@@ -181,7 +194,11 @@ def run_worker(config: WorkerConfig) -> None:
         if config.shadow_log is not None
         else None
     )
-    service = ScoringService(holder, shadow)
+    writer = None
+    if config.feature_store_url is not None:
+        store_redis = _redis(config.feature_store_url, timeout=1.0)
+        writer = StoreWriter(FeatureStore(store_redis, reference))
+    service = ScoringService(holder, shadow, writer)
     server, health_servicer, _ = build_server(
         service,
         config.address,
@@ -249,12 +266,12 @@ def write_status(directory: Path, holder: ModelHolder) -> None:
     staging.replace(directory / f"{os.getpid()}.json")
 
 
-def _redis(url: str | None) -> Any:
+def _redis(url: str | None, timeout: float = 0.05) -> Any:
     if url is None:
         return None
     import redis  # noqa: PLC0415 - only when configured
 
-    return redis.Redis.from_url(url, decode_responses=True, socket_timeout=0.05)
+    return redis.Redis.from_url(url, decode_responses=True, socket_timeout=timeout)
 
 
 def serve(config: WorkerConfig, workers: int) -> list[multiprocessing.process.BaseProcess]:
