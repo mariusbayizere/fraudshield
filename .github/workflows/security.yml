@@ -33,18 +33,39 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # A separate step, so a registry outage or rate limit reads as a download failure rather than
+      # as findings. Trivy already falls back from mirror.gcr.io to ghcr.io.
+      - name: Download the vulnerability database (3 attempts)
+        run: |
+          for attempt in 1 2 3; do
+            infrastructure/bin/trivy fs --download-db-only --no-progress && exit 0
+            echo "::warning::trivy DB download attempt $attempt failed"
+            sleep $((attempt * 20))
+          done
+          exit 1
       - name: Scan lockfiles (uv.lock, pnpm-lock.yaml, Maven poms)
         run: |
-          infrastructure/bin/trivy fs --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed \
-            --exit-code 1 --format table .
-      - name: Full report (all severities) for the artifact
-        if: always()
-        run: infrastructure/bin/trivy fs --scanners vuln --format json --output trivy-dependencies.json .
+          infrastructure/bin/trivy fs --skip-db-update --no-progress --scanners vuln --format json \
+            --output trivy-dependencies.json .
+          infrastructure/bin/trivy convert --scanners vuln --format table trivy-dependencies.json \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Gate on HIGH/CRITICAL vulnerabilities that have a fix
+        run: |
+          gated=$(jq '[.Results[]? | .Vulnerabilities[]?
+                       | select((.Severity == "HIGH" or .Severity == "CRITICAL")
+                                and (.FixedVersion // "") != "")] | length' trivy-dependencies.json)
+          echo "HIGH/CRITICAL with a fix: $gated" | tee -a "$GITHUB_STEP_SUMMARY"
+          jq -r '.Results[]? | .Target as $t | .Vulnerabilities[]?
+                 | select((.Severity == "HIGH" or .Severity == "CRITICAL") and (.FixedVersion // "") != "")
+                 | "\($t)\t\(.PkgName) \(.InstalledVersion) -> \(.FixedVersion)\t\(.VulnerabilityID)"' \
+            trivy-dependencies.json | tee -a "$GITHUB_STEP_SUMMARY"
+          test "$gated" -eq 0
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: trivy-dependencies
           path: trivy-dependencies.json
+          if-no-files-found: ignore
           retention-days: 30
 
   trivy-configuration:
