@@ -1,0 +1,42 @@
+\section{Fraud scenarios and variants}
+\label{app:scenarios}
+
+The eight scenarios and their main signals, as the scenario design notes give them
+(\texttt{docs/\allowbreak ml/\allowbreak scenarios/}), with the fraud rows each contributes to the draw \texttt{d8083dbc}
+(Table~\ref{tab:scenarios}). The notes describe what a detection system can observe, not how to
+commit fraud. Every behavioural parameter of the scenarios is assumed
+(\texttt{dataset/\allowbreak params\_provenance.md}); none is taken from a published East African fraud
+statistic.
+
+\begin{longtable}{p{0.2\linewidth}p{0.58\linewidth}r}
+\toprule
+Scenario & Main signals & Fraud rows \\
+\midrule
+\endhead
+SIM-swap takeover & A SIM swap shortly before transfers to new or mule counterparties. & \nScenSimSwap{} \\
+Account takeover & A new device, then online spend and transfers. & \nScenATO{} \\
+Agent fraud & Cash-outs concentrated at a few agents, in round sums. & \nScenAgent{} \\
+Velocity fraud & Bursts of small payments within minutes. & \nScenVelocity{} \\
+Card-not-present & Online or card spend from an unseen device. & \nScenCNP{} \\
+Mule accounts & Many inbound drains and fast forwarding outward (fan-in and fan-out). & \nScenMule{} \\
+Merchant fraud & Card charges clustering at a few merchants. & \nScenMerchant{} \\
+Synthetic identity & A quiet new account, then a bust-out. & \nScenSynth{} \\
+\midrule
+Total & & \nScenTotal{} \\
+\bottomrule
+\end{longtable}
+
+Shared by every scenario: fraud rows go through the same code path, formats and null rules as
+legitimate rows, and incidents follow the victim's daily activity profile, with a share at night.
+
+\paragraph{Variants.} Three variants are scored separately in Section~\ref{sec:generalisation}.
+\begin{itemize}
+  \item \texttt{adapted\_below\_threshold}: from the thirteenth simulated month, some amounts adapt
+  to just below a published rule threshold. It is present in training and test.
+  \item \texttt{novel\_esim\_delayed\_drain}: a SIM-swap sub-variant whose drain follows the
+  enabling SIM event by days rather than minutes; \nNovelRows{} rows, test period only.
+  \item \texttt{reversal\_scam\_social\_engineering}: the pre-registered non-burst variant
+  (ADR 0028); \nRevRows{} rows, test period only, generated as \texttt{mule\_account} rows and
+  paid to a prior contact of the victim. The battery scores \nRevFraud{} fraud rows of it
+  (Section~\ref{sec:generalisation}).
+\end{itemize}
