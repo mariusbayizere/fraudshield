@@ -1745,3 +1745,53 @@ partition and the prior sets over every partition earlier than the corpus;
 `test_truncating_the_corpus_changes_no_unbounded_feature` scores the same row against the full
 corpus and a truncated one and requires all five to be identical, with a control proving the
 truncated corpus really does hide the history.
+
+## M7 — staff identity, authorisation and audit
+
+### 2026-09-22 · A fix whose test never reached it
+
+This belongs with the vacuous-test entries (2026-09-19, "A test whose fixture lacks the condition it
+tests passes vacuously"). It is the same defect one level up: there the *test* was vacuous; here the
+*fix* was, and a test existed but never reached the fix.
+
+**The defect.** After M7 moved staff accounts onto JPA (ADR 0071), the independent review found
+that a row-locking query hands back the entity the transaction already holds, without refreshing it.
+The case is an administrator editing their own account, whom the service reads as the actor before
+locking the target. A full-row flush could then write an old password hash and token version back
+over a concurrent password change. The fix added a `refresh` after the locking query, plus
+`@DynamicUpdate`. Its test passed, and the review record said "fixed".
+
+**The fix did not work in the case it was written for.** Hibernate 7 compares the version of the row
+the locking query returns with the copy it holds. When the version has moved, which is exactly
+when the copy is stale, it throws "conflicting version of entity already held in persistence
+context" *from the query itself*. The `refresh` on the next line never ran, and the race answered
+500 instead of 409. The test had seeded the conflict with a password change, which does not advance
+the version, so the query succeeded and the refresh ran. It only ever exercised the branch where the
+fix was not needed. `@DynamicUpdate` independently blocked the write-back, so every assertion held.
+
+**How it was found.** Mutation K1 removed only the refresh, and it survived. The survivor had a
+ready explanation ("defence in depth: `@DynamicUpdate` covers it"), and the review record briefly
+filed it that way. The owner asked instead whether the refresh protects anything the column-only
+save does not, and required either a test that fails without it or a written argument that nothing
+does. Writing that test meant forcing the real interleaving: holding the row lock while a lockout
+committed, which advanced the version. The first run failed *with the fix in place*, and the stack
+trace pointed at the locking query, not at the refresh. The fix became lock-by-refresh,
+`refresh(entity, PESSIMISTIC_WRITE)`, which has no query to reject the row (`8f6bdba`).
+
+**It happened again the same day.** The analytic staleness bound for the session cache had a
+surviving mutation too: B1, which anchors only the version tier after the read. The ready
+explanation was that a missing session entry reloads both tiers, so the version tier can never act
+alone. That is true for one instance and one session. It is false once another instance has cached
+a second session of the same account in Redis. The test for that path kills B1 at exactly 2,000 ms
+(`5b728a1`).
+
+**The rule.** A surviving mutation is a question, not a verdict. "Equivalent" and "defence in
+depth" are claims, and each needs the same evidence as any other: a test that fails without the
+code, or a written argument covering every path. Two survivors were explained away with a
+plausible sentence, and both sentences were wrong.
+
+*Why it belongs in the paper:* the earlier vacuous tests were silent. This one was worse, because
+it produced a false positive about a fix. The review table read "Fixed; test; mutation killed" —
+killed for K2, which removed *both* defences. A reader of the record would have seen three
+confirmations of a fix that did nothing in its own scenario. Counting killed mutations measures the
+tests; only investigating the survivors measures the claims.

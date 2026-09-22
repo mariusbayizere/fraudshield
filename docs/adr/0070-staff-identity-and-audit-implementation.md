@@ -124,7 +124,7 @@ with Ed25519 from the JDK.
 
 A chain spans every institution that wrote to its partition. The anchoring job (`fs_app`) and the
 verifier (`fs_compliance_ro`) read positions and hashes through two SECURITY DEFINER functions
-(`audit_chain_head`, `audit_chain_hashes`, V12). They never read content.
+(`audit_chain_head`, `audit_chain_hashes`, V70). They never read content.
 
 The job refuses to sign a chain whose `prev_hash` links or sequence are broken. The verifier checks
 every signature up to `--to`, recomputes the anchors inside `[--from, --to]`, and re-hashes the
@@ -136,7 +136,7 @@ signature verification and is reported, but it can still block that day's legiti
 ### 11. `users.version` for optimistic locking, returned as an ETag
 
 `StaffUserUpdate.version` has no column in M1's schema, and `StaffUser` does not return a version.
-V12 adds `users.version`. It was first advanced by a trigger when an administrator-editable field
+V70 adds `users.version`. It was first advanced by a trigger when an administrator-editable field
 changed. ADR 0071 replaced the trigger with a JPA `@Version`: administrator edits go through the
 entity and advance it, and sign-in bookkeeping uses bulk updates that leave it alone, so a sign-in
 still never makes an edit stale. The admin API returns it in the `ETag` header of

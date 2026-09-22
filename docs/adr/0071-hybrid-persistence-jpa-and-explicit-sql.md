@@ -81,7 +81,7 @@ triggers and a hash-chained audit log.
      - They leave it alone for the failure count, last sign-in, token version, email verification
        and Google link, so an ordinary sign-in never makes an administrator's edit stale.
 
-     This keeps the behaviour of the removed V12 trigger (which fired when an editable column
+     This keeps the behaviour of the removed V70 trigger (which fired when an editable column
      changed); two writers of one version column would disagree. One deliberate difference: an
      entity edit that only clears the failure count or moves a lock's end also advances it. The
      API still returns the version as an `ETag` (the contract is frozen, ADR 0070 §11). Tests:
@@ -134,6 +134,77 @@ triggers and a hash-chained audit log.
    - Use explicit SQL, or batched `COPY`, for the decision hot path, the hypertables
      (`transactions`, `fraud_scores`, `shadow_scores`, `audit_events`) and every append-only table.
    - Every audit record goes through `AuditLog`.
+
+6. **Staleness bounds, derived rather than measured** (owner decision 2026-09-22). The 5 s gates
+   for token-version invalidation (D-27) and API-key revocation (FR-06-07) rest on analysis, not on
+   a measurement. At `85aff03` the worst case measured 4,620 ms on a loaded laptop, too thin a
+   margin to rest on.
+
+   *Definitions.*
+   - A change commits at time *c*. Its pub/sub announcement and (for sessions) its Redis write are
+     lost.
+   - A **stale answer** is one given from a value read from the database before *c*.
+   - The bound is the latest time after *c* at which any instance can still give a stale answer.
+   - After that time, the next check reads the database, which has the change. That request's
+     own processing (one read) is the "check path". It adds latency to that one response, not
+     staleness.
+
+   *API-key cache (one tier, TTL T = 2 s).*
+   - `credential()` takes `now` from the monotonic clock *before* the database read, and caches
+     the record until `now + T`.
+   - A stale record was read before *c*, so `now` < *c*, and it expires before *c + T*. The read's
+     duration does not appear.
+   - **Bound: T = 2 s**, exposed as `ApiKeyAuthenticator.worstCaseStaleness()`.
+
+   *Session cache, as it was (Redis TTL R = 2 s, in-process TTL L = 1 s).*
+   - `load()` set both TTLs *after* the read.
+   - An instance could refill its in-process copy from Redis just before the Redis entry expired
+     and keep it for a further L.
+   - So the bound was R + L + δ, where δ is the time from the read to the Redis write. δ has no
+     bound: garbage-collection pauses, scheduling, a slow Redis. That is the 4,620 ms (3 s plus
+     about 1.6 s of δ).
+   - A bound containing an unbounded term cannot be asserted independently of machine load, so the
+     design was changed rather than the TTL:
+     - `load()` takes its anchors *before* the read. The in-process copy lives until
+       `start + L`. The Redis value carries the wall-clock deadline `start + R`, and it is not
+       written at all if that deadline has already passed.
+     - A reader accepts a Redis value only before its deadline, and caps its in-process copy at
+       that deadline: `min(L, deadline − now)`.
+     - Every stale copy therefore descends from a read that began before *c*, and dies by that
+       read's start plus max(R, L).
+   - **Bound: max(R, L) + σ = 2 s + σ**, exposed as `SessionStateCache.worstCaseStaleness()`. σ is
+     the wall-clock skew between instances, because the deadline written by one instance is read
+     by another. With NTP-synchronised hosts, σ is milliseconds.
+
+   *The TTL rule.* The owner's rule is to lower the TTL if the bound plus a reasonable scheduling
+   allowance comes within 1 s of the 5 s gate.
+   - With a 1 s allowance: sessions 2 s + σ + 1 s ≈ 3 s; API keys 2 s + 1 s = 3 s. Both leave
+     about 2 s of margin, so **the TTLs stay at their defaults**.
+   - The old session design (3 s + δ + 1 s ≥ 4 s) would have triggered the rule, and a lower TTL
+     would not have removed δ. The anchoring does.
+
+   *Tests (fake time, so the bound is asserted to the millisecond whatever the load).*
+   - `FakeTime` drives both clocks. The database read is made slow *for real*: a held
+     `ACCESS EXCLUSIVE` table lock blocks the read after its anchors are taken, while fake time
+     advances by 0, 0.5, 1.5 or 2.5 s.
+   - `SessionInvalidationTimingTest.staleAnswersEndWithinTheAnalyticBoundHoweverSlowTheRead` and
+     `ApiKeyLifecycleTest.revokedKeyIsRefusedWithinTheAnalyticBoundHoweverSlowTheRead` require a
+     stale answer 1 ms inside the bound (so the test is not vacuous) and a refusal at the bound
+     and at every probe after it.
+   - `SessionInvalidationTimingTest.staleVersionCannotOutliveTheBoundThroughAnotherSession` covers
+     the one path where the version tier acts alone. Another instance caches a second session of
+     the account in Redis after the change, so only the version copy can be stale.
+
+   *Mutations, all killed:*
+   - B1: version tier anchored after the read, killed only by the second-session test (it
+     survived the first one; see the lab notebook, 2026-09-22);
+   - B2: deadline ignored;
+   - B3: in-process copy not capped at the deadline;
+   - B4: deadline taken after the read;
+   - B5: API-key expiry anchored after the read.
+
+   *Re-measured:* with the announcement and Redis write lost, 20 runs gave p50 1,970 ms and max
+   2,030 ms. Before, the figures were p50 2,009 ms and max 4,620 ms.
 
 ## Consequences
 
