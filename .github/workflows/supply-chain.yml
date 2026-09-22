@@ -6,8 +6,9 @@
 # in the same job against the expected workflow identity. Pull requests only build and scan;
 # signing and pushing happen on pushes to this repository's branches.
 #
-# Images: each row of the matrix builds only when its Dockerfile exists. A missing Dockerfile is
-# reported as a warning and in the job summary ("NOT BUILT"), never as a pass.
+# Images: `image-matrix` lists every service image and keeps those whose Dockerfile exists. Only
+# those get an `images` job; a missing Dockerfile is a warning and a "NOT BUILT" line in the
+# summary. No job reports success for an image that was never built.
 name: supply-chain
 
 on:
@@ -58,8 +59,43 @@ jobs:
           path: fraudshield-source.cdx.json*
           retention-days: 90
 
+  image-matrix:
+    name: which service images can be built?
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+      any: ${{ steps.select.outputs.any }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: select
+        # Size limits from SRS 8.1 stage 6; edge and worker limits are FraudShield's own.
+        run: |
+          all='[
+            {"image": "fraudshield-api", "dockerfile": "backend/Dockerfile", "context": "backend", "max_mb": 500},
+            {"image": "fraudshield-ml", "dockerfile": "ml/Dockerfile", "context": ".", "max_mb": 1200},
+            {"image": "fraudshield-ml-worker", "dockerfile": "ml/Dockerfile.worker", "context": ".", "max_mb": 1200},
+            {"image": "fraudshield-frontend", "dockerfile": "frontend/Dockerfile", "context": "frontend", "max_mb": 150},
+            {"image": "fraudshield-edge", "dockerfile": "infrastructure/docker/edge/Dockerfile", "context": "infrastructure/docker/edge", "max_mb": 100}
+          ]'
+          present='[]'
+          while read -r row; do
+            file=$(jq -r .dockerfile <<<"$row")
+            if [ -f "$file" ]; then
+              present=$(jq -c --argjson r "$row" '. + [$r]' <<<"$present")
+            else
+              name=$(jq -r .image <<<"$row")
+              echo "::warning title=$name not built::$file does not exist yet"
+              echo "NOT BUILT: $name ($file does not exist yet)" >>"$GITHUB_STEP_SUMMARY"
+            fi
+          done < <(jq -c '.[]' <<<"$all")
+          echo "matrix={\"include\":$present}" >>"$GITHUB_OUTPUT"
+          echo "any=$(jq 'length > 0' <<<"$present")" >>"$GITHUB_OUTPUT"
+
   images:
     name: image ${{ matrix.image }} (build, size, scan, SBOM, sign)
+    needs: image-matrix
+    if: needs.image-matrix.outputs.any == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
@@ -68,37 +104,17 @@ jobs:
       id-token: write # keyless signing
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          # Size limits from SRS 8.1 stage 6; edge and worker limits are FraudShield's own.
-          - {image: fraudshield-api, dockerfile: backend/Dockerfile, context: backend, max_mb: 500}
-          - {image: fraudshield-ml, dockerfile: ml/Dockerfile, context: ., max_mb: 1200}
-          - {image: fraudshield-ml-worker, dockerfile: ml/Dockerfile.worker, context: ., max_mb: 1200}
-          - {image: fraudshield-frontend, dockerfile: frontend/Dockerfile, context: frontend, max_mb: 150}
-          - {image: fraudshield-edge, dockerfile: infrastructure/docker/edge/Dockerfile, context: infrastructure/docker/edge, max_mb: 100}
+      matrix: ${{ fromJSON(needs.image-matrix.outputs.matrix) }}
     env:
       IMAGE: ghcr.io/mariusbayizere/${{ matrix.image }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - id: present
-        env:
-          DOCKERFILE: ${{ matrix.dockerfile }}
-        run: |
-          if [ -f "$DOCKERFILE" ]; then
-            echo "build=true" >>"$GITHUB_OUTPUT"
-          else
-            echo "build=false" >>"$GITHUB_OUTPUT"
-            echo "::warning title=${{ matrix.image }} not built::$DOCKERFILE does not exist yet"
-            echo "NOT BUILT: ${{ matrix.image }} ($DOCKERFILE does not exist yet)" >>"$GITHUB_STEP_SUMMARY"
-          fi
       - name: Build
-        if: steps.present.outputs.build == 'true'
         env:
           DOCKERFILE: ${{ matrix.dockerfile }}
           CONTEXT: ${{ matrix.context }}
         run: docker build --file "$DOCKERFILE" --tag "$IMAGE:$GITHUB_SHA" "$CONTEXT"
       - name: Size limit
-        if: steps.present.outputs.build == 'true'
         env:
           MAX_MB: ${{ matrix.max_mb }}
         run: |
@@ -107,17 +123,15 @@ jobs:
           echo "${{ matrix.image }}: ${mb} MB (limit ${MAX_MB} MB)" | tee -a "$GITHUB_STEP_SUMMARY"
           test "$mb" -lt "$MAX_MB"
       - name: Trivy image scan (HIGH/CRITICAL with a fix)
-        if: steps.present.outputs.build == 'true'
         run: |
           infrastructure/bin/trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
             "$IMAGE:$GITHUB_SHA"
       - name: Image SBOM (CycloneDX)
-        if: steps.present.outputs.build == 'true'
         run: |
           infrastructure/bin/syft scan "docker:$IMAGE:$GITHUB_SHA" \
             --output "cyclonedx-json=${{ matrix.image }}.cdx.json"
       - name: Push, sign and attest the SBOM by digest
-        if: steps.present.outputs.build == 'true' && github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -131,7 +145,6 @@ jobs:
             --certificate-oidc-issuer "$CERTIFICATE_ISSUER" "$digest" >/dev/null
           echo "${{ matrix.image }}: $digest signed and SBOM attested" >>"$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: steps.present.outputs.build == 'true'
         with:
           name: sbom-${{ matrix.image }}
           path: ${{ matrix.image }}.cdx.json
