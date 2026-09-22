@@ -89,6 +89,23 @@ developer machine ↔ public repository.
 | Customer verification (5) | S: guessed or reused links | Token hash lookup, single use (`verificationTokenAnswersOnce`), expiry trigger | schema M1, page M6 |
 | Front end (2) | I: cached alert data on shared phones (D-29) | No offline decision replay without re-validation, cache limits | M8 |
 
+### 3.6 Staff identity, administration and audit (M7: implemented, ADR 0070)
+
+| STRIDE | Threat | Control | Evidence |
+|---|---|---|---|
+| S | Wrong role, API key or anonymous caller reaching a staff operation | URL policy read from the packaged contract, deny by default; method-level rules equal to the matrix; API keys hold scopes, never roles | `AuthorisationMatrixTest` (every operation × anonymous, four roles, four scope sets) |
+| S | Stolen access token used after sign-out, password change, role change or deactivation | `token_version` and `sid` checked per request through a 1 s / 2 s / database cache with pub/sub invalidation | `SessionTest`, `SessionInvalidationTimingTest` (measured, < 5 s even with the announcement lost) |
+| S | Stolen refresh token | Rotation on every use; reuse revokes the family; httpOnly, Secure, SameSite=Strict, path-scoped cookie; double-submit CSRF on cookie-bearing operations | `SessionTest` |
+| S | Password guessing | 10 attempts / 15 min per IP (office ceiling per institution allowlist), per (IP, email) limit, 5-failure lock with 30-min auto-unlock, bcrypt cost 12 | `LoginTest`, `PasswordHasherTest` |
+| I | Account enumeration | Same 401/423 sequence and one bcrypt for unknown, inactive and real accounts; 202 for every registration and reset request, padded to a minimum duration | `LoginTest`, `RegistrationTest`, `PasswordResetTest` |
+| S | Google account from outside the institution | Server-side ID-token verification (signature, iss, aud, exp, email_verified); self-service domain allowlist; new accounts PENDING_APPROVAL with no access (D-23) | `GoogleSignInTest` |
+| E | Self-elevation | Registration records a requested role only; administrators cannot change their own role or status; admin writes re-check the actor's role in the database | `RegistrationTest`, `UserAdministrationTest` |
+| E | Two administrators demoting each other | Admin-affecting edits lock the institution's active administrators first | `concurrentMutualDemotionLeavesOneActiveAdmin` |
+| S | API-key guessing or timing | 256-bit secrets, HMAC with pepper, constant-time compare, unknown key IDs hashed too; 2 s cache and pub/sub revocation | `ApiKeyLifecycleTest`, `NetworkAndKeysTest` |
+| T | SSRF through webhook URLs | HTTPS, no user info, no IP literals, every resolved address public; the dispatcher must re-check at delivery (M6) | `WebhookUrlValidatorTest` |
+| T/R | Audit rows edited, deleted or re-ordered, including by a superuser who recomputes hashes | Database-assigned chain (V8); daily Ed25519-signed RFC 6962 anchors over sequence ranges; `fraudshield audit verify` | `AuditAnchoringTest`, `AuditVerifyCommandTest` |
+| I | Secrets at rest | Password bcrypt; OTP HMAC; API keys HMAC; webhook and Google tokens AES-256-GCM with associated data; unlock and reset tokens stateless; emails with credentials never written to the outbox | `CryptoTest`, `ApiKeyLifecycleTest` |
+
 ### 3.5 Development and CI (carried from the M0 review)
 
 | Element | Threat | Control | Residual |
@@ -105,6 +122,10 @@ developer machine ↔ public repository.
 | # | Risk | Owner action or milestone |
 |---|---|---|
 | R-1 | `main` ruleset (no force push, no deletion) not verifiable without authentication | Owner confirms (F-06) |
-| R-2 | Audit anchors unsigned until the audit service exists | Audit service milestone |
+| R-2 | Audit anchors are signed (M7), but `fs_app` can still insert a forged anchor that blocks the day's legitimate one (PB-11); verification reports it | Dedicated anchoring role (needs bootstrap and Compose changes) |
 | R-3 | Application role `fs_app` necessarily reads credential hashes of its tenant; a SQL injection in the API would expose them | Parameterised queries only (M5/M6 persistence layer), static analysis in CI |
 | R-4 | Third-party penetration test | REQUIRES_EXTERNAL_PARTY (D-28) |
+| R-5 | A temporary password from an administrator works until the user changes it; the contract cannot tell the console to force a change | Contract change: `password_change_required` (ADR 0070 §9) |
+| R-6 | Staff emails carrying unlock links, reset codes or temporary passwords are lost if the instance dies between commit and send | Accepted: the user repeats the request, waits for auto-unlock or asks an administrator (ADR 0070 §8) |
+| R-7 | Two colluding administrators, or one who approves a sock-puppet account, bypass separation of duties (ADR 0014) | Dual control on role grants (not built) |
+| R-8 | Rate limits and caches degrade to per-instance behaviour while Redis is down | Accepted degraded mode (C.4); per-account lockout stays in the database |
