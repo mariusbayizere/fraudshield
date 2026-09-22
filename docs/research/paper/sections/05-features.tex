@@ -1,0 +1,95 @@
+\section{Features and training/serving parity}
+\label{sec:features}
+
+\subsection{The feature catalogue}
+
+Every transaction yields a vector of \nFeatures{} features in ten groups: velocity (counts and
+sums over 60 seconds to 7 days, and the ratio of the last hour's count to the mean hourly count
+over the prior 30 days), amount behaviour, temporal (local hour and day from coordinates, night,
+month-end salary windows, time since the last transaction), geographic (distance and implied
+speed from the last transaction, distance from a 90-day home centroid, first appearance in a
+country, and a lagged, smoothed confirmed-fraud rate per H3 cell), counterparty (novelty, age,
+distinct senders in 24 hours as a mule signal, lagged confirmed fraud), device and channel,
+account profile (including days since a SIM swap), agent-specific, corridor, and a
+label-free synthetic-identity composite. Every label-derived feature uses only labels whose
+availability time precedes the transaction. The catalogue in the repository is generated from the
+code's feature registry, so documentation cannot drift from implementation.
+
+\subsection{Two paths, and a test that can fail}
+
+A model is trained on vectors computed in batch over history and served vectors computed online,
+one transaction at a time. If the two differ, every offline metric describes a system that does
+not exist in production, and the gap is invisible in both. The parity design settles six things
+before any feature was written:
+\begin{enumerate}
+  \item \textbf{What counts as identical.} The specification's absolute tolerance of $10^{-9}$ is
+        both vacuous (millions of units in the last place of slack on a flag) and unsatisfiable
+        (below float64 resolution on large seven-day sums). Integral and categorical features
+        must match exactly; real-valued features must satisfy
+        $|b - o| \le \nParityRel{} + \nParityRel{}\,|b|$, stricter than the specification at every
+        realistic magnitude; NaN positions must match exactly (ADR 0025).
+  \item \textbf{What the paths are fed.} Prefix replay: the online path receives an account's
+        transactions one at a time, and the batch path is computed on the prefix ending at each
+        one. A batch window that reaches forward in time fails immediately.
+  \item \textbf{Which cases are covered}: zero history, both sides of every window boundary, all
+        six channels (so the NaN contract is exercised), label-derived features against their
+        availability time, per-account replay, a cold cache flushed mid-replay, and a history
+        that spans a configuration change, asserted to contain one before agreement is asserted,
+        since the two paths agree on every transaction newer than the last change (ADR 0026).
+  \item \textbf{Independence, enforced.} A parity test is blind to a bug both paths share, so a
+        test walks the import graph and fails if either path imports the other; both share only
+        the declarative registry.
+  \item \textbf{Proof the test can fail.} Deliberately wrong online paths (mutations) must be
+        caught; a mutation that passes specifies a missing case.
+  \item \textbf{Three paths, not two.} A database aggregate that serves velocity features when
+        the cache is down is a third computation of the same quantities and is held to the same
+        contract.
+\end{enumerate}
+The limit is stated rather than hidden: the parity suite is blind by construction to a defect both
+paths share, and one such defect (the velocity ratio not filtering by account) was found by an
+index-equivalence test, not by parity. Feature computation is deterministic, byte-identical across
+batch sizes of \nBatchSizes{}. The online path's latency (a p95 below 10~ms including the cache
+fetch is the M3 target) is \notyet{M10}, because latency percentiles are admissible only from a
+dedicated machine (ADR 0010).
+
+\subsection{The single-feature floor}
+\label{sec:floor}
+
+The D-08 control holds for the dataset's columns and fails for the engineered features.
+Measured at \nScoredRows{} scored rows holding \nScoredFraud{} confirmed fraud, with categorical
+encodings folded by whole account, \nFeaturesAboveCeiling{} of the \nFeatures{} features exceed
+the \nCeiling{} ceiling alone (Table~\ref{tab:floor}). The strongest,
+\texttt{velocity\_ratio\_1h\_vs\_30d}, reaches \nFloorM{} $\pm$ \nFloorMci{}.
+
+\begin{table}[h]
+\centering
+\caption{Single features above the D-08 ceiling, $\max(\mathrm{AUC}, 1-\mathrm{AUC})$, draw
+\texttt{6abde44e}, commit \texttt{2c80ef6} (raw output
+\texttt{docs/benchmarks/m3\_single\_feature\_auc\_2c80ef6.txt}).}
+\label{tab:floor}
+\begin{tabular}{lr}
+\toprule
+Feature & Separation \\
+\midrule
+\texttt{velocity\_ratio\_1h\_vs\_30d} & \nFloorM \\
+\texttt{counterparty\_is\_new\_for\_account} & \nCounterpartyNewM \\
+\texttt{tx\_count\_1h} & \nTxCountHourM \\
+\texttt{implied\_speed\_kmh} & \nImpliedSpeedM \\
+\texttt{seconds\_since\_last\_tx} & \nSecondsSinceM \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+All five are burst or recency indicators, and the generator injects fraud as incidents: a
+SIM-swap drain, a velocity run and a mule fan-out are each a rapid sequence of transactions on one
+account. We did not suppress the burst structure, because real drains and fan-outs are bursty and
+a generator whose fraud was not would be the weaker artefact; and we did not restate D-08 as a
+claim about columns only, because that would redefine a control so that it passes. The
+consequence is a rule applied to every model metric in this paper: \textbf{a metric is reported
+as a margin over the best single feature and the best trivial rule, measured on the same rows}.
+
+The floor was itself corrected once. The first measurement was taken before a review found that
+five features claiming unbounded history derived it from the truncated corpus they were given.
+The correction moved \texttt{counterparty\_is\_new\_for\_account} from \nCounterpartyNewBefore{}
+to \nCounterpartyNewM{} and left the velocity ratio unchanged; the review had expected the
+headline to be inflated, and the measurement says it was not.
