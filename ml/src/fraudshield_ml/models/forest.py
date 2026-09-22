@@ -174,7 +174,7 @@ class Forest:
 
 def fit(matrix: Sequence[Sequence[float]], seed: int) -> tuple[Forest, Any]:
     """Fit on the training rows, export, and return the fitted estimator for parity checks."""
-    from sklearn.ensemble import IsolationForest  # type: ignore[import-untyped]  # noqa: PLC0415
+    from sklearn.ensemble import IsolationForest  # noqa: PLC0415
 
     array = np.asarray(matrix, dtype=float)
     with warnings.catch_warnings():

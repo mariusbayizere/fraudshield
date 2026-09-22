@@ -19,9 +19,9 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
-import onnxruntime as ort  # type: ignore[import-untyped]
-from onnxmltools import convert_lightgbm, convert_xgboost  # type: ignore[import-untyped]
-from onnxmltools.convert.common import data_types  # type: ignore[import-untyped]
+import onnxruntime as ort
+from onnxmltools import convert_lightgbm, convert_xgboost
+from onnxmltools.convert.common import data_types
 
 from fraudshield_ml.models.bundle import Bundle
 

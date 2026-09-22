@@ -12,13 +12,15 @@ and a fixture whose coverage varied by seed would make the answer vary with it.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
 from fraudshield_ml.features.types import CountryFacts, Outcome, Transaction
 from fraudshield_ml.features.vector import FeatureContext
+from fraudshield_ml.training import access
 
 START = datetime(2025, 1, 1, tzinfo=UTC)
 
@@ -181,3 +183,13 @@ def make_context() -> Callable[..., FeatureContext]:
     steps.
     """
     return _context
+
+
+# Suite-wide isolation: no test writes to the committed test-set access log. Session-scoped and
+# autouse, so it is in place before any module-scoped fixture runs a command that records access.
+@pytest.fixture(autouse=True, scope="session")
+def private_access_log(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]:
+    path = tmp_path_factory.mktemp("access") / "test_set_access.jsonl"
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv(access.ENVIRONMENT, str(path))
+        yield path

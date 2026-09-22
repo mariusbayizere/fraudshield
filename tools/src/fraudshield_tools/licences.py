@@ -141,6 +141,26 @@ EXCEPTIONS: dict[str, tuple[str, str]] = {
         "confirmed against the tagged source (github.com/scipy/scipy, tag v1.18.1) on 2026-09-22. "
         "A transitive dependency of xgboost and lightgbm, not declared directly",
     ),
+    "python:flatbuffers@25.12.19": (
+        "Apache-2.0",
+        "classifier says only 'Apache Software License' and the wheel ships no licence file; every "
+        "one of the ten installed modules carries Google's 'Licensed under the Apache License, "
+        "Version 2.0' header, read 2026-09-22. A transitive dependency of onnxruntime",
+    ),
+    "python:skl2onnx@1.20.0": (
+        "Apache-2.0",
+        "classifier says only 'Apache Software License'; dist-info/licenses/LICENSE is the full "
+        "Apache License 2.0 text and NOTICE credits Microsoft, both read 2026-09-22. A transitive "
+        "dependency of onnxmltools",
+    ),
+    "python:cloudpickle@3.1.2": (
+        "BSD-3-Clause",
+        "classifier says only 'BSD License' and the policy does not read the old-style 'License: "
+        "BSD-3-Clause' field; dist-info/licenses/LICENSE is the full 3-clause text (copyright "
+        "Cloudpickle contributors, Regents of the University of California, PiCloud), read in "
+        "full on 2026-09-22 from the installed wheel, not checked against upstream source. A "
+        "transitive dependency of joblib via scikit-learn, not declared directly",
+    ),
     "python:nvidia-nccl-cu12@2.31.2": (
         "BSD-3-Clause",
         "the wheel's own License-Expression field says 'LicenseRef-NVIDIA-Proprietary', which is "
@@ -155,12 +175,6 @@ EXCEPTIONS: dict[str, tuple[str, str]] = {
         "device='cuda' anywhere in the tree), so the wheel is present but never loaded. Recorded "
         "as BSD-3-Clause on the text actually bundled, not on the misleading declared field, "
         "which is the same 'read the file, not the label' rule every other exception here uses",
-    ),
-    "python:cloudpickle@3.1.2": (
-        "BSD-3-Clause",
-        "classifier says only 'BSD License'; dist-info/licenses/LICENSE is the 3-clause text with "
-        "the non-endorsement clause naming the University of California, Berkeley (verified "
-        "2026-09-22). Runtime, via scikit-learn -> joblib (M5 IsolationForest, D-06)",
     ),
     "python:sortedcontainers@2.4.0": (
         "Apache-2.0",

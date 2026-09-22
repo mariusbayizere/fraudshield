@@ -72,8 +72,9 @@ to produce a result.
 pre-registered, typology-grounded non-burst variant — `reversal_scam_social_engineering`, a single
 victim-initiated transfer to an established counterparty, added 2026-09-22 (ADR 0028) specifically
 because the country and lead-time axes above never removed the two mechanisms the model actually
-relies on — is caught at **6.1%** (4 of 66 fraud rows, Wilson 95% interval [2.4%, 14.6%]), against
-94.2% [92.4%, 95.6%] for the base scenarios at the same threshold. The intervals do not overlap.
+relies on — is caught at **9.1%** (6 of 66 fraud rows, Wilson 95% interval [4.2%, 18.4%]), against
+94.4% [92.7%, 95.8%] for the base scenarios at the same threshold. The intervals do not overlap
+(`docs/benchmarks/m4_battery_d8083dbc_e1.txt`; first measured at 6.1% [2.4%, 14.6%] with a target encoding E1 forbids, and restated after the correction; the interval now reaches past the pre-registered range's 0.15 lower edge).
 This is not a generalisation success to qualify the statement above: it is a genuine detection
 failure, on one typology, measured rather than assumed. It supports the narrower claim that this
 model's detection power is concentrated in burst-structure and counterparty-novelty, and says

@@ -512,3 +512,54 @@ def test_computing_a_row_never_copies_the_outcome_mapping(
         f"the outcome mapping was traversed {counting.traversals} times while scoring one row, "
         "so something is copying it again"
     )
+
+
+DEVICE_FEATURES = frozenset(
+    {"device_age_days", "device_changes_24h", "device_is_new_for_account", "accounts_per_device_7d"}
+)
+AGENT_FEATURES = frozenset(n for n, s in REGISTRY.items() if s.group.name == "AGENT")
+SIX_CHANNELS = ("MOBILE_MONEY", "CARD", "AGENT_BANKING", "USSD", "ONLINE", "BANK_TRANSFER")
+
+
+def _missing(value: object) -> bool:
+    return isinstance(value, float) and math.isnan(value)
+
+
+@pytest.mark.req("TEST-01", "FR-02-02", "D-04")
+@pytest.mark.parametrize("channel", SIX_CHANNELS)
+def test_all_44_are_emitted_on_every_channel_with_the_d04_nan_pattern(
+    channel: str, corpus: list[Transaction], context: FeatureContext
+) -> None:
+    """TEST-01's coverage target: all 44 features on all six channel types.
+
+    No test exercised BANK_TRANSFER or ONLINE until the M4 review looked. Each channel gets the
+    same scored row, so only the channel, the fingerprint and the agent differ: USSD has no
+    fingerprint and only AGENT_BANKING has an agent. The two agent features with no source data
+    (PB-44) are missing everywhere and are excluded from the "present on agent" check.
+    """
+    last = corpus[-1]
+    device = next(
+        r.device_fingerprint
+        for r in corpus
+        if r.account_id == last.account_id and r.device_fingerprint
+    )
+    scored = replace(
+        last,
+        channel=channel,
+        device_fingerprint=None if channel == "USSD" else device,
+        agent_id="AG0" if channel == "AGENT_BANKING" else None,
+    )
+    values = vector.compute([*corpus[:-1], scored], len(corpus) - 1, context)
+
+    assert set(values) == set(REGISTRY)
+    assert len(values) == 44
+    for name in DEVICE_FEATURES:
+        assert _missing(values[name]) is (channel == "USSD"), (channel, name, values[name])
+    computable_agent = {
+        n for n in AGENT_FEATURES if REGISTRY[n].computable is Computability.COMPUTABLE
+    }
+    for name in AGENT_FEATURES:
+        if channel != "AGENT_BANKING":
+            assert _missing(values[name]), (channel, name, values[name])
+        elif name in computable_agent:
+            assert not _missing(values[name]), (channel, name, values[name])

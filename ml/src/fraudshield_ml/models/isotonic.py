@@ -35,7 +35,7 @@ class Isotonic:
 
 def fit(scores: Sequence[float], labels: Sequence[bool]) -> tuple[Isotonic, Any]:
     """Fit on the calibration split; returns the estimator too, for the parity test."""
-    from sklearn.isotonic import IsotonicRegression  # type: ignore[import-untyped]  # noqa: PLC0415
+    from sklearn.isotonic import IsotonicRegression  # noqa: PLC0415
 
     model = IsotonicRegression(y_min=0.0, y_max=1.0, out_of_bounds="clip").fit(
         np.asarray(scores, dtype=float), np.asarray(labels, dtype=float)

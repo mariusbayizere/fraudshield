@@ -37,7 +37,6 @@ from fraudshield_ml.features.vector import FeatureValue
 from fraudshield_ml.metrics.single_feature import (
     auc,
     auc_standard_error,
-    hash_fold,
     separation,
 )
 
@@ -46,11 +45,6 @@ from fraudshield_ml.metrics.single_feature import (
 #: `test_the_floor_matches_the_published_baseline` pins the two together.
 SINGLE_FEATURE_FLOOR = 0.894
 FLOOR_FEATURE = "velocity_ratio_1h_vs_30d"
-
-#: Folds for the out-of-fold encoding, grouped by account (E1). Fixed rather than a parameter:
-#: every fold count this project uses is five, and a caller free to pass one would be free to pass
-#: a count that puts an account's own rows back in its own estimate.
-ENCODING_FOLDS = 5
 
 
 def trainable_features() -> tuple[str, ...]:
@@ -117,60 +111,71 @@ def encode_categoricals(
     *,
     prior_weight: float = 50.0,
 ) -> dict[str, list[float]]:
-    """Target-encode the two categoricals, fitted on the training rows only.
+    """Target-encode the two categoricals, fitted on the training rows only (E1).
 
-    Two different encodings, deliberately. **Training rows** get an out-of-fold estimate with folds
-    grouped by whole accounts (E1), so a row's own incident cannot inform its score. **Test rows**
-    get the estimate fitted on all training rows, which is what serving would do. Using the
-    out-of-fold estimate for test rows would leak the test labels; using the full-fit estimate for
-    training rows would leak each row's own.
+    **Training rows** are encoded in time order, each from the training rows **strictly earlier**
+    than it and belonging to **other accounts**. E1 was settled on 2026-09-19 as both: out-of-fold
+    encodings over rows earlier in time, never over random folds, and never from the row's own
+    account, whose earlier rows may be the same fraud incident. Random account-grouped folds —
+    what this function did until the M4 review — let a training row's estimate read later training
+    rows, which serving can never do.
 
-    The out-of-fold estimate is computed by subtracting each fold's totals from the whole, rather
-    than by rescanning the kept rows for every row — the same arithmetic in one pass instead of
-    `len(train)` passes. `test_the_fast_encoding_matches_the_obvious_one` holds the two together,
-    because the fast form is the one that is easy to get subtly wrong.
+    **Every other row** (validation, calibration, test) gets the estimate fitted on all training
+    rows, which D-07's embargoed split places entirely before it: what serving would do.
+
+    Training rows must be passed in time order, as every cache and `evaluate` sample is: rows are
+    sorted by timestamp when read and each period's sample keeps that order. Indices are sorted
+    here, so the order that matters is the matrix's own. The first training rows have nothing
+    earlier to learn from and encode as zero; that is the cost of refusing to look ahead.
     """
     categorical = [n for n, s in REGISTRY.items() if s.dtype is Dtype.CATEGORICAL]
-    training = set(train)
-    folds = ENCODING_FOLDS
-    fold_of = {i: hash_fold(accounts[i], folds) for i in train}
-    # Positives and rows per fold, so each fold's base rate is the whole minus that fold.
-    fold_positives = [0] * folds
-    fold_rows = [0] * folds
-    for i in train:
-        fold_positives[fold_of[i]] += int(labels[i])
-        fold_rows[fold_of[i]] += 1
-    total_positives, total_rows = sum(fold_positives), sum(fold_rows)
+    ordered = sorted(train)
+    training = set(ordered)
+    total_positives = sum(1 for i in ordered if labels[i])
+    total_rows = len(ordered)
 
     encoded: dict[str, list[float]] = {}
     for name in categorical:
         values = [str(row[name]) for row in rows]
-        base = total_positives / max(total_rows, 1)
+        column = [0.0] * len(rows)
+
+        # Full fit, for every row outside training.
         totals: dict[str, list[float]] = {}
-        # Per category: [fraud, seen] overall, then the same split by fold.
-        by_fold: list[dict[str, list[float]]] = [{} for _ in range(folds)]
-        for i in train:
+        for i in ordered:
             cell = totals.setdefault(values[i], [0.0, 0.0])
             cell[0] += float(labels[i])
             cell[1] += 1.0
-            cell = by_fold[fold_of[i]].setdefault(values[i], [0.0, 0.0])
-            cell[0] += float(labels[i])
-            cell[1] += 1.0
-
-        column = [0.0] * len(rows)
+        base = total_positives / max(total_rows, 1)
         for i in range(len(rows)):
             if i not in training:
                 fraud, seen = totals.get(values[i], [0.0, 0.0])
                 column[i] = (fraud + prior_weight * base) / (seen + prior_weight)
-                continue
-            # Out-of-fold for a training row: its own account's fold is held out.
-            fold = fold_of[i]
-            kept_rows = total_rows - fold_rows[fold]
-            fold_base = (total_positives - fold_positives[fold]) / max(kept_rows, 1)
-            whole = totals[values[i]]
-            held = by_fold[fold].get(values[i], [0.0, 0.0])
-            fraud, seen = whole[0] - held[0], whole[1] - held[1]
-            column[i] = (fraud + prior_weight * fold_base) / (seen + prior_weight)
+
+        # Expanding window for training rows: running totals over earlier rows, with the row's own
+        # account's earlier rows subtracted. One pass rather than a rescan per row.
+        seen_positives = 0
+        by_category: dict[str, list[float]] = {}
+        by_account: dict[str, list[float]] = {}
+        by_account_category: dict[tuple[str, str], list[float]] = {}
+        for seen_rows, i in enumerate(ordered):
+            account, value = accounts[i], values[i]
+            own = by_account.get(account, [0.0, 0.0])
+            own_cell = by_account_category.get((account, value), [0.0, 0.0])
+            cell = by_category.get(value, [0.0, 0.0])
+            other_rows = seen_rows - own[1]
+            other_base = (seen_positives - own[0]) / other_rows if other_rows else 0.0
+            fraud, seen = cell[0] - own_cell[0], cell[1] - own_cell[1]
+            column[i] = (fraud + prior_weight * other_base) / (seen + prior_weight)
+
+            y = float(labels[i])
+            seen_positives += int(labels[i])
+            for bucket in (
+                by_category.setdefault(value, [0.0, 0.0]),
+                by_account.setdefault(account, [0.0, 0.0]),
+                by_account_category.setdefault((account, value), [0.0, 0.0]),
+            ):
+                bucket[0] += y
+                bucket[1] += 1.0
         encoded[name] = column
     return encoded
 
@@ -320,6 +325,10 @@ CACHE_EXTRAS = (
     CACHE_CHANNEL,
     CACHE_VARIANT,
 )
+#: The merchant category code, for E.5's rule-engine baseline. Optional so that a cache written
+#: before it was carried still reads; a reader that needs it says what it did without it.
+CACHE_MCC = "_mcc"
+CACHE_OPTIONAL = (CACHE_MCC,)
 
 
 def cache_key(dataset: str, corpus_rows: int, sample_rows: int) -> dict[str, str]:
@@ -351,8 +360,9 @@ def cache_write(
         raise ValueError(f"the cache needs {sorted(missing)} alongside the features")
     names = trainable_features()
     columns: dict[str, list[object]] = {name: [row[name] for row in rows] for name in names}
+    carried = CACHE_EXTRAS + tuple(k for k in CACHE_OPTIONAL if k in extras)
     table = pa.table(
-        {**columns, **{k: list(extras[k]) for k in CACHE_EXTRAS}},
+        {**columns, **{k: list(extras[k]) for k in carried}},
         metadata={k.encode(): v.encode() for k, v in key.items()},
     )
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -394,5 +404,6 @@ def _read(
         return None
     columns = {name: table.column(name).to_pylist() for name in names}
     rows = [{name: columns[name][i] for name in names} for i in range(table.num_rows)]
-    extras = {k: [str(v) for v in table.column(k).to_pylist()] for k in CACHE_EXTRAS}
+    carried = CACHE_EXTRAS + tuple(k for k in CACHE_OPTIONAL if k in table.schema.names)
+    extras = {k: [str(v) for v in table.column(k).to_pylist()] for k in carried}
     return rows, extras

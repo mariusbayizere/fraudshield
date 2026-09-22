@@ -161,7 +161,10 @@ DEFECT_MILESTONES: dict[str, str] = {
     "D-49": "M9",
     **dict.fromkeys(("D-07", "D-08"), "M2"),
     **dict.fromkeys(("D-03", "D-04"), "M3"),
-    **dict.fromkeys(("D-01", "D-02", "D-05", "D-06", "D-09"), "M4"),
+    **dict.fromkeys(("D-01", "D-02", "D-05", "D-06"), "M4"),
+    # ADR 0031: D-09's register closes when the paper states each claim, and five of its claims
+    # need primary sources only the author can supply. C-6 was measured in M4.
+    "D-09": "M11",
     **dict.fromkeys(("D-11", "D-16", "D-50"), "M5"),
     **dict.fromkeys(("D-10", "D-12", "D-13", "D-14", "D-15", "D-17", "D-18", "D-25", "D-51"), "M6"),
     **dict.fromkeys(("D-19", "D-23", "D-24", "D-26", "D-27"), "M7"),

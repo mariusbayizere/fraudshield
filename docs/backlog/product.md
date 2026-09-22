@@ -1085,12 +1085,14 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 - **Updated 2026-09-22 — the real variant was added and measured (ADR 0028).** One
   pre-registered, typology-grounded, non-burst variant (`reversal_scam_social_engineering`:
   victim-initiated, single transaction, established counterparty — see the lab notebook's
-  2026-09-22 entries for the pre-registration and the result). Measured recall **6.1%** (4 of 66
-  fraud rows), Wilson 95% interval [2.4%, 14.6%], against base's 94.2% [92.4%, 95.6%] — intervals
-  do not overlap. Below the pre-registered prediction range (0.15–0.55): the model's dependence on
+  2026-09-22 entries for the pre-registration and the result). Measured recall **9.1%** (6 of 66
+  fraud rows), Wilson 95% interval [4.2%, 18.4%], against base's 94.4% [92.7%, 95.8%] — intervals
+  do not overlap (first measured at 6.1% [2.4%, 14.6%] with a target encoding E1 forbids, and restated after the correction; the interval now reaches past the pre-registered range's 0.15 lower edge). The point estimate is below the pre-registered prediction range
+  (0.15–0.55), though the interval no longer excludes it entirely: the model's dependence on
   burst-structure and counterparty-novelty was underestimated, not overestimated. This is now the
   benchmark's one measured non-burst detection failure and belongs in the paper alongside the two
-  null results, not as a replacement for either. Evidence: `docs/benchmarks/m4_battery_pb61.txt`.
+  null results, not as a replacement for either. Evidence: `docs/benchmarks/m4_battery_d8083dbc_e1.txt`
+  (restated), `docs/benchmarks/m4_battery_pb61.txt` (first measurement).
 
 ### PB-60 · An ablation on this benchmark cannot say which features matter
 - **Source:** the M4 battery, 2026-09-22 · **Priority:** medium · **Due:** before C-4's ablation
@@ -1108,3 +1110,75 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
   alone is misleading in opposite directions, and state that redundancy is why. Decide what C-4
   becomes: either withdraw the claim, or replace it with a comparison that redundancy cannot
   flatten.
+
+### PB-62 · Recall and FNR at D-02's 0.60 flag threshold fail the M4 gate
+- **Source:** the declared M4 gate run, 2026-09-22 (`docs/benchmarks/m4_gate_d8083dbc_v3.txt`) ·
+  **Priority:** high · **Due:** owner decision before M5 sets serving thresholds
+- **Measured:** recall at 0.60 **0.736** [0.707, 0.765] against ML-GATE-03's 0.88; FNR at 0.60
+  **0.264** against ML-GATE-06's 0.12 (the same fact, since FNR = 1 − recall there). Five-seed
+  recall 0.744 ± 0.041. The other nine gate metrics pass.
+- **What the artefact already says:** at 0.60 the calibrated ensemble is conservative — precision
+  0.927 at 0.06% FPR — and even at the 1% FPR budget, far below 0.60, recall is 0.871. D-02's
+  reference point (recall 0.88 at about 0.28% FPR) is out of reach at every threshold this run
+  shows, so moving the threshold would not meet the gate either.
+- **Not a reason to tune on the test period** (D.3). A threshold chosen by looking at these
+  numbers would be exactly that.
+- **Acceptance, one of:** (a) PB-67's larger training sample, reported beside this run whichever
+  way it lands; (b) D-02's operating point revisited as a defect resolution, argued from the
+  validation period and D-10's alert budget, not from the test period; (c) the shortfall accepted
+  and carried into the paper as measured. The choice is the owner's.
+- **Decided 2026-09-22 (owner): option (c).** Both rows are `DONE_WITH_DEVIATION` against ADR 0031's
+  amendment, the miss recorded in each and in the paper as a finding. Option (a) stays open as
+  PB-67.
+
+### PB-63 · The CI ML gate has no dataset to run on
+- **Source:** M4 milestone review, TEST-14, 2026-09-22 · **Priority:** medium · **Due:** M9
+- **Problem:** E.5 item 9 asks CI to fail when a gate metric's point estimate misses its
+  threshold. `fs-features gate --enforce` does exactly that, but CI has no dataset: the 1M draw is
+  gitignored and generating one takes about 24 minutes, beyond the python job's 15-minute budget.
+  The gate therefore runs as committed `fs-evidence` artefacts, not as a CI check.
+- **Acceptance:** a CI job that generates (or restores from a cache) a pinned draw, builds the
+  gate cache and runs `fs-features gate --enforce`, with its failure policy decided first — PB-62
+  means it would fail today, and D.3 says to record a failing metric rather than tune it away.
+
+### PB-64 · M4 clauses that need the scoring service
+- **Source:** M4 milestone review, ADR 0031, 2026-09-22 · **Priority:** high · **Due:** M5
+- **Problem:** four M4 acceptance clauses need a service that does not exist until M5: TEST-02's
+  fallback rule engine when the ML scorer returns 503; TEST-14's shadow-mode AUC delta and its
+  MLflow logging (ADR 0030); FR-02-03's "deployment blocked if ECE > 0.05", which needs a
+  promotion step to block; and loading the exported ONNX models, whose parity M4 established.
+- **Acceptance:** each clause tested in M5, against the models `fs-features gate` evaluated.
+
+### PB-65 · D-06's anomaly routing threshold is not configured anywhere
+- **Source:** M4 milestone review, ADR 0031, 2026-09-22 · **Priority:** medium · **Due:** M6
+- **Problem:** `anomaly_score` exists (percentile rank against the training reference, D-06), but
+  the routing D-06 specifies — 0.7 in the test profile, a configurable percentile defaulting to
+  0.995 in production, sized by D-10's alert budget — is a decision-engine setting, and there is no
+  decision engine yet.
+- **Acceptance:** the threshold is versioned configuration in M6, with both profiles tested.
+
+### PB-66 · E.5 protocol items M4 did not build
+- **Source:** M4 milestone review, re-review, 2026-09-22 · **Priority:** medium · **Due:** M11,
+  except the search, which is M5
+- **Problem:** the D.3 gate is met or recorded, but E.5's research protocol is wider than the gate
+  and these were not built: fairness and harm by country, channel, KYC tier and urban/rural (item
+  7); the cost curve and alert-budget analysis (item 8); leave-one-fraud-type-out and performance
+  by test month (item 5, C-5); reliability diagrams per channel (item 6). E.4's latency-constrained
+  hyperparameter search (D-16) was not run either: the gate model's configuration is fixed.
+- **Acceptance:** each item reported with the single-feature baselines PB-46 requires, or
+  withdrawn from the paper's claims with a reason. The search waits for M5's latency measurement.
+
+### PB-67 · The gate model trains on 30,000 of the train period's 792,162 rows
+- **Source:** M4 gate run, 2026-09-22 · **Priority:** high · **Due:** before the paper's results
+- **Problem:** the feature pass costs about 270 rows a second, so the gate cache samples 30,000
+  training rows (260 fraud) from a 400,000-row corpus that reaches only the last 128 days of the
+  train period. Every M4 model figure is a model trained on that sample, and PB-62's recall
+  shortfall may be partly its cost.
+- **Acceptance:** a gate run on a larger training sample, reported beside the current one — not as
+  a replacement chosen because it passes.
+
+### PB-68 · The frontier and the battery write-up still describe the 6abde44e draw
+- **Source:** M4 milestone review, 2026-09-22 · **Priority:** low · **Due:** before M11
+- **Problem:** `docs/benchmarks/m4_frontier.md` and `m4_battery.md`'s prose were measured at
+  `6abde44e`; the gate, battery and C-6 evidence are at `d8083dbc`, with the E1 encoding.
+- **Acceptance:** both re-run at `d8083dbc` through `fs-evidence`, prose restated from the output.

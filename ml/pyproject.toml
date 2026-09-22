@@ -16,8 +16,16 @@ dependencies = [
     # one measurement. C-6 claims the ensemble reduces seed variance by 12% and cannot be
     # settled without it.
     "lightgbm==4.7.0",
-    # M5 serving. IsolationForest (D-06) and IsotonicRegression (D-05) come from scikit-learn.
-    "scikit-learn==1.9.1",
+    # D-06's Isolation Forest, D-05's isotonic calibration, and E.5's logistic-regression and
+    # random-forest baselines. Four uses the SRS specifies, not one convenience: the booster
+    # APIs stay native (smoke.py's reason still holds for them).
+    "scikit-learn==1.8.0",
+    # E.4's ONNX exports and their parity test (max absolute probability difference < 1e-5):
+    # onnxmltools converts the XGBoost and LightGBM boosters, onnxruntime runs them. The M4
+    # review found no export at all (M4-4).
+    "onnx==1.23.0",
+    "onnxruntime==1.30.0",
+    "onnxmltools==1.16.0",
     # The scoring contract is gRPC (contracts/proto); the health service is the standard one the
     # proto's header names for orchestration probes. Pinned to the grpcio-tools that compiles it.
     "grpcio==1.84.0",
@@ -26,9 +34,7 @@ dependencies = [
     # the client is protocol-compatible with it.
     "redis==8.1.0",
     "prometheus-client==0.26.0",
-    # Serving inference for both boosters (ADR 0032): exact to 1e-6 against the native boosters
-    # on XGBoost and LightGBM alike, without the per-call overhead of their Python wrappers and
-    # with no compiler at build time. SHAP stays on the native boosters.
+    # Serving inference candidate (ADR 0032), measured against ONNX on M4's model.
     "treelite==4.7.2",
     # The admin port (health, model status, shadow switch); never on the hot path.
     "fastapi==0.141.1",
@@ -39,11 +45,6 @@ dependencies = [
 dev = [
     # In-process Redis for unit tests on a machine without Docker; the real-Redis tests run in CI.
     "fakeredis==2.35.1",
-    # E.4's ONNX export parity test (ADR 0032). Test-only: serving uses Treelite, because the
-    # LightGBM converter accepts float32 input only and cannot meet the 1e-5 parity.
-    "onnx==1.23.0",
-    "onnxmltools==1.16.0",
-    "onnxruntime==1.30.0",
 ]
 
 [project.scripts]

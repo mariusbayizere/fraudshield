@@ -237,3 +237,43 @@ self-verifying, and here it was actively wrong rather than merely absent — the
 project has learned about hand-written commit provenance (PB-52/PB-53) and about a benchmark's
 column-level control being quoted as a claim about its features (D-08's family). The fix in every
 case is the same: read the artefact the check is actually about, not a label attached to it.
+
+## Amendment 2026-09-22 — `scikit-learn`, for four things the SRS specifies
+
+The M4 milestone review (`docs/reviews/M4/milestone-review.md`, M4-2 and M4-1) found D-06's
+Isolation Forest, D-05's isotonic calibration and E.5's logistic-regression and random-forest
+baselines all unbuilt. Each is a scikit-learn estimator in the SRS's own description, and the
+Isolation Forest is also what E.4's ONNX export expects. `scikit-learn==1.8.0` is taken on once
+for all four; the boosted models stay on their native booster APIs, so `smoke.py`'s reason for
+avoiding the scikit-learn wrappers still holds for them.
+
+It brings three transitive packages. `scikit-learn`, `joblib` and `threadpoolctl` declare
+`License-Expression: BSD-3-Clause` and resolve without an exception; each bundled licence file
+was read and is the BSD 3-clause text.
+
+**`cloudpickle` (via `joblib`) needed one**, for a mechanical reason rather than a doubtful one: its
+metadata carries only the classifier `BSD License` and the old-style `License: BSD-3-Clause` field,
+which the policy does not read. Its `dist-info/licenses/LICENSE` is the full 3-clause text
+(Cloudpickle contributors, Regents of the University of California, PiCloud). It was read from the
+installed wheel, and unlike the `scipy` and `xgboost` entries it was not checked against the
+upstream source; the exception says so.
+
+Run in a worktree without `frontend/node_modules`, `fs-licences` also reports every npm package as
+`Unknown`: the check reads licences from the installed packages, so an uninstalled front-end is
+not a clean result. CI installs it, and CI's result is the one that counts.
+
+## Amendment 2026-09-22 — the ONNX export chain
+
+E.4 requires ONNX exports of the boosters with a parity test, and the M4 review found none (M4-4).
+`onnx==1.23.0`, `onnxruntime==1.30.0` and `onnxmltools==1.16.0` are taken on for that alone: the
+converter, the format, and the runtime the parity test and M5's scoring service run on. They bring
+`skl2onnx`, `flatbuffers` and `ml-dtypes`.
+
+Four resolve from their SPDX fields. Two needed exceptions, both for a bare classifier:
+
+- **`skl2onnx`** bundles the full Apache 2.0 text and a `NOTICE` crediting Microsoft. Apache 2.0
+  §4(d) requires that notice to travel with any redistribution, which matters at M9 when images are
+  built, not here.
+- **`flatbuffers`** ships no licence file in its wheel, the `xgboost` shape. Rather than the
+  upstream repository, the installed artefact itself was read: all ten of its modules carry
+  Google's Apache 2.0 header.

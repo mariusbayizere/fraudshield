@@ -181,6 +181,8 @@ def spread(pool: Sequence[int], wanted: int) -> list[int]:
     at 400,000 and at 560,000 corpus rows — the sample size decided the window and the corpus
     depth did nothing. A stride costs the same and covers the period.
     """
+    if wanted <= 0:
+        return []
     if wanted >= len(pool):
         return list(pool)
     stride = len(pool) / wanted

@@ -2309,3 +2309,60 @@ commit and tree state it was produced from, rather than the one its author belie
 rule belongs on a milestone tag: **a milestone tag requires a green run of every CI job on the
 exact commit being tagged**, cited by run ID against that SHA, not a green run on an ancestor.
 A citation to any other commit is evidence about a different tree.
+
+### 2026-09-22 · The M4 gate: nine of eleven, and three runs to get there honestly
+
+The M4 milestone review (`docs/reviews/M4/milestone-review.md`) found the model and gate
+machinery missing, and it was built: D-05's ensemble, D-06's Isolation Forest, the eleven M4 gate
+metrics with stratified bootstrap intervals, baselines, ablations, ONNX parity, LaTeX tables. The
+gate was then run three times on the same test period, and each run is committed and logged in
+`docs/benchmarks/test_set_access.jsonl`, because each is a look at the test set.
+
+- **Run 1** (`m4_gate_d8083dbc`, at `590ca14`) exposed two defects. The LightGBM ONNX export
+  disagreed with the evaluated model on 398 of 101,909 rows, by up to 0.229; and precision at "1%
+  FPR" printed above its own theoretical ceiling, because isotonic ties left the realised FPR at
+  0.47%. Neither fix touched a model setting or a threshold.
+- **Run 2** (`_v2`, at `07ed1ed`) passed parity. It still trained with a random-fold target
+  encoding, which E1 forbids — a settled rule recorded on FR-02-03 that the review's first pass
+  had not checked.
+- **Run 3** (`_v3`, at `d40fca2`) is the declared result.
+
+**Nine of eleven pass.** AUC 0.970 [0.962, 0.977], recall at the 1% FPR budget 0.871, F1 at 0.60
+0.821, FPR at 0.85 0.000, channel AUCs 0.953 / 0.953 / 0.979, SHAP coverage 1.000, ECE 0.001.
+Every ranking metric clears both of PB-46's baselines: the headline AUC is +0.091 over
+`velocity_ratio_1h_vs_30d` (0.879) and +0.311 over the best trivial rule, and the narrowest
+margin is USSD's +0.049. On this benchmark a random forest and XGBoost alone are statistically
+indistinguishable from the ensemble (DeLong p 0.21 and 0.67), and logistic regression sits 0.005
+below it (p 0.0049): the velocity-separability of PB-46 again.
+
+**Two fail, both at D-02's 0.60 flag threshold, and are recorded rather than tuned:** recall
+0.736 [0.707, 0.765] against 0.88, and FNR 0.264 against 0.12 — one fact, stated twice, since FNR
+is 1 − recall there. What the committed numbers already say about why, without another look:
+
+- **The threshold is not the only constraint.** Even at the 1% FPR budget — a threshold far below
+  0.60, flagging 0.96% of legitimate rows — recall is 0.871. D-02's reference point (recall 0.88
+  at about 0.28% FPR) is beyond this model on this training sample at any threshold the artefact
+  shows.
+- **At 0.60 the model is conservative, not wrong:** precision 0.927 at an FPR of 0.06%. A
+  calibrated probability of 0.60 means "60% of rows like this are fraud", and most fraud rows here
+  do not reach that confidence.
+- **It is not one seed:** over five refits recall at 0.60 is 0.744 ± 0.041.
+- **Training volume is a candidate cause, not a finding:** the model sees 30,000 training rows
+  and 260 frauds of a period holding 792,162 (PB-67). Testing that means a larger training sample
+  reported beside this one, not a new threshold.
+
+F1 at 0.60 passed in run 1 (0.819), failed in run 2 (0.795) and passed in run 3 (0.821). It sits
+at the threshold, and its five-seed spread in run 3 (0.820 ± 0.020) covers it.
+
+**The reversal-scam figure, restated.** The PB-61 battery evidence was produced with the
+forbidden encoding, so it was re-run on the same cache. The variant is caught at **9.1% (6 of 66),
+Wilson 95% [4.2%, 18.4%]**, against 94.4% for base; it was 6.1% [2.4%, 14.6%]. The intervals
+still do not overlap and the point estimate is still below the pre-registered 0.15–0.55. **What
+changed is that the interval now reaches 18.4%, past the prediction's lower edge**, so "below the
+predicted range" holds for the point estimate and no longer for the whole interval. The
+pre-registration entry above is unedited; this is the correction the result needed, stated
+against it.
+
+**C-6, restated.** With the E1 encoding the ensemble's seed-to-seed AUC standard deviation is
+−0.6% against XGBoost alone (no reduction) and +12.5% against LightGBM alone. The first
+measurement's +62.9% was LightGBM being far more seed-sensitive under random-fold encoding.
