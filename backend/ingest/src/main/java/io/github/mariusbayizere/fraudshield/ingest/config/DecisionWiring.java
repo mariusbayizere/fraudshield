@@ -380,8 +380,10 @@ public class DecisionWiring {
       IngestService ingest,
       IdempotencyStore idempotency,
       ExecutorService batchExecutor,
-      Clock clock) {
-    return new BatchJobs(dataSource, ingest, idempotency, batchExecutor, clock);
+      Clock clock,
+      TenantTransactions tenants,
+      io.github.mariusbayizere.fraudshield.ingest.jpa.BatchJobRepository jobs) {
+    return new BatchJobs(dataSource, ingest, idempotency, batchExecutor, clock, tenants, jobs);
   }
 
   @Bean

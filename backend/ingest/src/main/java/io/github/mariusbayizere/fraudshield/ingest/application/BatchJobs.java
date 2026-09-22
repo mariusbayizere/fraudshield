@@ -86,6 +86,9 @@ public final class BatchJobs {
    */
   public record Accepted(UUID jobId, int accepted) {}
 
+  private final io.github.mariusbayizere.fraudshield.decision.adapter.jpa.TenantTransactions
+      tenants;
+  private final io.github.mariusbayizere.fraudshield.ingest.jpa.BatchJobRepository jobs;
   private final DataSource dataSource;
   private final IngestService ingest;
   private final IdempotencyStore idempotency;
@@ -106,7 +109,11 @@ public final class BatchJobs {
       IngestService ingest,
       IdempotencyStore idempotency,
       ExecutorService executor,
-      Clock clock) {
+      Clock clock,
+      io.github.mariusbayizere.fraudshield.decision.adapter.jpa.TenantTransactions tenants,
+      io.github.mariusbayizere.fraudshield.ingest.jpa.BatchJobRepository jobs) {
+    this.tenants = Objects.requireNonNull(tenants, "tenants");
+    this.jobs = Objects.requireNonNull(jobs, "jobs");
     this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
     this.ingest = Objects.requireNonNull(ingest, "ingest");
     this.idempotency = Objects.requireNonNull(idempotency, "idempotency");
@@ -150,16 +157,12 @@ public final class BatchJobs {
     }
     ArrayNode items = (ArrayNode) body.get("transactions");
     UUID job = UUID.randomUUID();
-    try (Connection c = tenant(principal.institutionId())) {
-      try (PreparedStatement s = c.prepareStatement(CREATE)) {
-        s.setObject(1, job);
-        s.setObject(2, principal.institutionId());
-        s.setObject(3, principal.apiKeyId());
-        s.setInt(4, items.size());
-        s.executeUpdate();
-      }
-      c.commit();
-    }
+    tenants.as(
+        principal.institutionId(),
+        () ->
+            jobs.save(
+                new io.github.mariusbayizere.fraudshield.ingest.jpa.BatchJobEntity(
+                    job, principal.institutionId(), principal.apiKeyId(), items.size())));
     executor.execute(() -> run(principal, job, items));
     return new Accepted(job, items.size());
   }
@@ -210,11 +213,11 @@ public final class BatchJobs {
           clock.instant());
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
-    } catch (SQLException | RuntimeException e) {
+    } catch (RuntimeException e) {
       LOG.error("batch job failed", e);
       try {
         progress(institution, job, "FAILED", processed.get(), failed.get(), clock.instant());
-      } catch (SQLException ignored) {
+      } catch (RuntimeException ignored) {
         LOG.error("could not mark a batch job failed", ignored);
       }
     }
@@ -314,22 +317,28 @@ public final class BatchJobs {
       throw new IllegalArgumentException("cursor");
     }
     int from = cursor == null ? 0 : Integer.parseInt(cursor);
+    ObjectNode header =
+        tenants.as(
+            principal.institutionId(),
+            () ->
+                jobs.findById(job)
+                    .map(
+                        entity -> {
+                          ObjectNode node = JSON.createObjectNode();
+                          node.put("job_id", job.toString());
+                          node.put("state", entity.state());
+                          node.put("total", entity.total());
+                          node.put("processed", entity.processed());
+                          node.put("failed", entity.failed());
+                          return node;
+                        })
+                    .orElse(null));
+    if (header == null) {
+      return Optional.empty();
+    }
+    // The items are append-only and paginated by position: explicit SQL (ADR 0068).
     try (Connection c = tenant(principal.institutionId())) {
-      ObjectNode status = JSON.createObjectNode();
-      try (PreparedStatement s = c.prepareStatement(JOB)) {
-        s.setObject(1, job);
-        try (ResultSet row = s.executeQuery()) {
-          if (!row.next()) {
-            c.rollback();
-            return Optional.empty();
-          }
-          status.put("job_id", job.toString());
-          status.put("state", row.getString(1));
-          status.put("total", row.getInt(2));
-          status.put("processed", row.getInt(3));
-          status.put("failed", row.getInt(4));
-        }
-      }
+      ObjectNode status = header;
       ArrayNode results = status.putArray("results");
       try (PreparedStatement s = c.prepareStatement(ITEMS)) {
         s.setObject(1, job);
@@ -379,19 +388,14 @@ public final class BatchJobs {
   }
 
   private void progress(
-      UUID institution, UUID job, String state, int processed, int failed, Instant completed)
-      throws SQLException {
-    try (Connection c = tenant(institution);
-        PreparedStatement s = c.prepareStatement(PROGRESS)) {
-      s.setString(1, state);
-      s.setInt(2, processed);
-      s.setInt(3, failed);
-      s.setObject(
-          4, completed == null ? null : OffsetDateTime.ofInstant(completed, ZoneOffset.UTC));
-      s.setObject(5, job);
-      s.executeUpdate();
-      c.commit();
-    }
+      UUID institution, UUID job, String state, int processed, int failed, Instant completed) {
+    tenants.as(
+        institution,
+        () -> {
+          jobs.findById(job)
+              .ifPresent(entity -> entity.progress(state, processed, failed, completed));
+          return null;
+        });
   }
 
   private Connection tenant(UUID institution) throws SQLException {
