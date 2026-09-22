@@ -74,6 +74,16 @@ public final class FactCodec {
     return events;
   }
 
+  /**
+   * Serialises a JSON-ready value (maps, lists, numbers, strings, nulls).
+   *
+   * @param value the value
+   * @return UTF-8 JSON
+   */
+  public static byte[] toJson(Object value) {
+    return JSON.writeValueAsBytes(value);
+  }
+
   private static ObjectNode encodeFact(DecisionEvent event) {
     ObjectNode node = JSON.createObjectNode();
     switch (event) {
