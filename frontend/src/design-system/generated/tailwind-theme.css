@@ -1,4 +1,4 @@
-/* GENERATED from design-tokens/tokens.json by scripts/generate-tokens.ts. Do not edit. */
+/* GENERATED from design-tokens/*.json by scripts/generate-tokens.ts. Do not edit. */
 @theme {
   --breakpoint-*: initial;
   --breakpoint-fp: 240px;
