@@ -118,3 +118,39 @@ decimal string plus an ISO 4217 currency; never a JSON number"). Decision 9 corr
   speaker reviews them. None is presented as reviewed.
 - The zone abbreviation D-43 asks for ("CAT") waits for a pack field. Until then the UI shows the
   offset, which is exact but less familiar.
+
+## Amendment 2026-09-22 — §10, the bundle budget is an architecture, not a hope
+
+The shell alone measured **194.8 KB gzipped** of initial JavaScript against D-39's 200 KB, before
+a single screen existed. A budget with 5 KB left is a budget already spent, so the owner directed
+that the architecture carry it.
+
+**Decisions.**
+
+1. **The initial bundle is the auth shell only**: providers (theme, region, catalogues, query
+   client), the router, the start-up error screen, and the route that is being visited. The
+   console's frame — app bar, navigation drawer, bottom bar, banners — is itself a lazily loaded
+   route component, not part of the entry chunk.
+2. **Every screen and every heavy dependency loads per route**: the free DataGrid, Recharts, the
+   map (D-46), the graph library, Framer Motion, and each language's namespaces beyond the one in
+   use. A screen that needs one of these owns its chunk.
+3. **Budgets, gzipped, enforced by `productionBundle.build.test.ts`** on a real production build,
+   in `pnpm test` and therefore in CI:
+
+   | What | Budget | Measured at this amendment |
+   |---|---|---|
+   | Initial JavaScript (entry plus everything `index.html` preloads) | **170 KB** (30 KB under D-39's 200 KB) | 158.3 KB |
+   | Any single lazily loaded chunk | **120 KB** | 39.1 KB (the shell) |
+
+   The initial budget is deliberately below D-39's limit so that the next screen cannot spend the
+   last of it. Raising either number needs a new amendment and the owner's agreement, not an edit
+   to a constant.
+4. **Per route, the budget is the route's own chunks**: a route may load up to the 120 KB chunk
+   budget on top of the initial bundle. The heaviest routes are expected to be the alert feed
+   (DataGrid), the investigation drawer's SHAP and behavioural charts (Recharts), the network
+   graph (D3-force) and the risk officer's heatmap (D-46); each must stay inside it, or split
+   further — for example loading a drawer tab's chart only when that tab is opened.
+
+**How the 194.8 KB came down.** `zod` became `zod/mini` (−16 KB), the MUI `Select` became a native
+one (−10 KB), and the shell became a lazy route (−36 KB). React, MUI's styling engine, the router,
+TanStack Query and i18next are what remain, and they are the floor for any screen.

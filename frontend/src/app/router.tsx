@@ -6,14 +6,15 @@ import {
   redirect,
   type AnyRoute,
 } from '@tanstack/react-router';
-import { AppShell } from './AppShell';
 import { alertSearch } from './alertSearch';
 import { PUBLIC_PAGES, SECTIONS } from './sections';
 
 const rootRoute = createRootRoute();
 
-/** Pages load as their own chunks, on first visit (D-39). */
+// Everything past the providers loads as its own chunk, on first visit (D-39, ADR 0080 §10):
+// the shell's navigation, app bar and drawers are not in the initial bundle either.
 const SectionPage = lazyRouteComponent(() => import('./pages/SectionPage'));
+const AppShell = lazyRouteComponent(() => import('./AppShell'), 'AppShell');
 
 const shell = createRoute({ getParentRoute: () => rootRoute, id: 'shell', component: AppShell });
 
