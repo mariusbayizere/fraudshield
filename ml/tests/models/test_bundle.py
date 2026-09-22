@@ -219,7 +219,9 @@ def test_the_bundle_is_m4_s_fitted_model_and_scores_as_it_does(built: Built) -> 
     rows = [data.matrix[i] for i in data.test]
     expected = fitted.score(rows).ensemble
     served = [bundle.predict(r).ensemble_score for r in rows]
-    assert max(abs(a - b) for a, b in zip(served, expected, strict=True)) < PARITY
+    # Raw parity is E.4's bound; calibration can amplify it on steep segments, but never across
+    # a risk tier (models.build enforces both).
+    assert max(abs(a - b) for a, b in zip(served, expected, strict=True)) < 1e-3
 
 
 @pytest.mark.req("FR-02-01")
@@ -240,5 +242,5 @@ def test_a_build_whose_served_path_disagrees_is_refused(
 ) -> None:
     vectors, extras = synthetic_cache(1500, 5)
     monkeypatch.setattr(builder, "PARITY", 0.0)  # nothing can be within zero
-    with pytest.raises(builder.ParityError, match=r"bound is 0\.0"):
+    with pytest.raises(builder.ParityError, match=r"bound 0\.0"):
         builder.build(vectors, extras, seed=5)
