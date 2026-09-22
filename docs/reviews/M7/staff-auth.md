@@ -175,3 +175,28 @@ database that ran the old V12 needs `flyway repair` or a rebuild.
 
 Script: one mutation at a time, then `git checkout` of the file; the tree was clean after the
 batch.
+
+### Owner follow-up on the surviving mutation (2026-09-22)
+
+The owner asked whether the reload after locking protects anything that saving only the changed
+columns does not. It does: `UserAdministrationService.update` reads the acting administrator
+before locking the target, and a self-edit's decisions (the version check, status, lock end) then
+ran on the copy read before the lock.
+
+The test written for that path (`selfEditRacingFailureLockDecidesOnTheLockedRow`) also exposed a
+defect in the `24016f9` fix. On Hibernate 7 the locking query throws "conflicting version" when the
+row's version has moved, so the refresh after it never ran, and the race answered 500. Fixed in
+`8f6bdba`: rows are locked by `refresh(entity, PESSIMISTIC_WRITE)`.
+
+| # | Mutation | Test | Result |
+|---|---|---|---|
+| R1 | Lock without reload (`lock` instead of `refresh`) | `UserAdministrationTest.selfEditRacingFailureLockDecidesOnTheLockedRow` | killed |
+| R2 | Reload without lock | `RefreshRaceTest.signOutEverywhereRacingRotationLeavesNoLiveToken` | killed |
+| R3 | API-key row lock removed | `ApiKeyLifecycleTest.concurrentRotationsOfOneKeyIssueOneReplacement` (added in `bac8cbb`; R3 survived before it) | killed |
+
+R1 replaces K1, the former survivor.
+
+Final frozen-tree run at `85aff03`: 1,403 tests with 0 failures, all gates met
+(`docs/benchmarks/m7_evidence_85aff03.md`). The worst-case token-version invalidation measured
+4,620 ms under a load average of about 11. It is within the 5 s gate but has little margin, so CI
+should re-measure it.
