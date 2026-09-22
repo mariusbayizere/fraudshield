@@ -2,7 +2,7 @@
 
 Every macro in `numbers.tex` checked against its evidence file at `m4-complete` (`72e7790`), read with `git show`, by `audit_numbers.py`. Values are compared as printed: rounding, sign and interval bounds included. Regenerate with `python3 docs/research/paper/audit_numbers.py`; do not edit by hand.
 
-**307 macros, 307 MATCH, 0 not matching.**
+**323 macros, 323 MATCH, 0 not matching.**
 
 | Macro | Value in paper | Value in evidence | File | Note | Result |
 |---|---|---|---|---|---|
@@ -87,7 +87,10 @@ Every macro in `numbers.tex` checked against its evidence file at `m4-complete` 
 | `\nGateFone` | `0.821` | `0.821` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
 | `\nGateFNR` | `0.264` | `0.264` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
 | `\nGateECE` | `0.001` | `0.001` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
-| `\nGatePass` | `9 of 11` | `9 of 11` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nGatePassed` | `9` | `9` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nGateMeasured` | `11` | `11` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nGateTotal` | `13` | `13` | `docs/traceability/requirements.yaml` | the last gate id in the file | MATCH |
+| `\nGateFPRFlag` | `0.0006` | `0.0006` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
 | `\nGatePrecFPR` | `0.471` | `0.471` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
 | `\nGatePrecCeiling` | `0.494` | `0.494` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
 | `\nGateOnnx` | `\ensuremath{4.06 \times 10^{-7}}` | `4.06e-07` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
@@ -180,6 +183,19 @@ Every macro in `numbers.tex` checked against its evidence file at `m4-complete` 
 | `\nAblRoundD` | `-0.0025` | `-0.0025` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
 | `\nAblMonthD` | `-0.0008` | `-0.0008` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
 | `\nAblCardD` | `-0.0420` | `-0.0420` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nAblCardAUC` | `0.928` | `0.928` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nAblCardp` | `\ensuremath{2.6 \times 10^{-23}}` | `2.6e-23` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nAblCardR` | `0.677` | `0.677` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nTestLegit` | `100{,}924` | `100924` | derived | test rows minus test fraud | MATCH |
+| `\nGateFPRBlockCount` | `32` | `32` | derived | ML-GATE-05's unrounded FPR (metrics.json) times the legitimate test rows; must be whole | MATCH |
+| `\nGateFPRBlockPct` | `0.03\%` | `0.03%` | derived | ML-GATE-05's unrounded FPR (metrics.json) as a percentage | MATCH |
+| `\nRocPoints` | `200` | `200` | derived | vertices of the plotted ROC curve | MATCH |
+| `\nRocLowFPR` | `1.2\%` | `1.2%` | derived | FPR of the last plotted ROC vertex below the recall target (axes 264 px from x=48, y=312) | MATCH |
+| `\nRocLowRecall` | `0.871` | `0.871` | derived | recall of that vertex | MATCH |
+| `\nRocHighFPR` | `1.7\%` | `1.7%` | derived | FPR of the first plotted ROC vertex at or above the recall target | MATCH |
+| `\nRocHighRecall` | `0.882` | `0.882` | derived | recall of that vertex | MATCH |
+| `\nRevTrueFraud` | `68` | `68` | `docs/research/paper/evidence/reversal_labels_d8083dbc.txt` at `3559f8c` (evidence commit `6fe4bf0`) |  | MATCH |
+| `\nRevScoredUnlabelled` | `2` | `2` | `docs/research/paper/evidence/reversal_labels_d8083dbc.txt` at `3559f8c` (evidence commit `6fe4bf0`) |  | MATCH |
 | `\nAblUSSDD` | `-0.0004` | `-0.0004` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
 | `\nGroupDevice` | `0.720` | `0.720` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
 | `\nGroupSynth` | `0.706` | `0.706` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |

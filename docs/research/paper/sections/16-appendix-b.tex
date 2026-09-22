@@ -74,7 +74,7 @@ Feature & Definition \\
 \texttt{corridor\_\allowbreak class} & Domestic, intra-bloc, cross-bloc within Africa, or intercontinental, from the two countries' bloc memberships (ADR 0023; Section~\ref{sec:setting}). \\
 \addlinespace
 \multicolumn{2}{l}{\textbf{Synthetic identity}} \\*
-\texttt{synthetic\_\allowbreak identity\_\allowbreak score} & A deterministic, hand-specified composite of low KYC tier, young account age, shared device and phone attributes, and rapid volume ramp, computed without labels. \\
+\texttt{synthetic\_\allowbreak identity\_\allowbreak score} & The unweighted mean of four terms, each in $[0, 1]$, computed without labels: low KYC tier; an account opened within the last thirty days; device sharing (zero for one account on the device, one at three or more); and a volume ramp (the share of the trailing thirty days' transactions that fall in the trailing seven, rescaled so that a constant rate scores zero). A term without data contributes zero, so a score of zero means no evidence rather than checked and clean. \emph{On this benchmark} no KYC tier or opening date exists (\texttt{kyc\_tier} and \texttt{account\_age\_days} above have no source), so the first two terms are always zero; the device term is zero wherever there is no device fingerprint, as on USSD; and the phone attributes the specification names have no column. The score therefore reads device sharing and volume ramp only, and cannot exceed one half. \\
 \addlinespace
 \bottomrule
 \end{longtable}

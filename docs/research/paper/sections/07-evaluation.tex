@@ -38,18 +38,27 @@ of \nGateTrivialMargin{}. The remaining gate metrics are read at a calibrated pr
 lone feature does not have, so no floor exists for them and none is quoted: at the flag threshold
 recall is \nGateRecallSix{} \nGateRecallSixci{} against a target of \nTargetRecall{} and the
 false-negative rate \nGateFNR{} against \nTargetFNR{}, the two metrics that \textbf{fail}; F1 is
-\nGateFone{} \nGateFoneci{}; the false-positive rate at the block threshold is \nGateFPRBlock{};
-SHAP coverage of flagged transactions is \nGateShapCov{}; and the expected calibration error over
-15 equal-mass bins is \nGateECE{}. In all, \nGatePass{} gate metrics pass.
+\nGateFone{} \nGateFoneci{}; at the block threshold \nGateFPRBlockCount{} of the \nTestLegit{}
+legitimate test rows are blocked, a false-positive rate of \nGateFPRBlockPct{} (printed as
+\nGateFPRBlock{} at three decimals); SHAP coverage of flagged transactions is \nGateShapCov{}; and
+the expected calibration error over 15 equal-mass bins is \nGateECE{}. In all, \nGatePassed{} of the
+\nGateMeasured{} gate metrics measurable at this stage pass. The specification's gate has
+\nGateTotal{}: the other two, inference latency at the 99th percentile and the shadow-mode AUC
+delta, need the scoring service and, for latency, a dedicated machine, and both are \notyet{M5 and M10}.
 
 The recall miss is recorded as a finding at this training volume, with the threshold unchanged and
-nothing tuned on the test period (ADR 0031). It is a shortfall in ranking, not a choice of
-threshold: even at the looser \nFPRBudget{} false-positive budget recall is \nGateRecallFPR{},
-still below \nTargetRecall{}, so no threshold on this run reaches the target. Whether the miss is a
-property of the benchmark or of training on \nTrainUsed{} of the \nTrainRows{} available rows is
-untested until the learning curve (PB-67) is measured: \notyet{PB-67 learning curve}. At the flag
-threshold precision is \nGatePrecSix{}, so the operating point trades recall for very few false
-alerts.
+nothing tuned on the test period (ADR 0031). It holds for the flag threshold and for every
+threshold at least as strict, not for every threshold. At the flag threshold the false-positive
+rate is \nGateFPRFlag{} and precision \nGatePrecSix{}: the operating point trades recall for very
+few false alerts. Recall at the \nFPRBudget{} false-positive budget is \nGateRecallFPR{}, still
+below \nTargetRecall{}, and recall cannot fall as the false-positive rate rises, so \textbf{no
+threshold with a false-positive rate at or below \nFPRBudget{} reaches the target}. A looser
+threshold does. On the run's ROC curve, plotted through \nRocPoints{} vertices, recall is
+\nRocLowRecall{} at a false-positive rate of \nRocLowFPR{} and \nRocHighRecall{} at \nRocHighFPR{},
+so it first reaches \nTargetRecall{} somewhere between those two rates, at more than the budget
+the specification's own recall-at-budget metric allows. Whether the miss depends on training on
+\nTrainUsed{} of the \nTrainRows{} available rows is untested until the learning curve over
+training volume is measured, which is \notyet{PB-67}.
 
 Precision at the \nFPRBudget{} budget is \nGatePrecFPR{}, reported against its ceiling at this
 test period's base rate, \nGatePrecCeiling{}: even a perfect ranking could not exceed it, which is
@@ -177,16 +186,27 @@ same structure into the velocity, counterparty, temporal and geographic views at
 earlier draw \texttt{6abde44e} the same four groups each reached at least \nEarlyGroupMin{}; the
 threshold moved with the draw and the finding did not.
 
-It also disposes of a planned experiment. The specification's claim that models built elsewhere
-reach far lower AUC on East African mobile money data is unverified (claims register, C-4), and
-the proposed replacement, a card-style feature set against the full set, cannot answer it here:
-the production ensemble restricted to card-style features changes AUC by \nAblCardD{}, and on a
-benchmark this redundant a subset comparison shows a small difference whatever is true of real
-systems. The specification's other ablations of the production ensemble are equally small
-(without agent features \nAblAgentD{}, without the corridor feature \nAblCorridorD{}, without
-round-sum awareness \nAblRoundD{}, without month-end awareness \nAblMonthD{}, without USSD-aware
-device handling \nAblUSSDD{}) and are reported for completeness, not as evidence of what matters
-in production.
+It also disposes of a planned experiment, although that experiment produces the largest ablation
+effect in this paper. The specification claims that models built elsewhere reach far lower AUC on
+East African mobile money data; the claim is unverified (claims register, C-4), and the proposed
+replacement was to compare a card-style feature set with the full set. Restricting the production
+ensemble to the six groups we assume a card-fraud model would carry, which drops the counterparty, agent,
+corridor and synthetic-identity groups, lowers AUC by \nAblCardD{} to \nAblCardAUC{} (DeLong
+$p = \nAblCardp$) and recall at the \nFPRBudget{} budget from \nGateRecallFPR{} to \nAblCardR{}.
+The effect is real on this benchmark, and its size is exactly why it cannot answer the claim. The
+dropped groups include counterparty, the strongest group on its own (\nGroupCounterparty{}) and the
+one whose removal costs most, \nGroupMaxDrop{} on the diagnostic model, and the generator writes counterparty
+structure into its scenarios by design: SIM-swap drains go to new or mule counterparties, and mule
+accounts collect many inbound transfers (Appendix~\ref{app:scenarios}). The drop therefore
+measures how much of the fraud this generator plants is carried by person-to-person features,
+which is a consequence of assumed scenario parameters. The claim is about a change of population,
+a model built on other transactions and applied to East African ones, and a feature subset trained
+and tested on one synthetic population does not test a change of population at any effect size: a
+larger drop would say only that the generator puts more of its fraud into counterparty structure.
+The specification's other ablations of the production ensemble are small (without agent features
+\nAblAgentD{}, without the corridor feature \nAblCorridorD{}, without round-sum awareness
+\nAblRoundD{}, without month-end awareness \nAblMonthD{}, without USSD-aware device handling
+\nAblUSSDD{}) and are reported for completeness, not as evidence of what matters in production.
 
 \subsection{Calibration and explanation}
 
@@ -199,8 +219,8 @@ contributions, which must sum to the model's margin, is \nBatAdditivity{}.
 \subsection{The latency--explainability frontier}
 \label{sec:frontier}
 
-Resolution D-16 makes tree complexity a constrained hyperparameter: a configuration whose
-single-request 99th-percentile latency, model plus exact TreeSHAP, exceeds 40~ms is rejected.
+Tree complexity is a latency-constrained hyperparameter here: a configuration whose single-request
+99th-percentile latency, model plus exact TreeSHAP, exceeds 40~ms is rejected (resolution D-16).
 Table~\ref{tab:frontier} is the trade-off, measured one request at a time (a batch would amortise
 exactly the overhead a single request pays), \nFrRequests{} timed requests per configuration after
 a warm-up, on the development laptop.
@@ -256,7 +276,7 @@ target, should choose the tree configuration.
 \textbf{We report the median only.} In \nFrontNegative{} configurations the measured 99th
 percentile shows a \emph{negative} explanation cost, which is impossible: explaining cannot be
 faster than not explaining. The tail on this shared machine is scheduler jitter, not model
-complexity. D-16's 40~ms constraint therefore cannot be applied from this run; the
+complexity. The 40~ms constraint therefore cannot be applied from this run; the
 99th-percentile frontier on a dedicated machine is \notyet{M10}. Three further limits: one model
 family (not the ensemble), one process (not the specified multi-process service), and a SHAP cost
 paid on every row, whereas in serving it is paid only on flagged transactions.
