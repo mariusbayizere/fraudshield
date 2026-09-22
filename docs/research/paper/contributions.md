@@ -24,6 +24,7 @@ whether or not it flattered the dataset.
 | **Leave-one-country-out is null**: removing a country from training entirely costs ≤ 0.002 AUC | PB-59 |
 | **The novel-variant temporal hold-out is null too**: the unseen shape is caught at 100% against 95.1% for the familiar one | PB-61 |
 | One cause explains all three: the benchmark encodes fraud as **bursts**, and every variant, every country and every feature group is a view of that one structure | PB-61 |
+| **A pre-registered, typology-grounded non-burst variant is the one genuine failure found**: `reversal_scam_social_engineering` (single victim-initiated transfer, established counterparty) is caught at **6.1%** (4/66, Wilson 95% CI [2.4%, 14.6%]) against base's 94.2% [92.4%, 95.6%] — confirming, on a held-out shape rather than by inference from ablation margins, that detection power concentrates in burst-structure and counterparty-novelty | PB-61, ADR 0028, `docs/benchmarks/m4_battery_pb61.txt` |
 | The dataset carries a **fingerprint over its output rows**, because a parameter digest cannot see a changed draw | PB-41, PB-54 |
 | Evidence artefacts carry the commit **and the working-tree state**, because a hash written by hand records an intention | PB-52, PB-53 |
 

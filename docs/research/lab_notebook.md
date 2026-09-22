@@ -2214,3 +2214,44 @@ to lack both at once.
 
 This entry will not be edited after the measurement. The result — whichever direction it lands —
 follows in its own entry, dated after the regeneration this commit precedes.
+
+### 2026-09-22 · The reversal-scam result: below the predicted range, not inside it
+
+Measured against `dataset/output/features_full.parquet` at fingerprint `d8083dbc`, the full test
+period (101,909 rows, so every one of the variant's rows is scored, not a sample of them):
+`docs/benchmarks/m4_battery_pb61.txt`.
+
+**`reversal_scam_social_engineering`: recall 6.1% (4 of 66 fraud rows detected), Wilson 95%
+interval [2.4%, 14.6%]. AUC 0.656 ± 0.072.** Against `base` at recall 94.2%, interval [92.4%,
+95.6%], on 827 rows. The two intervals do not overlap — at 66 fraud rows a single point estimate
+would not be enough on its own to say the variant is genuinely harder to detect rather than the
+result of sampling noise, but the non-overlap is what makes this a supported comparison rather than
+one asserted from the point estimate alone.
+
+**This falls below the pre-registered prediction range (0.15–0.55), not inside it.** The
+pre-registration's own refutation condition for "recall below roughly 0.10" is the one that fired:
+"burst-structure and counterparty-novelty account for nearly all of this benchmark's detection
+power on their own." The prediction undershot in the direction of *underestimating* how much the
+model depends on those two axes — the lower bound of the predicted range (0.15) was itself set from
+"amount and the counterparty-confirmed-fraud-90d feature remain live," and at 6.1% those two
+signals are evidently much weaker load-bearing features than the prediction assumed, once the
+burst shape and payee novelty are both absent.
+
+**What this changes.** PB-59 (LOCO) and PB-61's first variant (`novel_esim_delayed_drain`) were
+both null because the axis they varied was never the axis the model uses. This is the first
+experiment in the M4 generalisation series to measure the model actually failing at something —
+and it fails hard, not marginally. It is also the sharpest confirmation yet of PB-60's redundancy
+finding: four disjoint feature groups each reaching AUC ≥0.845 alone was already evidence that
+detection power concentrates in a few mechanisms; a purpose-built case lacking two of them landing
+at 6.1% recall is that same finding, now demonstrated on a single held-out shape rather than
+inferred from ablation margins.
+
+**What this does not change.** The pre-registration was explicit that this is one variant, chosen
+from one typology, and that a low recall here does not generalise to "non-burst fraud is
+undetectable" — it generalises only as far as "this benchmark's two strongest signals are absent in
+this shape, and the remaining signals do not compensate." Whether that holds for other non-burst
+typologies (romance scams, invoice fraud, authorised-push-payment variants with different
+counterparty patterns) is untested and out of scope for this entry.
+
+The 2026-09-22 pre-registration entry above is unedited. This entry supersedes nothing in it; it
+reports the measurement that entry said would follow.

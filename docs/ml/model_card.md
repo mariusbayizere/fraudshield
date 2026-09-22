@@ -68,6 +68,18 @@ and explaining that detection. The generator has deliberately not been changed t
 experiment informative: engineering a difference so that a test can fail is tuning the benchmark
 to produce a result.
 
+**One held-out shape does fail, and it is the one the two null results predicted would.** A
+pre-registered, typology-grounded non-burst variant — `reversal_scam_social_engineering`, a single
+victim-initiated transfer to an established counterparty, added 2026-09-22 (ADR 0028) specifically
+because the country and lead-time axes above never removed the two mechanisms the model actually
+relies on — is caught at **6.1%** (4 of 66 fraud rows, Wilson 95% interval [2.4%, 14.6%]), against
+94.2% [92.4%, 95.6%] for the base scenarios at the same threshold. The intervals do not overlap.
+This is not a generalisation success to qualify the statement above: it is a genuine detection
+failure, on one typology, measured rather than assumed. It supports the narrower claim that this
+model's detection power is concentrated in burst-structure and counterparty-novelty, and says
+nothing about other non-burst typologies (romance scams, invoice fraud, other APP variants), which
+remain untested.
+
 ### The benchmark is velocity-separable, and this governs every metric below
 
 A single feature, `velocity_ratio_1h_vs_30d`, reaches `max(AUC, 1−AUC)` of **0.894 ±0.032** on this

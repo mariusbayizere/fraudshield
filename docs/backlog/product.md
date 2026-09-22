@@ -1082,6 +1082,15 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 - **Not in scope here:** making the generator's scenarios country-specific. That would change the
   draw and is an owner decision; it would also be a claim about how fraud differs between these
   markets, which the 2026-09-18 sourcing pass established no publication supports.
+- **Updated 2026-09-22 — the real variant was added and measured (ADR 0028).** One
+  pre-registered, typology-grounded, non-burst variant (`reversal_scam_social_engineering`:
+  victim-initiated, single transaction, established counterparty — see the lab notebook's
+  2026-09-22 entries for the pre-registration and the result). Measured recall **6.1%** (4 of 66
+  fraud rows), Wilson 95% interval [2.4%, 14.6%], against base's 94.2% [92.4%, 95.6%] — intervals
+  do not overlap. Below the pre-registered prediction range (0.15–0.55): the model's dependence on
+  burst-structure and counterparty-novelty was underestimated, not overestimated. This is now the
+  benchmark's one measured non-burst detection failure and belongs in the paper alongside the two
+  null results, not as a replacement for either. Evidence: `docs/benchmarks/m4_battery_pb61.txt`.
 
 ### PB-60 · An ablation on this benchmark cannot say which features matter
 - **Source:** the M4 battery, 2026-09-22 · **Priority:** medium · **Due:** before C-4's ablation

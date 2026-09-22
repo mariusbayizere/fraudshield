@@ -340,6 +340,14 @@ the study of a novel fraud variant that appears only in the test period.
 The generator has deliberately **not** been changed to make any of these experiments informative.
 Engineering a difference so that a test can fail is tuning the benchmark to produce a result.
 
+**One non-burst variant was added, and it is what a real out-of-distribution test looks like
+here.** `reversal_scam_social_engineering` (victim-initiated, single transaction, established
+counterparty — a real "sent by mistake, please return" typology, not engineered to defeat the
+model; pre-registered before generation, ADR 0028) is caught at **6.1%** (4 of 66 fraud rows,
+Wilson 95% interval [2.4%, 14.6%]) against 94.2% [92.4%, 95.6%] for the base scenarios. This is a
+genuine, measured detection gap on one typology — not evidence that this dataset supports general
+non-burst generalisation claims, which it does not (PB-61).
+
 **What do the M3 features go silent on?** One documented silence, with the measurement that says
 what it costs on this dataset.
 
