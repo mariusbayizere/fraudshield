@@ -18,11 +18,11 @@ public final class LocalRateLimiter implements RateLimiter {
 
   private static final class Bucket {
     private double tokens;
-    private long lastRefillNanos;
+    private long lastRefillMillis;
 
-    private Bucket(double tokens, long nanos) {
+    private Bucket(double tokens, long millis) {
       this.tokens = tokens;
-      this.lastRefillNanos = nanos;
+      this.lastRefillMillis = millis;
     }
   }
 
@@ -52,9 +52,9 @@ public final class LocalRateLimiter implements RateLimiter {
     long now = clock.millis();
     Bucket bucket = buckets.computeIfAbsent(apiKeyId, key -> new Bucket(burst, now));
     synchronized (bucket) {
-      double refill = (now - bucket.lastRefillNanos) / 1000.0 * limit;
+      double refill = (now - bucket.lastRefillMillis) / 1000.0 * limit;
       bucket.tokens = Math.min(burst, bucket.tokens + Math.max(0, refill));
-      bucket.lastRefillNanos = now;
+      bucket.lastRefillMillis = now;
       if (bucket.tokens >= 1) {
         bucket.tokens -= 1;
         return new Permit(true, limit, (int) bucket.tokens, 0, true);

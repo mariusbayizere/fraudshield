@@ -100,6 +100,18 @@ developer machine ↔ public repository.
 | `fs_migrator` credential | T/R: the schema owner can disable or drop append-only triggers and rewrite decisions, blocks, labels or configuration versions | Owner used only by the migration job, never by services (M9); audit log tamper-evident through the hash chain and signed anchors (M7) | Non-audit append-only tables have no tamper evidence beyond grants and triggers |
 | Devcontainer | E: Docker-in-Docker privileged | Base image by digest | Feature versions not digest-pinned |
 
+### 3.7 The M6 decision path, as built (numbered 3.7 because M7's branch takes 3.6)
+
+| Component | Threat | Control as built | Residual |
+|---|---|---|---|
+| PII vault (8) | I: a compromised service or a stolen backup reveals phone and account numbers | A separate PostgreSQL instance whose roles do not include any role of the main database; AES-256-GCM per-row data keys wrapped under a master key held by a `KeyProvider`; the institution and account token are authenticated data, so a row copied elsewhere fails to decrypt; contacts are resolved for one send and never logged, stored or published (ADR 0069, `VaultContactsTest`) | Master keys come from configuration until M9's KMS; key rotation re-wraps lazily, so an old key must stay configured until every row is rewritten; anyone holding both the vault dump and the configuration holds the data |
+| Ingestion API (1) | D: one key floods the decision path | A token bucket per API key in Redis, 429 with `Retry-After`; while Redis is down each instance holds the budget alone and says so in `RateLimit-Degraded` and in `fs_rate_limit_decisions_total` (E.1, `RateLimitApiTest`) | The degraded budget is per instance, so a deployment of N instances allows up to N times the limit during a Redis outage — a deliberate trade against refusing traffic the store cannot vouch for |
+| Idempotency (C.2) | T: one payment decided twice with different answers, across a lease expiry or a Redis outage | Claim ownership tokens, fingerprints always stored, UNCERTAIN claims, and a per-institution verification window against `transaction_ids` after any decision Redis did not see (ADR 0067 points 4–6) | With both Redis and PostgreSQL unavailable the claim is decided unverified and counted; the durable writer still keeps the first decision |
+| Notification consumers | D: a poison record stalls every customer SMS or webhook on a partition | Permanent failures go to `<topic>.dlq` with the reason and the source offset; transient ones back off to 30 s (C.3, ADR 0064 point 5) | A dead-lettered record needs an operator; nothing replays the DLQ yet |
+| Webhook egress (7) | I/E: a registered URL points at an internal address (SSRF) | An explicit deny-list of IPv4 and IPv6 special-purpose ranges, including CGNAT, checked on every resolved address, with a test per range (ADR 0066) | DNS rebinding between the check and the connection is declared, not prevented; pinning is open work |
+| `/api/docs` (1) | I: a documentation endpoint that leaks internals or drifts from the contract | The frozen `contracts/openapi/fraudshield-api.yaml` served byte for byte from the jar, with a test that fails on any difference; no API key required, because it is the public contract | The document names every endpoint, which is the point of publishing it |
+| Configuration reads (JPA) | T: an ORM writing where the schema forbids it; I: a tenant reading another's configuration | Append-only tables map to `@Immutable` entities; `ddl-auto=validate` and `open-in-view=false` are enforced at start-up; the institution is set inside the JPA transaction, so row-level security covers Hibernate's statements (ADR 0068) | A future entity over an append-only table that forgets `@Immutable` fails at the trigger, not at review; the guard covers settings, not annotations |
+
 ## 4. Open risks
 
 | # | Risk | Owner action or milestone |
@@ -108,3 +120,7 @@ developer machine ↔ public repository.
 | R-2 | Audit anchors unsigned until the audit service exists | Audit service milestone |
 | R-3 | Application role `fs_app` necessarily reads credential hashes of its tenant; a SQL injection in the API would expose them | Parameterised queries only (M5/M6 persistence layer), static analysis in CI |
 | R-4 | Third-party penetration test | REQUIRES_EXTERNAL_PARTY (D-28) |
+| R-9 | The vault's master keys live in configuration until M9's KMS; whoever holds a vault backup and the process configuration holds customer PII | M9 (D-20, ADR 0069) |
+| R-10 | The MNO SIM-swap signal does not exist, so D-25 refuses self-service for every block and no customer reaches the verification page in production | M7/M8 adapter (ADR 0065) |
+| R-11 | Nothing replays a dead-lettered notification; a poison record is preserved and counted, not recovered | M7 operations tooling (ADR 0064 point 5) |
+| R-12 | Webhook DNS rebinding between the destination check and the connection | Pinning or a proxy with an address allow-list (ADR 0066) |

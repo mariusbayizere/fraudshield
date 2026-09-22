@@ -110,7 +110,8 @@ public class NotificationWiring {
     source.setUrl(vault.url());
     source.setUser(vault.username());
     source.setPassword(vault.password());
-    LOG.info("the PII vault is configured at {}; customer SMS can be sent", vault.url());
+    // The URL is not logged: a JDBC URL can carry a password, and this line would publish it.
+    LOG.info("the PII vault is configured; customer SMS can be sent");
     return new VaultContacts(
         source, new PassphraseKeyProvider(vault.masterKeys(), vault.currentKeyId()));
   }

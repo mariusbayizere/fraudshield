@@ -1,6 +1,5 @@
 package io.github.mariusbayizere.fraudshield.ingest.config;
 
-import java.util.Locale;
 import java.util.Set;
 import org.springframework.context.EnvironmentAware;
 import org.springframework.core.env.Environment;
@@ -29,7 +28,7 @@ public final class PersistenceSettingsGuard implements EnvironmentAware {
     check(
         environment, "spring.jpa.properties.jakarta.persistence.schema-generation.database.action");
     String openInView = environment.getProperty("spring.jpa.open-in-view", "false");
-    if (!"false".equalsIgnoreCase(openInView.strip())) {
+    if (!"false".equals(openInView.strip())) {
       throw new IllegalStateException(
           "spring.jpa.open-in-view must be false: a persistence context must not outlive the"
               + " transaction that set the institution (ADR 0068)");
@@ -37,7 +36,10 @@ public final class PersistenceSettingsGuard implements EnvironmentAware {
   }
 
   private static void check(Environment environment, String property) {
-    String value = environment.getProperty(property, "").strip().toLowerCase(Locale.ROOT);
+    // Matched exactly, neither lowercased nor compared case-insensitively: case mapping is
+    // locale-dependent, and a guard should refuse anything it does not recognise as safe. So
+    // "VALIDATE" is refused as firmly as "update" — fail closed, and say which value was seen.
+    String value = environment.getProperty(property, "").strip();
     if (!ALLOWED_DDL.contains(value)) {
       throw new IllegalStateException(
           property

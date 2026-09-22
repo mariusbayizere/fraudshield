@@ -85,12 +85,23 @@ restated it for M6, which owns this ADR and this branch's work. Both backends sh
    `id`. M6 has no bulk JPQL update and no pessimistic lock; where either arrives, ADR 0071's rules
    apply (advance `@Version` explicitly, lock by `refresh(entity, PESSIMISTIC_WRITE)`).
 
-7. **Entities live in `backend/persistence`**, beside the migrations they mirror, so one mapping
-   serves the seeder that writes a configuration version and the decision path that reads it. The
-   repositories live with their callers. The application class is in the root package, so Boot's
-   auto-configuration package already covers both; `@EnableJpaRepositories` is deliberately not
-   used, because it would replace that scanning and could switch off another module's
-   repositories.
+7. **Entities live in the module that uses them**, with their repositories: the decision module
+   maps the configuration tables it reads, the persistence module maps what the demo seeder
+   writes. The two are never on one classpath, and the seeder's copies carry distinct entity names
+   so they could co-exist if that ever changed.
+
+   This was not the first design. Putting every entity in `backend/persistence` reads better —
+   entities beside the migrations they mirror — but it makes the API depend on that module, which
+   carries the demo seeder's start-up guards with it: the API then refused to start against a
+   database holding synthetic data, and every API test failed. A module dependency brings its
+   auto-configuration along, so the modules stay as they are (this is also how M7's entities sit,
+   in its own `auth.persistence` package).
+
+   The application class is in the root package, so Boot's auto-configuration package already
+   covers the entities and repositories wherever they live; `@EnableJpaRepositories` is
+   deliberately not used, because it would replace that scanning and could switch off another
+   module's repositories. Repository interfaces are top-level: Spring Data's scanner does not
+   register interfaces nested inside a class.
 
 8. **Licence exceptions** (owner decision, recorded verbatim from M7 so the branches merge):
    `jakarta.persistence-api` 3.2.0 elects **BSD-3-Clause**, `jakarta.transaction-api` 2.0.1 elects
@@ -104,7 +115,7 @@ settings and the ones the application ships), `IngestApiTest` (the application b
 `validate`, and a 1,000-item batch runs through the JPA job), `RedisOutageTest`,
 `DemoDataSeederTest`, `SyntheticDataGuardTest`, `DatabaseSecurityTest` and `SchemaPoliciesTest`.
 
-The decision module now depends on the persistence module for the entities. Hibernate 7.4 and
-Spring Data JPA 4.1 enter the runtime classpath; the API's start-up gains a mapping validation,
+Hibernate 7.4 and Spring Data JPA 4.1 enter the runtime classpath of the decision and persistence
+modules; the API's start-up gains a mapping validation,
 which is a check, not a cost worth measuring. The hot path is unchanged: it never touches an
 entity.

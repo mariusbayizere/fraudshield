@@ -23,6 +23,13 @@
     <Class name="io.github.mariusbayizere.fraudshield.ingest.web.VerificationPageController"/>
     <Bug pattern="SPRING_ENDPOINT"/>
   </Match>
+  <!-- ApiDocsController serves one constant byte array read at start-up: the frozen OpenAPI
+       contract, which is public by definition (FR-01-07). It takes no parameter and reads no
+       request state, so there is nothing to authenticate or validate. -->
+  <Match>
+    <Class name="io.github.mariusbayizere.fraudshield.ingest.web.ApiDocsController"/>
+    <Bug pattern="SPRING_ENDPOINT"/>
+  </Match>
   <!-- The X-API-Key header is client-controlled by definition; it is only ever passed to the
        API-key module's constant-time verifier and never trusted before that (D-19). -->
   <Match>

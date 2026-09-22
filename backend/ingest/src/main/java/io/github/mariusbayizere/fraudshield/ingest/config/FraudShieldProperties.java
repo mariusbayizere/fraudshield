@@ -97,7 +97,7 @@ public record FraudShieldProperties(
       String currentKeyId,
       Map<String, String> masterKeys) {
 
-    /** Validates a configured vault. */
+    /** Validates a configured vault and copies its key material. */
     public Vault {
       if (url == null || username == null || password == null) {
         throw new IllegalArgumentException(
@@ -107,6 +107,7 @@ public record FraudShieldProperties(
         throw new IllegalArgumentException(
             "fraudshield.vault.current-key-id and master-keys are required when the vault is set");
       }
+      masterKeys = Map.copyOf(masterKeys);
     }
 
     @Override

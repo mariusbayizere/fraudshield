@@ -19,7 +19,18 @@ public interface KeyProvider {
    * @param key the data key itself, for this write only
    * @param wrapped the data key as stored beside the row
    */
-  record DataKey(String keyId, SecretKey key, byte[] wrapped) {}
+  record DataKey(String keyId, SecretKey key, byte[] wrapped) {
+
+    /** Copies the wrapping, so no caller can change what was stored beside the row. */
+    public DataKey {
+      wrapped = wrapped.clone();
+    }
+
+    @Override
+    public byte[] wrapped() {
+      return wrapped.clone();
+    }
+  }
 
   /**
    * Makes a data key for one row.

@@ -56,6 +56,10 @@ class IngestApiTest {
   @DynamicPropertySource
   static void properties(DynamicPropertyRegistry registry) {
     ApiHarness.properties(registry);
+    // FR-01-03's 100 concurrent duplicates and FR-01-06's 1,000-item batch are about idempotency
+    // and batching; E.1's budget is asserted in RateLimitApiTest, so it is lifted here.
+    registry.add("fraudshield.rate-limit.requests-per-second", () -> "50000");
+    registry.add("fraudshield.rate-limit.burst", () -> "50000");
   }
 
   @BeforeEach
