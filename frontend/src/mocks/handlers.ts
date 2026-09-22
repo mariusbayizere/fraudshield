@@ -68,6 +68,19 @@ export const handlers = [
       { status: 202, headers: { 'x-mock': MOCK_MARKER } },
     ),
   ),
+  http.post('/api/v1/auth/password-reset/request', () => new HttpResponse(null, { status: 202 })),
+  http.post('/api/v1/auth/password-reset/verify', async ({ request }) => {
+    const body = (await request.json()) as { code?: string };
+    // Development only: 000000 is the code that works, anything else is refused.
+    return body.code === '000000'
+      ? HttpResponse.json({
+          reset_token: 'mock-reset-token-abcdefghijklmnopqrstuvwxyz',
+          expires_at: new Date(Date.now() + 900_000).toISOString(),
+        })
+      : HttpResponse.json({ title: 'Invalid code' }, { status: 400 });
+  }),
+  http.post('/api/v1/auth/password-reset/complete', () => new HttpResponse(null, { status: 204 })),
+  http.post('/api/v1/auth/unlock', () => new HttpResponse(null, { status: 204 })),
   // Development only: one taken email and one taken employee ID, to exercise both answers.
   http.get('/api/v1/auth/availability', ({ request }) => {
     const value = new URL(request.url).searchParams.get('value') ?? '';

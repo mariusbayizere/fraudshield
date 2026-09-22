@@ -18,6 +18,17 @@ const SectionPage = lazyRouteComponent(() => import('./pages/SectionPage'));
 const AppShell = lazyRouteComponent(() => import('./AppShell'), 'AppShell');
 const LoginPage = lazyRouteComponent(() => import('../auth/LoginPage'));
 const RegisterPage = lazyRouteComponent(() => import('../auth/registration/RegisterPage'));
+const ForgotPasswordPage = lazyRouteComponent(() => import('../auth/ForgotPasswordPage'));
+const ResetPasswordPage = lazyRouteComponent(() => import('../auth/ResetPasswordPage'));
+const UnlockPage = lazyRouteComponent(() => import('../auth/UnlockPage'));
+const PendingApprovalPage = lazyRouteComponent(() => import('../auth/PendingApprovalPage'));
+
+const AUTH_PAGES: { path: string; component: ReturnType<typeof lazyRouteComponent> }[] = [
+  { path: '/forgot-password', component: ForgotPasswordPage },
+  { path: '/reset-password', component: ResetPasswordPage },
+  { path: '/unlock', component: UnlockPage },
+  { path: '/pending-approval', component: PendingApprovalPage },
+];
 
 const shell = createRoute({ getParentRoute: () => rootRoute, id: 'shell', component: AppShell });
 
@@ -59,9 +70,13 @@ const registerRoute = createRoute({
   component: RegisterPage,
 });
 
-const publicPages: AnyRoute[] = PUBLIC_PAGES.filter(
-  (page) => page.path !== '/login' && page.path !== '/register',
-).map((page) =>
+const authPages: AnyRoute[] = AUTH_PAGES.map((page) =>
+  createRoute({ getParentRoute: () => rootRoute, path: page.path, component: page.component }),
+);
+
+const built = new Set(['/login', '/register', ...AUTH_PAGES.map((page) => page.path)]);
+
+const publicPages: AnyRoute[] = PUBLIC_PAGES.filter((page) => !built.has(page.path)).map((page) =>
   createRoute({
     getParentRoute: () => rootRoute,
     path: page.path,
@@ -73,6 +88,7 @@ export const routeTree = rootRoute.addChildren([
   shell.addChildren([index, ...sections, alertDetail]),
   login,
   registerRoute,
+  ...authPages,
   ...publicPages,
 ]);
 
