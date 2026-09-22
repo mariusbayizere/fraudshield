@@ -143,9 +143,17 @@ class Bundle:
         return out
 
     def predict(self, row: Sequence[float]) -> Prediction:
+        return self.calibrate(*self.raw(row))
+
+    def raw(self, row: Sequence[float]) -> tuple[float, float]:
+        """Each booster's uncalibrated probability for one row."""
         array = np.asarray([row], dtype=np.float64)
         p_xgb = float(self.xgboost.inplace_predict(array, missing=math.nan)[0])
         p_lgb = float(self.lightgbm.predict(array, num_threads=1)[0])
+        return p_xgb, p_lgb
+
+    def calibrate(self, p_xgb: float, p_lgb: float) -> Prediction:
+        """D-05: one isotonic map on the weighted combination, and one per model for display."""
         raw = XGBOOST_WEIGHT * p_xgb + LIGHTGBM_WEIGHT * p_lgb
         return Prediction(
             xgboost_raw=p_xgb,
