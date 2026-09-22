@@ -1,0 +1,37 @@
+# 0065 — Customer SMS, verification and local time
+
+- **Status:** Accepted
+- **Date:** 2026-09-22
+- **Requirements affected:** FR-03-04, FR-03-05
+- **Defects referenced:** D-25, D-42, D-43, D-51
+
+## Context
+
+E.7 and D-25 specify the auto-block SMS and the verification page. Three facts constrain them:
+FraudShield only ever sees account tokens; no MNO SIM-swap adapter exists yet; and the SMS must be
+one GSM-7 segment in four languages.
+
+## Decision
+
+1. **Self-service is refused** when the SIM swap is under 7 days **or the signal is unavailable**,
+   the device changed in 24 hours, the score is 0.95 or more, the model's reasons indicate takeover,
+   or the fallback decided. Until an MNO adapter exists every block is therefore told to call the
+   institution; that is D-25's rule, not a defect.
+2. **The link** is minted only at send time: 128 random bits, stored as SHA-256, bound to the
+   block, one per block, expiring at exactly 10 minutes, answered once (V5 triggers). The page
+   never says why a token is unusable beyond "expired or already used".
+3. **Local time** follows the transaction currency's country (CAT, EAT; the DRC is split at 22.5°E
+   between Kinshasa WAT and Lubumbashi CAT, an approximation of the provincial boundary); USD and
+   EUR carry no country and are shown in UTC rather than a guessed zone.
+4. **Contract gap**: `notification-customer.parameters.masked_account` must be a masked account,
+   but the API has only tokens. The intent carries the token's last four characters; the sender
+   uses the vault's masked account number when it renders the message.
+5. **Templates** are GSM-7, fit one segment at worst-case lengths with a verification link of at
+   most 54 characters (`https://` + a 21-character domain + `/v/` + token), never ask for a PIN or
+   password, and are all `machine_draft` (D-43): none has had native-speaker review.
+
+## Consequences
+
+`SmsPolicyTest`, `VerificationFlowTest`, `ResilienceApiTest` (page over HTTP, block lifted and
+webhook delivered within 10 s). The PII-vault `ContactDirectory` is not built (no vault schema
+exists); without it the SMS channel does not start and intents stay on Kafka.
