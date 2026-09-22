@@ -309,3 +309,71 @@
 \newcommand{\nFrHeldOutFraud}{\meas{551}}
 % Single-feature floor rows (single_feature_baseline.md): the draw's row count.
 \newcommand{\nFloorDrawRows}{\meas{1{,}006{,}249}}
+
+% ---------------------------------------------------------------------------------------------
+% Dataset at a glance (Section 4): draw d8083dbc, read at m4-complete from
+% dataset/realism_report.md (mixes, scenario table, labels, splits), docs/ml/datasheet.md (period,
+% fingerprints, reversal-scam rows) and dataset/params_provenance.md (parameter counts).
+% ---------------------------------------------------------------------------------------------
+\newcommand{\nFingerprintA}{\meas{6abde44e5e952f4f5c6b86aac0fb934cd4de023b53ec1f2cfe9dc01cf0a3e420}}
+\newcommand{\nFingerprintB}{\meas{d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32}}
+\newcommand{\nPeriodStart}{\meas{2024-01-01}}
+\newcommand{\nPeriodEnd}{\meas{2025-12-31}}
+\newcommand{\nMonths}{\meas{24}}
+\newcommand{\nTestStart}{\meas{2025-10-28 22:02 UTC}}
+% Channel mix, measured (target in \srcd, SRS 7.1 as printed in the report).
+\newcommand{\nMixMM}{\meas{40.84\%}}\newcommand{\nMixTargetMM}{\srcd{41.0\%}}
+\newcommand{\nMixUSSD}{\meas{18.08\%}}\newcommand{\nMixTargetUSSD}{\srcd{18.0\%}}
+\newcommand{\nMixAgent}{\meas{13.96\%}}\newcommand{\nMixTargetAgent}{\srcd{14.0\%}}
+\newcommand{\nMixCard}{\meas{12.02\%}}\newcommand{\nMixTargetCard}{\srcd{12.0\%}}
+\newcommand{\nMixOnline}{\meas{9.08\%}}\newcommand{\nMixTargetOnline}{\srcd{9.0\%}}
+\newcommand{\nMixBank}{\meas{6.01\%}}\newcommand{\nMixTargetBank}{\srcd{6.0\%}}
+% Country mix, measured and target.
+\newcommand{\nCMixRW}{\meas{42.01\%}}\newcommand{\nCMixTargetRW}{\srcd{42.0\%}}
+\newcommand{\nCMixKE}{\meas{27.99\%}}\newcommand{\nCMixTargetKE}{\srcd{28.0\%}}
+\newcommand{\nCMixTZ}{\meas{15.00\%}}\newcommand{\nCMixTargetTZ}{\srcd{15.0\%}}
+\newcommand{\nCMixUG}{\meas{10.00\%}}\newcommand{\nCMixTargetUG}{\srcd{10.0\%}}
+\newcommand{\nCMixCD}{\meas{4.99\%}}\newcommand{\nCMixTargetCD}{\srcd{5.0\%}}
+% Fraud rows per scenario (true label), summed over the 24 months of the report's scenario table.
+\newcommand{\nScenATO}{\meas{1{,}402}}
+\newcommand{\nScenAgent}{\meas{1{,}048}}
+\newcommand{\nScenCNP}{\meas{1{,}237}}
+\newcommand{\nScenMerchant}{\meas{700}}
+\newcommand{\nScenMule}{\meas{1{,}105}}
+\newcommand{\nScenSimSwap}{\meas{1{,}496}}
+\newcommand{\nScenSynth}{\meas{796}}
+\newcommand{\nScenVelocity}{\meas{1{,}038}}
+\newcommand{\nScenTotal}{\meas{8{,}822}}
+% Reversal-scam rows added to the draw (datasheet), staged as mule_account (generator fraud.py).
+\newcommand{\nRevRows}{\meas{68}}
+% Split spans in days (report).
+\newcommand{\nTrainDays}{\meas{602.34}}
+\newcommand{\nValDays}{\meas{57.69}}
+\newcommand{\nCalDays}{\meas{25.36}}
+% Parameter provenance at the tag (params_provenance.md "Counts").
+\newcommand{\nProvSourced}{\meas{33}}
+\newcommand{\nProvAssumed}{\meas{76}}
+\newcommand{\nProvCalibrated}{\meas{15}}
+\newcommand{\nProvTotal}{\meas{124}}
+\newcommand{\nProvFraudTotal}{\meas{30}}
+\newcommand{\nProvFraudAssumed}{\meas{26}}
+\newcommand{\nProvFraudCalibrated}{\meas{4}}
+
+% ---------------------------------------------------------------------------------------------
+% Test period by channel and country (Section 7): m4_battery_d8083dbc_e1.txt BY CHANNEL and
+% BY COUNTRY (evidence commit d40fca2): rows, fraud and the diagnostic model's AUC.
+% ---------------------------------------------------------------------------------------------
+\newcommand{\nChRowsMM}{\meas{41{,}439}}\newcommand{\nChFraudMM}{\meas{250}}\newcommand{\nChAucMM}{\meas{0.958}}
+\newcommand{\nChRowsUSSD}{\meas{18{,}325}}\newcommand{\nChFraudUSSD}{\meas{193}}\newcommand{\nChAucUSSD}{\meas{0.956}}
+\newcommand{\nChRowsAgent}{\meas{14{,}075}}\newcommand{\nChFraudAgent}{\meas{151}}\newcommand{\nChAucAgent}{\meas{0.981}}
+\newcommand{\nChRowsCard}{\meas{12{,}228}}\newcommand{\nChFraudCard}{\meas{148}}\newcommand{\nChAucCard}{\meas{0.988}}
+\newcommand{\nChRowsOnline}{\meas{9{,}527}}\newcommand{\nChFraudOnline}{\meas{125}}\newcommand{\nChAucOnline}{\meas{0.981}}
+\newcommand{\nChRowsBank}{\meas{6{,}315}}\newcommand{\nChFraudBank}{\meas{118}}\newcommand{\nChAucBank}{\meas{0.998}}
+\newcommand{\nCoRowsRW}{\meas{42{,}810}}
+\newcommand{\nCoRowsKE}{\meas{28{,}516}}
+\newcommand{\nCoRowsTZ}{\meas{15{,}274}}
+\newcommand{\nCoRowsUG}{\meas{10{,}244}}
+\newcommand{\nCoRowsCD}{\meas{5{,}065}}
+% Evaluation draw d8083dbc (dataset/realism_report.md at m4-complete): the same two channels.
+\newcommand{\nColumnMaxAUCB}{\meas{0.709}}
+\newcommand{\nEventDelayAUCB}{\meas{0.726}}

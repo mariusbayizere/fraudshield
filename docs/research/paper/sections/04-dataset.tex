@@ -13,7 +13,7 @@ peaks; volume grows over 24 simulated months. Eight fraud scenarios are injected
 randomised parameters and temporal evolution: SIM-swap takeover, account takeover through a
 credential or device change, agent fraud, velocity fraud, card-not-present fraud, mule accounts
 (fan-in and fan-out), merchant fraud and synthetic identity. Adversarial adaptation moves amounts
-just below published rule thresholds after simulated month 12, and one sub-variant appears only
+just below published rule thresholds from the thirteenth simulated month (index 12), and one sub-variant appears only
 in the test period.
 
 Unless stated otherwise, results use seed \nSeed{} at about one million rows: the draw with
@@ -25,26 +25,115 @@ row results are reported at their stated scale).
 
 \subsection{What the parameters rest on}
 
-A sourcing pass read \nSourceDocs{} documents in full (central bank payment system reports for
-Tanzania and Rwanda, a Rwandan census and financial inclusion survey, official exchange rates,
-the IANA time zone database, a national school calendar and the ISO 4217 list) and raised the
-number of sourced generator parameters from none to \nParamsSourced{} of \nParamsTotal{};
-\nParamsAssumed{} remain modelling choices and \nParamsCalibrated{} are calibrated to targets in
-the specification. The sourced parameters fix population and volume structure (transactions per
-active customer, agents and merchant acceptance points per customer, urban share, per-channel
-mean amounts, the person-to-person share, cross-border share, volume growth, exchange rates,
-currencies, time zones and school terms). Because Tanzania publishes value and volume by
-transaction category and Rwanda does not, per-transaction levels come from Tanzanian aggregates
-while the country mix is Rwanda-weighted; they are order-of-magnitude anchors, not claims about
-one market.
+A sourcing pass on 2026-09-18 read \nSourceDocs{} documents in full and raised the number of
+sourced generator parameters from none to \nParamsSourced{} of the \nParamsTotal{} that existed
+then. The generator at the evaluated draw has \nProvTotal{} parameters: \nProvSourced{} sourced,
+\nProvAssumed{} modelling choices, and \nProvCalibrated{} calibrated to targets in the
+specification (\texttt{dataset/params\_provenance.md}); the count grew because currency, time-zone
+and exchange-rate parameters became per-country. The sourced parameters rest on these documents,
+each re-read for this paper:
+\begin{itemize}
+  \item transactions per active customer, mobile money volume growth, per-channel mean amounts and
+        the person-to-person share: the Bank of Tanzania's payment systems report
+       , Annex H, Tables H1, H2, H3 and H5 (page 48) and H8 (page 49), and
+        Annex I (page 50);
+  \item the cross-border share: the same report, Annex G, Table G2 (page 47);
+  \item active customers per agent and per merchant acceptance point: the National Bank of Rwanda's
+        annual report, Table 11 (page 86) and the count of active mobile payment
+        subscribers (page 87);
+  \item the urban share of the population: Rwanda's 2022 census, Table 2
+        (printed page 5, page 30 of the PDF), and mobile money use by urban and rural adults:
+        FinScope Rwanda 2024, Figure 26 (page 40);
+  \item exchange rates: the World Bank's official exchange rates; time zones: the
+        IANA time zone database; currency codes and minor units: the ISO 4217
+        list;
+  \item the months in which school terms begin: one Rwandan school's 2024--2025 calendar
+       ;
+  \item regional-bloc membership: the East African Community and COMESA
+        membership pages.
+\end{itemize}
+Because Tanzania publishes value and volume by transaction category and Rwanda does not,
+per-transaction levels come from Tanzanian aggregates while the country mix is Rwanda-weighted;
+they are order-of-magnitude anchors, not claims about one market.
 
-\textbf{No fraud parameter is sourced.} Of the \nFraudParams{} fraud parameters,
-\nFraudParamsChoice{} are modelling choices (scenario prevalence and mix, incident length, burst
-timing, adaptation, mule structure, the novel variant) and \nFraudParamsCalibrated{} are
+\textbf{No fraud parameter is sourced.} Of the \nProvFraudTotal{} fraud parameters,
+\nProvFraudAssumed{} are modelling choices (scenario prevalence and mix, incident length, burst
+timing, adaptation, mule structure, the two held-out variants) and \nProvFraudCalibrated{} are
 calibrated to specification targets. No central bank publication read gives fraud incidence by
 type for these markets; sourcing those figures from vendor reports or global aggregates presented
 as regional would make the paper look better and be less honest. Every result that depends on the
 \emph{level} of fraud inherits this assumption (Section~\ref{sec:limitations}).
+
+\subsection{Dataset at a glance}
+
+Table~\ref{tab:glance} describes the draw evaluated in Sections~\ref{sec:evaluation}
+and~\ref{sec:generalisation}; Table~\ref{tab:scenarios} gives its fraud by scenario. The draw
+\texttt{6abde44e}, used for the single-feature measurements of Section~\ref{sec:features}, is the
+same data without the \nRevRows{} test-period rows of the pre-registered reversal-scam variant;
+its train, validation, calibration and embargo splits are identical.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Dataset at a glance: draw \texttt{d8083dbc}, seed \nSeed{}. Source:
+\texttt{dataset/realism\_report.md} and \texttt{docs/ml/datasheet.md} at \texttt{m4-complete}.
+Mixes are measured, with the specification's target in parentheses. Split rows overlap: the
+calibration split is the tail of validation, and the embargo belongs to no split.}
+\label{tab:glance}
+\begin{tabular}{ll}
+\toprule
+Rows & \nRowsDrawB{} \\
+Simulated period & \nPeriodStart{} to \nPeriodEnd{} (\nMonths{} months) \\
+Countries & Rwanda, Kenya, Tanzania, Uganda, DR Congo \\
+Country mix & RW \nCMixRW{} (\nCMixTargetRW), KE \nCMixKE{} (\nCMixTargetKE), TZ \nCMixTZ{}
+  (\nCMixTargetTZ), \\
+ & UG \nCMixUG{} (\nCMixTargetUG), CD \nCMixCD{} (\nCMixTargetCD) \\
+Channel mix & mobile money \nMixMM{} (\nMixTargetMM), USSD \nMixUSSD{} (\nMixTargetUSSD), \\
+ & agent banking \nMixAgent{} (\nMixTargetAgent), card \nMixCard{} (\nMixTargetCard), \\
+ & online \nMixOnline{} (\nMixTargetOnline), bank transfer \nMixBank{} (\nMixTargetBank) \\
+Fraud rate & \nFraudRateAll{} overall; \nFraudRateTest{} in the test period \\
+Fraud rows (true label) & \nScenTotal{} in eight scenarios (Table~\ref{tab:scenarios}) \\
+Label noise & fraud labelled legitimate: \nLabelNoiseMissed{} of true fraud; \\
+ & legitimate labelled fraud: \nLabelNoiseFalse{} of true fraud \\
+Train & \nTrainRows{} rows, \nTrainDays{} days \\
+Validation & \nValRows{} rows, \nValDays{} days \\
+Calibration (tail of validation) & \nCalRows{} rows, \nCalDays{} days \\
+Embargo (excluded) & \nEmbargoRows{} rows, \nEmbargoDays{} days \\
+Test & \nTestRows{} rows, \nTestSpanDays{} days, from \nTestStart{} \\
+\midrule
+\multicolumn{2}{l}{Fingerprint of this draw (SHA-256 over its rows):} \\
+\multicolumn{2}{l}{\quad\texttt{\footnotesize\nFingerprintB}} \\
+\multicolumn{2}{l}{Fingerprint of draw \texttt{6abde44e} (\nRowsDrawA{} rows):} \\
+\multicolumn{2}{l}{\quad\texttt{\footnotesize\nFingerprintA}} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{Fraud rows by scenario over the whole draw (true label; realism report's scenario table,
+summed over its \nMonths{} months). The two held-out variants are sub-variants of a scenario:
+the novel eSIM delayed drain (\nNovelRows{} rows, test period only) is a SIM-swap sub-variant,
+and the pre-registered reversal scam (\nRevRows{} rows, test period only) is generated as a
+\texttt{mule\_account} row (\texttt{dataset/src/fraudshield\_dataset/generator/fraud.py}).}
+\label{tab:scenarios}
+\begin{tabular}{lr}
+\toprule
+Scenario & Fraud rows \\
+\midrule
+SIM-swap takeover & \nScenSimSwap \\
+Account takeover & \nScenATO \\
+Card not present & \nScenCNP \\
+Mule account & \nScenMule \\
+Agent fraud & \nScenAgent \\
+Velocity & \nScenVelocity \\
+Synthetic identity & \nScenSynth \\
+Merchant fraud & \nScenMerchant \\
+\midrule
+Total & \nScenTotal \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \subsection{Realism and anti-leakage controls}
 
@@ -52,8 +141,8 @@ Every generated dataset is checked by a report that fails the build when a gated
 The controls, and why each exists:
 \begin{itemize}
   \item \textbf{Single-column separation.} No dataset column may separate the classes beyond an
-        AUC of \nCeiling{} (resolution D-08). The strongest column is the merchant category at
-        \nColumnMaxAUC{}. Section~\ref{sec:features} shows why this control, true of the columns,
+        AUC of \nCeiling{} (resolution D-08). The strongest column is the merchant category, at
+        \nColumnMaxAUCB{} on the evaluation draw (\nColumnMaxAUC{} on draw \texttt{6abde44e}). Section~\ref{sec:features} shows why this control, true of the columns,
         is false of the engineered features.
   \item \textbf{A shortcut detector} trained on non-behavioural columns (identifiers, file order,
         construction artefacts) must stay within its own null band around chance; on the
@@ -76,7 +165,8 @@ The controls, and why each exists:
 
 One reported (not gated) channel deserves its own sentence: the delay between an account event
 (a SIM swap or device change) and that account's next transaction separates the classes at
-\nEventDelayAUC{}. When the takeover lead time was changed from a narrow uniform window to a
+\nEventDelayAUC{} on draw \texttt{6abde44e} and \nEventDelayAUCB{} on the evaluation draw. When the
+takeover lead time was changed from a narrow uniform window to a
 long-tailed distribution, the channel fell from \nEventDelayBefore{} to \nEventDelayAfter{},
 inside a band of \nEventDelayBandLow{}--\nEventDelayBandHigh{} predicted before the regenerated
 draw existed. About \nEventDelayShare{} of the separation above chance was therefore an artefact

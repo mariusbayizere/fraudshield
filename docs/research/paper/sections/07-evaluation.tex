@@ -13,7 +13,7 @@ trivial rule on the same rows. On these rows the best single feature, again
 \nGateMargin{}. The narrowest margin is USSD's, \nGateUSSDMargin{}, the channel with no device
 fingerprint.
 
-\begin{table}[h]
+\begin{table}[htbp]
 \centering
 \caption{Ranking metrics of the calibrated ensemble, with the best single feature
 (\texttt{velocity\_ratio\_1h\_vs\_30d}) on the same rows and the margin over it. Draw
@@ -58,11 +58,44 @@ why the specification's precision target at this rate was replaced (resolution D
 \nGateSeedRecallSix{}. Export parity: the maximum absolute difference between ONNX and native
 scores over the whole test period is \nGateOnnx{}.
 
+\paragraph{What each slice rests on.} Table~\ref{tab:slices} gives the test period by channel and by
+country, with the fraud count behind every per-channel and per-country AUC in this paper. The
+rows and fraud sum to the test period's \nTestRows{} and \nTestFraud{}. The three channel AUCs of
+Table~\ref{tab:gate} are the ensemble's; the others are the diagnostic model's
+(Section~\ref{sec:method}).
+
+\begin{table}[htbp]
+\centering
+\caption{Test period by channel and by country: rows, confirmed fraud, and AUC. Ensemble AUCs from
+\texttt{docs/benchmarks/m4\_gate\_d8083dbc\_v3.txt}; diagnostic-model AUCs, rows and fraud from
+\texttt{docs/benchmarks/m4\_battery\_d8083dbc\_e1.txt} (draw \texttt{d8083dbc}, evidence commit
+\texttt{d40fca2}). A dash means the ensemble was not sliced that way.}
+\label{tab:slices}
+\begin{tabular}{lrrrr}
+\toprule
+Slice & Rows & Fraud & Ensemble AUC & Diagnostic AUC \\
+\midrule
+\texttt{MOBILE\_MONEY} & \nChRowsMM & \nChFraudMM & \nGateMM & \nChAucMM \\
+\texttt{USSD} & \nChRowsUSSD & \nChFraudUSSD & \nGateUSSD & \nChAucUSSD \\
+\texttt{AGENT\_BANKING} & \nChRowsAgent & \nChFraudAgent & \nGateAgent & \nChAucAgent \\
+\texttt{CARD} & \nChRowsCard & \nChFraudCard & -- & \nChAucCard \\
+\texttt{ONLINE} & \nChRowsOnline & \nChFraudOnline & -- & \nChAucOnline \\
+\texttt{BANK\_TRANSFER} & \nChRowsBank & \nChFraudBank & -- & \nChAucBank \\
+\midrule
+RW & \nCoRowsRW & \nLocoRWf & -- & \nLocoRWin \\
+KE & \nCoRowsKE & \nLocoKEf & -- & \nLocoKEin \\
+TZ & \nCoRowsTZ & \nLocoTZf & -- & \nLocoTZin \\
+UG & \nCoRowsUG & \nLocoUGf & -- & \nLocoUGin \\
+CD & \nCoRowsCD & \nLocoCDf & -- & \nLocoCDin \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 \paragraph{Baselines.} Table~\ref{tab:baselines}. The status-quo rule engine is far below every
 learned model. Random forest and XGBoost alone are statistically indistinguishable from the
 ensemble on this benchmark (DeLong $p = \nBaseRFp$ and $p = \nBaseXGBp$).
 
-\begin{table}[h]
+\begin{table}[htbp]
 \centering
 \caption{Baselines on the same test rows (draw \texttt{d8083dbc}, \nTestRows{} rows holding
 \nTestFraud{} fraud, evidence commit \texttt{d40fca2}, source
@@ -99,7 +132,7 @@ Removing any one of the ten feature groups from the diagnostic model costs at mo
 be true of a model at \nBatAUC{}. Keeping only one group says why (Table~\ref{tab:groups}): four
 disjoint groups each reach at least \nGroupGeographic{} on their own.
 
-\begin{table}[h]
+\begin{table}[htbp]
 \centering
 \caption{Diagnostic model with one feature group only (draw \texttt{d8083dbc}, \nBatTestRows{}
 test rows holding \nBatTestFraud{} fraud, evidence commit \texttt{d40fca2}, source
@@ -158,7 +191,7 @@ Table~\ref{tab:frontier} is the trade-off, measured one request at a time (a bat
 exactly the overhead a single request pays), \nFrRequests{} timed requests per configuration after
 a warm-up, on the development laptop.
 
-\begin{table}[h]
+\begin{table}[htbp]
 \centering
 \caption{Accuracy and median single-request latency across tree complexity (one XGBoost booster,
 draw \texttt{6abde44e}, \nFrHeldOutRows{} held-out rows holding \nFrHeldOutFraud{} fraud,
