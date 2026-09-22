@@ -21,6 +21,11 @@ blocks.
 | Region, i18n, RTL | 66c7df5, a3c871f | Fixes d8e269f's breach of ADR 0023 (a country's currency, locale and zone named in TypeScript) and its float money. Region data comes from the country packs; en/rw/fr/sw catalogues (all non-English `machine_draft`); RTL Emotion cache; lint rejects physical left/right properties. |
 | API client | a9a0a2c | Generated from `contracts/openapi` by `@hey-api/openapi-ts`; `apiDrift.test.ts` regenerates and fails on any difference (R2). |
 | App shell, routing, PWA | 6f1db49, 914e4b8 | Every E.9 route; drawer / bottom bar (05B A.7); PWA precaches the shell only; Tailwind without Preflight; self-hosted Inter. `productionBundle.build.test.ts` checks R1, R3, R4, R8 and D-39 on two production builds. |
+| Degraded-mode banners | 46893d7, f537c0f | ADR 0081's `GET /system/status`, polled every 60 s; contract test pins the payload to the list; the shell shows one banner per mode. |
+| Bundle architecture | cf4cb8f | The shell is a lazy route; initial JS 158.3 KB against a 170 KB budget, no lazy chunk over 120 KB, both enforced on a real build (ADR 0080 §10). |
+| Auth: session and sign-in | cb5b02b, d160b3b | Token in memory only, CSRF double-submit, every contract failure answered, guard with a safe "next". |
+| Auth: registration | 2d374f2, dd0cb84 | SRS 5.3 fields, D-24 split, FR-07-07 password rule from the shared vectors (all 25 are tests), E.164 phone, availability checks. |
+| Auth: recovery | 754b7e5, 13ad126, 5877a4f | Forgot password, reset with a six-digit code, unlock from an emailed link, pending approval. |
 | Playwright, RTL journey | 4ef3911 | `e2e/rtl.spec.ts` (R6) in the new `frontend-e2e` workflow, one job per browser. |
 
 ## 2. Evidence (commands actually run, laptop, 2026-09-22)
@@ -31,7 +36,9 @@ blocks.
 | `pnpm test:coverage --maxWorkers=1` at 6f1db49 | 349 tests pass; 98% statements, 93.1% branches (thresholds 90 / 85) |
 | `pnpm vitest run --project build` at 914e4b8 | 7 pass: R1 on a release build and on a production-mode build with NODE_ENV=test, R3, R4, R8, no generated schemas, D-39 |
 | `npx playwright test --project chromium` at 4ef3911 | 3 pass (RTL layout both directions, navigation, axe with contrast) |
-| `uv run fs-licences` at 66c7df5 | 940 dependencies, 0 violations (Inter under the new OFL-for-fonts rule, 922cde8) |
+| `uv run fs-licences` at 2d374f2 | 941 dependencies, 0 violations (Inter under the new OFL-for-fonts rule, 922cde8) |
+| `pnpm test:coverage` at 5877a4f | 482 tests pass; 97.5% statements, 91.9% branches |
+| CI on 2d374f2 | `ci`, `frontend-e2e` (3 browsers), `stack`, `devcontainer`: success |
 | Mutation spot checks | see `docs/reviews/M8/m8-frontend.md` |
 
 ## 3. Changes to shared files
