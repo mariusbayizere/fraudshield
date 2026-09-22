@@ -53,7 +53,8 @@ class AnomalyModel:
         return [bisect.bisect_right(self.reference, -r) / n for r in self.raw(rows)]
 
 
-def _medians(matrix: Sequence[Sequence[float]], train: Sequence[int]) -> tuple[float, ...]:
+def training_medians(matrix: Sequence[Sequence[float]], train: Sequence[int]) -> tuple[float, ...]:
+    """Per-column medians over the training rows, ignoring NaN. Never over scored rows."""
     import statistics  # noqa: PLC0415 - only this path needs it
 
     width = len(matrix[train[0]])
@@ -73,7 +74,7 @@ def fit_anomaly(
 
     if not train:
         raise ValueError("no training rows to fit the Isolation Forest on")
-    medians = _medians(matrix, train)
+    medians = training_medians(matrix, train)
     unfitted = AnomalyModel(forest=None, medians=medians, reference=())
     fitting = unfitted.impute([matrix[i] for i in train])
     forest = IsolationForest(
