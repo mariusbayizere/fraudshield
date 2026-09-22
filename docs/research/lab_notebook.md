@@ -2366,3 +2366,41 @@ against it.
 **C-6, restated.** With the E1 encoding the ensemble's seed-to-seed AUC standard deviation is
 −0.6% against XGBoost alone (no reduction) and +12.5% against LightGBM alone. The first
 measurement's +62.9% was LightGBM being far more seed-sensitive under random-fold encoding.
+
+## M5 — the scoring service
+
+### 2026-09-22 · A small error, amplified: raw parity says nothing after a steep transformation
+
+**What was measured.** M5 serves M4's evaluated ensemble through ONNX Runtime. On the gate model's
+whole test period (101,909 rows, draw `d8083dbc`, bundle built at 894fbb4), E.4's parity test
+passes with a wide margin: the ONNX probabilities differ from the native boosters by at most
+**8.3e-7** per model and **4.1e-7** after the 0.55/0.45 combination, against a bound of 1e-5. The
+*calibrated* ensemble score, the number every threshold is read on, differs by up to **1.97e-4**,
+on **37 rows** above 1e-5. None of them crosses a risk tier at 0.60 or 0.85.
+
+**Why.** The isotonic calibrator is the same function on both paths. It is exact when reproduced
+as knots and interpolation: the difference between the knots and scikit-learn's own `predict` is
+0.0 on identical inputs. But the fitted calibrator is near-vertical on one segment, with a slope of
+about **1.2e5** between two adjacent thresholds, where the calibration split's labels jump over a
+tiny range of raw scores. A 4e-7 difference entering that segment leaves it roughly 1e5 times
+larger.
+
+**The general point.** A component's error can be small and still be amplified downstream, so a
+parity bound on raw outputs says nothing about outputs after a steep transformation. Bounding the
+calibrated score at 1e-5 would have been unmeetable by any inference path that is not bit-identical
+to the native boosters. Not bounding it at all would have hidden the one place the difference
+could matter: a decision threshold. The bound has to be stated in the space where the consequence
+is.
+
+**What M5 does with it** (`ml/src/fraudshield_ml/models/build.py`, ADR 0032 amended):
+- The build bounds E.4's quantity, raw probabilities, at 1e-5.
+- It requires **zero risk-tier changes** over the test period, which is the consequence that
+  matters.
+- It records the calibrated gap and its row count in the bundle's provenance, where a new model's
+  steeper calibrator would show.
+- The owner confirmed this handling on 2026-09-22.
+
+**What it does not establish.** The slope is a property of this calibrator on this calibration
+split (20,000 rows, 172 frauds). A different draw or a larger split will have its own steepest
+segment, and possibly a threshold inside it, which is why the tier check runs on every build rather
+than being argued once here.
