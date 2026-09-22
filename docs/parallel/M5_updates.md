@@ -31,3 +31,11 @@ metadata (`requests`, `databricks-sdk`, `google-auth`, `gitdb`, `smmap`, `sqlpar
 The scorer needs only a handful of registry REST calls: resolve an alias, download a version's
 artifacts, log metrics. So `ml/` talks to the MLflow REST API with the standard library instead,
 which also keeps every serving process lighter.
+
+## 2. `docs/traceability/requirements_matrix.md` is re-rendered on this branch
+
+The pre-commit governance hook refuses a commit that adds a requirement-tagged test unless the
+generated matrix is re-rendered (`fs-traceability render`). So M5 commits include the re-rendered
+file. It is generated output, not a hand edit, and `requirements.yaml` itself is untouched. The
+diffs only ever add `ml/tests/serving/...` and `ml/tests/featurestore/...` test locations to M5
+rows. If it conflicts with another branch at merge, resolve it by re-rendering, not by hand.
