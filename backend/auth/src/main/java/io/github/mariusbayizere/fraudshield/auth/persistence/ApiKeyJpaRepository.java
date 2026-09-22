@@ -1,12 +1,10 @@
 package io.github.mariusbayizere.fraudshield.auth.persistence;
 
-import jakarta.persistence.LockModeType;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -15,14 +13,14 @@ import org.springframework.data.repository.query.Param;
 public interface ApiKeyJpaRepository extends JpaRepository<ApiKeyEntity, UUID> {
 
   /**
-   * A key of the institution, locked for update.
+   * The row ID of a key of the institution. A scalar, so it never meets the persistence context;
+   * the caller locks the row by ID ({@code ApiKeyRepository.findForUpdate}).
    *
    * @param keyId public key ID
-   * @return the key
+   * @return the row ID
    */
-  @Lock(LockModeType.PESSIMISTIC_WRITE)
-  @Query("select k from ApiKeyEntity k where k.keyId = :keyId")
-  Optional<ApiKeyEntity> findForUpdate(@Param("keyId") String keyId);
+  @Query("select k.id from ApiKeyEntity k where k.keyId = :keyId")
+  Optional<UUID> findIdByKeyId(@Param("keyId") String keyId);
 
   /**
    * Keys of the institution, newest first.

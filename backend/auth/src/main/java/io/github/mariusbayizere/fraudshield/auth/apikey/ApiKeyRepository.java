@@ -3,6 +3,7 @@ package io.github.mariusbayizere.fraudshield.auth.apikey;
 import io.github.mariusbayizere.fraudshield.auth.persistence.ApiKeyEntity;
 import io.github.mariusbayizere.fraudshield.auth.persistence.ApiKeyJpaRepository;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import java.sql.Array;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -184,9 +185,15 @@ public final class ApiKeyRepository {
    * @return the key
    */
   public Optional<ApiKeyRecord> findForUpdate(String keyId) {
-    Optional<ApiKeyEntity> locked = keys.findForUpdate(keyId);
-    locked.ifPresent(entities::refresh); // the lock query does not refresh a managed instance
-    return locked.map(ApiKeyRepository::record);
+    return keys.findIdByKeyId(keyId)
+        .map(
+            id -> {
+              // Lock by refresh, as StaffAccountRepository does: a held copy is replaced, not
+              // reused
+              ApiKeyEntity key = entities.find(ApiKeyEntity.class, id);
+              entities.refresh(key, LockModeType.PESSIMISTIC_WRITE);
+              return record(key);
+            });
   }
 
   /**

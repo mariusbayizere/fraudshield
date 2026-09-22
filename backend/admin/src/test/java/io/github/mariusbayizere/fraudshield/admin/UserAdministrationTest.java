@@ -287,6 +287,64 @@ class UserAdministrationTest extends AuthIntegrationTest {
         .isEqualTo(1L);
   }
 
+  /**
+   * A self-edit loads the acting administrator before locking the target, which is the same row.
+   * The decision after the lock (version check, status) must use the row as it is once locked, not
+   * the copy read before (ADR 0071 §4): a failure lock committed in between answers 409 with the
+   * current account instead of failing at flush.
+   */
+  @Test
+  @Tag("FR-06-02")
+  void selfEditRacingFailureLockDecidesOnTheLockedRow() throws Exception {
+    UUID institution = DB.createInstitution("self-" + System.nanoTime() % 100000);
+    Account admin = createAccount(institution, "ADMIN", "ACTIVE");
+    Session session = issueSession(admin);
+    long seen = version(session, admin.id());
+    try (java.sql.Connection holder = DB.superuser();
+        var pool = java.util.concurrent.Executors.newSingleThreadExecutor()) {
+      holder.setAutoCommit(false);
+      try (var lock =
+          holder.prepareStatement("SELECT 1 FROM fraudshield.users WHERE id = ? FOR UPDATE")) {
+        lock.setObject(1, admin.id());
+        lock.executeQuery().close();
+      }
+      final var edit =
+          pool.submit(
+              () -> patch(session, admin.id(), Map.of("version", seen, "first_name", "Renamed")));
+      awaitBlockedOnRowLock();
+      try (var failureLock =
+          holder.prepareStatement(
+              "UPDATE fraudshield.users SET status = 'LOCKED', failed_login_count = 5,"
+                  + " locked_until = now() + interval '30 minutes', version = version + 1"
+                  + " WHERE id = ?")) {
+        failureLock.setObject(1, admin.id());
+        failureLock.executeUpdate();
+      }
+      holder.commit();
+      Http.Response response = edit.get();
+      assertThat(response.status()).as("stale version detected after the lock").isEqualTo(409);
+      assertThat(response.json().get("current").get("status").asString()).isEqualTo("LOCKED");
+    }
+    assertThat(
+            query(
+                "SELECT count(*) FROM fraudshield.users WHERE id = ? AND first_name = 'Renamed'",
+                admin.id()))
+        .isEqualTo(0L);
+  }
+
+  private static void awaitBlockedOnRowLock() throws Exception {
+    long deadline = System.nanoTime() + Duration.ofSeconds(20).toNanos();
+    while (System.nanoTime() < deadline) {
+      Object waiting =
+          query("SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock'");
+      if (((Number) waiting).longValue() > 0) {
+        return;
+      }
+      Thread.sleep(20);
+    }
+    throw new AssertionError("the edit never waited for the row lock");
+  }
+
   @Test
   @Tag("FR-06-02")
   void deactivationEndsSessionsAndBlocksPasswordSignIn() {

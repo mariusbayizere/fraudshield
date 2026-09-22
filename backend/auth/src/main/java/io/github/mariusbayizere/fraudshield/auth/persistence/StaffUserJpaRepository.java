@@ -25,17 +25,6 @@ import org.springframework.data.repository.query.Param;
 public interface StaffUserJpaRepository extends JpaRepository<StaffUserEntity, UUID> {
 
   /**
-   * An account locked for update (the account row is the first lock of every session write; ADR
-   * 0070, review finding 1).
-   *
-   * @param id account ID
-   * @return the account
-   */
-  @Lock(LockModeType.PESSIMISTIC_WRITE)
-  @Query("select u from StaffUserEntity u where u.id = :id")
-  Optional<StaffUserEntity> findForUpdate(@Param("id") UUID id);
-
-  /**
    * The institution's ACTIVE administrators, locked in ID order.
    *
    * @return the administrators

@@ -8,6 +8,7 @@ import io.github.mariusbayizere.fraudshield.auth.persistence.StaffUserEntity;
 import io.github.mariusbayizere.fraudshield.auth.persistence.StaffUserJpaRepository;
 import io.github.mariusbayizere.fraudshield.common.config.StaffRole;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import jakarta.persistence.TypedQuery;
 import java.time.Instant;
 import java.util.List;
@@ -115,15 +116,23 @@ public final class StaffAccountRepository {
   }
 
   /**
-   * Locks the row and then reloads it. A locking query returns the instance the persistence context
-   * already holds without refreshing it, so an entity read earlier in the transaction (the acting
-   * administrator, say) would otherwise carry state from before the lock, and a flush could write
-   * it back over a concurrent change such as a password change.
+   * Locks the row and loads its state as of the lock ({@code SELECT … FOR UPDATE} through {@code
+   * refresh}). The account row is the first lock of every session write (ADR 0070, review finding
+   * 1).
+   *
+   * <p>A locking query is not enough when the transaction already holds the entity (the acting
+   * administrator editing themself): Hibernate either hands back the copy read before the lock, or
+   * refuses the row outright when its version moved in between. Refreshing with the lock replaces
+   * the held state, version included, so every decision after the lock sees the locked row and a
+   * flush cannot write stale state back (ADR 0071 §4).
    */
   private Optional<StaffUserEntity> lockCurrent(UUID id) {
-    Optional<StaffUserEntity> locked = users.findForUpdate(id);
-    locked.ifPresent(entities::refresh);
-    return locked;
+    StaffUserEntity entity = entities.find(StaffUserEntity.class, id);
+    if (entity == null) {
+      return Optional.empty();
+    }
+    entities.refresh(entity, LockModeType.PESSIMISTIC_WRITE);
+    return Optional.of(entity);
   }
 
   /**
