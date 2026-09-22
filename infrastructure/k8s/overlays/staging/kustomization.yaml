@@ -1,0 +1,32 @@
+# Staging (SRS 8.1 Staging Deploy): namespace fraudshield-staging, plain Kubernetes rolling
+# updates, smaller footprint. Synthetic data only (D-21).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: fraudshield-staging
+resources:
+  - ../../base
+configMapGenerator:
+  - name: fraudshield-api-config
+    literals:
+      - SPRING_PROFILES_ACTIVE=staging
+patches:
+  - target: {kind: HorizontalPodAutoscaler}
+    patch: |
+      - op: replace
+        path: /spec/minReplicas
+        value: 2
+  - target: {kind: Deployment, name: fraudshield-api|fraudshield-ml}
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 2
+  - target: {kind: Deployment, name: fraudshield-ml-worker}
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  - target: {kind: StatefulSet, name: fraudshield-prometheus}
+    patch: |
+      - op: replace
+        path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage
+        value: 20Gi

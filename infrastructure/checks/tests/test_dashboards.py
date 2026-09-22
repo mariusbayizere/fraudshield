@@ -13,7 +13,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "infrastructure/grafana"))
 
-import generate_dashboards as gd  # noqa: E402
+import generate_dashboards as gd  # type: ignore[import-not-found]  # noqa: E402
 
 BOARDS = [board.render() for board in gd.DASHBOARDS]
 

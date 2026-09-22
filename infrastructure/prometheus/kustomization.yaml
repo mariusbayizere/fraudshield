@@ -1,0 +1,16 @@
+# Prometheus and the blackbox exporter for one FraudShield namespace, with their configuration
+# generated from the files in this directory (hash-suffixed, so a change rolls the pods).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - workloads.yaml
+configMapGenerator:
+  - name: fraudshield-prometheus-config
+    files: [prometheus.yml]
+  - name: fraudshield-prometheus-rules
+    files:
+      - rules/alerts.yml
+      - rules/recording.yml
+      - rules/thresholds.yml
+  - name: fraudshield-blackbox-config
+    files: [blackbox.yml]

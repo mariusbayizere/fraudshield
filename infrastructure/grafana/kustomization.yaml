@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - workloads.yaml
+configMapGenerator:
+  - name: fraudshield-grafana-datasources
+    files: [provisioning/datasources/fraudshield.yml]
+  - name: fraudshield-grafana-dashboard-providers
+    files: [provisioning/dashboards/fraudshield.yml]
+  - name: fraudshield-grafana-dashboards
+    files:
+      - dashboards/fs-analyst-operations.json
+      - dashboards/fs-decision-path.json
+      - dashboards/fs-kafka-spool.json
+      - dashboards/fs-model-health.json
+      - dashboards/fs-risk-overview.json

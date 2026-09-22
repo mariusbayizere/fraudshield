@@ -1,0 +1,207 @@
+# NetworkPolicies: deny everything, then allow each flow of the threat model (docs/security/
+# threat_model.md section 2) explicitly. Pods are selected by app.kubernetes.io/name.
+#
+# Data stores (PostgreSQL + TimescaleDB, PII vault, Redis, Kafka, MLflow, object store) are not
+# in these manifests yet. Their pods must carry the label fraudshield.io/datastore with the values
+# used below; the policies admitting clients into them ship with their manifests.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+          podSelector: {matchLabels: {k8s-app: kube-dns}}
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+---
+# Edge: the only ingress from outside the cluster; forwards to the API and the front end.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: fraudshield-edge
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: fraudshield-edge}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - ports: [{protocol: TCP, port: 8443}]
+  egress:
+    - to: [{podSelector: {matchLabels: {app.kubernetes.io/name: fraudshield-api}}}]
+      ports: [{protocol: TCP, port: 8080}]
+    - to: [{podSelector: {matchLabels: {app.kubernetes.io/name: fraudshield-frontend}}}]
+      ports: [{protocol: TCP, port: 8080}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: fraudshield-frontend
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: fraudshield-frontend}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {app.kubernetes.io/name: fraudshield-edge}}}]
+      ports: [{protocol: TCP, port: 8080}]
+---
+# API: public port from the edge only; management port (health, metrics) from Prometheus and the
+# blackbox exporter only (ADR 0014 section 6). Egress to the scorer, the data stores, and HTTPS and
+# SMTP submission outside the cluster for signed webhooks to core banking, SMS, email, Google OAuth
+# and JWKS (D-51). Private address ranges are excluded so the API cannot reach other in-cluster or
+# internal services through the external rule.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: fraudshield-api
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: fraudshield-api}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {app.kubernetes.io/name: fraudshield-edge}}}]
+      ports: [{protocol: TCP, port: 8080}]
+    - from:
+        - podSelector: {matchLabels: {app.kubernetes.io/name: fraudshield-prometheus}}
+        - podSelector: {matchLabels: {app.kubernetes.io/name: fraudshield-blackbox-exporter}}
+      ports: [{protocol: TCP, port: 8081}]
+  egress:
+    - to: [{podSelector: {matchLabels: {app.kubernetes.io/name: fraudshield-ml}}}]
+      ports: [{protocol: TCP, port: 50051}]
+    - to: [{podSelector: {matchLabels: {app.kubernetes.io/name: fraudshield-grafana}}}]
+      ports: [{protocol: TCP, port: 3000}]
+    - to:
+        - podSelector:
+            matchExpressions:
+              - key: fraudshield.io/datastore
+                operator: In
+                values: [postgresql, pii-vault, redis, kafka]
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 169.254.0.0/16]
+      ports:
+        - {protocol: TCP, port: 443}
+        - {protocol: TCP, port: 587}
+---
+# Scorer: gRPC from the API, metrics from Prometheus. Reads the feature store (Redis) and loads
+# models from MLflow and its object store. No internet egress.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: fraudshield-ml
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: fraudshield-ml}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {app.kubernetes.io/name: fraudshield-api}}}]
+      ports: [{protocol: TCP, port: 50051}]
+    - from: [{podSelector: {matchLabels: {app.kubernetes.io/name: fraudshield-prometheus}}}]
+      ports: [{protocol: TCP, port: 8000}]
+  egress:
+    - to:
+        - podSelector:
+            matchExpressions:
+              - key: fraudshield.io/datastore
+                operator: In
+                values: [redis, mlflow, object-store]
+---
+# ML worker: metrics from Prometheus; Kafka, Redis, PostgreSQL, MLflow and the object store. No
+# internet egress and no access to the PII vault.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: fraudshield-ml-worker
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: fraudshield-ml-worker}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {app.kubernetes.io/name: fraudshield-prometheus}}}]
+      ports: [{protocol: TCP, port: 8000}]
+  egress:
+    - to:
+        - podSelector:
+            matchExpressions:
+              - key: fraudshield.io/datastore
+                operator: In
+                values: [postgresql, redis, kafka, mlflow, object-store]
+---
+# Prometheus: scrapes this namespace's pods and discovers them through the Kubernetes API, whose
+# address is outside the pod network; queried by Grafana; sends alerts to Alertmanager.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: fraudshield-prometheus
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: fraudshield-prometheus}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {app.kubernetes.io/name: fraudshield-grafana}}}]
+      ports: [{protocol: TCP, port: 9090}]
+  egress:
+    - to: [{podSelector: {matchLabels: {app.kubernetes.io/part-of: fraudshield}}}]
+    - to:
+        - ipBlock: {cidr: 0.0.0.0/0}
+      ports:
+        - {protocol: TCP, port: 443}
+        - {protocol: TCP, port: 6443}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: fraudshield-blackbox-exporter
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: fraudshield-blackbox-exporter}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {app.kubernetes.io/name: fraudshield-prometheus}}}]
+      ports: [{protocol: TCP, port: 9115}]
+  egress:
+    - to: [{podSelector: {matchLabels: {app.kubernetes.io/name: fraudshield-api}}}]
+      ports: [{protocol: TCP, port: 8081}]
+---
+# Alertmanager: alerts from Prometheus (and the Loki ruler once deployed); PagerDuty over HTTPS.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: fraudshield-alertmanager
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: fraudshield-alertmanager}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector: {matchLabels: {app.kubernetes.io/name: fraudshield-prometheus}}
+        - podSelector: {matchLabels: {app.kubernetes.io/name: fraudshield-loki}}
+      ports: [{protocol: TCP, port: 9093}]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 169.254.0.0/16]
+      ports: [{protocol: TCP, port: 443}]
+---
+# Grafana: reached only through the API's authenticated proxy (E.8: never anonymous embeds);
+# queries Prometheus and Loki.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: fraudshield-grafana
+spec:
+  podSelector: {matchLabels: {app.kubernetes.io/name: fraudshield-grafana}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {app.kubernetes.io/name: fraudshield-api}}}]
+      ports: [{protocol: TCP, port: 3000}]
+  egress:
+    - to: [{podSelector: {matchLabels: {app.kubernetes.io/name: fraudshield-prometheus}}}]
+      ports: [{protocol: TCP, port: 9090}]
+    - to: [{podSelector: {matchLabels: {app.kubernetes.io/name: fraudshield-loki}}}]
+      ports: [{protocol: TCP, port: 3100}]

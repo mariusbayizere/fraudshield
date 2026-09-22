@@ -1,0 +1,29 @@
+# Production: namespace fraudshield, fraudshield-api released through the Argo Rollouts canary
+# (SRS 8.1 Production Deploy). The deploy workflow pins every FraudShield image by digest with
+# `kustomize edit set image` before applying; the base never names a tag.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: fraudshield
+resources:
+  - ../../base
+  - ../../../argo-rollouts
+  - argo-rollouts-network-policy.yaml
+configMapGenerator:
+  - name: fraudshield-api-config
+    literals:
+      - SPRING_PROFILES_ACTIVE=prod
+patches:
+  # The Rollout owns the API pods; the Deployment only carries the pod template (workloadRef).
+  - target: {kind: HorizontalPodAutoscaler, name: fraudshield-api}
+    patch: |
+      - op: replace
+        path: /spec/scaleTargetRef
+        value: {apiVersion: argoproj.io/v1alpha1, kind: Rollout, name: fraudshield-api}
+      - op: replace
+        path: /spec/minReplicas
+        value: 10
+  - target: {kind: Deployment, name: fraudshield-api}
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 0

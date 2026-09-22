@@ -1,0 +1,14 @@
+# The overlay's namespace transformer renames this object (fraudshield, fraudshield-staging).
+# Pod Security Admission enforces the "restricted" profile on every pod in the namespace; audit and
+# warn use the same level so a violation is visible before a change reaches enforcement.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: fraudshield
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.34
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: v1.34
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: v1.34
