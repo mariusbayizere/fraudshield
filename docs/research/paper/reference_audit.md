@@ -6,8 +6,12 @@ a throwaway environment outside the repository); web pages were fetched directly
 number printed on the page; where it differs from the PDF page index, both are given. Each citing
 sentence (Section 4, "What the parameters rest on") was compared with what the source says.
 
-No entry has a DOI: none of these sources is a journal or conference publication, and none carries
-one. Every entry is a web source and carries its URL and an access date.
+The first ten entries (section 1) are web sources and documents without DOIs; each carries its URL
+and an access date. The scholarly entries (section 2) carry a DOI wherever one is registered; the
+five without one (three NeurIPS papers, one PMLR paper, one USENIX paper) and PaySim carry the
+publisher's URL and an access date instead.
+
+## 1. Sources of the generator parameters
 
 | Key | Checked | Where | Result |
 |---|---|---|---|
@@ -22,15 +26,60 @@ one. Every entry is a web source and carries its URL and an access date.
 | `eacOverview` | Page title "Overview of EAC"; "eight (8) Partner States" including the DRC, Kenya, Rwanda, Uganda and Tanzania; Somalia a full member on 4 March 2024 | https://www.eac.int/overview-of-eac (fetched with a browser-equivalent client; the site refuses plain scripted requests) | Verified |
 | `comesaMembers` | Page title "COMESA Members States" (as published); 21 member states including the DRC, Kenya, Rwanda and Uganda | https://www.comesa.int/comesa-members-states/ | Verified |
 
-## Removed or not added
+## 2. Scholarly references (added 2026-09-22)
+
+Method: for each DOI, the registration record was fetched from Crossref (`api.crossref.org/works/<doi>`)
+and authors, title and subtitle, venue, year, volume, issue, pages and DOI were compared with the
+entry. Where Crossref lacked a field, the publisher's page supplied it (Project Euclid, PubMed, PMLR,
+NeurIPS proceedings, USENIX). Abstracts were read (OpenAlex or the publisher's page) for every paper
+the text cites for a specific finding; standard methods (models, calibration, intervals) are cited for
+the method they define. "Result" says what the citing sentence was checked against.
+
+| Key | Checked against | Result |
+|---|---|---|
+| `dogan2025grift` | Crossref 10.1145/3715335.3736315: Doğan, Gilbert, Kotut; COMPASS '25; pp. 694-699 | **Metadata verified; text not accessible** (ACM DL returns 403; OpenAlex: closed, no open copy; no abstract registered). The Section 8 description (forged M-PESA message, recipient usually new) is the owner's reading of the paper and is flagged for the author to confirm before submission |
+| `lopezrojas2016paysim` | The paper's PDF (msc-les.org), read: title, authors, pages 249-255, ISBN 978-88-97999-76-8, editors | Verified. The paper describes each log record as the client, the action, the recipient, the sum and the change in balances, at an hourly step; no channel, device, geography or corridor field. Agents have a position in a simulated space, which the paper does not put in the record. **"Larnaca" is not printed in the paper and is omitted** |
+| `phipps2018thinsim` | Crossref 10.1145/3209811.3209817; abstract | Verified |
+| `razaq2021scams` | Crossref 10.1145/3449115 (title and subtitle, PACM HCI 5(CSCW1), pp. 1-30); abstract: SMS and call fraud in Pakistan, 96 interviews | Verified |
+| `lee2020simswap` | USENIX SOUPS 2020 page: authors, pp. 61-79, ISBN 978-1-939133-16-8; abstract | Verified (no DOI registered) |
+| `suri2016mpesa` | Crossref 10.1126/science.aah5309; abstract | Verified |
+| `bolton2002fraud` | Crossref 10.1214/ss/1042727940; Project Euclid for pp. 235-255 | Verified |
+| `dalpozzolo2014lessons` | Crossref 10.1016/j.eswa.2014.02.026 | Verified |
+| `he2009imbalanced` | Crossref 10.1109/TKDE.2008.239 | Verified |
+| `chen2016xgboost` | Crossref 10.1145/2939672.2939785 (title and subtitle, pp. 785-794) | Verified |
+| `ke2017lightgbm` | NeurIPS proceedings page (NIPS 2017, vol. 30) | Verified; no DOI; no page range printed, none given |
+| `liu2008iforest` | Crossref 10.1109/ICDM.2008.17 | Verified |
+| `lundberg2017shap` | NeurIPS proceedings page (NIPS 2017, vol. 30) | Verified; no DOI; no page range printed |
+| `lundberg2020trees` | Crossref 10.1038/s42256-019-0138-9 | Verified. Cited for exact TreeSHAP and its polynomial cost |
+| `zadrozny2002calibration` | Crossref 10.1145/775047.775151 | Verified |
+| `niculescumizil2005calibration` | Crossref 10.1145/1102351.1102430 | Verified. Cited for Platt scaling and isotonic regression, which it compares |
+| `naeini2015bbq` | Crossref 10.1609/aaai.v29i1.9602; AAAI page | Verified; neither source prints a page range, so none is given |
+| `guo2017calibration` | PMLR page: PMLR 70:1321-1330 | Verified (no DOI) |
+| `kumar2019calibration` | NeurIPS proceedings page (NeurIPS 2019, vol. 32) | Verified; no DOI; no page range printed |
+| `delong1988auc` | Crossref 10.2307/2531595 (first page only); PubMed 3203132 (pp. 837-845) | Verified |
+| `hanley1982auc` | Crossref 10.1148/radiology.143.1.7063747 | Verified |
+| `wilson1927interval` | Crossref 10.1080/01621459.1927.10502953 | Verified |
+| `efron1979bootstrap` | Crossref 10.1214/aos/1176344552; Project Euclid for pp. 1-26 | Verified |
+| `saito2015prc` | Crossref 10.1371/journal.pone.0118432 | Verified |
+| `roberts2017cv` | Crossref 10.1111/ecog.02881; abstract | Verified |
+| `bergmeir2012cv` | Crossref 10.1016/j.ins.2011.12.028 | Verified |
+| `kaufman2012leakage` | Crossref 10.1145/2382577.2382579 (title and subtitle); abstract | Verified |
+| `kapoor2023leakage` | Crossref 10.1016/j.patter.2023.100804; abstract | Verified |
+| `geirhos2020shortcut` | Crossref 10.1038/s42256-020-00257-z | Verified (no abstract registered; cited for the concept the title names) |
+| `sculley2015debt` | NeurIPS proceedings page (NIPS 2015, vol. 28) | Verified; no DOI; no page range printed |
+| `breck2017testscore` | Crossref 10.1109/BigData.2017.8258038 | Verified |
+| `gebru2021datasheets` | Crossref 10.1145/3458723 | Verified |
+| `mitchell2019modelcards` | Crossref 10.1145/3287560.3287596 | Verified |
+| `nosek2018preregistration` | Crossref 10.1073/pnas.1708274114 | Verified |
+
+## 3. Removed or not added
 
 | Source | Why |
 |---|---|
 | SADC "Member States" page (https://www.sadc.int/member-states), cited by `dataset/params_provenance.md` for Tanzania's and the DRC's bloc memberships | Could not be opened on 2026-09-22 (connection refused, then timed out). Under the rule "verify or remove", it is not cited; the paper cites only the EAC and COMESA pages for bloc membership |
-| Every scholarly reference the related-work section needs | None has been read for this paper yet. Each place carries a visible "[reference needed]" marker (`\refneeded`) instead of a citation, so no unverified entry exists in `references.bib` |
+| Platt (1999), "Probabilistic outputs for support vector machines and comparisons to regularized likelihood methods", in *Advances in Large Margin Classifiers* | No DOI; not in Crossref; the publisher's page (MIT Press) refused automated access on 2026-09-22. Not confirmed, so not added. Platt scaling is cited through Niculescu-Mizil and Caruana (2005), which describes and evaluates it |
 
-## Not checked here
+## 4. Not added
 
-The owner's brief names an entry `star2025mpesa` from the revised draft (v2). That draft was not
-available on this machine when this audit was made, so the entry has not been read or added; see
-`docs/parallel/M11_updates.md`.
+`star2025mpesa`, named in an earlier brief from the revised draft (v2): the draft never reached this
+machine, the entry was not in the owner's final list, and it has not been read or added.

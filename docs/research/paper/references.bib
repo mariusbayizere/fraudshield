@@ -1,11 +1,15 @@
 % Bibliography for the FraudShield paper.
 %
-% Build prompt E.13 and D-09: only sources read in full, no invented reference, DOI or page. Every
-% field below was checked against the source itself on 2026-09-22 (reference_audit.md records how
-% and where). A field a source does not print (for example a publication date) is not supplied;
-% "n.d." marks it. Places where a scholarly reference is still needed carry \cite{TODO-verify} in
-% the text and have no entry here.
+% Rule (D-09): no invented reference, DOI or page. Every entry carries a STATUS comment saying what
+% was checked and where, on 2026-09-22; reference_audit.md has the full record. A field a source does
+% not print is not supplied ("n.d." for a missing date; no pages where the publisher prints none).
+%   STATUS VERIFIED-SOURCE    the document itself was read for the fields and the citing sentence
+%   STATUS VERIFIED-METADATA  bibliographic fields confirmed from the DOI registration (Crossref) or
+%                             the publisher's page; the citing sentence checked against the abstract
+%   STATUS METADATA-ONLY      fields confirmed, but the text could not be read (closed access); the
+%                             citing sentence rests on the owner's reading and is flagged for review
 
+% STATUS VERIFIED-SOURCE: document read on 2026-09-22 (reference_audit.md).
 @techreport{botPSAR2024,
   author      = {{Bank of Tanzania}},
   title       = {Payment Systems Annual Report for 2024},
@@ -17,6 +21,7 @@
   url         = {https://www.bot.go.tz/Publications/Regular/Annual%20Report/sw/2025032515311662.pdf}
 }
 
+% STATUS VERIFIED-SOURCE: document read on 2026-09-22 (reference_audit.md).
 @techreport{bnrAR2425,
   author      = {{National Bank of Rwanda}},
   title       = {{NBR} Annual Report 2024--2025},
@@ -28,6 +33,7 @@
   url         = {https://www.bnr.rw/documents/Annual_Report_2024_25_English_Full_Version_RwYAWN0.pdf}
 }
 
+% STATUS VERIFIED-SOURCE: document read on 2026-09-22 (reference_audit.md).
 @techreport{nisrCensus2022,
   author      = {{National Institute of Statistics of Rwanda}},
   title       = {The Fifth {Rwanda} Population and Housing Census, 2022: Main Indicators Report},
@@ -40,6 +46,7 @@
   url         = {https://statistics.gov.rw/sites/default/files/documents/2025-02/RPHC5_MainIndicatorsReport_Final.pdf}
 }
 
+% STATUS VERIFIED-SOURCE: document read on 2026-09-22 (reference_audit.md).
 @techreport{afrFinscope2024,
   author      = {{Access to Finance Rwanda}},
   title       = {{FinScope} 2024 Report},
@@ -52,6 +59,7 @@
   url         = {https://statistics.gov.rw/sites/default/files/documents/2024-09/Rwanda-Finscope-2024-Report_compressed.pdf}
 }
 
+% STATUS VERIFIED-SOURCE: document read on 2026-09-22 (reference_audit.md).
 @misc{wbFCRF,
   author       = {{World Bank}},
   title        = {Official exchange rate ({LCU} per {US}\$, period average), indicator
@@ -65,6 +73,7 @@
   url          = {https://api.worldbank.org/v2/country/RWA;KEN;TZA;UGA;COD/indicator/PA.NUS.FCRF?format=json&date=2023:2024}
 }
 
+% STATUS VERIFIED-SOURCE: document read on 2026-09-22 (reference_audit.md).
 @misc{ianaTZ2026c,
   author       = {{Internet Assigned Numbers Authority}},
   title        = {Time Zone Database, release 2026c},
@@ -75,6 +84,7 @@
   url          = {https://www.iana.org/time-zones}
 }
 
+% STATUS VERIFIED-SOURCE: document read on 2026-09-22 (reference_audit.md).
 @misc{ngaCalendar2425,
   author       = {{New Generation Academy}},
   title        = {School Calendar 2024--2025},
@@ -85,6 +95,7 @@
   url          = {https://www.nga.ac.rw/storage/nArw8l4yXLQqkb3qi5aHo39WSkW9SH-metaU0NIT09MIENBTEVOREFSLnBkZg==-.pdf}
 }
 
+% STATUS VERIFIED-SOURCE: document read on 2026-09-22 (reference_audit.md).
 @misc{iso4217list,
   author       = {{SIX Group, as ISO 4217 maintenance agency}},
   title        = {{ISO} 4217 Currency Code List One: Current Currency and Funds},
@@ -95,6 +106,7 @@
   url          = {https://www.six-group.com/dam/download/financial-information/data-center/iso-currrency/lists/list-one.xml}
 }
 
+% STATUS VERIFIED-SOURCE: document read on 2026-09-22 (reference_audit.md).
 @misc{eacOverview,
   author       = {{East African Community}},
   title        = {Overview of {EAC}},
@@ -104,6 +116,7 @@
   url          = {https://www.eac.int/overview-of-eac}
 }
 
+% STATUS VERIFIED-SOURCE: document read on 2026-09-22 (reference_audit.md).
 @misc{comesaMembers,
   author       = {{Common Market for Eastern and Southern Africa}},
   title        = {{COMESA} Members States},
@@ -111,4 +124,438 @@
   year         = {n.d.},
   note         = {Page title as published. Accessed 2026-09-22},
   url          = {https://www.comesa.int/comesa-members-states/}
+}
+
+% ============================== Mobile money fraud and payments =================================
+
+% STATUS METADATA-ONLY: Crossref 10.1145/3715335.3736315. Full text closed (ACM DL 403; OpenAlex
+% reports no open copy). Section 8's description of the forged-message form rests on the owner's
+% reading; to be confirmed by the author before submission.
+@inproceedings{dogan2025grift,
+  author    = {Do{\u{g}}an, Amelia Lee and Gilbert, Meira and Kotut, Lindah},
+  title     = {Easy Come, Easy Go: Phone Enabled Small-Scale Financial Grift},
+  booktitle = {Proceedings of the ACM SIGCAS/SIGCHI Conference on Computing and Sustainable
+               Societies (COMPASS '25)},
+  publisher = {ACM},
+  year      = {2025},
+  pages     = {694--699},
+  doi       = {10.1145/3715335.3736315}
+}
+
+% STATUS VERIFIED-SOURCE: the paper's PDF (msc-les.org) read: title, authors, pages 249-255 and ISBN
+% 978-88-97999-76-8 printed on its pages; the log record is described in Section 4 of the paper.
+% The place (Larnaca) is not printed in the paper and is not given.
+@inproceedings{lopezrojas2016paysim,
+  author    = {Lopez-Rojas, Edgar Alonso and Elmir, Ahmad and Axelsson, Stefan},
+  title     = {{PaySim}: A Financial Mobile Money Simulator for Fraud Detection},
+  booktitle = {Proceedings of the 28th European Modeling and Simulation Symposium (EMSS 2016)},
+  editor    = {Bruzzone, Agostino G. and Jim{\'e}nez, Emilio and Longo, Francesco and Louca, Loucas
+               and Zhang, Lin},
+  year      = {2016},
+  pages     = {249--255},
+  isbn      = {978-88-97999-76-8},
+  url       = {https://www.msc-les.org/proceedings/emss/2016/EMSS2016_249.pdf},
+  note      = {Accessed 2026-09-22}
+}
+
+% STATUS VERIFIED-METADATA: Crossref 10.1145/3209811.3209817; abstract read.
+@inproceedings{phipps2018thinsim,
+  author    = {Phipps, Rowan and Mare, Shrirang and Ney, Peter and Webster, Jennifer and Heimerl,
+               Kurtis},
+  title     = {{ThinSIM}-based Attacks on Mobile Money Systems},
+  booktitle = {Proceedings of the 1st ACM SIGCAS Conference on Computing and Sustainable Societies
+               (COMPASS '18)},
+  publisher = {ACM},
+  year      = {2018},
+  pages     = {1--11},
+  doi       = {10.1145/3209811.3209817}
+}
+
+% STATUS VERIFIED-METADATA: Crossref 10.1145/3449115; abstract read (96 interviews, Pakistan).
+@article{razaq2021scams,
+  author  = {Razaq, Lubna and Ahmad, Tallal and Ibtasam, Samia and Ramzan, Umer and Mare, Shrirang},
+  title   = {``{We} Even Borrowed Money From Our Neighbor'': Understanding Mobile-based Frauds
+             Through Victims' Experiences},
+  journal = {Proceedings of the ACM on Human-Computer Interaction},
+  volume  = {5},
+  number  = {CSCW1},
+  year    = {2021},
+  pages   = {1--30},
+  doi     = {10.1145/3449115}
+}
+
+% STATUS VERIFIED-METADATA: USENIX SOUPS 2020 page (no DOI): authors, pages 61-79, ISBN; abstract read.
+@inproceedings{lee2020simswap,
+  author    = {Lee, Kevin and Kaiser, Benjamin and Mayer, Jonathan and Narayanan, Arvind},
+  title     = {An Empirical Study of Wireless Carrier Authentication for {SIM} Swaps},
+  booktitle = {Sixteenth Symposium on Usable Privacy and Security (SOUPS 2020)},
+  publisher = {USENIX Association},
+  year      = {2020},
+  pages     = {61--79},
+  isbn      = {978-1-939133-16-8},
+  url       = {https://www.usenix.org/conference/soups2020/presentation/lee},
+  note      = {Accessed 2026-09-22}
+}
+
+% STATUS VERIFIED-METADATA: Crossref 10.1126/science.aah5309; abstract read.
+@article{suri2016mpesa,
+  author  = {Suri, Tavneet and Jack, William},
+  title   = {The Long-Run Poverty and Gender Impacts of Mobile Money},
+  journal = {Science},
+  volume  = {354},
+  number  = {6317},
+  year    = {2016},
+  pages   = {1288--1292},
+  doi     = {10.1126/science.aah5309}
+}
+
+% STATUS VERIFIED-METADATA: Project Euclid page: vol 17(3), pages 235-255 (Crossref gives no pages).
+@article{bolton2002fraud,
+  author  = {Bolton, Richard J. and Hand, David J.},
+  title   = {Statistical Fraud Detection: A Review},
+  journal = {Statistical Science},
+  volume  = {17},
+  number  = {3},
+  year    = {2002},
+  pages   = {235--255},
+  doi     = {10.1214/ss/1042727940}
+}
+
+% STATUS VERIFIED-METADATA: Crossref 10.1016/j.eswa.2014.02.026.
+@article{dalpozzolo2014lessons,
+  author  = {Dal Pozzolo, Andrea and Caelen, Olivier and Le Borgne, Yann-A{\"e}l and Waterschoot,
+             Serge and Bontempi, Gianluca},
+  title   = {Learned Lessons in Credit Card Fraud Detection from a Practitioner Perspective},
+  journal = {Expert Systems with Applications},
+  volume  = {41},
+  number  = {10},
+  year    = {2014},
+  pages   = {4915--4928},
+  doi     = {10.1016/j.eswa.2014.02.026}
+}
+
+% STATUS VERIFIED-METADATA: Crossref 10.1109/TKDE.2008.239.
+@article{he2009imbalanced,
+  author  = {He, Haibo and Garcia, Edwardo A.},
+  title   = {Learning from Imbalanced Data},
+  journal = {IEEE Transactions on Knowledge and Data Engineering},
+  volume  = {21},
+  number  = {9},
+  year    = {2009},
+  pages   = {1263--1284},
+  doi     = {10.1109/TKDE.2008.239}
+}
+
+% ================================== Models and explanation =====================================
+
+% STATUS VERIFIED-METADATA: Crossref 10.1145/2939672.2939785 (title and subtitle).
+@inproceedings{chen2016xgboost,
+  author    = {Chen, Tianqi and Guestrin, Carlos},
+  title     = {{XGBoost}: A Scalable Tree Boosting System},
+  booktitle = {Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery
+               and Data Mining (KDD '16)},
+  publisher = {ACM},
+  year      = {2016},
+  pages     = {785--794},
+  doi       = {10.1145/2939672.2939785}
+}
+
+% STATUS VERIFIED-METADATA: NeurIPS proceedings page (no DOI; the page prints no page range).
+@inproceedings{ke2017lightgbm,
+  author    = {Ke, Guolin and Meng, Qi and Finley, Thomas and Wang, Taifeng and Chen, Wei and Ma,
+               Weidong and Ye, Qiwei and Liu, Tie-Yan},
+  title     = {{LightGBM}: A Highly Efficient Gradient Boosting Decision Tree},
+  booktitle = {Advances in Neural Information Processing Systems 30 (NIPS 2017)},
+  year      = {2017},
+  url       = {https://papers.nips.cc/paper_files/paper/2017/hash/6449f44a102fde848669bdd9eb6b76fa-Abstract.html},
+  note      = {Accessed 2026-09-22}
+}
+
+% STATUS VERIFIED-METADATA: Crossref 10.1109/ICDM.2008.17.
+@inproceedings{liu2008iforest,
+  author    = {Liu, Fei Tony and Ting, Kai Ming and Zhou, Zhi-Hua},
+  title     = {Isolation Forest},
+  booktitle = {2008 Eighth IEEE International Conference on Data Mining (ICDM)},
+  publisher = {IEEE},
+  year      = {2008},
+  pages     = {413--422},
+  doi       = {10.1109/ICDM.2008.17}
+}
+
+% STATUS VERIFIED-METADATA: NeurIPS proceedings page (no DOI; the page prints no page range).
+@inproceedings{lundberg2017shap,
+  author    = {Lundberg, Scott M. and Lee, Su-In},
+  title     = {A Unified Approach to Interpreting Model Predictions},
+  booktitle = {Advances in Neural Information Processing Systems 30 (NIPS 2017)},
+  year      = {2017},
+  url       = {https://papers.nips.cc/paper_files/paper/2017/hash/8a20a8621978632d76c43dfd28b67767-Abstract.html},
+  note      = {Accessed 2026-09-22}
+}
+
+% STATUS VERIFIED-METADATA: Crossref 10.1038/s42256-019-0138-9.
+@article{lundberg2020trees,
+  author  = {Lundberg, Scott M. and Erion, Gabriel and Chen, Hugh and DeGrave, Alex and Prutkin,
+             Jordan M. and Nair, Bala and Katz, Ronit and Himmelfarb, Jonathan and Bansal, Nisha and
+             Lee, Su-In},
+  title   = {From Local Explanations to Global Understanding with Explainable {AI} for Trees},
+  journal = {Nature Machine Intelligence},
+  volume  = {2},
+  number  = {1},
+  year    = {2020},
+  pages   = {56--67},
+  doi     = {10.1038/s42256-019-0138-9}
+}
+
+% ======================================== Calibration ==========================================
+
+% STATUS VERIFIED-METADATA: Crossref 10.1145/775047.775151.
+@inproceedings{zadrozny2002calibration,
+  author    = {Zadrozny, Bianca and Elkan, Charles},
+  title     = {Transforming Classifier Scores into Accurate Multiclass Probability Estimates},
+  booktitle = {Proceedings of the Eighth ACM SIGKDD International Conference on Knowledge Discovery
+               and Data Mining (KDD '02)},
+  publisher = {ACM},
+  year      = {2002},
+  pages     = {694--699},
+  doi       = {10.1145/775047.775151}
+}
+
+% STATUS VERIFIED-METADATA: Crossref 10.1145/1102351.1102430. Compares Platt scaling and isotonic
+% regression; cited for Platt scaling because Platt's own chapter could not be confirmed.
+@inproceedings{niculescumizil2005calibration,
+  author    = {Niculescu-Mizil, Alexandru and Caruana, Rich},
+  title     = {Predicting Good Probabilities with Supervised Learning},
+  booktitle = {Proceedings of the 22nd International Conference on Machine Learning (ICML '05)},
+  publisher = {ACM},
+  year      = {2005},
+  pages     = {625--632},
+  doi       = {10.1145/1102351.1102430}
+}
+
+% STATUS VERIFIED-METADATA: Crossref and the AAAI page; neither prints a page range, so none given.
+@inproceedings{naeini2015bbq,
+  author    = {Naeini, Mahdi Pakdaman and Cooper, Gregory and Hauskrecht, Milos},
+  title     = {Obtaining Well Calibrated Probabilities Using {Bayesian} Binning},
+  booktitle = {Proceedings of the AAAI Conference on Artificial Intelligence},
+  volume    = {29},
+  note      = {Volume 29, number 1},
+  year      = {2015},
+  doi       = {10.1609/aaai.v29i1.9602}
+}
+
+% STATUS VERIFIED-METADATA: PMLR page, volume 70, pages 1321-1330 (no DOI).
+@inproceedings{guo2017calibration,
+  author    = {Guo, Chuan and Pleiss, Geoff and Sun, Yu and Weinberger, Kilian Q.},
+  title     = {On Calibration of Modern Neural Networks},
+  booktitle = {Proceedings of the 34th International Conference on Machine Learning},
+  series    = {Proceedings of Machine Learning Research},
+  volume    = {70},
+  year      = {2017},
+  pages     = {1321--1330},
+  url       = {https://proceedings.mlr.press/v70/guo17a.html},
+  note      = {Accessed 2026-09-22}
+}
+
+% STATUS VERIFIED-METADATA: NeurIPS proceedings page (no DOI; the page prints no page range).
+@inproceedings{kumar2019calibration,
+  author    = {Kumar, Ananya and Liang, Percy and Ma, Tengyu},
+  title     = {Verified Uncertainty Calibration},
+  booktitle = {Advances in Neural Information Processing Systems 32 (NeurIPS 2019)},
+  year      = {2019},
+  url       = {https://papers.nips.cc/paper_files/paper/2019/hash/f8c0c968632845cd133308b1a494967f-Abstract.html},
+  note      = {Accessed 2026-09-22}
+}
+
+% ================================ Evaluation and statistics ====================================
+
+% STATUS VERIFIED-METADATA: Crossref 10.2307/2531595 (first page only) and PubMed 3203132
+% (pages 837-845).
+@article{delong1988auc,
+  author  = {DeLong, Elizabeth R. and DeLong, David M. and Clarke-Pearson, Daniel L.},
+  title   = {Comparing the Areas under Two or More Correlated Receiver Operating Characteristic
+             Curves: A Nonparametric Approach},
+  journal = {Biometrics},
+  volume  = {44},
+  number  = {3},
+  year    = {1988},
+  pages   = {837--845},
+  doi     = {10.2307/2531595}
+}
+
+% STATUS VERIFIED-METADATA: Crossref 10.1148/radiology.143.1.7063747.
+@article{hanley1982auc,
+  author  = {Hanley, James A. and McNeil, Barbara J.},
+  title   = {The Meaning and Use of the Area under a Receiver Operating Characteristic ({ROC}) Curve},
+  journal = {Radiology},
+  volume  = {143},
+  number  = {1},
+  year    = {1982},
+  pages   = {29--36},
+  doi     = {10.1148/radiology.143.1.7063747}
+}
+
+% STATUS VERIFIED-METADATA: Crossref 10.1080/01621459.1927.10502953.
+@article{wilson1927interval,
+  author  = {Wilson, Edwin B.},
+  title   = {Probable Inference, the Law of Succession, and Statistical Inference},
+  journal = {Journal of the American Statistical Association},
+  volume  = {22},
+  number  = {158},
+  year    = {1927},
+  pages   = {209--212},
+  doi     = {10.1080/01621459.1927.10502953}
+}
+
+% STATUS VERIFIED-METADATA: Project Euclid page: vol 7(1), pages 1-26 (Crossref gives no pages).
+@article{efron1979bootstrap,
+  author  = {Efron, Bradley},
+  title   = {Bootstrap Methods: Another Look at the Jackknife},
+  journal = {The Annals of Statistics},
+  volume  = {7},
+  number  = {1},
+  year    = {1979},
+  pages   = {1--26},
+  doi     = {10.1214/aos/1176344552}
+}
+
+% STATUS VERIFIED-METADATA: Crossref 10.1371/journal.pone.0118432 (article e0118432).
+@article{saito2015prc,
+  author  = {Saito, Takaya and Rehmsmeier, Marc},
+  title   = {The Precision-Recall Plot Is More Informative than the {ROC} Plot When Evaluating Binary
+             Classifiers on Imbalanced Datasets},
+  journal = {PLOS ONE},
+  volume  = {10},
+  number  = {3},
+  year    = {2015},
+  pages   = {e0118432},
+  doi     = {10.1371/journal.pone.0118432}
+}
+
+% STATUS VERIFIED-METADATA: Crossref 10.1111/ecog.02881; abstract read.
+@article{roberts2017cv,
+  author  = {Roberts, David R. and Bahn, Volker and Ciuti, Simone and Boyce, Mark S. and Elith, Jane
+             and Guillera-Arroita, Gurutzeta and Hauenstein, Severin and Lahoz-Monfort, Jos{\'e} J.
+             and Schr{\"o}der, Boris and Thuiller, Wilfried and Warton, David I. and Wintle,
+             Brendan A. and Hartig, Florian and Dormann, Carsten F.},
+  title   = {Cross-Validation Strategies for Data with Temporal, Spatial, Hierarchical, or
+             Phylogenetic Structure},
+  journal = {Ecography},
+  volume  = {40},
+  number  = {8},
+  year    = {2017},
+  pages   = {913--929},
+  doi     = {10.1111/ecog.02881}
+}
+
+% STATUS VERIFIED-METADATA: Crossref 10.1016/j.ins.2011.12.028.
+@article{bergmeir2012cv,
+  author  = {Bergmeir, Christoph and Ben{\'i}tez, Jos{\'e} M.},
+  title   = {On the Use of Cross-Validation for Time Series Predictor Evaluation},
+  journal = {Information Sciences},
+  volume  = {191},
+  year    = {2012},
+  pages   = {192--213},
+  doi     = {10.1016/j.ins.2011.12.028}
+}
+
+% =============================== Leakage, shortcuts, practice ==================================
+
+% STATUS VERIFIED-METADATA: Crossref 10.1145/2382577.2382579; abstract read.
+@article{kaufman2012leakage,
+  author  = {Kaufman, Shachar and Rosset, Saharon and Perlich, Claudia and Stitelman, Ori},
+  title   = {Leakage in Data Mining: Formulation, Detection, and Avoidance},
+  journal = {ACM Transactions on Knowledge Discovery from Data},
+  volume  = {6},
+  number  = {4},
+  year    = {2012},
+  pages   = {1--21},
+  doi     = {10.1145/2382577.2382579}
+}
+
+% STATUS VERIFIED-METADATA: Crossref 10.1016/j.patter.2023.100804 (article 100804); abstract read.
+@article{kapoor2023leakage,
+  author  = {Kapoor, Sayash and Narayanan, Arvind},
+  title   = {Leakage and the Reproducibility Crisis in Machine-Learning-Based Science},
+  journal = {Patterns},
+  volume  = {4},
+  number  = {9},
+  year    = {2023},
+  pages   = {100804},
+  doi     = {10.1016/j.patter.2023.100804}
+}
+
+% STATUS VERIFIED-METADATA: Crossref 10.1038/s42256-020-00257-z.
+@article{geirhos2020shortcut,
+  author  = {Geirhos, Robert and Jacobsen, J{\"o}rn-Henrik and Michaelis, Claudio and Zemel, Richard
+             and Brendel, Wieland and Bethge, Matthias and Wichmann, Felix A.},
+  title   = {Shortcut Learning in Deep Neural Networks},
+  journal = {Nature Machine Intelligence},
+  volume  = {2},
+  number  = {11},
+  year    = {2020},
+  pages   = {665--673},
+  doi     = {10.1038/s42256-020-00257-z}
+}
+
+% STATUS VERIFIED-METADATA: NeurIPS proceedings page (no DOI; the page prints no page range).
+@inproceedings{sculley2015debt,
+  author    = {Sculley, D. and Holt, Gary and Golovin, Daniel and Davydov, Eugene and Phillips, Todd
+               and Ebner, Dietmar and Chaudhary, Vinay and Young, Michael and Crespo, Jean-Fran{\c{c}}ois
+               and Dennison, Dan},
+  title     = {Hidden Technical Debt in Machine Learning Systems},
+  booktitle = {Advances in Neural Information Processing Systems 28 (NIPS 2015)},
+  year      = {2015},
+  url       = {https://papers.nips.cc/paper_files/paper/2015/hash/86df7dcfd896fcaf2674f757a2463eba-Abstract.html},
+  note      = {Accessed 2026-09-22}
+}
+
+% STATUS VERIFIED-METADATA: Crossref 10.1109/BigData.2017.8258038.
+@inproceedings{breck2017testscore,
+  author    = {Breck, Eric and Cai, Shanqing and Nielsen, Eric and Salib, Michael and Sculley, D.},
+  title     = {The {ML} Test Score: A Rubric for {ML} Production Readiness and Technical Debt
+               Reduction},
+  booktitle = {2017 IEEE International Conference on Big Data (Big Data)},
+  publisher = {IEEE},
+  year      = {2017},
+  pages     = {1123--1132},
+  doi       = {10.1109/BigData.2017.8258038}
+}
+
+% STATUS VERIFIED-METADATA: Crossref 10.1145/3458723.
+@article{gebru2021datasheets,
+  author  = {Gebru, Timnit and Morgenstern, Jamie and Vecchione, Briana and Vaughan, Jennifer Wortman
+             and Wallach, Hanna and Daum{\'e} III, Hal and Crawford, Kate},
+  title   = {Datasheets for Datasets},
+  journal = {Communications of the ACM},
+  volume  = {64},
+  number  = {12},
+  year    = {2021},
+  pages   = {86--92},
+  doi     = {10.1145/3458723}
+}
+
+% STATUS VERIFIED-METADATA: Crossref 10.1145/3287560.3287596.
+@inproceedings{mitchell2019modelcards,
+  author    = {Mitchell, Margaret and Wu, Simone and Zaldivar, Andrew and Barnes, Parker and
+               Vasserman, Lucy and Hutchinson, Ben and Spitzer, Elena and Raji, Inioluwa Deborah and
+               Gebru, Timnit},
+  title     = {Model Cards for Model Reporting},
+  booktitle = {Proceedings of the Conference on Fairness, Accountability, and Transparency
+               (FAT* '19)},
+  publisher = {ACM},
+  year      = {2019},
+  pages     = {220--229},
+  doi       = {10.1145/3287560.3287596}
+}
+
+% STATUS VERIFIED-METADATA: Crossref 10.1073/pnas.1708274114.
+@article{nosek2018preregistration,
+  author  = {Nosek, Brian A. and Ebersole, Charles R. and DeHaven, Alexander C. and Mellor, David T.},
+  title   = {The Preregistration Revolution},
+  journal = {Proceedings of the National Academy of Sciences},
+  volume  = {115},
+  number  = {11},
+  year    = {2018},
+  pages   = {2600--2606},
+  doi     = {10.1073/pnas.1708274114}
 }
