@@ -367,7 +367,7 @@ M6 supplies its reader. Three deliberately broken fallbacks were caught.
 
 ```yaml
 # ROW_MILESTONE_OVERRIDES / backlog: FR-02-09's DB-fallback clause, carried M5 -> M6
-- id: PB-68            # next free number: check docs/backlog/ before using it
+- id: PB-69            # PB-68 is taken (docs/backlog/product.md); confirm at integration
   title: "FR-02-09 / C.4: feature-store DB fallback over M6's tables"
   due_milestone: M6
   carried_from: M5 (milestone review finding M5-3, owner decision 2026-09-22)
@@ -377,7 +377,7 @@ M6 supplies its reader. Three deliberately broken fallbacks were caught.
     served by the PostgreSQL Fallback (account_velocity_cache, the transactions hypertable, PB-37's
     per-account durable table) yields an AccountContext and exact ages identical to the Redis
     read, flagged feature_store_degraded.
-  requirement_note: "FR-02-09 stays IN_PROGRESS until PB-68 closes; the rest of the row is met in M5."
+  requirement_note: "FR-02-09 stays IN_PROGRESS until PB-69 closes; the rest of the row is met in M5."
 ```
 
 **The lab notebook** gained the entry the owner asked for, in 2c54c87, appended only: "A small
@@ -396,7 +396,7 @@ error, amplified: raw parity says nothing after a steep transformation".
 >    - `UNAVAILABLE` also means the feature store is unreadable; the circuit breaker treats it as
 >      a scorer outage.
 >    - **Do not implement `AccountContext` assembly in Java.**
-> 2. **The DB fallback is M6's (PB-68, carried from M5).** Implement the `Fallback` protocol in
+> 2. **The DB fallback is M6's (PB-69, carried from M5).** Implement the `Fallback` protocol in
 >    `ml/src/fraudshield_ml/featurestore/store.py`, a Python reader over M6's tables, returning
 >    what `featurestore.fallback.ReplayFallback` returns. Enable the `m6-postgresql` parameter in
 >    `ml/tests/featurestore/test_db_fallback.py`. The test passes only if the features are
@@ -429,14 +429,14 @@ error, amplified: raw parity says nothing after a steep transformation".
 3. **Tag `m5-complete` only on a commit whose CI is green**, and after the review is clean.
 
 **Carried, not open:**
-- The DB fallback goes to M6 (PB-68, proposed in section 12, acceptance test in place).
+- The DB fallback goes to M6 (PB-69, proposed in section 12, acceptance test in place).
 - The latency gate goes to M10 (ADR 0032).
 - The admin endpoint and panel for thresholds and the shadow switch go to M7/M8.
 - The audit consumer of `fs.ml.shadow` goes to M6/M7.
 
 **For the owner to integrate:**
 - The status proposals in sections 3 and 11.
-- PB-68 from section 12.
+- PB-69 from section 12.
 - The M6 block from section 12, for `M6_updates.md`.
 - The threat-model delta in `docs/reviews/M5/milestone-review.md`.
 - `SESSION_STATE.md` still says `main` never merged M2/M3; that is stale.
@@ -520,7 +520,7 @@ the fixes. The latest full `ml` suite is 521 passed, 3 skipped, coverage 94.31% 
     985 frauds, twice and independently: served AUC 0.9611 against 0.9700 as trained; 254
     transactions change risk tier; 162 of 725 frauds no longer reach the 0.60 flag threshold, a
     22% fall in detections at the operating point. Carried with acceptance tests to M6/M9
-    (docs/parallel/M6_updates.md, M9_updates.md) and PB-68 for the DB fallback; M10's end-to-end
+    (docs/parallel/M6_updates.md, M9_updates.md) and PB-69 for the DB fallback; M10's end-to-end
     verification must re-measure this skew and require it to be zero.
 ```
 
@@ -543,3 +543,47 @@ the fixes. The latest full `ml` suite is 521 passed, 3 skipped, coverage 94.31% 
 `m6/decision`, `m9/infra` and `m11/paper` as well. Each file here is that branch's content plus one
 appended "From M5" section, so a merge should keep both sides; if git reports a conflict, keep
 both.
+
+## 16. The independent re-review, and what it changed (2026-09-22)
+
+The owner's condition 5: the six fixes and the blocker handling were re-reviewed by a **second**
+independent reviewer, in its own worktree at `2afbb0e`, with a fresh environment and no caches.
+The record is committed verbatim at `docs/reviews/M5/principal-re-review.md` (commit `607cb15`).
+
+**Verdict: CHANGES_REQUIRED**, on seven new MAJOR findings. It reproduced every figure this branch
+publishes — the ml suite (521 passed, 3 skipped, 94.31%), contracts (490), buf lint and breaking,
+the gate rebuild (191/342 rounds, AUC 0.9700 ±0.0075, ECE 0.00139, recall 0.8711, ONNX parity
+8.27e-7, calibrated gap 1.97e-4 on 37 rows) and **all four rows of ADR 0034's skew table,
+including the worst score moves and "162 of 725 = 22.3%"**. Findings 2, 5 and 6 of the first
+review were confirmed closed, and 3, 4 and 7 closed only in part — which is what the new findings
+are about. The fixes for two of them had introduced defects in the promotion path as serious as
+what they replaced.
+
+| # | What it found | Answered by |
+|---|---|---|
+| N1 | D-11's gate could be bypassed twice over: a report with `promote: false` and no `reasons` promoted anyway, and `--override <anything>` skipped the gate and was recorded nowhere although the help text said "(recorded)" | `_gate_problems` now re-derives D-11's clauses from the report's own numbers, and a refusal with no reason is still a refusal; the override reason and the gate's figures are written to the model version's MLflow tags. `test_a_report_that_refuses_without_a_reason_does_not_promote`, `test_an_override_is_recorded_on_the_version_it_promoted` |
+| N2 | the fix for finding 4 broke D-50: `fs-model alias production <previous_version>` — the only rollback an operator has — was refused without a shadow report | promoting the version `previous_production` holds is a rollback, not a promotion: the ECE block still applies, the shadow gate does not. `test_a_rollback_through_fs_model_alias_needs_no_shadow_gate` rolls back **through the CLI** and forward again |
+| N3 | nothing tested `cli.main`, so the line joining `--threshold-profile` to `WorkerConfig` was free to ship D-06's 0.7 test profile to production | `test_the_profile_a_worker_is_started_with_is_the_one_the_flag_names`, parametrised over both profiles, with `server.serve` monkeypatched. Mutating the line to `thresholds=DEFAULT` now fails it (checked) |
+| N4 | the window-edge corpus reached only the account-velocity windows; three inclusive/exclusive flips in the geo-cell 30 d, counterparty 90 d and senders 24 h ranges survived the whole featurestore suite | the corpus now carries a labelled cell row, a labelled counterparty row and three *distinct* senders on their edges (a set-valued window needs a sender per position, or a neighbour masks the edge). Each of the reviewer's three flips now fails two tests (checked) |
+| N5 | the alert written for M9 would page continuously: `outcomes` fired on ordinary label latency, and the three reference-state arms fire on every read until the producer exists | the counter now fires only where the state could have applied — a counterparty row older than three weeks (~95th percentile of E.3's 72 h log-normal label delay), an account the store already knows, and never on a degraded read. The rule is split in two: `LabelsConsumerNotWritingOutcomes` (page, silent today) and `AccountReferenceStateHasNoProducer` (ticket until PB-71, then page). Both sides asserted in `test_the_store_counts_features_left_constant_for_want_of_a_producer` |
+| N6 | ADR 0034 still read "Status: Proposed … Decision: **Not taken**" while five other documents cited it as the owner's settled decision | ADR 0034 is **Accepted**, with option 3 and all five conditions written into `## Decision`, the carries and the alert linked from `## Consequences` |
+| N7 | the carries named no owning milestone and no backlog row, M10 had no artefact at all, and PB-68 was already taken by the frontier write-up item | each carry now has one owner and an id: **PB-69** DB fallback (M6, renumbered off the collision), **PB-70** `fs.labels` consumer (M6), **PB-71** account reference-state contract and producer (M6), **PB-72** M10 re-measures the skew and requires zero. `docs/parallel/M10_updates.md` is new, so the milestone that must close this sees it. **The numbers are proposals**: M5 does not edit `docs/backlog/`, so confirm them at integration |
+
+**Residual risks it listed, and what was done:**
+
+- A `_warm` failure escaping `AliasWatcher.poll_once` would have ended the polling thread, leaving
+  the scorer serving on with nothing watching `@production` — including for a rollback. The swap
+  callback is now caught, counted as a failure and the next poll retries:
+  `test_a_swap_callback_that_raises_leaves_the_watcher_watching`.
+- ADR 0034's promised startup line naming the absent producers is now logged by every worker.
+- `fs-bench memory` built a `Scorer` on the 0.7 test profile; it now uses the production profile,
+  so it measures the routing mix production serves.
+- "AUC fell 0.009, comfortably inside the gate's ±0.0075 interval" overstated the arithmetic:
+  0.0089 is about one interval **half**-width. Corrected in the lab notebook entry, ADR 0034 and
+  `M11_updates.md` — the point is that no AUC-expressed gate would refuse the drop, which stands.
+- `pytest-timeout` is still absent (a new dependency needs an ADR 0009 licence review; the
+  suite has no hanging test today). The in-process shadow `Comparison` series is still asserted
+  only through the MLflow log. Both are left open and named here rather than fixed quietly.
+
+**Not changed, deliberately:** the latency figures stay laptop-only and out of the gate (ADR 0032),
+and FR-02-09 stays NOT DONE. Neither is affected by the seven findings.

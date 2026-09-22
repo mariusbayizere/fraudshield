@@ -647,3 +647,39 @@ def test_a_rollback_through_fs_model_alias_needs_no_shadow_gate(
     assert fake.tags[(NAME, "1")]["fraudshield.promotion_gate"].startswith("rollback")
     forward = ["alias", "--mlflow", url, PRODUCTION, "2", "--cache", str(tmp_path)]
     assert model_cli.main(forward) == 0, "rolling forward again is the same one move"
+
+
+@pytest.mark.req("FR-02-10")
+def test_a_swap_callback_that_raises_leaves_the_watcher_watching(
+    mlflow: tuple[FakeMlflow, str],
+    bundle_dirs: tuple[Path, Path],
+    kit: SimpleNamespace,
+    tmp_path: Path,
+) -> None:
+    """The callback warms ONNX sessions before the swap. On the watcher's own thread an exception
+    there would end the thread, and the scorer would serve on with nothing watching @production
+    for the next alias move — including a rollback (re-review, residual risks)."""
+    fake, url = mlflow
+    registry = MlflowRegistry(url)
+    registry.publish(NAME, bundle_dirs[0], alias=PRODUCTION, override=FIRST)
+    holder = ModelHolder()
+    w = watcher(url, holder, kit, tmp_path)
+    warmed: list[str] = []
+
+    def warm(bundle: Bundle) -> None:
+        if not warmed:
+            warmed.append(bundle.model_version)
+            raise RuntimeError("onnxruntime could not allocate an arena")
+        holder.swap_production(Scorer(bundle, kit.reference))
+
+    w._on[PRODUCTION] = warm
+    w.poll_once()
+    unwarmed = holder.production
+    assert unwarmed is None, "a model that did not warm is not swapped in"
+    assert w.metrics.failures.labels(PRODUCTION)._value.get() == 1
+    assert w.metrics.swaps.labels(PRODUCTION)._value.get() == 0
+    assert w.loaded[PRODUCTION] is None, "and the version is not recorded as loaded"
+
+    w.poll_once()
+    assert holder.production is not None, "the next poll swaps it in: the watcher is still alive"
+    assert fake.models[NAME]["aliases"][PRODUCTION] == "1"

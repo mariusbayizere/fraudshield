@@ -391,8 +391,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "memory":
         from fraudshield_ml.models.bundle import Bundle  # noqa: PLC0415
         from fraudshield_ml.serving.scorer import Scorer  # noqa: PLC0415
+        from fraudshield_ml.serving.thresholds import PRODUCTION, ThresholdStore  # noqa: PLC0415
 
-        scorer = Scorer(Bundle.load(args.bundle), Reference.from_packs(args.packs))
+        # The profile a worker serves (D-06's 0.995), not the 0.7 test default: a benchmark that
+        # measures a different routing mix than production measures the wrong thing.
+        scorer = Scorer(
+            Bundle.load(args.bundle),
+            Reference.from_packs(args.packs),
+            ThresholdStore(None, default=PRODUCTION),
+        )
         report["memory"] = asdict(run_memory(scorer, requests, args.scorings, args.warmup))
     else:
         report["serve"] = asdict(_serve_command(args, requests))
