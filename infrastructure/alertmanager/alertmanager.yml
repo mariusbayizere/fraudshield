@@ -1,0 +1,62 @@
+# Alertmanager routing for FraudShield (C.1: Alertmanager -> PagerDuty).
+#
+# Every notification goes to a PagerDuty service per team, so no institution-specific address or
+# key is written here. The Events API v2 routing keys are mounted from the Secret
+# fraudshield-alertmanager-pagerduty (one file per team) and are never in the repository.
+#   severity=page   -> PagerDuty "critical" (high urgency: phones on-call, P1 for probes)
+#   severity=ticket -> PagerDuty "warning" (configure the service's low-urgency rule on the
+#                      PagerDuty side so tickets never wake anyone)
+# Risk-officer alerts (SRS 8.2 "immediate risk officer alert", "notification within 5 minutes")
+# have their own service, so risk officers are not paged for platform faults and vice versa.
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: pagerduty-sre
+  group_by: [alertname, team, app, channel, topic, group]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers: ['team="risk"']
+      receiver: pagerduty-risk
+      # Rule evaluation (1 min) + group_wait stays well inside the SRS 8.2 5-minute window.
+      group_wait: 10s
+    - matchers: ['team="ml"']
+      receiver: pagerduty-ml
+    - matchers: ['team="sre"']
+      receiver: pagerduty-sre
+
+inhibit_rules:
+  # While the scorer health probe is failing, the fallback alert says the same thing again.
+  - source_matchers: ['alertname="FraudShieldMlHealthProbeFailing"']
+    target_matchers: ['alertname="FraudShieldMlFallbackActive"']
+  # While the API is down, a transaction-rate drop and latency alerts are consequences.
+  - source_matchers: ['alertname="FraudShieldApiHealthProbeFailing"']
+    target_matchers: ['alertname=~"FraudShieldTransactionRateDrop|FraudShieldDecisionLatencyP99High"']
+
+receivers:
+  - name: pagerduty-sre
+    pagerduty_configs:
+      - routing_key_file: /etc/alertmanager/pagerduty/sre
+        severity: '{{ if eq .CommonLabels.severity "page" }}critical{{ else }}warning{{ end }}'
+        description: '{{ .CommonAnnotations.summary }}'
+        links:
+          - href: '{{ .CommonAnnotations.runbook_url }}'
+            text: Runbook
+        send_resolved: true
+  - name: pagerduty-risk
+    pagerduty_configs:
+      - routing_key_file: /etc/alertmanager/pagerduty/risk
+        severity: '{{ if eq .CommonLabels.severity "page" }}critical{{ else }}warning{{ end }}'
+        description: '{{ .CommonAnnotations.summary }}'
+        links:
+          - href: '{{ .CommonAnnotations.runbook_url }}'
+            text: Runbook
+        send_resolved: true
+  - name: pagerduty-ml
+    pagerduty_configs:
+      - routing_key_file: /etc/alertmanager/pagerduty/ml
+        severity: '{{ if eq .CommonLabels.severity "page" }}critical{{ else }}warning{{ end }}'
+        description: '{{ .CommonAnnotations.summary }}'
+        send_resolved: true

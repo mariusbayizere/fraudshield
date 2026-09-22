@@ -1,0 +1,105 @@
+# Prometheus configuration for one FraudShield namespace (SRS 08: FraudShield has its own
+# Prometheus; nothing is shared with another project). Mounted at /etc/prometheus by
+# infrastructure/prometheus/kustomization.yaml, with the rule files under /etc/prometheus/rules.
+#
+# Scrape targets are the pods of this namespace only (own_namespace), selected by their
+# app.kubernetes.io/name label and a named container port, so a new workload is never scraped by
+# accident. The target labels attached here are exactly SCRAPE_LABELS in
+# infrastructure/checks/metric_catalogue.py.
+global:
+  scrape_interval: 30s
+  scrape_timeout: 10s
+  evaluation_interval: 30s
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: [fraudshield-alertmanager:9093]
+
+scrape_configs:
+  - job_name: fraudshield-api
+    metrics_path: /actuator/prometheus
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces: {own_namespace: true}
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name, __meta_kubernetes_pod_container_port_name]
+        regex: fraudshield-api;management
+        action: keep
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+      - source_labels: [__meta_kubernetes_pod_container_name]
+        target_label: container
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+        target_label: app
+      # Separates canary from stable pods in the Argo Rollouts analysis.
+      - source_labels: [__meta_kubernetes_pod_label_rollouts_pod_template_hash]
+        target_label: rollouts_pod_template_hash
+
+  - job_name: fraudshield-ml
+    metrics_path: /metrics
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces: {own_namespace: true}
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name, __meta_kubernetes_pod_container_port_name]
+        regex: fraudshield-ml;admin
+        action: keep
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+      - source_labels: [__meta_kubernetes_pod_container_name]
+        target_label: container
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+        target_label: app
+
+  - job_name: fraudshield-ml-worker
+    metrics_path: /metrics
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces: {own_namespace: true}
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name, __meta_kubernetes_pod_container_port_name]
+        regex: fraudshield-ml-worker;metrics
+        action: keep
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+      - source_labels: [__meta_kubernetes_pod_container_name]
+        target_label: container
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+        target_label: app
+
+  # SRS 8.2 uptime probes, read from the management port (ADR 0014 section 6: detailed health is
+  # never routed through the public ingress). The API liveness probe runs every 30 s and the ML
+  # health probe every 60 s, as the SRS specifies; alerts.yml pages on 2 consecutive failures.
+  - job_name: blackbox-api-health
+    scrape_interval: 30s
+    metrics_path: /probe
+    params:
+      module: [http_status_up]
+    static_configs:
+      - targets: [http://fraudshield-api-management:8081/actuator/health]
+    relabel_configs: &blackbox_relabeling
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: fraudshield-blackbox-exporter:9115
+
+  - job_name: blackbox-ml-health
+    scrape_interval: 60s
+    metrics_path: /probe
+    params:
+      module: [http_status_up]
+    static_configs:
+      - targets: [http://fraudshield-api-management:8081/actuator/health/ml]
+    relabel_configs: *blackbox_relabeling
