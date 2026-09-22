@@ -34,8 +34,8 @@ a data protection impact assessment, and hosting in a permitted location (Sectio
 specification requires (\notyet{M10}), and the models were trained on \nTrainUsed{} rows rather than
 the full training period. Single-feature AUC moves with dataset size by more than seed noise, and the
 cause is unexplained; every figure is therefore stated at its scale. The two failing gate metrics
-(recall and false-negative rate at the flag threshold) may depend on training volume; that is a
-candidate cause, not a finding.
+(recall and false-negative rate at the flag threshold) are recorded at \nTrainUsed{} training rows
+only; whether they depend on training volume is untested until the learning curve is measured.
 
 \paragraph{Latency.} No latency figure here is a gate figure. The frontier is a median on a shared
 development laptop, where the 99th percentile is not measurable; serving, end-to-end and load
@@ -45,10 +45,9 @@ latencies belong to later milestones.
 rows; intervals are reported for each, and the Democratic Republic of the Congo's rest on fewer than
 30 and give direction only.
 
-\paragraph{Provisional results.} Every figure marked \textsuperscript{\dag} comes from a milestone not
-yet tagged complete and is re-verified before publication. Two of the contribution figures already
-moved between data draws (the redundancy threshold and the leave-one-country-out loss); the findings
-did not.
+\paragraph{Figures that depend on the draw.} Two contribution figures moved between data draws
+(the redundancy threshold and the leave-one-country-out loss); the findings did not. Each figure is
+stated with the draw it was measured on.
 
 \paragraph{Claims not made.} The specification's figures on regional fraud growth, payment volume,
 analyst dismissal rates, the accuracy of models built elsewhere on East African data, annual model

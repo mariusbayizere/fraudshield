@@ -6,17 +6,17 @@
 % that.
 %
 %   \meas{x}      MEASURED on main (M2/M3). Printed as is.
-%   \prov{x}      MEASURED on m4/generalisation pinned at a6b0c9e, before m4-complete exists.
-%                 Printed with a dagger; the paper's front note explains it. Every \prov is
-%                 re-verified against the m4-complete tag before the dagger may be removed.
+%   \prov{x}      MEASURED on a milestone not yet tagged complete. Printed with a dagger. None is
+%                 in use: every M4 value was re-verified at m4-complete (72e7790) on 2026-09-22 by
+%                 audit_numbers.py and moved to \meas.
 %   \srcd{x}      A value fixed by the specification (a threshold or target), not a result.
 %   \notyet{Mx}   A result a later milestone produces. Printed as "NOT YET MEASURED -- Mx".
 %
 % Data draws (seed 20260917 throughout):
 %   6abde44e  1,006,249 rows (claims register header; M3 and the first M4 battery)
-%   d8083dbc  1,006,317 rows (dataset/realism_report.md at a6b0c9e; the PB-61 draw with the
+%   d8083dbc  1,006,317 rows (dataset/realism_report.md at m4-complete; the PB-61 draw with the
 %             pre-registered non-burst variant; the M4 gate and the E1-corrected battery)
-% Evidence files are under docs/benchmarks/ at the stated branch and commit; each file begins
+% Evidence files are read at the m4-complete tag (72e7790), which is on main; each file begins
 % with its own evidence-commit and evidence-tree-state stamp.
 
 \newcommand{\meas}[1]{#1}
@@ -64,23 +64,23 @@
 \newcommand{\nEventDelayBandLow}{\meas{0.68}}
 \newcommand{\nEventDelayBandHigh}{\meas{0.74}}
 
-% Draw d8083dbc (dataset/realism_report.md at a6b0c9e): distribution and split.
-\newcommand{\nRowsDrawB}{\prov{1{,}006{,}317}}
-\newcommand{\nFraudRateAll}{\prov{0.877\%}}
-\newcommand{\nFraudRateTest}{\prov{0.971\%}}
-\newcommand{\nLabelNoiseMissed}{\prov{1.55\%}}
-\newcommand{\nLabelNoiseFalse}{\prov{1.64\%}}
-\newcommand{\nShortcutAUC}{\prov{0.503}}
-\newcommand{\nNovelRows}{\prov{73}}
-\newcommand{\nTrainRows}{\prov{792{,}162}}
-\newcommand{\nValRows}{\prov{101{,}332}}
-\newcommand{\nCalRows}{\prov{40{,}700}}
-\newcommand{\nEmbargoRows}{\prov{10{,}914}}
-\newcommand{\nTestRows}{\prov{101{,}909}}
-\newcommand{\nTestSpanDays}{\prov{63.97}}
-\newcommand{\nEmbargoDays}{\prov{6.99}}
-\newcommand{\nChannelMixDev}{\prov{0.16}}
-\newcommand{\nCountryMixDev}{\prov{0.01}}
+% Draw d8083dbc (dataset/realism_report.md at m4-complete): distribution and split.
+\newcommand{\nRowsDrawB}{\meas{1{,}006{,}317}}
+\newcommand{\nFraudRateAll}{\meas{0.877\%}}
+\newcommand{\nFraudRateTest}{\meas{0.971\%}}
+\newcommand{\nLabelNoiseMissed}{\meas{1.55\%}}
+\newcommand{\nLabelNoiseFalse}{\meas{1.64\%}}
+\newcommand{\nShortcutAUC}{\meas{0.503}}
+\newcommand{\nNovelRows}{\meas{73}}
+\newcommand{\nTrainRows}{\meas{792{,}162}}
+\newcommand{\nValRows}{\meas{101{,}332}}
+\newcommand{\nCalRows}{\meas{40{,}700}}
+\newcommand{\nEmbargoRows}{\meas{10{,}914}}
+\newcommand{\nTestRows}{\meas{101{,}909}}
+\newcommand{\nTestSpanDays}{\meas{63.97}}
+\newcommand{\nEmbargoDays}{\meas{6.99}}
+\newcommand{\nChannelMixDev}{\meas{0.16}}
+\newcommand{\nCountryMixDev}{\meas{0.01}}
 
 % ---------------------------------------------------------------------------------------------
 % Features (M3), main
@@ -106,103 +106,103 @@
 \newcommand{\nBatchSizes}{\meas{1, 5 and 17}}
 
 % ---------------------------------------------------------------------------------------------
-% Model evaluation (M4), m4/generalisation @ a6b0c9e: PROVISIONAL
+% Model evaluation (M4), m4-complete (72e7790); re-verified by audit_numbers.py
 % ---------------------------------------------------------------------------------------------
 % Gate: docs/benchmarks/m4_gate_d8083dbc_v3.txt (evidence commit d40fca2, tree clean), draw
 % d8083dbc, test 101,909 rows / 985 fraud, 1,000 stratified bootstrap resamples, 5 seeds.
-\newcommand{\nTestFraud}{\prov{985}}
-\newcommand{\nTrainUsed}{\prov{30{,}000}}
-\newcommand{\nGateAUC}{\prov{0.970}}
-\newcommand{\nGateAUCci}{\prov{[0.962, 0.977]}}
-\newcommand{\nGateFloor}{\prov{0.879}}
-\newcommand{\nGateMargin}{\prov{+0.091}}
-\newcommand{\nGateTrivial}{\prov{0.659}}
-\newcommand{\nGateTrivialMargin}{\prov{+0.311}}
-\newcommand{\nGateRecallFPR}{\prov{0.871}}
-\newcommand{\nGateRecallFPRci}{\prov{[0.847, 0.891]}}
-\newcommand{\nGateRecallFPRFloor}{\prov{0.598}}
-\newcommand{\nGateRecallFPRMargin}{\prov{+0.273}}
-\newcommand{\nGateMM}{\prov{0.953}}
-\newcommand{\nGateMMFloor}{\prov{0.882}}
-\newcommand{\nGateMMMargin}{\prov{+0.070}}
-\newcommand{\nGateUSSD}{\prov{0.953}}
-\newcommand{\nGateUSSDFloor}{\prov{0.904}}
-\newcommand{\nGateUSSDMargin}{\prov{+0.049}}
-\newcommand{\nGateAgent}{\prov{0.979}}
-\newcommand{\nGateAgentFloor}{\prov{0.843}}
-\newcommand{\nGateAgentMargin}{\prov{+0.136}}
-\newcommand{\nGateRecallSix}{\prov{0.736}}
-\newcommand{\nGateFone}{\prov{0.821}}
-\newcommand{\nGateFNR}{\prov{0.264}}
-\newcommand{\nGateECE}{\prov{0.001}}
-\newcommand{\nGatePass}{\prov{9 of 11}}
-\newcommand{\nGatePrecFPR}{\prov{0.471}}
-\newcommand{\nGatePrecCeiling}{\prov{0.494}}
-\newcommand{\nGateOnnx}{\prov{\ensuremath{4.06 \times 10^{-7}}}}
-\newcommand{\nGateSeedAUC}{\prov{\ensuremath{0.9667 \pm 0.0040}}}
+\newcommand{\nTestFraud}{\meas{985}}
+\newcommand{\nTrainUsed}{\meas{30{,}000}}
+\newcommand{\nGateAUC}{\meas{0.970}}
+\newcommand{\nGateAUCci}{\meas{[0.962, 0.977]}}
+\newcommand{\nGateFloor}{\meas{0.879}}
+\newcommand{\nGateMargin}{\meas{+0.091}}
+\newcommand{\nGateTrivial}{\meas{0.659}}
+\newcommand{\nGateTrivialMargin}{\meas{+0.311}}
+\newcommand{\nGateRecallFPR}{\meas{0.871}}
+\newcommand{\nGateRecallFPRci}{\meas{[0.847, 0.891]}}
+\newcommand{\nGateRecallFPRFloor}{\meas{0.598}}
+\newcommand{\nGateRecallFPRMargin}{\meas{+0.273}}
+\newcommand{\nGateMM}{\meas{0.953}}
+\newcommand{\nGateMMFloor}{\meas{0.882}}
+\newcommand{\nGateMMMargin}{\meas{+0.070}}
+\newcommand{\nGateUSSD}{\meas{0.953}}
+\newcommand{\nGateUSSDFloor}{\meas{0.904}}
+\newcommand{\nGateUSSDMargin}{\meas{+0.049}}
+\newcommand{\nGateAgent}{\meas{0.979}}
+\newcommand{\nGateAgentFloor}{\meas{0.843}}
+\newcommand{\nGateAgentMargin}{\meas{+0.136}}
+\newcommand{\nGateRecallSix}{\meas{0.736}}
+\newcommand{\nGateFone}{\meas{0.821}}
+\newcommand{\nGateFNR}{\meas{0.264}}
+\newcommand{\nGateECE}{\meas{0.001}}
+\newcommand{\nGatePass}{\meas{9 of 11}}
+\newcommand{\nGatePrecFPR}{\meas{0.471}}
+\newcommand{\nGatePrecCeiling}{\meas{0.494}}
+\newcommand{\nGateOnnx}{\meas{\ensuremath{4.06 \times 10^{-7}}}}
+\newcommand{\nGateSeedAUC}{\meas{\ensuremath{0.9667 \pm 0.0040}}}
 % Baselines (same file): AUC and DeLong p against the ensemble.
-\newcommand{\nBaseRules}{\prov{0.707}}
-\newcommand{\nBaseLR}{\prov{0.965}}
-\newcommand{\nBaseRF}{\prov{0.967}}
-\newcommand{\nBaseXGB}{\prov{0.970}}
-\newcommand{\nBaseLGB}{\prov{0.952}}
-\newcommand{\nBaseIF}{\prov{0.943}}
-\newcommand{\nBaseRFp}{\prov{0.21}}
-\newcommand{\nBaseXGBp}{\prov{0.67}}
+\newcommand{\nBaseRules}{\meas{0.707}}
+\newcommand{\nBaseLR}{\meas{0.965}}
+\newcommand{\nBaseRF}{\meas{0.967}}
+\newcommand{\nBaseXGB}{\meas{0.970}}
+\newcommand{\nBaseLGB}{\meas{0.952}}
+\newcommand{\nBaseIF}{\meas{0.943}}
+\newcommand{\nBaseRFp}{\meas{0.21}}
+\newcommand{\nBaseXGBp}{\meas{0.67}}
 
 % Battery, E1-corrected: docs/benchmarks/m4_battery_d8083dbc_e1.txt (evidence commit d40fca2),
 % one untuned XGBoost, 38 features, trained on 30,000 rows.
-\newcommand{\nBatAUC}{\prov{0.972}}
-\newcommand{\nBatECEAll}{\prov{0.0012}}
-\newcommand{\nBatECEDecision}{\prov{0.0185}}
-\newcommand{\nBatDecisionRows}{\prov{767}}
-\newcommand{\nBatAdditivity}{\prov{\ensuremath{1.13 \times 10^{-5}}}}
-\newcommand{\nGroupCounterparty}{\prov{0.925}}
-\newcommand{\nGroupVelocity}{\prov{0.860}}
-\newcommand{\nGroupTemporal}{\prov{0.856}}
-\newcommand{\nGroupGeographic}{\prov{0.829}}
-\newcommand{\nGroupMaxDrop}{\prov{0.034}}
-\newcommand{\nGroupsAtMostSmall}{\prov{0.007}}
+\newcommand{\nBatAUC}{\meas{0.972}}
+\newcommand{\nBatECEAll}{\meas{0.0012}}
+\newcommand{\nBatECEDecision}{\meas{0.0185}}
+\newcommand{\nBatDecisionRows}{\meas{767}}
+\newcommand{\nBatAdditivity}{\meas{\ensuremath{1.13 \times 10^{-5}}}}
+\newcommand{\nGroupCounterparty}{\meas{0.925}}
+\newcommand{\nGroupVelocity}{\meas{0.860}}
+\newcommand{\nGroupTemporal}{\meas{0.856}}
+\newcommand{\nGroupGeographic}{\meas{0.829}}
+\newcommand{\nGroupMaxDrop}{\meas{0.034}}
+\newcommand{\nGroupsAtMostSmall}{\meas{0.007}}
 % Novel and pre-registered variants, same file (Wilson 95% intervals).
-\newcommand{\nRevRecall}{\prov{9.1\%}}
-\newcommand{\nRevCI}{\prov{[4.2\%, 18.4\%]}}
-\newcommand{\nRevCaught}{\prov{6}}
-\newcommand{\nRevFraud}{\prov{66}}
-\newcommand{\nRevAUC}{\prov{0.708}}
-\newcommand{\nBaseVarRecall}{\prov{94.4\%}}
-\newcommand{\nBaseVarCI}{\prov{[92.7\%, 95.8\%]}}
-\newcommand{\nBaseVarFraud}{\prov{827}}
-\newcommand{\nNovelRecall}{\prov{98.6\%}}
-\newcommand{\nNovelCI}{\prov{[92.6\%, 99.8\%]}}
+\newcommand{\nRevRecall}{\meas{9.1\%}}
+\newcommand{\nRevCI}{\meas{[4.2\%, 18.4\%]}}
+\newcommand{\nRevCaught}{\meas{6}}
+\newcommand{\nRevFraud}{\meas{66}}
+\newcommand{\nRevAUC}{\meas{0.708}}
+\newcommand{\nBaseVarRecall}{\meas{94.4\%}}
+\newcommand{\nBaseVarCI}{\meas{[92.7\%, 95.8\%]}}
+\newcommand{\nBaseVarFraud}{\meas{827}}
+\newcommand{\nNovelRecall}{\meas{98.6\%}}
+\newcommand{\nNovelCI}{\meas{[92.6\%, 99.8\%]}}
 % First reversal-scam measurement, random-fold encoding E1 forbids:
 % docs/benchmarks/m4_battery_pb61.txt (evidence commit dbda585).
-\newcommand{\nRevRecallFirst}{\prov{6.1\%}}
-\newcommand{\nRevCIFirst}{\prov{[2.4\%, 14.6\%]}}
-\newcommand{\nBaseVarRecallFirst}{\prov{94.2\%}}
-\newcommand{\nBaseVarCIFirst}{\prov{[92.4\%, 95.6\%]}}
+\newcommand{\nRevRecallFirst}{\meas{6.1\%}}
+\newcommand{\nRevCIFirst}{\meas{[2.4\%, 14.6\%]}}
+\newcommand{\nBaseVarRecallFirst}{\meas{94.2\%}}
+\newcommand{\nBaseVarCIFirst}{\meas{[92.4\%, 95.6\%]}}
 % Leave-one-country-out, same E1 file: in-sample vs unseen, largest loss (UG, 0.967 -> 0.961).
-\newcommand{\nLocoMaxLoss}{\prov{0.006}}
+\newcommand{\nLocoMaxLoss}{\meas{0.006}}
 % Earlier draw 6abde44e: docs/benchmarks/m4_battery.md, raw m4_battery_6abde44e.txt (evidence
 % commit d15f165), 60,000 held-out rows, 551 fraud.
-\newcommand{\nEarlyGroupMin}{\prov{0.845}}
-\newcommand{\nEarlyLocoMaxLoss}{\prov{0.002}}
-\newcommand{\nEarlyNovelRecall}{\prov{100\%}}
-\newcommand{\nEarlyBaseRecall}{\prov{95.1\%}}
+\newcommand{\nEarlyGroupMin}{\meas{0.845}}
+\newcommand{\nEarlyLocoMaxLoss}{\meas{0.002}}
+\newcommand{\nEarlyNovelRecall}{\meas{100\%}}
+\newcommand{\nEarlyBaseRecall}{\meas{95.1\%}}
 % Seed variance: docs/benchmarks/m4_seed_variance_d8083dbc_e1.txt (evidence commit d40fca2).
-\newcommand{\nSeedSdEnsemble}{\prov{0.000612}}
-\newcommand{\nSeedSdXGB}{\prov{0.000609}}
-\newcommand{\nSeedSdLGB}{\prov{0.000700}}
+\newcommand{\nSeedSdEnsemble}{\meas{0.000612}}
+\newcommand{\nSeedSdXGB}{\meas{0.000609}}
+\newcommand{\nSeedSdLGB}{\meas{0.000700}}
 
 % Frontier: docs/benchmarks/m4_frontier_6abde44e.txt (evidence commit 95b722c), draw 6abde44e,
 % dev-laptop-01 (docs/benchmarks/hardware.md), 900 timed single requests per configuration.
 % p50 only; the p99 columns are not measurement on this machine (ADR 0010).
-\newcommand{\nFrontShapSmall}{\prov{0.08}}
-\newcommand{\nFrontShapLarge}{\prov{2.80}}
-\newcommand{\nFrontPredSmall}{\prov{0.48}}
-\newcommand{\nFrontPredLarge}{\prov{0.56}}
-\newcommand{\nFrontAUCDelta}{\prov{-0.004}}
-\newcommand{\nFrontRatio}{\prov{35}}
-\newcommand{\nFrontNegative}{\prov{2 of 5}}
+\newcommand{\nFrontShapSmall}{\meas{0.08}}
+\newcommand{\nFrontShapLarge}{\meas{2.80}}
+\newcommand{\nFrontPredSmall}{\meas{0.48}}
+\newcommand{\nFrontPredLarge}{\meas{0.56}}
+\newcommand{\nFrontAUCDelta}{\meas{-0.004}}
+\newcommand{\nFrontRatio}{\meas{35}}
+\newcommand{\nFrontNegative}{\meas{2 of 5}}
 
 % ---------------------------------------------------------------------------------------------
 % Pre-registered predictions (docs/research/lab_notebook.md)
@@ -212,12 +212,12 @@
 % field (confirmed on mechanism, refuted on sequence), accounts_per_device_7d conflict (refuted).
 \newcommand{\nPredEarly}{\meas{four}}
 \newcommand{\nPredEarlyRight}{\meas{one}}
-% m4/generalisation @ a6b0c9e: two more. PB-56 event-delay band (commit 0138099, measured on
+% m4-complete: two more. PB-56 event-delay band (commit 0138099, measured on
 % 6abde44e; confirmed, see \nEventDelayBandLow) and the ADR 0028 reversal-scam range below.
-\newcommand{\nPredTotal}{\prov{six}}
-\newcommand{\nRevPredLow}{\prov{0.15}}
-\newcommand{\nRevPredHigh}{\prov{0.55}}
-\newcommand{\nRevPredFloor}{\prov{0.10}}
+\newcommand{\nPredTotal}{\meas{six}}
+\newcommand{\nRevPredLow}{\meas{0.15}}
+\newcommand{\nRevPredHigh}{\meas{0.55}}
+\newcommand{\nRevPredFloor}{\meas{0.10}}
 
 % ---------------------------------------------------------------------------------------------
 % Specification values (SOURCED: build prompt Part B / E.5, SRS 7.2)
@@ -228,74 +228,84 @@
 \newcommand{\nBlockThreshold}{\srcd{0.85}}     % D-02 block threshold
 \newcommand{\nFPRBudget}{\srcd{1\%}}           % D-01 operating point
 \newcommand{\nTargetRecall}{\srcd{0.880}}      % D-02 recall at 0.60
-\newcommand{\nTargetFNR}{\srcd{12\%}}          % D-02 FNR at 0.60
+\newcommand{\nTargetFNR}{\srcd{12.0\%}}          % D-02 FNR at 0.60
 \newcommand{\nResamples}{\srcd{1{,}000}}       % E.5 item 2 bootstrap resamples
 \newcommand{\nSeeds}{\srcd{five}}              % E.5 item 2
 
 % Gate training details: docs/benchmarks/m4_gate_d8083dbc_v3.txt (evidence commit d40fca2).
-\newcommand{\nGateTrainFraud}{\prov{260}}
-\newcommand{\nGateXGBRounds}{\prov{191}}
-\newcommand{\nGateLGBRounds}{\prov{342}}
-\newcommand{\nGateSPW}{\prov{114.4}}
+\newcommand{\nGateTrainFraud}{\meas{260}}
+\newcommand{\nGateXGBRounds}{\meas{191}}
+\newcommand{\nGateLGBRounds}{\meas{342}}
+\newcommand{\nGateSPW}{\meas{114.4}}
 
 % Remaining gate rows, same file (m4_gate_d8083dbc_v3.txt).
-\newcommand{\nGateRecallSixci}{\prov{[0.707, 0.765]}}
-\newcommand{\nGateFoneci}{\prov{[0.800, 0.840]}}
-\newcommand{\nGateFPRBlock}{\prov{0.000}}
-\newcommand{\nGateShapCov}{\prov{1.000}}
-\newcommand{\nGatePrecSix}{\prov{0.927}}
-\newcommand{\nGateSeedRecallSix}{\prov{\ensuremath{0.7440 \pm 0.0410}}}
-\newcommand{\nBaseRulesp}{\prov{\ensuremath{1.2 \times 10^{-223}}}}
-\newcommand{\nBaseLRp}{\prov{0.0049}}
-\newcommand{\nBaseLGBp}{\prov{\ensuremath{2.7 \times 10^{-8}}}}
-\newcommand{\nBaseIFp}{\prov{\ensuremath{4.8 \times 10^{-20}}}}
-\newcommand{\nBaseRulesR}{\prov{0.019}}
-\newcommand{\nBaseLRR}{\prov{0.815}}
-\newcommand{\nBaseRFR}{\prov{0.874}}
-\newcommand{\nBaseXGBR}{\prov{0.874}}
-\newcommand{\nBaseLGBR}{\prov{0.826}}
-\newcommand{\nBaseIFR}{\prov{0.619}}
+\newcommand{\nGateRecallSixci}{\meas{[0.707, 0.765]}}
+\newcommand{\nGateFoneci}{\meas{[0.800, 0.840]}}
+\newcommand{\nGateFPRBlock}{\meas{0.000}}
+\newcommand{\nGateShapCov}{\meas{1.000}}
+\newcommand{\nGatePrecSix}{\meas{0.927}}
+\newcommand{\nGateSeedRecallSix}{\meas{\ensuremath{0.7440 \pm 0.0410}}}
+\newcommand{\nBaseRulesp}{\meas{\ensuremath{1.2 \times 10^{-223}}}}
+\newcommand{\nBaseLRp}{\meas{0.0049}}
+\newcommand{\nBaseLGBp}{\meas{\ensuremath{2.7 \times 10^{-8}}}}
+\newcommand{\nBaseIFp}{\meas{\ensuremath{4.8 \times 10^{-20}}}}
+\newcommand{\nBaseRulesR}{\meas{0.019}}
+\newcommand{\nBaseLRR}{\meas{0.815}}
+\newcommand{\nBaseRFR}{\meas{0.874}}
+\newcommand{\nBaseXGBR}{\meas{0.874}}
+\newcommand{\nBaseLGBR}{\meas{0.826}}
+\newcommand{\nBaseIFR}{\meas{0.619}}
 % Production-ensemble ablations (E.5.4), same file: AUC and delta vs the full model.
-\newcommand{\nAblAgentD}{\prov{-0.0038}}
-\newcommand{\nAblCorridorD}{\prov{-0.0041}}
-\newcommand{\nAblRoundD}{\prov{-0.0025}}
-\newcommand{\nAblMonthD}{\prov{-0.0008}}
-\newcommand{\nAblCardD}{\prov{-0.0420}}
-\newcommand{\nAblUSSDD}{\prov{-0.0004}}
+\newcommand{\nAblAgentD}{\meas{-0.0038}}
+\newcommand{\nAblCorridorD}{\meas{-0.0041}}
+\newcommand{\nAblRoundD}{\meas{-0.0025}}
+\newcommand{\nAblMonthD}{\meas{-0.0008}}
+\newcommand{\nAblCardD}{\meas{-0.0420}}
+\newcommand{\nAblUSSDD}{\meas{-0.0004}}
 % Battery groups alone, remaining rows (m4_battery_d8083dbc_e1.txt).
-\newcommand{\nGroupDevice}{\prov{0.720}}
-\newcommand{\nGroupSynth}{\prov{0.706}}
-\newcommand{\nGroupAmount}{\prov{0.655}}
-\newcommand{\nGroupAgent}{\prov{0.556}}
-\newcommand{\nGroupProfile}{\prov{0.548}}
-\newcommand{\nGroupCorridor}{\prov{0.507}}
-\newcommand{\nGroupWithoutCounterparty}{\prov{0.938}}
+\newcommand{\nGroupDevice}{\meas{0.720}}
+\newcommand{\nGroupSynth}{\meas{0.706}}
+\newcommand{\nGroupAmount}{\meas{0.655}}
+\newcommand{\nGroupAgent}{\meas{0.556}}
+\newcommand{\nGroupProfile}{\meas{0.548}}
+\newcommand{\nGroupCorridor}{\meas{0.507}}
+\newcommand{\nGroupWithoutCounterparty}{\meas{0.938}}
 % Frontier rows (m4_frontier_6abde44e.txt): AUC, predict p50 (ms), +SHAP p50 (ms), SHAP cost.
-\newcommand{\nFrAucA}{\prov{0.995}}\newcommand{\nFrPredA}{\prov{0.48}}\newcommand{\nFrShapA}{\prov{0.56}}\newcommand{\nFrCostA}{\prov{0.08}}
-\newcommand{\nFrAucB}{\prov{0.992}}\newcommand{\nFrPredB}{\prov{0.48}}\newcommand{\nFrShapB}{\prov{0.81}}\newcommand{\nFrCostB}{\prov{0.33}}
-\newcommand{\nFrAucC}{\prov{0.991}}\newcommand{\nFrPredC}{\prov{0.49}}\newcommand{\nFrShapC}{\prov{1.49}}\newcommand{\nFrCostC}{\prov{1.00}}
-\newcommand{\nFrAucD}{\prov{0.990}}\newcommand{\nFrPredD}{\prov{0.52}}\newcommand{\nFrShapD}{\prov{2.38}}\newcommand{\nFrCostD}{\prov{1.86}}
-\newcommand{\nFrAucE}{\prov{0.990}}\newcommand{\nFrPredE}{\prov{0.56}}\newcommand{\nFrShapE}{\prov{3.36}}\newcommand{\nFrCostE}{\prov{2.80}}
-\newcommand{\nFrRequests}{\prov{900}}
+\newcommand{\nFrAucA}{\meas{0.995}}\newcommand{\nFrPredA}{\meas{0.48}}\newcommand{\nFrShapA}{\meas{0.56}}\newcommand{\nFrCostA}{\meas{0.08}}
+\newcommand{\nFrAucB}{\meas{0.992}}\newcommand{\nFrPredB}{\meas{0.48}}\newcommand{\nFrShapB}{\meas{0.81}}\newcommand{\nFrCostB}{\meas{0.33}}
+\newcommand{\nFrAucC}{\meas{0.991}}\newcommand{\nFrPredC}{\meas{0.49}}\newcommand{\nFrShapC}{\meas{1.49}}\newcommand{\nFrCostC}{\meas{1.00}}
+\newcommand{\nFrAucD}{\meas{0.990}}\newcommand{\nFrPredD}{\meas{0.52}}\newcommand{\nFrShapD}{\meas{2.38}}\newcommand{\nFrCostD}{\meas{1.86}}
+\newcommand{\nFrAucE}{\meas{0.990}}\newcommand{\nFrPredE}{\meas{0.56}}\newcommand{\nFrShapE}{\meas{3.36}}\newcommand{\nFrCostE}{\meas{2.80}}
+\newcommand{\nFrRequests}{\meas{900}}
 % SRS 2.3 claim, UNVERIFIED (claims register C-6); quoted only to report the measurement that
 % replaces it.
 \newcommand{\nSpecVarianceClaim}{\srcd{12\%}}
 
 % Leave-one-country-out and variants, m4_battery_d8083dbc_e1.txt (evidence commit d40fca2):
 % country AUC in-sample (BY COUNTRY) and with the country removed from training (LOCO), fraud rows.
-\newcommand{\nLocoKEin}{\prov{0.980}}\newcommand{\nLocoKEout}{\prov{0.977}}\newcommand{\nLocoKEf}{\prov{264}}
-\newcommand{\nLocoRWin}{\prov{0.969}}\newcommand{\nLocoRWout}{\prov{0.964}}\newcommand{\nLocoRWf}{\prov{445}}
-\newcommand{\nLocoTZin}{\prov{0.967}}\newcommand{\nLocoTZout}{\prov{0.964}}\newcommand{\nLocoTZf}{\prov{152}}
-\newcommand{\nLocoUGin}{\prov{0.967}}\newcommand{\nLocoUGout}{\prov{0.961}}\newcommand{\nLocoUGf}{\prov{110}}
-\newcommand{\nLocoCDin}{\prov{0.989}}\newcommand{\nLocoCDout}{\prov{0.988}}\newcommand{\nLocoCDf}{\prov{14}}
-\newcommand{\nNovelCaught}{\prov{72}}
-\newcommand{\nAdaptRecall}{\prov{90.9\%}}
-\newcommand{\nAdaptCI}{\prov{[62.3\%, 98.4\%]}}
-\newcommand{\nAdaptFraud}{\prov{11}}
+\newcommand{\nLocoKEin}{\meas{0.980}}\newcommand{\nLocoKEout}{\meas{0.977}}\newcommand{\nLocoKEf}{\meas{264}}
+\newcommand{\nLocoRWin}{\meas{0.969}}\newcommand{\nLocoRWout}{\meas{0.964}}\newcommand{\nLocoRWf}{\meas{445}}
+\newcommand{\nLocoTZin}{\meas{0.967}}\newcommand{\nLocoTZout}{\meas{0.964}}\newcommand{\nLocoTZf}{\meas{152}}
+\newcommand{\nLocoUGin}{\meas{0.967}}\newcommand{\nLocoUGout}{\meas{0.961}}\newcommand{\nLocoUGf}{\meas{110}}
+\newcommand{\nLocoCDin}{\meas{0.989}}\newcommand{\nLocoCDout}{\meas{0.988}}\newcommand{\nLocoCDf}{\meas{14}}
+\newcommand{\nNovelCaught}{\meas{72}}
+\newcommand{\nAdaptRecall}{\meas{90.9\%}}
+\newcommand{\nAdaptCI}{\meas{[62.3\%, 98.4\%]}}
+\newcommand{\nAdaptFraud}{\meas{11}}
 % First reversal-scam run (m4_battery_pb61.txt, dbda585): caught 4 of 66, AUC 0.656.
-\newcommand{\nRevCaughtFirst}{\prov{4}}
-\newcommand{\nRevAUCFirst}{\prov{0.656}}
+\newcommand{\nRevCaughtFirst}{\meas{4}}
+\newcommand{\nRevAUCFirst}{\meas{0.656}}
 
 % docs/benchmarks/hardware.md (main), dev-laptop-01, recorded 2026-09-17.
 \newcommand{\nHwCPU}{\meas{Intel Core i5-6200U at 2.30~GHz, 2 cores / 4 threads}}
 \newcommand{\nHwMem}{\meas{7.8~GiB}}
+
+% Row and fraud counts stated in table captions.
+% Battery (m4_battery_d8083dbc_e1.txt, d40fca2): test rows and fraud of the headline line.
+\newcommand{\nBatTestRows}{\meas{101{,}909}}
+\newcommand{\nBatTestFraud}{\meas{985}}
+% Frontier (docs/benchmarks/m4_frontier.md, raw m4_frontier_6abde44e.txt, 95b722c).
+\newcommand{\nFrHeldOutRows}{\meas{60{,}000}}
+\newcommand{\nFrHeldOutFraud}{\meas{551}}
+% Single-feature floor rows (single_feature_baseline.md): the draw's row count.
+\newcommand{\nFloorDrawRows}{\meas{1{,}006{,}249}}

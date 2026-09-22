@@ -2,8 +2,8 @@
 \label{sec:evaluation}
 
 All figures in this section are on the evaluation draw's test period (\nTestRows{} rows holding
-\nTestFraud{} confirmed fraud), for models trained on \nTrainUsed{} rows, and are provisional
-until the M4 milestone is tagged (see the note on the first page).
+\nTestFraud{} confirmed fraud), for models trained on \nTrainUsed{} rows holding
+\nGateTrainFraud{} confirmed fraud.
 
 \subsection{Gate metrics as margins over the floor}
 
@@ -16,8 +16,9 @@ fingerprint.
 \begin{table}[h]
 \centering
 \caption{Ranking metrics of the calibrated ensemble, with the best single feature
-(\texttt{velocity\_ratio\_1h\_vs\_30d}) on the same rows and the margin over it. Source:
-\texttt{docs/benchmarks/m4\_gate\_d8083dbc\_v3.txt}.}
+(\texttt{velocity\_ratio\_1h\_vs\_30d}) on the same rows and the margin over it. Draw
+\texttt{d8083dbc}, test period of \nTestRows{} rows holding \nTestFraud{} fraud, evidence commit
+\texttt{d40fca2}, source \texttt{docs/benchmarks/m4\_gate\_d8083dbc\_v3.txt}.}
 \label{tab:gate}
 \begin{tabular}{lrrr}
 \toprule
@@ -39,10 +40,16 @@ recall is \nGateRecallSix{} \nGateRecallSixci{} against a target of \nTargetReca
 false-negative rate \nGateFNR{} against \nTargetFNR{}, the two metrics that \textbf{fail}; F1 is
 \nGateFone{} \nGateFoneci{}; the false-positive rate at the block threshold is \nGateFPRBlock{};
 SHAP coverage of flagged transactions is \nGateShapCov{}; and the expected calibration error over
-15 equal-mass bins is \nGateECE{}. In all, \nGatePass{} gate metrics pass. The two failures are
-recorded, not tuned away; training on a fraction of the available rows is a candidate cause, not
-a finding. At the flag threshold precision is \nGatePrecSix{}, so the operating point trades recall
-for very few false alerts.
+15 equal-mass bins is \nGateECE{}. In all, \nGatePass{} gate metrics pass.
+
+The recall miss is recorded as a finding at this training volume, with the threshold unchanged and
+nothing tuned on the test period (ADR 0031). It is a shortfall in ranking, not a choice of
+threshold: even at the looser \nFPRBudget{} false-positive budget recall is \nGateRecallFPR{},
+still below \nTargetRecall{}, so no threshold on this run reaches the target. Whether the miss is a
+property of the benchmark or of training on \nTrainUsed{} of the \nTrainRows{} available rows is
+untested until the learning curve (PB-67) is measured: \notyet{PB-67 learning curve}. At the flag
+threshold precision is \nGatePrecSix{}, so the operating point trades recall for very few false
+alerts.
 
 Precision at the \nFPRBudget{} budget is \nGatePrecFPR{}, reported against its ceiling at this
 test period's base rate, \nGatePrecCeiling{}: even a perfect ranking could not exceed it, which is
@@ -57,8 +64,10 @@ ensemble on this benchmark (DeLong $p = \nBaseRFp$ and $p = \nBaseXGBp$).
 
 \begin{table}[h]
 \centering
-\caption{Baselines on the same test rows: AUC, recall at \nFPRBudget{} FPR, and DeLong $p$
-against the ensemble.}
+\caption{Baselines on the same test rows (draw \texttt{d8083dbc}, \nTestRows{} rows holding
+\nTestFraud{} fraud, evidence commit \texttt{d40fca2}, source
+\texttt{docs/benchmarks/m4\_gate\_d8083dbc\_v3.txt}): AUC, recall at \nFPRBudget{} FPR, and DeLong
+$p$ against the ensemble.}
 \label{tab:baselines}
 \begin{tabular}{lrrr}
 \toprule
@@ -92,7 +101,8 @@ disjoint groups each reach at least \nGroupGeographic{} on their own.
 
 \begin{table}[h]
 \centering
-\caption{Diagnostic model with one feature group only (draw \texttt{d8083dbc}, source
+\caption{Diagnostic model with one feature group only (draw \texttt{d8083dbc}, \nBatTestRows{}
+test rows holding \nBatTestFraud{} fraud, evidence commit \texttt{d40fca2}, source
 \texttt{docs/benchmarks/m4\_battery\_d8083dbc\_e1.txt}).}
 \label{tab:groups}
 \begin{tabular}{lr}
@@ -151,7 +161,9 @@ a warm-up, on the development laptop.
 \begin{table}[h]
 \centering
 \caption{Accuracy and median single-request latency across tree complexity (one XGBoost booster,
-draw \texttt{6abde44e}, source \texttt{docs/benchmarks/m4\_frontier\_6abde44e.txt}). Milliseconds
+draw \texttt{6abde44e}, \nFrHeldOutRows{} held-out rows holding \nFrHeldOutFraud{} fraud,
+\nFrRequests{} timed requests per configuration, evidence commit \texttt{95b722c}, source
+\texttt{docs/benchmarks/m4\_frontier\_6abde44e.txt}). Milliseconds
 are from the development laptop and are not gate figures (ADR 0010).}
 \label{tab:frontier}
 \begin{tabular}{rrrrrr}
