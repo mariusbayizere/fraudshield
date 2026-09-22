@@ -1,0 +1,101 @@
+\section{Generalisation: two nulls and one failure}
+\label{sec:generalisation}
+
+Once a single feature reached \nFloorM{}, the headline AUC could no longer show that a model had
+learned anything a one-line rule could not. Two experiments were meant to carry that weight
+instead: leave-one-country-out, and a fraud sub-variant that appears only in the test period.
+Both are null. This section reports them as null results rather than dropping them, explains why
+this benchmark could not make them informative, and reports the one experiment that did find a
+failure.
+
+\subsection{Leave-one-country-out}
+
+Each country is removed from training entirely and then scored, and each result is compared with
+the same country scored by the model that saw it (Table~\ref{tab:loco}). Removing a country costs
+at most \nLocoMaxLoss{} AUC; on the earlier draw \texttt{6abde44e} it cost at most
+\nEarlyLocoMaxLoss{}.
+
+\begin{table}[h]
+\centering
+\caption{AUC per country, in-sample and with the country unseen in training (diagnostic model,
+draw \texttt{d8083dbc}, source \texttt{docs/benchmarks/m4\_battery\_d8083dbc\_e1.txt}). CD rests
+on fewer than 30 fraud rows and gives direction only.}
+\label{tab:loco}
+\begin{tabular}{lrrr}
+\toprule
+Country & In-sample & Unseen in training & Fraud rows \\
+\midrule
+KE & \nLocoKEin & \nLocoKEout & \nLocoKEf \\
+RW & \nLocoRWin & \nLocoRWout & \nLocoRWf \\
+TZ & \nLocoTZin & \nLocoTZout & \nLocoTZf \\
+UG & \nLocoUGin & \nLocoUGout & \nLocoUGf \\
+CD & \nLocoCDin & \nLocoCDout & \nLocoCDf \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The null has a mechanism, and it is tested rather than argued: \textbf{no fraud parameter is keyed
+by country} (a test fails if one is). Country enters only as a lookup for which mule, merchant,
+agent, currency or time zone an incident uses, so withholding a country withholds no fraud
+mechanism. Country-level generalisation cannot be evaluated on this benchmark and belongs to a
+real-data validation plan. We did not change the generator to make countries differ: no source
+read gives fraud prevalence by type and country for these markets, so the only way to choose such
+a parameter would be to pick whatever makes the experiment show a gap, which defines the ground
+truth from the test's desired answer (ADR 0028).
+
+\subsection{A novel variant held out in time}
+
+\texttt{novel\_esim\_delayed\_drain} occurs only in the test period. All variants are scored
+against the same legitimate rows at one threshold, the \nFPRBudget{} false-positive budget over all
+legitimate rows. The unseen variant is caught at \nNovelRecall{} \nNovelCI{} (\nNovelCaught{} of
+\nNovelRows{}), against \nBaseVarRecall{} \nBaseVarCI{} for the base scenarios the model trained
+on: at least as often as the familiar shape. On the earlier draw the figures were
+\nEarlyNovelRecall{} against \nEarlyBaseRecall{}. The variant's novelty is in its lead time (a
+drain delayed by days rather than minutes after the enabling SIM event), not in its transaction
+pattern, which is still a burst, so a model that detects bursts catches it without having seen it.
+This is not an out-of-distribution test.
+
+\subsection{One cause}
+
+Both nulls, and the redundancy of Section~\ref{sec:redundancy}, have one explanation: \textbf{the
+benchmark encodes fraud as bursts}, and every country, every variant and every feature group is a
+view of that single structure. What the benchmark supports is detection \emph{given}
+burst-structured fraud, and the cost of computing and explaining that detection. It supports no
+claim about generalisation, geographic or temporal.
+
+\subsection{A pre-registered non-burst variant: the one failure found}
+
+A generalisation test needs a mechanism that actually differs. One was available without inventing
+anything: the victim-initiated reversal scam, a documented mobile-money fraud pattern
+\cite{TODO-verify} in which the victim, persuaded that money was ``sent by mistake'', makes a single
+ordinary-looking transfer, often to a counterparty they already know. Its defining properties
+remove exactly the two axes this benchmark's detection relies on: burst structure and counterparty
+novelty. That overlap is not a design chosen to make the test fail; it is why the typology works in
+the real world, where burst-based and novelty-based detectors are what such fraud is built to evade.
+
+The variant's definition, its justification and the predicted result were committed before the
+dataset was regenerated and before any measurement existed (ADR 0028). The prediction: recall at
+the same threshold \textbf{between \nRevPredLow{} and \nRevPredHigh{}}, lower than the base
+scenarios but not zero, with recall below about \nRevPredFloor{} stated as the outcome that would
+say burst structure and counterparty novelty carry nearly all of the benchmark's detection power.
+
+\textbf{Result.} \texttt{reversal\_scam\_social\_engineering} is caught at \nRevRecall{}
+(\nRevCaught{} of \nRevFraud{}, Wilson \nRevCI{}), against \nBaseVarRecall{} \nBaseVarCI{} for the
+base scenarios on \nBaseVarFraud{} rows; its AUC is \nRevAUC{}. The intervals do not overlap. The
+point estimate is below the pre-registered range; the interval now reaches past the range's lower
+edge, so ``below the predicted range'' holds for the point estimate and not for the whole interval.
+
+\textbf{A correction, reported rather than hidden.} The first measurement gave \nRevRecallFirst{}
+\nRevCIFirst{} (\nRevCaughtFirst{} of \nRevFraud{}; AUC \nRevAUCFirst{}) against
+\nBaseVarRecallFirst{} \nBaseVarCIFirst{}. It used a random-fold target encoding that the project's
+encoding rule (E1) forbids; re-running on the same data with the permitted encoding produced the
+figures above. The conclusion did not change; the interval did.
+
+\textbf{What this does and does not show.} It confirms, on a held-out shape rather than by inference
+from ablation margins, that this benchmark's detection power concentrates in burst structure and
+counterparty novelty, and that the remaining signals (amount, channel, time) do not compensate
+when both are absent. It does not show that non-burst fraud is undetectable: other non-burst
+typologies are untested, and a real system has signals this benchmark does not simulate. A second
+held-out variant, \texttt{adapted\_below\_threshold}, rests on \nAdaptFraud{} fraud rows (recall
+\nAdaptRecall{} \nAdaptCI{}); its interval overlaps the base scenarios' and establishes nothing on
+its own.
