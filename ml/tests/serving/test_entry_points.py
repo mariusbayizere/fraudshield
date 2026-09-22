@@ -51,6 +51,21 @@ def packs(tmp_path: Path) -> Path:
     return path
 
 
+class _Dead:
+    """A worker process that is already gone, so `cli.main` returns without waiting."""
+
+    name, pid, exitcode = "scorer-0", None, 1
+
+    def is_alive(self) -> bool:
+        return False
+
+    def terminate(self) -> None:
+        return
+
+    def join(self, timeout: float | None = None) -> None:
+        return
+
+
 def _free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
@@ -105,23 +120,11 @@ def test_the_scorer_cli_refuses_plaintext_unless_asked(packs: Path) -> None:
 def test_the_supervisor_exits_when_a_worker_dies(
     packs: Path, monkeypatch: pytest.MonkeyPatch, bundle_dirs: tuple[Path, Path]
 ) -> None:
-    class Dead:
-        name, pid, exitcode = "scorer-0", None, 1
-
-        def is_alive(self) -> bool:
-            return False
-
-        def terminate(self) -> None:
-            return
-
-        def join(self, timeout: float | None = None) -> None:
-            return
-
     started: list[Any] = []
 
-    def serve(config: server.WorkerConfig, workers: int) -> list[Dead]:
+    def serve(config: server.WorkerConfig, workers: int) -> list[_Dead]:
         started.append(config)
-        return [Dead()]
+        return [_Dead()]
 
     monkeypatch.setattr(server, "serve", serve)
     code = scorer_cli.main(
@@ -144,6 +147,51 @@ def test_the_supervisor_exits_when_a_worker_dies(
     )
     assert code == 1, "a dead worker stops the pod so the orchestrator restarts it"
     assert started[0].tls is None
+
+
+@pytest.mark.req("FR-02-05", "D-06")
+@pytest.mark.parametrize(
+    ("argv", "expected"), [([], 0.995), (["--threshold-profile", "test"], 0.70)]
+)
+def test_the_profile_a_worker_is_started_with_is_the_one_the_flag_names(
+    packs: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    bundle_dirs: tuple[Path, Path],
+    argv: list[str],
+    expected: float,
+) -> None:
+    """`cli.main` is where the profile reaches `WorkerConfig`; asserting the two defaults apart
+    from each other left that line free to ship D-06's 0.7 to production (re-review N3)."""
+    started: list[server.WorkerConfig] = []
+
+    def serve(config: server.WorkerConfig, workers: int) -> list[Any]:
+        started.append(config)
+        return [_Dead()]
+
+    monkeypatch.setattr(server, "serve", serve)
+    assert (
+        scorer_cli.main(
+            [
+                "serve",
+                "--bundle",
+                str(bundle_dirs[0]),
+                "--packs",
+                str(packs),
+                "--insecure",
+                "--feature-store",
+                "redis://localhost:6379/0",
+                "--workers",
+                "1",
+                "--port",
+                str(_free_port()),
+                "--admin-port",
+                str(_free_port()),
+                *argv,
+            ]
+        )
+        == 1
+    )
+    assert started[0].thresholds.anomaly_review == expected
 
 
 def test_regeneration_is_idempotent(capsys: pytest.CaptureFixture[str]) -> None:

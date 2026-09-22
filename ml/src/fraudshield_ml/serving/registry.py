@@ -37,6 +37,7 @@ from typing import Any
 from prometheus_client import CollectorRegistry, Counter
 
 from fraudshield_ml.models.bundle import FILES, MANIFEST, Bundle, BundleError
+from fraudshield_ml.serving import shadow
 from fraudshield_ml.serving.shadow import GateDecision
 
 PRODUCTION = "production"
@@ -60,16 +61,47 @@ class PromotionRefused(RegistryError):  # noqa: N818 - a refusal, named as one
 MAX_ECE = 0.05
 
 
+def _d11_recheck(gate: GateDecision) -> list[str]:
+    """D-11's clauses re-derived from the decision's own numbers.
+
+    The in-house `shadow.promotion_gate` always names a reason when it refuses, but the design
+    hands this file a *report*, which an external comparator writes. A report is not trusted to
+    have applied D-11 correctly: its `promote` flag is checked against the figures beside it.
+    The 24-hour window is the one clause a `GateDecision` carries no field for, so it can only be
+    checked by the comparator that produced it.
+    """
+    problems: list[str] = []
+    if gate.scored < shadow.MIN_SCORED:
+        problems.append(f"{gate.scored} shadow scores, need {shadow.MIN_SCORED} (D-11)")
+    if gate.label_coverage < shadow.MIN_LABEL_COVERAGE:
+        problems.append(f"label coverage {gate.label_coverage:.1%} is under 30% (D-11)")
+    elif gate.auc_delta is None:
+        problems.append("the gate report carries no AUC delta (D-11)")
+    if gate.auc_delta is not None and gate.auc_delta < shadow.MIN_AUC_DELTA:
+        problems.append(f"AUC delta {gate.auc_delta:+.4f} is below {shadow.MIN_AUC_DELTA} (D-11)")
+    if gate.psi is not None and gate.psi >= shadow.MAX_PSI:
+        problems.append(f"score PSI {gate.psi:.3f} is not below {shadow.MAX_PSI} (D-11)")
+    return problems
+
+
 def _gate_problems(gate: GateDecision | None, override: str | None) -> list[str]:
-    """D-11's shadow gate as a promotion condition: a decision, or a recorded override."""
-    if gate is None and override is None:
-        return [
-            "no shadow-gate decision (D-11): pass the comparator's report, or an override reason "
-            "for a first deployment"
-        ]
-    if gate is not None and not gate.promote:
-        return list(gate.reasons)
-    return []
+    """D-11's shadow gate as a promotion condition: a decision, or a recorded override.
+
+    A rollback does not come here: `promote` exempts the version `previous_production` holds,
+    which has already served (D-50).
+    """
+    if gate is None:
+        if override is None:
+            return [
+                "no shadow-gate decision (D-11): pass the comparator's report, or an override "
+                "reason for a first deployment. A rollback to the version "
+                "`previous_production` holds needs neither"
+            ]
+        return []
+    problems = list(gate.reasons) or _d11_recheck(gate)
+    if not problems and not gate.promote:
+        problems.append("the shadow comparator refused promotion and named no reason (D-11)")
+    return problems
 
 
 def promotion_problems(manifest: dict[str, Any]) -> list[str]:
@@ -169,20 +201,68 @@ class MlflowRegistry:
 
         `gate` is the decision a shadow comparator produced from `fs.ml.shadow` (M6/M9 deploys it;
         `shadow.promotion_gate` computes it). `override` is the owner promoting without one, for a
-        first deployment that has no shadow window to show.
+        first deployment that has no shadow window to show; it is written to the version's tags,
+        so a promotion that skipped the gate can be found afterwards.
+
+        **A rollback is one alias move (D-50).** Moving `production` back to the version
+        `previous_production` holds needs no shadow decision: that model has already served. The
+        calibration block still applies — a bundle that cannot be loaded and checked is never
+        pointed at by `production`, whichever direction it is moving.
         """
         if alias != PRODUCTION:
             self.set_alias(name, alias, version)
             return
         bundle = self.fetch_bundle(ModelVersion(name, version, self.source(name, version)), cache)
         problems = promotion_problems(json.loads((bundle / MANIFEST).read_text()))
-        problems.extend(_gate_problems(gate, override))
+        previous = self.by_alias(name, PREVIOUS)
+        rollback = previous is not None and previous.version == version
+        if not rollback:
+            problems.extend(_gate_problems(gate, override))
         if problems:
             raise PromotionRefused("; ".join(problems))
         outgoing = self.by_alias(name, PRODUCTION)
         if outgoing is not None and outgoing.version != version:
             self.set_alias(name, PREVIOUS, outgoing.version)
+        self._record_promotion(name, version, gate=gate, override=override, rollback=rollback)
         self.set_alias(name, alias, version)
+
+    def _record_promotion(
+        self,
+        name: str,
+        version: str,
+        *,
+        gate: GateDecision | None,
+        override: str | None,
+        rollback: bool = False,
+    ) -> None:
+        """Write how this version came to be production onto the version itself.
+
+        `fs-model alias … --override` advertises the reason as recorded; this is where it is
+        recorded. Tagging is best effort: a tracking server that refuses the tag must not leave
+        `production` pointing at nothing, so the failure is logged and the move goes ahead.
+        """
+        tags = {"fraudshield.promoted_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+        if rollback:
+            tags["fraudshield.promotion_gate"] = "rollback to previous_production (D-50)"
+        elif gate is not None:
+            tags["fraudshield.promotion_gate"] = (
+                f"D-11 passed: {gate.scored} scores, coverage {gate.label_coverage:.1%}, "
+                f"auc_delta {gate.auc_delta}, psi {gate.psi}"
+            )
+        if override is not None:
+            tags["fraudshield.promotion_override"] = override
+        for key, value in tags.items():
+            try:
+                self.set_version_tag(name, version, key, value)
+            except RegistryError:
+                LOG.warning("could not tag %s version %s with %s", name, version, key)
+
+    def set_version_tag(self, name: str, version: str, key: str, value: str) -> None:
+        self._json(
+            "POST",
+            "/api/2.0/mlflow/model-versions/set-tag",
+            body={"name": name, "version": version, "key": key, "value": value},
+        )
 
     def source(self, name: str, version: str) -> str:
         reply = self._json(
@@ -329,6 +409,7 @@ class MlflowRegistry:
                 outgoing = self.by_alias(name, PRODUCTION)
                 if outgoing is not None and outgoing.version != version:
                     self.set_alias(name, PREVIOUS, outgoing.version)
+                self._record_promotion(name, version, gate=gate, override=override)
             self.set_alias(name, alias, version)
         return version
 
