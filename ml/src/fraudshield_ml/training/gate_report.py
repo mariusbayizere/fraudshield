@@ -47,9 +47,11 @@ def summary(report: Report) -> list[str]:
     c = report.companions
     lines += [
         "",
-        f"  precision at 1% FPR {_f(c['precision_at_1pct_fpr'][0])} "
-        f"{_ci(c['precision_at_1pct_fpr'][1])}, against a ceiling of "
-        f"{_f(c['precision_ceiling_at_1pct_fpr'][0])} at this base rate (D-01)",
+        f"  at the 1% FPR budget's threshold the realised FPR is "
+        f"{_f(c['realised_fpr_at_1pct_budget'][0], 4)} (ties are not charged); precision there "
+        f"{_f(c['precision_at_1pct_fpr'][0])} {_ci(c['precision_at_1pct_fpr'][1])}",
+        f"  against D-01's ceiling of {_f(c['precision_ceiling_at_realised_fpr'][0])} at that "
+        f"rate and {_f(c['precision_ceiling_at_1pct_fpr'][0])} at exactly 1% FPR",
         f"  at 0.60: precision {_f(c['precision_at_flag'][0])}, FPR {_f(c['fpr_at_flag'][0], 4)}"
         f"   at 0.85: precision {_f(c['precision_at_block'][0])}, recall "
         f"{_f(c['recall_at_block'][0])}, F1 {_f(c['f1_at_block'][0])}   (D-02)",

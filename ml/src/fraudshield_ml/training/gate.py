@@ -89,14 +89,23 @@ def recall_at_fpr(scores: Any, labels: Any, fpr: float = FPR_BUDGET) -> float:
     return float((positives > negatives[index]).mean())
 
 
-def precision_at_fpr(scores: Any, labels: Any, fpr: float = FPR_BUDGET) -> float:
+def at_fpr_budget(scores: Any, labels: Any, fpr: float = FPR_BUDGET) -> tuple[float, float]:
+    """Precision and the **realised** false-positive rate at the `fpr` budget's threshold.
+
+    Rows strictly above the threshold are flagged (`recall_at_fpr`'s rule), so ties on it are not
+    charged. A calibrated score has many — isotonic regression is piecewise constant — and the
+    realised rate can fall well below the budget. Precision is only comparable with D-01's ceiling
+    at the rate it was actually measured at, so both are returned.
+    """
     np = _np()
     negatives = np.sort(scores[~labels])[::-1]
     if len(negatives) == 0:
-        return math.nan
+        return math.nan, math.nan
     threshold = negatives[min(len(negatives) - 1, max(0, int(len(negatives) * fpr) - 1))]
     flagged = scores > threshold
-    return float(labels[flagged].mean()) if flagged.any() else math.nan
+    realised = float((flagged & ~labels).sum() / len(negatives))
+    precision = float(labels[flagged].mean()) if flagged.any() else math.nan
+    return precision, realised
 
 
 def precision_ceiling(base_rate: float, fpr: float = FPR_BUDGET) -> float:
@@ -201,6 +210,7 @@ def metrics(rows: Rows) -> dict[str, float]:
     flag = at_threshold(scores, labels, FLAG)
     block = at_threshold(scores, labels, BLOCK)
     flagged = scores >= FLAG
+    budget_precision, realised = at_fpr_budget(scores, labels)
     values = {
         "ML-GATE-01": auc(scores, labels),
         "ML-GATE-02": recall_at_fpr(scores, labels),
@@ -210,8 +220,10 @@ def metrics(rows: Rows) -> dict[str, float]:
         "ML-GATE-06": flag.fnr,
         "ML-GATE-10": float(covered[flagged].mean()) if flagged.any() else math.nan,
         "ML-GATE-11": ece_equal_mass(scores, labels),
-        "precision_at_1pct_fpr": precision_at_fpr(scores, labels),
+        "precision_at_1pct_fpr": budget_precision,
+        "realised_fpr_at_1pct_budget": realised,
         "precision_ceiling_at_1pct_fpr": precision_ceiling(float(labels.mean())),
+        "precision_ceiling_at_realised_fpr": precision_ceiling(float(labels.mean()), realised),
         "precision_at_flag": flag.precision,
         "precision_at_block": block.precision,
         "recall_at_block": block.recall,

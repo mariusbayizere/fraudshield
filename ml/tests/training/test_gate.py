@@ -137,3 +137,18 @@ def test_a_gate_spec_fails_on_nan_and_respects_direction() -> None:
     assert below.passes(0.049)
     assert not below.passes(0.05)
     assert not at_least.passes(math.nan), "an unmeasured metric is not a passed one"
+
+
+@pytest.mark.req("D-01")
+def test_precision_never_exceeds_the_ceiling_at_the_rate_it_was_measured_at() -> None:
+    """The M4 gate's first run printed precision 0.641 beside a ceiling of 0.494 — impossible.
+
+    Heavy ties (an isotonic score is piecewise constant) meant the 1% budget's threshold flagged
+    only 0.47% of negatives. D-01's ceiling holds at the realised rate, and must be quoted there.
+    """
+    rng = np.random.default_rng(6)
+    labels = rng.random(20000) < 0.01
+    scores = np.round(np.clip(rng.normal(0.2, 0.1, 20000) + 0.5 * labels, 0, 1), 1)
+    precision, realised = gate.at_fpr_budget(scores, labels)
+    assert realised < gate.FPR_BUDGET, "precondition: ties leave the realised rate under budget"
+    assert precision <= gate.precision_ceiling(float(labels.mean()), realised) + 1e-12
