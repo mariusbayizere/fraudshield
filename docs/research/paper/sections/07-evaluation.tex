@@ -93,7 +93,12 @@ CD & \nCoRowsCD & \nLocoCDf & -- & \nLocoCDin \\
 
 \paragraph{Baselines.} Table~\ref{tab:baselines}. The status-quo rule engine is far below every
 learned model. Random forest and XGBoost alone are statistically indistinguishable from the
-ensemble on this benchmark (DeLong $p = \nBaseRFp$ and $p = \nBaseXGBp$).
+ensemble on this benchmark (DeLong $p = \nBaseRFp$ and $p = \nBaseXGBp$), and logistic regression
+comes within five thousandths of its AUC (\nBaseLR{} against \nGateAUC{}, a difference DeLong's test
+detects, $p = \nBaseLRp$). \textbf{The ensemble is therefore not justified by accuracy here}: a
+single XGBoost model ranks as well on this benchmark. It is kept because the specification requires
+it (resolution D-05), and the seed-variance measurement below finds that it does not reduce
+variance against XGBoost either; whether it earns its cost on real data is open.
 
 \begin{table}[htbp]
 \centering
@@ -216,9 +221,18 @@ From the smallest configuration to the largest, AUC moves \nFrontAUCDelta{}, ins
 interval, while the median cost of explaining a decision grows about \nFrontRatio-fold, from
 \nFrontShapSmall{} to \nFrontShapLarge{}~ms; prediction alone grows from \nFrontPredSmall{} to
 \nFrontPredLarge{}~ms. The accuracy half is a property of this easy benchmark and should not be
-generalised. The latency half is a property of the model and the explanation algorithm, which is
-why an easy benchmark cannot weaken it: on data like this, the explanation budget, not the
-accuracy target, should choose the tree configuration.
+generalised. The latency half is a property of the model and the explanation algorithm: exact
+TreeSHAP costs $O(TLD^2)$ for $T$ trees with at most $L$ leaves and depth $D$
+\cite{lundberg2020trees}, which is why an easy benchmark cannot weaken it.
+
+Three cautions keep this result in proportion. First, every configuration explains a decision in a
+few milliseconds at the median, far inside the specification's 40~ms per-request budget, so on this
+evidence explanation cost binds at throughput (the work each core does per explained request)
+rather than at the latency of a single request. Second, the \nFrontRatio-fold ratio depends on the
+grid: it is measured from the cheapest configuration tried, and a different smallest configuration
+would give a different ratio; the growth with trees and depth is the finding, not the number.
+Third, it is one machine's median. On data like this, the explanation budget, not the accuracy
+target, should choose the tree configuration.
 
 \textbf{We report the median only.} In \nFrontNegative{} configurations the measured 99th
 percentile shows a \emph{negative} explanation cost, which is impossible: explaining cannot be

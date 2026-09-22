@@ -4,9 +4,12 @@
 Digital payments in East Africa run largely over mobile money: person-to-person transfers,
 agent cash-in and cash-out, merchant payments and USSD sessions on basic handsets, alongside
 cards and bank transfers. The fraud that accompanies them (SIM-swap account takeover, agent float
-manipulation, mule accounts, social-engineering scams) is shaped by those channels. Systems
-designed around card fraud in other markets assume device fingerprints, card-present signals and
-merchant structures that many of these transactions do not have \refneeded{}. We do not
+manipulation, mule accounts, social-engineering scams) is shaped by those channels. Much of the
+published practice of fraud detection was developed on card transactions
+\cite{bolton2002fraud,dalpozzolo2014lessons}, while mobile money fraud takes forms such as
+SIM-swap takeover \cite{lee2020simswap}, attacks through add-on SIM hardware
+\cite{phipps2018thinsim} and scams carried out by SMS and phone call
+\cite{razaq2021scams,dogan2025grift}, on channels such as USSD that carry no device signals. We do not
 repeat the frequently quoted figures about the growth of mobile money fraud in the region: the
 claims register of this project lists each of them as unverified or replaced, and this paper
 states none of them as fact (Section~\ref{sec:limitations}).

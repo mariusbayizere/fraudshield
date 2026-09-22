@@ -66,13 +66,19 @@ claim about generalisation, geographic or temporal.
 
 \subsection{A pre-registered non-burst variant: the one failure found}
 
-A generalisation test needs a mechanism that actually differs. One was available without inventing
-anything: the victim-initiated reversal scam, a documented mobile-money fraud pattern
-\refneeded{} in which the victim, persuaded that money was ``sent by mistake'', makes a single
-ordinary-looking transfer, often to a counterparty they already know. Its defining properties
-remove exactly the two axes this benchmark's detection relies on: burst structure and counterparty
-novelty. That overlap is not a design chosen to make the test fail; it is why the typology works in
-the real world, where burst-based and novelty-based detectors are what such fraud is built to evade.
+A generalisation test needs a mechanism that actually differs, and one is documented: the
+``sent by mistake'' reversal scam among Kenyan M-PESA users \cite{dogan2025grift}. In its common
+documented form the victim receives a forged M-PESA confirmation message, so no money has in fact
+arrived, and is persuaded to return the ``mistaken'' amount with a single transfer, usually to a
+counterparty the victim has never paid before.
+
+The benchmark's variant keeps the single, victim-initiated transfer and departs from that form in
+one deliberate respect: its recipient is a counterparty the victim already knows. That is a
+modelling choice, not a property of the documented scam (ADR 0028). It removes both axes this
+benchmark's detection relies on at once, burst structure and counterparty novelty, which makes the
+variant the harder case of the two: the documented form, with its new recipient, keeps counterparty
+novelty. The generator stages each such row as a \texttt{mule\_account} row with its own sub-variant
+label (Table~\ref{tab:scenarios}).
 
 The variant's definition, its justification and the predicted result were committed before the
 dataset was regenerated and before any measurement existed (ADR 0028). The prediction: recall at
@@ -93,10 +99,12 @@ encoding rule (E1) forbids; re-running on the same data with the permitted encod
 figures above. The conclusion did not change; the interval did.
 
 \textbf{What this does and does not show.} It confirms, on a held-out shape rather than by inference
-from ablation margins, that this benchmark's detection power concentrates in burst structure and
-counterparty novelty, and that the remaining signals (amount, channel, time) do not compensate
-when both are absent. It does not show that non-burst fraud is undetectable: other non-burst
-typologies are untested, and a real system has signals this benchmark does not simulate. A second
+from ablation margins, that when burst structure and counterparty novelty are both absent the
+remaining signals (amount, channel, time) do not recover this benchmark's detection power. Because
+the variant removes the two axes together, the result cannot say how much each contributes on its
+own; a variant with a new recipient, as in the documented form, would separate them and has not
+been measured. It does not show that non-burst fraud is undetectable: other typologies are
+untested, and a real system has signals this benchmark does not simulate. A second
 held-out variant, \texttt{adapted\_below\_threshold}, rests on \nAdaptFraud{} fraud rows (recall
 \nAdaptRecall{} \nAdaptCI{}); its interval overlaps the base scenarios' and establishes nothing on
 its own.

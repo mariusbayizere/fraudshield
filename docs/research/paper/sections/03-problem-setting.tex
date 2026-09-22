@@ -20,10 +20,16 @@ agent's float utilisation, cash-out counts, distinct customers and distance from
 location. Those features are defined only for \texttt{AGENT\_BANKING} and are NaN on every other
 channel, again by contract.
 
-\paragraph{Corridors.} Transfers within a country, within the East African Community (EAC), and
-to countries outside it are different populations: regional remittances, including cross-border
-salary and family transfers, are routine and must not be treated like arbitrary foreign
-transfers. A categorical \texttt{corridor\_class} feature separates the three.
+\paragraph{Corridors.} Transfers within a country, within a regional bloc such as the East African
+Community (EAC), and beyond it are different populations: regional remittances, including
+cross-border salary and family transfers, are routine and must not be treated like arbitrary
+foreign transfers. The categorical \texttt{corridor\_class} feature has four classes, derived from
+the two countries' bloc memberships rather than from a list of EAC countries (ADR 0023):
+\texttt{DOMESTIC}, \texttt{INTRA\_BLOC}, \texttt{CROSS\_BLOC\_AFRICA} and
+\texttt{INTERCONTINENTAL}. \textbf{Only the first two occur on this benchmark}: every simulated
+counterparty is in one of the five countries, all of them EAC members, so the models never saw a
+cross-bloc or intercontinental transfer and nothing here says how they would score one (the
+feature registry records the two classes as unreachable, PB-43).
 
 \paragraph{Currencies, time and money.} Five currencies with different minor units, amounts
 normalised to Rwandan francs by a dated exchange-rate table, local time derived from coordinates

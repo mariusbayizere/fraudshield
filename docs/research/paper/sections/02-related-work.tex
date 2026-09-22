@@ -1,42 +1,67 @@
 \section{Related work}
 \label{sec:related}
 
-\emph{Draft note.} This section names the bodies of work the paper must be positioned against
-and cites none of them yet. The build prompt's rule is that only papers read in full are cited
-and that no reference is invented; every place marked \refneeded{} needs a source the author
-has read and verified. No claim about what a cited work reports is made here.
+\paragraph{Fraud detection on payment data.} Statistical fraud detection has a long literature
+across credit cards, telecommunications and money laundering, surveyed by Bolton and Hand
+\cite{bolton2002fraud}. Practitioner accounts of card fraud detection stress the problems this
+paper meets in synthetic form: extreme class imbalance, drift in fraud behaviour over time, and
+metrics that must reflect a limited budget of analyst alerts \cite{dalpozzolo2014lessons}.
+Learning under imbalance has its own methods and pitfalls \cite{he2009imbalanced}, and at a base
+rate below one per cent the receiver-operating curve can look reassuring while precision stays low
+\cite{saito2015prc}; we therefore report recall at a fixed false-positive rate and precision beside
+its ceiling rather than AUC alone. Our models are standard: gradient-boosted trees in their
+XGBoost \cite{chen2016xgboost} and LightGBM \cite{ke2017lightgbm} implementations, and an
+Isolation Forest \cite{liu2008iforest} for anomaly scores. We claim no novelty in them.
 
-\paragraph{Fraud detection on payment transactions.} Supervised gradient-boosted trees on
-engineered behavioural features are a common approach to card and payment fraud
-\refneeded{}, as is the treatment of class imbalance by reweighting rather than resampling
-\refneeded{}. Our method follows this line (Section~\ref{sec:method}) and does not claim
-novelty in it.
+\paragraph{Mobile money and its fraud.} Mobile money is now a primary financial service in parts
+of East Africa; in Kenya, access to M-PESA has been estimated to have lifted about two per cent of
+households out of poverty \cite{suri2016mpesa}. Its fraud differs from card fraud. Phipps et al.\
+analyse attacks on mobile money systems through ThinSIM add-on cards \cite{phipps2018thinsim}. Lee
+et al.\ found that the authentication five prepaid US carriers applied to SIM-swap requests could
+be subverted easily, and that the swap alone was enough to compromise accounts on a number of
+websites \cite{lee2020simswap}; SIM-swap takeover is one of the benchmark's eight scenarios. Razaq
+et al.\ describe SMS- and call-based social-engineering fraud from 96 interviews in Pakistan,
+mostly with victims \cite{razaq2021scams}, and Do{\u{g}}an et al.\ study the small-scale scams
+Kenyan M-PESA users face and how they respond \cite{dogan2025grift}. That last line of work is
+where the pre-registered variant of Section~\ref{sec:generalisation} comes from.
 
-\paragraph{Mobile money and East African payments.} Work on fraud in mobile money ecosystems,
-SIM-swap takeover, and agent networks \refneeded{}; regulatory and industry reports on
-payment volumes in the region \refneeded{}. Where this paper uses a regional statistic it
-is taken from a document read in full and recorded in the project's sourcing pass
-(Section~\ref{sec:dataset}); vendor or news figures are not used.
+\paragraph{Synthetic transaction data.} Real transaction data is rarely shareable, which is why
+synthetic generators exist. The closest to ours is PaySim, an agent-based simulator of mobile
+money transactions calibrated to aggregates of a real service \cite{lopezrojas2016paysim}. Its
+transaction log records who made which of five transaction types (cash-in, cash-out, debit,
+payment, transfer), to whom, the amount and the change in balances, at an hourly step; it has no
+channel, device, geographic or cross-border corridor field. FraudShield-EAC differs in what it
+simulates (six channels including USSD and agent banking, devices, coordinates, five countries and
+their corridors) and in what it is used for: this paper is less about the generator than about
+what its benchmark can and cannot support. We make no claim that it is the first East African
+fraud benchmark: that would require a documented search of datasets we have not done (claims
+register, C-8). We document the dataset with a datasheet \cite{gebru2021datasheets} and the model
+with a model card \cite{mitchell2019modelcards}.
 
-\paragraph{Synthetic financial datasets and simulators.} Agent-based simulators of payment and
-mobile money transactions, and public synthetic fraud datasets \refneeded{}. The question
-this paper adds is not how to generate such data but what a generated benchmark can and cannot
-support, and how to find out before trusting it.
+\paragraph{Leakage and shortcuts.} Leakage, information about the target that would not be
+available at prediction time, is a recurring cause of over-optimistic results in data mining
+\cite{kaufman2012leakage} and across machine-learning-based science \cite{kapoor2023leakage}.
+Models also learn shortcuts, cues that separate the classes in the data without being the
+behaviour of interest \cite{geirhos2020shortcut}. Data with temporal or grouped structure needs
+cross-validation that respects it \cite{roberts2017cv,bergmeir2012cv}. Several of the failure
+modes in Section~\ref{sec:discussion} are instances of these: rows of one fraud incident leaking
+into each other's encoding, and a benchmark whose strongest signal is a single burst feature.
 
-\paragraph{Leakage and shortcut learning.} Target leakage through preprocessing and encoding,
-shortcut features that separate classes for reasons unrelated to the task, and grouped or
-temporal cross-validation as defences \refneeded{}. Several of our failure modes
-(Section~\ref{sec:discussion}) are instances of these.
+\paragraph{Calibration and explanation.} Scores become probabilities through Platt scaling or
+isotonic regression \cite{zadrozny2002calibration,niculescumizil2005calibration}. Calibration error
+is usually summarised by binned estimates such as the expected calibration error
+\cite{naeini2015bbq,guo2017calibration}, which depend on the binning and can underestimate the
+error \cite{kumar2019calibration}; we report the decision-region figure beside the overall one for
+that reason. Explanations are Shapley-value attributions \cite{lundberg2017shap}, computed exactly
+for tree ensembles by TreeSHAP \cite{lundberg2020trees}.
 
-\paragraph{Calibration and explanation.} Isotonic and Platt calibration \refneeded{};
-expected calibration error and its dependence on binning \refneeded{}; exact TreeSHAP for
-tree ensembles and its additivity property \refneeded{}. We use these methods as specified
-and report their cost (Section~\ref{sec:evaluation}).
+\paragraph{Evaluation statistics.} We use Hanley and McNeil's standard error for single AUCs
+\cite{hanley1982auc}, DeLong's test for correlated AUCs \cite{delong1988auc}, Wilson intervals for
+proportions on small counts \cite{wilson1927interval}, and the bootstrap \cite{efron1979bootstrap}
+for the gate metrics.
 
-\paragraph{Evaluation under imbalance and generalisation.} Recall at a fixed false-positive rate,
-DeLong's test for correlated AUCs, bootstrap and Wilson intervals \refneeded{}; temporal
-hold-outs and leave-one-group-out designs for distribution shift \refneeded{}.
-
-\paragraph{Novelty claims.} The specification asks whether FraudShield-EAC is the first public
-East African financial fraud benchmark. That claim is unverified (claims register, C-8) and is
-not made here; it requires a documented dataset search by the author.
+\paragraph{Engineering and research practice.} Machine-learning systems accumulate hidden costs at
+their boundaries \cite{sculley2015debt}, and production readiness can be scored by the tests a
+system has \cite{breck2017testscore}; the parity suite and evidence stamps of
+Sections~\ref{sec:features} and~\ref{sec:repro} are in that spirit. Recording predictions before
+the evidence, as Section~\ref{sec:discussion} does, is pre-registration \cite{nosek2018preregistration}.
