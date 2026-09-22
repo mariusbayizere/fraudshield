@@ -121,4 +121,21 @@ proposals are decided when the contracts are next opened.
 
 ## Evidence record
 
-Filled from the final frozen-tree run (see below).
+| What | Where |
+|---|---|
+| Principal review, fixes, re-review (verdict APPROVED_WITH_MINORS) and 12 mutation spot checks | `docs/reviews/M7/staff-auth.md` |
+| Full verify, M7 gate measurements, machine and load | `docs/benchmarks/m7_evidence_fe757fa.md` and the files `m7_*_fe757fa.*` |
+
+Final branch state: `2dc718c`, pushed.
+
+- **Last full verify per module:** common, persistence and audit at `fe757fa`; auth at `e0b9391`;
+  admin at `2dc718c`. No module changed after its last passing run.
+- **Commits touching `requirements_matrix.md`** (regenerated, never hand-edited): `c280402`,
+  `7be13e7`, `fe757fa`, `e0b9391`.
+- **Commit touching `tools/`:** `4a91ebc` (the licence exceptions).
+
+## Not done by this branch (by instruction)
+
+No merge to `main`, no `m7-complete` tag, no milestone walkthrough status block in
+`SESSION_STATE.md`. M7's HTTP surface runs only in the test application until M6 assembles the API
+application.
