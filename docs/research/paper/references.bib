@@ -8,6 +8,7 @@
 %                             the publisher's page; the citing sentence checked against the abstract
 %   STATUS METADATA-ONLY      fields confirmed, but the text could not be read (closed access); the
 %                             citing sentence rests on the owner's reading and is flagged for review
+%                             (no entry has this status since 2026-09-22)
 
 % STATUS VERIFIED-SOURCE: document read on 2026-09-22 (reference_audit.md).
 @techreport{botPSAR2024,
@@ -128,18 +129,37 @@
 
 % ============================== Mobile money fraud and payments =================================
 
-% STATUS METADATA-ONLY: Crossref 10.1145/3715335.3736315. Full text closed (ACM DL 403; OpenAlex
-% reports no open copy). Section 8's description of the forged-message form rests on the owner's
-% reading; to be confirmed by the author before submission.
+% STATUS VERIFIED-SOURCE: full text read on 2026-09-22 (the third author's copy,
+% faculty.washington.edu/kotut/papers/COMPASS-2025-Financial-Grift.pdf; 6 pp.): title, authors,
+% venue, pages 694-699 and DOI printed on its pages, and matching Crossref. Cited for what it states:
+% forged M-PESA confirmation messages (Section 5.1.1, the most common type reported), malicious
+% reversal requests (Section 2) and disputing mistaken transfers (Section 5.3.3). It does not narrate
+% the "sent by mistake, please return it" story; that is cited to star2025mpesa.
 @inproceedings{dogan2025grift,
   author    = {Do{\u{g}}an, Amelia Lee and Gilbert, Meira and Kotut, Lindah},
   title     = {Easy Come, Easy Go: Phone Enabled Small-Scale Financial Grift},
   booktitle = {Proceedings of the ACM SIGCAS/SIGCHI Conference on Computing and Sustainable
                Societies (COMPASS '25)},
   publisher = {ACM},
+  address   = {Toronto, ON, Canada},
   year      = {2025},
   pages     = {694--699},
   doi       = {10.1145/3715335.3736315}
+}
+
+% STATUS VERIFIED-SOURCE: article read in full on 2026-09-22 at the URL below: headline, byline
+% (Felix Kipkemoi), date (27 March 2025, 13:58) and section (News) as printed. Cited for the "sent by
+% mistake" story (fake M-PESA message showing LOCKED instead of a balance; the scammer claims to have
+% sent the money by mistake; victims send it back; no money was ever deposited) and for Safaricom's
+% advice, quoted in the article, not to refund the money.
+@misc{star2025mpesa,
+  author       = {Kipkemoi, Felix},
+  title        = {{EXPLAINER}: What You Need to Know about {M-PESA} Fraud Schemes},
+  howpublished = {The Star (Kenya)},
+  year         = {2025},
+  month        = mar,
+  note         = {Published 27 March 2025. Accessed 2026-09-22},
+  url          = {https://www.the-star.co.ke/news/2025-03-27-explainer-what-you-need-to-know-about-m-pesa-fraud-schemes}
 }
 
 % STATUS VERIFIED-SOURCE: the paper's PDF (msc-les.org) read: title, authors, pages 249-255 and ISBN
