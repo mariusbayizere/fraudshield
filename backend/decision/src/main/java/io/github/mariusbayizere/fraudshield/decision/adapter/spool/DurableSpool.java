@@ -310,6 +310,7 @@ public final class DurableSpool implements AutoCloseable {
       } catch (AtomicMoveNotSupportedException e) {
         Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING);
       }
+      syncDirectory();
       counter.set(position);
       deleteConsumedSegments();
     } catch (IOException e) {
@@ -537,6 +538,22 @@ public final class DurableSpool implements AutoCloseable {
             file, StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.READ);
     activeBase = base;
     segments.put(base, file);
+    // A new file's data is fsynced with the batch, but on some filesystems its directory entry is
+    // not durable until the directory itself is fsynced: a crash could lose a freshly rolled
+    // segment and the records acknowledged in it (Principal Review finding 17).
+    syncDirectory();
+  }
+
+  /**
+   * Makes the directory's own entries durable, after creating a segment or renaming a checkpoint.
+   */
+  private void syncDirectory() {
+    try (FileChannel dir = FileChannel.open(directory, StandardOpenOption.READ)) {
+      dir.force(true);
+    } catch (IOException e) {
+      // Some filesystems refuse to open or fsync a directory; the data fsync still happened.
+      LOG.debug("could not fsync the spool directory", e);
+    }
   }
 
   private void closeActive() {

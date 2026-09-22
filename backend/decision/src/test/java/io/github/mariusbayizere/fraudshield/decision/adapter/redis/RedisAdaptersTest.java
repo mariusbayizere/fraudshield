@@ -144,8 +144,35 @@ class RedisAdaptersTest {
 
   @Test
   @Tag("FR-03-06")
-  void exactlyOneOfManyConcurrentThirdHighsFreezes() throws Exception {
+  void theThirdHighInTheWindowFreezesAndOnlyOneOfManyRacingThirdsDoes() throws Exception {
     RedisFreezes freezes = new RedisFreezes(connection, TIMEOUT);
+
+    // The production Lua freezes on exactly the third HIGH, not the second and not the fourth
+    // (FR-03-06; Principal Review finding 8: this is what the mutation "count > 3" survived).
+    String counted = "tok_CountedAccountBbbbCcccDd1";
+    FreezePort.FreezeCheck first = freezes.recordHigh(INSTITUTION, counted, UUID.randomUUID(), NOW);
+    assertThat(first.highDecisionsInWindow()).isEqualTo(1);
+    assertThat(first.frozeNow()).isFalse();
+    FreezePort.FreezeCheck second =
+        freezes.recordHigh(INSTITUTION, counted, UUID.randomUUID(), NOW.plusSeconds(60));
+    assertThat(second.highDecisionsInWindow()).isEqualTo(2);
+    assertThat(second.frozeNow()).isFalse();
+    FreezePort.FreezeCheck third =
+        freezes.recordHigh(
+            INSTITUTION, counted, UUID.randomUUID(), NOW.plus(Duration.ofMinutes(59)));
+    assertThat(third.highDecisionsInWindow()).isEqualTo(3);
+    assertThat(third.frozeNow()).as("the third HIGH within the hour freezes").isTrue();
+
+    // Exactly 60 minutes after the first, the first has left the half-open window: the third HIGH
+    // of this account counts two and does not freeze.
+    String edge = "tok_EdgeAccountEeeeFfffGggg01";
+    freezes.recordHigh(INSTITUTION, edge, UUID.randomUUID(), NOW);
+    freezes.recordHigh(INSTITUTION, edge, UUID.randomUUID(), NOW.plusSeconds(1));
+    FreezePort.FreezeCheck afterTheWindow =
+        freezes.recordHigh(INSTITUTION, edge, UUID.randomUUID(), NOW.plus(Duration.ofMinutes(60)));
+    assertThat(afterTheWindow.highDecisionsInWindow()).isEqualTo(2);
+    assertThat(afterTheWindow.frozeNow()).isFalse();
+
     assertThat(freezes.recordHigh(INSTITUTION, ACCOUNT, UUID.randomUUID(), NOW).frozeNow())
         .isFalse();
     assertThat(
@@ -164,16 +191,7 @@ class RedisAdaptersTest {
         froze += result.get().frozeNow() ? 1 : 0;
       }
     }
-    assertThat(froze).isEqualTo(1);
-    // A HIGH more than 60 minutes after the others starts a new window.
-    String other = "tok_AnotherAccountDdddEeeeFff1";
-    freezes.recordHigh(INSTITUTION, other, UUID.randomUUID(), NOW);
-    freezes.recordHigh(INSTITUTION, other, UUID.randomUUID(), NOW.plusSeconds(1));
-    assertThat(
-            freezes
-                .recordHigh(INSTITUTION, other, UUID.randomUUID(), NOW.plus(Duration.ofMinutes(60)))
-                .highDecisionsInWindow())
-        .isEqualTo(2);
+    assertThat(froze).as("exactly one of twenty racing third HIGHs freezes").isEqualTo(1);
   }
 
   @Test

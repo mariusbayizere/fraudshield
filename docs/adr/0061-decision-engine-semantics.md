@@ -19,7 +19,12 @@ window" is counted across instances, and what a rule does with a missing value.
    so 0.85 is HIGH at 0.85); custom rules only raise; an open MCC breaker makes LOW into MEDIUM;
    LOW with an anomaly percentile at or above the configured threshold goes to ANOMALY_REVIEW
    without a hold (D-10). A frozen account's decline reports the computed tier, because reporting
-   HIGH would be a claim the model did not make.
+   HIGH would be a claim the model did not make. **The transaction is scored first even when the
+   account is frozen** (Principal Review finding 9): the scorer is the feature store's only writer
+   (point 7), so skipping the call would leave the payment out of the account's own history, and
+   the scoring record is wanted for audit either way. The outcome is unaffected, and the frozen
+   decline carries `ACCOUNT_FROZEN` alone — not `ML_UNAVAILABLE`, which would blame a missing score
+   for a decline the freeze made on its own.
 2. **Rules are three-valued** (Kleene): a comparison with a missing value is UNKNOWN and a rule
    fires only on TRUE, so absent data never raises a tier unless the rule asks `is_null`.
 3. **Fallback rule set `fallback-rules-2`** (C.4): MEDIUM (a hold) at 2,000,000 RWF or more,
@@ -37,6 +42,7 @@ window" is counted across instances, and what a rule does with a missing value.
    one-minute granularity. The breach test itself is exact (`fraud > threshold × n` with n at least
    the minimum), so exactly 5.0% does not open it and one more fraud does (D-18). The monitor runs
    every 5 s, well within FR-03-07's 60 s; state changes are compare-and-set.
+
 5. **Reason codes** group the 44 features into coarse codes, at most three, because D-12 limits
    what the machine response reveals.
 6. **Audit**: holds, frozen-account declines, auto-blocks, freezes, every later decision change,
@@ -56,9 +62,17 @@ window" is counted across instances, and what a rule does with a missing value.
    and changed the definition of `counterparty_unique_senders_24h` for late arrivals; that was
    training–serving skew and it was removed.
 
+8. **Confirmed fraud is counted once** (Principal Review finding 16). An auto-blocked HIGH already
+   raised the numerator when it was decided, so `countConfirmedFraud` is for confirmations of
+   transactions that were **not** auto-blocked; callers (M7's staff API) must not call it for an
+   auto-block. It buckets by the transaction's time, not the confirmation's, so a confirmation
+   lands in the window the transaction belongs to, and `counts` clamps `f` to `n`, so a
+   confirmation whose bucket has expired raises nothing.
+
 ## Consequences
 
-Tested by `DecisionEngineTest` (including a generative property over thresholds and rules),
+Tested by `DecisionEngineTest` (including a generative property over thresholds and rules, and
+frozen accounts at every tier and with the fallback deciding),
 `FreezeAndBreakerTest`, `FallbackRulesTest`, `RuleCompilerTest`,
 `DecisionServiceTest.rulesReadTheFeatureValuesTheScorerReturned` and `GrpcScorerTest` (the request
 carries no context). The fallback's threshold is configuration; changing it is a new version name.

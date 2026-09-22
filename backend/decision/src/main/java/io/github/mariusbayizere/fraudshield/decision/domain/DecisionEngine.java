@@ -53,10 +53,13 @@ public final class DecisionEngine {
 
     List<String> leading = fallback ? List.of(ReasonCodes.ML_UNAVAILABLE) : List.of();
     if (in.accountFrozen()) {
+      // A frozen account declines whatever the score says, so the score's absence played no part
+      // in this decline and ML_UNAVAILABLE would misdescribe it (Principal Review finding 9,
+      // ADR 0061 point 1). The transaction is still scored, for the record and the feature store.
       return new DecisionOutcome(
           Decision.DECLINE,
           tier,
-          ReasonCodes.merge(List.of(ReasonCodes.ACCOUNT_FROZEN), leading),
+          List.of(ReasonCodes.ACCOUNT_FROZEN),
           null,
           Optional.empty(),
           false,

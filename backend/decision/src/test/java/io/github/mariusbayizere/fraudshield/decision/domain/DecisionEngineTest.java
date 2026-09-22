@@ -117,6 +117,37 @@ class DecisionEngineTest {
     assertThat(outcome.alert()).isEmpty();
   }
 
+  /**
+   * The mutation that moved the freeze behind the tiering was killed only by the generative
+   * property (Principal Review, mutation M2), because no example covered a frozen account whose
+   * score is MEDIUM or HIGH. A frozen HIGH declines for the freeze and raises no auto-block.
+   */
+  @ParameterizedTest(name = "a frozen account scoring {0} declines for the freeze alone")
+  @CsvSource({"0.1", "0.7", "0.99"})
+  void frozenAccountsDeclineForTheFreezeAtEveryTier(double score) {
+    DecisionOutcome outcome =
+        DecisionEngine.decide(inputs(model(score, 0.1), true, false, NO_RULES));
+    assertThat(outcome.decision()).isEqualTo(Decision.DECLINE);
+    assertThat(outcome.reasonCodes()).containsExactly(ReasonCodes.ACCOUNT_FROZEN);
+    assertThat(outcome.autoBlock()).isFalse();
+    assertThat(outcome.alert()).isEmpty();
+  }
+
+  /**
+   * With the scorer down the fallback decides, but a frozen account's decline owes nothing to the
+   * missing model, so ML_UNAVAILABLE must not be among its reasons (Principal Review finding 9).
+   */
+  @Test
+  void frozenDeclinesDoNotBlameTheScorerWhenTheFallbackDecided() {
+    Scoring.Fallback fallback =
+        new Scoring.Fallback(
+            UUID.randomUUID(), "fallback-rules-2", RiskTier.MEDIUM, List.of("AMOUNT_ABOVE_NORMAL"));
+    DecisionOutcome outcome = DecisionEngine.decide(inputs(fallback, true, false, NO_RULES));
+    assertThat(outcome.decision()).isEqualTo(Decision.DECLINE);
+    assertThat(outcome.reasonCodes()).containsExactly(ReasonCodes.ACCOUNT_FROZEN);
+    assertThat(outcome.fallback()).as("the record still says the fallback decided").isTrue();
+  }
+
   @Test
   void rulesRaiseButNeverLower() {
     DecisionOutcome raised =

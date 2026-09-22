@@ -32,9 +32,16 @@ public interface CircuitBreakerPort {
   /**
    * Counts a later analyst confirmation of fraud (D-18 numerator) without a new transaction.
    *
+   * <p>The caller counts only confirmations of transactions this instance did not already count as
+   * fraud, which means confirmations of transactions that were <em>not</em> auto-blocked: an
+   * auto-block already raised the numerator when it was decided, and counting its confirmation
+   * again would double it (Principal Review finding 16, ADR 0061 point 6). {@code at} is the
+   * transaction's time, not the confirmation's, so the count lands in the window the transaction
+   * belongs to; a confirmation older than the window is dropped by the adapter.
+   *
    * @param institutionId institution
    * @param merchantCategoryCode MCC
-   * @param at confirmation time
+   * @param at the transaction's time
    */
   void countConfirmedFraud(UUID institutionId, String merchantCategoryCode, Instant at);
 

@@ -80,6 +80,9 @@ public final class RedisCircuitBreakers implements CircuitBreakerPort {
 
   @Override
   public void countConfirmedFraud(UUID institutionId, String mcc, Instant at) {
+    // Buckets by the transaction's minute, not the confirmation's, so the fraud lands in the
+    // window it belongs to; counts() clamps f to n, so a confirmation whose bucket has expired
+    // raises nothing (ADR 0061 point 6).
     String bucket = RedisKeys.mccBucket(institutionId, mcc, minute(at));
     RedisSupport.await(redis.hincrby(bucket, "f", 1), timeout);
     RedisSupport.await(redis.pexpire(bucket, BUCKET_TTL.toMillis()), timeout);
