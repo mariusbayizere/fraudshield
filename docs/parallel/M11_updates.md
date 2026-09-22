@@ -4,7 +4,12 @@ Written by the M11 agent for the owner and the M4 agent. M11 owns `docs/research
 `contributions.md` (M4's, read only). Everything else under `docs/` is read, not edited, from this
 branch; what it needs is proposed here.
 
-**Status: first complete draft, not reviewed.** `docs/research/paper/main.tex`, 13 sections,
+**Status: first complete draft, audited, not reviewed.** Update of 2026-09-22 (second pass) at the
+end of this file: every number re-verified at `m4-complete`, no provisional value left, verified
+bibliography, dataset tables. **The revised draft v2 has not been integrated: it is not on this
+machine.**
+
+Original status line: **first complete draft, not reviewed.** `docs/research/paper/main.tex`, 13 sections,
 compiles to 18 pages with Tectonic 0.17.0 (run outside the repository). Every number is a macro in
 `docs/research/paper/numbers.tex` naming its evidence file, commit and data draw;
 `check_numbers.py` finds no number typed directly into a section; every macro value was checked
@@ -87,3 +92,58 @@ The paper resolves each as stated; the source documents are not edited from this
 - **`make reproduce`**, publishing scripts and checklists, `CITATION.cff` (no DOI).
 - **Compilation in CI**: the draft compiles locally with Tectonic; a CI job belongs to whoever owns
   `.github/workflows/`.
+
+## 6. Second pass, 2026-09-22 (after `m4-complete`)
+
+**v2 is not integrated.** `~/Downloads/fraudshield-paper-v2.zip` does not exist, and no `REVIEW.md`,
+`figures/make_figures.py` or `star2025mpesa` entry exists anywhere under the home directory.
+`~/fraudshield-paper.zip` is byte-identical to this branch's paper at `961fbec`, and
+`~/Downloads/fraudshield_paper.pdf` is a render of it. Everything below was done on the current
+draft so it can be merged into v2 when v2 arrives: `audit_numbers.py` runs unchanged against v2's
+`numbers.tex`, and each new macro carries its own audit source.
+
+**Numbers.** `audit_numbers.py` reads every macro's evidence file at `m4-complete` (`72e7790`) with
+`git show` and compares printed values exactly. 305 macros, 0 mismatches; one mismatch was found
+and fixed at its source (the FNR target is 12.0%, printed as 12%). No evidence file changed
+between the pin `a6b0c9e` and the tag, so every former `\prov` value matched and none is
+provisional. Captions now state draw, rows, fraud and evidence commit.
+
+**Learning curve (PB-67).** Not measured on any branch at the time of writing; the paper says the
+recall miss is untested against training volume and marks the curve NOT YET MEASURED.
+
+**Living-document procedure.** When a milestone produces a result the paper marks NOT YET
+MEASURED: add a macro with its evidence file and commit to `numbers.tex`, add its source to
+`audit_numbers.py`, run the audit at the new tag, replace the marker, and record the change. The
+history belongs in the paper's `REVIEW.md`, which is part of v2; until v2 is integrated it is kept
+here.
+
+| Date | Change | Evidence |
+|---|---|---|
+| 2026-09-22 | All M4 values re-verified at `m4-complete`; daggers removed | `number_audit.md` at `72e7790` |
+| 2026-09-22 | Recall-miss wording follows ADR 0031 (a finding at 30,000 training rows) | ADR 0031 at `m4-complete` |
+
+**Discrepancies found upstream in this pass** (not fixed from this branch; owners in brackets):
+
+1. `dataset/params_provenance.md` and `docs/research/sourcing_pass.md` cite Bank of Tanzania
+   Annex H one page early: H1, H2, H3 and H5 are on printed page 48 (cited as 47), H8 on page 49
+   (cited as 48). [dataset / M2]
+2. `params_provenance.md` puts the NBR active-subscriber count on page 86; it is on page 87.
+   [dataset / M2]
+3. The sourcing pass cites the census table at "page 30", the PDF index; the printed page is 5.
+   [dataset / M2]
+4. The school calendar is hosted by **New Generation Academy** (nga.ac.rw); the sourcing pass and
+   `params_provenance.md` say "Nu Vision Academy". The PDF names no school, and nothing read
+   confirms that it implements the national calendar. [dataset / M2]
+5. `docs/ml/datasheet.md` gives label noise 1.66% / 1.67%, the old 1,012,522-row report's figures;
+   `dataset/realism_report.md` for the same draw `d8083dbc` gives 1.55% / 1.64%. [M4]
+6. `docs/research/limitations.md` gives 25 fraud parameters (21 assumed, 4 calibrated);
+   `params_provenance.md` at the tag gives 30 (26 assumed, 4 calibrated), and 124 parameters
+   overall (33 sourced). [M4]
+7. The claims register says the sourcing pass "read seven documents"; the pass lists eight
+   (S-1 to S-8). It also says `dataset/realism_report.md` "now carries" fingerprint `6abde44e`; at
+   the tag it carries `d8083dbc`. [M4]
+8. The datasheet says the reversal scam added 68 test-period rows; the battery scores 66 fraud rows
+   of that variant. Nothing read explains the two rows; the paper states both counts with their
+   sources. [M4]
+9. The SADC member-states page cited by `params_provenance.md` (CD and TZ bloc memberships) could
+   not be opened on 2026-09-22 and is not cited. [dataset / M2]
