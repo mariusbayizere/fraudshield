@@ -69,8 +69,9 @@ and a decision, and it is why the gate's numbers cannot be said to describe prod
    the gate would then describe the served model. It means retraining and re-running M4's gate,
    losing `counterparty_confirmed_fraud_90d`, which the battery shows carrying real signal, and
    re-opening M4's closed rows.
-3. **Carry, with the cost recorded and the rows honest (recommended).** FR-02-09 stays
-   `IN_PROGRESS`; a backlog row per half names its owner (labels consumer: M6/M9; account
+3. **Carry, with the cost recorded and the rows honest (recommended).** FR-02-09 does not reach
+   DONE (the row is proposed as `IN_PROGRESS`, which is what the matrix renders for work carried
+   rather than finished); a backlog row per half names its owner (labels consumer: M6/M9; account
    reference state: a contract plus a producer); ML-GATE rows keep a note that their figures
    describe the trained model and that production currently differs by the table above; and the
    scorer reports the shortfall rather than hiding it.
@@ -78,14 +79,20 @@ and a decision, and it is why the gate's numbers cannot be said to describe prod
 ## Decision
 
 **Option 3: carry, with the cost recorded and the rows honest.** Taken by the owner on 2026-09-22,
-on the author's recommendation, under five conditions. Each is discharged in the artefact named
-beside it; none of them is a note.
+on the author's recommendation, under five conditions. Conditions 2 to 5 are discharged in the
+artefacts named beside them; condition 1 **cannot be discharged on this branch** and is proposed
+for the owner to apply, because M5 does not edit `requirements.yaml` (re-review V5).
 
-1. **FR-02-09 stays NOT DONE, and its row carries the measured skew.** The row proposed in
-   `docs/parallel/M5_updates.md` §12 records served AUC **0.9611** against **0.9700**, **254** risk
-   tier changes, and **162 of 725** frauds no longer reaching the flag threshold — a **22%** fall in
-   detections at the operating point. The figures are the table above, reproduced independently by
-   the re-review (`docs/reviews/M5/principal-re-review.md`).
+1. **FR-02-09 stays NOT DONE, and its row carries the measured skew.** The row text is proposed in
+   `docs/parallel/M5_updates.md` §15 — served AUC **0.9611** against **0.9700**, **254** risk tier
+   changes, and **162 of 725** frauds no longer reaching the flag threshold, a **22%** fall in
+   detections at the operating point, blocked on PB-69, PB-70, PB-71 and PB-72. The figures are
+   the table above, reproduced independently by the re-review
+   (`docs/reviews/M5/principal-re-review.md`).
+   **State on this branch:** `requirements.yaml` is untouched, so the generated matrix still
+   renders FR-02-09 as `NOT_STARTED` with no evidence, no skew and no link here. The owner applies
+   the row at integration and re-renders with `fs-traceability render`. Until that happens this
+   condition is **open**, and the matrix is not evidence that it was met.
 2. **Two carries with acceptance tests, each with one owning milestone and a backlog row.**
    - **PB-70 — a consumer of `fs.labels` that calls `apply_label`. Owner: M6** (it owns the
      decision-side services and their database); M9 deploys it and M10 verifies it. *Acceptance:*

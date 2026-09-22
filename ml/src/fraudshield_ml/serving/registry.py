@@ -46,6 +46,9 @@ PREVIOUS = "previous_production"
 POLL_SECONDS = 5.0
 MAX_POLL_SECONDS = 10.0
 ARTIFACT_SCHEME = "mlflow-artifacts:/"
+#: Written by `promote` when it points `production` at a version, and read back to decide whether
+#: a later move to that version is a rollback. Only this module writes it.
+SERVED_TAG = "fraudshield.served_as_production"
 LOG = logging.getLogger(__name__)
 
 
@@ -61,14 +64,16 @@ class PromotionRefused(RegistryError):  # noqa: N818 - a refusal, named as one
 MAX_ECE = 0.05
 
 
-def _d11_recheck(gate: GateDecision) -> list[str]:
+def _d11_recheck(gate: GateDecision, manifest: dict[str, Any]) -> list[str]:
     """D-11's clauses re-derived from the decision's own numbers.
 
     The in-house `shadow.promotion_gate` always names a reason when it refuses, but the design
     hands this file a *report*, which an external comparator writes. A report is not trusted to
-    have applied D-11 correctly: its `promote` flag is checked against the figures beside it.
-    The 24-hour window is the one clause a `GateDecision` carries no field for, so it can only be
-    checked by the comparator that produced it.
+    have applied D-11 correctly: its `promote` flag is checked against the figures beside it, and
+    a figure it leaves out is a clause it did not apply, not a clause that passed (re-review V2).
+
+    All five of D-11's clauses are checked here, and the report must name the model it measured:
+    a decision about one shadow model is not a decision about whatever version is being promoted.
     """
     problems: list[str] = []
     if gate.scored < shadow.MIN_SCORED:
@@ -79,26 +84,39 @@ def _d11_recheck(gate: GateDecision) -> list[str]:
         problems.append("the gate report carries no AUC delta (D-11)")
     if gate.auc_delta is not None and gate.auc_delta < shadow.MIN_AUC_DELTA:
         problems.append(f"AUC delta {gate.auc_delta:+.4f} is below {shadow.MIN_AUC_DELTA} (D-11)")
-    if gate.psi is not None and gate.psi >= shadow.MAX_PSI:
+    if gate.psi is None:
+        problems.append("the gate report carries no score PSI (D-11)")
+    elif gate.psi >= shadow.MAX_PSI:
         problems.append(f"score PSI {gate.psi:.3f} is not below {shadow.MAX_PSI} (D-11)")
+    if gate.window_hours is None:
+        problems.append("the gate report carries no shadow window (D-11 needs 24 h)")
+    elif gate.window_hours < shadow.MIN_DURATION.total_seconds() / 3600:
+        problems.append(f"shadow window {gate.window_hours:.1f} h is under 24 h (D-11)")
+    served = str(manifest.get("model_version", ""))
+    if gate.shadow_version is None:
+        problems.append("the gate report does not name the model it measured (D-11)")
+    elif gate.shadow_version != served:
+        problems.append(f"the gate report measured {gate.shadow_version}, not {served} (D-11)")
     return problems
 
 
-def _gate_problems(gate: GateDecision | None, override: str | None) -> list[str]:
+def _gate_problems(
+    gate: GateDecision | None, override: str | None, manifest: dict[str, Any]
+) -> list[str]:
     """D-11's shadow gate as a promotion condition: a decision, or a recorded override.
 
-    A rollback does not come here: `promote` exempts the version `previous_production` holds,
-    which has already served (D-50).
+    A rollback does not come here: `promote` exempts a version that has served, proved by the
+    `SERVED_TAG` this module writes, not by where an alias happens to point (D-50, re-review V1).
     """
     if gate is None:
         if override is None:
             return [
                 "no shadow-gate decision (D-11): pass the comparator's report, or an override "
-                "reason for a first deployment. A rollback to the version "
-                "`previous_production` holds needs neither"
+                "reason for a first deployment. A rollback to a version that has served needs "
+                "neither"
             ]
         return []
-    problems = list(gate.reasons) or _d11_recheck(gate)
+    problems = list(gate.reasons) or _d11_recheck(gate, manifest)
     if not problems and not gate.promote:
         problems.append("the shadow comparator refused promotion and named no reason (D-11)")
     return problems
@@ -204,27 +222,33 @@ class MlflowRegistry:
         first deployment that has no shadow window to show; it is written to the version's tags,
         so a promotion that skipped the gate can be found afterwards.
 
-        **A rollback is one alias move (D-50).** Moving `production` back to the version
-        `previous_production` holds needs no shadow decision: that model has already served. The
-        calibration block still applies — a bundle that cannot be loaded and checked is never
-        pointed at by `production`, whichever direction it is moving.
+        **A rollback is one alias move (D-50).** Moving `production` back to a version that has
+        already served needs no shadow decision. "Has already served" is not "is pointed at by
+        `previous_production`": that alias can be moved by anyone with `fs-model alias`, and taking
+        it as proof made the gate a two-command formality (re-review V1). The proof is
+        `SERVED_TAG`, which only this method writes, and only at the moment it points `production`
+        at a version. The calibration block still applies — a bundle that cannot be loaded and
+        checked is never pointed at by `production`, whichever direction it is moving.
         """
         if alias != PRODUCTION:
             self.set_alias(name, alias, version)
             return
         bundle = self.fetch_bundle(ModelVersion(name, version, self.source(name, version)), cache)
-        problems = promotion_problems(json.loads((bundle / MANIFEST).read_text()))
+        manifest = json.loads((bundle / MANIFEST).read_text())
+        problems = promotion_problems(manifest)
         previous = self.by_alias(name, PREVIOUS)
-        rollback = previous is not None and previous.version == version
+        rollback = (
+            previous is not None and previous.version == version and self.has_served(name, version)
+        )
         if not rollback:
-            problems.extend(_gate_problems(gate, override))
+            problems.extend(_gate_problems(gate, override, manifest))
         if problems:
             raise PromotionRefused("; ".join(problems))
         outgoing = self.by_alias(name, PRODUCTION)
         if outgoing is not None and outgoing.version != version:
             self.set_alias(name, PREVIOUS, outgoing.version)
-        self._record_promotion(name, version, gate=gate, override=override, rollback=rollback)
         self.set_alias(name, alias, version)
+        self._record_promotion(name, version, gate=gate, override=override, rollback=rollback)
 
     def _record_promotion(
         self,
@@ -241,9 +265,12 @@ class MlflowRegistry:
         recorded. Tagging is best effort: a tracking server that refuses the tag must not leave
         `production` pointing at nothing, so the failure is logged and the move goes ahead.
         """
-        tags = {"fraudshield.promoted_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+        now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        # Written here and nowhere else: the record that this version was served, which is what a
+        # later rollback to it is allowed to rely on.
+        tags = {"fraudshield.promoted_at": now, SERVED_TAG: now}
         if rollback:
-            tags["fraudshield.promotion_gate"] = "rollback to previous_production (D-50)"
+            tags["fraudshield.promotion_gate"] = "rollback to a version that served (D-50)"
         elif gate is not None:
             tags["fraudshield.promotion_gate"] = (
                 f"D-11 passed: {gate.scored} scores, coverage {gate.label_coverage:.1%}, "
@@ -256,6 +283,21 @@ class MlflowRegistry:
                 self.set_version_tag(name, version, key, value)
             except RegistryError:
                 LOG.warning("could not tag %s version %s with %s", name, version, key)
+
+    def version_tags(self, name: str, version: str) -> dict[str, str]:
+        reply = self._json(
+            "GET", "/api/2.0/mlflow/model-versions/get", query={"name": name, "version": version}
+        )
+        tags = reply.get("model_version", {}).get("tags", []) or []
+        return {str(t["key"]): str(t.get("value", "")) for t in tags}
+
+    def has_served(self, name: str, version: str) -> bool:
+        """Whether `promote` has ever pointed `production` at this version (`SERVED_TAG`)."""
+        try:
+            return SERVED_TAG in self.version_tags(name, version)
+        except RegistryError as error:
+            LOG.warning("could not read tags for %s v%s: %s", name, version, error)
+            return False
 
     def set_version_tag(self, name: str, version: str, key: str, value: str) -> None:
         self._json(
@@ -394,7 +436,7 @@ class MlflowRegistry:
         manifest = json.loads((bundle_dir / MANIFEST).read_text())
         if alias == PRODUCTION:
             problems = promotion_problems(manifest)
-            problems.extend(_gate_problems(gate, override))
+            problems.extend(_gate_problems(gate, override, manifest))
             if problems:
                 raise PromotionRefused("; ".join(problems))
         prefix = f"bundles/{name}/{manifest['model_version']}"
@@ -409,8 +451,10 @@ class MlflowRegistry:
                 outgoing = self.by_alias(name, PRODUCTION)
                 if outgoing is not None and outgoing.version != version:
                     self.set_alias(name, PREVIOUS, outgoing.version)
+                self.set_alias(name, alias, version)
                 self._record_promotion(name, version, gate=gate, override=override)
-            self.set_alias(name, alias, version)
+            else:
+                self.set_alias(name, alias, version)
         return version
 
 

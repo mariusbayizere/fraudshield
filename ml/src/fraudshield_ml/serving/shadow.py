@@ -186,6 +186,10 @@ class GateDecision:
     label_coverage: float
     auc_delta: float | None
     psi: float | None
+    #: How long the shadow window ran, and which model it measured. A promotion re-checks every
+    #: D-11 clause from these numbers, so a report that omits one is refused (re-review V2).
+    window_hours: float | None = None
+    shadow_version: str | None = None
 
 
 def promotion_gate(comparison: Comparison, labels: dict[str, bool], now: datetime) -> GateDecision:
@@ -225,6 +229,8 @@ def promotion_gate(comparison: Comparison, labels: dict[str, bool], now: datetim
         label_coverage=coverage,
         auc_delta=delta,
         psi=stability,
+        window_hours=(now - comparison.started).total_seconds() / 3600,
+        shadow_version=comparison.shadow_version or None,
     )
 
 

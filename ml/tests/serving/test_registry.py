@@ -26,11 +26,12 @@ import pytest
 from prometheus_client import CollectorRegistry
 
 from fraudshield_ml.models import cli as model_cli
-from fraudshield_ml.models.bundle import Bundle
+from fraudshield_ml.models.bundle import MANIFEST, Bundle
 from fraudshield_ml.models.cli import _gate as read_gate
 from fraudshield_ml.serving.registry import (
     PREVIOUS,
     PRODUCTION,
+    SERVED_TAG,
     SHADOW,
     AliasWatcher,
     MlflowRegistry,
@@ -88,7 +89,15 @@ class FakeMlflow:
             return 200, {}
         if path == "/api/2.0/mlflow/model-versions/get":
             source = self.models[query["name"]]["versions"][query["version"]]
-            return 200, {"model_version": {"version": query["version"], "source": source}}
+            tags = self.tags.get((query["name"], query["version"]), {})
+            return 200, {
+                "model_version": {
+                    "version": query["version"],
+                    "source": source,
+                    # MLflow returns tags on the version, which is how a rollback is recognised.
+                    "tags": [{"key": k, "value": v} for k, v in sorted(tags.items())],
+                }
+            }
         if path == "/api/2.0/mlflow/registered-models/alias":
             if method == "POST":
                 self.models[data["name"]]["aliases"][data["alias"]] = data["version"]
@@ -417,6 +426,18 @@ def test_publish_and_hot_swap_against_the_mlflow_the_deployment_runs(
         registry.publish(NAME, bundle_dirs[1], alias=PRODUCTION, override=FIRST)
         w.poll_once()
         assert holder.production.model_version == Bundle.load(bundle_dirs[1]).model_version
+
+        # The promotion record and the rollback exemption both depend on version tags coming
+        # back from a real server, not only from the fake above (re-review N1b, V1).
+        tags = registry.version_tags(NAME, "2")
+        assert tags["fraudshield.promotion_override"] == FIRST
+        assert SERVED_TAG in tags
+        assert registry.has_served(NAME, "2")
+        assert not registry.has_served(NAME, "3"), "a version that does not exist never served"
+        registry.promote(NAME, PRODUCTION, "1", tmp_path / "rollback")
+        rolled_back = registry.by_alias(NAME, PRODUCTION)
+        assert rolled_back is not None
+        assert rolled_back.version == "1", "a rollback needs no shadow gate (D-50)"
         run = registry.start_run(registry.experiment("fs-shadow-it"), "it", {"k": "v"})
         registry.log_metrics(run, {"shadow_scored": 1.0}, 1)
     finally:
@@ -501,15 +522,23 @@ def test_a_bundle_without_a_measured_ece_is_refused_too() -> None:
     assert promotion_problems({"provenance": {"held_out": {"ece_equal_width_10": 0.01}}}) == []
 
 
-def _gate_report(path: Path, **overrides: object) -> Path:
-    """A shadow comparator's decision, in the shape `fs-model --gate` reads."""
-    report = {
+def _gate_report(path: Path, bundle: Path | None = None, **overrides: object) -> Path:
+    """A shadow comparator's decision, in the shape `fs-model --gate` reads.
+
+    `bundle` is the bundle the decision measured: D-11 is re-checked against the version being
+    promoted, so a report that names a different model (or none) is refused (re-review V2).
+    """
+    report: dict[str, object] = {
         "promote": True,
         "reasons": [],
         "scored": 60_000,
         "label_coverage": 0.42,
         "auc_delta": 0.002,
         "psi": 0.05,
+        "window_hours": 30.0,
+        "shadow_version": (
+            json.loads((bundle / MANIFEST).read_text())["model_version"] if bundle else None
+        ),
     }
     path.write_text(json.dumps(report | overrides))
     return path
@@ -528,6 +557,7 @@ def test_production_promotion_needs_the_shadow_gate(
         registry.promote(NAME, PRODUCTION, "2", tmp_path / "c")
     failed = _gate_report(
         tmp_path / "failed.json",
+        bundle_dirs[1],
         promote=False,
         reasons=["Insufficient labels: coverage 11.0% is under 30%"],
     )
@@ -536,7 +566,11 @@ def test_production_promotion_needs_the_shadow_gate(
     assert fake.models[NAME]["aliases"][PRODUCTION] == "1", "neither refusal moved the alias"
 
     registry.promote(
-        NAME, PRODUCTION, "2", tmp_path / "c", gate=_gate(_gate_report(tmp_path / "ok.json"))
+        NAME,
+        PRODUCTION,
+        "2",
+        tmp_path / "c",
+        gate=_gate(_gate_report(tmp_path / "ok.json", bundle_dirs[1])),
     )
     assert fake.models[NAME]["aliases"][PRODUCTION] == "2"
     assert fake.models[NAME]["aliases"][PREVIOUS] == "1", "rollback is one alias move (D-50)"
@@ -551,7 +585,7 @@ def test_fs_model_alias_reads_the_gate_report(
     registry.publish(NAME, bundle_dirs[0], alias=PRODUCTION, override=FIRST)
     registry.publish(NAME, bundle_dirs[1])
     assert model_cli.main(["alias", "--mlflow", url, PRODUCTION, "2"]) == 1
-    report = _gate_report(tmp_path / "gate.json")
+    report = _gate_report(tmp_path / "gate.json", bundle_dirs[1])
     assert (
         model_cli.main(
             [
@@ -588,7 +622,7 @@ def test_a_report_that_refuses_without_a_reason_does_not_promote(
     registry.publish(NAME, bundle_dirs[0], alias=PRODUCTION, override=FIRST)
     registry.publish(NAME, bundle_dirs[1])
 
-    silent = _gate_report(tmp_path / "silent.json", promote=False, reasons=[])
+    silent = _gate_report(tmp_path / "silent.json", bundle_dirs[1], promote=False, reasons=[])
     with pytest.raises(PromotionRefused, match="named no reason"):
         registry.promote(NAME, PRODUCTION, "2", tmp_path / "c", gate=_gate(silent))
 
@@ -598,8 +632,15 @@ def test_a_report_that_refuses_without_a_reason_does_not_promote(
         ("auc_delta", -0.5, "below -0.01"),
         ("psi", 0.9, "not below 0.2"),
         ("auc_delta", None, "no AUC delta"),
+        ("psi", None, "no score PSI"),
+        ("window_hours", None, "no shadow window"),
+        ("window_hours", 3.0, "under 24 h"),
+        ("shadow_version", None, "does not name the model"),
+        ("shadow_version", "ensemble-somethingelse", "not ensemble-"),
     ]:
-        lying = _gate_report(tmp_path / f"{field}.json", promote=True, reasons=[], **{field: value})
+        lying = _gate_report(
+            tmp_path / f"{field}.json", bundle_dirs[1], promote=True, reasons=[], **{field: value}
+        )
         with pytest.raises(PromotionRefused, match=expected):
             registry.promote(NAME, PRODUCTION, "2", tmp_path / "c", gate=_gate(lying))
     assert fake.models[NAME]["aliases"][PRODUCTION] == "1", "no refusal moved the alias"
@@ -618,7 +659,11 @@ def test_an_override_is_recorded_on_the_version_it_promoted(
 
     registry.publish(NAME, bundle_dirs[1])
     registry.promote(
-        NAME, PRODUCTION, "2", tmp_path / "c", gate=_gate(_gate_report(tmp_path / "ok.json"))
+        NAME,
+        PRODUCTION,
+        "2",
+        tmp_path / "c",
+        gate=_gate(_gate_report(tmp_path / "ok.json", bundle_dirs[1])),
     )
     recorded = fake.tags[(NAME, "2")]
     assert "fraudshield.promotion_override" not in recorded, "the gate passed; nothing was skipped"
@@ -636,7 +681,11 @@ def test_a_rollback_through_fs_model_alias_needs_no_shadow_gate(
     registry.publish(NAME, bundle_dirs[0], alias=PRODUCTION, override=FIRST)
     registry.publish(NAME, bundle_dirs[1])
     registry.promote(
-        NAME, PRODUCTION, "2", tmp_path / "c", gate=_gate(_gate_report(tmp_path / "ok.json"))
+        NAME,
+        PRODUCTION,
+        "2",
+        tmp_path / "c",
+        gate=_gate(_gate_report(tmp_path / "ok.json", bundle_dirs[1])),
     )
     assert fake.models[NAME]["aliases"] == {PRODUCTION: "2", PREVIOUS: "1"}
 
@@ -682,4 +731,44 @@ def test_a_swap_callback_that_raises_leaves_the_watcher_watching(
 
     w.poll_once()
     assert holder.production is not None, "the next poll swaps it in: the watcher is still alive"
+    assert fake.models[NAME]["aliases"][PRODUCTION] == "1"
+
+
+@pytest.mark.req("ML-GATE-13", "D-11")
+def test_moving_previous_production_by_hand_does_not_buy_a_promotion(
+    mlflow: tuple[FakeMlflow, str], bundle_dirs: tuple[Path, Path], tmp_path: Path
+) -> None:
+    """The rollback exemption must rest on having served, not on where an alias points.
+
+    `previous_production` is one of the aliases `fs-model alias` moves freely, so taking it as
+    proof made D-11 a two-command formality: point it at any version, then promote that version
+    (re-review V1).
+    """
+    fake, url = mlflow
+    registry = MlflowRegistry(url)
+    registry.publish(NAME, bundle_dirs[0], alias=PRODUCTION, override=FIRST)
+    registry.publish(NAME, bundle_dirs[1])  # v2: never served
+
+    assert model_cli.main(["alias", "--mlflow", url, PREVIOUS, "2"]) == 0
+    cache = ["--cache", str(tmp_path / "c")]
+    assert model_cli.main(["alias", "--mlflow", url, PRODUCTION, "2", *cache]) == 1, (
+        "a version that never served is a promotion, and needs the gate"
+    )
+    assert fake.models[NAME]["aliases"][PRODUCTION] == "1"
+    assert SERVED_TAG not in fake.tags.get((NAME, "2"), {})
+    assert "rollback" not in json.dumps(fake.tags.get((NAME, "2"), {})), (
+        "and nothing may record it as one"
+    )
+
+    # The same version, promoted properly, may then be rolled back to.
+    registry.promote(
+        NAME,
+        PRODUCTION,
+        "2",
+        tmp_path / "c",
+        gate=_gate(_gate_report(tmp_path / "ok.json", bundle_dirs[1])),
+    )
+    assert SERVED_TAG in fake.tags[(NAME, "2")]
+    assert registry.has_served(NAME, "2"), "read back through the registry, not the fake's dict"
+    assert model_cli.main(["alias", "--mlflow", url, PRODUCTION, "1", *cache]) == 0
     assert fake.models[NAME]["aliases"][PRODUCTION] == "1"

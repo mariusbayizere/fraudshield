@@ -519,9 +519,10 @@ the fixes. The latest full `ml` suite is 521 passed, 3 skipped, coverage 94.31% 
     (no topic exists). Measured on M4's gate model over the whole test period, 101,909 rows and
     985 frauds, twice and independently: served AUC 0.9611 against 0.9700 as trained; 254
     transactions change risk tier; 162 of 725 frauds no longer reach the 0.60 flag threshold, a
-    22% fall in detections at the operating point. Carried with acceptance tests to M6/M9
-    (docs/parallel/M6_updates.md, M9_updates.md) and PB-69 for the DB fallback; M10's end-to-end
-    verification must re-measure this skew and require it to be zero.
+    22% fall in detections at the operating point. Blocked on PB-69 (DB fallback, M6), PB-70
+    (fs.labels consumer, M6), PB-71 (account reference-state contract and producer, M6) and
+    PB-72 (M10 re-measures this skew and requires it to be zero). Acceptance tests are in
+    docs/parallel/M6_updates.md, M9_updates.md and M10_updates.md.
 ```
 
 **The other conditions, applied:**
@@ -531,8 +532,12 @@ the fixes. The latest full `ml` suite is 521 passed, 3 skipped, coverage 94.31% 
    acceptance test proving a verdict reaches the store and the affected features change, including
    the leakage case; (b) a contract and producer for account reference state, with an as-of tier
    test. Both state that **M10 re-measures the skew and requires zero**.
-3. The fallback-to-constant metric stays, and a `FeatureServedFromConstant` Prometheus rule is
-   written out for the M9 agent in `M9_updates.md` (M9 owns the rules file and the routing).
+3. The fallback-to-constant metric stays, and two Prometheus rules are written out for the M9
+   agent in `M9_updates.md` (M9 owns the rules file and the routing):
+   `LabelsConsumerNotWritingOutcomes` (page; silent today, so it signals the consumer stopping)
+   and `AccountReferenceStateHasNoProducer` (ticket until PB-71 lands, then page). A single
+   `FeatureServedFromConstant` rule over every state, as first drafted, would have paged
+   continuously from the day it was deployed.
 4. The lab notebook has "2026-09-22 · AUC moved 0.009; a fifth of the detections disappeared", and
    `docs/parallel/M11_updates.md` carries the four-row table for the discussion and limitations,
    with what may and may not be claimed from it.
@@ -588,7 +593,40 @@ what they replaced.
 **Not changed, deliberately:** the latency figures stay laptop-only and out of the gate (ADR 0032),
 and FR-02-09 stays NOT DONE. Neither is affected by the seven findings.
 
+**Suite after V1-V5:** ml 530 passed, 3 skipped, coverage 94.30%; `fs-traceability check` 258
+rows, 994 tagged tests, 0 errors.
+
 **Generated files touched by this section** (the owner's rule: name each commit, regenerate on
 merge, never hand-resolve): `docs/traceability/requirements_matrix.md` re-rendered in the commit
 below the N5-N7 fixes — 258 rows, 990 tagged tests, `fs-traceability check` 0 errors 0 warnings.
 `requirements.yaml` is untouched, as throughout.
+
+## 17. Second verification pass, and the regression it caught (2026-09-22)
+
+Because two of the seven findings in §16 existed *because* an earlier fix round went unreviewed, a
+**third** independent reviewer verified the fixes themselves, in its own worktree at `bf97ee2`,
+with mutation testing of each fix. Verdict: **CHANGES_REQUIRED**, five findings (V1–V5). It
+confirmed the suites (ml 527/3, 94.33%; contracts 490, 93.21%; ruff, mypy 202 files,
+`fs-traceability check` 990 tagged tests, seed up to date) and that eleven of its mutations of the
+new fixes were caught. The five it raised were real; all are now fixed.
+
+| # | What it found | Answered by |
+|---|---|---|
+| **V1** | **A regression I introduced in §16.** The N2 rollback exemption trusted `previous_production`, which `fs-model alias` moves freely — so `alias previous_production 2` followed by `alias production 2` promoted a never-served model with D-11 skipped, **and tagged it "rollback"**. Proven end to end by the reviewer | The exemption now rests on `fraudshield.served_as_production`, a version tag only `promote` writes, and only when it actually points `production` at a version. `test_moving_previous_production_by_hand_does_not_buy_a_promotion` runs the exact two-command sequence and asserts `rc == 1`, no tag and no "rollback" wording; the same version, promoted properly, can then be rolled back to. The tag is read back **through the registry** (`has_served`), so the read path is exercised, not just the fake's dict |
+| **V2** | `_d11_recheck` policed 3 of D-11's 5 clauses: a report omitting `psi` promoted, the 24 h window was unchecked, and no report was bound to the model it measured | `psi` and `window_hours` missing are now problems in their own right; `GateDecision` carries `window_hours` and `shadow_version`, `promotion_gate` fills both, and a report that names a different model than the version being promoted is refused. Six more shapes added to the refusal table |
+| **V3** | N4 fixed the three windows the previous reviewer named, not the class: five more flips survived | `_window_edges` is rebuilt **per Redis key** rather than per window — the account key, the counterparty key, the account key filtered by counterparty, the cell key, the device key and the agent key (a second scored row through an agent). Set-valued windows get one sender per position; the 1 h edge carries three rows so the half-open pair `(t-30d, t-1h]` cannot cancel its two errors. All eight flips now fail two tests each (checked one at a time) |
+| **V4** | **A second regression from §16.** `if degraded: return` suppressed the counter for any read where the *account* was unknown — but the outcomes arm reads the *counterparty's* key, and "new customer pays established counterparty" is routine. Neither the suppression nor `LABEL_LATENCY` was pinned by a test | The counterparty arm now runs regardless of `degraded`; only the three account-state arms stand down. Two tests added: the new-account-old-counterparty shape, and the horizon itself asserted at `LABEL_LATENCY` and one microsecond past it |
+| **V5** | ADR 0034 claimed all five conditions were "discharged"; condition 1 cannot be, since `requirements.yaml` is the owner's file and the generated matrix still renders FR-02-09 `NOT_STARTED` | ADR 0034 now says conditions 2–5 are discharged and **condition 1 is open**, names the owner's render step, and cites §15 (not §12). The proposed row names PB-69/70/71/72, and §15's stale `FeatureServedFromConstant` is replaced by the two rules that exist |
+
+**What this round did not change:** the skew figures (no training or feature code was touched;
+the re-review reproduced all four rows at `2afbb0e`), the latency position (ADR 0032), and
+FR-02-09's status. Still open and named rather than hidden: `pytest-timeout` (needs an ADR 0009
+licence review), the in-process `Comparison` series asserted only through the MLflow log, the
+second half of the first review's finding 2 (a missing `prof`/`tier` as a fallback trigger), the
+three `requires_docker` suites, and `fs-bench memory`'s new production profile, which is changed
+but not executed by any test.
+
+**One thing worth recording for whoever reads a surviving mutant later:** `ACCOUNT_HORIZON` equals
+`W_90D`, so the fetch bound and `_amounts`' own 90 d comparison are redundant with each other.
+Flipping either alone is an *equivalent* mutant; flipping both fails the suite (checked). That is
+a property of the code, not a hole in the corpus, and it is noted in `_window_edges`' docstring.
