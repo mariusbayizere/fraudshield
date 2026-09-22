@@ -296,6 +296,9 @@ operations:
   getSystemHealth:
     roles: [ADMIN]
     ref: "FR-06-05"
+  getSystemStatus:
+    roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER, ADMIN]
+    ref: "FR-04-12, E.9 degraded-mode banners; the list only, no component detail (ADR 0081)"
   searchAuditEvents:
     roles: [ADMIN]
     ref: "FR-06-06, D-32"
