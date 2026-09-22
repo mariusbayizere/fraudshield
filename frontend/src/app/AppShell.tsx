@@ -21,7 +21,9 @@ import { Link as RouterLink, Outlet, useRouterState } from '@tanstack/react-rout
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { tokens } from '../design-system/tokens';
+import { SystemBanners } from '../design-system/components/SystemBanner/SystemBanner';
 import { LanguageSwitcher } from './LanguageSwitcher';
+import { useSystemConditions } from './systemStatus';
 import { SECTIONS, type SectionGroup } from './sections';
 
 const DRAWER_WIDTH = 240;
@@ -79,6 +81,7 @@ export function AppShell() {
   const [menuOpen, setMenuOpen] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const primary = SECTIONS.filter((s) => s.primary === true);
+  const conditions = useSystemConditions();
 
   useEffect(() => {
     document.documentElement.lang = i18n.resolvedLanguage ?? i18n.language;
@@ -156,6 +159,11 @@ export function AppShell() {
         sx={{ flexGrow: 1, minWidth: 0, p: { xs: 2, md: 3 }, pb: wide ? 3 : 10 }}
       >
         <Toolbar />
+        {conditions.length === 0 ? null : (
+          <Box sx={{ mb: 2 }}>
+            <SystemBanners conditions={conditions} />
+          </Box>
+        )}
         <Outlet />
       </Box>
       {wide ? null : (

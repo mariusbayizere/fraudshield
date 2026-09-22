@@ -1,5 +1,5 @@
 import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/react-router';
-import { act, render, screen, within } from '@testing-library/react';
+import { act, cleanup, render, screen, within } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import { axeViolations } from '../test/axe';
 import { testI18n } from '../test/i18n';
@@ -42,6 +42,26 @@ afterEach(() => {
   } catch {
     // jsdom always has storage; the guard mirrors the app's.
   }
+});
+
+describe('AppShell degraded-mode banners (E.9, ADR 0081)', () => {
+  it('shows one banner per active mode, and none when the status cannot be read', async () => {
+    vi.stubGlobal('fetch', () =>
+      Promise.resolve(
+        new Response(JSON.stringify({ degraded_modes: ['ML_UNAVAILABLE'] }), {
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    );
+    await renderAt('/alerts');
+    expect(await screen.findByRole('status')).toHaveTextContent('The scoring model is unavailable');
+
+    cleanup();
+    vi.stubGlobal('fetch', () => Promise.reject(new Error('offline')));
+    await renderAt('/alerts');
+    await screen.findByRole('heading', { level: 1, name: 'Alerts' });
+    expect(screen.queryByRole('status')).toBeNull();
+  });
 });
 
 describe('AppShell (E.9, 05B A.7)', () => {
