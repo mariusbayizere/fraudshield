@@ -58,14 +58,17 @@ Three tables:
 
 **How many instances are there?** The release target is at least 5,000,000 transactions over 24
 months (2024-01 to 2025-12). The verification run documented in `dataset/realism_report.md` holds
-1,006,249 transactions, generated at 178 MiB peak resident memory; the figures in this datasheet
+1,006,317 transactions, generated at 170 MiB peak resident memory; the figures in this datasheet
 come from that run unless stated otherwise.
 
-**Which run, exactly (rewritten 2026-09-21).** Every figure here comes from the dataset with
-fingerprint `6abde44e5e952f4f5c6b86aac0fb934cd4de023b53ec1f2cfe9dc01cf0a3e420` — 1,006,249 rows,
+**Which run, exactly (restated 2026-09-22).** Every figure here comes from the dataset with
+fingerprint `d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32` — 1,006,317 rows,
 seed 20260917, kept at `dataset/output/bench1m` and described by `dataset/realism_report.md`, which
 carries that fingerprint. The dataset is identified by the hash of its rows rather than by a commit,
-because the commit is what this paragraph got wrong.
+because the commit is what this paragraph got wrong. It replaces the `6abde44e` draw (1,006,249
+rows) by adding the 68 test-period rows of the pre-registered reversal-scam variant (ADR 0028); the
+train, validation, calibration and embargo splits report identical counts and rates in both, and
+only the test split below changed.
 
 **What this paragraph used to say, and why it was withdrawn.** It said every figure came from a
 1,012,522-row dataset generated at tree `d85385f`, and explained the difference from M2's published
@@ -162,7 +165,7 @@ from the calibrated volume and reported with measured counts:
 | validation | 101,332 | 0.883% | 57.69 |
 | calibration (last part of validation) | 40,700 | 0.907% | 25.36 |
 | embargo (excluded) | 10,914 | 1.008% | 6.99 |
-| test | 101,841 | 0.905% | 63.97 |
+| test | 101,909 | 0.971% | 63.97 |
 
 The seven-day embargo between validation and test exists so that a model cannot see the days
 immediately before the test period. One fraud sub-variant occurs only in the test period, so that
@@ -276,9 +279,9 @@ the study of a novel fraud variant that appears only in the test period.
   measured from any institution.
 - Amounts and locations are simulated; they carry no commercial or geographic information.
 - **No single dataset COLUMN separates the classes beyond AUC 0.80** (D-08), measured as
-  `max(AUC, 1 − AUC)` with out-of-fold encoding for categoricals. At 1,006,249 rows
-  (fingerprint `6abde44e`) the strongest transaction column is `merchant_category_code` at
-  **0.706**.
+  `max(AUC, 1 − AUC)` with out-of-fold encoding for categoricals. At 1,006,317 rows
+  (fingerprint `d8083dbc`) the strongest transaction column is `merchant_category_code` at
+  **0.709** (0.706 at `6abde44e`).
   **The engineered features are a different matter and the claim does not extend to them.** Five
   of the 44 exceed the ceiling on this benchmark — `velocity_ratio_1h_vs_30d` **0.894**,
   `counterparty_is_new_for_account` 0.851, `tx_count_1h` 0.826, `implied_speed_kmh` 0.812 and
@@ -289,10 +292,11 @@ the study of a novel fraud variant that appears only in the test period.
   anything a one-line rule could not**, and any headline figure should be reported beside the
   strongest single feature. Tracked as PB-46; C-9 in the claims register is marked refuted as
   stated, with C-14 carrying the measurement. The
-  strongest channel in the dataset as a whole is **0.746**, and it is not a transaction column:
+  strongest channel in the dataset as a whole is **0.726**, and it is not a transaction column:
   joining `account_events` to the transactions by account token — which this datasheet invites
   above — gives the time from a SIM swap or device change to that account's next transaction, and
-  that delay carries 0.746. (M2 published 0.706 and 0.758 from the pre-PB-29 draw.)
+  that delay carries 0.726 (0.730 at `6abde44e`; M2 published 0.706 and 0.758 from the pre-PB-29
+  draw).
 - Single-feature AUCs are computed with target encoding whose folds are **whole accounts**. Folding
   per row leaves the other rows of a fraud incident inside the estimate that scores it, which
   inflated `merchant_category_code` by 0.005 and `channel` by 0.006 before it was corrected. Any
@@ -300,10 +304,11 @@ the study of a novel fraud variant that appears only in the test period.
   A benchmark result that uses the event join is therefore not comparable to one that does not, and
   which of the two was used should be stated.
 - The event-delay signal is partly an artefact of the generator, not only of the scenario. The lead
-  time is drawn from `fraud.takeover_lead_minutes = [5, 60]`, provenance `ASSUMED`, so every
-  fraud-enabling event is followed by its drain inside a tight uniform window, with no long tail and
-  no unexploited event. Real SIM swaps sometimes precede nothing. Do not read the strength of this
-  signal as evidence about how quickly real takeovers follow a SIM swap.
+  time is drawn from a lognormal with median 45 minutes and sigma 1.8, clipped to [5, 43,200]
+  minutes (`fraud.takeover_lead_*`, all `ASSUMED`). PB-56 replaced an earlier uniform [5, 60]
+  window with this tail, and the delay's separation fell from 0.758 to 0.730 as predicted. Every
+  fraud-enabling event is still followed by its drain. Do not read the strength of this signal as
+  evidence about how quickly real takeovers follow a SIM swap.
 
 **What is known to be unresolved about it?** Three things, stated rather than buried.
 
@@ -317,7 +322,7 @@ the study of a novel fraud variant that appears only in the test period.
    1.62 is derived from 45 clean datasets there, where per-scale estimates agree. Above 60,000 rows
    it is an extrapolation: four to ten seeds give estimates from 0.84 to 2.32, too wide to settle.
 3. **The release-size run has not happened.** The target is 5,000,000 transactions; every figure in
-   this datasheet comes from a 1,006,249-row run. ML-DATA-01 is recorded as
+   this datasheet comes from a 1,006,317-row run. ML-DATA-01 is recorded as
    `VERIFIED_AT_REDUCED_SCALE`, not as met.
 
 **What can this dataset NOT be used to evaluate? Generalisation.** Measured 2026-09-22
