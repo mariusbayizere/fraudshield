@@ -133,6 +133,19 @@ EXCEPTIONS: dict[str, tuple[str, str]] = {
         "SPDX 'EPL-2.0 OR GPL-2.0 WITH Classpath-exception-2.0'. Jakarta Mail implementation "
         "used by the M7 staff mailer; allowed by ADR 0020 (verified 2026-09-22)",
     ),
+    "maven:jakarta.persistence:jakarta.persistence-api@3.2.0": (
+        "EPL-2.0 OR BSD-3-Clause",
+        "POM lists 'Eclipse Distribution License v. 1.0' and 'Eclipse Public License v. 2.0'; the "
+        "jar's META-INF/NOTICE.md declares SPDX 'EPL-2.0 OR BSD-3-Clause' (EDL 1.0 is the BSD "
+        "3-Clause text). Runtime API of the M7 JPA persistence layer (ADR 0071); allowed by "
+        "ADR 0020 (verified 2026-09-22)",
+    ),
+    "maven:jakarta.transaction:jakarta.transaction-api@2.0.1": (
+        "EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0",
+        "POM lists 'EPL 2.0' and 'GPL2 w/ CPE'; the jar's META-INF/NOTICE.md declares SPDX "
+        "'EPL-2.0 OR GPL-2.0 WITH Classpath-exception-2.0'. Required by hibernate-core for the "
+        "M7 JPA persistence layer (ADR 0071); allowed by ADR 0020 (verified 2026-09-22)",
+    ),
     "maven:com.tngtech.archunit:archunit@1.5.0": (
         "Apache-2.0 AND BSD-3-Clause",
         "POM declares Apache-2.0 and 'BSD'; the BSD part is shaded ASM, whose bundled "

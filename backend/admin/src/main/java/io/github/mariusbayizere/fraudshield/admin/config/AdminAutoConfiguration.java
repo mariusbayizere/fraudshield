@@ -5,7 +5,6 @@ import io.github.mariusbayizere.fraudshield.admin.audit.AuditSearchController;
 import io.github.mariusbayizere.fraudshield.admin.network.IpAllowlistController;
 import io.github.mariusbayizere.fraudshield.admin.support.AdminContext;
 import io.github.mariusbayizere.fraudshield.admin.support.IdempotencyStore;
-import io.github.mariusbayizere.fraudshield.admin.support.StaffReferences;
 import io.github.mariusbayizere.fraudshield.admin.users.UserAdminController;
 import io.github.mariusbayizere.fraudshield.admin.users.UserAdministrationService;
 import io.github.mariusbayizere.fraudshield.audit.AuditLog;
@@ -36,11 +35,6 @@ public class AdminAutoConfiguration {
   @Bean
   AdminContext adminContext(StaffAccountRepository accounts) {
     return new AdminContext(accounts);
-  }
-
-  @Bean
-  StaffReferences staffReferences(StaffAccountRepository accounts) {
-    return new StaffReferences(accounts);
   }
 
   @Bean

@@ -1,9 +1,13 @@
 package io.github.mariusbayizere.fraudshield.auth.apikey;
 
+import io.github.mariusbayizere.fraudshield.auth.persistence.ApiKeyEntity;
+import io.github.mariusbayizere.fraudshield.auth.persistence.ApiKeyJpaRepository;
+import jakarta.persistence.EntityManager;
 import java.sql.Array;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -12,22 +16,32 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-/** Reads and writes {@code api_keys} (D-19, D-31). */
+/**
+ * Reads and writes {@code api_keys} (D-19, D-31) with hybrid persistence (ADR 0071): the
+ * authentication lookup runs before any institution is known, through a SECURITY DEFINER function
+ * in explicit SQL; the administrator lifecycle is tenant-scoped JPA. Writes flush at once.
+ */
 public final class ApiKeyRepository {
 
-  private static final String COLUMNS =
-      "id, institution_id, key_id, name, scopes, last_four, state, webhook_url, created_at,"
-          + " expires_at, last_used_at";
-
   private final JdbcTemplate jdbc;
+  private final ApiKeyJpaRepository keys;
+  private final EntityManager entities;
+  private final Clock clock;
 
   /**
    * Creates the repository.
    *
-   * @param jdbc JDBC template of the application role
+   * @param jdbc JDBC template of the application role (the pre-tenant credential lookup)
+   * @param keys Spring Data repository of API keys (the administrator lifecycle)
+   * @param entities shared, transaction-bound entity manager
+   * @param clock clock
    */
-  public ApiKeyRepository(JdbcTemplate jdbc) {
+  public ApiKeyRepository(
+      JdbcTemplate jdbc, ApiKeyJpaRepository keys, EntityManager entities, Clock clock) {
     this.jdbc = Objects.requireNonNull(jdbc, "jdbc");
+    this.keys = Objects.requireNonNull(keys, "keys");
+    this.entities = Objects.requireNonNull(entities, "entities");
+    this.clock = Objects.requireNonNull(clock, "clock");
   }
 
   /**
@@ -143,26 +157,24 @@ public final class ApiKeyRepository {
    * @return the stored record
    */
   public ApiKeyRecord insert(NewKey key) {
-    return jdbc.queryForObject(
-        """
-        INSERT INTO api_keys (institution_id, key_id, name, secret_hmac, pepper_version, last_four,
-          scopes, webhook_url, webhook_secret_ciphertext, webhook_secret_key_id, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?::text[], ?, ?, ?, ?)
-        RETURNING
-        """
-            + COLUMNS,
-        ApiKeyRepository::map,
-        key.institutionId(),
-        key.keyId(),
-        key.name(),
-        key.secretHmac(),
-        key.pepperVersion(),
-        key.lastFour(),
-        "{" + String.join(",", key.scopes().stream().map(ApiKeyScope::value).toList()) + "}",
-        key.webhookUrl(),
-        key.webhookSecretCiphertext(),
-        key.webhookSecretKeyId(),
-        key.createdBy());
+    ApiKeyEntity entity =
+        ApiKeyEntity.create(
+            UUID.randomUUID(),
+            key.institutionId(),
+            key.keyId(),
+            key.name(),
+            key.secretHmac(),
+            (short) key.pepperVersion(),
+            key.lastFour(),
+            key.scopes().stream().map(ApiKeyScope::value).toArray(String[]::new),
+            key.webhookUrl(),
+            key.webhookSecretCiphertext(),
+            key.webhookSecretKeyId(),
+            key.createdBy(),
+            clock.instant());
+    entities.persist(entity);
+    entities.flush();
+    return record(entity);
   }
 
   /**
@@ -172,24 +184,18 @@ public final class ApiKeyRepository {
    * @return the key
    */
   public Optional<ApiKeyRecord> findForUpdate(String keyId) {
-    return jdbc
-        .query(
-            "SELECT " + COLUMNS + " FROM api_keys WHERE key_id = ? FOR UPDATE",
-            ApiKeyRepository::map,
-            keyId)
-        .stream()
-        .findFirst();
+    return keys.findForUpdate(keyId).map(ApiKeyRepository::record);
   }
 
   /**
-   * Keys of the current institution, newest first.
+   * Keys of the current institution, newest first: one query.
    *
    * @return the keys
    */
   public List<ApiKeyRecord> list() {
-    return jdbc.query(
-        "SELECT " + COLUMNS + " FROM api_keys ORDER BY created_at DESC, id DESC",
-        ApiKeyRepository::map);
+    return keys.findAllByOrderByCreatedAtDescIdDesc().stream()
+        .map(ApiKeyRepository::record)
+        .toList();
   }
 
   /**
@@ -199,11 +205,7 @@ public final class ApiKeyRepository {
    * @return whether it is taken
    */
   public boolean liveNameTaken(String name) {
-    return Boolean.TRUE.equals(
-        jdbc.queryForObject(
-            "SELECT EXISTS (SELECT 1 FROM api_keys WHERE name = ? AND state <> 'REVOKED')",
-            Boolean.class,
-            name));
+    return keys.existsByNameAndStateNot(name, "REVOKED");
   }
 
   /**
@@ -214,41 +216,32 @@ public final class ApiKeyRepository {
    * @param expiresAt end of the overlap
    */
   public void markRotating(UUID id, UUID replacedBy, Instant expiresAt) {
-    jdbc.update(
-        "UPDATE api_keys SET state = 'ROTATING', replaced_by = ?, expires_at = ? WHERE id = ?",
-        replacedBy,
-        Timestamp.from(expiresAt),
-        id);
+    keys.findById(id).orElseThrow().startRotation(replacedBy, expiresAt);
+    entities.flush();
   }
 
   /**
-   * Revokes a key.
+   * Revokes a key; a revoked key stays as it is.
    *
    * @param id key
    * @param at revocation time
    */
   public void revoke(UUID id, Instant at) {
-    jdbc.update(
-        "UPDATE api_keys SET state = 'REVOKED', revoked_at = ? WHERE id = ? AND state <> 'REVOKED'",
-        Timestamp.from(at),
-        id);
+    ApiKeyEntity key = keys.findById(id).orElseThrow();
+    if (!"REVOKED".equals(key.getState())) {
+      key.revoke(at);
+      entities.flush();
+    }
   }
 
   /**
-   * The ciphertext webhook secret of a key.
+   * The sealed webhook secret of a key.
    *
    * @param id key
    * @return the ciphertext, or empty without a webhook
    */
   public Optional<byte[]> webhookSecretCiphertext(UUID id) {
-    return jdbc
-        .query(
-            "SELECT webhook_secret_ciphertext FROM api_keys WHERE id = ?",
-            (row, i) -> row.getBytes(1),
-            id)
-        .stream()
-        .filter(Objects::nonNull)
-        .findFirst();
+    return keys.findById(id).map(ApiKeyEntity::getWebhookSecretCiphertext);
   }
 
   /**
@@ -258,22 +251,25 @@ public final class ApiKeyRepository {
    * @param at time of use
    */
   public void touch(UUID id, Instant at) {
-    jdbc.update("UPDATE api_keys SET last_used_at = ? WHERE id = ?", Timestamp.from(at), id);
+    keys.touch(id, at);
   }
 
-  private static ApiKeyRecord map(ResultSet row, int index) throws SQLException {
+  private static ApiKeyRecord record(ApiKeyEntity key) {
     return new ApiKeyRecord(
-        row.getObject("id", UUID.class),
-        row.getObject("institution_id", UUID.class),
-        row.getString("key_id"),
-        row.getString("name"),
-        scopes(row.getArray("scopes")),
-        row.getString("last_four"),
-        row.getString("state"),
-        row.getString("webhook_url"),
-        instant(row, "created_at"),
-        instant(row, "expires_at"),
-        instant(row, "last_used_at"));
+        key.getId(),
+        key.getInstitutionId(),
+        key.getKeyId(),
+        key.getName(),
+        java.util.Arrays.stream(key.getScopes())
+            .map(ApiKeyScope::parse)
+            .flatMap(Optional::stream)
+            .toList(),
+        key.getLastFour(),
+        key.getState(),
+        key.getWebhookUrl(),
+        key.getCreatedAt(),
+        key.getExpiresAt(),
+        key.getLastUsedAt());
   }
 
   private static List<ApiKeyScope> scopes(Array array) throws SQLException {
@@ -282,11 +278,6 @@ public final class ApiKeyRepository {
       ApiKeyScope.parse((String) value).ifPresent(scopes::add);
     }
     return scopes;
-  }
-
-  private static Instant instant(ResultSet row, String column) throws SQLException {
-    Timestamp value = row.getTimestamp(column);
-    return value == null ? null : value.toInstant();
   }
 
   private static Instant instant(ResultSet row, int column) throws SQLException {

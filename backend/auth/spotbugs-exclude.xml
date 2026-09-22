@@ -91,4 +91,17 @@
     </Or>
     <Bug pattern="CRLF_INJECTION_LOGS"/>
   </Match>
+
+  <!--
+    JPA entities hold and return their associated entities (OfficeIpRangeEntity.createdBy); that is
+    the mapping, managed by the persistence context, not internal state to copy (ADR 0071). Arrays
+    are still copied in and out.
+  -->
+  <Match>
+    <Package name="io.github.mariusbayizere.fraudshield.auth.persistence"/>
+    <Or>
+      <Bug pattern="EI_EXPOSE_REP"/>
+      <Bug pattern="EI_EXPOSE_REP2"/>
+    </Or>
+  </Match>
 </FindBugsFilter>

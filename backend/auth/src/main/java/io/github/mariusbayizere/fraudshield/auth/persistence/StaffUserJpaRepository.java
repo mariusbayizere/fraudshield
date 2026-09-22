@@ -1,0 +1,175 @@
+package io.github.mariusbayizere.fraudshield.auth.persistence;
+
+import io.github.mariusbayizere.fraudshield.auth.domain.AccountStatus;
+import jakarta.persistence.LockModeType;
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+/**
+ * Spring Data repository of {@code users} (ADR 0071). Every query runs inside a tenant transaction,
+ * so row-level security confines it to one institution. Bulk updates bypass the persistence context
+ * and the optimistic version on purpose (sign-in bookkeeping must not make an administrator's edit
+ * stale); they flush before and clear after, so no managed entity is left stale.
+ */
+public interface StaffUserJpaRepository extends JpaRepository<StaffUserEntity, UUID> {
+
+  /**
+   * An account locked for update (the account row is the first lock of every session write; ADR
+   * 0070, review finding 1).
+   *
+   * @param id account ID
+   * @return the account
+   */
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("select u from StaffUserEntity u where u.id = :id")
+  Optional<StaffUserEntity> findForUpdate(@Param("id") UUID id);
+
+  /**
+   * The institution's ACTIVE administrators, locked in ID order.
+   *
+   * @return the administrators
+   */
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query(
+      "select u from StaffUserEntity u where u.role = io.github.mariusbayizere.fraudshield.common"
+          + ".config.StaffRole.ADMIN and u.status = io.github.mariusbayizere.fraudshield.auth"
+          + ".domain.AccountStatus.ACTIVE order by u.id")
+  List<StaffUserEntity> lockActiveAdmins();
+
+  /**
+   * Whether an employee ID is taken in the institution.
+   *
+   * @param employeeId employee ID
+   * @return whether it exists
+   */
+  boolean existsByEmployeeId(String employeeId);
+
+  /**
+   * The account with an employee ID.
+   *
+   * @param employeeId employee ID
+   * @return the account
+   */
+  Optional<StaffUserEntity> findFirstByEmployeeId(String employeeId);
+
+  /**
+   * Accounts in a status, oldest first.
+   *
+   * @param status status
+   * @return the accounts
+   */
+  List<StaffUserEntity> findByStatusOrderByCreatedAtAscIdAsc(AccountStatus status);
+
+  /**
+   * Records a successful sign-in: clears failures and any lock.
+   *
+   * @param id account
+   * @param at sign-in time
+   * @return rows changed
+   */
+  @Modifying(flushAutomatically = true, clearAutomatically = true)
+  @Query(
+      "update StaffUserEntity u set u.failedLoginCount = 0, u.lockedUntil = null,"
+          + " u.lastLoginAt = :at, u.status = case when u.status = io.github.mariusbayizere"
+          + ".fraudshield.auth.domain.AccountStatus.LOCKED then io.github.mariusbayizere"
+          + ".fraudshield.auth.domain.AccountStatus.ACTIVE else u.status end where u.id = :id")
+  int recordLoginSuccess(@Param("id") UUID id, @Param("at") Instant at);
+
+  /**
+   * Counts a failed sign-in.
+   *
+   * @param id account
+   * @return rows changed
+   */
+  @Modifying(flushAutomatically = true, clearAutomatically = true)
+  @Query(
+      "update StaffUserEntity u set u.failedLoginCount = u.failedLoginCount + 1 where u.id = :id")
+  int incrementFailures(@Param("id") UUID id);
+
+  /**
+   * Locks an account after failed sign-ins.
+   *
+   * @param id account
+   * @param until end of the lock
+   * @return rows changed
+   */
+  @Modifying(flushAutomatically = true, clearAutomatically = true)
+  @Query(
+      "update StaffUserEntity u set u.status = io.github.mariusbayizere.fraudshield.auth.domain"
+          + ".AccountStatus.LOCKED, u.lockedUntil = :until where u.id = :id")
+  int lock(@Param("id") UUID id, @Param("until") Instant until);
+
+  /**
+   * Lifts a lock and clears the failures.
+   *
+   * @param id account
+   * @return rows changed
+   */
+  @Modifying(flushAutomatically = true, clearAutomatically = true)
+  @Query(
+      "update StaffUserEntity u set u.status = io.github.mariusbayizere.fraudshield.auth.domain"
+          + ".AccountStatus.ACTIVE, u.lockedUntil = null, u.failedLoginCount = 0"
+          + " where u.id = :id and u.status = io.github.mariusbayizere.fraudshield.auth.domain"
+          + ".AccountStatus.LOCKED")
+  int unlock(@Param("id") UUID id);
+
+  /**
+   * Replaces the password, increments the token version and lifts a failure lock.
+   *
+   * @param id account
+   * @param hash new bcrypt hash
+   * @return rows changed
+   */
+  @Modifying(flushAutomatically = true, clearAutomatically = true)
+  @Query(
+      "update StaffUserEntity u set u.passwordHash = :hash, u.tokenVersion = u.tokenVersion + 1,"
+          + " u.failedLoginCount = 0, u.lockedUntil = case when u.status = io.github.mariusbayizere"
+          + ".fraudshield.auth.domain.AccountStatus.LOCKED then null else u.lockedUntil end,"
+          + " u.status = case when u.status = io.github.mariusbayizere.fraudshield.auth.domain"
+          + ".AccountStatus.LOCKED then io.github.mariusbayizere.fraudshield.auth.domain"
+          + ".AccountStatus.ACTIVE else u.status end where u.id = :id")
+  int changePassword(@Param("id") UUID id, @Param("hash") String hash);
+
+  /**
+   * Increments the token version (D-27).
+   *
+   * @param id account
+   * @return rows changed
+   */
+  @Modifying(flushAutomatically = true, clearAutomatically = true)
+  @Query("update StaffUserEntity u set u.tokenVersion = u.tokenVersion + 1 where u.id = :id")
+  int bumpTokenVersion(@Param("id") UUID id);
+
+  /**
+   * Marks the email verified.
+   *
+   * @param id account
+   * @return rows changed
+   */
+  @Modifying(flushAutomatically = true, clearAutomatically = true)
+  @Query("update StaffUserEntity u set u.emailVerified = true where u.id = :id")
+  int markEmailVerified(@Param("id") UUID id);
+
+  /**
+   * Links a Google account and stores its avatar.
+   *
+   * @param id account
+   * @param subject Google subject
+   * @param avatarUrl avatar or null
+   * @return rows changed
+   */
+  @Modifying(flushAutomatically = true, clearAutomatically = true)
+  @Query(
+      "update StaffUserEntity u set u.oauthProvider = 'GOOGLE', u.oauthId = :subject,"
+          + " u.avatarUrl = coalesce(:avatar, u.avatarUrl), u.emailVerified = true"
+          + " where u.id = :id")
+  int linkGoogle(
+      @Param("id") UUID id, @Param("subject") String subject, @Param("avatar") String avatarUrl);
+}

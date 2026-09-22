@@ -166,13 +166,7 @@ public final class RegistrationService {
       String email,
       String hash,
       RequestContext context) {
-    Optional<StaffAccount> sameEmployee =
-        jdbc
-            .queryForList(
-                "SELECT id FROM users WHERE employee_id = ?", UUID.class, registration.employeeId())
-            .stream()
-            .findFirst()
-            .flatMap(accounts::findById);
+    Optional<StaffAccount> sameEmployee = accounts.findByEmployeeId(registration.employeeId());
     if (sameEmployee.isPresent()) {
       sendExistingNotice(sameEmployee.get(), context);
       return;

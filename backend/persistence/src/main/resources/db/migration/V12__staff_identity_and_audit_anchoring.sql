@@ -1,28 +1,11 @@
--- Staff identity and audit anchoring additions for M7 (ADR 0027, D-24, D-32, FR-06-02, FR-07-02).
--- Additive only: one column, one index, one trigger and four owner-rights read functions.
+-- Staff identity and audit anchoring additions for M7 (ADR 0070, ADR 0071, D-24, D-32, FR-06-02, FR-07-02).
+-- Additive only: one column, one index and five owner-rights read functions.
 
--- Optimistic locking for administrator edits (StaffUserUpdate.version, FR-06-02). The version moves
--- only when a field an administrator can edit changes, so a sign-in (last_login_at, failed-login
--- count) never makes an administrator's pending edit stale.
+-- Optimistic locking for administrator edits (StaffUserUpdate.version, FR-06-02). The JPA entity's
+-- @Version owns this column (ADR 0071): Hibernate increments it on every entity update and checks it
+-- in the WHERE clause. Sign-in bookkeeping (failure count, last sign-in, token version) uses bulk
+-- statements that leave it alone, so a sign-in never makes an administrator's edit stale.
 ALTER TABLE users ADD COLUMN version bigint NOT NULL DEFAULT 0 CHECK (version >= 0);
-
-CREATE FUNCTION users_bump_version() RETURNS trigger
-  LANGUAGE plpgsql
-  AS $$
-BEGIN
-  IF (NEW.first_name, NEW.last_name, NEW.phone, NEW.department, NEW.role, NEW.status,
-      NEW.preferred_locale)
-     IS DISTINCT FROM
-     (OLD.first_name, OLD.last_name, OLD.phone, OLD.department, OLD.role, OLD.status,
-      OLD.preferred_locale) THEN
-    NEW.version := OLD.version + 1;
-  ELSE
-    NEW.version := OLD.version;
-  END IF;
-  RETURN NEW;
-END
-$$;
-CREATE TRIGGER users_version BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION users_bump_version();
 
 GRANT SELECT (version) ON users TO fs_app_readonly;
 

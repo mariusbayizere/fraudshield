@@ -138,8 +138,29 @@ public class AuthAutoConfiguration {
   }
 
   @Bean
-  StaffAccountRepository staffAccountRepository(JdbcTemplate jdbc) {
-    return new StaffAccountRepository(jdbc);
+  PersistenceSettingsGuard persistenceSettingsGuard(org.springframework.core.env.Environment env) {
+    return new PersistenceSettingsGuard(env);
+  }
+
+  /**
+   * The shared, transaction-bound entity manager used by the staff-identity adapters.
+   *
+   * @param factory the entity manager factory
+   * @return the shared entity manager
+   */
+  @Bean
+  jakarta.persistence.EntityManager authEntityManager(
+      jakarta.persistence.EntityManagerFactory factory) {
+    return org.springframework.orm.jpa.SharedEntityManagerCreator.createSharedEntityManager(
+        factory);
+  }
+
+  @Bean
+  StaffAccountRepository staffAccountRepository(
+      JdbcTemplate jdbc,
+      io.github.mariusbayizere.fraudshield.auth.persistence.StaffUserJpaRepository users,
+      jakarta.persistence.EntityManager authEntityManager) {
+    return new StaffAccountRepository(jdbc, users, authEntityManager);
   }
 
   @Bean
@@ -148,8 +169,12 @@ public class AuthAutoConfiguration {
   }
 
   @Bean
-  ApiKeyRepository apiKeyRepository(JdbcTemplate jdbc) {
-    return new ApiKeyRepository(jdbc);
+  ApiKeyRepository apiKeyRepository(
+      JdbcTemplate jdbc,
+      io.github.mariusbayizere.fraudshield.auth.persistence.ApiKeyJpaRepository keys,
+      jakarta.persistence.EntityManager authEntityManager,
+      Clock clock) {
+    return new ApiKeyRepository(jdbc, keys, authEntityManager, clock);
   }
 
   @Bean
@@ -192,9 +217,18 @@ public class AuthAutoConfiguration {
 
   @Bean
   OfficeIpAllowlist officeIpAllowlist(
-      JdbcTemplate jdbc, TenantTransactions tenants, AuthProperties properties) {
+      io.github.mariusbayizere.fraudshield.auth.persistence.OfficeIpRangeJpaRepository ranges,
+      io.github.mariusbayizere.fraudshield.auth.persistence.StaffUserJpaRepository users,
+      jakarta.persistence.EntityManager authEntityManager,
+      TenantTransactions tenants,
+      AuthProperties properties) {
     return new OfficeIpAllowlist(
-        jdbc, tenants, properties.rateLimits().officeIpCacheTtl(), System::nanoTime);
+        ranges,
+        users,
+        authEntityManager,
+        tenants,
+        properties.rateLimits().officeIpCacheTtl(),
+        System::nanoTime);
   }
 
   @Bean

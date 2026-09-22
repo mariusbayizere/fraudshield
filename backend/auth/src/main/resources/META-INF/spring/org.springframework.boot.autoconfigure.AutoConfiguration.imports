@@ -1,1 +1,2 @@
 io.github.mariusbayizere.fraudshield.auth.config.AuthAutoConfiguration
+io.github.mariusbayizere.fraudshield.auth.config.AuthPersistenceAutoConfiguration

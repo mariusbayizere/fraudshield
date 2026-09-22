@@ -1,7 +1,6 @@
 package io.github.mariusbayizere.fraudshield.admin.network;
 
 import io.github.mariusbayizere.fraudshield.admin.support.AdminContext;
-import io.github.mariusbayizere.fraudshield.admin.support.StaffReferences;
 import io.github.mariusbayizere.fraudshield.audit.AuditActor;
 import io.github.mariusbayizere.fraudshield.audit.AuditEvent;
 import io.github.mariusbayizere.fraudshield.audit.AuditEventType;
@@ -47,7 +46,6 @@ public class IpAllowlistController {
   private final TenantTransactions tenants;
   private final OfficeIpAllowlist allowlist;
   private final AdminContext admins;
-  private final StaffReferences references;
   private final AuditLog audit;
   private final Clock clock;
 
@@ -57,7 +55,6 @@ public class IpAllowlistController {
    * @param tenants tenant transactions
    * @param allowlist allowlist
    * @param admins acting-administrator resolver
-   * @param references staff reference lookup
    * @param audit audit log
    * @param clock clock
    */
@@ -65,13 +62,11 @@ public class IpAllowlistController {
       TenantTransactions tenants,
       OfficeIpAllowlist allowlist,
       AdminContext admins,
-      StaffReferences references,
       AuditLog audit,
       Clock clock) {
     this.tenants = Objects.requireNonNull(tenants);
     this.allowlist = Objects.requireNonNull(allowlist);
     this.admins = Objects.requireNonNull(admins);
-    this.references = Objects.requireNonNull(references);
     this.audit = Objects.requireNonNull(audit);
     this.clock = Objects.requireNonNull(clock);
   }
@@ -197,7 +192,12 @@ public class IpAllowlistController {
     view.put("entry_id", entry.id());
     view.put("cidr", entry.cidr());
     view.put("description", entry.description());
-    view.put("created_by", references.of(entry.createdBy()));
+    Map<String, Object> creator = new LinkedHashMap<>();
+    creator.put("user_id", entry.createdBy().userId());
+    creator.put("first_name", entry.createdBy().firstName());
+    creator.put("last_name", entry.createdBy().lastName());
+    creator.put("role", entry.createdBy().role());
+    view.put("created_by", creator);
     view.put("created_at", entry.createdAt().toString());
     return view;
   }

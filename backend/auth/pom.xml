@@ -42,6 +42,12 @@
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-validation</artifactId>
     </dependency>
+    <!-- Hybrid persistence (ADR 0071): JPA for the CRUD staff domain; explicit SQL stays for the
+         audit chain, append-only and TimescaleDB tables and the pre-tenant lookups. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-jpa</artifactId>
+    </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-data-redis</artifactId>

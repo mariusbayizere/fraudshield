@@ -136,8 +136,10 @@ signature verification and is reported, but it can still block that day's legiti
 ### 11. `users.version` for optimistic locking, returned as an ETag
 
 `StaffUserUpdate.version` has no column in M1's schema, and `StaffUser` does not return a version.
-V12 adds `users.version`, advanced by a trigger only when an administrator-editable field changes
-(so sign-ins never make an edit stale). The admin API returns it in the `ETag` header of
+V12 adds `users.version`. It was first advanced by a trigger when an administrator-editable field
+changed. ADR 0071 replaced the trigger with a JPA `@Version`: administrator edits go through the
+entity and advance it, and sign-in bookkeeping uses bulk updates that leave it alone, so a sign-in
+still never makes an edit stale. The admin API returns it in the `ETag` header of
 single-account responses. A stale PATCH answers 409 `conflict` with the current account.
 
 ### 12. The last-active-admin rule is a race guard

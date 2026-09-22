@@ -2,12 +2,12 @@ package io.github.mariusbayizere.fraudshield.auth.session;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.mariusbayizere.fraudshield.audit.testing.AppDatabase;
 import io.github.mariusbayizere.fraudshield.audit.testing.TestDatabase;
 import io.github.mariusbayizere.fraudshield.auth.account.StaffAccountRepository;
 import io.github.mariusbayizere.fraudshield.auth.jwt.StaffClaims;
 import io.github.mariusbayizere.fraudshield.auth.support.SafeRedis;
 import io.github.mariusbayizere.fraudshield.auth.testing.Instances;
+import io.github.mariusbayizere.fraudshield.auth.testing.JpaTestStack;
 import io.github.mariusbayizere.fraudshield.common.config.StaffRole;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -39,7 +39,7 @@ class SessionInvalidationTimingTest {
   private static final int RUNS = 20;
 
   private static TestDatabase db;
-  private static AppDatabase app;
+  private static JpaTestStack app;
   private static UUID bank;
   private static StringRedisTemplate redisA;
   private static StringRedisTemplate redisB;
@@ -48,7 +48,7 @@ class SessionInvalidationTimingTest {
   @BeforeAll
   static void start() {
     db = TestDatabase.create();
-    app = AppDatabase.of(db, "fs_app");
+    app = JpaTestStack.of(db, "fs_app");
     bank = db.createInstitution("timing-bank");
     redisA = Instances.redis();
     redisB = Instances.redis();
@@ -64,7 +64,7 @@ class SessionInvalidationTimingTest {
     return new SessionStateCache(
         redis,
         app.tenants(),
-        new StaffAccountRepository(app.jdbc()),
+        new StaffAccountRepository(app.jdbc(), app.users(), app.entities()),
         new RefreshTokenRepository(app.jdbc()),
         redisTtl,
         localTtl,
@@ -113,7 +113,9 @@ class SessionInvalidationTimingTest {
         app.tenants()
             .inTenant(
                 bank,
-                () -> new StaffAccountRepository(app.jdbc()).bumpTokenVersion(claims.userId()));
+                () ->
+                    new StaffAccountRepository(app.jdbc(), app.users(), app.entities())
+                        .bumpTokenVersion(claims.userId()));
     b.versionChanged(claims.userId(), version);
   }
 

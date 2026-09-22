@@ -1,10 +1,14 @@
 package io.github.mariusbayizere.fraudshield.auth.account;
 
 import io.github.mariusbayizere.fraudshield.audit.jdbc.TenantTransactions;
+import io.github.mariusbayizere.fraudshield.auth.persistence.OfficeIpRangeEntity;
+import io.github.mariusbayizere.fraudshield.auth.persistence.OfficeIpRangeJpaRepository;
+import io.github.mariusbayizere.fraudshield.auth.persistence.StaffUserEntity;
+import io.github.mariusbayizere.fraudshield.auth.persistence.StaffUserJpaRepository;
 import io.github.mariusbayizere.fraudshield.auth.support.AfterCommit;
+import jakarta.persistence.EntityManager;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -15,7 +19,6 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.LongSupplier;
 import java.util.regex.Pattern;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
  * An institution's office egress ranges, which get a higher sign-in ceiling (D-26), and their
@@ -27,7 +30,9 @@ public final class OfficeIpAllowlist {
   private static final Pattern IP_LITERAL =
       Pattern.compile("^([0-9]{1,3}(\\.[0-9]{1,3}){3}|[0-9A-Fa-f.]*:[0-9A-Fa-f:.]{1,44})$");
 
-  private final JdbcTemplate jdbc;
+  private final OfficeIpRangeJpaRepository ranges;
+  private final StaffUserJpaRepository users;
+  private final EntityManager entities;
   private final TenantTransactions tenants;
   private final long cacheTtlNanos;
   private final LongSupplier nanoTime;
@@ -41,25 +46,44 @@ public final class OfficeIpAllowlist {
    * @param id entry ID
    * @param cidr network in CIDR notation, as PostgreSQL prints it
    * @param description description
-   * @param createdBy administrator who added it
+   * @param createdBy administrator who added it, fetched with the entry (no N + 1)
    * @param createdAt when it was added
    */
   public record Entry(
-      UUID id, String cidr, String description, UUID createdBy, Instant createdAt) {}
+      UUID id, String cidr, String description, Creator createdBy, Instant createdAt) {}
+
+  /**
+   * The administrator who added a range.
+   *
+   * @param userId account ID
+   * @param firstName first name
+   * @param lastName last name
+   * @param role role
+   */
+  public record Creator(UUID userId, String firstName, String lastName, String role) {}
 
   private record Range(byte[] network, int prefix) {}
 
   /**
    * Creates the allowlist.
    *
-   * @param jdbc JDBC template of the application role
+   * @param ranges Spring Data repository of the ranges
+   * @param users Spring Data repository of users (creator references)
+   * @param entities shared, transaction-bound entity manager
    * @param tenants tenant transactions
    * @param cacheTtl cache time to live
    * @param nanoTime monotonic clock
    */
   public OfficeIpAllowlist(
-      JdbcTemplate jdbc, TenantTransactions tenants, Duration cacheTtl, LongSupplier nanoTime) {
-    this.jdbc = Objects.requireNonNull(jdbc, "jdbc");
+      OfficeIpRangeJpaRepository ranges,
+      StaffUserJpaRepository users,
+      EntityManager entities,
+      TenantTransactions tenants,
+      Duration cacheTtl,
+      LongSupplier nanoTime) {
+    this.ranges = Objects.requireNonNull(ranges, "ranges");
+    this.users = Objects.requireNonNull(users, "users");
+    this.entities = Objects.requireNonNull(entities, "entities");
     this.tenants = Objects.requireNonNull(tenants, "tenants");
     this.cacheTtlNanos = cacheTtl.toNanos();
     this.nanoTime = Objects.requireNonNull(nanoTime, "nanoTime");
@@ -97,14 +121,12 @@ public final class OfficeIpAllowlist {
     if (cached != null && cached.expiresAtNanos() - now > 0) {
       return cached.ranges();
     }
-    List<Range> ranges =
+    List<Range> loaded =
         tenants.inTenant(
             institutionId,
-            () ->
-                jdbc.query(
-                    "SELECT cidr FROM office_ip_allowlist", (row, i) -> parse(row.getString(1))));
-    cache.put(institutionId, new Cached(List.copyOf(ranges), now + cacheTtlNanos));
-    return ranges;
+            () -> ranges.findAllCidrs().stream().map(OfficeIpAllowlist::parse).toList());
+    cache.put(institutionId, new Cached(loaded, now + cacheTtlNanos));
+    return loaded;
   }
 
   private static Range parse(String cidr) {
@@ -130,37 +152,43 @@ public final class OfficeIpAllowlist {
   }
 
   /**
-   * Entries of the current institution. Must run in a tenant transaction.
+   * Entries of the current institution with their creators, in one query. Must run in a tenant
+   * transaction.
    *
    * @return the entries, newest first
    */
   public List<Entry> list() {
-    return jdbc.query(
-        """
-        SELECT id, cidr::text, description, created_by, created_at FROM office_ip_allowlist
-        ORDER BY created_at DESC, id DESC
-        """,
-        (row, i) ->
-            new Entry(
-                row.getObject(1, UUID.class),
-                row.getString(2),
-                row.getString(3),
-                row.getObject(4, UUID.class),
-                row.getTimestamp(5).toInstant()));
+    return ranges.findAllWithCreator().stream().map(OfficeIpAllowlist::entry).toList();
+  }
+
+  private static Entry entry(OfficeIpRangeEntity range) {
+    StaffUserEntity creator = range.getCreatedBy();
+    return new Entry(
+        range.getId(),
+        range.getCidr(),
+        range.getDescription(),
+        new Creator(
+            creator.getId(),
+            creator.getFirstName(),
+            creator.getLastName(),
+            creator.getRole().name()),
+        range.getCreatedAt());
   }
 
   /**
-   * Whether the current institution already lists a network.
+   * Whether the current institution already lists a network (compared as {@code cidr}, not text).
    *
    * @param cidr canonical CIDR
    * @return whether it exists
    */
   public boolean exists(String cidr) {
-    return Boolean.TRUE.equals(
-        jdbc.queryForObject(
-            "SELECT EXISTS (SELECT 1 FROM office_ip_allowlist WHERE cidr = ?::cidr)",
-            Boolean.class,
-            cidr));
+    Object found =
+        entities
+            .createNativeQuery(
+                "SELECT EXISTS (SELECT 1 FROM office_ip_allowlist WHERE cidr = CAST(?1 AS cidr))")
+            .setParameter(1, cidr)
+            .getSingleResult();
+    return Boolean.TRUE.equals(found);
   }
 
   /**
@@ -175,20 +203,18 @@ public final class OfficeIpAllowlist {
    */
   public Entry add(
       UUID institutionId, String cidr, String description, UUID createdBy, Instant at) {
-    UUID id = UUID.randomUUID();
-    jdbc.update(
-        """
-        INSERT INTO office_ip_allowlist (id, institution_id, cidr, description, created_by, created_at)
-        VALUES (?, ?, ?::cidr, ?, ?, ?)
-        """,
-        id,
-        institutionId,
-        cidr,
-        description,
-        createdBy,
-        Timestamp.from(at));
+    OfficeIpRangeEntity range =
+        OfficeIpRangeEntity.create(
+            UUID.randomUUID(),
+            institutionId,
+            cidr,
+            description,
+            users.getReferenceById(createdBy),
+            at);
+    entities.persist(range);
+    entities.flush();
     AfterCommit.run(() -> cache.remove(institutionId));
-    return find(id).orElseThrow();
+    return find(range.getId()).orElseThrow();
   }
 
   /**
@@ -209,8 +235,13 @@ public final class OfficeIpAllowlist {
    * @return whether it existed
    */
   public boolean remove(UUID institutionId, UUID id) {
-    boolean removed = jdbc.update("DELETE FROM office_ip_allowlist WHERE id = ?", id) == 1;
+    Optional<OfficeIpRangeEntity> range = ranges.findById(id);
+    range.ifPresent(
+        r -> {
+          ranges.delete(r);
+          entities.flush();
+        });
     AfterCommit.run(() -> cache.remove(institutionId));
-    return removed;
+    return range.isPresent();
   }
 }

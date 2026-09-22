@@ -115,6 +115,8 @@ public abstract class AuthIntegrationTest {
     // The schema is migrated by TestDatabase as fs_migrator; the application role cannot and must
     // not.
     registry.add("spring.flyway.enabled", () -> "false");
+    // Statement counting for the N + 1 guards (ADR 0071); off in production.
+    registry.add("spring.jpa.properties.hibernate.generate_statistics", () -> "true");
     registry.add("spring.datasource.url", DB::url);
     registry.add("spring.datasource.username", () -> "fs_app");
     registry.add("spring.datasource.password", () -> DB.password("fs_app"));

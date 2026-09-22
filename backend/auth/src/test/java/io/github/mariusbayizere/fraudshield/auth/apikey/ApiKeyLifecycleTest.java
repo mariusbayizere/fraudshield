@@ -6,11 +6,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import io.github.mariusbayizere.fraudshield.audit.AuditActor;
 import io.github.mariusbayizere.fraudshield.audit.RequestContext;
 import io.github.mariusbayizere.fraudshield.audit.jdbc.JdbcAuditLog;
-import io.github.mariusbayizere.fraudshield.audit.testing.AppDatabase;
 import io.github.mariusbayizere.fraudshield.audit.testing.TestDatabase;
 import io.github.mariusbayizere.fraudshield.auth.crypto.Crypto;
 import io.github.mariusbayizere.fraudshield.auth.crypto.SecretBox;
 import io.github.mariusbayizere.fraudshield.auth.testing.Instances;
+import io.github.mariusbayizere.fraudshield.auth.testing.JpaTestStack;
 import io.github.mariusbayizere.fraudshield.auth.testing.MutableClock;
 import io.github.mariusbayizere.fraudshield.auth.web.ProblemException;
 import io.github.mariusbayizere.fraudshield.common.config.StaffRole;
@@ -38,7 +38,7 @@ class ApiKeyLifecycleTest {
   private static final Executor DIRECT = Runnable::run;
   private static final SecretBox BOX = new SecretBox("box-1", Crypto.randomBytes(32));
   private static TestDatabase db;
-  private static AppDatabase app;
+  private static JpaTestStack app;
   private static UUID bank;
   private static AuditActor admin;
   private static StringRedisTemplate redisA;
@@ -49,7 +49,7 @@ class ApiKeyLifecycleTest {
   @BeforeAll
   static void start() throws Exception {
     db = TestDatabase.create();
-    app = AppDatabase.of(db, "fs_app");
+    app = JpaTestStack.of(db, "fs_app");
     bank = db.createInstitution("key-bank");
     UUID adminId = UUID.randomUUID();
     try (Connection superuser = db.superuser();
@@ -72,7 +72,7 @@ class ApiKeyLifecycleTest {
 
   private ApiKeyAuthenticator authenticator(StringRedisTemplate redis, String environment) {
     return new ApiKeyAuthenticator(
-        new ApiKeyRepository(app.jdbc()),
+        new ApiKeyRepository(app.jdbc(), app.apiKeys(), app.entities(), clock),
         app.tenants(),
         Instances.safe(redis),
         PEPPERS,
@@ -86,7 +86,7 @@ class ApiKeyLifecycleTest {
   private ApiKeyService service(ApiKeyAuthenticator authenticator) {
     return new ApiKeyService(
         app.tenants(),
-        new ApiKeyRepository(app.jdbc()),
+        new ApiKeyRepository(app.jdbc(), app.apiKeys(), app.entities(), clock),
         authenticator,
         new WebhookUrlValidator(host -> new InetAddress[] {InetAddress.getByName("203.0.113.7")}),
         BOX,

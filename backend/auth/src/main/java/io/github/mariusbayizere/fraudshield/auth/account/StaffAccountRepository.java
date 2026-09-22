@@ -4,47 +4,56 @@ import io.github.mariusbayizere.fraudshield.auth.domain.AccountStatus;
 import io.github.mariusbayizere.fraudshield.auth.domain.Department;
 import io.github.mariusbayizere.fraudshield.auth.domain.StaffAccount;
 import io.github.mariusbayizere.fraudshield.auth.domain.StaffLocale;
+import io.github.mariusbayizere.fraudshield.auth.persistence.StaffUserEntity;
+import io.github.mariusbayizere.fraudshield.auth.persistence.StaffUserJpaRepository;
 import io.github.mariusbayizere.fraudshield.common.config.StaffRole;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Timestamp;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.TypedQuery;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
 
 /**
- * Reads and writes {@code users} (D-31). Every method except the two pre-tenant lookups must run in
- * a tenant transaction ({@code TenantTransactions}); row-level security confines it to the
- * institution of that transaction.
+ * Reads and writes {@code users} (D-31) for the staff-identity services.
+ *
+ * <p>Hybrid persistence (ADR 0071):
+ *
+ * <ul>
+ *   <li>Tenant-scoped access goes through JPA ({@link StaffUserJpaRepository}). Every method except
+ *       the three pre-tenant lookups must run in a tenant transaction ({@code TenantTransactions}),
+ *       whose {@code set_config} applies to Hibernate's statements because they share the
+ *       transaction's connection. Row-level security then confines them to one institution.
+ *   <li>The pre-tenant lookups call SECURITY DEFINER functions in explicit SQL, because they run
+ *       before an institution is known.
+ * </ul>
+ *
+ * <p>Writes flush at once, so explicit-SQL statements interleaved in the same transaction (refresh
+ * tokens, verification tokens, audit rows) always see them, and in the order the code states.
  */
 public final class StaffAccountRepository {
 
   /** End of an administrator's lock, which never lifts by itself. */
   public static final Instant ADMIN_LOCK_UNTIL = Instant.parse("9999-12-31T23:59:59Z");
 
-  private static final String COLUMNS =
-      """
-      id, institution_id, first_name, last_name, email, phone, role, requested_role, status,
-      locked_until, failed_login_count, token_version, email_verified, preferred_locale, avatar_url,
-      oauth_provider, employee_id, department, last_login_at, created_at, version
-      """;
-
-  private static final RowMapper<StaffAccount> MAPPER = StaffAccountRepository::map;
-
   private final JdbcTemplate jdbc;
+  private final StaffUserJpaRepository users;
+  private final EntityManager entities;
 
   /**
    * Creates the repository.
    *
-   * @param jdbc JDBC template of the application role
+   * @param jdbc JDBC template of the application role (pre-tenant lookups)
+   * @param users Spring Data repository of users
+   * @param entities shared, transaction-bound entity manager
    */
-  public StaffAccountRepository(JdbcTemplate jdbc) {
+  public StaffAccountRepository(
+      JdbcTemplate jdbc, StaffUserJpaRepository users, EntityManager entities) {
     this.jdbc = Objects.requireNonNull(jdbc, "jdbc");
+    this.users = Objects.requireNonNull(users, "users");
+    this.entities = Objects.requireNonNull(entities, "entities");
   }
 
   /**
@@ -92,8 +101,7 @@ public final class StaffAccountRepository {
    * @return the account
    */
   public Optional<StaffAccount> findById(UUID id) {
-    return jdbc.query("SELECT " + COLUMNS + " FROM users WHERE id = ?", MAPPER, id).stream()
-        .findFirst();
+    return users.findById(id).map(StaffUserEntity::toDomain);
   }
 
   /**
@@ -103,10 +111,7 @@ public final class StaffAccountRepository {
    * @return the account
    */
   public Optional<StaffAccount> findByIdForUpdate(UUID id) {
-    return jdbc
-        .query("SELECT " + COLUMNS + " FROM users WHERE id = ? FOR UPDATE", MAPPER, id)
-        .stream()
-        .findFirst();
+    return users.findForUpdate(id).map(StaffUserEntity::toDomain);
   }
 
   /**
@@ -116,11 +121,17 @@ public final class StaffAccountRepository {
    * @return whether it is taken
    */
   public boolean employeeIdTaken(String employeeId) {
-    return Boolean.TRUE.equals(
-        jdbc.queryForObject(
-            "SELECT EXISTS (SELECT 1 FROM users WHERE employee_id = ?)",
-            Boolean.class,
-            employeeId));
+    return users.existsByEmployeeId(employeeId);
+  }
+
+  /**
+   * The account of the current institution with an employee ID.
+   *
+   * @param employeeId employee ID
+   * @return the account
+   */
+  public Optional<StaffAccount> findByEmployeeId(String employeeId) {
+    return users.findFirstByEmployeeId(employeeId).map(StaffUserEntity::toDomain);
   }
 
   /**
@@ -130,46 +141,20 @@ public final class StaffAccountRepository {
    * @return the hash, or empty for a Google-only account
    */
   public Optional<String> passwordHash(UUID id) {
-    return jdbc
-        .query("SELECT password_hash FROM users WHERE id = ?", (row, i) -> row.getString(1), id)
-        .stream()
-        .filter(Objects::nonNull)
-        .findFirst();
+    return users.findById(id).map(StaffUserEntity::getPasswordHash);
   }
 
   /**
    * Inserts an account.
    *
    * @param account the account (ID, names, contact, role, status, locale, employee ID, department,
-   *     avatar and Google link are used)
+   *     avatar, Google link and creation time are used)
    * @param passwordHash bcrypt hash, or null for a Google-only account
    * @param googleSubject Google {@code sub}, or null
    */
   public void insert(StaffAccount account, String passwordHash, String googleSubject) {
-    jdbc.update(
-        """
-        INSERT INTO users (id, institution_id, first_name, last_name, email, phone, password_hash,
-          role, requested_role, status, email_verified, preferred_locale, avatar_url, oauth_provider,
-          oauth_id, employee_id, department)
-        VALUES (?, ?, ?, ?, lower(?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        account.id(),
-        account.institutionId(),
-        account.firstName(),
-        account.lastName(),
-        account.email(),
-        account.phone(),
-        passwordHash,
-        account.role().name(),
-        account.requestedRole() == null ? null : account.requestedRole().name(),
-        account.status().name(),
-        account.emailVerified(),
-        account.preferredLocale().name(),
-        account.avatarUrl(),
-        googleSubject == null ? null : "GOOGLE",
-        googleSubject,
-        account.employeeId(),
-        account.department().name());
+    entities.persist(StaffUserEntity.create(account, passwordHash, googleSubject));
+    entities.flush();
   }
 
   /**
@@ -179,14 +164,7 @@ public final class StaffAccountRepository {
    * @param at sign-in time
    */
   public void recordLoginSuccess(UUID id, Instant at) {
-    jdbc.update(
-        """
-        UPDATE users SET failed_login_count = 0, locked_until = NULL, last_login_at = ?,
-          status = CASE WHEN status = 'LOCKED' THEN 'ACTIVE' ELSE status END
-        WHERE id = ?
-        """,
-        Timestamp.from(at),
-        id);
+    users.recordLoginSuccess(id, at);
   }
 
   /**
@@ -196,12 +174,8 @@ public final class StaffAccountRepository {
    * @return the new consecutive failure count
    */
   public int recordLoginFailure(UUID id) {
-    return Objects.requireNonNull(
-        jdbc.queryForObject(
-            "UPDATE users SET failed_login_count = failed_login_count + 1 WHERE id = ?"
-                + " RETURNING failed_login_count",
-            Integer.class,
-            id));
+    users.incrementFailures(id);
+    return users.findById(id).map(e -> e.toDomain().failedLoginCount()).orElseThrow();
   }
 
   /**
@@ -211,10 +185,7 @@ public final class StaffAccountRepository {
    * @param until end of the lock
    */
   public void lock(UUID id, Instant until) {
-    jdbc.update(
-        "UPDATE users SET status = 'LOCKED', locked_until = ? WHERE id = ?",
-        Timestamp.from(until),
-        id);
+    users.lock(id, until);
   }
 
   /**
@@ -223,12 +194,7 @@ public final class StaffAccountRepository {
    * @param id account ID
    */
   public void unlock(UUID id) {
-    jdbc.update(
-        """
-        UPDATE users SET status = 'ACTIVE', locked_until = NULL, failed_login_count = 0
-        WHERE id = ? AND status = 'LOCKED'
-        """,
-        id);
+    users.unlock(id);
   }
 
   /**
@@ -239,18 +205,8 @@ public final class StaffAccountRepository {
    * @return the new token version
    */
   public long changePassword(UUID id, String passwordHash) {
-    return Objects.requireNonNull(
-        jdbc.queryForObject(
-            """
-            UPDATE users SET password_hash = ?, token_version = token_version + 1,
-              failed_login_count = 0,
-              status = CASE WHEN status = 'LOCKED' THEN 'ACTIVE' ELSE status END,
-              locked_until = CASE WHEN status = 'LOCKED' THEN NULL ELSE locked_until END
-            WHERE id = ? RETURNING token_version
-            """,
-            Long.class,
-            passwordHash,
-            id));
+    users.changePassword(id, passwordHash);
+    return tokenVersion(id).orElseThrow();
   }
 
   /**
@@ -260,12 +216,8 @@ public final class StaffAccountRepository {
    * @return the new token version
    */
   public long bumpTokenVersion(UUID id) {
-    return Objects.requireNonNull(
-        jdbc.queryForObject(
-            "UPDATE users SET token_version = token_version + 1 WHERE id = ?"
-                + " RETURNING token_version",
-            Long.class,
-            id));
+    users.bumpTokenVersion(id);
+    return tokenVersion(id).orElseThrow();
   }
 
   /**
@@ -275,10 +227,7 @@ public final class StaffAccountRepository {
    * @return the version, or empty if the account does not exist in this institution
    */
   public Optional<Long> tokenVersion(UUID id) {
-    return jdbc
-        .query("SELECT token_version FROM users WHERE id = ?", (row, i) -> row.getLong(1), id)
-        .stream()
-        .findFirst();
+    return users.findById(id).map(StaffUserEntity::getTokenVersion);
   }
 
   /**
@@ -287,7 +236,7 @@ public final class StaffAccountRepository {
    * @param id account ID
    */
   public void markEmailVerified(UUID id) {
-    jdbc.update("UPDATE users SET email_verified = true WHERE id = ?", id);
+    users.markEmailVerified(id);
   }
 
   /**
@@ -298,15 +247,7 @@ public final class StaffAccountRepository {
    * @param avatarUrl avatar URL, or null
    */
   public void linkGoogle(UUID id, String googleSubject, String avatarUrl) {
-    jdbc.update(
-        """
-        UPDATE users SET oauth_provider = 'GOOGLE', oauth_id = ?,
-          avatar_url = COALESCE(?, avatar_url), email_verified = true
-        WHERE id = ?
-        """,
-        googleSubject,
-        avatarUrl,
-        id);
+    users.linkGoogle(id, googleSubject, avatarUrl);
   }
 
   /**
@@ -316,40 +257,35 @@ public final class StaffAccountRepository {
    * @return the subject, or empty
    */
   public Optional<String> googleSubject(UUID id) {
-    return jdbc
-        .query("SELECT oauth_id FROM users WHERE id = ?", (row, i) -> row.getString(1), id)
-        .stream()
-        .filter(Objects::nonNull)
-        .findFirst();
+    return users.findById(id).map(StaffUserEntity::getOauthId);
   }
 
   /**
-   * Applies an administrator's edit. The version trigger (V12) advances {@code version} when an
-   * editable field changes; a role or status change also increments the token version.
+   * Applies an administrator's edit through the entity, so the JPA {@code @Version} advances when
+   * (and only when) a field changes. A role or status change also increments the token version.
+   * Flushes at once, so the returned account and the caller's next statements see the new version.
    *
    * @param id account ID
    * @param edit the new values
    */
   public void applyAdminEdit(UUID id, AdminEdit edit) {
-    jdbc.update(
-        """
-        UPDATE users SET first_name = ?, last_name = ?, phone = ?, department = ?, role = ?,
-          status = ?, preferred_locale = ?, locked_until = ?,
-          failed_login_count = CASE WHEN ? THEN 0 ELSE failed_login_count END,
-          token_version = token_version + CASE WHEN ? THEN 1 ELSE 0 END
-        WHERE id = ?
-        """,
+    StaffUserEntity entity = users.findForUpdate(id).orElseThrow();
+    entity.edit(
         edit.firstName(),
         edit.lastName(),
         edit.phone(),
-        edit.department().name(),
-        edit.role().name(),
-        edit.status().name(),
-        edit.preferredLocale().name(),
-        edit.lockedUntil() == null ? null : Timestamp.from(edit.lockedUntil()),
-        edit.status() == AccountStatus.ACTIVE,
-        edit.endsSessions(),
-        id);
+        edit.department(),
+        edit.role(),
+        edit.status(),
+        edit.preferredLocale(),
+        edit.lockedUntil());
+    if (edit.status() == AccountStatus.ACTIVE) {
+      entity.clearFailures();
+    }
+    if (edit.endsSessions()) {
+      entity.bumpTokenVersion();
+    }
+    entities.flush();
   }
 
   /**
@@ -378,23 +314,18 @@ public final class StaffAccountRepository {
 
   /**
    * Number of ACTIVE administrators other than one account (the last-active-admin rule). Locks
-   * every ACTIVE administrator row of the institution first, so two administrators demoting each
-   * other at the same moment are serialised and cannot both succeed.
+   * every ACTIVE administrator row of the institution first, in ID order, so two administrators
+   * demoting each other at the same moment are serialised and cannot both succeed.
    *
    * @param excluding account to leave out
    * @return the count
    */
   public long otherActiveAdmins(UUID excluding) {
-    List<UUID> admins =
-        jdbc.queryForList(
-            "SELECT id FROM users WHERE role = 'ADMIN' AND status = 'ACTIVE'"
-                + " ORDER BY id FOR UPDATE",
-            UUID.class);
-    return admins.stream().filter(id -> !id.equals(excluding)).count();
+    return users.lockActiveAdmins().stream().filter(u -> !u.getId().equals(excluding)).count();
   }
 
   /**
-   * A page of accounts, newest first, with keyset pagination.
+   * A page of accounts, newest first, with keyset pagination: one query.
    *
    * @param status filter, or null
    * @param role filter, or null
@@ -403,24 +334,32 @@ public final class StaffAccountRepository {
    * @return up to {@code limit + 1} accounts, so the caller knows whether another page exists
    */
   public List<StaffAccount> page(AccountStatus status, StaffRole role, Position after, int limit) {
-    StringBuilder sql = new StringBuilder("SELECT " + COLUMNS + " FROM users WHERE true");
-    List<Object> args = new ArrayList<>();
+    StringBuilder jpql = new StringBuilder("select u from StaffUserEntity u where 1 = 1");
     if (status != null) {
-      sql.append(" AND status = ?");
-      args.add(status.name());
+      jpql.append(" and u.status = :status");
     }
     if (role != null) {
-      sql.append(" AND role = ?");
-      args.add(role.name());
+      jpql.append(" and u.role = :role");
     }
     if (after != null) {
-      sql.append(" AND (created_at, id) < (?, ?)");
-      args.add(Timestamp.from(after.createdAt()));
-      args.add(after.id());
+      jpql.append(" and (u.createdAt < :afterAt or (u.createdAt = :afterAt and u.id < :afterId))");
     }
-    sql.append(" ORDER BY created_at DESC, id DESC LIMIT ?");
-    args.add(limit + 1);
-    return jdbc.query(sql.toString(), MAPPER, args.toArray());
+    jpql.append(" order by u.createdAt desc, u.id desc");
+    TypedQuery<StaffUserEntity> query =
+        entities.createQuery(jpql.toString(), StaffUserEntity.class);
+    if (status != null) {
+      query.setParameter("status", status);
+    }
+    if (role != null) {
+      query.setParameter("role", role);
+    }
+    if (after != null) {
+      query.setParameter("afterAt", after.createdAt());
+      query.setParameter("afterId", after.id());
+    }
+    return query.setMaxResults(limit + 1).getResultList().stream()
+        .map(StaffUserEntity::toDomain)
+        .toList();
   }
 
   /**
@@ -437,11 +376,9 @@ public final class StaffAccountRepository {
    * @return the accounts
    */
   public List<StaffAccount> pendingApproval() {
-    return jdbc.query(
-        "SELECT "
-            + COLUMNS
-            + " FROM users WHERE status = 'PENDING_APPROVAL' ORDER BY created_at, id",
-        MAPPER);
+    return users.findByStatusOrderByCreatedAtAscIdAsc(AccountStatus.PENDING_APPROVAL).stream()
+        .map(StaffUserEntity::toDomain)
+        .toList();
   }
 
   /**
@@ -451,35 +388,4 @@ public final class StaffAccountRepository {
    * @param institutionId institution
    */
   public record AccountRef(UUID userId, UUID institutionId) {}
-
-  private static StaffAccount map(ResultSet row, int index) throws SQLException {
-    String requested = row.getString("requested_role");
-    return new StaffAccount(
-        row.getObject("id", UUID.class),
-        row.getObject("institution_id", UUID.class),
-        row.getString("first_name"),
-        row.getString("last_name"),
-        row.getString("email"),
-        row.getString("phone"),
-        StaffRole.valueOf(row.getString("role")),
-        requested == null ? null : StaffRole.valueOf(requested),
-        AccountStatus.valueOf(row.getString("status")),
-        instant(row, "locked_until"),
-        row.getInt("failed_login_count"),
-        row.getLong("token_version"),
-        row.getBoolean("email_verified"),
-        StaffLocale.valueOf(row.getString("preferred_locale")),
-        row.getString("avatar_url"),
-        row.getString("oauth_provider") != null,
-        row.getString("employee_id"),
-        Department.valueOf(row.getString("department")),
-        instant(row, "last_login_at"),
-        instant(row, "created_at"),
-        row.getLong("version"));
-  }
-
-  private static Instant instant(ResultSet row, String column) throws SQLException {
-    Timestamp value = row.getTimestamp(column);
-    return value == null ? null : value.toInstant();
-  }
 }
