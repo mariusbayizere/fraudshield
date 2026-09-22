@@ -181,6 +181,7 @@ groups:
             {{ $value | humanizePercentage }} of {{ $labels.channel }} MEDIUM holds in the last
             15 minutes were released by the review deadline without an analyst decision.
           runbook_url: https://github.com/mariusbayizere/fraudshield/blob/main/docs/runbooks/FraudShieldTimeoutReleaseRateHigh.md
+          level_basis: 'ASSUMED: the 0.10 level is a placeholder, not derived; docs/ml/capacity_model.md (alert budget vs analysts on shift) replaces it.'
 
       - alert: FraudShieldFalsePositiveRateHigh
         # SRS 8.2: false positive rate > 5%. Computed from analyst labels, which lag, so this is

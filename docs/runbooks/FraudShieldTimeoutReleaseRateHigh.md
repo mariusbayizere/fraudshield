@@ -6,6 +6,12 @@ than by an analyst decision has been above the configured level
 `infrastructure/prometheus/rules/thresholds.yml`) for 10 minutes, with at least 20 holds per
 15 minutes (D-10).
 
+**The level is ASSUMED.** The default 0.10 is a placeholder chosen without a capacity model.
+It is replaced by the level derived in `docs/ml/capacity_model.md` (alert budget against analysts
+on shift) once that document exists. Until then, treat this alert as a signal to check analyst
+capacity, not as a calibrated threshold, and report how often it fires so the capacity model can
+use it.
+
 **Impact.** Under the `RELEASE_WITH_TIMEOUT_LABEL` policy each timeout **approves a transaction
 the model rated risky without anyone looking at it**. This is the silent failure D-10 exists to
 catch.
