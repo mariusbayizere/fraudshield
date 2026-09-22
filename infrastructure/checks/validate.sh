@@ -61,7 +61,9 @@ expect_route pagerduty-sre team=sre severity=page alertname=FraudShieldErrorLogg
 expect_route pagerduty-sre alertname=AnythingUnlabelled
 echo "routing: 5 cases as expected"
 
-step "Metric catalogue (Part E.10)"
+step "Metric catalogue (Part E.10) and alert conventions (runbooks)"
 uv run --frozen python infrastructure/checks/metric_catalogue.py
+uv run --frozen python infrastructure/checks/rule_conventions.py
+uv run --frozen pytest -q infrastructure/checks
 
 printf '\ninfrastructure: all checks passed\n'
