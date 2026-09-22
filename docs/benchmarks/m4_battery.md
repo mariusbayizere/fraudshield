@@ -63,18 +63,43 @@ because the fraud patterns are not country-specific. PB-46 anticipated the mecha
 is not country-specific, so a velocity threshold transfers trivially" — and named it as a risk;
 the measurement says the risk was real.
 
-**What still carries weight** is the novel sub-variant, which is a *temporal* hold-out rather than
-a geographic one: a fraud shape that appears only in the test period cannot be learned from the
-training period however transferable the rest is. That experiment is not in this battery and is
-the next thing M4 owes.
+### 2b. And the novel sub-variant does not carry it either
+
+Measured the same evening, after this section first claimed it would. Every variant scored against
+**the same** legitimate rows at **one** threshold (the 1% false-positive budget over all
+legitimate rows):
+
+| Variant | AUC | Recall | Caught | Fraud |
+|---|---:|---:|---:|---:|
+| `novel_esim_delayed_drain` (never in training) | 0.999 ±0.005 | **1.000** | 38 | 38 |
+| `base` | 0.994 ±0.005 | 0.951 | 481 | 506 |
+| `adapted_below_threshold` | 0.988 ±0.076 | 0.750 | 3 | 4 |
+
+The unseen shape is caught **more** often than the familiar one. Its novelty is in the *lead
+time* — a drain delayed by days rather than minutes after the enabling event — and not in the
+transaction pattern, which is still a burst. A model that detects bursts catches it without ever
+having seen it.
+
+**So both of PB-46's generalisation experiments are null, for one reason.** The benchmark encodes
+fraud as bursts; every country, every variant and every feature group is a view of that single
+structure. That sentence explains the LOCO result, this one, and the redundancy above. This
+benchmark supports no generalisation claim, and what it does support is detection *given*
+burst-structured fraud, plus the cost of computing and explaining that detection (PB-61).
 
 ## Calibration
 
 Platt scaling fitted on D-07's calibration period — 20,000 rows that are neither fitted on nor
 scored. AUC is unchanged by construction, since a monotone map cannot reorder.
 
-Brier 0.00187 → 0.00186; expected calibration error **0.0005**. The model was already calibrated,
-which is the honest reading: an untuned XGBoost on a 0.9% base rate with 30,000 training rows is
+Brier 0.00187 → 0.00186; overall expected calibration error **0.0005**.
+
+**That number is nearly meaningless on its own and is reported with a second one.** It is
+row-weighted, and at a 0.9% base rate a good model puts 99% of rows in the lowest bin — so the
+average is dominated by predictions nobody will ever act on. Restricted to the **decision region**
+(score ≥ 0.60), where an alert is actually raised: **465 rows holding 436 fraud, ECE 0.0145,
+Brier 0.04855**. Thirty times the overall figure, and it is the one an alert budget depends on.
+
+The model is still well calibrated, which is the honest reading: an untuned XGBoost on a 0.9% base rate with 30,000 training rows is
 not obviously miscalibrated, and the reliability table bears that out — the top bin predicts 0.980
 against an observed 0.978 over 357 rows.
 
@@ -111,4 +136,6 @@ out of positives long before it runs out of rows.
 - **It trains on 30,000 rows spanning 128 days**, not the whole train period. Comparable with the
   gates in its split, not in its training volume.
 - **Thirteen gate metrics are not all covered.** Recall, AUC and calibration are; precision at a
-  fixed alert budget, latency and the operational gates are not.
+  fixed alert budget and the operational gates are not. Latency has its own document,
+  `docs/benchmarks/m4_frontier.md`, and its figures are explicitly not gate numbers.
+- **One seed.** Nothing here speaks to C-6's seed-variance claim.

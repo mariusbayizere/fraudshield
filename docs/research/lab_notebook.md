@@ -2079,3 +2079,59 @@ is now the only one of PB-46's two that is still standing.
 
 The honest summary for the paper: on this benchmark, geographic generalisation is easy and says
 nothing; temporal generalisation to an unseen variant is the test that can fail.
+
+### 2026-09-22 · Two generalisation experiments, both chosen before anyone asked if they could fail
+
+PB-46, four days ago, moved the evidential weight off the headline AUC — correctly, since one
+velocity feature reaches 0.89 — and onto two experiments: **leave-one-country-out** and the
+**novel sub-variant**. Both are now measured. Both are null.
+
+| | In-sample | Held out |
+|---|---:|---:|
+| KE / RW / TZ / UG, country removed from training | 0.996 / 0.994 / 0.981 / 0.975 | 0.996 / 0.993 / 0.979 / 0.976 |
+| Novel variant, never in the training period | base recall 95.1% | **novel recall 100.0%** |
+
+The unseen fraud shape is caught *more* often than the familiar one.
+
+#### One cause, and it was knowable in advance
+
+The benchmark encodes fraud as **bursts**. The novel variant's novelty is in the *lead time* — a
+drain delayed by days rather than minutes — and not in the transaction pattern, which is still a
+burst. Every country's fraud is the same burst, drawn from one scenario library with no parameter
+keyed by country. Four disjoint feature groups each reach ≥0.845 alone because each is a different
+view of that one structure.
+
+So a country hold-out withholds no mechanism, a variant hold-out withholds no pattern, and an
+ablation removes no unique signal. Three experiments, one reason, and the reason is a property of
+the generator that was fully visible in its source the whole time.
+
+#### The habit this breaks
+
+**I chose both experiments as headline evidence before checking whether the benchmark could make
+either one informative.** That is the error, and it is not the same as being wrong about an
+outcome. An experiment is a question put to a dataset; before running it you can ask whether the
+dataset is capable of answering — and here the answer was in `fraud.yaml`, in the absence of any
+country key, and in the novel variant's own definition, which changes a delay and nothing else.
+
+PB-46 even *named* the mechanism when it set the plan: "burstiness is not country-specific, so a
+velocity threshold transfers trivially". It was written as a risk to watch rather than as a
+prediction to test, which is the third time this week a hedge turned out to be a measurable claim
+nobody had measured — the delay channel this morning, C-11's proportion, and now this.
+
+The check to run before promoting an experiment to headline evidence: **what property of the data
+would have to hold for this to be able to fail, and is it there?** For LOCO: fraud mechanisms
+differing by country. For the variant hold-out: a *pattern* differing, not a schedule. Neither was
+present, and neither would have taken a run to establish.
+
+#### What not to do about it
+
+Not to make the countries differ. Not to design a harder variant. Engineering the data until the
+experiment becomes informative is tuning the benchmark to produce a result, and it is the failure
+this project spent two milestones learning to avoid — the owner's direction, and the right one.
+The honest output is a null result reported as a null result, plus a statement that country-level
+generalisation belongs to real-data validation and not to this benchmark.
+
+**And what is left is better than what was lost.** The latency-explainability frontier does not
+depend on the data being hard: explanation cost grows 35× from the smallest tree configuration to
+the largest while accuracy moves inside its own interval. That is a claim about the model and the
+SHAP algorithm, and an easy benchmark cannot weaken it.

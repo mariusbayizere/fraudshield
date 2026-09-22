@@ -56,9 +56,17 @@ The same redundancy defeats feature ablations: four disjoint feature groups each
 better **alone**, so removing any one group costs ≤0.031 and an ablation table on this benchmark
 cannot be read as a statement about which features matter in production (PB-60).
 
-**What still carries weight is the novel fraud sub-variant**, which appears only in the test
-period. A temporal hold-out is the one test here that can still fail, because no amount of
-transfer helps a model learn a pattern absent from its training window.
+**And the novel sub-variant does not carry it either.** Promoted to load-bearing on 2026-09-22 and
+measured the same evening: the unseen shape is caught at **100%** (38 of 38) against 95.1% for the
+shape the model trained on. Its novelty is in the *lead time*, not in the transaction pattern —
+the drain is still a burst — so a model that detects bursts catches it without ever having seen
+it (PB-61).
+
+**This benchmark therefore supports no generalisation claim at all**, geographic or temporal. It
+supports claims about detection *given* burst-structured fraud, and about the cost of computing
+and explaining that detection. The generator has deliberately not been changed to make either
+experiment informative: engineering a difference so that a test can fail is tuning the benchmark
+to produce a result.
 
 ### The benchmark is velocity-separable, and this governs every metric below
 

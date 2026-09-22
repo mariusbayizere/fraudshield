@@ -50,6 +50,23 @@ every gate passes. What was wrong was a provenance sentence attached to a supers
 | C-13 | "Out-of-fold encoding removed the single-feature AUC's dependence on run size" (M2 dataset response) | REFUTED | Withdrawn. Ten seeds at 300,000 rows give a seed-to-seed sd of 0.0055, while the quoted three-point series spanned 0.065 — twelve times that, so the variation was not seed noise. The mechanism fix is sound and the range narrowed from 0.147 to 0.065, but a residual size dependence remains and is **unexplained**: account-grouped folds remove the same amount at 300,000 and 1,000,000 rows (0.0043 vs 0.0046), so sibling leakage does not account for it | M2 / M3 |
 | C-11 | "The event delay is designed scenario signal a model is meant to learn" (event gate rationale, `realism/checks.py`) | **MEASURED** | The proportion is no longer assumed. The lead was `[5, 60]` minutes drawn uniformly; on 2026-09-22 it became a clipped lognormal with a real tail (PB-56, owner decision), and the channel fell from **0.758 to 0.730** on the regenerated draw `6abde44e`. So about **11% of the excess over 0.5 was the assumed schedule and the rest is the scenario** — the artefact was the small part. The fall was predicted before the draw existed (`0138099`, band 0.68-0.74) and the prediction held. What remains assumed is the lead distribution's own shape, not its contribution: `takeover_lead_median_minutes` and `takeover_lead_log_sigma` are ASSUMED and no publication read gives takeover-to-drain delays for these markets | M2 / M4 |
 
+## Claims this benchmark cannot support (added 2026-09-22)
+
+Recorded here rather than in a limitations paragraph, because the register is what this project
+checks before quoting anything.
+
+- **No generalisation claim, geographic or temporal.** Leave-one-country-out changes a country's
+  AUC by at most 0.002 (PB-59) and the novel sub-variant is caught at 100% against 95.1% for the
+  familiar one (PB-61). Both are null for one reason: the benchmark encodes fraud as bursts, and
+  every country and every variant is a view of that structure. Country-level generalisation
+  belongs to a real-data validation plan.
+- **No claim about which features matter.** Four disjoint feature groups each reach ≥ 0.845 alone,
+  so an ablation measures redundancy rather than importance (PB-60).
+- **No latency gate figure from a development machine.** Two of five configurations in the D-16
+  frontier show a *negative* explanation cost at p99, which is impossible and is what establishes
+  that the p99 here is scheduler jitter. The p50 shape is reportable; the 40 ms constraint is not
+  applicable (ADR 0010).
+
 ## Replaced wording
 
 C-2's original wording is not used anywhere in text this project authors; it survives only in

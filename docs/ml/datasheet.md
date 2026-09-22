@@ -320,6 +320,26 @@ the study of a novel fraud variant that appears only in the test period.
    this datasheet comes from a 1,006,249-row run. ML-DATA-01 is recorded as
    `VERIFIED_AT_REDUCED_SCALE`, not as met.
 
+**What can this dataset NOT be used to evaluate? Generalisation.** Measured 2026-09-22
+(`docs/benchmarks/m4_battery.md`):
+
+- **Country-level generalisation cannot be evaluated here.** No fraud parameter is keyed by a
+  country code — country enters only as a lookup for *which* mule, merchant, agent, currency or
+  UTC offset an incident uses — so fraud mechanisms are **country-invariant by construction** and
+  `test_no_fraud_parameter_is_keyed_by_country` asserts it. Removing a country from training
+  entirely changes its AUC by at most 0.002. This belongs to a real-data validation plan, not to
+  this benchmark (PB-59).
+- **Nor does the novel sub-variant provide an out-of-distribution test.** It differs in *timing* —
+  a drain delayed by days rather than minutes — and not in transaction pattern, so a model that
+  detects bursts catches it without having seen it: 100% recall against 95.1% for the variant the
+  model trained on (PB-61).
+- **One cause for both, and for the feature redundancy:** the generator encodes fraud as bursts,
+  and every country, every variant and every feature group is a view of that one structure. Four
+  disjoint feature groups each reach AUC ≥ 0.845 **alone** (PB-60).
+
+The generator has deliberately **not** been changed to make any of these experiments informative.
+Engineering a difference so that a test can fail is tuning the benchmark to produce a result.
+
 **What do the M3 features go silent on?** One documented silence, with the measurement that says
 what it costs on this dataset.
 
