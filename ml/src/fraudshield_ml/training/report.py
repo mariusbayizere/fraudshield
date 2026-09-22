@@ -254,6 +254,12 @@ def seed_variance_table(
     ensemble = summaries["ensemble"]
     for base in baselines:
         reduction = ensemble.reduction_from(summaries[base])
+        if math.isnan(reduction):
+            lines.append(
+                f"  ensemble stdev vs {base} alone: UNDEFINED ({base}'s stdev is zero across "
+                "these seeds, so there is no variance to reduce)"
+            )
+            continue
         verdict = "REDUCED" if reduction > 0 else "DID NOT REDUCE"
         lines.append(
             f"  ensemble stdev vs {base} alone: {reduction:+.1f}% ({verdict} seed variance"

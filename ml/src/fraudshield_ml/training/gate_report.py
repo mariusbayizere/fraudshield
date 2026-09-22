@@ -28,8 +28,8 @@ def summary(report: Report) -> list[str]:
     counts = "  ".join(f"{k} {n:,}/{f:,}" for k, (n, f) in report.counts.items())
     lines = [
         "M4 GATE — D-05's calibrated ensemble on D-07's test period, thresholds from D-01/D-02.",
-        f"  floor: strongest single feature {report.floor[0]} at {_f(report.floor[1])} on the "
-        "same rows (PB-46)",
+        f"  floor: strongest single feature {report.floors['ML-GATE-01'].single_feature} at "
+        f"{_f(report.floors['ML-GATE-01'].single)} on the same rows; margins below (PB-46)",
         f"  rows/fraud  {counts}",
         f"  XGBoost {report.xgboost_rounds} rounds, LightGBM {report.lightgbm_rounds}, "
         f"scale_pos_weight {report.scale_pos_weight:.1f}, seed {report.seed}, "
@@ -68,6 +68,22 @@ def summary(report: Report) -> list[str]:
         f"  {len(passed)} of {len(report.gates)} gate metrics pass"
         + (f"; FAILED: {', '.join(g.spec.id for g in failed)}" if failed else ""),
     ]
+    lines += [
+        "",
+        "SINGLE-FEATURE BASELINES (PB-46) — each ranking metric beside the best single feature",
+        "and the best trivial rule on its own rows, as a margin. ML-GATE-03 to 06, 10 and 11 are",
+        "read at a calibrated probability, which a lone feature does not have, so none is quoted.",
+    ]
+    for gate_result in report.gates:
+        floor = report.floors.get(gate_result.spec.id)
+        if floor is None:
+            continue
+        lines.append(
+            f"  {gate_result.spec.id:<11s} model {_f(gate_result.value)}  single "
+            f"{_f(floor.single)} ({floor.single_feature}) margin "
+            f"{gate_result.value - floor.single:+.3f}  trivial {_f(floor.trivial)} "
+            f"({floor.trivial_feature}) margin {gate_result.value - floor.trivial:+.3f}"
+        )
     lines += [
         "",
         "BASELINES — AUC with a Hanley-McNeil 95% interval; DeLong p against the ensemble.",
@@ -142,7 +158,15 @@ def as_json(report: Report) -> dict[str, object]:
             "seed": report.seed,
             "bootstrap_resamples": report.resamples,
         },
-        "floor": {"feature": report.floor[0], "separation": clean(report.floor[1])},
+        "single_feature_baselines": {
+            k: {
+                "single_feature": f.single_feature,
+                "single": clean(f.single),
+                "trivial_feature": f.trivial_feature,
+                "trivial": clean(f.trivial),
+            }
+            for k, f in report.floors.items()
+        },
         "gate": [
             {
                 "id": g.spec.id,

@@ -83,6 +83,21 @@ class Ablation:
 
 
 @dataclass(frozen=True)
+class Floor:
+    """PB-46's baselines for one metric, on that metric's own rows: a feature and a rule."""
+
+    single_feature: str
+    single: float
+    trivial_feature: str
+    trivial: float
+
+
+#: The metrics a lone feature can be compared on: rankings, and recall at a fixed FPR. The rest
+#: are read at a calibrated probability, which a single feature does not have.
+FLOORED = ("ML-GATE-01", "ML-GATE-02", "ML-GATE-07", "ML-GATE-08", "ML-GATE-09")
+
+
+@dataclass(frozen=True)
 class GateResult:
     spec: gate.Spec
     value: float
@@ -103,7 +118,7 @@ class Report:
     resamples: int
     gates: list[GateResult]
     companions: dict[str, tuple[float, tuple[float, float]]]
-    floor: tuple[str, float]
+    floors: dict[str, Floor]
     baselines: list[Scored]
     ablations: list[Ablation] = field(default_factory=list)
     seeds: dict[str, list[float]] = field(default_factory=dict)
@@ -182,17 +197,47 @@ def _covered(ens: model.Ensemble, data: Loaded, scores: Sequence[float]) -> list
     return covered
 
 
-def _floor(data: Loaded, labels: Sequence[bool]) -> tuple[str, float]:
-    """The strongest single feature defined on every test row, measured on the same rows."""
+def _best(
+    data: Loaded, rows: Sequence[int], metric: Callable[[Any, Any], float], names: Sequence[str]
+) -> tuple[str, float]:
+    """The best of `names` by `metric` on `rows`, each oriented by its AUC's direction.
+
+    Only features defined on every one of `rows`: a feature scored on the subset where it exists
+    is measured on a different population from the model (evaluate's `Baseline.partial`).
+    """
+    import numpy as np  # noqa: PLC0415 - heavy, and only this path needs it
+
+    labels = np.asarray([data.labels[i] for i in rows], dtype=bool)
     best = ("", math.nan)
-    for j, name in enumerate(data.names):
-        column = [data.matrix[i][j] for i in data.test]
-        if any(math.isnan(v) for v in column):
+    for name in names:
+        j = data.names.index(name)
+        column = np.asarray([data.matrix[i][j] for i in rows], dtype=float)
+        if np.isnan(column).any():
             continue
-        value = smoke.floor_from(column, labels)
-        if math.isnan(best[1]) or value > best[1]:
+        if gate.auc(column, labels) < 0.5:
+            column = -column
+        value = metric(column, labels)
+        if not math.isnan(value) and (math.isnan(best[1]) or value > best[1]):
             best = (name, value)
     return best
+
+
+def _floors(data: Loaded) -> dict[str, Floor]:
+    """PB-46: each ranking metric's best single feature and best trivial rule, same rows."""
+    from fraudshield_ml.training.evaluation import TRIVIAL_FEATURES  # noqa: PLC0415
+
+    populations = {"ML-GATE-01": list(data.test), "ML-GATE-02": list(data.test)}
+    for gate_id, channel in gate.CHANNELS.items():
+        populations[gate_id] = [i for i in data.test if data.channels[i] == channel]
+    floors = {}
+    for gate_id, rows in populations.items():
+        if not rows:
+            continue
+        metric = gate.recall_at_fpr if gate_id == "ML-GATE-02" else gate.auc
+        single = _best(data, rows, metric, data.names)
+        trivial = _best(data, rows, metric, [n for n in TRIVIAL_FEATURES if n in data.names])
+        floors[gate_id] = Floor(single[0], single[1], trivial[0], trivial[1])
+    return floors
 
 
 def _ablations(
@@ -317,7 +362,7 @@ def run(data: Loaded, *, seed: int, seeds: Sequence[int], resamples: int, ablate
         resamples=resamples,
         gates=[GateResult(s, point[s.id], intervals[s.id]) for s in gate.SPECS],
         companions={k: (v, intervals[k]) for k, v in point.items() if not k.startswith("ML-GATE-")},
-        floor=_floor(data, labels),
+        floors=_floors(data),
         baselines=[_scored(n, s, scored.ensemble, labels) for n, s in candidates],
         reliability=_reliability(rows),
         roc=_roc(rows),

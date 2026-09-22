@@ -209,8 +209,12 @@ def test_seed_variance_reports_all_three_models_at_the_seeds_asked(
     for name in ("xgboost", "lightgbm", "ensemble"):
         stdev = next(line for line in out.splitlines() if line.strip().startswith(name)).split()[-1]
         assert not math.isnan(float(stdev))
-    assert out.count("ensemble stdev vs") == 2
-    assert "REDUCED" in out, "each baseline comparison must state a verdict"
+    comparisons = [line for line in out.splitlines() if "ensemble stdev vs" in line]
+    assert len(comparisons) == 2
+    for line in comparisons:
+        assert any(v in line for v in ("(REDUCED", "(DID NOT REDUCE", "UNDEFINED")), (
+            f"a baseline comparison without a verdict: {line}"
+        )
 
 
 @pytest.mark.req("ML-GATE-12")
@@ -313,7 +317,13 @@ def test_the_gate_reports_every_metric_and_writes_its_artefacts(
     printed = capsys.readouterr().out
     for spec in gate.SPECS:
         assert spec.id in printed
-    for heading in ("floor: strongest single feature", "BASELINES", "ABLATIONS", "SEEDS"):
+    for heading in (
+        "floor: strongest single feature",
+        "SINGLE-FEATURE BASELINES (PB-46)",
+        "BASELINES",
+        "ABLATIONS",
+        "SEEDS",
+    ):
         assert heading in printed
     for baseline in ("status-quo rule engine", "logistic regression", "random forest"):
         assert baseline in printed
@@ -327,6 +337,9 @@ def test_the_gate_reports_every_metric_and_writes_its_artefacts(
     assert metrics["rows"]["test"]["rows"] == GATE_SEGMENTS["test"]
     assert len(metrics["seeds"]["ML-GATE-01"]) == 2
     assert metrics["onnx_parity"]["rows"] == GATE_SEGMENTS["test"]
+    floors = metrics["single_feature_baselines"]
+    assert set(floors) == {"ML-GATE-01", "ML-GATE-02", "ML-GATE-07", "ML-GATE-08", "ML-GATE-09"}
+    assert all(f["single"] is not None and f["trivial"] is not None for f in floors.values())
     assert metrics["onnx_parity"]["pass"] is True
     assert metrics["environment"]["packages"]["xgboost"], "E.4: the run logs its environment"
     assert "ONNX parity over" in printed
