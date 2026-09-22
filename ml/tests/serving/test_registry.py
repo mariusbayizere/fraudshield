@@ -9,8 +9,11 @@ for the CI stack, where the compose MLflow server runs.
 from __future__ import annotations
 
 import json
+import socket
+import subprocess
 import threading
 import urllib.parse
+import urllib.request
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -341,3 +344,63 @@ def test_fs_model_publishes_and_moves_aliases(
     assert model_cli.main(["alias", "--mlflow", url, SHADOW, "2"]) == 0
     assert fake.models[NAME]["aliases"] == {PRODUCTION: "1", SHADOW: "2"}
     assert "@shadow -> v2" in capsys.readouterr().out
+
+
+@pytest.mark.requires_docker
+@pytest.mark.req("FR-02-10", "D-50")
+def test_publish_and_hot_swap_against_the_mlflow_the_deployment_runs(
+    bundle_dirs: tuple[Path, Path], kit: SimpleNamespace, tmp_path: Path
+) -> None:
+    """The fake above encodes my reading of MLflow's REST API; this checks it against MLflow
+    3.16.0, the image docker-compose.yml pins, with the artifact proxy on. Skipped without Docker,
+    run in CI (ADR 0010)."""
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = int(s.getsockname()[1])
+    command = [
+        "docker",
+        "run",
+        "-d",
+        "--rm",
+        "-p",
+        f"127.0.0.1:{port}:5000",
+        "ghcr.io/mlflow/mlflow:v3.16.0",
+        "mlflow",
+        "server",
+        "--host",
+        "0.0.0.0",  # noqa: S104 - inside the container, published to 127.0.0.1 only
+        "--port",
+        "5000",
+        "--backend-store-uri",
+        "sqlite:////tmp/mlflow.db",
+        "--artifacts-destination",
+        "/tmp/artifacts",  # noqa: S108 - a path inside the throwaway container
+        "--serve-artifacts",
+    ]
+    container = subprocess.run(  # noqa: S603
+        command, capture_output=True, text=True, check=True, timeout=900
+    ).stdout.strip()
+    url = f"http://127.0.0.1:{port}"
+    try:
+        assert wait_until(lambda: _healthy(url), 180), "MLflow did not become healthy"
+        registry = MlflowRegistry(url)
+        assert registry.publish(NAME, bundle_dirs[0], alias=PRODUCTION) == "1"
+        holder = ModelHolder()
+        w = watcher(url, holder, kit, tmp_path)
+        w.poll_once()
+        assert holder.production is not None
+        registry.publish(NAME, bundle_dirs[1], alias=PRODUCTION)
+        w.poll_once()
+        assert holder.production.model_version == Bundle.load(bundle_dirs[1]).model_version
+        run = registry.start_run(registry.experiment("fs-shadow-it"), "it", {"k": "v"})
+        registry.log_metrics(run, {"shadow_scored": 1.0}, 1)
+    finally:
+        subprocess.run(["docker", "stop", container], capture_output=True, check=False)  # noqa: S603, S607
+
+
+def _healthy(url: str) -> bool:
+    try:
+        with urllib.request.urlopen(url + "/health", timeout=2):  # noqa: S310
+            return True
+    except OSError:
+        return False

@@ -10,10 +10,14 @@ from __future__ import annotations
 
 import math
 import random
+import socket
+import subprocess
+import time
 from datetime import UTC, datetime, timedelta
 
 import fakeredis
 import pytest
+import redis
 from prometheus_client import CollectorRegistry
 
 from fraudshield_ml.features.registry import REGISTRY, Dtype
@@ -150,11 +154,14 @@ def _agree(name: str, batch: float | str, served: float | str) -> bool:
     return abs(b - s) <= TOLERANCE + TOLERANCE * abs(b)
 
 
-def replay() -> tuple[list[dict[str, float | str]], list[dict[str, float | str]]]:
+def replay(
+    redis: object | None = None,
+) -> tuple[list[dict[str, float | str]], list[dict[str, float | str]]]:
+    """The prefix replay, against fakeredis by default or any Redis client passed in."""
     rows, outcomes = corpus()
     extra = reference_data()
     store = FeatureStore(
-        fakeredis.FakeRedis(decode_responses=True),
+        redis if redis is not None else fakeredis.FakeRedis(decode_responses=True),
         REFERENCE,
         authoritative=True,
         metrics=StoreMetrics.create(CollectorRegistry()),
@@ -275,3 +282,48 @@ def test_the_replay_detects_a_divergence(
 def test_the_replay_detects_labels_that_never_arrive(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(FeatureStore, "observe_outcome", lambda *_: True)
     assert _disagreements() > 0
+
+
+# ------------------------------------------------------------------ against the real server
+
+
+def _free_port() -> int:
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return int(s.getsockname()[1])
+
+
+@pytest.mark.requires_docker
+@pytest.mark.req("FR-02-09")
+def test_the_replay_agrees_on_the_redis_the_deployment_runs() -> None:
+    """fakeredis stands in everywhere else; this checks ZADD LT and pipelining on Redis 7.2.16,
+    the image docker-compose.yml pins. Skipped without Docker, run in CI (ADR 0010)."""
+    port = _free_port()
+    container = subprocess.run(  # noqa: S603
+        ["docker", "run", "-d", "--rm", "-p", f"127.0.0.1:{port}:6379", "redis:7.2.16"],  # noqa: S607
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=600,
+    ).stdout.strip()
+    try:
+        client = redis.Redis(port=port, decode_responses=True)
+        deadline = time.monotonic() + 60
+        while True:
+            try:
+                client.ping()
+                break
+            except redis.ConnectionError:
+                if time.monotonic() > deadline:
+                    raise
+                time.sleep(0.5)
+        batch_rows, served_rows = replay(client)
+        bad = [
+            (i, n)
+            for i, (b, s) in enumerate(zip(batch_rows, served_rows, strict=True))
+            for n in REGISTRY
+            if not _agree(n, b[n], s[n])
+        ]
+        assert not bad, bad[:8]
+    finally:
+        subprocess.run(["docker", "stop", container], capture_output=True, check=False)  # noqa: S603, S607
