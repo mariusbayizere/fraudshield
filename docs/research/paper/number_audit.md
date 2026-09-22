@@ -2,7 +2,7 @@
 
 Every macro in `numbers.tex` checked against its evidence file at `m4-complete` (`72e7790`), read with `git show`, by `audit_numbers.py`. Values are compared as printed: rounding, sign and interval bounds included. Regenerate with `python3 docs/research/paper/audit_numbers.py`; do not edit by hand.
 
-**232 macros, 232 MATCH, 0 not matching.**
+**305 macros, 305 MATCH, 0 not matching.**
 
 | Macro | Value in paper | Value in evidence | File | Note | Result |
 |---|---|---|---|---|---|
@@ -238,3 +238,76 @@ Every macro in `numbers.tex` checked against its evidence file at `m4-complete` 
 | `\nFrHeldOutRows` | `60{,}000` | `60,000` | `docs/benchmarks/m4_frontier.md` |  | MATCH |
 | `\nFrHeldOutFraud` | `551` | `551` | `docs/benchmarks/m4_frontier.md` |  | MATCH |
 | `\nFloorDrawRows` | `1{,}006{,}249` | `1,006,249` | `docs/benchmarks/single_feature_baseline.md` |  | MATCH |
+| `\nFingerprintA` | `6abde44e5e952f4f5c6b86aac0fb934cd4de023b53ec1f2cfe9dc01cf0a3e420` | `6abde44e5e952f4f5c6b86aac0fb934cd4de023b53ec1f2cfe9dc01cf0a3e420` | `docs/research/claims_register.md` |  | MATCH |
+| `\nFingerprintB` | `d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32` | `d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32` | `dataset/realism_report.md` |  | MATCH |
+| `\nPeriodStart` | `2024-01-01` | `2024-01-01` | `docs/ml/datasheet.md` |  | MATCH |
+| `\nPeriodEnd` | `2025-12-31` | `2025-12-31` | `docs/ml/datasheet.md` |  | MATCH |
+| `\nMonths` | `24` | `24` | `dataset/realism_report.md` |  | MATCH |
+| `\nTestStart` | `2025-10-28 22:02 UTC` | `2025-10-28 22:02 UTC` | `dataset/realism_report.md` |  | MATCH |
+| `\nMixMM` | `40.84\%` | `40.84%` | `dataset/realism_report.md` |  | MATCH |
+| `\nMixTargetMM` | `41.0\%` | `41.0%` | `dataset/realism_report.md` |  | MATCH |
+| `\nMixUSSD` | `18.08\%` | `18.08%` | `dataset/realism_report.md` |  | MATCH |
+| `\nMixTargetUSSD` | `18.0\%` | `18.0%` | `dataset/realism_report.md` |  | MATCH |
+| `\nMixAgent` | `13.96\%` | `13.96%` | `dataset/realism_report.md` |  | MATCH |
+| `\nMixTargetAgent` | `14.0\%` | `14.0%` | `dataset/realism_report.md` |  | MATCH |
+| `\nMixCard` | `12.02\%` | `12.02%` | `dataset/realism_report.md` |  | MATCH |
+| `\nMixTargetCard` | `12.0\%` | `12.0%` | `dataset/realism_report.md` |  | MATCH |
+| `\nMixOnline` | `9.08\%` | `9.08%` | `dataset/realism_report.md` |  | MATCH |
+| `\nMixTargetOnline` | `9.0\%` | `9.0%` | `dataset/realism_report.md` |  | MATCH |
+| `\nMixBank` | `6.01\%` | `6.01%` | `dataset/realism_report.md` |  | MATCH |
+| `\nMixTargetBank` | `6.0\%` | `6.0%` | `dataset/realism_report.md` |  | MATCH |
+| `\nCMixRW` | `42.01\%` | `42.01%` | `dataset/realism_report.md` |  | MATCH |
+| `\nCMixTargetRW` | `42.0\%` | `42.0%` | `dataset/realism_report.md` |  | MATCH |
+| `\nCMixKE` | `27.99\%` | `27.99%` | `dataset/realism_report.md` |  | MATCH |
+| `\nCMixTargetKE` | `28.0\%` | `28.0%` | `dataset/realism_report.md` |  | MATCH |
+| `\nCMixTZ` | `15.00\%` | `15.00%` | `dataset/realism_report.md` |  | MATCH |
+| `\nCMixTargetTZ` | `15.0\%` | `15.0%` | `dataset/realism_report.md` |  | MATCH |
+| `\nCMixUG` | `10.00\%` | `10.00%` | `dataset/realism_report.md` |  | MATCH |
+| `\nCMixTargetUG` | `10.0\%` | `10.0%` | `dataset/realism_report.md` |  | MATCH |
+| `\nCMixCD` | `4.99\%` | `4.99%` | `dataset/realism_report.md` |  | MATCH |
+| `\nCMixTargetCD` | `5.0\%` | `5.0%` | `dataset/realism_report.md` |  | MATCH |
+| `\nScenATO` | `1{,}402` | `1402` | derived | `account_takeover` column of the scenario table, summed over 24 months | MATCH |
+| `\nScenAgent` | `1{,}048` | `1048` | derived | `agent_fraud` column of the scenario table, summed over 24 months | MATCH |
+| `\nScenCNP` | `1{,}237` | `1237` | derived | `card_not_present` column of the scenario table, summed over 24 months | MATCH |
+| `\nScenMerchant` | `700` | `700` | derived | `merchant_fraud` column of the scenario table, summed over 24 months | MATCH |
+| `\nScenMule` | `1{,}105` | `1105` | derived | `mule_account` column of the scenario table, summed over 24 months | MATCH |
+| `\nScenSimSwap` | `1{,}496` | `1496` | derived | `sim_swap` column of the scenario table, summed over 24 months | MATCH |
+| `\nScenSynth` | `796` | `796` | derived | `synthetic_identity` column of the scenario table, summed over 24 months | MATCH |
+| `\nScenVelocity` | `1{,}038` | `1038` | derived | `velocity` column of the scenario table, summed over 24 months | MATCH |
+| `\nScenTotal` | `8{,}822` | `8822` | derived | sum of all eight scenario columns (equals the sum of the monthly Fraud column) | MATCH |
+| `\nRevRows` | `68` | `68` | `docs/ml/datasheet.md` |  | MATCH |
+| `\nTrainDays` | `602.34` | `602.34` | `dataset/realism_report.md` |  | MATCH |
+| `\nValDays` | `57.69` | `57.69` | `dataset/realism_report.md` |  | MATCH |
+| `\nCalDays` | `25.36` | `25.36` | `dataset/realism_report.md` |  | MATCH |
+| `\nProvSourced` | `33` | `33` | `dataset/params_provenance.md` |  | MATCH |
+| `\nProvAssumed` | `76` | `76` | `dataset/params_provenance.md` |  | MATCH |
+| `\nProvCalibrated` | `15` | `15` | `dataset/params_provenance.md` |  | MATCH |
+| `\nProvTotal` | `124` | `124` | `dataset/params_provenance.md` |  | MATCH |
+| `\nProvFraudTotal` | `30` | `30` | `dataset/params_provenance.md` |  | MATCH |
+| `\nProvFraudAssumed` | `26` | `26` | `dataset/params_provenance.md` |  | MATCH |
+| `\nProvFraudCalibrated` | `4` | `4` | `dataset/params_provenance.md` |  | MATCH |
+| `\nChRowsMM` | `41{,}439` | `41439` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nChFraudMM` | `250` | `250` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nChAucMM` | `0.958` | `0.958` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nChRowsUSSD` | `18{,}325` | `18325` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nChFraudUSSD` | `193` | `193` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nChAucUSSD` | `0.956` | `0.956` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nChRowsAgent` | `14{,}075` | `14075` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nChFraudAgent` | `151` | `151` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nChAucAgent` | `0.981` | `0.981` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nChRowsCard` | `12{,}228` | `12228` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nChFraudCard` | `148` | `148` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nChAucCard` | `0.988` | `0.988` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nChRowsOnline` | `9{,}527` | `9527` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nChFraudOnline` | `125` | `125` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nChAucOnline` | `0.981` | `0.981` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nChRowsBank` | `6{,}315` | `6315` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nChFraudBank` | `118` | `118` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nChAucBank` | `0.998` | `0.998` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nCoRowsRW` | `42{,}810` | `42810` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nCoRowsKE` | `28{,}516` | `28516` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nCoRowsTZ` | `15{,}274` | `15274` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nCoRowsUG` | `10{,}244` | `10244` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nCoRowsCD` | `5{,}065` | `5065` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nColumnMaxAUCB` | `0.709` | `0.709` | `dataset/realism_report.md` |  | MATCH |
+| `\nEventDelayAUCB` | `0.726` | `0.726` | `dataset/realism_report.md` |  | MATCH |

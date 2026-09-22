@@ -389,6 +389,145 @@ SOURCES: dict[str, Src | Derived] = {
     "nFrHeldOutRows": Src(FRONT_MD, r"draw `6abde44e`, ([\d,]+) held-out"),
     "nFrHeldOutFraud": Src(FRONT_MD, r"held-out\s+rows with (\d+) fraud"),
     "nFloorDrawRows": Src(FLOOR, r"Commit `2c80ef6`, dataset of ([\d,]+) rows"),
+    # ---- dataset at a glance ----
+    "nFingerprintA": Src(CLAIMS, r"fingerprint is\s+`([0-9a-f]{64})`"),
+    "nFingerprintB": Src(REAL, r"Dataset fingerprint SHA-256 \| `([0-9a-f]{64})`"),
+    "nPeriodStart": Src("docs/ml/datasheet.md", r"The simulated period is (\d{4}-\d\d-\d\d) to"),
+    "nPeriodEnd": Src(
+        "docs/ml/datasheet.md", r"The simulated period is \d{4}-\d\d-\d\d to (\d{4}-\d\d-\d\d)"
+    ),
+    "nMonths": Src(REAL, r"(\d+) of \d+ monthly intervals cover their target"),
+    "nTestStart": Src(REAL, r"The temporal hold-out test set starts ([\d-]+ [\d:]+ UTC)"),
+    "nRevRows": Src(
+        "docs/ml/datasheet.md",
+        r"adding the (\d+) test-period rows of the pre-registered reversal-scam variant",
+    ),
+    "_RevIsMule": Src(
+        "dataset/src/fraudshield_dataset/generator/fraud.py",
+        r"(\"mule_account\"), customer, month, rng, rows=1, variant=REVERSAL_SCAM_VARIANT",
+    ),
+    "nTrainDays": Src(REAL, r"\| train \| [\d,]+ \| [\d.]+% \| [\d.]+% \| ([\d.]+) \|"),
+    "nValDays": Src(REAL, r"\| validation \| [\d,]+ \| [\d.]+% \| [\d.]+% \| ([\d.]+) \|"),
+    "nCalDays": Src(
+        REAL,
+        r"\| calibration \(last part of validation\) \| [\d,]+ \| "
+        r"[\d.]+% \| [\d.]+% \| ([\d.]+) \|",
+    ),
+    "nProvSourced": Src("dataset/params_provenance.md", r"\| \*\*all\*\* \| \*\*(\d+)\*\* \|"),
+    "nProvAssumed": Src(
+        "dataset/params_provenance.md", r"\| \*\*all\*\* \| \*\*\d+\*\* \| \*\*(\d+)\*\* \|"
+    ),
+    "nProvCalibrated": Src(
+        "dataset/params_provenance.md",
+        r"\| \*\*all\*\* \| \*\*\d+\*\* \| \*\*\d+\*\* \| \*\*(\d+)\*\* \|",
+    ),
+    "nProvTotal": Src(
+        "dataset/params_provenance.md", r"\| \*\*all\*\* \| (?:\*\*\d+\*\* \| ){3}\*\*(\d+)\*\* \|"
+    ),
+    "nProvFraudTotal": Src(
+        "dataset/params_provenance.md", r"^\| fraud \| 0 \| \d+ \| \d+ \| (\d+) \|"
+    ),
+    "nProvFraudAssumed": Src("dataset/params_provenance.md", r"^\| fraud \| 0 \| (\d+) \|"),
+    "nProvFraudCalibrated": Src(
+        "dataset/params_provenance.md", r"^\| fraud \| 0 \| \d+ \| (\d+) \|"
+    ),
+    "nMixMM": Src(REAL, r"^\| MOBILE_MONEY \| [\d.]+% \| ([\d.]+%) \|"),
+    "nMixTargetMM": Src(REAL, r"^\| MOBILE_MONEY \| ([\d.]+%) \| [\d.]+% \|"),
+    "nChRowsMM": Src(BAT, r"\n  MOBILE_MONEY\s+[\d.]+ \+/-[\d.]+\s+\S+\s+[\d.]+\s+(\d+)"),
+    "nChFraudMM": Src(BAT, r"\n  MOBILE_MONEY\s+[\d.]+ \+/-[\d.]+\s+\S+\s+[\d.]+\s+\d+\s+(\d+)"),
+    "nChAucMM": Src(BAT, r"\n  MOBILE_MONEY\s+([\d.]+) \+/-"),
+    "nMixUSSD": Src(REAL, r"^\| USSD \| [\d.]+% \| ([\d.]+%) \|"),
+    "nMixTargetUSSD": Src(REAL, r"^\| USSD \| ([\d.]+%) \| [\d.]+% \|"),
+    "nChRowsUSSD": Src(BAT, r"\n  USSD\s+[\d.]+ \+/-[\d.]+\s+\S+\s+[\d.]+\s+(\d+)"),
+    "nChFraudUSSD": Src(BAT, r"\n  USSD\s+[\d.]+ \+/-[\d.]+\s+\S+\s+[\d.]+\s+\d+\s+(\d+)"),
+    "nChAucUSSD": Src(BAT, r"\n  USSD\s+([\d.]+) \+/-"),
+    "nMixAgent": Src(REAL, r"^\| AGENT_BANKING \| [\d.]+% \| ([\d.]+%) \|"),
+    "nMixTargetAgent": Src(REAL, r"^\| AGENT_BANKING \| ([\d.]+%) \| [\d.]+% \|"),
+    "nChRowsAgent": Src(BAT, r"\n  AGENT_BANKING\s+[\d.]+ \+/-[\d.]+\s+\S+\s+[\d.]+\s+(\d+)"),
+    "nChFraudAgent": Src(
+        BAT, r"\n  AGENT_BANKING\s+[\d.]+ \+/-[\d.]+\s+\S+\s+[\d.]+\s+\d+\s+(\d+)"
+    ),
+    "nChAucAgent": Src(BAT, r"\n  AGENT_BANKING\s+([\d.]+) \+/-"),
+    "nMixCard": Src(REAL, r"^\| CARD \| [\d.]+% \| ([\d.]+%) \|"),
+    "nMixTargetCard": Src(REAL, r"^\| CARD \| ([\d.]+%) \| [\d.]+% \|"),
+    "nChRowsCard": Src(BAT, r"\n  CARD\s+[\d.]+ \+/-[\d.]+\s+\S+\s+[\d.]+\s+(\d+)"),
+    "nChFraudCard": Src(BAT, r"\n  CARD\s+[\d.]+ \+/-[\d.]+\s+\S+\s+[\d.]+\s+\d+\s+(\d+)"),
+    "nChAucCard": Src(BAT, r"\n  CARD\s+([\d.]+) \+/-"),
+    "nMixOnline": Src(REAL, r"^\| ONLINE \| [\d.]+% \| ([\d.]+%) \|"),
+    "nMixTargetOnline": Src(REAL, r"^\| ONLINE \| ([\d.]+%) \| [\d.]+% \|"),
+    "nChRowsOnline": Src(BAT, r"\n  ONLINE\s+[\d.]+ \+/-[\d.]+\s+\S+\s+[\d.]+\s+(\d+)"),
+    "nChFraudOnline": Src(BAT, r"\n  ONLINE\s+[\d.]+ \+/-[\d.]+\s+\S+\s+[\d.]+\s+\d+\s+(\d+)"),
+    "nChAucOnline": Src(BAT, r"\n  ONLINE\s+([\d.]+) \+/-"),
+    "nMixBank": Src(REAL, r"^\| BANK_TRANSFER \| [\d.]+% \| ([\d.]+%) \|"),
+    "nMixTargetBank": Src(REAL, r"^\| BANK_TRANSFER \| ([\d.]+%) \| [\d.]+% \|"),
+    "nChRowsBank": Src(BAT, r"\n  BANK_TRANSFER\s+[\d.]+ \+/-[\d.]+\s+\S+\s+[\d.]+\s+(\d+)"),
+    "nChFraudBank": Src(BAT, r"\n  BANK_TRANSFER\s+[\d.]+ \+/-[\d.]+\s+\S+\s+[\d.]+\s+\d+\s+(\d+)"),
+    "nChAucBank": Src(BAT, r"\n  BANK_TRANSFER\s+([\d.]+) \+/-"),
+    "nCMixRW": Src(REAL, r"^\| RW \| [\d.]+% \| ([\d.]+%) \|"),
+    "nCMixTargetRW": Src(REAL, r"^\| RW \| ([\d.]+%) \| [\d.]+% \|"),
+    "nCoRowsRW": Src(BAT, r"\n  RW\s+[\d.]+ \+/-[\d.]+\s+\S+\s+[\d.]+\s+(\d+)"),
+    "nCMixKE": Src(REAL, r"^\| KE \| [\d.]+% \| ([\d.]+%) \|"),
+    "nCMixTargetKE": Src(REAL, r"^\| KE \| ([\d.]+%) \| [\d.]+% \|"),
+    "nCoRowsKE": Src(BAT, r"\n  KE\s+[\d.]+ \+/-[\d.]+\s+\S+\s+[\d.]+\s+(\d+)"),
+    "nCMixTZ": Src(REAL, r"^\| TZ \| [\d.]+% \| ([\d.]+%) \|"),
+    "nCMixTargetTZ": Src(REAL, r"^\| TZ \| ([\d.]+%) \| [\d.]+% \|"),
+    "nCoRowsTZ": Src(BAT, r"\n  TZ\s+[\d.]+ \+/-[\d.]+\s+\S+\s+[\d.]+\s+(\d+)"),
+    "nCMixUG": Src(REAL, r"^\| UG \| [\d.]+% \| ([\d.]+%) \|"),
+    "nCMixTargetUG": Src(REAL, r"^\| UG \| ([\d.]+%) \| [\d.]+% \|"),
+    "nCoRowsUG": Src(BAT, r"\n  UG\s+[\d.]+ \+/-[\d.]+\s+\S+\s+[\d.]+\s+(\d+)"),
+    "nCMixCD": Src(REAL, r"^\| CD \| [\d.]+% \| ([\d.]+%) \|"),
+    "nCMixTargetCD": Src(REAL, r"^\| CD \| ([\d.]+%) \| [\d.]+% \|"),
+    "nCoRowsCD": Src(BAT, r"\n  CD\s+[\d.]+ \+/-[\d.]+\s+\S+\s+[\d.]+\s+(\d+)"),
+    "nScenATO": Derived(
+        ("_ScenTable",),
+        lambda t: str(scenario_totals(t)["account_takeover"]),
+        "`account_takeover` column of the scenario table, summed over 24 months",
+    ),
+    "nScenAgent": Derived(
+        ("_ScenTable",),
+        lambda t: str(scenario_totals(t)["agent_fraud"]),
+        "`agent_fraud` column of the scenario table, summed over 24 months",
+    ),
+    "nScenCNP": Derived(
+        ("_ScenTable",),
+        lambda t: str(scenario_totals(t)["card_not_present"]),
+        "`card_not_present` column of the scenario table, summed over 24 months",
+    ),
+    "nScenMerchant": Derived(
+        ("_ScenTable",),
+        lambda t: str(scenario_totals(t)["merchant_fraud"]),
+        "`merchant_fraud` column of the scenario table, summed over 24 months",
+    ),
+    "nScenMule": Derived(
+        ("_ScenTable",),
+        lambda t: str(scenario_totals(t)["mule_account"]),
+        "`mule_account` column of the scenario table, summed over 24 months",
+    ),
+    "nScenSimSwap": Derived(
+        ("_ScenTable",),
+        lambda t: str(scenario_totals(t)["sim_swap"]),
+        "`sim_swap` column of the scenario table, summed over 24 months",
+    ),
+    "nScenSynth": Derived(
+        ("_ScenTable",),
+        lambda t: str(scenario_totals(t)["synthetic_identity"]),
+        "`synthetic_identity` column of the scenario table, summed over 24 months",
+    ),
+    "nScenVelocity": Derived(
+        ("_ScenTable",),
+        lambda t: str(scenario_totals(t)["velocity"]),
+        "`velocity` column of the scenario table, summed over 24 months",
+    ),
+    "nScenTotal": Derived(
+        ("_ScenTable",),
+        lambda t: str(sum(scenario_totals(t).values())),
+        "sum of all eight scenario columns (equals the sum of the monthly Fraud column)",
+    ),
+    "_ScenTable": Src(REAL, r"(## Fraud scenarios over time.*?)## Parameter provenance"),
+    "nColumnMaxAUCB": Src(
+        REAL, r"single-feature AUC \| pass \| yes \| max ([\d.]+) \(merchant_category_code\)"
+    ),
+    "nEventDelayAUCB": Src(REAL, r"event delay \(reported\) \| pass \| no \| AUC ([\d.]+)"),
     # ---- hardware ----
     "nHwCPU": Src(HARDWARE, r"\| CPU \| (Intel Core i5-6200U @ 2\.30 GHz, 2 cores / 4 threads) \|"),
     "nHwMem": Src(HARDWARE, r"\| Memory \| ([\d.]+ GiB) total"),
@@ -403,6 +542,19 @@ SOURCES: dict[str, Src | Derived] = {
     "nResamples": Src(PROMPT, r"stratified bootstrap \(([\d,]+) resamples\)"),
     "nSeeds": Src(PROMPT, r"mean ± SD over (\d+) seeds", "the paper writes the count as a word"),
 }
+
+
+def scenario_totals(table: str) -> dict[str, int]:
+    """Column totals of the realism report's 'Fraud scenarios over time' table."""
+    header = re.search(r"^\| Month \| Rows \| (.*) \|$", table, re.M)
+    if header is None:
+        raise ValueError("scenario table header not found in the realism report")
+    names = header.group(1).split(" | ")
+    totals = dict.fromkeys(names, 0)
+    for values in re.findall(r"^\| \d{4}-\d\d \| [\d,]+ \| (.*) \|$", table, re.M):
+        for name, value in zip(names, values.split(" | "), strict=True):
+            totals[name] += int(value)
+    return totals
 
 
 def normalise(value: str) -> str:
