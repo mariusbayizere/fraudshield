@@ -15,7 +15,11 @@ describe('the access token (D-27, ADR 0014)', () => {
     expect(local).not.toHaveBeenCalled();
     expect(localStorage.getItem('fs.token')).toBeNull();
     expect(sessionStorage.getItem('fs.token')).toBeNull();
-    expect(JSON.stringify({ ...localStorage, ...sessionStorage })).not.toContain('secret-token');
+    const dump = (store: Storage) =>
+      Object.keys(store)
+        .map((key) => store.getItem(key) ?? '')
+        .join('|');
+    expect(dump(localStorage) + dump(sessionStorage)).not.toContain('secret-token');
     expect(document.cookie).not.toContain('secret-token');
   });
 
