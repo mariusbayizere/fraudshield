@@ -4,10 +4,9 @@ Written by the M11 agent for the owner and the M4 agent. M11 owns `docs/research
 `contributions.md` (M4's, read only). Everything else under `docs/` is read, not edited, from this
 branch; what it needs is proposed here.
 
-**Status: first complete draft, audited, not reviewed.** Update of 2026-09-22 (second pass) at the
-end of this file: every number re-verified at `m4-complete`, no provisional value left, verified
-bibliography, dataset tables. **The revised draft v2 has not been integrated: it is not on this
-machine.**
+**Status: complete draft, audited, not reviewed.** Section 7 (2026-09-22, third pass): the v2
+revision's changes applied by hand, since its archive was never delivered. The paper's own history
+is now in `docs/research/paper/REVIEW.md`; sections 1-6 below are the record up to that point.
 
 Original status line: **first complete draft, not reviewed.** `docs/research/paper/main.tex`, 13 sections,
 compiles to 18 pages with Tectonic 0.17.0 (run outside the repository). Every number is a macro in
@@ -147,3 +146,40 @@ here.
    sources. [M4]
 9. The SADC member-states page cited by `params_provenance.md` (CD and TZ bloc memberships) could
    not be opened on 2026-09-22 and is not cited. [dataset / M2]
+
+## 7. Third pass, 2026-09-22: v2's changes applied by hand
+
+The v2 archive was never delivered; its ten listed changes were applied to this branch, keeping
+every audited value, table and caption. Commits: `2e4e4bd` (references), `36d835b` (title, cover
+page, contents), `22d1ee7` (related work; Sections 3, 7, 8, 11), `bf867d1` (figures), and the
+appendix, documentation and history commits that follow. Checks at the end of the pass:
+`audit_numbers.py` 0 problems at `m4-complete`, `check_numbers.py` 0 direct numbers,
+`make_figures.py --check` clean, Tectonic build with no undefined references and no overfull lines.
+
+**Where this branch departs from v2's instructions, and why:**
+
+1. **PaySim venue.** The instruction gives "EMSS 2016, Larnaca, pp. 249-255". Venue and pages are
+   confirmed; "Larnaca" is not printed in the proceedings front matter read, so the entry omits
+   the place rather than state it unconfirmed.
+2. **Platt (1999) dropped.** No DOI or publisher page confirming the chapter could be opened;
+   Platt scaling is cited through Niculescu-Mizil and Caruana (2005), which describes it.
+3. **Doğan et al. is METADATA-ONLY.** Title, authors, venue, pages and DOI are confirmed from
+   Crossref and the ACM page; the full text returned 403 and has no open copy or abstract. The
+   Section 8 description of the forged-message form rests on the brief, and REVIEW.md lists it as
+   an open point for the author to check against the paper.
+4. **PaySim and geography.** PaySim's log has no channel, device, geographic or corridor field, as
+   the paper says; its agents do occupy a simulated space, so "no geography" is stated as "no
+   geographic field" rather than "no notion of location".
+5. **`star2025mpesa`** was named in an earlier brief but never found or added; it is not cited.
+6. **Lee et al. (SOUPS 2020)** studied five prepaid carriers in the United States; the paper says
+   so rather than generalising to East African operators.
+7. **The corrected reversal-scam figures stand** (9.1%, 6 of 66, E1 run `d40fca2`), not the
+   superseded first run the earlier brief quoted (section 2, item 1).
+8. **Email address.** The cover page gives `bayizeremarius119@gmail.com`, the contact the
+   repository documents; the owner should confirm it is the address wanted on the paper.
+
+**Process note.** During reference checking, the first few Crossref API requests carried the
+owner's email address in the User-Agent header (Crossref's "polite pool" convention). This was
+stopped at once; later requests carried no personal data.
+
+**Page count:** 35 pages (cover, abstract, contents, 14 sections, references, Appendices A-D).
