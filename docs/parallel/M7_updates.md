@@ -213,29 +213,57 @@ application.
 - **The surviving mutation was resolved.** A stale-read path existed. It is now tested, and
   finding it also fixed a defect (`8f6bdba`). See the review addendum.
 
-## Merge state — resume from here (rewritten 2026-09-22 at `91ee255`)
+## Merge state — resume from here (rewritten 2026-09-22 after merging `origin/main`)
 
 **Status:** M7 is approved by the owner, including the hybrid persistence change, the analytic
-staleness bounds and the V70 renumbering. It is **not merged and not tagged**, by instruction. M7
-cannot merge until M6's application exists.
+staleness bounds and the V70 renumbering. It is **not merged and not tagged**, by instruction.
 
-**Branch:** `origin/m7/staff-auth`. The last code-and-docs commit is `91ee255`; only the evidence
-commit that rewrites this section follows it. The branch was cut from `main` at `f8885d6`. Every
-commit is pushed and the working tree is clean.
+**Merge order is M5, then M6, then M7** (owner, 2026-09-22). M7 waits for both:
 
-**Last verified state:** `91ee255`, `-pl common,persistence,audit,auth,admin clean install`, 1,406
-tests with 0 failures, all gates met (`docs/benchmarks/m7_evidence_91ee255.md`). **Build with
-`clean`:** a build tree from before the V12 → V70 rename still holds a stale `V12` in
-`persistence/target/classes`, and the persistence tests then fail with "column version already
-exists".
+| Milestone | State on 2026-09-22 | Blocks M7 because |
+|---|---|---|
+| M5 (`m5/scoring`) | under independent review, not tagged | it merges first |
+| M6 (`m6/decision`) | still building: the no-Java-features blocker, the PII vault, rate limiting, `/api/docs` | M7's admin API is the operator surface over M6's decisions; M7 merges after it |
+| M7 (`m7/staff-auth`) | ready, prepared against `main` | — |
 
-**The Flyway ordering blocker is resolved.** M7's migration is `V70`, in M7's range `V70`–`V79`,
-above M6's `V60`–`V69`, so either merge order passes `fs-migration-guard`. Nothing in M6's
-`V60`–`V63` references M7's objects. Recheck with `git grep` at merge if M6 has added more.
+`origin/main` did **not** contain M6 when this was written (`origin/main` was `72e7790`, the M4
+close-out; `origin/m6/decision` was `be470a4` and was not an ancestor). Check again before merging:
+`git merge-base --is-ancestor origin/m6/decision origin/main`.
+
+**Prepared merge (this branch).** `origin/main` at `72e7790` (M4 close-out) is merged into
+`m7/staff-auth` as `0fe8ca7`, to keep the branch mergeable while it waits. Nothing was pushed to
+`main` and nothing was tagged. In that merge:
+
+- one conflict, `docs/research/lab_notebook.md`, append-only on both sides: both sets of entries
+  are kept, M4's first and M7's after them;
+- `uv.lock` and `docs/traceability/requirements_matrix.md` were regenerated, not hand-merged.
+  `uv lock --check` passes and `fs-traceability render` reproduces the merged matrix exactly
+  (258 rows, 967 tagged tests);
+- `docs/traceability/requirements.yaml` is `main`'s version. M7 does not edit it;
+- `tools/src/fraudshield_tools/licences.py` merged cleanly, keeping both sides' `EXCEPTIONS`;
+- `backend/pom.xml` needs no resolution yet: `main` has only `common` and `persistence`, and M7
+  adds `audit`, `auth` and `admin`. **M6 will add its own modules, so expect a `<modules>`
+  conflict at the real merge; keep both sides.**
+
+**Flyway ordering is safe in either order.** M7's migration is `V70`, in M7's range `V70`–`V79`;
+M6 owns `V60`–`V69`. Whichever merges first, the other's migrations still sort above every merged
+version, so `fs-migration-guard` passes. Nothing in M6's `V60`–`V63` references M7's objects;
+recheck with `git grep` at the real merge if M6 has added more.
+
+**Last verified state:** `0fe8ca7` (the prepared merge), `./mvnw clean verify` over every backend
+module. See the evidence record named below. **Build with `clean`:** a tree from before the
+V12 → V70 rename still holds a stale `V12` in `persistence/target/classes`, and the persistence
+tests then fail with "column version already exists".
+
+**Working in this repository:** `/home/marius/fraudshield` is shared with other sessions, which
+switch branches in it. Use a git worktree with its own `uv sync --all-packages` environment, or the
+governance hooks and the `fs-*` tools will run another branch's code against your files.
 
 **At merge (checklist):**
-1. Merge `origin/main` into `m7/staff-auth`, or rebase it, after M6 has merged. Expect conflicts
-   in:
+1. Confirm M5 and then M6 are on `main`
+   (`git merge-base --is-ancestor origin/m6/decision origin/main`), then merge `origin/main` into
+   `m7/staff-auth` again. The prepared merge `0fe8ca7` already carries the M4 close-out, so only
+   M5's and M6's changes remain. Expect conflicts in:
    - `docs/traceability/requirements_matrix.md`: regenerate it with
      `uv run fs-traceability render`;
    - `uv.lock`, if touched: regenerate it;
