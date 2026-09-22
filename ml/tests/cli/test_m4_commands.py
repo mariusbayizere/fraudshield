@@ -420,3 +420,13 @@ def test_a_metrics_only_gate_run_says_what_it_skipped(
     assert "ONNX parity: not measured" in printed
     assert "ABLATIONS" not in printed
     assert "train 300/" in printed
+
+
+def test_a_learning_curve_run_is_logged_as_one(
+    gate_cache: Path, tmp_path: Path, private_access_log: Path
+) -> None:
+    """The access log says what each look was for; a curve point is not the declared gate."""
+    args = ["gate", str(gate_cache), "--out", str(tmp_path), "--seeds", "1", "--resamples", "5"]
+    assert cli.main([*args, "--metrics-only", "--train-rows", "300"]) == 0
+    last = json.loads(private_access_log.read_text().splitlines()[-1])
+    assert last["purpose"] == "PB-67 learning curve at 300 training rows"
