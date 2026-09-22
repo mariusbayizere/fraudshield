@@ -1,147 +1,82 @@
-# Session state — one non-burst variant was measured, and it fails hard
+# Session state — M4 reviewed and approved; the gate passes 9 of 11 and M4 is not yet closed
 
-Rewritten 2026-09-22 (late). Facts only; where something is unverified, assumed or open it says so.
+Rewritten 2026-09-22 (evening). Facts only; where something is unverified, assumed or open it says
+so.
 
 ## Read this first
 
-**Both of M4's original generalisation experiments (LOCO, the temporal novel-variant) were null,
-for one reason: this benchmark encodes fraud as bursts.** A third, pre-registered experiment was
-then added and measured this session — a variant differing in *mechanism*, not just timing or
-geography — and it is **not** null.
+**One decision is waiting for the owner: whether M4 closes with two gate metrics failing.** The
+declared gate run (`docs/benchmarks/m4_gate_d8083dbc_v3.txt`) passes 9 of 11. **ML-GATE-03 (recall
+at 0.60, 0.736 against 0.88) and ML-GATE-06 (FNR at 0.60, 0.264 against 0.12) fail.** D.3 says
+record, do not tune. The rows stay `IN_PROGRESS`, M4 is not in `milestones.yaml`'s `completed`,
+and `m4-complete` is not tagged (ADR 0031). PB-62 lists the three options.
 
-**`reversal_scam_social_engineering`** (victim-initiated, single transaction, established
-counterparty — a real "sent by mistake, please return" typology, grounded outside the benchmark's
-own construction; pre-registered before generation, ADR 0028) is caught at **6.1%** (4 of 66 fraud
-rows, Wilson 95% interval **[2.4%, 14.6%]**), against **94.2%** [92.4%, 95.6%] for the base
-scenarios at the same 1%-FPR threshold. The intervals do not overlap. This falls **below** the
-pre-registered prediction range (0.15–0.55) — the model's dependence on burst-structure and
-counterparty-novelty was underestimated, not overestimated. Full writeup:
-`docs/research/lab_notebook.md`, entries dated 2026-09-22 ("Pre-registration" and "The result").
+**The M4 milestone review is APPROVED_WITH_MINORS** (`docs/reviews/M4/milestone-review.md`). The
+first pass found 5 BLOCKERs and 5 MAJORs; five more were found while fixing them. All fifteen are
+fixed. The reviewer is the author, and the record says so.
 
-This is now the benchmark's one measured non-burst detection failure. It does not reopen the
-geographic or temporal generalisation claims — those remain null for the reasons already recorded
-— and it does not generalise past this one typology (romance scams, invoice fraud, other
-authorised-push-payment variants are untested).
+## Branches and CI
 
-## The dataset
+- **`main` is at `m3-complete` (`f8885d6`)**, green on every job. It is fast-forwarded to the M4
+  head only after CI is green there.
+- **`m4/generalisation`** is PR #1 against `main`. The default branch is still `m0/bootstrap`, a
+  repository setting only the owner can change (PB-25 stays blocked).
+- `m2-complete` sits on a commit whose python CI job fails; it was tagged before any CI run on it
+  (lab notebook). Not moved.
 
-| | |
+## What M4 now contains
+
+| | Where |
 |---|---|
-| Path | `dataset/output/bench1m` · split `split.json` · packs `packs.json` · cache `features_full.parquet` |
-| Rows | 1,006,317, seed 20260917 (+68 over the previous draw, all `reversal_scam_social_engineering`) |
-| Fingerprint | `d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32` (**v2**) |
-| Generated at | commit `656d24e`, through `fs-evidence` on a clean tree |
-| Realism gates | all pass — `merchant_category_code` 0.709, shortcut 0.503, event delay 0.726, trivial rule 0.606 (`docs/benchmarks/m4_realism_pb61.txt`) |
-| Cache | full test period scored (not a sample): 101,909 test rows (985 fraud), 30,000 train, 20,000 calibration — sized so all 66 reversal-scam rows are captured |
+| D-05's ensemble: XGBoost and LightGBM, early-stopped on validation average precision, imbalance-weighted, one isotonic calibrator on the 0.55/0.45 combination, float32-exact | `ml/src/fraudshield_ml/training/model.py` |
+| D-06's Isolation Forest, raw score and percentile score | `training/anomaly.py` |
+| Per-model exact SHAP, the margin-space combination, top-5, coverage | `training/explain.py`, `docs/ml/explainability.md` |
+| The eleven M4 gate metrics, bootstrap CIs, DeLong, baselines, ablations, seeds, `metrics.json`, LaTeX, SVG | `training/gate*.py`, `fs-features gate` |
+| ONNX export and parity | `training/onnx_export.py` |
+| Test-set access log, back-filled | `docs/benchmarks/test_set_access.jsonl` |
+| E1's time-ordered target encoding | `training/smoke.py` |
 
-## The results
+## The results that matter
 
 | | Evidence |
 |---|---|
-| Model AUC **0.968** ±0.008, **+0.089** over the floor (0.879) | `docs/benchmarks/m4_evaluate_pb61.txt` |
-| **Redundancy: four disjoint groups each ≥ 0.845 alone**, removing any one costs ≤ 0.031 | `docs/benchmarks/m4_battery_pb61.txt`, PB-60 |
-| **LOCO null**: removing a country from training costs ≤ 0.002 | same, PB-59 |
-| **Temporal novel-variant null**: unseen shape caught at 97.3% [90.5%, 99.2%] vs 94.2% [92.4%, 95.6%] for the familiar one — intervals overlap, easier not harder | same, PB-61 |
-| **Reversal-scam variant fails**: 6.1% [2.4%, 14.6%] vs 94.2% [92.4%, 95.6%] — intervals do not overlap, a supported finding | same, PB-61, ADR 0028 |
-| **C-6 measured**: ensemble seed-variance stdev **-0.5%** vs XGBoost alone (did not reduce), **+62.9%** vs LightGBM alone (reduced). D-09's claimed 12% figure holds only against the weaker base model | `docs/benchmarks/m4_seed_variance_pb61.txt` |
-| LightGBM cleared through `fs-licences`: 288 deps, 0 violations. `xgboost`, `scipy`, `nvidia-nccl-cu12` licence exceptions verified against bundled text, not declared metadata | ADR 0009 Amendment 2026-09-22 |
-
-**Every table now carries its own recall confidence interval** (Wilson score), not just AUC's
-Hanley-McNeil interval — a bare recall on ~66 rows was reading as more settled than the sample
-size supports, so the artefact says so itself rather than requiring a reader to compute it.
-
-## Branches, `main`, and CI
-
-**`main` is at `m3-complete` (`f8885d6`).** On 2026-09-22 the history was confirmed linear
-(`main` → `m2-complete` → `m3-complete` → `m4/generalisation`, each an ancestor of the next), and
-`main` was fast-forwarded twice, pushed each time, never forced. The tags were not moved.
-
-- **At `m2-complete` (`ed7a8d9`) `main`'s CI was red**: the python job fails `mypy --strict` on
-  two `re.search(...).group(1)` calls in `dataset/tests/test_generator.py`, and the devcontainer
-  job fails for a reason not yet known (the owner is fetching the log). This was transient —
-  `m3-complete` is green on every job, fixed in `5f0a8a1` — so nothing was fixed forward on
-  `main`, since that would have broken the fast-forward. The tag itself had no CI result on its
-  commit when it was placed; see the lab notebook, 2026-09-22.
-- **The default branch is still `m0/bootstrap`, not `main`** (`git ls-remote --symref origin
-  HEAD`). PB-25 stays blocked until that changes, which is a repository setting for the owner.
-- **The M4 PR is not opened yet**, because `gh` has no credentials. Title and body are drafted for
-  the web UI. It targets `main` and contains only M4's 45 commits.
-- **This branch's python CI was red for much of M4.** `ml` coverage fell to 84% against the 90%
-  floor because `battery`, `frontier` and `seed-variance` had no tests. `bbdc534` adds them
-  (91.95%). They also caught a verdict bug in the variant table, fixed in `e0e52c9`. The
-  committed PB-61 evidence renders byte-identically through the fixed code.
-
-## The paper
-
-`docs/research/paper/contributions.md` — the evidence-backed contribution list. The LaTeX draft is
-M11 and unstarted. **Kept:** benchmark-construction methodology and its measured failure modes; the
-latency–explainability frontier; the redundancy finding; the reversal-scam variant as the one
-measured non-burst failure; the system as setting. **Removed:** cross-country generalisation,
-temporal-novel-variant generalisation, and C-4's card-style ablation.
+| Gate: AUC 0.970 [0.962, 0.977], +0.091 over the best single feature, +0.311 over the best trivial rule | `m4_gate_d8083dbc_v3.txt` |
+| Gate fails: recall at 0.60 0.736, FNR 0.264; even at the 1% FPR budget recall is 0.871 | same, PB-62 |
+| ONNX parity < 1e-6 on all 101,909 test rows | same |
+| Reversal-scam variant **9.1%** (6/66, [4.2%, 18.4%]) vs base 94.4%; below the pre-registered 0.15 as a point estimate, not as a whole interval | `m4_battery_d8083dbc_e1.txt` |
+| C-6: ensemble −0.6% vs XGBoost, +12.5% vs LightGBM | `m4_seed_variance_d8083dbc_e1.txt` |
+| Ablation: card-style features only −0.042 AUC (C-4's measurement; PB-60's redundancy caveat applies) | gate run |
 
 ## Open, in the order I would take them
 
 | Item | What |
 |---|---|
-| **M4 PR** | paste the drafted PR, then the Principal Review; confirm CI green on its head first |
-| **Default branch** | switch it to `main` (owner setting); unblocks PB-25 |
-| **Devcontainer** | the job failing at `m2-complete`; cause unknown until the log is read |
-| **C-5** | per-month performance, measurable and unmeasured |
-| — | precision at a fixed alert budget: the operational number, not yet reported |
-| **PB-57** | `fs-evidence` captures instead of streaming, so a long run is silent |
-| **PB-51** | FR-02-02's `< 10 ms`, carried to M10, needs the dedicated machine |
-| **PB-44** | five features still have no source data; all wait on a per-account or agent table |
-| **PB-43** | `corridor_class` reaches two of its four classes; owner decision is to keep them |
-| **PB-36/37/38** | untested DB fallback; no per-account durable table; 8-day refresh under a 30-day feature |
-| **PB-25** | the 5M run, still blocked on the default branch |
-
-Also unmeasured: ONNX export parity, the ensemble the SRS specifies (this is one booster, not
-0.55·XGB + 0.45·LGBM, in the deployed model — the ensemble exists only in `training/ensemble.py`
-for C-6), and the LaTeX tables.
+| **Owner** | ML-GATE-03/06 (PB-62), then the M4 tag; ADR 0030 (MLflow) awaits confirmation |
+| PB-67 | a larger training sample, reported beside the current run |
+| PB-63 | the CI ML gate needs a dataset in CI (M9) |
+| PB-64, 65 | clauses carried to M5 and M6 |
+| PB-66 | E.5 items beyond the gate |
+| PB-68 | frontier and battery prose at `d8083dbc` |
+| M8 | the owner's next milestone once M4 is settled |
 
 ## Things that will bite whoever picks this up
 
-- **Read CI on the branch you push to, every time.** This branch's python job was red across
-  much of M4, and every artefact committed in that time said nothing about it. A test suite
-  that is green locally on a subset (`-k`, `--no-cov`, one file) is not the suite CI runs.
-- **Several sessions share this checkout.** Another session switched branches mid-task on
-  2026-09-22, and a test run silently tested the wrong commit. Work in a `git worktree` with its
-  own `UV_PROJECT_ENVIRONMENT`.
-- **Unauthenticated GitHub API: 60 requests an hour.** A per-commit CI scan uses it up quickly.
-- **A null generalisation result is not the end of the question — ask what a genuinely different
-  mechanism would show before concluding "this benchmark supports no generalisation claim at
-  all."** The two null results (country, timing) never removed the axes the model actually uses;
-  the one variant that did (burst-structure, counterparty-novelty) found a real 6.1% recall
-  failure. The difference between a null result and a missing test is whether the thing that
-  varies is the thing the model depends on.
-- **Pre-registration only works if the commit predates the measurement, provably.** The lab
-  notebook's prediction (0.15–0.55) was wrong — the actual result (6.1%) fell below it — and that
-  is reported as-is rather than revised, which is the entire point of writing the prediction down
-  first.
-- **A citable-run artefact can go stale relative to its own rendering code.** The battery evidence
-  had to be re-run after `report.py` changed to print the CI column, even though the underlying
-  measurement was unchanged — the artefact is a function of the code that rendered it, not just the
-  data it scored.
-- **A mechanism built and tested is not evidence until it runs through `fs-evidence`.** C-6 was
-  implemented, unit-tested and even run manually as a preview earlier this session, and still
-  needed a citable run before the claims register could move off `UNVERIFIED`.
-- **Ask whether an experiment can fail before promoting it to headline evidence.** Both original
-  generalisation tests were chosen as load-bearing evidence before anyone checked whether the
-  benchmark could make either informative. The answer was in `fraud.yaml` — no parameter keyed by
-  country — and in the variant's own definition, which changed a delay and nothing else.
-- **A hedge is often a measurable claim nobody measured.** C-11's delay proportion, PB-46's
-  "burstiness is not country-specific", the temporal novel variant, and now C-6's 12% figure — all
-  four turned out to have a real measurement behind the hedge, in each case different from the
-  claim.
-- **A package's declared licence metadata is not authoritative.** `nvidia-nccl-cu12` declares
-  `LicenseRef-NVIDIA-Proprietary` in its own metadata while bundling genuine BSD-3-Clause NCCL
-  text — the bundled file is what was checked, following the `h3`/`nodeenv` precedent.
-- **`fs-evidence` refuses on a dirty tree**, including untracked files — a stale evidence artefact
-  left over from before a rendering change has to be removed or committed before the next run, not
-  just the source.
-- **A perfectly separated fixture has a Hanley–McNeil variance of exactly zero**, so an interval
-  comparison passes at `0.0 > 0.0` whatever the code does. The same trap exists for Wilson
-  intervals at `recall == 1.0`; a dedicated test now checks the interval stays inside [0, 1] there.
-- Timings: ml suite ~8 s (excluding coverage gate on a partial run); dataset suite ~31–46 min; 1M
-  generation ~24 min; feature pass ~450 rows/s at a 400k corpus; `fs-features battery` on the full
-  101,909-row test period, a few minutes; `fs-features seed-variance`, five seeds, a few minutes.
+- **Read a requirement's notes before building it.** E1 and PB-46's reporting rule were both
+  written on the M4 rows as settled decisions, and both were missed until the register was being
+  updated at the very end.
+- **A parity test on random data proves little.** The ONNX test passed on normals and the real
+  data failed on 0.39% of rows; the new test builds doubles that collapse to one float32.
+- **An impossible number is the best bug report** — precision above its own ceiling pointed
+  straight at isotonic ties.
+- **Commit before running a mutation script that restores from git.** One run reset an
+  uncommitted fix; a stash taken beforehand is what saved it.
+- **Never let a cleanup step run after a refused evidence run.** One reverted the access log and
+  lost a line, now reconstructed and marked.
+- **Several sessions share `/home/marius/fraudshield`; `backend/` belongs to the M7 agent.** Work in
+  a worktree with its own `UV_PROJECT_ENVIRONMENT`, with absolute paths.
+- **Read CI on the branch you push to.** This branch's python job was red for 22 runs.
+- **`fs-evidence` refuses on a dirty tree, untracked files included** — which is why evidence runs
+  from a separate frozen worktree here.
+- **Unauthenticated GitHub API: 60 requests an hour.**
+- Timings: ml suite ~1–2 min with coverage; dataset suite 30–60 min under load; gate cache build
+  ~13 min; `fs-features gate` with ablations and five seeds ~5 min; battery ~3 min.
