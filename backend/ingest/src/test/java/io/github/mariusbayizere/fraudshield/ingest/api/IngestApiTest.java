@@ -172,7 +172,7 @@ class IngestApiTest {
     assertThat(
             ApiHarness.SCORER.requests.stream()
                 .filter(r -> r.getTransaction().getChannel().name().equals("CHANNEL_USSD"))
-                .allMatch(r -> !r.getTransaction().hasDeviceToken() && !r.getContext().hasDevice()))
+                .allMatch(r -> !r.getTransaction().hasDeviceToken()))
         .isTrue();
   }
 

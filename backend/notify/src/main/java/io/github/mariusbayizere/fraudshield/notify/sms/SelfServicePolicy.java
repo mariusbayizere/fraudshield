@@ -1,11 +1,13 @@
 package io.github.mariusbayizere.fraudshield.notify.sms;
 
-import io.github.mariusbayizere.fraudshield.decision.domain.AccountHistory;
 import io.github.mariusbayizere.fraudshield.decision.domain.FeatureContribution;
 import io.github.mariusbayizere.fraudshield.decision.domain.ReasonCodes;
 import io.github.mariusbayizere.fraudshield.decision.domain.Scoring;
+import io.github.mariusbayizere.fraudshield.rules.dsl.FieldValue;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.OptionalDouble;
 import java.util.Set;
 
 /**
@@ -59,19 +61,22 @@ public final class SelfServicePolicy {
   private SelfServicePolicy() {}
 
   /**
-   * Evaluates the D-25 conditions.
+   * Evaluates the D-25 conditions on the feature values the scorer returned (ADR 0033); nothing is
+   * recomputed here. A missing value is unsafe: an unknown SIM-swap recency or device state refuses
+   * self-service, exactly as D-25 treats an unavailable MNO signal.
    *
    * @param scoring the scoring the block was based on
-   * @param history the account state before the transaction
+   * @param hasDevice whether the transaction carried a device fingerprint (USSD does not, D-04)
    * @return eligibility with every refusal reason
    */
-  public static Eligibility evaluate(Scoring scoring, AccountHistory history) {
+  public static Eligibility evaluate(Scoring scoring, boolean hasDevice) {
     List<Refusal> refusals = new ArrayList<>();
-    if (history.daysSinceSimSwap() == null || history.daysSinceSimSwap() < SIM_SWAP_DAYS) {
+    Map<String, FieldValue> features = scoring.features();
+    OptionalDouble simSwapDays = number(features, "days_since_sim_swap");
+    if (simSwapDays.isEmpty() || simSwapDays.getAsDouble() < SIM_SWAP_DAYS) {
       refusals.add(Refusal.SIM_SWAP_RECENT_OR_UNKNOWN);
     }
-    if (history.device() != null
-        && (history.device().newForAccount() || history.device().deviceChanges24h() > 0)) {
+    if (hasDevice && deviceChanged(features)) {
       refusals.add(Refusal.DEVICE_CHANGED);
     }
     switch (scoring) {
@@ -96,5 +101,21 @@ public final class SelfServicePolicy {
       }
     }
     return new Eligibility(refusals.isEmpty(), refusals);
+  }
+
+  /** A new device for the account, a device change within 24 hours, or unknown device state. */
+  private static boolean deviceChanged(Map<String, FieldValue> features) {
+    OptionalDouble isNew = number(features, "device_is_new_for_account");
+    OptionalDouble changes = number(features, "device_changes_24h");
+    return isNew.isEmpty()
+        || isNew.getAsDouble() > 0
+        || changes.isEmpty()
+        || changes.getAsDouble() > 0;
+  }
+
+  private static OptionalDouble number(Map<String, FieldValue> features, String name) {
+    return features.get(name) instanceof FieldValue.Number n
+        ? OptionalDouble.of(n.value().doubleValue())
+        : OptionalDouble.empty();
   }
 }

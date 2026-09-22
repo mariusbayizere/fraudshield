@@ -2,7 +2,6 @@ package io.github.mariusbayizere.fraudshield.notify.sms;
 
 import io.github.mariusbayizere.fraudshield.decision.application.event.DecisionEvent;
 import io.github.mariusbayizere.fraudshield.decision.application.port.CustomerNotificationPolicy;
-import io.github.mariusbayizere.fraudshield.decision.domain.AccountHistory;
 import io.github.mariusbayizere.fraudshield.decision.domain.Scoring;
 import io.github.mariusbayizere.fraudshield.decision.domain.Transaction;
 import java.time.Instant;
@@ -40,12 +39,9 @@ public final class CustomerSmsPolicy implements CustomerNotificationPolicy {
 
   @Override
   public DecisionEvent.CustomerNotificationRequested compose(
-      Transaction transaction,
-      UUID autoBlockEventId,
-      Scoring scoring,
-      AccountHistory history,
-      Instant at) {
-    SelfServicePolicy.Eligibility eligibility = SelfServicePolicy.evaluate(scoring, history);
+      Transaction transaction, UUID autoBlockEventId, Scoring scoring, Instant at) {
+    SelfServicePolicy.Eligibility eligibility =
+        SelfServicePolicy.evaluate(scoring, transaction.deviceToken() != null);
     String token = transaction.accountToken();
     return new DecisionEvent.CustomerNotificationRequested(
         UUID.randomUUID(),

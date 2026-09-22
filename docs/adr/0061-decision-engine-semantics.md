@@ -1,6 +1,6 @@
 # 0061 — Decision engine semantics the SRS left open
 
-- **Status:** Accepted
+- **Status:** Accepted; revised the same day after the owner's decision on ADR 0033 (points 3 and 7)
 - **Date:** 2026-09-22
 - **Requirements affected:** FR-03-01, FR-03-02, FR-03-03, FR-03-06, FR-03-07, FR-05-05, FR-05-07,
   NFR-REL-01
@@ -22,13 +22,16 @@ window" is counted across instances, and what a rule does with a missing value.
    HIGH would be a claim the model did not make.
 2. **Rules are three-valued** (Kleene): a comparison with a missing value is UNKNOWN and a rule
    fires only on TRUE, so absent data never raises a tier unless the rule asks `is_null`.
-3. **Fallback rule set `fallback-rules-1`** (C.4): HIGH on 5 transactions in 60 s, a new
-   counterparty with at least 10,000,000 RWF, or the SIM-swap takeover pattern (swap under 7 days,
-   new counterparty, at least 500,000 RWF); MEDIUM on 10 in an hour, 2,000,000 RWF or more, or a
-   new counterparty or new device with 500,000 RWF or more. It leans to holding: while the model is
-   down, a hold costs a review and a wrong approval costs a customer's money. The persisted record
-   needs a score that does not exist, so it carries the lower edge of its tier's interval (0, the
-   MEDIUM threshold or the HIGH threshold) flagged by `ml_unavailable_fallback`, which keeps
+3. **Fallback rule set `fallback-rules-2`** (C.4): MEDIUM (a hold) at 2,000,000 RWF or more,
+   otherwise LOW; it never blocks. The fallback sees the transaction and nothing else, because the
+   account's behaviour exists only as model features and the decision path does not compute them
+   (point 7). The institution's own rules on request fields still apply; rules on features evaluate
+   UNKNOWN while the scorer is down and do not fire (point 2). Blocking on amount alone would decline
+   legitimate payments without evidence, so the fallback leans to holding. This is weaker than
+   `fallback-rules-1`, which it replaces: velocity bursts, new-counterparty amounts and the SIM-swap
+   pattern are not caught until the replay job re-scores fallback decisions after recovery (C.4).
+   The persisted record needs a score that does not exist, so it carries the lower edge of its
+   tier's interval (0 or the MEDIUM threshold) flagged by `ml_unavailable_fallback`, which keeps
    expected-loss ordering consistent with the tier.
 4. **MCC counts** are one-minute buckets in Redis shared by every instance; the window's edge has
    one-minute granularity. The breach test itself is exact (`fraud > threshold × n` with n at least
@@ -40,22 +43,22 @@ window" is counted across instances, and what a rule does with a missing value.
    breaker changes and idempotency conflicts are audited; LOW approvals are not, because
    `decision_states` is already an append-only record of every one and auditing each would put the
    audit hash chain on the path of every payment.
-7. **Distinct counts are computed in the store.** The counterparty's senders over 24 h and the
-   device's accounts over 7 days keep one member per account, scored with its latest time
-   (`ZADD GT`), and are read with `ZCOUNT` and `ZSCORE`. A popular merchant's set therefore holds
-   one entry per payer, not one per payment, and the read returns two integers rather than the set.
-   An earlier version stored one member per payment and counted in Java; under the benchmark's
-   single counterparty it shipped tens of thousands of members per decision. The cost is one
-   deviation for late arrivals: an account whose latest payment is newer than the scored
-   transaction is not counted even if it also paid inside the window, so a late-arriving
-   transaction can see one sender fewer than the batch features would. In-order traffic is exact.
-   Decisions, the response and the audit record run before the feature-store update and the MCC
-   count, which run on a virtual thread after the response (C.2); a transaction that arrives
-   within a few milliseconds of its predecessor on the same account can miss that predecessor.
+7. **No model features in Java; the boundary of the decision path's state** (owner decision
+   2026-09-22, ADR 0033). Each of the 44 features has one implementation, the Python feature
+   pipeline with its parity suite (M3). The scorer reads the account context from the feature
+   store, computes the features and returns their values in `ScoringResult.feature_vector`; the
+   feature store has **one writer, the ML side**. The decision path sends the transaction and the
+   account token, and custom rules, the D-25 self-service policy and the persisted record read
+   feature values from that result, never recomputing them. The decision path's own Redis state is
+   decision state only: freeze windows and the frozen flag, MCC circuit-breaker counts and states,
+   idempotency claims, decision states and hold timers, under `fs:{...}` keys that never overlap
+   the store's `fs:fv1:` prefix. An earlier version of this branch computed the context in Java
+   and changed the definition of `counterparty_unique_senders_24h` for late arrivals; that was
+   training–serving skew and it was removed.
 
 ## Consequences
 
 Tested by `DecisionEngineTest` (including a generative property over thresholds and rules),
-`FreezeAndBreakerTest`, `FallbackRulesTest`, `RuleCompilerTest` and
-`RedisAdaptersTest.counterpartyAndDeviceSetsCountDistinctOtherAccountsInOpenWindows`. The
-fallback's thresholds are configuration; changing them is a new version name.
+`FreezeAndBreakerTest`, `FallbackRulesTest`, `RuleCompilerTest`,
+`DecisionServiceTest.rulesReadTheFeatureValuesTheScorerReturned` and `GrpcScorerTest` (the request
+carries no context). The fallback's threshold is configuration; changing it is a new version name.

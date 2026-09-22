@@ -73,6 +73,14 @@ public final class MicrometerDecisionMetrics implements DecisionMetrics {
   }
 
   @Override
+  public void featureStoreDegraded() {
+    Counter.builder("fs_feature_store_degraded_total")
+        .description("Decisions the scorer made without the feature store (ADR 0033)")
+        .register(registry)
+        .increment();
+  }
+
+  @Override
   public void timeoutRelease(String channel) {
     Counter.builder("fs_alert_timeout_release_total")
         .tag("channel", channel)

@@ -15,7 +15,6 @@ import io.github.mariusbayizere.fraudshield.decision.application.IngestDecision;
 import io.github.mariusbayizere.fraudshield.decision.application.port.DecisionMetrics;
 import io.github.mariusbayizere.fraudshield.decision.application.port.ScorerUnavailableException;
 import io.github.mariusbayizere.fraudshield.decision.application.port.ScoringPort;
-import io.github.mariusbayizere.fraudshield.decision.domain.AccountHistory;
 import io.github.mariusbayizere.fraudshield.decision.domain.Decision;
 import io.github.mariusbayizere.fraudshield.decision.domain.ReasonCodes;
 import io.github.mariusbayizere.fraudshield.decision.domain.Transaction;
@@ -64,8 +63,7 @@ class GrpcScorerTest {
   }
 
   private ScoringPort.Scored score(Transaction t) {
-    return scorer.score(
-        t, AccountHistory.empty(true), List.of(Money.of("50000", CurrencyCode.RWF)));
+    return scorer.score(t, List.of(Money.of("50000", CurrencyCode.RWF)));
   }
 
   @Test
@@ -83,9 +81,9 @@ class GrpcScorerTest {
     assertThat(request.getTransaction().getChannel().name()).isEqualTo("CHANNEL_USSD");
     assertThat(request.getTransaction().hasDeviceToken()).as("USSD has no fingerprint").isFalse();
     assertThat(request.getTransaction().hasAgentToken()).isFalse();
-    assertThat(request.getContext().hasDevice()).isFalse();
-    assertThat(request.getContext().getMeanHourlyCount30D()).as("PB-37 fail closed").isNaN();
-    assertThat(request.getContext().hasKycTier()).isFalse();
+    // ADR 0033: the scorer reads the account context from the feature store; field 2 is reserved.
+    assertThat(ScoreRequest.getDescriptor().findFieldByNumber(2)).isNull();
+    assertThat(request.getUnknownFields().asMap()).isEmpty();
     assertThat(request.getConfiguredLimitsList())
         .singleElement()
         .satisfies(m -> assertThat(m.getAmount()).isEqualTo("50000"));
@@ -94,47 +92,19 @@ class GrpcScorerTest {
 
     Transaction agent =
         Fixtures.transaction(UUID.randomUUID(), Fixtures.ACCOUNT, "100", Channel.AGENT_BANKING);
-    scorer.score(
-        agent,
-        new AccountHistory(
-            1,
-            1,
-            1,
-            1,
-            java.math.BigDecimal.ONE,
-            java.math.BigDecimal.ONE,
-            1,
-            0.5,
-            java.math.BigDecimal.ONE,
-            java.math.BigDecimal.ZERO,
-            java.math.BigDecimal.ONE,
-            1,
-            new io.github.mariusbayizere.fraudshield.decision.domain.GeoPoint(1, 2),
-            NOW,
-            new io.github.mariusbayizere.fraudshield.decision.domain.GeoPoint(1, 2),
-            List.of("RW"),
-            400,
-            2,
-            3,
-            0,
-            false,
-            20,
-            1,
-            0,
-            1,
-            new AccountHistory.DeviceHistory(false, 1, 0, 30),
-            new AccountHistory.AgentHistory(0.5, 3, 2, 1.5),
-            0.01,
-            0,
-            1.2),
-        List.of());
+    scorer.score(agent, List.of());
     ScoreRequest full = remote.requests.get(1);
     assertThat(full.getTransaction().getAgentToken()).isEqualTo(agent.agentToken());
-    assertThat(full.getContext().getAgent().getCashoutCount1H()).isEqualTo(3);
-    assertThat(full.getContext().getDevice().getDeviceAgeDays()).isEqualTo(30);
-    assertThat(full.getContext().getAccountAgeDays()).isEqualTo(400);
-    assertThat(full.getContext().getDaysSinceSimSwap()).isEqualTo(3);
-    assertThat(full.getContext().getAmountMad90DRwf()).isEqualTo("0");
+    assertThat(full.getTransaction().getAccountToken()).isEqualTo(Fixtures.ACCOUNT);
+    assertThat(full.getUnknownFields().asMap()).isEmpty();
+  }
+
+  @Test
+  @Tag("NFR-REL-02")
+  void theScorersDegradedFeatureStoreIsCarriedIntoTheRecord() {
+    assertThat(score(Fixtures.transaction("100")).record().featureStoreDegraded()).isFalse();
+    remote.tamper = b -> b.setFeatureStoreDegraded(true);
+    assertThat(score(Fixtures.transaction("100")).record().featureStoreDegraded()).isTrue();
   }
 
   @Test
@@ -185,9 +155,7 @@ class GrpcScorerTest {
       impatient.warmUp(Duration.ofSeconds(5));
       remote.delayMillis = 500;
       long start = System.nanoTime();
-      assertThatThrownBy(
-              () ->
-                  impatient.score(Fixtures.transaction("1"), AccountHistory.empty(true), List.of()))
+      assertThatThrownBy(() -> impatient.score(Fixtures.transaction("1"), List.of()))
           .isInstanceOf(ScorerUnavailableException.class);
       assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofMillis(450));
     }
@@ -258,7 +226,7 @@ class GrpcScorerTest {
           service.decide(Fixtures.transaction("100"), new byte[32], System.nanoTime());
       assertThat(fallback.mlUnavailableFallback()).isTrue();
       assertThat(fallback.reasonCodes()).contains(ReasonCodes.ML_UNAVAILABLE);
-      assertThat(fallback.modelVersion()).isEqualTo("fallback-rules-1");
+      assertThat(fallback.modelVersion()).isEqualTo("fallback-rules-2");
     }
     assertThat(scorer.state()).isEqualTo(CircuitBreaker.State.OPEN);
   }

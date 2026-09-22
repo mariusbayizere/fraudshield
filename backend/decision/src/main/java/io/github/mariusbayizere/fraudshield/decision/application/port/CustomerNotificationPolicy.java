@@ -1,7 +1,6 @@
 package io.github.mariusbayizere.fraudshield.decision.application.port;
 
 import io.github.mariusbayizere.fraudshield.decision.application.event.DecisionEvent;
-import io.github.mariusbayizere.fraudshield.decision.domain.AccountHistory;
 import io.github.mariusbayizere.fraudshield.decision.domain.Scoring;
 import io.github.mariusbayizere.fraudshield.decision.domain.Transaction;
 import java.time.Instant;
@@ -19,14 +18,9 @@ public interface CustomerNotificationPolicy {
    * @param transaction the blocked transaction
    * @param autoBlockEventId the block
    * @param scoring the scoring the block was based on
-   * @param history the account state before the transaction
    * @param at request time
    * @return the intent
    */
   DecisionEvent.CustomerNotificationRequested compose(
-      Transaction transaction,
-      UUID autoBlockEventId,
-      Scoring scoring,
-      AccountHistory history,
-      Instant at);
+      Transaction transaction, UUID autoBlockEventId, Scoring scoring, Instant at);
 }

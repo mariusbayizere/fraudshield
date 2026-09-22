@@ -37,6 +37,12 @@ public interface DecisionMetrics {
    */
   default void stage(String stage, long nanos) {}
 
+  /**
+   * The scorer answered without the feature store ({@code ScoringResult.feature_store_degraded},
+   * ADR 0033): C.4's DEGRADED_MODE on the scorer's side.
+   */
+  default void featureStoreDegraded() {}
+
   /** Metrics that record nothing, for callers that have none. */
   DecisionMetrics NONE =
       new DecisionMetrics() {

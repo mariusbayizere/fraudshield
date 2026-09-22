@@ -66,7 +66,7 @@ public sealed interface Scoring {
    * The rule-based fallback decided because the scorer was unavailable (C.4, NFR-REL-01).
    *
    * @param scoringResultId result id
-   * @param modelVersion fallback rule-set version, for example {@code fallback-rules-1}
+   * @param modelVersion fallback rule-set version, for example {@code fallback-rules-2}
    * @param tier the fallback's tier
    * @param reasonCodes why, most important first
    */

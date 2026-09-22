@@ -160,14 +160,14 @@ class DecisionEngineTest {
   void theFallbackDecidesWithItsOwnTierAndSaysSo() {
     Scoring.Fallback fallback =
         new Scoring.Fallback(
-            UUID.randomUUID(), "fallback-rules-1", RiskTier.MEDIUM, List.of("AMOUNT_ABOVE_NORMAL"));
+            UUID.randomUUID(), "fallback-rules-2", RiskTier.MEDIUM, List.of("AMOUNT_ABOVE_NORMAL"));
     DecisionOutcome outcome = DecisionEngine.decide(inputs(fallback, false, false, NO_RULES));
     assertThat(outcome.fallback()).isTrue();
     assertThat(outcome.decision()).isEqualTo(Decision.HOLD);
     assertThat(outcome.reasonCodes())
         .containsExactly(ReasonCodes.ML_UNAVAILABLE, "AMOUNT_ABOVE_NORMAL");
     Scoring.Fallback low =
-        new Scoring.Fallback(UUID.randomUUID(), "fallback-rules-1", RiskTier.LOW, List.of());
+        new Scoring.Fallback(UUID.randomUUID(), "fallback-rules-2", RiskTier.LOW, List.of());
     DecisionOutcome approved = DecisionEngine.decide(inputs(low, false, false, NO_RULES));
     assertThat(approved.reasonCodes()).containsExactly(ReasonCodes.ML_UNAVAILABLE);
     assertThat(approved.alert()).isEmpty();

@@ -7,13 +7,14 @@ import io.github.mariusbayizere.fraudshield.common.money.CurrencyCode;
 import io.github.mariusbayizere.fraudshield.common.money.Money;
 import io.github.mariusbayizere.fraudshield.common.transaction.Channel;
 import io.github.mariusbayizere.fraudshield.decision.application.event.DecisionEvent;
-import io.github.mariusbayizere.fraudshield.decision.domain.AccountHistory;
 import io.github.mariusbayizere.fraudshield.decision.domain.FeatureContribution;
 import io.github.mariusbayizere.fraudshield.decision.domain.RiskTier;
 import io.github.mariusbayizere.fraudshield.decision.domain.Scoring;
 import io.github.mariusbayizere.fraudshield.decision.domain.Transaction;
+import io.github.mariusbayizere.fraudshield.rules.dsl.FieldValue;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -28,44 +29,33 @@ class SmsPolicyTest {
   private static final Instant AT = Instant.parse("2026-09-22T08:15:30Z");
   private static final UUID BLOCK = UUID.fromString("0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d");
 
-  private static Scoring.Model model(double score, String... features) {
-    List<FeatureContribution> top =
-        java.util.Arrays.stream(features).map(f -> new FeatureContribution(f, 1, true)).toList();
-    return new Scoring.Model(UUID.randomUUID(), "m", score, 0.1, top, Map.of());
+  /** The scorer's feature values for a customer on a known device (ADR 0033). */
+  private static final Map<String, FieldValue> SAFE = features(30.0, 0.0, 0.0);
+
+  private static Map<String, FieldValue> features(
+      Double simSwapDays, Double deviceIsNew, Double deviceChanges) {
+    Map<String, FieldValue> values = new HashMap<>();
+    values.put("days_since_sim_swap", value(simSwapDays));
+    values.put("device_is_new_for_account", value(deviceIsNew));
+    values.put("device_changes_24h", value(deviceChanges));
+    return values;
   }
 
-  private static AccountHistory history(Integer simSwapDays, AccountHistory.DeviceHistory device) {
-    return new AccountHistory(
-        0,
-        0,
-        0,
-        0,
-        BigDecimal.ZERO,
-        BigDecimal.ZERO,
-        0,
-        Double.NaN,
-        null,
-        null,
-        null,
-        0,
-        null,
-        null,
-        null,
-        List.of(),
-        null,
-        null,
-        simSwapDays,
-        null,
-        true,
-        null,
-        0,
-        0,
-        0,
-        device,
-        null,
-        null,
-        0,
-        null);
+  private static FieldValue value(Double number) {
+    return number == null ? FieldValue.MISSING : FieldValue.of(number);
+  }
+
+  private static Scoring.Model model(
+      double score, Map<String, FieldValue> features, String... contributions) {
+    List<FeatureContribution> top =
+        java.util.Arrays.stream(contributions)
+            .map(f -> new FeatureContribution(f, 1, true))
+            .toList();
+    return new Scoring.Model(UUID.randomUUID(), "m", score, 0.1, top, features);
+  }
+
+  private static SelfServicePolicy.Eligibility evaluate(Scoring scoring) {
+    return SelfServicePolicy.evaluate(scoring, true);
   }
 
   private static Transaction transaction(String currency, double longitude) {
@@ -91,41 +81,80 @@ class SmsPolicyTest {
   @Tag("D-25")
   @Tag("FR-03-04")
   void selfServiceIsAllowedOnlyWhenEveryConditionIsSafe() {
-    AccountHistory.DeviceHistory sameDevice = new AccountHistory.DeviceHistory(false, 1, 0, 90);
-    assertThat(SelfServicePolicy.evaluate(model(0.9), history(30, sameDevice)).allowed()).isTrue();
-    assertThat(SelfServicePolicy.evaluate(model(0.9), history(30, null)).allowed())
+    assertThat(evaluate(model(0.9, SAFE)).allowed()).isTrue();
+    assertThat(SelfServicePolicy.evaluate(model(0.9, features(30.0, null, null)), false).allowed())
         .as("USSD: no device, nothing changed")
         .isTrue();
-
-    assertThat(SelfServicePolicy.evaluate(model(0.9), history(null, sameDevice)).refusals())
-        .as("an unavailable SIM-swap signal is unsafe")
+    assertThat(evaluate(model(0.9, features(6.0, 0.0, 0.0))).refusals())
         .containsExactly(SelfServicePolicy.Refusal.SIM_SWAP_RECENT_OR_UNKNOWN);
-    assertThat(SelfServicePolicy.evaluate(model(0.9), history(6, sameDevice)).refusals())
-        .containsExactly(SelfServicePolicy.Refusal.SIM_SWAP_RECENT_OR_UNKNOWN);
-    assertThat(SelfServicePolicy.evaluate(model(0.9), history(7, sameDevice)).allowed()).isTrue();
-    assertThat(
-            SelfServicePolicy.evaluate(
-                    model(0.9), history(30, new AccountHistory.DeviceHistory(true, 1, 0, 0)))
-                .refusals())
+    assertThat(evaluate(model(0.9, features(7.0, 0.0, 0.0))).allowed()).isTrue();
+    assertThat(evaluate(model(0.9, features(30.0, 1.0, 0.0))).refusals())
         .containsExactly(SelfServicePolicy.Refusal.DEVICE_CHANGED);
-    assertThat(
-            SelfServicePolicy.evaluate(
-                    model(0.9), history(30, new AccountHistory.DeviceHistory(false, 1, 1, 0)))
-                .refusals())
+    assertThat(evaluate(model(0.9, features(30.0, 0.0, 1.0))).refusals())
         .containsExactly(SelfServicePolicy.Refusal.DEVICE_CHANGED);
-    assertThat(SelfServicePolicy.evaluate(model(0.95), history(30, sameDevice)).refusals())
+    assertThat(evaluate(model(0.9, features(30.0, null, 0.0))).refusals())
+        .as("a fingerprinted payment with unknown device state is treated as changed")
+        .containsExactly(SelfServicePolicy.Refusal.DEVICE_CHANGED);
+    assertThat(evaluate(model(0.95, SAFE)).refusals())
         .containsExactly(SelfServicePolicy.Refusal.SCORE_TOO_HIGH);
-    assertThat(
-            SelfServicePolicy.evaluate(model(0.9, "days_since_sim_swap"), history(30, sameDevice))
-                .refusals())
+    assertThat(evaluate(model(0.9, SAFE, "days_since_sim_swap")).refusals())
         .containsExactly(SelfServicePolicy.Refusal.TAKEOVER_SIGNALS);
     Scoring.Fallback fallback =
-        new Scoring.Fallback(
-            UUID.randomUUID(), "fallback-rules-1", RiskTier.HIGH, List.of("RECENT_SIM_SWAP"));
-    assertThat(SelfServicePolicy.evaluate(fallback, history(30, sameDevice)).refusals())
+        new Scoring.Fallback(UUID.randomUUID(), "fallback-rules-2", RiskTier.MEDIUM, List.of());
+    assertThat(evaluate(fallback).refusals())
         .containsExactly(
-            SelfServicePolicy.Refusal.MODEL_UNAVAILABLE,
-            SelfServicePolicy.Refusal.TAKEOVER_SIGNALS);
+            SelfServicePolicy.Refusal.SIM_SWAP_RECENT_OR_UNKNOWN,
+            SelfServicePolicy.Refusal.DEVICE_CHANGED,
+            SelfServicePolicy.Refusal.MODEL_UNAVAILABLE);
+  }
+
+  /**
+   * Intended behaviour, not a gap (D-25 point 2): until an MNO SIM-swap adapter exists the scorer
+   * returns {@code days_since_sim_swap} as missing, and a missing recency is unsafe, so no block
+   * offers the self-service link, however safe everything else is. The customer is told to call the
+   * institution or visit a branch or agent.
+   */
+  @Test
+  @Tag("D-25")
+  @Tag("FR-03-04")
+  void withoutTheSimSwapSignalNoBlockOffersSelfService() {
+    for (double score : new double[] {0.85, 0.9, 0.94}) {
+      for (boolean hasDevice : new boolean[] {true, false}) {
+        SelfServicePolicy.Eligibility eligibility =
+            SelfServicePolicy.evaluate(model(score, features(null, 0.0, 0.0)), hasDevice);
+        assertThat(eligibility.allowed()).isFalse();
+        assertThat(eligibility.refusals())
+            .containsExactly(SelfServicePolicy.Refusal.SIM_SWAP_RECENT_OR_UNKNOWN);
+      }
+    }
+    assertThat(
+            new CustomerSmsPolicy("en")
+                .compose(transaction("RWF", 30.06), BLOCK, model(0.9, features(null, 0.0, 0.0)), AT)
+                .verificationLinkAllowed())
+        .isFalse();
+  }
+
+  @Test
+  @Tag("FR-03-04")
+  @Tag("D-25")
+  void theIntentCarriesEverythingTheContractRequiresAndNoContactDetails() {
+    DecisionEvent.CustomerNotificationRequested intent =
+        new CustomerSmsPolicy("en").compose(transaction("RWF", 30.06), BLOCK, model(0.9, SAFE), AT);
+    assertThat(intent.templateKey()).matches("^sms\\.[a-z_]+$");
+    assertThat(intent.maskedAccount()).isEqualTo("***4821").matches("^\\*{3,}[0-9A-Za-z]{2,4}$");
+    assertThat(intent.localTime())
+        .isEqualTo("10:15 CAT")
+        .matches("^([01][0-9]|2[0-3]):[0-5][0-9] [A-Z]{3,4}$");
+    assertThat(intent.referenceCode()).matches("^[A-Z0-9]{6,10}$");
+    assertThat(intent.verificationLinkAllowed()).isTrue();
+    assertThat(intent.autoBlockEventId()).isEqualTo(BLOCK);
+    assertThat(
+            new CustomerSmsPolicy("rw")
+                .compose(transaction("RWF", 30.06), BLOCK, model(0.97, SAFE), AT)
+                .verificationLinkAllowed())
+        .isFalse();
+    assertThatThrownBy(() -> new CustomerSmsPolicy("de"))
+        .isInstanceOf(IllegalArgumentException.class);
   }
 
   @ParameterizedTest(name = "{0} at {1}E -> {2}")
@@ -151,35 +180,6 @@ class SmsPolicyTest {
     String code = ReferenceCodes.of(BLOCK);
     assertThat(code).matches("^[0-9A-HJKMNP-TV-Z]{8}$").isEqualTo(ReferenceCodes.of(BLOCK));
     assertThat(ReferenceCodes.of(UUID.randomUUID())).isNotEqualTo(code);
-  }
-
-  @Test
-  @Tag("FR-03-04")
-  @Tag("D-25")
-  void theIntentCarriesEverythingTheContractRequiresAndNoContactDetails() {
-    DecisionEvent.CustomerNotificationRequested intent =
-        new CustomerSmsPolicy("en")
-            .compose(
-                transaction("RWF", 30.06),
-                BLOCK,
-                model(0.9),
-                history(30, new AccountHistory.DeviceHistory(false, 1, 0, 90)),
-                AT);
-    assertThat(intent.templateKey()).matches("^sms\\.[a-z_]+$");
-    assertThat(intent.maskedAccount()).isEqualTo("***4821").matches("^\\*{3,}[0-9A-Za-z]{2,4}$");
-    assertThat(intent.localTime())
-        .isEqualTo("10:15 CAT")
-        .matches("^([01][0-9]|2[0-3]):[0-5][0-9] [A-Z]{3,4}$");
-    assertThat(intent.referenceCode()).matches("^[A-Z0-9]{6,10}$");
-    assertThat(intent.verificationLinkAllowed()).isTrue();
-    assertThat(intent.autoBlockEventId()).isEqualTo(BLOCK);
-    assertThat(
-            new CustomerSmsPolicy("rw")
-                .compose(transaction("RWF", 30.06), BLOCK, model(0.97), history(30, null), AT)
-                .verificationLinkAllowed())
-        .isFalse();
-    assertThatThrownBy(() -> new CustomerSmsPolicy("de"))
-        .isInstanceOf(IllegalArgumentException.class);
   }
 
   @ParameterizedTest(name = "{0}")

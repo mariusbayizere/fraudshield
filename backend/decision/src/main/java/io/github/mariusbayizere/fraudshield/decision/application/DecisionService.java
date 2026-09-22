@@ -2,7 +2,7 @@ package io.github.mariusbayizere.fraudshield.decision.application;
 
 import io.github.mariusbayizere.fraudshield.common.config.ChannelThreshold;
 import io.github.mariusbayizere.fraudshield.decision.application.event.DecisionEvent;
-import io.github.mariusbayizere.fraudshield.decision.application.port.AccountStatePort;
+import io.github.mariusbayizere.fraudshield.decision.application.port.AccountStatusPort;
 import io.github.mariusbayizere.fraudshield.decision.application.port.CircuitBreakerPort;
 import io.github.mariusbayizere.fraudshield.decision.application.port.ConfigurationPort;
 import io.github.mariusbayizere.fraudshield.decision.application.port.CustomerNotificationPolicy;
@@ -32,8 +32,12 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 /**
- * The synchronous decision path (C.2 steps 3–10): account state, score or fallback, rules, circuit
+ * The synchronous decision path (C.2 steps 3–10): freeze flag, score or fallback, rules, circuit
  * breaker, decision, then side effects recorded durably before the response (D-13, D-15).
+ *
+ * <p>The account's behaviour reaches this class only as the feature values the scorer returns; the
+ * scorer reads the feature store and is its only writer (ADR 0033). Nothing here computes or writes
+ * a model feature (ADR 0061).
  *
  * <p>Events are recorded to the fsynced spool <em>before</em> the fast-path Redis state is written,
  * so every decision a client can see is durable. If the process dies between the two, the Redis
@@ -43,7 +47,7 @@ import java.util.concurrent.TimeUnit;
 public final class DecisionService {
 
   private final ConfigurationPort configuration;
-  private final AccountStatePort accounts;
+  private final AccountStatusPort accounts;
   private final ScoringPort scorer;
   private final FreezePort freezes;
   private final CircuitBreakerPort breakers;
@@ -60,7 +64,7 @@ public final class DecisionService {
    * Creates the service.
    *
    * @param configuration thresholds, rules and breaker settings
-   * @param accounts online feature store
+   * @param accounts account freeze flags
    * @param scorer ML scorer
    * @param freezes account freeze counter
    * @param breakers MCC circuit breakers
@@ -74,7 +78,7 @@ public final class DecisionService {
    */
   public DecisionService(
       ConfigurationPort configuration,
-      AccountStatePort accounts,
+      AccountStatusPort accounts,
       ScoringPort scorer,
       FreezePort freezes,
       CircuitBreakerPort breakers,
@@ -105,7 +109,7 @@ public final class DecisionService {
    * Creates the service with an executor for the work done after the response.
    *
    * @param configuration thresholds, rules and breaker settings
-   * @param accounts online feature store
+   * @param accounts account freeze flags
    * @param scorer ML scorer
    * @param freezes account freeze counter
    * @param breakers MCC circuit breakers
@@ -116,11 +120,11 @@ public final class DecisionService {
    * @param metrics metrics
    * @param settings decision settings
    * @param clock clock
-   * @param afterResponse runs the feature-store update and MCC counting off the request path
+   * @param afterResponse runs the MCC counting off the request path
    */
   public DecisionService(
       ConfigurationPort configuration,
-      AccountStatePort accounts,
+      AccountStatusPort accounts,
       ScoringPort scorer,
       FreezePort freezes,
       CircuitBreakerPort breakers,
@@ -165,10 +169,10 @@ public final class DecisionService {
     ConfigurationPort.Thresholds thresholds = configuration.thresholds(institution);
     ChannelThreshold threshold = thresholds.thresholds().byChannel().get(transaction.channel());
     mark = stage("configuration", mark);
-    AccountStatePort.Snapshot snapshot = accounts.read(transaction);
-    mark = stage("account_read", mark);
+    boolean frozen = accounts.frozen(institution, transaction.accountToken());
+    mark = stage("account_status", mark);
 
-    Scores scores = score(transaction, snapshot, threshold);
+    Scores scores = score(transaction, threshold);
     final Scoring scoring = scores.scoring();
     final DecisionEvent.ScoringRecord record = scores.record();
 
@@ -183,7 +187,7 @@ public final class DecisionService {
                 transaction,
                 scoring,
                 threshold,
-                snapshot.frozen(),
+                frozen,
                 breakerOpen,
                 rules,
                 settings.anomalyReviewThreshold(),
@@ -208,8 +212,7 @@ public final class DecisionService {
             state,
             thresholds.version(),
             requestFingerprint,
-            latencyMs,
-            snapshot.firstSeen()));
+            latencyMs));
     outcome
         .alert()
         .ifPresent(
@@ -227,7 +230,7 @@ public final class DecisionService {
                         outcome.reasonCodes(),
                         decidedAt)));
     if (outcome.autoBlock()) {
-      addAutoBlock(events, transaction, record, outcome, scoring, snapshot, decidedAt);
+      addAutoBlock(events, transaction, record, outcome, scoring, decidedAt);
     }
 
     mark = stage("decide", mark);
@@ -245,19 +248,21 @@ public final class DecisionService {
               outcome.reviewDeadlineAt()));
     }
     stage("fast_state_writes", mark);
-    // After the response (C.2): the feature-store update (FR-02-09, p99 < 100 ms) and the MCC
-    // counts are not needed to answer this request and are rebuilt from PostgreSQL if lost.
+    // After the response (C.2): the MCC counts are not needed to answer this request. The feature
+    // store is updated by the scorer, not here (ADR 0033).
     afterResponse.execute(
         () -> {
           long started = System.nanoTime();
           try {
             breakers.count(
                 institution, transaction.merchantCategoryCode(), decidedAt, outcome.autoBlock());
-            accounts.record(transaction);
           } finally {
-            metrics.stage("feature_store_update", System.nanoTime() - started);
+            metrics.stage("breaker_count", System.nanoTime() - started);
           }
         });
+    if (record.featureStoreDegraded()) {
+      metrics.featureStoreDegraded();
+    }
     metrics.decided(transaction, outcome, System.nanoTime() - receivedNanos);
 
     return new IngestDecision(
@@ -280,13 +285,12 @@ public final class DecisionService {
 
   private record Scores(Scoring scoring, DecisionEvent.ScoringRecord record) {}
 
-  private Scores score(
-      Transaction transaction, AccountStatePort.Snapshot snapshot, ChannelThreshold threshold) {
+  private Scores score(Transaction transaction, ChannelThreshold threshold) {
     try {
-      ScoringPort.Scored scored = scorer.score(transaction, snapshot.history(), List.of());
+      ScoringPort.Scored scored = scorer.score(transaction, List.of());
       return new Scores(scored.scoring(), scored.record());
     } catch (ScorerUnavailableException unavailable) {
-      Scoring.Fallback fallback = settings.fallbackRules().score(transaction, snapshot.history());
+      Scoring.Fallback fallback = settings.fallbackRules().score(transaction);
       return new Scores(fallback, fallbackRecord(fallback, threshold));
     }
   }
@@ -297,7 +301,6 @@ public final class DecisionService {
       DecisionEvent.ScoringRecord record,
       DecisionOutcome outcome,
       Scoring scoring,
-      AccountStatePort.Snapshot snapshot,
       Instant decidedAt) {
     UUID block = UUID.randomUUID();
     events.add(
@@ -309,7 +312,7 @@ public final class DecisionService {
             transaction.accountToken(),
             decidedAt,
             String.join(",", outcome.reasonCodes())));
-    events.add(notifications.compose(transaction, block, scoring, snapshot.history(), decidedAt));
+    events.add(notifications.compose(transaction, block, scoring, decidedAt));
     FreezePort.FreezeCheck check =
         freezes.recordHigh(
             transaction.institutionId(),
@@ -352,7 +355,8 @@ public final class DecisionService {
         0,
         true,
         null,
-        fallback.tier() != RiskTier.LOW);
+        fallback.tier() != RiskTier.LOW,
+        false);
   }
 
   static double nominalScore(RiskTier tier, ChannelThreshold threshold) {

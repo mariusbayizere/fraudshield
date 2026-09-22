@@ -103,7 +103,6 @@ class KafkaMessagesContractTest {
         assertThat(copy.state()).isEqualTo(original.state());
         assertThat(copy.scoring()).isEqualTo(original.scoring());
         assertThat(copy.requestFingerprint()).isEqualTo(original.requestFingerprint());
-        assertThat(copy.firstSeenForAccount()).isEqualTo(original.firstSeenForAccount());
       } else {
         assertThat(decoded.get(i)).isEqualTo(events.get(i));
       }

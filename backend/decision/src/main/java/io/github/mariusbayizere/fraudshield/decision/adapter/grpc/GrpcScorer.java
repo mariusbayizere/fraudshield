@@ -7,7 +7,6 @@ import io.github.mariusbayizere.fraudshield.contracts.scoring.v1.ScoreResponse;
 import io.github.mariusbayizere.fraudshield.contracts.scoring.v1.ScoringServiceGrpc;
 import io.github.mariusbayizere.fraudshield.decision.application.port.ScorerUnavailableException;
 import io.github.mariusbayizere.fraudshield.decision.application.port.ScoringPort;
-import io.github.mariusbayizere.fraudshield.decision.domain.AccountHistory;
 import io.github.mariusbayizere.fraudshield.decision.domain.Transaction;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
@@ -76,10 +75,10 @@ public final class GrpcScorer implements ScoringPort, AutoCloseable {
   }
 
   @Override
-  public Scored score(Transaction transaction, AccountHistory history, List<Money> limits) {
+  public Scored score(Transaction transaction, List<Money> limits) {
     // Built before the deadline starts, so request construction never spends the scorer's budget
     // (the first call pays protobuf class initialisation).
-    ScoreRequest request = ScoringContract.request(transaction, history, limits);
+    ScoreRequest request = ScoringContract.request(transaction, limits);
     try {
       return breaker.executeSupplier(
           () -> {
@@ -104,7 +103,7 @@ public final class GrpcScorer implements ScoringPort, AutoCloseable {
    * @return the scorer's production model version, if it answered
    */
   public java.util.Optional<String> warmUp(Duration timeout) {
-    ScoringContract.request(WARM_UP, AccountHistory.empty(true), List.of());
+    ScoringContract.request(WARM_UP, List.of());
     try {
       return java.util.Optional.of(
           stub.withDeadlineAfter(timeout.toNanos(), TimeUnit.NANOSECONDS)

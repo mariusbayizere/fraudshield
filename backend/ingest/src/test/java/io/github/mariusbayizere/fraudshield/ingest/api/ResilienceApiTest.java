@@ -166,7 +166,7 @@ class ResilienceApiTest {
                       IngestApiTest.body(UUID.randomUUID(), "USSD").toString())
                   .body());
       assertThat(decision.get("ml_unavailable_fallback").asBoolean()).isTrue();
-      assertThat(decision.get("model_version").asString()).isEqualTo("fallback-rules-1");
+      assertThat(decision.get("model_version").asString()).isEqualTo("fallback-rules-2");
       assertThat(decision.get("reason_codes").toString()).contains("ML_UNAVAILABLE");
     }
     ApiHarness.SCORER.failure = null;

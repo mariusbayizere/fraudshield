@@ -39,8 +39,6 @@ public sealed interface DecisionEvent {
    * @param thresholdsVersion thresholds version in force
    * @param requestFingerprint SHA-256 of the canonical request (FR-01-03)
    * @param decisionLatencyMs server processing time
-   * @param firstSeenForAccount whether this is the account's first transaction in FraudShield
-   *     (PB-37's durable first-seen)
    */
   record TransactionDecided(
       Transaction transaction,
@@ -49,8 +47,7 @@ public sealed interface DecisionEvent {
       DecisionState state,
       long thresholdsVersion,
       byte[] requestFingerprint,
-      long decisionLatencyMs,
-      boolean firstSeenForAccount)
+      long decisionLatencyMs)
       implements DecisionEvent {
 
     /** Requires every component and copies the fingerprint. */
@@ -287,6 +284,7 @@ public sealed interface DecisionEvent {
    * @param fallback whether the fallback decided
    * @param traceId W3C trace id, or null
    * @param requiresAnalystReview whether an analyst queue receives it
+   * @param featureStoreDegraded whether the scorer answered without the feature store (ADR 0033)
    */
   record ScoringRecord(
       UUID scoringResultId,
@@ -304,7 +302,8 @@ public sealed interface DecisionEvent {
       int scoringDurationMs,
       boolean fallback,
       String traceId,
-      boolean requiresAnalystReview) {
+      boolean requiresAnalystReview,
+      boolean featureStoreDegraded) {
 
     /** Copies the collections; feature values may be null (structurally missing, D-04). */
     public ScoringRecord {
@@ -349,7 +348,8 @@ public sealed interface DecisionEvent {
           scoringDurationMs,
           fallback,
           traceId,
-          review);
+          review,
+          featureStoreDegraded);
     }
   }
 }

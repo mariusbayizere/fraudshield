@@ -3,7 +3,7 @@ package io.github.mariusbayizere.fraudshield.decision.testing;
 import io.github.mariusbayizere.fraudshield.common.config.CircuitBreakerSettings;
 import io.github.mariusbayizere.fraudshield.common.money.Money;
 import io.github.mariusbayizere.fraudshield.decision.application.event.DecisionEvent;
-import io.github.mariusbayizere.fraudshield.decision.application.port.AccountStatePort;
+import io.github.mariusbayizere.fraudshield.decision.application.port.AccountStatusPort;
 import io.github.mariusbayizere.fraudshield.decision.application.port.CircuitBreakerPort;
 import io.github.mariusbayizere.fraudshield.decision.application.port.ConfigurationPort;
 import io.github.mariusbayizere.fraudshield.decision.application.port.CustomerNotificationPolicy;
@@ -14,7 +14,6 @@ import io.github.mariusbayizere.fraudshield.decision.application.port.HoldSchedu
 import io.github.mariusbayizere.fraudshield.decision.application.port.RecorderUnavailableException;
 import io.github.mariusbayizere.fraudshield.decision.application.port.ScorerUnavailableException;
 import io.github.mariusbayizere.fraudshield.decision.application.port.ScoringPort;
-import io.github.mariusbayizere.fraudshield.decision.domain.AccountHistory;
 import io.github.mariusbayizere.fraudshield.decision.domain.CircuitBreakerState;
 import io.github.mariusbayizere.fraudshield.decision.domain.DecisionState;
 import io.github.mariusbayizere.fraudshield.decision.domain.FeatureContribution;
@@ -23,6 +22,7 @@ import io.github.mariusbayizere.fraudshield.decision.domain.MccCircuitBreaker;
 import io.github.mariusbayizere.fraudshield.decision.domain.RiskTier;
 import io.github.mariusbayizere.fraudshield.decision.domain.Scoring;
 import io.github.mariusbayizere.fraudshield.decision.domain.Transaction;
+import io.github.mariusbayizere.fraudshield.rules.dsl.FieldValue;
 import io.github.mariusbayizere.fraudshield.rules.dsl.RuleSet;
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -41,7 +41,7 @@ import java.util.function.Function;
 
 /** In-memory test doubles for every decision port. Test sources only, never production. */
 public class InMemoryPorts
-    implements AccountStatePort,
+    implements AccountStatusPort,
         ScoringPort,
         FreezePort,
         CircuitBreakerPort,
@@ -60,14 +60,14 @@ public class InMemoryPorts
   /** Latest state per transaction. */
   public final Map<UUID, DecisionState> latest = new ConcurrentHashMap<>();
 
-  /** Transactions recorded into the feature store. */
-  public final List<Transaction> recorded = new ArrayList<>();
+  /** Feature values the scorer double returns, as the real scorer reads them (ADR 0033). */
+  public Map<String, FieldValue> features = Map.of();
+
+  /** Whether the scorer double reports that it answered without the feature store. */
+  public boolean featureStoreDegraded;
 
   /** Frozen accounts. */
   public final Set<String> frozen = new HashSet<>();
-
-  /** Accounts seen. */
-  public final Set<String> seen = new HashSet<>();
 
   /** Breaker state per MCC. */
   public final Map<Key, CircuitBreakerState> breakerStates = new HashMap<>();
@@ -101,16 +101,8 @@ public class InMemoryPorts
   private final Map<String, List<Instant>> highs = new HashMap<>();
 
   @Override
-  public Snapshot read(Transaction transaction) {
-    boolean first = !seen.contains(transaction.accountToken());
-    return new Snapshot(
-        AccountHistory.empty(true), frozen.contains(transaction.accountToken()), first);
-  }
-
-  @Override
-  public void record(Transaction transaction) {
-    recorded.add(transaction);
-    seen.add(transaction.accountToken());
+  public boolean frozen(UUID institutionId, String accountToken) {
+    return frozen.contains(accountToken);
   }
 
   @Override
@@ -122,7 +114,7 @@ public class InMemoryPorts
   }
 
   @Override
-  public Scored score(Transaction transaction, AccountHistory history, List<Money> limits) {
+  public Scored score(Transaction transaction, List<Money> limits) {
     Optional<Double> score = scores.apply(transaction);
     if (score.isEmpty()) {
       throw new ScorerUnavailableException("scorer down (test double)", null);
@@ -131,7 +123,7 @@ public class InMemoryPorts
     List<FeatureContribution> top =
         value >= 0.6 ? List.of(new FeatureContribution("tx_count_60s", 1.0, true)) : List.of();
     Scoring.Model model =
-        new Scoring.Model(UUID.randomUUID(), "fs-test-model", value, anomaly, top, Map.of());
+        new Scoring.Model(UUID.randomUUID(), "fs-test-model", value, anomaly, top, features);
     return new Scored(
         model,
         new DecisionEvent.ScoringRecord(
@@ -150,7 +142,8 @@ public class InMemoryPorts
             3,
             false,
             null,
-            false));
+            false,
+            featureStoreDegraded));
   }
 
   @Override
@@ -266,7 +259,7 @@ public class InMemoryPorts
 
   @Override
   public DecisionEvent.CustomerNotificationRequested compose(
-      Transaction transaction, UUID block, Scoring scoring, AccountHistory history, Instant at) {
+      Transaction transaction, UUID block, Scoring scoring, Instant at) {
     return new DecisionEvent.CustomerNotificationRequested(
         UUID.randomUUID(),
         transaction.institutionId(),

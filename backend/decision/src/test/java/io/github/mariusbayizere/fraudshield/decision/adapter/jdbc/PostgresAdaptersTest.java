@@ -166,8 +166,7 @@ class PostgresAdaptersTest {
             redecided,
             first.thresholdsVersion(),
             first.requestFingerprint(),
-            3,
-            false);
+            3);
     sink.accept(records(List.of(first, second)));
     assertThat(sink.duplicateDecisions()).isEqualTo(1);
     assertThat(one("SELECT count(*) FROM fraudshield.decision_states")).isEqualTo("1");
@@ -357,11 +356,18 @@ class PostgresAdaptersTest {
   void firstSeenIsDurableAndOnlyMovesEarlier() throws Exception {
     List<DecisionEvent> facts = FactScenarios.everyKindOfFact();
     sink.accept(records(facts));
-    JdbcAccountProfiles profiles = new JdbcAccountProfiles(db.dataSource("fs_app"));
-    Instant first =
-        profiles.find(INSTITUTION, "tok_AccountAaaaBbbbCcccDddd01").orElseThrow().firstSeenAt();
-    assertThat(first).isEqualTo(NOW);
-    assertThat(profiles.find(INSTITUTION, "tok_NeverSeenAccountCcccDddd01")).isEmpty();
+    assertThat(
+            one(
+                "SELECT first_seen_at = '"
+                    + NOW
+                    + "'::timestamptz FROM fraudshield.account_profiles WHERE account_token ="
+                    + " 'tok_AccountAaaaBbbbCcccDddd01'"))
+        .isEqualTo("t");
+    assertThat(
+            one(
+                "SELECT count(*) FROM fraudshield.account_profiles WHERE account_token ="
+                    + " 'tok_NeverSeenAccountCcccDddd01'"))
+        .isEqualTo("0");
     try (Connection c = db.dataSource("fs_app").getConnection()) {
       c.setAutoCommit(false);
       Tenant.use(c, INSTITUTION);

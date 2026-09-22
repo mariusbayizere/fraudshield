@@ -6,14 +6,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import io.github.mariusbayizere.fraudshield.common.transaction.Channel;
-import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcAccountHistory;
-import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcAccountProfiles;
+import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcAccountStatus;
 import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcConfiguration;
 import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcDecisionStates;
 import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcFreezes;
 import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcOverdueHolds;
 import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.PostgresSink;
-import io.github.mariusbayizere.fraudshield.decision.adapter.redis.RedisAccountState;
+import io.github.mariusbayizere.fraudshield.decision.adapter.redis.RedisAccountStatus;
 import io.github.mariusbayizere.fraudshield.decision.adapter.redis.RedisCircuitBreakers;
 import io.github.mariusbayizere.fraudshield.decision.adapter.redis.RedisDecisionStates;
 import io.github.mariusbayizere.fraudshield.decision.adapter.redis.RedisFreezes;
@@ -96,7 +95,7 @@ class RedisOutageTest {
             100,
             Duration.ofMillis(10),
             Duration.ofMillis(200));
-    JdbcAccountProfiles profiles = new JdbcAccountProfiles(app);
+    JdbcAccountStatus durableStatus = new JdbcAccountStatus(app);
     JdbcDecisionStates durableStates = new JdbcDecisionStates(app);
     redisHolds = new RedisHoldSchedule(connection, TIMEOUT);
     HoldSchedulePort holds = ResilientPorts.holds(redisHolds, mode);
@@ -107,9 +106,9 @@ class RedisOutageTest {
     decisions =
         new DecisionService(
             new JdbcConfiguration(app, clock),
-            ResilientPorts.accountState(
-                new RedisAccountState(connection, profiles, TIMEOUT, Duration.ofSeconds(5)),
-                new JdbcAccountHistory(app, profiles),
+            ResilientPorts.accountStatus(
+                new RedisAccountStatus(connection, durableStatus, TIMEOUT, Duration.ofSeconds(5)),
+                durableStatus,
                 mode),
             scorer,
             ResilientPorts.freezes(

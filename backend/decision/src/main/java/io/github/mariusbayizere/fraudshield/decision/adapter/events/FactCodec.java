@@ -96,7 +96,6 @@ public final class FactCodec {
         node.put("thresholds_version", e.thresholdsVersion());
         node.put("fingerprint", HexFormat.of().formatHex(e.requestFingerprint()));
         node.put("latency_ms", e.decisionLatencyMs());
-        node.put("first_seen", e.firstSeenForAccount());
       }
       case DecisionEvent.AlertRaised e -> {
         node.put("type", "alert_raised");
@@ -194,8 +193,7 @@ public final class FactCodec {
               state(node.get("state")),
               node.get("thresholds_version").asLong(),
               HexFormat.of().parseHex(node.get("fingerprint").asString()),
-              node.get("latency_ms").asLong(),
-              node.get("first_seen").asBoolean());
+              node.get("latency_ms").asLong());
       case "alert_raised" ->
           new DecisionEvent.AlertRaised(
               uuid(node, "alert_id"),
@@ -329,6 +327,7 @@ public final class FactCodec {
     map.put("ml_unavailable_fallback", s.fallback());
     map.put("trace_id", s.traceId());
     map.put("requires_analyst_review", s.requiresAnalystReview());
+    map.put("feature_store_degraded", s.featureStoreDegraded());
     return map;
   }
 
@@ -353,7 +352,8 @@ public final class FactCodec {
         node.get("scoring_duration_ms").asInt(),
         node.get("ml_unavailable_fallback").asBoolean(),
         text(node, "trace_id"),
-        node.get("requires_analyst_review").asBoolean());
+        node.get("requires_analyst_review").asBoolean(),
+        node.get("feature_store_degraded").asBoolean());
   }
 
   private static ObjectNode outcome(DecisionOutcome o) {

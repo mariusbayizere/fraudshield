@@ -3,8 +3,11 @@ package io.github.mariusbayizere.fraudshield.decision.adapter.redis;
 import java.util.UUID;
 
 /**
- * Redis key layout. Per-account keys share a hash tag so one account's state lives in one cluster
- * slot. Values hold tokens, amounts, times and coordinates only; never personal data (D-20).
+ * Redis key layout of the decision path's own state: freeze windows and flags, decision states,
+ * hold timers and MCC circuit-breaker counts (ADR 0061). The feature store is not here; the scorer
+ * owns it and is its only writer (ADR 0033). Per-account keys share a hash tag so one account's
+ * state lives in one cluster slot. Values hold tokens, times and counts only; never personal data
+ * (D-20).
  */
 final class RedisKeys {
 
@@ -12,18 +15,6 @@ final class RedisKeys {
 
   static String account(UUID institution, String account, String suffix) {
     return "fs:{" + institution + ":" + account + "}:" + suffix;
-  }
-
-  static String counterparty(UUID institution, String counterparty) {
-    return "fs:{" + institution + ":" + counterparty + "}:senders";
-  }
-
-  static String device(UUID institution, String device, String suffix) {
-    return "fs:{" + institution + ":" + device + "}:device:" + suffix;
-  }
-
-  static String agent(UUID institution, String agent) {
-    return "fs:{" + institution + ":" + agent + "}:agent";
   }
 
   static String decision(UUID institution, UUID transaction) {

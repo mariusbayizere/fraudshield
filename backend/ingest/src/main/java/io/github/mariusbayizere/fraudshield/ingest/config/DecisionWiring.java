@@ -3,8 +3,7 @@ package io.github.mariusbayizere.fraudshield.ingest.config;
 import io.github.mariusbayizere.fraudshield.decision.adapter.events.KafkaMessages;
 import io.github.mariusbayizere.fraudshield.decision.adapter.grpc.GrpcScorer;
 import io.github.mariusbayizere.fraudshield.decision.adapter.grpc.ScorerChannels;
-import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcAccountHistory;
-import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcAccountProfiles;
+import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcAccountStatus;
 import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcConfiguration;
 import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcDecisionStates;
 import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcFreezes;
@@ -12,7 +11,7 @@ import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcFxRates;
 import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcOverdueHolds;
 import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.PostgresSink;
 import io.github.mariusbayizere.fraudshield.decision.adapter.kafka.KafkaSink;
-import io.github.mariusbayizere.fraudshield.decision.adapter.redis.RedisAccountState;
+import io.github.mariusbayizere.fraudshield.decision.adapter.redis.RedisAccountStatus;
 import io.github.mariusbayizere.fraudshield.decision.adapter.redis.RedisCircuitBreakers;
 import io.github.mariusbayizere.fraudshield.decision.adapter.redis.RedisDecisionStates;
 import io.github.mariusbayizere.fraudshield.decision.adapter.redis.RedisFreezes;
@@ -229,12 +228,13 @@ public class DecisionWiring {
       FraudShieldProperties properties,
       Clock clock,
       ExecutorService afterResponse) {
-    JdbcAccountProfiles profiles = new JdbcAccountProfiles(dataSource);
+    JdbcAccountStatus durableStatus = new JdbcAccountStatus(dataSource);
     return new DecisionService(
         configuration,
-        ResilientPorts.accountState(
-            new RedisAccountState(redis, profiles, properties.redisTimeout()),
-            new JdbcAccountHistory(dataSource, profiles),
+        ResilientPorts.accountStatus(
+            new RedisAccountStatus(
+                redis, durableStatus, properties.redisTimeout(), Duration.ofMillis(50)),
+            durableStatus,
             mode),
         scorer,
         ResilientPorts.freezes(
@@ -312,7 +312,7 @@ public class DecisionWiring {
         decisions, idempotency, rates, recorder, clock, properties.duplicateWait(), metrics);
   }
 
-  /** Work done after the response (C.2): feature-store updates and MCC counts. */
+  /** Work done after the response (C.2): MCC circuit-breaker counts. */
   @Bean(destroyMethod = "close")
   ExecutorService afterResponse() {
     return Executors.newVirtualThreadPerTaskExecutor();

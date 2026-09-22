@@ -6,13 +6,11 @@ import static io.github.mariusbayizere.fraudshield.decision.testing.Fixtures.NOW
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.mariusbayizere.fraudshield.common.config.MediumTimeoutPolicy;
-import io.github.mariusbayizere.fraudshield.common.transaction.Channel;
 import io.github.mariusbayizere.fraudshield.decision.adapter.events.FactCodec;
-import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcAccountProfiles;
+import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcAccountStatus;
 import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcDecisionStates;
 import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.PostgresSink;
 import io.github.mariusbayizere.fraudshield.decision.adapter.spool.SpoolRecord;
-import io.github.mariusbayizere.fraudshield.decision.application.port.AccountStatePort;
 import io.github.mariusbayizere.fraudshield.decision.application.port.CircuitBreakerPort;
 import io.github.mariusbayizere.fraudshield.decision.application.port.FreezePort;
 import io.github.mariusbayizere.fraudshield.decision.application.port.HoldSchedulePort;
@@ -21,9 +19,7 @@ import io.github.mariusbayizere.fraudshield.decision.domain.DecidedBy;
 import io.github.mariusbayizere.fraudshield.decision.domain.Decision;
 import io.github.mariusbayizere.fraudshield.decision.domain.DecisionState;
 import io.github.mariusbayizere.fraudshield.decision.domain.DecisionValue;
-import io.github.mariusbayizere.fraudshield.decision.domain.Transaction;
 import io.github.mariusbayizere.fraudshield.decision.testing.FactScenarios;
-import io.github.mariusbayizere.fraudshield.decision.testing.Fixtures;
 import io.github.mariusbayizere.fraudshield.decision.testing.RedisTestServer;
 import io.github.mariusbayizere.fraudshield.decision.testing.TestDatabase;
 import io.lettuce.core.api.StatefulRedisConnection;
@@ -70,110 +66,10 @@ class RedisAdaptersTest {
     server.flush();
   }
 
-  private static Transaction at(Instant when, String amount, Channel channel) {
-    return at(ACCOUNT, when, amount, channel);
-  }
-
-  private static Transaction at(String account, Instant when, String amount, Channel channel) {
-    Transaction t = Fixtures.transaction(UUID.randomUUID(), account, amount, channel);
-    return new Transaction(
-        t.institutionId(),
-        t.transactionId(),
-        t.accountToken(),
-        t.counterpartyToken(),
-        t.amount(),
-        t.amountRwf(),
-        t.channel(),
-        t.merchantCategoryCode(),
-        t.latitude(),
-        t.longitude(),
-        t.deviceToken(),
-        t.agentToken(),
-        t.counterpartyCountry(),
-        when,
-        when);
-  }
-
   @Test
-  @Tag("FR-02-09")
-  @Tag("FR-01-04")
-  void theFeatureStoreSeesEarlierTransactionsAndNotTheScoredOne() {
-    RedisAccountState store =
-        new RedisAccountState(
-            connection,
-            new JdbcAccountProfiles(db.dataSource("fs_app")),
-            TIMEOUT,
-            Duration.ofSeconds(5));
-    String account =
-        "tok_FreshAccount" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
-    Transaction first = at(account, NOW.minusSeconds(120), "1000", Channel.AGENT_BANKING);
-    AccountStatePort.Snapshot before = store.read(first);
-    assertThat(before.firstSeen()).isTrue();
-    assertThat(before.history().meanHourlyCount30d()).isNaN();
-    store.record(first);
-    store.record(at(account, NOW.minusSeconds(30), "2000", Channel.AGENT_BANKING));
-
-    Transaction scored = at(account, NOW, "3000", Channel.AGENT_BANKING);
-    AccountStatePort.Snapshot snapshot = store.read(scored);
-    assertThat(snapshot.firstSeen()).isFalse();
-    assertThat(snapshot.frozen()).isFalse();
-    assertThat(snapshot.history().txCount60s()).isEqualTo(1);
-    assertThat(snapshot.history().txCount1h()).isEqualTo(2);
-    assertThat(snapshot.history().amountSum24hRwf()).isEqualByComparingTo("3000");
-    assertThat(snapshot.history().lastTransactionAt()).isEqualTo(NOW.minusSeconds(30));
-    assertThat(snapshot.history().meanHourlyCount30d()).as("first seen 2 minutes ago").isZero();
-    assertThat(snapshot.history().agent().cashoutCount1h()).isEqualTo(2);
-    assertThat(snapshot.history().device().newForAccount()).isFalse();
-    assertThat(snapshot.history().device().deviceAgeDays()).isZero();
-    store.record(scored);
-    // Recording the same transaction again changes nothing (members are keyed by id).
-    store.record(scored);
-    assertThat(
-            store
-                .read(at(account, NOW.plusSeconds(1), "1", Channel.AGENT_BANKING))
-                .history()
-                .txCount60s())
-        .isEqualTo(2);
-  }
-
-  @Test
-  @Tag("FR-02-09")
-  void counterpartyAndDeviceSetsCountDistinctOtherAccountsInOpenWindows() {
-    RedisAccountState store =
-        new RedisAccountState(
-            connection,
-            new JdbcAccountProfiles(db.dataSource("fs_app")),
-            TIMEOUT,
-            Duration.ofSeconds(5));
-    final String sender = "tok_SenderBbbbCcccDdddEeee01";
-    final Instant day = NOW.minus(Duration.ofDays(1));
-    // Many payments from one sender count once, whatever order they are recorded in.
-    store.record(at(sender, NOW.minusSeconds(10), "1", Channel.MOBILE_MONEY));
-    for (int i = 1; i <= 5; i++) {
-      store.record(at(sender, NOW.minus(Duration.ofHours(i)), "1", Channel.MOBILE_MONEY));
-    }
-    store.record(
-        at("tok_SenderCcccDdddEeeeFfff01", day.minusSeconds(3600), "1", Channel.MOBILE_MONEY));
-    store.record(at("tok_SenderDdddEeeeFfffGggg01", day, "1", Channel.MOBILE_MONEY));
-    store.record(at("tok_SenderEeeeFfffGgggHhhh01", NOW.plusSeconds(5), "1", Channel.MOBILE_MONEY));
-    store.record(at("tok_SenderFfffGgggHhhhIiii01", day.plusMillis(1), "1", Channel.MOBILE_MONEY));
-    store.record(at(NOW.minus(Duration.ofHours(1)), "1", Channel.MOBILE_MONEY));
-
-    AccountStatePort.Snapshot snapshot = store.read(at(NOW, "1", Channel.MOBILE_MONEY));
-    // B and F: C is older than 24 h, D sits exactly on the open edge, E is later, A is the payer.
-    assertThat(snapshot.history().counterpartyUniqueSenders24h()).isEqualTo(2);
-    // Over 7 days the device saw A, B, C, D and F; E is later than the scored transaction.
-    assertThat(snapshot.history().device().accountsPerDevice7d()).isEqualTo(5);
-    assertThat(snapshot.history().accountsSharingDeviceOrPhone()).isEqualTo(4);
-    assertThat(connection.sync().zcard(RedisKeys.counterparty(INSTITUTION, Fixtures.COUNTERPARTY)))
-        .as("one member per sender, not per payment; E's write trimmed C and D")
-        .isEqualTo(4L);
-  }
-
-  @Test
-  @Tag("FR-02-09")
   @Tag("FR-03-06")
-  void flushesRestoreFirstSeenAndTheFreezeFromPostgres() throws Exception {
+  @Tag("FR-02-09")
+  void flushesRestoreTheFreezeAndFirstSeenStaysDurableForTheScorer() throws Exception {
     PostgresSink sink =
         new PostgresSink(db.dataSource("fs_app"), Files.createTempDirectory("dead"));
     List<SpoolRecord> records = new ArrayList<>();
@@ -182,31 +78,46 @@ class RedisAdaptersTest {
       records.add(new SpoolRecord(records.size(), records.size() + 1, payload));
     }
     sink.accept(records);
-    RedisAccountState store =
-        new RedisAccountState(
+    RedisAccountStatus status =
+        new RedisAccountStatus(
             connection,
-            new JdbcAccountProfiles(db.dataSource("fs_app")),
+            new JdbcAccountStatus(db.dataSource("fs_app")),
             TIMEOUT,
             Duration.ofSeconds(5));
-    AccountStatePort.Snapshot afterFlush =
-        store.read(at(NOW.plus(Duration.ofHours(2)), "10", Channel.MOBILE_MONEY));
-    assertThat(afterFlush.firstSeen()).isFalse();
-    assertThat(afterFlush.frozen()).as("frozen by the third HIGH in the scenario").isTrue();
-    // Two hours after first seen: a baseline of one hour with no arrivals in Redis.
-    assertThat(afterFlush.history().meanHourlyCount30d()).isZero();
-    // The durable values were written back, so the next read needs no database.
-    assertThat(
-            connection
-                .sync()
-                .hget(RedisKeys.account(INSTITUTION, ACCOUNT, "profile"), "first_seen"))
-        .isEqualTo(Long.toString(NOW.toEpochMilli()));
+    assertThat(status.frozen(INSTITUTION, ACCOUNT))
+        .as("frozen by the scenario's third HIGH")
+        .isTrue();
+    // Written back, so the next read needs no database.
     assertThat(connection.sync().exists(RedisKeys.account(INSTITUTION, ACCOUNT, "frozen"))).isOne();
+    final String other = "tok_NeverFrozenAaaaBbbbCccc01";
+    assertThat(status.frozen(INSTITUTION, other)).isFalse();
+    assertThat(connection.sync().exists(RedisKeys.account(INSTITUTION, other, "known"))).isOne();
+
+    // PB-37: the account's durable first-seen is in account_profiles, where the scorer's database
+    // fallback reads it with the read-only role (ADR 0033, ADR 0062).
+    try (java.sql.Connection c = db.dataSource("fs_app_readonly").getConnection()) {
+      c.setAutoCommit(false);
+      try (java.sql.PreparedStatement tenant =
+              c.prepareStatement("SELECT set_config('fraudshield.institution_id', ?, true)");
+          java.sql.PreparedStatement read =
+              c.prepareStatement(
+                  "SELECT first_seen_at FROM account_profiles WHERE account_token = ?")) {
+        tenant.setString(1, INSTITUTION.toString());
+        tenant.execute();
+        read.setString(1, ACCOUNT);
+        try (java.sql.ResultSet row = read.executeQuery()) {
+          assertThat(row.next()).isTrue();
+          assertThat(row.getObject(1, java.time.OffsetDateTime.class).toInstant()).isEqualTo(NOW);
+        }
+      }
+      c.rollback();
+    }
   }
 
   @Test
-  @Tag("FR-02-09")
+  @Tag("FR-03-06")
   @Tag("NFR-REL-01")
-  void stalledPostgresNeverStallsTheFeatureStoreRead() {
+  void stalledPostgresNeverStallsTheFreezeCheck() {
     javax.sql.DataSource stalled =
         new org.postgresql.ds.PGSimpleDataSource() {
           @Override
@@ -219,15 +130,16 @@ class RedisAdaptersTest {
             throw new java.sql.SQLException("stalled (test)", "08006");
           }
         };
-    RedisAccountState store =
-        new RedisAccountState(
-            connection, new JdbcAccountProfiles(stalled), TIMEOUT, Duration.ofMillis(50));
+    RedisAccountStatus status =
+        new RedisAccountStatus(
+            connection, new JdbcAccountStatus(stalled), TIMEOUT, Duration.ofMillis(50));
+    final String account = "tok_StalledAccountAaaaBbbbCc1";
     long start = System.nanoTime();
-    AccountStatePort.Snapshot snapshot =
-        store.read(at("tok_StalledAccountAaaaBbbbCc1", NOW, "10", Channel.CARD));
+    assertThat(status.frozen(INSTITUTION, account)).isFalse();
     assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofMillis(500));
-    assertThat(snapshot.firstSeen()).as("unknown, so not called new").isFalse();
-    assertThat(snapshot.history().meanHourlyCount30d()).as("fails closed").isNaN();
+    assertThat(connection.sync().exists(RedisKeys.account(INSTITUTION, account, "known")))
+        .as("unknown, so asked again next time")
+        .isZero();
   }
 
   @Test

@@ -1,7 +1,7 @@
 package io.github.mariusbayizere.fraudshield.decision.adapter.resilience;
 
 import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcDecisionStates;
-import io.github.mariusbayizere.fraudshield.decision.application.port.AccountStatePort;
+import io.github.mariusbayizere.fraudshield.decision.application.port.AccountStatusPort;
 import io.github.mariusbayizere.fraudshield.decision.application.port.CircuitBreakerPort;
 import io.github.mariusbayizere.fraudshield.decision.application.port.DecisionStatePort;
 import io.github.mariusbayizere.fraudshield.decision.application.port.FreezePort;
@@ -9,7 +9,6 @@ import io.github.mariusbayizere.fraudshield.decision.application.port.HoldSchedu
 import io.github.mariusbayizere.fraudshield.decision.domain.CircuitBreakerState;
 import io.github.mariusbayizere.fraudshield.decision.domain.DecisionState;
 import io.github.mariusbayizere.fraudshield.decision.domain.MccCircuitBreaker;
-import io.github.mariusbayizere.fraudshield.decision.domain.Transaction;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -63,25 +62,13 @@ public final class ResilientPorts {
    * @param mode degraded-mode flag
    * @return the resilient port
    */
-  public static AccountStatePort accountState(
-      AccountStatePort redis, AccountStatePort database, DegradedMode mode) {
-    return new AccountStatePort() {
-      @Override
-      public Snapshot read(Transaction transaction) {
-        return attempt(mode, () -> redis.read(transaction), () -> database.read(transaction));
-      }
-
-      @Override
-      public void record(Transaction transaction) {
+  public static AccountStatusPort accountStatus(
+      AccountStatusPort redis, AccountStatusPort database, DegradedMode mode) {
+    return (institutionId, accountToken) ->
         attempt(
             mode,
-            () -> {
-              redis.record(transaction);
-              return null;
-            },
-            () -> null);
-      }
-    };
+            () -> redis.frozen(institutionId, accountToken),
+            () -> database.frozen(institutionId, accountToken));
   }
 
   /**
