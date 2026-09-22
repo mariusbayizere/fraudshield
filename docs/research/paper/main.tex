@@ -9,8 +9,14 @@
 \usepackage{booktabs}
 \usepackage{hyperref}
 \usepackage{xcolor}
+\usepackage[numbers,sort]{natbib}
+\usepackage{url}
 
 \input{numbers}
+
+% A place where a scholarly reference is needed and none has been verified yet. Printed visibly;
+% never a citation key, so the bibliography holds only sources that were read (references.bib).
+\newcommand{\refneeded}{\textsuperscript{[reference needed]}}
 
 % Title from the SRS ("Research Paper" row, SRS front matter).
 \title{FraudShield-EAC: A Real-Time Explainable Fraud Detection System for East Africa\\[0.5em]
@@ -43,7 +49,7 @@ listed in \texttt{numbers.tex}, and the check in \texttt{number\_audit.md}; \tex
 \input{sections/11-limitations}
 \input{sections/12-reproducibility}
 
-\bibliographystyle{plain}
+\bibliographystyle{plainnat}
 \bibliography{references}
 
 \end{document}
