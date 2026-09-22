@@ -3,8 +3,9 @@
 LaTeX draft of the FraudShield paper, per build prompt Part E.13. Entry point: `main.tex`;
 sections in `sections/`; every number in `numbers.tex`.
 
-**Status: DRAFT, not reviewed, not compiled.** No TeX toolchain is installed on the development
-laptop; the sources are checked structurally (below), not rendered.
+**Status: DRAFT, not reviewed.** Compiles to an 18-page PDF with Tectonic 0.17.0 (checksum-verified
+release binary, run outside the repository): `tectonic -X compile main.tex`. The only warnings are
+the intentional `TODO-verify` citations, which render as `[?]` until verified references exist.
 
 ## Rules every number obeys
 
