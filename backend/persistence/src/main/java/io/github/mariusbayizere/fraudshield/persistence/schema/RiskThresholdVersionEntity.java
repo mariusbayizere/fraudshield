@@ -1,4 +1,4 @@
-package io.github.mariusbayizere.fraudshield.decision.adapter.jpa;
+package io.github.mariusbayizere.fraudshield.persistence.schema;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -59,6 +59,19 @@ public class RiskThresholdVersionEntity {
 
   /** For Hibernate. */
   protected RiskThresholdVersionEntity() {}
+
+  /**
+   * A new version. Append-only: a version is written once and never changed.
+   *
+   * @param institutionId institution
+   * @param version the version number
+   * @param effectiveAt when it takes effect
+   */
+  public RiskThresholdVersionEntity(UUID institutionId, long version, Instant effectiveAt) {
+    this.institutionId = institutionId;
+    this.version = version;
+    this.effectiveAt = effectiveAt;
+  }
 
   /**
    * The version.

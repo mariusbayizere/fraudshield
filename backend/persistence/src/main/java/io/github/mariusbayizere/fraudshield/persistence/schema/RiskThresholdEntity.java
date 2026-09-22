@@ -1,4 +1,4 @@
-package io.github.mariusbayizere.fraudshield.decision.adapter.jpa;
+package io.github.mariusbayizere.fraudshield.persistence.schema;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -72,6 +72,31 @@ public class RiskThresholdEntity {
 
   /** For Hibernate. */
   protected RiskThresholdEntity() {}
+
+  /**
+   * One channel's thresholds in a new version. Append-only: written once, never changed.
+   *
+   * @param institutionId institution
+   * @param version the version it belongs to
+   * @param channel the channel
+   * @param mediumThreshold the MEDIUM threshold
+   * @param highThreshold the HIGH threshold
+   * @param mediumTimeoutPolicy what happens when a MEDIUM hold times out
+   */
+  public RiskThresholdEntity(
+      UUID institutionId,
+      long version,
+      String channel,
+      BigDecimal mediumThreshold,
+      BigDecimal highThreshold,
+      String mediumTimeoutPolicy) {
+    this.institutionId = institutionId;
+    this.version = version;
+    this.channel = channel;
+    this.mediumThreshold = mediumThreshold;
+    this.highThreshold = highThreshold;
+    this.mediumTimeoutPolicy = mediumTimeoutPolicy;
+  }
 
   /**
    * The version this row belongs to.

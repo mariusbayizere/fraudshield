@@ -22,10 +22,28 @@ public class DemoSeedConfiguration {
       Environment environment,
       DemoSeedProperties properties,
       JdbcTemplate jdbc,
-      TransactionTemplate transactions) {
+      TransactionTemplate transactions,
+      io.github.mariusbayizere.fraudshield.persistence.schema.InstitutionRepository institutions,
+      io.github.mariusbayizere.fraudshield.persistence.schema.DemoUserRepository users,
+      io.github.mariusbayizere.fraudshield.persistence.schema.ThresholdVersionRepository
+          thresholdVersions,
+      io.github.mariusbayizere.fraudshield.persistence.schema.ThresholdSeedRepository thresholds,
+      io.github.mariusbayizere.fraudshield.persistence.schema.BreakerSettingsSeedRepository
+          breakerSettings,
+      jakarta.persistence.EntityManager entities) {
     // Defence in depth: the listener has already checked, but the seeder must never exist
     // otherwise.
     DemoSeedGuard.check(environment);
-    return new DemoDataSeeder(properties, jdbc, transactions, Clock.systemUTC());
+    return new DemoDataSeeder(
+        properties,
+        jdbc,
+        transactions,
+        Clock.systemUTC(),
+        institutions,
+        users,
+        thresholdVersions,
+        thresholds,
+        breakerSettings,
+        entities);
   }
 }

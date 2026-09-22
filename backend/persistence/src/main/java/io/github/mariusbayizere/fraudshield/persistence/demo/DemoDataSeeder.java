@@ -1,8 +1,19 @@
 package io.github.mariusbayizere.fraudshield.persistence.demo;
 
+import io.github.mariusbayizere.fraudshield.persistence.schema.BreakerSettingsEntity;
+import io.github.mariusbayizere.fraudshield.persistence.schema.BreakerSettingsSeedRepository;
+import io.github.mariusbayizere.fraudshield.persistence.schema.DemoUserEntity;
+import io.github.mariusbayizere.fraudshield.persistence.schema.DemoUserRepository;
+import io.github.mariusbayizere.fraudshield.persistence.schema.InstitutionEntity;
+import io.github.mariusbayizere.fraudshield.persistence.schema.InstitutionRepository;
+import io.github.mariusbayizere.fraudshield.persistence.schema.RiskThresholdEntity;
+import io.github.mariusbayizere.fraudshield.persistence.schema.RiskThresholdVersionEntity;
+import io.github.mariusbayizere.fraudshield.persistence.schema.ThresholdSeedRepository;
+import io.github.mariusbayizere.fraudshield.persistence.schema.ThresholdVersionRepository;
 import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
 import java.time.Clock;
+import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
@@ -38,6 +49,12 @@ public final class DemoDataSeeder implements ApplicationRunner {
   private final JdbcTemplate jdbc;
   private final TransactionTemplate transactions;
   private final Clock clock;
+  private final InstitutionRepository institutions;
+  private final DemoUserRepository users;
+  private final ThresholdVersionRepository thresholdVersions;
+  private final ThresholdSeedRepository thresholds;
+  private final BreakerSettingsSeedRepository breakerSettings;
+  private final jakarta.persistence.EntityManager entities;
 
   /**
    * Creates the seeder.
@@ -46,16 +63,34 @@ public final class DemoDataSeeder implements ApplicationRunner {
    * @param jdbc database access
    * @param transactions transaction boundary for the whole seed
    * @param clock time source
+   * @param institutions institution repository
+   * @param users staff user repository
+   * @param thresholdVersions threshold version repository
+   * @param thresholds per-channel threshold repository
+   * @param breakerSettings circuit-breaker settings repository
+   * @param entities the persistence context, flushed before the explicit SQL that reads its writes
    */
   public DemoDataSeeder(
       DemoSeedProperties properties,
       JdbcTemplate jdbc,
       TransactionTemplate transactions,
-      Clock clock) {
+      Clock clock,
+      InstitutionRepository institutions,
+      DemoUserRepository users,
+      ThresholdVersionRepository thresholdVersions,
+      ThresholdSeedRepository thresholds,
+      BreakerSettingsSeedRepository breakerSettings,
+      jakarta.persistence.EntityManager entities) {
     this.properties = Objects.requireNonNull(properties, "properties");
     this.jdbc = Objects.requireNonNull(jdbc, "jdbc");
     this.transactions = Objects.requireNonNull(transactions, "transactions");
     this.clock = Objects.requireNonNull(clock, "clock");
+    this.institutions = Objects.requireNonNull(institutions, "institutions");
+    this.users = Objects.requireNonNull(users, "users");
+    this.thresholdVersions = Objects.requireNonNull(thresholdVersions, "thresholdVersions");
+    this.thresholds = Objects.requireNonNull(thresholds, "thresholds");
+    this.breakerSettings = Objects.requireNonNull(breakerSettings, "breakerSettings");
+    this.entities = Objects.requireNonNull(entities, "entities");
   }
 
   @Override
@@ -76,22 +111,20 @@ public final class DemoDataSeeder implements ApplicationRunner {
     Boolean inserted =
         transactions.execute(
             status -> {
-              List<UUID> existing =
-                  jdbc.queryForList(
-                      "SELECT id FROM fraudshield.institutions WHERE code = ?",
-                      UUID.class,
-                      INSTITUTION_CODE);
-              if (!existing.isEmpty()) {
+              if (institutions.findByCode(INSTITUTION_CODE).isPresent()) {
                 return false;
               }
               UUID institution = UUID.randomUUID();
-              jdbc.update(
-                  "INSERT INTO fraudshield.institutions (id, code, name, country, synthetic)"
-                      + " VALUES (?, ?, ?, ?, true)",
-                  institution,
-                  INSTITUTION_CODE,
-                  "Synthetic Demo Bank (not a real institution)",
-                  "RW");
+              institutions.save(
+                  new InstitutionEntity(
+                      institution,
+                      INSTITUTION_CODE,
+                      "Synthetic Demo Bank (not a real institution)",
+                      "RW",
+                      true));
+              // The institutions policy keys on id, so the row above is written before the tenant
+              // is set, as fs_migrator. Everything after it is tenant-scoped.
+              entities.flush();
               jdbc.queryForObject(
                   "SELECT set_config('fraudshield.institution_id', ?, true)",
                   String.class,
@@ -159,23 +192,19 @@ public final class DemoDataSeeder implements ApplicationRunner {
       UUID institution, BCryptPasswordEncoder encoder, Account account, String password) {
     requireUsablePassword(account.login(), password);
     UUID id = UUID.randomUUID();
-    jdbc.update(
-        """
-        INSERT INTO fraudshield.users (id, institution_id, first_name, last_name, email,
-          password_hash,
-          role, requested_role, status, email_verified, preferred_locale, employee_id, department)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', true, 'en', ?, ?)
-        """,
-        id,
-        institution,
-        account.firstName(),
-        account.lastName(),
-        account.login() + ".demo@example.com",
-        encoder.encode(password),
-        account.role(),
-        account.role(),
-        account.employeeId(),
-        account.department());
+    users.save(
+        new DemoUserEntity(
+            id,
+            institution,
+            account.firstName(),
+            account.lastName(),
+            account.login() + ".demo@example.com",
+            encoder.encode(password),
+            account.role(),
+            account.employeeId(),
+            account.department()));
+    // The API key and the audit event below are written with explicit SQL and reference this row.
+    entities.flush();
     return id;
   }
 
@@ -207,27 +236,23 @@ public final class DemoDataSeeder implements ApplicationRunner {
   }
 
   private void riskConfiguration(UUID institution) {
-    jdbc.update(
-        "INSERT INTO fraudshield.risk_threshold_versions (institution_id, version) VALUES (?, 1)",
-        institution);
+    Instant now = clock.instant();
+    thresholdVersions.save(new RiskThresholdVersionEntity(institution, 1, now));
     for (String channel : CHANNELS) {
-      jdbc.update(
-          """
-          INSERT INTO fraudshield.risk_thresholds (institution_id, version, channel,
-            medium_threshold,
-            high_threshold, medium_timeout_policy)
-          VALUES (?, 1, ?, 0.6000, 0.8500, 'RELEASE_WITH_TIMEOUT_LABEL')
-          """,
-          institution,
-          channel);
+      thresholds.save(
+          new RiskThresholdEntity(
+              institution,
+              1,
+              channel,
+              new java.math.BigDecimal("0.6000"),
+              new java.math.BigDecimal("0.8500"),
+              "RELEASE_WITH_TIMEOUT_LABEL"));
     }
-    jdbc.update(
-        """
-        INSERT INTO fraudshield.mcc_circuit_breaker_settings_versions (institution_id, version,
-          fraud_rate_threshold, window_minutes, minimum_transactions, clean_reset_minutes)
-        VALUES (?, 1, 0.0500, 15, 100, 60)
-        """,
-        institution);
+    breakerSettings.save(
+        new BreakerSettingsEntity(
+            institution, 1, new java.math.BigDecimal("0.0500"), 15, 100, 60, now));
+    // The audit event that follows is explicit SQL, so these rows must already be in the database.
+    entities.flush();
   }
 
   private void audit(UUID institution, UUID admin) {

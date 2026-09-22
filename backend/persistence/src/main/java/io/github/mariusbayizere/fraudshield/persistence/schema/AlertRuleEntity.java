@@ -1,4 +1,4 @@
-package io.github.mariusbayizere.fraudshield.decision.adapter.jpa;
+package io.github.mariusbayizere.fraudshield.persistence.schema;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

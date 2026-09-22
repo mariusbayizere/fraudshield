@@ -58,10 +58,16 @@
       <artifactId>spring-jdbc</artifactId>
     </dependency>
     <!-- ADR 0068 (following ADR 0071): JPA for the configuration tables, explicit SQL for the
-         hot path, the append-only tables and the hypertables. -->
+         hot path, the append-only tables and the hypertables. The entities live beside the
+         migrations they mirror, in the persistence module. -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-data-jpa</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.github.mariusbayizere.fraudshield</groupId>
+      <artifactId>fraudshield-persistence</artifactId>
+      <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.postgresql</groupId>

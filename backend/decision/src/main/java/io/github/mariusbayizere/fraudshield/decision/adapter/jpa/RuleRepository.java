@@ -1,5 +1,7 @@
 package io.github.mariusbayizere.fraudshield.decision.adapter.jpa;
 
+import io.github.mariusbayizere.fraudshield.persistence.schema.AlertRuleEntity;
+import io.github.mariusbayizere.fraudshield.persistence.schema.AlertRuleVersionEntity;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.Query;

@@ -78,7 +78,10 @@ class DemoSeedGuardTest {
     environment.setActiveProfiles("prod");
     environment.setProperty(DemoSeedGuard.ENABLED_PROPERTY, "true");
     assertThatThrownBy(
-            () -> new DemoSeedConfiguration().demoDataSeeder(environment, null, null, null))
+            () ->
+                new DemoSeedConfiguration()
+                    .demoDataSeeder(
+                        environment, null, null, null, null, null, null, null, null, null))
         .isInstanceOf(IllegalStateException.class);
   }
 }
