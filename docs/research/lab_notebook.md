@@ -2366,3 +2366,40 @@ against it.
 **C-6, restated.** With the E1 encoding the ensemble's seed-to-seed AUC standard deviation is
 −0.6% against XGBoost alone (no reduction) and +12.5% against LightGBM alone. The first
 measurement's +62.9% was LightGBM being far more seed-sensitive under random-fold encoding.
+
+### 2026-09-22 · Pre-registration: the PB-67 learning curve, before any size is run
+
+Committed before the cache is built and before any model is fitted at a new size. M4 closed with
+recall at the 0.60 flag threshold missed **at 30,000 training rows** (0.736 against 0.88; ADR
+0031). The owner asked whether that is a property of the benchmark or of the training volume: 260
+frauds is about 3% of the benchmark's fraud.
+
+**Design, fixed now.** One feature cache from a 520,000-row corpus, so the train period's pool
+holds about 306,000 rows. It carries **240,000 training rows** spread evenly across that pool, and
+the **same evaluation rows as the declared gate run**: 20,000 validation rows outside the
+calibration tail, 20,000 calibration rows, and all 101,909 test rows. Sizes **30K, 60K and 120K**
+are spread evenly within the cached 240K, in time order. At every size `fs-features gate
+--metrics-only --train-rows N --seeds 1 2 3 4 5 --resamples 1000`: the same model, the same
+thresholds, seed 1 reported with its bootstrap interval and all five seeds as mean ± SD. One job at
+a time, memory checked before each.
+
+**One difference from the declared gate, stated in advance.** The gate's 30,000 rows came from the
+last 128 days of the train period (a 400,000-row corpus); this curve's 30K comes from a pool
+reaching further back. The curve is compared with itself, and its 30K point with the gate's.
+
+**Prediction.** Recall at 0.60 stays **below 0.88 at every size**, rising to **between 0.76 and
+0.84 at 240K**. Recall at the 1% FPR budget rises to **between 0.87 and 0.91** at 240K. The reason:
+the ensemble ranks well already and the calibrated score is conservative at 0.60 (precision 0.927
+at 30K). More training data should sharpen confident fraud a little without changing that. About
+7% of test fraud is the reversal-scam variant, which the model misses by construction.
+
+**What each outcome would mean, decided now:**
+- **Recall at 0.60 reaches 0.88** at some size (point estimate): the gate miss was a
+  training-scale artefact, and the smallest such size is the volume at which the gate is met.
+- **It stays below 0.88 and flattens** — 120K to 240K gains less than the 240K interval's
+  half-width, and the 240K interval's upper bound is below 0.88: the miss is a property of this
+  benchmark and model, and the paper can say so.
+- **It stays below 0.88 but is still rising at 240K**: neither conclusion holds, and the claim
+  stays "at the volumes measured", with the largest volume named.
+
+This entry will not be edited after the runs.
