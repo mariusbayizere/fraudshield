@@ -6,9 +6,9 @@ so.
 ## Read this first
 
 **M4 is complete.** The declared gate run (`docs/benchmarks/m4_gate_d8083dbc_v3.txt`) passes 9 of
-11. **ML-GATE-03 (recall at 0.60, 0.736 against 0.88) and ML-GATE-06 (FNR at 0.60, 0.264 against
-0.12) are missed**, and on the owner's decision they are `DONE_WITH_DEVIATION` against ADR 0031's
-amendment: a genuine miss on this benchmark, not deferrable and not a defect, recorded with value,
+11. **ML-GATE-03 (recall at 0.60, 0.736 at 30,000 training rows, against 0.88) and ML-GATE-06 (FNR at 0.60, 0.264
+against 0.12) are missed**, and on the owner's decision they are `DONE_WITH_DEVIATION` against ADR 0031's
+amendment: a miss at the training volume used, not deferrable and not a defect, recorded with value,
 interval and cause, reported in the paper, D-02's threshold unchanged. PB-67 (a larger training
 sample) is the open test of the candidate cause.
 

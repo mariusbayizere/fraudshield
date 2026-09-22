@@ -9,7 +9,8 @@ Rwanda, Kenya, Tanzania, Uganda and the DRC.
 > independent paths, 36 of them computable on this benchmark) are complete, and so is M4 (the
 > calibrated XGBoost + LightGBM ensemble, evaluated on the benchmark's held-out test period). M4
 > passes 9 of its 11 gate metrics — AUC 0.970, +0.091 over the strongest single feature — and
-> misses two: recall at the 0.60 flag threshold is 0.736 against 0.88, and the matching FNR
+> misses two: recall at the 0.60 flag threshold is 0.736 at 30,000 training rows, against 0.88,
+> and the matching FNR
 > (ADR 0031). All results are on the FraudShield-EAC synthetic benchmark, not on real data. M5–M7
 > (scoring service, decision engine, staff identity) are not complete, so no running service
 > exists yet. This README states only what exists and has been verified; measured results are

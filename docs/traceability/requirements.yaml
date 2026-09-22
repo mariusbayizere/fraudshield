@@ -2600,9 +2600,10 @@ requirements:
     on the same terms as a metric quoted without its scale (E2). M4 (2026-09-22): declared gate run at
     d40fca2, recall at 0.60 0.736 [0.707, 0.765], five seeds 0.744 +/- 0.041: FAILS the 0.880 threshold.
     Recorded, not tuned (D.3). Analysis and options in PB-62; the owner decides (ADR 0031). OWNER DECISION
-    2026-09-22 (ADR 0031 amendment): GATE MISSED: recall at 0.60 is 0.736 [0.707, 0.765] against the 0.880
-    threshold. A genuine miss on this benchmark, not deferrable and not a defect. Cause: ranking, not
-    the threshold (recall is 0.871 even at the 1% FPR budget); not the reversal-scam variant (at most
+    2026-09-22 (ADR 0031 amendment): GATE MISSED: recall at 0.60 is 0.736 [0.707, 0.765] at 30,000 training
+    rows, against the 0.880 threshold. A miss at the training volume used (30,000 rows, 260 frauds), not
+    deferrable and not a defect; not a property of the benchmark until PB-67 is tested. Cause: ranking,
+    not the threshold (recall is 0.871 even at the 1% FPR budget); not the reversal-scam variant (at most
     0.789 without it); candidate, untested: training volume (PB-67). D-02''s threshold unchanged, nothing
     tuned on test; reported as a finding in the paper.'
 - id: ML-GATE-04
@@ -2682,9 +2683,10 @@ requirements:
   - docs/adr/0031-closing-m4s-rows-and-the-two-that-fail.md
   notes: 'M4 (2026-09-22): declared gate run at d40fca2, FNR at 0.60 0.264 [0.235, 0.293]: FAILS the 12.0%
     threshold. The same shortfall as ML-GATE-03 (FNR = 1 - recall at 0.60). PB-62; ADR 0031. OWNER DECISION
-    2026-09-22 (ADR 0031 amendment): GATE MISSED: FNR at 0.60 is 0.264 [0.235, 0.293] against the 12.0%
-    threshold. A genuine miss on this benchmark, not deferrable and not a defect. Cause: ranking, not
-    the threshold (recall is 0.871 even at the 1% FPR budget); not the reversal-scam variant (at most
+    2026-09-22 (ADR 0031 amendment): GATE MISSED: FNR at 0.60 is 0.264 [0.235, 0.293] at 30,000 training
+    rows, against the 12.0% threshold. A miss at the training volume used (30,000 rows, 260 frauds), not
+    deferrable and not a defect; not a property of the benchmark until PB-67 is tested. Cause: ranking,
+    not the threshold (recall is 0.871 even at the 1% FPR budget); not the reversal-scam variant (at most
     0.789 without it); candidate, untested: training volume (PB-67). D-02''s threshold unchanged, nothing
     tuned on test; reported as a finding in the paper.'
 - id: ML-GATE-07

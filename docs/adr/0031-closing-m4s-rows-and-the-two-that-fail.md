@@ -69,12 +69,18 @@ benchmark** is recorded with its value, interval and cause, marked `DONE_WITH_DE
 ADR, and goes into the paper as a finding, with no threshold moved and nothing tuned on the test
 set; and a failure that **points to a defect in code or measurement** blocks M4 until it is fixed.
 
-**Both are genuine misses.** They are one shortfall stated twice (FNR = 1 − recall at 0.60):
+**Both are misses at the training volume used, not deferrable and not defects.** They are one
+shortfall stated twice (FNR = 1 − recall at 0.60):
 
 | Row | Measured (declared run, `d40fca2`) | Threshold |
 |---|---|---|
-| ML-GATE-03, recall at 0.60 | **0.736** [0.707, 0.765]; five seeds 0.744 ± 0.041 | ≥ 0.880 |
-| ML-GATE-06, FNR at 0.60 | **0.264** [0.235, 0.293]; five seeds 0.256 ± 0.041 | < 0.120 |
+| ML-GATE-03, recall at 0.60 | **0.736 at 30,000 training rows** [0.707, 0.765]; five seeds 0.744 ± 0.041 | ≥ 0.880 |
+| ML-GATE-06, FNR at 0.60 | **0.264 at 30,000 training rows** [0.235, 0.293]; five seeds 0.256 ± 0.041 | < 0.120 |
+
+**Scope of the claim (owner's correction, 2026-09-22).** The shortfall is established only at the
+training volume used: 30,000 rows and 260 frauds, about 3% of the benchmark's fraud. It is stated
+as "recall 0.736 at 30,000 training rows", **never as a property of the benchmark**, until PB-67's
+learning curve has been run.
 
 **Not deferrable.** Both were measured in M4, with intervals and seeds; neither needs later
 hardware or a later service, unlike ML-GATE-12 (dedicated hardware, ADR 0010) and ML-GATE-13

@@ -170,7 +170,7 @@ metric beside PB-46's baselines with a positive margin, ONNX parity inside 1e-6.
 (recall at 0.60, 0.736) and ML-GATE-06 (FNR at 0.60, 0.264) fail.** D.3 asks for the measured
 value and the analysis, not tuning; both are in the lab notebook and PB-62, and the rows stay
 `IN_PROGRESS` (ADR 0031). Whether M4 closes with them recorded is the owner's decision, and so is
-the `m4-complete` tag. **Decided 2026-09-22:** both are genuine misses — measurable now, and no
+the `m4-complete` tag. **Decided 2026-09-22:** both are misses at the training volume used (30,000 rows) — measurable now, and no
 defect found in code or measurement — so both are `DONE_WITH_DEVIATION` with the miss recorded in
 the row, the cause in ADR 0031's amendment, and a finding in the paper. M4 closes.
 
