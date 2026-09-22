@@ -31,9 +31,24 @@ The decision must also reach PostgreSQL without putting PostgreSQL on the hot pa
    every persisted HOLD with no later state 10 s after its deadline. A repeated timeout carries the
    same sequence and decision, which receivers ignore (ADR 0011).
 
+5. **The reading end dead-letters too** (Principal Review finding 7). `EnvelopeConsumer` commits
+   only after its handler returns, so a transient failure re-reads the record; it now backs off
+   exponentially to 30 s instead of re-reading every 100 ms. A record the handler can never accept
+   — a malformed envelope, a missing institution, a row PostgreSQL refuses (SQLSTATE outside the
+   transient classes 08, 40, 53, 57, 58) — goes to `<topic>.dlq` (C.3, ADR 0012) with the reason,
+   the source topic, partition, offset and time in its headers, and the consumer commits past it.
+   Otherwise one poison record stalls every customer SMS or webhook on its partition. If the
+   dead-letter send itself fails, the record is retried rather than dropped.
+6. **A caller that stops waiting for the spool** may already have had its record taken by the
+   writer. `appendAndWait` withdraws a record only while it is still queued; once taken, the caller
+   waits up to 5 s more, and a record whose fsync does not confirm in time raises "outcome
+   unknown" rather than "not recorded" (ADR 0067 point 5).
+
 ## Consequences
 
-`DurableSpoolTest`, `KafkaSpoolChaosTest` (Kafka paused, the process killed with a backlog; 500 of
+`DurableSpoolTest`, `SpoolDrainerTest` (a sink that refuses N times: order kept, nothing committed
+past a refused batch, a restarted consumer resumes), `EnvelopeConsumerTest` (a poison record is
+dead-lettered with its reason and the good record behind it is handled), `KafkaSpoolChaosTest` (Kafka paused, the process killed with a backlog; 500 of
 500 reconciled by transaction id), `PostgresAdaptersTest`, `RedisOutageTest` and
 `ResilienceApiTest` (PostgreSQL paused). The spool directory must be on a persistent volume per
 instance.
