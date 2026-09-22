@@ -71,15 +71,21 @@ public final class IngestController {
    */
   @PostMapping("/api/v1/transactions/ingest")
   public ResponseEntity<byte[]> ingest(HttpServletRequest request) throws IOException {
-    long received = System.nanoTime();
+    final long received = System.nanoTime();
     UUID correlation = ApiKeyFilter.correlation(request);
     Optional<ResponseEntity<byte[]>> refused = refuse(request, ApiScope.INGEST_WRITE, MAX_BODY);
     if (refused.isPresent()) {
       return refused.get();
     }
+    byte[] raw = request.getInputStream().readNBytes(MAX_BODY + 1);
+    if (raw.length > MAX_BODY) {
+      // No Content-Length (a chunked body): the limit is found by reading one byte past it, so an
+      // oversized body is 413 rather than a truncated 400 (Principal Review finding 13).
+      return tooLarge(MAX_BODY, correlation);
+    }
     JsonNode body;
     try {
-      body = JSON.readTree(request.getInputStream().readNBytes(MAX_BODY));
+      body = JSON.readTree(raw);
     } catch (JacksonException malformed) {
       return problem(Problems.validation(RequestValidator.malformed(), correlation));
     }
@@ -123,9 +129,13 @@ public final class IngestController {
     if (refused.isPresent()) {
       return refused.get();
     }
+    byte[] raw = request.getInputStream().readNBytes(MAX_BATCH_BODY + 1);
+    if (raw.length > MAX_BATCH_BODY) {
+      return tooLarge(MAX_BATCH_BODY, correlation);
+    }
     JsonNode body;
     try {
-      body = JSON.readTree(request.getInputStream().readNBytes(MAX_BATCH_BODY));
+      body = JSON.readTree(raw);
     } catch (JacksonException malformed) {
       return problem(Problems.validation(RequestValidator.malformed(), correlation));
     }
@@ -242,20 +252,35 @@ public final class IngestController {
                   correlation)));
     }
     if (request.getContentLengthLong() > maxBody) {
-      return Optional.of(
-          problem(
-              Problems.problem(
-                  "payload-too-large",
-                  "Payload too large",
-                  413,
-                  "the body exceeds " + maxBody + " bytes",
-                  correlation)));
+      return Optional.of(tooLarge(maxBody, correlation));
     }
     return Optional.empty();
   }
 
+  private static ResponseEntity<byte[]> tooLarge(int maxBody, UUID correlation) {
+    return problem(
+        Problems.problem(
+            "payload-too-large",
+            "Payload too large",
+            413,
+            "the body exceeds " + maxBody + " bytes",
+            correlation));
+  }
+
   private static Optional<ResponseEntity<byte[]>> scope(
       HttpServletRequest request, ApiScope scope) {
+    if (principal(request) == null) {
+      // A path variant that reached this controller without passing the filter: unauthenticated,
+      // not a 500 (Principal Review finding 13).
+      return Optional.of(
+          problem(
+              Problems.problem(
+                  "unauthorized",
+                  "Unauthorized",
+                  401,
+                  "an API key is required",
+                  ApiKeyFilter.correlation(request))));
+    }
     if (!principal(request).has(scope)) {
       return Optional.of(
           problem(

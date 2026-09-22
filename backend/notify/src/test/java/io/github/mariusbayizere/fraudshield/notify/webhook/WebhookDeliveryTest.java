@@ -257,6 +257,24 @@ class WebhookDeliveryTest {
     assertThat(policy.allowed(URI.create("https://[fd00::1]/hook"))).isFalse();
     assertThat(policy.allowed(URI.create("https://user@8.8.8.8/hook"))).isFalse();
     assertThat(policy.allowed(URI.create("https://8.8.8.8/hook"))).isTrue();
+
+    // The ranges the earlier filter let through (Principal Review finding 18).
+    assertThat(policy.allowed(URI.create("https://100.64.0.1/hook"))).as("CGNAT").isFalse();
+    assertThat(policy.allowed(URI.create("https://100.127.255.255/hook"))).as("CGNAT").isFalse();
+    assertThat(policy.allowed(URI.create("https://0.0.0.0/hook"))).isFalse();
+    assertThat(policy.allowed(URI.create("https://192.0.0.1/hook"))).isFalse();
+    assertThat(policy.allowed(URI.create("https://192.0.2.5/hook"))).as("TEST-NET-1").isFalse();
+    assertThat(policy.allowed(URI.create("https://198.18.0.1/hook"))).as("benchmark").isFalse();
+    assertThat(policy.allowed(URI.create("https://198.51.100.7/hook"))).as("TEST-NET-2").isFalse();
+    assertThat(policy.allowed(URI.create("https://203.0.113.7/hook"))).as("TEST-NET-3").isFalse();
+    assertThat(policy.allowed(URI.create("https://240.0.0.1/hook"))).as("reserved").isFalse();
+    assertThat(policy.allowed(URI.create("https://255.255.255.255/hook"))).isFalse();
+    assertThat(policy.allowed(URI.create("https://[2001:db8::1]/hook"))).as("doc").isFalse();
+    assertThat(policy.allowed(URI.create("https://[2001::1]/hook"))).as("Teredo").isFalse();
+    // 252.x is not IPv6 unique-local: the old test on the first octet refused a public address.
+    assertThat(policy.allowed(URI.create("https://100.63.255.255/hook"))).isTrue();
+    assertThat(policy.allowed(URI.create("https://[2606:4700::1111]/hook"))).isTrue();
+
     HttpWebhookTransport strict = new HttpWebhookTransport(policy);
     assertThatThrownBy(
             () -> strict.post(URI.create("http://127.0.0.1:1/x"), java.util.Map.of(), new byte[0]))

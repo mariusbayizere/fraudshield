@@ -64,6 +64,12 @@ public final class BatchJobs {
       INSERT INTO batch_job_items (job_id, institution_id, position, transaction_id, outcome,
       problem) VALUES (?, ?, ?, ?, ?, ?::jsonb) ON CONFLICT DO NOTHING
       """;
+  private static final String UNFINISHED_INSTITUTIONS =
+      "SELECT institutions_with_unfinished_batch_jobs FROM"
+          + " institutions_with_unfinished_batch_jobs()";
+  private static final String FAIL_UNFINISHED =
+      "UPDATE batch_jobs SET state = 'FAILED', completed_at = ?"
+          + " WHERE state IN ('QUEUED', 'RUNNING')";
   private static final String JOB =
       "SELECT state, total, processed, failed FROM batch_jobs WHERE id = ?";
   private static final String ITEMS =
@@ -254,6 +260,44 @@ public final class BatchJobs {
   }
 
   /**
+   * Marks jobs left QUEUED or RUNNING by a process that died as FAILED (V65).
+   *
+   * <p>A job's items live in memory while it runs, so nothing else can finish one whose instance is
+   * gone: without this, a job answered 202 stays RUNNING for ever (Principal Review finding 12). It
+   * runs at start-up, so the jobs it sees are earlier processes' leftovers.
+   *
+   * @return the jobs it failed
+   * @throws SQLException when the database is unavailable
+   */
+  public int failUnfinishedJobs() throws SQLException {
+    List<UUID> institutions = new java.util.ArrayList<>();
+    try (Connection c = dataSource.getConnection()) {
+      c.setAutoCommit(false);
+      c.setReadOnly(true);
+      try (PreparedStatement s = c.prepareStatement(UNFINISHED_INSTITUTIONS);
+          ResultSet rows = s.executeQuery()) {
+        while (rows.next()) {
+          institutions.add(rows.getObject(1, UUID.class));
+        }
+      }
+      c.commit();
+    }
+    int failed = 0;
+    for (UUID institution : institutions) {
+      try (Connection c = tenant(institution);
+          PreparedStatement s = c.prepareStatement(FAIL_UNFINISHED)) {
+        s.setObject(1, OffsetDateTime.ofInstant(clock.instant(), ZoneOffset.UTC));
+        failed += s.executeUpdate();
+        c.commit();
+      }
+    }
+    if (failed > 0) {
+      LOG.warn("{} batch jobs were left unfinished by an earlier process and are FAILED", failed);
+    }
+    return failed;
+  }
+
+  /**
    * A job's status (OpenAPI {@code JobStatus}), paginated by position.
    *
    * @param principal the key (with {@code jobs:read})
@@ -265,6 +309,10 @@ public final class BatchJobs {
    */
   public Optional<ObjectNode> status(ApiPrincipal principal, UUID job, String cursor, int limit)
       throws SQLException {
+    if (cursor != null && !cursor.matches("^[0-9]{1,7}$")) {
+      // The controller validates it too; this keeps any other caller off Integer.parseInt.
+      throw new IllegalArgumentException("cursor");
+    }
     int from = cursor == null ? 0 : Integer.parseInt(cursor);
     try (Connection c = tenant(principal.institutionId())) {
       ObjectNode status = JSON.createObjectNode();

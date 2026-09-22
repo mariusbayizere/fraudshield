@@ -4,6 +4,7 @@ import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcConfigurat
 import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcOverdueHolds;
 import io.github.mariusbayizere.fraudshield.decision.application.CircuitBreakerMonitor;
 import io.github.mariusbayizere.fraudshield.decision.application.HoldTimeoutService;
+import io.github.mariusbayizere.fraudshield.ingest.application.BatchJobs;
 import io.github.mariusbayizere.fraudshield.notify.verification.UnblockReconciler;
 import java.time.Duration;
 import java.util.Objects;
@@ -40,6 +41,7 @@ public final class BackgroundTasks implements SmartLifecycle {
   private final CircuitBreakerMonitor breakers;
   private final JdbcConfiguration configuration;
   private final UnblockReconciler unblocks;
+  private final BatchJobs batches;
   private ScheduledExecutorService scheduler;
 
   /**
@@ -50,22 +52,31 @@ public final class BackgroundTasks implements SmartLifecycle {
    * @param breakers MCC breaker monitor
    * @param configuration risk configuration
    * @param unblocks customer unblocks that did not reach the decision path
+   * @param batches batch jobs, for the start-up sweep
    */
   public BackgroundTasks(
       HoldTimeoutService holds,
       JdbcOverdueHolds overdue,
       CircuitBreakerMonitor breakers,
       JdbcConfiguration configuration,
-      UnblockReconciler unblocks) {
+      UnblockReconciler unblocks,
+      BatchJobs batches) {
     this.holds = Objects.requireNonNull(holds, "holds");
     this.overdue = Objects.requireNonNull(overdue, "overdue");
     this.breakers = Objects.requireNonNull(breakers, "breakers");
     this.configuration = Objects.requireNonNull(configuration, "configuration");
     this.unblocks = Objects.requireNonNull(unblocks, "unblocks");
+    this.batches = Objects.requireNonNull(batches, "batches");
   }
 
   @Override
   public synchronized void start() {
+    try {
+      // Jobs an earlier process left RUNNING have no items anywhere and can only be failed (V65).
+      batches.failUnfinishedJobs();
+    } catch (java.sql.SQLException | RuntimeException e) {
+      LOG.warn("could not fail the batch jobs left unfinished by an earlier process", e);
+    }
     scheduler =
         Executors.newScheduledThreadPool(
             2, Thread.ofPlatform().name("decision-tasks-", 0).daemon(true).factory());

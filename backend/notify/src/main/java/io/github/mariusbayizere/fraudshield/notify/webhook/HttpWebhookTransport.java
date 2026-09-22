@@ -40,17 +40,58 @@ public final class HttpWebhookTransport implements WebhookTransport {
             return false;
           }
           for (InetAddress address : InetAddress.getAllByName(url.getHost())) {
-            if (address.isLoopbackAddress()
-                || address.isSiteLocalAddress()
-                || address.isLinkLocalAddress()
-                || address.isAnyLocalAddress()
-                || address.isMulticastAddress()
-                || (address.getAddress()[0] & 0xfe) == 0xfc) {
+            if (!isPublic(address)) {
               return false;
             }
           }
           return true;
         };
+
+    /**
+     * Whether one resolved address is a public unicast address.
+     *
+     * <p>An explicit deny-list of the special-purpose ranges, because the {@code InetAddress}
+     * predicates miss some and the IPv6 unique-local test was being applied to the first octet of
+     * IPv4 addresses, where {@code 252.x} is not unique-local (Principal Review finding 18).
+     *
+     * @param address a resolved address
+     * @return true when a webhook may be sent to it
+     */
+    private static boolean isPublic(InetAddress address) {
+      if (address.isLoopbackAddress()
+          || address.isAnyLocalAddress()
+          || address.isLinkLocalAddress()
+          || address.isMulticastAddress()
+          || address.isSiteLocalAddress()) {
+        return false;
+      }
+      byte[] bytes = address.getAddress();
+      if (bytes.length == 4) {
+        int first = bytes[0] & 0xff;
+        int second = bytes[1] & 0xff;
+        return !(first == 0 // 0.0.0.0/8 "this network"
+            || first == 100 && second >= 64 && second <= 127 // 100.64.0.0/10 carrier-grade NAT
+            || first == 127 // loopback
+            || first == 192 && second == 0 // 192.0.0.0/24 and 192.0.2.0/24 documentation
+            || first == 192 && second == 88 // 192.88.99.0/24 6to4 relay anycast
+            || first == 198 && (second == 18 || second == 19) // 198.18.0.0/15 benchmarking
+            || first == 198 && second == 51 // 198.51.100.0/24 documentation
+            || first == 203 && second == 0 // 203.0.113.0/24 documentation
+            || first >= 224); // multicast and 240.0.0.0/4 reserved, including 255.255.255.255
+      }
+      int first = bytes[0] & 0xff;
+      if ((first & 0xfe) == 0xfc) { // fc00::/7 unique local
+        return false;
+      }
+      if (first == 0x20 && (bytes[1] & 0xff) == 0x01) {
+        int third = bytes[2] & 0xff;
+        // 2001:db8::/32 documentation, 2001::/23 IETF protocol assignments (Teredo, ORCHID).
+        return !(third == 0x0d && (bytes[3] & 0xff) == 0xb8) && third != 0x00;
+      }
+      // ::/128, ::1 and IPv4-mapped addresses are covered by the predicates above and by the
+      // IPv4 branch; anything else is public unicast.
+      return true;
+    }
   }
 
   private final HttpClient client;

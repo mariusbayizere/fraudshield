@@ -51,6 +51,8 @@ class IngestApiTest {
 
   @Autowired Environment environment;
 
+  @Autowired io.github.mariusbayizere.fraudshield.ingest.application.BatchJobs batches;
+
   @DynamicPropertySource
   static void properties(DynamicPropertyRegistry registry) {
     ApiHarness.properties(registry);
@@ -326,6 +328,22 @@ class IngestApiTest {
                     "{\"x\":\"" + "a".repeat(20_000) + "\"}")
                 .statusCode())
         .isEqualTo(413);
+    // The same body with no Content-Length (chunked) was truncated and answered 400 malformed
+    // (Principal Review finding 13).
+    String oversized = "{\"x\":\"" + "a".repeat(20_000) + "\"}";
+    HttpResponse<String> chunked =
+        HTTP.send(
+            HttpRequest.newBuilder(URI.create(url("/api/v1/transactions/ingest")))
+                .header("X-API-Key", ApiHarness.KEY)
+                .header("Content-Type", "application/json")
+                .POST(
+                    HttpRequest.BodyPublishers.ofInputStream(
+                        () ->
+                            new java.io.ByteArrayInputStream(
+                                oversized.getBytes(StandardCharsets.UTF_8))))
+                .build(),
+            HttpResponse.BodyHandlers.ofString());
+    assertThat(chunked.statusCode()).isEqualTo(413);
   }
 
   @Test
@@ -472,6 +490,34 @@ class IngestApiTest {
         .isEqualTo(422);
     assertThat(get("/api/v1/jobs/" + UUID.randomUUID(), ApiHarness.KEY).statusCode())
         .isEqualTo(404);
+    assertThat(get(status + "?cursor=not-a-number", ApiHarness.KEY).statusCode())
+        .as("a cursor that is not a position is a validation error, never a 500")
+        .isEqualTo(422);
+  }
+
+  /**
+   * A job whose process died has no items anywhere and can only be failed; before the start-up
+   * sweep it stayed RUNNING for ever (Principal Review finding 12).
+   */
+  @Test
+  @Tag("FR-01-06")
+  void unfinishedJobsAreFailedWhenAnInstanceStarts() throws Exception {
+    UUID job = UUID.randomUUID();
+    try (Connection c = ApiHarness.DB.superuser();
+        Statement s = c.createStatement()) {
+      s.execute(
+          "INSERT INTO fraudshield.batch_jobs (id, institution_id, api_key_id, state, total)"
+              + " SELECT '"
+              + job
+              + "', '"
+              + Fixtures.INSTITUTION
+              + "', k.id, 'RUNNING', 10 FROM fraudshield.api_keys k WHERE k.institution_id = '"
+              + Fixtures.INSTITUTION
+              + "' LIMIT 1");
+    }
+    assertThat(batches.failUnfinishedJobs()).isPositive();
+    JsonNode status = JSON.readTree(get("/api/v1/jobs/" + job, ApiHarness.KEY).body());
+    assertThat(status.get("state").asString()).isEqualTo("FAILED");
   }
 
   @Test
