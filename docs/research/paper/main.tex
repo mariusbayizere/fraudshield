@@ -1,0 +1,51 @@
+% FraudShield paper draft (build prompt Part E.13, milestone M11).
+% Status: DRAFT. Not reviewed. See README.md in this directory for the rules every number obeys.
+\documentclass[11pt]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[a4paper,margin=2.5cm]{geometry}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{xcolor}
+
+\input{numbers}
+
+% Title from the SRS ("Research Paper" row, SRS front matter).
+\title{FraudShield-EAC: A Real-Time Explainable Fraud Detection System for East Africa\\[0.5em]
+\large DRAFT --- results on the FraudShield-EAC synthetic benchmark only}
+\author{Marius Bayizere\\Independent Researcher, Kigali, Rwanda}
+\date{Draft of 2026-09-22}
+
+\begin{document}
+\maketitle
+
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule}{\small
+\textbf{Status of the numbers in this draft.} Every figure is measured on the FraudShield-EAC
+synthetic benchmark; none describes a real institution. Figures marked \textsuperscript{\dag}
+come from milestone M4's evaluation at commit \texttt{a6b0c9e} of branch
+\texttt{m4/generalisation}, before that milestone was tagged complete; they are provisional and
+will be re-verified against the \texttt{m4-complete} tag. Unmarked figures come from milestones
+M2 and M3 on \texttt{main}. ``NOT YET MEASURED'' marks results a later milestone produces; no
+value is estimated in their place. The source of every number is listed in
+\texttt{numbers.tex}.}}
+
+\input{sections/00-abstract}
+\input{sections/01-introduction}
+\input{sections/02-related-work}
+\input{sections/03-problem-setting}
+\input{sections/04-dataset}
+\input{sections/05-features}
+\input{sections/06-method}
+\input{sections/07-evaluation}
+\input{sections/08-generalisation}
+\input{sections/09-discussion}
+\input{sections/10-ethics}
+\input{sections/11-limitations}
+\input{sections/12-reproducibility}
+
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}

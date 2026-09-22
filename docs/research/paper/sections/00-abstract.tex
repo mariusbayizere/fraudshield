@@ -1,0 +1,25 @@
+\begin{abstract}
+We describe FraudShield, a real-time fraud detection system specified for East African digital
+payments (mobile money, USSD, agent banking, card, online and bank transfer), and FraudShield-EAC,
+the seeded synthetic benchmark built to develop and evaluate it. The benchmark is the paper's
+subject as much as the system is: we report what it was built to support and, with the
+measurements that establish them, what it cannot support.
+
+On this benchmark a single engineered feature, the one-hour to thirty-day velocity ratio, reaches
+a class separation of \nFloorM{} on its own, so we report every model metric as a margin over
+that single-feature floor rather than over chance. The calibrated XGBoost and LightGBM ensemble
+reaches an AUC of \nGateAUC{} \nGateAUCci{}, a margin of \nGateMargin{} over the floor measured
+on the same test rows. Four disjoint feature groups each reach at least \nGroupGeographic{} alone,
+so ablations on this benchmark measure redundancy, not importance. Both generalisation
+experiments we planned (leave-one-country-out and a novel fraud variant held out in time) are
+null, for one reason: the generator encodes fraud as bursts, and every country and variant is a
+view of that structure. A pre-registered, typology-grounded variant without burst structure, a
+single victim-initiated transfer to an established counterparty, is the one genuine failure we
+found: it is caught at \nRevRecall{} \nRevCI{} against \nBaseVarRecall{} \nBaseVarCI{} for the
+base scenarios. The most robust quantitative result is a cost the benchmark cannot weaken: across
+tree complexity, the median cost of an exact TreeSHAP explanation grows about
+\nFrontRatio-fold while accuracy stays within its interval.
+
+All results are on a synthetic benchmark whose fraud parameters are modelling choices, not
+observations; we state what real-data validation would need to show.
+\end{abstract}
