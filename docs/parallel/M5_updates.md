@@ -169,3 +169,87 @@ output is omitted by config). The shortfall is M4's `cli.py` (51%), `training/re
 and the non-M5 code alone is below 90%, which matches M4's red CI. `origin/m4/generalisation` has
 commits after this branch's base that test those commands; the rebase onto `m4-complete` will
 show whether they close it.
+
+
+## 9. After the owner's decisions of 2026-09-22
+
+**Licence exceptions, done (owner-approved).** `tools/src/fraudshield_tools/licences.py` gained the
+two version-pinned entries from section 1, `python:cloudpickle@3.1.2` and
+`python:sortedcontainers@2.4.0`, in c0b4655, a change outside `ml/` made on the owner's approval.
+The `tools` licence tests pass (56).
+
+**Three more exceptions, awaiting approval.** The latency work (ADR 0032) added packages whose
+metadata the checker cannot identify, so **the licences job fails on this branch again** until
+these land. The texts were verified 2026-09-22:
+
+```python
+    "python:treelite@4.7.2": (
+        "Apache-2.0",
+        "classifier says only 'Apache Software License' and the wheel ships no licence file; "
+        "METADATA 'License: Apache-2.0', confirmed against the tagged source (github.com/dmlc/"
+        "treelite, tag 4.7.2, LICENSE: 'Apache License Version 2.0, January 2004') on "
+        "2026-09-22. The wheel bundles libgomp (GCC Runtime Library Exception). Runtime: M5 "
+        "serving inference (ADR 0032)",
+    ),
+    "python:skl2onnx@1.20.0": (
+        "Apache-2.0",
+        "classifier says only 'Apache Software License'; dist-info/licenses/LICENSE is the Apache "
+        "License, Version 2.0 text (verified 2026-09-22). Dev only, via onnxmltools (E.4's ONNX "
+        "parity test, ADR 0032)",
+    ),
+    "python:flatbuffers@25.12.19": (
+        "Apache-2.0",
+        "classifier says only 'Apache Software License'; METADATA 'License: Apache 2.0' "
+        "(verified 2026-09-22). Dev only, via onnxruntime (E.4's ONNX parity test)",
+    ),
+```
+
+**Latency: ADR 0032, accepted by the owner.**
+- The served configuration is 50 trees at depth 3, the smallest inside the best AUC's interval
+  (0.9685 against 0.9702 ±0.0075).
+- Inference runs through Treelite for both boosters, exact to 1e-6.
+- The Isolation Forest is vectorised, and the SHAP `DMatrix` is built on one thread.
+- Per-request service time on this laptop is 0.91 ms p50 unflagged and 2.79 ms p50 on the SHAP
+  path, about 900 requests/s per worker (from about 326).
+- The 200-in-flight run reached 296 requests/s on 3 workers (from 183).
+- Evidence: `docs/benchmarks/m5_serve_laptop_576637f.json` and
+  `m5_service_time_laptop_576637f.txt`, **not gate evidence**. The gate stays as written and is
+  recorded as a throughput requirement of about 13,300 requests/s, at least 15 dedicated cores of
+  this class, measured in M10.
+- ONNX: XGBoost meets E.4's 1e-5 parity on 100,000 rows. LightGBM cannot, because its converter is
+  float32-only against double thresholds. This is a recorded deviation from E.4's artefact list.
+
+**FR-02-03's deployment block (PB-64, from ADR 0031): done.** `fs-model publish --alias
+production`, `fs-model alias production <v>` and the workers' swap each refuse a bundle whose
+held-out ECE exceeds 0.05, or that records none (`test_registry.py`). Proposed: FR-02-03 moves from
+`DONE_WITH_DEVIATION` to `DONE`, since the promotion step now exists.
+
+### For the M6 agent: ADR 0033 (proposed contract change, awaiting the owner)
+
+**Do not implement the `AccountContext` assembly in Java.** The owner rejected a third
+implementation of the parity-critical window arithmetic. The proposal
+(`docs/adr/0033-the-scorer-reads-account-context-from-the-feature-store.md`, with the diff in
+`docs/parallel/M5_proto_proposal.diff`; `buf lint` and `buf breaking` pass):
+
+- **`ScoreRequest.context` is removed**, number 2 and its name reserved. The API sends the
+  transaction, which carries `account_token`, plus `configured_limits` and `traceparent`.
+- **The scorer reads the context from the Redis feature store itself**, one pipelined round trip.
+  It moves from the API to the scorer, so no hop is added.
+- **`ScoringResult.account_context` (18)** returns what the scorer read, for audit and replay.
+  **`ScoringResult.feature_store_degraded` (19)** tells the API to raise DEGRADED_MODE.
+- **Status codes:** `UNAVAILABLE` now also means the feature store is unreadable, and the circuit
+  breaker handles it as it handles a scorer outage. `INVALID_ARGUMENT` covers a request the scorer
+  cannot place.
+- **Until approval**, the scorer already accepts a `ScoreRequest` without `context` when started
+  with `--feature-store` (`test_store_loop.py`). So M6 can build its client against the proposed
+  shape now.
+- **The database fallback moves to the scorer side.** M6 owns the tables
+  (`account_velocity_cache` and the per-account durable table, PB-37); M5 owns the reader, the
+  `Fallback` protocol in `featurestore/store.py`.
+- **On approval, the owner or M6 regenerates** `contracts/proto/baseline/scoring-v1.json`, and M5
+  regenerates the Python messages.
+
+**A message meant for M7 reached this session.** The owner's hybrid-persistence instruction (Spring
+Data JPA for M7's CRUD domain, explicit SQL for the audit chain, `M7_updates.md`) arrived in the M5
+session. M5 owns `ml/` only and did not act on it. If the M7 agent has not received it, it needs
+resending there.
