@@ -49,6 +49,50 @@ The specific name "Fraud score" is held by `RiskScoreGauge.test.tsx`
 **The axe suite has teeth.** Removing `aria-hidden` from the gauge's value ring exposes an unnamed
 progressbar. That fails all 8 gauge stories with `serious aria-progressbar-name`.
 
+### Region, i18n and RTL (at 66c7df5)
+
+| Mutant | Outcome |
+|---|---|
+| Money ignores the pack's minor units | caught |
+| formatMoney accepts any string | caught |
+| formatMoney formats through a float | caught |
+| Offset label drops minutes | caught |
+| Clock ignores the region's offset | caught |
+| regionFor falls back to the first pack | caught |
+| sw catalogue loses a string | caught |
+| fr loses its `many` plural form | caught |
+| rw drops a placeholder | caught |
+| A status claims an invalid value | caught |
+| RTL Emotion cache loses `stylis-plugin-rtl` | **survived**; fixed by a3c871f (MUI's icon margins must swap sides), then caught |
+| ThemeRoot never sets `<html dir>` | caught |
+| Lint allows `marginLeft` | caught |
+| `packs.json` edited by hand | caught |
+
+### App shell and production build (at 6f1db49 and 914e4b8)
+
+| Mutant | Outcome |
+|---|---|
+| Mocks start in every mode | caught |
+| Mock guard keyed on `DEV` again | **survived** the release build alone; a second build with NODE_ENV=test added (914e4b8), then caught |
+| Service worker caches `/api/` | caught |
+| Preflight imported | caught |
+| Font CDN `@import` at the top of fonts.css | **ineffective mutant**: an `@import` after other rules is invalid CSS and was dropped, so nothing reached the output. Retried as a `<link>` to the CDN in index.html: caught |
+| All Inter subsets shipped | caught |
+| Responses validated in production | **equivalent for now**: no screen calls `checked()` yet, so it is tree-shaken either way. Re-run when the first screen uses it. |
+| Tier filter fails instead of dropping | caught |
+| Drawer anchored physically right | caught |
+| Skip link targets nothing | caught |
+| Bottom bar loses Search | caught |
+| Language choice not remembered | caught |
+
+### Playwright (at 4ef3911)
+
+| Mutant | Outcome |
+|---|---|
+| `?dir=` override ignored | caught (rtl.spec.ts) |
+| RTL cache without `stylis-plugin-rtl` | caught (rtl.spec.ts) |
+| Navigation links straight inside `<ul>` | caught by the AppShell axe test. The first attempt replaced only the opening tag and did not compile, so it proved nothing; it was redone with both tags replaced. |
+
 ## Findings
 
 None recorded yet; the milestone review fills this table.
@@ -61,6 +105,10 @@ None recorded yet; the milestone review fills this table.
 Filled at review.
 
 ## Residual risks
+
+- `productionBundle.build.test.ts` sat in `src/build/`, which the root `.gitignore` hides, so
+  6f1db49 described a test it did not contain, and CI never ran it until 914e4b8. Any new
+  directory named `build/` anywhere in the tree is invisible to git.
 
 - Axe runs in jsdom, which does no layout or paint, so colour contrast is measured by
   `tokens.test.ts` over every token pair, not on rendered pixels. The Playwright journeys run
