@@ -60,7 +60,8 @@ def _per_model(
     import numpy as np  # noqa: PLC0415 - heavy, and only this path needs it
     import xgboost as xgb  # noqa: PLC0415 - heavy, and only this path needs it
 
-    array = np.array(rows, dtype=float)
+    # float32, as `Ensemble.raw` scores: an explanation of a different routing is not one.
+    array = np.asarray(rows, dtype=np.float32)
     matrix = xgb.DMatrix(array, missing=float("nan"))
     span = (0, ensemble.xgboost_rounds)
     phi_xgb = ensemble.xgboost.predict(matrix, pred_contribs=True, iteration_range=span)

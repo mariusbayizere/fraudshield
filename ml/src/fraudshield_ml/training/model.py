@@ -14,6 +14,15 @@ Imbalance weighting inflates every raw probability, which is exactly why step 3 
 weighted boosters rank well and are badly calibrated, and a monotone map fixes the second without
 touching the first.
 
+**Scores are float32 throughout, because serving is.** The ONNX export M5 serves (E.4) computes
+in float32, and so does XGBoost internally. LightGBM does not: it compares a double input with a
+double threshold, so on the release-scale test period 398 of 101,909 rows scored differently once
+exported, up to 0.23 in probability — 310 because an input float32 cannot represent crossed a
+split when rounded, the rest because a double threshold moved when stored as float32. So every
+input is rounded to float32 before either booster sees it, and each LightGBM threshold is
+replaced by the largest float32 not above it. For a float32 input `x`, `x <= t` and
+`x <= floor32(t)` then agree exactly, and the model evaluated here is the model exported.
+
 **The three row sets must be disjoint, and `fit_ensemble` refuses otherwise** rather than leaving
 it to the caller. A calibrator fitted on rows the boosters trained or stopped on learns how
 confident the model is about data it has seen, which is the leak D-05's separate split exists to
@@ -75,7 +84,7 @@ class Ensemble:
         import numpy as np  # noqa: PLC0415 - heavy, and only this path needs it
         import xgboost as xgb  # noqa: PLC0415 - heavy, and only this path needs it
 
-        array = np.array(rows, dtype=float)
+        array = np.asarray(rows, dtype=np.float32)
         p_xgb = self.xgboost.predict(
             xgb.DMatrix(array, missing=float("nan")), iteration_range=(0, self.xgboost_rounds)
         )
@@ -124,6 +133,45 @@ class RowSplit:
                 )
 
 
+def _floor32(value: float) -> float:
+    """The largest float32 that is not above `value`."""
+    import numpy as np  # noqa: PLC0415 - heavy, and only this path needs it
+
+    rounded = np.float32(value)
+    if float(rounded) > value:
+        rounded = np.nextafter(rounded, np.float32(-np.inf))
+    return float(rounded)
+
+
+def float32_exact(booster: Any, rounds: int) -> Any:
+    """`booster` truncated to `rounds` and made to route float32 inputs exactly as ONNX will.
+
+    Every numeric threshold `t` becomes `floor32(t)`: for any float32 input the comparison
+    `x <= t` is then unchanged, and the threshold survives the float32 export without moving.
+    The `tree_sizes` header indexes the text by byte length, which the rewrite changes, so it is
+    dropped and LightGBM parses the trees in order instead.
+    """
+    import re  # noqa: PLC0415 - only this path needs it
+
+    import lightgbm as lgb  # noqa: PLC0415 - heavy, and only this path needs it
+
+    text = booster.model_to_string(num_iteration=rounds)
+    for decision in re.findall(r"^decision_type=(.*)$", text, flags=re.MULTILINE):
+        if any(int(d) & 1 for d in decision.split()):
+            raise ValueError(
+                "a categorical split cannot be made float32-exact by moving its threshold; "
+                "the features are numeric by construction, so this is a change to the matrix"
+            )
+    text = re.sub(
+        r"^threshold=(.*)$",
+        lambda m: "threshold=" + " ".join(repr(_floor32(float(v))) for v in m.group(1).split()),
+        text,
+        flags=re.MULTILINE,
+    )
+    text = re.sub(r"^tree_sizes=.*\n", "", text, flags=re.MULTILINE)
+    return lgb.Booster(model_str=text)
+
+
 def _isotonic(scores: Sequence[float], labels: Sequence[bool]) -> Any:
     from sklearn.isotonic import IsotonicRegression  # noqa: PLC0415 - heavy, only this path
 
@@ -144,7 +192,7 @@ def fit_ensemble(
     import xgboost as xgb  # noqa: PLC0415 - heavy, and only this path needs it
 
     def rows(index: Sequence[int]) -> Any:
-        return np.array([matrix[i] for i in index], dtype=float)
+        return np.array([matrix[i] for i in index], dtype=np.float32)
 
     def targets(index: Sequence[int]) -> Any:
         return np.array([1.0 if labels[i] else 0.0 for i in index])
@@ -175,11 +223,12 @@ def fit_ensemble(
         valid_sets=[lgb.Dataset(rows(validation), label=targets(validation))],
         callbacks=[lgb.early_stopping(PATIENCE, verbose=False)],
     )
+    exact = float32_exact(lightgbm, int(lightgbm.best_iteration))
     fitted = Ensemble(
         xgboost=booster,
-        lightgbm=lightgbm,
+        lightgbm=exact,
         xgboost_rounds=int(booster.best_iteration) + 1,
-        lightgbm_rounds=int(lightgbm.best_iteration),
+        lightgbm_rounds=int(exact.num_trees()),
         calibrator=None,
         xgboost_calibrator=None,
         lightgbm_calibrator=None,
