@@ -62,6 +62,17 @@ export const handlers = [
     HttpResponse.json(session, { headers: { 'x-mock': MOCK_MARKER } }),
   ),
   http.post('/api/v1/auth/logout', () => new HttpResponse(null, { status: 204 })),
+  http.post('/api/v1/auth/register', () =>
+    HttpResponse.json(
+      { status: 'PENDING_APPROVAL', message_key: 'registration.pending' },
+      { status: 202, headers: { 'x-mock': MOCK_MARKER } },
+    ),
+  ),
+  // Development only: one taken email and one taken employee ID, to exercise both answers.
+  http.get('/api/v1/auth/availability', ({ request }) => {
+    const value = new URL(request.url).searchParams.get('value') ?? '';
+    return HttpResponse.json({ available: !['taken@example.test', 'EMP-TAKEN'].includes(value) });
+  }),
   http.get('/api/v1/system/status', () =>
     HttpResponse.json(status, { headers: { 'x-mock': MOCK_MARKER } }),
   ),

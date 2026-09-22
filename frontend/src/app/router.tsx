@@ -17,6 +17,7 @@ const rootRoute = createRootRoute();
 const SectionPage = lazyRouteComponent(() => import('./pages/SectionPage'));
 const AppShell = lazyRouteComponent(() => import('./AppShell'), 'AppShell');
 const LoginPage = lazyRouteComponent(() => import('../auth/LoginPage'));
+const RegisterPage = lazyRouteComponent(() => import('../auth/registration/RegisterPage'));
 
 const shell = createRoute({ getParentRoute: () => rootRoute, id: 'shell', component: AppShell });
 
@@ -52,7 +53,15 @@ const login = createRoute({
   component: LoginPage,
 });
 
-const publicPages: AnyRoute[] = PUBLIC_PAGES.filter((page) => page.path !== '/login').map((page) =>
+const registerRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/register',
+  component: RegisterPage,
+});
+
+const publicPages: AnyRoute[] = PUBLIC_PAGES.filter(
+  (page) => page.path !== '/login' && page.path !== '/register',
+).map((page) =>
   createRoute({
     getParentRoute: () => rootRoute,
     path: page.path,
@@ -63,6 +72,7 @@ const publicPages: AnyRoute[] = PUBLIC_PAGES.filter((page) => page.path !== '/lo
 export const routeTree = rootRoute.addChildren([
   shell.addChildren([index, ...sections, alertDetail]),
   login,
+  registerRoute,
   ...publicPages,
 ]);
 
