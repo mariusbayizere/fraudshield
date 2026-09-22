@@ -10,14 +10,15 @@ no more true than optimism and is exactly as trusted.
 from __future__ import annotations
 
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Iterator, Mapping
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from fraudshield_ml.features import batch, vector
 from fraudshield_ml.features.registry import REGISTRY, Computability
-from fraudshield_ml.features.types import Transaction
+from fraudshield_ml.features.types import Outcome, Transaction
 from fraudshield_ml.features.vector import FeatureContext
 
 #: Defined here rather than imported from `conftest`: a test module importing a conftest is not a
@@ -68,7 +69,15 @@ def test_the_vector_reads_only_rows_before_the_one_it_scores(
 #: checked there by an evidence run (`docs/benchmarks/m3_computability_fad43dd.txt`). Demanding it
 #: of a toy corpus would be asking a fixture to be a benchmark — and tuning one until the verdict
 #: read zero would shape the fixture by the answer.
-FIXTURE_CANNOT_VARY = {"agent_cashout_count_1h", "agent_unique_customers_1h"}
+FIXTURE_CANNOT_VARY = {
+    "agent_cashout_count_1h",
+    "agent_unique_customers_1h",
+    # Every account in this fixture has its own device, so the count is 1 wherever it is defined.
+    # That was true of the benchmark too until PB-40 gave the generator a device-sharing
+    # mechanism; it is now a property of these 70 rows alone, and giving the fixture shared
+    # devices to make the mismatch disappear would be shaping it by the answer.
+    "accounts_per_device_7d",
+}
 
 
 @pytest.mark.req("FR-02-02", "ML-DATA-07")
@@ -94,16 +103,21 @@ def test_the_six_without_source_data_are_dead_at_any_size(
 ) -> None:
     """A property of the data's *shape* rather than its size, so it must hold here too.
 
-    Opening dates, tier histories, agent standing and denominations are absent from this fixture
-    for the same reason they are absent from the benchmark: nothing produces them. Every declared
+    Opening dates, tier histories and agent standing are absent from this fixture for the same
+    reason they are absent from the benchmark: nothing produces them. Every declared
     NO_SOURCE_DATA feature must therefore produce no value at all, and none may appear among the
     mismatches — one that did would mean the fixture supplies something the benchmark does not.
+
+    Denominations used to be on that list and are not any more: they became a pack field on
+    2026-09-20, so the fixture supplies them exactly as the benchmark does. The count below is
+    asserted rather than derived so that a sixth feature quietly losing its source, or a fifth
+    quietly gaining one, has to be a deliberate edit here.
     """
     result = vector.computability(corpus, context, sample=sample)
     declared = {
         name for name, spec in REGISTRY.items() if spec.computable is Computability.NO_SOURCE_DATA
     }
-    assert len(declared) == 6
+    assert len(declared) == 5
     for name in declared:
         assert result.distinct[name] == 0, f"{name} produced a value"
         assert result.nan_rate[name] == 1.0
@@ -172,18 +186,27 @@ def test_a_revived_feature_is_reported_so_the_register_cannot_drift_into_pessimi
     sample: list[int],
     make_context: Callable[..., FeatureContext],
 ) -> None:
-    """Supply the denominations and `round_sum_flag` comes alive while the register says it is dead.
+    """Supply the opening dates and `account_age_days` comes alive while the register calls it
+    dead.
 
     Without this direction, wiring the data and forgetting the declaration would leave the register
     stale in a way a reader has no reason to question — pessimism reads as caution.
+
+    This test used to make its point with `round_sum_flag` and a denomination table. It could not
+    keep doing so: `round_denominations` became a pack field on 2026-09-20 and the feature is now
+    declared COMPUTABLE, so supplying the table is no longer a revival. The property is unchanged
+    and the case moved to a feature that is still waiting for its source — which is the shape this
+    test will keep needing, since a revived feature is by definition one whose declaration is about
+    to change.
     """
-    with_denominations = vector.computability(
-        corpus, make_context(denominations={"AAA": (1_000, 5_000)}), sample=sample
-    )
-    mismatches = {name: (d, o) for name, d, o in with_denominations.mismatched}
-    assert "round_sum_flag" in mismatches
-    assert mismatches["round_sum_flag"][0] is Computability.NO_SOURCE_DATA
-    assert "still says it is dead" in vector.describe(with_denominations)
+    opened = {t.account_id: t.timestamp - timedelta(days=400) for t in corpus}
+    assert opened, "precondition: the corpus must name accounts, or nothing is revived"
+    revived = vector.computability(corpus, make_context(opened_at=opened), sample=sample)
+    mismatches = {name: (d, o) for name, d, o in revived.mismatched}
+    assert "account_age_days" in mismatches
+    assert mismatches["account_age_days"][0] is Computability.NO_SOURCE_DATA
+    assert mismatches["account_age_days"][1] is Computability.COMPUTABLE
+    assert "still says it is dead" in vector.describe(revived)
 
 
 @pytest.mark.req("FR-02-02", "ML-DATA-07")
@@ -443,3 +466,100 @@ def test_a_truncated_corpus_without_prior_knowledge_reports_everything_as_new() 
         "precondition: a corpus that hides the earlier payment reports the payee as new"
     )
     assert batch.counterparty_is_new_for_account([], scored, known_before={"PAYEE"}) is False
+
+
+class _CountingOutcomes(Mapping[str, Outcome]):
+    """A mapping that records bulk traversal, so a copy cannot happen unnoticed."""
+
+    def __init__(self, inner: Mapping[str, Outcome]) -> None:
+        self._inner = inner
+        self.traversals = 0
+
+    def __getitem__(self, key: str) -> Outcome:
+        return self._inner[key]
+
+    def __iter__(self) -> Iterator[str]:
+        self.traversals += 1
+        return iter(self._inner)
+
+    def __len__(self) -> int:
+        return len(self._inner)
+
+
+@pytest.mark.req("FR-02-02")
+def test_computing_a_row_never_copies_the_outcome_mapping(
+    corpus: list[Transaction], sample: list[int], make_context: Callable[..., FeatureContext]
+) -> None:
+    """The feature pass *was* the copying, and nothing said so.
+
+    `geo_cell_fraud_rate_30d` and `counterparty_confirmed_fraud_90d` were each handed
+    `dict(context.outcomes)` — a fresh mapping of every outcome in the corpus, rebuilt twice for
+    every scored row. Measured at a 200,000-row corpus: 40.5 ms per row of copying against a total
+    of about 40, and removing it made the pass **23.4x faster with zero values changed**.
+
+    A timing test would be flaky and would pass on a machine fast enough not to care. This asserts
+    the property instead: computing a row must never traverse the whole mapping, only look rows up
+    in it. `dict(m)` traverses; `m[key]` does not.
+    """
+    context = make_context()
+    counting = _CountingOutcomes(context.outcomes)
+    watched = replace(context, outcomes=counting)
+
+    index = vector.CorpusIndex.build(corpus)
+    vector.compute(corpus, sample[-1], watched, index)
+
+    assert counting.traversals == 0, (
+        f"the outcome mapping was traversed {counting.traversals} times while scoring one row, "
+        "so something is copying it again"
+    )
+
+
+DEVICE_FEATURES = frozenset(
+    {"device_age_days", "device_changes_24h", "device_is_new_for_account", "accounts_per_device_7d"}
+)
+AGENT_FEATURES = frozenset(n for n, s in REGISTRY.items() if s.group.name == "AGENT")
+SIX_CHANNELS = ("MOBILE_MONEY", "CARD", "AGENT_BANKING", "USSD", "ONLINE", "BANK_TRANSFER")
+
+
+def _missing(value: object) -> bool:
+    return isinstance(value, float) and math.isnan(value)
+
+
+@pytest.mark.req("TEST-01", "FR-02-02", "D-04")
+@pytest.mark.parametrize("channel", SIX_CHANNELS)
+def test_all_44_are_emitted_on_every_channel_with_the_d04_nan_pattern(
+    channel: str, corpus: list[Transaction], context: FeatureContext
+) -> None:
+    """TEST-01's coverage target: all 44 features on all six channel types.
+
+    No test exercised BANK_TRANSFER or ONLINE until the M4 review looked. Each channel gets the
+    same scored row, so only the channel, the fingerprint and the agent differ: USSD has no
+    fingerprint and only AGENT_BANKING has an agent. The two agent features with no source data
+    (PB-44) are missing everywhere and are excluded from the "present on agent" check.
+    """
+    last = corpus[-1]
+    device = next(
+        r.device_fingerprint
+        for r in corpus
+        if r.account_id == last.account_id and r.device_fingerprint
+    )
+    scored = replace(
+        last,
+        channel=channel,
+        device_fingerprint=None if channel == "USSD" else device,
+        agent_id="AG0" if channel == "AGENT_BANKING" else None,
+    )
+    values = vector.compute([*corpus[:-1], scored], len(corpus) - 1, context)
+
+    assert set(values) == set(REGISTRY)
+    assert len(values) == 44
+    for name in DEVICE_FEATURES:
+        assert _missing(values[name]) is (channel == "USSD"), (channel, name, values[name])
+    computable_agent = {
+        n for n in AGENT_FEATURES if REGISTRY[n].computable is Computability.COMPUTABLE
+    }
+    for name in AGENT_FEATURES:
+        if channel != "AGENT_BANKING":
+            assert _missing(values[name]), (channel, name, values[name])
+        elif name in computable_agent:
+            assert not _missing(values[name]), (channel, name, values[name])

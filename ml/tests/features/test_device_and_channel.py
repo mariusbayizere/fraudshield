@@ -202,19 +202,21 @@ def test_the_device_sharing_count_includes_the_scored_account() -> None:
 
 
 @pytest.mark.req("FR-02-02", "ML-DATA-07")
-def test_an_unshared_device_reads_one_which_is_the_degenerate_case() -> None:
-    """PB-40: no device in the current dataset is used by more than one account, so this is the
-    value the feature takes for **every row** of the benchmark.
+def test_an_unshared_device_reads_one() -> None:
+    """One account on a device is one account, which is the common case and not a degenerate one.
 
-    Implemented correctly anyway. The generator fix is scheduled before M4 training, and a feature
-    written to match a degenerate dataset would become the defect once the dataset stops being
-    degenerate.
+    This used to assert that the feature was *declared degenerate*, because no device in the
+    benchmark was used by more than one account (PB-40) and 1.0 was the value every row took. The
+    generator shares devices now — 7 distinct values on the regenerated draw — so the declaration
+    is gone and this test is back to asserting the arithmetic it was always about. The feature was
+    written to be correct rather than to match the degenerate data, which is why nothing about it
+    had to change when the data stopped being degenerate.
     """
     own_only = [tx(2.0, device="D1", account="A"), tx(3.0, device="D1", account="A")]
     assert batch.accounts_per_device_7d(own_only, SCORED) == 1.0
     assert warm(own_only).accounts_per_device_7d(SCORED) == 1.0
-    assert REGISTRY["accounts_per_device_7d"].degeneracy, (
-        "the feature must stay declared degenerate while the generator shares no device"
+    assert REGISTRY["accounts_per_device_7d"].degeneracy is None, (
+        "PB-40 is closed, so the feature must no longer claim to be degenerate"
     )
 
 

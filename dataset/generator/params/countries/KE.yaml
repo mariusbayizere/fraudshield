@@ -80,3 +80,19 @@ parameters:
     rationale: >-
       Geographic fact, recorded as a pack field rather than inferred from "has a pack", so that a
       non-African pack can be added without corridor_class silently mis-classifying it.
+  round_denominations:
+    value: [5000, 10000, 20000, 50000, 100000]
+    unit: >-
+      common denominations of this country's currency, in MINOR units, that a round amount is an
+      exact multiple of
+    provenance: ASSUMED
+    rationale: >-
+      The steps a payer of KES hands over or types: 50, 100, 200, 500 and 1,000 shillings. Recorded in minor
+      units because round_sum_flag tests an integer remainder and "exact" is a property of
+      integers -- 2 decimal places here, so a major-unit step is multiplied by
+      100. This is a modelling choice and not a sourced banknote series: no central-bank
+      publication for these currencies was read in full, so presenting the list as fact would
+      be the kind of unsourced claim D-09 exists to prevent. What it must get right is the
+      *shape* -- that roundness is defined against the local currency the payer typed, never
+      against a converted base-currency amount -- and the values only have to be plausible
+      steps for the feature to mean what it says.

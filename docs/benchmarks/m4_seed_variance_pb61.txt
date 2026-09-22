@@ -1,0 +1,28 @@
+# evidence-commit: 6bc842da166db871d24ccf660c497b03a13693ef
+# evidence-tree-state: clean
+# command: .venv/bin/python -u -m fraudshield_ml.cli seed-variance dataset/output/features_full.parquet
+# exit: 0
+
+
+C-6 — SEED VARIANCE: XGBoost alone, LightGBM alone and the 0.55/0.45 ensemble (D-05),
+at 5 fixed seeds (1, 2, 3, 4, 5), on the same
+train/test rows throughout. Not calibrated: this measures how much a model's own random
+state moves its AUC, not the calibrated ensemble's error rate.
+
+   seed     xgboost    lightgbm    ensemble
+      1    0.968260    0.966525    0.968294
+      2    0.966685    0.967583    0.966708
+      3    0.967958    0.968655    0.967983
+      4    0.967803    0.964172    0.967830
+      5    0.967137    0.967914    0.967164
+
+                   mean       stdev
+  xgboost      0.967568    0.000642
+  lightgbm     0.966970    0.001742
+  ensemble     0.967596    0.000646
+
+  ensemble stdev vs xgboost alone: -0.5% (DID NOT REDUCE seed variance relative to xgboost)
+  ensemble stdev vs lightgbm alone: +62.9% (REDUCED seed variance relative to lightgbm)
+
+  C-6 claims a 12% reduction with no citation (D-09). The figures above are the
+  replacement measurement, reported as measured whichever way they come out.

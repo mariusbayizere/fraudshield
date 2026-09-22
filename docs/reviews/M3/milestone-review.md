@@ -4,7 +4,9 @@ One pass, **BLOCKER and MAJOR only**, against E11's four areas: leakage under th
 determinism, the grouping rules, and whether every claim in the M3 walkthrough is backed by a test
 or a measurement.
 
-Reviewed at commit `4e16e11` plus the uncommitted PB-46/PB-47 work. Verified state: ml 266 passed
+Reviewed at commit `4e16e11` plus the then-uncommitted PB-46/PB-47 work. **Both MAJOR findings
+were fixed at commit `2c80ef6`**, and the corrected measurement they prompted is
+`docs/benchmarks/m3_single_feature_auc_2c80ef6.txt`. Verified state: ml 266 passed
 (96.72% branch), dataset 126 passed (94.01%), tools 177, contracts 490, mypy clean over 122 files,
 governance 258 rows / 637 tagged tests / 0 errors.
 

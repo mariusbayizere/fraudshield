@@ -62,6 +62,7 @@ from fraudshield_dataset.realism.stats import (
     separation,
     wilson_interval,
 )
+from fraudshield_dataset.release.split import SEGMENT_LABELS, segment_counts
 
 SINGLE_FEATURE_AUC_LIMIT = 0.80
 SHORTCUT_TOLERANCE = 0.03
@@ -295,11 +296,13 @@ class Dataset:
         gated construction pair at 0.544. The delay figure is the larger channel and is the one the
         earlier "0.537 on its own" wording did not measure.
 
-        The delay is not purely a consequence of the scenario: ``fraud.takeover_lead_minutes`` is
-        ``[5, 60]`` and ``provenance: ASSUMED``, so every enabling event is followed by its drain
-        inside a tight uniform window with no long tail and no unexploited swaps. Part designed
-        causal signal, part artefact of an assumed schedule, and reporting it keeps that visible
-        rather than asserted.
+        The delay is not purely a consequence of the scenario: the lead is drawn from parameters
+        whose provenance is ASSUMED, so part of the separation is the assumed schedule. It was a
+        uniform ``[5, 60]`` minutes until 2026-09-22 — every enabling event drained inside the
+        hour, with no long tail and no unexploited swap — and is now a clipped lognormal with a
+        real tail (PB-56). Reporting the figure keeps the residual visible rather than asserted,
+        and the wording no longer names the numbers, because a docstring quoting a parameter goes
+        stale the first time the parameter moves.
 
         Delay is measured to the account's next transaction **within the same month**, which keeps
         the one-month-at-a-time memory property; an event with no later transaction in its own
@@ -548,7 +551,9 @@ def _reported_event_auc(
     return measured
 
 
-def _reported_event_results(measured: dict[str, float]) -> list[CheckResult]:
+def _reported_event_results(
+    measured: dict[str, float], config: SimulationConfig
+) -> list[CheckResult]:
     """The two excluded event channels, reported and never gated.
 
     See :func:`_reported_event_auc` for why they are measured at all.
@@ -565,7 +570,10 @@ def _reported_event_results(measured: dict[str, float]) -> list[CheckResult]:
             value("event_delay_seconds"),
             "reported, not gated: seconds from an event to that account's next transaction",
             "excluded from the event gate as the scenario's own signal, so it is tracked here "
-            "instead. The lead is drawn from fraud.takeover_lead_minutes = [5, 60], which is "
+            f"instead. The lead is drawn from a lognormal with median "
+            f"{config.parameters.number('fraud.takeover_lead_median_minutes'):.0f} minutes and "
+            f"sigma {config.parameters.number('fraud.takeover_lead_log_sigma')}, clipped to "
+            f"{[int(v) for v in config.parameters.numbers('fraud.takeover_lead_minutes')]}, all "
             "ASSUMED, so part of this separation is the assumed schedule rather than the scenario",
         ),
         CheckResult(
@@ -640,7 +648,7 @@ def _leakage_checks(
 
     reported_event_auc = _reported_event_auc(data, event_labels, config)
     measures["event_reported_auc"] = reported_event_auc
-    reported_event_results = _reported_event_results(reported_event_auc)
+    reported_event_results = _reported_event_results(reported_event_auc, config)
 
     file_order = separation(np.concatenate(data.file_index_parts), observed)
     measures["file_order_auc"] = file_order
@@ -996,25 +1004,11 @@ def run_checks(
 
 
 def split_counts(data: Dataset, config: SimulationConfig) -> dict[str, dict[str, float]]:
-    s = config.split
-    t = data.timestamps
-    true, observed = data.true, data.observed
-    masks = {
-        "train": t < s.validation_start,
-        "validation": (t >= s.validation_start) & (t < s.embargo_start),
-        "calibration (last part of validation)": (t >= s.calibration_start) & (t < s.embargo_start),
-        "embargo (excluded)": (t >= s.embargo_start) & (t < s.test_start),
-        "test": t >= s.test_start,
-    }
-    out = {}
-    for name, mask in masks.items():
-        count = int(mask.sum())
-        out[name] = {
-            "rows": count,
-            "true_fraud_rate": float(true[mask].mean()) if count else 0.0,
-            "observed_fraud_rate": float(observed[mask].mean()) if count else 0.0,
-            "span_days": round(float(t[mask].max() - t[mask].min()) / _MICROS_PER_DAY, 2)
-            if count
-            else 0.0,
-        }
-    return out
+    """The report's split table, computed by the same code that publishes `split.json` (PB-48).
+
+    Keyed by the label the report prints rather than by the machine key, which is the only
+    difference between the two: the definition of who belongs to which segment has one home, in
+    `release.split`, so the report and the release cannot drift apart.
+    """
+    counts = segment_counts(data.timestamps, data.true, data.observed, config.split)
+    return {SEGMENT_LABELS[key]: counts[key] for key in SEGMENT_LABELS}

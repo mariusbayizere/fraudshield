@@ -44,6 +44,9 @@ class Customer:
     counterparties: tuple[tuple[int, str], ...]  # (customer index, country)
     events: tuple[AccountEvent, ...]
     seed: int
+    #: A handset this customer does not own: a ring device shared by a synthetic-identity group,
+    #: or one handed down from another customer (PB-40). ``None`` means the customer's own chain.
+    shared_device: str | None = None
 
     @property
     def has_smartphone(self) -> bool:
@@ -54,9 +57,19 @@ class Customer:
         return token(self.seed, "account", self.index)
 
     def device_at(self, month: int, day: int, seconds: int) -> str | None:
-        """The customer's device token at a moment; a new device after each device change."""
+        """The customer's device token at a moment; a new device after each device change.
+
+        A shared handset has no generation of its own. Two people using one phone are using one
+        phone, and a device change recorded against either of them would be a *different* handset
+        rather than a new generation of this one — so a sharer keeps the shared token for the
+        whole simulation, and the owner moves off it the first time they replace their own.
+        Handing a phone down and then buying a new one is exactly how a device comes to be seen
+        on two accounts and later on one (PB-40).
+        """
         if not self.has_smartphone:
             return None
+        if self.shared_device is not None:
+            return self.shared_device
         generation = sum(
             1
             for e in self.events
@@ -83,6 +96,9 @@ class Population:
         self._salary_days = (low, high)
         self._sim_swap = p.number("population.legit_sim_swap_monthly_probability")
         self._device_change = p.number("population.device_change_monthly_probability")
+        self._shared_device_share = p.number("population.shared_device_share")
+        self._synthetic_fraction = p.number("fraud.synthetic_identity_fraction")
+        self._ring_size = p.integer("fraud.synthetic_identity_ring_size")
         self._counterparties = p.number("population.counterparties_per_customer")
         self._home_spread = p.number("population.home_spread_degrees")
         self._merchants_range = _int_pair(p.value("population.merchants_per_customer"))
@@ -198,6 +214,67 @@ class Population:
                 return month
         raise ValueError(f"customer {index} is beyond the simulated population")
 
+    def _is_synthetic_identity(self, index: int) -> bool:
+        """Whether this customer is a synthetic identity (PB-40).
+
+        The same predicate `FraudModel._bust_out_month` applies, evaluated from the same named
+        stream on its own generator object, so reading it here disturbs nothing there. It is
+        duplicated rather than shared because the fraud side draws the bust-out month from the
+        *same* stream immediately afterwards, and factoring out the first draw would move the
+        second. `test_the_population_and_the_fraud_model_agree_on_who_is_synthetic` pins the two
+        together, which is the guard that duplication needs and sharing would not have.
+        """
+        return bool(
+            stream(self.config.seed, "role", "synthetic", index).random() < self._synthetic_fraction
+        )
+
+    def _shared_device(self, index: int, segment: str) -> str | None:
+        """The handset this customer uses but does not own, or None (PB-40).
+
+        Two mechanisms, and the second is the one that gives the feature meaning. A ring of
+        synthetic identities transacts from one handset, which is the "shared device and phone
+        attributes across accounts" term Part E.2 names and the scenario had no way to produce.
+        Separately, a share of ordinary customers use a handed-down handset, so that a device seen
+        on several accounts is **not** by itself a fraud signal — without that, the ring device
+        would be a shortcut and the realism gate would refuse the dataset, correctly.
+        """
+        if segment == "rural_ussd":
+            return None
+        if self._is_synthetic_identity(index):
+            # Drawn from a pool sized so a ring holds `ring_size` members on average, rather than
+            # bucketing consecutive indices: synthetic identities are about a ninth of the
+            # population, so four consecutive indices hold less than one of them and index buckets
+            # produced rings of one. Measured before it was believed -- the first attempt gave a
+            # single device with four accounts where it should have given some two hundred.
+            pool = max(
+                1,
+                round(
+                    self.config.customers_total * self._synthetic_fraction / max(self._ring_size, 1)
+                ),
+            )
+            ring = int(stream(self.config.seed, "ring", index).integers(0, pool))
+            return token(self.config.seed, "ring-device", ring)
+        rng = stream(self.config.seed, "device-share", index)
+        if rng.random() >= self._shared_device_share:
+            return None
+        # The lender is any other customer, stepping forward until one is found who owns their own
+        # handset and has one: a chain of hand-me-downs would make the group size depend on
+        # iteration order rather than on the share.
+        total = self.config.customers_total
+        start = int(rng.integers(0, total))
+        for step in range(total):
+            owner = (start + step) % total
+            if owner == index or self.segment_of(owner) == "rural_ussd":
+                continue
+            if self._is_synthetic_identity(owner):
+                continue
+            if (
+                stream(self.config.seed, "device-share", owner).random()
+                >= self._shared_device_share
+            ):
+                return token(self.config.seed, "device", owner, 0)
+        return None
+
     def customer(self, index: int) -> Customer:
         seed = self.config.seed
         rng = stream(seed, "customer", index)
@@ -271,6 +348,7 @@ class Population:
             counterparties=tuple(counterparties),
             events=tuple(events),
             seed=seed,
+            shared_device=self._shared_device(index, segment),
         )
 
     def merchant_token(self, country: str, merchant: int) -> str:

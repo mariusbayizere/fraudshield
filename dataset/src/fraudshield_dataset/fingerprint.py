@@ -52,18 +52,30 @@ from typing import Any
 import pyarrow.parquet as pq
 
 #: Bumped when the payload's shape changes, so that two fingerprints are never compared across
-#: definitions and silently found to differ for the wrong reason.
-FINGERPRINT_VERSION = 1
+#: definitions and silently found to differ for the wrong reason. Version 2 hashes **every**
+#: column of each sampled row; version 1 hashed three per table and could not see a change
+#: confined to any of the others.
+FINGERPRINT_VERSION = 2
 
 SAMPLE_ROWS = 1024
 
-#: The columns sampled per table. Identifiers give the ordering; the others are what a changed draw
-#: moves. Every table is included: a change confined to the label delay or to account events would
-#: be invisible in a transactions-only fingerprint, and those are drawn from the same streams.
-SAMPLED_COLUMNS: dict[str, tuple[str, ...]] = {
-    "account_events": ("account_id", "event_type", "event_timestamp"),
-    "labels": ("transaction_id", "is_fraud_observed", "label_available_at"),
-    "transactions": ("transaction_id", "amount_rwf", "transaction_timestamp"),
+#: The column each table's sample is **ordered** by. It decides *which* rows are sampled and
+#: nothing else: every column of those rows is hashed.
+#:
+#: **This used to be a list of three columns per table, and that was the defect.** PB-40 gave the
+#: generator a device-sharing mechanism, which rewrote `device_fingerprint` for hundreds of
+#: accounts and changed nothing else — and the fingerprint did not move, because
+#: `device_fingerprint` was not one of the three. A guard that reads three columns of fourteen
+#: cannot answer "is this report still about this dataset?", which is the only question it exists
+#: to answer. That is the seventh instance of the guard-with-two-doors shape in the notebook, and
+#: the first inside a guard written to fix the sixth.
+#:
+#: Hashing every column costs nothing that matters: the sample is 1,024 rows per table either way,
+#: and the extra columns are read from Parquet only for the partitions being scanned.
+ORDERING_COLUMN: dict[str, str] = {
+    "account_events": "account_id",
+    "labels": "transaction_id",
+    "transactions": "transaction_id",
 }
 
 
@@ -71,17 +83,26 @@ class FingerprintError(RuntimeError):
     """A dataset that cannot be fingerprinted, which is never a reason to ship one without."""
 
 
-def _rows(path: Path, columns: tuple[str, ...]) -> Iterator[tuple[str, ...]]:
-    """One partition's sampled columns, canonicalised to strings.
+def _rows(path: Path, ordering: str) -> tuple[list[str], Iterator[tuple[str, ...]]]:
+    """One partition's rows, every column, canonicalised to strings and ordered-column first.
 
     Strings rather than native values so the ordering and the payload do not depend on how Arrow
     happens to map a decimal or a timestamp into Python, which is a detail of the reader version
     rather than of the data.
+
+    The ordering column is placed first so that `nsmallest` sorts by it, and the remaining columns
+    ride along in the tuple. A row's whole content therefore reaches the payload, which is the
+    difference between version 2 and version 1.
     """
-    block = pq.read_table(path, columns=list(columns))
-    values = [block.column(name).to_pylist() for name in columns]
-    for row in zip(*values, strict=True):
-        yield tuple("" if value is None else str(value) for value in row)
+    block = pq.read_table(path)
+    names = [ordering, *sorted(n for n in block.schema.names if n != ordering)]
+    values = [block.column(name).to_pylist() for name in names]
+
+    def stream() -> Iterator[tuple[str, ...]]:
+        for row in zip(*values, strict=True):
+            yield tuple("" if value is None else str(value) for value in row)
+
+    return names, stream()
 
 
 def _partitions(root: Path, table: str) -> list[Path]:
@@ -96,22 +117,26 @@ def _partitions(root: Path, table: str) -> list[Path]:
 
 
 def table_fingerprint(root: Path, table: str) -> dict[str, Any]:
-    """One table's contribution: its row count and its canonical sample."""
-    columns = SAMPLED_COLUMNS[table]
+    """One table's contribution: its row count and its canonical sample, every column."""
+    ordering = ORDERING_COLUMN[table]
     rows = 0
+    names: list[str] = []
     sample: list[tuple[str, ...]] = []
     for path in _partitions(root, table):
         block = pq.read_metadata(path)
         rows += block.num_rows
+        names, incoming = _rows(path, ordering)
         # `nsmallest` keeps a bounded heap over the iterator, so a month is streamed rather than
         # materialised as tuples all at once.
-        sample = heapq.nsmallest(SAMPLE_ROWS, _chain(sample, _rows(path, columns)))
+        sample = heapq.nsmallest(SAMPLE_ROWS, _chain(sample, incoming))
     if rows == 0:
         raise FingerprintError(
             f"{table} has partitions but no rows; a fingerprint over nothing would be a constant "
             "that matches every empty dataset"
         )
-    return {"rows": rows, "columns": list(columns), "sample": [list(row) for row in sample]}
+    # The column names travel with the sample: a table that gained or lost a column would
+    # otherwise produce a payload of the same shape over different content.
+    return {"rows": rows, "columns": names, "sample": [list(row) for row in sample]}
 
 
 def _chain(
@@ -131,6 +156,6 @@ def dataset_fingerprint(root: Path) -> str:
     payload = {
         "version": FINGERPRINT_VERSION,
         "sample_rows": SAMPLE_ROWS,
-        "tables": {table: table_fingerprint(root, table) for table in sorted(SAMPLED_COLUMNS)},
+        "tables": {table: table_fingerprint(root, table) for table in sorted(ORDERING_COLUMN)},
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()

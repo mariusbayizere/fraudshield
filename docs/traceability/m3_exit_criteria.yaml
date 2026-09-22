@@ -1,0 +1,154 @@
+# M3 exit criteria, with the evidence each rests on (PB-45).
+#
+# The status table in m3_exit_criteria.md is GENERATED from this file. Edit here, then run:
+#   uv run fs-exit-criteria --render
+#
+# Four kinds of evidence. Three are resolved mechanically — a test that exists, a gate the
+# governance target runs, an artefact naming the commit it was produced at. The fourth,
+# `judgement`, is never auto-marked met: it may only be `author_asserted`, and it must name who
+# judged and what. A checker that marked judgements met would lend a machine's authority to a
+# claim no machine made.
+milestone: M3
+criteria:
+  - id: E1
+    title: every fold, split, sample and encoding groups by the feature's unit of history
+    status: met
+    evidence:
+      kind: test
+      ref:
+        - test_the_encoding_folds_by_account_not_by_row
+        - test_the_categorical_encoding_folds_by_account_not_by_row
+    finding: >-
+      restated per history_key after measurement refuted component folding for three of four
+      relational keys
+
+  - id: E2
+    title: every reported metric states the scale it was measured at
+    status: author_asserted
+    evidence:
+      kind: judgement
+      asserted_by: author
+      note: >-
+        a rule applied throughout rather than a checkable artefact; fs-features auc prints the
+        corpus size, scored-row count and fraud count before any figure, but nothing prevents a
+        future figure being quoted without its scale
+
+  - id: E3
+    title: the 44 engineered features re-checked against the D-08 0.80 ceiling
+    status: not_met
+    evidence:
+      kind: artifact
+      ref: docs/benchmarks/m3_single_feature_auc_2c80ef6.txt
+      commit: 2c80ef6
+    finding: >-
+      re-check performed; five features exceed the ceiling, strongest 0.894. Resolved by the
+      reporting gate (PB-46), not by moving the line
+
+  - id: E4
+    title: feature computation deterministic and byte-identical across batch sizes
+    status: met
+    evidence:
+      kind: test
+      ref:
+        - test_e4_the_vector_is_byte_identical_across_batch_sizes
+        - test_e4_the_vector_is_deterministic_across_repeated_runs
+
+  - id: E5
+    title: no feature reads a column the anti-leakage gates exclude
+    status: met
+    evidence:
+      kind: test
+      ref:
+        - test_e5_no_feature_reads_identifier_bytes
+        - test_e5_no_feature_reads_row_position
+        - test_e5_the_sub_second_part_of_a_timestamp_is_not_a_signal
+        - test_e5_no_feature_reads_the_label_delay
+        - test_e5_the_outcome_record_carries_no_confirmation_time
+
+  - id: E6
+    title: the account_events join is available to features and measured alongside them
+    status: met
+    evidence:
+      kind: artifact
+      ref: docs/benchmarks/m3_single_feature_auc_2c80ef6.txt
+      commit: 2c80ef6
+    finding: days_since_sim_swap separates at 0.577 +/-0.177 on 11 fraud of 2,193 usable rows
+
+  - id: E7
+    title: PB-26 fixed before any feature reads the month partitions
+    status: met
+    evidence:
+      kind: test
+      ref: test_the_partition_key_is_the_simulation_month_and_its_drift_is_bounded
+
+  - id: E8
+    title: country packs and corridor_class land in this branch, nothing hard-coded
+    status: met
+    evidence:
+      kind: test
+      ref:
+        - test_an_invented_country_in_an_invented_bloc_needs_no_code_change
+        - test_no_country_currency_bloc_or_continent_is_named_in_the_feature_paths
+
+  - id: E9
+    title: every new parameter carries provenance
+    status: met
+    evidence:
+      kind: gate
+      ref: uv run fs-dataset provenance --check
+
+  - id: E10
+    title: the register covers every M3 requirement and the matrix is current
+    status: met
+    evidence:
+      kind: gate
+      ref: uv run fs-traceability check
+
+  - id: E11
+    title: a milestone review covering leakage, determinism, grouping and claim backing
+    status: met
+    evidence:
+      kind: artifact
+      ref: docs/reviews/M3/milestone-review.md
+      commit: 2c80ef6
+    finding: one pass, BLOCKER and MAJOR only; two MAJOR found and both fixed in place
+
+  - id: E12
+    title: every bound, absence or invariant test asserts its own precondition first
+    status: author_asserted
+    evidence:
+      kind: judgement
+      asserted_by: author
+      note: >-
+        applied throughout and visible in the suite, but no check can tell a precondition that
+        constrains the fixture from one phrased to match it — which happened twice this milestone
+
+  - id: E13
+    title: the 44 feature tests each exercise their feature non-trivially
+    status: author_asserted
+    evidence:
+      kind: judgement
+      asserted_by: author
+      note: >-
+        hand-computed cases with non-zero history, a crossed boundary or a structural NaN exist
+        for every feature; "non-trivially" is not mechanically decidable
+
+  - id: E14
+    title: mutation checks run as the tests are written, and are recorded
+    status: met
+    evidence:
+      kind: test
+      ref:
+        - test_mutation_5_a_structural_missing_emitted_as_zero_is_detected
+        - test_mutation_11_joining_current_thresholds_instead_of_as_of_ones_is_detected
+        - test_mutation_14_the_speed_cap_applied_on_one_path_only_is_detected
+    finding: twelve of thirteen rows executed; row 9 needs the DB fallback path (PB-36)
+
+  - id: E15
+    title: no test mutates anything outside tmp_path, and a check enforces it
+    status: met
+    evidence:
+      kind: test
+      ref:
+        - test_the_geography_mutation_that_broke_a_real_run_is_reported
+        - test_a_created_pack_is_reported_because_the_loader_globs_the_directory

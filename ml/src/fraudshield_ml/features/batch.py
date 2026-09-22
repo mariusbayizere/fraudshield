@@ -83,7 +83,7 @@ def velocity_ratio_1h_vs_30d(
 
 def geo_cell_fraud_rate_30d(
     corpus: Sequence[Transaction],
-    outcomes: dict[str, Outcome],
+    outcomes: Mapping[str, Outcome],
     scored: Transaction,
     prior: float,
 ) -> float:
@@ -814,7 +814,7 @@ def counterparty_unique_senders_24h(corpus: Sequence[Transaction], scored: Trans
 
 
 def counterparty_confirmed_fraud_90d(
-    corpus: Sequence[Transaction], outcomes: dict[str, Outcome], scored: Transaction
+    corpus: Sequence[Transaction], outcomes: Mapping[str, Outcome], scored: Transaction
 ) -> int:
     """Confirmed-fraud transactions involving this counterparty in the prior 90 d.
 

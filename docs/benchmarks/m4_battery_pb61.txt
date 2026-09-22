@@ -1,0 +1,147 @@
+# evidence-commit: dbda58509920db099a9b2b5387662f0234348893
+# evidence-tree-state: clean
+# command: .venv/bin/python -u -m fraudshield_ml.cli battery dataset/output/features_full.parquet
+# exit: 0
+
+M4 BATTERY — every figure on D-07's test period, every model fitted on its train period,
+nothing tuned. Margins are against the full model unless a table says otherwise.
+  cache dataset/output/features_full.parquet
+  rows train/test/calibration 30000/101909/20000
+
+HEADLINE
+                                     AUC           margin  R@1%      rows fraud
+  full model, 38 features            0.968 +/-0.008         0.877   101909   985
+
+CALIBRATION — Platt scaling fitted on D-07's calibration period, which is neither
+fitted on nor scored. AUC is unchanged by construction: a monotone map cannot reorder.
+  Brier before 0.00250  ->  after 0.00249
+  expected calibration error, all rows      0.0011
+
+  predicted       rows   predicted   observed
+  [0.0, 0.1)    100793    0.001      0.001
+  [0.1, 0.2)       136    0.146      0.176
+  [0.2, 0.3)        69    0.252      0.290
+  [0.3, 0.4)        54    0.352      0.444
+  [0.4, 0.5)        43    0.451      0.395
+  [0.5, 0.6)        37    0.549      0.568
+  [0.6, 0.7)        37    0.652      0.676
+  [0.7, 0.8)        65    0.757      0.831
+  [0.8, 0.9)        94    0.854      0.947
+  [0.9, 1.0)       581    0.972      0.969
+
+  DECISION REGION (score >= 0.60) — where an alert is raised. The
+  overall ECE above is row-weighted, so at a 0.9% base rate it is dominated by
+  predictions nobody acts on; this is the number an alert budget depends on.
+    rows / fraud                           777 / 731
+    expected calibration error             0.0206
+    Brier                                  0.05156
+
+  predicted       rows   predicted   observed
+  [0.6, 0.7)        37    0.652      0.676
+  [0.7, 0.8)        65    0.757      0.831
+  [0.8, 0.9)        94    0.854      0.947
+  [0.9, 1.0)       581    0.972      0.969
+
+EXPLANATIONS — exact TreeSHAP from XGBoost's own pred_contribs, no new dependency.
+  additivity error 1.35e-05 (contributions must sum to the model's margin)
+
+  top 15 features by mean |SHAP|
+  counterparty_is_new_for_account    1.6631
+  counterparty_confirmed_fraud_90d   0.8525
+  velocity_ratio_1h_vs_30d           0.8081
+  device_age_days                    0.4654
+  seconds_since_last_tx              0.4627
+  channel                            0.3802
+  amount_to_max_90d_ratio            0.3284
+  round_sum_flag                     0.2917
+  implied_speed_kmh                  0.2579
+  synthetic_identity_score           0.2487
+  amount_log1p                       0.2428
+  local_hour_cos                     0.2346
+  amount_zscore_90d                  0.2311
+  distance_from_home_centroid_km     0.2098
+  counterparty_unique_senders_24h    0.2033
+
+ABLATIONS, ONE GROUP REMOVED — a negative margin is what that group was worth.
+                                     AUC           margin  R@1%      rows fraud
+  without counterparty (4)           0.935 +/-0.011  -0.033  0.732   101909   985
+  without temporal (6)               0.963 +/-0.008  -0.005  0.873   101909   985
+  without device_and_channel (5)     0.965 +/-0.008  -0.003  0.855   101909   985
+  without amount_behaviour (4)       0.966 +/-0.008  -0.002  0.870   101909   985
+  without velocity (8)               0.967 +/-0.008  -0.001  0.872   101909   985
+  without corridor (1)               0.967 +/-0.008  -0.001  0.873   101909   985
+  without geographic (5)             0.967 +/-0.008  -0.000  0.881   101909   985
+  without synthetic_identity (1)     0.969 +/-0.008  +0.001  0.876   101909   985
+  without agent (2)                  0.969 +/-0.008  +0.002  0.876   101909   985
+  without account_profile (2)        0.970 +/-0.007  +0.002  0.878   101909   985
+
+ABLATIONS, ONE GROUP ONLY — what each group can do by itself.
+                                     AUC           margin  R@1%      rows fraud
+  counterparty alone (4)             0.925 +/-0.011  -0.042  0.434   101909   985
+  velocity alone (8)                 0.860 +/-0.015  -0.108  0.570   101909   985
+  temporal alone (6)                 0.856 +/-0.015  -0.112  0.470   101909   985
+  geographic alone (5)               0.829 +/-0.016  -0.138  0.397   101909   985
+  device_and_channel alone (5)       0.760 +/-0.018  -0.208  0.337   101909   985
+  synthetic_identity alone (1)       0.706 +/-0.018  -0.262  0.087   101909   985
+  amount_behaviour alone (4)         0.655 +/-0.019  -0.312  0.036   101909   985
+  agent alone (2)                    0.556 +/-0.019  -0.411  0.070   101909   985
+  account_profile alone (2)          0.548 +/-0.019  -0.420  0.081   101909   985
+  corridor alone (1)                 0.493 +/-0.018  -0.474  0.000   101909   985
+
+BY COUNTRY — the same model and the same scores, sliced.
+                                     AUC           margin  R@1%      rows fraud
+  CD                                 0.964 +/-0.069  -0.004  0.857     5065    14
+  KE                                 0.977 +/-0.013  +0.010  0.905    28516   264
+  RW                                 0.963 +/-0.012  -0.004  0.872    42810   445
+  TZ                                 0.967 +/-0.020  -0.001  0.862    15274   152
+  UG                                 0.964 +/-0.024  -0.004  0.845    10244   110
+  ^ CD rest on fewer than 30 fraud rows; read those as direction
+    rather than as measurement.
+
+BY CHANNEL — the same model and the same scores, sliced.
+                                     AUC           margin  R@1%      rows fraud
+  AGENT_BANKING                      0.978 +/-0.016  +0.011  0.894    14075   151
+  BANK_TRANSFER                      0.998 +/-0.005  +0.031  0.975     6315   118
+  CARD                               0.986 +/-0.013  +0.019  0.932    12228   148
+  MOBILE_MONEY                       0.950 +/-0.019  -0.018  0.824    41439   250
+  ONLINE                             0.982 +/-0.016  +0.015  0.912     9527   125
+  USSD                               0.952 +/-0.021  -0.016  0.803    18325   193
+
+NOVEL SUB-VARIANT — a fraud shape present only in the test period, so the model has
+never seen it. All variants scored against the same legitimate rows at one threshold
+(0.008354, the 1% false-positive budget over all legitimate rows).
+
+  variant                            AUC           recall [95% CI]         caught  fraud
+  novel_esim_delayed_drain           0.999 +/-0.006  0.973 [0.905, 0.992]       71     73
+  adapted_below_threshold            0.998 +/-0.017  0.909 [0.623, 0.984]       10     11
+  base                               0.996 +/-0.003  0.942 [0.924, 0.956]      779    827
+  reversal_scam_social_engineering   0.656 +/-0.072  0.061 [0.024, 0.146]        4     66
+
+  novel_esim_delayed_drain: recall 97.3% [90.5%, 99.2%] on 73 fraud rows, against
+  base at 94.2% [92.4%, 95.6%] on 827 rows.
+  **The unseen shape is caught at least as often as the familiar one, so
+  this experiment does not measure generalisation on this benchmark.** The
+  novelty is in the lead time, not the transaction pattern: the drain is
+  still a burst, and a model that detects bursts catches it without having
+  seen the variant. Reported as a null result rather than dropped (PB-61).
+
+  adapted_below_threshold: recall 90.9% [62.3%, 98.4%] on 11 fraud rows, against
+  base at 94.2% [92.4%, 95.6%] on 827 rows.
+  The intervals overlap, so this comparison alone does not establish a difference.
+  Rests on 11 fraud rows; read the interval, not the point estimate alone.
+
+  reversal_scam_social_engineering: recall 6.1% [2.4%, 14.6%] on 66 fraud rows, against
+  base at 94.2% [92.4%, 95.6%] on 827 rows.
+  The intervals do not overlap: this is a supported finding, not noise at this sample size.
+
+LEAVE-ONE-COUNTRY-OUT — the country is removed from training entirely, then scored.
+  Compare each row against the same country in BY COUNTRY, not against the headline: a
+  country's own difficulty and the cost of never having seen it are different things.
+                                     AUC           margin  R@1%      rows fraud
+  CD unseen in training              0.977 +/-0.055         0.857     5065    14
+  KE unseen in training              0.976 +/-0.013         0.909    28516   264
+  RW unseen in training              0.964 +/-0.012         0.874    42810   445
+  TZ unseen in training              0.963 +/-0.021         0.855    15274   152
+  UG unseen in training              0.957 +/-0.026         0.855    10244   110
+  ^ CD unseen in training rest on fewer than 30 fraud rows; read those as direction
+    rather than as measurement.

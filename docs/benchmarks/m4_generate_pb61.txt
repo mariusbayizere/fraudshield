@@ -1,0 +1,6 @@
+# evidence-commit: 656d24e15bc0ac409bf51cc73dc0226b8db40fa8
+# evidence-tree-state: clean
+# command: .venv/bin/python -u -m fraudshield_dataset.cli generate --output dataset/output/bench1m --seed 20260917 --rows 1000000
+# exit: 0
+
+generated 1006317 rows in 24 months; peak RSS 170 MiB

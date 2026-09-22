@@ -66,6 +66,20 @@ parameters:
     unit: fraction of merchants that run fraudulent card charges
     provenance: ASSUMED
     rationale: A small share of merchants process charges with compromised card data; a modelling choice.
+  synthetic_identity_ring_size:
+    value: 4
+    unit: synthetic identities per ring, all of which transact from one handset
+    provenance: ASSUMED
+    rationale: >-
+      Part E.2 names "shared device and phone attributes across accounts" as a term of
+      synthetic_identity_score, and the scenario had no mechanism producing it (PB-40): every
+      synthetic identity had its own device, so the term could never fire. A ring of four shares
+      one handset. The size is a modelling choice and is deliberately small: a large ring would
+      make accounts_per_device_7d a near-perfect fraud detector and the realism gates would refuse
+      the dataset, which is the outcome this parameter has to be set to avoid as much as to
+      achieve. Realised rings are smaller than this: ring membership is drawn from a pool sized
+      by the synthetic-identity count, and a member with no handset (rural USSD) does not join
+      one, so the parameter sets the pool rather than the realised group.
   synthetic_identity_fraction:
     value: 0.12
     unit: fraction of newly joining customers that are synthetic identities
@@ -112,11 +126,67 @@ parameters:
     unit: fraction of mule-account forwarding transfers sent to another EAC country
     provenance: ASSUMED
     rationale: Mules move proceeds across borders more often than ordinary customers remit (behaviour.cross_border_share); the share is a modelling choice.
-  takeover_lead_minutes:
-    value: [5, 60]
-    unit: inclusive range of minutes between the enabling SIM swap or device change and the first fraudulent transaction
+  reversal_scam_probability:
+    value: 0.005
+    unit: probability, per active customer per test-period month, of planting one reversal-scam social-engineering transaction
     provenance: ASSUMED
-    rationale: Takeovers are exploited quickly once control is gained; a modelling choice.
+    rationale: >-
+      PB-61's replacement generalisation test (ADR 0028), pre-registered 2026-09-22. Drawn
+      independently per customer per test-period month, not from mule_account's own incident
+      budget: that budget holds at most ~15 incidents in the test period even at 100% conversion
+      (measured directly against the 1,000,000-row plan before this parameter was set), too few
+      for a recall figure to rest on -- the same "a handful of fraud rows is not a measurement"
+      lesson this session already paid for once today (PB-55/PB-56). Sized against the ~17,000
+      customer-month draws the test period actually holds to land near 60-70 rows, the same order
+      as novel_esim_delayed_drain's realised 73. A power calculation made before generating, not a
+      result read back into the design: it decides how much evidence the experiment produces, not
+      whether the model catches it.
+  reversal_scam_amount_multiplier:
+    value: 3.5
+    unit: multiple of the channel's median legitimate amount used as the reversal-scam amount, in place of amount_multiplier.mule_account
+    provenance: ASSUMED
+    rationale: >-
+      Reversal ("sent by mistake, please return") scams work by asking the victim to send back an
+      amount described as an overpayment or a specific mistaken transfer -- typically notably
+      larger than the victim's habitual P2P transfer, since a trivial amount would not motivate
+      the deception. Set above mule_account's own 2.0x so the request reads as the outsized,
+      specific ask the scam depends on, not as an ordinary transfer; a modelling choice, not
+      calibrated to any source, since the sourcing pass of 2026-09-18 found no publication giving
+      reversal-scam amounts for these markets.
+  takeover_lead_minutes:
+    value: [5, 43200]
+    unit: >-
+      bounds, in minutes, on the delay between the enabling SIM swap or device change and the
+      first fraudulent transaction; the draw is lognormal and clipped to these
+    provenance: ASSUMED
+    rationale: >-
+      Five minutes to thirty days. This was [5, 60] drawn uniformly until 2026-09-22, which meant
+      every enabling event was followed by its drain inside the hour, with no long tail and no
+      unexploited event -- and C-11 recorded since M2 that part of the event-delay channel's
+      separation was an artefact of that window rather than of the scenario (PB-56, owner
+      decision, because widening it changes the draw). The bounds are a floor and a cap on a
+      lognormal, not a uniform range: a drain twelve seconds after a swap is implausible, and a
+      lead of months would be a different scenario rather than a slow takeover.
+  takeover_lead_median_minutes:
+    value: 45
+    unit: median minutes from the enabling event to the first fraudulent transaction
+    provenance: ASSUMED
+    rationale: >-
+      Takeovers are usually exploited quickly once control is gained, so the mode stays in the
+      first hour. 45 minutes is the centre of the range this replaced, chosen so the change is
+      visible in the tail rather than in a shifted body.
+  takeover_lead_log_sigma:
+    value: 1.8
+    unit: sigma of the lognormal from which the lead is drawn, in log-minutes
+    provenance: ASSUMED
+    rationale: >-
+      The tail's weight, and the whole point of the change. Measured over 200,000 draws: a quarter
+      inside 13 minutes, half inside 45, 43.6% beyond an hour, 95% inside 14 hours and 2.7% beyond
+      a day. A lognormal is chosen because it is the ordinary shape for a delay -- a mode early
+      and a tail that does not end -- and not because any source supports 1.8; the 2026-09-18
+      sourcing pass established that no publication found gives takeover-to-drain delays for these
+      markets. A two-component fast/slow mixture was rejected: two clusters are structure of their
+      own, and a model could learn the gap between them as readily as the old tight window.
   drain_to_mule_probability:
     value: 0.7
     unit: probability that a drained or forwarded transfer goes to a known mule account rather than a one-off new account

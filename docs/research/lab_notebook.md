@@ -1746,6 +1746,627 @@ partition and the prior sets over every partition earlier than the corpus;
 corpus and a truncated one and requires all five to be identical, with a control proving the
 truncated corpus really does hide the history.
 
+### 2026-09-20 · Eleven minutes of feature computation to discover a missing import
+
+The M4 pipeline smoke test computed 36 features for 20,000 rows — eleven minutes — and then died
+on the first line of the model half:
+
+```
+ImportError: sklearn needs to be installed in order to use this module
+```
+
+`xgboost.XGBClassifier` is the scikit-learn wrapper and imports scikit-learn, which this package
+does not depend on. The fix was to use the booster API instead, which is four lines and the right
+dependency footprint. The cost was the whole feature pass, thrown away.
+
+What makes this worth an entry is not the import. It is the **shape of the command**: an expensive
+irreversible stage followed by a cheap fragile one, with nothing between them. Every minute of the
+expensive stage is wagered on the cheap stage being correct, and the wager is settled only at the
+end. The same shape produced the earlier loss today, where a 30,000-row run spent 106 minutes
+printing nothing at all, because the progress line came before the loop rather than inside it.
+
+Three changes, and the third is the general one:
+
+1. **The model half is a function with a test.** `fit_and_score` trains a booster on 200 synthetic
+   rows with one planted signal column, in under a second. The failing import fails there now, and
+   a column of pure NaN is exercised beside it (D-04), because that is what the benchmark hands it.
+2. **The expensive stage writes its output.** `--cache` stores the computed matrix keyed on the
+   dataset, the corpus size, the sample size and the feature list, so a failure after it costs
+   seconds rather than the pass. The key matters as much as the cache: one keyed on nothing is a
+   way to report one run's numbers under another run's settings, and each field is asserted to
+   invalidate on its own.
+3. **The expensive stage reports progress.** Rate and estimated time, every 500 rows. A silent
+   hour and a hang are the same observation, and I spent 106 minutes not distinguishing them.
+
+The habit to carry: **when a pipeline has an expensive stage and a cheap one, test the cheap one
+first and persist the expensive one's output.** Neither is a new idea; what is new is noticing that
+"run the whole thing and see" is the default shape and costs a working session's worth of machine
+time before it teaches anything.
+
+### 2026-09-21 · The explanation was wrong for two days, and the artefact could not say so
+
+`dataset/realism_report.md` said **1,012,522 rows**. Regenerating it said **1,006,249**. The gap
+had a published explanation — PB-29 moved country facts into packs, `countries.simulated()` sorts,
+so iteration went from declaration order to alphabetical and the draw shifted — and that
+explanation had been copied into the datasheet, the claims register, the walkthrough and four M2
+review documents. It was wrong, and so was the commit it was attached to.
+
+Three candidates, tested cheapest first:
+
+1. **A different `--rows`.** Refuted from the artefact. The split boundaries are planned from the
+   *target* row count, so a different target moves them. Both reports state the same test start
+   and the same spans to two decimals.
+2. **A committed generator change.** Refuted from the history. The figure appears exactly once in
+   the report's whole history, and the only commit touching the generator or its parameters in the
+   window is the pack refactor itself.
+3. **The pack refactor.** Refuted by measurement. Generating 200,000 rows at the same seed on the
+   commit before the refactor and on the current tree gives 201,243 rows **and the identical
+   fingerprint**. PB-29 did not re-draw anything.
+
+So the run was made on a **dirty working tree**, and the change is unrecoverable: never committed,
+never stashed, never described.
+
+#### What is actually interesting here
+
+Not that someone ran a job on uncommitted code — that is ordinary. It is that **the mistake was
+undetectable by construction**, and then the project reasoned around it with great care for two
+days. The explanation was not lazy: it named a specific mechanism, in a specific function, with a
+plausible causal story, and it was repeated in six places by someone checking their work. Detail
+and confidence are not evidence, and a wrong explanation that survives scrutiny does more damage
+than an unexplained gap, because it closes the question.
+
+The earlier entry about `_first_seen` said *a true comment can defend a wrong value*. This is the
+same shape one level up: **a plausible mechanism can defend a wrong provenance**. In both cases
+the defence was written by someone trying to be careful, and in both cases the thing that finally
+settled it was a measurement nobody had thought to take because the story already accounted for
+the facts.
+
+#### What would catch this class
+
+The commit hash on an artefact is written by hand or passed as a flag, so it records what the
+author *believed* the tree was. A commit identifies a tree in the object database; the interpreter
+imports the **working** tree; the two coincide only when it is clean, and nothing checked that.
+
+So the stamp carries two values (`fs-evidence`, PB-53): the commit, and a hash of
+`git status --porcelain` — `clean` for an unmodified tree, and varying with any modification,
+staged or not, **tracked or not**. Untracked files count as dirty deliberately: the archetypal
+accident is a new module that is imported and not yet added, and a guard diffing tracked content
+would call exactly that case clean. An evidence run refuses to start on a dirty tree;
+`--allow-dirty` runs anyway and stamps the artefact `NOT CITABLE`, so a development run stays
+possible and can never be mistaken for evidence.
+
+`fs-exit-criteria` now reads the stamp rather than only the prose hash. A missing stamp is a
+**warning**, not an error — every artefact predating the guard lacks one, and failing them would
+either block the milestone or invite the stamps to be pasted in by hand, which is the disease and
+not the cure. A stamp that is present and contradicts the row is an error, because that can only
+happen to a run made after the guard existed.
+
+The general rule, which is the one to carry: **a record of provenance that the author writes is a
+record of intention. Provenance has to be taken from the system at the moment the work happens, or
+it records what someone meant to do.** That is the same principle as deriving a status table from
+its evidence rather than from an author's edit — the entry from two days ago — applied to the
+evidence itself.
+
+### 2026-09-21 · Three runs of one measurement, and only the third was about the model
+
+The first M4 metric on D-07's published split took three runs. The model barely changed. What
+changed was what the numbers were about.
+
+**Run 1** printed: model AUC 0.998, best single feature **1.000** (`days_since_sim_swap`), margin
+**−0.002**. I wrote a backlog item saying the benchmark had a second perfect separator.
+
+**Run 2** printed the denominator. Those 1.000s were over **660 rows holding two confirmed fraud**.
+`auc` drops NaN with its labels — right, a structurally missing value is not a low value — so the
+feature was scored on the accounts that had a SIM swap while the model was scored on all of them.
+Two numbers over different populations had been subtracted and called a margin.
+
+**Run 3** made the sample representative: an even stride across each period instead of its tail.
+The feature stopped being the strongest at any coverage. The strongest became
+`velocity_ratio_1h_vs_30d` at 0.871 on 100% of rows — the baseline PB-46 already knew about — and
+the model's margin came out at **+0.115**. The finding from run 1 did not shrink; it evaporated.
+
+Two separate defects, and it is worth keeping them apart.
+
+**The comparison was cross-population.** PB-46's rule is "report every metric as a margin over the
+single-feature baseline". The code implemented that rule literally, and "the baseline" silently
+meant "over whatever rows that feature happens to be defined on". A rule followed to the letter and
+broken in substance is the same shape as a guard that checks the input it was written for rather
+than the output it protects — and that shape appeared three times in three days: in the parameter
+digest (PB-41), in the fingerprint that replaced it (PB-54), and here.
+
+**The sample was the tail.** Both early runs took the last N rows of each period, so they trained
+on about a week no matter how deep the corpus read — the sample size decided the window and the
+corpus depth did nothing. Deepening the corpus from 400,000 to 560,000 rows changed the answer not
+at all, which should have been the tell. A stride over a pool already in timestamp order costs the
+same, spans 235 days, and needs no seed.
+
+#### The habit
+
+**The first version of a measurement is the one most likely to be about its sampling rather than
+about its subject.** Not wrong arithmetic — the AUCs were all computed correctly. The question
+"what rows is this over?" simply had a different answer for each number being compared, and
+nothing in the output said so.
+
+So the report prints coverage and fraud count beside every baseline, and refuses to subtract a
+partial-coverage feature from the model at all. The denominator arrives *with* the number rather
+than after it, which is the only arrangement under which a reader can catch this before a backlog
+item gets written about it.
+
+#### And the guard reintroduced a solved problem
+
+`fs-evidence`, built the same afternoon to stamp provenance, captures its child's output instead of
+streaming it. A 34-minute run is now completely silent — which is the failure the notebook already
+has an entry about, from the 106-minute run that printed nothing. Recorded as PB-57. Fourth
+instance of *knowing a failure mode does not immunise against it*, and the second where the
+immunity was expected to come from having just written about it.
+
+### 2026-09-21 · The fingerprint read three columns of fourteen — seventh instance
+
+Recorded separately from the run that found it, because it belongs to a family and the family is
+now long enough to be the point.
+
+`dataset_fingerprint` exists to answer one question: *is this report still about this dataset?*
+PB-40 gave the generator a device-sharing mechanism, which rewrote `device_fingerprint` for 504
+devices and changed nothing else. The fingerprint returned **the identical value** for the old
+draw and the new one. `SAMPLED_COLUMNS` hashed three columns per table and `device_fingerprint`
+was not among them.
+
+#### The family, in order
+
+1. A licence check that ran over an empty scope and passed for three milestones.
+2. E1's grouping check, which ranged over folds rather than over units of history.
+3. D-08's ceiling, measured on the dataset's **columns** and quoted as a claim about the
+   **features** — the fourth instance was the one that made E3 fail.
+4. …and two more of the same "control on inputs" shape recorded at M3.
+5. **PB-41:** the parameter digest answered "did the parameters change?" while the report needed
+   "is this about this dataset?". The fix was a second digest over the output rows.
+6. **PB-54, this one:** that second digest then sampled three columns of fourteen.
+7. **PB-55, the next morning:** "a margin over the single-feature baseline" implemented as a
+   margin over a feature measured on a *different set of rows* from the model.
+
+#### What is new at seven
+
+The early instances were scope errors findable by reading: name the object the check ranges over,
+name the object the claim is about, compare the nouns. Five and six are not findable that way,
+because the check's scope is not written down anywhere near the claim — it is in a constant two
+files away, and the claim is in a docstring that is *correct about the check* and silent about the
+gap.
+
+So the question that finds the early ones — *what does this range over?* — has to become a
+question about distance: **how far apart are the definition of the check and the statement of the
+claim, and is anything keeping them in step?** For PB-54 the answer was "a tuple in another
+module, and nothing". The fix is not a better list of columns; it is removing the list, so that
+the sample is the row and there is no scope left to get wrong.
+
+That generalises better than "check more things": **prefer a guard with no scope parameter to a
+guard with a well-chosen one.** A scope that can be set correctly can be set incorrectly, and
+usually will be, one refactor after the person who chose it stopped looking.
+
+### 2026-09-22 · Prediction, recorded before the draw exists
+
+The owner has directed that `fraud.takeover_lead_minutes` gain a long tail (PB-56). It is `[5, 60]`
+drawn uniformly: every SIM swap or device change that enables a takeover is followed by the drain
+inside the hour, with no long tail and no unexploited event. C-11 has said since M2 that part of
+the event-delay channel's separation is an artefact of that window rather than of the scenario.
+
+This entry is written and committed **before** the regeneration, so the prediction cannot be
+adjusted to the result.
+
+#### The change
+
+`takeover_lead_minutes` becomes the **bounds** `[5, 43200]` — five minutes to thirty days — with
+the draw a lognormal of median `takeover_lead_median_minutes = 45` and
+`takeover_lead_log_sigma = 1.8`, clipped to those bounds. Measured over 200,000 draws: 25% inside
+13 minutes, median 45, **43.6% beyond an hour**, 95% inside 14 hours, **2.7% beyond a day**, 99%
+inside two days. Provenance stays ASSUMED and says so: no publication read in the 2026-09-18
+sourcing pass gives takeover-to-drain delays for these markets, and a lognormal is chosen because
+it is the ordinary shape for a delay — a mode early, a tail that does not end — and not because
+any source supports these two numbers.
+
+A mixture of "fast" and "slow" leads was considered and rejected: two clusters would be structure
+of its own, and a model could learn the gap between them as readily as it learns the old tight
+window.
+
+#### The predictions
+
+1. **The event-delay channel falls from 0.758.** It is `max(AUC, 1−AUC)` for "seconds from an
+   account event to that account's next transaction", and it separates because fraud is *fast*
+   while a legitimate account's next transaction lands whenever it lands. Moving 44% of fraud
+   leads past an hour and 2.7% past a day puts that much of the fraud distribution inside the
+   legitimate one. **I predict 0.68–0.74.** A fall of less than 0.01 refutes the mechanism claim
+   C-11 has carried for four days — it would mean the separation never came from the window.
+2. **`days_since_sim_swap` stops being a candidate for the strongest partial feature.** It already
+   stopped when the sample was made representative, so this is the weaker prediction; what it
+   adds is that the effect should now survive a tail-sampled run too.
+3. **The single-feature ceiling gate still passes**, because it measures columns and the delay
+   channel is reported rather than gated; and **the model's margin over the velocity baseline does
+   not move materially**, because none of this touches velocity. If the margin moves by more than
+   its interval, something other than the lead window changed and I have mis-attributed the
+   effect.
+
+The first is the one to hold me to.
+
+### 2026-09-22 · The prediction held, and the number it produced is more interesting than the prediction
+
+Predicted before the draw existed (committed at `0138099`): giving `takeover_lead_minutes` a long
+tail would drop the event-delay channel from **0.758**, into **0.68–0.74**, and a fall of less
+than 0.01 would refute the mechanism claim C-11 has carried since M2.
+
+Measured on the regenerated draw (`6abde44e`): **0.730**. Inside the band, at its top. The
+mechanism claim is confirmed — part of that separation *was* the assumed window — and the single
+-feature gate is untouched at 0.706, because it measures columns and the lead is not one.
+
+#### What the residual says, which is the part I did not predict
+
+The channel fell by 0.028. Against a baseline of 0.5 that is **11% of the excess**, so roughly
+nine tenths of the delay separation is the *scenario* and one tenth was the window. I had written
+the prediction expecting to learn "how much of this is an artefact"; the answer is "much less than
+the framing implied".
+
+That reframes four days of hedging. C-11 said the interpretation was "part designed causal signal,
+part artefact of an assumed schedule" and could not say in what proportion. It can now: the
+artefact was the small part. A SIM swap shortly before a drain is the scenario working, and saying
+so is now a measurement rather than a hope.
+
+It also means the hedge was **doing work in the wrong direction**. Every quotation of the delay
+channel has carried a caveat implying the figure might be mostly artefact. It was not, and the
+caveat was free to write and cost nothing to leave in place, which is exactly how a caveat becomes
+permanent. The test for keeping one: *what measurement would remove it?* If there is no answer,
+the caveat is a decoration. If there is — and here it was one parameter and one regeneration —
+then leaving it unmeasured is a choice, and four days is a long time to choose that.
+
+#### On the prediction landing at the top of the band
+
+0.730 against 0.68–0.74 is confirmed but poorly centred: I expected a larger fall than I got. The
+error is legible. I reasoned from the *fraction of fraud leads moved past an hour* (43.6%) and not
+from what the channel actually measures, which is fraud leads against **legitimate** next-
+transaction delays. Those are mostly hours to days, so moving a fraud lead from 20 minutes to 90
+minutes leaves it well inside the fraud end of the ordering; only the 2.7% beyond a day cross into
+the legitimate mass in a way that changes a rank. The right predictor was the tail weight past a
+day, not the weight past an hour — and it was in the rationale I had just written.
+
+### 2026-09-22 · Leave-one-country-out carries no weight, and the ablation said so first
+
+PB-46's owner decision, four days old, read: "leave-one-country-out and the novel sub-variant
+carry the weight the headline AUC no longer can". The reasoning was sound — once one velocity
+feature reaches 0.894, a headline AUC stops discriminating between a model that learned fraud and
+one that learned a threshold, so the load moves to the generalisation experiments.
+
+Measured, on 60,000 held-out rows with 551 fraud:
+
+| Country | In-sample | Unseen in training |
+|---|---:|---:|
+| KE | 0.996 | 0.996 |
+| RW | 0.994 | 0.993 |
+| TZ | 0.981 | 0.979 |
+| UG | 0.975 | 0.976 |
+
+Removing a country from training **entirely** costs nothing measurable. LOCO is not a demanding
+test on this benchmark, and half of PB-46's plan is refuted.
+
+#### The ablation had already said it
+
+Every one of the ten feature groups can be removed for ≤0.031 AUC, and eight for ≤0.001. Read
+alone that says every group is worthless, which cannot be true of a model at 0.991 — so I added
+the complementary experiment, keeping only one group at a time. **Four disjoint groups each reach
+0.845 or better alone**: counterparty 0.949, velocity 0.871, temporal 0.861, geographic 0.845.
+
+That is the same fact as the LOCO result, one level down. The benchmark can be solved several
+different ways, so removing any one route — a feature group, a country — leaves the others
+intact. A generalisation test works by removing the thing the model relied on; when the model
+relies on four interchangeable things, removing one measures nothing.
+
+#### What I should have predicted and did not
+
+PB-46 *named this mechanism* when it set the plan: "burstiness is not country-specific, so a
+velocity threshold transfers trivially". It was written as a risk to watch. It was in fact a
+prediction, and it was available four days before the measurement — no run required, only the
+observation that the generator draws fraud from one scenario library applied to every country.
+
+So the failure was not the plan; it was reading a mechanism as a caveat. The two are
+distinguishable by one question: **does this sentence say what a measurement would show?** "LOCO
+may transfer trivially" is a hedge. "LOCO will transfer trivially, because the scenarios are not
+country-specific" is a prediction, costs nothing more to write, and would have been recorded and
+tested. The same distinction retired C-11's delay-channel hedge this morning, which is twice in
+one day that a caveat turned out to be a measurable claim nobody had measured.
+
+#### What is left holding the weight
+
+The **novel sub-variant** — a fraud shape present only in the test period. It is a *temporal*
+hold-out, not a geographic one, and no amount of cross-country transfer helps a model learn a
+pattern that does not exist in its training window. That is the experiment M4 still owes, and it
+is now the only one of PB-46's two that is still standing.
+
+The honest summary for the paper: on this benchmark, geographic generalisation is easy and says
+nothing; temporal generalisation to an unseen variant is the test that can fail.
+
+### 2026-09-22 · Two generalisation experiments, both chosen before anyone asked if they could fail
+
+PB-46, four days ago, moved the evidential weight off the headline AUC — correctly, since one
+velocity feature reaches 0.89 — and onto two experiments: **leave-one-country-out** and the
+**novel sub-variant**. Both are now measured. Both are null.
+
+| | In-sample | Held out |
+|---|---:|---:|
+| KE / RW / TZ / UG, country removed from training | 0.996 / 0.994 / 0.981 / 0.975 | 0.996 / 0.993 / 0.979 / 0.976 |
+| Novel variant, never in the training period | base recall 95.1% | **novel recall 100.0%** |
+
+The unseen fraud shape is caught *more* often than the familiar one.
+
+#### One cause, and it was knowable in advance
+
+The benchmark encodes fraud as **bursts**. The novel variant's novelty is in the *lead time* — a
+drain delayed by days rather than minutes — and not in the transaction pattern, which is still a
+burst. Every country's fraud is the same burst, drawn from one scenario library with no parameter
+keyed by country. Four disjoint feature groups each reach ≥0.845 alone because each is a different
+view of that one structure.
+
+So a country hold-out withholds no mechanism, a variant hold-out withholds no pattern, and an
+ablation removes no unique signal. Three experiments, one reason, and the reason is a property of
+the generator that was fully visible in its source the whole time.
+
+#### The habit this breaks
+
+**I chose both experiments as headline evidence before checking whether the benchmark could make
+either one informative.** That is the error, and it is not the same as being wrong about an
+outcome. An experiment is a question put to a dataset; before running it you can ask whether the
+dataset is capable of answering — and here the answer was in `fraud.yaml`, in the absence of any
+country key, and in the novel variant's own definition, which changes a delay and nothing else.
+
+PB-46 even *named* the mechanism when it set the plan: "burstiness is not country-specific, so a
+velocity threshold transfers trivially". It was written as a risk to watch rather than as a
+prediction to test, which is the third time this week a hedge turned out to be a measurable claim
+nobody had measured — the delay channel this morning, C-11's proportion, and now this.
+
+The check to run before promoting an experiment to headline evidence: **what property of the data
+would have to hold for this to be able to fail, and is it there?** For LOCO: fraud mechanisms
+differing by country. For the variant hold-out: a *pattern* differing, not a schedule. Neither was
+present, and neither would have taken a run to establish.
+
+#### What not to do about it
+
+Not to make the countries differ. Not to design a harder variant. Engineering the data until the
+experiment becomes informative is tuning the benchmark to produce a result, and it is the failure
+this project spent two milestones learning to avoid — the owner's direction, and the right one.
+The honest output is a null result reported as a null result, plus a statement that country-level
+generalisation belongs to real-data validation and not to this benchmark.
+
+**And what is left is better than what was lost.** The latency-explainability frontier does not
+depend on the data being hard: explanation cost grows 35× from the smallest tree configuration to
+the largest while accuracy moves inside its own interval. That is a claim about the model and the
+SHAP algorithm, and an easy benchmark cannot weaken it.
+
+### 2026-09-22 · Pre-registration: one non-burst fraud variant, before the draw exists
+
+Committed before the dataset is regenerated and before any measurement of it exists (ADR 0028).
+PB-46's two generalisation experiments both came back null today: leave-one-country-out changes an
+AUC by at most 0.002, and the novel sub-variant is *easier* than the familiar one (100.0% recall
+against 95.1%) because it differs from its parent scenario only in timing, not in shape — still a
+burst. One cause explains both and the redundancy finding: this benchmark encodes fraud as bursts,
+and every country, variant and feature group is a view of that structure.
+
+The owner's direction: do not invent country differences (there is no source to ground them in —
+that would be circular, ADR 0028 §Decision 1). Do add one variant whose *mechanism* differs, drawn
+from a real, independently-documented fraud typology rather than from what would defeat this
+model.
+
+#### The variant: `reversal_scam_social_engineering`
+
+**Typology.** "Sent by mistake, please return" scams: a scammer contacts a victim, convinces them
+that a payment was sent in error (a real payment, a fabricated one, or an actual small transfer
+followed by a much larger "correction" request), and asks the victim to send back an amount
+described as the mistake. The transfer is the **victim's own act**, not an attacker's — no
+compromised account, no enabling SIM swap or device change. It is a **single transaction** — the
+whole incident is the one transfer the scam depends on, not a drain. And it typically goes to a
+**counterparty the victim has established contact with** in the course of the scam, which by the
+time of the transfer is not a fresh, unrecognised payee to the account.
+
+**Mechanism, as implemented.** Drawn independently per (customer, test-period month) — not from
+`mule_account`'s own incident budget, whose test-period allocation tops out at ~15 incidents even
+at 100% conversion (measured against the 1,000,000-row plan before any probability was set, a
+sizing calculation and not a result). One row. The counterparty is drawn from the customer's own
+`counterparties` list — the same pool their legitimate P2P transactions already draw from —
+verified directly against `Population.customer(i).counterparties`, not inferred from rows a small
+draw happened to have already written (an earlier check against realised legitimate rows gave a
+false negative for exactly that reason, corrected before this entry was written). The amount uses
+a dedicated multiplier (3.5×, against `mule_account`'s own 2.0×) because the scam's request is
+described as an unusual, specific "overpayment" — notably larger than a habitual transfer — and is
+never a round sum, matching the "return exactly what I mistakenly sent" framing.
+
+**What this removes, stated plainly rather than left implicit.** Burst-structure (one row) and
+counterparty-novelty (an established payee) — the two axes PB-60 and PB-61 found doing the work.
+Amount, channel and timing remain available to a detector. This is not a claim of invisibility on
+every axis; it is a claim about which two axes are absent, chosen because those are the two this
+benchmark's models are shown to rely on, not because the model's SHAP ranking was checked feature
+by feature and a value picked to duck under each one.
+
+**Sizing.** `reversal_scam_probability = 0.005`, chosen against ~17,000 test-period customer-month
+draws to land near 60-70 rows — the same order as `novel_esim_delayed_drain`'s realised 73, and
+well clear of the "fewer than 30 fraud rows, read as direction not measurement" line this project's
+own reporting convention already draws. A power calculation, made before generating: it decides
+how much evidence the experiment produces, not whether the model catches it.
+
+**Verified mechanically before this entry was committed** (`test_the_reversal_scam_variant_is_one_
+transaction_to_a_known_payee_in_the_test_period`, dataset suite; full realism gate check re-run at
+200,000-row scale, all gates still pass): exactly one row per selected incident, every counterparty
+on the account's own established list, every timestamp at or after the test-period boundary, zero
+rows in any earlier month.
+
+#### The prediction, recorded before the draw exists
+
+**I predict the model still detects a meaningful share of this variant, though less well than the
+base scenarios, and the honest range is wide because the removed axes (SHAP-ranked #1 counterparty
+novelty, and the whole velocity/temporal group) carried most of the separation measured today.**
+Concretely: recall at the same 1%-FPR threshold used for the novel-variant comparison, **between
+0.15 and 0.55** — well below `base`'s 95.1% and `novel_esim_delayed_drain`'s 100.0%, but not zero,
+because amount (a 3.5× multiplier is still an unusual amount for the account) and the counterparty-
+confirmed-fraud-90d feature (the account's history, if any prior fraud touched this exact
+counterparty pool) remain live.
+
+**What would refute the mechanism claim in either direction.** Recall above roughly 0.7 would say
+the amount and channel signal alone still catch most of it — a real result, but one saying this
+particular variant did not remove enough of what the model uses, not that non-burst fraud is
+undetectable in general. Recall below roughly 0.10 would say burst-structure and counterparty-
+novelty account for nearly all of this benchmark's detection power on their own, which PB-60's
+redundancy table already makes plausible (four independent groups each ≥0.845 alone means a lot of
+signal is concentrated in a few mechanisms) but has not yet been measured directly on a case built
+to lack both at once.
+
+This entry will not be edited after the measurement. The result — whichever direction it lands —
+follows in its own entry, dated after the regeneration this commit precedes.
+
+### 2026-09-22 · The reversal-scam result: below the predicted range, not inside it
+
+Measured against `dataset/output/features_full.parquet` at fingerprint `d8083dbc`, the full test
+period (101,909 rows, so every one of the variant's rows is scored, not a sample of them):
+`docs/benchmarks/m4_battery_pb61.txt`.
+
+**`reversal_scam_social_engineering`: recall 6.1% (4 of 66 fraud rows detected), Wilson 95%
+interval [2.4%, 14.6%]. AUC 0.656 ± 0.072.** Against `base` at recall 94.2%, interval [92.4%,
+95.6%], on 827 rows. The two intervals do not overlap — at 66 fraud rows a single point estimate
+would not be enough on its own to say the variant is genuinely harder to detect rather than the
+result of sampling noise, but the non-overlap is what makes this a supported comparison rather than
+one asserted from the point estimate alone.
+
+**This falls below the pre-registered prediction range (0.15–0.55), not inside it.** The
+pre-registration's own refutation condition for "recall below roughly 0.10" is the one that fired:
+"burst-structure and counterparty-novelty account for nearly all of this benchmark's detection
+power on their own." The prediction undershot in the direction of *underestimating* how much the
+model depends on those two axes — the lower bound of the predicted range (0.15) was itself set from
+"amount and the counterparty-confirmed-fraud-90d feature remain live," and at 6.1% those two
+signals are evidently much weaker load-bearing features than the prediction assumed, once the
+burst shape and payee novelty are both absent.
+
+**What this changes.** PB-59 (LOCO) and PB-61's first variant (`novel_esim_delayed_drain`) were
+both null because the axis they varied was never the axis the model uses. This is the first
+experiment in the M4 generalisation series to measure the model actually failing at something —
+and it fails hard, not marginally. It is also the sharpest confirmation yet of PB-60's redundancy
+finding: four disjoint feature groups each reaching AUC ≥0.845 alone was already evidence that
+detection power concentrates in a few mechanisms; a purpose-built case lacking two of them landing
+at 6.1% recall is that same finding, now demonstrated on a single held-out shape rather than
+inferred from ablation margins.
+
+**What this does not change.** The pre-registration was explicit that this is one variant, chosen
+from one typology, and that a low recall here does not generalise to "non-burst fraud is
+undetectable" — it generalises only as far as "this benchmark's two strongest signals are absent in
+this shape, and the remaining signals do not compensate." Whether that holds for other non-burst
+typologies (romance scams, invoice fraud, authorised-push-payment variants with different
+counterparty patterns) is untested and out of scope for this entry.
+
+The 2026-09-22 pre-registration entry above is unedited. This entry supersedes nothing in it; it
+reports the measurement that entry said would follow.
+
+### 2026-09-22 · The m2-complete tag sits on a commit whose python CI job fails
+
+Found when `main` was fast-forwarded from the M1 merge (`a7e6896`) to `m2-complete` (`ed7a8d9`),
+the first time either M2 or M3 reached `main`. The `ci` run that push triggered failed at
+`mypy --strict`, before pytest ran:
+
+```
+dataset/tests/test_generator.py:501: error: Item "None" of "Match[str] | None" has no attribute "group"  [union-attr]
+dataset/tests/test_generator.py:520: error: Item "None" of "Match[str] | None" has no attribute "group"  [union-attr]
+```
+
+Reproduced locally at the same commit with the lockfile's own mypy (2.3.1). The calls are
+`re.search(...).group(1)` with no `None` check, introduced by `1ff1d2f` ("refuse a run too small to
+stage every fraud scenario", 2026-09-18) — seventeen commits into M2's review work and one day
+before the tag.
+
+**What the record said.** `docs/reviews/M2/gate-evidence.md` cites `ci` run 35323956798 as green
+on every job, at `817db76`, which it calls "the current branch head". It also states the rule
+this breaks, in its own words: the `ci` citation "should be moved forward whenever the head moves
+— otherwise the tag rests on a commit that is not the one being tagged". The head then moved
+seventeen commits, including `1ff1d2f`, and the tag went on `ed7a8d9` with the citation still at
+`817db76`.
+
+**What CI actually recorded on the tagged commit.** Before 2026-09-22, no `ci` check-run exists on
+`ed7a8d9` at all — the python, java, frontend and governance jobs never ran there, although `ci`
+triggers on every push; why is not established from the API alone (the per-ref
+`cancel-in-progress` concurrency group is one candidate, not a verified cause). The `stack` and
+`devcontainer` workflows did run on 2026-09-19, starting at 08:35 UTC — ten minutes *after* the
+tag (10:25 +0200, 08:25 UTC), so they could not have informed it: stack succeeded, and **`build
+devcontainer, post-create make ci, smoke test inside` failed**. So the tag was placed with no CI
+result on its commit at all, and the first two results that commit ever received included a
+failure nobody read.
+
+**How it was fixed, and why that did not surface it either.** The `None` checks were added in
+`5f0a8a1` (2026-09-19), a `feat(ml)` commit declaring the 44 features, whose message does not
+mention the fix. M3's CI went green, `m3-complete` is green on every job including the
+devcontainer, and nothing pointed back at the tag.
+
+**Not fixed forward on `main`.** A commit on `main` at `m2-complete` would break the ancestry, and
+`main` could then no longer fast-forward to `m3-complete`. `main` was red at `m2-complete` only
+transiently and was fast-forwarded to the green `m3-complete` the same morning. The tag is not
+moved or re-cut: it records what was signed off, and this entry records what that was.
+
+**The pattern.** The same one PB-52 and PB-53 were about, on a tag instead of an artefact: the
+record ran ahead of the facts. A citation written when a commit was the head was left standing
+after the head moved, and the tag inherited a green it never had. It was caught only because
+`main` made the tagged commit build again.
+
+**The structural fix.** PB-53's `fs-evidence` stamp already makes an evidence artefact carry the
+commit and tree state it was produced from, rather than the one its author believed. The same
+rule belongs on a milestone tag: **a milestone tag requires a green run of every CI job on the
+exact commit being tagged**, cited by run ID against that SHA, not a green run on an ancestor.
+A citation to any other commit is evidence about a different tree.
+
+### 2026-09-22 · The M4 gate: nine of eleven, and three runs to get there honestly
+
+The M4 milestone review (`docs/reviews/M4/milestone-review.md`) found the model and gate
+machinery missing, and it was built: D-05's ensemble, D-06's Isolation Forest, the eleven M4 gate
+metrics with stratified bootstrap intervals, baselines, ablations, ONNX parity, LaTeX tables. The
+gate was then run three times on the same test period, and each run is committed and logged in
+`docs/benchmarks/test_set_access.jsonl`, because each is a look at the test set.
+
+- **Run 1** (`m4_gate_d8083dbc`, at `590ca14`) exposed two defects. The LightGBM ONNX export
+  disagreed with the evaluated model on 398 of 101,909 rows, by up to 0.229; and precision at "1%
+  FPR" printed above its own theoretical ceiling, because isotonic ties left the realised FPR at
+  0.47%. Neither fix touched a model setting or a threshold.
+- **Run 2** (`_v2`, at `07ed1ed`) passed parity. It still trained with a random-fold target
+  encoding, which E1 forbids — a settled rule recorded on FR-02-03 that the review's first pass
+  had not checked.
+- **Run 3** (`_v3`, at `d40fca2`) is the declared result.
+
+**Nine of eleven pass.** AUC 0.970 [0.962, 0.977], recall at the 1% FPR budget 0.871, F1 at 0.60
+0.821, FPR at 0.85 0.000, channel AUCs 0.953 / 0.953 / 0.979, SHAP coverage 1.000, ECE 0.001.
+Every ranking metric clears both of PB-46's baselines: the headline AUC is +0.091 over
+`velocity_ratio_1h_vs_30d` (0.879) and +0.311 over the best trivial rule, and the narrowest
+margin is USSD's +0.049. On this benchmark a random forest and XGBoost alone are statistically
+indistinguishable from the ensemble (DeLong p 0.21 and 0.67), and logistic regression sits 0.005
+below it (p 0.0049): the velocity-separability of PB-46 again.
+
+**Two fail, both at D-02's 0.60 flag threshold, and are recorded rather than tuned:** recall
+0.736 [0.707, 0.765] against 0.88, and FNR 0.264 against 0.12 — one fact, stated twice, since FNR
+is 1 − recall there. What the committed numbers already say about why, without another look:
+
+- **The threshold is not the only constraint.** Even at the 1% FPR budget — a threshold far below
+  0.60, flagging 0.96% of legitimate rows — recall is 0.871. D-02's reference point (recall 0.88
+  at about 0.28% FPR) is beyond this model on this training sample at any threshold the artefact
+  shows.
+- **At 0.60 the model is conservative, not wrong:** precision 0.927 at an FPR of 0.06%. A
+  calibrated probability of 0.60 means "60% of rows like this are fraud", and most fraud rows here
+  do not reach that confidence.
+- **It is not one seed:** over five refits recall at 0.60 is 0.744 ± 0.041.
+- **Training volume is a candidate cause, not a finding:** the model sees 30,000 training rows
+  and 260 frauds of a period holding 792,162 (PB-67). Testing that means a larger training sample
+  reported beside this one, not a new threshold.
+
+F1 at 0.60 passed in run 1 (0.819), failed in run 2 (0.795) and passed in run 3 (0.821). It sits
+at the threshold, and its five-seed spread in run 3 (0.820 ± 0.020) covers it.
+
+**The reversal-scam figure, restated.** The PB-61 battery evidence was produced with the
+forbidden encoding, so it was re-run on the same cache. The variant is caught at **9.1% (6 of 66),
+Wilson 95% [4.2%, 18.4%]**, against 94.4% for base; it was 6.1% [2.4%, 14.6%]. The intervals
+still do not overlap and the point estimate is still below the pre-registered 0.15–0.55. **What
+changed is that the interval now reaches 18.4%, past the prediction's lower edge**, so "below the
+predicted range" holds for the point estimate and no longer for the whole interval. The
+pre-registration entry above is unedited; this is the correction the result needed, stated
+against it.
+
+**C-6, restated.** With the E1 encoding the ensemble's seed-to-seed AUC standard deviation is
+−0.6% against XGBoost alone (no reduction) and +12.5% against LightGBM alone. The first
+measurement's +62.9% was LightGBM being far more seed-sensitive under random-fold encoding.
+
 ## M7 — staff identity, authorisation and audit
 
 ### 2026-09-22 · A fix whose test never reached it

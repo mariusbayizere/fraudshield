@@ -406,25 +406,24 @@ def test_a_feature_with_no_signal_on_this_dataset_declares_it() -> None:
     "All 44 computable for >= 98% of records" is satisfied by all three. Nothing downstream emits
     a NaN or raises, so the loss is silent until someone asks why a feature has zero importance.
 
-    The four are not degenerate for the same *kind* of reason, which is why the backlog item is
-    read out of the declaration rather than fixed at PB-40: two are a generator gap that will be
-    closed before M4 training; `corridor_class` is degenerate because the owner has ruled that the
-    simulated country set is not to be broadened (ADR 0023); and `just_below_limit_flag` is
-    constant because the benchmark holds no limit configuration at all, so the feature is complete,
-    well-typed and carries one value. A gap someone has decided to keep still has to be declared;
-    what it must not do is look like the other kind.
+    The two remaining are not degenerate for the same *kind* of reason, which is why the backlog
+    item is read out of the declaration rather than assumed: `corridor_class` is degenerate because
+    the owner has ruled that the simulated country set is not to be broadened (ADR 0023), and
+    `just_below_limit_flag` is constant because the benchmark holds no limit configuration at all,
+    so the feature is complete, well-typed and carries one value. A gap someone has decided to keep
+    still has to be declared; what it must not do is look like the other kind.
+
+    It was four until 2026-09-21. `accounts_per_device_7d` and `synthetic_identity_score` were a
+    **generator** gap — no device was shared — and PB-40 closed it, so both declarations are gone.
+    That is the shape a scheduled degeneracy is supposed to have: declared, tracked, and deleted
+    when the thing it described stopped being true.
     """
     degenerate = {n: s.degeneracy for n, s in REGISTRY.items() if s.degeneracy}
     assert degenerate, (
         "precondition: at least one feature is declared degenerate; without one this test passes "
         "vacuously (E12)"
     )
-    assert set(degenerate) == {
-        "accounts_per_device_7d",
-        "synthetic_identity_score",
-        "corridor_class",
-        "just_below_limit_flag",
-    }
+    assert set(degenerate) == {"corridor_class", "just_below_limit_flag"}
     for name, note in degenerate.items():
         assert re.search(r"PB-\d+", note), (
             f"{name} must name the backlog item tracking its degeneracy"
@@ -440,10 +439,10 @@ def test_no_other_feature_silently_claims_to_be_fine() -> None:
     """The control: `degeneracy` defaults to None, so the test above proves nothing on its own.
 
     If every feature were accidentally marked degenerate the test above would still pass its
-    membership check only by luck. This asserts the default actually applies to the other 40.
+    membership check only by luck. This asserts the default actually applies to the other 42.
     """
     healthy = [n for n, s in REGISTRY.items() if s.degeneracy is None]
-    assert len(healthy) == 40, f"expected 40 non-degenerate features, got {len(healthy)}"
+    assert len(healthy) == 42, f"expected 42 non-degenerate features, got {len(healthy)}"
 
 
 @pytest.mark.req("FR-02-02")
@@ -535,12 +534,17 @@ def test_a_computable_feature_may_not_carry_a_source_data_gap() -> None:
 
 
 @pytest.mark.req("FR-02-02", "ML-DATA-07")
-def test_every_feature_declares_its_computability_and_six_have_no_source_data() -> None:
+def test_every_feature_declares_its_computability_and_five_have_no_source_data() -> None:
     """The registry-wide form, with the count asserted so that a change has to be deliberate.
 
-    The six are the measured set, not an estimate: an earlier session's note said eight, from
-    reasoning about which inputs were missing rather than from computing the features. The
-    computability check exists because that kind of arithmetic is exactly what gets it wrong.
+    The set is measured, not estimated: an earlier session's note said eight, from reasoning about
+    which inputs were missing rather than from computing the features. The computability check
+    exists because that kind of arithmetic is exactly what gets it wrong.
+
+    It was six until `round_denominations` became a pack field (PB-44, 2026-09-20). The five that
+    remain all need tables that do not exist — a per-account durable table for the two account
+    ages and `kyc_tier`, an agent standing table for the two agent features — which is why
+    `round_sum_flag` was the one that could close alone.
     """
     gaps = {n: s.source_data_gap for n, s in REGISTRY.items() if s.source_data_gap}
     assert set(gaps) == {
@@ -549,9 +553,8 @@ def test_every_feature_declares_its_computability_and_six_have_no_source_data() 
         "kyc_tier",
         "agent_float_utilisation_ratio",
         "agent_distance_from_registered_km",
-        "round_sum_flag",
     }
-    assert len(REGISTRY) - len(gaps) == 38, "38 of the 44 have data to read"
+    assert len(REGISTRY) - len(gaps) == 39, "39 of the 44 have data to read"
     for name, gap in gaps.items():
         assert re.search(r"\bM\d+\b", gap or ""), f"{name}: no milestone named"
 
@@ -589,10 +592,12 @@ def test_the_three_computability_states_partition_the_registry() -> None:
 
     Both CONSTANT members are constant for different reasons, and both were found by measurement
     rather than by reading: `just_below_limit_flag` because the benchmark holds no limit
-    configuration, `accounts_per_device_7d` because no device is shared (PB-40) so it is
-    identically 1 wherever it is defined. The second only surfaced once the check stopped counting
-    NaN as a value — it is NaN on every USSD row, which read as a second distinct value and hid a
-    feature that carries nothing.
+    configuration. It was two until 2026-09-21: `accounts_per_device_7d` was identically 1 because
+    no device was ever shared (PB-40), and it only surfaced once the check stopped counting NaN as
+    a value — it is NaN on every USSD row, which read as a second distinct value and hid a feature
+    that carried nothing. The generator now shares devices and the feature takes 7 distinct values,
+    so the declaration moved. It moved **after** the measurement said so and not before: the
+    computability check failed on this feature first.
     """
     by_state: dict[Computability, set[str]] = {state: set() for state in Computability}
     for name, spec in REGISTRY.items():
@@ -607,8 +612,5 @@ def test_the_three_computability_states_partition_the_registry() -> None:
     for name in by_state[Computability.COMPUTABLE]:
         assert REGISTRY[name].source_data_gap is None
 
-    assert by_state[Computability.CONSTANT] == {
-        "just_below_limit_flag",
-        "accounts_per_device_7d",
-    }
-    assert len(by_state[Computability.NO_SOURCE_DATA]) == 6
+    assert by_state[Computability.CONSTANT] == {"just_below_limit_flag"}
+    assert len(by_state[Computability.NO_SOURCE_DATA]) == 5

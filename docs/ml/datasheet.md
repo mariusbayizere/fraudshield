@@ -58,19 +58,28 @@ Three tables:
 
 **How many instances are there?** The release target is at least 5,000,000 transactions over 24
 months (2024-01 to 2025-12). The verification run documented in `dataset/realism_report.md` holds
-1,012,522 transactions, generated at 178 MiB peak resident memory; the figures in this datasheet
+1,006,317 transactions, generated at 170 MiB peak resident memory; the figures in this datasheet
 come from that run unless stated otherwise.
 
-**Which run, exactly (added 2026-09-19).** Every figure here comes from the dataset generated at
-tree `d85385fa43b8a392271135bf226d7053eaab01ce`, seed 20260917. **Regenerating at the `m2-complete`
-tag reproduces M2's published figures; regenerating on `main` does not.** PB-29 moved every country
-fact into packs, and `countries.simulated()` sorts, so country iteration changed from declaration
-order to alphabetical and every downstream random draw shifted. **No parameter value changed** — the
-pack FX rates are byte-identical to the table they replaced. The dataset's *properties* are
-unchanged: every gate still passes, every rank order holds, the fraud rate is the same to three
-decimal places. The *draw* is different, so absolute figures moved. A reader comparing M2's tagged
-evidence against a fresh run on `main` is seeing a **re-draw, not a corrected error and not a
-defect**.
+**Which run, exactly (restated 2026-09-22).** Every figure here comes from the dataset with
+fingerprint `d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32` — 1,006,317 rows,
+seed 20260917, kept at `dataset/output/bench1m` and described by `dataset/realism_report.md`, which
+carries that fingerprint. The dataset is identified by the hash of its rows rather than by a commit,
+because the commit is what this paragraph got wrong. It replaces the `6abde44e` draw (1,006,249
+rows) by adding the 68 test-period rows of the pre-registered reversal-scam variant (ADR 0028); the
+train, validation, calibration and embargo splits report identical counts and rates in both, and
+only the test split below changed.
+
+**What this paragraph used to say, and why it was withdrawn.** It said every figure came from a
+1,012,522-row dataset generated at tree `d85385f`, and explained the difference from M2's published
+numbers as a re-draw caused by PB-29 changing country iteration from declaration order to
+alphabetical. Regenerating on 2026-09-21 refuted both halves. That tree's generator code and
+parameters are byte-identical to the current ones and produce **1,006,249** rows, not 1,012,522;
+and country iteration order changes nothing at all, because `Population._apportioned` sorts
+internally — the reason PB-41's prescribed "reverse the pack order" mutation produced a
+byte-identical dataset. What produced the 1,012,522-row draw is unexplained and is PB-52. The
+dataset is not in doubt: it is reproducible from its seed and every gate passes. The provenance
+sentence was.
 
 **What is the smallest run that produces the whole dataset?** About **170,000 rows**. Below that the
 mule-account role pool is usually empty, and a scenario with no role holder cannot be staged, so a
@@ -123,9 +132,11 @@ Activity is placed in each customer's local time and then converted to UTC. A tr
 the *previous* month while sitting in the current month's partition. The generator carries rows
 forward past a partition's end but never backward, so the drift is one-directional.
 
-Measured at 1,012,522 rows (tree `d85385f`): **463 rows (0.046%) have a UTC timestamp earlier than
-their partition's start; none is later.** The first partition's earliest timestamp is
-2023-12-31 21:08 UTC, before the dataset's nominal start of 2024-01-01. (The pre-PB-29 draw gave
+Measured at 1,012,522 rows on the draw PB-52 now questions: **463 rows (0.046%) have a UTC
+timestamp earlier than their partition's start; none is later.** The first partition's earliest
+timestamp is 2023-12-31 21:08 UTC, before the dataset's nominal start of 2024-01-01. The direction
+and the boundedness are structural and hold on any draw; the two counts are not re-measured here
+and are marked as belonging to a superseded run. (The pre-PB-29 draw gave
 447 rows, 0.044% — the same property, a different draw.)
 
 **What a consumer must do.** Backward drift can never exceed the largest UTC offset in the dataset
@@ -150,15 +161,26 @@ from the calibrated volume and reported with measured counts:
 
 | Split | Rows | True fraud rate | Span (days) |
 |---|---:|---:|---:|
-| train | 797,013 | 0.861% | 602.34 |
-| validation | 101,986 | 0.881% | 57.69 |
-| calibration (last part of validation) | 40,877 | 0.881% | 25.37 |
-| embargo (excluded) | 10,981 | 0.883% | 7.0 |
-| test | 102,542 | 0.927% | 63.98 |
+| train | 792,162 | 0.862% | 602.34 |
+| validation | 101,332 | 0.883% | 57.69 |
+| calibration (last part of validation) | 40,700 | 0.907% | 25.36 |
+| embargo (excluded) | 10,914 | 1.008% | 6.99 |
+| test | 101,909 | 0.971% | 63.97 |
 
 The seven-day embargo between validation and test exists so that a model cannot see the days
 immediately before the test period. One fraud sub-variant occurs only in the test period, so that
 generalisation to an unseen variant can be measured.
+
+The boundaries themselves travel with the data (PB-48), so this table is a summary and not the
+source: `manifest.json` carries a `split` block recording the four boundaries the generator
+planned, in epoch microseconds and in UTC, with the rule defining each segment;
+`fs-dataset split --output split.json` adds the measured counts; and `release.json` carries the
+same block, so a release can be evaluated without this document. Do not reconstruct the
+boundaries — they are planned from the *target* row count, which the realised counts do not
+determine, and a reconstruction lands within hours of the right answer without saying so. Note
+that the segments overlap: calibration is the tail of validation, and the embargo belongs to no
+fitting set, so the five counts do not sum to the dataset. **Datasets generated before
+2026-09-20 carry no `split` block**, and the tooling refuses them rather than guessing.
 
 **Are there errors, sources of noise or redundancies?** Yes, deliberately. Labels carry noise in
 both directions: 1.66% of true fraud is unlabelled and a further 1.67% of true fraud's worth of
@@ -257,8 +279,9 @@ the study of a novel fraud variant that appears only in the test period.
   measured from any institution.
 - Amounts and locations are simulated; they carry no commercial or geographic information.
 - **No single dataset COLUMN separates the classes beyond AUC 0.80** (D-08), measured as
-  `max(AUC, 1 − AUC)` with out-of-fold encoding for categoricals. At 1,012,522 rows (tree
-  `d85385f`) the strongest transaction column is `merchant_category_code` at **0.707**.
+  `max(AUC, 1 − AUC)` with out-of-fold encoding for categoricals. At 1,006,317 rows
+  (fingerprint `d8083dbc`) the strongest transaction column is `merchant_category_code` at
+  **0.709** (0.706 at `6abde44e`).
   **The engineered features are a different matter and the claim does not extend to them.** Five
   of the 44 exceed the ceiling on this benchmark — `velocity_ratio_1h_vs_30d` **0.894**,
   `counterparty_is_new_for_account` 0.851, `tx_count_1h` 0.826, `implied_speed_kmh` 0.812 and
@@ -269,10 +292,11 @@ the study of a novel fraud variant that appears only in the test period.
   anything a one-line rule could not**, and any headline figure should be reported beside the
   strongest single feature. Tracked as PB-46; C-9 in the claims register is marked refuted as
   stated, with C-14 carrying the measurement. The
-  strongest channel in the dataset as a whole is **0.746**, and it is not a transaction column:
+  strongest channel in the dataset as a whole is **0.726**, and it is not a transaction column:
   joining `account_events` to the transactions by account token — which this datasheet invites
   above — gives the time from a SIM swap or device change to that account's next transaction, and
-  that delay carries 0.746. (M2 published 0.706 and 0.758 from the pre-PB-29 draw.)
+  that delay carries 0.726 (0.730 at `6abde44e`; M2 published 0.706 and 0.758 from the pre-PB-29
+  draw).
 - Single-feature AUCs are computed with target encoding whose folds are **whole accounts**. Folding
   per row leaves the other rows of a fraud incident inside the estimate that scores it, which
   inflated `merchant_category_code` by 0.005 and `channel` by 0.006 before it was corrected. Any
@@ -280,10 +304,11 @@ the study of a novel fraud variant that appears only in the test period.
   A benchmark result that uses the event join is therefore not comparable to one that does not, and
   which of the two was used should be stated.
 - The event-delay signal is partly an artefact of the generator, not only of the scenario. The lead
-  time is drawn from `fraud.takeover_lead_minutes = [5, 60]`, provenance `ASSUMED`, so every
-  fraud-enabling event is followed by its drain inside a tight uniform window, with no long tail and
-  no unexploited event. Real SIM swaps sometimes precede nothing. Do not read the strength of this
-  signal as evidence about how quickly real takeovers follow a SIM swap.
+  time is drawn from a lognormal with median 45 minutes and sigma 1.8, clipped to [5, 43,200]
+  minutes (`fraud.takeover_lead_*`, all `ASSUMED`). PB-56 replaced an earlier uniform [5, 60]
+  window with this tail, and the delay's separation fell from 0.758 to 0.730 as predicted. Every
+  fraud-enabling event is still followed by its drain. Do not read the strength of this signal as
+  evidence about how quickly real takeovers follow a SIM swap.
 
 **What is known to be unresolved about it?** Three things, stated rather than buried.
 
@@ -297,8 +322,36 @@ the study of a novel fraud variant that appears only in the test period.
    1.62 is derived from 45 clean datasets there, where per-scale estimates agree. Above 60,000 rows
    it is an extrapolation: four to ten seeds give estimates from 0.84 to 2.32, too wide to settle.
 3. **The release-size run has not happened.** The target is 5,000,000 transactions; every figure in
-   this datasheet comes from a 1,012,522-row run. ML-DATA-01 is recorded as
+   this datasheet comes from a 1,006,317-row run. ML-DATA-01 is recorded as
    `VERIFIED_AT_REDUCED_SCALE`, not as met.
+
+**What can this dataset NOT be used to evaluate? Generalisation.** Measured 2026-09-22
+(`docs/benchmarks/m4_battery.md`):
+
+- **Country-level generalisation cannot be evaluated here.** No fraud parameter is keyed by a
+  country code — country enters only as a lookup for *which* mule, merchant, agent, currency or
+  UTC offset an incident uses — so fraud mechanisms are **country-invariant by construction** and
+  `test_no_fraud_parameter_is_keyed_by_country` asserts it. Removing a country from training
+  entirely changes its AUC by at most 0.002. This belongs to a real-data validation plan, not to
+  this benchmark (PB-59).
+- **Nor does the novel sub-variant provide an out-of-distribution test.** It differs in *timing* —
+  a drain delayed by days rather than minutes — and not in transaction pattern, so a model that
+  detects bursts catches it without having seen it: 100% recall against 95.1% for the variant the
+  model trained on (PB-61).
+- **One cause for both, and for the feature redundancy:** the generator encodes fraud as bursts,
+  and every country, every variant and every feature group is a view of that one structure. Four
+  disjoint feature groups each reach AUC ≥ 0.845 **alone** (PB-60).
+
+The generator has deliberately **not** been changed to make any of these experiments informative.
+Engineering a difference so that a test can fail is tuning the benchmark to produce a result.
+
+**One non-burst variant was added, and it is what a real out-of-distribution test looks like
+here.** `reversal_scam_social_engineering` (victim-initiated, single transaction, established
+counterparty — a real "sent by mistake, please return" typology, not engineered to defeat the
+model; pre-registered before generation, ADR 0028) is caught at **9.1%** (6 of 66 fraud rows,
+Wilson 95% interval [4.2%, 18.4%]) against 94.4% [92.7%, 95.8%] for the base scenarios — first measured at 6.1% [2.4%, 14.6%] with a target encoding E1 forbids, and restated after the correction; the interval now reaches past the pre-registered range's 0.15 lower edge. This is a
+genuine, measured detection gap on one typology — not evidence that this dataset supports general
+non-burst generalisation claims, which it does not (PB-61).
 
 **What do the M3 features go silent on?** One documented silence, with the measurement that says
 what it costs on this dataset.
@@ -327,19 +380,25 @@ dataset has.** Since no timestamps collide, the strictly-earlier bound excludes 
 should be; but any claim resting on it is a claim about a few hundred rows at this scale, and it
 should be quoted with that count rather than with an overall rate.
 
-**Which of the 44 features can this dataset actually feed? Thirty-eight.** Six read reference
+**Which of the 44 features can this dataset actually feed? Thirty-nine, of which
+thirty-eight also vary.** Five read reference
 data that neither the dataset nor M1's schema holds, so they return NaN for every row until it
 exists (PB-44): `account_age_days`, `counterparty_account_age_days`, `kyc_tier`,
-`agent_float_utilisation_ratio`, `agent_distance_from_registered_km` and `round_sum_flag`. Each is
-implemented and tested on both paths; what is missing is the input, and `docs/features.md` lists
-what each needs and which milestone supplies it.
+`agent_float_utilisation_ratio` and `agent_distance_from_registered_km`. Each is implemented and
+tested on both paths; what is missing is the input, and `docs/features.md` lists what each needs
+and which milestone supplies it.
+
+It was thirty-eight until 2026-09-20. `round_sum_flag` needed a table of each currency's common
+denominations and nothing published one; `round_denominations` is now a country-pack field
+(`ASSUMED`, and the packs say so) carried through `fs-dataset packs`, so the feature computes. The
+five that remain all wait on a per-account or agent table that does not exist.
 
 The number is **measured, not estimated** — `fs-features computability` computes all 44 over the
 benchmark and fails if a feature declared computable is NaN for every row, or if one declared
 without source data is not. An earlier revision of this datasheet said eight, from reasoning about
 which inputs were missing rather than from running the features. That is why the check exists.
 
-`days_since_sim_swap` is **not** among the six: `account_events` carries `SIM_SWAP` rows, so it is
+`days_since_sim_swap` is **not** among the five: `account_events` carries `SIM_SWAP` rows, so it is
 computable once joined — and the check reports it as dead if the join is forgotten, which is a
 case the test suite runs deliberately.
 

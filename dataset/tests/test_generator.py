@@ -23,16 +23,23 @@ from fraudshield_dataset.generator.config import (
     SimulationConfig,
     build_config,
     check_urban_share,
+    month_bounds,
     month_labels,
     seasonal_factor,
     segment_channel_shares,
 )
 from fraudshield_dataset.generator.countries import load_packs
-from fraudshield_dataset.generator.fraud import NOVEL_VARIANT, SCENARIOS, FraudModel
+from fraudshield_dataset.generator.fraud import (
+    NOVEL_VARIANT,
+    REVERSAL_SCAM_VARIANT,
+    SCENARIOS,
+    FraudModel,
+)
+from fraudshield_dataset.generator.keys import token
 from fraudshield_dataset.generator.legit import LegitimateBehaviour, month_start_micros
 from fraudshield_dataset.generator.pipeline import generate
 from fraudshield_dataset.generator.population import Population
-from fraudshield_dataset.generator.schema import ACCOUNT_EVENTS, LABELS, TRANSACTIONS
+from fraudshield_dataset.generator.schema import ACCOUNT_EVENTS, LABELS, TRANSACTIONS, Rows
 from fraudshield_dataset.params import ParameterError, ParameterSet, ScaleError, load_parameters
 from fraudshield_dataset.paths import PARAMS_DIR
 
@@ -90,6 +97,14 @@ parameters:
     rationale: >-
       A bloc of one, sharing membership with no simulated country, so every corridor to Country Z
       is cross-bloc and a bloc list hard-coded to African communities would be caught.
+  round_denominations:
+    value: [7, 343]
+    unit: common denominations of this country's currency, in minor units
+    provenance: ASSUMED
+    rationale: >-
+      Powers of seven rather than of ten, so a denomination table hard-coded to decimal steps --
+      or a feature that tested roundness by counting trailing zeros instead of by taking a
+      remainder -- would be caught here rather than in a currency where the two agree.
 """
 
 
@@ -101,6 +116,18 @@ def _files(root: Path) -> dict[str, str]:
         str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
         for path in sorted(root.rglob("*.parquet"))
     }
+
+
+@pytest.fixture(scope="module")
+def sharing(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """A run large enough for device sharing to have a distribution rather than an instance."""
+    output = tmp_path_factory.mktemp("sharing")
+    generate(
+        build_config(load_parameters(), seed=20260917, total_rows=40_000),
+        output,
+        allow_missing_scenarios=True,
+    )
+    return output
 
 
 @pytest.fixture(scope="module")
@@ -713,3 +740,227 @@ def test_the_packs_command_publishes_the_facts_a_consumer_needs(tmp_path: Path) 
     again = tmp_path / "again.json"
     assert cli.main(["packs", "--output", str(again)]) == 0
     assert again.read_bytes() == output.read_bytes()
+
+
+@pytest.mark.req("ML-DATA-07", "D-08")
+def test_devices_are_shared_between_accounts(sharing: Path) -> None:
+    """PB-40: no device was ever seen on two accounts, so two features were dead by construction.
+
+    `accounts_per_device_7d` was identically 1 — zero variance, no signal — and the "shared device
+    across accounts" term of `synthetic_identity_score`, which Part E.2 names explicitly, was dead
+    with it. Neither is visible to a completeness check: both features computed, returned a
+    number, and carried nothing.
+
+    The assertion is on the **distribution**, not on the existence of one shared device. A single
+    shared handset would satisfy "sharing happens" while leaving the feature constant for every
+    row that matters, which is the shape E13 warns about. It runs at 40,000 rows rather than on
+    the 6,000-row fixture because a population of a few dozen customers cannot show a
+    distribution, and a test that asserted one there would be asserting a property of its own size.
+    """
+    devices: dict[str, set[str]] = {}
+    for path in sorted((sharing / "transactions").glob("month=*/*.parquet")):
+        table = pq.read_table(path, columns=["account_id", "device_fingerprint"])
+        for account, device in zip(
+            table.column("account_id").to_pylist(),
+            table.column("device_fingerprint").to_pylist(),
+            strict=True,
+        ):
+            if device is not None:
+                devices.setdefault(device, set()).add(account)
+
+    assert devices, "precondition: the run must produce devices at all"
+    counts = sorted(len(accounts) for accounts in devices.values())
+    shared = [n for n in counts if n > 1]
+    assert shared, "no device is used by more than one account, which is PB-40 unfixed"
+    assert max(counts) >= 3, (
+        f"the largest device serves {max(counts)} accounts; a ring shares one handset, so a "
+        "maximum of two means only the hand-me-down path fired and the ring path did not"
+    )
+    assert len(shared) / len(devices) < 0.5, (
+        "more than half of devices are shared, which would make 'device seen on two accounts' "
+        "ordinary enough to carry no information in the other direction"
+    )
+
+
+@pytest.mark.req("ML-DATA-07")
+def test_the_population_and_the_fraud_model_agree_on_who_is_synthetic() -> None:
+    """The one duplicated predicate in the generator, pinned (PB-40).
+
+    `Population._shared_device` needs to know whether a customer is a synthetic identity, and
+    `FraudModel._bust_out_month` decides it. The predicate is duplicated rather than shared,
+    because the fraud side draws the bust-out month from the *same* stream immediately afterwards
+    and factoring out the first draw would move the second. Duplication is only safe with a test
+    that fails when the two drift, and this is it.
+    """
+    config = build_config(load_parameters(), seed=20260917, total_rows=40_000)
+    population = Population(config)
+    fraud = FraudModel(config, population, LegitimateBehaviour(config, population))
+
+    verdicts = [
+        (population._is_synthetic_identity(i), fraud._bust_out_month(i) is not None)
+        for i in range(config.customers_total)
+    ]
+    assert any(mine for mine, _ in verdicts), "precondition: some customer must be synthetic"
+    assert not all(mine for mine, _ in verdicts), "precondition: and some must not be"
+    disagreements = [i for i, (mine, theirs) in enumerate(verdicts) if mine != theirs]
+    assert not disagreements, f"the two predicates disagree on customers {disagreements[:5]}"
+
+
+@pytest.mark.req("ML-DATA-02", "D-08")
+def test_the_takeover_lead_has_a_tail_rather_than_a_window() -> None:
+    """PB-56: every enabling event used to be followed by its drain inside the hour.
+
+    That made "seconds since this account's last event" separate fraud from legitimate almost by
+    construction, and C-11 recorded since M2 that part of the event-delay channel's separation was
+    the assumed window rather than the scenario.
+
+    The assertions are on the **shape** and not on a quantile, because the quantiles are
+    parameters and a test that restated them would fail every time the owner tuned one without
+    ever testing anything. What must hold whatever the parameters say: the draw respects its
+    declared bounds, the body stays early, and a real fraction lands beyond an hour — a tail that
+    only one draw in ten thousand reaches is not a tail, it is a rounding error with a long name.
+    """
+    config = build_config(load_parameters(), seed=20260917, total_rows=40_000)
+    model = FraudModel(config, Population(config), LegitimateBehaviour(config, Population(config)))
+    low, high = model.lead
+
+    rng = np.random.default_rng(99)
+    minutes = [model._lead_micros(rng) / 60_000_000 for _ in range(20_000)]
+
+    assert min(minutes) >= low, "a lead below the declared floor"
+    assert max(minutes) <= high, "a lead above the declared cap"
+    assert float(np.median(minutes)) < 120, "the body must stay in the first hours"
+    beyond_an_hour = sum(1 for m in minutes if m > 60) / len(minutes)
+    assert 0.1 < beyond_an_hour < 0.9, (
+        f"{beyond_an_hour:.1%} of leads exceed an hour; outside this range the draw is either the "
+        "tight window PB-56 removed or a tail with no body left"
+    )
+    beyond_a_day = sum(1 for m in minutes if m > 1440) / len(minutes)
+    assert beyond_a_day > 0.005, (
+        f"only {beyond_a_day:.2%} of leads exceed a day, which is not a tail a model can be "
+        "confused by"
+    )
+
+
+@pytest.mark.req("ML-DATA-02")
+def test_the_lead_is_clipped_at_both_ends_rather_than_resampled() -> None:
+    """Clipping is the declared behaviour and the bounds are load-bearing at both ends.
+
+    A drain twelve seconds after a swap is implausible, and a lead of months is a different
+    scenario rather than a slow takeover. Resampling until the draw fell inside would change the
+    distribution's shape near the bounds without saying so.
+    """
+    config = build_config(load_parameters(), seed=20260917, total_rows=40_000)
+    model = FraudModel(config, Population(config), LegitimateBehaviour(config, Population(config)))
+    rng = np.random.default_rng(7)
+    minutes = [model._lead_micros(rng) / 60_000_000 for _ in range(20_000)]
+    low, high = model.lead
+
+    assert sum(1 for m in minutes if m == low) > 0, (
+        "precondition: some draw must fall below the floor, or clipping is untested there"
+    )
+    assert all(low <= m <= high for m in minutes)
+
+
+@pytest.mark.req("ML-DATA-02", "D-08")
+def test_no_fraud_parameter_is_keyed_by_country() -> None:
+    """The mechanism behind PB-59's null result, asserted rather than described.
+
+    Leave-one-country-out measures nothing on this benchmark: removing a country from training
+    entirely changes its AUC by at most 0.002. The reason is that fraud here is **country-
+    invariant by construction** — every scenario share, burst length, amount multiplier, lead
+    distribution and adaptation parameter is global. Country enters only as a lookup for *which*
+    mule, merchant, agent, currency or UTC offset an incident uses, so the identities differ and
+    the mechanism does not.
+
+    This is a test rather than a sentence because the sentence would otherwise be the only thing
+    standing behind a published negative result, and a later parameter keyed by country would
+    quietly make that result wrong. **It is deliberately not a reason to make fraud
+    country-specific**: engineering a difference so that the experiment becomes informative would
+    be tuning the benchmark to produce a result (owner decision, 2026-09-22).
+    """
+    parameters = load_parameters()
+    codes = set(load_packs(parameters))
+    assert len(codes) >= 2, "precondition: more than one country pack, or nothing can be keyed"
+
+    fraud_keys = [k for k in parameters.parameters if k.startswith("fraud.")]
+    assert fraud_keys, "precondition: the fraud category has parameters to check"
+
+    offenders = []
+    for key in fraud_keys:
+        value = parameters.value(key)
+        if isinstance(value, dict) and codes & set(value):
+            offenders.append((key, sorted(codes & set(value))))
+
+    assert not offenders, (
+        f"fraud parameters keyed by country: {offenders}. Country-specific fraud would make "
+        "leave-one-country-out informative, and PB-59 records that as a change to the benchmark "
+        "rather than a fix to the experiment"
+    )
+
+
+@pytest.mark.req("ML-DATA-02", "D-08")
+def test_the_reversal_scam_variant_is_one_transaction_to_a_known_payee_in_the_test_period() -> None:
+    """PB-61's pre-registered generalisation test (ADR 0028), checked against its own definition.
+
+    Three properties make this a genuinely different mechanism from NOVEL_VARIANT, and all three
+    are asserted directly rather than inferred from a row count: **one row per incident**, not a
+    burst — checked by counting produced rows per (customer, month) call, never more than one;
+    **a counterparty already on the account's own payee list**, not a fresh or mule one — checked
+    against `customer.counterparties` itself, not against rows the corpus happens to have written
+    yet (an earlier manual check against realised legitimate rows in a small draw gave a false
+    negative for exactly this reason: the customer's other established counterparties simply had
+    not transacted yet in that draw); and **test period only** — every row's timestamp at or after
+    `config.split.test_start`, and zero rows produced for any earlier month.
+    """
+    config = build_config(load_parameters(), seed=20260917, total_rows=200_000)
+    population = Population(config)
+    legitimate = LegitimateBehaviour(config, population)
+    model = FraudModel(config, population, legitimate, allow_missing_scenarios=True)
+
+    established: dict[str, set[str]] = {}
+    for index in range(config.customers_total):
+        customer = population.customer(index)
+        established[customer.account] = {
+            token(config.seed, "account", other) for other, _ in customer.counterparties
+        }
+
+    produced_per_month: dict[str, int] = {}
+    rows = Rows()
+    for month_index, month in enumerate(config.months):
+        before = len(rows)
+        for index in range(config.customers_total):
+            customer = population.customer(index)
+            one_row_before = len(rows)
+            model._maybe_reversal_scam(customer, month_index, rows)
+            assert len(rows) - one_row_before <= 1, (
+                f"{customer.account} in {month}: more than one row from a single call, which is "
+                "the burst this variant exists to not be"
+            )
+        produced_per_month[month] = len(rows) - before
+
+    assert len(rows) >= 8, (
+        f"only {len(rows)} rows at 200,000 scale; precondition for a test that means to check "
+        "the distribution across accounts and months, not just that the mechanism can fire once"
+    )
+    test_start = config.split.test_start
+    for month, count in produced_per_month.items():
+        _, hi = month_bounds(month)
+        if hi <= test_start:
+            assert count == 0, f"{month} ends before the test period and produced {count} rows"
+
+    accounts = [str(v) for v in rows.columns["account_id"]]
+    counterparties = [str(v) for v in rows.columns["counterparty_id"]]
+    timestamps = [int(v) for v in rows.columns["transaction_timestamp"]]  # type: ignore[call-overload]
+    variants = [str(v) for v in rows.columns["scenario_variant"]]
+    fraud_types = [str(v) for v in rows.columns["fraud_type"]]
+
+    assert all(v == REVERSAL_SCAM_VARIANT for v in variants)
+    assert all(ft == "mule_account" for ft in fraud_types)
+    assert all(t >= test_start for t in timestamps), "a row landed before the test period"
+    assert accounts, "precondition: rows were actually written"
+    for account, counterparty in zip(accounts, counterparties, strict=True):
+        assert counterparty in established[account], (
+            f"{counterparty} is not on {account}'s own established payee list — the mechanism "
+            "must draw from customer.counterparties, not a fresh or mule token"
+        )

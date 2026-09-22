@@ -1,106 +1,85 @@
-# Session state — M3 closed, held for the owner's tag
+# Session state — M4 closed with two gate metrics missed and recorded; M8 next
 
-Rewritten 2026-09-20. Facts only; where something is unverified, assumed or open it says so.
+Rewritten 2026-09-22 (evening). Facts only; where something is unverified, assumed or open it says
+so.
 
-## Where the work is
+## Read this first
 
-- **Branch:** `m3/features`, pushed. **Tag `m2-complete`** is at `ed7a8d9` on `m2/generator`.
-- **Milestone register:** `current: M3`, `completed: [M0, M1, M2]`. **M3 is not tagged** — the owner
-  holds that.
+**M4 is complete.** The declared gate run (`docs/benchmarks/m4_gate_d8083dbc_v3.txt`) passes 9 of
+11. **ML-GATE-03 (recall at 0.60, 0.736 at 30,000 training rows, against 0.88) and ML-GATE-06 (FNR at 0.60, 0.264
+against 0.12) are missed**, and on the owner's decision they are `DONE_WITH_DEVIATION` against ADR 0031's
+amendment: a miss at the training volume used, not deferrable and not a defect, recorded with value,
+interval and cause, reported in the paper, D-02's threshold unchanged. PB-67 (a larger training
+sample) is the open test of the candidate cause.
 
-| Commit | What |
+**The M4 milestone review is APPROVED_WITH_MINORS** (`docs/reviews/M4/milestone-review.md`):
+fifteen BLOCKER and MAJOR findings, all fixed. The reviewer is the author, and the record says so.
+
+**Next is M8 (front-end), as the owner planned**, in its own worktree. M5–M7 are not complete;
+`backend/` belongs to the M7 agent.
+
+## Branches and CI
+
+- **`main` is at `m3-complete` (`f8885d6`)**, green on every job. It is fast-forwarded to the M4
+  head only after CI is green there.
+- **`m4/generalisation`** is PR #1 against `main`. The default branch is still `m0/bootstrap`, a
+  repository setting only the owner can change (PB-25 stays blocked).
+- `m2-complete` sits on a commit whose python CI job fails; it was tagged before any CI run on it
+  (lab notebook). Not moved.
+
+## What M4 now contains
+
+| | Where |
 |---|---|
-| `65c8351` | `corridor_class` from the packs (PB-30); the `categories` contract field |
-| `ae41c88` | the dataset fingerprint (PB-41); export refuses a report about other data |
-| `01af5b6` | velocity, amount, temporal, geographic — 21 features |
-| `083f92e` | counterparty, device, profile, agent, synthetic identity — 19 features |
-| `fad43dd` | `computable` declarations and the computability check (PB-44, PB-43) |
-| `4e16e11` | E3 run, and failed — five features beat the D-08 ceiling |
-| `2c80ef6` | five unbounded features stopped asking a corpus what it cannot know (M3-2) |
+| D-05's ensemble: XGBoost and LightGBM, early-stopped on validation average precision, imbalance-weighted, one isotonic calibrator on the 0.55/0.45 combination, float32-exact | `ml/src/fraudshield_ml/training/model.py` |
+| D-06's Isolation Forest, raw score and percentile score | `training/anomaly.py` |
+| Per-model exact SHAP, the margin-space combination, top-5, coverage | `training/explain.py`, `docs/ml/explainability.md` |
+| The eleven M4 gate metrics, bootstrap CIs, DeLong, baselines, ablations, seeds, `metrics.json`, LaTeX, SVG | `training/gate*.py`, `fs-features gate` |
+| ONNX export and parity | `training/onnx_export.py` |
+| Test-set access log, back-filled | `docs/benchmarks/test_set_access.jsonl` |
+| E1's time-ordered target encoding | `training/smoke.py` |
 
-**Verified at `2c80ef6`:** ml **270 passed**, 96.30% branch; dataset **126 passed** in 30 minutes,
-94.01% (at `fad43dd`, unchanged since); tools 177; contracts 490; `mypy` clean over 122 files; ruff
-clean; governance **258 rows, 655 tagged tests, 0 errors, 0 warnings**; scope guard 422 files;
-gitleaks clean.
+## The results that matter
 
-## The two things a reader must know before anything else
+| | Evidence |
+|---|---|
+| Gate: AUC 0.970 [0.962, 0.977], +0.091 over the best single feature, +0.311 over the best trivial rule | `m4_gate_d8083dbc_v3.txt` |
+| Gate fails: recall at 0.60 0.736, FNR 0.264; even at the 1% FPR budget recall is 0.871 | same, PB-62 |
+| ONNX parity < 1e-6 on all 101,909 test rows | same |
+| Reversal-scam variant **9.1%** (6/66, [4.2%, 18.4%]) vs base 94.4%; below the pre-registered 0.15 as a point estimate, not as a whole interval | `m4_battery_d8083dbc_e1.txt` |
+| C-6: ensemble −0.6% vs XGBoost, +12.5% vs LightGBM | `m4_seed_variance_d8083dbc_e1.txt` |
+| Ablation: card-style features only −0.042 AUC (C-4's measurement; PB-60's redundancy caveat applies) | gate run |
 
-**1. The benchmark is velocity-separable, and that is now a reported result rather than a caveat.**
-`velocity_ratio_1h_vs_30d` reaches `max(AUC, 1−AUC)` of **0.894 ±0.032**; four more single features
-exceed the D-08 ceiling of 0.80. The generator injects fraud as incidents, so recency and rate
-features find it. **Owner decision (PB-46): keep the data, keep the ceiling, change what is
-reported.** No model metric may be quoted without its single-feature baseline and best trivial rule
-beside it, as a margin — a gate on ML-GATE-01 to -04, -07 to -09 and -13, inadmissible on the same
-terms as a metric without its scale. Full statement:
-`docs/benchmarks/single_feature_baseline.md`.
-
-**2. Implemented is not the same as fed.** All 44 features exist on both paths; **38** can be
-computed on this benchmark. Six read reference data nothing produces (PB-44) and two are constant
-(PB-47). `fs-features computability` fails when a declaration disagrees with the data in any of six
-directions.
-
-## What M4 must start from
-
-- **Train on the features that carry information and report that number with every metric.** Never
-  "44 features" where fewer were used.
-- **Leave-one-country-out and the novel SIM-swap sub-variant carry the weight the headline AUC no
-  longer can**, and the register rows say so. Burstiness is not country-specific, so a velocity
-  threshold transfers trivially; a variant absent from training separates a model that learned the
-  shape of fraud from one that learned its rate.
-- **`corridor_class` is evaluated over two of its four classes** and a model trained here has never
-  seen the other two (PB-43, owner decision: keep them, do not broaden the simulated set).
-- **PB-40 is due before training** — no device is shared, so `accounts_per_device_7d` is constant
-  and `synthetic_identity_score` is a term short.
-
-## Open items
+## Open, in the order I would take them
 
 | Item | What |
 |---|---|
-| **PB-44** | six features have no source data; `round_sum_flag` is the cheapest and pairs with PB-41's regeneration |
-| **PB-41** | the committed `realism_report.md` carries no fingerprint until its next regeneration; export refuses to bundle it meanwhile |
-| **PB-45** | the exit-criteria table has no checker; "met" is still an author's edit except for E3 and E6 |
-| **PB-46** | velocity separability — resolved by reporting gate, carried into M4 |
-| **PB-47** | `CONSTANT` shipped; `dormancy_reactivation_flag` measured and **not** constant |
-| **PB-36/37/38** | untested DB fallback; no per-account durable table; 8-day refresh under a 30-day feature |
-| **PB-25** | the 5M run, still blocked on the default branch being `m0/bootstrap` |
-| **E11** | review done, `docs/reviews/M3/milestone-review.md`; both MAJOR findings fixed in place |
-
-## What this session learned that outlives it
-
-Four entries in `docs/research/lab_notebook.md` are worth reading before touching M4:
-
-- **A control measured on the inputs is not a control on the system** — fourth instance. The test
-  that finds it: name the object the check ranges over, then read the sentence it justifies; if the
-  nouns differ, it does not justify it.
-- **A true comment can defend a wrong value.** `_first_seen`'s docstring was correct about complete
-  corpora and attached to a function only ever called with truncated ones. Second written claim of
-  safety with nothing behind it. The rule: *an aggregate over a window is corpus-derivable; a
-  statement about all of history is not.*
-- **Fixtures built to be small rather than built to contain the condition** — three instances, and
-  then I made a fourth while writing the entry about it. Name the property first, construct for it,
-  let size follow.
-- **Knowing a failure mode does not immunise against it**, which is why every lesson should carry
-  the question *what would enforce this?*, and the ones with no answer are known-weak rather than
-  settled.
+| **Owner** | ADR 0030 (MLflow deferred to M5) awaits confirmation |
+| PB-67 | a larger training sample, reported beside the current run |
+| PB-63 | the CI ML gate needs a dataset in CI (M9) |
+| PB-64, 65 | clauses carried to M5 and M6 |
+| PB-66 | E.5 items beyond the gate |
+| PB-68 | frontier and battery prose at `d8083dbc` |
+| M8 | next, in its own worktree |
 
 ## Things that will bite whoever picks this up
 
-- **One heavy job at a time.** Five evidence runs were lost this session to five different causes:
-  source edited mid-run, `uv sync --reinstall` mid-run, a test mutating shared parameters, memory
-  pressure from two runs started in parallel, and an **invented scratch path** that was reaped. An
-  evidence run owns its tree, its environment, its machine and its output location — put artefacts
-  in the scratchpad the harness names, never a path you compose.
-- **Do not commit while a suite runs.** `pre-commit` stashes unstaged changes and regenerates the
-  traceability matrix against the reduced tree, so it disagrees and governance fails. Recovery:
-  `git stash push -u` the unrelated work, re-render, commit, pop.
-- **Clear `.mypy_cache` after adding or removing an `__init__.py`.** A transient one poisoned the
-  cache and produced five plausible, unrelated errors in the dataset package.
-- **`ml/tests` must not be a package** — a top-level `tests` module collides with `dataset/tests`
-  under the workspace's single mypy invocation. Shared fixtures go in `conftest.py`.
-- **An exit code from a piped pytest is `tail`'s.** Use `${PIPESTATUS[0]}` or drop the pipe.
-- **The commit hook caps the subject at 72 and wraps the body at 72** — rewrap per paragraph, not
-  per line, or words end up orphaned.
-- **The feature pipeline is O(corpus) per feature without the index.** `CorpusIndex` makes a
-  meaningful corpus affordable; `test_the_corpus_index_changes_no_value` asserts it changes nothing.
-- Fast subset ~10 s (`ml/tests` + ruff + mypy); dataset suite **30 minutes**; a 1M generation ~35;
-  `fs-features auc` at 200k/20k ~20.
+- **Read a requirement's notes before building it.** E1 and PB-46's reporting rule were both
+  written on the M4 rows as settled decisions, and both were missed until the register was being
+  updated at the very end.
+- **A parity test on random data proves little.** The ONNX test passed on normals and the real
+  data failed on 0.39% of rows; the new test builds doubles that collapse to one float32.
+- **An impossible number is the best bug report** — precision above its own ceiling pointed
+  straight at isotonic ties.
+- **Commit before running a mutation script that restores from git.** One run reset an
+  uncommitted fix; a stash taken beforehand is what saved it.
+- **Never let a cleanup step run after a refused evidence run.** One reverted the access log and
+  lost a line, now reconstructed and marked.
+- **Several sessions share `/home/marius/fraudshield`; `backend/` belongs to the M7 agent.** Work in
+  a worktree with its own `UV_PROJECT_ENVIRONMENT`, with absolute paths.
+- **Read CI on the branch you push to.** This branch's python job was red for 22 runs.
+- **`fs-evidence` refuses on a dirty tree, untracked files included** — which is why evidence runs
+  from a separate frozen worktree here.
+- **Unauthenticated GitHub API: 60 requests an hour.**
+- Timings: ml suite ~1–2 min with coverage; dataset suite 30–60 min under load; gate cache build
+  ~13 min; `fs-features gate` with ablations and five seeds ~5 min; battery ~3 min.
