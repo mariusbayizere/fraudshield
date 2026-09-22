@@ -97,17 +97,37 @@ triggers and a hash-chained audit log.
      left stale.
    - Pessimistic locks (`@Lock(PESSIMISTIC_WRITE)`) keep the account-then-token order of ADR 0070
      finding 1.
-   - **A locked read reloads the row.** A locking query returns the instance the persistence
-     context already holds and does not refresh it. The acting administrator's own account, read
-     earlier in the transaction, would otherwise carry state from before the lock, and a flush
-     would write it back over a concurrent password change, including the old hash and token
-     version. So:
-     - `findByIdForUpdate`, `applyAdminEdit` and the API-key `findForUpdate` refresh after
-       locking;
-     - both entities are `@DynamicUpdate`, so a flush writes only the columns that changed.
+   - **Rows are locked by refresh, not by a locking query.** `StaffAccountRepository.lockCurrent`
+     and `ApiKeyRepository.findForUpdate` run `find` and then
+     `refresh(entity, PESSIMISTIC_WRITE)`, which issues `SELECT … FOR UPDATE` and replaces the
+     held state, version included. A locking query is not enough when the transaction already
+     holds the entity, which is the case when the acting administrator edits their own account:
+     - if the version is unchanged, Hibernate returns the copy read before the lock, and later
+       decisions (status, lock state, token version, the ETag check) run on stale state;
+     - if the version moved in between, Hibernate 7 rejects the row ("conflicting version of entity
+       already held in persistence context"), and the request fails with a 500 instead of a 409.
 
-     Found by the independent review; test
-     `HybridPersistenceTest.lockedReadReloadsSoAnEditCannotWriteBackStaleState`.
+     Both entities are also `@DynamicUpdate`, so a flush writes only the columns that changed.
+     History:
+     - The independent review found the write-back form (a full-row flush restoring an old
+       password hash and token version).
+     - `24016f9` added a refresh *after* the locking query. A mutation that removed only that
+       refresh survived, because `@DynamicUpdate` already stopped the write-back.
+     - The owner asked whether a stale *read* after locking could still drive a wrong decision.
+       It could: `UserAdministrationService.update` resolves the actor before locking the target,
+       and for a self-edit they are the same row. The test written for that path,
+       `UserAdministrationTest.selfEditRacingFailureLockDecidesOnTheLockedRow`, holds the row
+       lock to force the interleaving. It also showed that the refresh after the query never ran
+       in this case, because the query itself threw. Fixed in `8f6bdba`.
+
+     Mutations, now killed:
+     - lock without reload (R1): killed by the self-edit race test;
+     - reload without lock (R2): killed by `RefreshRaceTest`;
+     - API-key lock removed (R3): killed by
+       `ApiKeyLifecycleTest.concurrentRotationsOfOneKeyIssueOneReplacement`.
+   - `lockActiveAdmins` is still a locking query. It is the first statement of its transaction, so
+     no administrator entity is held yet. Code that adds an earlier read must lock by refresh
+     instead.
 5. **Rule for M6 and later milestones.**
    - Use JPA for configuration tables: thresholds, rules, rule versions, circuit-breaker settings,
      models and similar.
@@ -122,10 +142,13 @@ triggers and a hash-chained audit log.
 - New runtime dependencies from the Spring Boot BOM:
   - Hibernate ORM 7.4 (Apache-2.0).
   - Spring Data JPA.
-  - `jakarta.persistence-api` 3.2.0 (EPL-2.0 OR BSD-3-Clause).
-  - `jakarta.transaction-api` 2.0.1 (EPL-2.0 OR GPL-2.0 with Classpath exception).
+  - `jakarta.persistence-api` 3.2.0, offered as EPL-2.0 OR BSD-3-Clause. **The project elects
+    BSD-3-Clause**, the permissive option.
+  - `jakarta.transaction-api` 2.0.1, offered as EPL-2.0 OR GPL-2.0 with the Classpath exception.
+    **The project elects EPL-2.0**, used unmodified as a runtime dependency.
 
-  The two Jakarta APIs are the ADR 0020 case, with version-pinned licence exceptions.
+  The two Jakarta APIs are the ADR 0020 case. Their version-pinned licence exceptions state the
+  elected licence as the expression the tool checks (owner approval, 2026-09-22).
 - Hibernate adds startup time (schema validation) and memory. Neither is on the transaction
   decision path.
 - Anyone adding an entity over an append-only or hypertable table must mark it `@Immutable` and
