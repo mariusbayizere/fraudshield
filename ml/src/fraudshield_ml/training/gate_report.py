@@ -100,11 +100,38 @@ def summary(report: Report) -> list[str]:
     return lines
 
 
+#: The packages whose versions decide the gate's numbers. The full lock is uv.lock at the commit
+#: the evidence stamp names; these are repeated here so the file answers the question alone.
+PACKAGES = ("xgboost", "lightgbm", "scikit-learn", "onnxruntime", "onnxmltools", "numpy", "scipy")
+
+
+def environment() -> dict[str, object]:
+    """What E.4 asks a run to log beside its metrics: the environment and the hardware."""
+    import os  # noqa: PLC0415 - only this path needs it
+    import platform  # noqa: PLC0415
+    from importlib.metadata import PackageNotFoundError, version  # noqa: PLC0415
+
+    def installed(name: str) -> str | None:
+        try:
+            return version(name)
+        except PackageNotFoundError:
+            return None
+
+    return {
+        "python": platform.python_version(),
+        "platform": platform.platform(),
+        "machine": platform.machine(),
+        "cpus": os.cpu_count(),
+        "packages": {name: installed(name) for name in PACKAGES},
+    }
+
+
 def as_json(report: Report) -> dict[str, object]:
     def clean(v: float) -> float | None:
         return None if math.isnan(v) else v
 
     return {
+        "environment": environment(),
         "rows": {k: {"rows": n, "fraud": f} for k, (n, f) in report.counts.items()},
         "model": {
             "xgboost_rounds": report.xgboost_rounds,
