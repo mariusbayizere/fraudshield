@@ -3,8 +3,10 @@
 - **Method:** STRIDE per component and per data flow (build prompt D-28, I.3). S = spoofing,
   T = tampering, R = repudiation, I = information disclosure, D = denial of service, E = elevation of
   privilege.
-- **Version:** M1 (database, contracts, demo seeding). Updated at every milestone that adds a component
-  or a data flow; each milestone review checks this file against the change (M0 review condition M-1).
+- **Version:** M1 (database, contracts, demo seeding), plus the M9 delta (Kubernetes platform,
+  observability and alerting, supply chain: sections 3.8 to 3.10, risks R-14 to R-18). Updated at
+  every milestone that adds a component or a data flow; each milestone review checks this file
+  against the change (M0 review condition M-1).
 - **Status legend:** *implemented* (control exists and is tested), *contracted* (fixed in the
   OpenAPI, Kafka or proto contract, implemented later), *planned* (milestone named).
 
@@ -132,6 +134,44 @@ developer machine ↔ public repository.
 | `/api/docs` (1) | I: a documentation endpoint that leaks internals or drifts from the contract | The frozen `contracts/openapi/fraudshield-api.yaml` served byte for byte from the jar, with a test that fails on any difference; no API key required, because it is the public contract | The document names every endpoint, which is the point of publishing it |
 | Configuration reads (JPA) | T: an ORM writing where the schema forbids it; I: a tenant reading another's configuration | Append-only tables map to `@Immutable` entities; `ddl-auto=validate` and `open-in-view=false` are enforced at start-up; the institution is set inside the JPA transaction, so row-level security covers Hibernate's statements (ADR 0068) | A future entity over an append-only table that forgets `@Immutable` fails at the trigger, not at review; the guard covers settings, not annotations |
 
+### 3.8 Kubernetes platform (M9: manifests validated offline, not yet applied to a cluster)
+
+Controls are in `infrastructure/k8s/` and are checked on every change by
+`infrastructure/checks/validate.sh`: kubeconform (strict, Kubernetes 1.34 schemas) and
+`infrastructure/checks/k8s_policy.py`, whose tests break each rule once and expect a failure.
+
+| STRIDE | Threat | Control | Status |
+|---|---|---|---|
+| E | A compromised container escalates to the node | Namespace enforces Pod Security `restricted`; every pod non-root, `allowPrivilegeEscalation: false`, all capabilities dropped, RuntimeDefault seccomp, read-only root filesystem, no host namespaces or hostPath; checked offline so a violation fails CI, not admission | implemented (manifests) |
+| S/E | A stolen service account token calls the Kubernetes API | One service account per workload, token not mounted except Prometheus, whose Role allows only get/list/watch on pods in its own namespace | implemented (manifests) |
+| I/T | Lateral movement between workloads | Default-deny ingress and egress; one allow policy per flow of section 2. The management port (health detail, metrics) admits only Prometheus and the blackbox exporter (ADR 0014); the PII vault is reachable from the API only, never from the scorer or ML worker | implemented (manifests) |
+| I | The API's internet egress (webhooks, SMS, email, OAuth) used to reach internal services | Egress on 443 and 587 only, with RFC 1918, CGNAT and link-local ranges excluded | implemented (manifests) |
+| T | A mutable tag deploys an unreviewed image | Third-party images pinned by digest; FraudShield images untagged in manifests and pinned by digest at deploy; the policy check fails on any tag | implemented (manifests); deploy step planned |
+| D | Voluntary disruption (node drain, upgrade) takes a component down | PodDisruptionBudgets for every workload, HPAs for serving components, spread across nodes and zones | implemented (manifests) |
+| D/T | A bad release degrades decisions | Argo Rollouts canary: 10% for 30 minutes, background analysis on canary pods only, rollback on 5xx > 0.5% or p99 > 80 ms, fail-closed when metrics are missing (`test_canary_analysis.py`) | implemented (manifests) |
+| R/I | Decisions spooled on an API pod are lost when the pod is deleted during a Kafka outage (D-15) | Spool on the pod's `emptyDir` survives container restarts, not pod deletion; 120 s grace for draining; runbook forbids draining nodes with a non-zero spool | partial: see R-14 |
+
+### 3.9 Observability and alerting (M9)
+
+| STRIDE | Threat | Control | Status |
+|---|---|---|---|
+| I | Dashboards expose fraud data to anyone who finds Grafana | No anonymous access, no sign-up; reachable only from the API's authenticated proxy by NetworkPolicy (E.8); update checks, reporting and news feed disabled, so Grafana makes no outbound calls | implemented (manifests) |
+| I | Personal data in metric labels | Queries may use only the labels Part E.10 defines (no account, device or counterparty tokens); `metric_catalogue.py` fails on any other label | implemented (for queries); emitting services must follow E.10 |
+| I | Personal data in log-based alerts and incident notes | Alerts carry counts and service names only; runbooks forbid copying log lines or payloads and treat a PII-bearing log line as a privacy incident | implemented |
+| T/R | An alert is weakened or removed silently | Rules and thresholds are reviewed code; promtool unit tests fix every threshold from both sides; `rule_conventions.py` fails when a page alert loses its runbook; the one operator-set level (D-10) lives in its own file | implemented |
+| S/I | PagerDuty routing keys leak or are forged | Keys only in the Secret `fraudshield-alertmanager-pagerduty`, mounted as files; never in the repository | implemented (manifests) |
+| D | The alerting path itself fails unnoticed | Single Prometheus and Alertmanager with persistent volumes; no high availability and no external dead-man's switch yet | open: R-15 |
+
+### 3.10 Supply chain (M9)
+
+| STRIDE | Threat | Control | Status |
+|---|---|---|---|
+| T | A tampered validator or scanner binary | Every tool (kustomize, kubeconform, promtool, amtool, lokitool, blackbox_exporter, actionlint, trivy, syft, cosign) runs through a launcher that checks the release checksum and re-checks the binary's SHA-256 on every run | implemented |
+| T | Vulnerable dependencies reach a release | Trivy on lockfiles and on images fails on HIGH/CRITICAL with a fix; configuration scanned for misconfiguration | implemented (CI) |
+| T/S | An image or SBOM is replaced after the build | Keyless cosign signatures bound to the supply-chain workflow identity, verified in the same job; CycloneDX SBOMs attested to image digests | implemented (CI); images pending Dockerfiles |
+| T | An unsigned image is admitted to the cluster anyway | Admission-time signature verification (for example Sigstore policy-controller or Kyverno) is not configured | open: R-16 |
+| I | Signing publishes build metadata | Rekor entries show the workflow, commit and repository, all of which are public already | accepted |
+
 ## 4. Open risks
 
 | # | Risk | Owner action or milestone |
@@ -149,3 +189,8 @@ developer machine ↔ public repository.
 | R-11 | A dead-lettered record is preserved and counted, but an operator has no packaged way to replay it | M6 built the replay (`DeadLetterReplay`, docs/architecture/decision-fact-ordering.md D-c), and it now also covers `fs.audit.events.dlq`; packaging it as an operator command with a runbook is M9's (PB-103) |
 | R-12 | Webhook DNS rebinding between the destination check and the connection | Pinning or a proxy with an address allow-list (ADR 0066) |
 | R-13 | While an instance cannot read PostgreSQL (database unavailable, contract R8), it keeps using a key's cached record for up to 10 minutes after the read that produced it (owner decision 2026-10-17, option B, for D-15; rules in `docs/architecture/api-key-cache-contract.md`). It can therefore miss a revocation committed after that read whose announcement it did not receive: one committed up to 10 minutes **before** an outage on every instance (an idle key's record is still served), or one committed **during** an outage local to this instance (pool exhaustion, a partition, a connection limit) by an instance that can still write. Redis pub/sub drops announcements while a subscriber reconnects. A received announcement is never undone; a read that overlapped one is not installed; a read that sees the key revoked removes the entry (best effort). A key with no cached record is refused with 503 and `Retry-After`, never 401; past 10 minutes every key is refused, so D-15 holds for outages up to 10 minutes. The failure limiter runs before any read and uncached reads share a 4-permit bulkhead, so an unauthenticated flood cannot exhaust the pool or induce a local outage | **Accepted** (owner, 2026-10-18): option 2, a narrower 26 s bound, was abandoned under the owner's rule after its contract was found unsound in three drafts, leaving this 10-minute window. Evidence: `ApiKeyCacheContractTest` (P1-P35), `KeyStoreUnavailabilityTest`, `ApiKeyLifecycleTest` (outage, announcement and forward-only state tests), `ApiKeyAuthenticationFilterTest`, `ApiKeyFilterTest`, `StaffIdentityWiringTest`, `InMemoryRateLimiterTest`, `RedisRateLimiterTest`, `AuthPropertiesTest`, `ResilienceApiTest` (ADR 0073) |
+| R-14 | API spool on `emptyDir` is lost if the pod is deleted before Kafka accepts it (D-15 requires surviving the pod's death); Argo Rollouts cannot manage the StatefulSet that per-pod volumes need | Owner and M6 decision, options in `docs/parallel/M9_updates.md` |
+| R-15 | Alerting has no high availability and no dead-man's switch: if Prometheus or Alertmanager stops, nothing pages | M9 follow-up: Watchdog alert to an external heartbeat service; HA pair |
+| R-16 | Cluster admission does not verify image signatures | M9 follow-up with the cluster's admission controller |
+| R-17 | Data stores and Loki are not in the Kubernetes manifests; their NetworkPolicies and at-rest encryption (D-20) are unverified | M9 follow-up (CloudNativePG, D-49) |
+| R-18 | The ZAP baseline and image signing jobs have not executed: the compose stack has no API service and no service Dockerfile exists yet | Runs automatically once M6/M5/M8 add them |
