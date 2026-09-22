@@ -100,7 +100,7 @@ BREAKING = [
     (
         "renumbered field",
         [],
-        [("string model_version = 14;", "string model_version = 20;")],
+        [("string model_version = 14;", "string model_version = 90;")],
         "was deleted without reserving the number",
     ),
     (
@@ -215,8 +215,8 @@ def test_buf_reports_breaking_changes(
             "field added",
             [
                 (
-                    "  bool feature_store_degraded = 19;\n",
-                    "  bool feature_store_degraded = 19;\n  string trace_id = 20;\n",
+                    "  repeated StageTiming stage_timings = 17;\n",
+                    "  repeated StageTiming stage_timings = 17;\n  string trace_id = 90;\n",
                 )
             ],
         ),
