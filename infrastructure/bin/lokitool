@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+# Pinned, checksum-verified lokitool launcher: checks Loki log alert rules (AGPL-3.0, CI tooling only, never shipped).
+# Trust model and cache layout: infrastructure/bin/lib/pinned.sh.
+set -eu
+. "$(dirname "$0")/lib/pinned.sh"
+pinned_exec lokitool "3.7.7" \
+  "https://github.com/grafana/loki/releases/download/v3.7.7/lokitool-linux-amd64.zip" \
+  "455577b4eaed5e243af915970667c2162495acd64bb017357c6441f8ff29d197" \
+  "lokitool-linux-amd64" \
+  "ec7500888838977bc7a3ce4991bd407453e814cf580016144997ebf260a4aef2" \
+  -- "$@"
