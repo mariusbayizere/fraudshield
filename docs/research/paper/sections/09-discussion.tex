@@ -17,8 +17,8 @@ scale, was several times wider than the band it was meant to bound, so the check
 Out-of-fold encoding removed each row's own label but left the other rows of the same fraud
 incident in the estimate, inflating every single-feature AUC by about \nSiblingLeak{} until folds
 were grouped by account; later, account grouping turned out not to protect features whose unit of
-history is a counterparty or a map cell. The D-08 ceiling was true of the columns it measured and
-false of the features it was quoted about. The fingerprint fix itself first hashed only some of
+history is a counterparty or a map cell. The single-column separation ceiling was true of the columns it
+measured and false of the engineered features it was quoted about. The fingerprint fix itself first hashed only some of
 the columns. In each case the obvious form of the defect (the individual value, the row) was
 fixed and the aggregate form (the set, the group, the regime) was not. The habit that follows,
 now an exit criterion: for every guard, name the object it ranges over and read the sentence it
@@ -39,10 +39,11 @@ contain the condition under test passed vacuously: a fold test whose categories 
 test whose fixture had no drifting rows. Tests now assert their precondition before their
 conclusion, and fixtures are specified by the property they must have before their size.
 
-\paragraph{The wrong denominator.} The central methodological error of M2 was standardising a
-detector's offset against a theoretical null rather than the observed seed-to-seed spread; a
-single three-sigma reading turned out to be noise once repeated seeds were run. The first model
-margin in M4 subtracted a feature measured on a few hundred rows holding two frauds from a model
+\paragraph{The wrong denominator.} The central methodological error of the dataset milestone was
+standardising a detector's offset against a theoretical null rather than the observed seed-to-seed
+spread; a
+single three-sigma reading turned out to be noise once repeated seeds were run. The first model margin
+reported subtracted a feature measured on a few hundred rows holding two frauds from a model
 measured on the full test set. Every baseline now prints the rows and fraud it rests on, and a
 partial-coverage feature is never subtracted from a model.
 
@@ -54,7 +55,7 @@ Status is now derived from the existence of evidence artefacts, evidence files c
 state they were produced from, and a tag requires a green run on the exact commit.
 
 \paragraph{Knowing a failure mode does not immunise against it.} Several of these patterns recurred
-after they had been analysed and written up, by the same author in the same session. The lesson
+after they had been analysed and recorded. The lesson
 the notebook draws is that a defence that depends on remembering a rule at the moment of temptation
 is not a defence; each lesson is useful only with the question ``what would enforce this?''
 attached, and most of the rules above are now tests.
@@ -103,10 +104,60 @@ the author predicted well. It is that falsifiable predictions were recorded befo
 that most were wrong, that each refutation cost a paragraph rather than a shipped result, and that
 several of the guards now in the system exist because of what the refutations found.
 
-\subsection{What a builder of synthetic benchmarks should take from this}
+\subsection{A benchmark audit protocol}
 
-Run, before trusting a synthetic benchmark: the best single feature on the engineered features, not
-only on the raw columns; a leave-one-group-out \emph{and} a one-group-only ablation, since the first
-alone cannot distinguish redundancy from irrelevance; a check that every generalisation experiment
-withholds a mechanism and not just a label; and at least one pre-registered variant built from an
-independently documented typology. On FraudShield-EAC each of these changed what could be claimed.
+The checks below are what we would run before trusting any synthetic benchmark, whoever built it.
+Each one exists because its absence hid something here: Table~\ref{tab:protocol} states what each
+check detects and what it found on FraudShield-EAC. They are cheap: every one is a measurement on
+data that already exists, and together they decide which claims the benchmark can carry.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{A benchmark audit protocol: the checks, what each detects, and what each found on
+FraudShield-EAC. Every finding is reported in the section named.}
+\label{tab:protocol}
+\begin{tabular}{p{0.26\linewidth}p{0.3\linewidth}p{0.36\linewidth}}
+\toprule
+Check & What it detects & What it found here \\
+\midrule
+The best single \emph{engineered} feature, not only the best raw column &
+A benchmark one rule can solve, and model metrics quoted against chance &
+The velocity ratio alone reaches \nFloorM{}, while the strongest raw column reaches
+\nColumnMaxAUCB{}; every metric is now a margin over the floor (Section~\ref{sec:floor}) \\
+\addlinespace
+Leave-one-group-out \emph{and} one-group-only &
+Redundancy read as irrelevance: the first check alone cannot tell them apart &
+Removing any group costs at most \nGroupMaxDrop{}, yet four groups each reach at least
+\nGroupGeographic{} alone (Section~\ref{sec:redundancy}) \\
+\addlinespace
+Does each generalisation experiment withhold a \emph{mechanism}, or only a label? &
+Experiments that cannot fail, reported as evidence of generalisation &
+No fraud parameter is keyed by country, so leave-one-country-out costs at most \nLocoMaxLoss{};
+the variant held out in time is still a burst and is caught at \nNovelRecall{}
+(Section~\ref{sec:generalisation}) \\
+\addlinespace
+A pre-registered variant from an independently documented typology &
+Whether detection survives without the benchmark's dominant structure &
+Recall \nRevRecall{} \nRevCI{} against \nBaseVarRecall{} \nBaseVarCI{}, below the registered
+prediction (Section~\ref{sec:generalisation}) \\
+\addlinespace
+A fingerprint over the output rows, beside any digest of the parameters &
+Reports that silently describe a different draw &
+A refactor that changed no parameter value re-drew the whole benchmark; datasets are now
+identified by their rows (Section~\ref{sec:repro}) \\
+\addlinespace
+Encodings and folds grouped by each feature's unit of history &
+Leakage between rows of one incident, which inflates every feature's score &
+Out-of-fold encoding grouped by row inflated single-feature AUC by \nSiblingLeak{}; grouping by
+account fixed it, and features keyed by counterparty or map cell needed their own grouping \\
+\addlinespace
+For every control, a named mutation that would kill it &
+Controls and tests that cannot fail &
+Vacuous fixtures (a fold test with pure categories, a drift test with no drift) and a documented
+cross-account control that controlled nothing \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+On FraudShield-EAC each of these changed what could be claimed.
