@@ -3,9 +3,10 @@
 LaTeX draft of the FraudShield paper, per build prompt Part E.13. Entry point: `main.tex`;
 sections in `sections/`; every number in `numbers.tex`.
 
-**Status: DRAFT, not reviewed.** Compiles to an 18-page PDF with Tectonic 0.17.0 (checksum-verified
-release binary, run outside the repository): `tectonic -X compile main.tex`. The only warnings are
-the intentional `TODO-verify` citations, which render as `[?]` until verified references exist.
+**Status: DRAFT, not reviewed.** Builds with Tectonic 0.17.0 (checksum-verified release binary, run
+outside the repository; it runs BibTeX itself): `tectonic -X compile main.tex`. The build has no
+undefined references and no overfull lines. `\refneeded` prints a visible "[reference needed]"
+where a scholarly source is still owed; it is not a citation key.
 
 ## Rules every number obeys
 
@@ -21,8 +22,9 @@ the intentional `TODO-verify` citations, which render as `[?]` until verified re
 - `python3 audit_numbers.py` checks every macro against its evidence file at the tag and writes
   `number_audit.md`; it must report zero problems before a commit.
   `\notyet{Mx}`: a result a later milestone produces, printed as "NOT YET MEASURED -- Mx".
-- No reference is invented. `\cite{TODO-verify}` marks every place one is needed;
-  `references.bib` stays empty until the author has read and verified each source.
+- No reference is invented. Every entry in `references.bib` was checked against the source itself
+  (`reference_audit.md`: what was checked, where, and when); a source that cannot be opened and
+  confirmed is removed. `\refneeded` marks every place a reference is still owed.
 - Every result is worded as a result on the FraudShield-EAC synthetic benchmark (D-08).
 
 ## Ownership
