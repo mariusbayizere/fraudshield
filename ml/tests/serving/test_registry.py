@@ -34,8 +34,10 @@ from fraudshield_ml.serving.registry import (
     AliasWatcher,
     MlflowRegistry,
     ModelVersion,
+    PromotionRefused,
     RegistryError,
     WatcherMetrics,
+    promotion_problems,
     wait_until,
 )
 from fraudshield_ml.serving.scorer import ModelHolder, Scorer
@@ -77,6 +79,9 @@ class FakeMlflow:
             version = str(len(model["versions"]) + 1)
             model["versions"][version] = data["source"]
             return 200, {"model_version": {"version": version, "source": data["source"]}}
+        if path == "/api/2.0/mlflow/model-versions/get":
+            source = self.models[query["name"]]["versions"][query["version"]]
+            return 200, {"model_version": {"version": query["version"], "source": source}}
         if path == "/api/2.0/mlflow/registered-models/alias":
             if method == "POST":
                 self.models[data["name"]]["aliases"][data["alias"]] = data["version"]
@@ -431,3 +436,47 @@ def test_a_second_worker_downloading_the_same_version_uses_the_first_copy(
     monkeypatch.setattr(Path, "rename", real_rename)
     assert Bundle.load(fetched).model_version == Bundle.load(bundle_dirs[0]).model_version
     assert not list(fetched.parent.glob(".*.partial")), "the loser's staging copy is removed"
+
+
+def _badly_calibrated(bundle_dir: Path, tmp_path: Path) -> Path:
+    """A copy of a bundle whose manifest records a held-out ECE over FR-02-03's 0.05."""
+    copy = tmp_path / "miscalibrated"
+    shutil.copytree(bundle_dir, copy)
+    manifest = json.loads((copy / "manifest.json").read_text())
+    manifest["provenance"]["held_out"]["ece_equal_width_10"] = 0.08
+    (copy / "manifest.json").write_text(json.dumps(manifest))
+    return copy
+
+
+@pytest.mark.req("FR-02-03")
+def test_a_bundle_over_the_ece_limit_cannot_become_production(
+    mlflow: tuple[FakeMlflow, str],
+    bundle_dirs: tuple[Path, Path],
+    kit: SimpleNamespace,
+    tmp_path: Path,
+) -> None:
+    fake, url = mlflow
+    registry = MlflowRegistry(url)
+    bad = _badly_calibrated(bundle_dirs[1], tmp_path)
+    with pytest.raises(PromotionRefused, match=r"ECE 0\.0800 exceeds 0\.05"):
+        registry.publish(NAME, bad, alias=PRODUCTION)
+    registry.publish(NAME, bundle_dirs[0], alias=PRODUCTION)  # v1, well calibrated
+    registry.publish(NAME, bad, alias=SHADOW)  # v2: shadowing a model is not deploying it
+    with pytest.raises(PromotionRefused):
+        registry.promote(NAME, PRODUCTION, "2", tmp_path / "cache")
+    assert fake.models[NAME]["aliases"][PRODUCTION] == "1"
+
+    # Defence in depth: a production alias moved around these checks is still not served.
+    holder = ModelHolder()
+    w = watcher(url, holder, kit, tmp_path / "watch")
+    w.poll_once()
+    serving = holder.production
+    fake.models[NAME]["aliases"][PRODUCTION] = "2"
+    w.poll_once()
+    assert holder.production is serving
+    assert w.metrics.failures.labels(PRODUCTION)._value.get() == 1
+
+
+def test_a_bundle_without_a_measured_ece_is_refused_too() -> None:
+    assert promotion_problems({"provenance": {"held_out": {}}})
+    assert promotion_problems({"provenance": {"held_out": {"ece_equal_width_10": 0.01}}}) == []

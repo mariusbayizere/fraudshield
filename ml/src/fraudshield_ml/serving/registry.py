@@ -51,6 +51,29 @@ class RegistryError(RuntimeError):
     """The registry answered with an error, or not at all."""
 
 
+class PromotionRefused(RegistryError):  # noqa: N818 - a refusal, named as one
+    """A bundle that may not become production (FR-02-03's calibration block, PB-64)."""
+
+
+#: FR-02-03: "deployment blocked if ECE > 0.05".
+MAX_ECE = 0.05
+
+
+def promotion_problems(manifest: dict[str, Any]) -> list[str]:
+    """Why a bundle may not be production, from its own manifest; empty when it may.
+
+    The ECE is the held-out figure the bundle was built with (`fs-model build`). A bundle that does
+    not record one is refused too: an unmeasured calibration is not a passing one.
+    """
+    held_out = manifest.get("provenance", {}).get("held_out", {})
+    ece = held_out.get("ece_equal_width_10")
+    if ece is None:
+        return ["the bundle records no held-out ECE, so FR-02-03's block cannot be checked"]
+    if float(ece) > MAX_ECE:
+        return [f"held-out ECE {float(ece):.4f} exceeds {MAX_ECE} (FR-02-03)"]
+    return []
+
+
 @dataclass(frozen=True)
 class ModelVersion:
     name: str
@@ -117,6 +140,23 @@ class MlflowRegistry:
             raise
         version = reply["model_version"]
         return ModelVersion(name=name, version=str(version["version"]), source=version["source"])
+
+    def promote(self, name: str, alias: str, version: str, cache: Path) -> None:
+        """Move an alias, checking FR-02-03's block before anything becomes production."""
+        if alias == PRODUCTION:
+            bundle = self.fetch_bundle(
+                ModelVersion(name, version, self.source(name, version)), cache
+            )
+            problems = promotion_problems(json.loads((bundle / MANIFEST).read_text()))
+            if problems:
+                raise PromotionRefused("; ".join(problems))
+        self.set_alias(name, alias, version)
+
+    def source(self, name: str, version: str) -> str:
+        reply = self._json(
+            "GET", "/api/2.0/mlflow/model-versions/get", query={"name": name, "version": version}
+        )
+        return str(reply["model_version"]["source"])
 
     def set_alias(self, name: str, alias: str, version: str) -> None:
         self._json(
@@ -232,6 +272,8 @@ class MlflowRegistry:
         rollback is one alias move (D-50).
         """
         manifest = json.loads((bundle_dir / MANIFEST).read_text())
+        if alias == PRODUCTION and (problems := promotion_problems(manifest)):
+            raise PromotionRefused("; ".join(problems))
         prefix = f"bundles/{name}/{manifest['model_version']}"
         for file in (MANIFEST, *FILES):
             self.upload(f"{prefix}/{file}", (bundle_dir / file).read_bytes())
@@ -311,7 +353,12 @@ class AliasWatcher:
                 # A removed production alias keeps the loaded model: never serve nothing.
                 continue
             try:
-                bundle = Bundle.load(self.registry.fetch_bundle(version, self.cache))
+                directory = self.registry.fetch_bundle(version, self.cache)
+                if alias == PRODUCTION and (
+                    problems := promotion_problems(json.loads((directory / MANIFEST).read_text()))
+                ):
+                    raise PromotionRefused("; ".join(problems))
+                bundle = Bundle.load(directory)
             except (RegistryError, BundleError, OSError, ValueError) as error:
                 self.metrics.failures.labels(alias).inc()
                 LOG.error("@%s -> v%s not swapped in: %s", alias, current, error)

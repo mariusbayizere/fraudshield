@@ -34,6 +34,7 @@ from fraudshield_ml.featurestore.reference import Reference
 from fraudshield_ml.featurestore.store import FeatureStore
 from fraudshield_ml.featurestore.writer import StoreWriter
 from fraudshield_ml.models.bundle import Bundle
+from fraudshield_ml.serving import features
 from fraudshield_ml.serving.features import RequestError
 from fraudshield_ml.serving.generated import scoring_pb2 as pb
 from fraudshield_ml.serving.registry import AliasWatcher, MlflowRegistry
@@ -51,17 +52,45 @@ class ScoringService:
         holder: ModelHolder,
         shadow: ShadowRunner | None = None,
         writer: StoreWriter | None = None,
+        store: FeatureStore | None = None,
     ) -> None:
         self.holder = holder
         self.shadow = shadow
         self.writer = writer
+        #: ADR 0033: when a request carries no account context, it is read from this store, so
+        #: the window arithmetic has one implementation. Compatible with today's contract, where
+        #: the field may simply be unset.
+        self.store = store
+
+    def _context(self, request: pb.ScoreRequest, scorer: Scorer, context: Any) -> Any:
+        """The request's own context, or the store's; never an empty one taken as "no history"."""
+        if request.HasField("context"):
+            return None
+        if self.store is None:
+            context.abort(
+                grpc.StatusCode.INVALID_ARGUMENT,
+                "no account context in the request and no feature store configured; an empty "
+                "context would score the account as brand new",
+            )
+        try:
+            tx = features.domain_transaction(request.transaction, scorer.reference)
+        except RequestError as error:
+            context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+        try:
+            return self.store.context_for(tx)  # type: ignore[union-attr]
+        except Exception as error:
+            LOG.warning("feature store unreadable: %s", error)
+            context.abort(grpc.StatusCode.UNAVAILABLE, "feature store unavailable")
+        return None  # unreachable: abort raises
 
     def Score(self, request: pb.ScoreRequest, context: Any) -> pb.ScoreResponse:  # noqa: N802
         scorer = self.holder.production  # read once: this request stays on this model
         if scorer is None:
             context.abort(grpc.StatusCode.UNAVAILABLE, "no production model loaded")
+        # Outside the try below: abort() raises, and the broad handler would report it as INTERNAL.
+        account = self._context(request, scorer, context)  # type: ignore[arg-type]
         try:
-            scored = scorer.score(request)  # type: ignore[union-attr]
+            scored = scorer.score(request, account)  # type: ignore[union-attr]
         except RequestError as error:
             context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
         except Exception as error:
@@ -213,10 +242,11 @@ def start_worker(config: WorkerConfig) -> Worker:
         else None
     )
     writer = None
+    store = None
     if config.feature_store_url is not None:
-        store_redis = _redis(config.feature_store_url, timeout=1.0)
-        writer = StoreWriter(FeatureStore(store_redis, reference))
-    service = ScoringService(holder, shadow, writer)
+        store = FeatureStore(_redis(config.feature_store_url, timeout=1.0), reference)
+        writer = StoreWriter(store)
+    service = ScoringService(holder, shadow, writer, store)
     server, health_servicer, port = build_server(
         service,
         config.address,

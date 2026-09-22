@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -35,6 +36,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     alias.add_argument("--mlflow", required=True)
     alias.add_argument("--name", default="fraudshield-ensemble")
     alias.add_argument("alias", choices=[PRODUCTION, SHADOW, PREVIOUS])
+    alias.add_argument("--cache", type=Path, default=Path(tempfile.gettempdir()) / "fs-models")
     alias.add_argument("version")
 
     args = parser.parse_args(argv)
@@ -54,7 +56,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         version = MlflowRegistry(args.mlflow).publish(args.name, args.bundle, alias=args.alias)
         print(f"{args.name} v{version}" + (f" is now @{args.alias}" if args.alias else ""))
     elif args.command == "alias":
-        MlflowRegistry(args.mlflow).set_alias(args.name, args.alias, args.version)
+        MlflowRegistry(args.mlflow).promote(args.name, args.alias, args.version, args.cache)
         print(f"{args.name} @{args.alias} -> v{args.version}")
     return 0
 

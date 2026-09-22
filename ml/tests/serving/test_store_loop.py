@@ -104,3 +104,75 @@ def test_a_full_queue_drops_the_write(kit: SimpleNamespace) -> None:
     writer.drain()
     assert accepted.count(False) >= 4
     assert writer.dropped._value.get() == accepted.count(False)
+
+
+def _serve(service: server.ScoringService) -> tuple[Any, Any]:
+    grpc_server, _, port = server.build_server(service, "127.0.0.1:0", tls=None)
+    grpc_server.start()
+    channel = grpc.insecure_channel(f"127.0.0.1:{port}")
+    score = channel.unary_unary(
+        f"/{server.SERVICE}/Score",
+        request_serializer=pb.ScoreRequest.SerializeToString,
+        response_deserializer=pb.ScoreResponse.FromString,
+    )
+    return grpc_server, score
+
+
+@pytest.mark.req("FR-02-09", "FR-02-01")
+def test_the_scorer_reads_the_context_itself_when_the_api_sends_none(
+    bundles: tuple[Bundle, Bundle], kit: SimpleNamespace
+) -> None:
+    """ADR 0033's shape, on today's contract: the request carries the transaction only."""
+    features = store(kit)
+    earlier = [kit.transaction(i, timestamp=kit.t0 + timedelta(minutes=i)) for i in range(3)]
+    for tx in earlier:
+        features.observe(tx)
+    service = server.ScoringService(
+        ModelHolder(Scorer(bundles[0], kit.reference)), None, None, features
+    )
+    grpc_server, score = _serve(service)
+    try:
+        scored = kit.transaction(9, timestamp=kit.t0 + timedelta(minutes=10))
+        reply = score(pb.ScoreRequest(transaction=to_proto(scored)), timeout=10)
+    finally:
+        grpc_server.stop(0)
+    assert reply.result.feature_vector["tx_count_1h"].number == 3.0
+
+
+def test_no_context_and_no_store_is_refused_rather_than_scored_as_new(
+    bundles: tuple[Bundle, Bundle], kit: SimpleNamespace
+) -> None:
+    grpc_server, score = _serve(
+        server.ScoringService(ModelHolder(Scorer(bundles[0], kit.reference)))
+    )
+    try:
+        with pytest.raises(grpc.RpcError) as caught:
+            score(pb.ScoreRequest(transaction=to_proto(kit.transaction(1))), timeout=10)
+        assert caught.value.code() == grpc.StatusCode.INVALID_ARGUMENT
+        assert "brand new" in caught.value.details()
+    finally:
+        grpc_server.stop(0)
+
+
+def test_an_unreadable_store_is_unavailable_so_the_api_falls_back(
+    bundles: tuple[Bundle, Bundle], kit: SimpleNamespace
+) -> None:
+    class Down:
+        def pipeline(self, **_: Any) -> Any:
+            raise ConnectionError("redis down")
+
+    broken = FeatureStore(Down(), kit.reference, metrics=StoreMetrics.create(CollectorRegistry()))
+    grpc_server, score = _serve(
+        server.ScoringService(ModelHolder(Scorer(bundles[0], kit.reference)), None, None, broken)
+    )
+    try:
+        with pytest.raises(grpc.RpcError) as caught:
+            score(pb.ScoreRequest(transaction=to_proto(kit.transaction(1))), timeout=10)
+        assert caught.value.code() == grpc.StatusCode.UNAVAILABLE
+        bad = to_proto(kit.transaction(2))
+        bad.amount.currency = "XOF"
+        with pytest.raises(grpc.RpcError) as caught:
+            score(pb.ScoreRequest(transaction=bad), timeout=10)
+        assert caught.value.code() == grpc.StatusCode.INVALID_ARGUMENT
+    finally:
+        grpc_server.stop(0)

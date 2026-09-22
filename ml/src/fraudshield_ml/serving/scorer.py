@@ -69,7 +69,9 @@ class Scorer:
     def model_version(self) -> str:
         return self.bundle.model_version
 
-    def score(self, request: pb.ScoreRequest) -> Scored:
+    def score(self, request: pb.ScoreRequest, context: pb.AccountContext | None = None) -> Scored:
+        """Score one request. `context` overrides the request's, for a scorer that read the
+        account's state from the feature store itself (ADR 0033)."""
         started = time.perf_counter()
         timings: list[tuple[int, float]] = []
 
@@ -80,7 +82,10 @@ class Scorer:
 
         tx = features.domain_transaction(request.transaction, self.reference)
         values = features.compute(
-            tx, request.context, list(request.configured_limits), self.reference
+            tx,
+            context if context is not None else request.context,
+            list(request.configured_limits),
+            self.reference,
         )
         mark = lap(Stage.STAGE_FEATURES, started)
 
