@@ -1,4 +1,4 @@
-package io.github.mariusbayizere.fraudshield.decision.adapter.jdbc;
+package io.github.mariusbayizere.fraudshield.decision.adapter.jpa;
 
 import io.github.mariusbayizere.fraudshield.common.config.ChannelThreshold;
 import io.github.mariusbayizere.fraudshield.common.config.ChannelThresholds;
@@ -12,10 +12,6 @@ import io.github.mariusbayizere.fraudshield.rules.dsl.RuleSet;
 import io.github.mariusbayizere.fraudshield.rules.dsl.TierOverride;
 import io.github.mariusbayizere.fraudshield.rules.json.RuleDefinitions;
 import java.math.BigDecimal;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -27,9 +23,9 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
-import javax.sql.DataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Limit;
 import tools.jackson.databind.ObjectMapper;
 
 /**
@@ -38,13 +34,19 @@ import tools.jackson.databind.ObjectMapper;
  * #refreshAll()} runs on a short schedule (5 s by default) and {@link #invalidate(UUID)} on a
  * {@code fs.config.changes} event, which keeps changes effective well inside E.6's 60 seconds.
  *
+ * <p>The tables are read through JPA (ADR 0068, following ADR 0071): configuration is the domain
+ * the rule puts in the ORM, and these reads are not on the synchronous decision path — a decision
+ * reads the snapshot in memory, and the database read happens on the refresh schedule or once when
+ * an institution is first seen. The entities are {@link org.hibernate.annotations.Immutable}
+ * because their tables are append-only; a new configuration is a new version.
+ *
  * <p>An institution with no configuration rows is decided with the SRS defaults (0.60 / 0.85,
  * release with timeout label; 5% over 15 minutes with at least 100 transactions and a 60-minute
  * clean reset), reported as version 0 and counted. A stored rule that no longer compiles is skipped
  * and counted: rules can only raise a tier, so skipping one never approves what the model would
  * have held.
  */
-public final class JdbcConfiguration implements ConfigurationPort {
+public final class JpaConfiguration implements ConfigurationPort {
 
   /** SRS default thresholds (FR-03-01..03, D-02). */
   public static final ChannelThreshold SRS_THRESHOLD =
@@ -55,34 +57,16 @@ public final class JdbcConfiguration implements ConfigurationPort {
       new CircuitBreakerSettings(
           new BigDecimal("0.05"), Duration.ofMinutes(15), 100, Duration.ofMinutes(60));
 
-  private static final Logger LOG = LoggerFactory.getLogger(JdbcConfiguration.class);
+  private static final Logger LOG = LoggerFactory.getLogger(JpaConfiguration.class);
   private static final ObjectMapper JSON = new ObjectMapper();
 
   private record Snapshot(
       Thresholds thresholds, RuleSet rules, BreakerSettings breaker, Instant loadedAt) {}
 
-  private static final String SELECT_RISK_THRESHOLDS =
-      """
-      SELECT t.version, t.channel, t.medium_threshold, t.high_threshold, t.medium_timeout_policy
-      FROM risk_thresholds t WHERE t.version = ( SELECT max(version) FROM
-      risk_threshold_versions WHERE effective_at <= ?)
-      """;
-
-  private static final String SELECT_ALERT_RULES =
-      """
-      SELECT r.id, v.version, v.rule_expression::text, v.risk_tier_override, r.version FROM
-      alert_rules r JOIN alert_rule_versions v ON v.rule_id = r.id AND v.version =
-      r.current_version WHERE r.state = 'ENABLED' ORDER BY r.id
-      """;
-
-  private static final String SELECT_MCC_CIRCUIT_BREAKER_SETTINGS_VERSIONS =
-      """
-      SELECT version, fraud_rate_threshold, window_minutes, minimum_transactions,
-      clean_reset_minutes FROM mcc_circuit_breaker_settings_versions WHERE effective_at <= ?
-      ORDER BY version DESC LIMIT 1
-      """;
-
-  private final DataSource dataSource;
+  private final TenantTransactions tenants;
+  private final ThresholdRepository thresholds;
+  private final RuleRepository rules;
+  private final BreakerSettingsRepository breakers;
   private final Clock clock;
   private final Map<UUID, Snapshot> snapshots = new ConcurrentHashMap<>();
   private final AtomicLong defaultsUsed = new AtomicLong();
@@ -91,11 +75,22 @@ public final class JdbcConfiguration implements ConfigurationPort {
   /**
    * Creates the adapter.
    *
-   * @param dataSource connections as {@code fs_app}
+   * @param tenants transactions scoped to one institution
+   * @param thresholds threshold repository
+   * @param rules rule repository
+   * @param breakers circuit-breaker settings repository
    * @param clock clock for effective times
    */
-  public JdbcConfiguration(DataSource dataSource, Clock clock) {
-    this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
+  public JpaConfiguration(
+      TenantTransactions tenants,
+      ThresholdRepository thresholds,
+      RuleRepository rules,
+      BreakerSettingsRepository breakers,
+      Clock clock) {
+    this.tenants = Objects.requireNonNull(tenants, "tenants");
+    this.thresholds = Objects.requireNonNull(thresholds, "thresholds");
+    this.rules = Objects.requireNonNull(rules, "rules");
+    this.breakers = Objects.requireNonNull(breakers, "breakers");
     this.clock = Objects.requireNonNull(clock, "clock");
   }
 
@@ -125,7 +120,7 @@ public final class JdbcConfiguration implements ConfigurationPort {
       try {
         snapshots.put(institution, load(institution));
         reloaded++;
-      } catch (SQLException e) {
+      } catch (RuntimeException e) {
         LOG.warn("configuration refresh failed; keeping the previous snapshot", e);
       }
     }
@@ -140,7 +135,7 @@ public final class JdbcConfiguration implements ConfigurationPort {
   public void invalidate(UUID institutionId) {
     try {
       snapshots.put(institutionId, load(institutionId));
-    } catch (SQLException e) {
+    } catch (RuntimeException e) {
       LOG.warn("configuration reload failed; keeping the previous snapshot", e);
     }
   }
@@ -168,97 +163,73 @@ public final class JdbcConfiguration implements ConfigurationPort {
     if (snapshot != null) {
       return snapshot;
     }
-    try {
-      Snapshot loaded = load(institutionId);
-      snapshots.put(institutionId, loaded);
-      return loaded;
-    } catch (SQLException e) {
-      throw new IllegalStateException("risk configuration is unavailable", e);
-    }
+    Snapshot loaded = load(institutionId);
+    snapshots.put(institutionId, loaded);
+    return loaded;
   }
 
-  private Snapshot load(UUID institutionId) throws SQLException {
-    try (Connection c = dataSource.getConnection()) {
-      c.setAutoCommit(false);
-      c.setReadOnly(true);
-      try {
-        Tenant.use(c, institutionId);
-        Instant now = clock.instant();
-        Snapshot snapshot =
-            new Snapshot(loadThresholds(c, now), loadRules(c), loadBreaker(c, now), now);
-        c.commit();
-        return snapshot;
-      } catch (SQLException e) {
-        c.rollback();
-        throw e;
-      }
-    }
+  private Snapshot load(UUID institutionId) {
+    Instant now = clock.instant();
+    return tenants.as(
+        institutionId, () -> new Snapshot(loadThresholds(now), loadRules(), loadBreaker(now), now));
   }
 
-  private Thresholds loadThresholds(Connection c, Instant now) throws SQLException {
-    try (PreparedStatement s = c.prepareStatement(SELECT_RISK_THRESHOLDS)) {
-      s.setObject(1, Tenant.utc(now));
-      Map<Channel, ChannelThreshold> byChannel = new EnumMap<>(Channel.class);
-      long version = 0;
-      try (ResultSet rows = s.executeQuery()) {
-        while (rows.next()) {
-          version = rows.getLong(1);
-          byChannel.put(
-              Channel.valueOf(rows.getString(2)),
-              new ChannelThreshold(
-                  rows.getBigDecimal(3),
-                  rows.getBigDecimal(4),
-                  MediumTimeoutPolicy.valueOf(rows.getString(5))));
-        }
-      }
-      for (Channel channel : Channel.values()) {
-        if (byChannel.putIfAbsent(channel, SRS_THRESHOLD) == null) {
-          defaultsUsed.incrementAndGet();
-        }
-      }
-      return new Thresholds(version, new ChannelThresholds(byChannel));
+  private Thresholds loadThresholds(Instant now) {
+    Map<Channel, ChannelThreshold> byChannel = new EnumMap<>(Channel.class);
+    long version = 0;
+    for (RiskThresholdEntity row : thresholds.inForce(now)) {
+      version = row.version();
+      byChannel.put(
+          Channel.valueOf(row.channel()),
+          new ChannelThreshold(
+              row.mediumThreshold(),
+              row.highThreshold(),
+              MediumTimeoutPolicy.valueOf(row.mediumTimeoutPolicy())));
     }
+    for (Channel channel : Channel.values()) {
+      if (byChannel.putIfAbsent(channel, SRS_THRESHOLD) == null) {
+        defaultsUsed.incrementAndGet();
+      }
+    }
+    return new Thresholds(version, new ChannelThresholds(byChannel));
   }
 
-  private RuleSet loadRules(Connection c) throws SQLException {
+  private RuleSet loadRules() {
     List<CompiledRule> compiled = new ArrayList<>();
     long version = 0;
-    try (PreparedStatement s = c.prepareStatement(SELECT_ALERT_RULES);
-        ResultSet rows = s.executeQuery()) {
-      while (rows.next()) {
-        version = Math.max(version, rows.getLong(5));
-        try {
-          compiled.add(
-              new CompiledRule(
-                  rows.getObject(1, UUID.class),
-                  rows.getInt(2),
-                  TierOverride.valueOf(rows.getString(4)),
-                  RuleDefinitions.compile(JSON.readTree(rows.getString(3)), "rule_expression")));
-        } catch (InvalidRuleException e) {
-          invalidRules.incrementAndGet();
-          LOG.error("a stored rule no longer compiles and is skipped", e);
-        }
+    for (RuleRepository.Published pair : rules.enabledWithCurrentVersion()) {
+      AlertRuleEntity rule = pair.getRule();
+      AlertRuleVersionEntity published = pair.getPublished();
+      version = Math.max(version, rule.version());
+      try {
+        compiled.add(
+            new CompiledRule(
+                rule.id(),
+                published.version(),
+                TierOverride.valueOf(published.riskTierOverride()),
+                RuleDefinitions.compile(
+                    JSON.readTree(published.ruleExpression()), "rule_expression")));
+      } catch (InvalidRuleException e) {
+        invalidRules.incrementAndGet();
+        LOG.error("a stored rule no longer compiles and is skipped", e);
       }
     }
     return new RuleSet(version, compiled);
   }
 
-  private BreakerSettings loadBreaker(Connection c, Instant now) throws SQLException {
-    try (PreparedStatement s = c.prepareStatement(SELECT_MCC_CIRCUIT_BREAKER_SETTINGS_VERSIONS)) {
-      s.setObject(1, Tenant.utc(now));
-      try (ResultSet rows = s.executeQuery()) {
-        if (!rows.next()) {
-          defaultsUsed.incrementAndGet();
-          return new BreakerSettings(0, SRS_BREAKER);
-        }
-        return new BreakerSettings(
-            rows.getLong(1),
-            new CircuitBreakerSettings(
-                rows.getBigDecimal(2),
-                Duration.ofMinutes(rows.getInt(3)),
-                rows.getInt(4),
-                Duration.ofMinutes(rows.getInt(5))));
-      }
+  private BreakerSettings loadBreaker(Instant now) {
+    List<BreakerSettingsEntity> latest = breakers.inForce(now, Limit.of(1));
+    if (latest.isEmpty()) {
+      defaultsUsed.incrementAndGet();
+      return new BreakerSettings(0, SRS_BREAKER);
     }
+    BreakerSettingsEntity settings = latest.getFirst();
+    return new BreakerSettings(
+        settings.version(),
+        new CircuitBreakerSettings(
+            settings.fraudRateThreshold(),
+            Duration.ofMinutes(settings.windowMinutes()),
+            settings.minimumTransactions(),
+            Duration.ofMinutes(settings.cleanResetMinutes())));
   }
 }

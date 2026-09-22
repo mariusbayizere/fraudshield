@@ -7,6 +7,8 @@ import io.github.mariusbayizere.fraudshield.notify.sms.CustomerSmsSender;
 import io.github.mariusbayizere.fraudshield.notify.sms.InstitutionMessaging;
 import io.github.mariusbayizere.fraudshield.notify.sms.SmsCatalogue;
 import io.github.mariusbayizere.fraudshield.notify.sms.SmsGateway;
+import io.github.mariusbayizere.fraudshield.notify.vault.PassphraseKeyProvider;
+import io.github.mariusbayizere.fraudshield.notify.vault.VaultContacts;
 import io.github.mariusbayizere.fraudshield.notify.verification.VerificationService;
 import io.github.mariusbayizere.fraudshield.notify.webhook.HttpWebhookTransport;
 import io.github.mariusbayizere.fraudshield.notify.webhook.RetryPolicy;
@@ -86,6 +88,31 @@ public class NotificationWiring {
                     new InstitutionMessaging.Settings(
                         i.senderId(), i.officialPhone(), i.verificationBase())));
     return institution -> Optional.ofNullable(settings.get(institution));
+  }
+
+  /**
+   * The vault-backed contact directory, when a vault is configured (D-20, ADR 0068).
+   *
+   * <p>Its own data source: a separate server, a separate role and separate credentials from the
+   * main database, so a compromise of one is not a compromise of the other. Without this bean the
+   * SMS channel does not start, and customer intents stay on their topic.
+   *
+   * @param properties configuration
+   * @return the directory, or nothing when no vault is configured
+   */
+  @Bean
+  @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
+      prefix = "fraudshield.vault",
+      name = "url")
+  ContactDirectory vaultContacts(FraudShieldProperties properties) {
+    FraudShieldProperties.Vault vault = properties.vault();
+    org.postgresql.ds.PGSimpleDataSource source = new org.postgresql.ds.PGSimpleDataSource();
+    source.setUrl(vault.url());
+    source.setUser(vault.username());
+    source.setPassword(vault.password());
+    LOG.info("the PII vault is configured at {}; customer SMS can be sent", vault.url());
+    return new VaultContacts(
+        source, new PassphraseKeyProvider(vault.masterKeys(), vault.currentKeyId()));
   }
 
   @Bean(destroyMethod = "close")

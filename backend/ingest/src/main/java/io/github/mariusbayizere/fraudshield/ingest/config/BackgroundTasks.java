@@ -1,7 +1,7 @@
 package io.github.mariusbayizere.fraudshield.ingest.config;
 
-import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcConfiguration;
 import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcOverdueHolds;
+import io.github.mariusbayizere.fraudshield.decision.adapter.jpa.JpaConfiguration;
 import io.github.mariusbayizere.fraudshield.decision.application.CircuitBreakerMonitor;
 import io.github.mariusbayizere.fraudshield.decision.application.HoldTimeoutService;
 import io.github.mariusbayizere.fraudshield.ingest.application.BatchJobs;
@@ -39,7 +39,7 @@ public final class BackgroundTasks implements SmartLifecycle {
   private final HoldTimeoutService holds;
   private final JdbcOverdueHolds overdue;
   private final CircuitBreakerMonitor breakers;
-  private final JdbcConfiguration configuration;
+  private final JpaConfiguration configuration;
   private final UnblockReconciler unblocks;
   private final BatchJobs batches;
   private ScheduledExecutorService scheduler;
@@ -58,7 +58,7 @@ public final class BackgroundTasks implements SmartLifecycle {
       HoldTimeoutService holds,
       JdbcOverdueHolds overdue,
       CircuitBreakerMonitor breakers,
-      JdbcConfiguration configuration,
+      JpaConfiguration configuration,
       UnblockReconciler unblocks,
       BatchJobs batches) {
     this.holds = Objects.requireNonNull(holds, "holds");

@@ -9,6 +9,7 @@ import io.github.mariusbayizere.fraudshield.common.config.MediumTimeoutPolicy;
 import io.github.mariusbayizere.fraudshield.common.money.CurrencyCode;
 import io.github.mariusbayizere.fraudshield.common.transaction.Channel;
 import io.github.mariusbayizere.fraudshield.decision.adapter.events.FactCodec;
+import io.github.mariusbayizere.fraudshield.decision.adapter.jpa.JpaConfiguration;
 import io.github.mariusbayizere.fraudshield.decision.adapter.spool.SpoolDrainer;
 import io.github.mariusbayizere.fraudshield.decision.adapter.spool.SpoolRecord;
 import io.github.mariusbayizere.fraudshield.decision.application.event.DecisionEvent;
@@ -18,6 +19,7 @@ import io.github.mariusbayizere.fraudshield.decision.domain.DecisionValue;
 import io.github.mariusbayizere.fraudshield.decision.domain.MccCircuitBreaker;
 import io.github.mariusbayizere.fraudshield.decision.domain.RiskTier;
 import io.github.mariusbayizere.fraudshield.decision.testing.FactScenarios;
+import io.github.mariusbayizere.fraudshield.decision.testing.JpaTesting;
 import io.github.mariusbayizere.fraudshield.decision.testing.MutableClock;
 import io.github.mariusbayizere.fraudshield.decision.testing.TestDatabase;
 import java.math.BigDecimal;
@@ -67,12 +69,37 @@ class PostgresAdaptersTest {
   @TempDir Path deadLetters;
   private TestDatabase db;
   private PostgresSink sink;
+  private JpaTesting jpa;
 
   @BeforeEach
   void setUp() throws SQLException {
     db = TestDatabase.create();
     db.institution(INSTITUTION);
     sink = new PostgresSink(db.dataSource("fs_app"), deadLetters);
+    jpa = new JpaTesting(db.dataSource("fs_app"));
+  }
+
+  @org.junit.jupiter.api.AfterEach
+  void closeJpa() {
+    jpa.close();
+  }
+
+  /** An analyst row, because rules reference their author. */
+  private UUID analyst() throws SQLException {
+    UUID analyst = UUID.randomUUID();
+    try (Connection c = db.superuser()) {
+      TestDatabase.exec(
+          c,
+          "INSERT INTO fraudshield.users (id, institution_id, first_name,"
+              + " last_name, email, role, employee_id, department, password_hash)"
+              + " VALUES (?, ?, 'Test', 'Officer', ?, 'RISK_OFFICER', ?,"
+              + " 'RISK', '$2b$12$notARealHashJustTheShapeOfOne.............')",
+          analyst,
+          INSTITUTION,
+          analyst + "@example.test",
+          "EMP" + analyst.toString().substring(0, 5));
+    }
+    return analyst;
   }
 
   private static List<SpoolRecord> records(List<DecisionEvent> facts) {
@@ -249,7 +276,7 @@ class PostgresAdaptersTest {
           analyst);
     }
     MutableClock clock = new MutableClock(Instant.now());
-    JdbcConfiguration configuration = new JdbcConfiguration(db.dataSource("fs_app"), clock);
+    JpaConfiguration configuration = jpa.configuration(clock);
     assertThat(configuration.thresholds(INSTITUTION).version()).isEqualTo(1);
     assertThat(
             configuration.thresholds(INSTITUTION).thresholds().byChannel().get(Channel.USSD).high())
@@ -269,9 +296,9 @@ class PostgresAdaptersTest {
     }
     assertThat(configuration.thresholds(unconfigured).version()).isZero();
     assertThat(configuration.thresholds(unconfigured).thresholds().byChannel().get(Channel.CARD))
-        .isEqualTo(JdbcConfiguration.SRS_THRESHOLD);
+        .isEqualTo(JpaConfiguration.SRS_THRESHOLD);
     assertThat(configuration.breakerSettings(unconfigured).settings())
-        .isEqualTo(JdbcConfiguration.SRS_BREAKER);
+        .isEqualTo(JpaConfiguration.SRS_BREAKER);
     assertThat(configuration.defaultsUsed()).isPositive();
 
     // A new version becomes effective on refresh; a broken stored rule is skipped, not fatal.
@@ -315,7 +342,9 @@ class PostgresAdaptersTest {
           analyst);
       TestDatabase.exec(c, "UPDATE fraudshield.alert_rules SET current_version = 2", new Object[0]);
     }
-    clock.advance(Duration.ofSeconds(1));
+    // Past the effective_at of the rows just written, which the database stamped with its own
+    // clock while these inserts ran.
+    clock.advance(Duration.ofMinutes(1));
     assertThat(configuration.refreshAll()).isEqualTo(2);
     assertThat(configuration.thresholds(INSTITUTION).version()).isEqualTo(2);
     assertThat(
@@ -328,6 +357,46 @@ class PostgresAdaptersTest {
         .isEqualTo(MediumTimeoutPolicy.DECLINE_AND_VERIFY);
     assertThat(configuration.rules(INSTITUTION).rules()).isEmpty();
     assertThat(configuration.invalidRules()).isEqualTo(1);
+  }
+
+  /**
+   * ADR 0068: no listing may grow into N + 1 queries. A configuration load is three statements —
+   * thresholds, rules and breaker settings — whatever the number of channels or rules, and it
+   * navigates no association lazily.
+   */
+  @Test
+  @Tag("FR-05-05")
+  void oneConfigurationLoadIsThreeStatementsHoweverManyRules() throws Exception {
+    UUID analyst = analyst();
+    for (int i = 0; i < 5; i++) {
+      UUID rule = UUID.randomUUID();
+      try (Connection c = db.superuser()) {
+        TestDatabase.exec(
+            c,
+            "INSERT INTO fraudshield.alert_rules (id, institution_id, rule_name, created_by)"
+                + " VALUES (?, ?, ?, ?)",
+            rule,
+            INSTITUTION,
+            "Counted rule " + i,
+            analyst);
+        TestDatabase.exec(
+            c,
+            "INSERT INTO fraudshield.alert_rule_versions (rule_id, institution_id, version,"
+                + " description, rule_expression, risk_tier_override, created_by)"
+                + " VALUES (?, ?, 1, 'A rule that counts statements', ?::jsonb, 'HIGH', ?)",
+            rule,
+            INSTITUTION,
+            "{\"field\":\"agent_cashout_count_1h\",\"op\":\"gte\",\"value\":3}",
+            analyst);
+      }
+    }
+    JpaConfiguration configuration = jpa.configuration(new MutableClock(Instant.now()));
+    org.hibernate.stat.Statistics statistics = jpa.statistics();
+    statistics.clear();
+    assertThat(configuration.rules(INSTITUTION).rules()).hasSize(5);
+    assertThat(statistics.getPrepareStatementCount()).isEqualTo(3);
+    assertThat(statistics.getEntityFetchCount()).as("no lazy entity fetch").isZero();
+    assertThat(statistics.getCollectionFetchCount()).as("no lazy collection fetch").isZero();
   }
 
   @Test

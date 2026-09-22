@@ -4,12 +4,16 @@ import io.github.mariusbayizere.fraudshield.decision.adapter.events.KafkaMessage
 import io.github.mariusbayizere.fraudshield.decision.adapter.grpc.GrpcScorer;
 import io.github.mariusbayizere.fraudshield.decision.adapter.grpc.ScorerChannels;
 import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcAccountStatus;
-import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcConfiguration;
 import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcDecisionStates;
 import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcFreezes;
 import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcFxRates;
 import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcOverdueHolds;
 import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.PostgresSink;
+import io.github.mariusbayizere.fraudshield.decision.adapter.jpa.BreakerSettingsRepository;
+import io.github.mariusbayizere.fraudshield.decision.adapter.jpa.JpaConfiguration;
+import io.github.mariusbayizere.fraudshield.decision.adapter.jpa.RuleRepository;
+import io.github.mariusbayizere.fraudshield.decision.adapter.jpa.TenantTransactions;
+import io.github.mariusbayizere.fraudshield.decision.adapter.jpa.ThresholdRepository;
 import io.github.mariusbayizere.fraudshield.decision.adapter.kafka.KafkaSink;
 import io.github.mariusbayizere.fraudshield.decision.adapter.redis.RedisAccountStatus;
 import io.github.mariusbayizere.fraudshield.decision.adapter.redis.RedisCircuitBreakers;
@@ -73,6 +77,10 @@ import org.springframework.core.io.ResourceLoader;
  * are required, so a missing one stops the application at start rather than failing later.
  */
 @Configuration(proxyBeanMethods = false)
+// The configuration tables are read through JPA (ADR 0068). The application class sits in the
+// root package io.github.mariusbayizere.fraudshield, so its auto-configuration package already
+// covers the decision module's entities and repositories. @EnableJpaRepositories is deliberately
+// not used: it would replace Boot's scanning and switch off another module's repositories.
 public class DecisionWiring {
 
   /** Spool consumer that publishes to Kafka. */
@@ -173,9 +181,30 @@ public class DecisionWiring {
     return scorer;
   }
 
+  /**
+   * Transactions scoped to one institution, shared by JPA and explicit SQL (ADR 0068).
+   *
+   * @param transactionManager the JPA transaction manager, which lends its connection to JDBC
+   * @param dataSource the same data source
+   * @return the helper
+   */
   @Bean
-  JdbcConfiguration configuration(DataSource dataSource, Clock clock) {
-    return new JdbcConfiguration(dataSource, clock);
+  TenantTransactions tenantTransactions(
+      org.springframework.transaction.PlatformTransactionManager transactionManager,
+      DataSource dataSource) {
+    return new TenantTransactions(
+        new org.springframework.transaction.support.TransactionTemplate(transactionManager),
+        new org.springframework.jdbc.core.JdbcTemplate(dataSource));
+  }
+
+  @Bean
+  JpaConfiguration configuration(
+      TenantTransactions tenants,
+      ThresholdRepository thresholds,
+      RuleRepository rules,
+      BreakerSettingsRepository breakers,
+      Clock clock) {
+    return new JpaConfiguration(tenants, thresholds, rules, breakers, clock);
   }
 
   @Bean
@@ -217,7 +246,7 @@ public class DecisionWiring {
 
   @Bean
   DecisionService decisionService(
-      JdbcConfiguration configuration,
+      JpaConfiguration configuration,
       StatefulRedisConnection<String, String> redis,
       DataSource dataSource,
       ScoringPort scorer,
@@ -288,7 +317,7 @@ public class DecisionWiring {
   @Bean
   CircuitBreakerMonitor breakerMonitor(
       CircuitBreakerPort breakers,
-      JdbcConfiguration configuration,
+      JpaConfiguration configuration,
       EventRecorder recorder,
       Clock clock) {
     return new CircuitBreakerMonitor(breakers, configuration, recorder, clock);

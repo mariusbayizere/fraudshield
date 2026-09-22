@@ -7,7 +7,6 @@ import static org.awaitility.Awaitility.await;
 
 import io.github.mariusbayizere.fraudshield.common.transaction.Channel;
 import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcAccountStatus;
-import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcConfiguration;
 import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcDecisionStates;
 import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcFreezes;
 import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcOverdueHolds;
@@ -33,6 +32,7 @@ import io.github.mariusbayizere.fraudshield.decision.domain.ReasonCodes;
 import io.github.mariusbayizere.fraudshield.decision.domain.Transaction;
 import io.github.mariusbayizere.fraudshield.decision.testing.Fixtures;
 import io.github.mariusbayizere.fraudshield.decision.testing.InMemoryPorts;
+import io.github.mariusbayizere.fraudshield.decision.testing.JpaTesting;
 import io.github.mariusbayizere.fraudshield.decision.testing.MutableClock;
 import io.github.mariusbayizere.fraudshield.decision.testing.RedisTestServer;
 import io.github.mariusbayizere.fraudshield.decision.testing.TestDatabase;
@@ -68,6 +68,7 @@ class RedisOutageTest {
   private RedisTestServer redis;
   private StatefulRedisConnection<String, String> connection;
   private TestDatabase db;
+  private JpaTesting jpa;
   private DurableSpool spool;
   private SpoolDrainer writer;
   private final MutableClock clock = new MutableClock(NOW);
@@ -95,6 +96,7 @@ class RedisOutageTest {
             100,
             Duration.ofMillis(10),
             Duration.ofMillis(200));
+    jpa = new JpaTesting(app);
     JdbcAccountStatus durableStatus = new JdbcAccountStatus(app);
     JdbcDecisionStates durableStates = new JdbcDecisionStates(app);
     redisHolds = new RedisHoldSchedule(connection, TIMEOUT);
@@ -105,7 +107,7 @@ class RedisOutageTest {
     SpoolingEventRecorder recorder = new SpoolingEventRecorder(spool, Duration.ofSeconds(5));
     decisions =
         new DecisionService(
-            new JdbcConfiguration(app, clock),
+            jpa.configuration(clock),
             ResilientPorts.accountStatus(
                 new RedisAccountStatus(connection, durableStatus, TIMEOUT, Duration.ofSeconds(5)),
                 durableStatus,
@@ -128,6 +130,7 @@ class RedisOutageTest {
 
   @AfterEach
   void stop() {
+    jpa.close();
     writer.close();
     spool.close();
     connection.close();

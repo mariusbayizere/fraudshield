@@ -23,6 +23,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param duplicateWait how long a duplicate waits for the first submission
  * @param batchThreads threads deciding batch jobs
  * @param sms SMS provider, when customer SMS is enabled
+ * @param vault the PII vault, when customer SMS is enabled (D-20)
  * @param institutions per-institution SMS settings by institution id
  */
 @ConfigurationProperties(prefix = "fraudshield")
@@ -42,6 +43,7 @@ public record FraudShieldProperties(
     Duration duplicateWait,
     int batchThreads,
     Sms sms,
+    Vault vault,
     Map<String, Institution> institutions) {
 
   /**
@@ -73,6 +75,41 @@ public record FraudShieldProperties(
     @Override
     public String toString() {
       return "Sms[baseUrl=" + baseUrl + ", username=" + username + ", apiKey=<redacted>]";
+    }
+  }
+
+  /**
+   * The PII vault instance (D-20): its own PostgreSQL server, its own role, its own key material.
+   *
+   * @param url JDBC URL of the vault instance
+   * @param username the {@code fs_vault} role
+   * @param password its password, from the environment
+   * @param currentKeyId id of the master key new rows are wrapped with
+   * @param masterKeys master keys by id, each 32 bytes as base64, from the environment; older ids
+   *     stay here so rows written under them can still be read
+   */
+  public record Vault(
+      String url,
+      String username,
+      String password,
+      String currentKeyId,
+      Map<String, String> masterKeys) {
+
+    /** Validates a configured vault. */
+    public Vault {
+      if (url == null || username == null || password == null) {
+        throw new IllegalArgumentException(
+            "fraudshield.vault.url, username and password are required when the vault is set");
+      }
+      if (currentKeyId == null || masterKeys == null || masterKeys.isEmpty()) {
+        throw new IllegalArgumentException(
+            "fraudshield.vault.current-key-id and master-keys are required when the vault is set");
+      }
+    }
+
+    @Override
+    public String toString() {
+      return "Vault[url=" + url + ", username=" + username + ", keys=<redacted>]";
     }
   }
 

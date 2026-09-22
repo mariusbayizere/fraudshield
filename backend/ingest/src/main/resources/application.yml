@@ -19,6 +19,16 @@ spring:
         connectTimeout: 2
   flyway:
     enabled: false
+  # ADR 0068: Flyway owns the schema and no persistence context outlives its transaction.
+  # PersistenceSettingsGuard refuses anything else at start-up.
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
 
 server:
   port: ${FRAUDSHIELD_API_PORT:8080}
