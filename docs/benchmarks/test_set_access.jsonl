@@ -10,3 +10,4 @@
 {"backfilled": true, "command": "battery", "commit": "dbda585", "purpose": "committed evidence run before the access log existed (M4 review, M4-8)", "source": "docs/benchmarks/m4_battery_pb61.txt", "test_rows": 101909, "utc": "2026-09-22T04:45:25+02:00"}
 {"backfilled": true, "command": "seed-variance", "commit": "6bc842d", "purpose": "committed evidence run before the access log existed (M4 review, M4-8)", "source": "docs/benchmarks/m4_seed_variance_pb61.txt", "test_rows": null, "utc": "2026-09-22T04:49:22+02:00"}
 {"command": "evaluate", "purpose": "first evaluation and cache build", "source": "/home/marius/fraudshield/dataset/output/bench1m", "test_rows": 101909, "utc": "2026-09-22T05:39:58Z"}
+{"command": "gate", "purpose": "declared M4 gate evaluation", "source": "/tmp/claude-1000/-home-marius-fraudshield/d9f158ee-49ce-49e8-afa6-780adaf6043a/scratchpad/cache/features_gate.parquet", "test_rows": 101909, "utc": "2026-09-22T05:47:21Z"}
