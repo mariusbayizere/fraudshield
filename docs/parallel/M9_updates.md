@@ -40,22 +40,32 @@ week-long alert tests). It needs `uv` and network access for the first download 
 | Trivy dependency scan | CI `security` | failed on 8d94d9c and e408828: Maven Central 429 while Trivy resolved parent POMs (reproduced locally). Fixed in 9056cc9 by resolving into `~/.m2` first |
 | All workflows on 9056cc9 | CI runs: security 35692117624, supply-chain 35692117608, infrastructure 35692117611, ci 35692117637, stack 35692117616, devcontainer 35692117629 | all success. Executed and passed: Trivy DB download, Maven resolve, dependency scan, HIGH/CRITICAL gate, configuration scan, source SBOM sign + verify. Skipped (shown as skipped, not green): ZAP baseline, image jobs |
 
-## 3. Owner decisions (1–4 decided 2026-09-22; 5 open)
+## 3. Decisions the owner needs to make
 
-1. **D-15 spool versus the Argo Rollouts canary. Decided 2026-09-22: ADR 0090.** Per-pod
-   directories on a shared ReadWriteMany volume plus a replayer that recovers the spools of dead
-   pods, conditional on spool append p95 fitting the 2 ms step-10 budget on target hardware (M10).
-   Fallback: StatefulSet with per-pod volumes and a partitioned canary. Ephemeral spool storage is
-   prohibited and `k8s_policy.py` enforces it. M6's contract is in section 6 below.
-2. **AUC-drop alert. Decided 2026-09-22: ADR 0091.** Part E.10 gains `fs_model_auc_roc{alias}`
-   and `fs_model_label_coverage{alias}`, and `fs_model_version_info` gains `version`. The
-   `FraudShieldModelAucDrop` alert (ticket, ml) fires only while coverage is at least 0.30 (D-11),
-   against the covered 30-day mean with at least 72 covered hours. `ml_test.yml` covers the drop,
-   the non-drop, low coverage, a short baseline and the shadow alias.
-3. **`fs_model_version_info` version label.** Decided with 2 (ADR 0091).
-4. **D-10 timeout-release level. Decided 2026-09-22:** 0.10 stays as a placeholder, marked
-   ASSUMED in the alert annotation, `thresholds.yml` and the runbook, to be replaced by the value
-   from `docs/ml/capacity_model.md` when that exists.
+1. **D-15 spool versus the Argo Rollouts canary (highest risk, R-5).** D-15 requires the API's
+   disk spool to survive the API pod's death. Per-pod persistent volumes need a StatefulSet, and
+   Argo Rollouts cannot manage StatefulSets. The manifests currently use an `emptyDir` spool
+   (survives container restarts, not pod deletion) with a 120 s grace period, so a pod deleted
+   during a Kafka outage loses its spooled decisions. Options:
+   - (a) API as a StatefulSet with per-pod PVCs; canary by `partition` rolling updates plus the
+     same Prometheus analysis in the deploy workflow instead of Argo Rollouts (deviation from the
+     M9 gate wording, not from its intent);
+   - (b) keep the Rollout; spool on a shared RWX volume in per-pod directories, with a
+     leader-elected replayer in the API that drains directories of pods that no longer exist (M6
+     work; needs fsync latency on the RWX storage measured against the 2 ms step 10 budget);
+   - (c) keep the Rollout; make Kafka acknowledgement part of the synchronous path when the spool
+     is not durable (costs latency, changes D-13).
+   Recommendation: (b) if the storage latency holds, otherwise (a). Needs an ADR.
+2. **SRS 8.2 "AUC-ROC drop > 0.03" has no alert.** Part E.10 defines no live AUC metric, and the
+   metric-catalogue check (as instructed) rejects anything outside E.10. Proposal: add
+   `fs_model_auc_roc{alias}` (AUC on labels available so far, with `fs_label_coverage_ratio`) to
+   E.10; the rule and its test are then a few lines.
+3. **`fs_model_version_info{alias}` carries no version.** With `alias` as its only E.10 label a
+   dashboard can show that `@production` exists, not which version it is. Proposal: add a
+   `version` label in E.10.
+4. **D-10 timeout-release level.** `fraudshield:config:timeout_release_ratio_max` defaults to
+   0.10 in `rules/thresholds.yml`. It is a starting value, not a derived one; replace it with the
+   value from `docs/ml/capacity_model.md` (not yet written).
 5. **Proposed ADRs** (not written here; `docs/adr/` is not an M9-owned path):
    - lokitool (AGPL-3.0) runs as a CI-only checker and is never shipped;
    - production canary splits by replica count (no service mesh), hence at least 10 API pods;
@@ -82,7 +92,7 @@ All `IN_PROGRESS` until review and merge; evidence paths are on `m9/infra`.
 |---|---|---|
 | OPS-OBS-01 | `infrastructure/prometheus/rules/*.yml`, `infrastructure/grafana/` | `prometheus/tests/*_test.yml`, `checks/tests/test_dashboards.py` |
 | OPS-OBS-02 | `infrastructure/loki/rules/fraudshield/errors.yml` | `lokitool rules lint`; alert not yet exercised against real logs |
-| OPS-OBS-03 | `alerts.yml` FraudShieldFeatureDrift and FraudShieldModelAucDrop; dashboard `fs-model-health` | `platform_test.yml`, `ml_test.yml` (ADR 0091) |
+| OPS-OBS-03 | `alerts.yml` FraudShieldFeatureDrift; dashboard `fs-model-health` | `platform_test.yml`; AUC-drop part missing (decision 2) |
 | OPS-OBS-05 | `prometheus.yml` blackbox jobs, `blackbox.yml`, probe alerts | `platform_test.yml` (two consecutive failures, flapping stays silent) |
 | OPS-OBS-06 | `recording.yml` risk signals, FraudShieldFraudRateAnomaly | `risk_test.yml` (fires, 1σ silent, short history silent) |
 | D-10 (5) | FraudShieldTimeoutReleaseRateHigh, `thresholds.yml` | `risk_test.yml` (above, below, low volume) |
@@ -93,11 +103,6 @@ All `IN_PROGRESS` until review and merge; evidence paths are on `m9/infra`.
 | D-28 | threat model 3.6–3.8, Trivy, SBOM, cosign | CI runs above |
 
 ## 6. Interface requirements for other milestones
-
-**M4/M5 (ML worker): model metrics (ADR 0091).** Publish `fs_model_auc_roc{alias}` and
-`fs_model_label_coverage{alias}` together from the hourly drift job, over the same window, and
-`fs_model_version_info{alias, version}`. `alias` is the MLflow alias without `@`: `production`,
-`shadow`, `previous_production`.
 
 **M6 (API) and M5 (scorer): metrics.** The alerts and dashboards already read these, and
 `metric_catalogue.py` will reject any rename.
@@ -118,48 +123,6 @@ All `IN_PROGRESS` until review and merge; evidence paths are on `m9/infra`.
 - `fs_spool_depth`: per API pod, number of decisions not yet acknowledged by Kafka.
 - No account, device or counterparty tokens as label values (threat model 3.7).
 
-**M6: spool layout and replayer contract (ADR 0090).** Binding on the M6 spool module unless
-changed by a new ADR. The manifests provide the volume and two variables; everything else is M6's.
-
-- **Where.** `$FRAUDSHIELD_SPOOL_DIR` (`/var/lib/fraudshield/spool`) is a ReadWriteMany volume
-  shared by all API pods. Each pod owns `$FRAUDSHIELD_SPOOL_DIR/$FRAUDSHIELD_SPOOL_INSTANCE/`
-  (`FRAUDSHIELD_SPOOL_INSTANCE` is the pod name, unique per pod lifetime) and writes nowhere else
-  except while replaying a claimed directory.
-- **Files in a pod directory.**
-  - `segment-<20-digit zero-padded sequence>.log`: append-only; records written in decision order;
-    fsync batched every 5 ms (D-15); a segment is closed at a size bound and never modified after.
-  - Each record is self-delimiting and checksummed (length + CRC32C or equivalent) so a torn tail
-    written at the moment of a crash is detected and ignored, never replayed as garbage.
-  - Each record carries the Kafka topic, key, the envelope `event_id` and the `transaction_id`, so
-    replay needs nothing but the file.
-  - `heartbeat`: its mtime is refreshed at least every 1 s by the owning pod.
-  - `acked`: the highest sequence position acknowledged by Kafka (`acks=all`), updated after
-    acknowledgement; replay starts after it. Fully acknowledged segments may be deleted by the
-    owner.
-- **Orphan detection.** A directory is orphaned when its `heartbeat` is older than 30 s
-  (configurable, named constant with units). No Kubernetes API access is needed; API pods have no
-  service account token (threat model 3.6).
-- **Claiming.** A live pod claims an orphan by an atomic `rename` of the directory to
-  `$FRAUDSHIELD_SPOOL_DIR/.claimed/<original name>.<claimer pod name>`. Only the pod whose rename
-  succeeds replays it. A claimed directory whose claimer's own heartbeat goes stale can be claimed
-  again the same way (the claimer died mid-replay).
-- **Owner fencing.** An owner that finds its directory renamed (checked on every fsync batch) has
-  been presumed dead: it stops accepting decisions (readiness DOWN) and exits, so no decision is
-  written to a directory that is no longer its own.
-- **Replay.** Segments in sequence order, records in file order, from after `acked`, through the
-  same idempotent producer (`enable.idempotence=true`, `acks=all`). Duplicates are expected; every
-  consumer is idempotent on `event_id` (ADR 0012).
-- **Deletion.** A claimed directory is deleted only after every record is acknowledged **and** no
-  byte has been appended for at least the orphan timeout (a fenced owner's last batch may land
-  late).
-- **Bound and back-pressure.** The spool has a configured size bound per pod; at the bound the pod
-  answers decisions with the degraded behaviour M6 defines (never silently drops a decision).
-- **Metrics.** `fs_spool_depth` per pod counts unacknowledged records in its own directory;
-  records being replayed from claimed directories are counted by the claimer.
-- **Tests M6 owns.** Torn-tail record ignored; replay order; concurrent claim by two pods (one
-  wins); fenced owner stops; deletion waits for quiescence. The pod-deletion chaos case is M10's
-  (ADR 0090 decision 5).
-
 **M5, M6, M8: deployment interface.** Ports, probe paths, UID 10001, read-only root filesystem,
 writable paths and the spool directory are in the table in `infrastructure/k8s/README.md`. In
 particular: the scorer needs HTTP `/health/live` and `/health/ready` on its admin port 8000,
@@ -177,7 +140,7 @@ spool on SIGTERM within 120 s.
 |---|---|
 | All 8 CI stages of SRS 8.1 | partial: security (Trivy, ZAP job) and image/SBOM/sign stages added; no integration stage, ML gate, staging or production deploy workflow |
 | Grafana dashboards provisioned as code | done on branch (5 dashboards) |
-| Alert rules for every SRS 8.2 threshold | all, including the AUC drop (ADR 0091); the AUC and coverage gauges are not emitted yet |
+| Alert rules for every SRS 8.2 threshold | all but AUC drop (decision 2) |
 | k8s manifests: namespace, NetworkPolicies, PSA restricted, HPA, PDBs | done on branch for application and observability workloads; data stores not included |
 | Argo Rollouts canary with automated analysis | done on branch; never applied to a cluster |
 | ZAP 0 critical | not run: no API service in compose yet |
