@@ -17,7 +17,13 @@ describe('App', () => {
     render(
       <App i18n={testI18n()} region={COUNTRY_Z} router={router} directionOverride={override} />,
     );
-    expect(await screen.findByRole('heading', { level: 1, name: 'Search' })).toBeVisible();
+    // The shell is a lazy route (ADR 0080 §10); its first import takes longer than the default.
+    const heading = await screen.findByRole(
+      'heading',
+      { level: 1, name: 'Search' },
+      { timeout: 10_000 },
+    );
+    expect(heading).toBeVisible();
     expect(document.documentElement.dir).toBe(dir);
   });
 });

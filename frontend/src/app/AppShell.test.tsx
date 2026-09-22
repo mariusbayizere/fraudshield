@@ -31,7 +31,8 @@ async function renderAt(
       <RouterProvider router={router} />
     </Providers>,
   );
-  await screen.findByRole('main');
+  // The shell is a lazy route (ADR 0080 §10); its first import takes longer than the default.
+  await screen.findByRole('main', {}, { timeout: 10_000 });
   return { router, i18n };
 }
 
