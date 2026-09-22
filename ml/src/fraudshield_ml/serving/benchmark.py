@@ -37,6 +37,8 @@ from pathlib import Path
 from typing import Any
 
 from fraudshield_ml.featurestore.reference import Reference
+from fraudshield_ml.featurestore.store import ContextRead
+from fraudshield_ml.serving.contexts import StaticContexts
 from fraudshield_ml.serving.generated import scoring_pb2 as pb
 
 GATE = {"p50": 15.0, "p95": 25.0, "p99": 40.0}
@@ -81,7 +83,10 @@ def machine() -> dict[str, Any]:
 # ------------------------------------------------------------------------------ requests
 
 
-def dataset_requests(root: Path, packs: Path, corpus: int, keep: int) -> list[pb.ScoreRequest]:
+Request = tuple[pb.ScoreRequest, ContextRead]
+
+
+def dataset_requests(root: Path, packs: Path, corpus: int, keep: int) -> list[Request]:
     """The last `keep` of `corpus` transactions, each with the context the store gave it."""
     import fakeredis  # noqa: PLC0415 - benchmark-only
     from prometheus_client import CollectorRegistry  # noqa: PLC0415
@@ -98,21 +103,18 @@ def dataset_requests(root: Path, packs: Path, corpus: int, keep: int) -> list[pb
         authoritative=False,
         metrics=StoreMetrics.create(CollectorRegistry()),
     )
-    requests: list[pb.ScoreRequest] = []
+    requests: list[Request] = []
     start = len(rows) - keep
     for i, tx in enumerate(rows):
         if i >= start:
             requests.append(
-                pb.ScoreRequest(
-                    transaction=to_proto(tx, reference=reference),
-                    context=store.context_for(tx),
-                )
+                (pb.ScoreRequest(transaction=to_proto(tx, reference=reference)), store.read(tx))
             )
         store.observe(tx)
     return requests
 
 
-def synthetic_requests(count: int) -> list[pb.ScoreRequest]:
+def synthetic_requests(count: int) -> list[Request]:
     """Ordinary requests with a burst in one in twelve, for a machine without the dataset."""
     import random  # noqa: PLC0415
     from datetime import UTC, datetime, timedelta  # noqa: PLC0415
@@ -154,7 +156,7 @@ def synthetic_requests(count: int) -> list[pb.ScoreRequest]:
         ctx.last_transaction_at.FromDatetime(t0 + timedelta(seconds=i) - timedelta(hours=3))
         ctx.last_location.CopyFrom(pb.GeoPoint(latitude=-1.95, longitude=30.06))
         ctx.device.CopyFrom(pb.DeviceContext(accounts_per_device_7d=1))
-        out.append(pb.ScoreRequest(transaction=tx, context=ctx))
+        out.append((pb.ScoreRequest(transaction=tx), ContextRead(context=ctx, exact_ages={})))
     return out
 
 
@@ -176,7 +178,7 @@ class ServeReport:
 
 
 async def _drive(
-    address: str, requests: Sequence[pb.ScoreRequest], concurrency: int, warmup: int
+    address: str, requests: Sequence[Request], concurrency: int, warmup: int
 ) -> tuple[list[float], list[pb.ScoringResult], int, float]:
     import grpc  # type: ignore[import-untyped]  # noqa: PLC0415
 
@@ -194,7 +196,8 @@ async def _drive(
     results: list[pb.ScoringResult] = []
     errors = 0
 
-    async def one(i: int, request: pb.ScoreRequest, record: bool) -> None:
+    async def one(i: int, pair: Request, record: bool) -> None:
+        request = pair[0]
         nonlocal errors
         async with gate:
             began = time.perf_counter()
@@ -217,7 +220,7 @@ async def _drive(
 
 
 def run_serve(
-    requests: Sequence[pb.ScoreRequest],
+    requests: Sequence[Request],
     *,
     address: str,
     concurrency: int,
@@ -269,17 +272,17 @@ class MemoryReport:
 
 
 def run_memory(
-    scorer: Any, requests: Sequence[pb.ScoreRequest], scorings: int, warmup: int = 500
+    scorer: Any, requests: Sequence[Request], scorings: int, warmup: int = 500
 ) -> MemoryReport:
     import gc  # noqa: PLC0415
 
     bundle = scorer.bundle
     for i in range(warmup):
-        scorer.score(requests[i % len(requests)])
+        scorer.score(*requests[i % len(requests)])
     gc.collect()
     before = rss_mb()
     for i in range(scorings):
-        scorer.score(requests[i % len(requests)])
+        scorer.score(*requests[i % len(requests)])
     gc.collect()
     after = rss_mb()
     return MemoryReport(
@@ -302,14 +305,14 @@ def _free_port() -> int:
         return int(s.getsockname()[1])
 
 
-def _requests(args: argparse.Namespace) -> list[pb.ScoreRequest]:
+def _requests(args: argparse.Namespace) -> list[Request]:
     total = args.requests + args.warmup
     if args.synthetic:
         return synthetic_requests(total)
     return dataset_requests(args.dataset, args.packs, args.corpus, min(total, args.corpus))
 
 
-def _serve_command(args: argparse.Namespace, requests: Sequence[pb.ScoreRequest]) -> ServeReport:
+def _serve_command(args: argparse.Namespace, requests: Sequence[Request]) -> ServeReport:
     """Start the workers unless an address was given, drive them, and always stop them."""
     from fraudshield_ml.serving import server  # noqa: PLC0415
 
@@ -318,6 +321,12 @@ def _serve_command(args: argparse.Namespace, requests: Sequence[pb.ScoreRequest]
     if address is None:
         address = f"127.0.0.1:{_free_port()}"
         status = Path(tempfile.mkdtemp(prefix="fs-bench-"))
+        # This laptop has no Redis: the workers read the replay's contexts from a file, so the
+        # figures cover scoring and exclude the store read (reported in the output).
+        contexts = StaticContexts.write(
+            status / "contexts.jsonl",
+            ((req.transaction.transaction_id, read) for req, read in requests),
+        )
         processes = server.serve(
             server.WorkerConfig(
                 address=address,
@@ -326,6 +335,7 @@ def _serve_command(args: argparse.Namespace, requests: Sequence[pb.ScoreRequest]
                 bundle=args.bundle,
                 status_dir=status,
                 threads=4,
+                static_contexts=contexts,
             ),
             args.workers,
         )
@@ -373,7 +383,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     requests = _requests(args)
-    report: dict[str, Any] = {"machine": machine(), "bundle": str(args.bundle)}
+    report: dict[str, Any] = {
+        "machine": machine(),
+        "bundle": str(args.bundle),
+        "store_read": "excluded: contexts precomputed from the replay (no Redis on this machine)",
+    }
     if args.command == "memory":
         from fraudshield_ml.models.bundle import Bundle  # noqa: PLC0415
         from fraudshield_ml.serving.scorer import Scorer  # noqa: PLC0415

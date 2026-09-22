@@ -27,7 +27,7 @@ def scorer(bundles: tuple[Bundle, Bundle], kit: SimpleNamespace) -> Scorer:
 @pytest.mark.req("FR-02-01", "TEST-10")
 def test_every_result_carries_the_nine_fields(scorer: Scorer, kit: SimpleNamespace) -> None:
     for burst in (False, True):
-        result = scorer.score(kit.request(1, burst=burst)).result
+        result = scorer.score(kit.request(1), kit.read(burst=burst)).result
         for name in ("ensemble_score", "xgboost_score", "lightgbm_score", "anomaly_score"):
             value = getattr(result, name)
             assert isinstance(value, float)
@@ -47,7 +47,7 @@ def test_structural_missingness_is_the_missing_marker_not_a_number(
     scorer: Scorer, kit: SimpleNamespace
 ) -> None:
     ussd = kit.transaction(2, channel="USSD", device_fingerprint=None)
-    result = scorer.score(kit.request(tx=ussd)).result
+    result = scorer.score(kit.request(tx=ussd), kit.read()).result
     for name in (
         "device_is_new_for_account",
         "accounts_per_device_7d",
@@ -63,8 +63,8 @@ def test_structural_missingness_is_the_missing_marker_not_a_number(
 def test_shap_is_computed_at_and_above_the_threshold_only(
     scorer: Scorer, kit: SimpleNamespace
 ) -> None:
-    flagged = scorer.score(kit.request(3, burst=True)).result
-    quiet = scorer.score(kit.request(4, burst=False)).result
+    flagged = scorer.score(kit.request(3), kit.read(burst=True)).result
+    quiet = scorer.score(kit.request(4), kit.read(burst=False)).result
     assert flagged.ensemble_score >= 0.60, "precondition: the burst request is flagged"
     assert quiet.ensemble_score < 0.60, "precondition: the quiet request is not"
 
@@ -86,7 +86,7 @@ def test_shap_is_computed_at_and_above_the_threshold_only(
 
 
 def test_every_stage_is_timed(scorer: Scorer, kit: SimpleNamespace) -> None:
-    result = scorer.score(kit.request(5)).result
+    result = scorer.score(kit.request(5), kit.read()).result
     stages = {s.stage for s in result.stage_timings}
     assert stages == {
         Stage.STAGE_FEATURES,
@@ -114,7 +114,7 @@ def test_a_synthetic_outlier_reaches_review_even_below_the_ensemble_threshold(
     ctx.device.device_new_for_account = True
     ctx.device.device_changes_24h = 4
     ctx.last_location.CopyFrom(pb.GeoPoint(latitude=-1.95, longitude=30.06))
-    result = scorer.score(kit.request(tx=outlier, ctx=ctx)).result
+    result = scorer.score(kit.request(tx=outlier), kit.read(ctx=ctx)).result
     assert result.anomaly_score > 0.7
     assert result.ensemble_score < 0.60, "precondition: the ensemble alone would not flag it"
     assert result.model_risk_tier == pb.RISK_TIER_MEDIUM, "routed to analyst review"
@@ -141,17 +141,17 @@ def test_a_threshold_change_takes_effect_within_the_refresh_without_a_reload(
     quiet = Thresholds(anomaly_review=0.999)
     store = ThresholdStore(redis, default=quiet, refresh=10.0, clock=lambda: now[0])
     scorer = Scorer(bundles[0], kit.reference, store)
-    request = kit.request(7, burst=False)
-    before = scorer.score(request).result
+    request, read = kit.request(7), kit.read()
+    before = scorer.score(request, read).result
     assert before.model_risk_tier == pb.RISK_TIER_LOW, "precondition: a quiet transaction"
     assert before.anomaly_score > 0.01, "precondition: room to lower the review threshold under it"
     lowered = before.anomaly_score / 2
 
     redis.hset(KEY, mapping={"medium": "0.6", "high": "0.85", "anomaly_review": str(lowered)})
     now[0] = 5.0
-    assert scorer.score(request).result.model_risk_tier == pb.RISK_TIER_LOW, "not yet"
+    assert scorer.score(request, read).result.model_risk_tier == pb.RISK_TIER_LOW, "not yet"
     now[0] = 10.5
-    after = scorer.score(request).result
+    after = scorer.score(request, read).result
     assert after.model_risk_tier == pb.RISK_TIER_MEDIUM, "the lowered threshold now applies"
     assert after.model_version == before.model_version, "the model was not reloaded"
 

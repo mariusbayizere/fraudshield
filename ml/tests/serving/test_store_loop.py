@@ -36,7 +36,9 @@ def test_each_scored_transaction_reaches_the_next_one_s_context(
 ) -> None:
     features = store(kit)
     writer = StoreWriter(features, registry=CollectorRegistry())
-    service = server.ScoringService(ModelHolder(Scorer(bundles[0], kit.reference)), None, writer)
+    service = server.ScoringService(
+        ModelHolder(Scorer(bundles[0], kit.reference)), None, writer, features
+    )
     grpc_server, _, port = server.build_server(service, "127.0.0.1:0", tls=None)
     grpc_server.start()
     counts = []
@@ -49,12 +51,11 @@ def test_each_scored_transaction_reaches_the_next_one_s_context(
             )
             for i in range(5):
                 tx = kit.transaction(i, timestamp=kit.t0 + timedelta(minutes=i))
-                context = features.context_for(tx)  # what the API reads before calling Score
-                counts.append(context.tx_count_1h)
-                reply = score(
-                    pb.ScoreRequest(transaction=to_proto(tx), context=context), timeout=10
-                )
-                assert reply.result.feature_vector["tx_count_1h"].number == context.tx_count_1h
+                # ADR 0033: the API sends the transaction; the scorer reads the store itself.
+                reply = score(pb.ScoreRequest(transaction=to_proto(tx)), timeout=10)
+                counts.append(reply.result.account_context.tx_count_1h)
+                assert reply.result.feature_vector["tx_count_1h"].number == counts[-1]
+                assert not reply.result.feature_store_degraded
                 writer.drain()
     finally:
         grpc_server.stop(0)
@@ -139,7 +140,7 @@ def test_the_scorer_reads_the_context_itself_when_the_api_sends_none(
     assert reply.result.feature_vector["tx_count_1h"].number == 3.0
 
 
-def test_no_context_and_no_store_is_refused_rather_than_scored_as_new(
+def test_no_feature_store_is_unavailable_rather_than_scored_as_new(
     bundles: tuple[Bundle, Bundle], kit: SimpleNamespace
 ) -> None:
     grpc_server, score = _serve(
@@ -148,8 +149,8 @@ def test_no_context_and_no_store_is_refused_rather_than_scored_as_new(
     try:
         with pytest.raises(grpc.RpcError) as caught:
             score(pb.ScoreRequest(transaction=to_proto(kit.transaction(1))), timeout=10)
-        assert caught.value.code() == grpc.StatusCode.INVALID_ARGUMENT
-        assert "brand new" in caught.value.details()
+        assert caught.value.code() == grpc.StatusCode.UNAVAILABLE
+        assert "no feature store" in caught.value.details()
     finally:
         grpc_server.stop(0)
 

@@ -29,7 +29,13 @@ def parse(argv: Sequence[str] | None) -> argparse.Namespace:
     serve.add_argument("--workers", type=int, default=os.cpu_count() or 1)
     serve.add_argument("--threads", type=int, default=4, help="gRPC threads per worker")
     serve.add_argument("--redis", help="Redis URL of the threshold config store (FR-02-06)")
-    serve.add_argument("--feature-store", help="Redis URL of the feature store to write (FR-02-09)")
+    serve.add_argument(
+        "--feature-store",
+        help="Redis URL of the feature store the scorer reads and writes (FR-02-09, ADR 0033)",
+    )
+    serve.add_argument(
+        "--static-contexts", type=Path, help="benchmark only: precomputed contexts, no Redis"
+    )
     serve.add_argument("--shadow-log", type=Path, help="JSON-lines sink for fs.ml.shadow events")
     serve.add_argument("--cache", type=Path, default=Path(tempfile.gettempdir()) / "fs-models")
     tls = serve.add_argument_group("mTLS (required unless --insecure)")
@@ -38,6 +44,8 @@ def parse(argv: Sequence[str] | None) -> argparse.Namespace:
     tls.add_argument("--tls-client-ca", type=Path)
     serve.add_argument("--insecure", action="store_true", help="plaintext; development only")
     args = parser.parse_args(argv)
+    if not (args.feature_store or args.static_contexts):
+        parser.error("the scorer reads account context from the store: pass --feature-store")
     if not args.insecure and not (args.tls_cert and args.tls_key and args.tls_client_ca):
         parser.error("mTLS needs --tls-cert, --tls-key and --tls-client-ca; or pass --insecure")
     return args
@@ -67,6 +75,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         cache=args.cache,
         redis_url=args.redis,
         feature_store_url=args.feature_store,
+        static_contexts=args.static_contexts,
         shadow_log=args.shadow_log,
         status_dir=status_dir,
         threads=args.threads,

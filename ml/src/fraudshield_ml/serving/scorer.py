@@ -25,6 +25,7 @@ from dataclasses import dataclass
 
 from fraudshield_ml.features.types import Transaction
 from fraudshield_ml.featurestore.reference import Reference
+from fraudshield_ml.featurestore.store import ContextRead
 from fraudshield_ml.models.bundle import SHAP_THRESHOLD, Bundle
 from fraudshield_ml.serving import features
 from fraudshield_ml.serving.generated import scoring_pb2 as pb
@@ -69,14 +70,8 @@ class Scorer:
     def model_version(self) -> str:
         return self.bundle.model_version
 
-    def score(
-        self,
-        request: pb.ScoreRequest,
-        context: pb.AccountContext | None = None,
-        exact_ages: Mapping[str, float] | None = None,
-    ) -> Scored:
-        """Score one request. `context` (and `exact_ages`) override the request's, for a scorer
-        that read the account's state from the feature store itself (ADR 0033)."""
+    def score(self, request: pb.ScoreRequest, read: ContextRead) -> Scored:
+        """Score one request against the account context the scorer read itself (ADR 0033)."""
         started = time.perf_counter()
         timings: list[tuple[int, float]] = []
 
@@ -87,11 +82,7 @@ class Scorer:
 
         tx = features.domain_transaction(request.transaction, self.reference)
         values = features.compute(
-            tx,
-            context if context is not None else request.context,
-            list(request.configured_limits),
-            self.reference,
-            exact_ages,
+            tx, read.context, list(request.configured_limits), self.reference, read.exact_ages
         )
         mark = lap(Stage.STAGE_FEATURES, started)
 
@@ -116,7 +107,9 @@ class Scorer:
             model_risk_tier=thresholds.tier(prediction.ensemble_score, anomaly_score),  # type: ignore[arg-type]
             model_version=self.bundle.model_version,
             feature_registry_version=self.bundle.registry_version,
+            feature_store_degraded=read.degraded,
         )
+        result.account_context.CopyFrom(read.context)
         for name, value in values.items():
             result.feature_vector[name].CopyFrom(feature_value(value))
 

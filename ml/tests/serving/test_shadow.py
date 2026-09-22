@@ -81,10 +81,10 @@ def test_every_transaction_is_shadow_scored_and_logged_with_both_scores(
     shadowing = runner(holder, JsonLinesSink(log))
     results = []
     for i in range(12):
-        request = kit.request(i, burst=i % 3 == 0)
-        result = production.score(request).result
+        request, read = kit.request(i), kit.read(burst=i % 3 == 0)
+        result = production.score(request, read).result
         results.append(result)
-        assert shadowing.offer(request, result)
+        assert shadowing.offer(request, result, read)
     shadowing.drain()
 
     lines = [json.loads(line) for line in log.read_text().splitlines()]
@@ -107,7 +107,8 @@ def test_nothing_is_queued_when_shadow_mode_is_off(
     sink = ListSink()
     shadowing = runner(ModelHolder(production), sink)
     request = kit.request(1)
-    assert not shadowing.offer(request, production.score(request).result)
+    read = kit.read()
+    assert not shadowing.offer(request, production.score(request, read).result, read)
     shadowing.drain()
     assert sink.events == []
 
@@ -121,7 +122,7 @@ def test_a_full_queue_drops_rather_than_blocking_production(
     class Stuck:
         model_version = "stuck"
 
-        def score(self, request: pb.ScoreRequest) -> Any:
+        def score(self, request: pb.ScoreRequest, read: Any) -> Any:
             release.wait(5)
             raise RuntimeError("never mind")
 
@@ -129,9 +130,10 @@ def test_a_full_queue_drops_rather_than_blocking_production(
     holder = ModelHolder(production, Stuck())  # type: ignore[arg-type]
     shadowing = runner(holder, ListSink(), queue_size=2)
     request = kit.request(1)
-    result = production.score(request).result
+    read = kit.read()
+    result = production.score(request, read).result
     started = time.perf_counter()
-    accepted = [shadowing.offer(request, result) for _ in range(10)]
+    accepted = [shadowing.offer(request, result, read) for _ in range(10)]
     elapsed = time.perf_counter() - started
     release.set()
     shadowing.drain()
@@ -148,11 +150,12 @@ def test_a_new_shadow_version_starts_a_new_comparison(
     holder = ModelHolder(production, other)
     shadowing = runner(holder, ListSink())
     request = kit.request(1)
-    result = production.score(request).result
-    shadowing.offer(request, result)
+    read = kit.read()
+    result = production.score(request, read).result
+    shadowing.offer(request, result, read)
     shadowing.drain()
     holder.swap_shadow(production)
-    shadowing.offer(request, result)
+    shadowing.offer(request, result, read)
     shadowing.drain()
     assert shadowing.comparison.shadow_version == production.model_version
     assert len(shadowing.comparison.production) == 1

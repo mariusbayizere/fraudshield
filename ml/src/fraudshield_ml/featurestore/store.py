@@ -180,6 +180,9 @@ class ContextRead:
     context: pb.AccountContext
     #: The four `WHOLE_DAY_FEATURES` at full precision, where the store knows them.
     exact_ages: dict[str, float]
+    #: C.4's DEGRADED_MODE: the account's durable state was unknown, or came from the fallback
+    #: rather than Redis. Returned to the API as `ScoringResult.feature_store_degraded`.
+    degraded: bool = False
 
 
 @dataclass
@@ -398,6 +401,7 @@ class FeatureStore:
         risk tier."""
         t = micros(tx.timestamp)
         snap = self._read(tx, t)
+        degraded = snap.first is None
         first_seen, known = self._resolve_account(tx.account_id, snap, t)
         exact: dict[str, float] = {}
 
@@ -428,7 +432,10 @@ class FeatureStore:
         if month:
             recent = sum(1 for _, s in snap.rows if s > t - W_RAMP_RECENT)
             ctx.volume_ramp_ratio_7d = recent / month
-        return ContextRead(context=ctx, exact_ages=exact)
+        # Absent Redis state is degraded unless the store claims completeness (a replay or test).
+        return ContextRead(
+            context=ctx, exact_ages=exact, degraded=degraded and not self.authoritative
+        )
 
     def _read(self, tx: Transaction, t: int) -> _Snapshot:
         """Every command `context_for` needs, pipelined into a single round trip."""

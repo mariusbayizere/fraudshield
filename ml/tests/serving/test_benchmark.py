@@ -77,7 +77,7 @@ def test_the_memory_benchmark_scores_without_reloading(
     bundles: tuple[Bundle, Bundle], kit: SimpleNamespace
 ) -> None:
     scorer = Scorer(bundles[0], kit.reference)
-    requests = [kit.request(i, burst=i % 9 == 0) for i in range(50)]
+    requests = [(kit.request(i), kit.read(burst=i % 9 == 0)) for i in range(50)]
     report = benchmark.run_memory(scorer, requests, scorings=400, warmup=50)
     assert report.model_loaded_once
     assert report.scorings == 400

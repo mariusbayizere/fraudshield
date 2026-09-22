@@ -17,6 +17,7 @@ from fraudshield_ml.models import cli as model_cli
 from fraudshield_ml.models.bundle import Bundle
 from fraudshield_ml.serving import benchmark, server
 from fraudshield_ml.serving import cli as scorer_cli
+from fraudshield_ml.serving.contexts import StaticContexts
 from fraudshield_ml.serving.generated import regenerate
 from fraudshield_ml.serving.generated import scoring_pb2 as pb
 from fraudshield_ml.training import smoke
@@ -60,6 +61,10 @@ def _free_port() -> int:
 def test_a_worker_starts_serves_publishes_its_status_and_stops(
     bundle_dirs: tuple[Path, Path], packs: Path, tmp_path: Path, kit: SimpleNamespace
 ) -> None:
+    request = kit.request(1)
+    contexts = StaticContexts.write(
+        tmp_path / "contexts.jsonl", [(request.transaction.transaction_id, kit.read())]
+    )
     config = server.WorkerConfig(
         address="127.0.0.1:0",
         packs=packs,
@@ -68,6 +73,7 @@ def test_a_worker_starts_serves_publishes_its_status_and_stops(
         status_dir=tmp_path / "status",
         shadow_log=tmp_path / "shadow.jsonl",
         reuse_port=False,
+        static_contexts=contexts,
     )
     worker = server.start_worker(config)
     try:
@@ -77,7 +83,7 @@ def test_a_worker_starts_serves_publishes_its_status_and_stops(
                 request_serializer=pb.ScoreRequest.SerializeToString,
                 response_deserializer=pb.ScoreResponse.FromString,
             )
-            reply = score(kit.request(1), timeout=10)
+            reply = score(request, timeout=10)
         (status,) = [json.loads(p.read_text()) for p in (tmp_path / "status").glob("[0-9]*.json")]
         assert status["production_model_version"] == reply.result.model_version
         assert worker.shadow is not None, "a shadow log configures the shadow runner"
@@ -86,11 +92,14 @@ def test_a_worker_starts_serves_publishes_its_status_and_stops(
 
 
 def test_the_scorer_cli_refuses_plaintext_unless_asked(packs: Path) -> None:
+    store = ["--feature-store", "redis://localhost:6379/0"]
     with pytest.raises(SystemExit):
-        scorer_cli.parse(["serve", "--bundle", "b", "--packs", str(packs)])
-    args = scorer_cli.parse(["serve", "--bundle", "b", "--packs", str(packs), "--insecure"])
+        scorer_cli.parse(["serve", "--bundle", "b", "--packs", str(packs), *store])
+    with pytest.raises(SystemExit):  # ADR 0033: no store, no context to score with
+        scorer_cli.parse(["serve", "--bundle", "b", "--packs", str(packs), "--insecure"])
+    args = scorer_cli.parse(["serve", "--bundle", "b", "--packs", str(packs), "--insecure", *store])
     assert args.insecure
-    assert args.feature_store is None
+    assert args.feature_store == store[1]
 
 
 def test_the_supervisor_exits_when_a_worker_dies(
@@ -123,6 +132,8 @@ def test_the_supervisor_exits_when_a_worker_dies(
             "--packs",
             str(packs),
             "--insecure",
+            "--feature-store",
+            "redis://localhost:6379/0",
             "--workers",
             "1",
             "--port",
@@ -167,5 +178,6 @@ def test_the_benchmark_builds_requests_from_a_dataset_replay(
     monkeypatch.setattr(pipeline, "read_transactions", lambda root, packs_path, limit: rows)
     requests = benchmark.dataset_requests(Path("unused"), packs, 30, 10)
     assert len(requests) == 10
-    assert requests[-1].transaction.transaction_id == rows[-1].transaction_id
-    assert requests[-1].context.tx_count_24h == 29, "each context holds every earlier row"
+    request, read = requests[-1]
+    assert request.transaction.transaction_id == rows[-1].transaction_id
+    assert read.context.tx_count_24h == 29, "each context holds every earlier row"

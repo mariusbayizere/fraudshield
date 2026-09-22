@@ -49,7 +49,7 @@ def running(
     bundles: tuple[Bundle, Bundle], kit: SimpleNamespace
 ) -> Iterator[tuple[ModelHolder, Any, Any, Any]]:
     holder = ModelHolder(Scorer(bundles[0], kit.reference))
-    service = server.ScoringService(holder)
+    service = server.ScoringService(holder, contexts=kit.contexts(burst=True))
     grpc_server, health, port = server.build_server(service, "127.0.0.1:0", tls=None, threads=8)
     server.set_health(health, True)
     grpc_server.start()
@@ -65,7 +65,7 @@ def test_a_transaction_is_scored_over_grpc(
     running: tuple[ModelHolder, Any, Any, Any], kit: SimpleNamespace
 ) -> None:
     holder, score, status, channel = running
-    reply = score(kit.request(1, burst=True), timeout=10)
+    reply = score(kit.request(1), timeout=10)
     assert reply.result.model_version == holder.production.model_version  # type: ignore[union-attr]
     assert len(reply.result.feature_vector) == 44
     model = status(pb.GetModelStatusRequest(), timeout=5)
@@ -92,7 +92,7 @@ def test_an_unscorable_request_is_invalid_argument_with_the_reason(
 
 def test_no_model_is_unavailable_so_the_api_falls_back(kit: SimpleNamespace) -> None:
     holder = ModelHolder()
-    service = server.ScoringService(holder)
+    service = server.ScoringService(holder, contexts=kit.contexts())
     grpc_server, _, port = server.build_server(service, "127.0.0.1:0", tls=None)
     grpc_server.start()
     try:
@@ -110,11 +110,12 @@ def test_no_model_is_unavailable_so_the_api_falls_back(kit: SimpleNamespace) -> 
 def test_an_internal_failure_is_internal_never_a_default_score(kit: SimpleNamespace) -> None:
     class Broken:
         model_version = "broken"
+        reference = kit.reference
 
-        def score(self, request: pb.ScoreRequest) -> Any:
+        def score(self, request: pb.ScoreRequest, read: Any) -> Any:
             raise RuntimeError("boom")
 
-    service = server.ScoringService(ModelHolder(Broken()))  # type: ignore[arg-type]
+    service = server.ScoringService(ModelHolder(Broken()), contexts=kit.contexts())  # type: ignore[arg-type]
     grpc_server, _, port = server.build_server(service, "127.0.0.1:0", tls=None)
     grpc_server.start()
     try:
@@ -141,13 +142,13 @@ def test_only_the_production_result_is_returned_while_shadow_scores(
     runner = ShadowRunner(
         lambda: holder.shadow, Sink(), metrics=ShadowMetrics.create(CollectorRegistry())
     )
-    service = server.ScoringService(holder, runner)
+    service = server.ScoringService(holder, runner, contexts=kit.contexts(burst=True))
     grpc_server, _, port = server.build_server(service, "127.0.0.1:0", tls=None)
     grpc_server.start()
     try:
         with grpc.insecure_channel(f"127.0.0.1:{port}") as channel:
             score, status = stubs(channel)
-            reply = score(kit.request(5, burst=True), timeout=10)
+            reply = score(kit.request(5), timeout=10)
             assert status(pb.GetModelStatusRequest(), timeout=5).shadow_model_version == (
                 shadow.model_version
             )
@@ -264,7 +265,9 @@ def test_the_server_requires_a_client_certificate(
 ) -> None:
     d = certificates
     tls = server.Tls(d / "server.pem", d / "server.key", d / "ca.pem")
-    service = server.ScoringService(ModelHolder(Scorer(bundles[0], kit.reference)))
+    service = server.ScoringService(
+        ModelHolder(Scorer(bundles[0], kit.reference)), contexts=kit.contexts()
+    )
     grpc_server, _, port = server.build_server(service, "localhost:0", tls=tls)
     grpc_server.start()
     try:

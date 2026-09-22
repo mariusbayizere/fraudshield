@@ -36,6 +36,7 @@ from typing import Any, Protocol
 
 from prometheus_client import CollectorRegistry, Counter
 
+from fraudshield_ml.featurestore.store import ContextRead
 from fraudshield_ml.metrics.single_feature import auc
 from fraudshield_ml.serving.generated import scoring_pb2 as pb
 
@@ -290,6 +291,8 @@ class _Job:
     request: pb.ScoreRequest
     production_version: str
     production_score: float
+    #: The context production scored with: the shadow model scores exactly the same state.
+    read: ContextRead
 
 
 class ShadowRunner:
@@ -319,12 +322,14 @@ class ShadowRunner:
         self._thread = threading.Thread(target=self._run, name="shadow", daemon=True)
         self._thread.start()
 
-    def offer(self, request: pb.ScoreRequest, production: pb.ScoringResult) -> bool:
+    def offer(
+        self, request: pb.ScoreRequest, production: pb.ScoringResult, read: ContextRead
+    ) -> bool:
         if self._shadow() is None:
             return False
         try:
             self._queue.put_nowait(
-                _Job(request, production.model_version, production.ensemble_score)
+                _Job(request, production.model_version, production.ensemble_score, read)
             )
         except queue.Full:
             self.metrics.dropped.inc()
@@ -352,7 +357,7 @@ class ShadowRunner:
         if scorer is None:
             return
         try:
-            result = scorer.score(job.request).result
+            result = scorer.score(job.request, job.read).result
         except Exception:
             self.metrics.failed.inc()
             LOG.exception("shadow scoring failed for %s", job.request.transaction.transaction_id)

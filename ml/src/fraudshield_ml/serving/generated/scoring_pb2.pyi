@@ -179,16 +179,14 @@ class AgentContext(_message.Message):
     def __init__(self, float_utilisation_ratio: _Optional[float] = ..., cashout_count_1h: _Optional[int] = ..., unique_customers_1h: _Optional[int] = ..., distance_from_registered_km: _Optional[float] = ...) -> None: ...
 
 class ScoreRequest(_message.Message):
-    __slots__ = ("transaction", "context", "configured_limits", "traceparent")
+    __slots__ = ("transaction", "configured_limits", "traceparent")
     TRANSACTION_FIELD_NUMBER: _ClassVar[int]
-    CONTEXT_FIELD_NUMBER: _ClassVar[int]
     CONFIGURED_LIMITS_FIELD_NUMBER: _ClassVar[int]
     TRACEPARENT_FIELD_NUMBER: _ClassVar[int]
     transaction: Transaction
-    context: AccountContext
     configured_limits: _containers.RepeatedCompositeFieldContainer[Money]
     traceparent: str
-    def __init__(self, transaction: _Optional[_Union[Transaction, _Mapping]] = ..., context: _Optional[_Union[AccountContext, _Mapping]] = ..., configured_limits: _Optional[_Iterable[_Union[Money, _Mapping]]] = ..., traceparent: _Optional[str] = ...) -> None: ...
+    def __init__(self, transaction: _Optional[_Union[Transaction, _Mapping]] = ..., configured_limits: _Optional[_Iterable[_Union[Money, _Mapping]]] = ..., traceparent: _Optional[str] = ...) -> None: ...
 
 class FeatureValue(_message.Message):
     __slots__ = ("number", "category", "missing")
@@ -240,7 +238,7 @@ class StageTiming(_message.Message):
     def __init__(self, stage: _Optional[_Union[StageTiming.Stage, str]] = ..., milliseconds: _Optional[float] = ...) -> None: ...
 
 class ScoringResult(_message.Message):
-    __slots__ = ("scoring_result_id", "transaction_id", "ensemble_score", "xgboost_score", "lightgbm_score", "anomaly_score", "anomaly_raw", "model_risk_tier", "shap_top5", "feature_vector", "shap_all", "shap_base_value", "final_margin", "model_version", "feature_registry_version", "scoring_duration_ms", "stage_timings")
+    __slots__ = ("scoring_result_id", "transaction_id", "ensemble_score", "xgboost_score", "lightgbm_score", "anomaly_score", "anomaly_raw", "model_risk_tier", "shap_top5", "feature_vector", "shap_all", "shap_base_value", "final_margin", "model_version", "feature_registry_version", "scoring_duration_ms", "stage_timings", "account_context", "feature_store_degraded")
     class FeatureVectorEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -265,6 +263,8 @@ class ScoringResult(_message.Message):
     FEATURE_REGISTRY_VERSION_FIELD_NUMBER: _ClassVar[int]
     SCORING_DURATION_MS_FIELD_NUMBER: _ClassVar[int]
     STAGE_TIMINGS_FIELD_NUMBER: _ClassVar[int]
+    ACCOUNT_CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    FEATURE_STORE_DEGRADED_FIELD_NUMBER: _ClassVar[int]
     scoring_result_id: str
     transaction_id: str
     ensemble_score: float
@@ -282,7 +282,9 @@ class ScoringResult(_message.Message):
     feature_registry_version: str
     scoring_duration_ms: int
     stage_timings: _containers.RepeatedCompositeFieldContainer[StageTiming]
-    def __init__(self, scoring_result_id: _Optional[str] = ..., transaction_id: _Optional[str] = ..., ensemble_score: _Optional[float] = ..., xgboost_score: _Optional[float] = ..., lightgbm_score: _Optional[float] = ..., anomaly_score: _Optional[float] = ..., anomaly_raw: _Optional[float] = ..., model_risk_tier: _Optional[_Union[RiskTier, str]] = ..., shap_top5: _Optional[_Iterable[_Union[ShapContribution, _Mapping]]] = ..., feature_vector: _Optional[_Mapping[str, FeatureValue]] = ..., shap_all: _Optional[_Iterable[_Union[ShapContribution, _Mapping]]] = ..., shap_base_value: _Optional[float] = ..., final_margin: _Optional[float] = ..., model_version: _Optional[str] = ..., feature_registry_version: _Optional[str] = ..., scoring_duration_ms: _Optional[int] = ..., stage_timings: _Optional[_Iterable[_Union[StageTiming, _Mapping]]] = ...) -> None: ...
+    account_context: AccountContext
+    feature_store_degraded: bool
+    def __init__(self, scoring_result_id: _Optional[str] = ..., transaction_id: _Optional[str] = ..., ensemble_score: _Optional[float] = ..., xgboost_score: _Optional[float] = ..., lightgbm_score: _Optional[float] = ..., anomaly_score: _Optional[float] = ..., anomaly_raw: _Optional[float] = ..., model_risk_tier: _Optional[_Union[RiskTier, str]] = ..., shap_top5: _Optional[_Iterable[_Union[ShapContribution, _Mapping]]] = ..., feature_vector: _Optional[_Mapping[str, FeatureValue]] = ..., shap_all: _Optional[_Iterable[_Union[ShapContribution, _Mapping]]] = ..., shap_base_value: _Optional[float] = ..., final_margin: _Optional[float] = ..., model_version: _Optional[str] = ..., feature_registry_version: _Optional[str] = ..., scoring_duration_ms: _Optional[int] = ..., stage_timings: _Optional[_Iterable[_Union[StageTiming, _Mapping]]] = ..., account_context: _Optional[_Union[AccountContext, _Mapping]] = ..., feature_store_degraded: _Optional[bool] = ...) -> None: ...
 
 class ScoreResponse(_message.Message):
     __slots__ = ("result",)

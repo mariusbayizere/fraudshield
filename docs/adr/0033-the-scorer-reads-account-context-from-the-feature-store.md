@@ -1,6 +1,7 @@
 # 0033 — The scorer reads account context from the feature store; the API sends the account token
 
-- **Status:** Proposed. The contract change needs the owner's approval; `contracts/` is frozen.
+- **Status:** Accepted. Approved by the owner on 2026-09-22, who lifted the contract freeze for
+  this one change so that it lands on `m5/scoring` before M6 merges. Applied as proposed.
 - **Date:** 2026-09-22
 - **Decided by:** the owner (2026-09-22) set the direction: no third implementation of
   parity-critical logic; the scorer reads the context itself; the API sends only the account token.
@@ -52,9 +53,12 @@ Option 3, as the diff in `docs/parallel/M5_proto_proposal.diff` states it:
   with the state unknown (C.4's DEGRADED_MODE), so the API can surface it.
 - The header comment's hot-path description is amended to match.
 
-`buf lint` and `buf breaking` (the repository's pinned buf, `contracts/proto/buf.yaml`) both pass on
-the proposed file against the current one. `contracts/proto/baseline/scoring-v1.json` must be
-regenerated with the change, since `contracts/tests/test_proto.py` compares against it.
+`buf lint` and `buf breaking` (the repository's pinned buf, `contracts/proto/buf.yaml`) pass on the
+applied file against `origin/main`. **Correction to the proposal:** no baseline file needed
+regenerating. ADR 0016 replaced the descriptor baseline with `buf breaking`; the proto header's
+mention of `scoring-v1.json` predates it. Two self-tests in `contracts/tests/test_proto_breaking.py`
+injected a test field at number 18, which this change now uses; they inject at 90 instead, and the
+contracts suite passes (490).
 
 ## Consequences
 
@@ -74,3 +78,18 @@ regenerated with the change, since `contracts/tests/test_proto.py` compares agai
 - **M6 is the consumer to tell:** `docs/parallel/M5_updates.md` flags this for the M6 agent. The
   Java client should send `ScoreRequest` without `context` from the start, and read
   `feature_store_degraded`.
+
+
+## Applied (2026-09-22)
+
+- **Contract:** `contracts/proto/fraudshield/scoring/v1/scoring.proto` has
+  `ScoreRequest.context` removed (2 and `context` reserved), and adds
+  `ScoringResult.account_context` (18) and `ScoringResult.feature_store_degraded` (19).
+- **Scorer:** `ml/` regenerates its messages from it. `ScoringService` takes a context source, the
+  feature store in production, and answers `UNAVAILABLE` without one. `ScoringResult` returns the
+  context read and the degraded flag. The shadow model scores the same read as production.
+- **CLI:** `fs-scorer serve` requires `--feature-store`. `--static-contexts` exists only for
+  benchmarking on a machine without Redis, and those reports say the store read is excluded.
+- **The whole-day skew (M5 review finding M5-2) is gone.** The only path now reads the store, and
+  the store returns the ages at full precision.
+- **M6 builds its Java client against this contract** (`docs/parallel/M5_updates.md`).

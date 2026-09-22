@@ -31,10 +31,11 @@ import grpc  # type: ignore[import-untyped]
 from grpc_health.v1 import health, health_pb2, health_pb2_grpc  # type: ignore[import-untyped]
 
 from fraudshield_ml.featurestore.reference import Reference
-from fraudshield_ml.featurestore.store import FeatureStore
+from fraudshield_ml.featurestore.store import ContextRead, FeatureStore
 from fraudshield_ml.featurestore.writer import StoreWriter
 from fraudshield_ml.models.bundle import Bundle
 from fraudshield_ml.serving import features
+from fraudshield_ml.serving.contexts import ContextSource, StaticContexts
 from fraudshield_ml.serving.features import RequestError
 from fraudshield_ml.serving.generated import scoring_pb2 as pb
 from fraudshield_ml.serving.registry import AliasWatcher, MlflowRegistry
@@ -52,56 +53,45 @@ class ScoringService:
         holder: ModelHolder,
         shadow: ShadowRunner | None = None,
         writer: StoreWriter | None = None,
-        store: FeatureStore | None = None,
+        contexts: ContextSource | None = None,
     ) -> None:
         self.holder = holder
         self.shadow = shadow
         self.writer = writer
-        #: ADR 0033: when a request carries no account context, it is read from this store, so
-        #: the window arithmetic has one implementation. Compatible with today's contract, where
-        #: the field may simply be unset.
-        self.store = store
+        #: ADR 0033: the scorer reads each account's context itself, from the feature store, so
+        #: the window arithmetic has one implementation. The API sends only the transaction.
+        self.contexts = contexts
 
-    def _context(self, request: pb.ScoreRequest, scorer: Scorer, context: Any) -> Any:
-        """The request's own context, or the store's; never an empty one taken as "no history"."""
-        if request.HasField("context"):
-            return None
-        if self.store is None:
-            context.abort(
-                grpc.StatusCode.INVALID_ARGUMENT,
-                "no account context in the request and no feature store configured; an empty "
-                "context would score the account as brand new",
-            )
+    def _read(self, request: pb.ScoreRequest, scorer: Scorer, context: Any) -> ContextRead:
+        """The account's context from the store; a failure is UNAVAILABLE, never an empty one."""
+        if self.contexts is None:
+            context.abort(grpc.StatusCode.UNAVAILABLE, "no feature store configured")
         try:
             tx = features.domain_transaction(request.transaction, scorer.reference)
         except RequestError as error:
             context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
         try:
-            return self.store.read(tx)  # type: ignore[union-attr]
+            return self.contexts.read(tx)  # type: ignore[union-attr]
         except Exception as error:
             LOG.warning("feature store unreadable: %s", error)
             context.abort(grpc.StatusCode.UNAVAILABLE, "feature store unavailable")
-        return None  # unreachable: abort raises
+        raise AssertionError("unreachable: abort raises")  # pragma: no cover
 
     def Score(self, request: pb.ScoreRequest, context: Any) -> pb.ScoreResponse:  # noqa: N802
         scorer = self.holder.production  # read once: this request stays on this model
         if scorer is None:
             context.abort(grpc.StatusCode.UNAVAILABLE, "no production model loaded")
         # Outside the try below: abort() raises, and the broad handler would report it as INTERNAL.
-        read = self._context(request, scorer, context)  # type: ignore[arg-type]
+        read = self._read(request, scorer, context)  # type: ignore[arg-type]
         try:
-            scored = scorer.score(  # type: ignore[union-attr]
-                request,
-                read.context if read is not None else None,
-                read.exact_ages if read is not None else None,
-            )
+            scored = scorer.score(request, read)  # type: ignore[union-attr]
         except RequestError as error:
             context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
         except Exception as error:
             LOG.exception("scoring failed")
             context.abort(grpc.StatusCode.INTERNAL, f"scoring failed: {type(error).__name__}")
         if self.shadow is not None:
-            self.shadow.offer(request, scored.result)
+            self.shadow.offer(request, scored.result, read)
         if self.writer is not None:
             self.writer.offer(scored.transaction)
         return pb.ScoreResponse(result=scored.result)
@@ -200,6 +190,8 @@ class WorkerConfig:
     #: When set, each worker writes every scored transaction to the feature store at this Redis
     #: URL (FR-02-09; see `featurestore.writer` for why the scorer is the writer).
     feature_store_url: str | None = None
+    #: Benchmark only: precomputed contexts on a machine with no Redis (`serving.contexts`).
+    static_contexts: Path | None = None
     shadow_log: Path | None = None
     #: Each worker writes `<pid>.json` here on every swap, for the admin port (`serving.admin`).
     status_dir: Path | None = None
@@ -246,11 +238,14 @@ def start_worker(config: WorkerConfig) -> Worker:
         else None
     )
     writer = None
-    store = None
+    contexts: ContextSource | None = None
     if config.feature_store_url is not None:
         store = FeatureStore(_redis(config.feature_store_url, timeout=1.0), reference)
         writer = StoreWriter(store)
-    service = ScoringService(holder, shadow, writer, store)
+        contexts = store
+    elif config.static_contexts is not None:
+        contexts = StaticContexts.load(config.static_contexts)
+    service = ScoringService(holder, shadow, writer, contexts)
     server, health_servicer, port = build_server(
         service,
         config.address,

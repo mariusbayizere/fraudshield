@@ -16,6 +16,7 @@ import pytest
 
 from fraudshield_ml.features.types import CountryFacts, Transaction
 from fraudshield_ml.featurestore.reference import Reference
+from fraudshield_ml.featurestore.store import ContextRead
 from fraudshield_ml.models import build
 from fraudshield_ml.models.bundle import Bundle
 from fraudshield_ml.serving import features
@@ -150,20 +151,31 @@ def context(*, burst: bool = False, **overrides: object) -> pb.AccountContext:
     return ctx
 
 
-def request(
-    i: int = 0,
-    *,
-    burst: bool = False,
-    tx: Transaction | None = None,
-    ctx: pb.AccountContext | None = None,
-) -> pb.ScoreRequest:
+def request(i: int = 0, *, tx: Transaction | None = None) -> pb.ScoreRequest:
+    """A request as the API sends it since ADR 0033: the transaction, no account context."""
     return pb.ScoreRequest(
         transaction=to_proto(
             tx or transaction(i), institution="5b1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a5b"
         ),
-        context=ctx or context(burst=burst),
         traceparent="00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
     )
+
+
+def read(
+    *, burst: bool = False, ctx: pb.AccountContext | None = None, degraded: bool = False
+) -> ContextRead:
+    """What the scorer's store read returns for the account."""
+    return ContextRead(context=ctx or context(burst=burst), exact_ages={}, degraded=degraded)
+
+
+class FixedContexts:
+    """A context source returning one read for every transaction, for gRPC tests."""
+
+    def __init__(self, fixed: ContextRead) -> None:
+        self.fixed = fixed
+
+    def read(self, tx: Transaction) -> ContextRead:
+        return self.fixed
 
 
 @pytest.fixture(scope="session")
@@ -173,6 +185,8 @@ def kit() -> SimpleNamespace:
         transaction=transaction,
         context=context,
         request=request,
+        read=read,
+        contexts=lambda **kwargs: FixedContexts(read(**kwargs)),
         t0=T0,
         reference=REFERENCE,
         cache=_cache,
