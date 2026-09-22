@@ -423,10 +423,9 @@ error, amplified: raw parity says nothing after a steep transformation".
    including `test_the_replay_agrees_on_the_redis_the_deployment_runs` and
    `test_publish_and_hot_swap_against_the_mlflow_the_deployment_runs`. `gh` is not logged in on
    this laptop, so the agent cannot read CI.
-2. **The independent Principal Review.** A fresh subagent reviewing 24a9d1a in its own worktree,
-   BLOCKER and MAJOR only, one pass. Its record goes into `docs/reviews/M5/principal-review.md`
-   verbatim. Any BLOCKER or MAJOR it finds must be fixed and re-reviewed. See section 14 when
-   written.
+2. **The independent Principal Review: done, CHANGES_REQUIRED** (section 14). Its six MAJOR
+   findings are fixed; its BLOCKER is half fixed and half an owner decision (ADR 0034). The fixes
+   need a re-review before the tag.
 3. **Tag `m5-complete` only on a commit whose CI is green**, and after the review is clean.
 
 **Carried, not open:**
@@ -457,3 +456,50 @@ error, amplified: raw parity says nothing after a steep transformation".
   `.venv/bin/fs-model build --cache <gate cache> --out <dir> --seed 1`. It reproduces 191/342
   rounds and AUC 0.970, or refuses on parity.
 - Benchmarks: `fs-bench serve|memory --bundle <dir> --packs <packs.json> --dataset <bench1m>`.
+
+## 14. The independent Principal Review, and what it changed
+
+`docs/reviews/M5/principal-review.md`, committed verbatim (cd85f6b). A fresh agent with its own
+worktree at 24a9d1a, its own environment, no access to this session's context. **Verdict:
+CHANGES_REQUIRED — one BLOCKER, six MAJOR.** It reproduced every headline number (the gate model,
+ONNX parity, the calibrated gap, both suites, the buf checks) and found what the self-review
+missed. Three of its twelve mutations survived the author's tests; all three now fail.
+
+**Fixed, in 7a12285, 22f6b1d and bb4ece4:**
+
+| # | Finding | What changed |
+|---|---|---|
+| 2 | reference keys expired under an active account, silently | `observe` refreshes the profile, tier, SIM-swap and agent-standing keys; a test ages them and checks the features survive |
+| 3 | the 0.7 test anomaly profile was served (31% of the gate test period routed to review) | workers default to D-06's production profile (0.995); `--threshold-profile test` is explicit; asserted |
+| 4 | D-11's gate gated nothing; `promote()` did not record `previous_production` | production promotion needs a comparator decision or a recorded override; `previous_production` is recorded on both paths; `fs-model` exits 1 on refusal |
+| 5 | D-11's numbers were not asserted | boundary cases: AUC delta −0.006 promotes, −0.014 does not; PSI 0.184 promotes, 0.205 does not |
+| 6 | the shadow event's score was never asserted | the event must carry the shadow model's own score, and differ from production's |
+| 7 | the parity replay never hit a window edge | rows at exactly 60 s, 1 h, 24 h, 7 d, 30 d, 90 d and a microsecond either side; flipping the store to `>=` now fails two tests |
+| — | residual risks | ONNX sessions built before a swap publishes; hot-path store timeout 1 s → 0.1 s |
+
+**The BLOCKER is half fixed and half an owner decision — ADR 0034 (proposed).** Nothing deployed
+writes the store's outcomes or account reference state, so four trained features are constants in
+production. Reproduced independently on M4's gate model over 101,909 test rows:
+
+| Serving state | Test AUC | Tier changes | Frauds reaching 0.60 |
+|---|---|---|---|
+| as trained | 0.9700 | — | 725 |
+| outcomes missing | 0.9619 | 235 | 585 |
+| SIM swaps missing | 0.9699 | 25 | 712 |
+| **both, as shipped** | **0.9611** | **254** | **563** |
+
+- **Outcomes: seam built (22f6b1d).** `featurestore/ingest.apply_label` applies an `fs.labels`
+  event, honours E.2's leakage rule and replaces a superseded verdict. **A consumer of that topic
+  still has to be deployed** (M6/M9); `ml/` ships no Kafka client.
+- **Account reference state: no topic exists** for SIM swaps, KYC tier, account opening or agent
+  standing, so nothing can be wired until a contract and a producer exist (M6/M9; D-25 for the MNO
+  signal).
+- **Visible rather than silent (bb4ece4):** `fs_feature_store_missing_producer_reads_total{state}`
+  counts every read that fell back to a constant.
+- **The owner chooses** between deploying both producers before M5 closes, dropping the features
+  and re-evaluating (reopening M4's gate), or carrying with honest rows. The author recommends
+  carrying. **FR-02-09 must not read DONE until then**, and ML-GATE rows need a note that their
+  figures describe the trained model.
+
+**Still open before tagging:** CI green (M5-1), the owner's ADR 0034 decision, and a re-review of
+the fixes. The latest full `ml` suite is 521 passed, 3 skipped, coverage 94.31% at bb4ece4.
