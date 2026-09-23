@@ -264,3 +264,30 @@ Acceptance:
 
 Encrypted volumes for both databases and Redis, Redis TLS in transit, and the network policies
 above. Not re-specified here.
+
+### 8.4 Correction to 8.1 (M6 session, 2026-09-23, after the sixth independent review)
+
+Section 8.1 describes a design M6 has since replaced, and one statement in it is wrong. **Read this
+instead of 8.1's description of `make up`:**
+
+- **`docker compose up --wait` does not ignore a one-shot's exit code: it fails on a one-shot that
+  has already exited, even with status 0,** unless another service in the same `up` depends on it
+  with `condition: service_completed_successfully` (the protection `object-store-init` has, through
+  `mlflow`). Whether the one-shot has exited when Compose inspects it is a race. In CI's full `core`
+  stack it had, and the `stack` job failed on every M6 push from `0747d6c` to `9f68ec7`; the
+  sixth review reproduced it on Compose 5.5.1, 2.29.7 and 2.33.1.
+- **Current design (`m6/decision` `e7a5be5`):** `pii-vault-migrate` is listed under the `full`
+  profile only, so `--profile core up` never starts it, and `make up` runs it after the stack is
+  healthy with `docker compose --profile core run --rm pii-vault-migrate`, which returns Flyway's
+  exit status. `await-oneshot.sh` no longer exists.
+- **Rule for M9's manifests and workflows:** any service that needs the vault migrated (the API
+  when it joins the stack) must depend on `pii-vault-migrate` with
+  `condition: service_completed_successfully`, **in the same profile**. An API in `core` cannot
+  depend on a `full`-only service (Compose rejects it: "depends on undefined service"), and an API
+  with no dependency starts against a vault that was never migrated.
+- **Latent trap in this branch:** `.github/workflows/security.yml` runs
+  `docker compose --profile full up -d --wait fraudshield-api`. Under `--profile full`,
+  `pii-vault-migrate` is started by `up` and the race above returns unless `fraudshield-api` depends
+  on it with `service_completed_successfully`. Acceptance for 8.1 therefore adds: **6.** every `up
+  --wait` path that starts `pii-vault-migrate` has a dependent with `service_completed_successfully`,
+  and CI's job that runs it has executed green on the head that introduces it.
