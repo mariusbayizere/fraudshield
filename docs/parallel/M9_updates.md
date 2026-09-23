@@ -200,3 +200,60 @@ still `m0/bootstrap`. Until it changes, they run on push and pull request only.
 **Laptop note (2026-09-22).** Reproducing the Trivy failure triggered Maven Central's 429 for this
 machine's IP (Retry-After 1800 s, from about 07:47 CEST). Maven builds that need artefacts not
 already in `~/.m2` fail until the block clears.
+
+## 8. Carried from M6 to M9 (owner decision, 2026-09-23)
+
+Written by the M6 session at the owner's request, so these cannot be lost at merge. M6's side is on
+`m6/decision` (ADR 0062 point 6, ADR 0069 points 3, 9 and 10; `docs/parallel/M6_updates.md`). Each
+item needs its acceptance criteria met before M9's gate; M6 does not re-check them.
+
+### 8.1 The local compose changes, carried into the deployment manifests
+
+M6 changed the local stack (`docker-compose.yml`, `.env.example`, `Makefile`,
+`infrastructure/docker/pii-vault/init/20-vault-roles.sh`, `infrastructure/docker/timescaledb/init/20-fraudshield-roles.sh`):
+`fs_scorer`'s password reaches the main database; the PII vault creates its roles and schema on
+first start (`db/vault/bootstrap.sql`); a one-shot `pii-vault-migrate` job (Flyway 12.4.0) applies
+`db/vault` as `fs_vault_migrator`; `make up` fails if that job fails.
+
+Acceptance:
+1. The main database bootstrap (`db/bootstrap/bootstrap.sql`) is re-run on every existing database
+   **before** Flyway V67, which grants to the new `fs_scorer` role and fails if the role is absent.
+2. `FS_SCORER_DB_PASSWORD`, `FS_VAULT_MIGRATOR_DB_PASSWORD` and `FS_VAULT_DB_PASSWORD` come from the
+   deployment's secret store, never from a manifest, image or ConfigMap; the scorer receives only
+   `FS_SCORER_DB_PASSWORD`, the API only the `fs_vault` password.
+3. The vault's migrations run as a separate job with `fs_vault_migrator`'s credentials, and a failed
+   job fails the rollout. No long-running workload holds the migrator's credentials.
+4. The vault is its own PostgreSQL instance with its own volume and backups. Network policy lets only
+   the API (the notification path) and the migration job reach it; `fs_app`, `fs_app_readonly` and
+   `fs_compliance_ro` do not exist there, and a smoke check shows a login as `fs_app` is refused.
+5. The scorer is started with `--feature-store-database postgresql://fs_scorer@<host>:<port>/<db>`
+   and can reach the main database; nothing else logs in as `fs_scorer`.
+
+### 8.2 The key-management binding for the vault (D-20)
+
+The vault's production key provider is `KmsKeyProvider` over a `KmsClient` port. M6 ships the port,
+a contract suite and an in-memory double; the vendor binding waits on M9's choice of cloud.
+
+Acceptance:
+1. A `KmsClient` implementation for the chosen key service (AWS KMS `GenerateDataKey`/`Decrypt` with
+   an encryption context, Google Cloud KMS with additional authenticated data, or Vault Transit
+   `datakey`), bound as a Spring bean in the API.
+2. It passes `KmsClientContract` (the `fraudshield-notify` test jar) against the real service, in CI
+   or a recorded integration environment: 256-bit data keys, a wrong context, key or wrapping
+   refused, an unknown key refused; a wrapping that does not verify is `VaultException.permanent`,
+   an unreachable service or a key it does not have is not.
+3. Production runs with `fraudshield.vault.key-provider=kms` (the default). No production profile
+   includes `dev`, `demo` or `test` (which would allow keys from configuration), and no master keys
+   appear in production configuration (the application refuses the combination).
+4. The blind-index key is configured wrapped under the key service (`fraudshield.vault.index-key`
+   plus `index-key-id`) and never changes once tokens exist.
+5. Rotation is documented as a runbook: add the new key-encryption key to
+   `fraudshield.vault.readable-key-ids` on every instance **before** making it current, and keep a
+   retired key readable until no vault row names it (ADR 0069: an instance without a row's key
+   retries rather than dead-lettering, so a skipped step stalls notifications instead of losing
+   them).
+
+### 8.3 Already M9's, listed for completeness (ADR 0021, D-20)
+
+Encrypted volumes for both databases and Redis, Redis TLS in transit, and the network policies
+above. Not re-specified here.
