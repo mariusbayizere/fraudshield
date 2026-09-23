@@ -101,6 +101,16 @@ exist in the vault, and `fs_app` cannot connect even if someone creates it there
 is revoked from `PUBLIC`; `fs_vault` cannot drop or delete; master keys are checked when the
 provider is built).
 
+**Which vault failures are permanent** (added 2026-09-23 after the independent review and its
+delta review). A row whose ciphertext or wrapped key does not verify can never be read, so the
+notification consumer dead-letters that work (`permanent_vault_failure`) instead of stalling the
+partition. A row naming a key this instance does not hold is **not** permanent: during a rolling
+rotation an instance not yet given the new key reads rows written under it, and it retries until
+it is reconfigured. A retired key must therefore stay configured (or listed as readable under the
+key service) until no row still names it. Nothing re-drives `<topic>.dlq` yet (threat model R-12),
+so a dead-lettered SMS is a customer who is not told; that is why the permanent class is kept to
+rows that cannot verify.
+
 Operationally the vault is a second database to back up, restore and rotate keys for, and its
 master keys must reach the API process without touching the repository. Key rotation re-wraps rows
 lazily: a row keeps its key id until it is written again, which is why old ids stay configured.

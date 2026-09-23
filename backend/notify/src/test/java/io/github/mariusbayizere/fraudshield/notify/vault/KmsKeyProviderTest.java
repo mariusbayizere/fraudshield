@@ -42,7 +42,9 @@ class KmsKeyProviderTest {
     int before = kms.calls.get();
     assertThatThrownBy(() -> provider.unwrap("kek-unlisted", wrapped))
         .isInstanceOf(VaultException.class)
-        .hasMessageContaining("no master key with id kek-unlisted");
+        .hasMessageContaining("no master key with id kek-unlisted")
+        .as("a key this instance has not been given yet is retried, never dead-lettered")
+        .isInstanceOfSatisfying(VaultException.class, e -> assertThat(e.permanent()).isFalse());
     assertThat(kms.calls.get()).isEqualTo(before);
   }
 

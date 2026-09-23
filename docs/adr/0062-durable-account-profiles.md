@@ -58,7 +58,12 @@ reads:
    already names. Two indexes serve the token-only lookups.
 5. **Failure is never "never seen".** The reader raises `FallbackUnavailable` when the database
    cannot answer, and every statement is bounded (`statement_timeout`, 100 ms by default), because
-   it runs on the scorer's synchronous path. Returning `None` would read a known account as new
+   it runs on the scorer's synchronous path. After any failure the reader fails reads at once for
+   a cool-down (5 s) instead of reconnecting on every Redis miss, a read waits for another's turn
+   no longer than the statement timeout, and connections carry a 200 ms socket timeout, so a
+   blackholed database costs one attempt, not a queue of them (the delta review, 2026-09-23).
+   While the database is down, a read that misses Redis makes the scorer answer UNAVAILABLE and
+   that one payment is decided by `fallback-rules-2`; reads that hit Redis are unaffected. Returning `None` would read a known account as new
    and score its history away; raising makes the scorer answer UNAVAILABLE and the API decide on
    its rule-based fallback (C.4).
 6. **The driver is pg8000** (BSD-3-Clause). psycopg is LGPL, which ADR 0009 allows only in tools

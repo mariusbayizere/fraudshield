@@ -282,6 +282,21 @@ branch's tests and the two surviving mutations; it was **not** re-reviewed by a 
 independent reviewer, which the owner may want before merge (memory: fix rounds introduced
 defects before).
 
+### Delta review of the fix round (same reviewer, 2026-09-23)
+
+All eight fixes were confirmed correct (surviving mutations A and B now killed; finding 2
+reproduced as fixed on a real session: 100 ms, read-only, `pg_sleep(1)` cancelled at 0.10 s). The
+fix round itself introduced **two new MAJOR defects**, both fixed:
+
+| # | Finding | Fix |
+|---|---|---|
+| D1 | An unreachable database stalled the scorer: every Redis miss waited a 2 s connect behind a process-wide lock, with no back-off (four reads finished at 2, 4, 6, 8 s) | 200 ms socket timeout; a read waits for the lock no longer than the statement timeout; after a failure, reads fail at once for a 5 s cool-down; test with a blackholed connect: four concurrent reads fail in under 1 s with one attempt, none during the cool-down, one after (fallback branch) |
+| D2 | "No master key with id" was made permanent, so a rolling key rotation would dead-letter customers' block SMS, and nothing re-drives the DLQ | an unknown key id is retried again; only rows that do not verify are permanent; ADR 0069 states the rotation rule; `KmsKeyProviderTest` asserts it |
+
+Re-verified: notify 80 and ingest 84 (full `verify`), the vault and consumer tests, and the
+fallback branch's feature-store and entry-point tests. This second fix round was **not** reviewed
+again by an independent reviewer.
+
 ## Open items this branch did not take
 
 - **PB-69 (M5 called it PB-68/PB-69), the PostgreSQL feature-store fallback: done, on its own
@@ -360,3 +375,42 @@ defects before).
 - Moving the JPA entities into `backend/persistence` looked tidier and quietly put that module's
   synthetic-data start-up guard on the API's classpath, which stopped every API test. A module
   dependency carries its auto-configuration with it.
+
+## Resume here (state at the end of the 2026-09-23 laptop session)
+
+**Branches** (all pushed; nothing lives only on the laptop):
+
+| Branch | Head | What it is |
+|---|---|---|
+| `m6/decision` | see `git log origin/m6/decision -1` (review fixes `52481fc`, delta fixes after it) | M6. Merge **after** M5 |
+| `m6/featurestore-fallback` | see `git log origin/m6/featurestore-fallback -1` | `origin/m5/scoring` + `m6/decision` + the Python PostgreSQL fallback (PB-69). Merge **after** M5 and M6; re-merge `m6/decision` into it whenever M6 changes |
+
+**Do not** merge to `main` or tag `m6-complete`: the owner's order is M5 first, then M6, and the
+latency gate is NOT MET.
+
+**Gate state at `52481fc`:** backend build green (persistence 61, decision 105, notify 80,
+ingest 84; common 1131 and rules 42 unchanged since the green full run at `17c0773`); fallback
+branch: `ml/tests/featurestore` and `ml/tests/serving/test_entry_points.py` green (59), with the
+`m6-postgresql` acceptance parameter running against TimescaleDB. Latency NOT MET on both hosts
+measured.
+
+**Independent review:** CHANGES_REQUIRED (0 BLOCKER, 8 MAJOR), all fixed; the delta review of the
+fix round confirmed the eight and found two new MAJOR (D1, D2), both fixed and tested. The second
+fix round has not had its own independent review; the owner may want one before merge.
+
+**What needs the owner:**
+1. The latency gate: a measurement on a dedicated host (and with M5's real scorer), or an ADR
+   accepting the gate as NOT MET for the tag.
+2. The HdrHistogram licence election (`fs-licences` fails without it; pre-existing).
+3. The two compose proposals under Open items (`FS_SCORER_DB_PASSWORD`; vault provisioning).
+4. FR-03-05 proposed DONE on the owner's D-25 decision, against the first review's finding 5; the
+   owner decides which reading stands.
+5. M5 should know: `ml/tests/featurestore/test_ingest.py` has two mypy errors on
+   `origin/m5/scoring` itself (`fraudshield_contracts` has no `topics` / `validate_event` for
+   mypy); and `FallbackUnavailableError` reaches its serving layer, which already answers
+   UNAVAILABLE for any store failure.
+
+**Next steps for a resumed session:** re-run the gate only if code changed; after M5 merges,
+rebase nothing (ADR 0015 allows it, but the fallback branch holds merge commits): merge `main`
+into `m6/decision`, re-run the full `verify`, then merge; then merge `main` into
+`m6/featurestore-fallback`, re-run `uv run pytest ml/tests/featurestore`, then merge.

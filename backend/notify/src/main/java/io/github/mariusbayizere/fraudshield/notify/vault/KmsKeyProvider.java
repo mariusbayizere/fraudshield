@@ -64,7 +64,10 @@ public final class KmsKeyProvider implements KeyProvider {
   @Override
   public SecretKey unwrap(String keyId, byte[] wrapped) {
     if (!readableKekIds.contains(keyId)) {
-      throw VaultException.permanent("no master key with id " + keyId, null);
+      // Not permanent: during a rolling key rotation an instance not yet given the new key reads
+      // rows written under it, and must retry until it is reconfigured, not drop the customer's
+      // SMS (the delta review, 2026-09-23).
+      throw new VaultException("no master key with id " + keyId);
     }
     byte[] plaintext = kms.decrypt(keyId, wrapped, CONTEXT);
     try {

@@ -14,9 +14,10 @@ import java.util.Map;
  *
  * <p>An implementation must bind {@code context} to the wrapping (a wrong context fails to unwrap),
  * must never return the key-encryption key, and must throw rather than return anything when it
- * cannot answer. A wrapping, key or context that does not verify, or a key the service does not
- * have, is {@link VaultException#permanent}; a service that cannot be reached is not, because the
- * notification consumers dead-letter the first and retry the second.
+ * cannot answer. A wrapping or context that does not verify is {@link VaultException#permanent}; a
+ * service that cannot be reached, or a key it does not have (yet), is not, because the notification
+ * consumers dead-letter the first and retry the second, and a key rotation must never drop a
+ * customer's message.
  */
 public interface KmsClient {
 
