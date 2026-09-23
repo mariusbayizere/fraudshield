@@ -52,6 +52,11 @@ one passing figure of the first run.
    `m6-complete` is tagged with the latency criterion NOT MET under this ADR is the owner's decision
    at merge (after M5); if it is, the tag's annotation names this ADR.
 
+5. **FR-01-06 goes with it** (owner decision, later on 2026-09-23). Its 30 s batch criterion measured
+   30.20 s once on `dev-laptop-01` at host load ~7 and passed on re-run: a ~0.2 s, load-sensitive
+   margin is not evidence. FR-01-06 is `IN_PROGRESS` and carried to M10 as `PB-74`, measured on the
+   same dedicated machine as the latency gate.
+
 ## Consequences
 
 - The M6 gate record (`docs/parallel/M6_updates.md`, "M6 gate") states the criterion as NOT MET

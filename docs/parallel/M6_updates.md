@@ -99,6 +99,18 @@ the target met or refuted. Row to add at integration (M5's carry format):
     rates up to the largest the machine sustains without errors; the result file names the
     machine; p95 < 50 ms at that rate.
   requirement_note: "FR-01-01, FR-03-01 and FR-03-03 stay IN_PROGRESS until PB-73 closes."
+
+# ROW_MILESTONE_OVERRIDES / backlog: FR-01-06's 30 s criterion, carried M6 -> M10
+- id: PB-74            # confirm at integration
+  title: "FR-01-06: a 1,000-transaction batch fully decided within 30 s"
+  due_milestone: M10
+  carried_from: M6 (owner decision 2026-09-23)
+  acceptance: >
+    IngestApiTest.thousandTransactionBatchesAreDecidedWithinThirtySeconds, or a dedicated batch
+    benchmark, on the dedicated benchmark machine recorded in docs/benchmarks/hardware.md, with a
+    margin under the limit recorded over repeated runs. On dev-laptop-01 it measured 30.20 s once
+    (host load ~7) and passed on re-run: a ~0.2 s, load-sensitive margin that is not evidence.
+  requirement_note: "FR-01-06 stays IN_PROGRESS until PB-74 closes."
 ```
 
 ### The first measurement (2026-09-22, Codespace)
@@ -176,17 +188,17 @@ Evidence was produced on this branch; statuses are proposals for the reviewer, n
 
 | Row | Proposed | Evidence |
 |---|---|---|
-| FR-01-01 | IN_PROGRESS (was VERIFIED_AT_REDUCED_SCALE; the 2026-09-23 run meets the latency criterion at no rate) | Functionally evidenced by `KafkaSpoolChaosTest`, `IngestApiTest`; the latency part is NOT MET on both hosts measured (`docs/benchmarks/2026-09-22-…` and `2026-09-23-…`). SRS "publish to Kafka within 5 ms" is replaced by D-13/D-15 (publication after the response, from the spool). Under ADR 0059 the latency part is NOT MET on this hardware and is measured in M10 (PB-73); the row stays IN_PROGRESS until then |
+| FR-01-01 | IN_PROGRESS — latency criterion NOT MET on this hardware under ADR 0059; carried to M10 as PB-73 | Behaviour: `KafkaSpoolChaosTest`, `IngestApiTest` (SRS "publish to Kafka within 5 ms" is replaced by D-13/D-15: publication after the response, from the spool). Latency: Laptop shapes (`dev-laptop-01`, 2026-09-23, scorer double, load 3.4 → 17.6; **not gate figures**, ADR 0059): client p50/p95 36.7/120.9 ms at 25 req/s, 36.4/106.8 at 50, 88.1/290.9 at 100, 140.5/371.3 at 150, 141.2/392.0 at 200, 234.9/747.7 at 300 req/s (177 errors); server decision p95 42–43 ms at 25–50 req/s. Codespace shapes (2026-09-22, load 23): client p95 42.1 ms at 50 req/s (not reproduced by the reviewer: 325.3 ms), 69.1–108.6 ms at 100–200 req/s. **Reason**: both hosts are shared, with the load generator, the API and three stores on four hardware threads; ADR 0010 accepts gate numbers only from a dedicated machine, and M5's real scorer is not in either figure. **Carry**: PB-73, measured in M10 on the dedicated machine with the real scorer. `m6-complete`, when tagged, names ADR 0059 |
 | FR-01-02 | DONE | `RequestValidatorTest`, `IngestApiTest.everySharedValidationVectorGetsItsStatusAndErrorsOverHttp` (26 vectors); E.1's 429 is implemented (`RateLimitApiTest`), and an oversized chunked body is 413 rather than a truncated 400 |
 | FR-01-03 | (see above) | also `RedisIdempotencyTest` and `RequestValidatorTest`'s field-by-field fingerprint table (findings 1, 2, 4) |
 | FR-01-03 | DONE | `IngestApiTest` (100 identical, TTL 24 h, 409), `ResilienceApiTest` (10,000 duplicates) |
 | FR-01-04 | DONE_WITH_DEVIATION | M6's part: all six channels are accepted and decided as first-class values, USSD without a device (`IngestApiTest.everyChannelIsDecidedIncludingUssdWithoutDevices`). The channel-specific feature engineering is the scorer's since ADR 0033 (M5's feature pipeline and its D-04 structural-NaN tests); `HistoryCalculatorTest`, cited here before, was deleted with Java's feature code in `be470a4` |
 | FR-01-05 | IN_PROGRESS | M6 side done (`IngestApiTest.keysAreRequiredScopedAndMeanNothingOnStaffEndpoints`); key verification, rotation and staff-path denial are M7 |
-| FR-01-06 | DONE | `IngestApiTest.thousandTransactionBatchesAreDecidedWithinThirtySeconds`, and jobs an earlier process left RUNNING are failed at start-up (V65) |
+| FR-01-06 | IN_PROGRESS (was DONE) — the 30 s criterion is **not evidenced** on this laptop; carried to M10 as PB-74 | `IngestApiTest.thousandTransactionBatchesAreDecidedWithinThirtySeconds`: in the final frozen-tree verify it measured **30.20 s against the 30 s limit** at host load ~7 and failed; the re-run on the same tree passed. The margin on `dev-laptop-01` is therefore about **0.2 s and load-sensitive**, and a test that passes only on a quiet machine is not evidence (owner, 2026-09-23). The batch behaviour itself (every item decided, invalid items reported, jobs an earlier process left RUNNING failed at start-up, V65) is evidenced by the same test and `BatchJobs` tests. **Carry**: PB-74, measured in M10 on the dedicated machine alongside PB-73 |
 | FR-01-07 | DONE | `ApiDocsTest`: `/api/docs` serves `contracts/openapi/fraudshield-api.yaml` byte for byte, and the test fails if the two ever differ |
-| FR-03-01 | IN_PROGRESS (was VERIFIED_AT_REDUCED_SCALE) | `DecisionEngineTest`, `IngestApiTest` for the behaviour; the latency criterion is NOT MET (both benchmark files), and the "1,000 HIGH events/s" load was not run; NOT MET on this hardware under ADR 0059, measured in M10 (PB-73) |
+| FR-03-01 | IN_PROGRESS — latency NOT MET on this hardware under ADR 0059; carried to M10 as PB-73 | Behaviour: `DecisionEngineTest`, `IngestApiTest`. Latency: as FR-01-01 (same shapes, same reason); the "1,000 HIGH events/s" load was not run and is part of PB-73 |
 | FR-03-02 | DONE | `HoldTimeoutServiceTest`, `IngestApiTest.holdsAreReleasedAtThirtySeconds…` (±500 ms, D-18) |
-| FR-03-03 | IN_PROGRESS (was VERIFIED_AT_REDUCED_SCALE) | as FR-03-01 |
+| FR-03-03 | IN_PROGRESS — latency NOT MET on this hardware under ADR 0059; carried to M10 as PB-73 | as FR-01-01 (same shapes, same reason, same carry) |
 | FR-03-04 | DONE_WITH_DEVIATION | `SmsPolicyTest`, `VerificationFlowTest`, `IngestApiTest` (SMS within 5 s of the block, measured from the server's own timestamps), now through the **real vault adapters** over a vault container (`IngestApiTest.customerNumbersAndPhonesReachTheSmsProviderAndNothingElse`). Deviation: no contact is enrolled in a real deployment until M7's onboarding calls `AccountTokens`/`VaultContacts`, and there is no real Africa's Talking delivery |
 | FR-03-05 | DONE_WITH_DEVIATION (owner decision 2026-09-23; Principal Review finding 5) | `VerificationFlowTest`, `ResilienceApiTest.theVerificationPage…` (lifted and webhook within 10 s; `false_positive_confirmed` in the audit event; LEGITIMATE label). Deviation, recorded in ADR 0065 point 1: the behaviour is correct per D-25, but with no SIM-swap signal no production block offers the page, so the requirement as written is exercised only by tests that issue the link directly. Closes with the MNO adapter and a producer for `account_sim_swaps` (V67) |
 | FR-03-06 | DONE | `DecisionServiceTest`, `RedisAdaptersTest`: the production Lua freezes on exactly the third HIGH within the hour, not the second or the fourth, and exactly one of twenty racing thirds freezes (Principal Review finding 8) |
@@ -334,12 +346,57 @@ previous fix. Record: `docs/reviews/M6/m6-decision-2026-09-23-third.md`.
 |---|---|
 | MAJOR: the D1 cool-down started on any failure, so one statement cancelled at 100 ms turned the fallback off for every account in the worker for 5 s, and a frequently transacting account could keep it off (reproduced on a real server) | the cool-down starts only on connection-level failures; a cancelled or failed statement fails its own read and keeps the session; a TimescaleDB test at the production bounds; ADR 0062 point 5 corrected, and it now says the 100 ms bound is not yet shown for long histories (M10) (`5f74db3`, fallback branch) |
 | Surviving mutations P2 (unbounded lock wait), P3 (no re-check under the lock), P4 (2 s default socket timeout), J1 (unknown key id permanent for the passphrase provider) | a test for each; all four, and the original defect, now fail a test |
-| Observation: `make up` reported success when `pii-vault-migrate` failed (`--wait` ignores a one-shot's exit code) | `make up` checks the migration's exit status with `docker compose wait`, tested with a correct and a wrong migrator password on a throwaway project |
+| Observation: `make up` reported success when `pii-vault-migrate` failed (`--wait` ignores a one-shot's exit code) | `make up` checked the migration with `docker compose wait`, tested only with the two vault services, where the check still saw a running container. **That check was itself wrong** (fourth review, finding 1): replaced, see below |
 | Observation: comments in `VaultException` and `EnvelopeConsumer` still called an unknown key permanent | corrected, and pinned by the J1 test |
 
 D2, the compose change, ADRs 0059/0060/0065, the HdrHistogram election and the status rows had no
 finding. This fix round was verified by the tests above, the mutations, and the final full verify
 below; it has not had a fourth review.
+
+### Fix rounds need the same scrutiny as original work (owner, 2026-09-23)
+
+The owner's note (2026-09-23) was that **four fix rounds were needed and three introduced
+defects**. The fourth review then found a defect introduced by round 4 as well, so the record now
+stands at **five fix rounds, four of which introduced a new defect** in the code they changed:
+
+| Round | Fixed | Introduced, and how it was found |
+|---|---|---|
+| 1 (2026-09-22, Codespace, `f839ce7`…`bec7979`) | the first Principal Review's 8 MAJOR / 11 MINOR | the idempotency verification window made every claim consult PostgreSQL, so decisions stopped while PostgreSQL was down (found by the author's own chaos test, recorded above) |
+| 2 (2026-09-23, `52481fc`, `3155415`) | the first laptop review's 8 MAJOR | D1: the wired-in fallback stalled the scorer on an unreachable database; D2: a key rotation would dead-letter customers' block SMS (found by the delta review); also the vault bootstrap grant and a test race, caught by the round's own verify |
+| 3 (2026-09-23, `ac6e4a6`, `c7b4ae7`) | D1, D2 | the cool-down fired on any failure, so one slow statement turned the fallback off for every account (found by the third, fresh review) |
+| 4 (2026-09-23, `5f74db3`, `2bc1b72`) | that MAJOR, four surviving mutations, two observations | the `make up` check used `docker compose wait`, which sees only running containers, so `make up` (and CI's M0 stack job) failed whenever the migration had already finished, the normal case in the full stack; tested only on the two vault services, where it happened to pass (found by the fourth, fresh review) |
+| 5 (2026-09-23, fixes below) | the fourth review's 2 MAJOR, four unpinned paths | to be decided by the fifth review |
+
+Each new defect sat in the code written to fix the previous one, and each was the kind a
+fix-focused author looks past: the fix answered the finding's scenario and created a neighbouring
+one (an outage mode, a rotation, a single slow statement). **The loop ends when a review comes back
+clean, not after a fixed number of rounds** (owner decision).
+
+**For `lab_notebook.md`** (a shared file this branch does not edit; whoever merges M6 appends it):
+
+> **2026-09-23 — Fix rounds are original work.** M6's reviews needed five fix rounds, and four
+> introduced a new defect, each inside the code written to fix a previous finding: an idempotency
+> fix stopped decisions during a PostgreSQL outage; wiring the database fallback in made an
+> unreachable database stall the scorer and a key rotation drop customer SMS; bounding that made
+> one slow statement disable the fallback for everyone; and a check added so `make up` would notice
+> a failed migration failed on every healthy full stack, because it was tested on a subset where
+> the timing differed. The fixes were
+> tested against the finding that prompted them and not against their neighbours. A fix round
+> gets an independent review with the same scope and severity bar as the original work, and the
+> loop ends on a clean review, not on a count.
+
+### Fourth independent review (fresh reviewer, 2026-09-23)
+
+Scope: fix round 4 and the documentation since. Verdict **CHANGES_REQUIRED: 0 BLOCKER, 2 MAJOR**.
+The Python fallback fix held on a real server (statement-level failures keep the session; lost
+connections, a killed backend and a paused server start the cool-down; a rollback that raises is
+handled on both paths). Record: `docs/reviews/M6/m6-decision-2026-09-23-fourth.md`.
+
+| Finding | Fix (round 5) |
+|---|---|
+| MAJOR 1: `make up` failed on a healthy stack whenever `pii-vault-migrate` had already exited, which in the full `core` profile is the normal case, so CI's `stack.yml` (the M0 gate evidence) would fail | `infrastructure/docker/scripts/await-oneshot.sh` reads the one-shot's recorded state (`docker compose ps -a`), waiting while it runs, and fails on a non-zero exit, a missing container or a timeout. Tested on a throwaway project in four cases: immediately after `up --wait` (0), **20 s after the migration had exited** (0), wrong migrator password (1), never ran (1) |
+| MAJOR 2: M9's acceptance 8.2.2 said `KmsClientContract` checks that an unknown key and an unreachable service are not permanent; it did not | the contract now does: `anUnknownKeyIsRefusedButNotPermanently`, and `anUnreachableServiceIsNeverPermanent` through a new abstract `unreachableClient()` every binding supplies; a double that marks an unreachable service permanent now fails two tests |
+| Test gaps (not rated): a rollback that raises, `InterfaceError`, SQLSTATE 53 unpinned | a test each (`b89cc1f`, fallback branch); the reviewer's mutations M1, M2, M3, M6 now fail |
 
 ## Open items this branch did not take
 
@@ -424,42 +481,53 @@ below; it has not had a fourth review.
   synthetic-data start-up guard on the API's classpath, which stopped every API test. A module
   dependency carries its auto-configuration with it.
 
-## Resume here (state at the end of the 2026-09-23 laptop session)
+## Resume here (final state, 2026-09-23, end of the laptop session)
+
+**Stopped as instructed: nothing merged, nothing tagged.**
 
 **Branches** (all pushed; nothing lives only on the laptop):
 
-| Branch | Head | What it is |
+| Branch | Verified head | What it is |
 |---|---|---|
-| `m6/decision` | see `git log origin/m6/decision -1` (review fixes `52481fc`, delta fixes after it) | M6. Merge **after** M5 |
-| `m6/featurestore-fallback` | see `git log origin/m6/featurestore-fallback -1` | `origin/m5/scoring` + `m6/decision` + the Python PostgreSQL fallback (PB-69). Merge **after** M5 and M6; re-merge `m6/decision` into it whenever M6 changes |
+| `m6/decision` | `2bc1b72` (tree `8a83da8c15c5ebe10ee9aa4609c24672d611de7b`); the commit after it changes only this file | M6. Merge **after** M5 |
+| `m6/featurestore-fallback` | `35a3752` | `origin/m5/scoring` + `m6/decision` + the Python PostgreSQL fallback (PB-69). Merge **after** M5 and M6; re-merge `m6/decision` into it whenever M6 changes, taking `m6/decision`'s side of the generated matrix and re-rendering it |
 
-**Do not** merge to `main` or tag `m6-complete`: the owner's order is M5 first, then M6, and the
-latency gate is NOT MET.
+**Final verification on the frozen tree `8a83da8c` (no file changed during either run):**
+- `./mvnw -B -ntp -fae verify` (the CI command), 13 m 14 s: common 1131, persistence 61, rules 42,
+  decision 105, notify 80 — all passing, none skipped; ingest **83 of 84**: one timing failure,
+  `IngestApiTest.thousandTransactionBatchesAreDecidedWithinThirtySeconds` (FR-01-06), measured
+  **30.20 s against the 30 s limit** with the host's one-minute load at ~7. No production code on
+  the ingest or decision path changed since `5d06f94`, and the test passed in every earlier run.
+- Re-run of the ingest module alone on the same tree (load 6.9 → 8.5): **84 of 84 passing**.
+- The test was not loosened. Its margin on this host is small; the FR-01-06 timing is, like the
+  latency gate, a number for M10's dedicated machine (ADR 0010), and CI's run is authoritative.
+- Fallback branch at `35a3752`: `ml/tests/featurestore` and `ml/tests/serving/test_entry_points.py`
+  **64 passing**, the `m6-postgresql` acceptance parameter and the production-bounds test against
+  TimescaleDB included; `make typecheck`'s mypy command clean (204 files).
 
-**Gate state at `52481fc`:** backend build green (persistence 61, decision 105, notify 80,
-ingest 84; common 1131 and rules 42 unchanged since the green full run at `17c0773`); fallback
-branch: `ml/tests/featurestore` and `ml/tests/serving/test_entry_points.py` green (59), with the
-`m6-postgresql` acceptance parameter running against TimescaleDB. Latency NOT MET on both hosts
-measured.
+**Reviews:** four rounds on 2026-09-23 — the first independent review (8 MAJOR), its delta review
+(2 new MAJOR from the fix round), and a third, fresh review requested by the owner (1 new MAJOR from
+the fix round, plus four surviving mutations and two observations). All fixed and tested; the last
+fix round (`5f74db3`, `2bc1b72`) has not had a review of its own.
 
-**Independent review:** CHANGES_REQUIRED (0 BLOCKER, 8 MAJOR), all fixed; the delta review of the
-fix round confirmed the eight and found two new MAJOR (D1, D2), both fixed and tested. The second
-fix round has not had its own independent review; the owner may want one before merge.
+**Owner decisions of 2026-09-23, applied:** latency NOT MET on this hardware (ADR 0059; M10 measures
+it, PB-73 proposed); HdrHistogram BSD-2-Clause; compose (`FS_SCORER_DB_PASSWORD`, vault provisioning,
+`make up` checks the vault migration) applied and flagged for M9; FR-03-05 DONE_WITH_DEVIATION
+(ADR 0065). The mypy errors once reported against `m5/scoring` were a stale cache here; nothing was
+written to M5's file.
 
-**What needs the owner:**
-1. ~~Latency gate~~ decided 2026-09-23: NOT MET on this hardware (ADR 0059); measured in M10
-   (PB-73). Tagging is still the owner's call at merge.
-2. ~~HdrHistogram~~ decided 2026-09-23: BSD-2-Clause elected.
-3. ~~Compose proposals~~ decided 2026-09-23: applied, flagged for M9.
-4. ~~FR-03-05~~ decided 2026-09-23: DONE_WITH_DEVIATION (ADR 0065 point 1).
-5. **Withdrawn, 2026-09-23:** the "two mypy errors on `origin/m5/scoring`" reported at the end of
-   the first laptop session were a stale `.mypy_cache` in this session's worktree. `make typecheck`'s
-   command is clean on `origin/m5/scoring` (202 files) and on `m6/featurestore-fallback` (204 files)
-   after clearing the cache. Nothing was written to M5's file. For M5, one real point stands:
-   `FallbackUnavailableError` reaches its serving layer, which already answers UNAVAILABLE for any
-   store failure.
+**Owner decisions of 2026-09-23 (second set), applied:**
+- The review loop continues until a review comes back clean (fourth review below).
+- **`m6-complete`** is to be tagged with the latency criterion NOT MET under ADR 0059 **once M5 has
+  merged and the review is clean**. As of this commit M5 has **not** merged (`origin/main` =
+  `72e7790`), so no tag exists; by D.3 the tag goes on `main` after M6 merges, which also waits for
+  M5.
+- FR-01-06 is IN_PROGRESS and carried to M10 (PB-74): its 0.2 s, load-sensitive margin on this
+  laptop is not evidence.
+- The compose and key-management carry is written into `docs/parallel/M9_updates.md` section 8 on
+  `m9/infra` (`3f8028d`, appended only), with acceptance criteria.
 
-**Next steps for a resumed session:** re-run the gate only if code changed; after M5 merges,
-rebase nothing (ADR 0015 allows it, but the fallback branch holds merge commits): merge `main`
-into `m6/decision`, re-run the full `verify`, then merge; then merge `main` into
-`m6/featurestore-fallback`, re-run `uv run pytest ml/tests/featurestore`, then merge.
+**Next steps for a resumed session:** after M5 merges, merge `main` into `m6/decision`, re-run the
+full `verify`, then merge; then merge `main` into `m6/featurestore-fallback`, re-run
+`uv run pytest ml/tests/featurestore ml/tests/serving`, then merge. Re-run the gate only if code
+changed. Rebase nothing: the fallback branch holds merge commits.

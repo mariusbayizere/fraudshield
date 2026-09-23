@@ -9,7 +9,10 @@ import org.junit.jupiter.api.Test;
 
 /**
  * What every {@link KmsClient} must do (ADR 0069 point 3). A production binding (M9) passes this
- * suite against its service before it is wired in: extend it and supply the client and two key ids.
+ * suite against its service before it is wired in: extend it and supply the client, two key ids and
+ * the same binding pointed at a service it cannot reach. It checks which failures are permanent (a
+ * wrapping that does not verify) and which are not (an unknown key, an unreachable service),
+ * because the notification consumer dead-letters the first and retries the second.
  */
 @Tag("D-20")
 @Tag("NFR-SEC-03")
@@ -37,6 +40,13 @@ public abstract class KmsClientContract {
    * @return its id
    */
   protected abstract String otherKek();
+
+  /**
+   * The same binding pointed at a service it cannot reach (a closed port, a blackholed endpoint).
+   *
+   * @return a client whose every call fails as an unreachable service does
+   */
+  protected abstract KmsClient unreachableClient();
 
   @Test
   void dataKeysAre256BitsAndUnwrapToThemselves() {
@@ -72,8 +82,25 @@ public abstract class KmsClientContract {
   }
 
   @Test
-  void anUnknownKeyIsRefused() {
+  void anUnknownKeyIsRefusedButNotPermanently() {
+    // During a rolling rotation an instance may be asked for a key the service is about to have
+    // or this deployment is about to be given: that work is retried, never dead-lettered (ADR
+    // 0069).
+    byte[] wrapped = client().generateDataKey(kek(), CONTEXT).wrapped();
     assertThatThrownBy(() -> client().generateDataKey("no-such-key", CONTEXT))
-        .isInstanceOf(VaultException.class);
+        .isInstanceOfSatisfying(VaultException.class, e -> assertThat(e.permanent()).isFalse());
+    assertThatThrownBy(() -> client().decrypt("no-such-key", wrapped, CONTEXT))
+        .isInstanceOfSatisfying(VaultException.class, e -> assertThat(e.permanent()).isFalse());
+  }
+
+  @Test
+  void anUnreachableServiceIsNeverPermanent() {
+    // A throttle, a network blip or an outage passes; dead-lettering on it would drop customers'
+    // block SMS (the fourth review, 2026-09-23).
+    byte[] wrapped = client().generateDataKey(kek(), CONTEXT).wrapped();
+    assertThatThrownBy(() -> unreachableClient().generateDataKey(kek(), CONTEXT))
+        .isInstanceOfSatisfying(VaultException.class, e -> assertThat(e.permanent()).isFalse());
+    assertThatThrownBy(() -> unreachableClient().decrypt(kek(), wrapped, CONTEXT))
+        .isInstanceOfSatisfying(VaultException.class, e -> assertThat(e.permanent()).isFalse());
   }
 }
