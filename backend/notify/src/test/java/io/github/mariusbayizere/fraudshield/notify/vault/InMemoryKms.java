@@ -76,7 +76,7 @@ public final class InMemoryKms implements KmsClient {
     }
     SecretKey kek = keks.get(kekId);
     if (kek == null) {
-      throw VaultException.permanent("the key service has no key " + kekId, null);
+      throw new VaultException("the key service has no key " + kekId);
     }
     return input -> {
       try {
