@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import io.github.mariusbayizere.fraudshield.decision.testing.Fixtures;
+import io.github.mariusbayizere.fraudshield.notify.sms.ContactDirectory;
 import io.github.mariusbayizere.fraudshield.notify.webhook.WebhookSignatures;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -31,6 +32,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.env.Environment;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -43,6 +45,9 @@ import tools.jackson.databind.node.ObjectNode;
 @Tag("requires-docker")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.DEFINED_PORT)
 @Import(ApiHarness.Collaborators.class)
+@org.springframework.test.context.ActiveProfiles(ApiHarness.PROFILE)
+@org.junit.jupiter.api.extension.ExtendWith(
+    org.springframework.boot.test.system.OutputCaptureExtension.class)
 class IngestApiTest {
 
   private static final ObjectMapper JSON = new ObjectMapper();
@@ -50,6 +55,10 @@ class IngestApiTest {
       HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
 
   @Autowired Environment environment;
+
+  @Autowired io.github.mariusbayizere.fraudshield.notify.vault.VaultContacts vaultContacts;
+
+  @Autowired io.github.mariusbayizere.fraudshield.notify.vault.AccountTokens accountTokens;
 
   @Autowired io.github.mariusbayizere.fraudshield.ingest.application.BatchJobs batches;
 
@@ -413,6 +422,11 @@ class IngestApiTest {
   void highRiskTransactionsAreDeclinedBlockedAndTheCustomerIsTexted() throws Exception {
     ApiHarness.SCORER.score = r -> 0.9;
     UUID id = UUID.randomUUID();
+    // The customer's contact is enrolled in the PII vault, as the institution's onboarding does.
+    vaultContacts.store(
+        Fixtures.INSTITUTION,
+        body(id, "MOBILE_MONEY").get("account_id").asString(),
+        new ContactDirectory.Contact("+250788000001", "en", "***4821"));
     HttpResponse<String> response =
         post("/api/v1/transactions/ingest", ApiHarness.KEY, body(id, "MOBILE_MONEY").toString());
     JsonNode decision = JSON.readTree(response.body());
@@ -454,6 +468,68 @@ class IngestApiTest {
         .as("SMS within 5 s of the block (FR-03-04)")
         .isLessThan(5.0);
     assertThat(ApiHarness.SMS.getLast()).contains("15000 RWF", "+250788100100");
+  }
+
+  @Test
+  @Tag("D-20")
+  @Tag("NFR-SEC-03")
+  @Tag("FR-03-04")
+  void customerNumbersAndPhonesReachTheSmsProviderAndNothingElse(CapturedOutput output)
+      throws Exception {
+    // D-20: the account number and the phone number exist in the PII vault and, for one send, in
+    // the SMS provider's request. They must not reach a log line, a Kafka record, a Redis key or
+    // value, or the spool, on any path a blocked payment takes.
+    String number =
+        "4001" + String.format("%010d", Math.floorMod(System.nanoTime(), 10_000_000_000L));
+    String phone = "+2507" + String.format("%08d", Math.floorMod(System.nanoTime(), 100_000_000L));
+    String token = accountTokens.tokenise(Fixtures.INSTITUTION, number);
+    vaultContacts.store(
+        Fixtures.INSTITUTION,
+        token,
+        new ContactDirectory.Contact(phone, "en", "***" + number.substring(number.length() - 4)));
+    ch.qos.logback.classic.Logger ours =
+        (ch.qos.logback.classic.Logger)
+            org.slf4j.LoggerFactory.getLogger("io.github.mariusbayizere.fraudshield");
+    ch.qos.logback.classic.Level before = ours.getLevel();
+    ours.setLevel(ch.qos.logback.classic.Level.TRACE);
+    UUID id = UUID.randomUUID();
+    try {
+      ApiHarness.SCORER.score = r -> 0.9;
+      ObjectNode request = body(id, "MOBILE_MONEY");
+      request.put("account_id", token);
+      HttpResponse<String> response =
+          post("/api/v1/transactions/ingest", ApiHarness.KEY, request.toString());
+      assertThat(JSON.readTree(response.body()).get("decision").asString()).isEqualTo("DECLINE");
+      await()
+          .atMost(Duration.ofSeconds(20))
+          .until(
+              () ->
+                  one("SELECT count(*) FROM fraudshield.customer_notifications n"
+                          + " JOIN fraudshield.auto_block_events b"
+                          + " ON b.id = n.auto_block_event_id WHERE b.transaction_id = '"
+                          + id
+                          + "' AND n.event = 'SENT'")
+                      .equals("1"));
+    } finally {
+      ours.setLevel(before);
+    }
+    assertThat(ApiHarness.SMS_PHONES).as("the phone reached the provider").contains(phone);
+    List<String> kafka = PlaintextScan.kafka(ApiHarness.KAFKA.bootstrapServers());
+    assertThat(kafka).as("records on every topic").isNotEmpty();
+    assertThat(String.join("\n", kafka)).as("the transaction is on Kafka").contains(id.toString());
+    List<String> redis;
+    try (var connection = ApiHarness.REDIS.connect()) {
+      redis = PlaintextScan.redis(connection);
+    }
+    assertThat(redis).as("keys in Redis").isNotEmpty();
+    List<String> spool = PlaintextScan.files(ApiHarness.SPOOL);
+    List<String> forbidden = List.of(number, phone, phone.substring(1), number.substring(4));
+    for (String value : forbidden) {
+      assertThat(output.getAll()).as("logs").doesNotContain(value);
+      assertThat(kafka).as("Kafka").noneMatch(r -> r.contains(value));
+      assertThat(redis).as("Redis").noneMatch(r -> r.contains(value));
+      assertThat(spool).as("the spool").noneMatch(r -> r.contains(value));
+    }
   }
 
   @Test

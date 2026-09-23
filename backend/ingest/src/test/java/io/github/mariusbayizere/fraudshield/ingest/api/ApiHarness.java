@@ -9,8 +9,8 @@ import io.github.mariusbayizere.fraudshield.decision.testing.TestDatabase;
 import io.github.mariusbayizere.fraudshield.ingest.auth.ApiKeyAuthenticator;
 import io.github.mariusbayizere.fraudshield.ingest.auth.ApiPrincipal;
 import io.github.mariusbayizere.fraudshield.ingest.auth.ApiScope;
-import io.github.mariusbayizere.fraudshield.notify.sms.ContactDirectory;
 import io.github.mariusbayizere.fraudshield.notify.sms.SmsGateway;
+import io.github.mariusbayizere.fraudshield.notify.vault.TestVault;
 import io.github.mariusbayizere.fraudshield.notify.webhook.HttpWebhookTransport;
 import io.github.mariusbayizere.fraudshield.notify.webhook.WebhookEndpoints;
 import io.github.mariusbayizere.fraudshield.notify.webhook.WebhookTransport;
@@ -36,11 +36,18 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 
 /**
  * Everything the API needs, real where it can be: TimescaleDB, Redis and Kafka containers, and the
- * scorer as a gRPC double on a real Netty port (M5 builds the real one). The API-key module, the
- * webhook endpoint registry, the PII vault and the SMS provider are M7's and third parties'; here
- * they are test beans, registered only by these tests.
+ * scorer as a gRPC double on a real Netty port (M5 builds the real one), and the PII vault as its
+ * own PostgreSQL instance with the application's own vault adapters over it (D-20). The API-key
+ * module, the webhook endpoint registry and the SMS provider are M7's and third parties'; here they
+ * are test beans, registered only by these tests.
  */
 public final class ApiHarness {
+
+  /**
+   * The profile every API test runs under: the vault's keys come from configuration, which the
+   * application allows only under a dev, demo or test profile (ADR 0069 point 10).
+   */
+  public static final String PROFILE = "test";
 
   /** Full-scope key of the synthetic institution. */
   public static final String KEY = "fsk_test_aaaaaaaaaaaa_" + "k".repeat(43);
@@ -75,7 +82,13 @@ public final class ApiHarness {
   /** SMS texts the provider double accepted. */
   public static final List<String> SMS = new CopyOnWriteArrayList<>();
 
+  /** The numbers the provider double was asked to send to, in the order of {@link #SMS}. */
+  public static final List<String> SMS_PHONES = new CopyOnWriteArrayList<>();
+
   static final TestDatabase DB;
+  static final TestVault VAULT;
+  static final String VAULT_MASTER_KEY = TestVault.masterKey();
+  static final String VAULT_INDEX_KEY = TestVault.masterKey();
   static final RedisTestServer REDIS;
   static final KafkaTestCluster KAFKA;
   static final Server SCORER_SERVER;
@@ -87,6 +100,7 @@ public final class ApiHarness {
       DB = TestDatabase.create();
       DB.institution(Fixtures.INSTITUTION);
       apiKeyRow();
+      VAULT = new TestVault();
       REDIS = new RedisTestServer();
       KAFKA = new KafkaTestCluster();
       SCORER_SERVER =
@@ -159,6 +173,13 @@ public final class ApiHarness {
     registry.add("fraudshield.scorer.deadline", () -> "2s");
     registry.add("fraudshield.redis-timeout", () -> "500ms");
     registry.add("fraudshield.anomaly-review-threshold", () -> "0.7");
+    registry.add("fraudshield.vault.url", VAULT::url);
+    registry.add("fraudshield.vault.username", () -> "fs_vault");
+    registry.add("fraudshield.vault.password", () -> VAULT.password("fs_vault"));
+    registry.add("fraudshield.vault.key-provider", () -> "configured");
+    registry.add("fraudshield.vault.current-key-id", () -> "harness");
+    registry.add("fraudshield.vault.master-keys.harness", () -> VAULT_MASTER_KEY);
+    registry.add("fraudshield.vault.index-key", () -> VAULT_INDEX_KEY);
     registry.add("server.port", () -> "0");
     registry.add("management.server.port", () -> "0");
     registry.add("fraudshield.institutions." + Fixtures.INSTITUTION + ".sender-id", () -> "FSBANK");
@@ -211,14 +232,9 @@ public final class ApiHarness {
     }
 
     @Bean
-    ContactDirectory contacts() {
-      return (institution, account) ->
-          Optional.of(new ContactDirectory.Contact("+250788000001", "en", "***4821"));
-    }
-
-    @Bean
     SmsGateway smsGateway() {
       return (sender, phone, text) -> {
+        SMS_PHONES.add(phone);
         SMS.add(text);
         return "ATXid_" + SMS.size();
       };

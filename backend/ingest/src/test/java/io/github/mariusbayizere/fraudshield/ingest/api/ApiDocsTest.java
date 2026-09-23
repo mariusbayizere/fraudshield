@@ -32,6 +32,7 @@ import org.springframework.test.context.DynamicPropertySource;
 @Tag("FR-01-07")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.DEFINED_PORT)
 @Import(ApiHarness.Collaborators.class)
+@org.springframework.test.context.ActiveProfiles(ApiHarness.PROFILE)
 class ApiDocsTest {
 
   private static final HttpClient HTTP =

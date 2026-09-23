@@ -41,6 +41,7 @@ import tools.jackson.databind.node.ObjectNode;
 @Tag("requires-docker")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.DEFINED_PORT)
 @Import(ApiHarness.Collaborators.class)
+@org.springframework.test.context.ActiveProfiles(ApiHarness.PROFILE)
 class DecisionLatencyBenchmark {
 
   private static final ObjectMapper JSON = new ObjectMapper();
