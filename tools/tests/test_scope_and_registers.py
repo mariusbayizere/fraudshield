@@ -15,7 +15,12 @@ from fraudshield_tools.defect_register import (
 from fraudshield_tools.repo import tracked_files
 from fraudshield_tools.scope_guard import LINE_PRAGMA, violations
 from fraudshield_tools.scope_terms import banned_terms_in
-from fraudshield_tools.traceability_seed import REQUIREMENTS_YAML, SRS_MD, build_rows
+from fraudshield_tools.traceability_seed import (
+    REQUIREMENTS_YAML,
+    SRS_MD,
+    SRS_V5_MD,
+    build_rows,
+)
 from fraudshield_tools.traceability_seed import main as seed_main
 
 # Assembled at runtime so this file does not itself contain the out-of-scope words.
@@ -55,8 +60,14 @@ def test_banned_terms_respect_word_boundaries() -> None:
 
 @pytest.mark.req("D-47")
 def test_seeded_rows_apply_scope_substitutions() -> None:
-    rows = build_rows(SRS_MD.read_text(encoding="utf-8"), PROMPT_PATH.read_text(encoding="utf-8"))
-    assert len(rows) == 60 + 147 + 51
+    rows = build_rows(
+        SRS_MD.read_text(encoding="utf-8"),
+        PROMPT_PATH.read_text(encoding="utf-8"),
+        SRS_V5_MD.read_text(encoding="utf-8"),
+    )
+    # v1 functional rows + v1 section rows + adopted v5 rows (25 per-role, 11 device, 8 FR-08)
+    # + defect rows.
+    assert len(rows) == 60 + 147 + 44 + 54
     carrying_terms = {r["id"] for r in rows if banned_terms_in(f"{r['title']} {r['srs_text']}")}
     assert carrying_terms == {"D-47"}
     headers = {r["id"]: r["srs_text"] for r in rows}
@@ -65,7 +76,7 @@ def test_seeded_rows_apply_scope_substitutions() -> None:
 
 def test_defect_register_is_complete_and_current() -> None:
     prompt = PROMPT_PATH.read_text(encoding="utf-8")
-    assert defect_ids(extract_part_b(prompt)) == [f"D-{n:02d}" for n in range(1, 52)]
+    assert defect_ids(extract_part_b(prompt)) == [f"D-{n:02d}" for n in range(1, 55)]
     register = (REPO_ROOT / "docs/srs/defect_register.md").read_text(encoding="utf-8")
     assert register == render(prompt)
 
@@ -107,6 +118,7 @@ def test_the_line_pragma_is_inert_inside_a_fenced_code_block(tmp_path: Path) -> 
 def _seed_tree(tmp_path: Path) -> Path:
     for rel in (
         "docs/srs/FraudShield_SRS_v1_0.md",
+        "docs/srs/FraudShield_SRS_v5_0.md",
         "docs/prompts/FraudShield_Master_Build_Prompt.md",
     ):
         (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)

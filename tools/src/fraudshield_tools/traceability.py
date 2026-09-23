@@ -55,6 +55,9 @@ MATRIX_MD = Path("docs/traceability/requirements_matrix.md")
 
 ID_PATTERN = re.compile(
     r"^(FR-\d{2}-\d{2}|NFR-(PERF|SEC|REL)-\d{2}|UX-(REG|DASH)-\d{2}"
+    # UX-ROLE-* and DEV-MATRIX-* come from the parts of SRS v5.0 the owner adopted
+    # (docs/srs/v5_decisions.md): the per-role frontend specification and the device matrix.
+    r"|UX-ROLE-(AN|SN|RO|AD)-\d{2}|DEV-MATRIX-\d{2}"
     r"|MOB-(PWA|TOUCH|NET|PERF|COMP|DEV)-\d{2}|ML-(DATA|GATE)-\d{2}|OPS-(CI|OBS)-\d{2}"
     r"|TEST-\d{2}|RES-\d{2}|D-\d{2})$"
 )
@@ -71,7 +74,8 @@ STATUSES = {
 EVIDENCED_STATUSES = {"DONE", "DONE_WITH_DEVIATION", "VERIFIED_AT_REDUCED_SCALE"}
 FINAL_STATUSES = EVIDENCED_STATUSES | {"REQUIRES_EXTERNAL_PARTY"}
 VERIFICATIONS = {"test", "inspection", "manual", "external"}
-MILESTONES = [f"M{n}" for n in range(13)]
+# M13 is the reporting milestone added after M8 for SRS v5.0 FR-08 (build prompt D.3).
+MILESTONES = [f"M{n}" for n in range(14)]
 
 
 @dataclass

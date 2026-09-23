@@ -23,6 +23,10 @@ from fraudshield_tools.scope_terms import banned_terms_in
 from fraudshield_tools.srs_tables import SrsTable, first_table_after, functional_requirement_rows
 
 SRS_MD = REPO_ROOT / "docs/srs/FraudShield_SRS_v1_0.md"
+# SRS v5.0 is a source for the parts of it the owner adopted (docs/srs/v5_decisions.md): the
+# per-role frontend specification, the device matrix and the FR-08 reporting requirements. The
+# rest of v5 is not a source; where it contradicts the built system, D-52 to D-54 say so.
+SRS_V5_MD = REPO_ROOT / "docs/srs/FraudShield_SRS_v5_0.md"
 REQUIREMENTS_YAML = REPO_ROOT / "docs/traceability/requirements.yaml"
 
 # D-47: the SRS 05B tables were copied from an unrelated health-system project.
@@ -66,6 +70,19 @@ class SectionSpec:
     expected_rows: int
 
 
+# Sections read from SRS v5.0 (adopted parts only).
+V5_SECTIONS: tuple[SectionSpec, ...] = (
+    SectionSpec("UX-ROLE-AN", r"^12\.1\s+ANALYST", "v5 12.1 Per-role frontend: ANALYST", 5),
+    SectionSpec(
+        "UX-ROLE-SN", r"^12\.2\s+SENIOR_ANALYST", "v5 12.2 Per-role frontend: SENIOR_ANALYST", 5
+    ),
+    SectionSpec(
+        "UX-ROLE-RO", r"^12\.3\s+RISK_OFFICER", "v5 12.3 Per-role frontend: RISK_OFFICER", 6
+    ),
+    SectionSpec("UX-ROLE-AD", r"^12\.4\s+ADMIN", "v5 12.4 Per-role frontend: ADMIN", 9),
+    SectionSpec("DEV-MATRIX", r"^13\.1\s+", "v5 13.1 Supported device matrix", 11),
+)
+
 SECTIONS: tuple[SectionSpec, ...] = (
     SectionSpec("NFR-PERF", r"^4\.1\s+Performance", "4.1 Performance", 10),
     SectionSpec("NFR-SEC", r"^4\.2\s+Security", "4.2 Security", 10),
@@ -86,6 +103,18 @@ SECTIONS: tuple[SectionSpec, ...] = (
     SectionSpec("RES", r"^10\s+Research", "10 Research artifacts", 7),
 )
 
+V5_SECTION_MILESTONE = {
+    "UX-ROLE-AN": "M8",
+    "UX-ROLE-SN": "M8",
+    "UX-ROLE-RO": "M8",
+    "UX-ROLE-AD": "M8",
+    "DEV-MATRIX": "M8",
+}
+
+# FR-08 (v5 §20.5) is M13, the reporting milestone added after M8 (build prompt D.3).
+FR08_MILESTONE = "M13"
+FR08_SECTION = "v5 20.5 FR-08 operational reporting"
+
 FR_SECTION = {
     "01": "3.1 FR-01 Transaction ingestion API",
     "02": "3.2 FR-02 ML fraud scoring engine",
@@ -95,6 +124,9 @@ FR_SECTION = {
     "06": "3.6 FR-06 Admin panel",
     "07": "3.7 FR-07 Authentication and authorisation",
 }
+
+# The eight defects SRS v5.0 repeats (D-53). Its affected rows are theirs, so the two cannot drift.
+V5_REPEATED_DEFECTS = ("D-01", "D-09", "D-19", "D-20", "D-21", "D-29", "D-40", "D-42")
 
 # Defect → affected requirement rows (build prompt Part B). Rendered on both sides.
 DEFECT_LINKS: dict[str, tuple[str, ...]] = {
@@ -149,9 +181,30 @@ DEFECT_LINKS: dict[str, tuple[str, ...]] = {
     "D-49": ("NFR-REL-04",),
     "D-50": ("FR-06-03",),
     "D-51": ("TEST-07", "NFR-REL-06"),
+    # v5 review (docs/srs/v5_decisions.md). D-52 touches the rows whose columns v5 would drop;
+    # D-54 touches the session rows whose design it would change.
+    "D-52": (
+        "FR-02-01",
+        "FR-03-08",
+        "FR-06-06",
+        "FR-06-07",
+        "FR-07-05",
+        "NFR-SEC-05",
+    ),
+    "D-54": ("FR-06-02", "FR-07-01", "FR-07-04", "FR-07-09"),
 }
 
+DEFECT_LINKS["D-53"] = tuple(
+    sorted({row for defect in V5_REPEATED_DEFECTS for row in DEFECT_LINKS[defect]})
+)
+
 DEFECT_MILESTONES: dict[str, str] = {
+    # v5 review defects (docs/srs/v5_decisions.md). The two that reject wholesale changes are
+    # verified at the final audit, which is where "we kept what was built, and here is why" is
+    # checked; the security one belongs to M7, whose design it would have changed.
+    "D-52": "M12",
+    "D-53": "M12",
+    "D-54": "M7",
     **dict.fromkeys(("D-47", "D-48"), "M0"),
     **dict.fromkeys(("D-30", "D-31"), "M1"),
     # Re-planned out of M1 by ADR 0021 (M1 milestone review MAJOR-1): the M1 part is delivered and
@@ -335,7 +388,47 @@ def _defects_for(req_id: str) -> list[str]:
     return sorted(d for d, targets in DEFECT_LINKS.items() if req_id in targets)
 
 
-def build_rows(srs_text: str, prompt_text: str) -> list[dict[str, Any]]:
+def build_v5_rows(v5_text: str) -> list[dict[str, Any]]:
+    """Rows from the parts of SRS v5.0 the owner adopted (docs/srs/v5_decisions.md)."""
+    rows: list[dict[str, Any]] = []
+    for spec in V5_SECTIONS:
+        table = first_table_after(v5_text, spec.marker)
+        if len(table.rows) != spec.expected_rows:
+            found = len(table.rows)
+            raise SeedError(f"{spec.section}: expected {spec.expected_rows} rows, got {found}")
+        for n, row in enumerate(table.rows, start=1):
+            rows.append(
+                {
+                    "id": f"{spec.prefix}-{n:02d}",
+                    "section": spec.section,
+                    "title": _clean(row[0]),
+                    "priority": "M",
+                    "milestone": V5_SECTION_MILESTONE[spec.prefix],
+                    "srs_text": _row_text(table, row),
+                    "defects": [],
+                }
+            )
+    reporting = first_table_after(v5_text, r"^20\.5\s+")
+    if len(reporting.rows) != 8:
+        raise SeedError(f"{FR08_SECTION}: expected 8 rows, got {len(reporting.rows)}")
+    for row in reporting.rows:
+        if not re.fullmatch(r"FR-08-\d{2}", row[0]):
+            raise SeedError(f"{FR08_SECTION}: unexpected requirement id {row[0]!r}")
+        rows.append(
+            {
+                "id": row[0],
+                "section": FR08_SECTION,
+                "title": _clean(row[1]),
+                "priority": row[2],
+                "milestone": FR08_MILESTONE,
+                "srs_text": _clean(f"Acceptance criterion: {row[3]}"),
+                "defects": [],
+            }
+        )
+    return rows
+
+
+def build_rows(srs_text: str, prompt_text: str, v5_text: str) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for fr in functional_requirement_rows(srs_text):
         req_id = fr[0]
@@ -370,6 +463,7 @@ def build_rows(srs_text: str, prompt_text: str) -> list[dict[str, Any]]:
                     "defects": _defects_for(req_id),
                 }
             )
+    rows.extend(build_v5_rows(v5_text))
     part_b = extract_part_b(prompt_text)
     for match in DEFECT_HEADING.finditer(part_b):
         defect_id = match.group(1)
@@ -464,9 +558,10 @@ def main(argv: list[str] | None = None, root: Path = REPO_ROOT) -> int:
     )
     args = parser.parse_args(argv)
     srs = (root / SRS_MD.relative_to(REPO_ROOT)).read_text(encoding="utf-8")
+    srs_v5 = (root / SRS_V5_MD.relative_to(REPO_ROOT)).read_text(encoding="utf-8")
     prompt = (root / PROMPT_PATH.relative_to(REPO_ROOT)).read_text(encoding="utf-8")
     target = root / REQUIREMENTS_YAML.relative_to(REPO_ROOT)
-    expected = render_yaml(merge(build_rows(srs, prompt), load_rows(target)))
+    expected = render_yaml(merge(build_rows(srs, prompt, srs_v5), load_rows(target)))
     if args.check:
         current = target.read_text(encoding="utf-8") if target.exists() else ""
         if current != expected:

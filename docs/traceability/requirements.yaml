@@ -134,6 +134,7 @@ requirements:
     input; unit test confirms each field type'
   defects:
   - D-12
+  - D-52
   status: NOT_STARTED
   verification: test
   implementation: []
@@ -449,6 +450,7 @@ requirements:
     denied; confirmed by database security test'
   defects:
   - D-30
+  - D-52
   status: NOT_STARTED
   verification: test
   implementation: []
@@ -755,6 +757,7 @@ requirements:
     confirmed by login attempt test'
   defects:
   - D-27
+  - D-54
   status: NOT_STARTED
   verification: test
   implementation: []
@@ -813,6 +816,7 @@ requirements:
     UPDATE on audit_events; searchable by user, date range, action type'
   defects:
   - D-32
+  - D-52
   status: NOT_STARTED
   verification: test
   implementation: []
@@ -829,6 +833,8 @@ requirements:
   defects:
   - D-19
   - D-31
+  - D-52
+  - D-53
   status: NOT_STARTED
   verification: test
   implementation: []
@@ -844,6 +850,7 @@ requirements:
     role claim immutable after issue'
   defects:
   - D-24
+  - D-54
   status: NOT_STARTED
   verification: test
   implementation: []
@@ -890,6 +897,7 @@ requirements:
     token rotation confirmed; httpOnly cookie confirmed in browser DevTools'
   defects:
   - D-27
+  - D-54
   status: NOT_STARTED
   verification: test
   implementation: []
@@ -903,7 +911,8 @@ requirements:
   milestone: M7
   srs_text: 'Acceptance criterion: API key returns 403 on /api/v1/alerts and /api/v1/admin; confirmed
     by explicit permission test for every key-accessible endpoint combination'
-  defects: []
+  defects:
+  - D-52
   status: NOT_STARTED
   verification: test
   implementation: []
@@ -963,6 +972,7 @@ requirements:
     API call confirmed by mock in integration test'
   defects:
   - D-27
+  - D-54
   status: NOT_STARTED
   verification: test
   implementation: []
@@ -1127,6 +1137,7 @@ requirements:
     any SQL query from application role'
   defects:
   - D-20
+  - D-53
   status: NOT_STARTED
   verification: test
   implementation: []
@@ -1190,6 +1201,7 @@ requirements:
     denied from application DB user; confirmed by security test'
   defects:
   - D-32
+  - D-52
   status: DONE
   verification: test
   implementation:
@@ -1240,6 +1252,7 @@ requirements:
     test passes'
   defects:
   - D-19
+  - D-53
   status: NOT_STARTED
   verification: test
   implementation: []
@@ -1254,6 +1267,7 @@ requirements:
     BNR authorisation; Verification: Cloud region af-south-1 or equivalent; storage audit confirms location'
   defects:
   - D-21
+  - D-53
   status: NOT_STARTED
   verification: external
   implementation: []
@@ -1712,6 +1726,7 @@ requirements:
   defects:
   - D-29
   - D-41
+  - D-53
   status: NOT_STARTED
   verification: test
   implementation: []
@@ -1770,6 +1785,7 @@ requirements:
     Playwright CI; score stored as CI artifact; build fails if < 90'
   defects:
   - D-40
+  - D-53
   status: NOT_STARTED
   verification: test
   implementation: []
@@ -1939,6 +1955,7 @@ requirements:
     in IndexedDB via Background Sync; ''You are offline'' banner; silent reconnect every 30 seconds'
   defects:
   - D-29
+  - D-53
   status: NOT_STARTED
   verification: test
   implementation: []
@@ -1953,6 +1970,7 @@ requirements:
     functional via Africa''s Talking SMS regardless of app status'
   defects:
   - D-42
+  - D-53
   status: NOT_STARTED
   verification: test
   implementation: []
@@ -2260,6 +2278,7 @@ requirements:
     90; 0 Axe critical violations'
   defects:
   - D-40
+  - D-53
   status: NOT_STARTED
   verification: test
   implementation: []
@@ -2289,6 +2308,7 @@ requirements:
     Page loads < 15 seconds on EDGE; core info readable without JS; SMS link prominent'
   defects:
   - D-42
+  - D-53
   status: NOT_STARTED
   verification: manual
   implementation: []
@@ -2531,6 +2551,7 @@ requirements:
     volume to manageable level'
   defects:
   - D-01
+  - D-53
   status: DONE
   verification: test
   implementation: *id001
@@ -3351,6 +3372,7 @@ requirements:
   defects:
   - D-08
   - D-09
+  - D-53
   status: VERIFIED_AT_REDUCED_SCALE
   verification: test
   implementation:
@@ -3378,6 +3400,7 @@ requirements:
     Platform: GitHub fraudshield repo docs/ + arXiv appendix'
   defects:
   - D-09
+  - D-53
   status: DONE
   verification: test
   implementation:
@@ -3450,6 +3473,617 @@ requirements:
   defects: []
   status: NOT_STARTED
   verification: inspection
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-ROLE-AN-01
+  section: 'v5 12.1 Per-role frontend: ANALYST'
+  title: Alert Feed
+  priority: M
+  milestone: M8
+  srs_text: 'Can Do: View own assigned alerts; filter by risk tier, date, status; real-time updates; Cannot
+    Do: Cannot see alerts assigned to other analysts; cannot see unassigned pool; Key MUI Components:
+    MUI DataGrid (virtualised); MUI Chip (risk tier); MUI CircularProgress (score)'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-ROLE-AN-02
+  section: 'v5 12.1 Per-role frontend: ANALYST'
+  title: Alert Detail
+  priority: M
+  milestone: M8
+  srs_text: 'Can Do: SHAP waterfall; account history (last 30 tx); behavioural fingerprint; transaction
+    detail; Cannot Do: Cannot view raw PII — only masked account token; Key MUI Components: MUI Drawer
+    (right 560px); Recharts HorizontalBarChart; MUI Timeline'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-ROLE-AN-03
+  section: 'v5 12.1 Per-role frontend: ANALYST'
+  title: Decision Panel
+  priority: M
+  milestone: M8
+  srs_text: 'Can Do: CONFIRM FRAUD or MARK LEGITIMATE (both require comment >= 10 chars); ESCALATE to
+    SENIOR_ANALYST with reason; Cannot Do: Cannot senior-override; cannot manage rules or thresholds;
+    Key MUI Components: MUI Button (red/green); MUI TextField (comment); MUI Select (escalate)'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-ROLE-AN-04
+  section: 'v5 12.1 Per-role frontend: ANALYST'
+  title: Performance Panel
+  priority: M
+  milestone: M8
+  srs_text: 'Can Do: Own: alerts reviewed today, average review time, accuracy rate from customer verifications;
+    Cannot Do: Cannot view team performance; Key MUI Components: MUI Card (stats); Recharts LineChart
+    (daily trend)'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-ROLE-AN-05
+  section: 'v5 12.1 Per-role frontend: ANALYST'
+  title: Profile
+  priority: M
+  milestone: M8
+  srs_text: 'Can Do: Update own first name, last name; change password; link/unlink Google OAuth; notification
+    preferences; Cannot Do: Cannot change own role; Key MUI Components: MUI TextField; MUI Switch; MUI
+    Avatar (initials fallback)'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-ROLE-SN-01
+  section: 'v5 12.2 Per-role frontend: SENIOR_ANALYST'
+  title: All Alerts View
+  priority: M
+  milestone: M8
+  srs_text: 'Additional to ANALYST: View every alert regardless of assignment; see unassigned pool; filter
+    by assigned analyst; Cannot Do: Cannot configure thresholds or model versions; Key MUI Components:
+    MUI DataGrid with ''Assigned To'' column; analyst autocomplete filter'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-ROLE-SN-02
+  section: 'v5 12.2 Per-role frontend: SENIOR_ANALYST'
+  title: Alert Reassignment
+  priority: M
+  milestone: M8
+  srs_text: 'Additional to ANALYST: Reassign any alert to any on-duty analyst; self-assign from unassigned
+    pool; Cannot Do: Cannot override RISK_OFFICER decisions; Key MUI Components: MUI Select (analyst dropdown)
+    inline in alert card'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-ROLE-SN-03
+  section: 'v5 12.2 Per-role frontend: SENIOR_ANALYST'
+  title: Senior Override
+  priority: M
+  milestone: M8
+  srs_text: 'Additional to ANALYST: Override any ANALYST decision with SENIOR_OVERRIDE + mandatory reason;
+    creates new AlertDecision row; Cannot Do: Cannot close fraud campaigns; Key MUI Components: MUI Dialog
+    (confirmation); MUI TextField (reason, mandatory)'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-ROLE-SN-04
+  section: 'v5 12.2 Per-role frontend: SENIOR_ANALYST'
+  title: Team Performance
+  priority: M
+  milestone: M8
+  srs_text: 'Additional to ANALYST: All analysts: reviews/hour, accuracy rate, avg review time; sortable;
+    CSV export; Cannot Do: Cannot modify analyst accounts; Key MUI Components: MUI DataGrid (team stats);
+    MUI Button (CSV export)'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-ROLE-SN-05
+  section: 'v5 12.2 Per-role frontend: SENIOR_ANALYST'
+  title: Fraud Campaigns
+  priority: M
+  milestone: M8
+  srs_text: 'Additional to ANALYST: View all campaigns; transactions per campaign; add analyst notes;
+    escalate to RISK_OFFICER; Cannot Do: Cannot close campaigns; Key MUI Components: MUI Accordion (campaign
+    list); MUI Chip (transaction count, computed fresh)'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-ROLE-RO-01
+  section: 'v5 12.3 Per-role frontend: RISK_OFFICER'
+  title: Portfolio Dashboard
+  priority: M
+  milestone: M8
+  srs_text: 'Additional to SENIOR_ANALYST: Fraud prevented (RWF amount + count) today/week/month; fraud
+    rate by channel; by MCC; Leaflet.js geographic heatmap; top-10 fraud counterparties; Cannot Do: Cannot
+    promote model versions; Key MUI Components: Recharts BarChart, PieChart, AreaChart; Leaflet.js (heatmap)'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-ROLE-RO-02
+  section: 'v5 12.3 Per-role frontend: RISK_OFFICER'
+  title: Model Performance Monitor
+  priority: M
+  milestone: M8
+  srs_text: 'Additional to SENIOR_ANALYST: Live AUC-ROC from analyst labels; precision/recall/F1 trend
+    charts; per-channel AUC-ROC; drift indicator vs baseline; Cannot Do: Cannot manage user accounts or
+    API keys; Key MUI Components: Recharts ComposedChart (trend); MUI Alert (drift warning)'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-ROLE-RO-03
+  section: 'v5 12.3 Per-role frontend: RISK_OFFICER'
+  title: Campaign Management
+  priority: M
+  milestone: M8
+  srs_text: 'Additional to SENIOR_ANALYST: Close or reopen fraud campaigns; export transaction list as
+    CSV; generate BNR campaign summary; Cannot Do: Cannot promote or retire model versions; Key MUI Components:
+    MUI DataGrid (campaign list); MUI Button (close/export)'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-ROLE-RO-04
+  section: 'v5 12.3 Per-role frontend: RISK_OFFICER'
+  title: Rule Management
+  priority: M
+  milestone: M8
+  srs_text: 'Additional to SENIOR_ANALYST: Create alert rules via structured form (no code); enable/disable
+    existing rules; view rule audit history; Cannot Do: Cannot set HIGH threshold below 0.70 (server guardrail
+    enforced); Key MUI Components: MUI Stepper (rule wizard); MUI DataGrid (rule list); MUI Switch (enable/disable)'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-ROLE-RO-05
+  section: 'v5 12.3 Per-role frontend: RISK_OFFICER'
+  title: Threshold Management
+  priority: M
+  milestone: M8
+  srs_text: 'Additional to SENIOR_ANALYST: Set HIGH/MEDIUM/LOW thresholds per channel (6 channels); effective
+    within 60 seconds; Cannot Do: Cannot override ML deployment gate; Key MUI Components: MUI Slider per
+    channel; confirmation MUI Dialog'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-ROLE-RO-06
+  section: 'v5 12.3 Per-role frontend: RISK_OFFICER'
+  title: SAR Generation
+  priority: M
+  milestone: M8
+  srs_text: 'Additional to SENIOR_ANALYST: Auto-generate SAR from CONFIRM_FRAUD; edit draft; export PDF
+    in Rwanda BNR format; Cannot Do: Cannot delete SAR drafts; Key MUI Components: MUI RichTextField (draft
+    editor); MUI Button (export PDF)'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-ROLE-AD-01
+  section: 'v5 12.4 Per-role frontend: ADMIN'
+  title: User List
+  priority: M
+  milestone: M8
+  srs_text: 'Responsibility: All users: first name, last name, email, role, status, created date; pagination;
+    filter by role/status; Business Constraint: Cannot view password hashes — never returned by API; Key
+    MUI Components: MUI DataGrid (full user list); MUI Chip (role badge); MUI IconButton (actions)'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-ROLE-AD-02
+  section: 'v5 12.4 Per-role frontend: ADMIN'
+  title: User Create
+  priority: M
+  milestone: M8
+  srs_text: 'Responsibility: Create any role: first+last name, email, phone (country code flag + dial
+    code selector), employee ID, department, role, password + confirm + strength meter; welcome email
+    dispatched; Business Constraint: Cannot create second ADMIN without approval workflow; Key MUI Components:
+    MUI Stepper; MUI TextField; MUI Select (role); phone flag selector; MUI LinearProgress (strength)'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-ROLE-AD-03
+  section: 'v5 12.4 Per-role frontend: ADMIN'
+  title: User Edit
+  priority: M
+  milestone: M8
+  srs_text: 'Responsibility: Update name, email; change role (audit logged); reset password OTP; link/unlink
+    Google OAuth; Business Constraint: Cannot edit another ADMIN''s account; Key MUI Components: MUI TextField;
+    MUI Select (role); MUI Button (reset, OAuth)'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-ROLE-AD-04
+  section: 'v5 12.4 Per-role frontend: ADMIN'
+  title: User Deactivate / Reactivate
+  priority: M
+  milestone: M8
+  srs_text: 'Responsibility: Deactivate any account (all auth blocked within 5s); reactivate if needed;
+    deactivation logged in audit with reason; Business Constraint: Cannot permanently delete — regulatory
+    retention requirement; Key MUI Components: MUI Switch; MUI Dialog (confirm + reason); MUI Alert (impact
+    warning)'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-ROLE-AD-05
+  section: 'v5 12.4 Per-role frontend: ADMIN'
+  title: Model Management
+  priority: M
+  milestone: M8
+  srs_text: 'Responsibility: List model versions with metrics; promote to production (gate enforced server-side);
+    rollback; enable shadow mode; Business Constraint: Cannot promote model that fails any Section 09
+    gate metric; Key MUI Components: MUI DataGrid (model list); MUI Stepper (promotion wizard); MUI Chip
+    (PRODUCTION/SHADOW/RETIRED)'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-ROLE-AD-06
+  section: 'v5 12.4 Per-role frontend: ADMIN'
+  title: Dataset and Retrain
+  priority: M
+  milestone: M8
+  srs_text: 'Responsibility: Upload labelled CSV (drag-drop); trigger retraining; monitor progress via
+    WebSocket; model appears only after evaluate.py passes; Business Constraint: Cannot trigger if training
+    job already running; Key MUI Components: MUI FilePicker; MUI LinearProgress (training); WebSocket
+    real-time progress'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-ROLE-AD-07
+  section: 'v5 12.4 Per-role frontend: ADMIN'
+  title: API Key Management
+  priority: M
+  milestone: M8
+  srs_text: 'Responsibility: Create, view (last-4 chars only), revoke; raw key shown once at creation
+    with copy button; Business Constraint: Raw key never shown again after creation dialog dismissed;
+    Key MUI Components: MUI DataGrid; MUI Dialog (key display + copy button); MUI Button (revoke)'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-ROLE-AD-08
+  section: 'v5 12.4 Per-role frontend: ADMIN'
+  title: Audit Log
+  priority: M
+  milestone: M8
+  srs_text: 'Responsibility: Full searchable audit log; filter by user, date range, event type; export
+    CSV; immutable (no edit or delete option shown); Business Constraint: Cannot modify audit entries
+    — any attempt returns 403 even for ADMIN; Key MUI Components: MUI DataGrid (audit); MUI DatePicker
+    (range); MUI TextField (search); MUI Button (CSV)'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: UX-ROLE-AD-09
+  section: 'v5 12.4 Per-role frontend: ADMIN'
+  title: System Health
+  priority: M
+  milestone: M8
+  srs_text: 'Responsibility: Kafka lag, ML scoring p50/p95/p99, API error rate, Redis hit rate, DB pool,
+    alert queue depth; configurable alert thresholds; Business Constraint: Cannot change infrastructure
+    configuration from UI — requires Kubernetes/Terraform; Key MUI Components: MUI Grid of Recharts LineCharts;
+    MUI LinearProgress (pool); MUI Alert (threshold breach)'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: DEV-MATRIX-01
+  section: v5 13.1 Supported device matrix
+  title: Feature phone browser
+  priority: M
+  milestone: M8
+  srs_text: 'Screen Width: 240–319px; OS / Browser: KaiOS, Opera Mini; Example Devices: Nokia 3310 (KaiOS),
+    Tecno Pop 1; Network Assumed: 2G EDGE (0.1 Mbps); SMS fallback required'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: DEV-MATRIX-02
+  section: v5 13.1 Supported device matrix
+  title: Entry Android (Go Edition)
+  priority: M
+  milestone: M8
+  srs_text: 'Screen Width: 320–374px; OS / Browser: Android 10 Go, Chrome Lite; Example Devices: Tecno
+    Spark Go 2022, Itel A23 Pro; Network Assumed: 3G (1.6 Mbps, 150ms RTT)'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: DEV-MATRIX-03
+  section: v5 13.1 Supported device matrix
+  title: Mid-range Android
+  priority: M
+  milestone: M8
+  srs_text: 'Screen Width: 375–413px; OS / Browser: Android 11-13, Chrome; Example Devices: Samsung Galaxy
+    A14, Tecno Camon 19; Network Assumed: 3G to 4G (5–20 Mbps)'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: DEV-MATRIX-04
+  section: v5 13.1 Supported device matrix
+  title: iPhone SE (smallest iOS)
+  priority: M
+  milestone: M8
+  srs_text: 'Screen Width: 375px; OS / Browser: iOS 15+, Safari; Example Devices: iPhone SE 2020 and 2022;
+    Network Assumed: LTE / WiFi'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: DEV-MATRIX-05
+  section: v5 13.1 Supported device matrix
+  title: Standard smartphone
+  priority: M
+  milestone: M8
+  srs_text: 'Screen Width: 414–430px; OS / Browser: Android 12-14, iOS 16+; Example Devices: Galaxy S21
+    FE, iPhone 13, Pixel 6a; Network Assumed: 4G / LTE'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: DEV-MATRIX-06
+  section: v5 13.1 Supported device matrix
+  title: Large smartphone
+  priority: M
+  milestone: M8
+  srs_text: 'Screen Width: 430–480px; OS / Browser: Android / iOS; Example Devices: Galaxy A54, iPhone
+    15 Plus; Network Assumed: 4G / LTE'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: DEV-MATRIX-07
+  section: v5 13.1 Supported device matrix
+  title: Small tablet
+  priority: M
+  milestone: M8
+  srs_text: 'Screen Width: 600–767px; OS / Browser: Android tablet, Chrome; iPad mini; Example Devices:
+    Samsung Galaxy Tab A7 Lite, iPad mini 6; Network Assumed: WiFi / 4G'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: DEV-MATRIX-08
+  section: v5 13.1 Supported device matrix
+  title: Standard tablet
+  priority: M
+  milestone: M8
+  srs_text: 'Screen Width: 768–1023px; OS / Browser: iPadOS, Android, Chrome; Example Devices: iPad Air,
+    Samsung Galaxy Tab S6 Lite; Network Assumed: WiFi / 4G'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: DEV-MATRIX-09
+  section: v5 13.1 Supported device matrix
+  title: Laptop
+  priority: M
+  milestone: M8
+  srs_text: 'Screen Width: 1024–1279px; OS / Browser: Chrome, Firefox, Edge, Safari; Example Devices:
+    13-inch MacBook, HP Pavilion; Network Assumed: WiFi / Ethernet'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: DEV-MATRIX-10
+  section: v5 13.1 Supported device matrix
+  title: Desktop workstation
+  priority: M
+  milestone: M8
+  srs_text: 'Screen Width: 1280–1535px; OS / Browser: Chrome, Firefox, Edge; Example Devices: Standard
+    bank office PC; Network Assumed: Ethernet / WiFi'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: DEV-MATRIX-11
+  section: v5 13.1 Supported device matrix
+  title: Large monitor
+  priority: M
+  milestone: M8
+  srs_text: 'Screen Width: 1536px+; OS / Browser: Any modern browser; Example Devices: 27-inch trading
+    or reception desk display; Network Assumed: Ethernet'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-08-01
+  section: v5 20.5 FR-08 operational reporting
+  title: Daily report auto-generated at 06:00 Rwanda time; covers previous calendar day; delivered by
+    email to all RISK_OFFICER and ADMIN users
+  priority: M
+  milestone: M13
+  srs_text: 'Acceptance criterion: Celery task confirmed running at 06:00 UTC+2; email delivered within
+    5 minutes of trigger; all 7 daily sections present in PDF'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-08-02
+  section: v5 20.5 FR-08 operational reporting
+  title: Weekly report auto-generated every Monday at 07:00 Rwanda time; covers previous Mon-Sun; delivered
+    by email as PDF
+  priority: M
+  milestone: M13
+  srs_text: 'Acceptance criterion: Email delivered with PDF; all 7 additional weekly sections present;
+    7-day charts accurate against TimescaleDB'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-08-03
+  section: v5 20.5 FR-08 operational reporting
+  title: Monthly report auto-generated on 1st of month at 08:00 Rwanda time; BNR-formatted; all 9 sections
+    present including SAR summary table
+  priority: M
+  milestone: M13
+  srs_text: 'Acceptance criterion: PDF generated within 10 minutes of trigger; SAR summary matches alert_decisions
+    WHERE decision=CONFIRM_FRAUD for the month; BNR format validated against template'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-08-04
+  section: v5 20.5 FR-08 operational reporting
+  title: 'Admin Panel ''Reports'' tab: list all reports by date; download any report; trigger custom date
+    range report'
+  priority: M
+  milestone: M13
+  srs_text: 'Acceptance criterion: Reports tab visible for ADMIN and RISK_OFFICER roles; download completes
+    within 10 seconds; custom report generates within 5 minutes'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-08-05
+  section: v5 20.5 FR-08 operational reporting
+  title: 'Custom date range report: any date range up to 90 days; triggered from Admin Panel; results
+    in same format as daily report but spanning the custom range'
+  priority: S
+  milestone: M13
+  srs_text: 'Acceptance criterion: Report generated correctly for any date range; TimescaleDB aggregation
+    accurate; PDF correctly labelled with date range'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-08-06
+  section: v5 20.5 FR-08 operational reporting
+  title: 'All reports stored in S3-compatible object storage with correct retention periods: daily 90
+    days, weekly 1 year, monthly 7 years'
+  priority: M
+  milestone: M13
+  srs_text: 'Acceptance criterion: S3 lifecycle policy verified; objects deleted after retention period;
+    monthly reports confirmed 7-year retention for BNR compliance'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-08-07
+  section: v5 20.5 FR-08 operational reporting
+  title: 'Report generation API: GET /api/v1/reports/{type}?from=&to= returns JSON; requires RISK_OFFICER+
+    JWT; supports daily, weekly, monthly, custom'
+  priority: S
+  milestone: M13
+  srs_text: 'Acceptance criterion: API returns correct JSON structure; 403 for ANALYST role; date validation
+    rejects invalid ranges; response within 30 seconds for 30-day range'
+  defects: []
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: FR-08-08
+  section: v5 20.5 FR-08 operational reporting
+  title: Grafana dashboard 'Daily/Weekly/Monthly Report' auto-refreshes and shows current period data;
+    accessible at https://grafana.fraudshield.rw
+  priority: S
+  milestone: M13
+  srs_text: 'Acceptance criterion: Dashboard renders within 3 seconds; all panels populated with real
+    data; time range selector changes all panels simultaneously'
+  defects: []
+  status: NOT_STARTED
+  verification: test
   implementation: []
   evidence: []
   deviations: []
@@ -4356,6 +4990,69 @@ requirements:
   affects:
   - TEST-07
   - NFR-REL-06
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-52
+  section: Build prompt Part B defect register
+  title: SRS v5.0's "13 lean tables" would remove the security boundary, the audit chain and a table its
+    own requirements need.
+  priority: M
+  milestone: M12
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - FR-02-01
+  - FR-03-08
+  - FR-06-06
+  - FR-06-07
+  - FR-07-05
+  - NFR-SEC-05
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-53
+  section: Build prompt Part B defect register
+  title: SRS v5.0 repeats eight defects this register has already resolved.
+  priority: M
+  milestone: M12
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - FR-06-07
+  - ML-GATE-02
+  - MOB-DEV-05
+  - MOB-DEV-07
+  - MOB-NET-04
+  - MOB-NET-05
+  - MOB-PWA-05
+  - MOB-PWA-09
+  - NFR-SEC-01
+  - NFR-SEC-08
+  - NFR-SEC-09
+  - RES-01
+  - RES-02
+  status: NOT_STARTED
+  verification: test
+  implementation: []
+  evidence: []
+  deviations: []
+- id: D-54
+  section: Build prompt Part B defect register
+  title: SRS v5.0's Spring Security section disables CSRF and looks tokens up per request.
+  priority: M
+  milestone: M7
+  srs_text: See docs/srs/defect_register.md
+  defects: []
+  affects:
+  - FR-06-02
+  - FR-07-01
+  - FR-07-04
+  - FR-07-09
   status: NOT_STARTED
   verification: test
   implementation: []
