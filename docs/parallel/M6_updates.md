@@ -346,7 +346,7 @@ previous fix. Record: `docs/reviews/M6/m6-decision-2026-09-23-third.md`.
 |---|---|
 | MAJOR: the D1 cool-down started on any failure, so one statement cancelled at 100 ms turned the fallback off for every account in the worker for 5 s, and a frequently transacting account could keep it off (reproduced on a real server) | the cool-down starts only on connection-level failures; a cancelled or failed statement fails its own read and keeps the session; a TimescaleDB test at the production bounds; ADR 0062 point 5 corrected, and it now says the 100 ms bound is not yet shown for long histories (M10) (`5f74db3`, fallback branch) |
 | Surviving mutations P2 (unbounded lock wait), P3 (no re-check under the lock), P4 (2 s default socket timeout), J1 (unknown key id permanent for the passphrase provider) | a test for each; all four, and the original defect, now fail a test |
-| Observation: `make up` reported success when `pii-vault-migrate` failed (`--wait` ignores a one-shot's exit code) | `make up` checks the migration's exit status with `docker compose wait`, tested with a correct and a wrong migrator password on a throwaway project |
+| Observation: `make up` reported success when `pii-vault-migrate` failed (`--wait` ignores a one-shot's exit code) | `make up` checked the migration with `docker compose wait`, tested only with the two vault services, where the check still saw a running container. **That check was itself wrong** (fourth review, finding 1): replaced, see below |
 | Observation: comments in `VaultException` and `EnvelopeConsumer` still called an unknown key permanent | corrected, and pinned by the J1 test |
 
 D2, the compose change, ADRs 0059/0060/0065, the HdrHistogram election and the status rows had no
@@ -355,15 +355,17 @@ below; it has not had a fourth review.
 
 ### Fix rounds need the same scrutiny as original work (owner, 2026-09-23)
 
-M6's reviews needed **four fix rounds**, and **three of them introduced a new defect** in the
-code they changed:
+The owner's note (2026-09-23) was that **four fix rounds were needed and three introduced
+defects**. The fourth review then found a defect introduced by round 4 as well, so the record now
+stands at **five fix rounds, four of which introduced a new defect** in the code they changed:
 
 | Round | Fixed | Introduced, and how it was found |
 |---|---|---|
 | 1 (2026-09-22, Codespace, `f839ce7`…`bec7979`) | the first Principal Review's 8 MAJOR / 11 MINOR | the idempotency verification window made every claim consult PostgreSQL, so decisions stopped while PostgreSQL was down (found by the author's own chaos test, recorded above) |
 | 2 (2026-09-23, `52481fc`, `3155415`) | the first laptop review's 8 MAJOR | D1: the wired-in fallback stalled the scorer on an unreachable database; D2: a key rotation would dead-letter customers' block SMS (found by the delta review); also the vault bootstrap grant and a test race, caught by the round's own verify |
 | 3 (2026-09-23, `ac6e4a6`, `c7b4ae7`) | D1, D2 | the cool-down fired on any failure, so one slow statement turned the fallback off for every account (found by the third, fresh review) |
-| 4 (2026-09-23, `5f74db3`, `2bc1b72`) | that MAJOR, four surviving mutations, two observations | none, if the fourth review below comes back clean |
+| 4 (2026-09-23, `5f74db3`, `2bc1b72`) | that MAJOR, four surviving mutations, two observations | the `make up` check used `docker compose wait`, which sees only running containers, so `make up` (and CI's M0 stack job) failed whenever the migration had already finished, the normal case in the full stack; tested only on the two vault services, where it happened to pass (found by the fourth, fresh review) |
+| 5 (2026-09-23, fixes below) | the fourth review's 2 MAJOR, four unpinned paths | to be decided by the fifth review |
 
 Each new defect sat in the code written to fix the previous one, and each was the kind a
 fix-focused author looks past: the fix answered the finding's scenario and created a neighbouring
@@ -372,14 +374,29 @@ clean, not after a fixed number of rounds** (owner decision).
 
 **For `lab_notebook.md`** (a shared file this branch does not edit; whoever merges M6 appends it):
 
-> **2026-09-23 — Fix rounds are original work.** M6's reviews needed four fix rounds, and three
+> **2026-09-23 — Fix rounds are original work.** M6's reviews needed five fix rounds, and four
 > introduced a new defect, each inside the code written to fix a previous finding: an idempotency
 > fix stopped decisions during a PostgreSQL outage; wiring the database fallback in made an
 > unreachable database stall the scorer and a key rotation drop customer SMS; bounding that made
-> one slow statement disable the fallback for everyone. The fixes were
+> one slow statement disable the fallback for everyone; and a check added so `make up` would notice
+> a failed migration failed on every healthy full stack, because it was tested on a subset where
+> the timing differed. The fixes were
 > tested against the finding that prompted them and not against their neighbours. A fix round
 > gets an independent review with the same scope and severity bar as the original work, and the
 > loop ends on a clean review, not on a count.
+
+### Fourth independent review (fresh reviewer, 2026-09-23)
+
+Scope: fix round 4 and the documentation since. Verdict **CHANGES_REQUIRED: 0 BLOCKER, 2 MAJOR**.
+The Python fallback fix held on a real server (statement-level failures keep the session; lost
+connections, a killed backend and a paused server start the cool-down; a rollback that raises is
+handled on both paths). Record: `docs/reviews/M6/m6-decision-2026-09-23-fourth.md`.
+
+| Finding | Fix (round 5) |
+|---|---|
+| MAJOR 1: `make up` failed on a healthy stack whenever `pii-vault-migrate` had already exited, which in the full `core` profile is the normal case, so CI's `stack.yml` (the M0 gate evidence) would fail | `infrastructure/docker/scripts/await-oneshot.sh` reads the one-shot's recorded state (`docker compose ps -a`), waiting while it runs, and fails on a non-zero exit, a missing container or a timeout. Tested on a throwaway project in four cases: immediately after `up --wait` (0), **20 s after the migration had exited** (0), wrong migrator password (1), never ran (1) |
+| MAJOR 2: M9's acceptance 8.2.2 said `KmsClientContract` checks that an unknown key and an unreachable service are not permanent; it did not | the contract now does: `anUnknownKeyIsRefusedButNotPermanently`, and `anUnreachableServiceIsNeverPermanent` through a new abstract `unreachableClient()` every binding supplies; a double that marks an unreachable service permanent now fails two tests |
+| Test gaps (not rated): a rollback that raises, `InterfaceError`, SQLSTATE 53 unpinned | a test each (`b89cc1f`, fallback branch); the reviewer's mutations M1, M2, M3, M6 now fail |
 
 ## Open items this branch did not take
 

@@ -19,4 +19,11 @@ class InMemoryKmsTest extends KmsClientContract {
   protected String otherKek() {
     return "kek-b";
   }
+
+  @Override
+  protected KmsClient unreachableClient() {
+    InMemoryKms down = new InMemoryKms("kek-a");
+    down.down = true;
+    return down;
+  }
 }
