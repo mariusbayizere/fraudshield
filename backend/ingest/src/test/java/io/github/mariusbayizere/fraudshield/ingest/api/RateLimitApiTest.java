@@ -33,6 +33,7 @@ import tools.jackson.databind.ObjectMapper;
 @Tag("NFR-SEC-03")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.DEFINED_PORT)
 @Import(ApiHarness.Collaborators.class)
+@org.springframework.test.context.ActiveProfiles(ApiHarness.PROFILE)
 class RateLimitApiTest {
 
   private static final ObjectMapper JSON = new ObjectMapper();

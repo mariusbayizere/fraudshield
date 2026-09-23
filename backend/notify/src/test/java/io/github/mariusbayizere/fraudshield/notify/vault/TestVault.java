@@ -88,6 +88,25 @@ public final class TestVault implements AutoCloseable {
   }
 
   /**
+   * The vault's JDBC URL, as configuration would carry it.
+   *
+   * @return the URL
+   */
+  public String url() {
+    return container.getJdbcUrl();
+  }
+
+  /**
+   * A vault role's password, as the environment would carry it.
+   *
+   * @param role {@code fs_vault} or {@code fs_vault_migrator}
+   * @return the password
+   */
+  public String password(String role) {
+    return "fs_vault".equals(role) ? vaultPassword : migratorPassword;
+  }
+
+  /**
    * A fresh master key, as configuration would carry it.
    *
    * @return 32 bytes as base64

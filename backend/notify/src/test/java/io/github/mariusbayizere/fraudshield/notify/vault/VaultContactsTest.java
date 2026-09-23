@@ -12,6 +12,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -57,6 +58,10 @@ class VaultContactsTest {
     assertThat(contacts.find(INSTITUTION, ACCOUNT)).contains(CONTACT);
     assertThat(contacts.find(INSTITUTION, "tok_NeverEnrolledAaaaBbbbCc1")).isEmpty();
     assertThat(contacts.find(UUID.randomUUID(), ACCOUNT)).as("another institution").isEmpty();
+    // Any token the contracts accept can be enrolled, not only the 24-character ones.
+    String longest = "tok_" + "L".repeat(64);
+    contacts.store(INSTITUTION, longest, CONTACT);
+    assertThat(contacts.find(INSTITUTION, longest)).contains(CONTACT);
 
     try (Connection c = vault.superuser();
         Statement s = c.createStatement();
@@ -141,6 +146,53 @@ class VaultContactsTest {
       assertThatThrownBy(() -> s.execute("DELETE FROM vault.contacts"))
           .isInstanceOf(SQLException.class);
     }
+  }
+
+  @Test
+  void theApplicationRoleIsRefusedEvenIfSomeoneCreatesItHere() throws Exception {
+    // D-20: the analyst-facing application role has no way into the vault. It does not exist
+    // here; and if it were created by mistake, CONNECT is revoked from PUBLIC, so it still could
+    // not open a session, let alone read a contact.
+    String url;
+    try (Connection c = vault.superuser()) {
+      url = c.getMetaData().getURL();
+    }
+    assertThatThrownBy(() -> java.sql.DriverManager.getConnection(url, "fs_app", "anything"))
+        .isInstanceOf(SQLException.class);
+    try (Connection c = vault.superuser();
+        Statement s = c.createStatement()) {
+      s.execute("CREATE ROLE fs_app LOGIN PASSWORD 'mistaken-grant-1'");
+    }
+    try {
+      assertThatThrownBy(
+              () -> java.sql.DriverManager.getConnection(url, "fs_app", "mistaken-grant-1"))
+          .isInstanceOf(SQLException.class)
+          .hasMessageContaining("permission denied for database");
+    } finally {
+      try (Connection c = vault.superuser();
+          Statement s = c.createStatement()) {
+        s.execute("DROP ROLE fs_app");
+      }
+    }
+  }
+
+  @Test
+  void contactsRoundTripUnderKeyManagementServiceAndNotUnderAnotherKey() {
+    InMemoryKms kms = new InMemoryKms("kek-a", "kek-b");
+    VaultContacts underKms =
+        new VaultContacts(
+            vault.dataSource("fs_vault"), new KmsKeyProvider(kms, "kek-a", Set.of("kek-a")));
+    String account = "tok_KmsAccountAaaaBbbbCcc12Z";
+    underKms.store(INSTITUTION, account, CONTACT);
+    assertThat(underKms.find(INSTITUTION, account)).contains(CONTACT);
+    assertThatThrownBy(() -> contacts.find(INSTITUTION, account))
+        .as("a deployment that does not hold the row's key")
+        .isInstanceOf(VaultException.class);
+    VaultContacts otherKek =
+        new VaultContacts(
+            vault.dataSource("fs_vault"), new KmsKeyProvider(kms, "kek-b", Set.of("kek-b")));
+    assertThatThrownBy(() -> otherKek.find(INSTITUTION, account))
+        .isInstanceOf(VaultException.class);
   }
 
   @Test

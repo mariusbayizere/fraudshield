@@ -42,6 +42,8 @@ public final class TestDatabase {
           "fs_app_readonly",
           secret(),
           "fs_compliance_ro",
+          secret(),
+          "fs_scorer",
           secret());
   private static PostgreSQLContainer container;
 

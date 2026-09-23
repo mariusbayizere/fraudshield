@@ -16,7 +16,13 @@ one GSM-7 segment in four languages.
 1. **Self-service is refused** when the SIM swap is under 7 days **or the signal is unavailable**,
    the device changed in 24 hours, the score is 0.95 or more, the model's reasons indicate takeover,
    or the fallback decided. Until an MNO adapter exists every block is therefore told to call the
-   institution; that is D-25's rule, not a defect.
+   institution; that is D-25's rule, not a defect. **The owner confirmed this on 2026-09-23**: with
+   the SIM-swap signal unavailable, refusing customer self-service is correct per D-25 and is
+   recorded as intended behaviour, not as a deviation.
+   `SmsPolicyTest.withoutTheSimSwapSignalNoBlockOffersSelfService` holds it: no score, channel or
+   device state offers the link while `days_since_sim_swap` is missing. The value arrives through
+   the scorer's feature vector (ADR 0033), so when the MNO feed reaches the feature store the link
+   becomes available without a change here.
 2. **The link** is minted only at send time: 128 random bits, stored as SHA-256, bound to the
    block, one per block, expiring at exactly 10 minutes, answered once (V5 triggers). The page
    never says why a token is unusable beyond "expired or already used".

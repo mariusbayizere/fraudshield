@@ -118,6 +118,18 @@
   </profiles>
   <build>
     <plugins>
+      <!-- The test vault (TestVault) and the key-service contract (KmsClientContract) are shared
+           with the ingest module's tests and with a future key-service binding; never a runtime
+           dependency. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <executions>
+          <execution>
+            <goals><goal>test-jar</goal></goals>
+          </execution>
+        </executions>
+      </plugin>
       <plugin>
         <groupId>com.github.spotbugs</groupId>
         <artifactId>spotbugs-maven-plugin</artifactId>

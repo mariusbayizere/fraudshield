@@ -1,6 +1,7 @@
 package io.github.mariusbayizere.fraudshield.ingest.config;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
@@ -86,16 +87,35 @@ public record FraudShieldProperties(
    * @param url JDBC URL of the vault instance
    * @param username the {@code fs_vault} role
    * @param password its password, from the environment
-   * @param currentKeyId id of the master key new rows are wrapped with
-   * @param masterKeys master keys by id, each 32 bytes as base64, from the environment; older ids
-   *     stay here so rows written under them can still be read
+   * @param keyProvider {@code kms} (the default: a key management service holds the key-encryption
+   *     key, bound by the deployment as a {@code KmsClient} bean) or {@code configured} (the keys
+   *     below, from the environment; development, demo and tests only, ADR 0069 point 10)
+   * @param currentKeyId id of the key new rows are wrapped with: a master key below, or the key
+   *     service's key-encryption key id
+   * @param masterKeys {@code configured} only: master keys by id, each 32 bytes as base64; older
+   *     ids stay here so rows written under them can still be read
+   * @param readableKeyIds {@code kms} only: older key-encryption key ids whose rows may still be
+   *     read; the current id is always readable
+   * @param indexKey the tokenisation map's blind-index key, 32 bytes as base64 ({@code
+   *     configured}), or that key as wrapped by the key service ({@code kms}); it never changes
+   * @param indexKeyId {@code kms} only: the key-encryption key that wrapped the index key
    */
   public record Vault(
       String url,
       String username,
       String password,
+      String keyProvider,
       String currentKeyId,
-      Map<String, String> masterKeys) {
+      Map<String, String> masterKeys,
+      List<String> readableKeyIds,
+      String indexKey,
+      String indexKeyId) {
+
+    /** Key material held in configuration. */
+    public static final String CONFIGURED = "configured";
+
+    /** Key material held by a key management service. */
+    public static final String KMS = "kms";
 
     /** Validates a configured vault and copies its key material. */
     public Vault {
@@ -103,16 +123,46 @@ public record FraudShieldProperties(
         throw new IllegalArgumentException(
             "fraudshield.vault.url, username and password are required when the vault is set");
       }
-      if (currentKeyId == null || masterKeys == null || masterKeys.isEmpty()) {
+      keyProvider = keyProvider == null ? KMS : keyProvider;
+      masterKeys = masterKeys == null ? Map.of() : Map.copyOf(masterKeys);
+      readableKeyIds = readableKeyIds == null ? List.of() : List.copyOf(readableKeyIds);
+      if (currentKeyId == null || indexKey == null) {
         throw new IllegalArgumentException(
-            "fraudshield.vault.current-key-id and master-keys are required when the vault is set");
+            "fraudshield.vault.current-key-id and index-key are required when the vault is set");
       }
-      masterKeys = Map.copyOf(masterKeys);
+      switch (keyProvider) {
+        case CONFIGURED -> {
+          if (masterKeys.isEmpty()) {
+            throw new IllegalArgumentException(
+                "fraudshield.vault.master-keys are required when the key provider is configured");
+          }
+        }
+        case KMS -> {
+          if (!masterKeys.isEmpty()) {
+            // Key material in configuration next to a key service defeats the key service.
+            throw new IllegalArgumentException(
+                "fraudshield.vault.master-keys must be empty when the key provider is kms");
+          }
+          if (indexKeyId == null) {
+            throw new IllegalArgumentException(
+                "fraudshield.vault.index-key-id is required when the key provider is kms");
+          }
+        }
+        default ->
+            throw new IllegalArgumentException(
+                "fraudshield.vault.key-provider is kms or configured, not " + keyProvider);
+      }
     }
 
     @Override
     public String toString() {
-      return "Vault[url=" + url + ", username=" + username + ", keys=<redacted>]";
+      return "Vault[url="
+          + url
+          + ", username="
+          + username
+          + ", keyProvider="
+          + keyProvider
+          + ", keys=<redacted>]";
     }
   }
 

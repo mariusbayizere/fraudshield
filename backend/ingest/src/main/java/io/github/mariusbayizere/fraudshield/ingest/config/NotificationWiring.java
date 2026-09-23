@@ -7,6 +7,10 @@ import io.github.mariusbayizere.fraudshield.notify.sms.CustomerSmsSender;
 import io.github.mariusbayizere.fraudshield.notify.sms.InstitutionMessaging;
 import io.github.mariusbayizere.fraudshield.notify.sms.SmsCatalogue;
 import io.github.mariusbayizere.fraudshield.notify.sms.SmsGateway;
+import io.github.mariusbayizere.fraudshield.notify.vault.AccountTokens;
+import io.github.mariusbayizere.fraudshield.notify.vault.KeyProvider;
+import io.github.mariusbayizere.fraudshield.notify.vault.KmsClient;
+import io.github.mariusbayizere.fraudshield.notify.vault.KmsKeyProvider;
 import io.github.mariusbayizere.fraudshield.notify.vault.PassphraseKeyProvider;
 import io.github.mariusbayizere.fraudshield.notify.vault.VaultContacts;
 import io.github.mariusbayizere.fraudshield.notify.verification.VerificationService;
@@ -91,29 +95,129 @@ public class NotificationWiring {
   }
 
   /**
-   * The vault-backed contact directory, when a vault is configured (D-20, ADR 0068).
+   * The vault's key provider (D-20, ADR 0069 points 3 and 10).
+   *
+   * <p>{@code kms} is the default and needs a {@link KmsClient} bean, which the deployment binds to
+   * its key service (M9); without one the application does not start, rather than falling back to
+   * keys in configuration. {@code configured} keeps the keys in configuration and is refused unless
+   * a {@code dev}, {@code demo} or {@code test} profile is active: a production deployment cannot
+   * select it by accident.
+   *
+   * @param properties configuration
+   * @param environment the active profiles
+   * @param kms the key service binding, when the deployment has one
+   * @return the provider
+   */
+  @Bean
+  @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
+      prefix = "fraudshield.vault",
+      name = "url")
+  KeyProvider vaultKeys(
+      FraudShieldProperties properties,
+      org.springframework.core.env.Environment environment,
+      ObjectProvider<KmsClient> kms) {
+    return keyProvider(properties.vault(), environment, kms.getIfAvailable());
+  }
+
+  /**
+   * Chooses the vault's key provider; the bean method above, without Spring.
+   *
+   * @param vault the vault's configuration
+   * @param environment the active profiles
+   * @param kms the key service binding, or null when the deployment has none
+   * @return the provider
+   * @throws IllegalStateException when the choice is not allowed here
+   */
+  static KeyProvider keyProvider(
+      FraudShieldProperties.Vault vault,
+      org.springframework.core.env.Environment environment,
+      KmsClient kms) {
+    if (FraudShieldProperties.Vault.CONFIGURED.equals(vault.keyProvider())) {
+      if (!environment.matchesProfiles(CONFIGURED_KEY_PROFILES)) {
+        throw new IllegalStateException(
+            "fraudshield.vault.key-provider=configured holds the vault's keys in configuration and"
+                + " is allowed only with a dev, demo or test profile; production uses kms");
+      }
+      return new PassphraseKeyProvider(vault.masterKeys(), vault.currentKeyId());
+    }
+    if (kms == null) {
+      throw new IllegalStateException(
+          "fraudshield.vault.key-provider=kms needs a KmsClient bean for the deployment's key"
+              + " service; none is bound");
+    }
+    java.util.Set<String> readable = new java.util.HashSet<>(vault.readableKeyIds());
+    readable.add(vault.currentKeyId());
+    return new KmsKeyProvider(kms, vault.currentKeyId(), readable);
+  }
+
+  /** Profiles in which the vault's keys may come from configuration. */
+  static final String CONFIGURED_KEY_PROFILES = "dev | demo | test";
+
+  /**
+   * The PII vault's contact directory (D-20, ADR 0069).
    *
    * <p>Its own data source: a separate server, a separate role and separate credentials from the
    * main database, so a compromise of one is not a compromise of the other. Without this bean the
    * SMS channel does not start, and customer intents stay on their topic.
    *
    * @param properties configuration
+   * @param keys the vault's key provider
    * @return the directory, or nothing when no vault is configured
    */
   @Bean
   @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
       prefix = "fraudshield.vault",
       name = "url")
-  ContactDirectory vaultContacts(FraudShieldProperties properties) {
+  VaultContacts vaultContacts(FraudShieldProperties properties, KeyProvider keys) {
+    // The URL is not logged: a JDBC URL can carry a password, and this line would publish it.
+    LOG.info("the PII vault is configured; customer SMS can be sent");
+    return new VaultContacts(vaultDataSource(properties.vault()), keys);
+  }
+
+  /**
+   * The tokenisation map (D-20, ADR 0069 point 9), for the institution onboarding that enrols
+   * accounts (M7).
+   *
+   * @param properties configuration
+   * @param keys the vault's key provider
+   * @param kms the key service binding, which unwraps the index key under {@code kms}
+   * @return the map
+   */
+  @Bean
+  @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
+      prefix = "fraudshield.vault",
+      name = "url")
+  AccountTokens accountTokens(
+      FraudShieldProperties properties, KeyProvider keys, ObjectProvider<KmsClient> kms) {
     FraudShieldProperties.Vault vault = properties.vault();
+    byte[] indexKey;
+    try {
+      indexKey = java.util.Base64.getDecoder().decode(vault.indexKey());
+    } catch (IllegalArgumentException notBase64) {
+      throw new IllegalArgumentException("fraudshield.vault.index-key is not base64", notBase64);
+    }
+    if (FraudShieldProperties.Vault.KMS.equals(vault.keyProvider())) {
+      indexKey =
+          kms.getObject()
+              .decrypt(
+                  vault.indexKeyId(), indexKey, java.util.Map.of("purpose", INDEX_KEY_PURPOSE));
+    }
+    try {
+      return new AccountTokens(vaultDataSource(vault), keys, indexKey);
+    } finally {
+      java.util.Arrays.fill(indexKey, (byte) 0);
+    }
+  }
+
+  /** The key-service context the index key is wrapped under. */
+  static final String INDEX_KEY_PURPOSE = "fraudshield-vault-index-key";
+
+  private static DataSource vaultDataSource(FraudShieldProperties.Vault vault) {
     org.postgresql.ds.PGSimpleDataSource source = new org.postgresql.ds.PGSimpleDataSource();
     source.setUrl(vault.url());
     source.setUser(vault.username());
     source.setPassword(vault.password());
-    // The URL is not logged: a JDBC URL can carry a password, and this line would publish it.
-    LOG.info("the PII vault is configured; customer SMS can be sent");
-    return new VaultContacts(
-        source, new PassphraseKeyProvider(vault.masterKeys(), vault.currentKeyId()));
+    return source;
   }
 
   @Bean(destroyMethod = "close")
