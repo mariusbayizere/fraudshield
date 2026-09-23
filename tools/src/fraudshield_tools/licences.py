@@ -79,6 +79,24 @@ ALLOWED_WITH_EXCEPTIONS = frozenset({"LLVM-exception"})
 # Reviewed, version-pinned decisions where metadata is missing or ambiguous; an upgrade of the
 # package removes the exception and forces a new review. Value: (SPDX expression, reason).
 EXCEPTIONS: dict[str, tuple[str, str]] = {
+    "python:pg8000@1.31.5": (
+        "BSD-3-Clause",
+        "classifier says only 'BSD License'; dist-info/licenses/LICENSE is headed 'BSD 3-Clause "
+        "License' (verified 2026-09-23). The scorer's PostgreSQL driver for the feature store's "
+        "database fallback (ADR 0062 point 6)",
+    ),
+    "python:scramp@1.4.17": (
+        "MIT-0",
+        "the classifier names 'MIT No Attribution License (MIT-0)' in words the matcher does not "
+        "map; the LICENSE file is the MIT No Attribution text (verified 2026-09-23). pg8000's "
+        "SCRAM authentication",
+    ),
+    "python:python-dateutil@2.9.0.post0": (
+        "Apache-2.0 AND BSD-3-Clause",
+        "metadata says 'Dual License' with both classifiers; the LICENSE file states that the "
+        "BSD 3-Clause licence applies to all code, even that also covered by Apache 2.0, so both "
+        "apply and both are permissive (verified 2026-09-23). pg8000's dependency",
+    ),
     "python:nodeenv@1.10.0": (
         "BSD-3-Clause",
         "metadata says only 'BSD'; dist-info/licenses/LICENSE is the 3-clause text with the "
