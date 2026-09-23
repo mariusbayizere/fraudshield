@@ -99,6 +99,18 @@ the target met or refuted. Row to add at integration (M5's carry format):
     rates up to the largest the machine sustains without errors; the result file names the
     machine; p95 < 50 ms at that rate.
   requirement_note: "FR-01-01, FR-03-01 and FR-03-03 stay IN_PROGRESS until PB-73 closes."
+
+# ROW_MILESTONE_OVERRIDES / backlog: FR-01-06's 30 s criterion, carried M6 -> M10
+- id: PB-74            # confirm at integration
+  title: "FR-01-06: a 1,000-transaction batch fully decided within 30 s"
+  due_milestone: M10
+  carried_from: M6 (owner decision 2026-09-23)
+  acceptance: >
+    IngestApiTest.thousandTransactionBatchesAreDecidedWithinThirtySeconds, or a dedicated batch
+    benchmark, on the dedicated benchmark machine recorded in docs/benchmarks/hardware.md, with a
+    margin under the limit recorded over repeated runs. On dev-laptop-01 it measured 30.20 s once
+    (host load ~7) and passed on re-run: a ~0.2 s, load-sensitive margin that is not evidence.
+  requirement_note: "FR-01-06 stays IN_PROGRESS until PB-74 closes."
 ```
 
 ### The first measurement (2026-09-22, Codespace)
@@ -176,17 +188,17 @@ Evidence was produced on this branch; statuses are proposals for the reviewer, n
 
 | Row | Proposed | Evidence |
 |---|---|---|
-| FR-01-01 | IN_PROGRESS (was VERIFIED_AT_REDUCED_SCALE; the 2026-09-23 run meets the latency criterion at no rate) | Functionally evidenced by `KafkaSpoolChaosTest`, `IngestApiTest`; the latency part is NOT MET on both hosts measured (`docs/benchmarks/2026-09-22-…` and `2026-09-23-…`). SRS "publish to Kafka within 5 ms" is replaced by D-13/D-15 (publication after the response, from the spool). Under ADR 0059 the latency part is NOT MET on this hardware and is measured in M10 (PB-73); the row stays IN_PROGRESS until then |
+| FR-01-01 | IN_PROGRESS — latency criterion NOT MET on this hardware under ADR 0059; carried to M10 as PB-73 | Behaviour: `KafkaSpoolChaosTest`, `IngestApiTest` (SRS "publish to Kafka within 5 ms" is replaced by D-13/D-15: publication after the response, from the spool). Latency: Laptop shapes (`dev-laptop-01`, 2026-09-23, scorer double, load 3.4 → 17.6; **not gate figures**, ADR 0059): client p50/p95 36.7/120.9 ms at 25 req/s, 36.4/106.8 at 50, 88.1/290.9 at 100, 140.5/371.3 at 150, 141.2/392.0 at 200, 234.9/747.7 at 300 req/s (177 errors); server decision p95 42–43 ms at 25–50 req/s. Codespace shapes (2026-09-22, load 23): client p95 42.1 ms at 50 req/s (not reproduced by the reviewer: 325.3 ms), 69.1–108.6 ms at 100–200 req/s. **Reason**: both hosts are shared, with the load generator, the API and three stores on four hardware threads; ADR 0010 accepts gate numbers only from a dedicated machine, and M5's real scorer is not in either figure. **Carry**: PB-73, measured in M10 on the dedicated machine with the real scorer. `m6-complete`, when tagged, names ADR 0059 |
 | FR-01-02 | DONE | `RequestValidatorTest`, `IngestApiTest.everySharedValidationVectorGetsItsStatusAndErrorsOverHttp` (26 vectors); E.1's 429 is implemented (`RateLimitApiTest`), and an oversized chunked body is 413 rather than a truncated 400 |
 | FR-01-03 | (see above) | also `RedisIdempotencyTest` and `RequestValidatorTest`'s field-by-field fingerprint table (findings 1, 2, 4) |
 | FR-01-03 | DONE | `IngestApiTest` (100 identical, TTL 24 h, 409), `ResilienceApiTest` (10,000 duplicates) |
 | FR-01-04 | DONE_WITH_DEVIATION | M6's part: all six channels are accepted and decided as first-class values, USSD without a device (`IngestApiTest.everyChannelIsDecidedIncludingUssdWithoutDevices`). The channel-specific feature engineering is the scorer's since ADR 0033 (M5's feature pipeline and its D-04 structural-NaN tests); `HistoryCalculatorTest`, cited here before, was deleted with Java's feature code in `be470a4` |
 | FR-01-05 | IN_PROGRESS | M6 side done (`IngestApiTest.keysAreRequiredScopedAndMeanNothingOnStaffEndpoints`); key verification, rotation and staff-path denial are M7 |
-| FR-01-06 | DONE | `IngestApiTest.thousandTransactionBatchesAreDecidedWithinThirtySeconds`, and jobs an earlier process left RUNNING are failed at start-up (V65) |
+| FR-01-06 | IN_PROGRESS (was DONE) — the 30 s criterion is **not evidenced** on this laptop; carried to M10 as PB-74 | `IngestApiTest.thousandTransactionBatchesAreDecidedWithinThirtySeconds`: in the final frozen-tree verify it measured **30.20 s against the 30 s limit** at host load ~7 and failed; the re-run on the same tree passed. The margin on `dev-laptop-01` is therefore about **0.2 s and load-sensitive**, and a test that passes only on a quiet machine is not evidence (owner, 2026-09-23). The batch behaviour itself (every item decided, invalid items reported, jobs an earlier process left RUNNING failed at start-up, V65) is evidenced by the same test and `BatchJobs` tests. **Carry**: PB-74, measured in M10 on the dedicated machine alongside PB-73 |
 | FR-01-07 | DONE | `ApiDocsTest`: `/api/docs` serves `contracts/openapi/fraudshield-api.yaml` byte for byte, and the test fails if the two ever differ |
-| FR-03-01 | IN_PROGRESS (was VERIFIED_AT_REDUCED_SCALE) | `DecisionEngineTest`, `IngestApiTest` for the behaviour; the latency criterion is NOT MET (both benchmark files), and the "1,000 HIGH events/s" load was not run; NOT MET on this hardware under ADR 0059, measured in M10 (PB-73) |
+| FR-03-01 | IN_PROGRESS — latency NOT MET on this hardware under ADR 0059; carried to M10 as PB-73 | Behaviour: `DecisionEngineTest`, `IngestApiTest`. Latency: as FR-01-01 (same shapes, same reason); the "1,000 HIGH events/s" load was not run and is part of PB-73 |
 | FR-03-02 | DONE | `HoldTimeoutServiceTest`, `IngestApiTest.holdsAreReleasedAtThirtySeconds…` (±500 ms, D-18) |
-| FR-03-03 | IN_PROGRESS (was VERIFIED_AT_REDUCED_SCALE) | as FR-03-01 |
+| FR-03-03 | IN_PROGRESS — latency NOT MET on this hardware under ADR 0059; carried to M10 as PB-73 | as FR-01-01 (same shapes, same reason, same carry) |
 | FR-03-04 | DONE_WITH_DEVIATION | `SmsPolicyTest`, `VerificationFlowTest`, `IngestApiTest` (SMS within 5 s of the block, measured from the server's own timestamps), now through the **real vault adapters** over a vault container (`IngestApiTest.customerNumbersAndPhonesReachTheSmsProviderAndNothingElse`). Deviation: no contact is enrolled in a real deployment until M7's onboarding calls `AccountTokens`/`VaultContacts`, and there is no real Africa's Talking delivery |
 | FR-03-05 | DONE_WITH_DEVIATION (owner decision 2026-09-23; Principal Review finding 5) | `VerificationFlowTest`, `ResilienceApiTest.theVerificationPage…` (lifted and webhook within 10 s; `false_positive_confirmed` in the audit event; LEGITIMATE label). Deviation, recorded in ADR 0065 point 1: the behaviour is correct per D-25, but with no SIM-swap signal no production block offers the page, so the requirement as written is exercised only by tests that issue the link directly. Closes with the MNO adapter and a producer for `account_sim_swaps` (V67) |
 | FR-03-06 | DONE | `DecisionServiceTest`, `RedisAdaptersTest`: the production Lua freezes on exactly the third HIGH within the hour, not the second or the fourth, and exactly one of twenty racing thirds freezes (Principal Review finding 8) |
@@ -341,6 +353,34 @@ D2, the compose change, ADRs 0059/0060/0065, the HdrHistogram election and the s
 finding. This fix round was verified by the tests above, the mutations, and the final full verify
 below; it has not had a fourth review.
 
+### Fix rounds need the same scrutiny as original work (owner, 2026-09-23)
+
+M6's reviews needed **four fix rounds**, and **three of them introduced a new defect** in the
+code they changed:
+
+| Round | Fixed | Introduced, and how it was found |
+|---|---|---|
+| 1 (2026-09-22, Codespace, `f839ce7`…`bec7979`) | the first Principal Review's 8 MAJOR / 11 MINOR | the idempotency verification window made every claim consult PostgreSQL, so decisions stopped while PostgreSQL was down (found by the author's own chaos test, recorded above) |
+| 2 (2026-09-23, `52481fc`, `3155415`) | the first laptop review's 8 MAJOR | D1: the wired-in fallback stalled the scorer on an unreachable database; D2: a key rotation would dead-letter customers' block SMS (found by the delta review); also the vault bootstrap grant and a test race, caught by the round's own verify |
+| 3 (2026-09-23, `ac6e4a6`, `c7b4ae7`) | D1, D2 | the cool-down fired on any failure, so one slow statement turned the fallback off for every account (found by the third, fresh review) |
+| 4 (2026-09-23, `5f74db3`, `2bc1b72`) | that MAJOR, four surviving mutations, two observations | none, if the fourth review below comes back clean |
+
+Each new defect sat in the code written to fix the previous one, and each was the kind a
+fix-focused author looks past: the fix answered the finding's scenario and created a neighbouring
+one (an outage mode, a rotation, a single slow statement). **The loop ends when a review comes back
+clean, not after a fixed number of rounds** (owner decision).
+
+**For `lab_notebook.md`** (a shared file this branch does not edit; whoever merges M6 appends it):
+
+> **2026-09-23 — Fix rounds are original work.** M6's reviews needed four fix rounds, and three
+> introduced a new defect, each inside the code written to fix a previous finding: an idempotency
+> fix stopped decisions during a PostgreSQL outage; wiring the database fallback in made an
+> unreachable database stall the scorer and a key rotation drop customer SMS; bounding that made
+> one slow statement disable the fallback for everyone. The fixes were
+> tested against the finding that prompted them and not against their neighbours. A fix round
+> gets an independent review with the same scope and severity bar as the original work, and the
+> loop ends on a clean review, not on a count.
+
 ## Open items this branch did not take
 
 - **PB-69 (M5 called it PB-68/PB-69), the PostgreSQL feature-store fallback: done, on its own
@@ -459,13 +499,16 @@ it, PB-73 proposed); HdrHistogram BSD-2-Clause; compose (`FS_SCORER_DB_PASSWORD`
 (ADR 0065). The mypy errors once reported against `m5/scoring` were a stale cache here; nothing was
 written to M5's file.
 
-**What still needs the owner:**
-1. Whether to review the last fix round again before merge (every earlier fix round introduced a
-   defect the next review found).
-2. At merge, after M5: whether `m6-complete` is tagged with the latency criterion NOT MET under ADR
-   0059 (the tag's annotation would name it).
-3. For M9: carry the compose change into the deployment manifests, bind a `KmsClient`, and provide
-   `FS_SCORER_DB_PASSWORD` / the vault role passwords from its secret store.
+**Owner decisions of 2026-09-23 (second set), applied:**
+- The review loop continues until a review comes back clean (fourth review below).
+- **`m6-complete`** is to be tagged with the latency criterion NOT MET under ADR 0059 **once M5 has
+  merged and the review is clean**. As of this commit M5 has **not** merged (`origin/main` =
+  `72e7790`), so no tag exists; by D.3 the tag goes on `main` after M6 merges, which also waits for
+  M5.
+- FR-01-06 is IN_PROGRESS and carried to M10 (PB-74): its 0.2 s, load-sensitive margin on this
+  laptop is not evidence.
+- The compose and key-management carry is written into `docs/parallel/M9_updates.md` section 8 on
+  `m9/infra` (`3f8028d`, appended only), with acceptance criteria.
 
 **Next steps for a resumed session:** after M5 merges, merge `main` into `m6/decision`, re-run the
 full `verify`, then merge; then merge `main` into `m6/featurestore-fallback`, re-run
