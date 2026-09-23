@@ -40,6 +40,16 @@ public final class FactCodec {
   static final ObjectMapper JSON = JsonMapper.builder().build();
 
   private static final TypeReference<Map<String, Object>> MAP = new TypeReference<>() {};
+
+  /**
+   * The account context is rendered with every integer as a {@code long} (uint32 fields exceed an
+   * {@code int}); read it back the same way, so a record survives the spool unchanged.
+   */
+  private static final ObjectMapper LONGS =
+      JsonMapper.builder()
+          .enable(tools.jackson.databind.DeserializationFeature.USE_LONG_FOR_INTS)
+          .build();
+
   private static final TypeReference<List<Map<String, Object>>> LIST_OF_MAPS =
       new TypeReference<>() {};
 
@@ -356,7 +366,7 @@ public final class FactCodec {
         node.get("requires_analyst_review").asBoolean(),
         node.get("feature_store_degraded").asBoolean(),
         node.has("account_context") && !node.get("account_context").isNull()
-            ? JSON.convertValue(node.get("account_context"), MAP)
+            ? LONGS.convertValue(node.get("account_context"), MAP)
             : null);
   }
 
