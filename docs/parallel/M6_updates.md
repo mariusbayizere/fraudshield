@@ -444,6 +444,16 @@ local suite and a clean review are not substitutes for it.
 > declaring work done, read CI on the pushed head at job level and confirm that path-filtered jobs
 > executed; a green local suite and a clean review are not substitutes for it.
 
+### What needs an independent review (owner, 2026-09-23, for the rest of the project)
+
+**Independent review is required for changes to code, schema, contracts, CI or build
+configuration. Documentation-only changes need no review.** This bounds the review loop: it ends
+when the last change to code, schema, contracts, CI or build configuration has had a clean review,
+and documentation written afterwards does not reopen it. The seventh review (of `f73fc57`, whose
+only non-document change is a comment in `docker-compose.yml`) was stopped under this rule. Note
+that a comment in a stack input such as `docker-compose.yml` still triggers the path-filtered
+`stack` job, which is how the executed-stack evidence on `f73fc57` was obtained.
+
 ## Open items this branch did not take
 
 - **PB-69 (M5 called it PB-68/PB-69), the PostgreSQL feature-store fallback: done, on its own
@@ -616,7 +626,7 @@ correct. Record: `docs/reviews/M6/m6-decision-2026-09-23-sixth.md`.
 
 | Branch | State |
 |---|---|
-| `m6/decision` | `ci`, `stack` (executed) and `devcontainer` green on `e7a5be5`; the next commit (this record plus a documented compose comment, so `stack` executes on it) is checked the same way |
+| `m6/decision` | **ready; waits on M5's merge.** `ci` #318, `stack` #320 (executed: 160 s, `make up`, smoke, seed-demo) and `devcontainer` #321 (executed: 1,112 s) green on `f73fc57`, read at job level. The commit after it adds only the review-scope note to this file (documentation, no review needed; its `stack` job is skipped by the path filter, as it should be for a documentation change) |
 | `m6/featurestore-fallback` | `d71222e`; red in CI only for M5's failing MLflow test (section above), which blocks it until M5 fixes it |
 
 **Reviews:** five fresh reviews; the fifth APPROVED. After it, CI showed that a change none of the
