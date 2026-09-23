@@ -543,46 +543,47 @@ v2.39.4: exit 0 with V1–V3 applied; exit 1 with a wrong migrator password; too
 authoritative check is CI's `stack` job, which this push triggers because it changes stack inputs
 (`docker-compose.yml`, `Makefile`, `infrastructure/docker/`).
 
+**Result on `e7a5be5`, read at job level through the Actions API:** `ci` #311 green with every job
+executed (java 420 s; python 464 s with all four pytest steps), `stack` #313 green with its real job
+**executed** (146 s: `make up` including the vault migration, the smoke test, `make seed-demo`),
+`devcontainer` #314 green (1,104 s: post-create `make ci` and the smoke test inside). The commit
+that records this section touches `docker-compose.yml` (a documented comment) so that the stack job
+executes on it too; its runs are checked the same way before M6 is called ready.
+
+**`m6/featurestore-fallback` (`d71222e`) will stay red in CI for a reason that is M5's**: locally,
+run as CI runs it, tools 198, contracts 490, dataset 143 and ml 558 pass and one ml test fails,
+`tests/serving/test_registry.py::test_publish_and_hot_swap_against_the_mlflow_the_deployment_runs`
+(MLflow: "Registered model alias production not found"). It fails identically on a clean
+`origin/m5/scoring`, whose own `ci` #282 fails in the same step. Recorded for the M5 agent in
+`docs/parallel/M5_updates.md` on `m5/scoring` (`c59d543`, appended only); not fixed from an M6
+branch. The fallback branch merges after M5, so M5's fix reaches it then.
+
 **M6 is not ready** until `ci` is green and a `stack` job has **executed** (not skipped) on the same
 commit (owner, 2026-09-23). The rows of the fix-round and fifth-review sections above that describe
 `await-oneshot.sh` are superseded by this section.
 
-## Resume here (final state, 2026-09-23: review loop closed)
+## Resume here (final state, 2026-09-23, after CI)
 
-**Stopped as instructed: nothing merged, nothing tagged.** The review loop ended with the fifth,
-fresh review: **APPROVED, 0 BLOCKER, 0 MAJOR** — but CI was red (section above), so M6 is **not**
-ready until `ci` is green and a `stack` job has executed on the same commit.
+**Stopped as instructed: nothing merged, nothing tagged.**
 
-**Branches** (all pushed):
+| Branch | State |
+|---|---|
+| `m6/decision` | `ci`, `stack` (executed) and `devcontainer` green on `e7a5be5`; the next commit (this record plus a documented compose comment, so `stack` executes on it) is checked the same way |
+| `m6/featurestore-fallback` | `d71222e`; red in CI only for M5's failing MLflow test (section above), which blocks it until M5 fixes it |
 
-| Branch | Head | Merge order |
-|---|---|---|
-| `m6/decision` | the commit that adds this section (code last changed in `9f68ec7`) | after M5 |
-| `m6/featurestore-fallback` | the merge of this section (code last changed in `b89cc1f`, merged as `db250d8`) | after M5 and M6 |
+**Reviews:** five fresh reviews; the fifth APPROVED. After it, CI showed that a change none of the
+reviewers could run end to end (the full `core` stack under CI's Compose) had broken `make up` and a
+pinned budget test since `0747d6c`; fixed in `e7a5be5` without a further review round, verified by
+CI itself at job level. The owner may want a review of `e7a5be5` (a compose/Makefile change only).
 
-**Verification of the code as approved:** the frozen-tree full `verify` of `8a83da8c` (every module
-green but one FR-01-06 timing failure, 30.20 s against 30 s at load ~7, green on re-run: now
-IN_PROGRESS and carried to M10 as PB-74); since then round 5 changed the `Makefile`, a new script and
-two notify test classes (`notify` `verify`: 81 tests passing), and fallback tests (15 passing). The
-fifth reviewer re-ran the round's tests and mutations.
+**Tag `m6-complete`** (owner decision): after M5 merges and M6 merges after it, with the latency
+criterion NOT MET under ADR 0059 and the carries PB-73 and PB-74 named in the annotation, once `ci`
+and an executed `stack` job are green on the merged head.
 
-**Reviews on 2026-09-23:** five, with five fix rounds between the first and the last; four of those
-rounds introduced a new defect in the code they changed (the table above, and the lab-notebook entry
-for whoever merges).
+**Carried:** M9 — `M9_updates.md` section 8 (`6a7af4f`), plus O2 (`diagnose-stack.sh` should allow a
+finished `pii-vault-migrate`; with `run --rm` the container no longer lingers, so O2 is moot). M10 —
+PB-73, PB-74. M5 — the MLflow test (`c59d543`).
 
-**`m6-complete`, per the owner's decision:** tag with the latency criterion NOT MET under ADR 0059,
-**once M5 has merged and the review is clean** — the review is now clean; M5 had not merged as of
-this commit (`origin/main` = `72e7790`). Preconditions at tagging: M5 merged; M6 merged after it
-(D.3 tags `main`); the first CI `stack.yml` and `ci.yml` runs on the merged head green (O4); the tag
-annotation names ADR 0059 and the M10 carries PB-73 and PB-74.
-
-**Carried elsewhere:** M9 — `docs/parallel/M9_updates.md` section 8 on `m9/infra` (`6a7af4f`):
-compose into manifests, the `KmsClient` binding with `KmsClientContract`, the rotation runbook; plus
-O2. M10 — PB-73 (latency) and PB-74 (FR-01-06), proposed in the gate section above.
-
-**Needs the owner:** confirm CI green on the pushed heads (this laptop's `gh` is not authenticated);
-merge M5, then M6, then the fallback branch; tag.
-
-**Next steps for a resumed session:** after M5 merges, merge `main` into `m6/decision`, re-run the
-full `verify`, merge; then merge `main` into `m6/featurestore-fallback`, re-run
-`uv run pytest ml/tests/featurestore ml/tests/serving`, merge; then tag as above. Rebase nothing.
+**Next steps for a resumed session:** read CI for the head of `m6/decision` at job level (the
+stack job must have executed); after M5 merges, merge `main` into both M6 branches, re-run the full
+`verify` and the Python suites, confirm CI (stack executed) on each merged head, merge, tag.
