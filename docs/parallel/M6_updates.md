@@ -37,8 +37,8 @@ M6 owns `backend/{ingest,decision,rules,notify}`.
 | `backend/persistence/src/main/resources/db/bootstrap/bootstrap.sql` | a fifth role, `fs_scorer` (no table grants; executes V67's `feature_fallback_*` functions) | the scorer's database fallback reads as its own role (ADR 0062). Bootstrap must be re-run before V67 on an existing database, or V67's `GRANT` fails loudly |
 | `infrastructure/docker/timescaledb/init/20-fraudshield-roles.sh` | sets `fs_scorer`'s password only when `FS_SCORER_DB_PASSWORD` is set | without it the role cannot log in and the fallback stays off (fail closed) |
 | `backend/persistence/src/test/.../TestDatabase.java`, `DatabaseSecurityTest.java` | `fs_scorer` gets a test password; one new test: the role reads no table or view and may execute exactly the five fallback functions | M1's security suite covers the new role |
-| `docker-compose.yml`, `.env.example`, `Makefile` (`up` checks the vault migration), `infrastructure/docker/pii-vault/init/20-vault-roles.sh` (new) | `FS_SCORER_DB_PASSWORD` for `timescaledb`; vault roles and schema on the vault's first start; the one-shot `pii-vault-migrate` service; three new `.env` variables | owner decision 2026-09-23; **flagged for M9**, which owns infrastructure |
-| `docs/benchmarks/hardware.md` | the core profile's budget table (4,096 of 4,096 MiB, `pii-vault-migrate` added) | the table records the compose totals `fs-compose-budget` enforces |
+| `docker-compose.yml`, `.env.example`, `Makefile` (`up` runs the vault migration with `docker compose run --rm`, `e7a5be5`), `infrastructure/docker/pii-vault/init/20-vault-roles.sh` (new) | `FS_SCORER_DB_PASSWORD` for `timescaledb`; vault roles and schema on the vault's first start; the one-shot `pii-vault-migrate` service; three new `.env` variables | owner decision 2026-09-23; **flagged for M9**, which owns infrastructure |
+| `docs/benchmarks/hardware.md` | the core profile's budget table (core back to 3,968 MiB with the migration listed under `full`, `e7a5be5`; it was 4,096 from `0747d6c` to `9f68ec7`) | the table records the compose totals `fs-compose-budget` enforces |
 | `tools/src/fraudshield_tools/licences.py` (again) | the owner's BSD-2-Clause election for `HdrHistogram@2.2.2` | owner decision 2026-09-23 |
 | `docs/adr/0059` | new; M6 counts down from 0059 now its block is full (ADR 0060, revised) | ADR 0059 |
 | `backend/spotbugs-exclude.xml` | one entry: `UWF_UNWRITTEN_FIELD` on the JPA key classes | Hibernate writes an `@IdClass` key's fields reflectively; the alternative is a constructor no code calls |
@@ -346,7 +346,7 @@ previous fix. Record: `docs/reviews/M6/m6-decision-2026-09-23-third.md`.
 |---|---|
 | MAJOR: the D1 cool-down started on any failure, so one statement cancelled at 100 ms turned the fallback off for every account in the worker for 5 s, and a frequently transacting account could keep it off (reproduced on a real server) | the cool-down starts only on connection-level failures; a cancelled or failed statement fails its own read and keeps the session; a TimescaleDB test at the production bounds; ADR 0062 point 5 corrected, and it now says the 100 ms bound is not yet shown for long histories (M10) (`5f74db3`, fallback branch) |
 | Surviving mutations P2 (unbounded lock wait), P3 (no re-check under the lock), P4 (2 s default socket timeout), J1 (unknown key id permanent for the passphrase provider) | a test for each; all four, and the original defect, now fail a test |
-| Observation: `make up` reported success when `pii-vault-migrate` failed (`--wait` ignores a one-shot's exit code) | `make up` checked the migration with `docker compose wait`, tested only with the two vault services, where the check still saw a running container. **That check was itself wrong** (fourth review, finding 1): replaced, see below |
+| Observation: `make up` reported success when `pii-vault-migrate` failed (the reason given here, "`--wait` ignores a one-shot's exit code", was **wrong**: `--wait` fails on an exited one-shot; see "CI was red") | `make up` checked the migration with `docker compose wait`, tested only with the two vault services, where the check still saw a running container. **That check was itself wrong** (fourth review, finding 1): replaced, see below |
 | Observation: comments in `VaultException` and `EnvelopeConsumer` still called an unknown key permanent | corrected, and pinned by the J1 test |
 
 D2, the compose change, ADRs 0059/0060/0065, the HdrHistogram election and the status rows had no
@@ -422,6 +422,27 @@ round, and none blocks):
   output differed, the script fails closed ("did not run"), never falsely passes. **The first
   `stack.yml` run on the pushed head must be green before tagging**; `gh` is not authenticated on
   this laptop, so this session could not read CI.
+
+### A green local suite and a clean review are not CI (owner, 2026-09-23)
+
+Five independent reviews and every local run (full backend `verify`, all four Python suites, the
+compose tests) passed a change that CI failed on **every push** from `0747d6c` to `9f68ec7`: `make
+up` in the `stack` job and a pinned compose-budget test in `ci`. Each of us ran a subset of the
+stack in which the failing condition could not arise (the vault migration was still running when
+Compose looked at it), and no one read CI on the pushed head until the owner did. **Rule: before
+declaring work done, read CI on the pushed head at job level** — every job's conclusion and
+duration, and for path-filtered workflows whether the real job executed or was skipped. A green
+local suite and a clean review are not substitutes for it.
+
+**For `lab_notebook.md`** (appended by whoever merges M6, after the fix-round entry above):
+
+> **2026-09-23 — Read CI, at job level, on the pushed head.** Five independent reviews and a
+> passing local suite all missed a defect that CI caught on every push, because each of us ran a
+> subset of the stack where the failing condition could not arise: the one-shot vault migration was
+> still running whenever Compose inspected it locally, and had already exited in CI's full stack.
+> Path filters then made later green runs meaningless, because the stack job was skipped. Before
+> declaring work done, read CI on the pushed head at job level and confirm that path-filtered jobs
+> executed; a green local suite and a clean review are not substitutes for it.
 
 ## Open items this branch did not take
 
@@ -529,7 +550,8 @@ check-run annotations do not), the history shows more:
   Whether the one-shot has exited when Compose looks at it is a race. Every local run and all five
   reviews checked a subset of services where Compose looked while Flyway was still running; I also
   could not reproduce it with Compose v2.29.7, v2.33.1 or v2.39.4 on subsets, so the exact runner
-  behaviour is inferred from CI's annotations, not reproduced. The round-5 `await-oneshot.sh`,
+  behaviour was inferred from CI's annotations at the time; **the sixth review then reproduced it**
+  (below). The round-5 `await-oneshot.sh`,
   which five reviews examined, was never the cause and never the cure: CI failed inside `up --wait`
   before reaching it.
 - **`devcontainer`** failed in post-create's `make ci` on the same budget test.
@@ -562,6 +584,32 @@ branch. The fallback branch merges after M5, so M5's fix reaches it then.
 commit (owner, 2026-09-23). The rows of the fix-round and fifth-review sections above that describe
 `await-oneshot.sh` are superseded by this section.
 
+### Sixth independent review (fresh reviewer, 2026-09-23): the review of `e7a5be5`
+
+Verdict **CHANGES_REQUIRED: 0 BLOCKER, 1 MAJOR, in documentation only**; the code of `e7a5be5` is
+correct. Record: `docs/reviews/M6/m6-decision-2026-09-23-sixth.md`.
+
+- **The cause is reproduced, no longer inferred.** With `0747d6c`'s `pii-vault` and
+  `pii-vault-migrate` and a stand-in holding Compose's start phase open (as `mlflow` does in the
+  real stack, waiting for `timescaledb` and `object-store-init`), `up -d --wait` fails with
+  `container …-pii-vault-migrate-1 exited (0)` on Compose 5.5.1, 2.29.7 and 2.33.1; it passed
+  only when Flyway was still running at the check. A dependent with `service_completed_successfully`
+  makes it pass, confirming the protection `object-store-init` relies on.
+- **No other one-shot has the race on `m6/decision`.** The only other one-shot, `object-store-init`,
+  is protected by `mlflow` in every profile that starts it; `pii-vault-migrate` is `full`-only and
+  nothing runs `--profile full up --wait` here. Under `--profile full up -d --wait` the race
+  returns (reproduced): a latent trap, not a current defect.
+- **The new `make up` path holds** (5.5.1 and 2.29.7): first run exit 0 with V1–V3 applied, second
+  run "up to date", after `down` on the existing volume, and exit 1 with a wrong migrator password.
+- **MAJOR (docs): the M9 carry described the removed design** and said `up --wait` ignores a
+  one-shot's exit code, while `origin/m9/infra`'s `security.yml` already runs
+  `--profile full up -d --wait fraudshield-api`. **Fixed:** `M9_updates.md` section 8.4 on
+  `m9/infra` (`e20c1dd`, appended) states the current design, that `--wait` fails on an exited
+  one-shot, the rule that any service needing the vault migrated depends on `pii-vault-migrate`
+  with `service_completed_successfully` in the same profile, and the `security.yml` trap as an
+  acceptance item; the two stale rows of this file's "Files touched" table and the wrong claim
+  above are corrected.
+
 ## Resume here (final state, 2026-09-23, after CI)
 
 **Stopped as instructed: nothing merged, nothing tagged.**
@@ -580,7 +628,7 @@ CI itself at job level. The owner may want a review of `e7a5be5` (a compose/Make
 criterion NOT MET under ADR 0059 and the carries PB-73 and PB-74 named in the annotation, once `ci`
 and an executed `stack` job are green on the merged head.
 
-**Carried:** M9 — `M9_updates.md` section 8 (`6a7af4f`), plus O2 (`diagnose-stack.sh` should allow a
+**Carried:** M9 — `M9_updates.md` section 8 (`6a7af4f`), corrected by section 8.4 (`e20c1dd`), plus O2 (`diagnose-stack.sh` should allow a
 finished `pii-vault-migrate`; with `run --rm` the container no longer lingers, so O2 is moot). M10 —
 PB-73, PB-74. M5 — the MLflow test (`c59d543`).
 
