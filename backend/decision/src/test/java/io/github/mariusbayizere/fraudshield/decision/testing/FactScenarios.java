@@ -72,11 +72,14 @@ public final class FactScenarios {
         System.nanoTime());
     ports.scores = t -> Optional.of(0.1);
     ports.anomaly = 0.999;
+    // The scorer answered from the database fallback (ADR 0033, V66): the flag must survive.
+    ports.featureStoreDegraded = true;
     service.decide(
         Fixtures.transaction(
             UUID.randomUUID(), "tok_FourthAccountWwwwXxxxYyy1", "10", Channel.CARD),
         new byte[32],
         System.nanoTime());
+    ports.featureStoreDegraded = false;
     service.decide(Fixtures.transaction("20"), new byte[32], System.nanoTime());
 
     clock.advance(Duration.ofSeconds(30));

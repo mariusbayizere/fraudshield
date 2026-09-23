@@ -127,27 +127,42 @@ class EnvelopeConsumerTest {
                 // A row the database will never accept: a unique violation (SQLSTATE class 23).
                 throw new SQLException("duplicate key value (test)", "23505");
               }
+              if (sequence == 9) {
+                // A vault row that will never verify, reached through the SMS sender.
+                throw new IllegalStateException(
+                    "could not send",
+                    io.github.mariusbayizere.fraudshield.notify.vault.VaultException.permanent(
+                        "a vault row does not verify", null));
+              }
               handled.add(sequence);
             })) {
       publishRaw(topic, "{not json");
       publishRaw(topic, "{\"event_id\":\"" + UUID.randomUUID() + "\",\"payload\":{}}");
       publish(topic, institution, 7);
       publish(topic, institution, 8);
+      publish(topic, institution, 9);
+      publish(topic, institution, 10);
 
-      await().atMost(Duration.ofSeconds(30)).until(() -> handled.contains(8));
-      assertThat(handled).containsExactly(8);
-      await().atMost(Duration.ofSeconds(30)).until(() -> consumer.deadLettered() == 3);
+      await().atMost(Duration.ofSeconds(30)).until(() -> handled.contains(10));
+      assertThat(handled).containsExactly(8, 10);
+      await().atMost(Duration.ofSeconds(30)).until(() -> consumer.deadLettered() == 4);
     }
 
     List<ConsumerRecord<String, byte[]>> dead = drain(topic + ".dlq");
-    assertThat(dead).hasSize(3);
+    assertThat(dead).hasSize(4);
     assertThat(dead)
         .extracting(
             r ->
                 new String(r.headers().lastHeader("fs-dlq-reason").value(), StandardCharsets.UTF_8))
-        .containsExactly("malformed_envelope", "malformed_envelope", "rejected_by_the_database");
-    assertThat(new String(dead.getLast().value(), StandardCharsets.UTF_8))
+        .containsExactly(
+            "malformed_envelope",
+            "malformed_envelope",
+            "rejected_by_the_database",
+            "permanent_vault_failure");
+    assertThat(new String(dead.get(2).value(), StandardCharsets.UTF_8))
         .contains("\"decision_sequence\":7");
+    assertThat(new String(dead.getLast().value(), StandardCharsets.UTF_8))
+        .contains("\"decision_sequence\":9");
     assertThat(dead)
         .allSatisfy(
             r ->
@@ -172,7 +187,7 @@ class EnvelopeConsumerTest {
             new ByteArrayDeserializer())) {
       consumer.subscribe(List.of(topic));
       long deadline = System.nanoTime() + Duration.ofSeconds(30).toNanos();
-      while (System.nanoTime() < deadline && records.size() < 3) {
+      while (System.nanoTime() < deadline && records.size() < 4) {
         ConsumerRecords<String, byte[]> polled = consumer.poll(Duration.ofMillis(500));
         polled.forEach(records::add);
       }

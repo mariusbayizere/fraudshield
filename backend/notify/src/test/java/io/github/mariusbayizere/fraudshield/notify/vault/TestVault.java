@@ -18,7 +18,8 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
 /**
- * A bootstrapped and migrated PII vault database, from the same scripts the deployment uses ({@code
+ * A bootstrapped and migrated PII vault database, from the same scripts the deployment uses and
+ * nothing more (no grant is added here that the shipped bootstrap does not make) ({@code
  * backend/persistence/src/main/resources/db/vault}). A separate instance from the main database, as
  * docker-compose has it: the point of D-20 is that the two do not share a server, a role or a
  * backup.
@@ -49,7 +50,6 @@ public final class TestVault implements AutoCloseable {
       statement.execute(Files.readString(VAULT.resolve("bootstrap.sql"), StandardCharsets.UTF_8));
       statement.execute("ALTER ROLE fs_vault_migrator PASSWORD '" + migratorPassword + "'");
       statement.execute("ALTER ROLE fs_vault PASSWORD '" + vaultPassword + "'");
-      statement.execute("GRANT CREATE ON DATABASE fraudshield_pii TO fs_vault_migrator");
     } catch (IOException | SQLException e) {
       throw new IllegalStateException("could not bootstrap the test vault", e);
     }

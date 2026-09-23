@@ -52,7 +52,8 @@ public final class KmsKeyProvider implements KeyProvider {
     byte[] plaintext = generated.plaintext();
     try {
       if (plaintext.length != 32) {
-        throw new VaultException("the key service returned a data key that is not 256 bits");
+        throw VaultException.permanent(
+            "the key service returned a data key that is not 256 bits", null);
       }
       return new DataKey(currentKekId, new SecretKeySpec(plaintext, "AES"), generated.wrapped());
     } finally {
@@ -63,12 +64,13 @@ public final class KmsKeyProvider implements KeyProvider {
   @Override
   public SecretKey unwrap(String keyId, byte[] wrapped) {
     if (!readableKekIds.contains(keyId)) {
-      throw new VaultException("no master key with id " + keyId);
+      throw VaultException.permanent("no master key with id " + keyId, null);
     }
     byte[] plaintext = kms.decrypt(keyId, wrapped, CONTEXT);
     try {
       if (plaintext.length != 32) {
-        throw new VaultException("the key service returned a data key that is not 256 bits");
+        throw VaultException.permanent(
+            "the key service returned a data key that is not 256 bits", null);
       }
       return new SecretKeySpec(plaintext, "AES");
     } finally {
