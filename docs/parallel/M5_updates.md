@@ -654,3 +654,21 @@ transaction's own row, so a replay does not count `outcomes` off itself.
 
 **Suite after this round:** ml 537 passed, 3 skipped, coverage 94.31%; ruff, mypy (162 source
 files) and `fs-traceability check` clean.
+
+## From M6 (2026-09-23): a real-MLflow test fails on this branch
+
+Written by the M6 session at the owner's direction (M6 does not fix M5's code). CI's `ci` run #282 on
+`90078b2` (this branch's head) fails in the python job at step 9, the `ml` pytest step; the M6
+session reproduced it on a clean checkout of `origin/m5/scoring` with `REQUIRE_DOCKER=1`:
+
+```
+tests/serving/test_registry.py::test_publish_and_hot_swap_against_the_mlflow_the_deployment_runs
+fraudshield_ml.serving.registry.RegistryError: GET /api/2.0/mlflow/registered-models/alias:
+HTTP 400 {"error_code": "INVALID_PARAMETER_VALUE", "message": "Registered model alias
+production not found.", ...}
+```
+
+It is the only failure in `ml` (558 passing, coverage 94.54% on the combined M5+M6 tree). This is
+the "M5-1, the Docker tests" item in section 12: CI is **not** green for `m5/scoring`, so
+`m5-complete` must not be tagged yet, and `m6/featurestore-fallback` (which contains this branch)
+is red in CI for the same test until M5 fixes it.
