@@ -629,6 +629,16 @@ correct. Record: `docs/reviews/M6/m6-decision-2026-09-23-sixth.md`.
 | `m6/decision` | **ready; waits on M5's merge.** `ci` #318, `stack` #320 (executed: 160 s, `make up`, smoke, seed-demo) and `devcontainer` #321 (executed: 1,112 s) green on `f73fc57`, read at job level. The commit after it adds only the review-scope note to this file (documentation, no review needed; its `stack` job is skipped by the path filter, as it should be for a documentation change) |
 | `m6/featurestore-fallback` | `d71222e`; red in CI only for M5's failing MLflow test (section above), which blocks it until M5 fixes it |
 
+**Evidence split, for the tag annotation** (owner, 2026-09-23). Cite each commit for what it carries:
+
+| Commit | What it evidences |
+|---|---|
+| `f73fc57` | the last change to code, schema, CI or build configuration on `m6/decision` (a comment in the stack input `docker-compose.yml`), and the **executed-stack evidence**: `ci` #318 green with every job executed, `stack` #320 with its real job executed (160 s: `make up` including the vault migration, the smoke test, `make seed-demo`), `devcontainer` #321 executed (1,112 s: post-create `make ci` and the smoke test inside); read at job level through the Actions API |
+| `43143b9` and later documentation-only commits | documentation on top (`docs/parallel/M6_updates.md` only; `git diff --stat f73fc57 43143b9` lists that one file). `ci` #320 green with every job executed; `stack` #322 and `devcontainer` #323 green with their real jobs **skipped** by the path filter, as they should be for a documentation change |
+
+After the merge to `main`, the tag's own evidence is CI on the merged head: `ci` green and a `stack`
+job executed there (owner's instruction); `f73fc57` remains the branch-side evidence.
+
 **Reviews:** five fresh reviews; the fifth APPROVED. After it, CI showed that a change none of the
 reviewers could run end to end (the full `core` stack under CI's Compose) had broken `make up` and a
 pinned budget test since `0747d6c`; fixed in `e7a5be5` without a further review round, verified by
