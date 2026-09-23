@@ -623,7 +623,7 @@ the re-review reproduced all four rows at `2afbb0e`), the latency position (ADR 
 FR-02-09's status. Still open and named rather than hidden: `pytest-timeout` (needs an ADR 0009
 licence review), the in-process `Comparison` series asserted only through the MLflow log, the
 second half of the first review's finding 2 (a missing `prof`/`tier` as a fallback trigger), the
-three `requires_docker` suites, and `fs-bench memory`'s new production profile, which is changed
+two `requires_docker` suites, and `fs-bench memory`'s new production profile, which is changed
 but not executed by any test.
 
 **One thing worth recording for whoever reads a surviving mutant later:** `ACCOUNT_HORIZON` equals
@@ -719,4 +719,52 @@ run on the fixed head; this session has no GitHub credentials and cannot read ru
 **What it says about the review chain.** Four review passes over this code found six classes of
 defect in the promotion path and none of them found this one, because every one of them reasoned
 about the same fake. A test that talks to the real dependency is worth more than another reading
-of the client, and the three `requires_docker` tests are the only place M5 has one.
+of the client, and the two `requires_docker` tests M5 owns -- real MLflow in
+`tests/serving/test_registry.py`, real Redis in `tests/featurestore/test_serving_parity.py` -- are
+the only place it has one.
+
+### Final review (fde5311): APPROVED, and what it changed anyway
+
+The fifth and last pass drove `MlflowRegistry` against a live `ghcr.io/mlflow/mlflow:v3.16.0`
+across all nine endpoints the client calls, with absent, duplicate and malformed variants of each.
+**Verdict: APPROVED, no BLOCKER, no MAJOR.** It confirmed the alias fix is right on the real
+server, that no other call site makes the same assumption (`ensure_model` really is 400
+`RESOURCE_ALREADY_EXISTS`, `experiments/get-by-name` really is 404, an absent artifact really is
+404), that both new tests are load-bearing under mutation, and that the D-11 re-check, the
+`SERVED_TAG` exemption and `_count_missing_producers` are untouched by the delta.
+
+Three of its observations were acted on, because two of them make the §19 lesson sharper:
+
+1. **The guard read stronger than it was.** `_alias_absent` matched `"alias"` in the *formatted*
+   error, which always contains the request path `…/registered-models/alias`, so that conjunct was
+   vacuous — proved by a mutation that dropped it and survived. `RegistryError` now carries the
+   status and the decoded body, and the decision is made on the server's own `message` field.
+2. **A missing registered model read as "alias unset".** `by_alias("typo-name", …)` returned
+   `None`, so `AliasWatcher` would poll a misspelled model name forever with no log and no
+   `fs_model_swap_failures_total`. Now told apart by the message ("Registered Model with name=…"),
+   with a test. An existing test asserted the old behaviour; it was changed, because the contract
+   it encoded was the defect.
+3. **The fake still diverged where nobody looked**, answering a missing model with the alias
+   wording. Corrected — and the Docker test now **pins the fake's shapes against the live server**
+   (status and `error_code` for an unset alias compared with `FakeMlflow.alias_miss`, and the
+   missing-model 404 asserted) rather than merely traversing the path. That is the rule from the
+   lab notebook entry applied to itself: a real-service test per fake, whose job is to catch the
+   double drifting from its subject.
+
+Prose corrections from the same review: M5 owns **two** `requires_docker` tests, not three (the
+third is `tools/tests/test_pytest_docker.py`); and the Docker test pins MLflow *v3.16.0*, while
+`docker-compose.yml` runs `v3.16.0-full` on PostgreSQL — same version and same `SqlAlchemyStore`
+path, now said accurately in the docstring.
+
+**Suite after these changes**, `cd ml && REQUIRE_DOCKER=1 pytest -q`: **545 passed, 1 skipped,
+coverage 94.33%** (real MLflow 3.16.0 and real Redis 7.2.16 containers; the skip is M6's
+`m6-postgresql` parameter). The rest of CI's python job, run the same way on this tree: tools 198,
+contracts 490, dataset 143, `uv lock --check` clean, ruff and mypy (162 files) clean,
+`fs-traceability check` 0 errors.
+
+**Left for the owner, not fixable here:** all 14 M5 rows in `requirements.yaml` are still
+`NOT_STARTED` with empty implementation and evidence columns, while M4's were settled on-branch
+*before* the `m4-complete` tag (`b3c050e`, `4722ca7`). If M5 follows that precedent, the statuses
+and the FR-02-09 carry row from §15 want applying and re-rendering before the tag, not after the
+merge.
+
