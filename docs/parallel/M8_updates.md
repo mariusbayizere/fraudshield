@@ -50,6 +50,45 @@ blocks.
 3. **Owner-directed:** `tools/src/fraudshield_tools/licences.py` allows OFL-1.1 for
    `@fontsource/*` and `@fontsource-variable/*` npm packages only (922cde8), with tests.
 
+## 3b. SRS v5.0 review — shared files changed on the owner's decision (2026-09-23)
+
+The owner reviewed SRS v5.0 (`docs/srs/v5_delta.md`) and recorded decisions in
+`docs/srs/v5_decisions.md`. Carrying them out required editing files M8 does not own. Each change
+is generated-source, not hand-edited output:
+
+| File | Change | Why it could not be avoided |
+|---|---|---|
+| `docs/prompts/FraudShield_Master_Build_Prompt.md` Part B | **D-52, D-53, D-54** added | `docs/srs/defect_register.md` is generated from Part B; a defect cannot exist in the register without its resolution in the prompt |
+| `docs/prompts/FraudShield_Master_Build_Prompt.md` D.3 | **M13 — Operational reporting** added after M12 | FR-08 needed a milestone; M9–M12 are referenced by branches and reviews, so they were not renumbered |
+| `tools/src/fraudshield_tools/defect_register.py` | count 51 → 54; the count in its messages was hard-coded and now derives from the constant | the tool asserts the expected defect list |
+| `tools/src/fraudshield_tools/traceability_seed.py` | SRS v5.0 added as a source for the adopted sections only; `V5_SECTIONS`, FR-08 reader, D-52/53/54 milestones and links | `fs-traceability-seed --check` rebuilds every row from its sources and fails on hand-added rows |
+| `tools/src/fraudshield_tools/traceability.py` | `UX-ROLE-*` and `DEV-MATRIX-*` ID families; milestones extended to M13 | the checker validates ids and milestones against fixed lists |
+| `tools/tests/test_scope_and_registers.py` | fixture copies the v5 extraction; row and defect counts updated | the tests pin both |
+
+After the change: `fs-traceability-seed --check` and `fs-traceability check` report **305 rows,
+890 tagged tests, 0 errors, 0 warnings**; `fs-defect-register --check` reports 54; `pytest
+tools/tests` 206 pass. No migration, entity, contract or frontend file was touched.
+
+### For the M7 agent — proposed amendment to ADR 0071
+
+v5 §02/§23.1 require "no raw SQL" and "no database queries in services". The owner kept the hybrid
+rule. ADR 0082 (in M8's block) records the four reasons in the project's own words — audit-chain
+insert ordering, append-only triggers versus dirty checking, hypertables and security-barrier
+views, and set-based refresh-token revocation — plus ADR 0017's PII vault as a fifth. ADR 0071 is
+yours; a one-paragraph amendment pointing at ADR 0082 and D-54 would close the loop.
+
+### For the M9 agent — what v5 adds that M9 does not have
+
+1. **Service Dockerfiles with budgets**: six images, multi-stage, non-root, HEALTHCHECK, size caps
+   (api < 280 MB, ml < 1.2 GB, frontend < 45 MB, worker < 300 MB). Only `docker-compose.yml` exists
+   today; no service Dockerfile is on any branch.
+2. **Distributed tracing**: OpenTelemetry agent on the API, SDK on the Python services, context
+   propagated through Kafka headers, 10% sampling with 100% on errors and slow spans. The stack row
+   already names an OpenTelemetry Collector; v5 names Jaeger as the UI, which is M9's choice to
+   make.
+3. **Helm is rejected** (`v5_decisions.md` row 8): kustomize stays, because it is built, validated
+   by kubeconform and covered by 24 policy tests. The deviation is recorded there.
+
 ## 4. For the M6 agent: implement GET /system/status
 
 The owner approved a contract change (ADR 0081, commit 46893d7). **M6 owns the server side**,

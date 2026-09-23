@@ -19,7 +19,7 @@ REGISTER_PATH = REPO_ROOT / "docs/srs/defect_register.md"
 PART_B_START = "## PART B — SRS DEFECT REGISTER AND BINDING RESOLUTIONS"
 PART_C_START = "## PART C —"
 DEFECT_HEADING = re.compile(r"^\*\*(D-\d{2}) — (.+?)\*\*", re.MULTILINE)
-EXPECTED_DEFECT_COUNT = 51
+EXPECTED_DEFECT_COUNT = 54
 
 HEADER = """<!-- GENERATED FILE — do not edit.
      Source: docs/prompts/FraudShield_Master_Build_Prompt.md Part B.
@@ -75,10 +75,10 @@ def main(argv: list[str] | None = None) -> int:
         if current != content:
             print(f"{REGISTER_PATH} is stale; run: uv run fs-defect-register", file=sys.stderr)
             return 1
-        print("defect register up to date (51 defects)")
+        print(f"defect register up to date ({EXPECTED_DEFECT_COUNT} defects)")
         return 0
     Path(REGISTER_PATH).write_text(content, encoding="utf-8")
-    print(f"wrote {REGISTER_PATH.relative_to(REPO_ROOT)} (51 defects)")
+    print(f"wrote {REGISTER_PATH.relative_to(REPO_ROOT)} ({EXPECTED_DEFECT_COUNT} defects)")
     return 0
 
 

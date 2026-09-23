@@ -55,6 +55,9 @@ MATRIX_MD = Path("docs/traceability/requirements_matrix.md")
 
 ID_PATTERN = re.compile(
     r"^(FR-\d{2}-\d{2}|NFR-(PERF|SEC|REL)-\d{2}|UX-(REG|DASH)-\d{2}"
+    # UX-ROLE-* and DEV-MATRIX-* come from the parts of SRS v5.0 the owner adopted
+    # (docs/srs/v5_decisions.md): the per-role frontend specification and the device matrix.
+    r"|UX-ROLE-(AN|SN|RO|AD)-\d{2}|DEV-MATRIX-\d{2}"
     r"|MOB-(PWA|TOUCH|NET|PERF|COMP|DEV)-\d{2}|ML-(DATA|GATE)-\d{2}|OPS-(CI|OBS)-\d{2}"
     r"|TEST-\d{2}|RES-\d{2}|D-\d{2})$"
 )
@@ -74,8 +77,9 @@ VERIFICATIONS = {"test", "inspection", "manual", "external"}
 # M8B, the analyst API, was added by the owner on 2026-10-18 as its own milestone so the existing
 # numbering holds. It runs alongside M9 and must be on main before M10. Rule 7 closes milestones
 # cumulatively by position, so M8B sorts after M9 (completing M9 does not hold M8B's rows closed)
-# and before M10 (completing M10 does).
-MILESTONES = [*(f"M{n}" for n in range(10)), "M8B", *(f"M{n}" for n in range(10, 13))]
+# and before M10 (completing M10 does). M13 is the reporting milestone added after M8 for SRS v5.0
+# FR-08 (build prompt D.3); it sorts last.
+MILESTONES = [*(f"M{n}" for n in range(10)), "M8B", *(f"M{n}" for n in range(10, 14))]
 
 
 @dataclass
