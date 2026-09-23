@@ -144,23 +144,45 @@ class PostgresFallback:
         try:
             if self._clock() < self._failed_until:
                 raise FallbackUnavailableError("the feature store's database failed recently")
-            try:
-                if self._connection is None:
-                    self._connection = self._open()
-                cursor = self._connection.cursor()
+            if self._connection is None:
                 try:
-                    return work(cursor)
-                finally:
-                    # Read-only work: end the transaction so no snapshot is held between reads.
-                    self._connection.rollback()
+                    self._connection = self._open()
+                except Exception as error:
+                    self._connection_lost()
+                    raise FallbackUnavailableError(
+                        "the feature store's database cannot be reached"
+                    ) from error
+            connection = self._connection
+            try:
+                result = work(connection.cursor())
             except Exception as error:
-                self._drop()
-                self._failed_until = self._clock() + self._cool_down_s
+                if _connection_level(error):
+                    self._connection_lost()
+                else:
+                    # A statement that was cancelled or failed: this read fails, the next one is
+                    # tried as usual (the third review, 2026-09-23: one slow account must not turn
+                    # the fallback off for everyone).
+                    self._end(connection)
                 raise FallbackUnavailableError(
                     "the feature store's database fallback failed"
                 ) from error
+            # Read-only work: end the transaction so no snapshot is held between reads.
+            self._end(connection)
+            return result
         finally:
             self._lock.release()
+
+    def _connection_lost(self) -> None:
+        """The server is unreachable or the session is gone: stop asking for a while."""
+        self._drop()
+        self._failed_until = self._clock() + self._cool_down_s
+
+    def _end(self, connection: Connection) -> None:
+        """Ends the read's transaction; a session that cannot even roll back is lost."""
+        try:
+            connection.rollback()
+        except Exception:
+            self._connection_lost()
 
     def _open(self) -> Connection:
         connection = self._connect()
@@ -246,6 +268,27 @@ def connector(
         return connection
 
     return connect
+
+
+#: SQLSTATE classes and codes that mean the connection or server is gone, not that one statement
+#: failed: connection exceptions (08), insufficient resources (53) and administrator shutdown or
+#: crash (57P01-57P03). A cancelled statement (57014) is not among them.
+_CONNECTION_STATES = ("08", "53", "57P01", "57P02", "57P03")
+
+
+def _connection_level(error: BaseException) -> bool:
+    """Whether a failure means the connection is lost rather than one statement failing."""
+    if isinstance(error, (OSError, TimeoutError)):
+        return True
+    import pg8000.exceptions  # noqa: PLC0415 - only a deployment with a database needs the driver
+
+    if isinstance(error, pg8000.exceptions.InterfaceError):
+        return True
+    if isinstance(error, pg8000.exceptions.DatabaseError):
+        detail = error.args[0] if error.args else None
+        code = detail.get("C", "") if isinstance(detail, dict) else ""
+        return any(code.startswith(state) for state in _CONNECTION_STATES)
+    return False
 
 
 def _minor(amount: Decimal, units: int | None) -> int | None:
