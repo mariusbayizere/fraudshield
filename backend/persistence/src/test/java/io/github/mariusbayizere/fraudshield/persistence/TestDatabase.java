@@ -39,7 +39,8 @@ public final class TestDatabase {
           "fs_migrator", randomSecret(),
           "fs_app", randomSecret(),
           "fs_app_readonly", randomSecret(),
-          "fs_compliance_ro", randomSecret());
+          "fs_compliance_ro", randomSecret(),
+          "fs_scorer", randomSecret());
   private static PostgreSQLContainer container;
 
   private final String adminBaseUrl;
@@ -136,7 +137,7 @@ public final class TestDatabase {
   /**
    * A connection as one of the FraudShield roles.
    *
-   * @param role fs_migrator, fs_app, fs_app_readonly or fs_compliance_ro
+   * @param role fs_migrator, fs_app, fs_app_readonly, fs_compliance_ro or fs_scorer
    * @return the connection
    * @throws SQLException if the connection fails
    */

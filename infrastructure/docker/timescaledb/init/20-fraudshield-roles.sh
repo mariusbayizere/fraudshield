@@ -22,4 +22,13 @@ ALTER ROLE fs_app PASSWORD :'app';
 ALTER ROLE fs_app_readonly PASSWORD :'app_readonly';
 ALTER ROLE fs_compliance_ro PASSWORD :'compliance';
 SQL
+# fs_scorer (ADR 0062 point 6) is the scorer's feature-store fallback. Its password is optional
+# here: without FS_SCORER_DB_PASSWORD the role has none and cannot log in, so the scorer's database
+# fallback stays off (fail closed) until the deployment supplies one.
+if [[ -n "${FS_SCORER_DB_PASSWORD:-}" ]]; then
+  psql -v ON_ERROR_STOP=1 --quiet --username "${POSTGRES_USER:-postgres}" --dbname "$database" \
+    --set=scorer="${FS_SCORER_DB_PASSWORD}" <<'SQL'
+ALTER ROLE fs_scorer PASSWORD :'scorer';
+SQL
+fi
 echo "fraudshield roles ready in $database"

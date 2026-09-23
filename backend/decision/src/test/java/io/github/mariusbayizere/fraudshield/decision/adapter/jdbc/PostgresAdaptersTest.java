@@ -485,6 +485,32 @@ class PostgresAdaptersTest {
   }
 
   @Test
+  @Tag("FR-02-09")
+  void accountsOpenedBeforeTheyAreSeenTakeTheirFirstSeenFromTheirFirstPayment() throws Exception {
+    // V67: an institution may supply an opening date before the account ever transacts, so a
+    // profile can exist with first_seen_at unknown; the first payment fills it.
+    try (Connection c = db.superuser()) {
+      TestDatabase.exec(
+          c,
+          "INSERT INTO fraudshield.account_profiles (institution_id, account_token, opened_at)"
+              + " VALUES (?, 'tok_AccountAaaaBbbbCcccDddd01',"
+              + " ?::timestamptz - interval '400 days')",
+          INSTITUTION,
+          NOW.toString());
+    }
+    sink.accept(records(FactScenarios.everyKindOfFact()));
+    assertThat(
+            one(
+                "SELECT first_seen_at = '"
+                    + NOW
+                    + "'::timestamptz AND opened_at = '"
+                    + NOW
+                    + "'::timestamptz - interval '400 days' FROM fraudshield.account_profiles"
+                    + " WHERE account_token = 'tok_AccountAaaaBbbbCcccDddd01'"))
+        .isEqualTo("t");
+  }
+
+  @Test
   @Tag("D-43")
   void fxRatesAreReadAsOfTheTransactionDate() throws Exception {
     try (Connection c = db.superuser()) {

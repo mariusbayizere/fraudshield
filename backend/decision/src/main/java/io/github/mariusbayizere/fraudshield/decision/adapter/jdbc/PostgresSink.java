@@ -75,7 +75,8 @@ public final class PostgresSink implements SpoolDrainer.Sink {
       """
       INSERT INTO account_profiles (institution_id, account_token, first_seen_at) VALUES (?, ?,
       ?) ON CONFLICT (institution_id, account_token) DO UPDATE SET first_seen_at =
-      EXCLUDED.first_seen_at WHERE EXCLUDED.first_seen_at < account_profiles.first_seen_at
+      EXCLUDED.first_seen_at WHERE account_profiles.first_seen_at IS NULL
+      OR EXCLUDED.first_seen_at < account_profiles.first_seen_at
       """;
 
   private static final String SELECT_DECISION_STATES =
