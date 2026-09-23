@@ -53,10 +53,10 @@ Sum of `deploy.resources.limits.memory`, enforced by `fs-compose-budget` (ADR 00
 
 | Profile | Budget (MiB) | Current total (MiB) | Services |
 |---|---|---|---|
-| core | 4,096 | 3,968 | timescaledb 768, pii-vault 256, redis 320, kafka 768, object-store 384, object-store-init 128, mlflow 1,024, mailpit 64, wiremock 256 |
+| core | 4,096 | 4,096 | timescaledb 768, pii-vault 256, pii-vault-migrate 128 (one-shot, M6), redis 320, kafka 768, object-store 384, object-store-init 128, mlflow 1,024, mailpit 64, wiremock 256 |
 | ml | 6,144 | 0 | scoring service and workers arrive in M5 |
 | obs | 5,120 | 0 | Prometheus, Grafana, Loki, OpenTelemetry Collector arrive in M9 |
-| full | 10,240 | 3,968 | all profiles together |
+| full | 10,240 | 4,096 | all profiles together |
 
 Budgets fit the 16 GB Codespaces machine with room for the IDE, Maven and test JVMs. The `core`
 total exceeds the memory `dev-laptop-01` has free, which is why the stack does not run there.

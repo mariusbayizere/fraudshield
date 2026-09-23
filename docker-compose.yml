@@ -30,6 +30,7 @@ services:
       FS_APP_DB_PASSWORD: ${FS_APP_DB_PASSWORD:?run make env}
       FS_APP_READONLY_DB_PASSWORD: ${FS_APP_READONLY_DB_PASSWORD:?run make env}
       FS_COMPLIANCE_RO_DB_PASSWORD: ${FS_COMPLIANCE_RO_DB_PASSWORD:?run make env}
+      FS_SCORER_DB_PASSWORD: ${FS_SCORER_DB_PASSWORD:?run make env}
       TIMESCALEDB_TELEMETRY: "off"
     command: ["postgres", "-c", "shared_preload_libraries=timescaledb", "-c", "timescaledb.telemetry_level=off"]
     ports: ["127.0.0.1:5432:5432"]
@@ -54,8 +55,14 @@ services:
       POSTGRES_DB: fraudshield_pii
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${PII_VAULT_SUPERUSER_PASSWORD:?run make env}
+      FS_VAULT_MIGRATOR_DB_PASSWORD: ${FS_VAULT_MIGRATOR_DB_PASSWORD:?run make env}
+      FS_VAULT_DB_PASSWORD: ${FS_VAULT_DB_PASSWORD:?run make env}
     ports: ["127.0.0.1:5433:5432"]
-    volumes: [pii-vault-data:/var/lib/postgresql/data]
+    volumes:
+      - pii-vault-data:/var/lib/postgresql/data
+      # The vault's roles and schema (db/vault/bootstrap.sql), on first start (ADR 0069).
+      - ./infrastructure/docker/pii-vault/init:/docker-entrypoint-initdb.d:ro
+      - ./backend/persistence/src/main/resources/db/vault:/fraudshield-vault:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d fraudshield_pii"]
       interval: 5s
@@ -63,6 +70,28 @@ services:
       retries: 30
     deploy:
       resources: { limits: { memory: 256m } }
+
+  # One-shot: applies the vault's Flyway migrations (db/vault) as fs_vault_migrator, the only role
+  # that may change the vault's schema. The API never holds the migrator's credentials (ADR 0069).
+  pii-vault-migrate:
+    image: flyway/flyway:12.4.0
+    profiles: [core, full]
+    networks: [fraudshield]
+    depends_on:
+      pii-vault: { condition: service_healthy }
+    environment:
+      FLYWAY_URL: jdbc:postgresql://pii-vault:5432/fraudshield_pii
+      FLYWAY_USER: fs_vault_migrator
+      FLYWAY_PASSWORD: ${FS_VAULT_MIGRATOR_DB_PASSWORD:?run make env}
+      FLYWAY_SCHEMAS: vault
+      FLYWAY_LOCATIONS: filesystem:/flyway/sql
+      JAVA_ARGS: -Xmx80m
+    command: ["migrate"]
+    volumes:
+      - ./backend/persistence/src/main/resources/db/vault:/flyway/sql:ro
+    restart: "no"
+    deploy:
+      resources: { limits: { memory: 128m } }
 
   redis:
     <<: *defaults

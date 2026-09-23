@@ -32,6 +32,9 @@ env: ## Create .env with random local development credentials (never overwrites)
 .PHONY: up
 up: env ## Start the core local stack and wait until every service is healthy
 	$(COMPOSE) --profile core up -d --wait --wait-timeout 300
+	@# --wait treats a one-shot as ready once it runs; its exit code decides (ADR 0069).
+	$(COMPOSE) --profile core wait pii-vault-migrate | grep -q 'exited with status code 0$$' || \
+	  { echo "pii-vault-migrate failed: see '$(COMPOSE) logs pii-vault-migrate'" >&2; exit 1; }
 	$(COMPOSE) --profile core ps
 
 .PHONY: smoke

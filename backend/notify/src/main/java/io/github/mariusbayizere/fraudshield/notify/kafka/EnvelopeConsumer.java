@@ -198,9 +198,9 @@ public final class EnvelopeConsumer implements AutoCloseable {
       return deadLetter(record, "rejected_by_the_database", e);
     } catch (RuntimeException e) {
       if (permanentVaultFailure(e)) {
-        // A vault row that does not verify, or a key this deployment lacks: retrying would stall
-        // every customer behind this record on the partition, for ever (the independent review,
-        // 2026-09-23; finding 7 of the first review, reached again through the vault).
+        // A vault row that does not verify: retrying would stall every customer behind this record
+        // on the partition, for ever (the independent review, 2026-09-23). A key this instance
+        // does not hold yet is not permanent and is retried (ADR 0069, rolling rotation).
         return deadLetter(record, "permanent_vault_failure", e);
       }
       // A dependency that is down, a timeout: the record itself may be fine.
