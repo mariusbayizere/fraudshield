@@ -365,7 +365,7 @@ stands at **five fix rounds, four of which introduced a new defect** in the code
 | 2 (2026-09-23, `52481fc`, `3155415`) | the first laptop review's 8 MAJOR | D1: the wired-in fallback stalled the scorer on an unreachable database; D2: a key rotation would dead-letter customers' block SMS (found by the delta review); also the vault bootstrap grant and a test race, caught by the round's own verify |
 | 3 (2026-09-23, `ac6e4a6`, `c7b4ae7`) | D1, D2 | the cool-down fired on any failure, so one slow statement turned the fallback off for every account (found by the third, fresh review) |
 | 4 (2026-09-23, `5f74db3`, `2bc1b72`) | that MAJOR, four surviving mutations, two observations | the `make up` check used `docker compose wait`, which sees only running containers, so `make up` (and CI's M0 stack job) failed whenever the migration had already finished, the normal case in the full stack; tested only on the two vault services, where it happened to pass (found by the fourth, fresh review) |
-| 5 (2026-09-23, fixes below) | the fourth review's 2 MAJOR, four unpinned paths | to be decided by the fifth review |
+| 5 (2026-09-23, `9f68ec7`, `b89cc1f`) | the fourth review's 2 MAJOR, four unpinned paths | **none**: the fifth, fresh review came back clean (APPROVED, 0 BLOCKER, 0 MAJOR) |
 
 Each new defect sat in the code written to fix the previous one, and each was the kind a
 fix-focused author looks past: the fix answered the finding's scenario and created a neighbouring
@@ -397,6 +397,31 @@ handled on both paths). Record: `docs/reviews/M6/m6-decision-2026-09-23-fourth.m
 | MAJOR 1: `make up` failed on a healthy stack whenever `pii-vault-migrate` had already exited, which in the full `core` profile is the normal case, so CI's `stack.yml` (the M0 gate evidence) would fail | `infrastructure/docker/scripts/await-oneshot.sh` reads the one-shot's recorded state (`docker compose ps -a`), waiting while it runs, and fails on a non-zero exit, a missing container or a timeout. Tested on a throwaway project in four cases: immediately after `up --wait` (0), **20 s after the migration had exited** (0), wrong migrator password (1), never ran (1) |
 | MAJOR 2: M9's acceptance 8.2.2 said `KmsClientContract` checks that an unknown key and an unreachable service are not permanent; it did not | the contract now does: `anUnknownKeyIsRefusedButNotPermanently`, and `anUnreachableServiceIsNeverPermanent` through a new abstract `unreachableClient()` every binding supplies; a double that marks an unreachable service permanent now fails two tests |
 | Test gaps (not rated): a rollback that raises, `InterfaceError`, SQLSTATE 53 unpinned | a test each (`b89cc1f`, fallback branch); the reviewer's mutations M1, M2, M3, M6 now fail |
+
+### Fifth independent review (fresh reviewer, 2026-09-23): APPROVED — the review loop ends here
+
+Scope: fix round 5 (`9f68ec7`, `b89cc1f` merged as `db250d8`, and M9's `6a7af4f`). Verdict
+**APPROVED: 0 BLOCKER, 0 MAJOR**; no defect introduced by round 5 was found or reproduced. The
+reviewer ran `await-oneshot.sh` with the migration still running, finished 20 s earlier, on a
+second and third `up`, after `stop`/`up`, with Kafka delaying `up --wait` past the migration's exit
+(the round-4 failure case), with a failing migration (script 1 while `up --wait` returned 0), with
+no container and with a container stuck in `created` (bounded); re-killed the round's mutations;
+and confirmed nothing else extends `KmsClientContract`. Record:
+`docs/reviews/M6/m6-decision-2026-09-23-fifth.md`.
+
+Observations below the bar, recorded and **not acted on** (a code change would need another review
+round, and none blocks):
+- O1: a leftover `docker compose run pii-vault-migrate` one-off makes `ps -a` print two lines, and
+  `make up` fails closed with a garbled message until `make down` removes it. Nothing in the
+  repository runs `compose run` on this service.
+- O2: `infrastructure/docker/scripts/diagnose-stack.sh:25` allows only `object-store-init` as an
+  exited container, so on a failed CI run a healthy `pii-vault-migrate exited 0` would be
+  annotated as a problem (diagnostic noise; pass/fail unaffected). For M9.
+- O3: `await-oneshot.sh` has no automated test; CI exercises its success path only.
+- O4: CI's Compose version (v2.x on `ubuntu-24.04`) was not observed here. If its `ps --format`
+  output differed, the script fails closed ("did not run"), never falsely passes. **The first
+  `stack.yml` run on the pushed head must be green before tagging**; `gh` is not authenticated on
+  this laptop, so this session could not read CI.
 
 ## Open items this branch did not take
 
@@ -481,53 +506,41 @@ handled on both paths). Record: `docs/reviews/M6/m6-decision-2026-09-23-fourth.m
   synthetic-data start-up guard on the API's classpath, which stopped every API test. A module
   dependency carries its auto-configuration with it.
 
-## Resume here (final state, 2026-09-23, end of the laptop session)
+## Resume here (final state, 2026-09-23: review loop closed)
 
-**Stopped as instructed: nothing merged, nothing tagged.**
+**Stopped as instructed: nothing merged, nothing tagged.** The review loop ended with the fifth,
+fresh review: **APPROVED, 0 BLOCKER, 0 MAJOR**. M6 is ready for merge once M5 has merged.
 
-**Branches** (all pushed; nothing lives only on the laptop):
+**Branches** (all pushed):
 
-| Branch | Verified head | What it is |
+| Branch | Head | Merge order |
 |---|---|---|
-| `m6/decision` | `2bc1b72` (tree `8a83da8c15c5ebe10ee9aa4609c24672d611de7b`); the commit after it changes only this file | M6. Merge **after** M5 |
-| `m6/featurestore-fallback` | `35a3752` | `origin/m5/scoring` + `m6/decision` + the Python PostgreSQL fallback (PB-69). Merge **after** M5 and M6; re-merge `m6/decision` into it whenever M6 changes, taking `m6/decision`'s side of the generated matrix and re-rendering it |
+| `m6/decision` | the commit that adds this section (code last changed in `9f68ec7`) | after M5 |
+| `m6/featurestore-fallback` | the merge of this section (code last changed in `b89cc1f`, merged as `db250d8`) | after M5 and M6 |
 
-**Final verification on the frozen tree `8a83da8c` (no file changed during either run):**
-- `./mvnw -B -ntp -fae verify` (the CI command), 13 m 14 s: common 1131, persistence 61, rules 42,
-  decision 105, notify 80 — all passing, none skipped; ingest **83 of 84**: one timing failure,
-  `IngestApiTest.thousandTransactionBatchesAreDecidedWithinThirtySeconds` (FR-01-06), measured
-  **30.20 s against the 30 s limit** with the host's one-minute load at ~7. No production code on
-  the ingest or decision path changed since `5d06f94`, and the test passed in every earlier run.
-- Re-run of the ingest module alone on the same tree (load 6.9 → 8.5): **84 of 84 passing**.
-- The test was not loosened. Its margin on this host is small; the FR-01-06 timing is, like the
-  latency gate, a number for M10's dedicated machine (ADR 0010), and CI's run is authoritative.
-- Fallback branch at `35a3752`: `ml/tests/featurestore` and `ml/tests/serving/test_entry_points.py`
-  **64 passing**, the `m6-postgresql` acceptance parameter and the production-bounds test against
-  TimescaleDB included; `make typecheck`'s mypy command clean (204 files).
+**Verification of the code as approved:** the frozen-tree full `verify` of `8a83da8c` (every module
+green but one FR-01-06 timing failure, 30.20 s against 30 s at load ~7, green on re-run: now
+IN_PROGRESS and carried to M10 as PB-74); since then round 5 changed the `Makefile`, a new script and
+two notify test classes (`notify` `verify`: 81 tests passing), and fallback tests (15 passing). The
+fifth reviewer re-ran the round's tests and mutations.
 
-**Reviews:** four rounds on 2026-09-23 — the first independent review (8 MAJOR), its delta review
-(2 new MAJOR from the fix round), and a third, fresh review requested by the owner (1 new MAJOR from
-the fix round, plus four surviving mutations and two observations). All fixed and tested; the last
-fix round (`5f74db3`, `2bc1b72`) has not had a review of its own.
+**Reviews on 2026-09-23:** five, with five fix rounds between the first and the last; four of those
+rounds introduced a new defect in the code they changed (the table above, and the lab-notebook entry
+for whoever merges).
 
-**Owner decisions of 2026-09-23, applied:** latency NOT MET on this hardware (ADR 0059; M10 measures
-it, PB-73 proposed); HdrHistogram BSD-2-Clause; compose (`FS_SCORER_DB_PASSWORD`, vault provisioning,
-`make up` checks the vault migration) applied and flagged for M9; FR-03-05 DONE_WITH_DEVIATION
-(ADR 0065). The mypy errors once reported against `m5/scoring` were a stale cache here; nothing was
-written to M5's file.
+**`m6-complete`, per the owner's decision:** tag with the latency criterion NOT MET under ADR 0059,
+**once M5 has merged and the review is clean** — the review is now clean; M5 had not merged as of
+this commit (`origin/main` = `72e7790`). Preconditions at tagging: M5 merged; M6 merged after it
+(D.3 tags `main`); the first CI `stack.yml` and `ci.yml` runs on the merged head green (O4); the tag
+annotation names ADR 0059 and the M10 carries PB-73 and PB-74.
 
-**Owner decisions of 2026-09-23 (second set), applied:**
-- The review loop continues until a review comes back clean (fourth review below).
-- **`m6-complete`** is to be tagged with the latency criterion NOT MET under ADR 0059 **once M5 has
-  merged and the review is clean**. As of this commit M5 has **not** merged (`origin/main` =
-  `72e7790`), so no tag exists; by D.3 the tag goes on `main` after M6 merges, which also waits for
-  M5.
-- FR-01-06 is IN_PROGRESS and carried to M10 (PB-74): its 0.2 s, load-sensitive margin on this
-  laptop is not evidence.
-- The compose and key-management carry is written into `docs/parallel/M9_updates.md` section 8 on
-  `m9/infra` (`3f8028d`, appended only), with acceptance criteria.
+**Carried elsewhere:** M9 — `docs/parallel/M9_updates.md` section 8 on `m9/infra` (`6a7af4f`):
+compose into manifests, the `KmsClient` binding with `KmsClientContract`, the rotation runbook; plus
+O2. M10 — PB-73 (latency) and PB-74 (FR-01-06), proposed in the gate section above.
+
+**Needs the owner:** confirm CI green on the pushed heads (this laptop's `gh` is not authenticated);
+merge M5, then M6, then the fallback branch; tag.
 
 **Next steps for a resumed session:** after M5 merges, merge `main` into `m6/decision`, re-run the
-full `verify`, then merge; then merge `main` into `m6/featurestore-fallback`, re-run
-`uv run pytest ml/tests/featurestore ml/tests/serving`, then merge. Re-run the gate only if code
-changed. Rebase nothing: the fallback branch holds merge commits.
+full `verify`, merge; then merge `main` into `m6/featurestore-fallback`, re-run
+`uv run pytest ml/tests/featurestore ml/tests/serving`, merge; then tag as above. Rebase nothing.
