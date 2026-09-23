@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Module-level SpotBugs / FindSecBugs exclusions for the notification channels, in addition to
+  ../spotbugs-exclude.xml. Every entry is scoped to one class and one bug pattern and states why
+  the finding does not apply. Adding an entry requires review.
+-->
+<FindBugsFilter
+    xmlns="https://github.com/spotbugs/filter/3.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="https://github.com/spotbugs/filter/3.0.0 https://raw.githubusercontent.com/spotbugs/spotbugs/4.10.4/spotbugs/etc/findbugsfilter.xsd">
+  <!--
+    CRLF_INJECTION_LOGS flags every log statement with a non-constant argument. In these three
+    classes the interpolated values cannot carry a newline: they are UUIDs (transaction ids), the
+    topic name from configuration, one of two internal reason constants, and the throwable that
+    caused the failure. No customer or request text is logged anywhere in this module - the PII
+    vault's contact never is (D-20) - and a payload that could carry CRLF is dead-lettered, not
+    printed.
+  -->
+  <Match>
+    <Class name="io.github.mariusbayizere.fraudshield.notify.kafka.EnvelopeConsumer"/>
+    <Bug pattern="CRLF_INJECTION_LOGS"/>
+  </Match>
+  <Match>
+    <Class name="io.github.mariusbayizere.fraudshield.notify.verification.UnblockReconciler"/>
+    <Bug pattern="CRLF_INJECTION_LOGS"/>
+  </Match>
+  <Match>
+    <Class name="io.github.mariusbayizere.fraudshield.notify.verification.VerificationService"/>
+    <Bug pattern="CRLF_INJECTION_LOGS"/>
+  </Match>
+</FindBugsFilter>

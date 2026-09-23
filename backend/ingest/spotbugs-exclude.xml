@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Module-level SpotBugs / FindSecBugs exclusions for the ingestion web layer, in addition to
+  ../spotbugs-exclude.xml. Every entry is scoped to one class and one bug pattern and states why the
+  finding does not apply. Adding an entry requires review.
+-->
+<FindBugsFilter
+    xmlns="https://github.com/spotbugs/filter/3.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="https://github.com/spotbugs/filter/3.0.0 https://raw.githubusercontent.com/spotbugs/spotbugs/4.10.4/spotbugs/etc/findbugsfilter.xsd">
+  <!-- SPRING_ENDPOINT marks every controller for manual review; it is not a defect. Each endpoint
+       is reviewed in docs/reviews/M6: authentication by ApiKeyFilter, scope checks per operation,
+       validation by RequestValidator, and IngestApiTest over every status. -->
+  <Match>
+    <Class name="io.github.mariusbayizere.fraudshield.ingest.web.IngestController"/>
+    <Bug pattern="SPRING_ENDPOINT"/>
+  </Match>
+  <Match>
+    <Class name="io.github.mariusbayizere.fraudshield.ingest.web.PublicHealthController"/>
+    <Bug pattern="SPRING_ENDPOINT"/>
+  </Match>
+  <Match>
+    <Class name="io.github.mariusbayizere.fraudshield.ingest.web.VerificationPageController"/>
+    <Bug pattern="SPRING_ENDPOINT"/>
+  </Match>
+  <!-- ApiDocsController serves one constant byte array read at start-up: the frozen OpenAPI
+       contract, which is public by definition (FR-01-07). It takes no parameter and reads no
+       request state, so there is nothing to authenticate or validate. -->
+  <Match>
+    <Class name="io.github.mariusbayizere.fraudshield.ingest.web.ApiDocsController"/>
+    <Bug pattern="SPRING_ENDPOINT"/>
+  </Match>
+  <!-- The X-API-Key header is client-controlled by definition; it is only ever passed to the
+       API-key module's constant-time verifier and never trusted before that (D-19). -->
+  <Match>
+    <Class name="io.github.mariusbayizere.fraudshield.ingest.web.ApiKeyFilter"/>
+    <Bug pattern="SERVLET_HEADER"/>
+  </Match>
+  <!-- The Content-Type is only compared with application/json to answer 415; its value is never
+       echoed, stored or used to choose a parser. -->
+  <Match>
+    <Class name="io.github.mariusbayizere.fraudshield.ingest.web.IngestController"/>
+    <Bug pattern="SERVLET_CONTENT_TYPE"/>
+  </Match>
+</FindBugsFilter>
