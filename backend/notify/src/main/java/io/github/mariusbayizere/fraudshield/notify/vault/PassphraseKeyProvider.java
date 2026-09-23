@@ -89,10 +89,10 @@ public final class PassphraseKeyProvider implements KeyProvider {
     SecretKey master = masters.get(keyId);
     if (master == null) {
       // A row wrapped with a key this deployment does not hold: refuse, never guess.
-      throw new VaultException("no master key with id " + keyId);
+      throw VaultException.permanent("no master key with id " + keyId, null);
     }
     if (wrapped.length <= NONCE_BYTES) {
-      throw new VaultException("the wrapped key is too short to be one");
+      throw VaultException.permanent("the wrapped key is too short to be one", null);
     }
     try {
       Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
@@ -102,7 +102,8 @@ public final class PassphraseKeyProvider implements KeyProvider {
       byte[] data = cipher.doFinal(wrapped, NONCE_BYTES, wrapped.length - NONCE_BYTES);
       return new SecretKeySpec(data, "AES");
     } catch (GeneralSecurityException e) {
-      throw new VaultException("the wrapped key does not verify under master key " + keyId, e);
+      throw VaultException.permanent(
+          "the wrapped key does not verify under master key " + keyId, e);
     }
   }
 

@@ -149,17 +149,17 @@ Evidence was produced on this branch; statuses are proposals for the reviewer, n
 
 | Row | Proposed | Evidence |
 |---|---|---|
-| FR-01-01 | VERIFIED_AT_REDUCED_SCALE | `KafkaSpoolChaosTest`, `IngestApiTest`; latency file below. SRS "publish to Kafka within 5 ms" is replaced by D-13/D-15 (publication after the response, from the spool) |
+| FR-01-01 | IN_PROGRESS (was VERIFIED_AT_REDUCED_SCALE; the 2026-09-23 run meets the latency criterion at no rate) | Functionally evidenced by `KafkaSpoolChaosTest`, `IngestApiTest`; the latency part is NOT MET on both hosts measured (`docs/benchmarks/2026-09-22-…` and `2026-09-23-…`). SRS "publish to Kafka within 5 ms" is replaced by D-13/D-15 (publication after the response, from the spool). Move to VERIFIED_AT_REDUCED_SCALE only on a passing measurement |
 | FR-01-02 | DONE | `RequestValidatorTest`, `IngestApiTest.everySharedValidationVectorGetsItsStatusAndErrorsOverHttp` (26 vectors); E.1's 429 is implemented (`RateLimitApiTest`), and an oversized chunked body is 413 rather than a truncated 400 |
 | FR-01-03 | (see above) | also `RedisIdempotencyTest` and `RequestValidatorTest`'s field-by-field fingerprint table (findings 1, 2, 4) |
 | FR-01-03 | DONE | `IngestApiTest` (100 identical, TTL 24 h, 409), `ResilienceApiTest` (10,000 duplicates) |
-| FR-01-04 | DONE | `IngestApiTest.everyChannelIsDecidedIncludingUssdWithoutDevices`, `HistoryCalculatorTest` |
+| FR-01-04 | DONE_WITH_DEVIATION | M6's part: all six channels are accepted and decided as first-class values, USSD without a device (`IngestApiTest.everyChannelIsDecidedIncludingUssdWithoutDevices`). The channel-specific feature engineering is the scorer's since ADR 0033 (M5's feature pipeline and its D-04 structural-NaN tests); `HistoryCalculatorTest`, cited here before, was deleted with Java's feature code in `be470a4` |
 | FR-01-05 | IN_PROGRESS | M6 side done (`IngestApiTest.keysAreRequiredScopedAndMeanNothingOnStaffEndpoints`); key verification, rotation and staff-path denial are M7 |
 | FR-01-06 | DONE | `IngestApiTest.thousandTransactionBatchesAreDecidedWithinThirtySeconds`, and jobs an earlier process left RUNNING are failed at start-up (V65) |
 | FR-01-07 | DONE | `ApiDocsTest`: `/api/docs` serves `contracts/openapi/fraudshield-api.yaml` byte for byte, and the test fails if the two ever differ |
-| FR-03-01 | VERIFIED_AT_REDUCED_SCALE | `DecisionEngineTest`, `IngestApiTest`; latency file (the "1,000 HIGH events/s" load was not run) |
+| FR-03-01 | IN_PROGRESS (was VERIFIED_AT_REDUCED_SCALE) | `DecisionEngineTest`, `IngestApiTest` for the behaviour; the latency criterion is NOT MET (both benchmark files), and the "1,000 HIGH events/s" load was not run |
 | FR-03-02 | DONE | `HoldTimeoutServiceTest`, `IngestApiTest.holdsAreReleasedAtThirtySeconds…` (±500 ms, D-18) |
-| FR-03-03 | VERIFIED_AT_REDUCED_SCALE | as FR-03-01 |
+| FR-03-03 | IN_PROGRESS (was VERIFIED_AT_REDUCED_SCALE) | as FR-03-01 |
 | FR-03-04 | DONE_WITH_DEVIATION | `SmsPolicyTest`, `VerificationFlowTest`, `IngestApiTest` (SMS within 5 s of the block, measured from the server's own timestamps), now through the **real vault adapters** over a vault container (`IngestApiTest.customerNumbersAndPhonesReachTheSmsProviderAndNothingElse`). Deviation: no contact is enrolled in a real deployment until M7's onboarding calls `AccountTokens`/`VaultContacts`, and there is no real Africa's Talking delivery |
 | FR-03-05 | DONE (owner decision 2026-09-23; was DONE_WITH_DEVIATION after Principal Review finding 5) | `VerificationFlowTest`, `ResilienceApiTest.theVerificationPage…` (lifted and webhook within 10 s; `false_positive_confirmed` in the audit event; LEGITIMATE label). FR-03-05 applies "unless self-service is disabled by D-25 conditions", and the owner decided that an unavailable SIM-swap signal disabling it is D-25's intended behaviour, not a gap (ADR 0065 point 1, `SmsPolicyTest.withoutTheSimSwapSignalNoBlockOffersSelfService`). The page tests issue the link directly because D-25 withholds it today; that is stated, not hidden. A reviewer who reads finding 5 as still binding should keep DONE_WITH_DEVIATION |
 | FR-03-06 | DONE | `DecisionServiceTest`, `RedisAdaptersTest`: the production Lua freezes on exactly the third HIGH within the hour, not the second or the fourth, and exactly one of twenty racing thirds freezes (Principal Review finding 8) |
@@ -169,7 +169,7 @@ Evidence was produced on this branch; statuses are proposals for the reviewer, n
 | D-14, D-15, D-18 | DONE | see ADRs 0064, 0066 and the tests named there |
 | D-17 | DONE_WITH_DEVIATION | JUnit 5 with the generative harness ADR 0009 planned (`Properties.forAll`) |
 | D-25 | DONE (owner decision 2026-09-23) | `SmsPolicyTest`, `VerificationFlowTest`: self-service is refused whenever the SIM-swap age is unknown, which today is every block; the owner recorded this as intended (ADR 0065 point 1). The value arrives through the scorer's feature vector, so an MNO feed into the feature store (and `account_sim_swaps`, V67) enables the link without an API change |
-| D-20 | DONE (application side) | ADR 0069: separate instance and roles, AES-256-GCM envelope encryption with per-row data keys, `KmsKeyProvider` over a `KmsClient` port (`KmsClientContract`), keys from configuration only under dev/demo/test, the tokenisation map (`AccountTokensTest`), no PII in logs, Kafka, Redis or the spool (`IngestApiTest.customerNumbersAndPhonesReachTheSmsProviderAndNothingElse`), the application role refused (`VaultContactsTest`). Open, not M6's: the vendor `KmsClient` binding, encrypted volumes and Redis TLS (M9) |
+| D-20 | DONE_WITH_DEVIATION | ADR 0069: separate instance and roles, AES-256-GCM envelope encryption with per-row data keys, `KmsKeyProvider` over a `KmsClient` port (`KmsClientContract`), keys from configuration only under dev/demo/test, the tokenisation map (`AccountTokensTest`), no PII in logs, Kafka, Redis or the spool (`IngestApiTest.customerNumbersAndPhonesReachTheSmsProviderAndNothingElse`), the application role refused (`VaultContactsTest`). Open, not M6's: the vendor `KmsClient` binding, encrypted volumes and Redis TLS (M9). Deviation (independent review, 2026-09-23): nothing outside the tests provisions the vault yet; the shipped `db/vault/bootstrap.sql` now creates the schema for the migrator, but no compose init or runner applies it and the vault migrations (proposal under Open items) |
 | FR-02-09 (DB-fallback clause, PB-69) | DONE on `m6/featurestore-fallback` | `test_db_fallback.py::test_a_read_through_the_fallback_equals_the_redis_read[m6-postgresql]` passes against TimescaleDB built from this repository's migrations; two broken readers caught; `test_postgres_fallback.py` for the failure path; `DatabaseSecurityTest.theScorerMayCallTheFeatureFallbackAndReadNothingElse`. Closes when that branch merges (after M5 and M6) |
 | NFR-REL-01, NFR-REL-02 | DONE (chaos at test scale) | `GrpcScorerTest`, `RedisOutageTest`, `KafkaSpoolChaosTest`, `ResilienceApiTest` |
 
@@ -225,7 +225,7 @@ decisions to continue.
 
 - **The PII vault (D-20, ADR 0069)**: a separate instance, its own roles, AES-256-GCM envelope
   encryption with a per-row data key, a `KeyProvider` interface with a configuration-backed
-  implementation (KMS is M9). It closes ADR 0065's `masked_account` contract gap. Its code was
+  implementation (the KMS port and its contract suite were added on 2026-09-23; the vendor binding is M9's). It closes ADR 0065's `masked_account` contract gap. Its code was
   committed inside `452d1d9`, whose message describes only the JPA change — the two were staged
   together by mistake, and the history is not rewritten because the branch is pushed.
 - **Rate limiting (E.1)**: a token bucket per API key in Redis, 429 with `Retry-After`, and a
@@ -234,13 +234,79 @@ decisions to continue.
 - **`/api/docs` (FR-01-07)**: the frozen contract served byte for byte from the jar, with a test
   that fails if the served document differs from `contracts/openapi/fraudshield-api.yaml`.
 
+## Built on 2026-09-23 (laptop session, after the Codespace was retired)
+
+| Commit | What |
+|---|---|
+| `4b1bb22` | `ScoringResult.account_context` (18) and `feature_store_degraded` (19) persisted on `fraud_scores` (V66), which ADR 0033 asked for and nothing did; the tenant view recreated because `SELECT *` fixes its columns at creation |
+| `9338805` | The vault's KMS port (`KmsClient`, `KmsKeyProvider`, `KmsClientContract`), `kms` as the default provider with configured keys refused outside dev/demo/test, the tokenisation map (vault V2, `AccountTokens`), the API tests on the real vault adapters, and the no-PII test across logs, Kafka, Redis and the spool. **A defect found by it**: `vault.contacts` accepted only 24-character tokens while the contracts allow 24–64, so a valid customer could not be enrolled (vault V3) |
+| `3127a84` | V67 and `fs_scorer` for the feature-store fallback; `first_seen_at` nullable for accounts opened before they transact, and the sink's upsert fixed to fill a NULL |
+| `17c0773` | The gate's one failure: the spool codec read the account context's integers back as `int`, so a record changed across the spool |
+| `5d06f94` | The gate's record (above) |
+| `3a60173` (on `m6/featurestore-fallback`) | The Python reader and the enabled acceptance parameter |
+
+Item-by-item against the owner's list: (a) Java computed no features already (`be470a4`); this
+session added the persistence ADR 0033 asked for. (b) The 2026-09-22 review's findings stay fixed;
+the full build re-ran them. (c) above. (d) was done in `452d1d9`, `fe39e28`, `0b6f62f`, `cdd7325`;
+not changed today, re-verified by the gate and the independent review below. (e) `b1c3b24`,
+(f) `0e9de05`, likewise. (g) above.
+
+## Independent Principal Review, 2026-09-23 (fresh reviewer, own worktree; BLOCKER/MAJOR only)
+
+Reviewed `m6/decision` at `5d06f94` and `m6/featurestore-fallback` at `3a60173`. Verdict
+**CHANGES_REQUIRED: no BLOCKER, 8 MAJOR**. Nothing claimed was found fabricated; no PII leak or
+crypto misuse; rate limiting, `/api/docs`, the persistence rule and the first review's MAJOR fixes
+held. Mutations: spool commit order and fingerprint field (killed), empty vault AAD (killed),
+`feature_store_degraded` always false (**survived**), device first-seen returning NULL
+(**survived**). Every finding was fixed:
+
+| # | Finding | Fix |
+|---|---|---|
+| 1 | `PostgresFallback` was never wired into the scorer | `--feature-store-database`, password from `FS_SCORER_DB_PASSWORD` only, refused without `--feature-store`, kept out of `WorkerConfig`'s repr; tested (`3155415`, fallback branch) |
+| 2 | The session `SET`s were rolled back: no statement timeout, not read-only | committed; socket timeout on connect; a TimescaleDB test checks `SHOW statement_timeout`, read-only and that `pg_sleep(1)` is cancelled; reverting the fix fails it (`3155415`) |
+| 3 | The acceptance test never expired a device's first sighting | it does now; the NULL-returning mutation fails ("ages differ") (`3155415`) |
+| 4 | No fixture had `feature_store_degraded = true` | one scenario is degraded and `PostgresAdaptersTest` asserts exactly one such row |
+| 5 | Permanent vault faults were retried for ever, stalling the partition | `VaultException.permanent`; `EnvelopeConsumer` dead-letters them (`permanent_vault_failure`), retries the rest; `KmsClientContract` requires bindings to tell the two apart |
+| 6 | The shipped vault bootstrap could not let the migrator create its schema | the bootstrap creates `vault` owned by `fs_vault_migrator`; `TestVault` no longer adds a grant of its own; D-20 proposed DONE_WITH_DEVIATION (no provisioning outside tests) |
+| 7 | FR-01-01, FR-03-01, FR-03-03 proposed VERIFIED_AT_REDUCED_SCALE with the gate unmet | IN_PROGRESS |
+| 8 | FR-01-04 cited a deleted test; three stale statements in this file | FR-01-04 DONE_WITH_DEVIATION with the right evidence; the stale statements corrected |
+
+The fix round's own first verify caught a defect in it: PostgreSQL checks CREATE on the database
+even for `CREATE SCHEMA IF NOT EXISTS`, so the bootstrap also grants it to the migrator. It also
+exposed a race in `SpoolDrainerTest` (it read the drainer's counter before the drainer had counted
+the last batch), fixed in the test. After both: persistence 61, decision 105, notify 80, ingest 84,
+all passing (persistence re-run alone once, after a TimescaleDB container failed to start under
+host load in the combined run; common and rules unchanged since the green full run). The fix round
+was re-verified by those runs and by re-running the fallback
+branch's tests and the two surviving mutations; it was **not** re-reviewed by a second
+independent reviewer, which the owner may want before merge (memory: fix rounds introduced
+defects before).
+
 ## Open items this branch did not take
 
-- **PB-68, M5's PostgreSQL feature-store fallback**: deferred by the owner. It must be Python in
-  `ml/`, and `ml/src/fraudshield_ml/featurestore/` does not exist on `m6/decision` — it is on
-  `m5/scoring`. Whoever takes it needs one tree with both: either M5 merges first, or the reader is
-  written on a branch from `m5/scoring` against M6's migrations. The skipped `m6-postgresql`
-  parameter in `ml/tests/featurestore/test_db_fallback.py` is still skipped.
+- **PB-69 (M5 called it PB-68/PB-69), the PostgreSQL feature-store fallback: done, on its own
+  branch.** `m6/featurestore-fallback` = `origin/m5/scoring` + `m6/decision` + the reader
+  (`ml/src/fraudshield_ml/featurestore/postgres.py`) and its tests. The `m6-postgresql` parameter
+  is no longer skipped and passes. **Merge order: M5, then M6, then this branch**, whose own diff
+  is then the reader, its tests, `pg8000` in `ml/pyproject.toml` and `uv.lock`, a mypy override and
+  three licence entries. `uv.lock` is generated: if it conflicts, take either side and run
+  `uv lock`.
+- **The vendor `KmsClient` binding** (M9, with the choice of cloud). Production cannot start the
+  vault without it (`key-provider=kms` is the default and refuses to run unbound), which is the
+  intended failure mode.
+- **Compose proposal, not applied** (the owner's rule on shared compose): add
+  `FS_SCORER_DB_PASSWORD: ${FS_SCORER_DB_PASSWORD:?run make env}` to the `timescaledb` service's
+  environment in `docker-compose.yml`, and `FS_SCORER_DB_PASSWORD=CHANGE_ME` to `.env.example`.
+  Until then the init script leaves `fs_scorer` without a password (it cannot log in) and the
+  scorer's database fallback is off in the local stack.
+- **Vault provisioning in the local stack, proposed** (D-20's deviation): an init script for the
+  `pii-vault` service that runs `db/vault/bootstrap.sql` and sets `fs_vault_migrator`'s and
+  `fs_vault`'s passwords from `.env` (as `20-fraudshield-roles.sh` does for the main database), and
+  a one-shot Flyway run of `db/vault` as `fs_vault_migrator` (`make migrate-vault`). Not applied:
+  it edits `docker-compose.yml`. Never run the vault migrations from the API process, which must
+  not hold the migrator's credentials.
+- **Existing databases need `bootstrap.sql` re-run before V67**, or V67's `GRANT … TO fs_scorer`
+  fails (loudly, which is the intent).
 - **A pre-existing licence violation**: `fs-licences` fails on
   `maven:org.hdrhistogram:HdrHistogram@2.2.2` ("BSD-2-Clause", "Public Domain, per Creative Commons
   CC0"), which micrometer brings in. It fails with or without this branch's changes, so it is not
@@ -253,12 +319,18 @@ decisions to continue.
   otherwise (ADR 0062). The opening date has no source yet (`account_age_days` stays absent).
 - **New — account opening date and KYC tier history have no source.** The ingest contract carries
   neither; a staff or batch endpoint must supply them (ADR 0026 as-of rule for KYC).
-- **New — MNO SIM-swap adapter.** Until it exists D-25 refuses self-service for every block.
-- **PII vault — close.** Built in M6 (ADR 0069): schema, roles, envelope encryption and the
-  `ContactDirectory` adapter. What remains is not M6's: contacts are enrolled by M7's onboarding,
-  and a KMS-backed key provider is M9's (ADR 0021).
-- **New — Java/Python feature parity.** No test compares the Java AccountContext with the Python
-  online features.
+- **New — MNO SIM-swap adapter.** Until it exists D-25 refuses self-service for every block, which
+  the owner confirmed as intended (2026-09-23).
+- **PII vault — close.** Built in M6 (ADR 0069): schema, roles, envelope encryption, the
+  tokenisation map, the `KmsClient` port with its contract suite, the dev/demo/test-only guard for
+  configured keys, and the no-plaintext test. What remains is not M6's: contacts are enrolled by
+  M7's onboarding, and the vendor key-service binding is M9's (ADR 0021).
+- **PB-69 (FR-02-09 DB fallback, carried from M5) — close when `m6/featurestore-fallback`
+  merges.**
+- **New — producers for `account_sim_swaps` and `account_kyc_tiers`** (V67): the MNO feed and a
+  KYC endpoint. The feature store's Redis keys for the same facts have no producer either (ADR
+  0034).
+- **Java/Python feature parity — withdrawn.** Java computes no feature since ADR 0033.
 - **New — merchant_name** is validated but not persisted (`Transaction` has no field for it).
 - **New — the forked-JVM kill test** D-15 asks for; the chaos test's process death is an in-JVM
   close (Principal Review finding 11, ADR 0064).

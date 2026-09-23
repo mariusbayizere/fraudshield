@@ -66,6 +66,9 @@ public abstract class KmsClientContract {
         .isInstanceOf(VaultException.class);
     assertThatThrownBy(() -> client().decrypt(kek(), new byte[0], CONTEXT))
         .isInstanceOf(VaultException.class);
+    assertThatThrownBy(() -> client().decrypt(kek(), tampered, CONTEXT))
+        .as("no retry makes a tampered wrapping verify")
+        .isInstanceOfSatisfying(VaultException.class, e -> assertThat(e.permanent()).isTrue());
   }
 
   @Test

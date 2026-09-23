@@ -58,7 +58,8 @@ class SpoolDrainerTest {
           };
       try (SpoolDrainer drainer =
           new SpoolDrainer(spool, CONSUMER, sink, 7, Duration.ofMillis(5), Duration.ofMillis(20))) {
-        await().atMost(WAIT).until(() -> delivered.size() >= 20);
+        // The drainer counts a batch after its sink returns, so wait on its count, not the sink's.
+        await().atMost(WAIT).until(() -> drainer.delivered() >= 20);
         assertThat(drainer.delivered()).isEqualTo(20);
       }
       assertThat(committedWhileRefusing).hasSize(5).containsOnly(0L);

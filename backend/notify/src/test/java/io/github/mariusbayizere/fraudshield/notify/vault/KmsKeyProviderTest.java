@@ -62,7 +62,9 @@ class KmsKeyProviderTest {
     KmsKeyProvider provider = new KmsKeyProvider(kms, "kek-2026", Set.of("kek-2026"));
     byte[] wrapped = provider.newDataKey().wrapped();
     kms.down = true;
-    assertThatThrownBy(provider::newDataKey).isInstanceOf(VaultException.class);
+    assertThatThrownBy(provider::newDataKey)
+        .as("a service that is down may come back: not permanent")
+        .isInstanceOfSatisfying(VaultException.class, e -> assertThat(e.permanent()).isFalse());
     assertThatThrownBy(() -> provider.unwrap("kek-2026", wrapped))
         .isInstanceOf(VaultException.class);
   }

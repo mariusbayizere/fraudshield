@@ -18,3 +18,9 @@ $$;
 REVOKE ALL ON DATABASE fraudshield_pii FROM PUBLIC;
 GRANT CONNECT ON DATABASE fraudshield_pii TO fs_vault_migrator, fs_vault;
 REVOKE ALL ON SCHEMA public FROM PUBLIC;
+-- The migrator creates and owns the vault's schema (Flyway's history table lives there too).
+-- PostgreSQL checks CREATE on the database even for CREATE SCHEMA IF NOT EXISTS, so the grant is
+-- needed although the schema is created here; fs_vault is given no such grant.
+GRANT CREATE ON DATABASE fraudshield_pii TO fs_vault_migrator;
+CREATE SCHEMA IF NOT EXISTS vault AUTHORIZATION fs_vault_migrator;
+REVOKE ALL ON SCHEMA vault FROM PUBLIC;

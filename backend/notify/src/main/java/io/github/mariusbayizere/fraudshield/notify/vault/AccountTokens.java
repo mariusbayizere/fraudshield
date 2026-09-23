@@ -168,7 +168,7 @@ public final class AccountTokens {
       Arrays.fill(plaintext, (byte) 0);
       return Optional.of(number);
     } catch (GeneralSecurityException e) {
-      throw new VaultException("a vault row does not verify", e);
+      throw VaultException.permanent("a vault row does not verify", e);
     }
   }
 

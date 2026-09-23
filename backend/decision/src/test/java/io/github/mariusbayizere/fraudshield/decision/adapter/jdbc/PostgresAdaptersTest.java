@@ -180,9 +180,18 @@ class PostgresAdaptersTest {
                     + " AND NOT feature_store_degraded"))
         .as("what the scorer read is kept with the score (ADR 0033)")
         .isEqualTo(
+            String.valueOf(
+                Long.parseLong(
+                        one(
+                            "SELECT count(*) FROM fraudshield.fraud_scores WHERE NOT"
+                                + " ml_unavailable_fallback"))
+                    - 1));
+    assertThat(
             one(
-                "SELECT count(*) FROM fraudshield.fraud_scores WHERE NOT"
-                    + " ml_unavailable_fallback"));
+                "SELECT count(*) FROM fraudshield.fraud_scores WHERE feature_store_degraded"
+                    + " AND account_context IS NULL AND NOT ml_unavailable_fallback"))
+        .as("a score the scorer made without the feature store says so (V66)")
+        .isEqualTo("1");
   }
 
   @Test

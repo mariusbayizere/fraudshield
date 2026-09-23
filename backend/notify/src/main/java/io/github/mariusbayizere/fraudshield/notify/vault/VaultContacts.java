@@ -136,7 +136,7 @@ public final class VaultContacts implements ContactDirectory {
       plaintext = cipher.doFinal(ciphertext);
     } catch (GeneralSecurityException e) {
       // A row that does not decrypt is a tampered or misplaced row, never a missing contact.
-      throw new VaultException("a vault row does not verify", e);
+      throw VaultException.permanent("a vault row does not verify", e);
     }
     var payload = JSON.readTree(new String(plaintext, StandardCharsets.UTF_8));
     java.util.Arrays.fill(plaintext, (byte) 0);

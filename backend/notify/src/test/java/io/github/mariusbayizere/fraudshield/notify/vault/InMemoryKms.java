@@ -59,7 +59,7 @@ public final class InMemoryKms implements KmsClient {
   public byte[] decrypt(String kekId, byte[] wrapped, Map<String, String> context) {
     calls.incrementAndGet();
     if (wrapped.length <= 12) {
-      throw new VaultException("not a wrapped key");
+      throw VaultException.permanent("not a wrapped key", null);
     }
     byte[] nonce = java.util.Arrays.copyOf(wrapped, 12);
     byte[] sealed = java.util.Arrays.copyOfRange(wrapped, 12, wrapped.length);
@@ -76,7 +76,7 @@ public final class InMemoryKms implements KmsClient {
     }
     SecretKey kek = keks.get(kekId);
     if (kek == null) {
-      throw new VaultException("the key service has no key " + kekId);
+      throw VaultException.permanent("the key service has no key " + kekId, null);
     }
     return input -> {
       try {
@@ -85,7 +85,7 @@ public final class InMemoryKms implements KmsClient {
         c.updateAAD(new TreeMap<>(context).toString().getBytes(StandardCharsets.UTF_8));
         return c.doFinal(input);
       } catch (GeneralSecurityException e) {
-        throw new VaultException("the key service refused the wrapping", e);
+        throw VaultException.permanent("the key service refused the wrapping", e);
       }
     };
   }
