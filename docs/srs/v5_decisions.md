@@ -20,7 +20,7 @@ those of `docs/srs/FraudShield_SRS_v5_0.md`.
 | 2 | **Hybrid persistence (ADR 0071)** against v5's "JPA everywhere / no raw SQL" | **KEEP the hybrid rule**; v5's wording not adopted | JPA is used for CRUD domains. Explicit SQL stays for four things it cannot express safely: the audit hash chain (insert ordering that Hibernate's flush may reorder), append-only tables (dirty checking fights the triggers), hypertables and security-barrier views, and set-based refresh-token revocation whose statement order the ADR 0070 race fix depends on. A PII vault with its own role is also outside the ORM boundary by design. | ADR 0082 §3; amendment proposed to ADR 0071 (M7 owns it) in `docs/parallel/M8_updates.md` |
 | 3 | **§12 per-role frontend specification** | **ADOPT** as M8 requirements | It is the first written statement of what each role may see and do, and M8 is building those screens now. | 25 register rows: `UX-ROLE-AN-01…05`, `UX-ROLE-SN-01…05`, `UX-ROLE-RO-01…06`, `UX-ROLE-AD-01…09`, all M8 |
 | 4 | **§13.1 device matrix** | **ADOPT** as M8 requirements | v1's 05B gave testing and behaviour tables but no device matrix; this one names the widths, browsers and network assumptions the console must work on, which is what the breakpoints and the Playwright matrix are judged against. | 11 register rows: `DEV-MATRIX-01…11`, M8 |
-| 5 | **FR-08-01…08 operational reporting** | **ADOPT** the 8 requirements; assign to a **new milestone M13** | Scheduled operational reporting is real work with its own gate, and it cannot sit inside M8 (front-end) or M9 (observability). M13 runs **after M8**, and after M6 and M9 supply its data and dashboards. It is numbered 13 rather than inserted as a new M9 because M9–M12 are already referenced by branches, reviews and the register; renumbering them would invalidate those references. | 8 register rows `FR-08-01…08`, milestone M13; milestone defined in build prompt D.3 |
+| 5 | **FR-08-01…08 operational reporting** | **ADOPT** the 8 requirements; assign to a **new milestone M13**, which stays **unscheduled** until its entry criteria are met | Scheduled operational reporting is real work with its own gate, and it cannot sit inside M8 (front-end) or M9 (observability). **M13's number is a position in the register, not in the schedule** (owner, 2026-09-23): M13 runs **after M8** and **cannot close before M6 and M9**, which supply its data and dashboards. M9–M12 keep their numbers, because branches, reviews and the register already reference them. | 8 register rows `FR-08-01…08`, milestone M13; the milestone, its five entry criteria and its gate are in build prompt D.3 |
 | 6 | **Celery + WeasyPrint + Jinja2 + SMTP + S3** as the reporting stack | **NOT ADOPTED without an ADR** | The requirements say what the reports must contain and when; they do not settle how they are produced. Nothing in the project runs Celery today, and adding a broker plus a worker fleet is an architectural decision to be compared against what already exists (the scoring service's own scheduling, the outbox pattern already in the schema, and the object store chosen in ADR 0005). | M13's gate text in build prompt D.3 says the stack needs an ADR |
 | 7 | **§17 Docker, §18 Kubernetes, §19 Prometheus/Grafana, §22 OpenTelemetry** | **ADOPT only where they add something M9 lacks** | M9 already built the Prometheus rules with both-sides unit tests, five generated Grafana dashboards, the k8s manifests with PodSecurity restricted, NetworkPolicies, HPA and PDBs, and 24 break-one-rule policy tests. What v5 adds and M9 lacks: service Dockerfiles with size budgets and non-root users, and distributed tracing (OpenTelemetry SDK on the Python services, agent on the API). Jaeger as the UI is v5's choice; the project's stack row already names an OpenTelemetry Collector, so the backend is an M9 decision, not an SRS one. | Noted for M9 in `docs/parallel/M8_updates.md`; no register rows added, because M9's OPS-* rows already cover observability and the Docker/tracing items belong to M9's own gate |
 | 8 | **Helm 3 charts** replacing the kustomize layout | **REJECT; keep kustomize**, deviation recorded | The kustomize base and overlays are built, validated by kubeconform against pinned schemas, and covered by 24 policy tests plus canary analysis queries run through promtool. Helm would re-package all of it and invalidate that validation, for no stated gain. | This row is the record; also noted for M9 |
@@ -43,19 +43,24 @@ those of `docs/srs/FraudShield_SRS_v5_0.md`.
 **Nothing else was changed.** No migration, no entity, no contract and no frontend code was touched
 for v5: `git diff m4-complete -- backend ml dataset` is empty on this branch.
 
-## What FR-08 still needs before it can be scheduled
+## FR-08 stays unscheduled until five entry criteria are met
 
-1. **A stack ADR** (decision 6): scheduler, PDF renderer, template engine, mail transport and object
-   store, compared with what the project already runs. Until it exists, FR-08 has requirements but
-   no implementable design.
-2. **Its data sources**: FR-08 reports read the decision, alert and campaign tables M6 owns, and the
-   Prometheus metrics M9 owns. M13 cannot start its gate before M6 and M9 close.
-3. **A retention and privacy decision**: v5 asks for 7-year monthly reports in object storage. The
-   reports contain analyst names and counterparty tokens, so retention needs the same treatment as
-   the audit trail (ADR 0017's PII rules), and the S3-compatible store is the one ADR 0005 chose.
-4. **A recipient list that is not a person's inbox**: v5 mails reports to "all RISK_OFFICER and
-   ADMIN users". Who receives a report, and whether it may leave the deployment's jurisdiction, is a
-   deployment decision (D-21's residency reasoning applies to report delivery too).
-5. **Report reproducibility**: the M13 gate requires a report regenerated byte for byte from seeded
-   data. That needs a fixed clock and a seeded dataset, the same discipline the dataset milestone
-   uses, decided before the first report is written.
+The owner's decision of 2026-09-23: FR-08 is accepted as requirements, but **M13 does not start**
+until each of these is decided and recorded. They are written into M13's entry criteria in build
+prompt D.3, so the milestone cannot begin with any of them open.
+
+1. **Stack ADR — prefer what already runs.** The scheduler, PDF renderer, template engine, mail
+   transport and object store must each be justified **against the existing parts**: the outbox
+   table already in the schema, the object store decided in ADR 0005, and M6's regulatory-report
+   PDF rendering (SAR, FR-05-06). The ADR starts from those, not from v5's Celery/WeasyPrint
+   suggestions, and every new dependency has to earn its place against them.
+2. **Data sources ready**: the decision, alert and campaign tables (M6) and the Prometheus metrics
+   (M9) exist and are queryable. M13 cannot close before M6 and M9.
+3. **Privacy and retention.** Monthly reports carry analyst names and counterparty tokens, so they
+   **are personal data**: they are treated under **D-20** and **ADR 0017**, with retention and
+   residency decided alongside **D-21** — not as an object-store lifecycle rule, which is what v5
+   proposes.
+4. **Recipients**: who receives a report, and whether it may leave the deployment's jurisdiction,
+   recorded as a deployment decision under D-21's residency reasoning.
+5. **Reproducibility**: a fixed clock and a seeded dataset, so a report regenerates byte for byte,
+   decided before the first report is written.

@@ -395,8 +395,16 @@ Distributed Locust at the largest achievable scale (target 10,000 TPS for 5 minu
 *Gate:* `make reproduce` regenerates dataset → trains → evaluates → produces paper tables/figures on a clean machine; README, CITATION.cff, model card, datasheet, paper draft complete. Publishing to HuggingFace, Zenodo and arXiv is prepared as scripts and checklists but executed by the author, not by you.
 
 **M13 — Operational reporting (SRS v5.0 §20, FR-08)**
-Scheduled daily, weekly and monthly operations reports, the Reports tab, the custom-range report, the report API and the report retention policy. Runs **after M8** (it needs the admin shell) and after M6 and M9 supply its data and dashboards; it is numbered 13 rather than inserted as a new M9 because M9–M12 are referenced by branches, reviews and the register already.
-*Gate:* FR-08-01 … FR-08-08 tests pass; a generated report is reproduced byte for byte from seeded data; retention policy enforced and verified; no report contains raw PII. The scheduling and PDF stack is **not** settled by these requirements: choosing one needs an ADR comparing the candidates with what the project already runs.
+Scheduled daily, weekly and monthly operations reports, the Reports tab, the custom-range report, the report API and the report retention policy. **The number is a position in the register, not in the schedule:** M13 runs **after M8**, and it cannot close before M6 and M9, which supply its data and its dashboards. It is numbered 13 rather than inserted as a new M9 because M9–M12 are already referenced by branches, reviews and the register.
+
+*Entry criteria — M13 does not start until all five are decided and recorded:*
+1. **Stack ADR.** Scheduler, PDF renderer, template engine, mail transport and object store, each justified **against what already runs**: the outbox table already in the schema, the object store decided in ADR 0005, and M6's existing regulatory-report PDF rendering (SAR, FR-05-06). The ADR starts from those, not from SRS v5.0's suggestions; every new dependency must earn its place against them.
+2. **Data sources ready.** The decision, alert and campaign tables (M6) and the Prometheus metrics (M9) exist and are queryable.
+3. **Privacy and retention.** Monthly reports carry analyst names and counterparty tokens and are therefore personal data: they are treated under **D-20** (encryption, PII vault boundary) and **ADR 0017**, with retention and residency decided alongside **D-21** — not as an object-store lifecycle rule.
+4. **Recipients.** Who receives a report, and whether it may leave the deployment's jurisdiction, is recorded as a deployment decision under D-21's residency reasoning.
+5. **Reproducibility.** A fixed clock and a seeded dataset, so a report regenerates byte for byte.
+
+*Gate:* FR-08-01 … FR-08-08 tests pass; a generated report is reproduced byte for byte from seeded data; retention policy enforced and verified; no report contains raw PII.
 
 **M12 — Final audit and handover report (Parts F and I.4)**
 Full-system Principal Review from a fresh clone; final report; `v1.0.0` release tag pushed.
