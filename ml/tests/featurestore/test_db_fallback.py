@@ -43,7 +43,7 @@ from prometheus_client import CollectorRegistry
 
 from fraudshield_ml.features.types import CountryFacts, Transaction
 from fraudshield_ml.featurestore.fallback import ReplayFallback
-from fraudshield_ml.featurestore.postgres import PostgresFallback
+from fraudshield_ml.featurestore.postgres import FallbackUnavailableError, PostgresFallback
 from fraudshield_ml.featurestore.reference import Reference
 from fraudshield_ml.featurestore.store import FeatureStore, StoreMetrics
 
@@ -517,4 +517,20 @@ def test_the_database_session_is_bounded_and_read_only() -> None:
     connection.rollback()
     with pytest.raises(pg8000.dbapi.DatabaseError):
         cursor.execute("SELECT pg_sleep(1)")
+    reader.close()
+
+
+@pytest.mark.requires_docker
+@pytest.mark.req("FR-02-09")
+def test_at_the_production_bounds_a_timed_out_statement_does_not_refuse_the_next_read() -> None:
+    """The deployment's defaults (100 ms statements, 200 ms socket) against a real server: a
+    statement PostgreSQL cancels fails its own read, and the next read is served."""
+    db = _postgres().db
+    reader = PostgresFallback(db.scorer, dict(REFERENCE.minor_units))
+    assert reader.account("tok_" + "Q" * 24, START) is None
+    kept = reader._connection
+    with pytest.raises(FallbackUnavailableError):
+        reader._query(lambda cur: cur.execute("SELECT pg_sleep(0.3)"))
+    assert reader.account("tok_" + "Q" * 24, START) is None, "served, not refused"
+    assert reader._connection is kept
     reader.close()

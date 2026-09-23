@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
 import pg8000.dbapi
+import pg8000.exceptions
 import pytest
 
 from fraudshield_ml.featurestore.postgres import (
@@ -33,8 +35,10 @@ class _Cursor:
 
     def execute(self, sql: str, parameters: tuple[Any, ...] = ()) -> None:
         self.connection.statements.append(sql)
+        if self.connection.slow_on and self.connection.slow_on in sql:
+            time.sleep(self.connection.slow_s)
         if self.connection.fail_on and self.connection.fail_on in sql:
-            raise OSError("connection reset")
+            raise self.connection.error
         for prefix, rows in self.connection.answers.items():
             if prefix in sql:
                 self.rows = list(rows)
@@ -54,6 +58,9 @@ class _Connection:
         self.fail_on = fail_on
         self.statements: list[str] = []
         self.closed = False
+        self.error: BaseException = OSError("connection reset")
+        self.slow_on = ""
+        self.slow_s = 0.0
 
     def cursor(self) -> _Cursor:
         return _Cursor(self)
@@ -259,3 +266,95 @@ def test_a_blackholed_database_fails_reads_fast_and_is_not_retried_during_the_co
     with pytest.raises(FallbackUnavailableError):
         reader.device_first_seen("tok_D", AT)
     assert len(attempts) == 2, "after the cool-down the database is tried again"
+
+
+def _database_error(sqlstate: str) -> pg8000.exceptions.DatabaseError:
+    return pg8000.exceptions.DatabaseError({"S": "ERROR", "C": sqlstate, "M": "test"})
+
+
+@pytest.mark.req("FR-02-09")
+def test_a_cancelled_statement_fails_that_read_only_and_keeps_the_session() -> None:
+    """The third review's finding: one slow account's statement timeout (57014) turned the
+    fallback off for every account for 5 s. It now fails that read alone."""
+    connection = _Connection(SEEN, fail_on="feature_fallback_transactions")
+    connection.error = _database_error("57014")
+    opened: list[_Connection] = []
+
+    def connect() -> _Connection:
+        opened.append(connection)
+        return connection
+
+    reader = PostgresFallback(connect, {"KES": 2}, clock=lambda: 0.0)
+    with pytest.raises(FallbackUnavailableError):
+        reader.account(ACCOUNT, AT)
+    assert connection.statements[-1] == "ROLLBACK", "the aborted transaction is ended"
+    assert not connection.closed
+    assert reader.device_first_seen("tok_D", AT) == AT, "the next read is not refused"
+    assert len(opened) == 1, "the session is kept"
+
+
+@pytest.mark.req("FR-02-09")
+def test_a_lost_connection_starts_the_cool_down() -> None:
+    for error in (_database_error("08006"), _database_error("57P01"), TimeoutError("socket")):
+        connection = _Connection(SEEN, fail_on="feature_fallback_transactions")
+        connection.error = error
+        reader = PostgresFallback(_returning(connection), {"KES": 2}, clock=lambda: 0.0)
+        with pytest.raises(FallbackUnavailableError):
+            reader.account(ACCOUNT, AT)
+        assert connection.closed
+        with pytest.raises(FallbackUnavailableError, match="failed recently"):
+            reader.device_first_seen("tok_D", AT)
+
+
+def test_a_read_waits_for_another_no_longer_than_the_statement_timeout() -> None:
+    connection = _Connection(SEEN)
+    connection.slow_on = "feature_fallback_transactions"
+    connection.slow_s = 0.6
+    reader = PostgresFallback(lambda: connection, {"KES": 2}, statement_timeout_ms=100)
+    slow = threading.Thread(target=lambda: reader.account(ACCOUNT, AT))
+    slow.start()
+    time.sleep(0.1)
+    started = time.monotonic()
+    with pytest.raises(FallbackUnavailableError, match="busy"):
+        reader.device_first_seen("tok_D", AT)
+    waited = time.monotonic() - started
+    slow.join()
+    assert waited < 0.4, f"waited {waited:.2f} s behind a slow read"
+
+
+def test_a_read_queued_behind_a_failed_connect_does_not_connect_again() -> None:
+    attempts: list[float] = []
+
+    def blackhole() -> _Connection:
+        attempts.append(time.monotonic())
+        time.sleep(0.3)
+        raise TimeoutError("connect timed out")
+
+    # A lock wait (1 s) longer than the failed connect, so the second read gets the lock after
+    # the first failed and must see the cool-down it started.
+    reader = PostgresFallback(blackhole, {}, statement_timeout_ms=1000)
+    threads = [threading.Thread(target=lambda: _swallow(reader)) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+        time.sleep(0.05)
+    for thread in threads:
+        thread.join()
+    assert len(attempts) == 1
+
+
+def _swallow(reader: PostgresFallback) -> None:
+    with pytest.raises(FallbackUnavailableError):
+        reader.device_first_seen("tok_D", AT)
+
+
+def test_connections_carry_a_200_ms_socket_timeout_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: dict[str, Any] = {}
+    monkeypatch.setattr(pg8000.dbapi, "connect", lambda **kw: seen.update(kw) or _Connection({}))
+    connector("postgresql://fs_scorer@db:5432/fraudshield_db", "p")()
+    assert seen["timeout"] == 0.2
+
+
+def _returning(connection: _Connection) -> Callable[[], _Connection]:
+    return lambda: connection
