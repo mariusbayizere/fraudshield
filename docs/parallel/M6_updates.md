@@ -424,42 +424,50 @@ below; it has not had a fourth review.
   synthetic-data start-up guard on the API's classpath, which stopped every API test. A module
   dependency carries its auto-configuration with it.
 
-## Resume here (state at the end of the 2026-09-23 laptop session)
+## Resume here (final state, 2026-09-23, end of the laptop session)
+
+**Stopped as instructed: nothing merged, nothing tagged.**
 
 **Branches** (all pushed; nothing lives only on the laptop):
 
-| Branch | Head | What it is |
+| Branch | Verified head | What it is |
 |---|---|---|
-| `m6/decision` | see `git log origin/m6/decision -1` (review fixes `52481fc`, delta fixes after it) | M6. Merge **after** M5 |
-| `m6/featurestore-fallback` | see `git log origin/m6/featurestore-fallback -1` | `origin/m5/scoring` + `m6/decision` + the Python PostgreSQL fallback (PB-69). Merge **after** M5 and M6; re-merge `m6/decision` into it whenever M6 changes |
+| `m6/decision` | `2bc1b72` (tree `8a83da8c15c5ebe10ee9aa4609c24672d611de7b`); the commit after it changes only this file | M6. Merge **after** M5 |
+| `m6/featurestore-fallback` | `35a3752` | `origin/m5/scoring` + `m6/decision` + the Python PostgreSQL fallback (PB-69). Merge **after** M5 and M6; re-merge `m6/decision` into it whenever M6 changes, taking `m6/decision`'s side of the generated matrix and re-rendering it |
 
-**Do not** merge to `main` or tag `m6-complete`: the owner's order is M5 first, then M6, and the
-latency gate is NOT MET.
+**Final verification on the frozen tree `8a83da8c` (no file changed during either run):**
+- `./mvnw -B -ntp -fae verify` (the CI command), 13 m 14 s: common 1131, persistence 61, rules 42,
+  decision 105, notify 80 — all passing, none skipped; ingest **83 of 84**: one timing failure,
+  `IngestApiTest.thousandTransactionBatchesAreDecidedWithinThirtySeconds` (FR-01-06), measured
+  **30.20 s against the 30 s limit** with the host's one-minute load at ~7. No production code on
+  the ingest or decision path changed since `5d06f94`, and the test passed in every earlier run.
+- Re-run of the ingest module alone on the same tree (load 6.9 → 8.5): **84 of 84 passing**.
+- The test was not loosened. Its margin on this host is small; the FR-01-06 timing is, like the
+  latency gate, a number for M10's dedicated machine (ADR 0010), and CI's run is authoritative.
+- Fallback branch at `35a3752`: `ml/tests/featurestore` and `ml/tests/serving/test_entry_points.py`
+  **64 passing**, the `m6-postgresql` acceptance parameter and the production-bounds test against
+  TimescaleDB included; `make typecheck`'s mypy command clean (204 files).
 
-**Gate state at `52481fc`:** backend build green (persistence 61, decision 105, notify 80,
-ingest 84; common 1131 and rules 42 unchanged since the green full run at `17c0773`); fallback
-branch: `ml/tests/featurestore` and `ml/tests/serving/test_entry_points.py` green (59), with the
-`m6-postgresql` acceptance parameter running against TimescaleDB. Latency NOT MET on both hosts
-measured.
+**Reviews:** four rounds on 2026-09-23 — the first independent review (8 MAJOR), its delta review
+(2 new MAJOR from the fix round), and a third, fresh review requested by the owner (1 new MAJOR from
+the fix round, plus four surviving mutations and two observations). All fixed and tested; the last
+fix round (`5f74db3`, `2bc1b72`) has not had a review of its own.
 
-**Independent review:** CHANGES_REQUIRED (0 BLOCKER, 8 MAJOR), all fixed; the delta review of the
-fix round confirmed the eight and found two new MAJOR (D1, D2), both fixed and tested. The second
-fix round has not had its own independent review; the owner may want one before merge.
+**Owner decisions of 2026-09-23, applied:** latency NOT MET on this hardware (ADR 0059; M10 measures
+it, PB-73 proposed); HdrHistogram BSD-2-Clause; compose (`FS_SCORER_DB_PASSWORD`, vault provisioning,
+`make up` checks the vault migration) applied and flagged for M9; FR-03-05 DONE_WITH_DEVIATION
+(ADR 0065). The mypy errors once reported against `m5/scoring` were a stale cache here; nothing was
+written to M5's file.
 
-**What needs the owner:**
-1. ~~Latency gate~~ decided 2026-09-23: NOT MET on this hardware (ADR 0059); measured in M10
-   (PB-73). Tagging is still the owner's call at merge.
-2. ~~HdrHistogram~~ decided 2026-09-23: BSD-2-Clause elected.
-3. ~~Compose proposals~~ decided 2026-09-23: applied, flagged for M9.
-4. ~~FR-03-05~~ decided 2026-09-23: DONE_WITH_DEVIATION (ADR 0065 point 1).
-5. **Withdrawn, 2026-09-23:** the "two mypy errors on `origin/m5/scoring`" reported at the end of
-   the first laptop session were a stale `.mypy_cache` in this session's worktree. `make typecheck`'s
-   command is clean on `origin/m5/scoring` (202 files) and on `m6/featurestore-fallback` (204 files)
-   after clearing the cache. Nothing was written to M5's file. For M5, one real point stands:
-   `FallbackUnavailableError` reaches its serving layer, which already answers UNAVAILABLE for any
-   store failure.
+**What still needs the owner:**
+1. Whether to review the last fix round again before merge (every earlier fix round introduced a
+   defect the next review found).
+2. At merge, after M5: whether `m6-complete` is tagged with the latency criterion NOT MET under ADR
+   0059 (the tag's annotation would name it).
+3. For M9: carry the compose change into the deployment manifests, bind a `KmsClient`, and provide
+   `FS_SCORER_DB_PASSWORD` / the vault role passwords from its secret store.
 
-**Next steps for a resumed session:** re-run the gate only if code changed; after M5 merges,
-rebase nothing (ADR 0015 allows it, but the fallback branch holds merge commits): merge `main`
-into `m6/decision`, re-run the full `verify`, then merge; then merge `main` into
-`m6/featurestore-fallback`, re-run `uv run pytest ml/tests/featurestore`, then merge.
+**Next steps for a resumed session:** after M5 merges, merge `main` into `m6/decision`, re-run the
+full `verify`, then merge; then merge `main` into `m6/featurestore-fallback`, re-run
+`uv run pytest ml/tests/featurestore ml/tests/serving`, then merge. Re-run the gate only if code
+changed. Rebase nothing: the fallback branch holds merge commits.
