@@ -32,8 +32,8 @@ env: ## Create .env with random local development credentials (never overwrites)
 .PHONY: up
 up: env ## Start the core local stack and wait until every service is healthy
 	$(COMPOSE) --profile core up -d --wait --wait-timeout 300
-	@# --wait treats a one-shot as ready once it runs; its exit status decides (ADR 0069).
-	./infrastructure/docker/scripts/await-oneshot.sh pii-vault-migrate --profile core
+	@# The vault's migrations, after the stack is healthy: `run` returns their exit status (ADR 0069).
+	$(COMPOSE) --profile core run --rm pii-vault-migrate
 	$(COMPOSE) --profile core ps
 
 .PHONY: smoke

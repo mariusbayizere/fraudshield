@@ -506,10 +506,52 @@ round, and none blocks):
   synthetic-data start-up guard on the API's classpath, which stopped every API test. A module
   dependency carries its auto-configuration with it.
 
+## CI was red: what failed, why, and what changed (2026-09-23, after the fifth review)
+
+The owner reported CI red on the heads the fifth review approved: `ci` #309 (`6dd2eae`) and #310
+(`80a81a8`) failed; `stack` and `devcontainer` were green only because their real jobs were skipped
+by path filters. Read through the public Actions API (job logs need authentication; job steps and
+check-run annotations do not), the history shows more:
+
+- **`ci`, python job, step 8 (`tools` pytest), on every M6 push since `0747d6c`**:
+  `tools/tests/test_compose_budget.py` pins the core profile's total at 3,968 MiB, and adding the
+  128 MiB `pii-vault-migrate` to `core` made it 4,096. The ml, contracts and dataset pytest steps
+  after it never ran in CI. Locally, all four suites were run the way CI runs them
+  (`REQUIRE_DOCKER=1`): only this test failed (tools 1 failed/176, ml 270, contracts 490,
+  dataset 126). **My miss:** I ran `fs-compose-budget` (0 errors) and not the tools test suite,
+  and I never read CI before calling the work done.
+- **`stack` #302, #303, #308 (`0747d6c`, `2bc1b72`, `9f68ec7`), `make up` failed (exit 2)** while
+  the migration itself had succeeded ("Successfully applied 3 migrations"; the diagnostics
+  annotated only `pii-vault-migrate exited exit=0`). It failed **before** any `make up` check
+  existed (`0747d6c`), so `docker compose up --wait` itself failed: Compose v2 fails `--wait` on a
+  one-shot that has already exited unless another service depends on it with
+  `service_completed_successfully` (the reason `object-store-init` passes: `mlflow` depends on it).
+  Whether the one-shot has exited when Compose looks at it is a race. Every local run and all five
+  reviews checked a subset of services where Compose looked while Flyway was still running; I also
+  could not reproduce it with Compose v2.29.7, v2.33.1 or v2.39.4 on subsets, so the exact runner
+  behaviour is inferred from CI's annotations, not reproduced. The round-5 `await-oneshot.sh`,
+  which five reviews examined, was never the cause and never the cure: CI failed inside `up --wait`
+  before reaching it.
+- **`devcontainer`** failed in post-create's `make ci` on the same budget test.
+
+**Fix (this commit):** `pii-vault-migrate` is listed under the `full` profile only, so
+`--profile core up` never starts it, and `make up` runs it after the stack is healthy with
+`docker compose --profile core run --rm pii-vault-migrate`, which returns Flyway's exit status with
+no race. `await-oneshot.sh` is removed. The core profile is back at 3,968 MiB (the pinned test
+passes on its own terms; `hardware.md` reverted). Verified locally with Compose v5.5.1, v2.29.7 and
+v2.39.4: exit 0 with V1–V3 applied; exit 1 with a wrong migrator password; tools 177 passing. The
+authoritative check is CI's `stack` job, which this push triggers because it changes stack inputs
+(`docker-compose.yml`, `Makefile`, `infrastructure/docker/`).
+
+**M6 is not ready** until `ci` is green and a `stack` job has **executed** (not skipped) on the same
+commit (owner, 2026-09-23). The rows of the fix-round and fifth-review sections above that describe
+`await-oneshot.sh` are superseded by this section.
+
 ## Resume here (final state, 2026-09-23: review loop closed)
 
 **Stopped as instructed: nothing merged, nothing tagged.** The review loop ended with the fifth,
-fresh review: **APPROVED, 0 BLOCKER, 0 MAJOR**. M6 is ready for merge once M5 has merged.
+fresh review: **APPROVED, 0 BLOCKER, 0 MAJOR** — but CI was red (section above), so M6 is **not**
+ready until `ci` is green and a `stack` job has executed on the same commit.
 
 **Branches** (all pushed):
 
