@@ -9,7 +9,8 @@ those files. Facts only; where something is unverified or open it says so.
 | Kind | Reserved for M6 | Used |
 |---|---|---|
 | ADR | `0060`–`0069` | 0060–0069 (0068 hybrid persistence, 0069 the PII vault) |
-| Flyway | `V60`–`V69` | V60 account profiles, V61 FX rates, V62 hold reconciliation, V63 webhook deliveries, V64 unblock reconciliation, V65 unfinished batch jobs |
+| Flyway | `V60`–`V69` | V60 account profiles, V61 FX rates, V62 hold reconciliation, V63 webhook deliveries, V64 unblock reconciliation, V65 unfinished batch jobs, V66 the scorer's account context on `fraud_scores`, V67 the feature-store fallback (tables, `fs_scorer` functions) |
+| Vault Flyway (`db/vault`) | M6 only | V1 contacts, V2 tokenisation map, V3 contact token length |
 
 `0027` and `0028` already exist on `m4/generalisation` and `m5/scoring`; M7 will add identity
 migrations. Flyway refuses out-of-order versions on a database that already has a higher one, so
@@ -23,7 +24,7 @@ M6 owns `backend/{ingest,decision,rules,notify}`.
 |---|---|---|
 | `backend/pom.xml` | the four modules; managed versions (resilience4j, protobuf plugin, json-schema-validator, error-prone convergence pin) | a module must be listed by its parent |
 | `backend/README.md` | module table | the table listed M6 modules as planned |
-| `backend/persistence/src/main/resources/db/migration/V60`–`V65` | new migrations only; no merged migration changed (`fs-migration-guard` passes) | the schema lives in persistence |
+| `backend/persistence/src/main/resources/db/migration/V60`–`V67` | new migrations only; no merged migration changed (`fs-migration-guard` passes) | the schema lives in persistence |
 | `backend/persistence/src/main/resources/db/vault/` | new: the PII vault's schema and role bootstrap | the vault is a second database; its schema belongs beside the first (ADR 0069) |
 | `backend/persistence/src/main/java/.../persistence/schema/`, `.../persistence/demo/DemoDataSeeder.java` | the seeder now writes its institution, users and risk configuration through JPA repositories; its audit event and API key stay explicit SQL | the owner's persistence rule, point 4 (ADR 0068). **`backend/persistence` belongs to neither M6 nor M7**, so this is flagged for the merge: `DemoUserEntity` is a stand-in for M7's `StaffUserEntity` and should be deleted in favour of it |
 | `tools/src/fraudshield_tools/licences.py` | the owner's licence elections for `jakarta.persistence-api` 3.2.0 (BSD-3-Clause) and `jakarta.transaction-api` 2.0.1 (EPL-2.0), copied verbatim from M7 | CI's licence job fails without them once JPA is a dependency; identical entries on both branches merge cleanly |
@@ -33,6 +34,9 @@ M6 owns `backend/{ingest,decision,rules,notify}`.
 | `docs/benchmarks/2026-09-22-M6-decision-latency.json` | new | the gate's latency measurement |
 | `docs/reviews/M6/m6-decision.md` | new | Principal Review record (I.5) |
 | `docs/security/threat_model.md` | new section **3.7** and risks **R-9 … R-12** | the milestone threat-model delta (I.3). M7's branch takes 3.6 and R-5 … R-8, so the two append without colliding |
+| `backend/persistence/src/main/resources/db/bootstrap/bootstrap.sql` | a fifth role, `fs_scorer` (no table grants; executes V67's `feature_fallback_*` functions) | the scorer's database fallback reads as its own role (ADR 0062). Bootstrap must be re-run before V67 on an existing database, or V67's `GRANT` fails loudly |
+| `infrastructure/docker/timescaledb/init/20-fraudshield-roles.sh` | sets `fs_scorer`'s password only when `FS_SCORER_DB_PASSWORD` is set | without it the role cannot log in and the fallback stays off (fail closed) |
+| `backend/persistence/src/test/.../TestDatabase.java`, `DatabaseSecurityTest.java` | `fs_scorer` gets a test password; one new test: the role reads no table or view and may execute exactly the five fallback functions | M1's security suite covers the new role |
 | `backend/spotbugs-exclude.xml` | one entry: `UWF_UNWRITTEN_FIELD` on the JPA key classes | Hibernate writes an `@IdClass` key's fields reflectively; the alternative is a constructor no code calls |
 
 ## Contracts M5 and M7 must honour
@@ -50,16 +54,25 @@ M6 owns `backend/{ingest,decision,rules,notify}`.
   atomically against the timeout poller; refusal `REVIEW_DEADLINE_PASSED` maps to 409
   `review-deadline-passed`) and `CircuitBreakerPort.countConfirmedFraud` (the D-18 numerator's
   analyst-confirmed half). Senior overrides are not implemented in M6.
-- **M5 (scorer)** receives `AccountContext.mean_hourly_count_30d = NaN` when the account's durable
-  first-seen is unknown (PB-37 fail closed) and must treat it as missing, not as a number.
-  `days_since_sim_swap`, `kyc_tier`, `counterparty_account_age_days`,
-  `counterparty_confirmed_fraud_90d` (sent as 0), `geo_cell_fraud_rate_30d`, agent float and
-  premises and `volume_ramp_ratio_7d` have no source in the API yet and are absent. The AccountContext
-  is built with the Python online path's window rules, but **no cross-language parity test exists**
-  between the Java context builder and the Python features; that is an open item for M5/M6
-  integration.
-- **Contract gap (contracts are frozen):** `notification-customer.parameters.masked_account` must be
-  a masked account number but the API only has tokens (ADR 0065 point 4).
+- **M5 (scorer), ADR 0033 as applied**: the API sends `ScoreRequest` without `context`
+  (transaction, configured limits, traceparent); the Java side builds no `AccountContext` and
+  computes no feature (ADR 0061 point 7). It reads `feature_store_degraded` (19) into the
+  `fs_feature_store_degraded_total` metric and persists it with `account_context` (18) on
+  `fraud_scores` (V66). Because Java no longer computes features, **there is no Java/Python
+  parity gap to close**; the earlier "no cross-language parity test" item is withdrawn.
+- **M5 (scorer), the database fallback** (PB-69): `PostgresFallback` on
+  `m6/featurestore-fallback` reads as `fs_scorer` and raises `FallbackUnavailableError` rather than
+  answering "never seen" when the database cannot answer. `FeatureStore.read` does not catch it, so
+  the scorer's serving layer must map it to `UNAVAILABLE` (the API then decides on
+  `fallback-rules-2`). M5 should confirm that mapping in its serving code; M6 did not edit it.
+- **Contract gap, closed:** `notification-customer.parameters.masked_account` is filled from the
+  vault's masked account number (ADR 0069 point 8); the contract is unchanged.
+- **M7's onboarding enrols customers** by calling `AccountTokens.tokenise` (account number to
+  token) and `VaultContacts.store` (contact details under that token). Both are Spring beans when
+  `fraudshield.vault.url` is set; neither has an HTTP endpoint in M6.
+- **M9 binds a `KmsClient`** for its key service and runs `KmsClientContract` (notify's test jar)
+  against it. Production uses `fraudshield.vault.key-provider=kms` (the default); `configured` keys
+  are refused outside `dev`, `demo` and `test` profiles (ADR 0069 point 10).
 
 ## M6 gate: latency result (not met at the largest achievable load)
 
@@ -102,6 +115,34 @@ was **23**. Nothing was stopped for the run. These are this host's numbers, not 
   for the limiter's single Redis round trip. A measurement on a host that can support it is the
   open work, and it is owed before the tag.
 
+### Gate re-run, 2026-09-23 (this laptop, after the session's changes)
+
+Commit `17c0773`. Host: a 4-core, 7.6 GB laptop shared with other sessions; one-minute load 3.4
+before and **17.6** at the end of the benchmark. Nothing else heavy of this session ran alongside.
+
+- **`./mvnw -B -ntp verify` (the CI command), whole backend: BUILD SUCCESS**, 10 m 55 s: common
+  1131, persistence 61, rules 42, decision 105, notify 80, ingest 84 — 1,503 tests, 0 failures,
+  0 errors, **0 skipped** (every Testcontainers suite ran). The first run of the day failed one
+  test (`KafkaMessagesContractTest.theCodecRoundTripsEveryFact`, a type change in the spool codec's
+  new `account_context`, fixed in `17c0773`); the numbers above are the second run.
+- **Latency: NOT MET**, `docs/benchmarks/2026-09-23-M6-decision-latency.json`:
+
+| Target req/s | Achieved | Errors | Client p50 / p95 / p99 ms | Server decision p50 / p95 ms |
+|---|---|---|---|---|
+| 25 | 25 | 0 | 36.7 / 120.9 / 232.4 | 12 / 43 |
+| 50 | 50 | 0 | 36.4 / 106.8 / 221.2 | 9 / 42 |
+| 100 | 100 | 0 | 88.1 / 290.9 / 508.5 | 12 / 63 |
+| 150 | 150 | 0 | 140.5 / 371.3 / 511.4 | 28 / 113 |
+| 200 | 200 | 0 | 141.2 / 392.0 / 482.0 | 28 / 126 |
+| 300 | 293 | 177 | 234.9 / 747.7 / 1182.9 | 56 / 397 |
+
+  Worse than the 2026-09-22 Codespace run at every rate. The server-side p95 at 25–50 req/s
+  (42–43 ms) is under 50 ms while the client-side p95 is not, which points again at the host (the
+  load generator and three stores on four cores) rather than the decision path; that is a
+  hypothesis, not a measurement. The rate limiter's round trip and the V66 columns are the only
+  synchronous-path changes since the last run. **`m6-complete` must not be tagged on this
+  evidence**; a run on a dedicated host is still owed.
+
 ## Traceability updates to apply at merge
 
 Evidence was produced on this branch; statuses are proposals for the reviewer, not claims of done.
@@ -119,15 +160,17 @@ Evidence was produced on this branch; statuses are proposals for the reviewer, n
 | FR-03-01 | VERIFIED_AT_REDUCED_SCALE | `DecisionEngineTest`, `IngestApiTest`; latency file (the "1,000 HIGH events/s" load was not run) |
 | FR-03-02 | DONE | `HoldTimeoutServiceTest`, `IngestApiTest.holdsAreReleasedAtThirtySeconds…` (±500 ms, D-18) |
 | FR-03-03 | VERIFIED_AT_REDUCED_SCALE | as FR-03-01 |
-| FR-03-04 | DONE_WITH_DEVIATION | `SmsPolicyTest`, `VerificationFlowTest`, `IngestApiTest` (SMS within 5 s of the block, measured from the server's own timestamps); the PII vault now exists (ADR 0069, `VaultContactsTest`), but no contact is enrolled until M7's onboarding writes one, and there is no real Africa's Talking delivery |
-| FR-03-05 | DONE_WITH_DEVIATION (was proposed DONE; Principal Review finding 5) | `VerificationFlowTest`, `ResilienceApiTest.theVerificationPage…` (lifted and webhook within 10 s; `false_positive_confirmed` in the audit event; LEGITIMATE label). **The gate is bypassed in the tests**: `SelfServicePolicy` refuses a link whenever `daysSinceSimSwap` is null and nothing sets it, so in production no customer reaches the page until the MNO SIM-swap adapter exists. An answer whose decision transition fails is now reconciled (V64) rather than stranded (finding 6) |
+| FR-03-04 | DONE_WITH_DEVIATION | `SmsPolicyTest`, `VerificationFlowTest`, `IngestApiTest` (SMS within 5 s of the block, measured from the server's own timestamps), now through the **real vault adapters** over a vault container (`IngestApiTest.customerNumbersAndPhonesReachTheSmsProviderAndNothingElse`). Deviation: no contact is enrolled in a real deployment until M7's onboarding calls `AccountTokens`/`VaultContacts`, and there is no real Africa's Talking delivery |
+| FR-03-05 | DONE (owner decision 2026-09-23; was DONE_WITH_DEVIATION after Principal Review finding 5) | `VerificationFlowTest`, `ResilienceApiTest.theVerificationPage…` (lifted and webhook within 10 s; `false_positive_confirmed` in the audit event; LEGITIMATE label). FR-03-05 applies "unless self-service is disabled by D-25 conditions", and the owner decided that an unavailable SIM-swap signal disabling it is D-25's intended behaviour, not a gap (ADR 0065 point 1, `SmsPolicyTest.withoutTheSimSwapSignalNoBlockOffersSelfService`). The page tests issue the link directly because D-25 withholds it today; that is stated, not hidden. A reviewer who reads finding 5 as still binding should keep DONE_WITH_DEVIATION |
 | FR-03-06 | DONE | `DecisionServiceTest`, `RedisAdaptersTest`: the production Lua freezes on exactly the third HIGH within the hour, not the second or the fourth, and exactly one of twenty racing thirds freezes (Principal Review finding 8) |
 | FR-03-07 | DONE_WITH_DEVIATION | `FreezeAndBreakerTest`, `TransitionsAndBreakerMonitorTest`, `RedisAdaptersTest`; one-minute window granularity (ADR 0061); "visible in admin panel" is M7/M8 |
 | FR-03-08 | DONE | M1's `DatabaseSecurityTest` plus `PostgresAdaptersTest` (all writes are inserts into append-only tables) |
 | FR-05-05 | IN_PROGRESS | DSL done (`RuleCompilerTest`, `RuleDraftVectorsTest`); rule endpoints are M7/M8 |
 | D-14, D-15, D-18 | DONE | see ADRs 0064, 0066 and the tests named there |
 | D-17 | DONE_WITH_DEVIATION | JUnit 5 with the generative harness ADR 0009 planned (`Properties.forAll`) |
-| D-25 | DONE_WITH_DEVIATION | `SmsPolicyTest`, `VerificationFlowTest`: the policy is implemented and tested, and it refuses self-service whenever the SIM-swap age is unknown. Nothing supplies that age, so in production it refuses **every** block; the MNO adapter is on the backlog |
+| D-25 | DONE (owner decision 2026-09-23) | `SmsPolicyTest`, `VerificationFlowTest`: self-service is refused whenever the SIM-swap age is unknown, which today is every block; the owner recorded this as intended (ADR 0065 point 1). The value arrives through the scorer's feature vector, so an MNO feed into the feature store (and `account_sim_swaps`, V67) enables the link without an API change |
+| D-20 | DONE (application side) | ADR 0069: separate instance and roles, AES-256-GCM envelope encryption with per-row data keys, `KmsKeyProvider` over a `KmsClient` port (`KmsClientContract`), keys from configuration only under dev/demo/test, the tokenisation map (`AccountTokensTest`), no PII in logs, Kafka, Redis or the spool (`IngestApiTest.customerNumbersAndPhonesReachTheSmsProviderAndNothingElse`), the application role refused (`VaultContactsTest`). Open, not M6's: the vendor `KmsClient` binding, encrypted volumes and Redis TLS (M9) |
+| FR-02-09 (DB-fallback clause, PB-69) | DONE on `m6/featurestore-fallback` | `test_db_fallback.py::test_a_read_through_the_fallback_equals_the_redis_read[m6-postgresql]` passes against TimescaleDB built from this repository's migrations; two broken readers caught; `test_postgres_fallback.py` for the failure path; `DatabaseSecurityTest.theScorerMayCallTheFeatureFallbackAndReadNothingElse`. Closes when that branch merges (after M5 and M6) |
 | NFR-REL-01, NFR-REL-02 | DONE (chaos at test scale) | `GrpcScorerTest`, `RedisOutageTest`, `KafkaSpoolChaosTest`, `ResilienceApiTest` |
 
 ## Principal Review findings: what was done (2026-09-22, after the review)
