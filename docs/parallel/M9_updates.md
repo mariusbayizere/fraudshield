@@ -213,7 +213,10 @@ M6 changed the local stack (`docker-compose.yml`, `.env.example`, `Makefile`,
 `infrastructure/docker/pii-vault/init/20-vault-roles.sh`, `infrastructure/docker/timescaledb/init/20-fraudshield-roles.sh`):
 `fs_scorer`'s password reaches the main database; the PII vault creates its roles and schema on
 first start (`db/vault/bootstrap.sql`); a one-shot `pii-vault-migrate` job (Flyway 12.4.0) applies
-`db/vault` as `fs_vault_migrator`; `make up` fails if that job fails.
+`db/vault` as `fs_vault_migrator`; `make up` fails if that job fails
+(`infrastructure/docker/scripts/await-oneshot.sh`, which reads the job's recorded exit status:
+`docker compose up --wait` ignores a one-shot's exit code, and `docker compose wait` cannot see a
+container that has already exited).
 
 Acceptance:
 1. The main database bootstrap (`db/bootstrap/bootstrap.sql`) is re-run on every existing database
@@ -238,10 +241,14 @@ Acceptance:
 1. A `KmsClient` implementation for the chosen key service (AWS KMS `GenerateDataKey`/`Decrypt` with
    an encryption context, Google Cloud KMS with additional authenticated data, or Vault Transit
    `datakey`), bound as a Spring bean in the API.
-2. It passes `KmsClientContract` (the `fraudshield-notify` test jar) against the real service, in CI
-   or a recorded integration environment: 256-bit data keys, a wrong context, key or wrapping
-   refused, an unknown key refused; a wrapping that does not verify is `VaultException.permanent`,
-   an unreachable service or a key it does not have is not.
+2. It passes `KmsClientContract` (the `fraudshield-notify` test jar, as of `m6/decision` `9f68ec7`)
+   against the real service, in CI or a recorded integration environment. The binding's test
+   supplies the client, two key ids and `unreachableClient()` (the same binding pointed at an
+   endpoint it cannot reach). The contract checks: 256-bit data keys; a wrong context, key or
+   wrapping refused; a wrapping that does not verify is `VaultException.permanent`; an unknown key
+   and an unreachable service are refused but **not** permanent. Throttling and other transient
+   service errors must also map to a non-permanent `VaultException`; the contract cannot provoke
+   those against a real service, so the binding shows that mapping in its own unit tests.
 3. Production runs with `fraudshield.vault.key-provider=kms` (the default). No production profile
    includes `dev`, `demo` or `test` (which would allow keys from configuration), and no master keys
    appear in production configuration (the application refuses the combination).
