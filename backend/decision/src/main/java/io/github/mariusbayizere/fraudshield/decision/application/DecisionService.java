@@ -370,7 +370,8 @@ public final class DecisionService {
         true,
         null,
         fallback.tier() != RiskTier.LOW,
-        false);
+        false,
+        null);
   }
 
   static double nominalScore(RiskTier tier, ChannelThreshold threshold) {

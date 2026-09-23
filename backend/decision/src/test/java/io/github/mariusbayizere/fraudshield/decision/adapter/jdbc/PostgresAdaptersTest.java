@@ -167,6 +167,22 @@ class PostgresAdaptersTest {
     assertThat(
             one("SELECT count(*) FROM fraudshield.fraud_scores" + " WHERE ml_unavailable_fallback"))
         .isEqualTo("1");
+    assertThat(
+            one(
+                "SELECT count(*) FROM fraudshield.fraud_scores WHERE ml_unavailable_fallback"
+                    + " AND account_context IS NOT NULL"))
+        .as("a fallback decision has no context: the scorer did not read one")
+        .isEqualTo("0");
+    assertThat(
+            one(
+                "SELECT count(*) FROM fraudshield.fraud_scores WHERE NOT ml_unavailable_fallback"
+                    + " AND (account_context ->> 'tx_count_1h')::int = 1"
+                    + " AND NOT feature_store_degraded"))
+        .as("what the scorer read is kept with the score (ADR 0033)")
+        .isEqualTo(
+            one(
+                "SELECT count(*) FROM fraudshield.fraud_scores WHERE NOT"
+                    + " ml_unavailable_fallback"));
   }
 
   @Test

@@ -60,7 +60,10 @@ window" is counted across instances, and what a rule does with a missing value.
    idempotency claims, decision states and hold timers, under `fs:{...}` keys that never overlap
    the store's `fs:fv1:` prefix. An earlier version of this branch computed the context in Java
    and changed the definition of `counterparty_unique_senders_24h` for late arrivals; that was
-   training–serving skew and it was removed.
+   training–serving skew and it was removed. What the scorer read comes back in
+   `ScoringResult.account_context` (18) with `feature_store_degraded` (19), and both are stored with
+   the score (`fraud_scores`, V66) so a decision can be audited and replayed against the state it
+   saw; Java renders that message field by field and derives nothing from it.
 
 8. **Confirmed fraud is counted once** (Principal Review finding 16). An auto-blocked HIGH already
    raised the numerator when it was decided, so `countConfirmedFraud` is for confirmations of

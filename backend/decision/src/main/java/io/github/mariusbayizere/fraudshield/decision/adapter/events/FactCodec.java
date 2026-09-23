@@ -328,6 +328,7 @@ public final class FactCodec {
     map.put("trace_id", s.traceId());
     map.put("requires_analyst_review", s.requiresAnalystReview());
     map.put("feature_store_degraded", s.featureStoreDegraded());
+    map.put("account_context", s.accountContext());
     return map;
   }
 
@@ -353,7 +354,10 @@ public final class FactCodec {
         node.get("ml_unavailable_fallback").asBoolean(),
         text(node, "trace_id"),
         node.get("requires_analyst_review").asBoolean(),
-        node.get("feature_store_degraded").asBoolean());
+        node.get("feature_store_degraded").asBoolean(),
+        node.has("account_context") && !node.get("account_context").isNull()
+            ? JSON.convertValue(node.get("account_context"), MAP)
+            : null);
   }
 
   private static ObjectNode outcome(DecisionOutcome o) {

@@ -303,9 +303,13 @@ public sealed interface DecisionEvent {
       boolean fallback,
       String traceId,
       boolean requiresAnalystReview,
-      boolean featureStoreDegraded) {
+      boolean featureStoreDegraded,
+      Map<String, Object> accountContext) {
 
-    /** Copies the collections; feature values may be null (structurally missing, D-04). */
+    /**
+     * Copies the collections; feature values may be null (structurally missing, D-04). The account
+     * context is what the scorer read from the feature store (ADR 0033), null when there is none.
+     */
     public ScoringRecord {
       Objects.requireNonNull(scoringResultId, "scoringResultId");
       Objects.requireNonNull(tier, "tier");
@@ -314,6 +318,10 @@ public sealed interface DecisionEvent {
       shapAll = shapAll == null ? null : List.copyOf(copy(shapAll));
       featureVector =
           Collections.unmodifiableMap(new LinkedHashMap<>(Objects.requireNonNull(featureVector)));
+      accountContext =
+          accountContext == null
+              ? null
+              : Collections.unmodifiableMap(new LinkedHashMap<>(accountContext));
     }
 
     private static List<Map<String, Object>> copy(List<Map<String, Object>> rows) {
@@ -349,7 +357,8 @@ public sealed interface DecisionEvent {
           fallback,
           traceId,
           review,
-          featureStoreDegraded);
+          featureStoreDegraded,
+          accountContext);
     }
   }
 }

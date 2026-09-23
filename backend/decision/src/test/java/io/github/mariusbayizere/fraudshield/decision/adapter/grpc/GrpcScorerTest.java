@@ -5,9 +5,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
+import com.google.protobuf.Timestamp;
 import io.github.mariusbayizere.fraudshield.common.money.CurrencyCode;
 import io.github.mariusbayizere.fraudshield.common.money.Money;
 import io.github.mariusbayizere.fraudshield.common.transaction.Channel;
+import io.github.mariusbayizere.fraudshield.contracts.scoring.v1.AccountContext;
+import io.github.mariusbayizere.fraudshield.contracts.scoring.v1.GeoPoint;
 import io.github.mariusbayizere.fraudshield.contracts.scoring.v1.ScoreRequest;
 import io.github.mariusbayizere.fraudshield.decision.application.DecisionService;
 import io.github.mariusbayizere.fraudshield.decision.application.DecisionSettings;
@@ -30,6 +33,7 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -105,6 +109,40 @@ class GrpcScorerTest {
     assertThat(score(Fixtures.transaction("100")).record().featureStoreDegraded()).isFalse();
     remote.tamper = b -> b.setFeatureStoreDegraded(true);
     assertThat(score(Fixtures.transaction("100")).record().featureStoreDegraded()).isTrue();
+  }
+
+  @Test
+  @Tag("FR-02-10")
+  void theContextTheScorerReadIsKeptAsItWasReturned() {
+    assertThat(score(Fixtures.transaction("100")).record().accountContext())
+        .as("a scorer that returns no context")
+        .isNull();
+    remote.tamper =
+        b ->
+            b.setAccountContext(
+                AccountContext.newBuilder()
+                    .setTxCount1H(3)
+                    .setTxCount24H(0xFFFF_FFFF)
+                    .setAmountSum24HRwf("125000.50")
+                    .setMeanHourlyCount30D(Double.NaN)
+                    .setDaysSinceSimSwap(0)
+                    .setLastTransactionAt(Timestamp.newBuilder().setSeconds(1_790_000_000L))
+                    .setLastLocation(GeoPoint.newBuilder().setLatitude(-1.95).setLongitude(30.06))
+                    .addCountriesSeen("RW")
+                    .addCountriesSeen("UG"));
+    Map<String, Object> context = score(Fixtures.transaction("100")).record().accountContext();
+    assertThat(context)
+        .containsEntry("tx_count_1h", 3L)
+        .containsEntry("tx_count_24h", 4_294_967_295L)
+        .containsEntry("amount_sum_24h_rwf", "125000.50")
+        .containsEntry("mean_hourly_count_30d", null)
+        .containsEntry("tx_count_7d", 0L)
+        .containsEntry("days_since_sim_swap", 0L)
+        .containsEntry("last_transaction_at", "2026-09-21T14:13:20Z")
+        .containsEntry("last_location", Map.of("latitude", -1.95, "longitude", 30.06))
+        .containsEntry("countries_seen", List.of("RW", "UG"))
+        .as("a field with presence that was not set means no source, not zero")
+        .doesNotContainKeys("kyc_tier", "account_age_days", "device", "agent");
   }
 
   @Test

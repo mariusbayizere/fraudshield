@@ -143,7 +143,8 @@ public class InMemoryPorts
             false,
             null,
             false,
-            featureStoreDegraded));
+            featureStoreDegraded,
+            featureStoreDegraded ? null : Map.of("tx_count_1h", 1L)));
   }
 
   @Override

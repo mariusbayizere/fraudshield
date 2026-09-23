@@ -66,8 +66,9 @@ public final class PostgresSink implements SpoolDrainer.Sink {
       INSERT INTO fraud_scores (id, institution_id, transaction_id, scored_at, ensemble_score,
       xgboost_score, lightgbm_score, anomaly_score, anomaly_raw, risk_tier, shap_top5, shap_all,
       feature_vector, model_version, feature_registry_version, scoring_duration_ms,
-      requires_analyst_review, ml_unavailable_fallback, trace_id) VALUES (?, ?, ?, ?, ?, ?, ?,
-      ?, ?, ?, ?::jsonb, ?::jsonb, ?::jsonb, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING
+      requires_analyst_review, ml_unavailable_fallback, trace_id, account_context,
+      feature_store_degraded) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?::jsonb,
+      ?, ?, ?, ?, ?, ?, ?::jsonb, ?) ON CONFLICT DO NOTHING
       """;
 
   private static final String INSERT_ACCOUNT_PROFILES =
@@ -327,6 +328,8 @@ public final class PostgresSink implements SpoolDrainer.Sink {
       s.setBoolean(17, r.requiresAnalystReview());
       s.setBoolean(18, r.fallback());
       s.setString(19, r.traceId());
+      s.setString(20, r.accountContext() == null ? null : json(r.accountContext()));
+      s.setBoolean(21, r.featureStoreDegraded());
       s.executeUpdate();
     }
     state(c, e.state());
