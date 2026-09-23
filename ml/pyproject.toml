@@ -37,6 +37,10 @@ dependencies = [
     # The admin port (health, model status, shadow switch); never on the hot path.
     "fastapi==0.141.1",
     "uvicorn==0.53.0",
+    # The feature store's database fallback over M6's tables (C.4, PB-69, ADR 0062 point 6).
+    # pg8000 is pure Python and BSD-3-Clause; psycopg is LGPL, which ADR 0009 allows only for
+    # tools that are never distributed, and the scorer is.
+    "pg8000==1.31.5",
 ]
 
 [dependency-groups]
