@@ -767,4 +767,3 @@ contracts 490, dataset 143, `uv lock --check` clean, ruff and mypy (162 files) c
 *before* the `m4-complete` tag (`b3c050e`, `4722ca7`). If M5 follows that precedent, the statuses
 and the FR-02-09 carry row from §15 want applying and re-rendering before the tag, not after the
 merge.
-

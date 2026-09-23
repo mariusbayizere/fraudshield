@@ -267,4 +267,3 @@ every instrument agrees with every other. Contact with the real dependency is th
 outside that world. **What may not be claimed:** that the verification effort reported here
 establishes correctness against the services the system integrates with, beyond the three
 `requires_docker` tests that touch real Redis and real MLflow.
-
