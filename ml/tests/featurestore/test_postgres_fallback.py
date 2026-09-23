@@ -7,6 +7,8 @@ as "never seen", and a failed connection is not reused.
 
 from __future__ import annotations
 
+import threading
+import time
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -158,10 +160,12 @@ def test_a_failure_is_unavailable_never_never_seen_and_the_connection_is_replace
         connections.append(_Connection(SEEN, fail_on="feature_fallback_transactions"))
         return connections[-1]
 
-    reader = PostgresFallback(connect, {"KES": 2})
+    now = [0.0]
+    reader = PostgresFallback(connect, {"KES": 2}, clock=lambda: now[0])
     with pytest.raises(FallbackUnavailableError):
         reader.account(ACCOUNT, AT)
     assert connections[0].closed, "a connection that failed is not reused"
+    now[0] += 6.0  # past the cool-down
     with pytest.raises(FallbackUnavailableError):
         reader.account(ACCOUNT, AT)
     assert len(connections) == 2
@@ -214,3 +218,44 @@ def test_the_connector_takes_the_password_from_the_caller_and_bounds_the_socket(
     for bad in ("mysql://x@h/d", "postgresql://fs_scorer:pw@h/d", "postgresql:///d"):
         with pytest.raises(ValueError, match="feature store database"):
             connector(bad, "p")
+
+
+@pytest.mark.req("FR-02-09")
+def test_a_blackholed_database_fails_reads_fast_and_is_not_retried_during_the_cool_down() -> None:
+    """The delta review's D1: four concurrent reads against an unanswering database finished at
+    2, 4, 6 and 8 s. Now one attempt is made, the others give up within the lock wait, and reads
+    in the cool-down fail at once without connecting."""
+    attempts: list[float] = []
+    now = [0.0]
+
+    def blackhole() -> _Connection:
+        attempts.append(time.monotonic())
+        time.sleep(0.3)  # the socket timeout expiring
+        raise TimeoutError("connect timed out")
+
+    reader = PostgresFallback(blackhole, {}, clock=lambda: now[0])
+    failures: list[BaseException] = []
+
+    def read() -> None:
+        try:
+            reader.account(ACCOUNT, AT)
+        except BaseException as error:
+            failures.append(error)
+
+    started = time.monotonic()
+    threads = [threading.Thread(target=read) for _ in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert time.monotonic() - started < 1.0
+    assert len(failures) == 4
+    assert all(isinstance(f, FallbackUnavailableError) for f in failures)
+    assert len(attempts) == 1, "one connection attempt, not one per read"
+    with pytest.raises(FallbackUnavailableError, match="failed recently"):
+        reader.device_first_seen("tok_D", AT)
+    assert len(attempts) == 1, "no attempt during the cool-down"
+    now[0] += 6.0
+    with pytest.raises(FallbackUnavailableError):
+        reader.device_first_seen("tok_D", AT)
+    assert len(attempts) == 2, "after the cool-down the database is tried again"

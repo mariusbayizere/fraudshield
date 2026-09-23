@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import contextlib
 import threading
+import time
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -33,6 +34,15 @@ from fraudshield_ml.featurestore.store import ACCOUNT_HORIZON, Durable
 #: a stalled database must fail the read rather than hold it (the Java hot path's reads have the
 #: same kind of bound, ADR 0062).
 DEFAULT_STATEMENT_TIMEOUT_MS = 100
+
+#: After a failure, how long reads fail at once instead of reconnecting. A database that is down or
+#: blackholed must not make every Redis miss wait for a connection attempt behind the lock (the
+#: delta review, 2026-09-23: four concurrent reads finished at 2, 4, 6 and 8 s).
+DEFAULT_COOL_DOWN_S = 5.0
+
+#: The socket timeout a deployment's connections carry: connecting and every read. The statement
+#: timeout bounds work on a live server; this bounds a server that does not answer at all.
+DEFAULT_SOCKET_TIMEOUT_S = 0.2
 
 
 class FallbackUnavailableError(RuntimeError):
@@ -64,12 +74,20 @@ class PostgresFallback:
         minor_units: dict[str, int],
         *,
         statement_timeout_ms: int = DEFAULT_STATEMENT_TIMEOUT_MS,
+        cool_down_s: float = DEFAULT_COOL_DOWN_S,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._connect = connect
         self._minor_units = dict(minor_units)
         self._timeout_ms = int(statement_timeout_ms)
+        self._cool_down_s = float(cool_down_s)
+        #: How long a read waits for another read's turn: the statement timeout. Past it the read
+        #: fails rather than queueing behind a slow one.
+        self._lock_wait_s = self._timeout_ms / 1000
+        self._clock = clock
         self._lock = threading.Lock()
         self._connection: Connection | None = None
+        self._failed_until = float("-inf")
 
     def account(self, account_id: str, before: datetime) -> Durable | None:
         """The account's state strictly before `before`; None if the database has never seen it."""
@@ -119,7 +137,13 @@ class PostgresFallback:
             self._drop()
 
     def _query(self, work: Callable[[Any], Any]) -> Any:
-        with self._lock:
+        if self._clock() < self._failed_until:
+            raise FallbackUnavailableError("the feature store's database failed recently")
+        if not self._lock.acquire(timeout=self._lock_wait_s):
+            raise FallbackUnavailableError("the feature store's database is busy")
+        try:
+            if self._clock() < self._failed_until:
+                raise FallbackUnavailableError("the feature store's database failed recently")
             try:
                 if self._connection is None:
                     self._connection = self._open()
@@ -131,9 +155,12 @@ class PostgresFallback:
                     self._connection.rollback()
             except Exception as error:
                 self._drop()
+                self._failed_until = self._clock() + self._cool_down_s
                 raise FallbackUnavailableError(
                     "the feature store's database fallback failed"
                 ) from error
+        finally:
+            self._lock.release()
 
     def _open(self) -> Connection:
         connection = self._connect()
@@ -189,7 +216,9 @@ class PostgresFallback:
         )
 
 
-def connector(url: str, password: str, *, timeout_s: float = 2.0) -> Callable[[], Connection]:
+def connector(
+    url: str, password: str, *, timeout_s: float = DEFAULT_SOCKET_TIMEOUT_S
+) -> Callable[[], Connection]:
     """Opens pg8000 connections for `url` (postgresql://user@host:port/database).
 
     The password comes from the environment, never from the URL or the command line. The socket
