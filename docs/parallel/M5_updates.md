@@ -672,3 +672,51 @@ It is the only failure in `ml` (558 passing, coverage 94.54% on the combined M5+
 the "M5-1, the Docker tests" item in section 12: CI is **not** green for `m5/scoring`, so
 `m5-complete` must not be tagged yet, and `m6/featurestore-fallback` (which contains this branch)
 is red in CI for the same test until M5 fixes it.
+
+## 19. The real-MLflow failure: the fake was wrong, and the Docker test was right (2026-09-23)
+
+**Diagnosed, fixed, and reproduced both ways on this laptop** (Docker is available here, so the
+failure was observed against the real container before anything was changed, not fixed from the
+report).
+
+**What failed.** `test_publish_and_hot_swap_against_the_mlflow_the_deployment_runs`, the only
+`requires_docker` test M5 owns, against `ghcr.io/mlflow/mlflow:v3.16.0`:
+
+```
+RegistryError: GET /api/2.0/mlflow/registered-models/alias: HTTP 400
+{"error_code": "INVALID_PARAMETER_VALUE", "message": "Registered model alias production not
+found.", "sqlstate": "KAM00", "error_class": "INVALID_PARAMETER_VALUE"}
+```
+
+**Why.** `MlflowRegistry.by_alias` treated "that alias is not set" as absent only when the reply
+was `RESOURCE_DOES_NOT_EXIST` or HTTP 404 — which is how the rest of MLflow's registry API reports
+an absent thing, and how `FakeMlflow` answered. **MLflow 3.16 answers an unset alias with HTTP 400
+`INVALID_PARAMETER_VALUE`.** The first call on that path is `publish(..., alias="production")`
+reading the outgoing alias before moving it, so *every first promotion into a fresh registry*
+raised. Nothing that runs without Docker touches a real server, so 537 local tests passed against
+the fake's wrong answer.
+
+**The fix, in two halves.**
+
+1. `by_alias` accepts both shapes, via `_alias_absent`: `RESOURCE_DOES_NOT_EXIST`, HTTP 404, or a
+   message naming an alias as not found. An `INVALID_PARAMETER_VALUE` that is *not* about an
+   absent alias still raises — swallowing the whole error code would hide a real client bug as
+   "no alias set".
+2. **`FakeMlflow` now answers as MLflow 3.16.0 does.** This is the important half: the fake
+   encoded my reading of the REST API, the reading was wrong, and the fake's job is to be wrong
+   in the same places the server is. Two tests pin the behaviour without Docker
+   (`test_an_unset_alias_is_absent_however_the_registry_words_it`, parametrised over the 400 and
+   404 shapes, and `test_a_registry_error_that_is_not_an_absent_alias_still_raises`), so this
+   class of defect now fails in the fast suite rather than only in CI.
+
+**Evidence on this branch's head:** `REQUIRE_DOCKER=1 pytest ml/tests/serving/test_registry.py`
+→ **30 passed**, the previously failing test among them, against a real MLflow container. The
+whole suite the same way — `cd ml && REQUIRE_DOCKER=1 pytest -q` — → **542 passed, 1 skipped,
+coverage 94.35%**, the one skip being the `m6-postgresql` parameter M6 delivers. That is CI's
+condition reproduced on this laptop, real Redis and real MLflow included. The owner checks the `ci`
+run on the fixed head; this session has no GitHub credentials and cannot read run status.
+
+**What it says about the review chain.** Four review passes over this code found six classes of
+defect in the promotion path and none of them found this one, because every one of them reasoned
+about the same fake. A test that talks to the real dependency is worth more than another reading
+of the client, and the three `requires_docker` tests are the only place M5 has one.

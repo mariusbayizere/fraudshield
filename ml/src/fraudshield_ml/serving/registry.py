@@ -55,6 +55,22 @@ SERVED_TAG = "fraudshield.served_as_production"
 LOG = logging.getLogger(__name__)
 
 
+def _alias_absent(error: RegistryError) -> bool:
+    """Whether the registry is saying "no such alias" rather than failing.
+
+    MLflow 3.16 answers an unset alias with **HTTP 400 `INVALID_PARAMETER_VALUE`** and the message
+    "Registered model alias <alias> not found.", not the 404 `RESOURCE_DOES_NOT_EXIST` the rest of
+    its registry API uses for an absent thing. Reading it as an error made every first promotion
+    fail on a real server while the local fake, which returned 404, passed
+    (`docs/parallel/M5_updates.md` §19). Both shapes are accepted; an `INVALID_PARAMETER_VALUE`
+    that is *not* about an absent alias still raises, because that one is a real client bug.
+    """
+    text = str(error)
+    if "RESOURCE_DOES_NOT_EXIST" in text or "HTTP 404" in text:
+        return True
+    return "alias" in text.lower() and "not found" in text.lower()
+
+
 def _now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
@@ -217,7 +233,7 @@ class MlflowRegistry:
                 query={"name": name, "alias": alias},
             )
         except RegistryError as error:
-            if "RESOURCE_DOES_NOT_EXIST" in str(error) or "HTTP 404" in str(error):
+            if _alias_absent(error):
                 return None
             raise
         version = reply["model_version"]

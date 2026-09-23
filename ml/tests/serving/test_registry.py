@@ -1,7 +1,8 @@
 """Hot swap by registry alias (D-50, FR-02-10) against a fake MLflow REST server.
 
 The fake implements the endpoints `MlflowRegistry` calls, with MLflow's error shapes
-(`RESOURCE_DOES_NOT_EXIST` as HTTP 404, `RESOURCE_ALREADY_EXISTS` as 400). It checks the client
+(`RESOURCE_DOES_NOT_EXIST` as HTTP 404, `RESOURCE_ALREADY_EXISTS` and an unset alias as 400). It
+checks the client
 against MLflow's documented REST API, not against a running MLflow; that is an integration check
 for the CI stack, where the compose MLflow server runs.
 """
@@ -61,6 +62,15 @@ class FakeMlflow:
         self.requests: list[tuple[str, str]] = []
         self.tags: dict[tuple[str, str], dict[str, str]] = {}
         self.refuse_tags = False
+        #: How this registry words "that alias is not set"; overridden by the shape tests.
+        self.alias_miss: tuple[int, dict[str, str]] = (
+            400,
+            {
+                "error_code": "INVALID_PARAMETER_VALUE",
+                "message": "Registered model alias {alias} not found.",
+                "sqlstate": "KAM00",
+            },
+        )
 
     def handle(  # noqa: PLR0911, PLR0912 - one return per endpoint and error
         self, method: str, path: str, query: dict[str, str], body: bytes
@@ -111,7 +121,10 @@ class FakeMlflow:
             found = self.models.get(query["name"])
             alias = found["aliases"].get(query["alias"]) if found is not None else None
             if found is None or alias is None:
-                return 404, {"error_code": "RESOURCE_DOES_NOT_EXIST"}
+                # MLflow 3.16.0's own answer, checked against the container in the Docker test
+                # below: 400 INVALID_PARAMETER_VALUE, not the 404 this fake used to return.
+                status, miss = self.alias_miss
+                return status, {k: v.format(alias=query["alias"]) for k, v in miss.items()}
             return 200, {"model_version": {"version": alias, "source": found["versions"][alias]}}
         return self.tracking(path, query, data)
 
@@ -894,3 +907,45 @@ def test_a_promotion_that_cannot_record_itself_does_not_happen(
         == 0
     ), "the operator has a way through, and it is recorded"
     assert fake.tags[(NAME, "1")]["fraudshield.promotion_override"].startswith("its served tag")
+
+
+@pytest.mark.req("FR-02-10", "D-50")
+@pytest.mark.parametrize(
+    ("status", "payload"),
+    [
+        # MLflow 3.16.0's actual answer for an unset alias, from the container in the Docker test.
+        (
+            400,
+            {
+                "error_code": "INVALID_PARAMETER_VALUE",
+                "message": "Registered model alias production not found.",
+            },
+        ),
+        # What the rest of its registry API returns for an absent thing.
+        (404, {"error_code": "RESOURCE_DOES_NOT_EXIST", "message": "not found"}),
+    ],
+)
+def test_an_unset_alias_is_absent_however_the_registry_words_it(
+    mlflow: tuple[FakeMlflow, str], status: int, payload: dict[str, str]
+) -> None:
+    """An unset `@production` is the state every first deployment starts in, so reading it as an
+    error fails the first promotion on a real server. The fake returned 404 and the real server
+    returns 400, which is how this survived 537 local tests (M5_updates §19)."""
+    fake, url = mlflow
+    fake.alias_miss = (status, payload)
+    registry = MlflowRegistry(url)
+    registry.ensure_model(NAME)
+    assert registry.by_alias(NAME, PRODUCTION) is None
+
+
+def test_a_registry_error_that_is_not_an_absent_alias_still_raises(
+    mlflow: tuple[FakeMlflow, str],
+) -> None:
+    """`INVALID_PARAMETER_VALUE` is also what a genuinely malformed request gets; swallowing the
+    whole error code would hide a client bug as "no alias set"."""
+    fake, url = mlflow
+    fake.alias_miss = (400, {"error_code": "INVALID_PARAMETER_VALUE", "message": "bad name"})
+    registry = MlflowRegistry(url)
+    registry.ensure_model(NAME)
+    with pytest.raises(RegistryError, match="bad name"):
+        registry.by_alias(NAME, PRODUCTION)
