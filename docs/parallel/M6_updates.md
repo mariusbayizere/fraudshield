@@ -37,7 +37,7 @@ M6 owns `backend/{ingest,decision,rules,notify}`.
 | `backend/persistence/src/main/resources/db/bootstrap/bootstrap.sql` | a fifth role, `fs_scorer` (no table grants; executes V67's `feature_fallback_*` functions) | the scorer's database fallback reads as its own role (ADR 0062). Bootstrap must be re-run before V67 on an existing database, or V67's `GRANT` fails loudly |
 | `infrastructure/docker/timescaledb/init/20-fraudshield-roles.sh` | sets `fs_scorer`'s password only when `FS_SCORER_DB_PASSWORD` is set | without it the role cannot log in and the fallback stays off (fail closed) |
 | `backend/persistence/src/test/.../TestDatabase.java`, `DatabaseSecurityTest.java` | `fs_scorer` gets a test password; one new test: the role reads no table or view and may execute exactly the five fallback functions | M1's security suite covers the new role |
-| `docker-compose.yml`, `.env.example`, `infrastructure/docker/pii-vault/init/20-vault-roles.sh` (new) | `FS_SCORER_DB_PASSWORD` for `timescaledb`; vault roles and schema on the vault's first start; the one-shot `pii-vault-migrate` service; three new `.env` variables | owner decision 2026-09-23; **flagged for M9**, which owns infrastructure |
+| `docker-compose.yml`, `.env.example`, `Makefile` (`up` checks the vault migration), `infrastructure/docker/pii-vault/init/20-vault-roles.sh` (new) | `FS_SCORER_DB_PASSWORD` for `timescaledb`; vault roles and schema on the vault's first start; the one-shot `pii-vault-migrate` service; three new `.env` variables | owner decision 2026-09-23; **flagged for M9**, which owns infrastructure |
 | `docs/benchmarks/hardware.md` | the core profile's budget table (4,096 of 4,096 MiB, `pii-vault-migrate` added) | the table records the compose totals `fs-compose-budget` enforces |
 | `tools/src/fraudshield_tools/licences.py` (again) | the owner's BSD-2-Clause election for `HdrHistogram@2.2.2` | owner decision 2026-09-23 |
 | `docs/adr/0059` | new; M6 counts down from 0059 now its block is full (ADR 0060, revised) | ADR 0059 |
@@ -323,6 +323,23 @@ fix round itself introduced **two new MAJOR defects**, both fixed:
 Re-verified: notify 80 and ingest 84 (full `verify`), the vault and consumer tests, and the
 fallback branch's feature-store and entry-point tests. This second fix round was **not** reviewed
 again by an independent reviewer.
+
+### Third independent review (fresh reviewer, 2026-09-23, requested by the owner)
+
+Scope: the last fix round (D1 `c7b4ae7`, D2 `52481fc..ac6e4a6`, `3155415`) and the owner-decision
+commit `0747d6c`. Verdict **CHANGES_REQUIRED: 0 BLOCKER, 1 MAJOR** — introduced, again, by the
+previous fix. Record: `docs/reviews/M6/m6-decision-2026-09-23-third.md`.
+
+| Finding | Fix |
+|---|---|
+| MAJOR: the D1 cool-down started on any failure, so one statement cancelled at 100 ms turned the fallback off for every account in the worker for 5 s, and a frequently transacting account could keep it off (reproduced on a real server) | the cool-down starts only on connection-level failures; a cancelled or failed statement fails its own read and keeps the session; a TimescaleDB test at the production bounds; ADR 0062 point 5 corrected, and it now says the 100 ms bound is not yet shown for long histories (M10) (`5f74db3`, fallback branch) |
+| Surviving mutations P2 (unbounded lock wait), P3 (no re-check under the lock), P4 (2 s default socket timeout), J1 (unknown key id permanent for the passphrase provider) | a test for each; all four, and the original defect, now fail a test |
+| Observation: `make up` reported success when `pii-vault-migrate` failed (`--wait` ignores a one-shot's exit code) | `make up` checks the migration's exit status with `docker compose wait`, tested with a correct and a wrong migrator password on a throwaway project |
+| Observation: comments in `VaultException` and `EnvelopeConsumer` still called an unknown key permanent | corrected, and pinned by the J1 test |
+
+D2, the compose change, ADRs 0059/0060/0065, the HdrHistogram election and the status rows had no
+finding. This fix round was verified by the tests above, the mutations, and the final full verify
+below; it has not had a fourth review.
 
 ## Open items this branch did not take
 

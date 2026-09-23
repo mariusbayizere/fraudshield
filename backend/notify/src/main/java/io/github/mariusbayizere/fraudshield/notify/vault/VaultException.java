@@ -8,7 +8,10 @@ public final class VaultException extends RuntimeException {
 
   private static final long serialVersionUID = 1L;
 
-  /** Whether no retry can succeed: a row that does not verify, a key this deployment lacks. */
+  /**
+   * Whether no retry can succeed: a stored row or wrapping that does not verify. A key this
+   * deployment does not hold (yet) is not permanent: a rolling rotation must retry (ADR 0069).
+   */
   private final boolean permanent;
 
   /**
@@ -36,8 +39,9 @@ public final class VaultException extends RuntimeException {
   }
 
   /**
-   * A failure no retry can fix: the stored row does not verify, or it names a key this deployment
-   * does not hold. A consumer dead-letters the work rather than retrying it for ever.
+   * A failure no retry can fix: the stored row or its wrapped key does not verify. A consumer
+   * dead-letters the work rather than retrying it for ever. A key this deployment does not hold is
+   * never permanent: during a rolling rotation the instance is about to be given it (ADR 0069).
    *
    * @param message why, without any protected value
    * @param cause the underlying failure, or null

@@ -122,7 +122,12 @@ class VaultContactsTest {
             new PassphraseKeyProvider(Map.of("m9", TestVault.masterKey()), "m9"));
     assertThatThrownBy(() -> withoutTheKey.find(INSTITUTION, source))
         .isInstanceOf(VaultException.class)
-        .hasMessageContaining("no master key with id m6");
+        .hasMessageContaining("no master key with id m6")
+        .as("an instance not yet given a rotated key retries; it never dead-letters (ADR 0069)")
+        .isInstanceOfSatisfying(VaultException.class, e -> assertThat(e.permanent()).isFalse());
+    assertThatThrownBy(() -> withAnotherKey.find(INSTITUTION, source))
+        .as("a wrapping that does not verify under the key it names can never be read")
+        .isInstanceOfSatisfying(VaultException.class, e -> assertThat(e.permanent()).isTrue());
   }
 
   @Test

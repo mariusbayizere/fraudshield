@@ -56,16 +56,25 @@ reads:
    not for an institution, which is the scope the Redis keys already have; `fs_scorer` cannot list
    tokens, read a decision or a score, or see anything but the feature inputs of an account it
    already names. Two indexes serve the token-only lookups.
-5. **Failure is never "never seen".** The reader raises `FallbackUnavailable` when the database
+5. **Failure is never "never seen".** The reader raises `FallbackUnavailableError` when the database
    cannot answer, and every statement is bounded (`statement_timeout`, 100 ms by default), because
-   it runs on the scorer's synchronous path. After any failure the reader fails reads at once for
-   a cool-down (5 s) instead of reconnecting on every Redis miss, a read waits for another's turn
-   no longer than the statement timeout, and connections carry a 200 ms socket timeout, so a
-   blackholed database costs one attempt, not a queue of them (the delta review, 2026-09-23).
-   While the database is down, a read that misses Redis makes the scorer answer UNAVAILABLE and
-   that one payment is decided by `fallback-rules-2`; reads that hit Redis are unaffected. Returning `None` would read a known account as new
-   and score its history away; raising makes the scorer answer UNAVAILABLE and the API decide on
-   its rule-based fallback (C.4).
+   it runs on the scorer's synchronous path. A read waits for another read's turn no longer than
+   the statement timeout, and connections carry a 200 ms socket timeout.
+   **Connection-level failures start a cool-down; statement failures do not** (revised after the
+   third independent review, 2026-09-23). When the server cannot be reached or the session is lost
+   (connect errors, socket timeouts, SQLSTATE classes 08 and 53, 57P01–57P03), reads fail at once
+   for 5 s instead of reconnecting on every Redis miss, so a blackholed database costs one attempt,
+   not a queue of them. A statement that fails or is cancelled (57014) fails only its own read; the
+   session is kept and the next read is served. The first version of the cool-down treated both
+   alike, so one slow account turned the fallback off for every account in the worker for 5 s, and
+   an account transacting every few seconds could keep it off.
+   What a failed read costs: that read makes the scorer answer UNAVAILABLE and that payment is
+   decided by `fallback-rules-2`; while the database is unreachable, the same holds for every read
+   that misses Redis, and reads that hit Redis are unaffected.
+   **Not yet shown:** that 100 ms holds for `feature_fallback_account` on accounts with long
+   histories (it scans the account's whole history for the durable sets). The acceptance test runs
+   with a 10 s bound on a small corpus; the production defaults are tested only for their
+   behaviour. M10's measurement (ADR 0059) is where this is established.
 6. **The driver is pg8000** (BSD-3-Clause). psycopg is LGPL, which ADR 0009 allows only in tools
    that are never distributed, and the scorer is.
 
