@@ -295,7 +295,13 @@ def test_a_cancelled_statement_fails_that_read_only_and_keeps_the_session() -> N
 
 @pytest.mark.req("FR-02-09")
 def test_a_lost_connection_starts_the_cool_down() -> None:
-    for error in (_database_error("08006"), _database_error("57P01"), TimeoutError("socket")):
+    for error in (
+        _database_error("08006"),
+        _database_error("57P01"),
+        _database_error("53300"),
+        pg8000.exceptions.InterfaceError("network error"),
+        TimeoutError("socket"),
+    ):
         connection = _Connection(SEEN, fail_on="feature_fallback_transactions")
         connection.error = error
         reader = PostgresFallback(_returning(connection), {"KES": 2}, clock=lambda: 0.0)
@@ -358,3 +364,30 @@ def test_connections_carry_a_200_ms_socket_timeout_by_default(
 
 def _returning(connection: _Connection) -> Callable[[], _Connection]:
     return lambda: connection
+
+
+class _RollbackFails(_Connection):
+    def rollback(self) -> None:
+        self.statements.append("ROLLBACK")
+        raise OSError("the socket died during the rollback")
+
+
+@pytest.mark.req("FR-02-09")
+def test_a_session_that_cannot_roll_back_is_lost_on_both_paths() -> None:
+    """The fourth review's unpinned paths: a rollback that raises means the session is gone, after
+    a successful read (whose answer is still returned) and after a statement-level failure."""
+    ok = _RollbackFails(SEEN)
+    reader = PostgresFallback(_returning(ok), {"KES": 2}, clock=lambda: 0.0)
+    assert reader.device_first_seen("tok_D", AT) == AT, "the answer was read before the rollback"
+    assert ok.closed
+    with pytest.raises(FallbackUnavailableError, match="failed recently"):
+        reader.device_first_seen("tok_D", AT)
+
+    failing = _RollbackFails(SEEN, fail_on="feature_fallback_transactions")
+    failing.error = _database_error("22012")
+    reader = PostgresFallback(_returning(failing), {"KES": 2}, clock=lambda: 0.0)
+    with pytest.raises(FallbackUnavailableError):
+        reader.account(ACCOUNT, AT)
+    assert failing.closed
+    with pytest.raises(FallbackUnavailableError, match="failed recently"):
+        reader.device_first_seen("tok_D", AT)
