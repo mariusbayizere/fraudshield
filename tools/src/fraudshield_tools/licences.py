@@ -121,6 +121,14 @@ EXCEPTIONS: dict[str, tuple[str, str]] = {
         "POM lists 'EPL 2.0' and 'GPL2 w/ CPE'; the jar's META-INF/NOTICE.md declares "
         "SPDX 'EPL-2.0 OR GPL-2.0-only with Classpath-exception-2.0' (verified 2026-09-17)",
     ),
+    "maven:org.hdrhistogram:HdrHistogram@2.2.2": (
+        "BSD-2-Clause",
+        "Offered as 'CC0-1.0 OR BSD-2-Clause': the POM lists 'Public Domain, per Creative Commons "
+        "CC0' and 'BSD-2-Clause', and the jar's META-INF/LICENSE.txt releases the code to the "
+        "public domain under CC0 and also grants the BSD 2-Clause License text. The project "
+        "ELECTS BSD-2-Clause (owner decision 2026-09-23). Runtime dependency of "
+        "micrometer-registry-prometheus, the API's metrics (ADR 0060) (verified 2026-09-23)",
+    ),
     "maven:jakarta.persistence:jakarta.persistence-api@3.2.0": (
         "BSD-3-Clause",
         "Offered as 'EPL-2.0 OR BSD-3-Clause': the POM lists 'Eclipse Distribution License v. 1.0' "

@@ -23,6 +23,15 @@ one GSM-7 segment in four languages.
    device state offers the link while `days_since_sim_swap` is missing. The value arrives through
    the scorer's feature vector (ADR 0033), so when the MNO feed reaches the feature store the link
    becomes available without a change here.
+
+   **FR-03-05 is recorded as DONE_WITH_DEVIATION** (owner decision, 2026-09-23, as the first
+   Principal Review asked in its finding 5). The behaviour is correct per D-25, but it differs from
+   the requirement as written: FR-03-05 describes a customer answering "Yes" and the block lifting
+   within 10 s, and with no SIM-swap signal no customer is offered that page. The deviation is
+   that, until an MNO feed supplies `days_since_sim_swap`, FR-03-05's path is exercised only by
+   tests that issue the verification link directly (`VerificationFlowTest`,
+   `ResilienceApiTest.theVerificationPage…`), never by a production block. It closes when the MNO
+   adapter and the feature store's SIM-swap producer exist (V67's `account_sim_swaps`).
 2. **The link** is minted only at send time: 128 random bits, stored as SHA-256, bound to the
    block, one per block, expiring at exactly 10 minutes, answered once (V5 triggers). The page
    never says why a token is unusable beyond "expired or already used".

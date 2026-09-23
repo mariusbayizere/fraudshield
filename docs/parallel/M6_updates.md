@@ -8,7 +8,7 @@ those files. Facts only; where something is unverified or open it says so.
 
 | Kind | Reserved for M6 | Used |
 |---|---|---|
-| ADR | `0060`–`0069` | 0060–0069 (0068 hybrid persistence, 0069 the PII vault) |
+| ADR | `0060`–`0069`, then down from `0059` (block full; ADR 0060 revised) | 0060–0069 (0068 hybrid persistence, 0069 the PII vault), 0059 (the latency gate) |
 | Flyway | `V60`–`V69` | V60 account profiles, V61 FX rates, V62 hold reconciliation, V63 webhook deliveries, V64 unblock reconciliation, V65 unfinished batch jobs, V66 the scorer's account context on `fraud_scores`, V67 the feature-store fallback (tables, `fs_scorer` functions) |
 | Vault Flyway (`db/vault`) | M6 only | V1 contacts, V2 tokenisation map, V3 contact token length |
 
@@ -37,6 +37,10 @@ M6 owns `backend/{ingest,decision,rules,notify}`.
 | `backend/persistence/src/main/resources/db/bootstrap/bootstrap.sql` | a fifth role, `fs_scorer` (no table grants; executes V67's `feature_fallback_*` functions) | the scorer's database fallback reads as its own role (ADR 0062). Bootstrap must be re-run before V67 on an existing database, or V67's `GRANT` fails loudly |
 | `infrastructure/docker/timescaledb/init/20-fraudshield-roles.sh` | sets `fs_scorer`'s password only when `FS_SCORER_DB_PASSWORD` is set | without it the role cannot log in and the fallback stays off (fail closed) |
 | `backend/persistence/src/test/.../TestDatabase.java`, `DatabaseSecurityTest.java` | `fs_scorer` gets a test password; one new test: the role reads no table or view and may execute exactly the five fallback functions | M1's security suite covers the new role |
+| `docker-compose.yml`, `.env.example`, `infrastructure/docker/pii-vault/init/20-vault-roles.sh` (new) | `FS_SCORER_DB_PASSWORD` for `timescaledb`; vault roles and schema on the vault's first start; the one-shot `pii-vault-migrate` service; three new `.env` variables | owner decision 2026-09-23; **flagged for M9**, which owns infrastructure |
+| `docs/benchmarks/hardware.md` | the core profile's budget table (4,096 of 4,096 MiB, `pii-vault-migrate` added) | the table records the compose totals `fs-compose-budget` enforces |
+| `tools/src/fraudshield_tools/licences.py` (again) | the owner's BSD-2-Clause election for `HdrHistogram@2.2.2` | owner decision 2026-09-23 |
+| `docs/adr/0059` | new; M6 counts down from 0059 now its block is full (ADR 0060, revised) | ADR 0059 |
 | `backend/spotbugs-exclude.xml` | one entry: `UWF_UNWRITTEN_FIELD` on the JPA key classes | Hibernate writes an `@IdClass` key's fields reflectively; the alternative is a constructor no code calls |
 
 ## Contracts M5 and M7 must honour
@@ -74,7 +78,30 @@ M6 owns `backend/{ingest,decision,rules,notify}`.
   against it. Production uses `fraudshield.vault.key-provider=kms` (the default); `configured` keys
   are refused outside `dev`, `demo` and `test` profiles (ADR 0069 point 10).
 
-## M6 gate: latency result (not met at the largest achievable load)
+## M6 gate: latency criterion NOT MET on the hardware available (ADR 0059, owner decision 2026-09-23)
+
+The owner accepted the latency criterion as **NOT MET on this hardware** under ADR 0010's rule
+(gate numbers only from a dedicated machine) and moved the measurement to **M10**, on the dedicated
+benchmark machine and with M5's real scorer. The numbers below and in the 2026-09-23 re-run are
+**shapes, not gate figures** (ADR 0059 point 2): they show how latency grows with load on a shared
+host and that the server-side decision time sits well under the client-side time; they do not show
+the target met or refuted. Row to add at integration (M5's carry format):
+
+```yaml
+# ROW_MILESTONE_OVERRIDES / backlog: the M6 gate's latency criterion, carried M6 -> M10
+- id: PB-73            # PB-72 is the highest in use on any branch; confirm at integration
+  title: "M6 gate: end-to-end p95 decision latency < 50 ms at the largest achievable load"
+  due_milestone: M10
+  carried_from: M6 (ADR 0059, owner decision 2026-09-23)
+  acceptance: >
+    DecisionLatencyBenchmark (-Dfs.benchmark=true) on the dedicated benchmark machine recorded in
+    docs/benchmarks/hardware.md, with M5's real scorer in place of the gRPC double, at rising
+    rates up to the largest the machine sustains without errors; the result file names the
+    machine; p95 < 50 ms at that rate.
+  requirement_note: "FR-01-01, FR-03-01 and FR-03-03 stay IN_PROGRESS until PB-73 closes."
+```
+
+### The first measurement (2026-09-22, Codespace)
 
 `docs/benchmarks/2026-09-22-M6-decision-latency.json`, produced by
 `DecisionLatencyBenchmark` (opt-in: `-Dfs.benchmark=true -Dfs.benchmark.rates=… -Dfs.benchmark.seconds=30`).
@@ -149,7 +176,7 @@ Evidence was produced on this branch; statuses are proposals for the reviewer, n
 
 | Row | Proposed | Evidence |
 |---|---|---|
-| FR-01-01 | IN_PROGRESS (was VERIFIED_AT_REDUCED_SCALE; the 2026-09-23 run meets the latency criterion at no rate) | Functionally evidenced by `KafkaSpoolChaosTest`, `IngestApiTest`; the latency part is NOT MET on both hosts measured (`docs/benchmarks/2026-09-22-…` and `2026-09-23-…`). SRS "publish to Kafka within 5 ms" is replaced by D-13/D-15 (publication after the response, from the spool). Move to VERIFIED_AT_REDUCED_SCALE only on a passing measurement |
+| FR-01-01 | IN_PROGRESS (was VERIFIED_AT_REDUCED_SCALE; the 2026-09-23 run meets the latency criterion at no rate) | Functionally evidenced by `KafkaSpoolChaosTest`, `IngestApiTest`; the latency part is NOT MET on both hosts measured (`docs/benchmarks/2026-09-22-…` and `2026-09-23-…`). SRS "publish to Kafka within 5 ms" is replaced by D-13/D-15 (publication after the response, from the spool). Under ADR 0059 the latency part is NOT MET on this hardware and is measured in M10 (PB-73); the row stays IN_PROGRESS until then |
 | FR-01-02 | DONE | `RequestValidatorTest`, `IngestApiTest.everySharedValidationVectorGetsItsStatusAndErrorsOverHttp` (26 vectors); E.1's 429 is implemented (`RateLimitApiTest`), and an oversized chunked body is 413 rather than a truncated 400 |
 | FR-01-03 | (see above) | also `RedisIdempotencyTest` and `RequestValidatorTest`'s field-by-field fingerprint table (findings 1, 2, 4) |
 | FR-01-03 | DONE | `IngestApiTest` (100 identical, TTL 24 h, 409), `ResilienceApiTest` (10,000 duplicates) |
@@ -157,11 +184,11 @@ Evidence was produced on this branch; statuses are proposals for the reviewer, n
 | FR-01-05 | IN_PROGRESS | M6 side done (`IngestApiTest.keysAreRequiredScopedAndMeanNothingOnStaffEndpoints`); key verification, rotation and staff-path denial are M7 |
 | FR-01-06 | DONE | `IngestApiTest.thousandTransactionBatchesAreDecidedWithinThirtySeconds`, and jobs an earlier process left RUNNING are failed at start-up (V65) |
 | FR-01-07 | DONE | `ApiDocsTest`: `/api/docs` serves `contracts/openapi/fraudshield-api.yaml` byte for byte, and the test fails if the two ever differ |
-| FR-03-01 | IN_PROGRESS (was VERIFIED_AT_REDUCED_SCALE) | `DecisionEngineTest`, `IngestApiTest` for the behaviour; the latency criterion is NOT MET (both benchmark files), and the "1,000 HIGH events/s" load was not run |
+| FR-03-01 | IN_PROGRESS (was VERIFIED_AT_REDUCED_SCALE) | `DecisionEngineTest`, `IngestApiTest` for the behaviour; the latency criterion is NOT MET (both benchmark files), and the "1,000 HIGH events/s" load was not run; NOT MET on this hardware under ADR 0059, measured in M10 (PB-73) |
 | FR-03-02 | DONE | `HoldTimeoutServiceTest`, `IngestApiTest.holdsAreReleasedAtThirtySeconds…` (±500 ms, D-18) |
 | FR-03-03 | IN_PROGRESS (was VERIFIED_AT_REDUCED_SCALE) | as FR-03-01 |
 | FR-03-04 | DONE_WITH_DEVIATION | `SmsPolicyTest`, `VerificationFlowTest`, `IngestApiTest` (SMS within 5 s of the block, measured from the server's own timestamps), now through the **real vault adapters** over a vault container (`IngestApiTest.customerNumbersAndPhonesReachTheSmsProviderAndNothingElse`). Deviation: no contact is enrolled in a real deployment until M7's onboarding calls `AccountTokens`/`VaultContacts`, and there is no real Africa's Talking delivery |
-| FR-03-05 | DONE (owner decision 2026-09-23; was DONE_WITH_DEVIATION after Principal Review finding 5) | `VerificationFlowTest`, `ResilienceApiTest.theVerificationPage…` (lifted and webhook within 10 s; `false_positive_confirmed` in the audit event; LEGITIMATE label). FR-03-05 applies "unless self-service is disabled by D-25 conditions", and the owner decided that an unavailable SIM-swap signal disabling it is D-25's intended behaviour, not a gap (ADR 0065 point 1, `SmsPolicyTest.withoutTheSimSwapSignalNoBlockOffersSelfService`). The page tests issue the link directly because D-25 withholds it today; that is stated, not hidden. A reviewer who reads finding 5 as still binding should keep DONE_WITH_DEVIATION |
+| FR-03-05 | DONE_WITH_DEVIATION (owner decision 2026-09-23; Principal Review finding 5) | `VerificationFlowTest`, `ResilienceApiTest.theVerificationPage…` (lifted and webhook within 10 s; `false_positive_confirmed` in the audit event; LEGITIMATE label). Deviation, recorded in ADR 0065 point 1: the behaviour is correct per D-25, but with no SIM-swap signal no production block offers the page, so the requirement as written is exercised only by tests that issue the link directly. Closes with the MNO adapter and a producer for `account_sim_swaps` (V67) |
 | FR-03-06 | DONE | `DecisionServiceTest`, `RedisAdaptersTest`: the production Lua freezes on exactly the third HIGH within the hour, not the second or the fourth, and exactly one of twenty racing thirds freezes (Principal Review finding 8) |
 | FR-03-07 | DONE_WITH_DEVIATION | `FreezeAndBreakerTest`, `TransitionsAndBreakerMonitorTest`, `RedisAdaptersTest`; one-minute window granularity (ADR 0061); "visible in admin panel" is M7/M8 |
 | FR-03-08 | DONE | M1's `DatabaseSecurityTest` plus `PostgresAdaptersTest` (all writes are inserts into append-only tables) |
@@ -169,7 +196,7 @@ Evidence was produced on this branch; statuses are proposals for the reviewer, n
 | D-14, D-15, D-18 | DONE | see ADRs 0064, 0066 and the tests named there |
 | D-17 | DONE_WITH_DEVIATION | JUnit 5 with the generative harness ADR 0009 planned (`Properties.forAll`) |
 | D-25 | DONE (owner decision 2026-09-23) | `SmsPolicyTest`, `VerificationFlowTest`: self-service is refused whenever the SIM-swap age is unknown, which today is every block; the owner recorded this as intended (ADR 0065 point 1). The value arrives through the scorer's feature vector, so an MNO feed into the feature store (and `account_sim_swaps`, V67) enables the link without an API change |
-| D-20 | DONE_WITH_DEVIATION | ADR 0069: separate instance and roles, AES-256-GCM envelope encryption with per-row data keys, `KmsKeyProvider` over a `KmsClient` port (`KmsClientContract`), keys from configuration only under dev/demo/test, the tokenisation map (`AccountTokensTest`), no PII in logs, Kafka, Redis or the spool (`IngestApiTest.customerNumbersAndPhonesReachTheSmsProviderAndNothingElse`), the application role refused (`VaultContactsTest`). Open, not M6's: the vendor `KmsClient` binding, encrypted volumes and Redis TLS (M9). Deviation (independent review, 2026-09-23): nothing outside the tests provisions the vault yet; the shipped `db/vault/bootstrap.sql` now creates the schema for the migrator, but no compose init or runner applies it and the vault migrations (proposal under Open items) |
+| D-20 | DONE (application and local stack; deployment controls are M9's) | ADR 0069: separate instance and roles, AES-256-GCM envelope encryption with per-row data keys, `KmsKeyProvider` over a `KmsClient` port (`KmsClientContract`), keys from configuration only under dev/demo/test, the tokenisation map (`AccountTokensTest`), no PII in logs, Kafka, Redis or the spool (`IngestApiTest.customerNumbersAndPhonesReachTheSmsProviderAndNothingElse`), the application role refused (`VaultContactsTest`). The review's deviation (nothing provisioned the vault outside tests) is closed by the compose change of 2026-09-23 (verified on a throwaway stack). M9's, not M6's: the vendor `KmsClient` binding, encrypted volumes, Redis TLS |
 | FR-02-09 (DB-fallback clause, PB-69) | DONE on `m6/featurestore-fallback` | `test_db_fallback.py::test_a_read_through_the_fallback_equals_the_redis_read[m6-postgresql]` passes against TimescaleDB built from this repository's migrations; two broken readers caught; `test_postgres_fallback.py` for the failure path; `DatabaseSecurityTest.theScorerMayCallTheFeatureFallbackAndReadNothingElse`. Closes when that branch merges (after M5 and M6) |
 | NFR-REL-01, NFR-REL-02 | DONE (chaos at test scale) | `GrpcScorerTest`, `RedisOutageTest`, `KafkaSpoolChaosTest`, `ResilienceApiTest` |
 
@@ -309,24 +336,28 @@ again by an independent reviewer.
 - **The vendor `KmsClient` binding** (M9, with the choice of cloud). Production cannot start the
   vault without it (`key-provider=kms` is the default and refuses to run unbound), which is the
   intended failure mode.
-- **Compose proposal, not applied** (the owner's rule on shared compose): add
-  `FS_SCORER_DB_PASSWORD: ${FS_SCORER_DB_PASSWORD:?run make env}` to the `timescaledb` service's
-  environment in `docker-compose.yml`, and `FS_SCORER_DB_PASSWORD=CHANGE_ME` to `.env.example`.
-  Until then the init script leaves `fs_scorer` without a password (it cannot log in) and the
-  scorer's database fallback is off in the local stack.
-- **Vault provisioning in the local stack, proposed** (D-20's deviation): an init script for the
-  `pii-vault` service that runs `db/vault/bootstrap.sql` and sets `fs_vault_migrator`'s and
-  `fs_vault`'s passwords from `.env` (as `20-fraudshield-roles.sh` does for the main database), and
-  a one-shot Flyway run of `db/vault` as `fs_vault_migrator` (`make migrate-vault`). Not applied:
-  it edits `docker-compose.yml`. Never run the vault migrations from the API process, which must
-  not hold the migrator's credentials.
+- **Compose change, applied (owner decision 2026-09-23) — flagged for M9, which owns
+  infrastructure.** `docker-compose.yml` passes `FS_SCORER_DB_PASSWORD` to `timescaledb`, and the
+  `pii-vault` service now provisions itself (below); `.env.example` gains `FS_SCORER_DB_PASSWORD`,
+  `FS_VAULT_MIGRATOR_DB_PASSWORD` and `FS_VAULT_DB_PASSWORD` (`make env` appends them to an existing
+  `.env` without rotating anything). M9 should carry both into its deployment manifests.
+- **Vault provisioning in the local stack, applied** (D-20's deviation, owner decision
+  2026-09-23): `infrastructure/docker/pii-vault/init/20-vault-roles.sh` runs `db/vault/bootstrap.sql`
+  and sets both vault roles' passwords on the vault's first start, and a one-shot
+  `pii-vault-migrate` service (`flyway/flyway:12.4.0`, the backend's Flyway version, 128 MiB; the
+  core profile is now exactly at its 4,096 MiB budget) applies `db/vault` as `fs_vault_migrator`.
+  Verified on 2026-09-23 on a throwaway compose project (`-p fs-m6-vaulttest`, removed with its
+  volume afterwards): V1–V3 applied; from the host, `fs_vault` logs in with its password and
+  cannot delete a token, a wrong password is refused, and `fs_app` cannot log in. The API never
+  holds the migrator's credentials. An existing `pii-vault-data` volume skips the init script:
+  run it once with `docker compose exec pii-vault bash /docker-entrypoint-initdb.d/20-vault-roles.sh`.
 - **Existing databases need `bootstrap.sql` re-run before V67**, or V67's `GRANT … TO fs_scorer`
   fails (loudly, which is the intent).
-- **A pre-existing licence violation**: `fs-licences` fails on
-  `maven:org.hdrhistogram:HdrHistogram@2.2.2` ("BSD-2-Clause", "Public Domain, per Creative Commons
-  CC0"), which micrometer brings in. It fails with or without this branch's changes, so it is not
-  caused by the JPA dependencies, but CI's licence job fails until the owner elects one of the two
-  (both are permissive; BSD-2-Clause is the natural election).
+- **HdrHistogram licence — resolved** (owner decision 2026-09-23): the project elects
+  BSD-2-Clause for `HdrHistogram@2.2.2` (offered as CC0 or BSD-2-Clause, per the jar's
+  `META-INF/LICENSE.txt`), a version-pinned entry in `licences.py` in the pattern of M7's Jakarta
+  elections. `fs-licences` now reports no Maven or Python violation on this branch (npm entries
+  are unidentified only in a worktree without `node_modules`).
 
 ## Backlog updates to apply at merge
 
@@ -399,16 +430,17 @@ fix round confirmed the eight and found two new MAJOR (D1, D2), both fixed and t
 fix round has not had its own independent review; the owner may want one before merge.
 
 **What needs the owner:**
-1. The latency gate: a measurement on a dedicated host (and with M5's real scorer), or an ADR
-   accepting the gate as NOT MET for the tag.
-2. The HdrHistogram licence election (`fs-licences` fails without it; pre-existing).
-3. The two compose proposals under Open items (`FS_SCORER_DB_PASSWORD`; vault provisioning).
-4. FR-03-05 proposed DONE on the owner's D-25 decision, against the first review's finding 5; the
-   owner decides which reading stands.
-5. M5 should know: `ml/tests/featurestore/test_ingest.py` has two mypy errors on
-   `origin/m5/scoring` itself (`fraudshield_contracts` has no `topics` / `validate_event` for
-   mypy); and `FallbackUnavailableError` reaches its serving layer, which already answers
-   UNAVAILABLE for any store failure.
+1. ~~Latency gate~~ decided 2026-09-23: NOT MET on this hardware (ADR 0059); measured in M10
+   (PB-73). Tagging is still the owner's call at merge.
+2. ~~HdrHistogram~~ decided 2026-09-23: BSD-2-Clause elected.
+3. ~~Compose proposals~~ decided 2026-09-23: applied, flagged for M9.
+4. ~~FR-03-05~~ decided 2026-09-23: DONE_WITH_DEVIATION (ADR 0065 point 1).
+5. **Withdrawn, 2026-09-23:** the "two mypy errors on `origin/m5/scoring`" reported at the end of
+   the first laptop session were a stale `.mypy_cache` in this session's worktree. `make typecheck`'s
+   command is clean on `origin/m5/scoring` (202 files) and on `m6/featurestore-fallback` (204 files)
+   after clearing the cache. Nothing was written to M5's file. For M5, one real point stands:
+   `FallbackUnavailableError` reaches its serving layer, which already answers UNAVAILABLE for any
+   store failure.
 
 **Next steps for a resumed session:** re-run the gate only if code changed; after M5 merges,
 rebase nothing (ADR 0015 allows it, but the fallback branch holds merge commits): merge `main`

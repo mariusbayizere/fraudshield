@@ -40,6 +40,11 @@ Kafka, `grpc-inprocess`, Flyway. Proto stubs are generated from `contracts/proto
 profiles, V61 FX rates, V62 hold reconciliation, V63 webhook deliveries), because `0027`/`0028`
 already exist on `m4/generalisation` and `m5/scoring` and M7 will add identity migrations.
 
+**Revised 2026-09-23: the block is full.** `0060`–`0069` are all used. Further M6 ADRs count
+**down from `0059`** (`0059`, `0058`, …): sequential numbering from M1–M5 has reached `0034`, and
+M7, M8 and M9 own `0070`, `0080` and `0090` onwards, so the top of the unused gap cannot collide
+with either. ADR 0059 is the first.
+
 ## Consequences
 
 `uv run fs-licences` inventories the new artifacts; it should be re-run when M6 merges. Flyway on
