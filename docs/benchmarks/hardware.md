@@ -53,7 +53,7 @@ Sum of `deploy.resources.limits.memory`, enforced by `fs-compose-budget` (ADR 00
 
 | Profile | Budget (MiB) | Current total (MiB) | Services |
 |---|---|---|---|
-| core | 4,096 | 4,096 | timescaledb 768, pii-vault 256, pii-vault-migrate 128 (one-shot, M6), redis 320, kafka 768, object-store 384, object-store-init 128, mlflow 1,024, mailpit 64, wiremock 256 |
+| core | 4,096 | 3,968 | timescaledb 768, pii-vault 256, redis 320, kafka 768, object-store 384, object-store-init 128, mlflow 1,024, mailpit 64, wiremock 256 (the vault's one-shot migration, 128, runs from `make up` via `docker compose run`, listed under `full`) |
 | ml | 6,144 | 0 | scoring service and workers arrive in M5 |
 | obs | 5,120 | 0 | Prometheus, Grafana, Loki, OpenTelemetry Collector arrive in M9 |
 | full | 10,240 | 4,096 | all profiles together |

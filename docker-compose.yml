@@ -73,9 +73,14 @@ services:
 
   # One-shot: applies the vault's Flyway migrations (db/vault) as fs_vault_migrator, the only role
   # that may change the vault's schema. The API never holds the migrator's credentials (ADR 0069).
+  # Not part of `up`: `make up` runs it with `docker compose run --rm` once the stack is healthy,
+  # which returns its exit status. Under `up --wait`, Compose v2 fails on a one-shot that has
+  # already exited unless a service depends on it (as mlflow does on object-store-init), and
+  # whether it has exited when Compose looks is a race: CI's stack job lost it on 2026-09-23.
+  # Listed under `full` only so that `--profile core up` never starts it.
   pii-vault-migrate:
     image: flyway/flyway:12.4.0
-    profiles: [core, full]
+    profiles: [full]
     networks: [fraudshield]
     depends_on:
       pii-vault: { condition: service_healthy }
