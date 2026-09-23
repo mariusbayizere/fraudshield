@@ -442,9 +442,13 @@ def _store(fallback: object | None, *, authoritative: bool) -> FeatureStore:
     )
 
 
-def _expire_account(store: FeatureStore, account: str) -> None:
+def _expire_account(store: FeatureStore, account: str, device: str | None = None) -> None:
     for key in store.redis.keys(f"{store.prefix}a:{account}:*"):
         store.redis.delete(key)
+    if device is not None:
+        # The device's first sighting expires too, so the fallback is asked about devices the
+        # database has seen, not only ones it has not (the independent review, 2026-09-23).
+        store.redis.delete(f"{store.prefix}d:{device}:first")
 
 
 @pytest.mark.req("FR-02-09")
@@ -473,7 +477,7 @@ def test_a_read_through_the_fallback_equals_the_redis_read(
 
     compared = expired_rows = 0
     for tx in corpus():
-        _expire_account(fallback_path, tx.account_id)
+        _expire_account(fallback_path, tx.account_id, tx.device_fingerprint)
         expected = redis_path.read(tx)
         got = fallback_path.read(tx)
         assert got.context == expected.context, f"{tx.transaction_id}: contexts differ"
@@ -494,3 +498,23 @@ def test_an_account_the_database_has_never_seen_is_new_not_unknown() -> None:
     read = store.read(corpus(1)[0])
     assert read.context.mean_hourly_count_30d == 0.0, "first transaction: its own baseline"
     assert read.degraded
+
+
+@pytest.mark.requires_docker
+@pytest.mark.req("FR-02-09")
+def test_the_database_session_is_bounded_and_read_only() -> None:
+    """The reader's SETs must outlive the transaction the driver opened for them."""
+    db = _postgres().db
+    reader = PostgresFallback(db.scorer, dict(REFERENCE.minor_units), statement_timeout_ms=200)
+    assert reader.account("tok_" + "N" * 24, START) is None
+    connection = reader._connection
+    assert connection is not None
+    cursor = connection.cursor()
+    cursor.execute("SHOW statement_timeout")
+    assert cursor.fetchone()[0] == "200ms"
+    cursor.execute("SHOW transaction_read_only")
+    assert cursor.fetchone()[0] == "on"
+    connection.rollback()
+    with pytest.raises(pg8000.dbapi.DatabaseError):
+        cursor.execute("SELECT pg_sleep(1)")
+    reader.close()

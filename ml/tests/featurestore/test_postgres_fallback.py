@@ -11,9 +11,14 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
+import pg8000.dbapi
 import pytest
 
-from fraudshield_ml.featurestore.postgres import FallbackUnavailableError, PostgresFallback
+from fraudshield_ml.featurestore.postgres import (
+    FallbackUnavailableError,
+    PostgresFallback,
+    connector,
+)
 
 AT = datetime(2026, 9, 1, tzinfo=UTC)
 ACCOUNT = "tok_" + "A" * 24
@@ -51,8 +56,11 @@ class _Connection:
     def cursor(self) -> _Cursor:
         return _Cursor(self)
 
+    def commit(self) -> None:
+        self.statements.append("COMMIT")
+
     def rollback(self) -> None:
-        pass
+        self.statements.append("ROLLBACK")
 
     def close(self) -> None:
         self.closed = True
@@ -112,6 +120,8 @@ def test_a_database_that_has_never_seen_the_account_answers_none() -> None:
     assert reader.account(ACCOUNT, AT) is None
     assert any("statement_timeout = 100" in s for s in connection.statements)
     assert any("default_transaction_read_only" in s for s in connection.statements)
+    settings_end = connection.statements.index("SET default_transaction_read_only = on") + 1
+    assert connection.statements[settings_end] == "COMMIT", "a rollback would undo the SETs"
 
 
 @pytest.mark.req("FR-02-09")
@@ -185,3 +195,22 @@ def test_closing_a_connection_that_fails_to_close_still_forgets_it() -> None:
     assert any("statement_timeout = 250" in s for s in connection.statements)
     reader.close()
     reader.close()
+
+
+def test_the_connector_takes_the_password_from_the_caller_and_bounds_the_socket(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: dict[str, Any] = {}
+    monkeypatch.setattr(pg8000.dbapi, "connect", lambda **kw: seen.update(kw) or _Connection({}))
+    connector("postgresql://fs_scorer@db.internal:6543/fraudshield_db", "s3cret", timeout_s=1.5)()
+    assert seen == {
+        "user": "fs_scorer",
+        "host": "db.internal",
+        "port": 6543,
+        "database": "fraudshield_db",
+        "password": "s3cret",
+        "timeout": 1.5,
+    }
+    for bad in ("mysql://x@h/d", "postgresql://fs_scorer:pw@h/d", "postgresql:///d"):
+        with pytest.raises(ValueError, match="feature store database"):
+            connector(bad, "p")

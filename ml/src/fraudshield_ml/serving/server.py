@@ -23,13 +23,14 @@ import os
 import signal
 import threading
 from concurrent import futures
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import grpc  # type: ignore[import-untyped]
 from grpc_health.v1 import health, health_pb2, health_pb2_grpc  # type: ignore[import-untyped]
 
+from fraudshield_ml.featurestore.postgres import PostgresFallback, connector
 from fraudshield_ml.featurestore.reference import Reference
 from fraudshield_ml.featurestore.store import ContextRead, FeatureStore
 from fraudshield_ml.featurestore.writer import StoreWriter
@@ -190,6 +191,11 @@ class WorkerConfig:
     #: When set, each worker writes every scored transaction to the feature store at this Redis
     #: URL (FR-02-09; see `featurestore.writer` for why the scorer is the writer).
     feature_store_url: str | None = None
+    #: The feature store's database fallback (C.4, PB-69, ADR 0062 point 6):
+    #: postgresql://fs_scorer@host:port/database, read when an account's Redis keys have expired.
+    #: Its password is `feature_store_database_password`, from the environment.
+    feature_store_database: str | None = None
+    feature_store_database_password: str | None = field(default=None, repr=False)
     #: Benchmark only: precomputed contexts on a machine with no Redis (`serving.contexts`).
     static_contexts: Path | None = None
     #: D-06's profile until the admin API writes the Redis hash. Production (anomaly review at the
@@ -246,7 +252,17 @@ def start_worker(config: WorkerConfig) -> Worker:
     if config.feature_store_url is not None:
         # The store read is on the 40 ms hot path: fail fast to the API's breaker (C.4) rather
         # than holding a worker thread for a second (review, residual risks).
-        store = FeatureStore(_redis(config.feature_store_url, timeout=0.1), reference)
+        fallback = None
+        if config.feature_store_database is not None:
+            fallback = PostgresFallback(
+                connector(
+                    config.feature_store_database, config.feature_store_database_password or ""
+                ),
+                dict(reference.minor_units),
+            )
+        store = FeatureStore(
+            _redis(config.feature_store_url, timeout=0.1), reference, fallback=fallback
+        )
         writer = StoreWriter(store)
         contexts = store
     elif config.static_contexts is not None:
