@@ -36,6 +36,11 @@ def parse(argv: Sequence[str] | None) -> argparse.Namespace:
     serve.add_argument(
         "--static-contexts", type=Path, help="benchmark only: precomputed contexts, no Redis"
     )
+    serve.add_argument(
+        "--feature-store-database",
+        help="postgresql://fs_scorer@host:port/database: the feature store's database fallback "
+        "(C.4, ADR 0062); the password is read from FS_SCORER_DB_PASSWORD",
+    )
     serve.add_argument("--shadow-log", type=Path, help="JSON-lines sink for fs.ml.shadow events")
     serve.add_argument("--cache", type=Path, default=Path(tempfile.gettempdir()) / "fs-models")
     tls = serve.add_argument_group("mTLS (required unless --insecure)")
@@ -53,6 +58,10 @@ def parse(argv: Sequence[str] | None) -> argparse.Namespace:
     args = parser.parse_args(argv)
     if not (args.feature_store or args.static_contexts):
         parser.error("the scorer reads account context from the store: pass --feature-store")
+    if args.feature_store_database and not os.environ.get("FS_SCORER_DB_PASSWORD"):
+        parser.error("--feature-store-database needs FS_SCORER_DB_PASSWORD in the environment")
+    if args.feature_store_database and not args.feature_store:
+        parser.error("--feature-store-database is the fallback of --feature-store; pass both")
     if not args.insecure and not (args.tls_cert and args.tls_key and args.tls_client_ca):
         parser.error("mTLS needs --tls-cert, --tls-key and --tls-client-ca; or pass --insecure")
     return args
@@ -83,6 +92,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         cache=args.cache,
         redis_url=args.redis,
         feature_store_url=args.feature_store,
+        feature_store_database=args.feature_store_database,
+        feature_store_database_password=os.environ.get("FS_SCORER_DB_PASSWORD"),
         static_contexts=args.static_contexts,
         shadow_log=args.shadow_log,
         status_dir=status_dir,

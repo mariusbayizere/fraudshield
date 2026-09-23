@@ -12,6 +12,7 @@ import grpc  # type: ignore[import-untyped]
 import pytest
 
 from fraudshield_ml import cli as pipeline
+from fraudshield_ml.featurestore.postgres import PostgresFallback
 from fraudshield_ml.models import build as builder
 from fraudshield_ml.models import cli as model_cli
 from fraudshield_ml.models.bundle import Bundle
@@ -115,6 +116,46 @@ def test_the_scorer_cli_refuses_plaintext_unless_asked(packs: Path) -> None:
     args = scorer_cli.parse(["serve", "--bundle", "b", "--packs", str(packs), "--insecure", *store])
     assert args.insecure
     assert args.feature_store == store[1]
+
+
+@pytest.mark.req("FR-02-09")
+def test_the_database_fallback_is_configured_with_the_store_and_a_password_from_the_environment(
+    packs: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base = ["serve", "--bundle", "b", "--packs", str(packs), "--insecure"]
+    store = ["--feature-store", "redis://localhost:6379/0"]
+    database = ["--feature-store-database", "postgresql://fs_scorer@db:5432/fraudshield_db"]
+    monkeypatch.delenv("FS_SCORER_DB_PASSWORD", raising=False)
+    with pytest.raises(SystemExit):  # no password in the environment
+        scorer_cli.parse([*base, *store, *database])
+    monkeypatch.setenv("FS_SCORER_DB_PASSWORD", "from-the-environment")
+    with pytest.raises(SystemExit):  # a fallback without the store it falls back from
+        scorer_cli.parse([*base, "--static-contexts", "c.jsonl", *database])
+    args = scorer_cli.parse([*base, *store, *database])
+    assert args.feature_store_database == database[1]
+
+
+@pytest.mark.req("FR-02-09")
+def test_a_worker_with_a_database_reads_through_the_postgres_fallback(
+    bundle_dirs: tuple[Path, Path], packs: Path
+) -> None:
+    config = server.WorkerConfig(
+        address="127.0.0.1:0",
+        packs=packs,
+        tls=None,
+        bundle=bundle_dirs[0],
+        reuse_port=False,
+        feature_store_url="redis://127.0.0.1:1/0",
+        feature_store_database="postgresql://fs_scorer@127.0.0.1:1/fraudshield_db",
+        feature_store_database_password="never-printed",  # noqa: S106 - a test value
+    )
+    assert "never-printed" not in repr(config)
+    worker = server.start_worker(config)
+    try:
+        assert worker.writer is not None
+        assert isinstance(worker.writer.store.fallback, PostgresFallback)
+    finally:
+        worker.stop(grace=0)
 
 
 def test_the_supervisor_exits_when_a_worker_dies(

@@ -24,6 +24,7 @@ from collections.abc import Callable
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Protocol
+from urllib.parse import urlsplit
 
 from fraudshield_ml.features.types import Transaction
 from fraudshield_ml.featurestore.store import ACCOUNT_HORIZON, Durable
@@ -42,6 +43,8 @@ class Connection(Protocol):
     """The part of a DB-API connection the reader uses."""
 
     def cursor(self) -> Any: ...
+
+    def commit(self) -> None: ...
 
     def rollback(self) -> None: ...
 
@@ -137,7 +140,9 @@ class PostgresFallback:
         cursor = connection.cursor()
         cursor.execute(f"SET statement_timeout = {self._timeout_ms}")
         cursor.execute("SET default_transaction_read_only = on")
-        connection.rollback()
+        # A DB-API driver opens a transaction for these SETs; committing keeps them for the
+        # session. A rollback here would undo both (the independent review, 2026-09-23).
+        connection.commit()
         return connection
 
     def _drop(self) -> None:
@@ -182,6 +187,36 @@ class PostgresFallback:
             agent_id=agent,
             merchant_category_code=mcc.strip() if mcc else None,
         )
+
+
+def connector(url: str, password: str, *, timeout_s: float = 2.0) -> Callable[[], Connection]:
+    """Opens pg8000 connections for `url` (postgresql://user@host:port/database).
+
+    The password comes from the environment, never from the URL or the command line. The socket
+    timeout bounds connecting and every read, so an unreachable database fails the read rather
+    than holding the fallback's lock.
+    """
+    parts = urlsplit(url)
+    if parts.scheme not in ("postgresql", "postgres") or not parts.hostname or not parts.path:
+        raise ValueError("the feature store database is postgresql://user@host:port/database")
+    if parts.password:
+        raise ValueError("the feature store database password comes from the environment")
+    options = {
+        "user": parts.username or "fs_scorer",
+        "host": parts.hostname,
+        "port": parts.port or 5432,
+        "database": parts.path.lstrip("/"),
+        "password": password,
+        "timeout": timeout_s,
+    }
+
+    def connect() -> Connection:
+        import pg8000.dbapi  # noqa: PLC0415 - only a deployment with a database needs the driver
+
+        connection: Connection = pg8000.dbapi.connect(**options)
+        return connection
+
+    return connect
 
 
 def _minor(amount: Decimal, units: int | None) -> int | None:
