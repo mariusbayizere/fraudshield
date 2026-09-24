@@ -1,5 +1,9 @@
 # The benchmark machine M10 needs
 
+**Status: this specification is the requirement** (owner, 2026-09-24). The decision to rent, and
+which supplier, comes before the campaign runs; the two-machine shape and the capacities below are
+what the campaign needs whatever is rented.
+
 **Nothing has been measured, and this document asserts no performance figure.** It states the
 capacity to rent so that the campaign in `m10_plan.md` can run, and the properties that make a
 measurement admissible under ADR 0010. Whether the capacity below is *enough* is itself one of

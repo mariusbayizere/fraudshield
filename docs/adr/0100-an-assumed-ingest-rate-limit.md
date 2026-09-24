@@ -1,8 +1,12 @@
 # 0100 — An assumed ingest rate limit, counted in transactions
 
-- **Status:** Proposed, 2026-09-24 (M10). **The number below is ASSUMED**, not sourced and not
-  measured; it needs the owner's decision and M6's implementation before the verification campaign
-  can treat a refusal as a pass or a failure.
+- **Status:** **Accepted, 2026-09-24 (owner)**, including the transaction-counting change, which
+  the owner identified as the important part: charging the budget in requests lets a batch bypass
+  the control by up to a thousand times, so the budget is charged in transactions, once on
+  acceptance, and an oversized batch is refused whole. **This is recorded for M6 as a defect to fix
+  before M6 merges — a security control that does not currently hold — not as a proposal for
+  later.** The *budget figures* remain **ASSUMED**: derived below from the specified system
+  throughput, neither sourced nor measured.
 - **Date:** 2026-09-24
 - **Requirements affected:** FR-01-01, FR-01-03, FR-01-06, NFR-PERF-01, NFR-PERF-10, TEST-09
 - **ADRs referenced:** 0010 (gate numbers only from a dedicated machine), 0011 (API contract
@@ -41,7 +45,8 @@ specification from which a per-tenant budget can honestly be derived.
 
 ## Decision
 
-Proposed, for the owner to accept, amend or reject.
+Accepted by the owner on 2026-09-24. Point 1 is the defect fix; points 2 and 3 are the assumed
+figures, which the owner may revise without reopening the ADR.
 
 1. **Count the budget in transactions, not in requests.** A single-transaction request costs one
    unit; a batch request costs its item count, taken once when the batch is accepted. This makes
@@ -71,7 +76,7 @@ Proposed, for the owner to accept, amend or reject.
    storm the reliability requirement describes.
 5. **`Retry-After` is the whole number of seconds until the caller's next unit refills, floored at
    one second**, as the contract requires.
-6. **Until this ADR is accepted, the campaign records refusals as observations.** A `429` is
+6. **Until the change ships in M6, the campaign records refusals as observations.** A `429` is
    counted, reported with the budget in force and the `RateLimit-*` headers that accompanied it,
    and is neither a pass nor a failure. Refusals are excluded from the error percentage of
    NFR-PERF-10, which measures the system failing, not the system declining; the campaign
@@ -88,10 +93,12 @@ Proposed, for the owner to accept, amend or reject.
   project cannot support. It belongs with the other assumed parameters, and the paper's rule that
   an assumed number is labelled as one applies unchanged. Flagged in
   `docs/parallel/M11_updates.md`.
-- **If the owner rejects the transaction-count change**, the request-count budget stands and the
-  batch hole stands with it; the campaign then reports, in the verification report, that the
-  documented protection can be bypassed by a factor of the maximum batch size, which is a finding
-  rather than a failure of any row.
+- **The transaction-count change is a defect fix with a merge condition**: M6 does not merge with
+  the control in its current form. Until it lands, the documented protection can be bypassed by a
+  factor of the maximum batch size by any caller holding a valid key.
+- **Recorded in the lab notebook** (2026-09-24) with the guard failures it belongs with: a control
+  whose unit of account differs from the unit of load is not a control, and this one was found only
+  because a number had to be justified rather than defaulted.
 - **No row moves because of this ADR.** It adds no measurement and closes no requirement.
 
 ## Alternatives considered
