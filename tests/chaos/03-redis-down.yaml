@@ -1,0 +1,64 @@
+# C.4 case 3 — Redis down.
+#
+# NOT YET EXECUTED — requires the integrated system and dedicated hardware (ADR 0010).
+#
+# Specification (C.4): "Redis down -> DB fallback for velocity from account_velocity_cache and
+# TimescaleDB continuous aggregates; idempotency falls back to a PostgreSQL unique constraint
+# check with degraded latency, and a DEGRADED_MODE metric and UI banner."
+#
+# Acceptance conditions (NFR-REL-03): feature engineering continues on the database fallback, the
+# system keeps deciding while performance degrades, Redis reconnects by itself, and the feature
+# store is rebuilt inside the specified window.
+#
+# What the campaign records: that decisions continue; that the degraded-mode metric rises and the
+# console shows its banner; that idempotency still holds while the unique constraint is doing the
+# work (the duplicate-storm scenario from tests/performance is run inside this window, because a
+# fallback that is correct only when nothing is duplicated is not the fallback the case claims);
+# and that the velocity features computed from the database agree with the ones Redis served, for
+# the same transactions, once it returns. Latency is expected to degrade here, and the campaign
+# reports it as a shape, not against the latency gates.
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: redis-down
+  namespace: fraudshield
+  annotations:
+    fraudshield.io/case: "C.4 Redis down"
+    fraudshield.io/requirement: "NFR-REL-03"
+    fraudshield.io/executed: "never"
+spec:
+  action: pod-failure
+  mode: all
+  duration: 5m
+  selector:
+    namespaces: [fraudshield]
+    labelSelectors:
+      fraudshield.io/datastore: redis
+---
+# Redis present but unreachable from the scorer only, which is the failure that separates the
+# API's fallback from the scorer's: the scorer reads the feature store, and a fallback that exists
+# only in the API would leave the scorer serving constants without saying so.
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: redis-partitioned-from-scorer
+  namespace: fraudshield
+  annotations:
+    fraudshield.io/case: "C.4 Redis down (scorer side)"
+    fraudshield.io/requirement: "NFR-REL-03, FR-02-09"
+    fraudshield.io/executed: "never"
+spec:
+  action: partition
+  mode: all
+  direction: both
+  duration: 5m
+  selector:
+    namespaces: [fraudshield]
+    labelSelectors:
+      app.kubernetes.io/name: fraudshield-ml
+  target:
+    mode: all
+    selector:
+      namespaces: [fraudshield]
+      labelSelectors:
+        fraudshield.io/datastore: redis
