@@ -2516,3 +2516,29 @@ carrying into the paper, and it is not the finding PB-67 set out to test.
 
 **What this does not settle.** Whether a differently built model, or features that survive corpus
 truncation, would reach 0.88 on this benchmark. PB-69 is where that goes.
+
+### 2026-09-24 · The watchdog that made the 240K run possible, and the pattern to reuse
+
+The 240K cache build was reaped by the system for low memory on 2026-09-22 and completed on
+2026-09-24 on the same 7.6 GiB laptop. What changed was not the work but how it was run. **This is
+the pattern for every long run on this machine from now on** (owner, 2026-09-24):
+
+1. **Low priority** — `nice -n 15`. The run yields to whatever else is on the machine; several
+   agents share it.
+2. **Volunteer for the OOM killer** — `oom_score_adj 800` on the worker and every child, refreshed
+   while it runs. If memory runs short the kernel takes *this* job, not another agent's test suite.
+   On 2026-09-22 the reaping was indiscriminate; this makes it predictable and self-inflicted.
+3. **Abort before thrashing** — a loop reading `MemAvailable` every 10 s, stopping the run after
+   **three consecutive readings below 500 MB**. Three, not one: a single dip during a large
+   allocation is normal, a sustained one is the machine swapping.
+4. **Measure what it cost** — `/usr/bin/time -f "PEAK_RSS_KB %M ELAPSED %e"` inside the evidence
+   wrapper, so the artefact records peak memory next to the result.
+
+On the 240K build the watchdog never struck: peak RSS 1.4 GB against about 2 GB available at the
+start, and the machine stayed responsive. The scripts are
+`scratchpad/lc_cache_240k.sh` and `scratchpad/lc_gate_240k.sh`.
+
+**Why this is worth a notebook entry rather than a habit.** The earlier reaping cost a day and made
+the 240K point look like it needed a 16 GB Codespace, which it did not. The constraint was never
+total memory; it was that a long run and another agent's test suite were competing for the last
+gigabyte with no policy about who should lose.
