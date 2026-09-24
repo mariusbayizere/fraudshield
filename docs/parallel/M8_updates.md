@@ -117,6 +117,23 @@ SENIOR_ANALYST, RISK_OFFICER, ADMIN. Response 200:
 Until it exists, the console's development mocks serve it (`VITE_FS_DEGRADED` exercises the
 banners) and the banner area stays empty against a real backend.
 
+### Also for M6, during the merge: name the CSRF cookie in the contract
+
+**Fix this before the console consumes the real endpoints, not after** (owner, 2026-09-24). D-27's
+double-submit requires the console to read a cookie and echo it in `X-CSRF-Token` on `/auth/refresh`
+and `/auth/logout`. The contract names the header (`CsrfToken`) and the refresh cookie
+(`fs_refresh`), but **never the CSRF cookie**. Both sides already use `fs_csrf` and each pins it
+with its own tests — `CsrfDoubleSubmitFilter.COOKIE` plus four tests on `m7/staff-auth`,
+`csrf.ts` plus `csrf.test.ts` on `m8/frontend` — so neither can drift silently on its own, but
+nothing ties them to each other. The agreement holds by coincidence.
+
+**Proposed change** (M6 owns the contract during this merge): name the cookie in
+`contracts/openapi/fraudshield-api.yaml` — either a documented cookie scheme beside `refreshCookie`
+or, at minimum, the `CsrfToken` parameter description stating which cookie the header must equal —
+and add a contract test asserting the name, so both implementations assert against the contract
+rather than against each other. M8 has not made the change: `contracts/` is shared, and M8's last
+contract change was made only on the owner's explicit instruction.
+
 ## 5. Proposed, not made (files M8 does not own)
 
 1. **Generator: the password schema.** `@hey-api/openapi-ts` renders `Password` (`allOf` plus
