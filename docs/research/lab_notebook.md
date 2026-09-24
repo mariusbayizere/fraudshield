@@ -2447,3 +2447,82 @@ quantity it holds for. Parity within 1e-9 on the same inputs says nothing about 
 are the same in production. The honest statement is the table above, and the M5 rows say so: the
 owner carried the gap (ADR 0034, option 3) with acceptance tests against M6/M9, a metric counting
 every affected read, an alert on it, and M10 required to re-measure the skew and find zero.
+
+### 2026-09-23 · A fake is a hypothesis about an API, and 537 tests can confirm it wrongly
+
+`m5/scoring` had been reviewed four times — a principal review, a re-review of its fixes, a
+verification pass, and an adversarial pass over the promotion path — and CI was still red on one
+test. The failure:
+
+```
+RegistryError: GET /api/2.0/mlflow/registered-models/alias: HTTP 400
+{"error_code": "INVALID_PARAMETER_VALUE", "message": "Registered model alias production not found."}
+```
+
+**MLflow 3.16 reports an unset alias with HTTP 400 `INVALID_PARAMETER_VALUE`.** Everywhere else in
+its registry API an absent thing is HTTP 404 `RESOURCE_DOES_NOT_EXIST`, and that is what
+`MlflowRegistry.by_alias` was written to expect. So the client raised on a state that is not an
+error at all: *no production alias set yet*, which is the state every first deployment starts in.
+Publishing with `--alias production` reads the outgoing alias before moving it, so every first
+promotion into a fresh registry failed.
+
+**Why no review caught it.** `FakeMlflow`, the in-process double the serving tests run against,
+returned the 404 shape. It encodes the author's reading of the REST API — and every test that used
+it therefore tested the client against that reading, not against MLflow. 537 tests passed. Four
+reviewers read the code, mutated it, probed it adversarially, and found eleven real defects in the
+promotion path between them; none found this one, because each reasoned about the same double. The
+only thing that caught it was the single `requires_docker` test that starts a real MLflow container,
+and its whole purpose is stated in its docstring: "The fake above encodes my reading of MLflow's
+REST API; this checks it against MLflow 3.16.0, the image docker-compose.yml pins."
+
+**The rule.** A test double is a hypothesis about an external service, and tests written against it
+confirm the hypothesis rather than the service. So: **any fake standing in for an external service
+needs at least one test that exercises the real thing, and the fake's behaviour must be pinned
+against what that test observes.** Not a test per behaviour — a real-service test per *fake*, whose
+job is to catch the double drifting from its subject. When it fires, the fix has two halves: the
+client, and the double. Fixing only the client leaves the next wrong assumption undetectable.
+
+The fix here did both. `by_alias` accepts either wording (and still raises on an
+`INVALID_PARAMETER_VALUE` that is not about an absent alias, so a real client bug cannot hide as
+"no alias set"); `FakeMlflow` now answers as MLflow 3.16.0 does, with two tests pinning both shapes
+so this class of defect fails in the fast suite instead of only in CI.
+
+**The uncomfortable general point.** Mutation testing, adversarial probing and independent review
+all operate *inside* the world the test fixtures define. They cannot see a boundary that is
+mis-drawn, because every instrument agrees with every other. Only contact with the real dependency
+is outside that world. This is worth stating in the paper's limitations: the verification effort
+reported for this system is large, and it was still blind in exactly one direction until a
+container was started.
+
+### 2026-09-24 · A flag that enables a safeguard is not the safeguard running
+
+Every commit I made in this session ran with `git -c core.hooksPath=.githooks commit`. **There is
+no `.githooks/` directory in this repository.** The project installs its hooks into the common git
+directory (`make bootstrap`, `default_install_hook_types: [pre-commit, commit-msg]`), and they were
+installed and working. Pointing `core.hooksPath` at a directory that does not exist disables hooks
+silently: git finds no hook to run and reports nothing.
+
+So for the whole session the commit-msg and pre-commit checks did not run on a single commit, while
+I believed they were running and said so. No `--no-verify` was ever used -- and the effect was
+exactly the same as if it had been. The flag was written to *comply* with the rule that forbids
+`--no-verify`; it defeated it instead.
+
+**What it cost.** Seven commit messages violated G.3's 72-character body limit, 77 problems in all,
+and CI's commit-message job had been failing on this branch since `f606234`. I did not see it
+because I had no GitHub credentials and was reading CI second-hand, where the red run was
+attributed to a test failure that was also real. Fixing it needed a history rewrite of four commits
+another agent had already merged, which cost that agent a re-merge. Two trailing blank lines
+slipped through the same hole.
+
+**The rule.** *Verify that a safeguard is running; do not infer it from the flag you passed.* A
+configuration flag expresses an intention, and an intention that names a path, a file or a hook
+that does not exist fails open and says nothing. The check is cheap and direct: run the guard by
+hand once (`fs-commit-msg --rev-range …`, `pre-commit run --all-files`) and see it object to
+something it should object to. A safeguard that has never refused anything in your presence has not
+been observed working.
+
+The same shape appeared twice more in this milestone and is worth naming as a family: a fake that
+encodes a wrong reading of an API (2026-09-23), a guard whose condition was vacuous because it
+matched a substring always present, and now a hook path that silently matched nothing. Each was a
+check that reported success while checking nothing, and none of them was visible from inside the
+system that contained it.

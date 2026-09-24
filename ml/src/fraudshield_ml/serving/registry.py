@@ -55,12 +55,57 @@ SERVED_TAG = "fraudshield.served_as_production"
 LOG = logging.getLogger(__name__)
 
 
+def _alias_absent(error: RegistryError) -> bool:
+    """Whether the registry is saying "that alias is not set" rather than failing.
+
+    MLflow 3.16 answers an unset alias with **HTTP 400 `INVALID_PARAMETER_VALUE`** and the message
+    "Registered model alias <alias> not found.", not the 404 `RESOURCE_DOES_NOT_EXIST` the rest of
+    its registry API uses for an absent thing. Reading it as an error made every first promotion
+    fail on a real server while the local fake, which returned 404, passed
+    (`docs/parallel/M5_updates.md` §19).
+
+    The decision is made on the server's own `message`, not on the formatted error: that one
+    always contains the request path, `…/registered-models/alias`, so matching "alias" in it was
+    vacuous (final review, observation 1). Two things this must *not* swallow:
+
+    - an invalid or missing parameter ("Invalid alias name: …", "Missing value for required
+      parameter"), which is a client bug;
+    - **a registered model that does not exist** ("Registered Model with name=… not found"), which
+      would otherwise leave `AliasWatcher` polling a misspelled model name forever with no error
+      and no failure counted (final review, observation 2).
+    """
+    detail = error.detail.lower()
+    if "alias" in detail and "not found" in detail:
+        return "with name=" not in detail
+    # A server that reports absence with a code and no message at all: only at this endpoint, and
+    # only for the code that means exactly that.
+    return not detail and error.error_code == "RESOURCE_DOES_NOT_EXIST"
+
+
 def _now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
 class RegistryError(RuntimeError):
-    """The registry answered with an error, or not at all."""
+    """The registry answered with an error, or not at all.
+
+    The status and the decoded body are kept, so callers can decide on what the server *said*
+    rather than on a substring of the formatted message (the formatted one contains the request
+    path, which makes naive matching weaker than it reads).
+    """
+
+    def __init__(self, message: str, *, status: int | None = None, body: Any = None) -> None:
+        super().__init__(message)
+        self.status = status
+        self.body: dict[str, Any] = body if isinstance(body, dict) else {}
+
+    @property
+    def error_code(self) -> str:
+        return str(self.body.get("error_code", ""))
+
+    @property
+    def detail(self) -> str:
+        return str(self.body.get("message", ""))
 
 
 class PromotionRefused(RegistryError):  # noqa: N818 - a refusal, named as one
@@ -199,7 +244,13 @@ class MlflowRegistry:
                 return bytes(response.read())
         except urllib.error.HTTPError as error:
             detail = error.read().decode(errors="replace")[:300]
-            raise RegistryError(f"{method} {path}: HTTP {error.code} {detail}") from None
+            try:
+                body = json.loads(detail)
+            except ValueError:
+                body = None
+            raise RegistryError(
+                f"{method} {path}: HTTP {error.code} {detail}", status=error.code, body=body
+            ) from None
         except (urllib.error.URLError, TimeoutError, OSError) as error:
             raise RegistryError(f"{method} {path}: {error}") from None
 
@@ -217,7 +268,7 @@ class MlflowRegistry:
                 query={"name": name, "alias": alias},
             )
         except RegistryError as error:
-            if "RESOURCE_DOES_NOT_EXIST" in str(error) or "HTTP 404" in str(error):
+            if _alias_absent(error):
                 return None
             raise
         version = reply["model_version"]
@@ -552,7 +603,7 @@ class AliasWatcher:
             try:
                 version = self.registry.by_alias(self.name, alias)
             except RegistryError as error:
-                LOG.warning("registry unreachable polling @%s: %s", alias, error)
+                LOG.warning("could not read @%s (is the model name right?): %s", alias, error)
                 continue
             current = version.version if version else None
             if current == self.loaded[alias]:

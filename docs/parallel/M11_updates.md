@@ -247,3 +247,23 @@ caveats above beside it.
 
 **Do not write** that the served system detects 22% less fraud in operation: no deployment has run.
 The measurement is what the served *feature set* does to the evaluated model on the test period.
+
+### Also from M5 (2026-09-23): a limitation worth stating about the verification effort
+
+The lab notebook entry "A fake is a hypothesis about an API, and 537 tests can confirm it wrongly"
+(2026-09-23) belongs in the limitations discussion beside the training–serving skew, and makes a
+different point.
+
+M5's scoring client was reviewed four times — a principal review, a re-review of the fixes, a
+verification pass and an adversarial pass with mutation testing — which between them found eleven
+defects in the model-promotion path, including a gate that could be bypassed in one command. None
+of them found that the client misread how MLflow reports an unset alias, because all 537 tests ran
+against an in-process double that encoded the same misreading. The only thing that caught it was
+one test that starts a real MLflow container.
+
+**What may be claimed:** mutation testing, adversarial probing and independent review all operate
+inside the world the fixtures define, and cannot detect a boundary that is mis-drawn, because
+every instrument agrees with every other. Contact with the real dependency is the only check
+outside that world. **What may not be claimed:** that the verification effort reported here
+establishes correctness against the services the system integrates with, beyond the three
+`requires_docker` tests that touch real Redis and real MLflow.

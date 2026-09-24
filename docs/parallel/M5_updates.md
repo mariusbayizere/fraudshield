@@ -623,7 +623,7 @@ the re-review reproduced all four rows at `2afbb0e`), the latency position (ADR 
 FR-02-09's status. Still open and named rather than hidden: `pytest-timeout` (needs an ADR 0009
 licence review), the in-process `Comparison` series asserted only through the MLflow log, the
 second half of the first review's finding 2 (a missing `prof`/`tier` as a fallback trigger), the
-three `requires_docker` suites, and `fs-bench memory`'s new production profile, which is changed
+two `requires_docker` suites, and `fs-bench memory`'s new production profile, which is changed
 but not executed by any test.
 
 **One thing worth recording for whoever reads a surviving mutant later:** `ACCOUNT_HORIZON` equals
@@ -654,3 +654,184 @@ transaction's own row, so a replay does not count `outcomes` off itself.
 
 **Suite after this round:** ml 537 passed, 3 skipped, coverage 94.31%; ruff, mypy (162 source
 files) and `fs-traceability check` clean.
+
+## From M6 (2026-09-23): a real-MLflow test fails on this branch
+
+Written by the M6 session at the owner's direction (M6 does not fix M5's code). CI's `ci` run #282 on
+`90078b2` (this branch's head) fails in the python job at step 9, the `ml` pytest step; the M6
+session reproduced it on a clean checkout of `origin/m5/scoring` with `REQUIRE_DOCKER=1`:
+
+```
+tests/serving/test_registry.py::test_publish_and_hot_swap_against_the_mlflow_the_deployment_runs
+fraudshield_ml.serving.registry.RegistryError: GET /api/2.0/mlflow/registered-models/alias:
+HTTP 400 {"error_code": "INVALID_PARAMETER_VALUE", "message": "Registered model alias
+production not found.", ...}
+```
+
+It is the only failure in `ml` (558 passing, coverage 94.54% on the combined M5+M6 tree). This is
+the "M5-1, the Docker tests" item in section 12: CI is **not** green for `m5/scoring`, so
+`m5-complete` must not be tagged yet, and `m6/featurestore-fallback` (which contains this branch)
+is red in CI for the same test until M5 fixes it.
+
+## 19. The real-MLflow failure: the fake was wrong, and the Docker test was right (2026-09-23)
+
+**Diagnosed, fixed, and reproduced both ways on this laptop** (Docker is available here, so the
+failure was observed against the real container before anything was changed, not fixed from the
+report).
+
+**What failed.** `test_publish_and_hot_swap_against_the_mlflow_the_deployment_runs`, the only
+`requires_docker` test M5 owns, against `ghcr.io/mlflow/mlflow:v3.16.0`:
+
+```
+RegistryError: GET /api/2.0/mlflow/registered-models/alias: HTTP 400
+{"error_code": "INVALID_PARAMETER_VALUE", "message": "Registered model alias production not
+found.", "sqlstate": "KAM00", "error_class": "INVALID_PARAMETER_VALUE"}
+```
+
+**Why.** `MlflowRegistry.by_alias` treated "that alias is not set" as absent only when the reply
+was `RESOURCE_DOES_NOT_EXIST` or HTTP 404 — which is how the rest of MLflow's registry API reports
+an absent thing, and how `FakeMlflow` answered. **MLflow 3.16 answers an unset alias with HTTP 400
+`INVALID_PARAMETER_VALUE`.** The first call on that path is `publish(..., alias="production")`
+reading the outgoing alias before moving it, so *every first promotion into a fresh registry*
+raised. Nothing that runs without Docker touches a real server, so 537 local tests passed against
+the fake's wrong answer.
+
+**The fix, in two halves.**
+
+1. `by_alias` accepts both shapes, via `_alias_absent`: `RESOURCE_DOES_NOT_EXIST`, HTTP 404, or a
+   message naming an alias as not found. An `INVALID_PARAMETER_VALUE` that is *not* about an
+   absent alias still raises — swallowing the whole error code would hide a real client bug as
+   "no alias set".
+2. **`FakeMlflow` now answers as MLflow 3.16.0 does.** This is the important half: the fake
+   encoded my reading of the REST API, the reading was wrong, and the fake's job is to be wrong
+   in the same places the server is. Two tests pin the behaviour without Docker
+   (`test_an_unset_alias_is_absent_however_the_registry_words_it`, parametrised over the 400 and
+   404 shapes, and `test_a_registry_error_that_is_not_an_absent_alias_still_raises`), so this
+   class of defect now fails in the fast suite rather than only in CI.
+
+**Evidence on this branch's head:** `REQUIRE_DOCKER=1 pytest ml/tests/serving/test_registry.py`
+→ **30 passed**, the previously failing test among them, against a real MLflow container. The
+whole suite the same way — `cd ml && REQUIRE_DOCKER=1 pytest -q` — → **542 passed, 1 skipped,
+coverage 94.35%**, the one skip being the `m6-postgresql` parameter M6 delivers. That is CI's
+condition reproduced on this laptop, real Redis and real MLflow included. The owner checks the `ci`
+run on the fixed head; this session has no GitHub credentials and cannot read run status.
+
+**What it says about the review chain.** Four review passes over this code found six classes of
+defect in the promotion path and none of them found this one, because every one of them reasoned
+about the same fake. A test that talks to the real dependency is worth more than another reading
+of the client, and the two `requires_docker` tests M5 owns -- real MLflow in
+`tests/serving/test_registry.py`, real Redis in `tests/featurestore/test_serving_parity.py` -- are
+the only place it has one.
+
+### Final review (fde5311): APPROVED, and what it changed anyway
+
+The fifth and last pass drove `MlflowRegistry` against a live `ghcr.io/mlflow/mlflow:v3.16.0`
+across all nine endpoints the client calls, with absent, duplicate and malformed variants of each.
+**Verdict: APPROVED, no BLOCKER, no MAJOR.** It confirmed the alias fix is right on the real
+server, that no other call site makes the same assumption (`ensure_model` really is 400
+`RESOURCE_ALREADY_EXISTS`, `experiments/get-by-name` really is 404, an absent artifact really is
+404), that both new tests are load-bearing under mutation, and that the D-11 re-check, the
+`SERVED_TAG` exemption and `_count_missing_producers` are untouched by the delta.
+
+Three of its observations were acted on, because two of them make the §19 lesson sharper:
+
+1. **The guard read stronger than it was.** `_alias_absent` matched `"alias"` in the *formatted*
+   error, which always contains the request path `…/registered-models/alias`, so that conjunct was
+   vacuous — proved by a mutation that dropped it and survived. `RegistryError` now carries the
+   status and the decoded body, and the decision is made on the server's own `message` field.
+2. **A missing registered model read as "alias unset".** `by_alias("typo-name", …)` returned
+   `None`, so `AliasWatcher` would poll a misspelled model name forever with no log and no
+   `fs_model_swap_failures_total`. Now told apart by the message ("Registered Model with name=…"),
+   with a test. An existing test asserted the old behaviour; it was changed, because the contract
+   it encoded was the defect.
+3. **The fake still diverged where nobody looked**, answering a missing model with the alias
+   wording. Corrected — and the Docker test now **pins the fake's shapes against the live server**
+   (status and `error_code` for an unset alias compared with `FakeMlflow.alias_miss`, and the
+   missing-model 404 asserted) rather than merely traversing the path. That is the rule from the
+   lab notebook entry applied to itself: a real-service test per fake, whose job is to catch the
+   double drifting from its subject.
+
+Prose corrections from the same review: M5 owns **two** `requires_docker` tests, not three (the
+third is `tools/tests/test_pytest_docker.py`); and the Docker test pins MLflow *v3.16.0*, while
+`docker-compose.yml` runs `v3.16.0-full` on PostgreSQL — same version and same `SqlAlchemyStore`
+path, now said accurately in the docstring.
+
+**Suite after these changes**, `cd ml && REQUIRE_DOCKER=1 pytest -q`: **545 passed, 1 skipped,
+coverage 94.33%** (real MLflow 3.16.0 and real Redis 7.2.16 containers; the skip is M6's
+`m6-postgresql` parameter). The rest of CI's python job, run the same way on this tree: tools 198,
+contracts 490, dataset 143, `uv lock --check` clean, ruff and mypy (162 files) clean,
+`fs-traceability check` 0 errors.
+
+**Left for the owner, not fixable here:** all 14 M5 rows in `requirements.yaml` are still
+`NOT_STARTED` with empty implementation and evidence columns, while M4's were settled on-branch
+*before* the `m4-complete` tag (`b3c050e`, `4722ca7`). If M5 follows that precedent, the statuses
+and the FR-02-09 carry row from §15 want applying and re-rendering before the tag, not after the
+merge.
+
+## 20. History rewritten to fix seven commit messages (2026-09-24) -- M6 must re-merge
+
+**What happened.** CI's G.3 job had been failing on this branch since `f606234`, and the earlier
+reports attributed the red run to the ml test that ADR 0035's §19 fixed. It was a second,
+independent failure: seven of my commit messages have body lines over 72 characters, and two have
+over-length subjects. `fs-commit-msg --rev-range origin/main..HEAD` reported **77 problems across
+7 of 55 commits**.
+
+It mattered beyond this branch. A push to `main` is checked over the whole range it introduces, so
+fast-forwarding `main` would have failed the same job -- and a red G.3 run on `main` is the
+baseline every later milestone is measured against. The owner chose to rewrite (2026-09-24).
+
+**What was done.** `git filter-branch --msg-filter` over `origin/main..HEAD`, replacing only those
+seven messages. The working tree is unchanged: `git diff m5-prewrite-backup HEAD` is empty, and
+`fs-commit-msg --rev-range origin/main..HEAD` now reports **54 messages checked, 0 problems**. The
+pre-rewrite tip is kept locally as `m5-prewrite-backup` (`16035d2`) until the tag lands.
+
+**Where history diverges.** The first 44 commits of the range keep their ids exactly. Divergence
+begins at the 45th, old `2f475c4`:
+
+| Old id | New id | Subject |
+|---|---|---|
+| `2f475c4584ea` | `e54ee1c232e9` | fix(serving): close the promotion gate and restore rollback |
+| `6e7da2c3a9e1` | `7672c3dc9132` | fix(featurestore): make the missing-producer counter mean one thing |
+| `f60623452719` | `70314786dc6d` | fix(serving): rest the rollback exemption on having served |
+| `90078b2e6bc4` | `151e796f56de` | fix(serving): a figure that is not a number is a clause not applied |
+
+**For the M6 agent.** `origin/m6/featurestore-fallback` merged this branch at old **`90078b2`**,
+which is now **`151e796`**. Commits at or before `607cb15` are untouched, so only the four above
+moved. After the force-push, re-point at the new history:
+
+```
+git fetch origin
+git merge origin/m5/scoring      # content is identical, so the four duplicates resolve as no-ops
+```
+
+If git reports conflicts in files M6 has also edited, resolve them as usual; the M5 side of every
+one of those four commits is byte-for-byte what M6 already merged. Nothing in `ml/` changed in this
+rewrite -- only commit messages.
+
+## 21. A backlog row for `tools/`: the gitleaks self-test is flaky
+
+**Proposed row (M5 does not edit `docs/backlog/`; the id is a proposal to confirm at integration):**
+
+```yaml
+- id: PB-73            # next free after PB-72; confirm before using
+  title: "tools/bin/gitleaks-selftest fails about 3-4% of runs on generated secrets"
+  due_milestone: M9    # M9 owns the security workflows; tools/ is shared
+  raised_by: M5 (2026-09-24), from a red gitleaks job on m5/scoring
+  detail: >
+    The self-test plants randomly generated fake secrets and asserts gitleaks reports exactly
+    those. Some generated values do not match the generic-api-key rule, so the guard fails with
+    "NOT DETECTED generic-api-key in <path>" and the path differs run to run. Measured on
+    m5/scoring at 16035d2: 31 local runs, 1 failure (about 3%), on
+    backend/src/main/resources/application-prod.yml; CI run 35909780245 failed the same way on
+    contracts/kafka/examples/fs.planted.example.json. The gitleaks job passes on main, m6 and m7
+    by luck, not by difference: nothing in .gitleaks.toml or contracts/kafka/examples/ differs
+    between those branches and this one.
+  acceptance: >
+    tools/bin/gitleaks-selftest passes 200 consecutive runs. Generate planted values that the
+    pinned rules are guaranteed to match (fixed high-entropy shapes per rule, or assert the rule's
+    own regex against the generated value before planting it), so a failure means the
+    configuration regressed rather than that the generator was unlucky.
+```
+
+It will redden other milestones' CI eventually, and it is a guard on the secret scanner, so a
+flaky pass is worth as little as a flaky failure costs.
