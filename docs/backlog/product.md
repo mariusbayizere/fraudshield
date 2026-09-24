@@ -388,6 +388,28 @@ the decision engine M6, staff identity, admin and audit M7).
   would clear it, with `test_a_feature_with_no_signal_on_this_dataset_declares_it` asserting the
   declaration and `test_no_other_feature_silently_claims_to_be_fine` as its control. Clearing PB-40
   must also delete those declarations, which the second test will force.
+- **Closed 2026-09-21 (M4), two mechanisms.** A **ring** of synthetic identities transacts from one
+  handset, which is the "shared device and phone attributes across accounts" term Part E.2 names
+  and the scenario had no way to produce; and a share of ordinary customers use a **handed-down**
+  handset, so that a device seen on several accounts is not by itself a fraud signal. The second
+  is load-bearing: without it the ring device would be a shortcut and the realism gate would refuse
+  the dataset, correctly. Both rates are `ASSUMED` and the packs say why — the 2026-09-18 sourcing
+  pass established that no publication gives handset-sharing rates for these markets.
+  `test_devices_are_shared_between_accounts` asserts the **distribution**, not the existence of one
+  shared device, because a single shared handset would satisfy "sharing happens" while leaving the
+  feature constant for every row that matters. A shared handset has no device-change generation of
+  its own: two people using one phone are using one phone, so a sharer keeps the token and the
+  owner moves off it when they replace their own — which is how a device comes to be seen on two
+  accounts and later on one. The predicate deciding who is a synthetic identity is duplicated
+  between `Population` and `FraudModel` (factoring it out would move the bust-out draw that follows
+  it in the same stream) and pinned by
+  `test_the_population_and_the_fraud_model_agree_on_who_is_synthetic`.
+- **Measured before it was believed.** The first ring assignment bucketed consecutive customer
+  indices, and synthetic identities are about a ninth of the population, so four consecutive
+  indices held less than one of them: it produced a single device with four accounts where it
+  should have produced some two hundred. Ring membership is drawn from a sized pool instead. The
+  check that caught it took seconds and ran before the 20-minute regeneration, which is the only
+  reason it was not found afterwards.
 
 ### PB-41 · The report's digest covers parameters, so a changed draw is invisible to it
 - **Source:** PB-39's root cause, 2026-09-19 · **Priority:** high · **Due:** M3, before the next
@@ -581,6 +603,22 @@ the decision engine M6, staff identity, admin and audit M7).
   evidence resolving, and when the rendered table disagrees with the register; the M3 table is
   regenerated from the register; a mutation proves it — mark a criterion met with a missing
   artefact and assert the check exits non-zero. It joins `make governance`.
+- **CLOSED 2026-09-20, before M4's criteria were written**, which was the point of the due date.
+  `fs-exit-criteria` resolves three kinds mechanically — a test that exists in a tracked test file,
+  a gate the `governance` target runs, an artefact that names the commit it was produced at — and
+  refuses `judgement` in **both** directions: a judgement may only be `author_asserted`, and a
+  criterion whose evidence *is* mechanisable may not hide behind that label. The M3 table is now
+  generated between markers, so the prose around it survives while the rows cannot drift.
+- **It found something on its first run**: the M3 milestone review named no commit, so the row
+  claiming it as evidence could have pointed at any version of the file. The review now names the
+  commit its findings were fixed at.
+- **What it deliberately does not do.** It checks that a gate is *wired into* `make governance`
+  rather than running it, because running it would double what CI does and — since the checker is
+  itself part of `governance` — recurse. `--run-gates` executes them when someone wants that.
+- **Three M3 rows remain author-asserted and say so in the table**: E2 (every metric states its
+  scale), E12 (preconditions asserted first) and E13 (features exercised non-trivially). None is
+  mechanically decidable, and two of them describe habits this milestone twice failed to keep — so
+  the label is accurate rather than modest.
 
 ### PB-46 · Five engineered features exceed the D-08 single-feature ceiling
 - **Source:** M3 exit criterion E3, measured at commit `fad43dd` and restated at `2c80ef6` after
@@ -636,3 +674,511 @@ the decision engine M6, staff identity, admin and audit M7).
   and the milestone that supplies it, or `degeneracy` if a deployment genuinely has no limits);
   `dormancy_reactivation_flag` is measured rather than guessed. Mutation-proved: declare a constant
   feature `COMPUTABLE` and assert the check exits non-zero.
+
+### PB-48 · The dataset does not publish its temporal split boundaries
+- **Source:** writing the M4 pipeline smoke test, 2026-09-20 · **Priority:** high · **Due:** before
+  any M4 metric is reported, because every one of them is defined on this split
+- **Problem:** D-07 specifies a temporal train/validation/calibration/test split with a seven-day
+  embargo, and `plan_split` computes its four boundaries from the row count and the calibrated
+  volume. **None of them reaches the published output.** `manifest.json` carries rows, checksums,
+  seed and per-month counts; `release.json` adds the partitioning convention and the fingerprint.
+  A consumer holding the Parquet cannot say which rows are training rows.
+- **Why it matters more than it looks.** The boundaries are not a convenience: an evaluation
+  computed on a different split is not comparable with the gates, and the embargo is the thing
+  standing between a validation row and a training row of the same incident. A consumer who has to
+  reconstruct them will reconstruct them slightly differently, and nothing will say so — the same
+  shape as PB-26's partition key, where a convention that lived only in the generator made
+  pruning unsound for everyone else.
+- **Why the smoke test did not just import the planner.** `fraudshield_ml` must not import
+  `fraudshield_dataset`: the feature pipeline consumes the published interchange format so that it
+  cannot read values a release does not carry (the arrangement `fs-dataset packs` already
+  establishes for country facts). Re-implementing `plan_split` inside ml would duplicate a
+  non-trivial algorithm and give it two places to drift.
+- **Acceptance:** `fs-dataset split --output split.json` publishes the four boundaries as
+  timestamps, alongside the row counts and observed fraud rate of each segment; `release.json`
+  carries the same block so a release is self-describing; a test asserts the published boundaries
+  reproduce the segment row counts the realism report states. The smoke test's time-ordered
+  holdout is replaced by the real split the day it exists.
+- **Interim, and stated in the smoke test's own output:** it uses a 70/30 time-ordered holdout of
+  its scored sample, which is *a* temporal split and not *the* one, so its numbers are not
+  comparable with anything M4 will report.
+- **Closed 2026-09-20 (M4).** `planned_block` records the four boundaries into `manifest.json` at
+  generation, where the target row count the planner scaled by is still known; `fs-dataset split
+  --output split.json` adds the measured segment counts and fraud rates; `release.json` carries the
+  same block from the same function. `realism.checks.split_counts` now delegates to
+  `release.split.segment_counts`, so the report's table and the published sidecar have one
+  definition, and `test_the_published_split_reproduces_the_realism_report` parses the rendered
+  markdown and compares it with `split.json` — the comparison happens where a reader reads.
+  A dataset generated before this **refuses** rather than reconstructing: the target row count is
+  recorded nowhere else, and a boundary guessed from the realised count lands within hours of the
+  right answer, which is the error that would never be noticed. The existing 1M benchmark draw is
+  one of those datasets, so consuming the split in `fraudshield_ml` waits on the regeneration
+  PB-41 and PB-44 already require (PB-49).
+
+### PB-49 · The feature pipeline still cuts its own holdout
+- **Source:** closing PB-48, 2026-09-20 · **Priority:** high · **Due:** with the first M4 metric
+- **Problem:** the split is published now, but `fs-features smoke` still takes a 70/30 time-ordered
+  holdout of its scored sample, because the benchmark draw in use predates the block and refuses to
+  reconstruct it. Every number it prints is therefore computed on a split no gate is defined on.
+- **Acceptance:** regenerate the benchmark (which PB-41's fingerprint and PB-44's
+  `round_sum_flag` gap already require), then teach the feature CLI to read `split.json` — the
+  published format, never `fraudshield_dataset` — and assign each scored row to train, validation,
+  calibration or test by the published boundaries, excluding the embargo. No M4 headline metric is
+  reported on anything else.
+- **Closed 2026-09-21 (M4).** `fraudshield_ml.training.split` reads the published `split.json` —
+  the interchange format, never `fraudshield_dataset` — and `fs-features evaluate` fits on the
+  train period and scores the test period. The embargo is unreachable by construction rather than
+  by remembering: `FITTABLE` names the two segments a model may be fitted on and the embargo is
+  not one of them. **Calibration overlaps validation and the reader says so**: `segment_of`
+  returns one of four disjoint periods and `in_calibration` is asked separately, because a
+  `segment_of` returning one of five names would silently remove the calibration rows from
+  validation and a model would be tuned on a period it had also calibrated on.
+- **A separate command rather than a flag on `smoke`.** The smoke test stays exactly what it is —
+  a pipeline check that cuts its own holdout and says so in its first three lines. Teaching it to
+  produce a real metric under a flag would have made one report either caveat a result or promote
+  a check, and the caveat is the part that gets dropped when a figure is quoted.
+- **Stated limit, not a hidden one:** the corpus is read newest-first and bounded, so the training
+  rows are the *tail* of the train period rather than a draw from all of it. The report prints the
+  number of days covered beside every figure. A figure from here is comparable with the gates in
+  its split and not in its training volume.
+
+### PB-50 · The milestone register cannot advance to M4, and that is a finding
+- **Source:** starting M4, 2026-09-20 · **Priority:** high · **Due:** before the register records
+  M3 as completed
+- **Problem:** setting `current: M4` and `completed: [M0, M1, M2, M3]` makes `fs-traceability
+  check` fail with nine errors across six requirements — FR-02-02, FR-02-09, ML-DATA-07, TEST-01,
+  D-03 and D-04 are Must rows assigned to M3 whose `status` still reads `NOT_STARTED` and whose
+  `implementation` and `evidence` lists are **empty**. The work exists for most of them: 239
+  tagged feature tests, `test_completeness.py`, the four device features NaN together for D-04,
+  the 46-versus-44 count settled as bookkeeping for D-03. The record does not say so.
+- **Why it is not just bookkeeping.** Two of the six cannot be marked done at all.
+  **FR-02-09** (a Redis feature store refreshing velocity features within 100 ms) is M5 work
+  carrying an M3 milestone, and **FR-02-02** carries a `< 10ms` latency claim which ADR 0010 says
+  may only be measured on the dedicated machine in `docs/benchmarks/hardware.md` — so it reaches
+  `VERIFIED_AT_REDUCED_SCALE` at best. A register that advanced anyway would be asserting a gate
+  passed that did not.
+- **Held deliberately:** `milestones.yaml` still reads `current: M3`, and the README follows it.
+  The tag `m3-complete` records the owner's judgement; the register records the gate, and the two
+  disagree until this is closed. That disagreement is the accurate state, not a bug to paper over.
+- **Acceptance:** fill `implementation` and `evidence` for the four rows the work covers and set
+  their status from the evidence; reassign FR-02-09 to the milestone that will build it; decide
+  FR-02-02's status against ADR 0010's hardware rule. Then advance the register and the README in
+  one commit, with `fs-traceability check` green.
+- **Closed 2026-09-20 (M4), ADR 0027**, on the owner's direction to treat a requirement filed under
+  a milestone that cannot satisfy it as a specification error rather than a deviation — the same
+  reasoning ADR 0024 used at M2 close. **FR-02-09 → M5**, because the build prompt's own M5 gate
+  reads "FR-02-01, 02-04 … 02-10 tests pass" and there is no feature store, no Redis and no
+  Prometheus. **ML-DATA-07 → M6**, because a completeness requirement cannot be judged before the
+  data it counts exists, and the note claiming "≥ 98% computable" was satisfied "in the sense of
+  not raising while six features carry nothing" is withdrawn as a fudge. **TEST-01 → M4**, because
+  its fourth named scenario needs `round_sum_flag`, whose gap the registry schedules for M4.
+  **D-03 and D-04 are DONE** with evidence; only their register fields were unfilled.
+  **FR-02-02 stays in M3 as DONE_WITH_DEVIATION** — its acceptance criterion ("unit tests confirm
+  all 44 computed for all 6 channel types; USSD handles missing device_fingerprint gracefully") was
+  met, and only the `< 10 ms` in its specification line is carried, to M10 under ADR 0010's
+  dedicated-hardware condition (PB-51). Moving the whole row would have taken the 44-feature
+  requirement out of the milestone that delivered it. `milestones.yaml` now reads `current: M4`,
+  `completed: [M0, M1, M2, M3]`, and `fs-traceability check` passes on its own with the hook
+  intact.
+
+### PB-51 · FR-02-02's `< 10 ms` is carried to M10 and needs the dedicated machine
+- **Source:** ADR 0027, 2026-09-20 · **Priority:** medium · **Due:** M10, the verification campaign
+- **Problem:** FR-02-02 specifies 44 features per transaction **within < 10 ms**. The acceptance
+  criterion is met and the row is closed on it, but the latency figure has never been measured.
+  ADR 0010 forbids taking it from a shared CI runner, where CPU model, neighbours and I/O vary
+  between runs, and the reference laptop cannot host the stack.
+- **What is known:** the batch path computes 36 features for 20,000 rows at about 28 rows/second
+  with a 200,000-row corpus index — roughly 36 ms per row, and that is the *offline* path scanning
+  a corpus, not the online path reading prepared state. The online path has never been timed and
+  the two are not comparable; quoting the batch figure against a `< 10 ms` serving budget would be
+  a category error.
+- **Acceptance:** `benchmark.py features` p95 on the machine named in `docs/benchmarks/hardware.md`,
+  with the run recorded there, reported against the 10 ms budget, and FR-02-02's carried clause
+  given a final status in M10's matrix — `VERIFIED_AT_REDUCED_SCALE` at best until then.
+
+### PB-52 · A committed report described a draw this tree does not produce
+- **Source:** regenerating the 1M benchmark for PB-41/PB-49, 2026-09-21 · **Priority:** high ·
+  **Due:** before any figure from the M2 era is quoted again
+- **Problem:** `dataset/realism_report.md` described **1,012,522 rows**, and the claims register
+  attributed that draw to tree `d85385f` and its difference from M2's published numbers to PB-29
+  changing the country iteration order. Regenerating produced **1,006,249 rows**, twice, with
+  identical fingerprints — and `git diff d85385f HEAD -- dataset/generator/params
+  dataset/src/fraudshield_dataset/generator` is **empty**, so that tree's code is this tree's code
+  and it does not produce 1,012,522 rows.
+- **And the stated mechanism is independently false.** Country iteration order does not change the
+  draw: `Population._apportioned` sorts internally, which is why PB-41's prescribed mutation
+  (reversing the pack order) yielded a byte-identical dataset and had to be replaced with a
+  `_GOLDEN` constant mutation. PB-29 cannot have re-drawn anything.
+- **What is not in doubt:** the current dataset. It is reproducible from the seed, its fingerprint
+  `40a77bb6` is published in the report that describes it, and every gate passes. The defect is a
+  provenance sentence, not data.
+- **The suspicious part:** the regenerated figures (`merchant_category_code` 0.706, event delay
+  0.758, event type 0.537) are *exactly* M2's published ones. So the 1,012,522-row run is the
+  outlier, not the current one, and whatever produced it was present for one measurement and is
+  absent now.
+- **Acceptance:** find what produced the 1,012,522-row draw — check whether the run used a
+  different `--rows`, an uncommitted change, or a different parameter file — and either reproduce
+  it or record that it cannot be reproduced and why. Then state the rule the episode teaches: a
+  generated artefact must be regenerated by the tree that commits it, or the commit is not its
+  provenance. `fs-exit-criteria`'s artefact kind already checks that a cited artefact names its
+  commit; it does not check that the artefact was produced *at* that commit, and this is the case
+  that distinguishes them.
+
+#### Investigated 2026-09-21, 30-minute box. Cause: a dirty working tree. Change: unrecoverable.
+
+Three candidate causes, tested in order of cheapness:
+
+1. **A different `--rows`.** Refuted from the artefact itself. The split boundaries are planned
+   from the *target* row count, so a different target moves them; the 1,012,522-row report and the
+   current one state the **same test start (2025-10-28 22:02 UTC)** and the same segment spans to
+   two decimals. Same target, different rows.
+2. **A committed generator change.** Refuted from the history. The 1,012,522 figure appears
+   **exactly once** in the report's entire history, at `a36d252` (2026-09-19 15:16); every other
+   committed report, before and after, says 1,006,249. The only commit touching
+   `dataset/generator` or `dataset/generator/params` in the window between the last 1,006,249
+   report and that one is `dce89fe`, the pack refactor itself.
+3. **The pack refactor.** Refuted by measurement, which is the part worth keeping. Generating
+   200,000 rows at seed 20260917 on `683b7b6` (the commit *before* the refactor) and on the
+   current tree gives **201,243 rows on both** and the **identical fingerprint**
+   `9525c27fe636ce7ed5964215d700886ea15233cbbc4357f7c98f8d95937c5d6c`. The planned volume,
+   `customers_total` and `customers_active` are also identical. **PB-29 did not re-draw anything**,
+   and the explanation that stood in six documents for two days was never true.
+
+What remains is that the run was made on a **dirty working tree**: code that is in no commit. The
+commit message for `a36d252` says the run was "over tree `d85385f`", and `d85385f`'s committed
+generator is byte-identical to today's, which produces 1,006,249. The specific uncommitted change
+is **unrecoverable** — it was never committed, stashed or described, and no artefact from the run
+records anything but the commit hash it was *believed* to be at.
+
+**That last sentence is the whole finding, and it is why the fix is a guard rather than an
+answer.** A hash recorded by hand records an intention.
+
+**Closed 2026-09-21 as UNEXPLAINED-WITH-GUARD.** The cause is established (a dirty working tree);
+the specific change is not, and cannot be — it exists in no object this repository holds. PB-53
+supplies the guard so the next one is detected at the moment it happens rather than two days
+later. Every quotation of the 1,012,522-row figure is corrected or annotated.
+
+### PB-53 · An evidence run records the commit it believed it was at
+- **Source:** PB-52's investigation, 2026-09-21 · **Priority:** high · **Due:** immediately; it is
+  the only thing standing between this project and a second PB-52
+- **Problem:** every evidence artefact here names a commit, and that name is written by hand or
+  passed as a flag. It therefore records what the author *believed* the tree was, not what it was.
+  PB-52 is exactly that failure: a report was produced from uncommitted code, labelled with a
+  commit whose generator does not produce it, and six documents then explained the discrepancy
+  with a mechanism that measurement has since refuted. Nothing detected it for two days, and the
+  code that produced it is gone.
+- **Why naming a commit is not enough.** A commit hash identifies a tree in the object database.
+  It says nothing about the files the interpreter actually imported, which are the working tree.
+  The two agree only when the working tree is clean, and nothing checked that.
+- **Acceptance:**
+  1. A shared provenance stamp: the commit, **and** a hash of `git status --porcelain`, which is a
+     constant for a clean tree and varies with any modification. Both go into every evidence
+     artefact's header.
+  2. Evidence runs **refuse to start** on a dirty tree, with an explicit escape that stamps the
+     artefact `DIRTY` so an unciteable run is unciteable on its face rather than by omission.
+  3. `fs-exit-criteria`'s `artifact` kind checks the header: the artefact must carry a stamp, its
+     commit must match the one cited, and its tree state must be clean. That closes the gap
+     between "names a commit" and "was produced at that commit".
+- **Not in scope:** proving the interpreter imported the working tree rather than an installed
+  copy. `uv run` from the repo makes that true here, and a guard for it would be a different
+  mechanism.
+- **Closed 2026-09-21.** `fraudshield_tools.provenance` supplies the stamp: the commit plus a
+  digest of `git status --porcelain`, which is `clean` for an unmodified tree and varies with any
+  modification, **including untracked files** — the archetypal accident is a new module imported
+  and not yet added, which a tracked-content diff would call clean. `fs-evidence --output <file>
+  -- <command>` refuses on a dirty tree and stamps `NOT CITABLE` under `--allow-dirty`; it is a
+  wrapper rather than a flag on each producer so that `fraudshield_dataset` and `fraudshield_ml`
+  do not acquire a dependency on the governance package. `fs-exit-criteria` reads the stamp:
+  absent is a **warning** (every artefact predating the guard lacks one, and failing them would
+  get the threshold lowered until nothing failed), present-and-contradicting is an **error**.
+
+### PB-54 · The fingerprint read three columns of fourteen
+- **Source:** regenerating for PB-40, 2026-09-21 · **Priority:** high · **Resolved:** same day
+- **What happened:** PB-40 gave the generator a device-sharing mechanism. It rewrote
+  `device_fingerprint` for 504 devices and changed nothing else — and `dataset_fingerprint`
+  returned **the identical value** for the old draw and the new one. Measured, not suspected: the
+  new dataset holds devices serving up to seven accounts and the old one held none serving two.
+- **Cause:** `SAMPLED_COLUMNS` hashed three columns per table, and `device_fingerprint` was not
+  among them. The fingerprint exists to answer "is this report still about this dataset?" and
+  could not see a change to eleven of the fourteen transaction columns.
+- **Why it matters more than an ordinary bug.** PB-41 built this guard *because* the parameter
+  digest checked the input it was written for rather than the output it exists to protect — the
+  sixth instance of that shape in the notebook. The fingerprint then made the same mistake one
+  level down, in the module whose own docstring names the pattern. **A guard is not exempt from
+  the failure it was built to catch.**
+- **Fix:** version 2 hashes **every** column of each sampled row. `ORDERING_COLUMN` now names only
+  the column the sample is *ordered* by, which decides which rows are sampled and nothing else.
+  `FINGERPRINT_VERSION` is bumped so a version 1 value is never compared with a version 2 one —
+  which is what that constant was for.
+- **The test is per column, over every column the table has**, because choosing which columns to
+  check would reproduce the original mistake inside the test written to prevent it. It perturbs a
+  row the sample actually contains: the first attempt edited row 0 of the first partition and
+  failed for all fourteen columns, since the sample is the 1,024 rows that sort first by
+  identifier and row 0 is almost never among them. A test that edits an unsampled row proves
+  nothing about any column.
+- **Consequence for the record:** every fingerprint published before 2026-09-21 is a version 1
+  value. `40a77bb6` (v1) is `b896b632` under v2; the current dataset is `c8856a0e`.
+
+### PB-55 · The first real metric compared two numbers over different populations
+- **Source:** the first `fs-features evaluate` run, 2026-09-21 · **Priority:** high ·
+  **Resolved:** same day, before the figure was quoted anywhere
+- **What it printed:** model AUC 0.998, best single feature **1.000** (`days_since_sim_swap`),
+  margin **-0.002**. The margin is meaningless. `auc` drops NaN scores with their labels — which
+  is correct, a structurally missing value is not a low value — so `days_since_sim_swap` was
+  scored on the accounts that had a SIM swap while the model was scored on all 8,000 held-out
+  rows. Subtracting them compares different populations.
+- **Fix:** a baseline now carries the rows it was measured on. The **margin** is taken against the
+  strongest feature defined on *every* held-out row; the strongest feature of any coverage is
+  reported separately, with its coverage, and the report says in as many words that the two cannot
+  be subtracted.
+- **The shape, which is the part worth keeping.** PB-46 established the rule "report every metric
+  as a margin over the single-feature baseline". The rule was implemented and the implementation
+  did not satisfy it, because "the baseline" silently meant "over whatever rows that feature
+  happens to be defined on". A rule that is followed literally and violated in substance is the
+  same failure as a guard that checks the input it was written for — the seventh and eighth
+  instances of that family are three days apart.
+
+### PB-56 · `days_since_sim_swap` separates perfectly where it is defined
+- **Source:** the first `fs-features evaluate` run, 2026-09-21 · **Priority:** high · **Due:**
+  before any M4 headline metric is published
+- **Measured, and immediately overstated by me.** The first run reported `max(AUC, 1-AUC)` of
+  **1.000** on the rows where it is defined, and this entry was first written as though that
+  settled something. The corrected run prints the denominator: those are **660 held-out rows
+  holding 2 confirmed fraud**. An AUC of 1.000 over two positives is not evidence of perfect
+  separation; it is evidence of a subsample too small to say anything. The entry is kept with its
+  correction rather than rewritten, because "the figure looked decisive until its denominator was
+  printed" is the finding.
+- **It is not a leak, and that is why it matters.** A SIM swap before a takeover is how that fraud
+  works and a model is meant to learn it (C-11). But the *degree* is an artefact of the generator:
+  `fraud.takeover_lead_minutes = [5, 60]`, provenance **ASSUMED**, so every enabling event is
+  followed by its drain inside a tight uniform window with no long tail and no unexploited swap.
+  Among accounts that had a swap, "days since" therefore orders fraud from legitimate perfectly.
+- **What survives the correction.** Not "a feature separates perfectly" — two positives cannot
+  support that. What survives is the *mechanism*: the lead window is tight, uniform and ASSUMED,
+  so among accounts with a swap the ordering is near-deterministic by construction, and the
+  dataset-level gate cannot see it because D-08 measures *columns* over *all* rows, where the
+  delay channel reads 0.758. The right response is to widen the measurement, not to quote the
+  1.000: score enough test rows that the defined subset holds tens of fraud rather than two.
+- **PB-46's velocity separability is still the larger, better-measured finding**:
+  `velocity_ratio_1h_vs_30d` reaches **0.871 on every held-out row**, which is what the model's
+  margin is taken against.
+- **Closed 2026-09-21 by a third run, and it was never a finding at all.** The first two runs
+  sampled the *tail* of each period. With the sample spread across the periods instead, the
+  held-out rows hold 63 fraud rather than 40, and `days_since_sim_swap` is no longer the strongest
+  feature at any coverage — the strongest is `velocity_ratio_1h_vs_30d`, defined on 100% of rows.
+  The 1.000 was an artefact of a tail sample over two positives, twice over.
+- **What to keep from it.** Nothing about SIM swaps; something about method. A figure was printed,
+  written into the backlog as a finding, corrected once when its denominator was printed, and
+  withdrawn entirely when the sample was made representative. **The first version of a measurement
+  is the one most likely to be about the sampling.** The report now prints coverage and fraud
+  counts beside every baseline so the denominator arrives with the number rather than after it.
+- **Acceptance:** state it in the datasheet, the model card and the paper's limitations with the
+  same prominence as the velocity separability and with the mechanism named; report it beside
+  every model metric as the evaluation command now does; and decide whether
+  `takeover_lead_minutes` should carry a long tail, which **changes the dataset draw** and is
+  therefore an owner decision rather than one to take while closing a backlog item.
+- **Closed 2026-09-22 (owner decision).** The lead is now a clipped lognormal: bounds `[5, 43200]`
+  minutes, median 45, log-sigma 1.8 — a quarter inside 13 minutes, 43.6% beyond an hour, 2.7%
+  beyond a day, all ASSUMED and the pack rationale says why a lognormal and why not a mixture.
+  Regenerated at fingerprint `6abde44e`; all gate checks pass.
+- **The prediction was recorded first and held.** Committed at `0138099` before the draw existed:
+  the event-delay channel would fall from 0.758 into 0.68–0.74, and a fall under 0.01 would refute
+  C-11's mechanism claim. Measured **0.730**.
+- **And the residual is the finding.** A fall of 0.028 is **11% of the excess over 0.5**, so nine
+  tenths of that channel's separation is the scenario and one tenth was the window. C-11 moves
+  from PARTLY ASSUMED to MEASURED. The hedge that has ridden along with every quotation of this
+  figure for four days implied it might be mostly artefact; it was not.
+
+### PB-57 · `fs-evidence` captures its command's output instead of streaming it
+- **Source:** the first `fs-features evaluate` run, 2026-09-21 · **Priority:** medium · **Due:**
+  before the next long evidence run
+- **Problem:** `evidence_run` uses `subprocess.run(..., capture_output=True)`, so nothing appears
+  until the command exits. A 35-minute run is completely silent, and a silent run cannot be told
+  apart from a hung one.
+- **Why it is worth its own item.** The lab notebook already carries an entry on exactly this —
+  106 minutes spent on a run that printed nothing because the progress line sat outside the loop —
+  and the conclusion was that an expensive stage must report progress. The guard written three
+  hours later reintroduced the silence for every run that goes through it. **Knowing a failure
+  mode does not immunise against it**, which is the notebook's other standing lesson, and this is
+  its fourth instance.
+- **Acceptance:** tee rather than capture — stream the child's output to this process's stdout as
+  it arrives *and* accumulate it for the artefact. The artefact's content must not change.
+
+### PB-58 · Recall at 1% FPR charged nothing for ties
+- **Source:** the M4 battery's keep-one-only ablation, 2026-09-22 · **Priority:** high ·
+  **Resolved:** same day, before any gate quoted it
+- **What it printed:** `agent alone (2)` — AUC **0.551**, recall at 1% FPR **0.904**. That is
+  arithmetically impossible, and impossible figures are the useful kind: they cannot be argued
+  with.
+- **Cause:** the agent features are NaN for every non-agent row, so a model given only them scores
+  almost the whole population identically. The threshold was the 99th percentile of negatives and
+  recall counted positives **at or above** it, which admits every negative tied *on* the threshold
+  for free. The realised false-positive rate was near 1.0, not 0.01.
+- **Why it matters beyond one silly row:** ML-GATE-02 and ML-GATE-03 are defined at this operating
+  point. The error is invisible on a well-separated model — every figure the project has quoted so
+  far is unaffected, because ties are rare when a model works — and appears exactly when a model
+  is degenerate, which is when a gate most needs to fail.
+- **Fix:** count positives **strictly above** the threshold. That is the operating point a rule
+  engine could actually run, it never claims a rate the scores cannot deliver, and a degenerate
+  model now reports a recall near zero.
+- **The general shape:** a metric that is correct on good inputs and wrong on bad ones is worse
+  than one that is wrong on both, because nothing exercises it until the day it matters.
+
+### PB-59 · Leave-one-country-out measures nothing on this benchmark
+- **Source:** the M4 battery, 2026-09-22 · **Priority:** high · **Due:** before the paper's
+  generalisation section is written
+- **Measured:** removing a country from training entirely changes its AUC by at most 0.002 — KE
+  0.996 → 0.996, RW 0.994 → 0.993, TZ 0.981 → 0.979, UG 0.975 → 0.976.
+- **Why:** the generator applies one scenario library to every country, so fraud patterns are not
+  country-specific and there is nothing for a country hold-out to withhold. The ablation says the
+  same thing one level down: four disjoint feature groups each reach 0.845 or better alone, so
+  removing any one route leaves the others intact.
+- **This refutes half of PB-46.** That decision recorded that "leave-one-country-out and the novel
+  sub-variant carry the weight the headline AUC no longer can". LOCO carries none of it. PB-46
+  also *named the mechanism* — "burstiness is not country-specific, so a velocity threshold
+  transfers trivially" — as a risk, four days before it was measured.
+- **Acceptance:** report LOCO as a **negative result** rather than dropping it — a generalisation
+  test that cannot fail is worth publishing as such, because a reader would otherwise assume it
+  was omitted for being unflattering. State in the paper that geographic generalisation is easy on
+  this benchmark and says nothing. Then make the **novel sub-variant** experiment the load-bearing
+  one, since a temporal hold-out is the only one of the two that can still fail.
+- **Closed 2026-09-22 (owner decision).** LOCO is accepted as a null result and the generator is
+  **not** changed to make countries differ: engineering country-specific fraud so the experiment
+  becomes informative would be tuning the benchmark to produce a result. The mechanism is
+  confirmed and now tested — `test_no_fraud_parameter_is_keyed_by_country` asserts that no fraud
+  parameter is keyed by a country code, so country enters only as a lookup for *which* mule,
+  merchant, agent, currency or offset an incident uses. Recorded in the datasheet, the claims
+  register and the paper's limitations; removed from the contribution list. Country-level
+  generalisation belongs to the real-data validation plan, not to a benchmark whose fraud
+  mechanisms are country-invariant.
+- **And the replacement failed the same way (PB-61).** The novel sub-variant was promoted to
+  load-bearing on 2026-09-22 and measured the same evening: the unseen shape is caught at **100%**
+  (38 of 38) against 95.1% for the shape the model trained on. Both of PB-46's generalisation
+  experiments are null, for one reason — see PB-61.
+
+### PB-61 · Both generalisation experiments are null, and the cause is the same
+- **Source:** the novel-variant hold-out, 2026-09-22 · **Priority:** high · **Due:** before the
+  paper's evaluation section is written
+- **Measured:** the novel sub-variant (`novel_esim_delayed_drain`, present only in the test period
+  so the model has provably never seen it) is caught at **100.0%** on 38 fraud rows, AUC 0.999,
+  against **95.1%** and 0.994 for the base variant at the same threshold and against the same
+  legitimate rows. The unseen shape is *easier*, not harder.
+- **Why, and it is the same reason as PB-59 and PB-60.** The benchmark encodes fraud as **bursts**.
+  The novel variant's novelty is in the *lead time* — a drain delayed by days rather than minutes
+  after the enabling event — and not in the transaction pattern, which is still a burst. A model
+  that detects bursts catches it without ever having seen the variant. Equally, four disjoint
+  feature groups each reach ≥0.845 alone because each is a different view of the same burst, and
+  removing a country removes no mechanism because every country's fraud is the same burst.
+- **The honest statement:** this benchmark supports **no** generalisation claim. Not geographic,
+  not temporal-to-an-unseen-variant. It supports claims about detection *given* burst-structured
+  fraud, and about the cost of computing and explaining that detection.
+- **Acceptance:** report both experiments as null results with the shared cause named; remove
+  generalisation from the paper's contribution list; and state in the datasheet and the model card
+  that a variant differing only in timing is not an out-of-distribution test. If a future draw
+  wants a real one, it needs a variant whose **transaction pattern** differs — which changes the
+  draw and is an owner decision.
+- **Not a reason to engineer one now.** The same argument as PB-59: designing a variant until the
+  experiment fails would be tuning the benchmark to produce a result.
+- **Not in scope here:** making the generator's scenarios country-specific. That would change the
+  draw and is an owner decision; it would also be a claim about how fraud differs between these
+  markets, which the 2026-09-18 sourcing pass established no publication supports.
+- **Updated 2026-09-22 — the real variant was added and measured (ADR 0028).** One
+  pre-registered, typology-grounded, non-burst variant (`reversal_scam_social_engineering`:
+  victim-initiated, single transaction, established counterparty — see the lab notebook's
+  2026-09-22 entries for the pre-registration and the result). Measured recall **9.1%** (6 of 66
+  fraud rows), Wilson 95% interval [4.2%, 18.4%], against base's 94.4% [92.7%, 95.8%] — intervals
+  do not overlap (first measured at 6.1% [2.4%, 14.6%] with a target encoding E1 forbids, and restated after the correction; the interval now reaches past the pre-registered range's 0.15 lower edge). The point estimate is below the pre-registered prediction range
+  (0.15–0.55), though the interval no longer excludes it entirely: the model's dependence on
+  burst-structure and counterparty-novelty was underestimated, not overestimated. This is now the
+  benchmark's one measured non-burst detection failure and belongs in the paper alongside the two
+  null results, not as a replacement for either. Evidence: `docs/benchmarks/m4_battery_d8083dbc_e1.txt`
+  (restated), `docs/benchmarks/m4_battery_pb61.txt` (first measurement).
+
+### PB-60 · An ablation on this benchmark cannot say which features matter
+- **Source:** the M4 battery, 2026-09-22 · **Priority:** medium · **Due:** before C-4's ablation
+  is reported
+- **Measured:** removing any one of ten feature groups costs ≤0.031 AUC and eight cost ≤0.001,
+  while four groups each reach ≥0.845 **alone** (counterparty 0.949, velocity 0.871, temporal
+  0.861, geographic 0.845).
+- **Consequence for C-4.** The plan was to replace the unverifiable "Western models achieve
+  0.72–0.78 on East African data" with a measured ablation, "card-style feature set only vs full
+  EAC feature set". On a benchmark where four disjoint groups each reach 0.85 alone, that
+  comparison will show a small difference whatever is true of real systems, and the small
+  difference will mean nothing. Reporting it as evidence for the EAC-specific feature claim would
+  be the D-08 shape again: a control whose scope is narrower than the claim it justifies.
+- **Acceptance:** report the leave-one-out and keep-one-only tables **together**, since either
+  alone is misleading in opposite directions, and state that redundancy is why. Decide what C-4
+  becomes: either withdraw the claim, or replace it with a comparison that redundancy cannot
+  flatten.
+
+### PB-62 · Recall and FNR at D-02's 0.60 flag threshold fail the M4 gate
+- **Source:** the declared M4 gate run, 2026-09-22 (`docs/benchmarks/m4_gate_d8083dbc_v3.txt`) ·
+  **Priority:** high · **Due:** owner decision before M5 sets serving thresholds
+- **Measured:** recall at 0.60 **0.736** [0.707, 0.765] against ML-GATE-03's 0.88; FNR at 0.60
+  **0.264** against ML-GATE-06's 0.12 (the same fact, since FNR = 1 − recall there). Five-seed
+  recall 0.744 ± 0.041. The other nine gate metrics pass.
+- **What the artefact already says:** at 0.60 the calibrated ensemble is conservative — precision
+  0.927 at 0.06% FPR — and even at the 1% FPR budget, far below 0.60, recall is 0.871. D-02's
+  reference point (recall 0.88 at about 0.28% FPR) is out of reach at every threshold this run
+  shows, so moving the threshold would not meet the gate either.
+- **Not a reason to tune on the test period** (D.3). A threshold chosen by looking at these
+  numbers would be exactly that.
+- **Acceptance, one of:** (a) PB-67's larger training sample, reported beside this run whichever
+  way it lands; (b) D-02's operating point revisited as a defect resolution, argued from the
+  validation period and D-10's alert budget, not from the test period; (c) the shortfall accepted
+  and carried into the paper as measured. The choice is the owner's.
+- **Decided 2026-09-22 (owner): option (c).** Both rows are `DONE_WITH_DEVIATION` against ADR 0031's
+  amendment, the miss recorded in each and in the paper as a finding. Option (a) stays open as
+  PB-67.
+
+### PB-63 · The CI ML gate has no dataset to run on
+- **Source:** M4 milestone review, TEST-14, 2026-09-22 · **Priority:** medium · **Due:** M9
+- **Problem:** E.5 item 9 asks CI to fail when a gate metric's point estimate misses its
+  threshold. `fs-features gate --enforce` does exactly that, but CI has no dataset: the 1M draw is
+  gitignored and generating one takes about 24 minutes, beyond the python job's 15-minute budget.
+  The gate therefore runs as committed `fs-evidence` artefacts, not as a CI check.
+- **Acceptance:** a CI job that generates (or restores from a cache) a pinned draw, builds the
+  gate cache and runs `fs-features gate --enforce`, with its failure policy decided first — PB-62
+  means it would fail today, and D.3 says to record a failing metric rather than tune it away.
+
+### PB-64 · M4 clauses that need the scoring service
+- **Source:** M4 milestone review, ADR 0031, 2026-09-22 · **Priority:** high · **Due:** M5
+- **Problem:** four M4 acceptance clauses need a service that does not exist until M5: TEST-02's
+  fallback rule engine when the ML scorer returns 503; TEST-14's shadow-mode AUC delta and its
+  MLflow logging (ADR 0030); FR-02-03's "deployment blocked if ECE > 0.05", which needs a
+  promotion step to block; and loading the exported ONNX models, whose parity M4 established.
+- **Acceptance:** each clause tested in M5, against the models `fs-features gate` evaluated.
+
+### PB-65 · D-06's anomaly routing threshold is not configured anywhere
+- **Source:** M4 milestone review, ADR 0031, 2026-09-22 · **Priority:** medium · **Due:** M6
+- **Problem:** `anomaly_score` exists (percentile rank against the training reference, D-06), but
+  the routing D-06 specifies — 0.7 in the test profile, a configurable percentile defaulting to
+  0.995 in production, sized by D-10's alert budget — is a decision-engine setting, and there is no
+  decision engine yet.
+- **Acceptance:** the threshold is versioned configuration in M6, with both profiles tested.
+
+### PB-66 · E.5 protocol items M4 did not build
+- **Source:** M4 milestone review, re-review, 2026-09-22 · **Priority:** medium · **Due:** M11,
+  except the search, which is M5
+- **Problem:** the D.3 gate is met or recorded, but E.5's research protocol is wider than the gate
+  and these were not built: fairness and harm by country, channel, KYC tier and urban/rural (item
+  7); the cost curve and alert-budget analysis (item 8); leave-one-fraud-type-out and performance
+  by test month (item 5, C-5); reliability diagrams per channel (item 6). E.4's latency-constrained
+  hyperparameter search (D-16) was not run either: the gate model's configuration is fixed.
+- **Acceptance:** each item reported with the single-feature baselines PB-46 requires, or
+  withdrawn from the paper's claims with a reason. The search waits for M5's latency measurement.
+
+### PB-67 · The gate model trains on 30,000 of the train period's 792,162 rows
+- **Source:** M4 gate run, 2026-09-22 · **Priority:** high · **Due:** before the paper's results
+- **Problem:** the feature pass costs about 270 rows a second, so the gate cache samples 30,000
+  training rows (260 fraud) from a 400,000-row corpus that reaches only the last 128 days of the
+  train period. Every M4 model figure is a model trained on that sample, and PB-62's recall
+  shortfall may be partly its cost.
+- **Acceptance:** a gate run on a larger training sample, reported beside the current one — not as
+  a replacement chosen because it passes.
+
+### PB-68 · The frontier and the battery write-up still describe the 6abde44e draw
+- **Source:** M4 milestone review, 2026-09-22 · **Priority:** low · **Due:** before M11
+- **Problem:** `docs/benchmarks/m4_frontier.md` and `m4_battery.md`'s prose were measured at
+  `6abde44e`; the gate, battery and C-6 evidence are at `d8083dbc`, with the E1 encoding.
+- **Acceptance:** both re-run at `d8083dbc` through `fs-evidence`, prose restated from the output.

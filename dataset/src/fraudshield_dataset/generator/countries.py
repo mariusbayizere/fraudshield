@@ -36,6 +36,11 @@ class CountryPack:
     fx_rate_to_base: float
     continent: str
     blocs: frozenset[str]
+    #: Common denominations in MINOR units (PB-44). The generator does not read them -- its own
+    #: round-sum rule rounds to two significant figures -- but `round_sum_flag` cannot be computed
+    #: without them, and a pack is where a currency fact belongs (ADR 0023) rather than a table in
+    #: the feature code.
+    round_denominations: tuple[int, ...]
 
     def shares_a_bloc_with(self, other: CountryPack) -> bool:
         return bool(self.blocs & other.blocs)
@@ -62,6 +67,29 @@ def _blocs(value: Any, alpha2: str) -> frozenset[str]:
     return frozenset(str(v) for v in value)
 
 
+def _denominations(value: Any, alpha2: str) -> tuple[int, ...]:
+    """Positive integers in minor units, ascending and distinct.
+
+    Checked here rather than trusted, because every way this list can be wrong is silent:
+    a zero would make every amount round (`amount % 0` raises, and a guard that skipped it would
+    make the step vanish), a negative one is meaningless, a duplicate changes nothing but says the
+    pack was edited without reading it, and a float would make an exact integer remainder
+    inexact -- which is the one property `round_sum_flag` is built on.
+    """
+    if not isinstance(value, list) or not value:
+        raise ParameterError(f"countries.{alpha2}.round_denominations: expected a non-empty list")
+    if not all(isinstance(v, int) and not isinstance(v, bool) and v > 0 for v in value):
+        raise ParameterError(
+            f"countries.{alpha2}.round_denominations: every denomination must be a positive "
+            f"integer in minor units, got {value!r}"
+        )
+    if sorted(value) != list(value) or len(set(value)) != len(value):
+        raise ParameterError(
+            f"countries.{alpha2}.round_denominations: must be ascending and distinct, got {value!r}"
+        )
+    return tuple(int(v) for v in value)
+
+
 def load_packs(parameters: ParameterSet) -> dict[str, CountryPack]:
     """Every pack present, whether or not a run simulates it."""
     packs: dict[str, CountryPack] = {}
@@ -76,6 +104,9 @@ def load_packs(parameters: ParameterSet) -> dict[str, CountryPack]:
             fx_rate_to_base=parameters.number(f"{prefix}.fx_rate_to_base"),
             continent=str(parameters.value(f"{prefix}.continent")),
             blocs=_blocs(parameters.value(f"{prefix}.blocs"), alpha2),
+            round_denominations=_denominations(
+                parameters.value(f"{prefix}.round_denominations"), alpha2
+            ),
         )
     if not packs:
         raise ParameterError("no country packs found in generator/params/countries/")

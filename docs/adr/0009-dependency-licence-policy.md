@@ -174,3 +174,106 @@ Classpath-exception-2.0).
   requires a new ADR.
 - Property tests in Java are deterministic by construction; shrinking of failing cases is not
   available and is compensated by explicit boundary cases.
+
+## Amendment 2026-09-22 — `lightgbm`, and what its transitive dependencies dragged in
+
+C-6 claims "ensemble reduces variance 12% vs single model" and cannot be measured against a single
+booster. `fraudshield-ml` already carries `xgboost`; the SRS's own production model is
+0.55·XGBoost + 0.45·LightGBM (E.4), so `lightgbm==4.7.0` is the second half of a model that was
+already designed rather than a dependency taken on for one measurement.
+
+**`lightgbm` and its own transitive dependency `narwhals` both declare `License-Expression: MIT`**
+— a clean SPDX field, no exception needed, the check resolves them on the spot.
+
+**What was not clean: `xgboost`'s own transitive dependencies, discovered only now.** `xgboost`
+has been a runtime dependency since M3's pipeline smoke test, and `fs-licences` runs in the `ci`
+Makefile target, not the commit hook — so, like the empty-scope gap this ADR's first amendment
+found, this check had not run against `xgboost`'s full dependency closure until asked for
+directly. `uv sync --all-packages` (needed to make `lightgbm` importable at all — a package-scoped
+`uv sync` left it unresolved) surfaced two packages `xgboost` had been pulling in the whole time:
+
+```
+ERROR python:scipy@1.18.1 (runtime): unidentified licence ('BSD License',)
+ERROR python:nvidia-nccl-cu12@2.31.2 (runtime): unidentified licence ('LicenseRef-NVIDIA-Proprietary',)
+ERROR python:xgboost@3.0.2 (runtime): unidentified licence ('Apache Software License',)
+```
+
+Three failures, one mechanical and two worth reading in full.
+
+**`xgboost` and `scipy`** are the `h3` shape exactly: an ambiguous classifier, no
+`License-Expression`, resolved by reading the bundled text. `xgboost` ships no `LICENSE` in its
+wheel at all, so the source repository at the installed tag (`github.com/dmlc/xgboost`, `v3.0.2`,
+`LICENSE`) was read instead, and it is the Apache License, Version 2.0 in full. `scipy`'s
+`dist-info/licenses/LICENSE.txt` is headed "Copyright (c) 2001-2002 Enthought, Inc. 2003, SciPy
+Developers" with the 3-clause BSD disclaimer, confirmed against `github.com/scipy/scipy` at the
+installed tag `v1.18.1`. Both entered `EXCEPTIONS` the same way `h3` did.
+
+**`nvidia-nccl-cu12` is a different shape, and worth stating plainly: its own declared licence
+field is wrong.** `xgboost`'s wheel lists it as a plain (non-extra) dependency on
+`platform_system == 'Linux' and platform_machine != 'aarch64'`, for a GPU collective-communication
+code path this project never invokes — `ldd` on the installed `libxgboost.so` shows it links no
+NVIDIA library, and nothing in this repository sets `device='cuda'`. The package's own
+`License-Expression` metadata field says `LicenseRef-NVIDIA-Proprietary`. Read the actual bundled
+file instead — `dist-info/licenses/License.txt` — and it is the 3-clause BSD licence text for NCCL
+(NVIDIA CORPORATION / Lawrence Berkeley National Laboratory / U.S. Department of Energy, under DOE
+subcontract 7078610), which matches the upstream NCCL project's own stated position
+(`github.com/NVIDIA/nccl`, `LICENSE.txt`: "parts of the project retain their original BSD
+license"). **The wheel's metadata claims a licence more restrictive than the text it ships**, which
+is the opposite direction every other ambiguity in this table has run in — every prior exception
+resolved a vague or missing field, not a field asserting something the bundled text contradicts.
+Recorded in `EXCEPTIONS` as `BSD-3-Clause`, on the text, not the label — the same "read the file,
+not the classifier" rule this ADR has used since `h3`, applied to a case where trusting the label
+would have been not merely imprecise but wrong.
+
+**Not investigated further: whether NVIDIA intends `License-Expression` to describe some other
+component of the wheel** (a CUDA driver stub, a proprietary header) that this reading missed. The
+file actually bundled and installed under `dist-info/licenses/` is what a licence check has to
+answer for, and it is the BSD text. If a future NVIDIA release changes what ships under that path,
+the pinned exception (`nvidia-nccl-cu12@2.31.2`) stops applying at the next version bump and the
+check fails again, exactly as every other pinned exception in this table is designed to.
+
+**The general point repeats, one version further.** A package's own declared licence field is not
+self-verifying, and here it was actively wrong rather than merely absent — the same lesson this
+project has learned about hand-written commit provenance (PB-52/PB-53) and about a benchmark's
+column-level control being quoted as a claim about its features (D-08's family). The fix in every
+case is the same: read the artefact the check is actually about, not a label attached to it.
+
+## Amendment 2026-09-22 — `scikit-learn`, for four things the SRS specifies
+
+The M4 milestone review (`docs/reviews/M4/milestone-review.md`, M4-2 and M4-1) found D-06's
+Isolation Forest, D-05's isotonic calibration and E.5's logistic-regression and random-forest
+baselines all unbuilt. Each is a scikit-learn estimator in the SRS's own description, and the
+Isolation Forest is also what E.4's ONNX export expects. `scikit-learn==1.8.0` is taken on once
+for all four; the boosted models stay on their native booster APIs, so `smoke.py`'s reason for
+avoiding the scikit-learn wrappers still holds for them.
+
+It brings three transitive packages. `scikit-learn`, `joblib` and `threadpoolctl` declare
+`License-Expression: BSD-3-Clause` and resolve without an exception; each bundled licence file
+was read and is the BSD 3-clause text.
+
+**`cloudpickle` (via `joblib`) needed one**, for a mechanical reason rather than a doubtful one: its
+metadata carries only the classifier `BSD License` and the old-style `License: BSD-3-Clause` field,
+which the policy does not read. Its `dist-info/licenses/LICENSE` is the full 3-clause text
+(Cloudpickle contributors, Regents of the University of California, PiCloud). It was read from the
+installed wheel, and unlike the `scipy` and `xgboost` entries it was not checked against the
+upstream source; the exception says so.
+
+Run in a worktree without `frontend/node_modules`, `fs-licences` also reports every npm package as
+`Unknown`: the check reads licences from the installed packages, so an uninstalled front-end is
+not a clean result. CI installs it, and CI's result is the one that counts.
+
+## Amendment 2026-09-22 — the ONNX export chain
+
+E.4 requires ONNX exports of the boosters with a parity test, and the M4 review found none (M4-4).
+`onnx==1.23.0`, `onnxruntime==1.30.0` and `onnxmltools==1.16.0` are taken on for that alone: the
+converter, the format, and the runtime the parity test and M5's scoring service run on. They bring
+`skl2onnx`, `flatbuffers` and `ml-dtypes`.
+
+Four resolve from their SPDX fields. Two needed exceptions, both for a bare classifier:
+
+- **`skl2onnx`** bundles the full Apache 2.0 text and a `NOTICE` crediting Microsoft. Apache 2.0
+  §4(d) requires that notice to travel with any redistribution, which matters at M9 when images are
+  built, not here.
+- **`flatbuffers`** ships no licence file in its wheel, the `xgboost` shape. Rather than the
+  upstream repository, the installed artefact itself was read: all ten of its modules carry
+  Google's Apache 2.0 header.

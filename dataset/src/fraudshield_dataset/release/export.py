@@ -24,6 +24,7 @@ from pyarrow import csv
 
 from fraudshield_dataset.fingerprint import dataset_fingerprint
 from fraudshield_dataset.paths import DATASET_ROOT, PROVENANCE_MD, REALISM_REPORT_MD
+from fraudshield_dataset.release.split import measured_block, read_block
 
 TABLES = ("transactions", "labels", "account_events")
 LICENCE = DATASET_ROOT / "release" / "LICENSE-CC-BY-4.0.txt"
@@ -98,6 +99,11 @@ def export(
     if not manifest_path.exists():
         raise FileNotFoundError(f"{source} has no manifest.json; generate the dataset first")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    # Before anything is copied. A release that cannot carry its split is not self-describing
+    # (PB-48), and discovering that after writing a gigabyte of Parquet leaves a half-built
+    # directory that looks like a release and is not one. The block is read again below with its
+    # measured counts; reading the manifest twice is free next to copying the data.
+    read_block(source)
     output.mkdir(parents=True, exist_ok=True)
     rows: dict[str, int] = {}
     for table in TABLES:
@@ -138,6 +144,11 @@ def export(
         # realism report describes what arrived with it, has one value to compare and does not
         # need to re-run the generator to find out.
         "dataset_fingerprint_sha256": fingerprint,
+        # The temporal split, so a release is self-describing (PB-48). Without it a consumer
+        # holding the Parquet cannot say which rows are training rows, and any evaluation they
+        # compute is incomparable with the gates in a way nothing would announce. The boundaries
+        # are the generator's, read from the manifest; the counts are measured here.
+        "split": measured_block(source),
         "formats": ["parquet", "csv"] if csv_tables else ["parquet"],
         "licence": {"name": "CC BY 4.0", "file": LICENCE.name, "sha256": _sha256(LICENCE)},
         "source_manifest_sha256": _sha256(manifest_path),

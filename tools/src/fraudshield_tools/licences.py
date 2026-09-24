@@ -150,6 +150,62 @@ EXCEPTIONS: dict[str, tuple[str, str]] = {
         "POM declares Apache-2.0 and 'BSD'; the BSD part is shaded ASM, whose bundled "
         "asm.license is the 3-clause text (verified 2026-09-17)",
     ),
+    "python:xgboost@3.0.2": (
+        "Apache-2.0",
+        "classifier says only 'Apache Software License', ambiguous between versions and there is "
+        "no License-Expression; no LICENSE file ships in the wheel's dist-info. Confirmed against "
+        "the tagged source (github.com/dmlc/xgboost, tag v3.0.2, LICENSE) on 2026-09-22: the "
+        "Apache License, Version 2.0 (C-6, first runtime dependency of the ml/pyproject.toml "
+        "ensemble baseline)",
+    ),
+    "python:scipy@1.18.1": (
+        "BSD-3-Clause",
+        "classifier says only 'BSD License'; dist-info/licenses/LICENSE.txt is headed 'Copyright "
+        "(c) 2001-2002 Enthought, Inc. 2003, SciPy Developers' with the 3-clause disclaimer, "
+        "confirmed against the tagged source (github.com/scipy/scipy, tag v1.18.1) on 2026-09-22. "
+        "A transitive dependency of xgboost and lightgbm, not declared directly",
+    ),
+    "python:flatbuffers@25.12.19": (
+        "Apache-2.0",
+        "classifier says only 'Apache Software License' and the wheel ships no licence file; every "
+        "one of the ten installed modules carries Google's 'Licensed under the Apache License, "
+        "Version 2.0' header, read 2026-09-22. A transitive dependency of onnxruntime",
+    ),
+    "python:skl2onnx@1.20.0": (
+        "Apache-2.0",
+        "classifier says only 'Apache Software License'; dist-info/licenses/LICENSE is the full "
+        "Apache License 2.0 text and NOTICE credits Microsoft, both read 2026-09-22. A transitive "
+        "dependency of onnxmltools",
+    ),
+    "python:cloudpickle@3.1.2": (
+        "BSD-3-Clause",
+        "classifier says only 'BSD License' and the policy does not read the old-style 'License: "
+        "BSD-3-Clause' field; dist-info/licenses/LICENSE is the full 3-clause text (copyright "
+        "Cloudpickle contributors, Regents of the University of California, PiCloud), read in "
+        "full on 2026-09-22 from the installed wheel, not checked against upstream source. A "
+        "transitive dependency of joblib via scikit-learn, not declared directly",
+    ),
+    "python:nvidia-nccl-cu12@2.31.2": (
+        "BSD-3-Clause",
+        "the wheel's own License-Expression field says 'LicenseRef-NVIDIA-Proprietary', which is "
+        "wrong: dist-info/licenses/License.txt is the 3-clause BSD text for NCCL (NVIDIA "
+        "CORPORATION / Lawrence Berkeley National Laboratory / U.S. Department of Energy, DOE "
+        "subcontract 7078610), matching the upstream project's own licensing summary "
+        "(github.com/NVIDIA/nccl, LICENSE.txt: 'parts of the project retain their original BSD "
+        "license'), confirmed 2026-09-22. A transitive, platform-conditional dependency of "
+        "xgboost's published wheel (`platform_system == 'Linux' and platform_machine != "
+        "'aarch64'`) for its optional GPU code path; `ldd` on the installed libxgboost.so shows it "
+        "links no NVIDIA library, and this project trains CPU-only (missing=nan, nthread=1, no "
+        "device='cuda' anywhere in the tree), so the wheel is present but never loaded. Recorded "
+        "as BSD-3-Clause on the text actually bundled, not on the misleading declared field, "
+        "which is the same 'read the file, not the label' rule every other exception here uses",
+    ),
+    "python:sortedcontainers@2.4.0": (
+        "Apache-2.0",
+        "classifier says only 'Apache Software License'; METADATA 'License: Apache 2.0' and "
+        "dist-info/LICENSE is the Apache License, Version 2.0 notice (verified 2026-09-22). Dev "
+        "only, via fakeredis (M5 unit tests without Docker)",
+    ),
 }
 
 _NAME_PATTERNS: tuple[tuple[str, str], ...] = (

@@ -130,20 +130,25 @@ and in a one-microsecond label delay — and every leakage number stayed bit-ide
 Evidence: `dataset/realism_report.md`, `dataset/tests/test_realism_checks.py`.
 
 **Q: What is the strongest single signal in the dataset, and is it a leak?**
-0.746, and no. It is the time from a SIM swap or device change to that account's next transaction,
+0.730, and no. It is the time from a SIM swap or device change to that account's next transaction,
 reached by joining `account_events` to the transactions on the account token. It is above the
-strongest transaction column, `merchant_category_code` at 0.707, and both are inside the 0.80 D-08
-ceiling — the delay by 0.054. It is not a leak: a SIM swap before a takeover is how that fraud
+strongest transaction column, `merchant_category_code` at 0.706, and both are inside the 0.80 D-08
+ceiling — the delay by 0.070. It is not a leak: a SIM swap before a takeover is how that fraud
 works, and a model is meant to learn it, which is why it is measured and reported but deliberately
 not gated. Two caveats belong with the number. Part of it is an artefact of the generator rather
-than the phenomenon: the lead is drawn from `fraud.takeover_lead_minutes = [5, 60]`, provenance
-`ASSUMED`, so every enabling event is followed by its drain in a tight uniform window with no long
-tail and no unexploited swap, which real life does not guarantee. And the separation grows with
-sample size — 0.709 at 60,000 rows, 0.746 at 1,012,522 — so it must be quoted at release scale.
-(Both of those, and every figure in this answer, are from the dataset at tree `d85385f`; M2
-published 0.758 at 1,006,249 rows before PB-29 changed the country iteration order and re-drew the
-dataset. The 60,000-row figure is from the earlier draw and has not been re-measured, so the two
-ends of that comparison are not from the same draw — the direction holds, the gap is indicative.)
+than the phenomenon, and as of 2026-09-22 we know how much. The lead was
+`fraud.takeover_lead_minutes = [5, 60]` drawn uniformly — every enabling event drained inside the
+hour. Giving it a real tail (a clipped lognormal, median 45 minutes, 2.7% beyond a day) dropped
+this channel from 0.758 to **0.730**, so about **11% of the excess over 0.5 was the assumed
+schedule and the rest is the scenario**. The fall was predicted before the draw existed and the
+prediction held. And the separation grows with
+sample size — 0.709 at 60,000 rows on an older draw, 0.730 at 1,006,249 — so it must be quoted at
+release scale.
+(Every figure in this answer is from the dataset with fingerprint `6abde44e`, regenerated
+2026-09-21. It replaces a set quoted from a 1,012,522-row report that this tree does not
+reproduce; see PB-52. The 60,000-row figure is from an earlier run and has not been re-measured,
+so the two ends of that comparison are not from the same draw — the direction holds, the gap is
+indicative.)
 We found this after the review closed, by measuring the channel that an exclusion had excused: it
 had been asserted in a comment as "0.537 on its own", which was the *event type* channel, while the
 delay channel was never measured and no gate judged either. Both are now in the report on every run.
@@ -240,6 +245,6 @@ cannot settle whether it is constant: four to ten seeds give estimates from 0.84
 needs about 50 seeds per scale, roughly eight hours at a million rows. The value is used above that
 range as an extrapolation, and the code says so.
 Third, **the release-size run has never happened.** ML-DATA-01 asks for 5,000,000 rows; the
-verification run is 1,012,522. It sits at `VERIFIED_AT_REDUCED_SCALE` with that reason recorded, not
-quietly marked done.
+verification run is 1,006,249. It sits at `VERIFIED_AT_REDUCED_SCALE` with that reason recorded,
+not quietly marked done.
 Evidence: `docs/reviews/M2/milestone-review.md`, `docs/research/lab_notebook.md`.

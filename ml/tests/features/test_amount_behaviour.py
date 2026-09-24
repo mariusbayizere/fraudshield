@@ -208,7 +208,7 @@ def test_one_prior_observation_is_enough_for_a_maximum() -> None:
 # --- round_sum_flag ----------------------------------------------------------------------------
 
 
-@pytest.mark.req("FR-02-02", "ML-DATA-07")
+@pytest.mark.req("TEST-01", "FR-02-02", "ML-DATA-07")
 def test_round_sums_are_exact_multiples_in_minor_units() -> None:
     """15,000 is a multiple of both 1,000 and 5,000; 12,345 of neither; 2,000 of 1,000 only.
 
@@ -221,7 +221,7 @@ def test_round_sums_are_exact_multiples_in_minor_units() -> None:
         assert OnlineFeatures().round_sum_flag(scored, DENOMINATIONS) is expected, minor
 
 
-@pytest.mark.req("FR-02-02", "ML-DATA-07")
+@pytest.mark.req("TEST-01", "FR-02-02", "ML-DATA-07")
 def test_the_denominations_are_the_transactions_own_currencys() -> None:
     """The same integer is round in one currency and not in another, which is the property that
     makes a per-currency table necessary rather than tidy.

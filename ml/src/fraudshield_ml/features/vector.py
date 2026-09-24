@@ -230,8 +230,12 @@ def compute(
             history, scored, known_before=context.countries_before.get(account, frozenset())
         )
     )
+    # `context.outcomes` is passed, not copied. It used to be `dict(context.outcomes)` here and
+    # again below, which rebuilt a mapping of **every outcome in the corpus** twice for every
+    # scored row: 40.5 ms per row at a 200,000-row corpus, measured, against a total of about 40 —
+    # so the copying *was* the feature pass. The two callees never mutate it and now say `Mapping`.
     values["geo_cell_fraud_rate_30d"] = batch.geo_cell_fraud_rate_30d(
-        cell_history, dict(context.outcomes), scored, prior=context.cell_rate_prior
+        cell_history, context.outcomes, scored, prior=context.cell_rate_prior
     )
 
     values["counterparty_is_new_for_account"] = float(
@@ -248,7 +252,7 @@ def compute(
         batch.counterparty_unique_senders_24h(counterparty_history, scored)
     )
     values["counterparty_confirmed_fraud_90d"] = float(
-        batch.counterparty_confirmed_fraud_90d(counterparty_history, dict(context.outcomes), scored)
+        batch.counterparty_confirmed_fraud_90d(counterparty_history, context.outcomes, scored)
     )
     values["tx_count_to_counterparty_30d"] = float(
         batch.tx_count_to_counterparty_30d(history, scored)

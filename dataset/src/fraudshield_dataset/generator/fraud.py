@@ -18,11 +18,11 @@ import calendar
 from bisect import bisect_left
 from dataclasses import dataclass
 from functools import cached_property
-from math import ceil, sqrt
+from math import ceil, log, sqrt
 
 import numpy as np
 
-from fraudshield_dataset.generator.config import SimulationConfig
+from fraudshield_dataset.generator.config import SimulationConfig, month_bounds
 from fraudshield_dataset.generator.keys import stream, token, transaction_uuid
 from fraudshield_dataset.generator.legit import (
     CASH_MCC,
@@ -45,6 +45,19 @@ SCENARIOS = (
     "synthetic_identity",
 )
 NOVEL_VARIANT = "novel_esim_delayed_drain"
+#: PB-61's replacement generalisation test. Pre-registered 2026-09-22
+#: (docs/research/lab_notebook.md, same date, committed before this variant was first generated)
+#: and ADR 0028: unlike NOVEL_VARIANT, which differs from its parent scenario only in *when* the
+#: drain happens and is still a burst, this variant changes the *mechanism* -- one transaction,
+#: not a burst; the victim's own act, not an attacker's; a counterparty already on the account's
+#: own payee list, not a fresh one.
+#:
+#: Drawn independently per (customer, test-period month), not from any existing scenario's
+#: incident budget: `mule_account`'s own test-period incident count tops out at ~15 even at 100%
+#: conversion (measured against the plan before `reversal_scam_probability` was set), too few for
+#: a recall figure to rest on. Labelled `fraud_type="mule_account"` because it is, structurally, a
+#: single transfer to an external account -- the closest of the eight to what it is.
+REVERSAL_SCAM_VARIANT = "reversal_scam_social_engineering"
 ADAPTED_VARIANT = "adapted_below_threshold"
 BASE_VARIANT = "base"
 _MINUTE = 60 * 1_000_000
@@ -68,6 +81,11 @@ class Payment:
     agent_id: str | None = None
     destination: str | None = None
     round_sum: bool = False
+    #: Overrides `self.multiplier[incident.scenario]` for this one payment, when a sub-variant's
+    #: amount is not the scenario's usual median multiple (REVERSAL_SCAM_VARIANT: the amount a
+    #: reversal scam asks for is set by the "overpayment" narrative, not by mule_account's own
+    #: median). None means "use the scenario's own multiplier", the existing behaviour.
+    amount_multiplier: float | None = None
 
 
 @dataclass
@@ -110,6 +128,8 @@ class FraudModel:
         self.burst = (int(low), int(high))
         lead_low, lead_high = p.numbers("fraud.takeover_lead_minutes")
         self.lead = (int(lead_low), int(lead_high))
+        self.lead_median = p.number("fraud.takeover_lead_median_minutes")
+        self.lead_sigma = p.number("fraud.takeover_lead_log_sigma")
         self.night = p.number("fraud.night_probability")
         self.new_device = p.number("fraud.new_device_probability")
         self.mule_fraction = p.number("fraud.mule_account_fraction")
@@ -124,6 +144,8 @@ class FraudModel:
         self.band = (band_low, band_high)
         self.adapt_probability = p.number("fraud.adaptation_probability")
         self.novelty_share = p.number("fraud.novelty_share_of_sim_swap")
+        self.reversal_scam_probability = p.number("fraud.reversal_scam_probability")
+        self.reversal_scam_multiplier = p.number("fraud.reversal_scam_amount_multiplier")
         delay_low, delay_high = p.numbers("fraud.novelty_delay_days")
         self.novelty_delay = (int(delay_low), int(delay_high))
         self.mule_cross_border = p.number("fraud.mule_cross_border_share")
@@ -484,6 +506,48 @@ class FraudModel:
             rng = stream(self.config.seed, "fraud", scenario, customer.index, label)
             incident = Incident(scenario, customer, month, rng, rows=count)
             getattr(self, f"_{scenario}")(incident, rows, events)
+        self._maybe_reversal_scam(customer, month, rows)
+
+    def _maybe_reversal_scam(self, customer: Customer, month: int, rows: Rows) -> None:
+        """PB-61's pre-registered generalisation test (ADR 0028), independent of every scenario's
+        own incident budget: a single, victim-initiated transfer to an account already on the
+        customer's own payee list, planted only in the test period.
+
+        Drawn once per (customer, test-period month) rather than through `plan()`, because the
+        population this test needs to be measurable -- every customer active in a test-period
+        month, not one scenario's already-small incident count for those two months -- is a
+        different and much larger pool. The draw is wasted (and the row not written) for a
+        customer whose month does not overlap the test period at all, or whose randomly drawn day
+        within the month lands before the boundary; both are checked, in that order, because the
+        first is nearly free and the second needs a day already drawn.
+        """
+        _, hi = month_bounds(self.config.months[month])
+        if hi <= self.config.split.test_start or not customer.counterparties:
+            return
+        rng = stream(self.config.seed, "reversal-scam", customer.index, self.config.months[month])
+        if rng.random() >= self.reversal_scam_probability:
+            return
+        incident = Incident(
+            "mule_account", customer, month, rng, rows=1, variant=REVERSAL_SCAM_VARIANT
+        )
+        start = self._start(incident)
+        if start < self.config.split.test_start:
+            return
+        other, _ = customer.counterparties[int(rng.integers(0, len(customer.counterparties)))]
+        channel = self._wallet_channel(customer)
+        self._add(
+            incident,
+            rows,
+            Payment(
+                start,
+                channel,
+                token(self.config.seed, "account", other),
+                P2P_MCC,
+                self._device(incident, channel, fraud_device=False),
+                round_sum=False,
+                amount_multiplier=self.reversal_scam_multiplier,
+            ),
+        )
 
     def _start(self, incident: Incident) -> int:
         """UTC start of an incident, on any day of its month.
@@ -558,7 +622,12 @@ class FraudModel:
         mcc, device, agent_id = payment.mcc, payment.device, payment.agent_id
         destination, round_sum = payment.destination, payment.round_sum
         rng, customer = incident.rng, incident.customer
-        median = self.legitimate.median[channel] * self.multiplier[incident.scenario]
+        multiplier = (
+            payment.amount_multiplier
+            if payment.amount_multiplier is not None
+            else self.multiplier[incident.scenario]
+        )
+        median = self.legitimate.median[channel] * multiplier
         amount_rwf = median * float(rng.lognormal(0.0, self.legitimate.sigma))
         variant = incident.variant
         if (
@@ -614,10 +683,24 @@ class FraudModel:
 
     # --- the eight scenarios (signals: docs/ml/scenarios/) ------------------------------------
 
+    def _lead_micros(self, rng: np.random.Generator) -> int:
+        """Minutes from the enabling event to the drain, as microseconds (PB-56).
+
+        Lognormal rather than uniform. Until 2026-09-22 this was `rng.integers(5, 61)`, so every
+        takeover was drained inside the hour — which made "seconds since this account's last
+        event" separate fraud from legitimate almost by construction, and C-11 had recorded since
+        M2 that part of the event-delay channel's 0.758 was that window rather than the scenario.
+
+        Clipped to the declared bounds at both ends: a drain twelve seconds after a swap is
+        implausible, and a lead of months is a different scenario rather than a slow takeover.
+        """
+        drawn = rng.lognormal(log(self.lead_median), self.lead_sigma)
+        return int(min(max(drawn, self.lead[0]), self.lead[1])) * _MINUTE
+
     def _sim_swap(self, incident: Incident, rows: Rows, events: list[FraudEvent]) -> None:
         rng, customer = incident.rng, incident.customer
         start = self._start(incident)
-        lead = int(rng.integers(self.lead[0], self.lead[1] + 1)) * _MINUTE
+        lead = self._lead_micros(rng)
         novel = start - lead >= self.config.split.test_start and rng.random() < self.novelty_share
         if novel:
             # Novel sub-variant, test period only: re-provisioning seen as a device change, and a
@@ -648,7 +731,7 @@ class FraudModel:
     def _account_takeover(self, incident: Incident, rows: Rows, events: list[FraudEvent]) -> None:
         rng, customer = incident.rng, incident.customer
         start = self._start(incident)
-        lead = int(rng.integers(self.lead[0], self.lead[1] + 1)) * _MINUTE
+        lead = self._lead_micros(rng)
         events.append(FraudEvent(customer.account, "DEVICE_CHANGE", start - lead))
         for timestamp in self._times(incident, start):
             channel = ("ONLINE", "MOBILE_MONEY", "BANK_TRANSFER")[int(rng.integers(0, 3))]

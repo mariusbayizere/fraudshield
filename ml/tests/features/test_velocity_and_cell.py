@@ -50,7 +50,7 @@ SCORED = tx(timedelta(0), tid="scored")
 # --- velocity_ratio_1h_vs_30d ---------------------------------------------------------------
 
 
-@pytest.mark.req("FR-02-02")
+@pytest.mark.req("TEST-01", "FR-02-02")
 def test_zero_history_returns_exactly_one_on_both_paths() -> None:
     """The settled convention, hand-computed: (0 + 1) / (0 + 1) = 1.0, exactly.
 

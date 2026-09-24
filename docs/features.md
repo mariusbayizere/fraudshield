@@ -42,7 +42,7 @@ reading.
 The check reports how many rows it scanned and refuses an empty sample, per ADR 0009's
 generalisation: a check that has only ever run over an empty scope is untested.
 
-## The six the benchmark cannot feed
+## The five the benchmark cannot feed
 
 Measured, not estimated. An earlier note in this repository said eight, from reasoning about which
 inputs were missing rather than from computing the features; the check disagreed, which is what it
@@ -55,11 +55,22 @@ is for.
 | `kyc_tier` | tier assignments carrying `effective_at` | a per-account tier history (ADR 0026) | M6 |
 | `agent_float_utilisation_ratio` | float balance and limit, as-of | an agent standing table; agents are only a token column today | M6 |
 | `agent_distance_from_registered_km` | the registered premises, as-of | the same agent table | M6 |
-| `round_sum_flag` | the currency's common denominations | a `round_denominations` field in the country packs (ADR 0023) | M3 |
 
-`round_sum_flag` is the cheapest and is scheduled with **PB-41's pending report regeneration**: a
-new parameter makes the committed realism report stale anyway, so the two cost one evidence run
-together rather than two apart.
+All five wait on a table that does not exist. That is why the sixth could close alone.
+
+### `round_sum_flag` closed on 2026-09-20
+
+It was never unimplemented: it has been on both paths since the amount-behaviour group landed, and
+it takes a denomination table as an argument. What was missing was the table. `round_denominations`
+is now a country-pack field (ADR 0023), published by `fs-dataset packs` and read by
+`denominations_by_currency`, so the feature is declared `COMPUTABLE`.
+
+The values are `ASSUMED`, and the packs say so: they are plausible note and typing steps for each
+currency, not a sourced banknote series, because no central-bank publication for these currencies
+has been read in full and presenting the list as fact is the kind of claim D-09 exists to prevent.
+What the feature needs from them is the *shape* — roundness is a property of the local amount the
+payer typed, tested as an exact integer remainder in minor units, never of a converted
+base-currency figure — and that shape does not depend on the list being the true one.
 
 **Two substitutes were considered and rejected**, because each is the kind that reads plausibly and
 is wrong in one direction:
@@ -89,17 +100,22 @@ the wrong country and shift every local-time feature by hours. The honest fix is
 ## What M4 must do with this
 
 1. **Train on the features that carry information, and report that number with every metric.**
-   Never "44 features" where fewer were used. If one of the six becomes computable later, that is a
-   documented change to the model's input and a reason to restate earlier numbers — not a silent
-   improvement.
+   Never "44 features" where fewer were used. If one of the five becomes computable later, that is
+   a documented change to the model's input and a reason to restate earlier numbers — not a silent
+   improvement. **`round_sum_flag` is exactly that change**, made on 2026-09-20: the trainable set
+   went from 36 to 37, and PB-40 took it to **38** the next day when the generator began sharing
+   devices. A figure measured on 36 stays a figure measured on 36.
 2. **`corridor_class` is evaluated over two of its four classes.** `CROSS_BLOC_AFRICA` and
    `INTERCONTINENTAL` are implemented and unit-tested against the synthetic Country Z pack, and no
    row of the shipped dataset produces either: every simulated country is in the EAC and on one
    continent, and every cross-border corridor ends at another simulated country. A model trained
    here has never seen them. That is a stated limitation, not a defect to fix — ADR 0023's owner
    direction is that the simulated country set is not to be broadened (PB-43).
-3. **`accounts_per_device_7d` is constant and `synthetic_identity_score` is one term short** until
-   the generator shares devices between accounts (PB-40), which is scheduled before M4 training.
+3. **`accounts_per_device_7d` and `synthetic_identity_score` are live as of 2026-09-21.** The
+   generator shares devices between accounts now (PB-40): a ring of synthetic identities transacts
+   from one handset, and a share of ordinary customers use a handed-down one so that a shared
+   device is not by itself a fraud signal. Measured on the regenerated benchmark, the feature takes
+   **7 distinct values** where it used to take one, and the composite's fourth term fires.
 4. **The synthetic-identity composite's equal weights are a choice, not a derived optimum.**
    Part E.2 delegates the form; the weights are equal because the composite carries no fitted
    quantity and there was no evidence to argue any other weighting from. M4 may revisit them with

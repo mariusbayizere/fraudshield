@@ -1,5 +1,14 @@
 # M2 milestone review
 
+> **Withdrawn 2026-09-21 (PB-52).** The note below is kept as the record of what was believed,
+> and its explanation is now known to be wrong in both halves. Regenerating at the current tree
+> gives **1,006,249 rows** with `merchant_category_code` **0.706** and event delay **0.758** — M2's
+> original figures — and `git diff d85385f HEAD` over the generator and its parameters is empty, so
+> the tree named below produces that draw and not the 1,012,522-row one. Country iteration order
+> also changes nothing: `Population._apportioned` sorts internally, which is why PB-41's "reverse
+> the pack order" mutation produced a byte-identical dataset. What produced the 1,012,522-row draw
+> is unexplained. Current values: `dataset/realism_report.md`, fingerprint `6abde44e`.
+
 > **Note added 2026-09-19 — the figures below are from a superseded draw, not from an error.**
 > PB-29 moved every country fact into packs, and `countries.simulated()` sorts, so country
 > iteration changed from declaration order to alphabetical and every downstream random draw

@@ -24,17 +24,62 @@ figure appears in it.
 
 ## Features
 
-44 are declared and implemented; **38 carry information on this benchmark**. Six read reference
-data that neither the dataset nor M1's schema holds and are NaN for every row (PB-44):
+44 are declared and implemented; **38 carry information and vary on this benchmark**. Five read
+reference data that neither the dataset nor M1's schema holds and are NaN for every row (PB-44):
 `account_age_days`, `counterparty_account_age_days`, `kyc_tier`,
-`agent_float_utilisation_ratio`, `agent_distance_from_registered_km`, `round_sum_flag`.
+`agent_float_utilisation_ratio`, `agent_distance_from_registered_km`. One more is present and
+constant: `just_below_limit_flag`, because the benchmark carries no limit configuration (PB-47).
+
+It was six until 2026-09-20, when `round_denominations` became a country-pack field and
+`round_sum_flag` became computable; and `accounts_per_device_7d` was constant until 2026-09-21,
+when the generator began sharing devices (PB-40). The five that remain all wait on a table that
+does not exist, which is why the other two could close alone.
 
 **[M4] must state the number of features that carried information alongside every metric**, and
-must not report "44 features" where fewer were used. If one of the six becomes computable later,
+must not report "44 features" where fewer were used. If one of the five becomes computable later,
 that is a documented change to the model's input and a reason to restate earlier numbers — not a
-silent improvement. `docs/features.md` lists what each needs and which milestone supplies it.
+silent improvement: **the pipeline smoke test of 2026-09-20 trained on 36 and stays a figure
+measured on 36**, and any figure measured between then and 2026-09-21 was measured on 37. `docs/features.md` lists what each needs and which milestone supplies it.
 
 ## Limitations that are known before any training run
+
+### Geographic generalisation is easy here, and says nothing
+
+Measured 2026-09-22 (`docs/benchmarks/m4_battery.md`): removing a country from training
+**entirely** changes that country's AUC by at most 0.002. The generator applies one scenario
+library to every simulated country, so fraud patterns are not country-specific and a country
+hold-out withholds nothing. Leave-one-country-out is reported as a **negative result** rather than
+omitted — a generalisation test that cannot fail is worth saying so about, since a reader would
+otherwise assume it was dropped for being unflattering (PB-59).
+
+The same redundancy defeats feature ablations: four disjoint feature groups each reach 0.845 or
+better **alone**, so removing any one group costs ≤0.031 and an ablation table on this benchmark
+cannot be read as a statement about which features matter in production (PB-60).
+
+**And the novel sub-variant does not carry it either.** Promoted to load-bearing on 2026-09-22 and
+measured the same evening: the unseen shape is caught at **100%** (38 of 38) against 95.1% for the
+shape the model trained on. Its novelty is in the *lead time*, not in the transaction pattern —
+the drain is still a burst — so a model that detects bursts catches it without ever having seen
+it (PB-61).
+
+**This benchmark therefore supports no generalisation claim at all**, geographic or temporal. It
+supports claims about detection *given* burst-structured fraud, and about the cost of computing
+and explaining that detection. The generator has deliberately not been changed to make either
+experiment informative: engineering a difference so that a test can fail is tuning the benchmark
+to produce a result.
+
+**One held-out shape does fail, and it is the one the two null results predicted would.** A
+pre-registered, typology-grounded non-burst variant — `reversal_scam_social_engineering`, a single
+victim-initiated transfer to an established counterparty, added 2026-09-22 (ADR 0028) specifically
+because the country and lead-time axes above never removed the two mechanisms the model actually
+relies on — is caught at **9.1%** (6 of 66 fraud rows, Wilson 95% interval [4.2%, 18.4%]), against
+94.4% [92.7%, 95.8%] for the base scenarios at the same threshold. The intervals do not overlap
+(`docs/benchmarks/m4_battery_d8083dbc_e1.txt`; first measured at 6.1% [2.4%, 14.6%] with a target encoding E1 forbids, and restated after the correction; the interval now reaches past the pre-registered range's 0.15 lower edge).
+This is not a generalisation success to qualify the statement above: it is a genuine detection
+failure, on one typology, measured rather than assumed. It supports the narrower claim that this
+model's detection power is concentrated in burst-structure and counterparty-novelty, and says
+nothing about other non-burst typologies (romance scams, invoice fraud, other APP variants), which
+remain untested.
 
 ### The benchmark is velocity-separable, and this governs every metric below
 
