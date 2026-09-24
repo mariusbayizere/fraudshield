@@ -154,8 +154,18 @@ public final class IngestController {
     int units = BatchJobs.chargeableUnits(body);
     Optional<RateLimiter.Permit> rest = Optional.empty();
     if (units > 1) {
-      RateLimiter.Permit permit = limiter.take(principal(request).apiKeyId(), units - 1);
-      if (!permit.allowed()) {
+      RateLimiter.Permit charge = limiter.take(principal(request).apiKeyId(), units - 1);
+      if (!charge.allowed()) {
+        // The admission unit is kept, as for any refused request (ADR 0058 point 6), so a retry
+        // costs the whole batch again: Retry-After is the wait for all of it, not for the rest
+        // (review 9 of 2026-09-24).
+        RateLimiter.Permit permit =
+            new RateLimiter.Permit(
+                false,
+                charge.limit(),
+                charge.remaining(),
+                retryAfterForWholeBatch(units, charge.remaining(), charge.limit()),
+                charge.degraded());
         return withBudget(
             ResponseEntity.status(429)
                 .header("Retry-After", Integer.toString(permit.retryAfterSeconds()))
@@ -163,7 +173,7 @@ public final class IngestController {
                 .body(RateLimitFilter.refusal(permit, units, correlation)),
             permit);
       }
-      rest = Optional.of(permit);
+      rest = Optional.of(charge);
     }
     Object submitted = batches.submit(principal(request), body);
     if (submitted instanceof RequestValidator.Result invalid) {
@@ -181,6 +191,20 @@ public final class IngestController {
             .contentType(MediaType.APPLICATION_JSON)
             .body(JSON.writeValueAsBytes(node)),
         rest);
+  }
+
+  /**
+   * Seconds until a batch refused at its second charge would be accepted if sent again: a retry
+   * pays the admission unit again, so the wait is for the whole batch, not for the rest (ADR 0058
+   * point 6), floored at one second.
+   *
+   * @param units the batch's item count
+   * @param remaining units left after the admission unit
+   * @param limit units refilled per second
+   * @return whole seconds, at least one
+   */
+  static int retryAfterForWholeBatch(int units, int remaining, int limit) {
+    return (int) Math.max(1, Math.ceil((units - remaining) / (double) limit));
   }
 
   /** The answer with the budget headers of the controller's own charge, when it made one. */

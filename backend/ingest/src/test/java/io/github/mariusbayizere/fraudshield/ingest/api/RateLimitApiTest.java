@@ -174,15 +174,21 @@ class RateLimitApiTest {
   void batchCallersCannotExceedTheTransactionBudget() throws Exception {
     // M10's finding (ADR 0100): charged per request, a caller using batches got up to 1,000 times
     // the throughput of one using single submissions. Batches of 300 as fast as the client can
-    // send, for three seconds: whatever the timing, the transactions accepted never exceed the
-    // burst plus what refilled.
+    // send: whatever the timing, the transactions accepted never exceed the burst plus what
+    // refilled.
     String key = ApiHarness.BUDGET_KEY_FOUR;
     int accepted = 0;
     int acceptedBatches = 0;
     HttpResponse<String> lastRefusal = null;
     long start = System.nanoTime();
-    while (System.nanoTime() - start < Duration.ofSeconds(3).toNanos()) {
+    // Until the budget has bitten and for at least three seconds, whatever the host's speed (on a
+    // loaded host three seconds of 300-item batches did not reach the burst); at most thirty.
+    while ((lastRefusal == null || System.nanoTime() - start < Duration.ofSeconds(3).toNanos())
+        && System.nanoTime() - start < Duration.ofSeconds(30).toNanos()) {
       HttpResponse<String> response = batch(key, 300);
+      assertThat(response.headers().firstValue(RateLimitFilter.DEGRADED_HEADER))
+          .as("the bound holds for one limiter; degraded means a test left Redis down")
+          .isEmpty();
       if (response.statusCode() == 202) {
         accepted += JSON.readTree(response.body()).get("accepted").asInt();
         acceptedBatches++;
@@ -222,10 +228,41 @@ class RateLimitApiTest {
   void exhaustedKeysAreRefusedBeforeTheirBatchBodyIsRead() throws Exception {
     // Review 8 (2026-09-24): with the batch exempt from the filter, an exhausted key made the
     // server
-    // read and parse up to 4 MiB per request without limit. The admission unit is charged before
-    // the body is read, so a key over budget gets 429 while its body is still arriving.
+    // read and parse up to 4 MiB per request without limit. RateLimitFilterTest proves the order
+    // deterministically; this checks it end to end. The bucket refills (LIMIT per second) while
+    // the stalled requests are opened, so up to that many may be admitted and wait for their body:
+    // the bound allows for it, and the rest must be refused while their bodies are still arriving.
+    final int stalled = 10;
+    final long sent = System.nanoTime();
     assertThat(batch(ApiHarness.BUDGET_KEY_SIX, BURST).statusCode()).isEqualTo(202);
     int port = Integer.parseInt(environment.getProperty("local.server.port"));
+    java.util.concurrent.ExecutorService pool =
+        java.util.concurrent.Executors.newFixedThreadPool(stalled);
+    try {
+      List<java.util.concurrent.Future<String>> answers = new ArrayList<>();
+      for (int i = 0; i < stalled; i++) {
+        answers.add(pool.submit(() -> stalledBatch(port)));
+      }
+      int refused = 0;
+      for (java.util.concurrent.Future<String> answer : answers) {
+        if ("HTTP/1.1 429 ".equals(answer.get(10, java.util.concurrent.TimeUnit.SECONDS))) {
+          refused++;
+        }
+      }
+      double seconds = (System.nanoTime() - sent) / 1e9;
+      assertThat(refused)
+          .as("refused while their bodies were still arriving (%.2f s of refill)", seconds)
+          .isGreaterThanOrEqualTo(stalled - (int) Math.ceil(LIMIT * seconds) - 1)
+          .isPositive();
+    } finally {
+      pool.shutdownNow();
+    }
+  }
+
+  /**
+   * Sends a batch request's headers and part of its body, then stalls: the status line, or null.
+   */
+  private static String stalledBatch(int port) throws java.io.IOException {
     try (java.net.Socket socket = new java.net.Socket("127.0.0.1", port)) {
       socket.setSoTimeout(3_000);
       var out = socket.getOutputStream();
@@ -237,17 +274,34 @@ class RateLimitApiTest {
                   + "{\"transactions\":[{},{},{}")
               .getBytes(java.nio.charset.StandardCharsets.US_ASCII));
       out.flush();
-      long start = System.nanoTime();
-      String status =
-          new java.io.BufferedReader(
-                  new java.io.InputStreamReader(
-                      socket.getInputStream(), java.nio.charset.StandardCharsets.US_ASCII))
-              .readLine();
-      assertThat(status)
-          .as("answered while the body was still arriving")
-          .isEqualTo("HTTP/1.1 429 ");
-      assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofSeconds(3));
+      return new java.io.BufferedReader(
+              new java.io.InputStreamReader(
+                  socket.getInputStream(), java.nio.charset.StandardCharsets.US_ASCII))
+          .readLine();
+    } catch (java.net.SocketTimeoutException admittedAndWaitingForItsBody) {
+      return null;
     }
+  }
+
+  @Test
+  void batchesRefusedAtTheirSecondChargeAreToldWhenTheWholeBatchWillFit() throws Exception {
+    // Review 9 (2026-09-24): the admission unit is kept on a refusal, so Retry-After must cover the
+    // whole batch; a client that waits exactly that long is then accepted.
+    String key = ApiHarness.BUDGET_KEY_EIGHT;
+    assertThat(batch(key, BURST - 5).statusCode()).isEqualTo(202);
+    HttpResponse<String> refused = batch(key, 20);
+    assertThat(refused.statusCode()).isEqualTo(429);
+    int remaining = remaining(refused);
+    int retryAfter = Integer.parseInt(refused.headers().firstValue("Retry-After").orElseThrow());
+    assertThat(retryAfter)
+        .as("the wait for all 20 units from %d, at %d per second", remaining, LIMIT)
+        .isGreaterThanOrEqualTo((int) Math.ceil((20.0 - remaining) / LIMIT));
+    assertThat(JSON.readTree(refused.body()).get("detail").asString())
+        .contains("costs 20 transactions");
+    Thread.sleep(Duration.ofSeconds(retryAfter));
+    assertThat(batch(key, 20).statusCode())
+        .as("a client that honours Retry-After is accepted")
+        .isEqualTo(202);
   }
 
   @Test
@@ -274,6 +328,8 @@ class RateLimitApiTest {
         .isEqualTo(422);
     HttpResponse<String> valid = batch(key, 10);
     assertThat(valid.statusCode()).isEqualTo(202);
+    HttpResponse<String> two = batch(key, 2);
+    assertThat(two.statusCode()).isEqualTo(202);
     double seconds = (System.nanoTime() - start) / 1e9;
     int refill = (int) Math.ceil(LIMIT * seconds);
     assertThat(remaining(first))
@@ -285,6 +341,9 @@ class RateLimitApiTest {
     assertThat(remaining(valid))
         .as("a valid batch of ten costs ten units, one on admission and nine more")
         .isBetween(BURST - 12, BURST - 12 + refill);
+    assertThat(remaining(two))
+        .as("a batch of two costs two units")
+        .isBetween(BURST - 14, BURST - 14 + refill);
   }
 
   private static int remaining(HttpResponse<String> response) {
@@ -326,6 +385,17 @@ class RateLimitApiTest {
           .isTrue();
     } finally {
       ApiHarness.REDIS.unpause();
+      // Leave the limiter on Redis for the next test: for a second after a failure the fallback
+      // answers, with a fresh local bucket, and a test that started inside that window would see
+      // two bursts (it did, on CI, 2026-09-24).
+      await()
+          .atMost(Duration.ofSeconds(15))
+          .until(
+              () ->
+                  get("/api/v1/decisions/" + UUID.randomUUID(), ApiHarness.KEY)
+                      .headers()
+                      .firstValue(RateLimitFilter.DEGRADED_HEADER)
+                      .isEmpty());
     }
   }
 

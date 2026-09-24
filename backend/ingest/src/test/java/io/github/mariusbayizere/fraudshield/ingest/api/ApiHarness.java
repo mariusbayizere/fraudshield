@@ -79,6 +79,9 @@ public final class ApiHarness {
   /** A seventh key with its own budget, for what refused and invalid batches cost. */
   public static final String BUDGET_KEY_SEVEN = "fsk_test_jjjjjjjjjjjj_" + "h".repeat(43);
 
+  /** An eighth key with its own budget, for a batch refused at its second charge. */
+  public static final String BUDGET_KEY_EIGHT = "fsk_test_kkkkkkkkkkkk_" + "i".repeat(43);
+
   /**
    * The {@code api_keys} row ids of the budget keys: fixed, and inserted, because a batch job
    * references its key's row.
@@ -91,7 +94,8 @@ public final class ApiHarness {
           BUDGET_KEY_FOUR, UUID.fromString("6c1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a04"),
           BUDGET_KEY_FIVE, UUID.fromString("6c1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a05"),
           BUDGET_KEY_SIX, UUID.fromString("6c1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a06"),
-          BUDGET_KEY_SEVEN, UUID.fromString("6c1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a07"));
+          BUDGET_KEY_SEVEN, UUID.fromString("6c1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a07"),
+          BUDGET_KEY_EIGHT, UUID.fromString("6c1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a08"));
 
   /** The api_keys row id of {@link #KEY}. */
   public static final UUID KEY_ID = UUID.fromString("5b1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a5b");
@@ -241,20 +245,24 @@ public final class ApiHarness {
     @Bean
     ApiKeyAuthenticator apiKeys() {
       Map<String, ApiPrincipal> keys =
-          Map.of(
-              KEY, new ApiPrincipal(KEY_ID, Fixtures.INSTITUTION, Set.of(ApiScope.values())),
-              ROTATED_KEY,
-                  new ApiPrincipal(KEY_ID, Fixtures.INSTITUTION, Set.of(ApiScope.values())),
-              READ_ONLY_KEY,
+          Map.ofEntries(
+              Map.entry(
+                  KEY, new ApiPrincipal(KEY_ID, Fixtures.INSTITUTION, Set.of(ApiScope.values()))),
+              Map.entry(
+                  ROTATED_KEY,
+                  new ApiPrincipal(KEY_ID, Fixtures.INSTITUTION, Set.of(ApiScope.values()))),
+              Map.entry(
+                  READ_ONLY_KEY,
                   new ApiPrincipal(
-                      UUID.randomUUID(), Fixtures.INSTITUTION, Set.of(ApiScope.DECISIONS_READ)),
-              BUDGET_KEY_ONE, budget(BUDGET_KEY_ONE),
-              BUDGET_KEY_TWO, budget(BUDGET_KEY_TWO),
-              BUDGET_KEY_THREE, budget(BUDGET_KEY_THREE),
-              BUDGET_KEY_FOUR, budget(BUDGET_KEY_FOUR),
-              BUDGET_KEY_FIVE, budget(BUDGET_KEY_FIVE),
-              BUDGET_KEY_SIX, budget(BUDGET_KEY_SIX),
-              BUDGET_KEY_SEVEN, budget(BUDGET_KEY_SEVEN));
+                      UUID.randomUUID(), Fixtures.INSTITUTION, Set.of(ApiScope.DECISIONS_READ))),
+              Map.entry(BUDGET_KEY_ONE, budget(BUDGET_KEY_ONE)),
+              Map.entry(BUDGET_KEY_TWO, budget(BUDGET_KEY_TWO)),
+              Map.entry(BUDGET_KEY_THREE, budget(BUDGET_KEY_THREE)),
+              Map.entry(BUDGET_KEY_FOUR, budget(BUDGET_KEY_FOUR)),
+              Map.entry(BUDGET_KEY_FIVE, budget(BUDGET_KEY_FIVE)),
+              Map.entry(BUDGET_KEY_SIX, budget(BUDGET_KEY_SIX)),
+              Map.entry(BUDGET_KEY_SEVEN, budget(BUDGET_KEY_SEVEN)),
+              Map.entry(BUDGET_KEY_EIGHT, budget(BUDGET_KEY_EIGHT)));
       return raw -> Optional.ofNullable(raw == null ? null : keys.get(raw));
     }
 

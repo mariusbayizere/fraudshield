@@ -22,10 +22,13 @@ a requirement's job: no document says it is right and nothing fails if it is wro
 ## Decision
 
 1. **The budget is counted in transactions** (ADR 0100 point 1). A request for one transaction costs
-   one unit. A batch costs its item count, **charged once, when the batch is accepted, and all or
-   nothing**: if fewer units remain than the batch holds, nothing is taken, the whole batch is
-   refused with 429 and `Retry-After`, and no job is recorded. A partially accepted batch would give
-   the caller per-item outcomes `JobAccepted` cannot express.
+   one unit. A batch costs its item count, **charged in two steps and accepted all or nothing**:
+   one admission unit before its body is read (point 2), then the rest once its size is known. If
+   fewer units remain than the rest, the rest is not taken, the whole batch is refused with 429 and
+   `Retry-After`, and no job is recorded; the admission unit is kept, as it is for any refused
+   request, so a refused batch costs one unit and an accepted batch exactly its item count. A
+   partially accepted batch would give the caller per-item outcomes `JobAccepted` cannot
+   express.
 2. **Where the charge is taken.** The rate-limit filter charges one unit for every request on the
    machine paths, the batch submission included, **before the body is read**: a key over its budget
    is refused with 429 without the server reading or parsing anything. A batch's item count is known
@@ -50,9 +53,11 @@ a requirement's job: no document says it is right and nothing fails if it is wro
    refuses to start with such a configuration.
 5. **Idempotent replays consume budget** (ADR 0100 point 4): the filter charges before the
    idempotency check, so resending one transaction is not a way around the budget.
-6. **`Retry-After`** is the whole number of seconds until enough units have refilled for the refused
-   charge, floored at one (ADR 0100 point 5). `RateLimit-Remaining` on a refusal reports what is
-   still there, since a refusal takes nothing.
+6. **`Retry-After`** is the whole number of seconds until enough units have refilled for the request
+   to be accepted if it is sent again, floored at one (ADR 0100 point 5). For a batch refused at its
+   second charge that is the wait for **the whole batch**, since a retry pays admission again, not
+   only for the rest (revised after review 9). `RateLimit-Remaining` on a refusal reports what is
+   left after the admission unit: the refused charge itself takes nothing.
 7. **Outage behaviour is unchanged**: with Redis unavailable each instance charges its own bucket in
    the same units, marked `RateLimit-Degraded: true` and counted.
 

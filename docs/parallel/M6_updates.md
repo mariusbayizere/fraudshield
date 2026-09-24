@@ -658,6 +658,37 @@ acceptance, all or nothing, and replace the 200 per second implementation defaul
   Fixed with the admission unit restored in the filter; new tests for the stalled body, for what
   refused, invalid and valid batches cost, and for the configuration (`RateLimitConfigurationTest`);
   the reviewer's defect and a batch charged one unit each fail the new tests.
+- **Review 9** (fresh reviewer, 2026-09-24): CHANGES_REQUIRED, 2 MAJOR, both in the round-8 fix:
+  the stalled-body test passed only if the host answered within one refill (200 ms), and a batch
+  refused at its second charge kept its admission unit while its `Retry-After` covered one unit too
+  few, contrary to ADR 0058. Record: `docs/reviews/M6/m6-decision-2026-09-24-ninth.md`. Fixed:
+  `RateLimitFilterTest` proves deterministically that an over-budget request is refused before its
+  body is read, on every machine path; the API test opens ten stalled requests and allows for
+  refill; `Retry-After` for a batch refused at its second charge covers the whole batch, tested by a
+  client that waits exactly that long and is accepted; a two-item batch is now tested; ADR 0058
+  points 1 and 6 say what a refused batch costs.
+- **CI on `2f92169` failed** (`ci` #343, java job): `batchCallersCannotExceedTheTransactionBudget`
+  accepted 1,800 transactions against a bound of 1,021. The Redis-down test had run just before;
+  for a second after a Redis failure the limiter answers from its per-instance fallback with a
+  fresh bucket, so the key spent 900 there and 900 more once Redis answered again: the documented
+  outage trade-off (ADR 0058 point 7), and a test-isolation defect. The Redis-down test now waits
+  until answers are no longer degraded, and the budget test fails loudly if any answer it counts
+  was degraded.
+- **Open, found while verifying this round (2026-09-24), not fixed here:** on a heavily loaded
+  host (load ~10), `ResilienceApiTest.tenThousandDuplicatesAreScoredOnceAndAnsweredIdentically`
+  got a 500. The log shows the host starving both stores: PostgreSQL connections timing out on
+  socket reads, then the pool exhausted (20 active, 25 waiting). With Redis failing, or its degraded
+  window open, `ResilientIdempotency.claim` falls back to `JdbcIdempotency.claim`
+  (`ResilientIdempotency.java:72`), whose `IllegalStateException("idempotency is unavailable")` is
+  not caught and reaches the client as **500 rather than a retryable 503**. Nothing was accepted, so
+  no money or data is at risk; the answer is only the wrong status. It is not caused by the
+  rate-limit change, CI's runs of this test are green, and fixing it would widen a round already
+  under review, so it is recorded for the owner: when both idempotency stores are unavailable,
+  answer 503 `service-unavailable` with `Retry-After`.
+- Local `./mvnw -pl ingest verify` on this round's tree (load 10–13): 100 tests, the rate-limit
+  suites all green (`RateLimitApiTest` 8, `TransactionBudgetTest` 6, `RateLimitFilterTest` 2,
+  `RetryAfterTest` 1, `RateLimitConfigurationTest` 3, `ResilienceApiTest` 5); the one error is
+  FR-01-06's thirty-second batch under load, carried as PB-74. CI is the authority.
 - This is a code change, so it needs an independent review before M6 merges (owner's rule). M6 is
   **not** ready again until that review is clean and CI (with the stack job executed) is green on
   the head that carries it.
