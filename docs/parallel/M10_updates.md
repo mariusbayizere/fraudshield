@@ -107,3 +107,82 @@ journey has been run, and no number of any kind is recorded on this branch. Ever
 sits in the model deployment gate with milestone M5 and defect D-16, and ADR 0035 carries it to
 M10. The plan cites it as that row, so the reference is unambiguous whichever milestone the owner
 files it under.
+
+## Owner decisions, 2026-09-24
+
+### 1. The `PB-73` collision is resolved: M6's allocation stands
+
+**M6 keeps `PB-73`** — the carried end-to-end decision latency measurement — because ADR 0059
+already cites it and M6's settled traceability rows already point at it. `PB-74` (the batch row) is
+M6's and unaffected.
+
+**M5's item is renumbered to `PB-75`:** "tools/bin/gitleaks-selftest fails intermittently on
+generated secrets", owner M9, proposed in `docs/parallel/M5_updates.md` §21 with its own detail and
+acceptance criterion. `PB-75` is the next identifier free on every branch read on 2026-09-24
+(`docs/backlog/product.md` ends at `PB-68`; `PB-69` to `PB-72` are proposals in the M5, M6 and M10
+updates files; `PB-73` and `PB-74` are M6's). Whoever integrates the backlog should take M5's §21
+entry across under the new number; M10 does not edit `docs/backlog/` or `M5_updates.md`.
+
+### 2. Identifiers are claimed in the updates files, not guessed from the backlog
+
+The collision was not a mistake by either milestone: both took "the next free identifier" from a
+backlog file that neither could see the other editing, because parallel branches do not share
+`docs/backlog/`. The same shape will recur for every kind of identifier M11 through M12 allocate.
+
+**The convention, from the owner:** claim identifiers the way migration ranges are already claimed
+— write the claim into `docs/parallel/<milestone>_updates.md` **before** using it, and read the
+other milestones' updates files before choosing. `docs/parallel/M6_updates.md` already does this
+for ADRs (`0060`–`0069`) and Flyway versions (`V60`–`V69`), and that section is the model. A claim
+costs one line and is visible on every branch that fetches; "next free" is only ever true on the
+branch that asks.
+
+Claimed by M10 on 2026-09-24: **ADR `0100`–`0109`** (`0100` and `0101` used), and backlog
+identifier **`PB-75`** assigned to M5's renumbered item above, so that the number is not taken
+twice while the backlog file is still unedited.
+
+### 3. The ingest rate limit: ADR 0100
+
+A specification gap rather than an M10 problem. `docs/adr/0100-an-assumed-ingest-rate-limit.md`
+proposes a budget derived from the specified system throughput and M6's per-key token bucket,
+marked **ASSUMED** with its reasoning, and records the defect it uncovered: the budget is counted
+in requests, and the batch endpoint accepts up to a thousand transactions per request, so the limit
+protects the request path rather than the capacity the load costs. Flagged to M6 as the implementer
+and to M11 for the limitations. Until the owner accepts it, the campaign records refusals as
+observations, not as pass or fail, and excludes them from the error-rate row.
+
+### 4. The Google sign-in leg is recorded as untested
+
+`docs/benchmarks/m10_plan.md` §5 now lists the paths the campaign will not exercise, and the OAuth
+leg heads it: the endpoint exists, the button does not, journey 1 stays on email and password, and
+the verification report must say the leg was **not exercised** rather than implying it passed.
+Raised with M8 in `docs/parallel/M8_updates.md`, together with the selectors the journeys need.
+
+### 5. Prerequisites filed with their acceptance criteria
+
+`docs/adr/0101-prerequisites-for-the-chaos-and-benchmark-campaign.md` records how M10 conducts
+itself: prove each harness can fail before any measured row, record the machine before the first
+measurement, install the chaos controller outside the application namespace, and record a case
+whose target does not exist as not run rather than approximating it.
+
+The items belonging to other milestones are written into their files, not decided for them:
+
+| Filed in | Item | Acceptance criterion M10 needs |
+|---|---|---|
+| `M9_updates.md` | Data-store manifests carrying `fraudshield.io/datastore`, plus the operator's primary-role label | Chaos cases 02, 03 and 04 select real pods instead of reporting success against nothing |
+| `M9_updates.md` | Chaos Mesh in its own namespace with a NetworkPolicy allowing it to act | The controller can disturb `fraudshield` pods under restricted pod security and default-deny networking |
+| `M8_updates.md` | A Google sign-in control, the journey screens, and a stable per-alert handle | Journey 3 can prove the escalation that arrived is the one that was sent |
+| `M6_updates.md` | ADR 0100's rate limit, counted in transactions | A `429` during the campaign can be classified |
+| `M11_updates.md` | The rate limit as an assumed parameter | The paper states it as a modelling choice or not at all |
+
+### 6. Merge notes
+
+* `docs/parallel/M8_updates.md` is created here because M8's own copy lives on `m8/frontend` and
+  this branch needs a place on `main` to leave findings. At merge, M8's file wins and this
+  section is appended to it.
+* `docs/parallel/M11_updates.md` and `docs/parallel/M6_updates.md` are appended to on this branch
+  and are also being appended to on `m11/paper` and `m6/decision`; expect a conflict at the end of
+  each file, resolved by keeping both sections.
+* `main`'s copy of `M6_updates.md` is an older snapshot than `m6/decision`'s; the section added
+  here is written to make sense against either.
+
+**M10 does not run** until M6, M7, M8 and M9 are on `main` and the owner has decided the hardware.
