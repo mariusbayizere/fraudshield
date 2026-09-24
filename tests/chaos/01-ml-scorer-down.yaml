@@ -1,0 +1,89 @@
+# C.4 case 1 — ML scorer down.
+#
+# NOT YET EXECUTED — requires the integrated system and dedicated hardware (ADR 0010).
+#
+# Specification (C.4): "ML scorer down -> Resilience4j circuit opens within 5 s -> rule-based
+# fallback engine (versioned, tested) decides, ml_unavailable_fallback=true, label ML_UNAVAILABLE
+# -> a replay job re-scores fallback transactions after recovery and flags disagreements for
+# analyst review."
+#
+# Acceptance conditions (NFR-REL-01): the fallback activates within the specified window;
+# transactions continue to be decided and carry the ML_UNAVAILABLE label; after the scorer
+# returns, the backlog is caught up inside the specified recovery window.
+#
+# What the campaign records while this runs: the decision stream (every decision must carry
+# ml_unavailable_fallback true for the outage window), the circuit-breaker state metric, the
+# decision error rate (which must stay at its steady-state value: a fallback that fails closed is
+# a failure of this case), and, after recovery, the replay job's disagreement list.
+#
+# Two experiments, run in this order. The first removes the scorer's pods while the Deployment
+# replaces them: that is the kill the requirement describes. The second holds every scorer pod
+# unschedulable for a fixed window, which is the case the first cannot produce - a scorer that is
+# gone long enough for the replay backlog to matter.
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: ml-scorer-pod-kill
+  namespace: fraudshield
+  annotations:
+    fraudshield.io/case: "C.4 ML scorer down"
+    fraudshield.io/requirement: "NFR-REL-01"
+    fraudshield.io/executed: "never"
+spec:
+  action: pod-kill
+  mode: all
+  selector:
+    namespaces: [fraudshield]
+    labelSelectors:
+      app.kubernetes.io/name: fraudshield-ml
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: ml-scorer-unavailable
+  namespace: fraudshield
+  annotations:
+    fraudshield.io/case: "C.4 ML scorer down (sustained)"
+    fraudshield.io/requirement: "NFR-REL-01"
+    fraudshield.io/executed: "never"
+spec:
+  # pod-failure replaces the container with a pause image for the duration, so the pods stay
+  # scheduled and the Deployment does not fight the experiment.
+  action: pod-failure
+  mode: all
+  # Long enough that the fallback decides a meaningful number of transactions at the campaign's
+  # load, and that the replay job has a backlog to clear. The campaign's plan states the value it
+  # ran with; this is the starting point, not a measured result.
+  duration: 5m
+  selector:
+    namespaces: [fraudshield]
+    labelSelectors:
+      app.kubernetes.io/name: fraudshield-ml
+---
+# The same outage seen from the other side: the scorer is up, but the API cannot reach it. A
+# circuit breaker that opens on connection refusal and not on a black hole is a breaker that will
+# not open in the outage operators actually get.
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: ml-scorer-partitioned-from-api
+  namespace: fraudshield
+  annotations:
+    fraudshield.io/case: "C.4 ML scorer down (unreachable rather than dead)"
+    fraudshield.io/requirement: "NFR-REL-01"
+    fraudshield.io/executed: "never"
+spec:
+  action: partition
+  mode: all
+  direction: both
+  duration: 5m
+  selector:
+    namespaces: [fraudshield]
+    labelSelectors:
+      app.kubernetes.io/name: fraudshield-api
+  target:
+    mode: all
+    selector:
+      namespaces: [fraudshield]
+      labelSelectors:
+        app.kubernetes.io/name: fraudshield-ml

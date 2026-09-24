@@ -1,0 +1,78 @@
+# C.4 case 2 — Kafka down, the API spools.
+#
+# NOT YET EXECUTED — requires the integrated system and dedicated hardware (ADR 0010).
+#
+# Specification (C.4): "Kafka down -> spool." D-15 sets what that has to mean: an idempotent
+# producer with acks=all and a bounded local disk spool, appended and fsynced in batches, replayed
+# in order on recovery, with an in-memory buffer only in front of the spool. D-15's own acceptance
+# condition is a chaos test that kills both Kafka and the API pod and proves zero loss by
+# transaction_id reconciliation; the pod half is case 06, and this file is the Kafka half.
+#
+# Acceptance conditions (NFR-REL-02): the producer retries with backoff, the spool absorbs the
+# outage, Kafka's return resumes production inside the specified recovery window, buffered
+# transactions are replayed in order, and no transaction is lost.
+#
+# Reconciliation (the only thing that decides this case): every transaction_id for which the load
+# generator received a decision must appear in fs.transactions.scored and in TimescaleDB after
+# recovery. A missing id fails the case. Ordering is checked per key, which is the only ordering
+# Kafka promises and the only one the consumer relies on.
+#
+# Prerequisite: Kafka has no manifest in this repository yet. M9 fixes the selector contract as
+# fraudshield.io/datastore, which is what this file targets; until Kafka ships with that label the
+# experiment selects nothing, and a chaos experiment that selects nothing looks exactly like a
+# system that survived.
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: kafka-brokers-down
+  namespace: fraudshield
+  annotations:
+    fraudshield.io/case: "C.4 Kafka down"
+    fraudshield.io/requirement: "NFR-REL-02, D-15"
+    fraudshield.io/executed: "never"
+spec:
+  action: pod-failure
+  mode: all
+  # Longer than the producer's total retry budget, so the spool is exercised rather than the
+  # retry loop. The campaign holds it until the spool has taken a substantial share of its
+  # capacity, and records the share it reached.
+  duration: 10m
+  selector:
+    namespaces: [fraudshield]
+    labelSelectors:
+      fraudshield.io/datastore: kafka
+---
+# A partial outage rather than a clean one: the brokers answer slowly and drop some traffic. This
+# is the case that distinguishes a producer that times out and spools from one that blocks its
+# caller and turns a durability problem into a latency incident.
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: kafka-degraded-from-api
+  namespace: fraudshield
+  annotations:
+    fraudshield.io/case: "C.4 Kafka down (degraded rather than absent)"
+    fraudshield.io/requirement: "NFR-REL-02, D-13"
+    fraudshield.io/executed: "never"
+spec:
+  action: delay
+  mode: all
+  direction: to
+  duration: 5m
+  delay:
+    latency: "800ms"
+    jitter: "400ms"
+    correlation: "50"
+  loss:
+    loss: "10"
+    correlation: "25"
+  selector:
+    namespaces: [fraudshield]
+    labelSelectors:
+      app.kubernetes.io/name: fraudshield-api
+  target:
+    mode: all
+    selector:
+      namespaces: [fraudshield]
+      labelSelectors:
+        fraudshield.io/datastore: kafka

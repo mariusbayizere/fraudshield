@@ -1,0 +1,71 @@
+# ADR 0090's chaos case, assigned to M10 by the ADR itself.
+#
+# NOT YET EXECUTED — requires the integrated system and dedicated hardware (ADR 0010).
+#
+# ADR 0090 point 5, verbatim in its acceptance shape: with traffic flowing, stop Kafka, let the
+# spools fill, delete an API pod (not only kill its container), restore Kafka, and prove zero loss
+# by reconciling every transaction_id the load generator received a decision for against
+# fs.transactions.scored and TimescaleDB. Any missing transaction_id fails the test.
+#
+# This is also the half of D-15's acceptance condition that case 02 does not cover: D-15 requires
+# killing both Kafka and the API pod, because a spool on a volume that dies with its pod would
+# pass the Kafka-only case and lose data here.
+#
+# Run it as a sequence, in this order, with the load generator running throughout:
+#   1. apply 02-kafka-down-spool.yaml (kafka-brokers-down) and wait until the spool has filled to
+#      the share the campaign plan states;
+#   2. apply this file, which removes one API pod outright;
+#   3. remove the Kafka experiment and let the surviving pods replay;
+#   4. reconcile, and record the orphaned spool's replay from the metric ADR 0090 defines.
+#
+# The delete matters: the pod must go away, so that its spool is an orphan on the shared volume
+# and recovery depends on another pod adopting it. A container restart leaves the same pod to
+# finish its own work and tests nothing about the contract.
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: api-pod-deleted-with-full-spool
+  namespace: fraudshield
+  annotations:
+    fraudshield.io/case: "ADR 0090 orphan spool replay"
+    fraudshield.io/requirement: "D-15, NFR-REL-02"
+    fraudshield.io/executed: "never"
+spec:
+  action: pod-kill
+  mode: one
+  # Chaos Mesh deletes the pod object; the Deployment schedules a replacement, which is the
+  # situation the ADR describes. gracePeriod 0 removes the drain the API would otherwise perform,
+  # so the spool is left behind rather than flushed on the way out.
+  gracePeriod: 0
+  selector:
+    namespaces: [fraudshield]
+    labelSelectors:
+      app.kubernetes.io/name: fraudshield-api
+---
+# The storage-side variant of the same contract: the volume is present but slow to fsync. D-15
+# specifies batched fsync every few milliseconds, and ADR 0090 makes the spool append budget a
+# measurement M10 owes. A spool whose append blocks the decision path under storage pressure would
+# breach the decision budget rather than lose data, and the two failures need telling apart.
+apiVersion: chaos-mesh.org/v1alpha1
+kind: IOChaos
+metadata:
+  name: api-spool-volume-slow
+  namespace: fraudshield
+  annotations:
+    fraudshield.io/case: "ADR 0090 spool append under storage pressure"
+    fraudshield.io/requirement: "D-15, D-13"
+    fraudshield.io/executed: "never"
+spec:
+  action: latency
+  mode: all
+  duration: 3m
+  # The spool's mount inside the API container (FRAUDSHIELD_SPOOL_DIR in the M9 manifests).
+  volumePath: /var/lib/fraudshield/spool
+  path: "/var/lib/fraudshield/spool/**"
+  delay: "20ms"
+  percent: 50
+  methods: [write, fsync]
+  selector:
+    namespaces: [fraudshield]
+    labelSelectors:
+      app.kubernetes.io/name: fraudshield-api

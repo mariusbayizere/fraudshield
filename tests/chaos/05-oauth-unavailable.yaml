@@ -1,0 +1,70 @@
+# C.4 case 5 — Google OAuth down.
+#
+# NOT YET EXECUTED — requires the integrated system and dedicated hardware (ADR 0010).
+#
+# Specification (C.4): "Google OAuth down -> email/password unaffected, button shows 'Temporarily
+# unavailable'."
+#
+# Acceptance conditions (NFR-REL-06, D-51): email and password authentication continues, the
+# Google button reports itself unavailable, there is no system downtime, and OAuth-only users are
+# offered a password path by email.
+#
+# This is the one C.4 case whose dependency is outside the cluster, so it is injected as egress
+# loss rather than as a pod fault: the API's own egress rule allows external TCP 443, and this
+# experiment closes that route to Google's endpoints while leaving every internal flow alone. The
+# console side of the case (the button's state) is asserted by the Playwright journey, not here.
+#
+# The address list is the observable part of the dependency: the token endpoint and the JWKS the
+# API verifies with. Resolve them at campaign time and record what was blocked, because an
+# experiment that blocks a stale address proves nothing.
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: google-oauth-unreachable
+  namespace: fraudshield
+  annotations:
+    fraudshield.io/case: "C.4 Google OAuth down"
+    fraudshield.io/requirement: "NFR-REL-06, D-51"
+    fraudshield.io/executed: "never"
+spec:
+  action: partition
+  mode: all
+  direction: to
+  duration: 10m
+  selector:
+    namespaces: [fraudshield]
+    labelSelectors:
+      app.kubernetes.io/name: fraudshield-api
+  externalTargets:
+    - oauth2.googleapis.com
+    - www.googleapis.com
+    - accounts.google.com
+---
+# The harder half of the same case: the dependency answers, slowly, instead of vanishing. A
+# verifier that waits on a hanging JWKS fetch inside a request thread turns one unavailable
+# dependency into an unavailable login path for everyone, which is exactly what the requirement
+# says must not happen.
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: google-oauth-slow
+  namespace: fraudshield
+  annotations:
+    fraudshield.io/case: "C.4 Google OAuth down (slow, not absent)"
+    fraudshield.io/requirement: "NFR-REL-06, D-51"
+    fraudshield.io/executed: "never"
+spec:
+  action: delay
+  mode: all
+  direction: to
+  duration: 10m
+  delay:
+    latency: "30s"
+  selector:
+    namespaces: [fraudshield]
+    labelSelectors:
+      app.kubernetes.io/name: fraudshield-api
+  externalTargets:
+    - oauth2.googleapis.com
+    - www.googleapis.com
+    - accounts.google.com

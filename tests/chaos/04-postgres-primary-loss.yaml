@@ -1,0 +1,72 @@
+# C.4 case 4 — PostgreSQL primary loss.
+#
+# NOT YET EXECUTED — requires the integrated system and dedicated hardware (ADR 0010).
+#
+# Specification (C.4): "PostgreSQL primary loss -> replica promotion; writes queue in Kafka."
+#
+# Acceptance conditions (NFR-REL-04, D-49): the replica is promoted inside the specified window by
+# the operator, the write pause is brief and bounded, failover is automatic, and a synchronous
+# replica means no committed write is lost.
+#
+# What the campaign records: the promotion timestamps from the operator's own events; the write
+# pause as seen by the API (not by the database), because the requirement is about the system's
+# behaviour and the client is where the pause is felt; the decision error rate through the window;
+# and a reconciliation afterwards of every decided transaction_id against the promoted primary.
+# Zero loss is asserted against committed writes, so the reconciliation set is the decisions the
+# API returned, not the rows the old primary happened to hold.
+#
+# Prerequisites: PostgreSQL and TimescaleDB have no manifest in this repository yet, and D-49
+# names CloudNativePG as the operator. Deleting the primary pod is only a faithful test of
+# failover when an operator is watching it; without one this experiment measures how long a
+# Deployment takes to restart a database, which is a different question.
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: postgres-primary-loss
+  namespace: fraudshield
+  annotations:
+    fraudshield.io/case: "C.4 PostgreSQL primary loss"
+    fraudshield.io/requirement: "NFR-REL-04, D-49"
+    fraudshield.io/executed: "never"
+spec:
+  action: pod-kill
+  # The primary only. The operator labels its current primary; selecting every database pod would
+  # destroy the replica that the case exists to promote.
+  mode: one
+  selector:
+    namespaces: [fraudshield]
+    labelSelectors:
+      fraudshield.io/datastore: postgresql
+      # CloudNativePG marks the pod currently serving writes; confirm the key when the data-store
+      # manifests land, and fix this selector to whatever the deployed operator actually sets.
+      cnpg.io/instanceRole: primary
+---
+# The primary alive but cut off from the application, which is the split-brain-adjacent case the
+# pod kill cannot produce: the operator must still decide, and the application must not write to
+# two primaries. A promotion that happens here while the old primary keeps accepting writes fails
+# the case whatever the timings say.
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: postgres-primary-partitioned
+  namespace: fraudshield
+  annotations:
+    fraudshield.io/case: "C.4 PostgreSQL primary loss (partition, not crash)"
+    fraudshield.io/requirement: "NFR-REL-04, D-49"
+    fraudshield.io/executed: "never"
+spec:
+  action: partition
+  mode: one
+  direction: both
+  duration: 3m
+  selector:
+    namespaces: [fraudshield]
+    labelSelectors:
+      fraudshield.io/datastore: postgresql
+      cnpg.io/instanceRole: primary
+  target:
+    mode: all
+    selector:
+      namespaces: [fraudshield]
+      labelSelectors:
+        app.kubernetes.io/name: fraudshield-api
