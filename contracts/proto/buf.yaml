@@ -1,0 +1,17 @@
+# buf configuration for the scoring contract (ADR 0016). Lint uses the STANDARD rules. Breaking-change
+# detection uses FILE, the strictest category, except that a field or enum value may be removed when
+# both its number and its name are reserved (the rule in ADR 0012).
+version: v2
+lint:
+  use:
+    - STANDARD
+breaking:
+  use:
+    - FILE
+    - FIELD_NO_DELETE_UNLESS_NUMBER_RESERVED
+    - FIELD_NO_DELETE_UNLESS_NAME_RESERVED
+    - ENUM_VALUE_NO_DELETE_UNLESS_NUMBER_RESERVED
+    - ENUM_VALUE_NO_DELETE_UNLESS_NAME_RESERVED
+  except:
+    - FIELD_NO_DELETE
+    - ENUM_VALUE_NO_DELETE

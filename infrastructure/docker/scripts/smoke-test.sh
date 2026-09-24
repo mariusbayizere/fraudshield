@@ -15,6 +15,7 @@ step() {
 # Every failure path goes through fail(), which in GitHub Actions also emits an error
 # annotation, readable through the public API without log access.
 fail() {
+  "$(dirname "$0")/collect-stack-diagnostics.sh" >&2 || true
   echo "smoke test failed in step '${current_step}': $1" >&2
   if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
     echo "::error title=smoke test failed::step '${current_step}': $1"
@@ -87,8 +88,25 @@ printf '%s\n' "$bucket_tree"
 [[ "$bucket_tree" == *smoke.txt* ]] || fail "smoke.txt not found in the mlflow-artifacts bucket"
 echo "artifact present in the object store"
 
+step "memory: no process killed at a container limit; mlflow within budget"
+# A process killed by the cgroup OOM killer leaves the container running (no OOMKilled flag, no
+# restart), so read the kernel's own counters. MLflow previously ran at its limit and failed uploads
+# with HTTP 500 (job execution processes; see docker-compose.yml).
+for service in timescaledb pii-vault redis kafka object-store mlflow mailpit wiremock; do
+  container=$(compose ps -q "$service")
+  kills=$(docker exec "$container" cat /sys/fs/cgroup/memory.events | awk '/^oom_kill / {print $2}')
+  [[ "$kills" == "0" ]] || fail "$service: the kernel killed $kills process(es) at the memory limit"
+done
+mlflow_container=$(compose ps -q mlflow)
+anon=$(docker exec "$mlflow_container" cat /sys/fs/cgroup/memory.stat | awk '/^anon / {print $2}')
+limit=$(docker inspect --format '{{.HostConfig.Memory}}' "$mlflow_container")
+echo "mlflow anonymous memory: $((anon / 1048576)) MiB of $((limit / 1048576)) MiB"
+(( anon * 100 < limit * 60 )) || fail "mlflow uses $((anon * 100 / limit))% of its memory limit (budget 60%)"
+echo "no OOM kills; mlflow within 60% of its limit"
+
 step "mailpit and wiremock ready"
 compose exec -T mailpit /mailpit readyz && echo "mailpit ready"
 compose exec -T wiremock curl -fsS http://127.0.0.1:8080/__admin/health && echo
 
+"$(dirname "$0")/collect-stack-diagnostics.sh"
 step "all smoke checks passed"

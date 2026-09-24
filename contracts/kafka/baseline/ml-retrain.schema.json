@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fraudshield:kafka:ml-retrain",
+  "title": "fs.ml.retrain payload",
+  "type": "object",
+  "required": [
+    "job_id",
+    "state",
+    "progress_percent"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "job_id": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+    },
+    "dataset_id": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "QUEUED",
+        "TRAINING",
+        "EVALUATING",
+        "COMPLETED",
+        "FAILED"
+      ]
+    },
+    "progress_percent": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "candidate_model_version": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 100
+    },
+    "evaluation_passed": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "mlflow_run_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 64
+    },
+    "failure_reason": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 500
+    }
+  }
+}

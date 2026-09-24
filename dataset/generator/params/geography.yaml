@@ -1,0 +1,7 @@
+description: Distribution of customers and transactions across the five EAC markets.
+parameters:
+  country_share:
+    value: {RW: 0.42, KE: 0.28, TZ: 0.15, UG: 0.10, CD: 0.05}
+    unit: fraction of transactions by the customer's home country (ISO 3166-1 alpha-2)
+    provenance: CALIBRATED_TO_SRS_TARGET
+    citation: SRS v1.0 section 7.1, ML-DATA-05 (Rwanda 42%, Kenya 28%, Tanzania 15%, Uganda 10%, DRC 5%)

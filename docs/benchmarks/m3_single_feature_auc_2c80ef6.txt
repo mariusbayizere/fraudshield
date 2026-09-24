@@ -1,0 +1,66 @@
+# M3 exit criteria E3 and E6 — single-feature separation over the 44 engineered features.
+# SUPERSEDES m3_single_feature_auc_fad43dd.txt, which was measured before the milestone review's
+# MAJOR M3-2 fix: five unbounded features were then deriving durable state from the corpus.
+#
+# Command : uv run fs-features auc <dataset> --packs <packs.json> \
+#             --corpus-rows 200000 --sample-rows 20000
+# Commit  : 2c80ef6
+# Dataset : 1,006,249 rows, seed 20260917
+# Result  : FAILED. Five features exceed the D-08 ceiling of 0.80. See PB-46.
+#
+# Against the superseded run, exactly three figures moved, all of them unbounded features:
+#   counterparty_is_new_for_account  0.816 -> 0.851   (truncation had suppressed it)
+#   device_age_days                  0.752 -> 0.743
+#   is_new_country_for_account       0.502 -> 0.501
+# velocity_ratio_1h_vs_30d is UNCHANGED at 0.894, which refutes the review's M3-1 hypothesis that
+# the headline was inflated by the same bias.
+#
+# Raw output follows, unedited.
+single-feature separation: corpus 200000, scored 20000, fraud 166
+  ceiling max(AUC, 1-AUC) <= 0.8 (D-08), folds grouped by account
+  account_age_days                            -- (0 usable rows)
+  accounts_per_device_7d                  0.500 +/-0.047 (144 fraud of 11537 usable)
+  agent_cashout_count_1h                  0.703 +/-0.096 (36 fraud of 2651 usable)
+  agent_distance_from_registered_km           -- (0 usable rows)
+  agent_float_utilisation_ratio               -- (0 usable rows)
+  agent_unique_customers_1h               0.538 +/-0.097 (36 fraud of 2651 usable)
+  amount_log1p                            0.688 +/-0.045 (166 fraud of 20000 usable)
+  amount_sum_24h                          0.776 +/-0.042 (166 fraud of 20000 usable)  (interval reaches the ceiling)
+  amount_sum_7d                           0.623 +/-0.046 (166 fraud of 20000 usable)
+  amount_to_max_90d_ratio                 0.691 +/-0.045 (166 fraud of 19990 usable)
+  amount_zscore_90d                       0.650 +/-0.046 (163 fraud of 19603 usable)
+  channel                                 0.575 +/-0.046 (166 fraud of 20000 usable)  (out-of-fold target encoding, account-grouped)
+  corridor_class                          0.632 +/-0.046 (166 fraud of 20000 usable)  (out-of-fold target encoding, account-grouped)
+  counterparty_account_age_days               -- (0 usable rows)
+  counterparty_confirmed_fraud_90d        0.701 +/-0.045 (166 fraud of 20000 usable)
+  counterparty_is_new_for_account         0.851 +/-0.037 (166 fraud of 20000 usable)  ** OVER THE CEILING **
+  counterparty_unique_senders_24h         0.600 +/-0.046 (166 fraud of 20000 usable)
+  days_since_sim_swap                     0.577 +/-0.177 (11 fraud of 2193 usable)
+  device_age_days                         0.743 +/-0.047 (144 fraud of 11537 usable)
+  device_changes_24h                      0.569 +/-0.049 (144 fraud of 11537 usable)
+  device_is_new_for_account               0.547 +/-0.049 (144 fraud of 11537 usable)
+  distance_from_home_centroid_km          0.543 +/-0.045 (166 fraud of 19990 usable)
+  distance_from_last_tx_km                0.527 +/-0.045 (166 fraud of 19990 usable)
+  dormancy_reactivation_flag              0.500 +/-0.044 (166 fraud of 20000 usable)
+  geo_cell_fraud_rate_30d                 0.508 +/-0.044 (166 fraud of 20000 usable)
+  implied_speed_kmh                       0.812 +/-0.040 (166 fraud of 19990 usable)  ** OVER THE CEILING **
+  is_local_night                          0.621 +/-0.046 (166 fraud of 20000 usable)
+  is_month_end_window                     0.526 +/-0.045 (166 fraud of 20000 usable)
+  is_new_country_for_account              0.501 +/-0.044 (166 fraud of 20000 usable)
+  just_below_limit_flag                   0.500 +/-0.044 (166 fraud of 20000 usable)
+  kyc_tier                                    -- (0 usable rows)
+  local_day_of_week                       0.525 +/-0.045 (166 fraud of 20000 usable)
+  local_hour_cos                          0.551 +/-0.045 (166 fraud of 20000 usable)
+  local_hour_sin                          0.608 +/-0.046 (166 fraud of 20000 usable)
+  round_sum_flag                              -- (0 usable rows)
+  seconds_since_last_tx                   0.811 +/-0.040 (166 fraud of 19990 usable)  ** OVER THE CEILING **
+  synthetic_identity_score                0.759 +/-0.043 (166 fraud of 20000 usable)  (interval reaches the ceiling)
+  tx_count_1h                             0.826 +/-0.039 (166 fraud of 20000 usable)  ** OVER THE CEILING **
+  tx_count_24h                            0.765 +/-0.043 (166 fraud of 20000 usable)  (interval reaches the ceiling)
+  tx_count_60s                            0.533 +/-0.045 (166 fraud of 20000 usable)
+  tx_count_7d                             0.555 +/-0.045 (166 fraud of 20000 usable)
+  tx_count_to_counterparty_30d            0.727 +/-0.044 (166 fraud of 20000 usable)
+  unique_counterparties_24h               0.759 +/-0.043 (166 fraud of 20000 usable)  (interval reaches the ceiling)
+  velocity_ratio_1h_vs_30d                0.894 +/-0.032 (166 fraud of 20000 usable)  ** OVER THE CEILING **
+ERROR over the D-08 ceiling: counterparty_is_new_for_account, implied_speed_kmh, seconds_since_last_tx, tx_count_1h, velocity_ratio_1h_vs_30d
+exit=1

@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+.demo-credentials
 *.pem
 *.key
 *.p12
@@ -55,3 +56,6 @@ test-results/
 build/
 .devcontainer/.post-create-ok
 .devcontainer/post-create.log
+
+# Claude Code session state and agent worktrees; never part of the repository.
+.claude/

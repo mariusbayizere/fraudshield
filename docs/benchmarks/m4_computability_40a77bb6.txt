@@ -1,0 +1,52 @@
+# fs-features computability dataset/output/bench1m --packs <packs.json> --corpus-rows 200000 --sample-rows 20000
+# 2026-09-21, dataset fingerprint 40a77bb66868777f81c2cc72b5d23cf900c41c1d86c2fb84620b2d589b4f42a1
+# 1,006,249 rows at seed 20260917. Produced at commit 49b2bcb, which is the commit that adds
+# this file -- stated as a hash because PB-52 is about the difference between those two claims.
+
+corpus: 200000 transactions from dataset/output/bench1m
+computability: 44 features over 20000 scored rows
+  account_age_days                       NaN 100.0%      0 distinct  [declared NO_SOURCE_DATA]
+  accounts_per_device_7d                 NaN  42.3%      1 distinct  [declared CONSTANT]
+  agent_cashout_count_1h                 NaN  86.7%      5 distinct
+  agent_distance_from_registered_km      NaN 100.0%      0 distinct  [declared NO_SOURCE_DATA]
+  agent_float_utilisation_ratio          NaN 100.0%      0 distinct  [declared NO_SOURCE_DATA]
+  agent_unique_customers_1h              NaN  86.7%      4 distinct
+  amount_log1p                           NaN   0.0%  17634 distinct
+  amount_sum_24h                         NaN   0.0%   7351 distinct
+  amount_sum_7d                          NaN   0.0%  16700 distinct
+  amount_to_max_90d_ratio                NaN   0.0%  19967 distinct
+  amount_zscore_90d                      NaN   2.0%  19598 distinct
+  channel                                NaN   0.0%      6 distinct
+  corridor_class                         NaN   0.0%      2 distinct
+  counterparty_account_age_days          NaN 100.0%      0 distinct  [declared NO_SOURCE_DATA]
+  counterparty_confirmed_fraud_90d       NaN   0.0%     28 distinct
+  counterparty_is_new_for_account        NaN   0.0%      2 distinct
+  counterparty_unique_senders_24h        NaN   0.0%     12 distinct
+  days_since_sim_swap                    NaN  89.0%   2193 distinct
+  device_age_days                        NaN  42.3%  11485 distinct
+  device_changes_24h                     NaN  42.3%      2 distinct
+  device_is_new_for_account              NaN  42.3%      2 distinct
+  distance_from_home_centroid_km         NaN   0.0%  19990 distinct
+  distance_from_last_tx_km               NaN   0.0%  19990 distinct
+  dormancy_reactivation_flag             NaN   0.0%      2 distinct
+  geo_cell_fraud_rate_30d                NaN   0.0%     91 distinct
+  implied_speed_kmh                      NaN   0.0%  19935 distinct
+  is_local_night                         NaN   0.0%      2 distinct
+  is_month_end_window                    NaN   0.0%      2 distinct
+  is_new_country_for_account             NaN   0.0%      2 distinct
+  just_below_limit_flag                  NaN   0.0%      1 distinct  [declared CONSTANT]
+  kyc_tier                               NaN 100.0%      0 distinct  [declared NO_SOURCE_DATA]
+  local_day_of_week                      NaN   0.0%      7 distinct
+  local_hour_cos                         NaN   0.0%     22 distinct
+  local_hour_sin                         NaN   0.0%     22 distinct
+  round_sum_flag                         NaN   0.0%      2 distinct
+  seconds_since_last_tx                  NaN   0.0%  19990 distinct
+  synthetic_identity_score               NaN   0.0%    395 distinct
+  tx_count_1h                            NaN   0.0%     11 distinct
+  tx_count_24h                           NaN   0.0%     14 distinct
+  tx_count_60s                           NaN   0.0%      2 distinct
+  tx_count_7d                            NaN   0.0%     48 distinct
+  tx_count_to_counterparty_30d           NaN   0.0%     31 distinct
+  unique_counterparties_24h              NaN   0.0%     13 distinct
+  velocity_ratio_1h_vs_30d               NaN   0.0%    698 distinct
+OK every feature's computability declaration matches the data

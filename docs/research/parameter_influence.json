@@ -1,0 +1,578 @@
+{
+  "rows": 20000,
+  "seed": 20260917,
+  "step": 0.1,
+  "parameter_values_sha256": "f9dc8d87248fa0afbfe5d26474745e85100b7606e330f85c81037433ea785600",
+  "parameter_count": 81,
+  "share_tolerance": 0.005,
+  "relative_tolerance": 0.01,
+  "parameters": [
+    {
+      "key": "behaviour.remittance_corridors",
+      "score": null,
+      "worst_property": "",
+      "detail": "not numeric; not perturbable",
+      "perturbed": false
+    },
+    {
+      "key": "channels.channel_share",
+      "score": null,
+      "worst_property": "run refused",
+      "detail": "channel preferences could not be fitted to the SRS mix in 200 passes; check channels.channel_share and the segment weights",
+      "perturbed": true
+    },
+    {
+      "key": "currencies.currency_by_country",
+      "score": null,
+      "worst_property": "",
+      "detail": "not numeric; not perturbable",
+      "perturbed": false
+    },
+    {
+      "key": "fraud.fraud_rate_overall",
+      "score": null,
+      "worst_property": "run refused",
+      "detail": "fraud.monthly_intensity gives a test-period rate of 0.01001, more than 0.0002 from the 0.0091 target; adjust the schedule's trend",
+      "perturbed": true
+    },
+    {
+      "key": "fraud.fraud_rate_test",
+      "score": null,
+      "worst_property": "run refused",
+      "detail": "fraud.monthly_intensity gives a test-period rate of 0.00910, more than 0.0002 from the 0.010010000000000002 target; adjust the schedule's trend",
+      "perturbed": true
+    },
+    {
+      "key": "population.segment_share",
+      "score": null,
+      "worst_property": "run refused",
+      "detail": "population.segment_share puts 0.352 of customers in urban segments ('urban_salaried', 'student'), but population.urban_share_of_customers is 0.320",
+      "perturbed": true
+    },
+    {
+      "key": "population.urban_share_of_customers",
+      "score": null,
+      "worst_property": "run refused",
+      "detail": "population.segment_share puts 0.320 of customers in urban segments ('urban_salaried', 'student'), but population.urban_share_of_customers is 0.352",
+      "perturbed": true
+    },
+    {
+      "key": "volume.simulation_months",
+      "score": null,
+      "worst_property": "run refused",
+      "detail": "fraud.monthly_intensity has 24 values for 26 months",
+      "perturbed": true
+    },
+    {
+      "key": "volume.start_month",
+      "score": null,
+      "worst_property": "",
+      "detail": "not numeric; not perturbable",
+      "perturbed": false
+    },
+    {
+      "key": "geography.country_share",
+      "score": 10.288,
+      "worst_property": "counterparties",
+      "detail": "243.00 to 218.00 (10.29%)",
+      "perturbed": true
+    },
+    {
+      "key": "population.mean_transactions_per_active_customer_month",
+      "score": 9.322,
+      "worst_property": "accounts",
+      "detail": "118.00 to 107.00 (9.32%)",
+      "perturbed": true
+    },
+    {
+      "key": "behaviour.amount_mean_rwf",
+      "score": 8.665,
+      "worst_property": "mean_amount_rwf",
+      "detail": "30,855.41 to 33,528.93 (8.66%)",
+      "perturbed": true
+    },
+    {
+      "key": "behaviour.amount_log_sigma",
+      "score": 7.132,
+      "worst_property": "median_amount_rwf",
+      "detail": "11,580.38 to 10,754.48 (7.13%)",
+      "perturbed": true
+    },
+    {
+      "key": "fraud.rows_per_incident",
+      "score": 6.996,
+      "worst_property": "counterparties",
+      "detail": "243.00 to 260.00 (7.00%)",
+      "perturbed": true
+    },
+    {
+      "key": "behaviour.school_fee_months",
+      "score": 2.796,
+      "worst_property": "month:month=2025-10",
+      "detail": "0.0463 to 0.0603 (1.40 pp)",
+      "perturbed": true
+    },
+    {
+      "key": "behaviour.amount_median_rwf",
+      "score": 2.402,
+      "worst_property": "median_amount_rwf",
+      "detail": "11,580.38 to 11,858.50 (2.40%)",
+      "perturbed": true
+    },
+    {
+      "key": "population.activity_log_sigma",
+      "score": 1.819,
+      "worst_property": "median_amount_rwf",
+      "detail": "11,580.38 to 11,791.00 (1.82%)",
+      "perturbed": true
+    },
+    {
+      "key": "volume.monthly_growth_rate",
+      "score": 1.695,
+      "worst_property": "accounts",
+      "detail": "118.00 to 120.00 (1.69%)",
+      "perturbed": true
+    },
+    {
+      "key": "behaviour.school_fee_volume_boost",
+      "score": 0.936,
+      "worst_property": "median_amount_rwf",
+      "detail": "11,580.38 to 11,688.80 (0.94%)",
+      "perturbed": true
+    },
+    {
+      "key": "fraud.burst_minutes",
+      "score": 0.823,
+      "worst_property": "counterparties",
+      "detail": "243.00 to 241.00 (0.82%)",
+      "perturbed": true
+    },
+    {
+      "key": "fraud.drain_to_mule_probability",
+      "score": 0.823,
+      "worst_property": "counterparties",
+      "detail": "243.00 to 241.00 (0.82%)",
+      "perturbed": true
+    },
+    {
+      "key": "behaviour.segment_channel_preference",
+      "score": 0.676,
+      "worst_property": "channel:USSD",
+      "detail": "0.1803 to 0.1769 (0.34 pp)",
+      "perturbed": true
+    },
+    {
+      "key": "behaviour.volume_jitter_log_sigma",
+      "score": 0.567,
+      "worst_property": "median_amount_rwf",
+      "detail": "11,580.38 to 11,646.04 (0.57%)",
+      "perturbed": true
+    },
+    {
+      "key": "fraud.night_probability",
+      "score": 0.412,
+      "worst_property": "counterparties",
+      "detail": "243.00 to 244.00 (0.41%)",
+      "perturbed": true
+    },
+    {
+      "key": "population.customers_per_merchant",
+      "score": 0.412,
+      "worst_property": "counterparties",
+      "detail": "243.00 to 242.00 (0.41%)",
+      "perturbed": true
+    },
+    {
+      "key": "behaviour.night_activity_probability",
+      "score": 0.211,
+      "worst_property": "mean_amount_rwf",
+      "detail": "30,855.41 to 30,790.32 (0.21%)",
+      "perturbed": true
+    },
+    {
+      "key": "behaviour.p2p_share_of_wallet_payments",
+      "score": 0.179,
+      "worst_property": "mean_amount_rwf",
+      "detail": "30,855.41 to 30,800.29 (0.18%)",
+      "perturbed": true
+    },
+    {
+      "key": "fraud.amount_multiplier",
+      "score": 0.169,
+      "worst_property": "mean_amount_rwf",
+      "detail": "30,855.41 to 30,907.71 (0.17%)",
+      "perturbed": true
+    },
+    {
+      "key": "behaviour.cross_border_share",
+      "score": 0.153,
+      "worst_property": "mean_amount_rwf",
+      "detail": "30,855.41 to 30,902.65 (0.15%)",
+      "perturbed": true
+    },
+    {
+      "key": "behaviour.travel_probability",
+      "score": 0.108,
+      "worst_property": "mean_amount_rwf",
+      "detail": "30,855.41 to 30,888.82 (0.11%)",
+      "perturbed": true
+    },
+    {
+      "key": "currencies.rwf_per_unit",
+      "score": 0.065,
+      "worst_property": "median_amount_rwf",
+      "detail": "11,580.38 to 11,572.81 (0.07%)",
+      "perturbed": true
+    },
+    {
+      "key": "fraud.scenario_channel_share",
+      "score": 0.042,
+      "worst_property": "mean_amount_rwf",
+      "detail": "30,855.41 to 30,842.31 (0.04%)",
+      "perturbed": true
+    },
+    {
+      "key": "fraud.adaptation_start_month",
+      "score": 0.032,
+      "worst_property": "median_amount_rwf",
+      "detail": "11,580.38 to 11,576.70 (0.03%)",
+      "perturbed": true
+    },
+    {
+      "key": "behaviour.round_sum_probability",
+      "score": 0.001,
+      "worst_property": "mean_amount_rwf",
+      "detail": "30,855.41 to 30,855.75 (0.00%)",
+      "perturbed": true
+    },
+    {
+      "key": "behaviour.active_hours_local",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "behaviour.agent_hour_sd",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "behaviour.agent_peak_hours",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "behaviour.home_jitter_degrees",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "behaviour.market_day_weight",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "behaviour.merchant_mcc_share",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "behaviour.payday_spend_boost",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "behaviour.payday_window_days",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "behaviour.salary_day_range",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "behaviour.travel_distance_degrees",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "behaviour.wallet_hour_mean_local",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "behaviour.wallet_hour_sd",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "currencies.country_centre",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "currencies.utc_offset_hours",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "fraud.adaptation_band",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "fraud.adaptation_probability",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "fraud.colluding_merchant_fraction",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "fraud.compromised_agent_fraction",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "fraud.monthly_intensity",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "fraud.mule_account_fraction",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "fraud.mule_cross_border_share",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "fraud.new_device_probability",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "fraud.novelty_delay_days",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "fraud.novelty_share_of_sim_swap",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "fraud.rule_amount_threshold_rwf",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "fraud.scenario_share",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "fraud.synthetic_identity_bust_out_months",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "fraud.synthetic_identity_fraction",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "fraud.takeover_lead_minutes",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "fraud.test_rate_tolerance",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "labels.label_delay_log_sigma",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "labels.label_delay_median_hours",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "labels.label_noise_rate",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "population.counterparties_per_customer",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "population.customers_per_agent",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "population.device_change_monthly_probability",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "population.home_spread_degrees",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "population.kyc_tier_share",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "population.legit_sim_swap_monthly_probability",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "population.merchants_per_customer",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "population.min_counterparties",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "split.calibration_fraction_of_validation",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "split.embargo_days",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "split.test_rows",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "split.train_rows",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "split.validation_rows",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    },
+    {
+      "key": "volume.total_rows_target",
+      "score": 0.0,
+      "worst_property": "",
+      "detail": "no change",
+      "perturbed": true
+    }
+  ]
+}

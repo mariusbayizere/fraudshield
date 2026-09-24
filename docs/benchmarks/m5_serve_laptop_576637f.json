@@ -1,0 +1,45 @@
+{
+  "machine": {
+    "host": "marius-HP-Pavilion-x360-Convertible",
+    "cpus": 4,
+    "load_average": [
+      3.81,
+      5.02,
+      6.22
+    ],
+    "python": "3.12.14",
+    "commit": "576637f10e1b0be5a4406cd6f778b5a1a756003a",
+    "tree_dirty": false,
+    "caveat": "NOT GATE EVIDENCE unless run on the dedicated machine in docs/benchmarks/hardware.md (ADR 0010); a shared machine's percentiles are not repeatable",
+    "load_average_after": [
+      4.57,
+      5.08,
+      6.2
+    ]
+  },
+  "bundle": "/tmp/claude-1000/-home-marius-fraudshield/588b7b00-f4d0-41ec-a88b-de386b97359f/scratchpad/bundle-576637f-50x3",
+  "serve": {
+    "requests": 10000,
+    "concurrency": 200,
+    "workers": 3,
+    "errors": 0,
+    "seconds": 33.75676210797974,
+    "throughput_rps": 296.236942631299,
+    "client_ms": {
+      "p50": 647.5602659920696,
+      "p95": 779.687479021959,
+      "p99": 809.993900009431
+    },
+    "server_ms": {
+      "p50": 10.0,
+      "p95": 19.0,
+      "p99": 25.0
+    },
+    "shap_share": 0.004,
+    "gate": {
+      "p50": false,
+      "p95": false,
+      "p99": false
+    }
+  }
+}

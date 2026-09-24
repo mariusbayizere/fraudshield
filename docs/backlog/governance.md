@@ -19,7 +19,7 @@ Format: ID · title · source · priority · due · description · acceptance.
   names the machine; the row list is extended; tests cover each evasion.
 
 ### GOV-2 · Fail on runtime-skipped tests when Docker is required
-- **Source:** DR-3 (MINOR) · **Priority:** high · **Due:** before M1 closes
+- **Source:** DR-3 (MINOR) · **Priority:** high · **Due:** M3 (re-dated at the M1 close: no runtime-skip form exists yet, and `TestDatabase` throws rather than skips without Docker; M3 adds the first Redis Testcontainers and Python Docker tests)
 - **Problem:** `pytest.skip()` inside a test body, JUnit `Assumptions`, and
   `@Testcontainers(disabledWithoutDocker = true)` pass silently under `REQUIRE_DOCKER=1`; some
   never-running forms still count as tagged tests (custom disabling annotations, abstract tests,
@@ -35,33 +35,86 @@ Format: ID · title · source · priority · due · description · acceptance.
   `deploy.replicas` multiplies limits; an unparseable limit is a reported error, not a traceback.
 
 ### GOV-4 · Tests for the shell gates and allowlist prefix matching
-- **Source:** DR-6 (NIT) · **Priority:** low · **Due:** M1
+- **Source:** DR-6 (NIT) · **Priority:** low · **Due:** M3 (re-dated at the M1 close: the shell gates did not change in M1)
 - **Problem:** surviving mutants — `docker-gate` ignoring `REQUIRE_DOCKER`, the gitleaks cached-binary
   check disabled, scope-guard allowlist prefix matching.
 - **Acceptance:** subprocess tests with a stub `docker` on PATH and a tampered gitleaks cache; a test
   that `docs/srs.bak/x.md` is not exempted by the `docs/srs/` entry.
 
 ### GOV-5 · Devcontainer workflow triggers and default branch
-- **Source:** DR-7 (NIT) · **Priority:** low · **Due:** after `main` exists
-- **Status:** triggers widened in the path-filtered workflows (lockfiles, manifests, `.mvn`);
-  remaining: `pyproject.toml`, `tools/**`, `package.json` if post-create depends on them; the owner
-  sets `main` as the default branch so the nightly schedule runs.
+- **Source:** DR-7 (NIT) · **Priority:** low · **Due:** M2 (re-dated at the M1 close; the default branch is an open owner action, GOV-9)
+- **Status:** workflow part CLOSED in M2; the default branch remains an owner action (GOV-9).
+  `pyproject.toml` at any depth and `frontend/package.json` are now devcontainer inputs, because
+  post-create installs from them (`uv sync --all-packages --locked`, `pnpm install
+  --frozen-lockfile`). `tools/**` is deliberately not an input: post-create runs the tools through
+  `make ci`, but the container build does not depend on their source, and every change to them is
+  already checked by the `ci` workflow. Adding them would run the heavy build on most commits.
 
 ### GOV-6 · Line pragma inside fenced code blocks
-- **Source:** DR-9 (NIT) · **Priority:** low · **Due:** unscheduled
+- **Source:** DR-9 (NIT) · **Priority:** low · **Due:** M2 · **Status:** CLOSED in M2
 - **Acceptance:** the scope-guard pragma is ignored inside fenced code blocks in Markdown, or ADR 0008
   documents that it is honoured there.
+- **Closed by:** the guard tracks fence state and honours the pragma only outside a fence; a test
+  shows a fenced pragma failing to exempt its line while unfenced ones still do.
 
 ### GOV-7 · Commit-message tool attribution trailers
-- **Source:** R-8 remainder (NIT) · **Priority:** low · **Due:** M1
+- **Source:** R-8 remainder (NIT) · **Priority:** low · **Due:** M2 (re-dated at the M1 close: no such trailer has appeared; governance is time-boxed)
 - **Problem:** `Assisted-by:` and `Co-developed-by:` trailers naming tools, "Made with …" lines, and
   placeholder summaries with trailing words ("updated things across modules") pass.
 - **Acceptance:** those forms are rejected, with tests; owner trailers remain allowed.
+- **Status:** CLOSED in M2. `Assisted-by`, `Co-developed-by`, `Co-created-by` and `pair-programmed-by`
+  are rejected when they name a tool, as are "made/built/written/created/drafted with <tool>" lines;
+  a summary containing a vague object ("things", "stuff", "misc") is rejected whatever follows it.
+  The same trailers naming a person still pass, with a test for each direction.
 
 ### GOV-8 · Container images pinned by digest
 - **Source:** ADR 0003, re-review residual risk · **Priority:** medium · **Due:** M9
 - **Acceptance:** compose and Kubernetes images are pinned by digest, with an update process.
 
 ### GOV-9 · Branch protection on `main`
-- **Source:** G.2; `gh` not authenticated on the build machine · **Priority:** high · **Owner action**
+- **Source:** G.2; `gh` not authenticated on the build machine · **Priority:** high · **Due:** owner action, open at the M1 close (the owner reported the `protect-main` ruleset and `main` as default branch; not verifiable from the build session until `gh` is authenticated there)
 - **Acceptance:** `main` is the default branch and requires the `ci` jobs (and `stack` when it runs).
+
+### GOV-10 · Gate evidence must quote job results, not run conclusions
+- **Source:** M0 milestone review F-4 (NIT) · **Priority:** medium · **Due:** M2 (re-dated at the M1 close: M1 evidence records quote job-level results by hand, as the M1 milestone review did; the automated check is still open)
+- **Problem:** with path filters, a skipped `stack` or `build-and-verify` job still makes the run
+  conclude "success".
+- **Acceptance:** evidence records and any automated run verification check the named job ran and
+  succeeded (`GitEvidenceVerifier.ci_run` inspects jobs, not only the run conclusion).
+- **Status:** CLOSED in M2. `ci_run` fetches the run's jobs and accepts the run as evidence only if
+  every job concluded success; a skipped job is named in the verdict. Tests cover a skipped job, a
+  run reporting no jobs, and the existing run-level rejections.
+
+### GOV-11 · D-17 must close on the M6 decision-engine property tests
+- **Source:** M0 milestone review F-2 (NIT) · **Priority:** medium · **Due:** M6
+- **Problem:** `MoneyBoundaryTest` is tagged D-17, which would satisfy the tagged-test rule before
+  the generative property tests planned in ADR 0009 exist.
+- **Acceptance:** D-17 is closed only with the M6 property tests as evidence (reviewer check), and the
+  row note says so.
+
+### GOV-12 · Rounding tie cases for the remaining currencies
+- **Source:** M0 milestone review F-3 (NIT) · **Priority:** low · **Due:** next change to `MoneyBoundaryTest`
+- **Acceptance:** tie cases for BIF (0 decimals) and USD/EUR/SSP/SOS (2 decimals).
+
+### GOV-13 · Threat model document
+- **Source:** M0 milestone review M-1 (MINOR) · **Priority:** high · **Due:** M1, before the first data-flow component
+- **Status:** delivered in M1 as `docs/security/threat_model.md`.
+- **Note:** this is a product security artefact (build prompt D-28, I.3), not governance tooling; it is
+  delivered as part of M1.
+
+### GOV-14 · Clear error for commit evidence in shallow clones
+- **Source:** M0 closing-commit devcontainer run 35185341158 · **Priority:** low · **Due:** M3 (re-dated at the M1 close: CI uses full-history checkouts, so the misleading message has not recurred)
+- **Problem:** in a shallow clone, `fs-traceability check` reports cited commits as "not an ancestor of
+  HEAD", which reads like bad evidence rather than missing history. Fixed for CI by full-history
+  checkouts; the message should name the cause.
+- **Acceptance:** when `git rev-parse --is-shallow-repository` is true, the error says the clone is
+  shallow and how to fetch full history.
+
+### GOV-15 · Gitleaks self-test: same file name in another directory
+
+- **Source:** events final review F-11 (NIT), 2026-09-17.
+- **Problem:** an allowlist path widened to match the fixture's file name in any directory (for
+  example `^contracts/.*/signature-test-vectors\.json$`) is not caught; copies are planted only beside
+  the fixture and in an unrelated directory.
+- **Acceptance:** the self-test also plants each allowlisted value under the fixture's own file name
+  in a sibling directory, and that path widening fails it.

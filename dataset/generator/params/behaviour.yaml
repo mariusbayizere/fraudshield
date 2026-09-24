@@ -1,0 +1,192 @@
+description: Legitimate behaviour models (Part E.3) for timing, amounts, channels and counterparties.
+parameters:
+  volume_jitter_log_sigma:
+    value: 0.35
+    unit: standard deviation of the log of a customer's month-to-month volume jitter (mean one)
+    provenance: ASSUMED
+    rationale: A customer's transaction count varies from month to month around its own activity level; sigma 0.35 keeps most months within about a third of that level. The jitter only decides how a cell's exact monthly row quota is shared out, so month-to-month variation is kept while the country, segment and volume totals stay exact (ML-DATA-01, ML-DATA-03, ML-DATA-05).
+  segment_channel_preference:
+    value:
+      urban_salaried: {MOBILE_MONEY: 40, USSD: 5, AGENT_BANKING: 10, CARD: 20, ONLINE: 15, BANK_TRANSFER: 10}
+      informal_trader: {MOBILE_MONEY: 45, USSD: 20, AGENT_BANKING: 25, CARD: 4, ONLINE: 3, BANK_TRANSFER: 3}
+      rural_ussd: {MOBILE_MONEY: 20, USSD: 45, AGENT_BANKING: 30, CARD: 2, ONLINE: 1, BANK_TRANSFER: 2}
+      student: {MOBILE_MONEY: 50, USSD: 15, AGENT_BANKING: 15, CARD: 8, ONLINE: 10, BANK_TRANSFER: 2}
+    unit: relative weight per channel within a segment (scaled to the SRS mix, not absolute shares)
+    provenance: ASSUMED
+    rationale: >-
+      Relative preferences, not measured shares: a rural customer reaches for USSD and an agent, a
+      salaried urban one for a card or online banking, a trader for wallet and agent cash handling, a
+      student for a wallet. The generator fits these weights to the SRS channel mix (ML-DATA-03), which
+      takes precedence, so only the ordering and rough ratios inside each segment come from this
+      parameter. FinScope Rwanda 2024 (Figure 26, page 40) supports rural customers being wallet users at
+      all (72% of rural adults), but no source was found for the interface split within a segment.
+  amount_mean_rwf:
+    value: {MOBILE_MONEY: 15731, AGENT_BANKING: 16664, CARD: 110876, BANK_TRANSFER: 69344}
+    unit: mean transaction amount in RWF equivalent, by channel
+    provenance: SOURCED
+    citation: >-
+      Bank of Tanzania, Payment Systems Annual Report for 2024 (2025); each figure is the reported value
+      divided by the reported volume, converted at currencies.rwf_per_unit. Mobile money: Annex H, Table
+      H1, page 47 (TZS 198,859 billion over 6,414 million transactions). Agent cash-in: Annex H, Table H8,
+      page 48 (TZS 43,763 billion over 1,332.50 million). Card at merchant: Annex I, page 50, local POS
+      transactions (TZS 3,299.30 billion over 15,098,517). Bank to wallet: Annex H, Table H3, page 47
+      (TZS 11,299 billion over 82,676,171).
+      https://www.bot.go.tz/Publications/Regular/Annual%20Report/sw/2025032515311662.pdf
+    accessed: 2026-09-18
+    rationale: >-
+      Tanzanian aggregates, the only per-channel value and volume figures found in a document that could be
+      read in full; no equivalent Rwandan breakdown was published, and the dataset's country mix is
+      Rwanda-weighted, so these levels are an order-of-magnitude anchor rather than a claim about one
+      market. The generator turns each mean into the median its log-normal draw needs
+      (median = mean / exp(sigma^2 / 2), sigma from behaviour.amount_log_sigma). Card figures reflect
+      Tanzanian card usage, which skews to larger purchases than a wallet payment.
+  amount_median_rwf:
+    value: {USSD: 5000, ONLINE: 18000}
+    unit: median transaction amount in RWF equivalent, for the channels with no sourced mean
+    provenance: ASSUMED
+    rationale: >-
+      USSD is an interface rather than a transaction type, so no published series matches it; the figure
+      assumes a USSD payment is smaller than an app wallet payment. For ONLINE, the internet banking series
+      in the Bank of Tanzania report (Annex J, page 50) averages about RWF 5 million per transaction, which
+      is corporate treasury activity rather than the consumer online payments this channel represents, so
+      it is deliberately not used and this median stays a modelling choice.
+  amount_log_sigma:
+    value: 1.0
+    unit: standard deviation of the natural log of the amount around the channel median
+    provenance: ASSUMED
+    rationale: Payment amounts are right-skewed; sigma 1.0 spans roughly a factor of seven either side of the median for 95% of payments.
+  round_sum_probability:
+    value: 0.35
+    unit: probability that a person-to-person, cash or transfer amount is rounded to a round sum
+    provenance: ASSUMED
+    rationale: Part E.3 requires round-sum transfers as legitimate look-alike behaviour; the rate is a modelling choice.
+  salary_day_range:
+    value: [25, 28]
+    unit: day of month on which a salaried customer's salary credit falls (inclusive range)
+    provenance: ASSUMED
+    rationale: Month-end salary cycles required by Part E.3; the exact window is a modelling choice.
+  payday_spend_boost:
+    value: 2.5
+    unit: relative weight of days in the week after payday for salaried customers
+    provenance: ASSUMED
+    rationale: Spending concentrates after salary credit; the multiplier is a modelling choice.
+  market_day_weight:
+    value: 3.0
+    unit: relative weight of a trader's weekly market day
+    provenance: ASSUMED
+    rationale: Part E.3 requires market days; each trader gets one weekly market day with this relative activity weight, a modelling choice.
+  school_fee_months:
+    value: [1, 4, 9]
+    unit: calendar months (1-12) in which school-fee payments raise volume
+    provenance: SOURCED
+    citation: >-
+      "SCHOOL CALENDAR 2024-2025", published by Nu Vision Academy, Rwanda (nga.ac.rw), week-by-week
+      table: week 2 of term 1 is 2-6 September 2024, "Term 2 begins" in the week of 6-10 January 2025,
+      and "Term 3 begins" in the week of 22-25 April 2025.
+      https://www.nga.ac.rw/storage/nArw8l4yXLQqkb3qi5aHo39WSkW9SH-metaU0NIT09MIENBTEVOREFSLnBkZg==-.pdf
+    accessed: 2026-09-18
+    rationale: >-
+      This is one school's calendar, not the Ministry of Education's publication, which could not be
+      retrieved; the three term-start months it shows are what this parameter needs, and nothing here
+      claims the document is the national calendar itself. The previous value put the third term in
+      May, one month late. That fees are paid in the month a term starts is an assumption the
+      document does not address.
+  school_fee_volume_boost:
+    value: 1.3
+    unit: relative monthly transaction volume multiplier in school-fee months
+    provenance: ASSUMED
+    rationale: Modelling choice for the school-fee seasonal peak.
+  cross_border_share:
+    value: 0.0046
+    unit: fraction of person-to-person and bank transfers sent to another country
+    provenance: SOURCED
+    citation: >-
+      Bank of Tanzania, Payment Systems Annual Report for 2024 (2025), Annex G, Table G2 "Cross-border fund
+      transfers by MMO", page 47: 2,211,374 outbound cross-border mobile money transactions in 2024, against
+      479,107,425 person-to-person transfers in Annex H, Table H2, which is 0.46%.
+      https://www.bot.go.tz/Publications/Regular/Annual%20Report/sw/2025032515311662.pdf
+    accessed: 2026-09-18
+    rationale: >-
+      The previous value of 3% was six times too high: cross-border transfers are
+      a small share of transfers even in a market with large diaspora flows, because most cross-border value
+      moves through banks in few, large transactions (Table G1: 310,622 outbound bank transfers carrying
+      TZS 116,105 billion, against TZS 340 billion over mobile money). The generator applies this share to
+      person-to-person and bank transfers alike, which the source does not separate. The figure is
+      Tanzanian, used as a proxy: no Rwandan count of cross-border transfers by transaction was
+      found, and the dataset's country mix is Rwanda-weighted.
+  remittance_corridors:
+    value: {RW: [UG, KE, CD], KE: [UG, TZ], TZ: [KE, UG], UG: [KE, RW], CD: [RW, UG]}
+    unit: destination countries for cross-border transfers, by sender country
+    provenance: ASSUMED
+    rationale: Neighbouring-country corridors chosen by geography; destination weights are uniform as a modelling choice.
+  agent_peak_hours:
+    value: [8, 18]
+    unit: local hours of the two daily cash-agent peaks
+    provenance: ASSUMED
+    rationale: Part E.3 requires cash-in and cash-out peaks; morning and after-work peaks are a modelling choice.
+  travel_probability:
+    value: 0.05
+    unit: probability that a transaction happens away from the customer's home area
+    provenance: ASSUMED
+    rationale: Occasional travel so location alone does not identify account misuse; a modelling choice.
+  home_jitter_degrees:
+    value: 0.15
+    unit: standard deviation of a transaction's latitude and longitude around home (degrees)
+    provenance: ASSUMED
+    rationale: About 15 km of movement around home; a modelling choice.
+  merchant_mcc_share:
+    value: {"5411": 0.30, "5812": 0.12, "5541": 0.10, "4814": 0.12, "4900": 0.08, "5912": 0.08, "5732": 0.06, "5651": 0.06, "8211": 0.08}
+    unit: fraction of merchants by ISO 18245 merchant category code
+    provenance: ASSUMED
+    rationale: Everyday categories (groceries, restaurants, fuel, airtime, utilities, pharmacies, electronics, clothing, schools) with groceries most common; the weights are a modelling choice.
+  p2p_share_of_wallet_payments:
+    value: 0.216
+    unit: fraction of wallet payments (mobile money and USSD) that go to a person rather than a merchant
+    provenance: SOURCED
+    citation: >-
+      Bank of Tanzania, Payment Systems Annual Report for 2024 (2025), Annex H: Table H2
+      "Person-to-Person Transfer (P2P)", page 47, 479,107,425 transactions in 2024; and Table H5
+      "Personal to Business (P2B)", page 47, 1,736.15 million transactions in 2024. P2P is therefore 21.6%
+      of the two together.
+      https://www.bot.go.tz/Publications/Regular/Annual%20Report/sw/2025032515311662.pdf
+    accessed: 2026-09-18
+    rationale: >-
+      The generator's wallet payment is either to a person or to a merchant, which is the P2P and P2B split
+      exactly. The two tables do not sum to the report's total mobile money volume (airtime, bills and
+      other categories are not broken out), so the figure is their ratio rather than a share of all
+      transactions. It is Tanzanian; no Rwandan split of the same kind was found.
+  wallet_hour_mean_local:
+    value: 13.5
+    unit: mean local hour of day of non-agent transactions
+    provenance: ASSUMED
+    rationale: Daytime-centred activity with an early-afternoon mean; a modelling choice for the hour-of-day profile.
+  wallet_hour_sd:
+    value: 4.0
+    unit: standard deviation (hours) of the local hour of non-agent transactions
+    provenance: ASSUMED
+    rationale: Spreads activity from morning to late evening; a modelling choice.
+  agent_hour_sd:
+    value: 1.5
+    unit: standard deviation (hours) around each cash-agent peak hour
+    provenance: ASSUMED
+    rationale: Peaks of about three hours around the morning and evening agent peaks; a modelling choice.
+  active_hours_local:
+    value: [5.0, 23.5]
+    unit: earliest and latest local hour at which legitimate activity is placed
+    provenance: ASSUMED
+    rationale: Little legitimate activity before dawn or after midnight; night-time activity is left to fraud scenarios and occasional look-alikes, a modelling choice.
+  travel_distance_degrees:
+    value: 1.0
+    unit: standard deviation (degrees) of the displacement when a customer transacts away from home
+    provenance: ASSUMED
+    rationale: About 100 km, a trip to another town; a modelling choice.
+  payday_window_days:
+    value: 7
+    unit: days from salary day (inclusive) over which the payday spending boost applies
+    provenance: ASSUMED
+    rationale: Spending concentrated in the week after salary credit; a modelling choice.
+  night_activity_probability:
+    value: 0.03
+    unit: probability that a legitimate transaction happens at night (local 00:00-05:00)
+    provenance: ASSUMED
+    rationale: Some legitimate activity (shift workers, late transfers) happens at night so that night-time alone does not identify fraud; a modelling choice.

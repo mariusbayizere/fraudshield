@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fraudshield:kafka:audit-event",
+  "title": "fs.audit.events payload (D-32)",
+  "type": "object",
+  "required": [
+    "event_type",
+    "action",
+    "entity_type",
+    "entity_id",
+    "event_at",
+    "writer_partition"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "event_type": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/AuditEventType"
+    },
+    "action": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z_]{1,63}$"
+    },
+    "entity_type": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "entity_id": {
+      "type": "string",
+      "maxLength": 128
+    },
+    "event_at": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Timestamp"
+    },
+    "writer_partition": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1023
+    },
+    "actor_user_id": {
+      "oneOf": [
+        {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "actor_role": {
+      "oneOf": [
+        {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/Role"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "before_value": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "after_value": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "ip_address": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 45
+    },
+    "user_agent": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 512
+    }
+  }
+}

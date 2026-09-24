@@ -19,7 +19,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 REPOSITORY = "mariusbayizere/fraudshield"
 COMMIT_SHA = re.compile(r"^[0-9a-f]{7,40}$")
@@ -60,11 +60,9 @@ class GitEvidenceVerifier:
         )
         return result.returncode == 0
 
-    def ci_run(self, run_id: int) -> RunVerdict:
-        if not self.token:
-            return RunVerdict(None, "no GITHUB_TOKEN available to query the Actions API")
+    def _api(self, path: str) -> dict[str, Any] | RunVerdict:
         request = urllib.request.Request(
-            f"https://api.github.com/repos/{REPOSITORY}/actions/runs/{run_id}",
+            f"https://api.github.com/repos/{REPOSITORY}/{path}",
             headers={
                 "Accept": "application/vnd.github+json",
                 "Authorization": f"Bearer {self.token}",
@@ -73,17 +71,48 @@ class GitEvidenceVerifier:
         )
         try:
             with urllib.request.urlopen(request, timeout=API_TIMEOUT_SECONDS) as response:  # noqa: S310
-                run = json.load(response)
+                return dict(json.load(response))
         except urllib.error.HTTPError as error:
             return RunVerdict(False, f"Actions API returned HTTP {error.code}")
         except (urllib.error.URLError, TimeoutError) as error:
             return RunVerdict(None, f"Actions API unreachable: {error}")
+
+    def ci_run(self, run_id: int) -> RunVerdict:
+        """Verify a run as evidence: its jobs must have run, not only its conclusion (GOV-10).
+
+        A job that a path filter skipped leaves the run concluding "success", so a run cited for a
+        gate could contain no execution of the job the gate is about. Every job of the run must
+        have concluded success for the run to be evidence.
+        """
+        if not self.token:
+            return RunVerdict(None, "no GITHUB_TOKEN available to query the Actions API")
+        run = self._api(f"actions/runs/{run_id}")
+        if isinstance(run, RunVerdict):
+            return run
         if run.get("conclusion") != "success":
             return RunVerdict(False, f"run concluded {run.get('conclusion')!r}")
         head_sha = str(run.get("head_sha", ""))
         if not self.commit_in_history(head_sha):
             return RunVerdict(False, f"run commit {head_sha[:12]} is not in HEAD's history")
-        return RunVerdict(True, "success")
+        return self._jobs_verdict(run_id)
+
+    def _jobs_verdict(self, run_id: int) -> RunVerdict:
+        """Every job of the run must have concluded success (GOV-10)."""
+        jobs = self._api(f"actions/runs/{run_id}/jobs?per_page=100")
+        if isinstance(jobs, RunVerdict):
+            return jobs
+        listed = [j for j in jobs.get("jobs", []) if isinstance(j, dict)]
+        if not listed:
+            return RunVerdict(False, "run reports no jobs")
+        unfinished = {
+            str(job.get("name")): str(job.get("conclusion"))
+            for job in listed
+            if job.get("conclusion") != "success"
+        }
+        if unfinished:
+            detail = ", ".join(f"{name} {result}" for name, result in sorted(unfinished.items()))
+            return RunVerdict(False, f"run concluded success but job(s) did not: {detail}")
+        return RunVerdict(True, f"success, {len(listed)} job(s) succeeded")
 
 
 # --- row references ----------------------------------------------------------------------
