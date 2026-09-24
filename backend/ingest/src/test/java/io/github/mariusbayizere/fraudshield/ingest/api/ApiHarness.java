@@ -73,6 +73,12 @@ public final class ApiHarness {
   /** A fifth key with its own budget, for batches while Redis is down. */
   public static final String BUDGET_KEY_FIVE = "fsk_test_hhhhhhhhhhhh_" + "f".repeat(43);
 
+  /** A sixth key with its own budget, for an exhausted key's stalled batch. */
+  public static final String BUDGET_KEY_SIX = "fsk_test_iiiiiiiiiiii_" + "g".repeat(43);
+
+  /** A seventh key with its own budget, for what refused and invalid batches cost. */
+  public static final String BUDGET_KEY_SEVEN = "fsk_test_jjjjjjjjjjjj_" + "h".repeat(43);
+
   /**
    * The {@code api_keys} row ids of the budget keys: fixed, and inserted, because a batch job
    * references its key's row.
@@ -83,7 +89,9 @@ public final class ApiHarness {
           BUDGET_KEY_TWO, UUID.fromString("6c1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a02"),
           BUDGET_KEY_THREE, UUID.fromString("6c1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a03"),
           BUDGET_KEY_FOUR, UUID.fromString("6c1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a04"),
-          BUDGET_KEY_FIVE, UUID.fromString("6c1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a05"));
+          BUDGET_KEY_FIVE, UUID.fromString("6c1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a05"),
+          BUDGET_KEY_SIX, UUID.fromString("6c1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a06"),
+          BUDGET_KEY_SEVEN, UUID.fromString("6c1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a07"));
 
   /** The api_keys row id of {@link #KEY}. */
   public static final UUID KEY_ID = UUID.fromString("5b1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a5b");
@@ -244,7 +252,9 @@ public final class ApiHarness {
               BUDGET_KEY_TWO, budget(BUDGET_KEY_TWO),
               BUDGET_KEY_THREE, budget(BUDGET_KEY_THREE),
               BUDGET_KEY_FOUR, budget(BUDGET_KEY_FOUR),
-              BUDGET_KEY_FIVE, budget(BUDGET_KEY_FIVE));
+              BUDGET_KEY_FIVE, budget(BUDGET_KEY_FIVE),
+              BUDGET_KEY_SIX, budget(BUDGET_KEY_SIX),
+              BUDGET_KEY_SEVEN, budget(BUDGET_KEY_SEVEN));
       return raw -> Optional.ofNullable(raw == null ? null : keys.get(raw));
     }
 

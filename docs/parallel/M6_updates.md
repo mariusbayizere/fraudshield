@@ -633,9 +633,11 @@ acceptance, all or nothing, and replace the 200 per second implementation defaul
 
 - `RateLimiter.take(key, units)`; the Redis script and the per-instance fallback charge `units`
   all or nothing, and a refusal reports what remains and how long until the charge would fit.
-- The filter charges one unit per request except the batch submission, which the controller
-  charges by its item count after parsing and before the job is recorded; a refused or invalid
-  batch envelope costs one unit.
+- The filter charges one unit per request before the body is read, the batch submission included;
+  the controller then charges a valid batch the rest of its item count, all or nothing, before the
+  job is recorded; a refused or invalid batch envelope costs the one admission unit. (The first
+  version exempted the batch from the filter; review 8 found that an exhausted key could then make
+  the server read and parse 4 MiB bodies without limit, reproduced with a stalled body. Fixed.)
 - `fraudshield.rate-limit.transactions-per-second` (renamed from `requests-per-second`) and
   `burst`; the application refuses a burst below 1,000, the largest batch.
 - Tests: `TransactionBudgetTest` (both limiters) and
@@ -650,6 +652,12 @@ acceptance, all or nothing, and replace the 200 per second implementation defaul
   at load 11; a paired run then passed both (this tree at load 9.5, the pre-change tree at load
   13). Load, not the change: the same load-sensitivity already carried to M10 as PB-74. The load
   came from another project's local Kubernetes cluster started on this laptop meanwhile.
+- **Review 8** (fresh reviewer, 2026-09-24): CHANGES_REQUIRED, 1 MAJOR (the one above), plus two
+  surviving mutations (a refused envelope charged nothing; the burst startup check untested) and
+  the TEST-03 tag change checked with no finding. Record: `docs/reviews/M6/m6-decision-2026-09-24-eighth.md`.
+  Fixed with the admission unit restored in the filter; new tests for the stalled body, for what
+  refused, invalid and valid batches cost, and for the configuration (`RateLimitConfigurationTest`);
+  the reviewer's defect and a batch charged one unit each fail the new tests.
 - This is a code change, so it needs an independent review before M6 merges (owner's rule). M6 is
   **not** ready again until that review is clean and CI (with the stack job executed) is green on
   the head that carries it.

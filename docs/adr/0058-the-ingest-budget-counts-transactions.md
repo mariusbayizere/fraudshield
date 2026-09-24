@@ -27,12 +27,17 @@ a requirement's job: no document says it is right and nothing fails if it is wro
    refused with 429 and `Retry-After`, and no job is recorded. A partially accepted batch would give
    the caller per-item outcomes `JobAccepted` cannot express.
 2. **Where the charge is taken.** The rate-limit filter charges one unit for every request on the
-   machine paths except the batch submission, whose size is known only once its body is read; the
-   controller charges that one, after parsing and before the job is created. A batch request whose
-   envelope is refused (malformed JSON, a wrong field, an item count outside 1 to 1,000, a body over
-   the size limit, a missing scope) costs one unit, as any request does: charging only accepted
-   batches would make the parser free to exercise. A request with no API key has no budget to
-   charge; the key filter refuses it first.
+   machine paths, the batch submission included, **before the body is read**: a key over its budget
+   is refused with 429 without the server reading or parsing anything. A batch's item count is known
+   only once its body is read, so the controller then charges the rest (items minus the admission
+   unit), once and all or nothing, before the job is recorded. An accepted batch therefore costs
+   exactly its item count; a refused or invalid batch envelope (malformed JSON, a wrong field, an
+   item count outside 1 to 1,000, a body over the size limit, a missing scope) costs the one
+   admission unit, like any request. A request with no API key has no budget to charge; the key
+   filter refuses it first. **Revised the same day after review 8**: the first version exempted the
+   batch submission from the filter and charged it only in the controller, after the body had been
+   read, so an exhausted key could make the server read and parse 4 MiB bodies without limit, since
+   a refused charge takes nothing.
 3. **The default budget is 2,000 transactions per second sustained, burst 4,000, per API key**
    (ADR 0100 points 2 and 3), and it is **ASSUMED**: one fifth of the system's specified 10,000 per
    second, with two seconds of burst. No integrator profile, contract or measurement supports 2,000
@@ -54,11 +59,14 @@ a requirement's job: no document says it is right and nothing fails if it is wro
 ## Consequences
 
 - `TransactionBudgetTest` (both limiters: a batch costs its item count; a refused charge takes
-  nothing and says so; single and batch charges share one bucket per key) and
+  nothing and says so; single and batch charges share one bucket per key);
   `RateLimitApiTest.batchCallersCannotExceedTheTransactionBudget` (batches of 300 as fast as the
   client sends, for three seconds: the transactions accepted never exceed the burst plus what
   refilled, a refused batch records no job, and what remained after a refusal still buys a smaller
-  batch).
+  batch); `exhaustedKeysAreRefusedBeforeTheirBatchBodyIsRead` (an exhausted key's stalled batch is
+  answered 429 while its body is still arriving);
+  `refusedOrInvalidBatchesCostOneUnitAndValidOnesTheirItemCount`; and
+  `RateLimitConfigurationTest` (the default, and the burst check).
 - The configuration keys are renamed to say what they count:
   `fraudshield.rate-limit.transactions-per-second` and `fraudshield.rate-limit.burst`.
 - M10's campaign can classify a 429 against a stated budget, and configures its own key above the

@@ -219,6 +219,79 @@ class RateLimitApiTest {
   }
 
   @Test
+  void exhaustedKeysAreRefusedBeforeTheirBatchBodyIsRead() throws Exception {
+    // Review 8 (2026-09-24): with the batch exempt from the filter, an exhausted key made the
+    // server
+    // read and parse up to 4 MiB per request without limit. The admission unit is charged before
+    // the body is read, so a key over budget gets 429 while its body is still arriving.
+    assertThat(batch(ApiHarness.BUDGET_KEY_SIX, BURST).statusCode()).isEqualTo(202);
+    int port = Integer.parseInt(environment.getProperty("local.server.port"));
+    try (java.net.Socket socket = new java.net.Socket("127.0.0.1", port)) {
+      socket.setSoTimeout(3_000);
+      var out = socket.getOutputStream();
+      out.write(
+          ("POST /api/v1/transactions/ingest/batch HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                  + "X-API-Key: "
+                  + ApiHarness.BUDGET_KEY_SIX
+                  + "\r\nContent-Type: application/json\r\nContent-Length: 1000000\r\n\r\n"
+                  + "{\"transactions\":[{},{},{}")
+              .getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+      out.flush();
+      long start = System.nanoTime();
+      String status =
+          new java.io.BufferedReader(
+                  new java.io.InputStreamReader(
+                      socket.getInputStream(), java.nio.charset.StandardCharsets.US_ASCII))
+              .readLine();
+      assertThat(status)
+          .as("answered while the body was still arriving")
+          .isEqualTo("HTTP/1.1 429 ");
+      assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofSeconds(3));
+    }
+  }
+
+  @Test
+  void refusedOrInvalidBatchesCostOneUnitAndValidOnesTheirItemCount() throws Exception {
+    String key = ApiHarness.BUDGET_KEY_SEVEN;
+    final long start = System.nanoTime();
+    HttpRequest malformed =
+        HttpRequest.newBuilder(URI.create(url("/api/v1/transactions/ingest/batch")))
+            .header("X-API-Key", key)
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString("{\"transactions\": ["))
+            .build();
+    HttpResponse<String> first = HTTP.send(malformed, HttpResponse.BodyHandlers.ofString());
+    assertThat(first.statusCode()).isEqualTo(400);
+    HttpRequest empty =
+        HttpRequest.newBuilder(URI.create(url("/api/v1/transactions/ingest/batch")))
+            .header("X-API-Key", key)
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString("{\"transactions\": []}"))
+            .build();
+    HttpResponse<String> second = HTTP.send(empty, HttpResponse.BodyHandlers.ofString());
+    assertThat(second.statusCode())
+        .as("a valid JSON body that is not a valid batch")
+        .isEqualTo(422);
+    HttpResponse<String> valid = batch(key, 10);
+    assertThat(valid.statusCode()).isEqualTo(202);
+    double seconds = (System.nanoTime() - start) / 1e9;
+    int refill = (int) Math.ceil(LIMIT * seconds);
+    assertThat(remaining(first))
+        .as("a malformed batch costs one unit")
+        .isBetween(BURST - 1, BURST - 1 + refill);
+    assertThat(remaining(second))
+        .as("an invalid envelope costs one unit")
+        .isBetween(BURST - 2, BURST - 2 + refill);
+    assertThat(remaining(valid))
+        .as("a valid batch of ten costs ten units, one on admission and nine more")
+        .isBetween(BURST - 12, BURST - 12 + refill);
+  }
+
+  private static int remaining(HttpResponse<String> response) {
+    return Integer.parseInt(response.headers().firstValue("RateLimit-Remaining").orElseThrow());
+  }
+
+  @Test
   void singleSubmissionsAndBatchesDrawOnOneBudget() throws Exception {
     // A key that spent its budget on a batch is over budget for single requests too.
     assertThat(batch(ApiHarness.BUDGET_KEY_TWO, BURST).statusCode()).isEqualTo(202);
