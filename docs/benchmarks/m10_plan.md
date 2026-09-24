@@ -130,16 +130,40 @@ branch). It is listed here because the M10 report must carry its status either w
   not hold itself open by re-running until it passes.
 * Rows that need capacity the machine cannot give are `VERIFIED_AT_REDUCED_SCALE` with the scale
   named, never `DONE`.
+* Before any measured row, each harness is proved able to fail: a chaos experiment that injects
+  nothing and is confirmed to have selected the intended pods, a short load run, one journey on
+  one browser (ADR 0101).
 
-## 5. Open decisions for the owner
+## 5. Paths this campaign will not exercise
 
-1. **A backlog identifier collides.** `PB-73` is proposed twice on different branches: once by M5
-   for a security-tooling flake owned by M9, once by M6 for the carried latency measurement owned
-   by M10. Both were numbered "next free" on branches that could not see each other. The campaign
-   needs one of them renumbered before the report cites it.
-2. **Where the ingest API's rate limit is defined.** The contract declares the refusal and its
-   retry header, but no numeric limit is stated anywhere, so the load campaign cannot tell a
-   refusal that is correct from one that is a defect.
-3. **Whether the OAuth leg of journey 1 is in scope**, given that the console has no Google button
-   yet while the endpoint exists.
-4. **Machine provisioning**, `m10_machine_spec.md`.
+Recorded here so that the verification report states them rather than implying they passed.
+
+* **The Google sign-in leg of journey 1.** `POST /api/v1/auth/google` exists in the frozen
+  contract and M7 implements it; the console has no button for it, so no browser journey can
+  reach it. Journey 1 signs in with email and password and covers every step after that. The
+  report records the OAuth leg, and the requirement row timed from it, as **not exercised**;
+  neither may be read as passing. Raised with M8 as a missing screen element
+  (`docs/parallel/M8_updates.md`).
+* **Chaos cases whose targets have no manifests** (the data stores) and the two cases that need a
+  multi-node cluster, if only one node is rented. Recorded as not run, never approximated by
+  disturbing something adjacent (ADR 0101).
+* **Refusals under the ingest rate limit**, until ADR 0100 is accepted: counted and reported with
+  the budget in force, classified as neither pass nor failure.
+
+## 6. Decisions taken, and what is still open
+
+Settled by the owner on 2026-09-24:
+
+1. **The `PB-73` collision.** M6's allocation stands — the carried end-to-end latency measurement,
+   already cited by ADR 0059 and by M6's settled traceability rows. M5's security-tooling flake is
+   renumbered; the renumbering and the identifier-claiming convention that follows from it are
+   recorded in `docs/parallel/M10_updates.md` for whoever integrates the backlog.
+2. **The ingest rate limit** is a specification gap rather than an M10 problem: a limit is
+   proposed, with its derivation and its assumptions, in ADR 0100, for the owner to accept and M6
+   to implement. Until then the campaign observes refusals rather than judging them.
+3. **The campaign's prerequisites** are recorded in ADR 0101 and filed into the updates file of
+   each owning milestone with the acceptance criterion M10 needs.
+4. **M10 does not run** until M6, M7, M8 and M9 are on `main` and the hardware is decided.
+
+Still open: **machine provisioning** (`m10_machine_spec.md`), and the owner's acceptance of ADR
+0100.
