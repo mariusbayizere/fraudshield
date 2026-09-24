@@ -125,12 +125,25 @@ banners) and the banner area stays empty against a real backend.
    plainer schema for generators. The same generator also drops unknown fields instead of
    rejecting them, so `additionalProperties: false` is enforced by the contract tests, not by the
    generated Zod.
-2. **Contract: the CSRF cookie has no name.** D-27's double-submit needs the console to read a
-   cookie and echo it in `X-CSRF-Token`, which refresh and logout require. The contract names the
-   header (`CsrfToken`) and the refresh cookie (`fs_refresh`) but never the CSRF cookie. The
-   console reads **`fs_csrf`**, which is what M7's server sets (`backend/`, branch
-   `m7/staff-auth`). Proposal: document it in the contract, so the two sides are not agreeing by
-   coincidence.
+2. **Contract: the CSRF cookie has no name, and both sides pin it separately** (re-checked
+   2026-09-24). D-27's double-submit needs the console to read a cookie and echo it in
+   `X-CSRF-Token`, which refresh and logout require. The contract names the header (`CsrfToken`)
+   and the refresh cookie (`fs_refresh`) but never the CSRF cookie. Both sides do pin the name, by
+   their own tests and to the same value:
+   - server: `CsrfDoubleSubmitFilter.COOKIE = "fs_csrf"`
+     (`m7/staff-auth:backend/auth/.../security/CsrfDoubleSubmitFilter.java:29`), asserted by
+     `LoginTest.java:46` (the cookie is set at sign-in) and exercised by `SessionTest.java:52,61,73`
+     and `AuthorisationMatrixTest.java:306`;
+   - console: `CSRF_COOKIE = 'fs_csrf'` (`frontend/src/auth/csrf.ts`), asserted by
+     `frontend/src/auth/csrf.test.ts` and by the session test that checks the header is sent.
+
+   So neither side can drift silently on its own — but nothing ties them **to each other**, and the
+   artefact that should is the contract. **Proposal:** name the cookie in
+   `contracts/openapi/fraudshield-api.yaml` (a `cookieAuth`-style documented scheme, or at minimum
+   the `CsrfToken` parameter description saying which cookie the header must equal), and add a
+   contract test asserting that name, so both implementations assert against the contract rather
+   than against each other by coincidence. M8 has not made this change: `contracts/` is shared, and
+   the last contract change was made only on the owner's explicit instruction.
 3. **Country packs: a zone abbreviation.** D-43 asks the UI to show "CAT"; the packs carry
    `utc_offset_hours` but no abbreviation, so the console shows "UTC+2". Proposal: a
    `timezone_abbreviation` parameter with the packs' usual provenance.
