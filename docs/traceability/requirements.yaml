@@ -14,13 +14,30 @@ requirements:
     publish latency; zero data loss confirmed by consumer offset check'
   defects:
   - D-13
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/web/IngestController.java
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/application/DecisionService.java
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/adapter/spool
+  evidence:
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/IngestApiTest.java (decisions
+    over HTTP)
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/kafka/KafkaSpoolChaosTest.java
+    (publication from the spool after the response, D-13/D-15)
+  - docs/benchmarks/2026-09-22-M6-decision-latency.json (Codespace, shape only, ADR 0059)
+  - docs/benchmarks/2026-09-23-M6-decision-latency.json (dev-laptop-01, shape only, ADR 0059)
+  deviations:
+  - docs/adr/0059-m6-latency-gate-not-met-on-this-hardware.md
+  - docs/adr/0064-durable-spool-and-hold-reconciliation.md
   notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
-    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
+    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.
+    M6 (2026-09-24): accepted and decided synchronously; publication to Kafka happens after the response,
+    from the durable spool (D-13, D-15 replace the SRS''s 5 ms publish). The latency criterion is NOT
+    MET on the hardware available (ADR 0059): laptop shapes, not gate figures, client p95 107-121 ms at
+    25-50 req/s and 392 ms at 200 req/s on dev-laptop-01 with the scorer as a double; server decision
+    p95 42-43 ms at 25-50 req/s. Reason: shared hosts with the load generator, API and three stores on
+    four threads, and M5''s real scorer absent. Carried to M10 as PB-73.'
 - id: FR-01-02
   section: 3.1 FR-01 Transaction ingestion API
   title: 'Transaction schema: transaction_id (UUID), account_id (tokenised), counterparty_id (tokenised),
@@ -32,11 +49,24 @@ requirements:
   srs_text: 'Acceptance criterion: 400 returned for any missing required field with specific field-level
     error; 422 for type mismatches'
   defects: []
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/request
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/web
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/ratelimit
+  evidence:
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/request/RequestValidatorTest.java
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/IngestApiTest.java (26
+    shared validation vectors over HTTP)
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/RateLimitApiTest.java
+    (429 with Retry-After; a batch caller cannot exceed the transaction budget)
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/ratelimit/TransactionBudgetTest.java
   deviations: []
+  notes: 'M6 (2026-09-24): validation per E.1 with the contracts'' shared vectors; 413 for an oversized
+    body including chunked; E.1''s 429 is a per-key budget counted in transactions, a batch charged its
+    item count all or nothing (ADR 0058, after M10''s finding in ADR 0100). The budget, 2,000/s with a
+    4,000 burst per key, is ASSUMED.'
 - id: FR-01-03
   section: 3.1 FR-01 Transaction ingestion API
   title: 'Idempotent ingestion: duplicate transaction_id within 24 hours returns 200 with cached ScoringResult;
@@ -47,11 +77,23 @@ requirements:
     1 scored; all 100 return identical cached response; Redis idempotency key TTL=24h confirmed'
   defects:
   - D-12
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/idempotency
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/request/Fingerprints.java
+  evidence:
+  - 'backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/IngestApiTest.java (100
+    identical submissions: 1 scored, identical answers, TTL 24 h, 409 on a changed body)'
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/ResilienceApiTest.java
+    (10,000-duplicate storm scored once)
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/idempotency/RedisIdempotencyTest.java
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/request/RequestValidatorTest.java
+    (every fingerprinted field)
+  deviations:
+  - docs/adr/0067-ingest-idempotency.md
+  notes: 'M6 (2026-09-24): exactly-once decisions per transaction_id across leases and a Redis outage
+    (ADR 0067; Principal Review findings 1, 2, 4 fixed).'
 - id: FR-01-04
   section: 3.1 FR-01 Transaction ingestion API
   title: All 6 East African channels handled as first-class types with channel-specific feature engineering
@@ -61,15 +103,22 @@ requirements:
     AGENT_BANKING triggers agent-specific features; MOBILE_MONEY velocity features computed correctly'
   defects:
   - D-04
-  status: NOT_STARTED
+  status: DONE_WITH_DEVIATION
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/request
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/domain/Transaction.java
+  evidence:
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/IngestApiTest.java (every
+    channel decided, USSD without a device)
+  deviations:
+  - docs/adr/0033-the-scorer-reads-account-context-from-the-feature-store.md
   notes: 'M3 test case (owner, 2026-09-17): a transaction with a null device_fingerprint (USSD, and any
     channel) yields a 44-slot vector whose 4 device-derived features (device_is_new_for_account, accounts_per_device_7d,
     device_changes_24h, device_age_days) are NaN and every other slot is computed; tagged FR-01-04, D-04,
-    TEST-01.'
+    TEST-01. M6 (2026-09-24): all six channels are accepted and decided as first-class values. Channel-specific
+    feature engineering is the scorer''s since ADR 0033 (M5''s feature pipeline and its D-04 tests); the
+    Java decision path computes no feature (ADR 0061 point 7).'
 - id: FR-01-05
   section: 3.1 FR-01 Transaction ingestion API
   title: API key authentication for core banking system (machine-to-machine); JWT for human-facing endpoints;
@@ -79,11 +128,17 @@ requirements:
   srs_text: 'Acceptance criterion: API key cannot access /api/v1/alerts or /api/v1/admin; confirmed by
     permission test; key rotation supported without downtime'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/auth
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/web/ApiKeyFilter.java
+  evidence:
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/IngestApiTest.java (keys
+    required and scoped; no 2xx on staff paths)
   deviations: []
+  notes: 'M6 (2026-09-24): M6''s side is done: the ApiKeyAuthenticator port, scopes on the machine paths.
+    Key verification, rotation and staff-path 403s are M7''s.'
 - id: FR-01-06
   section: 3.1 FR-01 Transaction ingestion API
   title: Batch ingestion POST /api/v1/transactions/ingest/batch accepts up to 1,000 transactions; returns
@@ -93,13 +148,24 @@ requirements:
   srs_text: 'Acceptance criterion: Job status endpoint GET /api/v1/jobs/{id} returns progress; all 1,000
     transactions scored within 30 seconds'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/application/BatchJobs.java
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/web/IngestController.java
+  evidence:
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/IngestApiTest.java (1,000-transaction
+    batch)
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/RateLimitApiTest.java
+    (batches charged by item count)
+  deviations:
+  - docs/adr/0059-m6-latency-gate-not-met-on-this-hardware.md
   notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
-    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
+    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.
+    M6 (2026-09-24): the batch path is complete (every item decided, per-item errors, unfinished jobs
+    failed at start-up, V65). The 30 s criterion is not evidenced on dev-laptop-01: 30.20 s once at load
+    ~7 (and timeouts at load 12-15 on 2026-09-24), passing on re-run: a ~0.2 s, load-sensitive margin
+    is not evidence. Carried to M10 as PB-74.'
 - id: FR-01-07
   section: 3.1 FR-01 Transaction ingestion API
   title: OpenAPI 3.1 specification served at /api/docs with request/response examples for all 6 channel
@@ -406,13 +472,25 @@ requirements:
     0 incorrectly approved; SMS dispatched within 5s'
   defects:
   - D-13
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/domain/DecisionEngine.java
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/application/DecisionService.java
+  evidence:
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/domain/DecisionEngineTest.java
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/IngestApiTest.java (HIGH
+    declined, blocked, customer texted)
+  - docs/benchmarks/2026-09-22-M6-decision-latency.json (Codespace, shape only, ADR 0059)
+  - docs/benchmarks/2026-09-23-M6-decision-latency.json (dev-laptop-01, shape only, ADR 0059)
+  deviations:
+  - docs/adr/0059-m6-latency-gate-not-met-on-this-hardware.md
+  - docs/adr/0061-decision-engine-semantics.md
   notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
-    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
+    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.
+    M6 (2026-09-24): HIGH declines and auto-blocks as E.6 orders it; the latency criterion is NOT MET
+    on this hardware (ADR 0059, shapes as FR-01-01); the ''1,000 HIGH events/s'' load was not run. Carried
+    to M10 as PB-73.'
 - id: FR-03-02
   section: 3.3 FR-03 Risk decision and auto-block engine
   title: 'MEDIUM risk (0.60-0.84): transaction held; published to analyst queue; 30-second countdown;
@@ -425,11 +503,19 @@ requirements:
   - D-10
   - D-14
   - D-18
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/application/HoldTimeoutService.java
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/adapter/redis
+  evidence:
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/application/HoldTimeoutServiceTest.java
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/IngestApiTest.java (holds
+    released at 30 s +-500 ms and delivered by signed webhook)
+  deviations:
+  - docs/adr/0064-durable-spool-and-hold-reconciliation.md
+  notes: 'M6 (2026-09-24): MEDIUM holds with a 30 s deadline, leader-run poller, reconciliation of overdue
+    holds (V62) and holds drained back to Redis after an outage (D-18 tolerance).'
 - id: FR-03-03
   section: 3.3 FR-03 Risk decision and auto-block engine
   title: 'LOW risk (< 0.60): approved and processed within total pipeline latency budget; no analyst involvement'
@@ -438,13 +524,20 @@ requirements:
   srs_text: 'Acceptance criterion: Approval decision within 50ms total; approval rate consistent with
     expected 0.87% fraud rate in test set'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/domain/DecisionEngine.java
+  evidence:
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/domain/DecisionEngineTest.java
+  - docs/benchmarks/2026-09-22-M6-decision-latency.json (Codespace, shape only, ADR 0059)
+  - docs/benchmarks/2026-09-23-M6-decision-latency.json (dev-laptop-01, shape only, ADR 0059)
+  deviations:
+  - docs/adr/0059-m6-latency-gate-not-met-on-this-hardware.md
   notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
-    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
+    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.
+    M6 (2026-09-24): LOW approves; the latency criterion as FR-01-01 (NOT MET on this hardware, ADR 0059;
+    PB-73).'
 - id: FR-03-04
   section: 3.3 FR-03 Risk decision and auto-block engine
   title: 'Customer SMS on auto-block: masked account number, transaction amount, currency, timestamp,
@@ -456,11 +549,23 @@ requirements:
   defects:
   - D-25
   - D-43
-  status: NOT_STARTED
+  status: DONE_WITH_DEVIATION
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/notify/src/main/java/io/github/mariusbayizere/fraudshield/notify/sms
+  - backend/notify/src/main/java/io/github/mariusbayizere/fraudshield/notify/vault
+  evidence:
+  - backend/notify/src/test/java/io/github/mariusbayizere/fraudshield/notify/sms/SmsPolicyTest.java
+  - backend/notify/src/test/java/io/github/mariusbayizere/fraudshield/notify/verification/VerificationFlowTest.java
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/IngestApiTest.java (SMS
+    within 5 s of the block; no PII in logs, Kafka, Redis or spool)
+  - backend/notify/src/test/java/io/github/mariusbayizere/fraudshield/notify/vault/VaultContactsTest.java
+  deviations:
+  - docs/adr/0065-customer-sms-and-verification.md
+  - docs/adr/0069-pii-vault.md
+  notes: 'M6 (2026-09-24): the SMS path runs through the real PII vault adapters. Deviation: no contact
+    is enrolled in a real deployment until M7''s onboarding calls AccountTokens/VaultContacts, and there
+    is no real Africa''s Talking delivery.'
 - id: FR-03-05
   section: 3.3 FR-03 Risk decision and auto-block engine
   title: 'Customer verification: legitimate transaction verified via SMS link; block lifted within 10
@@ -471,11 +576,21 @@ requirements:
     in audit log; feature vector queued for retraining'
   defects:
   - D-25
-  status: NOT_STARTED
+  status: DONE_WITH_DEVIATION
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/notify/src/main/java/io/github/mariusbayizere/fraudshield/notify/verification
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/web/VerificationPageController.java
+  evidence:
+  - backend/notify/src/test/java/io/github/mariusbayizere/fraudshield/notify/verification/VerificationFlowTest.java
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/ResilienceApiTest.java
+    (lifted and webhook within 10 s)
+  deviations:
+  - docs/adr/0065-customer-sms-and-verification.md
+  notes: 'M6 (2026-09-24): owner decision 2026-09-23: the behaviour is correct per D-25, but with no SIM-swap
+    signal no production block offers the page, so the requirement as written is exercised only by tests
+    that issue the link directly (ADR 0065 point 1). A customer answer whose transition fails is reconciled
+    (V64).'
 - id: FR-03-06
   section: 3.3 FR-03 Risk decision and auto-block engine
   title: 'Account freeze logic: 3+ HIGH-risk transactions from same account within 1 hour triggers full
@@ -485,11 +600,18 @@ requirements:
   srs_text: 'Acceptance criterion: Third HIGH transaction triggers freeze at exactly 3; risk officer email
     dispatched; audit log records freeze with reason'
   defects: []
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/adapter/redis/RedisFreezes.java
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/adapter/jdbc
+  evidence:
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/redis/RedisAdaptersTest.java
+    (exactly the third HIGH in 60 min freezes)
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/application/DecisionServiceTest.java
   deviations: []
+  notes: 'M6 (2026-09-24): the production Lua freezes on exactly the third HIGH within the hour; one of
+    twenty racing thirds freezes.'
 - id: FR-03-07
   section: 3.3 FR-03 Risk decision and auto-block engine
   title: 'MCC circuit breaker: fraud rate > 5% from specific MCC in 15-minute rolling window flags all
@@ -500,14 +622,20 @@ requirements:
     60-minute clean window; circuit state visible in admin panel'
   defects:
   - D-18
-  status: NOT_STARTED
+  status: DONE_WITH_DEVIATION
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/domain/MccCircuitBreaker.java
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/adapter/redis/RedisCircuitBreakers.java
+  evidence:
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/domain/FreezeAndBreakerTest.java
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/application/TransitionsAndBreakerMonitorTest.java
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/redis/RedisAdaptersTest.java
   deviations:
-  - docs/adr/0014-staff-authorisation-model.md
+  - docs/adr/0061-decision-engine-semantics.md
   notes: 'Owner decision (ADR 0014 section 3): MCC circuit-breaker settings are under the same asymmetric
-    dual control; breaker state stays ADMIN-readable.'
+    dual control; breaker state stays ADMIN-readable. M6 (2026-09-24): one-minute window granularity (ADR
+    0061 point 4); ''visible in admin panel'' is M7/M8''s.'
 - id: FR-03-08
   section: 3.3 FR-03 Risk decision and auto-block engine
   title: All auto-block decisions append-only in audit log; no decision deletable or modifiable; override
@@ -518,11 +646,18 @@ requirements:
     denied; confirmed by database security test'
   defects:
   - D-30
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/adapter/jdbc/PostgresSink.java
+  - backend/persistence/src/main/resources/db/migration
+  evidence:
+  - backend/persistence/src/test/java/io/github/mariusbayizere/fraudshield/persistence/DatabaseSecurityTest.java
+    (append-only tables, M1)
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/jdbc/PostgresAdaptersTest.java
+    (all writes are inserts into append-only tables)
   deviations: []
+  notes: 'M6 (2026-09-24): every decision fact is an insert into an append-only table.'
 - id: FR-04-01
   section: 3.4 FR-04 Analyst dashboard
   title: Analyst authenticates with email + password OR Google OAuth 2.0; JWT issued; first name, last
@@ -1280,11 +1415,19 @@ requirements:
     zero raw SQL string concatenation; Verification: OWASP ZAP automated scan: 0 SQL injection findings;
     SonarQube: 0 injection hotspots'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/adapter/jdbc
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/jpa
+  - backend/notify/src/main/java/io/github/mariusbayizere/fraudshield/notify/vault
+  evidence:
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/jdbc/PostgresAdaptersTest.java
+  - backend/notify/src/test/java/io/github/mariusbayizere/fraudshield/notify/vault/AccountTokensTest.java
   deviations: []
+  notes: 'M6 (2026-09-24): every M6 statement is parameterised (JPA for configuration and jobs, prepared
+    statements for explicit SQL; ADR 0068); no M6 SQL is built by string concatenation of input. The verification
+    the row names (OWASP ZAP, SonarQube) has not been run; it belongs to the security scans of M9/M10.'
 - id: NFR-SEC-07
   section: 4.2 Security
   title: XSS prevention
@@ -1351,15 +1494,24 @@ requirements:
     with ML_UNAVAILABLE label; Recovery: ML service restart resumes scoring; backlog caught up within
     2 minutes; Test: Integration: ML service pod killed; fallback activates; Kafka lag clears after restart'
   defects: []
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/adapter/grpc
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/domain/FallbackRules.java
+  evidence:
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/grpc/GrpcScorerTest.java
+    (circuit opens within 5 s, closes after recovery)
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/ResilienceApiTest.java
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/domain/FallbackRulesTest.java
+  deviations:
+  - docs/adr/0061-decision-engine-semantics.md
   notes: 'M6: circuit-breaker integration test (ML scorer down -> rule-based fallback within 5 s) runs
     in a Spring Boot 4.1 context and is the compatibility proof for resilience4j-spring-boot4 2.4.0, built
     against Boot 4.0.0 (ADR 0007); fallback plan: resilience4j-circuitbreaker core with explicit beans.
-    Tagged requires-docker if it uses Testcontainers (ADR 0010).'
+    Tagged requires-docker if it uses Testcontainers (ADR 0010). M6 (2026-09-24): scorer down: decisions
+    continue on fallback-rules-2 (MEDIUM hold at 2,000,000 RWF or more, otherwise LOW; never blocks),
+    flagged; chaos at test scale.'
 - id: NFR-REL-02
   section: 4.3 Reliability
   title: Kafka broker failure
@@ -1371,11 +1523,21 @@ requirements:
     replay confirmed after restart'
   defects:
   - D-15
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/adapter/spool
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/adapter/kafka
+  evidence:
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/kafka/KafkaSpoolChaosTest.java
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/spool/DurableSpoolTest.java
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/spool/SpoolDrainerTest.java
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/ResilienceApiTest.java
+  deviations:
+  - docs/adr/0064-durable-spool-and-hold-reconciliation.md
+  notes: 'M6 (2026-09-24): Kafka down: decisions continue into the durable spool and are published in
+    order after recovery; the process-death case is an in-JVM close, not a forked-JVM kill (declared,
+    ADR 0064).'
 - id: NFR-REL-03
   section: 4.3 Reliability
   title: Redis feature store down
@@ -1386,11 +1548,19 @@ requirements:
     PostgreSQL within 5 minutes; Test: Unit: all Redis calls wrapped in try/except with DB fallback path
     tested'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/adapter/resilience
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/adapter/redis
+  evidence:
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/resilience/RedisOutageTest.java
+    (decisions continue while Redis is down and resume after)
+  deviations:
+  - docs/adr/0062-durable-account-profiles.md
+  notes: 'M6 (2026-09-24): the decision path''s own Redis state degrades to PostgreSQL and per-instance
+    fallbacks. The feature store''s database fallback (PB-69) is on m6/featurestore-fallback and closes
+    when that branch merges; ''rebuilt from PostgreSQL within 5 minutes'' is not measured.'
 - id: NFR-REL-04
   section: 4.3 Reliability
   title: PostgreSQL primary failure
@@ -1401,11 +1571,16 @@ requirements:
     zero data loss; Test: Chaos engineering: DB primary pod deleted; replica promotion timed'
   defects:
   - D-49
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/adapter/spool
+  evidence:
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/ResilienceApiTest.java
+    (decisions continue with PostgreSQL paused, through the spool)
   deviations: []
+  notes: 'M6 (2026-09-24): the application side holds: with PostgreSQL unavailable decisions continue
+    and are written after recovery. Replica promotion within 30 s by an operator is deployment work (M9).'
 - id: NFR-REL-05
   section: 4.3 Reliability
   title: Duplicate transaction storm
@@ -1415,13 +1590,18 @@ requirements:
     once; Recovery: Cache hit returns in < 1ms; no reprocessing; no duplicate blocks; Test: Load test:
     10,000 identical transaction_ids; exactly 1 scored; all return cached response'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/idempotency
+  evidence:
+  - 'backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/ResilienceApiTest.java
+    (10,000 identical transaction_ids: exactly one scored, all answered from the stored response)'
   deviations: []
   notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
-    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
+    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.
+    M6 (2026-09-24): the behaviour is evidenced; the ''< 1 ms cache hit'' is a benchmark criterion (ADR
+    0010) with no measurement file, for M10''s dedicated machine alongside PB-73.'
 - id: NFR-REL-06
   section: 4.3 Reliability
   title: Google OAuth service unavailable
@@ -1438,6 +1618,8 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M6 (2026-09-24): not M6''s: Google OAuth fallback is staff authentication (M7). M6 built nothing
+    here.'
 - id: UX-REG-01
   section: 5.3 Registration form
   title: First Name
@@ -2502,7 +2684,9 @@ requirements:
     NaN for every row, which D-04''s missing handling covers, so nothing raises and the count still reads
     44. The ''>= 98% computable'' clause is therefore satisfied in the sense of not raising while six
     features carry nothing. The registry declares computable per feature and ''fs-features computability''
-    fails if a COMPUTABLE feature is NaN for 100% of rows or a NO_SOURCE_DATA one is not. See docs/features.md.'
+    fails if a COMPUTABLE feature is NaN for 100% of rows or a NO_SOURCE_DATA one is not. See docs/features.md.
+    M6 (2026-09-24): not M6''s: feature completeness is measured on the feature pipeline (M3, PB-44) and
+    the scorer (M5). The row''s milestone should be revisited at integration.'
 - id: ML-DATA-08
   section: 7.1 Dataset
   title: Dataset release
@@ -3231,11 +3415,26 @@ requirements:
   defects:
   - D-17
   - D-18
-  status: NOT_STARTED
+  status: DONE_WITH_DEVIATION
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/domain
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/application
+  evidence:
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/domain/DecisionEngineTest.java
+    (threshold combinations, including a generative property)
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/domain/FreezeAndBreakerTest.java
+    (breaker above 5.0% with minimum volume)
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/application/HoldTimeoutServiceTest.java
+    (the 30 s timer)
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/idempotency/RedisIdempotencyTest.java
+    (no double decision)
+  deviations:
+  - docs/adr/0009-dependency-licence-policy.md
+  - docs/adr/0061-decision-engine-semantics.md
+  notes: 'M6 (2026-09-24): JUnit 5, not pytest (D-17); property tests use a fixed-seed generator because
+    jqwik was removed (ADR 0009). The breaker window is one-minute buckets and the breach test is exact
+    (ADR 0061 point 4).'
 - id: TEST-04
   section: 9 Testing requirements
   title: 'Unit: Auth (JWT + OAuth + API Key)'
@@ -3259,11 +3458,18 @@ requirements:
     Key Scenarios: Transaction ingested -> Kafka published -> ML scored -> risk decision -> auto-block
     OR analyst alert; p95 < 50ms confirmed; duplicate idempotency: 100 identical submissions = 1 scored'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision
+  evidence:
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/IngestApiTest.java (HTTP
+    to decision, auto-block or alert, 100 identical submissions scored once)
+  deviations:
+  - docs/adr/0059-m6-latency-gate-not-met-on-this-hardware.md
+  notes: 'M6 (2026-09-24): the pipeline is covered end to end with real PostgreSQL, Redis and Kafka; ''p95
+    < 50 ms confirmed'' is NOT MET on this hardware (ADR 0059, PB-73); the analyst dashboard end is M7/M8.'
 - id: TEST-06
   section: 9 Testing requirements
   title: 'Integration: Analyst Decision Flow'
@@ -3764,11 +3970,20 @@ requirements:
   - FR-02-05
   - FR-03-02
   - FR-04-02
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/domain/DecisionEngine.java
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/application/HoldTimeoutService.java
+  evidence:
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/domain/DecisionEngineTest.java
+    (LOW with a high anomaly percentile goes to ANOMALY_REVIEW without a hold)
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/application/HoldTimeoutServiceTest.java
+    (per-channel timeout policy)
+  deviations:
+  - docs/adr/0061-decision-engine-semantics.md
+  notes: 'M6 (2026-09-24): anomaly routing without a hold, and a per-channel timeout policy for MEDIUM
+    holds.'
 - id: D-11
   section: Build prompt Part B defect register
   title: Shadow "within 1%" is ambiguous and labels are delayed.
@@ -3803,11 +4018,19 @@ requirements:
   affects:
   - FR-01-03
   - FR-02-01
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/domain/ReasonCodes.java
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/web/IngestController.java
+  evidence:
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/IngestApiTest.java (the
+    decision response has exactly the contract fields)
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/domain/DecisionEngineTest.java
+  deviations:
+  - docs/adr/0061-decision-engine-semantics.md
+  notes: 'M6 (2026-09-24): the machine response carries at most three coarse reason codes, never the feature
+    vector, per-model scores or SHAP values (ADR 0061 point 5).'
 - id: D-13
   section: Build prompt Part B defect register
   title: The latency budget sums to 51 ms and puts PostgreSQL and Kafka round-trips in the synchronous
@@ -3820,11 +4043,22 @@ requirements:
   - FR-01-01
   - FR-03-01
   - NFR-PERF-02
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/adapter/spool
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/application/DecisionService.java
+  evidence:
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/kafka/KafkaSpoolChaosTest.java
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/application/DecisionServiceTest.java
+  - docs/benchmarks/2026-09-22-M6-decision-latency.json (Codespace, shape only, ADR 0059)
+  - docs/benchmarks/2026-09-23-M6-decision-latency.json (dev-laptop-01, shape only, ADR 0059)
+  deviations:
+  - docs/adr/0059-m6-latency-gate-not-met-on-this-hardware.md
+  - docs/adr/0064-durable-spool-and-hold-reconciliation.md
+  notes: 'M6 (2026-09-24): the resolution is built: Kafka and the PostgreSQL writes are off the synchronous
+    path (spool after the response), and the hot-path reads are bounded. Whether the p95 meets 50 ms is
+    PB-73''s measurement (ADR 0059).'
 - id: D-14
   section: Build prompt Part B defect register
   title: MEDIUM "hold for 30 seconds" cannot be an open HTTP request.
@@ -3834,11 +4068,17 @@ requirements:
   defects: []
   affects:
   - FR-03-02
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/adapter/jdbc
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/application/HoldTimeoutService.java
+  evidence:
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/jdbc/PostgresAdaptersTest.java
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/application/HoldTimeoutServiceTest.java
+  deviations:
+  - docs/adr/0064-durable-spool-and-hold-reconciliation.md
+  notes: 'M6 (2026-09-24): see ADR 0064.'
 - id: D-15
   section: Build prompt Part B defect register
   title: '"Buffer up to 10,000 transactions in memory" loses data if the pod dies.'
@@ -3848,11 +4088,19 @@ requirements:
   defects: []
   affects:
   - NFR-REL-02
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/adapter/spool
+  evidence:
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/spool/DurableSpoolTest.java
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/spool/SpoolDrainerTest.java
+    (nothing committed past a refused batch)
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/kafka/KafkaSpoolChaosTest.java
+  deviations:
+  - docs/adr/0064-durable-spool-and-hold-reconciliation.md
+  notes: 'M6 (2026-09-24): the durable spool; the forked-JVM kill test D-15 asks for is not built (the
+    chaos test''s process death is an in-JVM close, declared in ADR 0064).'
 - id: D-16
   section: Build prompt Part B defect register
   title: Python in the hot path at 10k TPS.
@@ -3890,13 +4138,17 @@ requirements:
   defects: []
   affects:
   - TEST-03
-  status: NOT_STARTED
+  status: DONE_WITH_DEVIATION
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
-  notes: jqwik removed (ADR 0009, A.4 item 1); M6 decision-engine property tests use a JUnit 5 extension
-    with per-run logged seeds; close as DONE_WITH_DEVIATION citing ADR 0009.
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/domain
+  evidence:
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/domain/DecisionEngineTest.java
+  deviations:
+  - docs/adr/0009-dependency-licence-policy.md
+  notes: 'jqwik removed (ADR 0009, A.4 item 1); M6 decision-engine property tests use a JUnit 5 extension
+    with per-run logged seeds; close as DONE_WITH_DEVIATION citing ADR 0009. M6 (2026-09-24): JUnit 5
+    for the decision engine; jqwik removed (ADR 0009), property tests on a fixed-seed generator.'
 - id: D-18
   section: Build prompt Part B defect register
   title: '"Exactly 30 s" and "exactly at 5%" need tolerances and minimum volume.'
@@ -3908,11 +4160,20 @@ requirements:
   - FR-03-02
   - FR-03-07
   - TEST-03
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/domain/MccCircuitBreaker.java
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/application/HoldTimeoutService.java
+  evidence:
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/domain/FreezeAndBreakerTest.java
+    (exactly 5.0% does not open, one more fraud does)
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/IngestApiTest.java (30
+    s +-500 ms)
+  deviations:
+  - docs/adr/0061-decision-engine-semantics.md
+  - docs/adr/0064-durable-spool-and-hold-reconciliation.md
+  notes: 'M6 (2026-09-24): tolerances and minimum volume as ADR 0061 point 4 and ADR 0064 state.'
 - id: D-19
   section: Build prompt Part B defect register
   title: API keys "stored as bcrypt hash" cannot be verified at 10,000 TPS
@@ -3937,16 +4198,27 @@ requirements:
   defects: []
   affects:
   - NFR-SEC-01
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/notify/src/main/java/io/github/mariusbayizere/fraudshield/notify/vault
+  - backend/persistence/src/main/resources/db/vault
+  - infrastructure/docker/pii-vault/init/20-vault-roles.sh
+  evidence:
+  - backend/notify/src/test/java/io/github/mariusbayizere/fraudshield/notify/vault/VaultContactsTest.java
+  - backend/notify/src/test/java/io/github/mariusbayizere/fraudshield/notify/vault/AccountTokensTest.java
+  - backend/notify/src/test/java/io/github/mariusbayizere/fraudshield/notify/vault/KmsKeyProviderTest.java
+  - backend/notify/src/test/java/io/github/mariusbayizere/fraudshield/notify/vault/InMemoryKmsTest.java
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/config/VaultConfigurationTest.java
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/IngestApiTest.java (no
+    PII in logs, Kafka, Redis or spool)
   deviations:
-  - docs/adr/0021-m1-scope-replan.md
+  - docs/adr/0069-pii-vault.md
   notes: 'Re-planned from M1 to M6 by ADR 0021: vault schema, dedicated role and AES-256-GCM envelope
     encryption behind a key-provider interface in M6; KMS, encrypted volumes, Redis TLS and network policy
     in M9. M1 delivered only the separate Compose instance; no customer PII column exists in the main
-    schema.'
+    schema. M6 (2026-09-24): application side and local stack (ADR 0069). M9''s: the vendor KmsClient
+    binding (M9_updates.md section 8), encrypted volumes, Redis TLS.'
 - id: D-21
   section: Build prompt Part B defect register
   title: 'Data residency: SRS says "af-south-1 or equivalent", but af-south-1 is Cape Town, outside the
@@ -4028,11 +4300,17 @@ requirements:
   affects:
   - FR-03-04
   - FR-03-05
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/notify/src/main/java/io/github/mariusbayizere/fraudshield/notify/sms/SelfServicePolicy.java
+  evidence:
+  - backend/notify/src/test/java/io/github/mariusbayizere/fraudshield/notify/sms/SmsPolicyTest.java (without
+    the SIM-swap signal no block offers self-service)
+  deviations:
+  - docs/adr/0065-customer-sms-and-verification.md
+  notes: 'M6 (2026-09-24): self-service refused when the SIM-swap age is unknown, which today is every
+    block: intended per D-25 (owner, 2026-09-23).'
 - id: D-26
   section: Build prompt Part B defect register
   title: '"10 attempts per 15 min per IP" will lock out whole bank offices and mobile users behind carrier-grade
@@ -4476,8 +4754,18 @@ requirements:
   affects:
   - TEST-07
   - NFR-REL-06
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/notify/src/main/java/io/github/mariusbayizere/fraudshield/notify/sms
+  - backend/notify/src/main/java/io/github/mariusbayizere/fraudshield/notify/vault
+  evidence:
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/IngestApiTest.java (SMS
+    provider double)
+  - backend/notify/src/test/java/io/github/mariusbayizere/fraudshield/notify/vault/InMemoryKmsTest.java
+    (key service double)
   deviations: []
+  notes: 'M6 (2026-09-24): M6''s external services run locally and in CI without real credentials: the
+    SMS provider behind a gateway port (WireMock stub in the stack), the key service behind KmsClient
+    with an in-memory double, the vault with configured keys under dev/demo/test. Google OAuth (M7) is
+    not M6''s.'
