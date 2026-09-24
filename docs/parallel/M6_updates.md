@@ -784,6 +784,59 @@ not tagged:** `devcontainer` run 35970682163 executed and **failed**.
   - `098c5dc`'s own CI is superseded by this change.
   - The change needs review 13.
 
+## SMS race: stopped for the owner (2026-09-24)
+
+**Review 13 of `b6f79a9`: CHANGES_REQUIRED, 1 MAJOR**
+(`docs/reviews/M6/m6-decision-2026-09-24-thirteenth.md`). The author stopped the fix loop here.
+
+**Why stop:** reviews 11, 12 and 13 each found a new MAJOR in this one path, and each fix round
+introduced the next defect. The remaining choices are design trade-offs for the owner, not defects
+the author can close.
+
+**The MAJOR:** a transaction decided twice gets a second random auto-block id. `PostgresSink` keeps
+the first decision and silently skips the second decision's rows, but Kafka still carries the second
+SMS intent.
+
+- At `b6f79a9` that intent waits for ever and stalls its partition. Replaying the writer's
+  dead-letter file does not help, because nothing was dead-lettered.
+- The intent carries nothing that identifies its transaction: the reference code is a hash of the
+  random block id. So the consumer cannot tell this orphan from a late parent without a change
+  elsewhere.
+
+**State of the branches:**
+
+- `main` = `5c3f6b2`. It has the original race: the SMS is sent before the parent is checked. With a
+  verification link allowed, the link's insert fails on the foreign key before sending, and the
+  intent is dead-lettered with no SMS sent. Without a link, the SMS is sent but its record is
+  refused.
+- `m6/decision` = `b6f79a9` plus this record. It sends nothing before the parent exists and never
+  loses an intent, but an intent whose parent never arrives stalls its partition, and the duplicate
+  decision above produces exactly that.
+- **`m6-complete` is not tagged.**
+
+**Options, for the owner to choose:**
+
+1. **Deterministic ids in the decision service.** Derive the auto-block id and the notification id
+   from the transaction id (name-based UUID). A re-decided transaction's intent then points at the
+   first decision's block, which exists, and the outcome check drops the duplicate SMS. No contract
+   change is needed.
+   - Residue: if the first decision was not an auto-block but the second was, the second block
+     still never exists. That case needs option 2 or 3 as well.
+2. **Add `transaction_id` to the customer-notification payload.** This is a frozen-contract change,
+   so it needs the owner. The consumer could then commit past an intent whose transaction's
+   persisted first decision has no such block.
+3. **Bound the wait again, with a replay.** Keep the no-deadline wait for a late writer, but give
+   operators a tool that replays `fs.notifications.customer.dlq`, and dead-letter after a bound. An
+   SMS dead-lettered wrongly can then be recovered rather than lost. This needs the replay tool and
+   an alert.
+4. **Accept `b6f79a9` as it is** for M6, carrying MAJOR 1 and MINORs 2 to 4 to a later milestone
+   with an alert on the WARN (the duplicate decision is rare: a crash between the spool append and
+   the response, or Redis down during a race).
+
+The author's recommendation is **option 1 plus option 3**. Deterministic ids remove the common
+orphan without a contract change. The replay tool makes any bound recoverable, so no deadline can
+lose a notice for good.
+
 ## Resume here (final state, 2026-09-23, after CI)
 
 **Stopped as instructed: nothing merged, nothing tagged.**
