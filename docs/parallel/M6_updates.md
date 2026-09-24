@@ -689,7 +689,20 @@ acceptance, all or nothing, and replace the 200 per second implementation defaul
   suites all green (`RateLimitApiTest` 8, `TransactionBudgetTest` 6, `RateLimitFilterTest` 2,
   `RetryAfterTest` 1, `RateLimitConfigurationTest` 3, `ResilienceApiTest` 5); the one error is
   FR-01-06's thirty-second batch under load, carried as PB-74. CI is the authority.
-- This is a code change, so it needs an independent review before M6 merges (owner's rule). M6 is
+- This is a code change, so it needs an independent review before M6 merges (owner's rule).
+- **Review 10 (2026-09-24) of the rate-limit fix at `7a86405`: clean** (0 BLOCKER, 0 MAJOR, 3
+  MINOR, 4 NIT; `docs/reviews/M6/m6-decision-2026-09-24-tenth.md`). The review loop for the fix
+  ends here, as the owner's rule says. MINORs 2 and 3 and NIT 7 are fixed in ADR 0058; the ADR
+  change is documentation-only and needs no review. MINOR 1 is also handled by correcting the ADR,
+  which now rests all or nothing on `TransactionBudgetTest`. NITs 4, 5 and 6 are recorded; none of
+  them admits extra work. The fix took three review rounds (8, 9 and 10). The first two found a
+  MAJOR each, and round 9's fix also let a stale degraded window reach CI (ci #343).
+- CI at job level on `7a86405`:
+  - ci run 35969165956: all 8 jobs success, java included.
+  - stack run 35969175673 (`workflow_dispatch`): the core compose stack job and its smoke test
+    **executed** and succeeded. The push-triggered stack run was cancelled; the dispatch
+    superseded it.
+  - devcontainer: path-filtered (skipped), since no devcontainer inputs changed. M6 is
   **not** ready again until that review is clean and CI (with the stack job executed) is green on
   the head that carries it.
 

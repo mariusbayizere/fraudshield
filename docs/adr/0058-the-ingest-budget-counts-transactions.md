@@ -28,7 +28,10 @@ a requirement's job: no document says it is right and nothing fails if it is wro
    `Retry-After`, and no job is recorded; the admission unit is kept, as it is for any refused
    request, so a refused batch costs one unit and an accepted batch exactly its item count. A
    partially accepted batch would give the caller per-item outcomes `JobAccepted` cannot
-   express.
+   express. A third case (review 10): a valid batch whose job cannot then be recorded, because the
+   database is unavailable, has been charged its item count and is answered 500; a retry pays
+   again. The charge is not refunded. That overcharges during an outage and never admits extra work,
+   which is the safe direction for this control.
 2. **Where the charge is taken.** The rate-limit filter charges one unit for every request on the
    machine paths, the batch submission included, **before the body is read**: a key over its budget
    is refused with 429 without the server reading or parsing anything. A batch's item count is known
@@ -57,7 +60,11 @@ a requirement's job: no document says it is right and nothing fails if it is wro
    to be accepted if it is sent again, floored at one (ADR 0100 point 5). For a batch refused at its
    second charge that is the wait for **the whole batch**, since a retry pays admission again, not
    only for the rest (revised after review 9). `RateLimit-Remaining` on a refusal reports what is
-   left after the admission unit: the refused charge itself takes nothing.
+   left after the admission unit: the refused charge itself takes nothing. A batch refused **at
+   admission** is told the wait for one unit, because its size is not yet known; that wait also fits
+   any batch only while the rate is at least the largest batch (1,000 per second; the default is
+   2,000). Below that, a caller retrying a large batch after the admission wait may pass admission
+   and be refused at the second charge, paying one unit each time (review 10).
 7. **Outage behaviour is unchanged**: with Redis unavailable each instance charges its own bucket in
    the same units, marked `RateLimit-Degraded: true` and counted.
 
@@ -66,10 +73,15 @@ a requirement's job: no document says it is right and nothing fails if it is wro
 - `TransactionBudgetTest` (both limiters: a batch costs its item count; a refused charge takes
   nothing and says so; single and batch charges share one bucket per key);
   `RateLimitApiTest.batchCallersCannotExceedTheTransactionBudget` (batches of 300 as fast as the
-  client sends, for three seconds: the transactions accepted never exceed the burst plus what
-  refilled, a refused batch records no job, and what remained after a refusal still buys a smaller
-  batch); `exhaustedKeysAreRefusedBeforeTheirBatchBodyIsRead` (an exhausted key's stalled batch is
-  answered 429 while its body is still arriving);
+  client sends, until the budget bites and for at least three seconds, at most thirty: the
+  transactions accepted never exceed the burst plus what refilled, and a refused batch records no
+  job; its closing check that what remained still buys a smaller batch runs only when a unit
+  remains, which on a fast client it usually does not, so all or nothing rests on
+  `TransactionBudgetTest`); `RateLimitFilterTest` (without timing: an exhausted key is refused
+  before its body is read, and every protected path costs one unit);
+  `exhaustedKeysAreRefusedBeforeTheirBatchBodyIsRead` (the same through the API, with stalled
+  connections); `batchesRefusedAtTheirSecondChargeAreToldWhenTheWholeBatchWillFit` and
+  `RetryAfterTest` (the whole-batch wait);
   `refusedOrInvalidBatchesCostOneUnitAndValidOnesTheirItemCount`; and
   `RateLimitConfigurationTest` (the default, and the burst check).
 - The configuration keys are renamed to say what they count:
