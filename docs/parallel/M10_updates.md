@@ -186,3 +186,23 @@ The items belonging to other milestones are written into their files, not decide
   here is written to make sense against either.
 
 **M10 does not run** until M6, M7, M8 and M9 are on `main` and the owner has decided the hardware.
+
+## Owner decisions, 2026-09-24 (second round)
+
+1. **ADR 0100 accepted**, with the transaction-counting change, which the owner named as the
+   important part. The change is recorded for M6 as **a defect to fix before M6 merges** — a
+   security control that does not currently hold — and not as a proposal for later. The budget
+   figures stay ASSUMED and may be revised without reopening the ADR; the unit of account is the
+   merge condition. `docs/parallel/M6_updates.md` is written in those terms.
+2. **Recorded in the lab notebook** (`docs/research/lab_notebook.md`, 2026-09-24, under a new M10
+   section): *a control whose unit of account differs from the unit of load is not a control.* It
+   belongs with the guard failures of M2 and M4 — the parameter digest guarding inputs while the
+   claim lived in the output, the D-08 ceiling true of columns and false of features — and it adds
+   a third instance to the rule that a guard must range over the object the sentence is about. The
+   entry also records how it was found: not by review, which it survived, but because a number had
+   to be justified in writing rather than defaulted.
+3. **ADR 0101 accepted as written.**
+4. **Hardware:** the owner decides before the campaign runs. `docs/benchmarks/m10_machine_spec.md`
+   stands as the requirement in the meantime and now says so in its status line.
+
+**M10 stops here.** It waits for M6, M7, M8 and M9 on `main`, and for the hardware decision.
