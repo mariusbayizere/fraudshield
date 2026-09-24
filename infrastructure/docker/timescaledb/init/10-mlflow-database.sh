@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Runs once on first container start (docker-entrypoint-initdb.d).
 # Creates the MLflow tracking database and its least-privilege owner role.
-# Application roles (fs_app, fs_app_readonly, fs_compliance_ro, fs_migrator) are created by
-# Flyway migrations in M1, not here.
+# The FraudShield roles are created by 20-fraudshield-roles.sh (ADR 0017).
 set -euo pipefail
 
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \

@@ -1,0 +1,27 @@
+description: Temporal split into train, validation (with calibration) and the temporal hold-out test set.
+parameters:
+  train_rows:
+    value: 4160000
+    unit: transactions
+    provenance: CALIBRATED_TO_SRS_TARGET
+    citation: SRS v1.0 section 7.1, ML-DATA-01 and binding resolution D-07 (train about 4.16M)
+  validation_rows:
+    value: 520000
+    unit: transactions
+    provenance: CALIBRATED_TO_SRS_TARGET
+    citation: SRS v1.0 section 7.1, ML-DATA-01 and binding resolution D-07 (validation about 520K)
+  test_rows:
+    value: 520000
+    unit: transactions
+    provenance: CALIBRATED_TO_SRS_TARGET
+    citation: SRS v1.0 section 7.1, ML-DATA-01 and binding resolution D-07 (test about 520K, the most recent contiguous period)
+  calibration_fraction_of_validation:
+    value: 0.40
+    unit: chronologically last fraction of the validation period
+    provenance: CALIBRATED_TO_SRS_TARGET
+    citation: Binding resolution D-07 (the chronologically last 40% of validation is the calibration split)
+  embargo_days:
+    value: 7
+    unit: days between the end of validation and the start of test, excluded from all splits
+    provenance: CALIBRATED_TO_SRS_TARGET
+    citation: Binding resolution D-07 (7-day embargo to model label delay)

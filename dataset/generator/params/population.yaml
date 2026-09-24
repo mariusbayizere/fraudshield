@@ -1,0 +1,122 @@
+description: Customers, their segments, activity and account-level events.
+parameters:
+  mean_transactions_per_active_customer_month:
+    value: 8.8
+    unit: transactions per active customer per month (mean)
+    provenance: SOURCED
+    citation: >-
+      Bank of Tanzania, Payment Systems Annual Report for 2024 (2025), Annex H, Table H1 "Mobile Payments", page
+      47: 6,414 million mobile money transactions and 60,745,698 active mobile money users in 2024, which is 8.8
+      transactions per active user per month.
+      https://www.bot.go.tz/Publications/Regular/Annual%20Report/sw/2025032515311662.pdf
+    accessed: 2026-09-18
+    rationale: >-
+      The report gives yearly volume and active users, so the monthly figure is their ratio divided
+      by twelve. The figure is Tanzanian, used as a proxy: Rwanda publishes subscriber and access
+      point counts but no comparable transaction volume series, and the dataset's country mix is
+      Rwanda-weighted. It also covers mobile money alone, while the SRS channel mix puts 32% of rows
+      on card, bank transfer and agent banking and 9% more online (ML-DATA-03), so it anchors the
+      order of magnitude rather than measuring this dataset's own mix.
+  activity_log_sigma:
+    value: 0.8
+    unit: standard deviation of the log of each customer's activity multiplier (mean-one log-normal)
+    provenance: ASSUMED
+    rationale: Customer activity is heavily skewed in payment data generally; a log-normal with sigma 0.8 gives a long tail of heavy users while keeping most customers near the mean. The generator places customers on this distribution's quantiles and rescales each country's multipliers to average exactly one, so the shape is preserved while the planned volume and country mix do not inherit sampling variance.
+  urban_share_of_customers:
+    value: 0.32
+    unit: fraction of simulated customers living in urban areas
+    provenance: SOURCED
+    citation: >-
+      National Institute of Statistics of Rwanda, Fifth Rwanda Population and Housing Census 2022, Main Indicators
+      Report (2023), Table 2 "Resident population by residence, Province, and District", page 30: 27.9% urban and
+      72.1% rural; and FinScope Rwanda 2024 (NISR, 2024), Figure 26 "Mobile money uptake/use by demographics",
+      page 40: 87% of urban and 72% of rural adults use mobile money.
+      Census:
+      https://statistics.gov.rw/sites/default/files/documents/2025-02/RPHC5_MainIndicatorsReport_Final.pdf
+      FinScope:
+      https://statistics.gov.rw/sites/default/files/documents/2024-09/Rwanda-Finscope-2024-Report_compressed.pdf
+      Both documents were read on 2026-09-18.
+    accessed: 2026-09-18
+    rationale: >-
+      Payment customers are not the general population, so the census split is weighted by usage: 0.279 x 0.87
+      urban against 0.721 x 0.72 rural gives 31.9% of users in urban areas, rounded to 32%. The generator refuses
+      to run if the urban segments do not sum to this share, so the sourced fact constrains the assumed segment
+      split rather than sitting beside it.
+  segment_share:
+    value: {urban_salaried: 0.24, informal_trader: 0.26, rural_ussd: 0.42, student: 0.08}
+    unit: fraction of customers
+    provenance: ASSUMED
+    rationale: Four behavioural segments needed by Part E.3 (salary cycles, market days, rural USSD use). The urban segments (urban_salaried, student) sum to the sourced urban_share_of_customers and the rural ones (informal_trader, rural_ussd) to the remainder; how each side divides between its two segments is a modelling choice, and the channel mix is re-solved per segment to keep meeting ML-DATA-03.
+  kyc_tier_share:
+    value: {TIER_1: 0.45, TIER_2: 0.40, TIER_3: 0.15}
+    unit: fraction of customers by KYC tier (1 = lowest limits)
+    provenance: ASSUMED
+    rationale: Tiered KYC with most customers on lower tiers is the common mobile-money structure; the exact shares are a modelling choice.
+  legit_sim_swap_monthly_probability:
+    value: 0.004
+    unit: probability that a customer has a legitimate SIM replacement in a month
+    provenance: ASSUMED
+    rationale: Legitimate SIM replacements (lost or damaged SIMs) must exist so a SIM swap alone does not identify fraud; the rate is a modelling choice.
+  device_change_monthly_probability:
+    value: 0.02
+    unit: probability that a smartphone customer changes device in a month
+    provenance: ASSUMED
+    rationale: Legitimate device changes (new phones, reinstalls) must exist so a new device alone does not identify account takeover; roughly one change every four years per customer.
+  shared_device_share:
+    value: 0.14
+    unit: fraction of smartphone customers who use a handset handed down from another customer
+    provenance: ASSUMED
+    rationale: >-
+      Handset sharing within a household is ordinary in these markets, and without it no device in
+      the dataset is ever seen on two accounts -- which left accounts_per_device_7d identically 1
+      and the "shared device across accounts" term of synthetic_identity_score dead (PB-40). The
+      rate is a modelling choice: the 2026-09-18 sourcing pass established that no publication
+      found gives handset-sharing rates for these markets, so a figure presented as sourced would
+      be the kind of claim D-09 exists to prevent. What it has to get right is that the feature
+      has a distribution with overlap between legitimate and fraudulent accounts, not that 0.14 is
+      the true rate.
+  counterparties_per_customer:
+    value: 12
+    unit: distinct regular person-to-person counterparties per customer (mean)
+    provenance: ASSUMED
+    rationale: Family and social payment circles; the size is a modelling choice that controls how often payments go to known counterparties.
+  customers_per_merchant:
+    value: 12
+    unit: active customers per simulated merchant
+    provenance: SOURCED
+    citation: >-
+      National Bank of Rwanda, NBR Annual Report 2024-2025 (2025), Table 11 "Payment Access Points", page 86:
+      625,489 modern (mobile and virtual) POS devices in June 2025 against 7,457,114 active mobile payment
+      subscribers, which is 11.9 active customers per merchant acceptance point.
+      https://www.bnr.rw/documents/Annual_Report_2024_25_English_Full_Version_RwYAWN0.pdf
+    accessed: 2026-09-18
+    rationale: Rounded from 11.9 to 12. The report counts acceptance devices rather than businesses, and 99.9% of modern POS are mobile POS, which in practice is one merchant code each. Tanzania reports 1,327,803 merchants against 60,745,698 users for 2024, a ratio of 46 (Payment Systems Annual Report for 2024, page 12); Rwanda's figure is used because Rwanda is the largest country in the simulated mix.
+  customers_per_agent:
+    value: 30
+    unit: active customers per simulated cash agent
+    provenance: SOURCED
+    citation: >-
+      National Bank of Rwanda, NBR Annual Report 2024-2025 (2025), Table 11 "Payment Access Points", page 86:
+      240,049 mobile agents and 10,993 banking agents in June 2025; and the same report, Payment Instruments
+      Issuance, page 86: 7,457,114 active mobile payment subscribers in June 2025, which is 29.7 active customers
+      per agent. https://www.bnr.rw/documents/Annual_Report_2024_25_English_Full_Version_RwYAWN0.pdf
+    accessed: 2026-09-18
+    rationale: >-
+      Rounded from 29.7 to 30. Tanzania's ratio for 2024 is 41 (Bank of Tanzania Payment Systems Annual Report for
+      2024, Table H1: 60,745,698 active users, 1,475,281 agents); Rwanda's figure is used because Rwanda is the
+      largest country in the simulated mix (ML-DATA-05).
+  home_spread_degrees:
+    value: 0.6
+    unit: standard deviation (degrees) of customers' home locations around the country centre
+    provenance: ASSUMED
+    rationale: A single urban-and-peri-urban cluster per country of roughly 60 km; district population weights (Part E.3) are not sourced yet, so this is a stand-in modelling choice.
+  merchants_per_customer:
+    value: [3, 8]
+    unit: inclusive range of regular merchants per customer
+    provenance: ASSUMED
+    rationale: A handful of shops, fuel stations and billers each customer pays repeatedly; a modelling choice.
+  min_counterparties:
+    value: 2
+    unit: minimum number of regular person-to-person counterparties per customer
+    provenance: ASSUMED
+    rationale: Every customer has at least a couple of people they pay, so person-to-person payments never have an empty choice set; a modelling choice.

@@ -1,0 +1,17 @@
+# fs-features smoke <dataset> --packs <packs.json> --corpus-rows 200000 --sample-rows 20000
+# 2026-09-20, 1,006,249-row draw at seed 20260917, 13.5 minutes.
+# Progress lines and the cache path removed; nothing else.
+
+computing 36 features for 20000 rows...
+PIPELINE SMOKE TEST — not a result. One model, one split, no tuning, no calibration,
+and a time-ordered holdout that is NOT D-07's evaluation split. Nothing here is
+comparable with anything M4 will report.
+
+  features trained on          36 (the computable ones, never 44)
+  train rows / fraud           14000 / 126
+  test rows / fraud            6000 / 40
+
+  single-feature floor         0.881  (velocity_ratio_1h_vs_30d)
+  model AUC                    0.993 +/-0.018
+  MARGIN OVER THE FLOOR        +0.112
+  recall at 1% FPR             0.925

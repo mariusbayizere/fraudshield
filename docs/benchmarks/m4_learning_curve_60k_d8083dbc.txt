@@ -1,0 +1,61 @@
+# evidence-commit: c59da11b9e01dd45484ffdf640478b6b3a04fef9
+# evidence-tree-state: clean
+# evidence-machine: Intel(R) Core(TM) i5-6200U CPU @ 2.30GHz; 4 logical cores; 7.6 GiB; Linux-7.0.0-31-generic-x86_64-with-glibc2.39
+# command: /tmp/claude-1000/-home-marius-fraudshield/d9f158ee-49ce-49e8-afa6-780adaf6043a/scratchpad/wt-evidence/.venv/bin/python -u -m fraudshield_ml.cli gate /tmp/claude-1000/-home-marius-fraudshield/d9f158ee-49ce-49e8-afa6-780adaf6043a/scratchpad/cache/features_lc120k.parquet --out docs/benchmarks/m4_learning_curve_60k_d8083dbc --train-rows 60000 --seeds 1 2 3 4 5 --resamples 1000 --metrics-only
+# exit: 0
+
+M4 GATE — D-05's calibrated ensemble on D-07's test period, thresholds from D-01/D-02.
+  floor: strongest single feature velocity_ratio_1h_vs_30d at 0.879 on the same rows; margins below (PB-46)
+  rows/fraud  train 60,000/532  validation 20,000/165  calibration 20,000/172  test 101,909/985
+  XGBoost 101 rounds, LightGBM 837, scale_pos_weight 111.8, seed 1, 1000 stratified bootstrap resamples
+
+  gate        metric                             value  95% CI             threshold  result
+  ML-GATE-01  AUC-ROC                            0.970  [0.963, 0.976]       >= 0.94  PASS
+  ML-GATE-02  Recall at 1% FPR (D-01)            0.854  [0.830, 0.876]       >= 0.72  PASS
+  ML-GATE-03  Recall at 0.60                     0.799  [0.773, 0.823]       >= 0.88  FAIL
+  ML-GATE-04  F1 at 0.60                         0.837  [0.817, 0.855]        >= 0.8  PASS
+  ML-GATE-05  FPR at 0.85                        0.001  [0.000, 0.001]       < 0.015  PASS
+  ML-GATE-06  FNR at 0.60                        0.201  [0.177, 0.227]        < 0.12  FAIL
+  ML-GATE-07  MOBILE_MONEY AUC-ROC               0.949  [0.930, 0.966]       >= 0.92  PASS
+  ML-GATE-08  USSD AUC-ROC                       0.955  [0.938, 0.971]        >= 0.9  PASS
+  ML-GATE-09  AGENT_BANKING AUC-ROC              0.981  [0.967, 0.992]       >= 0.91  PASS
+  ML-GATE-10  SHAP coverage, HIGH and MEDIUM     1.000  [1.000, 1.000]          >= 1  PASS
+  ML-GATE-11  ECE, 15 equal-mass bins            0.001  [0.001, 0.001]        < 0.05  PASS
+
+  at the 1% FPR budget's threshold the realised FPR is 0.0030 (ties are not charged); precision there 0.738 [0.712, 0.760]
+  against D-01's ceiling of 0.767 at that rate and 0.494 at exactly 1% FPR
+  at 0.60: precision 0.878, FPR 0.0011   at 0.85: precision 0.925, recall 0.741, F1 0.823   (D-02)
+  ECE equal-width 0.0014, Brier 0.00259
+  ONNX parity: not measured
+
+  9 of 11 gate metrics pass; FAILED: ML-GATE-03, ML-GATE-06
+
+SINGLE-FEATURE BASELINES (PB-46) — each ranking metric beside the best single feature
+and the best trivial rule on its own rows, as a margin. ML-GATE-03 to 06, 10 and 11 are
+read at a calibrated probability, which a lone feature does not have, so none is quoted.
+  ML-GATE-01  model 0.970  single 0.879 (velocity_ratio_1h_vs_30d) margin +0.091  trivial 0.659 (amount_log1p) margin +0.311
+  ML-GATE-02  model 0.854  single 0.598 (velocity_ratio_1h_vs_30d) margin +0.256  trivial 0.039 (amount_log1p) margin +0.815
+  ML-GATE-07  model 0.949  single 0.882 (velocity_ratio_1h_vs_30d) margin +0.066  trivial 0.699 (amount_log1p) margin +0.249
+  ML-GATE-08  model 0.955  single 0.904 (velocity_ratio_1h_vs_30d) margin +0.052  trivial 0.613 (amount_log1p) margin +0.342
+  ML-GATE-09  model 0.981  single 0.843 (velocity_ratio_1h_vs_30d) margin +0.138  trivial 0.707 (amount_log1p) margin +0.274
+
+BASELINES — AUC with a Hanley-McNeil 95% interval; DeLong p against the ensemble.
+  (not run: --metrics-only)
+
+SEEDS — mean and SD over 5 refits (E.5.2).
+  ML-GATE-01  0.9702 +/- 0.0005
+  ML-GATE-02  0.8625 +/- 0.0119
+  ML-GATE-03  0.7722 +/- 0.0376
+  ML-GATE-04  0.8351 +/- 0.0151
+  ML-GATE-05  0.0004 +/- 0.0002
+  ML-GATE-06  0.2278 +/- 0.0376
+  ML-GATE-07  0.9561 +/- 0.0050
+  ML-GATE-08  0.9512 +/- 0.0027
+  ML-GATE-09  0.9808 +/- 0.0013
+  ML-GATE-10  1.0000 +/- 0.0000
+  ML-GATE-11  0.0007 +/- 0.0001
+  wrote docs/benchmarks/m4_learning_curve_60k_d8083dbc/figures/reliability.svg
+  wrote docs/benchmarks/m4_learning_curve_60k_d8083dbc/figures/roc.svg
+  wrote docs/benchmarks/m4_learning_curve_60k_d8083dbc/metrics.json
+  wrote docs/benchmarks/m4_learning_curve_60k_d8083dbc/tables/baselines.tex
+  wrote docs/benchmarks/m4_learning_curve_60k_d8083dbc/tables/gate.tex

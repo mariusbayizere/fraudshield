@@ -1,0 +1,251 @@
+// FraudShield scoring contract between fraudshield-api (Java) and fraudshield-ml (Python).
+//
+// Hot path (build prompt C.2): the API validates the request, reads account context from Redis in
+// one pipelined round-trip, then calls Score over gRPC with mTLS on a persistent HTTP/2 channel.
+// The scorer computes the 44 features, the calibrated XGBoost + LightGBM ensemble, the Isolation
+// Forest score and, for ensemble scores >= 0.60, exact TreeSHAP. Risk tiers, rules and the decision
+// are applied by the API, not here.
+//
+// Conventions (ADR 0011, ADR 0012):
+// * Money is a decimal string plus an ISO 4217 code, never a float.
+// * Identifiers are opaque tokens (tok_...); no personal data crosses this boundary.
+// * Timestamps are google.protobuf.Timestamp in UTC.
+// * Every ScoringResult carries a model_version; a result is never produced by an unversioned model
+//   (FR-02-10).
+// * Fields are only ever added. Removed field numbers and names are reserved, and no number, type,
+//   label or oneof membership changes. contracts/tests/test_proto.py compares the compiled
+//   descriptor with contracts/proto/baseline/scoring-v1.json and fails on any such change.
+// * The scorer also serves the standard grpc.health.v1.Health service for orchestration probes;
+//   GetModelStatus below reports model versions for the management-port /actuator/health/ml
+//   (ADR 0014).
+syntax = "proto3";
+
+package fraudshield.scoring.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option java_multiple_files = true;
+option java_package = "io.github.mariusbayizere.fraudshield.contracts.scoring.v1";
+option java_outer_classname = "ScoringProto";
+
+service ScoringService {
+  // Scores one transaction. Deadline set by the caller (hot-path budget, D-13); on deadline or
+  // UNAVAILABLE the API's circuit breaker switches to the rule-based fallback (C.4).
+  rpc Score(ScoreRequest) returns (ScoreResponse);
+
+  // Loaded-model information for /actuator/health/ml and hot-swap monitoring. Liveness uses the
+  // standard grpc.health.v1.Health service, registered alongside this one.
+  rpc GetModelStatus(GetModelStatusRequest) returns (GetModelStatusResponse);
+}
+
+enum Channel {
+  CHANNEL_UNSPECIFIED = 0;
+  CHANNEL_MOBILE_MONEY = 1;
+  CHANNEL_CARD = 2;
+  CHANNEL_AGENT_BANKING = 3;
+  CHANNEL_USSD = 4;
+  CHANNEL_ONLINE = 5;
+  CHANNEL_BANK_TRANSFER = 6;
+}
+
+enum RiskTier {
+  RISK_TIER_UNSPECIFIED = 0;
+  RISK_TIER_LOW = 1;
+  RISK_TIER_MEDIUM = 2;
+  RISK_TIER_HIGH = 3;
+}
+
+message Money {
+  // Decimal string, at most 14 integer digits and 4 decimals (DECIMAL(18,4)).
+  string amount = 1;
+  // ISO 4217 alphabetic code.
+  string currency = 2;
+}
+
+message GeoPoint {
+  double latitude = 1;
+  double longitude = 2;
+}
+
+// The transaction as accepted at ingestion (FR-01-02 plus ADR 0011 additions).
+message Transaction {
+  string transaction_id = 1;
+  string institution_id = 2;
+  string account_token = 3;
+  string counterparty_token = 4;
+  Money amount = 5;
+  // Amount normalised to RWF with the FX table for the transaction date (E.2).
+  string amount_rwf = 6;
+  Channel channel = 7;
+  string merchant_category_code = 8;
+  GeoPoint location = 9;
+  // Absent for USSD and any transaction without a fingerprint (D-04).
+  optional string device_token = 10;
+  // Present for AGENT_BANKING.
+  optional string agent_token = 11;
+  // ISO 3166-1 alpha-2, when known.
+  optional string counterparty_country = 12;
+  google.protobuf.Timestamp transaction_timestamp = 13;
+  google.protobuf.Timestamp received_at = 14;
+}
+
+// Pre-computed state read from the Redis feature store before scoring (FR-02-09). Optional fields
+// are absent when there is no history; the scorer applies each feature's documented NaN rule.
+message AccountContext {
+  // Velocity windows (E.2 velocity group).
+  uint32 tx_count_60s = 1;
+  uint32 tx_count_1h = 2;
+  uint32 tx_count_24h = 3;
+  uint32 tx_count_7d = 4;
+  string amount_sum_24h_rwf = 5;
+  string amount_sum_7d_rwf = 6;
+  uint32 unique_counterparties_24h = 7;
+  double mean_hourly_count_30d = 8;
+
+  // Amount behaviour over 90 days.
+  optional string amount_median_90d_rwf = 9;
+  optional string amount_mad_90d_rwf = 10;
+  optional string amount_max_90d_rwf = 11;
+  uint32 history_count_90d = 12;
+
+  // Last transaction and home location.
+  optional GeoPoint last_location = 13;
+  optional google.protobuf.Timestamp last_transaction_at = 14;
+  optional GeoPoint home_centroid_90d = 15;
+  repeated string countries_seen = 16;
+
+  // Account profile.
+  optional uint32 account_age_days = 17;
+  optional uint32 kyc_tier = 18;
+  // Absent when the MNO signal is unavailable; treated as unsafe for self-service unblock (D-25).
+  optional uint32 days_since_sim_swap = 19;
+  optional uint32 days_since_previous_activity = 20;
+
+  // Counterparty.
+  bool counterparty_new_for_account = 21;
+  optional uint32 counterparty_account_age_days = 22;
+  uint32 counterparty_unique_senders_24h = 23;
+  // Confirmed-fraud labels available before the transaction time only (E.2 leakage rule).
+  uint32 counterparty_confirmed_fraud_90d = 24;
+  uint32 tx_count_to_counterparty_30d = 25;
+
+  // Device (absent entirely when the transaction has no fingerprint).
+  optional DeviceContext device = 26;
+
+  // Agent (AGENT_BANKING only).
+  optional AgentContext agent = 27;
+
+  // Geography: time-lagged confirmed-fraud rate for the transaction's H3 resolution-6 cell.
+  optional double geo_cell_fraud_rate_30d = 28;
+
+  // Synthetic-identity signals, computed without labels.
+  uint32 accounts_sharing_device_or_phone = 29;
+  optional double volume_ramp_ratio_7d = 30;
+}
+
+message DeviceContext {
+  bool device_new_for_account = 1;
+  uint32 accounts_per_device_7d = 2;
+  uint32 device_changes_24h = 3;
+  optional uint32 device_age_days = 4;
+}
+
+message AgentContext {
+  optional double float_utilisation_ratio = 1;
+  uint32 cashout_count_1h = 2;
+  uint32 unique_customers_1h = 3;
+  optional double distance_from_registered_km = 4;
+}
+
+message ScoreRequest {
+  Transaction transaction = 1;
+  AccountContext context = 2;
+  // Active rule and channel limits the just_below_limit_flag feature compares against (E.2).
+  repeated Money configured_limits = 3;
+  // W3C trace context propagated from the edge (E.10).
+  string traceparent = 4;
+}
+
+// Feature value: a number, a category, or structurally missing (NaN, D-04).
+message FeatureValue {
+  // Marker for a structurally missing value; it has no fields, so it cannot be "not missing".
+  message Missing {}
+
+  oneof value {
+    double number = 1;
+    string category = 2;
+    Missing missing = 3;
+  }
+}
+
+message ShapContribution {
+  string feature = 1;
+  FeatureValue value = 2;
+  // Weighted 0.55 * phi_xgb + 0.45 * phi_lgb in log-odds margin space (D-05).
+  double shap = 3;
+  bool increases_risk = 4;
+  // Key of the localised, deterministic plain-language template (D-45); never LLM text.
+  string template_key = 5;
+}
+
+message StageTiming {
+  enum Stage {
+    STAGE_UNSPECIFIED = 0;
+    STAGE_FEATURES = 1;
+    STAGE_ENSEMBLE = 2;
+    STAGE_CALIBRATION = 3;
+    STAGE_ISOLATION_FOREST = 4;
+    STAGE_SHAP = 5;
+  }
+  Stage stage = 1;
+  double milliseconds = 2;
+}
+
+// All nine FR-02-01 fields plus identifiers, per-model diagnostics and timings.
+message ScoringResult {
+  string scoring_result_id = 1;
+  string transaction_id = 2;
+  // Calibrated ensemble probability (isotonic regression on the combined score, D-05).
+  double ensemble_score = 3;
+  // Per-model isotonic-calibrated probabilities, for display and diagnostics.
+  double xgboost_score = 4;
+  double lightgbm_score = 5;
+  // Percentile rank of the negated Isolation Forest score in the training reference (D-06).
+  double anomaly_score = 6;
+  // Raw scikit-learn score_samples value, roughly in [-1, 0] (D-06).
+  double anomaly_raw = 7;
+  // Tier implied by the model's default thresholds; the API recomputes the tier from the
+  // institution's per-channel thresholds (FR-05-07) before deciding.
+  RiskTier model_risk_tier = 8;
+  // At most five contributions by absolute value; empty when ensemble_score < 0.60.
+  repeated ShapContribution shap_top5 = 9;
+  // Exactly 44 entries keyed by registered feature name (D-03).
+  map<string, FeatureValue> feature_vector = 10;
+  // All 44 contributions; populated only when ensemble_score >= 0.60 (FR-04-05).
+  repeated ShapContribution shap_all = 11;
+  double shap_base_value = 12;
+  double final_margin = 13;
+  string model_version = 14;
+  string feature_registry_version = 15;
+  uint32 scoring_duration_ms = 16;
+  repeated StageTiming stage_timings = 17;
+}
+
+message ScoreResponse {
+  ScoringResult result = 1;
+}
+
+message GetModelStatusRequest {}
+
+message GetModelStatusResponse {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    STATUS_SERVING = 1;
+    STATUS_DEGRADED = 2;
+    STATUS_NOT_SERVING = 3;
+  }
+  Status status = 1;
+  string production_model_version = 2;
+  optional string shadow_model_version = 3;
+  string feature_registry_version = 4;
+}

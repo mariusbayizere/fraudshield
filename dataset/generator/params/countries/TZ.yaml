@@ -1,0 +1,98 @@
+description: >-
+  Country pack for Tanzania, United Republic of (TZ). Facts about the country, carrying the same provenance
+  rules as every other parameter. Which countries a run simulates, and in what proportion, is a
+  simulation choice and lives in geography.country_share -- not here (ADR 0023).
+parameters:
+  currency:
+    value: TZS
+    unit: ISO 4217 alphabetic code of the local currency
+    provenance: SOURCED
+    citation: >-
+      ISO 4217 current currency and funds code list (List One), published 2026-09-17 by SIX Group as maintenance agency, read as XML: the Tanzania, United Republic of entry gives TZS with minor unit 2. https://www.six-group.com/dam/download/financial-information/data-center/iso-currrency/lists/list-one.xml
+    accessed: 2026-09-18
+    rationale: >-
+      The country's own currency, taken from the entry for this country rather than a similarly
+      named one. "Congo (the)" in the same list is a different country with a different currency
+      (XAF), so codes are read from the full country name.
+  currency_minor_units:
+    value: 2
+    unit: decimal places the currency is quoted to
+    provenance: SOURCED
+    citation: >-
+      ISO 4217 current currency and funds code list (List One), published 2026-09-17 by SIX Group as maintenance agency, read as XML: the Tanzania, United Republic of entry gives TZS with minor unit 2. https://www.six-group.com/dam/download/financial-information/data-center/iso-currrency/lists/list-one.xml
+    accessed: 2026-09-18
+    rationale: >-
+      Amounts are rounded to this many places. The same list is asserted against the JDK's ISO data
+      on the Java side (D-43), so the two cannot drift apart. It is a property of the currency, and
+      is repeated in each pack that uses that currency rather than kept in a shared table, because a
+      pack must be readable on its own.
+  utc_offset_hours:
+    value: 3
+    unit: hours ahead of UTC used to place local activity hours in UTC timestamps
+    provenance: SOURCED
+    citation: >-
+      IANA Time Zone Database, version 2026c (as shipped in Debian/Ubuntu tzdata 2026c-0ubuntu0.24.04.1), zone Africa/Dar_es_Salaam (+03:00), read with zdump/date for 2024-07-01. https://www.iana.org/time-zones
+    accessed: 2026-09-18
+    rationale: >-
+      The zone observes no daylight saving, so a fixed offset is exact rather than an
+      approximation. Where a country spans several zones the pack names the one its simulated
+      customers live in, which is why Dar es Salaam rather than the largest city may be chosen.
+  centre:
+    value: [-6.8, 39.28]
+    unit: latitude and longitude (degrees) around which this country's customers live
+    provenance: ASSUMED
+    rationale: >-
+      Approximate coordinates of Dar es Salaam, used as a single home cluster. District-level
+      population weights (Part E.3) are not sourced, so this is a modelling choice and not a claim
+      about where customers actually are.
+  fx_rate_to_base:
+    value: 0.5074
+    unit: base-currency units per one unit of this country's currency (fixed for the simulation)
+    provenance: SOURCED
+    citation: >-
+      World Bank, World Development Indicators, indicator PA.NUS.FCRF "Official exchange rate (LCU per US$, period average)", 2024 values read from the World Bank API on 2026-09-18 (source organisation: International Financial Statistics database, International Monetary Fund). The cross rate is the ratio of the two local-currency-per-dollar rates. https://api.worldbank.org/v2/country/RWA;KEN;TZA;UGA;COD/indicator/PA.NUS.FCRF?format=json&date=2023:2024
+    accessed: 2026-09-18
+    rationale: >-
+      Held fixed for the whole simulation so amounts stay comparable across the period; real rates
+      moved over 2024 and 2025 and that movement is deliberately not modelled. The 2024 value for
+      the Democratic Republic of the Congo is not published in the series, so CDF uses the 2023
+      pair. The rate lives in the pack because a country cannot be added without one -- the
+      Country Z test found it missing from ADR 0023's enumerated pack contents.
+  blocs:
+    value: ['EAC', 'SADC']
+    unit: regional economic communities this country belongs to, as of the accessed date
+    provenance: SOURCED
+    citation: >-
+      East African Community, "Overview of EAC", read 2026-09-19: the Community comprises eight Partner States -- Burundi, the Democratic Republic of the Congo, Kenya, Rwanda, Somalia, South Sudan, Uganda and the United Republic of Tanzania. Somalia became a full member on 4 March 2024, the most recent accession the page records. https://www.eac.int/overview-of-eac Southern African Development Community, "Member States" page, read 2026-09-19: sixteen Member States -- Angola, Botswana, Comoros, the Democratic Republic of Congo, Eswatini, Lesotho, Madagascar, Malawi, Mauritius, Mozambique, Namibia, Seychelles, South Africa, the United Republic of Tanzania, Zambia and Zimbabwe. https://www.sadc.int/member-states
+    accessed: 2026-09-19
+    rationale: >-
+      Read from each community's own membership page rather than recalled. Membership changes:
+      Somalia joined the EAC in 2024 and Tanzania has left COMESA, so a list is only true as of a
+      date -- the accessed field above is that date, and any claim resting on corridor_class is a
+      claim as of it. Restricted to the six communities ADR 0023 names (EAC,
+      ECOWAS, SADC, COMESA, CEMAC, AMU); this country may belong to others not modelled here, and
+      corridor_class treats membership as a set rather than naming a primary bloc, so an omission
+      can only make a corridor look less connected, never more.
+  continent:
+    value: AF
+    unit: continent code, used to separate an African cross-bloc corridor from an intercontinental one
+    provenance: ASSUMED
+    rationale: >-
+      Geographic fact, recorded as a pack field rather than inferred from "has a pack", so that a
+      non-African pack can be added without corridor_class silently mis-classifying it.
+  round_denominations:
+    value: [50000, 100000, 200000, 500000, 1000000]
+    unit: >-
+      common denominations of this country's currency, in MINOR units, that a round amount is an
+      exact multiple of
+    provenance: ASSUMED
+    rationale: >-
+      The steps a payer of TZS hands over or types: 500, 1,000, 2,000, 5,000 and 10,000 shillings. Recorded in minor
+      units because round_sum_flag tests an integer remainder and "exact" is a property of
+      integers -- 2 decimal places here, so a major-unit step is multiplied by
+      100. This is a modelling choice and not a sourced banknote series: no central-bank
+      publication for these currencies was read in full, so presenting the list as fact would
+      be the kind of unsourced claim D-09 exists to prevent. What it must get right is the
+      *shape* -- that roundness is defined against the local currency the payer typed, never
+      against a converted base-currency amount -- and the values only have to be plausible
+      steps for the feature to mean what it says.

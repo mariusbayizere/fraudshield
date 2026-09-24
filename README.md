@@ -4,9 +4,17 @@ Real-time explainable fraud detection and analyst intelligence platform for East
 digital payments: mobile money, USSD, agent banking, cards, online and bank transfers across
 Rwanda, Kenya, Tanzania, Uganda and the DRC.
 
-> **Project status: M0 — bootstrap and governance.** No fraud model, dataset or service is
-> implemented yet. This README states only what exists and has been verified; measured
-> results will be added with their hardware, scale and raw data as milestones close.
+> **Project status: M8 — front-end.** M0 (bootstrap and governance), M1 (contracts and database),
+> M2 (the synthetic dataset generator, verified at 1,006,249 rows) and M3 (44 features on two
+> independent paths, 36 of them computable on this benchmark) are complete, and so is M4 (the
+> calibrated XGBoost + LightGBM ensemble, evaluated on the benchmark's held-out test period). M4
+> passes 9 of its 11 gate metrics — AUC 0.970, +0.091 over the strongest single feature — and
+> misses two: recall at the 0.60 flag threshold is 0.736 at 30,000 training rows, against 0.88,
+> and the matching FNR
+> (ADR 0031). All results are on the FraudShield-EAC synthetic benchmark, not on real data. M5–M7
+> (scoring service, decision engine, staff identity) are not complete, so no running service
+> exists yet. This README states only what exists and has been verified; measured results are
+> given with their scale and the run that produced them.
 > FraudShield is an independent research project. It is not deployed at, endorsed by, or
 > validated with any financial institution or regulator.
 
@@ -50,8 +58,34 @@ specification (`docs/prompts/`) and ADRs (`docs/adr/`).
 | `tools/` | Governance tooling: defect register, traceability matrix, scope guard |
 | `docs/srs/` | Requirements (SRS v1.0) and the binding defect register |
 | `docs/adr/` | Architecture decision records |
+| `dataset/` | Synthetic dataset generator, realism and anti-leakage checks, release export |
 | `docs/traceability/` | Requirements ↔ tests ↔ evidence (258 rows) |
 | `docker-compose.yml` | Local stack: Kafka, PostgreSQL + TimescaleDB, PII vault, Redis, MLflow, fakes |
+
+## Dataset
+
+`dataset/` generates **FraudShield-EAC-Transactions**: 24 months of transactions, labels and
+account events across five countries, as partitioned Parquet with a CSV copy at export. It is
+synthetic. Nothing in it comes from a real customer or a real institution, and results measured on
+it are results on a synthetic benchmark (D-08).
+
+```console
+$ uv run fs-dataset generate --rows 1000000 --seed 20260917 --output /tmp/fs
+$ uv run fs-dataset report /tmp/fs --rows 1000000 --seed 20260917
+```
+
+**The smallest run that contains the whole dataset is about 170,000 rows.** Below that the
+mule-account role pool is usually empty, so a smaller run would hold seven of the eight fraud
+scenarios. The generator refuses such a run and names the size that would work. Pass
+`--allow-missing-scenarios` to generate anyway for development; the scenarios that could not be
+staged are then recorded in `manifest.json` under `scenarios_not_staged`, so a deficient dataset
+says so about itself. See the datasheet for how the figure is derived.
+
+Verified at 1,006,249 rows (seed 20260917): fraud rate 0.870% overall and 0.905% in the test
+period, all 24 monthly intervals covering their target, channel mix within 0.16 pp, country mix
+within 0.01 pp, and every anti-leakage gate passing. The release target of 5,000,000 rows has not
+yet been run (ML-DATA-01 is `VERIFIED_AT_REDUCED_SCALE`). Raw figures:
+`dataset/realism_report.md`; description: `docs/ml/datasheet.md`.
 
 ## Quickstart (development)
 

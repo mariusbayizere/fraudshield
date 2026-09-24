@@ -4,7 +4,32 @@ version = "0.1.0"
 description = "FraudShield ML pipeline and scoring service: features, ensemble, calibration, SHAP, evaluation"
 requires-python = "==3.12.*"
 license = "Apache-2.0"
-dependencies = []
+dependencies = [
+    "h3==4.5.0",
+    # Reads the dataset's published Parquet. The feature pipeline consumes the interchange format
+    # rather than importing fraudshield-dataset: a pipeline that imported the producer could read
+    # values the published format does not carry, and would work here and fail on a release.
+    "pyarrow==25.0.1",
+    "xgboost==3.0.2",
+    # The SRS specifies the production model as 0.55*XGBoost + 0.45*LightGBM (E.4), so this is
+    # the second half of a model that was already designed rather than a dependency taken on for
+    # one measurement. C-6 claims the ensemble reduces seed variance by 12% and cannot be
+    # settled without it.
+    "lightgbm==4.7.0",
+    # D-06's Isolation Forest, D-05's isotonic calibration, and E.5's logistic-regression and
+    # random-forest baselines. Four uses the SRS specifies, not one convenience: the booster
+    # APIs stay native (smoke.py's reason still holds for them).
+    "scikit-learn==1.8.0",
+    # E.4's ONNX exports and their parity test (max absolute probability difference < 1e-5):
+    # onnxmltools converts the XGBoost and LightGBM boosters, onnxruntime runs them. The M4
+    # review found no export at all (M4-4).
+    "onnx==1.23.0",
+    "onnxruntime==1.30.0",
+    "onnxmltools==1.16.0",
+]
+
+[project.scripts]
+fs-features = "fraudshield_ml.cli:main"
 
 [build-system]
 requires = ["hatchling==1.32.0"]

@@ -1,0 +1,19 @@
+{
+  "event_id": "39de8444-70aa-510d-a519-26cdb928b509",
+  "event_type": "retraining.progress",
+  "schema_version": 1,
+  "occurred_at": "2026-09-17T08:15:30Z",
+  "institution_id": "5b1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+  "producer": "fraudshield-ml-worker",
+  "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+  "payload": {
+    "job_id": "8b9c0d1e-2f3a-4b4c-9d5e-6f7a8b9c0d1e",
+    "dataset_id": "9c0d1e2f-3a4b-4c5d-8e6f-7a8b9c0d1e2f",
+    "state": "TRAINING",
+    "progress_percent": 40,
+    "candidate_model_version": null,
+    "evaluation_passed": null,
+    "mlflow_run_id": null,
+    "failure_reason": null
+  }
+}

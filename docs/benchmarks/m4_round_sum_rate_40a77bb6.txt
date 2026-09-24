@@ -1,0 +1,11 @@
+# round_sum_flag true-rate over every row read, same dataset and packs (PB-44).
+# 2026-09-21, dataset fingerprint 40a77bb6. The computability check answers 'does it vary';
+# a boolean with two distinct values varies by definition, so this answers 'how much'.
+
+200000 rows; denominations: {'CDF': [50000, 100000, 500000, 1000000, 2000000], 'KES': [5000, 10000, 20000, 50000, 100000], 'RWF': [100, 500, 1000, 2000, 5000], 'TZS': [50000, 100000, 200000, 500000, 1000000], 'UGX': [500, 1000, 2000, 5000, 10000, 20000]}
+round_sum_flag true for 20663 of 200000 rows (10.33%)
+  CDF      926/9993     9.27%
+  KES     4255/55999    7.60%
+  RWF    10576/84046   12.58%
+  TZS     2810/29966    9.38%
+  UGX     2096/19996   10.48%

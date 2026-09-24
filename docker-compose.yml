@@ -26,12 +26,17 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?run make env}
       MLFLOW_DB_PASSWORD: ${MLFLOW_DB_PASSWORD:?run make env}
+      FS_MIGRATOR_DB_PASSWORD: ${FS_MIGRATOR_DB_PASSWORD:?run make env}
+      FS_APP_DB_PASSWORD: ${FS_APP_DB_PASSWORD:?run make env}
+      FS_APP_READONLY_DB_PASSWORD: ${FS_APP_READONLY_DB_PASSWORD:?run make env}
+      FS_COMPLIANCE_RO_DB_PASSWORD: ${FS_COMPLIANCE_RO_DB_PASSWORD:?run make env}
       TIMESCALEDB_TELEMETRY: "off"
     command: ["postgres", "-c", "shared_preload_libraries=timescaledb", "-c", "timescaledb.telemetry_level=off"]
     ports: ["127.0.0.1:5432:5432"]
     volumes:
       - timescaledb-data:/var/lib/postgresql/data
       - ./infrastructure/docker/timescaledb/init:/docker-entrypoint-initdb.d:ro
+      - ./backend/persistence/src/main/resources/db/bootstrap:/fraudshield-bootstrap:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d fraudshield_db && psql -U postgres -d mlflow -tAc 'select 1' >/dev/null"]
       interval: 5s
@@ -173,6 +178,12 @@ services:
     environment:
       MLFLOW_DB_PASSWORD: ${MLFLOW_DB_PASSWORD:?run make env}
       MLFLOW_S3_ENDPOINT_URL: http://object-store:8333
+      # MLflow 3.x launches a job runner and one Huey consumer process per server-side job type
+      # (LLM judges, prompt optimisation) when the backend store is a database. FraudShield uses
+      # none of them; together they held the container at its memory limit (memory.peak = limit,
+      # thousands of memory.max events), so the kernel killed a process during artifact uploads and
+      # MLflow answered HTTP 500. Disabled rather than given more memory.
+      MLFLOW_SERVER_ENABLE_JOB_EXECUTION: "false"
       AWS_ACCESS_KEY_ID: ${OBJECT_STORE_ACCESS_KEY:?run make env}
       AWS_SECRET_ACCESS_KEY: ${OBJECT_STORE_SECRET_KEY:?run make env}
     entrypoint: ["/bin/sh", "-c"]

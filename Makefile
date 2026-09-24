@@ -38,6 +38,12 @@ up: env ## Start the core local stack and wait until every service is healthy
 smoke: ## Functional smoke test of the running core stack (M0 gate evidence)
 	./infrastructure/docker/scripts/smoke-test.sh
 
+.PHONY: seed-demo
+seed-demo: ## Migrate the stack database and seed synthetic demo accounts (credentials made locally, ADR 0019)
+	$(COMPOSE) --profile core exec -T timescaledb bash /docker-entrypoint-initdb.d/20-fraudshield-roles.sh
+	$(MVNW) -q package -pl persistence -am -DskipTests -Djacoco.skip=true -Dspotbugs.skip=true -Dcheckstyle.skip=true
+	uv run --package fraudshield-tools fs-seed-demo
+
 .PHONY: down
 down: ## Stop the local stack (volumes are kept)
 	$(COMPOSE) --profile full down
@@ -50,21 +56,23 @@ ps: ## Show local stack status
 
 .PHONY: lint
 lint: ## Lint and format-check all components
-	uv run ruff check tools ml
-	uv run ruff format --check tools ml
+	uv run ruff check tools ml contracts dataset
+	uv run ruff format --check tools ml contracts dataset
 	$(PNPM) lint
 	$(PNPM) format:check
 	$(MVNW) -q checkstyle:check
 
 .PHONY: typecheck
 typecheck: ## Strict type checks (mypy, tsc)
-	uv run mypy tools/src tools/tests ml/src ml/tests
+	uv run mypy tools/src tools/tests ml/src ml/tests contracts/src contracts/tests dataset/src dataset/tests
 	$(PNPM) typecheck
 
 .PHONY: test-python
 test-python: ## Python unit tests with the 90% line-coverage gate (SRS 8.1)
 	cd tools && uv run pytest -q
 	cd ml && uv run pytest -q
+	cd contracts && uv run pytest -q
+	cd dataset && uv run pytest -q
 
 .PHONY: test-java
 test-java: ## Java build, unit tests, SpotBugs and coverage gate (requires-docker tests need Docker)
@@ -94,7 +102,12 @@ governance: ## Defect register, traceability and scope checks (D.2, D-47)
 	uv run fs-traceability-seed --check
 	uv run fs-traceability check
 	uv run fs-scope-guard
+	uv run fs-readme-status
+	uv run fs-exit-criteria
 	uv run fs-compose-budget
+	uv run fs-contract-baselines --against origin/main
+	uv run fs-migration-guard --against origin/main
+	uv run fs-dataset provenance --check
 
 .PHONY: traceability
 traceability: ## Regenerate the traceability matrix from YAML and test tags
@@ -105,9 +118,10 @@ compose-config: ## Validate docker-compose.yml without starting containers (need
 	$(COMPOSE) --env-file .env.example --profile full config -q
 
 .PHONY: secrets-scan
-secrets-scan: ## Gitleaks scan of history and working tree (pinned, checksum-verified binary)
-	tools/bin/gitleaks git --redact --no-banner --exit-code 1 .
-	tools/bin/gitleaks dir --redact --no-banner --exit-code 1 .
+secrets-scan: ## Gitleaks scan of history and committable working-tree files (pinned binary)
+	tools/bin/gitleaks git --log-opts=HEAD --redact --no-banner --exit-code 1 .
+	tools/bin/gitleaks-worktree
+	uv run python tools/bin/gitleaks-selftest
 
 .PHONY: licences
 licences: ## Dependency licence inventory and policy check (ADR 0009)

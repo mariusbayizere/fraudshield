@@ -1,0 +1,444 @@
+"""The M4 gate evaluation (E.5): one declared run of D-05's model against the gate thresholds.
+
+Reads a cache holding D-07's four row sets — train, validation (outside its calibration tail),
+calibration, test — fits the ensemble once on the first three, and scores the fourth. Everything
+reported is on the test rows, and nothing here is tuned: the thresholds are D-02's, the model's
+configuration is fixed, and a metric that misses its threshold is reported as missed (D.3: record
+the measured value and the analysis, do not tune on test).
+
+What is printed beside every gate figure is what PB-46's option 3 requires: the single-feature
+floor, because on this benchmark one velocity feature nearly separates fraud alone.
+"""
+
+from __future__ import annotations
+
+import math
+import statistics
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+from fraudshield_ml.features.registry import REGISTRY, Dtype
+from fraudshield_ml.metrics.single_feature import auc_standard_error
+from fraudshield_ml.training import anomaly, baselines, explain, gate, model, onnx_export, smoke
+
+#: E.5.4's EAC-specific ablations. Each removes one mechanism the SRS argues a Western card model
+#: lacks. "USSD-aware device handling" is D-04's NaN-as-signal treatment of the four
+#: device-fingerprint features; removing it means imputing them, as a model without it would.
+DEVICE_FEATURES = (
+    "device_age_days",
+    "device_changes_24h",
+    "device_is_new_for_account",
+    "accounts_per_device_7d",
+)
+#: The groups a card-fraud model would carry. ASSUMED as a definition, pending the owner's C-4
+#: decision (PB-60): counterparty, agent, corridor and synthetic-identity features are specific
+#: to person-to-person mobile money and are left out.
+CARD_STYLE_GROUPS = frozenset(
+    {
+        "AMOUNT_BEHAVIOUR",
+        "VELOCITY",
+        "TEMPORAL",
+        "GEOGRAPHIC",
+        "DEVICE_AND_CHANNEL",
+        "ACCOUNT_PROFILE",
+    }
+)
+
+
+@dataclass(frozen=True)
+class Loaded:
+    """A cache decoded into what the gate needs, with D-07's four row sets."""
+
+    names: tuple[str, ...]
+    matrix: list[list[float]]
+    labels: list[bool]
+    channels: list[str]
+    mcc: list[str] | None
+    split: model.RowSplit
+    test: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class Scored:
+    """A model's scores on the test rows, compared with the ensemble's."""
+
+    name: str
+    auc: float
+    interval: float
+    recall_at_1pct_fpr: float
+    delong_p: float
+
+
+@dataclass(frozen=True)
+class Ablation:
+    name: str
+    features: int
+    auc: float
+    delta: float
+    delong_p: float
+    recall_at_1pct_fpr: float
+    ece: float
+
+
+@dataclass(frozen=True)
+class Floor:
+    """PB-46's baselines for one metric, on that metric's own rows: a feature and a rule."""
+
+    single_feature: str
+    single: float
+    trivial_feature: str
+    trivial: float
+
+
+#: The metrics a lone feature can be compared on: rankings, and recall at a fixed FPR. The rest
+#: are read at a calibrated probability, which a single feature does not have.
+FLOORED = ("ML-GATE-01", "ML-GATE-02", "ML-GATE-07", "ML-GATE-08", "ML-GATE-09")
+
+
+@dataclass(frozen=True)
+class GateResult:
+    spec: gate.Spec
+    value: float
+    interval: tuple[float, float]
+
+    @property
+    def passed(self) -> bool:
+        return self.spec.passes(self.value)
+
+
+@dataclass
+class Report:
+    counts: dict[str, tuple[int, int]]
+    xgboost_rounds: int
+    lightgbm_rounds: int
+    scale_pos_weight: float
+    seed: int
+    resamples: int
+    gates: list[GateResult]
+    companions: dict[str, tuple[float, tuple[float, float]]]
+    floors: dict[str, Floor]
+    baselines: list[Scored]
+    ablations: list[Ablation] = field(default_factory=list)
+    seeds: dict[str, list[float]] = field(default_factory=dict)
+    reliability: list[tuple[float, float, int]] = field(default_factory=list)
+    roc: list[tuple[float, float]] = field(default_factory=list)
+    mcc_available: bool = True
+    parity: onnx_export.Parity | None = None
+
+
+def load_cache(path: Path, *, train_rows: int | None = None) -> Loaded:
+    """Decode a cache column-wise into one float matrix. Refuses one without D-07's four sets.
+
+    Column-wise because a release-scale cache is hundreds of thousands of rows: a dict per row, as
+    `smoke.cache_read_any` builds, costs several times the matrix itself. `train_rows`, when given,
+    keeps that many training rows spread evenly across the cached ones — in time order, since the
+    cache is — and the target encoding is fitted on those alone, as if the others did not exist.
+    """
+    import numpy as np  # noqa: PLC0415 - heavy, and only this path needs it
+    import pyarrow.parquet as pq  # noqa: PLC0415 - heavy, and only this path needs it
+
+    from fraudshield_ml.training.evaluation import spread  # noqa: PLC0415
+
+    table = pq.read_table(path)
+    names = smoke.trainable_features()
+    missing = [n for n in (*names, *smoke.CACHE_EXTRAS) if n not in table.schema.names]
+    if missing:
+        raise ValueError(f"{path} is not a usable feature cache: it has no {missing[:3]}")
+    extras = {
+        k: [str(v) for v in table.column(k).to_pylist()]
+        for k in (*smoke.CACHE_EXTRAS, *smoke.CACHE_OPTIONAL)
+        if k in table.schema.names
+    }
+    labels = [v == "True" for v in extras[smoke.CACHE_LABEL]]
+    segment = extras[smoke.CACHE_SEGMENT]
+    by = {
+        s: tuple(i for i, v in enumerate(segment) if v == s)
+        for s in ("train", "validation", "calibration", "test")
+    }
+    missing_sets = [s for s, rows in by.items() if not rows]
+    if missing_sets:
+        raise ValueError(
+            f"the cache holds no {', '.join(missing_sets)} rows. The gate needs all four of D-07's "
+            "sets; write one with fs-features evaluate --calibration-rows N --validation-rows N"
+        )
+    train = by["train"]
+    if train_rows is not None:
+        if train_rows > len(train):
+            raise ValueError(
+                f"{train_rows} training rows were asked for and the cache holds {len(train)}"
+            )
+        train = tuple(spread(list(train), train_rows))
+
+    categorical = [n for n in names if REGISTRY[n].dtype is Dtype.CATEGORICAL]
+    category_rows = [
+        dict(zip(categorical, values, strict=True))
+        for values in zip(*(table.column(n).to_pylist() for n in categorical), strict=True)
+    ]
+    encoded = smoke.encode_categoricals(
+        category_rows,
+        labels,
+        extras[smoke.CACHE_ACCOUNT],
+        train,
+    )
+    matrix = np.empty((table.num_rows, len(names)), dtype=np.float64)
+    for j, name in enumerate(names):
+        if name in encoded:
+            matrix[:, j] = encoded[name]
+        else:
+            matrix[:, j] = table.column(name).to_numpy(zero_copy_only=False).astype(np.float64)
+    return Loaded(
+        names=names,
+        matrix=matrix,  # type: ignore[arg-type]
+        labels=labels,
+        channels=extras[smoke.CACHE_CHANNEL],
+        mcc=extras.get(smoke.CACHE_MCC),
+        split=model.RowSplit(train, by["validation"], by["calibration"]),
+        test=by["test"],
+    )
+
+
+def _arrays(scores: Sequence[float], labels: Sequence[bool]) -> tuple[Any, Any]:
+    import numpy as np  # noqa: PLC0415 - heavy, and only this path needs it
+
+    return np.asarray(scores, dtype=float), np.asarray(labels, dtype=bool)
+
+
+def _scored(
+    name: str, scores: Sequence[float], ensemble: Sequence[float], labels: Sequence[bool]
+) -> Scored:
+    s, y = _arrays(scores, labels)
+    e, _ = _arrays(ensemble, labels)
+    value, _, p = gate.delong(y, s, e)
+    positives = int(y.sum())
+    return Scored(
+        name=name,
+        auc=value,
+        interval=1.96 * auc_standard_error(value, positives, len(y) - positives),
+        recall_at_1pct_fpr=gate.recall_at_fpr(s, y),
+        delong_p=p,
+    )
+
+
+def _covered(ens: model.Ensemble, data: Loaded, scores: Sequence[float]) -> list[bool]:
+    """Explain every flagged test row; a LOW row needs no explanation and is not counted."""
+    flagged = [k for k, s in enumerate(scores) if s >= explain.EXPLAINED_FROM]
+    covered = [False] * len(scores)
+    if flagged:
+        rows = [data.matrix[data.test[k]] for k in flagged]
+        for k, e in zip(flagged, explain.explain(ens, rows, data.names), strict=True):
+            covered[k] = e.complete
+    return covered
+
+
+def _best(
+    data: Loaded, rows: Sequence[int], metric: Callable[[Any, Any], float], names: Sequence[str]
+) -> tuple[str, float]:
+    """The best of `names` by `metric` on `rows`, each oriented by its AUC's direction.
+
+    Only features defined on every one of `rows`: a feature scored on the subset where it exists
+    is measured on a different population from the model (evaluate's `Baseline.partial`).
+    """
+    import numpy as np  # noqa: PLC0415 - heavy, and only this path needs it
+
+    labels = np.asarray([data.labels[i] for i in rows], dtype=bool)
+    best = ("", math.nan)
+    for name in names:
+        j = data.names.index(name)
+        column = np.asarray([data.matrix[i][j] for i in rows], dtype=float)
+        if np.isnan(column).any():
+            continue
+        if gate.auc(column, labels) < 0.5:
+            column = -column
+        value = metric(column, labels)
+        if not math.isnan(value) and (math.isnan(best[1]) or value > best[1]):
+            best = (name, value)
+    return best
+
+
+def _floors(data: Loaded) -> dict[str, Floor]:
+    """PB-46: each ranking metric's best single feature and best trivial rule, same rows."""
+    from fraudshield_ml.training.evaluation import TRIVIAL_FEATURES  # noqa: PLC0415
+
+    populations = {"ML-GATE-01": list(data.test), "ML-GATE-02": list(data.test)}
+    for gate_id, channel in gate.CHANNELS.items():
+        populations[gate_id] = [i for i in data.test if data.channels[i] == channel]
+    floors = {}
+    for gate_id, rows in populations.items():
+        if not rows:
+            continue
+        metric = gate.recall_at_fpr if gate_id == "ML-GATE-02" else gate.auc
+        single = _best(data, rows, metric, data.names)
+        trivial = _best(data, rows, metric, [n for n in TRIVIAL_FEATURES if n in data.names])
+        floors[gate_id] = Floor(single[0], single[1], trivial[0], trivial[1])
+    return floors
+
+
+def _ablations(
+    data: Loaded, seed: int, full: Sequence[float], labels: Sequence[bool]
+) -> list[Ablation]:
+    group = {n: REGISTRY[n].group.name for n in data.names}
+    removals: list[tuple[str, Callable[[str], bool]]] = [
+        ("without agent features", lambda n: group[n] == "AGENT"),
+        ("without the corridor feature", lambda n: group[n] == "CORRIDOR"),
+        ("without round-sum awareness", lambda n: n == "round_sum_flag"),
+        ("without month-end awareness", lambda n: n == "is_month_end_window"),
+        ("card-style features only", lambda n: group[n] not in CARD_STYLE_GROUPS),
+    ]
+    import numpy as np  # noqa: PLC0415 - heavy, and only this path needs it
+
+    held = _arrays(full, labels)
+    whole = np.asarray(data.matrix, dtype=np.float64)
+    results = []
+    for name, drop in removals:
+        kept = [j for j, n in enumerate(data.names) if not drop(n)]
+        results.append(_ablate(name, whole[:, kept], data, seed, held))
+    # USSD-unaware: the device features imputed with training medians, so their missingness on
+    # USSD rows stops being a value the trees can split on.
+    medians = anomaly.training_medians(data.matrix, data.split.train)
+    matrix = whole.copy()
+    for j, name in enumerate(data.names):
+        if name in DEVICE_FEATURES:
+            column = matrix[:, j]
+            column[np.isnan(column)] = medians[j]
+    results.append(_ablate("without USSD-aware device handling", matrix, data, seed, held))
+    return results
+
+
+def _ablate(
+    name: str,
+    matrix: Any,
+    data: Loaded,
+    seed: int,
+    held: tuple[Any, Any],
+) -> Ablation:
+    full, y = held
+    fitted = model.fit_ensemble(matrix, data.labels, data.split, seed=seed)
+    scores, _ = _arrays(fitted.score([matrix[i] for i in data.test]).ensemble, list(y))
+    value, full_auc, p = gate.delong(y, scores, full)
+    return Ablation(
+        name=name,
+        features=len(matrix[0]),
+        auc=value,
+        delta=value - full_auc,
+        delong_p=p,
+        recall_at_1pct_fpr=gate.recall_at_fpr(scores, y),
+        ece=gate.ece_equal_mass(scores, y),
+    )
+
+
+def _reliability(rows: gate.Rows) -> list[tuple[float, float, int]]:
+    import numpy as np  # noqa: PLC0415 - heavy, and only this path needs it
+
+    order = np.argsort(rows.scores, kind="stable")
+    return [
+        (float(rows.scores[c].mean()), float(rows.labels[c].mean()), len(c))
+        for c in np.array_split(order, gate.ECE_BINS)
+        if len(c)
+    ]
+
+
+def _roc(rows: gate.Rows, points: int = 200) -> list[tuple[float, float]]:
+    import numpy as np  # noqa: PLC0415 - heavy, and only this path needs it
+
+    order = np.argsort(-rows.scores, kind="stable")
+    labels = rows.labels[order]
+    tpr = np.concatenate([[0.0], np.cumsum(labels) / max(int(labels.sum()), 1)])
+    fpr = np.concatenate([[0.0], np.cumsum(~labels) / max(int((~labels).sum()), 1)])
+    keep = np.unique(np.linspace(0, len(tpr) - 1, points).astype(int))
+    return [(float(fpr[k]), float(tpr[k])) for k in keep]
+
+
+def _baselines(
+    data: Loaded, scored: model.Scores, test_rows: Sequence[Sequence[float]], seed: int
+) -> list[tuple[str, Sequence[float]]]:
+    """E.5's baselines on the test rows, each fitted on the training rows only."""
+    amount = [row[data.names.index("amount_log1p")] for row in data.matrix]
+    rule = baselines.rule_engine(amount, data.mcc, data.labels, data.split.train)
+    forest = anomaly.fit_anomaly(data.matrix, data.split.train, seed=seed)
+    train, test = list(data.split.train), list(data.test)
+    return [
+        ("status-quo rule engine", [rule[i] for i in data.test]),
+        (
+            "logistic regression",
+            baselines.logistic_regression(data.matrix, data.labels, train, test, seed=seed),
+        ),
+        (
+            "random forest",
+            baselines.random_forest(data.matrix, data.labels, train, test, seed=seed),
+        ),
+        ("XGBoost alone", scored.xgboost),
+        ("LightGBM alone", scored.lightgbm),
+        ("Isolation Forest alone", forest.score(test_rows)),
+    ]
+
+
+def run(  # noqa: PLR0913 - every argument is a declared setting of the run
+    data: Loaded,
+    *,
+    seed: int,
+    seeds: Sequence[int],
+    resamples: int,
+    ablate: bool,
+    metrics_only: bool = False,
+) -> Report:
+    """One declared gate run. `metrics_only` skips baselines, ablations and ONNX parity: PB-67's
+    learning curve needs the gate metrics, their intervals and the seeds, and nothing else.
+    """
+    labels = [data.labels[i] for i in data.test]
+    channels = [data.channels[i] for i in data.test]
+    test_rows = [data.matrix[i] for i in data.test]
+
+    fitted = model.fit_ensemble(data.matrix, data.labels, data.split, seed=seed)
+    scored = fitted.score(test_rows)
+    rows = gate.rows_of(scored.ensemble, labels, channels, _covered(fitted, data, scored.ensemble))
+    point = gate.metrics(rows)
+    intervals = gate.bootstrap(rows, resamples=resamples, seed=seed)
+
+    candidates = [] if metrics_only else _baselines(data, scored, test_rows, seed)
+    counts = {
+        name: (len(index), sum(1 for i in index if data.labels[i]))
+        for name, index in (
+            ("train", data.split.train),
+            ("validation", data.split.validation),
+            ("calibration", data.split.calibration),
+            ("test", data.test),
+        )
+    }
+    report = Report(
+        counts=counts,
+        xgboost_rounds=fitted.xgboost_rounds,
+        lightgbm_rounds=fitted.lightgbm_rounds,
+        scale_pos_weight=fitted.scale_pos_weight,
+        seed=seed,
+        resamples=resamples,
+        gates=[GateResult(s, point[s.id], intervals[s.id]) for s in gate.SPECS],
+        companions={k: (v, intervals[k]) for k, v in point.items() if not k.startswith("ML-GATE-")},
+        floors=_floors(data),
+        baselines=[_scored(n, s, scored.ensemble, labels) for n, s in candidates],
+        reliability=_reliability(rows),
+        roc=_roc(rows),
+        mcc_available=data.mcc is not None,
+        parity=None if metrics_only else onnx_export.parity(fitted, test_rows),
+    )
+    if ablate and not metrics_only:
+        report.ablations = _ablations(data, seed, scored.ensemble, labels)
+    for other in seeds:
+        refit = (
+            fitted
+            if other == seed
+            else model.fit_ensemble(data.matrix, data.labels, data.split, seed=other)
+        )
+        again = refit.score(test_rows).ensemble
+        values = gate.metrics(gate.rows_of(again, labels, channels, _covered(refit, data, again)))
+        for key in (s.id for s in gate.SPECS):
+            report.seeds.setdefault(key, []).append(values[key])
+    return report
+
+
+def seed_summary(values: Sequence[float]) -> tuple[float, float]:
+    defined = [v for v in values if not math.isnan(v)]
+    if len(defined) < 2:
+        return (defined[0] if defined else math.nan), math.nan
+    return statistics.fmean(defined), statistics.stdev(defined)
