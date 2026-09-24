@@ -44,10 +44,11 @@ import tools.jackson.databind.ObjectMapper;
  * lost to an outage.
  *
  * <p>A record whose parent fact has not reached PostgreSQL yet ({@link NotYetRecordedException}) is
- * re-read every {@value #PARENT_BACKOFF_MS} ms. The wait is timed only while PostgreSQL answers and
- * the parent is still missing: the clock starts at the first such answer and restarts after any
- * transient failure, so an outage, and the backlog a drainer writes after it, never uses up the
- * wait. After {@link #PARENT_WAIT} of that, the record is dead-lettered (ADR 0057).
+ * re-read every {@value #PARENT_BACKOFF_MS} ms, or on the retry backoff while another partition's
+ * record is failing, for as long as it takes. It is never dead-lettered for that reason: a deadline
+ * would lose the customer's SMS whenever PostgreSQL accepts reads but not the writer's inserts for
+ * longer than the deadline. After {@link #WARN_AFTER} of waiting, and every {@link #WARN_AFTER}
+ * after that, the wait is logged at WARN so an operator can act (ADR 0057).
  */
 public final class EnvelopeConsumer implements AutoCloseable {
 
@@ -72,8 +73,8 @@ public final class EnvelopeConsumer implements AutoCloseable {
     DEAD_LETTER
   }
 
-  /** The record a partition is waiting on, and since when (monotonic nanoseconds). */
-  private record Waiting(long offset, long sinceNanos) {}
+  /** The record a partition is waiting on, since when, and when it was last reported. */
+  private record Waiting(long offset, long sinceNanos, long reportedNanos) {}
 
   private static final Logger LOG = LoggerFactory.getLogger(EnvelopeConsumer.class);
   private static final ObjectMapper JSON = new ObjectMapper();
@@ -83,13 +84,8 @@ public final class EnvelopeConsumer implements AutoCloseable {
 
   private static final long FIRST_BACKOFF_MS = 100;
 
-  /**
-   * How long PostgreSQL may answer without the record's parent fact before the record is
-   * dead-lettered: ASSUMED (ADR 0057). The spool's PostgreSQL drainer normally trails its Kafka
-   * drainer by milliseconds; after an outage it has a backlog to write, and this is the time it is
-   * given. Time during which PostgreSQL does not answer does not count.
-   */
-  static final Duration PARENT_WAIT = Duration.ofMinutes(30);
+  /** How long a record waits for its parent before the wait is logged at WARN, and how often. */
+  static final Duration WARN_AFTER = Duration.ofMinutes(1);
 
   /**
    * The pause between re-reads of a record waiting for its parent. It is fixed, not the exponential
@@ -103,7 +99,6 @@ public final class EnvelopeConsumer implements AutoCloseable {
   private final Handler handler;
   private final Thread thread;
   private final AtomicLong deadLettered = new AtomicLong();
-  private final Duration parentWait;
   private final Map<TopicPartition, Waiting> waiting = new HashMap<>();
   private volatile boolean running = true;
   private long backoffMs;
@@ -123,18 +118,6 @@ public final class EnvelopeConsumer implements AutoCloseable {
       String topic,
       String group,
       Handler handler) {
-    this(bootstrapServers, extra, topic, group, handler, PARENT_WAIT);
-  }
-
-  /** Starts consuming with a shorter parent wait, for tests. */
-  EnvelopeConsumer(
-      String bootstrapServers,
-      Map<String, Object> extra,
-      String topic,
-      String group,
-      Handler handler,
-      Duration parentWait) {
-    this.parentWait = Objects.requireNonNull(parentWait, "parentWait");
     Map<String, Object> properties = new HashMap<>(extra);
     properties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
     properties.put(ConsumerConfig.GROUP_ID_CONFIG, group);
@@ -225,11 +208,7 @@ public final class EnvelopeConsumer implements AutoCloseable {
     }
   }
 
-  /**
-   * Handles a record and keeps its partition's parent-wait clock: the clock survives only while the
-   * same record keeps waiting for its parent, and any other outcome, a transient failure included,
-   * resets it.
-   */
+  /** Handles a record, and forgets its partition's wait once the record is no longer waiting. */
   private Outcome handle(ConsumerRecord<String, byte[]> record) {
     TopicPartition partition = new TopicPartition(record.topic(), record.partition());
     Outcome outcome = handleOnce(record, partition);
@@ -254,18 +233,28 @@ public final class EnvelopeConsumer implements AutoCloseable {
       handler.handle(institution, payload);
       return Outcome.HANDLED;
     } catch (NotYetRecordedException e) {
-      // PostgreSQL answered, and the parent is not there yet.
+      // PostgreSQL answered, and the parent is not there yet. However long that lasts, the record
+      // is not dead-lettered: its customer would never be told (ADR 0057).
       long now = System.nanoTime();
       Waiting since = waiting.get(partition);
       if (since == null || since.offset() != record.offset()) {
-        since = new Waiting(record.offset(), now);
-        waiting.put(partition, since);
+        since = new Waiting(record.offset(), now, now);
       }
-      if (stillWaiting(since.sinceNanos(), now, parentWait)) {
+      if (reportDue(since.sinceNanos(), since.reportedNanos(), now)) {
+        LOG.warn(
+            "{} offset {} has waited {} s for its parent to reach PostgreSQL ({}); every record"
+                + " behind it on the partition waits too. If the PostgreSQL writer dead-lettered"
+                + " the parent, replay it; see ADR 0057",
+            partition,
+            record.offset(),
+            Duration.ofNanos(now - since.sinceNanos()).toSeconds(),
+            e.getMessage());
+        since = new Waiting(since.offset(), since.sinceNanos(), now);
+      } else {
         LOG.debug("a record's parent is not in PostgreSQL yet; it will be re-read", e);
-        return Outcome.WAIT_FOR_PARENT;
       }
-      return deadLetter(record, "parent_not_recorded", e);
+      waiting.put(partition, since);
+      return Outcome.WAIT_FOR_PARENT;
     } catch (SQLException e) {
       if (transientError(e)) {
         LOG.warn("a record could not be handled yet; it will be re-read", e);
@@ -286,16 +275,17 @@ public final class EnvelopeConsumer implements AutoCloseable {
   }
 
   /**
-   * Whether a record may still wait for its parent. The record's own timestamp plays no part: after
-   * an outage every record is old, and its parent may still be in the drainer's backlog.
+   * Whether a wait should be reported now: once it has lasted {@link #WARN_AFTER}, then every
+   * {@link #WARN_AFTER}.
    *
-   * @param sinceNanos when PostgreSQL first answered without the parent ({@link System#nanoTime})
+   * @param sinceNanos when the record started waiting ({@link System#nanoTime})
+   * @param reportedNanos when it was last reported, or {@code sinceNanos} if never
    * @param nowNanos now ({@link System#nanoTime})
-   * @param wait how long it may wait
-   * @return true while less than {@code wait} has passed
+   * @return true if a WARN is due
    */
-  static boolean stillWaiting(long sinceNanos, long nowNanos, Duration wait) {
-    return nowNanos - sinceNanos < wait.toNanos();
+  static boolean reportDue(long sinceNanos, long reportedNanos, long nowNanos) {
+    long every = WARN_AFTER.toNanos();
+    return nowNanos - sinceNanos >= every && nowNanos - reportedNanos >= every;
   }
 
   private static boolean permanentVaultFailure(Throwable e) {

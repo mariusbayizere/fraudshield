@@ -1,4 +1,4 @@
-# 0057: A customer SMS waits for its auto-block event, for at most 30 minutes of PostgreSQL answering
+# 0057: A customer SMS waits for its auto-block event, however long that takes
 
 - **Status:** Accepted (author decision under the brief's ambiguity rule, 2026-09-24; for the owner
   to confirm)
@@ -23,30 +23,41 @@ The devcontainer run on `5c3f6b2` (2026-09-24) caught this happening:
 - The consumer classes a foreign-key refusal as permanent, so it dead-lettered the intent.
 - The customer had an SMS with no record of it. Replaying the dead letter would have sent it again.
 
-The first fix timed the wait from the record's Kafka timestamp. Review 11 showed why that fails.
-After a PostgreSQL outage longer than the wait, every intent written during the outage is already
-past the bound when PostgreSQL returns. It would be dead-lettered the first time its parent was
-found missing, while the drainer was still writing its backlog. Nothing replays the dead-letter
-topic, so those customers would never be told about their blocked payment.
+Two deadlines were tried, and each failed review:
+
+- **Review 11:** timing the wait from the record's Kafka timestamp dead-lettered every intent written
+  during a PostgreSQL outage longer than the deadline, as soon as PostgreSQL answered and before its
+  drainer had written the backlog.
+- **Review 12:** timing it only while PostgreSQL answers still lost them whenever PostgreSQL accepts
+  reads but not the writer's inserts for longer than the deadline. Examples: a full disk, a lock, or
+  the writer's own pool, credentials or network path failing.
+
+Nothing replays the dead-letter topic, so each of these customers would never be told about their
+blocked payment. The consumer cannot tell a writer that is late from a parent that will never
+arrive, so any deadline trades a partition's delay for a customer's lost notice.
 
 ## Decision
 
 1. **Nothing is sent, issued or recorded before the auto-block event exists.**
    `CustomerSmsSender` checks for the row under the tenant. Until it exists, the sender throws
    `NotYetRecordedException`.
-2. **The wait is timed only while PostgreSQL answers without the parent.**
-   - The clock starts the first time PostgreSQL answers and the parent is missing.
-   - It restarts after any transient failure, so time spent in an outage does not count.
-   - The record's own timestamp plays no part, and a rebalance restarts the clock, which is the
-     safe direction.
-   - A waiting record is re-read every 500 ms, at a fixed pace rather than on the exponential
-     backoff, so the consumer's other partitions keep flowing.
-3. **The bound is 30 minutes, and it is ASSUMED.** After 30 minutes of PostgreSQL answering
-   without the parent, the intent is dead-lettered with reason `parent_not_recorded`. That happens
-   only if the parent will never arrive: `PostgresSink` dead-lettered its batch to a file.
-   - 30 minutes is the time the drainer is given to write a post-outage backlog.
-   - No measurement supports it over 10 or 60 minutes.
-   - The cost of a longer bound is that the partition behind a lost parent stalls for longer.
+2. **The intent waits until its auto-block event is there, and is never dead-lettered for waiting.**
+   - It is re-read every 500 ms, at a fixed pace rather than on the exponential backoff, so the
+     consumer's other partitions keep flowing. When another partition's record is failing in the
+     same poll, the retry backoff applies instead.
+   - Its age and the database's behaviour in the meantime play no part.
+3. **A long wait is loud, and the operator resolves it.** After one minute, and every minute after
+   that, the consumer logs a WARN naming the partition, the offset and the missing event. Every
+   record behind the waiting one on that partition waits too, which is the price of losing no
+   notice.
+   - A writer that is late needs no action: the wait ends when the event is written.
+   - A parent that will never arrive is one that `PostgresSink` refused for a non-transient reason
+     and wrote to its dead-letter file (ADR 0064 point 3). That is already an incident: a fact is
+     missing from PostgreSQL. Replaying that file writes the event, and the SMS follows.
+   - As a last resort, an operator can move the consumer group's offset for that partition past the
+     record (`kafka-consumer-groups --reset-offsets --to-offset <offset + 1>`). The record stays on
+     the topic for its retention period, to be sent by hand.
+   - A replay tool for the writer's dead-letter files is open for the owner.
 4. **An intent whose outcome is already recorded is not sent again.** A re-read after a crash
    between the recorded outcome and the offset commit finds the SENT or FAILED row and returns it.
    A transient failure between a successful send and its record can still send twice, which the
@@ -54,14 +65,14 @@ topic, so those customers would never be told about their blocked payment.
 
 ## Consequences
 
-- `VerificationFlowTest`, `ParentWaitTest` and
-  `EnvelopeConsumerTest.recordsWaitForTheirParentWhilePostgresAnswersAndOnlyThenAreDeadLettered`
-  test this ADR. The last covers four cases:
-  - an intent read before its parent is handled once the parent exists;
-  - an intent written an hour earlier still waits;
-  - an outage that outlasts the wait does not use it up;
-  - a parent that never arrives is dead-lettered and the records behind it are handled.
-- `parent_not_recorded` is a new value of the `fs-dlq-reason` header. The contracts define no set
-  of reasons, and nothing reads the header.
-- **Open for the owner:** a dead-letter replay tool, and a provider idempotency key for the
-  send-then-record window.
+- Tests:
+  - `VerificationFlowTest`: nothing is sent or issued before the event exists, and an intent
+    whose outcome is recorded is not sent again.
+  - `ParentWaitTest`: the WARN cadence.
+  - `EnvelopeConsumerTest.recordsWaitForTheirParentForAsLongAsItTakesAndAreNeverDeadLetteredForIt`:
+    a held-up writer, an hour-old intent and an intermittent outage are each handled in order,
+    and nothing is dead-lettered.
+- **Open for the owner:**
+  - a replay tool for `PostgresSink`'s dead-letter files;
+  - a provider idempotency key for the window between a send and its record;
+  - an alert on the WARN, or a lag alert on `notification-service`.

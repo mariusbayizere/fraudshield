@@ -766,6 +766,23 @@ not tagged:** `devcontainer` run 35970682163 executed and **failed**.
   - `3141763` itself was green in `ci`, `stack` (push and dispatched) and `devcontainer` (push; the
     real job was path-filtered).
   - The rework needs its own review (review 12) before `main` moves again.
+- **Review 12 of `098c5dc`: CHANGES_REQUIRED, 1 MAJOR**
+  (`docs/reviews/M6/m6-decision-2026-09-24-twelfth.md`).
+  - The MAJOR: a writer held up while PostgreSQL still answers reads (a full disk, a lock, the
+    writer's own path) would still dead-letter intents after 30 minutes. The reviewed design traded
+    a lost customer notice against a partition's delay, and the consumer cannot tell a late writer
+    from a lost parent.
+  - Two deadline designs had now failed review, so the design changed rather than the number
+    (**ADR 0057, rewritten**):
+    - An intent is never dead-lettered for waiting. It is re-read every 500 ms, and a wait longer
+      than a minute is logged at WARN every minute.
+    - A parent that will never arrive is one `PostgresSink` wrote to its dead-letter file, which is
+      already an incident. Replaying that file releases the SMS.
+    - As a last resort, an operator can move the partition's offset past the record.
+  - Open for the owner: a replay tool for those files, and an alert on the WARN.
+  - Local `./mvnw -pl notify verify`: 85 tests green, with checkstyle and spotbugs.
+  - `098c5dc`'s own CI is superseded by this change.
+  - The change needs review 13.
 
 ## Resume here (final state, 2026-09-23, after CI)
 

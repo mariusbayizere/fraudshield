@@ -2,26 +2,24 @@ package io.github.mariusbayizere.fraudshield.notify.kafka;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.time.Duration;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-/** A record waits for its parent for as long as PostgreSQL answers without it, up to a bound. */
+/** A record waiting for its parent is reported after a minute, then every minute (ADR 0057). */
 @Tag("FR-03-04")
 class ParentWaitTest {
 
-  @Test
-  void recordsWaitUntilPostgresHasAnsweredWithoutTheirParentForTheWholeWait() {
-    long since = 1_000_000_000L;
-    Duration wait = EnvelopeConsumer.PARENT_WAIT;
-    assertThat(EnvelopeConsumer.stillWaiting(since, since, wait)).isTrue();
-    assertThat(EnvelopeConsumer.stillWaiting(since, since + wait.toNanos() - 1, wait)).isTrue();
-    assertThat(EnvelopeConsumer.stillWaiting(since, since + wait.toNanos(), wait)).isFalse();
-  }
+  private static final long MINUTE = EnvelopeConsumer.WARN_AFTER.toNanos();
 
   @Test
-  void theWaitIsHalfAnHourAndItsRetriesDoNotBackOff() {
-    assertThat(EnvelopeConsumer.PARENT_WAIT).isEqualTo(Duration.ofMinutes(30));
-    assertThat(EnvelopeConsumer.PARENT_BACKOFF_MS).isLessThan(EnvelopeConsumer.MAX_BACKOFF_MS);
+  void waitsAreReportedAfterOneMinuteThenEveryMinute() {
+    long since = 1_000_000_000L;
+    assertThat(EnvelopeConsumer.reportDue(since, since, since)).isFalse();
+    assertThat(EnvelopeConsumer.reportDue(since, since, since + MINUTE - 1)).isFalse();
+    assertThat(EnvelopeConsumer.reportDue(since, since, since + MINUTE)).isTrue();
+
+    long reported = since + MINUTE;
+    assertThat(EnvelopeConsumer.reportDue(since, reported, reported + MINUTE - 1)).isFalse();
+    assertThat(EnvelopeConsumer.reportDue(since, reported, reported + MINUTE)).isTrue();
   }
 }

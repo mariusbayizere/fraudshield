@@ -295,7 +295,7 @@ class VerificationFlowTest {
                     + " 'REQUESTED'"))
         .isEqualTo("0");
 
-    // Once the event is recorded, the same intent is sent.
+    // An intent whose event is recorded (the fixture's) is sent as usual.
     assertThat(sender.send(INSTITUTION, intent)).isEqualTo(CustomerSmsSender.Outcome.SENT);
     assertThat(sent).hasSize(before + 1);
   }

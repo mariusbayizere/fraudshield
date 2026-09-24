@@ -13,7 +13,6 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -176,22 +175,18 @@ class EnvelopeConsumerTest {
 
   @Test
   @Tag("FR-03-04")
-  void recordsWaitForTheirParentWhilePostgresAnswersAndOnlyThenAreDeadLettered() throws Exception {
+  void recordsWaitForTheirParentForAsLongAsItTakesAndAreNeverDeadLetteredForIt() throws Exception {
     // The spool drains to Kafka ahead of PostgreSQL: an SMS intent can arrive before its auto-block
-    // event. Review 11 (2026-09-24): timing the wait from the record's timestamp dead-lettered
-    // every
-    // intent written during an outage of more than the wait, as soon as PostgreSQL answered and
-    // before its drainer had written the backlog. The wait is timed only while PostgreSQL answers
-    // without the parent, and restarts after a transient failure.
-    Duration wait = Duration.ofSeconds(2);
+    // event. Reviews 11 and 12 (2026-09-24): any deadline, timed from the record or from
+    // PostgreSQL's answers, loses the customer's SMS when the writer is held up for longer than it.
+    // A record waits until its parent is there, whatever its age and however the database behaves.
     UUID institution = UUID.randomUUID();
     String topic = "fs.notifications.staff";
     List<Integer> handled = new CopyOnWriteArrayList<>();
     AtomicInteger notYet = new AtomicInteger(3);
+    AtomicInteger longWait = new AtomicInteger(8);
     AtomicInteger oldNotYet = new AtomicInteger(3);
-    AtomicInteger outage = new AtomicInteger(12);
-    AtomicLong outageStarted = new AtomicLong();
-    AtomicLong outageEnded = new AtomicLong();
+    AtomicInteger outage = new AtomicInteger(8);
     try (EnvelopeConsumer consumer =
         new EnvelopeConsumer(
             kafka.bootstrapServers(),
@@ -203,30 +198,24 @@ class EnvelopeConsumerTest {
               if (sequence == 1 && notYet.getAndDecrement() > 0) {
                 throw new NotYetRecordedException("auto-block event not recorded yet (test)");
               }
-              if (sequence == 2) {
-                throw new NotYetRecordedException("auto-block event never recorded (test)");
+              if (sequence == 2 && longWait.getAndDecrement() > 0) {
+                // The writer is held up: PostgreSQL answers, without the parent, for a while.
+                throw new NotYetRecordedException("auto-block event held up (test)");
               }
               if (sequence == 4 && oldNotYet.getAndDecrement() > 0) {
-                // Written an hour ago, during an outage: it still waits for its parent.
+                // Written an hour ago, during an outage: its age does not matter.
                 throw new NotYetRecordedException("auto-block event in the backlog (test)");
-              }
-              if (sequence == 5) {
-                outageStarted.compareAndSet(0, System.nanoTime());
               }
               int left = sequence == 5 ? outage.getAndDecrement() : 0;
               if (left > 0) {
-                // PostgreSQL comes and goes for longer than the wait: each failure restarts it.
+                // PostgreSQL comes and goes while the parent is still missing.
                 if (left % 2 == 0) {
                   throw new SQLException("database unavailable (test)", "08006");
                 }
                 throw new NotYetRecordedException("auto-block event in the backlog (test)");
               }
-              if (sequence == 5) {
-                outageEnded.set(System.nanoTime());
-              }
               handled.add(sequence);
-            },
-            wait)) {
+            })) {
       publish(topic, institution, 1);
       publish(topic, institution, 2);
       publish(topic, institution, 3);
@@ -234,24 +223,13 @@ class EnvelopeConsumerTest {
       publish(topic, institution, 5);
 
       await().atMost(Duration.ofSeconds(60)).until(() -> handled.contains(5));
-      assertThat(handled).containsExactly(1, 3, 4, 5);
+      assertThat(handled).as("each record in order, none skipped").containsExactly(1, 2, 3, 4, 5);
       assertThat(notYet.get()).isNegative();
+      assertThat(longWait.get()).isNegative();
       assertThat(oldNotYet.get()).isNegative();
       assertThat(outage.get()).isNegative();
-      assertThat(Duration.ofNanos(outageEnded.get() - outageStarted.get()))
-          .as("the outage outlasted the wait, and the record was still handled")
-          .isGreaterThan(wait);
-      assertThat(consumer.deadLettered()).isEqualTo(1);
+      assertThat(consumer.deadLettered()).as("no intent is dead-lettered for waiting").isZero();
     }
-    List<ConsumerRecord<String, byte[]>> dead = drain(topic + ".dlq", 1);
-    assertThat(dead).hasSize(1);
-    assertThat(
-            new String(
-                dead.getFirst().headers().lastHeader("fs-dlq-reason").value(),
-                StandardCharsets.UTF_8))
-        .isEqualTo("parent_not_recorded");
-    assertThat(new String(dead.getFirst().value(), StandardCharsets.UTF_8))
-        .contains("\"decision_sequence\":2");
   }
 
   private static void publishAt(String topic, UUID institution, int sequence, Instant at)

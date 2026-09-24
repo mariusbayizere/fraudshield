@@ -40,9 +40,8 @@ The decision must also reach PostgreSQL without putting PostgreSQL on the hot pa
    Otherwise one poison record stalls every customer SMS or webhook on its partition. If the
    dead-letter send itself fails, the record is retried rather than dropped. **Amended
    2026-09-24 (ADR 0057):** a customer SMS intent read before its auto-block event has reached
-   PostgreSQL is neither sent nor dead-lettered at once. It is re-read every 500 ms, and it is
-   dead-lettered (`parent_not_recorded`) only after 30 minutes of PostgreSQL answering without the
-   event. The two drainers make that ordering possible.
+   PostgreSQL is not sent and is not dead-lettered. It is re-read until the event is there, and a
+   wait of more than a minute is logged at WARN. The two drainers make that ordering possible.
 6. **A caller that stops waiting for the spool** may already have had its record taken by the
    writer. `appendAndWait` withdraws a record only while it is still queued; once taken, the caller
    waits up to 5 s more, and a record whose fsync does not confirm in time raises "outcome
