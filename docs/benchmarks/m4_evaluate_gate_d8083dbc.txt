@@ -1,0 +1,117 @@
+# evidence-commit: bcaea94e70ac867ab4de002e3fdcfaa64c6c6fb6
+# evidence-tree-state: clean
+# command: /tmp/claude-1000/-home-marius-fraudshield/d9f158ee-49ce-49e8-afa6-780adaf6043a/scratchpad/wt-evidence/.venv/bin/python -u -m fraudshield_ml.cli evaluate /home/marius/fraudshield/dataset/output/bench1m --packs /home/marius/fraudshield/dataset/output/packs.json --split /home/marius/fraudshield/dataset/output/split.json --corpus-rows 400000 --train-rows 30000 --test-rows 101909 --calibration-rows 20000 --validation-rows 20000 --cache /tmp/claude-1000/-home-marius-fraudshield/d9f158ee-49ce-49e8-afa6-780adaf6043a/scratchpad/cache/features_gate.parquet
+# exit: 0
+
+computing 38 features for 171909 rows...
+  2000/171909 rows  1381/s  ~2.1 min left
+  4000/171909 rows  1198/s  ~2.3 min left
+  6000/171909 rows  885/s  ~3.1 min left
+  8000/171909 rows  768/s  ~3.6 min left
+  10000/171909 rows  663/s  ~4.1 min left
+  12000/171909 rows  604/s  ~4.4 min left
+  14000/171909 rows  595/s  ~4.4 min left
+  16000/171909 rows  588/s  ~4.4 min left
+  18000/171909 rows  576/s  ~4.5 min left
+  20000/171909 rows  554/s  ~4.6 min left
+  22000/171909 rows  528/s  ~4.7 min left
+  24000/171909 rows  496/s  ~5.0 min left
+  26000/171909 rows  476/s  ~5.1 min left
+  28000/171909 rows  474/s  ~5.1 min left
+  30000/171909 rows  452/s  ~5.2 min left
+  32000/171909 rows  435/s  ~5.4 min left
+  34000/171909 rows  423/s  ~5.4 min left
+  36000/171909 rows  416/s  ~5.4 min left
+  38000/171909 rows  409/s  ~5.5 min left
+  40000/171909 rows  384/s  ~5.7 min left
+  42000/171909 rows  365/s  ~5.9 min left
+  44000/171909 rows  356/s  ~6.0 min left
+  46000/171909 rows  343/s  ~6.1 min left
+  48000/171909 rows  334/s  ~6.2 min left
+  50000/171909 rows  323/s  ~6.3 min left
+  52000/171909 rows  317/s  ~6.3 min left
+  54000/171909 rows  312/s  ~6.3 min left
+  56000/171909 rows  307/s  ~6.3 min left
+  58000/171909 rows  300/s  ~6.3 min left
+  60000/171909 rows  297/s  ~6.3 min left
+  62000/171909 rows  292/s  ~6.3 min left
+  64000/171909 rows  284/s  ~6.3 min left
+  66000/171909 rows  275/s  ~6.4 min left
+  68000/171909 rows  268/s  ~6.5 min left
+  70000/171909 rows  262/s  ~6.5 min left
+  72000/171909 rows  260/s  ~6.4 min left
+  74000/171909 rows  261/s  ~6.3 min left
+  76000/171909 rows  253/s  ~6.3 min left
+  78000/171909 rows  251/s  ~6.2 min left
+  80000/171909 rows  247/s  ~6.2 min left
+  82000/171909 rows  245/s  ~6.1 min left
+  84000/171909 rows  242/s  ~6.0 min left
+  86000/171909 rows  240/s  ~6.0 min left
+  88000/171909 rows  238/s  ~5.9 min left
+  90000/171909 rows  227/s  ~6.0 min left
+  92000/171909 rows  226/s  ~5.9 min left
+  94000/171909 rows  228/s  ~5.7 min left
+  96000/171909 rows  230/s  ~5.5 min left
+  98000/171909 rows  231/s  ~5.3 min left
+  100000/171909 rows  232/s  ~5.2 min left
+  102000/171909 rows  229/s  ~5.1 min left
+  104000/171909 rows  227/s  ~5.0 min left
+  106000/171909 rows  227/s  ~4.8 min left
+  108000/171909 rows  226/s  ~4.7 min left
+  110000/171909 rows  225/s  ~4.6 min left
+  112000/171909 rows  225/s  ~4.4 min left
+  114000/171909 rows  225/s  ~4.3 min left
+  116000/171909 rows  225/s  ~4.1 min left
+  118000/171909 rows  226/s  ~4.0 min left
+  120000/171909 rows  226/s  ~3.8 min left
+  122000/171909 rows  226/s  ~3.7 min left
+  124000/171909 rows  227/s  ~3.5 min left
+  126000/171909 rows  229/s  ~3.3 min left
+  128000/171909 rows  231/s  ~3.2 min left
+  130000/171909 rows  232/s  ~3.0 min left
+  132000/171909 rows  234/s  ~2.8 min left
+  134000/171909 rows  236/s  ~2.7 min left
+  136000/171909 rows  238/s  ~2.5 min left
+  138000/171909 rows  240/s  ~2.4 min left
+  140000/171909 rows  242/s  ~2.2 min left
+  142000/171909 rows  244/s  ~2.0 min left
+  144000/171909 rows  246/s  ~1.9 min left
+  146000/171909 rows  248/s  ~1.7 min left
+  148000/171909 rows  248/s  ~1.6 min left
+  150000/171909 rows  249/s  ~1.5 min left
+  152000/171909 rows  250/s  ~1.3 min left
+  154000/171909 rows  253/s  ~1.2 min left
+  156000/171909 rows  255/s  ~1.0 min left
+  158000/171909 rows  257/s  ~0.9 min left
+  160000/171909 rows  259/s  ~0.8 min left
+  162000/171909 rows  261/s  ~0.6 min left
+  164000/171909 rows  263/s  ~0.5 min left
+  166000/171909 rows  265/s  ~0.4 min left
+  168000/171909 rows  266/s  ~0.2 min left
+  170000/171909 rows  268/s  ~0.1 min left
+  171909/171909 rows  269/s  ~0.0 min left
+wrote the feature matrix to /tmp/claude-1000/-home-marius-fraudshield/d9f158ee-49ce-49e8-afa6-780adaf6043a/scratchpad/cache/features_gate.parquet
+MODEL ON D-07's PUBLISHED SPLIT — fitted on the train period, scored on the test
+period, embargo excluded. Not tuned and not calibrated: the validation and calibration
+periods are identified and deliberately unused.
+
+  split                        train < 2025-08-25 05:24 <= validation (calibration from 2025-09-26 13:13) < 2025-10-21 22:02 <= embargo < 2025-10-28 22:02 <= test
+  features trained on          38 (the computable ones, never 44)
+  corpus rows scanned          400000
+  train rows / fraud           30000 / 260 (0.867%)
+  test rows / fraud            101909 / 985 (0.967%)
+
+  best single feature          0.879  (velocity_ratio_1h_vs_30d, defined on every row)
+  best trivial rule            0.669  (amount_to_max_90d_ratio)
+  model AUC                    0.968 +/-0.008
+  MARGIN OVER THE FEATURE      +0.089
+  MARGIN OVER THE TRIVIAL RULE +0.299
+  recall at 1% FPR             0.877
+
+  strongest feature of any     0.879  (velocity_ratio_1h_vs_30d)
+  ...defined on                100.0% of held-out rows (101909 rows, 985 fraud)
+
+
+  TRAINED ON THE LAST 128 DAYS of the train period, not all
+  of it: the corpus is bounded and the feature pass is its cost. A figure from here is
+  comparable with the gates in its split and not in its training volume.

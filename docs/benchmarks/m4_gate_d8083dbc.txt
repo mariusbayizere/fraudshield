@@ -1,0 +1,64 @@
+# evidence-commit: 590ca14eb2e78108e760ae73693c11c42ba5a849
+# evidence-tree-state: clean
+# command: /tmp/claude-1000/-home-marius-fraudshield/d9f158ee-49ce-49e8-afa6-780adaf6043a/scratchpad/wt-evidence/.venv/bin/python -u -m fraudshield_ml.cli gate /tmp/claude-1000/-home-marius-fraudshield/d9f158ee-49ce-49e8-afa6-780adaf6043a/scratchpad/cache/features_gate.parquet --out docs/benchmarks/m4_gate_d8083dbc --seeds 1 2 3 4 5 --resamples 1000 --ablate
+# exit: 0
+
+M4 GATE — D-05's calibrated ensemble on D-07's test period, thresholds from D-01/D-02.
+  floor: strongest single feature velocity_ratio_1h_vs_30d at 0.879 on the same rows (PB-46)
+  rows/fraud  train 30,000/260  validation 20,000/165  calibration 20,000/172  test 101,909/985
+  XGBoost 111 rounds, LightGBM 331, scale_pos_weight 114.4, seed 1, 1000 stratified bootstrap resamples
+
+  gate        metric                             value  95% CI             threshold  result
+  ML-GATE-01  AUC-ROC                            0.966  [0.957, 0.974]       >= 0.94  PASS
+  ML-GATE-02  Recall at 1% FPR (D-01)            0.861  [0.839, 0.882]       >= 0.72  PASS
+  ML-GATE-03  Recall at 0.60                     0.753  [0.726, 0.780]       >= 0.88  FAIL
+  ML-GATE-04  F1 at 0.60                         0.819  [0.799, 0.838]        >= 0.8  PASS
+  ML-GATE-05  FPR at 0.85                        0.000  [0.000, 0.000]       < 0.015  PASS
+  ML-GATE-06  FNR at 0.60                        0.247  [0.220, 0.274]        < 0.12  FAIL
+  ML-GATE-07  MOBILE_MONEY AUC-ROC               0.946  [0.926, 0.964]       >= 0.92  PASS
+  ML-GATE-08  USSD AUC-ROC                       0.944  [0.919, 0.967]        >= 0.9  PASS
+  ML-GATE-09  AGENT_BANKING AUC-ROC              0.981  [0.965, 0.994]       >= 0.91  PASS
+  ML-GATE-10  SHAP coverage, HIGH and MEDIUM     1.000  [1.000, 1.000]          >= 1  PASS
+  ML-GATE-11  ECE, 15 equal-mass bins            0.001  [0.001, 0.001]        < 0.05  PASS
+
+  precision at 1% FPR 0.641 [0.618, 0.663], against a ceiling of 0.494 at this base rate (D-01)
+  at 0.60: precision 0.898, FPR 0.0008   at 0.85: precision 0.967, recall 0.646, F1 0.774   (D-02)
+  ECE equal-width 0.0017, Brier 0.00276
+  ONNX parity over 101,909 test rows: max |ONNX - native| XGBoost 1.79e-07, LightGBM 2.29e-01, combined 1.03e-01 -> FAIL (E.4, < 1e-5)
+
+  9 of 11 gate metrics pass; FAILED: ML-GATE-03, ML-GATE-06
+
+BASELINES — AUC with a Hanley-McNeil 95% interval; DeLong p against the ensemble.
+  status-quo rule engine       0.707 +/-0.018  R@1%FPR 0.019  p 9.9e-205
+  logistic regression          0.965 +/-0.008  R@1%FPR 0.818  p 0.38
+  random forest                0.966 +/-0.008  R@1%FPR 0.873  p 0.92
+  XGBoost alone                0.966 +/-0.008  R@1%FPR 0.856  p 0.85
+  LightGBM alone               0.948 +/-0.010  R@1%FPR 0.838  p 2.1e-06
+  Isolation Forest alone       0.941 +/-0.010  R@1%FPR 0.612  p 7.7e-17
+
+ABLATIONS (E.5.4) — refitted on the same split; delta and DeLong p vs the full model.
+  without agent features                 36 feat  AUC 0.964 (-0.0020, p 0.28)  R@1%FPR 0.874  ECE 0.0010
+  without the corridor feature           37 feat  AUC 0.963 (-0.0035, p 0.047)  R@1%FPR 0.838  ECE 0.0009
+  without round-sum awareness            37 feat  AUC 0.947 (-0.0191, p 9.5e-07)  R@1%FPR 0.841  ECE 0.0008
+  without month-end awareness            37 feat  AUC 0.965 (-0.0013, p 0.42)  R@1%FPR 0.872  ECE 0.0006
+  card-style features only               30 feat  AUC 0.928 (-0.0385, p 9.2e-19)  R@1%FPR 0.671  ECE 0.0014
+  without USSD-aware device handling     38 feat  AUC 0.966 (-0.0006, p 0.69)  R@1%FPR 0.858  ECE 0.0010
+
+SEEDS — mean and SD over 5 refits (E.5.2).
+  ML-GATE-01  0.9663 +/- 0.0018
+  ML-GATE-02  0.8579 +/- 0.0141
+  ML-GATE-03  0.7403 +/- 0.0216
+  ML-GATE-04  0.8214 +/- 0.0129
+  ML-GATE-05  0.0002 +/- 0.0001
+  ML-GATE-06  0.2597 +/- 0.0216
+  ML-GATE-07  0.9429 +/- 0.0030
+  ML-GATE-08  0.9502 +/- 0.0075
+  ML-GATE-09  0.9773 +/- 0.0027
+  ML-GATE-10  1.0000 +/- 0.0000
+  ML-GATE-11  0.0009 +/- 0.0001
+  wrote docs/benchmarks/m4_gate_d8083dbc/figures/reliability.svg
+  wrote docs/benchmarks/m4_gate_d8083dbc/figures/roc.svg
+  wrote docs/benchmarks/m4_gate_d8083dbc/metrics.json
+  wrote docs/benchmarks/m4_gate_d8083dbc/tables/ablations.tex
+  wrote docs/benchmarks/m4_gate_d8083dbc/tables/baselines.tex
+  wrote docs/benchmarks/m4_gate_d8083dbc/tables/gate.tex

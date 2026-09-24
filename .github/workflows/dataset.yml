@@ -1,0 +1,87 @@
+# Full-scale dataset generation (ML-DATA-01: at least 5,000,000 rows).
+#
+# Manual only. The laptop this project is developed on generates a million rows in twenty minutes,
+# so the release-size run belongs on a runner, and a run of this length must not be started by an
+# ordinary push (CI minutes, owner direction). It records the machine it ran on, so the figures in
+# the realism report can be read against the hardware that produced them.
+name: dataset
+
+on:
+  workflow_dispatch:
+    inputs:
+      rows:
+        description: "Target rows (ML-DATA-01 requires at least 5,000,000)"
+        required: false
+        default: "5000000"
+      seed:
+        description: "Generator seed"
+        required: false
+        default: "20260917"
+
+permissions:
+  contents: read
+
+env:
+  UV_VERSION: "0.12.15"
+  PYTHON_VERSION: "3.12.14"
+
+jobs:
+  full-run:
+    name: generate, check --full and export
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+      - run: uv sync --package fraudshield-dataset --locked
+      - name: Record the machine
+        run: |
+          {
+            echo "### Runner"
+            echo
+            echo "- CPU: $(nproc) cores, $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | xargs)"
+            echo "- Memory: $(free -h | awk '/^Mem:/ {print $2}')"
+            echo "- Disk: $(df -h --output=avail / | tail -1 | xargs) available"
+            echo "- Image: $ImageOS ($ImageVersion)"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Generate
+        run: |
+          if ! /usr/bin/time -v uv run fs-dataset generate \
+            --output "$RUNNER_TEMP/dataset" \
+            --rows "${{ inputs.rows }}" \
+            --seed "${{ inputs.seed }}" 2> "$RUNNER_TEMP/generate.log"; then
+            tail -n 40 "$RUNNER_TEMP/generate.log"
+            exit 1
+          fi
+          tail -n 25 "$RUNNER_TEMP/generate.log"
+          grep -E "Maximum resident set size|Elapsed" "$RUNNER_TEMP/generate.log" >> "$GITHUB_STEP_SUMMARY"
+      - name: Realism report with the size and distribution gates
+        run: |
+          uv run fs-dataset report "$RUNNER_TEMP/dataset" \
+            --rows "${{ inputs.rows }}" --seed "${{ inputs.seed }}" --full \
+            --output "$RUNNER_TEMP/realism_report.md"
+          uv run fs-dataset check "$RUNNER_TEMP/dataset" \
+            --rows "${{ inputs.rows }}" --seed "${{ inputs.seed }}" --full | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Export the release and verify its checksums
+        run: |
+          uv run fs-dataset export "$RUNNER_TEMP/dataset" --output "$RUNNER_TEMP/release"
+          cd "$RUNNER_TEMP/release" && sha256sum -c SHA256SUMS --quiet && echo "checksums verify"
+      - name: Upload the report and the manifests
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dataset-full-run
+          # The data itself is not uploaded: it is reproducible from the seed, and G.5 forbids
+          # committing or publishing datasets from this repository.
+          path: |
+            ${{ runner.temp }}/realism_report.md
+            ${{ runner.temp }}/dataset/manifest.json
+            ${{ runner.temp }}/dataset/run.json
+            ${{ runner.temp }}/release/release.json
+            ${{ runner.temp }}/release/SHA256SUMS
+            ${{ runner.temp }}/generate.log
+          retention-days: 30

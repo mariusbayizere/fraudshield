@@ -3,6 +3,16 @@
 #
 # To save CI minutes the job runs only when its inputs changed, and always on pushes to main,
 # nightly, and on manual dispatch (owner direction, 2026-09-17).
+#
+# Reading this workflow's result: when the paths below are untouched, `changes` succeeds, the stack
+# job is SKIPPED, and the run still concludes "success". A run conclusion is therefore not evidence
+# that the stack was verified -- a gate record must quote the job (GOV-10). Milestone M2 changed no
+# path below, so every stack run on its branch skipped the job; its gate record cites the last
+# executed run instead (docs/reviews/M2/gate-evidence.md).
+#
+# And when you do trigger an executing run for a gate: the concurrency group below cancels it as soon
+# as another commit is pushed to the same ref, even a docs-only one that would skip the job. A run
+# collected as gate evidence has to be the last push until it finishes.
 name: stack
 
 on:
@@ -24,7 +34,7 @@ env:
   REQUIRE_DOCKER: "1"
   # Inputs of the stack: compose files, Dockerfiles, container scripts and config, the Makefile
   # targets that drive them, the devcontainer, and dependency locks.
-  STACK_INPUTS: '^(docker-compose[^/]*\.ya?ml|.*Dockerfile[^/]*|\.dockerignore|\.env\.example|infrastructure/docker/.*|\.devcontainer/.*|Makefile|uv\.lock|frontend/pnpm-lock\.yaml|backend/(.*/)?pom\.xml|\.github/workflows/stack\.yml)$'
+  STACK_INPUTS: '^(docker-compose[^/]*\.ya?ml|.*Dockerfile[^/]*|\.dockerignore|\.env\.example|infrastructure/docker/.*|\.devcontainer/.*|Makefile|uv\.lock|frontend/pnpm-lock\.yaml|backend/(.*/)?pom\.xml|backend/persistence/src/main/.*|tools/src/fraudshield_tools/seed_demo\.py|\.github/workflows/stack\.yml)$'
 
 jobs:
   changes:
@@ -82,6 +92,48 @@ jobs:
       - name: Functional smoke test
         shell: bash
         run: make smoke 2>&1 | tee stack-smoke.log
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "21.0.12"
+          cache: maven
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - name: make seed-demo (migrations, roles, demo accounts; ADR 0019)
+        shell: bash
+        run: |
+          make seed-demo 2>&1 | grep -v -e 'fsk_dev_' -e '@example.com' | tee stack-seed.log
+          ./infrastructure/docker/scripts/check-seeded-stack.sh 2>&1 | tee -a stack-seed.log
+      # Job logs need authentication; annotations do not. The log has no secrets (filtered above).
+      - name: Annotate seed-demo failure
+        if: failure()
+        shell: bash
+        run: |
+          [[ -f stack-seed.log ]] || exit 0
+          tail=$(tail -n 25 stack-seed.log)
+          tail=${tail//'%'/'%25'}; tail=${tail//$'\r'/'%0D'}; tail=${tail//$'\n'/'%0A'}
+          echo "::error title=seed-demo log tail::${tail}"
+      # MLflow HTTP 500 investigation: resources and service logs from the smoke test (redacted),
+      # as an artifact and as annotations readable without authentication.
+      - name: Stack diagnostics
+        if: always()
+        shell: bash
+        run: |
+          dir=build/stack-diagnostics
+          [[ -d "$dir" ]] || { echo "no stack diagnostics collected"; exit 0; }
+          escape() { local t=$1; t=${t//'%'/'%25'}; t=${t//$'\r'/'%0D'}; t=${t//$'\n'/'%0A'}; printf '%s' "$t"; }
+          echo "::notice title=stack stack resources::$(escape "$(head -c 3500 "$dir/resources.txt")")"
+          if [[ "${{ job.status }}" != "success" ]]; then
+            for service in mlflow object-store; do
+              [[ -f "$dir/logs-$service.txt" ]] || continue
+              echo "::error title=stack ${service} log tail::$(escape "$(tail -n 60 "$dir/logs-$service.txt" | tail -c 3500)")"
+            done
+          fi
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: stack-stack-diagnostics
+          path: build/stack-diagnostics
+          if-no-files-found: ignore
       - name: Diagnose services on failure (annotations)
         if: failure()
         run: ./infrastructure/docker/scripts/diagnose-stack.sh
@@ -89,7 +141,9 @@ jobs:
         if: always()
         with:
           name: stack-smoke-log
-          path: stack-smoke.log
+          path: |
+            stack-smoke.log
+            stack-seed.log
           if-no-files-found: ignore
       - if: always()
         run: docker compose --profile full down -v

@@ -1,0 +1,12 @@
+\begin{tabular}{lrrrrr}
+\toprule
+Ablation & Features & AUC & $\Delta$AUC & DeLong $p$ & Recall at 1\% FPR \\
+\midrule
+without agent features & 36 & 0.965 & -0.0013 & 0.5 & 0.873 \\
+without the corridor feature & 37 & 0.963 & -0.0031 & 0.086 & 0.837 \\
+without round-sum awareness & 37 & 0.947 & -0.0186 & 1.7e-06 & 0.841 \\
+without month-end awareness & 37 & 0.965 & -0.0008 & 0.6 & 0.872 \\
+card-style features only & 30 & 0.929 & -0.0371 & 1.4e-16 & 0.720 \\
+without USSD-aware device handling & 38 & 0.966 & -0.0002 & 0.92 & 0.859 \\
+\bottomrule
+\end{tabular}

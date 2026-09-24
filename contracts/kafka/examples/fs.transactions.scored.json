@@ -1,0 +1,40 @@
+{
+  "event_id": "f9844e88-0073-5fd0-a5d7-32241693cc15",
+  "event_type": "transaction.scored",
+  "schema_version": 1,
+  "occurred_at": "2026-09-17T08:15:30Z",
+  "institution_id": "5b1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+  "producer": "fraudshield-api",
+  "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+  "payload": {
+    "transaction_id": "3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11",
+    "account_token": "tok_exampleAccount0000000001",
+    "counterparty_token": "tok_exampleCounterparty000001",
+    "device_token": null,
+    "agent_token": null,
+    "amount": {
+      "amount": "15000",
+      "currency": "RWF"
+    },
+    "amount_rwf": "15000",
+    "channel": "MOBILE_MONEY",
+    "merchant_category_code": "4829",
+    "latitude": -1.9441,
+    "longitude": 30.0619,
+    "transaction_timestamp": "2026-09-17T08:15:30Z",
+    "received_at": "2026-09-17T08:15:30Z",
+    "decision": "DECLINE",
+    "risk_tier": "HIGH",
+    "ensemble_score": 0.91,
+    "anomaly_score": 0.62,
+    "scoring_result_id": "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d",
+    "model_version": "fs-ensemble-2026.09.1",
+    "ml_unavailable_fallback": false,
+    "decision_latency_ms": 31,
+    "thresholds_version": 4,
+    "reason_codes": [
+      "VELOCITY_SPIKE",
+      "NEW_COUNTERPARTY"
+    ]
+  }
+}

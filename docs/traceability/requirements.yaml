@@ -14,13 +14,30 @@ requirements:
     publish latency; zero data loss confirmed by consumer offset check'
   defects:
   - D-13
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/web/IngestController.java
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/application/DecisionService.java
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/adapter/spool
+  evidence:
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/IngestApiTest.java (decisions
+    over HTTP)
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/kafka/KafkaSpoolChaosTest.java
+    (publication from the spool after the response, D-13/D-15)
+  - docs/benchmarks/2026-09-22-M6-decision-latency.json (Codespace, shape only, ADR 0059)
+  - docs/benchmarks/2026-09-23-M6-decision-latency.json (dev-laptop-01, shape only, ADR 0059)
+  deviations:
+  - docs/adr/0059-m6-latency-gate-not-met-on-this-hardware.md
+  - docs/adr/0064-durable-spool-and-hold-reconciliation.md
   notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
-    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
+    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.
+    M6 (2026-09-24): accepted and decided synchronously; publication to Kafka happens after the response,
+    from the durable spool (D-13, D-15 replace the SRS''s 5 ms publish). The latency criterion is NOT
+    MET on the hardware available (ADR 0059): laptop shapes, not gate figures, client p95 107-121 ms at
+    25-50 req/s and 392 ms at 200 req/s on dev-laptop-01 with the scorer as a double; server decision
+    p95 42-43 ms at 25-50 req/s. Reason: shared hosts with the load generator, API and three stores on
+    four threads, and M5''s real scorer absent. Carried to M10 as PB-73.'
 - id: FR-01-02
   section: 3.1 FR-01 Transaction ingestion API
   title: 'Transaction schema: transaction_id (UUID), account_id (tokenised), counterparty_id (tokenised),
@@ -32,11 +49,24 @@ requirements:
   srs_text: 'Acceptance criterion: 400 returned for any missing required field with specific field-level
     error; 422 for type mismatches'
   defects: []
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/request
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/web
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/ratelimit
+  evidence:
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/request/RequestValidatorTest.java
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/IngestApiTest.java (26
+    shared validation vectors over HTTP)
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/RateLimitApiTest.java
+    (429 with Retry-After; a batch caller cannot exceed the transaction budget)
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/ratelimit/TransactionBudgetTest.java
   deviations: []
+  notes: 'M6 (2026-09-24): validation per E.1 with the contracts'' shared vectors; 413 for an oversized
+    body including chunked; E.1''s 429 is a per-key budget counted in transactions, a batch charged its
+    item count all or nothing (ADR 0058, after M10''s finding in ADR 0100). The budget, 2,000/s with a
+    4,000 burst per key, is ASSUMED.'
 - id: FR-01-03
   section: 3.1 FR-01 Transaction ingestion API
   title: 'Idempotent ingestion: duplicate transaction_id within 24 hours returns 200 with cached ScoringResult;
@@ -47,11 +77,23 @@ requirements:
     1 scored; all 100 return identical cached response; Redis idempotency key TTL=24h confirmed'
   defects:
   - D-12
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/idempotency
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/request/Fingerprints.java
+  evidence:
+  - 'backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/IngestApiTest.java (100
+    identical submissions: 1 scored, identical answers, TTL 24 h, 409 on a changed body)'
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/ResilienceApiTest.java
+    (10,000-duplicate storm scored once)
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/idempotency/RedisIdempotencyTest.java
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/request/RequestValidatorTest.java
+    (every fingerprinted field)
+  deviations:
+  - docs/adr/0067-ingest-idempotency.md
+  notes: 'M6 (2026-09-24): exactly-once decisions per transaction_id across leases and a Redis outage
+    (ADR 0067; Principal Review findings 1, 2, 4 fixed).'
 - id: FR-01-04
   section: 3.1 FR-01 Transaction ingestion API
   title: All 6 East African channels handled as first-class types with channel-specific feature engineering
@@ -61,15 +103,22 @@ requirements:
     AGENT_BANKING triggers agent-specific features; MOBILE_MONEY velocity features computed correctly'
   defects:
   - D-04
-  status: NOT_STARTED
+  status: DONE_WITH_DEVIATION
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/request
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/domain/Transaction.java
+  evidence:
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/IngestApiTest.java (every
+    channel decided, USSD without a device)
+  deviations:
+  - docs/adr/0033-the-scorer-reads-account-context-from-the-feature-store.md
   notes: 'M3 test case (owner, 2026-09-17): a transaction with a null device_fingerprint (USSD, and any
     channel) yields a 44-slot vector whose 4 device-derived features (device_is_new_for_account, accounts_per_device_7d,
     device_changes_24h, device_age_days) are NaN and every other slot is computed; tagged FR-01-04, D-04,
-    TEST-01.'
+    TEST-01. M6 (2026-09-24): all six channels are accepted and decided as first-class values. Channel-specific
+    feature engineering is the scorer''s since ADR 0033 (M5''s feature pipeline and its D-04 tests); the
+    Java decision path computes no feature (ADR 0061 point 7).'
 - id: FR-01-05
   section: 3.1 FR-01 Transaction ingestion API
   title: API key authentication for core banking system (machine-to-machine); JWT for human-facing endpoints;
@@ -79,11 +128,17 @@ requirements:
   srs_text: 'Acceptance criterion: API key cannot access /api/v1/alerts or /api/v1/admin; confirmed by
     permission test; key rotation supported without downtime'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/auth
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/web/ApiKeyFilter.java
+  evidence:
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/IngestApiTest.java (keys
+    required and scoped; no 2xx on staff paths)
   deviations: []
+  notes: 'M6 (2026-09-24): M6''s side is done: the ApiKeyAuthenticator port, scopes on the machine paths.
+    Key verification, rotation and staff-path 403s are M7''s.'
 - id: FR-01-06
   section: 3.1 FR-01 Transaction ingestion API
   title: Batch ingestion POST /api/v1/transactions/ingest/batch accepts up to 1,000 transactions; returns
@@ -93,13 +148,24 @@ requirements:
   srs_text: 'Acceptance criterion: Job status endpoint GET /api/v1/jobs/{id} returns progress; all 1,000
     transactions scored within 30 seconds'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/application/BatchJobs.java
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/web/IngestController.java
+  evidence:
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/IngestApiTest.java (1,000-transaction
+    batch)
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/RateLimitApiTest.java
+    (batches charged by item count)
+  deviations:
+  - docs/adr/0059-m6-latency-gate-not-met-on-this-hardware.md
   notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
-    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
+    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.
+    M6 (2026-09-24): the batch path is complete (every item decided, per-item errors, unfinished jobs
+    failed at start-up, V65). The 30 s criterion is not evidenced on dev-laptop-01: 30.20 s once at load
+    ~7 (and timeouts at load 12-15 on 2026-09-24), passing on re-run: a ~0.2 s, load-sensitive margin
+    is not evidence. Carried to M10 as PB-74.'
 - id: FR-01-07
   section: 3.1 FR-01 Transaction ingestion API
   title: OpenAPI 3.1 specification served at /api/docs with request/response examples for all 6 channel
@@ -109,11 +175,20 @@ requirements:
   srs_text: 'Acceptance criterion: OpenAPI spec validates against OpenAPI 3.1 schema; all endpoints documented;
     East African channel examples present'
   defects: []
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - contracts/openapi/fraudshield-api.yaml
+  - contracts/openapi/schema-examples.yaml
+  evidence:
+  - 'contracts/tests/test_openapi.py (tagged FR-01-07: document validates against OpenAPI 3.1, operations
+    documented, SRS-named routes exist)'
+  - contracts/tests/test_openapi_examples.py (ingest examples for all six channels validate)
+  - docs/reviews/M1/milestone-review.md (M1 milestone review and delta re-check)
+  - 754ade1 (main)
   deviations: []
+  notes: Serving the document at /api/docs is controller work, asserted in M6 (ADR 0011); the acceptance
+    criterion is met by the contract.
 - id: FR-02-01
   section: 3.2 FR-02 ML fraud scoring engine
   title: 'Every ScoringResult contains: ensemble_score (float 0-1), xgboost_score, lightgbm_score, anomaly_score
@@ -125,11 +200,20 @@ requirements:
     input; unit test confirms each field type'
   defects:
   - D-12
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - ml/src/fraudshield_ml/serving/scorer.py
+  - ml/src/fraudshield_ml/serving/server.py
+  - ml/src/fraudshield_ml/models/bundle.py
+  evidence:
+  - ml/tests/serving/test_scorer.py (all nine fields, their types, the 44-key vector)
+  - ml/tests/serving/test_server.py (over gRPC, mTLS, against the frozen contract)
+  - ml/tests/models/test_bundle.py
   deviations: []
+  notes: 'M5 (2026-09-23): every ScoringResult carries ensemble_score, xgboost_score, lightgbm_score,
+    anomaly_score, model_risk_tier, model_version, feature_vector and the SHAP contributions; scores come
+    from the ONNX path, exact against the native boosters to 8.27e-07 over the gate model''s test period.'
 - id: FR-02-02
   section: 3.2 FR-02 ML fraud scoring engine
   title: '44 features engineered per transaction within < 10ms: velocity (8 features), amount behaviour
@@ -142,13 +226,32 @@ requirements:
   defects:
   - D-03
   - D-04
-  status: NOT_STARTED
+  status: DONE_WITH_DEVIATION
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - ml/src/fraudshield_ml/features/registry.py
+  - ml/src/fraudshield_ml/features/batch.py
+  - ml/src/fraudshield_ml/features/online.py
+  - ml/src/fraudshield_ml/features/vector.py
+  evidence:
+  - ml/tests/features/test_completeness.py (all 44 computed for every channel, including USSD with a null
+    device_fingerprint)
+  - ml/tests/features/test_parity.py (the batch and online paths agree within ADR 0025's tolerance)
+  - docs/features.md
+  - docs/benchmarks/m3_computability_fad43dd.txt
+  deviations:
+  - docs/adr/0023-africa-wide-portability.md
+  - docs/adr/0027-m3-must-rows-filed-under-a-milestone-that-cannot-meet-them.md
   notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
-    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
+    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.
+    Deviation (owner decision 2026-09-19, ADR 0023): corridor_class is DOMESTIC | INTRA_BLOC | CROSS_BLOC_AFRICA
+    | INTERCONTINENTAL from pack bloc membership, not Part E.2''s DOMESTIC | EAC_CROSS_BORDER | NON_EAC_CROSS_BORDER.
+    The feature keeps its slot and the count stays 44; no EAC special case remains in code. D-03 records
+    that this row''s own group counts sum to 46 while E.2''s catalogue enumerates 44 by name; E.2 is authoritative.
+    M3 (2026-09-20): all 44 implemented on both paths; batch and online do not import each other, and
+    test_completeness asserts the registry''s list and the implemented list are the same list. Twelve
+    of the thirteen parity mutation rows are executed; row 9 needs the DB fallback path (PB-36). Six features
+    have no source data on this benchmark (PB-44) and corridor_class reaches two of its four classes (PB-43).'
 - id: FR-02-03
   section: 3.2 FR-02 ML fraud scoring engine
   title: XGBoost + LightGBM probabilities isotonic-regression calibrated; Expected Calibration Error <
@@ -159,11 +262,29 @@ requirements:
     deployment blocked if ECE > 0.05'
   defects:
   - D-05
-  status: NOT_STARTED
+  status: DONE_WITH_DEVIATION
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - ml/src/fraudshield_ml/training/model.py
+  evidence:
+  - ml/tests/training/test_model.py
+  - docs/benchmarks/m4_gate_d8083dbc_v3.txt (ECE 0.001 on the calibrated ensemble)
+  - docs/benchmarks/m4_gate_d8083dbc_v3/figures/reliability.svg
+  deviations:
+  - docs/adr/0031-closing-m4s-rows-and-the-two-that-fail.md
+  - docs/adr/0029-platt-scaling-stays-in-the-battery-only.md
+  notes: 'M3 evaluation-design constraint (E1, adopted 2026-09-19): seven of the 44 features aggregate
+    over an entity other than the account (counterparty, device, agent, geo cell), so account-grouped
+    folds do not isolate them, and component folding is unavailable - measured, the counterparty and geo-cell
+    graphs are single components spanning 100% of accounts and the agent graph reaches 38% (docs/research/component_sizes.json,
+    tree d85385f). The train/validation/test split is temporal with an embargo, and a validation row reading
+    earlier cross-account rows is what serving does, not leakage. The live exposure is OUT-OF-FOLD TARGET
+    ENCODING INSIDE THE TRAINING PERIOD, where folds are random and account-grouped - where M-8 lived.
+    Required: out-of-fold encodings are computed over rows strictly EARLIER IN TIME than the row being
+    encoded, never over random folds. This is settled, not open; M4 must not be designed as if it were.
+    M4 (2026-09-22): D-05''s isotonic calibration of the combined score, fitted on the calibration split,
+    disjoint by construction. ''Deployment blocked if ECE > 0.05'' needs M5''s promotion step (PB-64).
+    Training-row target encodings are time-ordered as E1 requires (71a91d9).'
 - id: FR-02-04
   section: 3.2 FR-02 ML fraud scoring engine
   title: SHAP TreeExplainer (exact, no sampling) computes top-5 SHAP features for all transactions with
@@ -174,11 +295,17 @@ requirements:
     unit test; 100% SHAP coverage for HIGH and MEDIUM risk'
   defects:
   - D-05
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - ml/src/fraudshield_ml/training/explain.py
+  evidence:
+  - ml/tests/training/test_explain.py
+  - docs/ml/explainability.md
+  - docs/benchmarks/m4_gate_d8083dbc_v3.txt (SHAP coverage 1.000 for HIGH and MEDIUM)
   deviations: []
+  notes: 'M4 (2026-09-22): additivity is tested per model in margin space at 0.001, where it is exact
+    (D-05); the analyst sees the 0.55/0.45 combination, which does not sum to the calibrated probability.'
 - id: FR-02-05
   section: 3.2 FR-02 ML fraud scoring engine
   title: Isolation Forest anomaly_score computed for every transaction; transactions with anomaly_score
@@ -190,11 +317,21 @@ requirements:
   defects:
   - D-06
   - D-10
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - ml/src/fraudshield_ml/models/forest.py
+  - ml/src/fraudshield_ml/serving/thresholds.py
+  - ml/src/fraudshield_ml/serving/scorer.py
+  evidence:
+  - ml/tests/models/test_forest_and_isotonic.py (the export scores as M4's fitted forest does, to 1e-12)
+  - 'ml/tests/serving/test_scorer.py (the acceptance scenario: extreme amount, new location, new device,
+    ensemble below 0.60, routed to review)'
+  - ml/tests/serving/test_entry_points.py (a worker serves D-06's production profile, 0.995, not the 0.7
+    test profile)
   deviations: []
+  notes: 'M5 (2026-09-23): D-06''s percentile anomaly score is computed for every transaction and carried
+    in model_risk_tier; the decision engine (M6) acts on it.'
 - id: FR-02-06
   section: 3.2 FR-02 ML fraud scoring engine
   title: Risk thresholds configurable at runtime without model reload via Redis config store; change takes
@@ -204,11 +341,18 @@ requirements:
   srs_text: 'Acceptance criterion: Admin API PATCH /api/v1/admin/thresholds; next transaction after 60s
     uses new threshold; confirmed by integration test'
   defects: []
-  status: NOT_STARTED
+  status: DONE_WITH_DEVIATION
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - ml/src/fraudshield_ml/serving/thresholds.py
+  evidence:
+  - ml/tests/serving/test_scorer.py (the scorer re-reads fs:config:model_thresholds every 10 s and applies
+    them to the next transaction, with no model reload)
+  deviations:
+  - docs/adr/0035-closing-m5s-rows-what-serving-proves-and-what-it-cannot.md
+  notes: 'M5 (2026-09-23): the scorer half is complete. The acceptance criterion names PATCH /api/v1/admin/thresholds
+    and an integration test over it; that endpoint is M7''s, under ADR 0014''s dual control, and the clause
+    is carried there (ADR 0035).'
 - id: FR-02-07
   section: 3.2 FR-02 ML fraud scoring engine
   title: 'ML scoring latency: p50 < 15ms, p95 < 25ms, p99 < 40ms (ensemble + SHAP for flagged transactions
@@ -219,13 +363,21 @@ requirements:
     confirmed on target hardware spec'
   defects:
   - D-16
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
-  notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
-    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
+  implementation:
+  - ml/src/fraudshield_ml/serving/benchmark.py
+  - ml/src/fraudshield_ml/serving/server.py
+  evidence:
+  - 'docs/benchmarks/m5_serve_laptop_4af4e5e.json (laptop, NOT gate evidence under ADR 0010: server-side
+    p50 12 ms, p95 27 ms, p99 39 ms; client-observed p50 1,164 ms at 200 in flight; 183 req/s)'
+  - ml/tests/serving/test_benchmark.py
+  deviations:
+  - docs/adr/0035-closing-m5s-rows-what-serving-proves-and-what-it-cannot.md
+  - docs/adr/0032-the-scoring-latency-gate-is-a-throughput-requirement.md
+  notes: 'M5 (2026-09-23): open, not met. ADR 0032: p50 < 15 ms with 200 in flight is a throughput requirement
+    of about 13,000 req/s, and no number from dev-laptop-01 is gate evidence (ADR 0010). Carried to M10
+    with the dedicated machine.'
 - id: FR-02-08
   section: 3.2 FR-02 ML fraud scoring engine
   title: 'Shadow mode: new model scores every transaction alongside production model; only production
@@ -236,27 +388,57 @@ requirements:
     production score in ScoringResult; MLflow comparison dashboard showing metric delta'
   defects:
   - D-11
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - ml/src/fraudshield_ml/serving/shadow.py
+  - ml/src/fraudshield_ml/serving/registry.py
+  evidence:
+  - 'ml/tests/serving/test_shadow.py (off the hot path: a bounded queue that drops and counts, never blocks;
+    only the production result is returned)'
+  - ml/tests/serving/test_registry.py (the comparison flushed to MLflow per shadow version, including
+    against a real MLflow 3.16.0 container)
+  - contracts/kafka/schemas/ml-shadow.schema.json (the frozen event shape the runner emits, validated
+    in ml/tests/serving/test_shadow.py)
   deviations: []
+  notes: 'M5 (2026-09-23): the shadow model scores every transaction alongside production and the comparison
+    reaches MLflow. Turning shadow mode on is an alias move (fs-model alias shadow <version>).'
 - id: FR-02-09
   section: 3.2 FR-02 ML fraud scoring engine
   title: Redis feature store pre-computes and updates velocity features for every account within 100ms
     of transaction completion
   priority: M
-  milestone: M3
+  milestone: M5
   srs_text: 'Acceptance criterion: Redis key TTL set to 30 days; stale key handled by DB fallback; update
     latency measured by Prometheus; p99 < 100ms'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
-  notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
-    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
+  implementation:
+  - ml/src/fraudshield_ml/featurestore/store.py
+  - ml/src/fraudshield_ml/featurestore/writer.py
+  - ml/src/fraudshield_ml/featurestore/ingest.py
+  - ml/src/fraudshield_ml/featurestore/fallback.py
+  evidence:
+  - ml/tests/featurestore/test_serving_parity.py (a prefix replay agreeing with the batch path at every
+    step, on fakeredis and on real Redis 7.2.16; window edges per Redis key)
+  - ml/tests/featurestore/test_store.py (30-day TTL on every key, refreshed while the account is active;
+    fs_feature_store_update_seconds)
+  - ml/tests/featurestore/test_ingest.py (apply_label restores both outcome features and honours E.2's
+    label_available_at)
+  - ml/tests/serving/test_store_loop.py (context, score and write over gRPC)
+  deviations:
+  - docs/adr/0034-serving-feeds-three-trained-features-from-state-nothing-writes.md
+  - docs/adr/0035-closing-m5s-rows-what-serving-proves-and-what-it-cannot.md
+  notes: 'M5 (2026-09-23): NOT DONE. The store is built and tested; production is not fed. Four trained
+    features are served from state no deployed component writes (ADR 0034, option 3, owner decision 2026-09-22):
+    fraud outcomes (no fs.labels consumer) and account reference state (no contract exists). Measured
+    on M4''s gate model over the whole test period, 101,909 rows and 985 frauds, twice and independently:
+    served AUC 0.9611 against 0.9700 as trained; 254 transactions change risk tier; 162 of 725 frauds
+    no longer reach the 0.60 flag threshold, a 22% fall in detections at the operating point. Blocked
+    on PB-69 (database fallback, M6), PB-70 (fs.labels consumer calling apply_label, M6), PB-71 (contract
+    and producer for account reference state, M6) and PB-72 (M10 re-measures this skew and requires zero).
+    Acceptance tests in docs/parallel/M6_updates.md, M9_updates.md and M10_updates.md.'
 - id: FR-02-10
   section: 3.2 FR-02 ML fraud scoring engine
   title: 'Model versioning: every ScoringResult records model_version string; old model continues scoring
@@ -266,11 +448,20 @@ requirements:
   srs_text: 'Acceptance criterion: Blue-green deployment: both model versions score simultaneously during
     switch window; no transactions score with unversioned model'
   defects: []
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - ml/src/fraudshield_ml/serving/registry.py
+  - ml/src/fraudshield_ml/serving/scorer.py
+  - ml/src/fraudshield_ml/models/bundle.py
+  evidence:
+  - ml/tests/serving/test_server.py (under concurrent load both versions score during a switch, and every
+    request begun after it gets the new one)
+  - ml/tests/serving/test_registry.py (alias polling at most every 10 s; a bundle that fails verification
+    is never swapped in; publish, hot swap and rollback against a real MLflow 3.16.0 container)
   deviations: []
+  notes: 'M5 (2026-09-23): every ScoringResult records its own model_version; a bundle without one cannot
+    be built or loaded.'
 - id: FR-03-01
   section: 3.3 FR-03 Risk decision and auto-block engine
   title: 'HIGH risk (ensemble_score >= 0.85): auto-blocked within 50ms of transaction receipt; account
@@ -281,13 +472,25 @@ requirements:
     0 incorrectly approved; SMS dispatched within 5s'
   defects:
   - D-13
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/domain/DecisionEngine.java
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/application/DecisionService.java
+  evidence:
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/domain/DecisionEngineTest.java
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/IngestApiTest.java (HIGH
+    declined, blocked, customer texted)
+  - docs/benchmarks/2026-09-22-M6-decision-latency.json (Codespace, shape only, ADR 0059)
+  - docs/benchmarks/2026-09-23-M6-decision-latency.json (dev-laptop-01, shape only, ADR 0059)
+  deviations:
+  - docs/adr/0059-m6-latency-gate-not-met-on-this-hardware.md
+  - docs/adr/0061-decision-engine-semantics.md
   notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
-    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
+    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.
+    M6 (2026-09-24): HIGH declines and auto-blocks as E.6 orders it; the latency criterion is NOT MET
+    on this hardware (ADR 0059, shapes as FR-01-01); the ''1,000 HIGH events/s'' load was not run. Carried
+    to M10 as PB-73.'
 - id: FR-03-02
   section: 3.3 FR-03 Risk decision and auto-block engine
   title: 'MEDIUM risk (0.60-0.84): transaction held; published to analyst queue; 30-second countdown;
@@ -300,11 +503,19 @@ requirements:
   - D-10
   - D-14
   - D-18
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/application/HoldTimeoutService.java
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/adapter/redis
+  evidence:
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/application/HoldTimeoutServiceTest.java
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/IngestApiTest.java (holds
+    released at 30 s +-500 ms and delivered by signed webhook)
+  deviations:
+  - docs/adr/0064-durable-spool-and-hold-reconciliation.md
+  notes: 'M6 (2026-09-24): MEDIUM holds with a 30 s deadline, leader-run poller, reconciliation of overdue
+    holds (V62) and holds drained back to Redis after an outage (D-18 tolerance).'
 - id: FR-03-03
   section: 3.3 FR-03 Risk decision and auto-block engine
   title: 'LOW risk (< 0.60): approved and processed within total pipeline latency budget; no analyst involvement'
@@ -313,13 +524,20 @@ requirements:
   srs_text: 'Acceptance criterion: Approval decision within 50ms total; approval rate consistent with
     expected 0.87% fraud rate in test set'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/domain/DecisionEngine.java
+  evidence:
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/domain/DecisionEngineTest.java
+  - docs/benchmarks/2026-09-22-M6-decision-latency.json (Codespace, shape only, ADR 0059)
+  - docs/benchmarks/2026-09-23-M6-decision-latency.json (dev-laptop-01, shape only, ADR 0059)
+  deviations:
+  - docs/adr/0059-m6-latency-gate-not-met-on-this-hardware.md
   notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
-    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
+    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.
+    M6 (2026-09-24): LOW approves; the latency criterion as FR-01-01 (NOT MET on this hardware, ADR 0059;
+    PB-73).'
 - id: FR-03-04
   section: 3.3 FR-03 Risk decision and auto-block engine
   title: 'Customer SMS on auto-block: masked account number, transaction amount, currency, timestamp,
@@ -331,11 +549,23 @@ requirements:
   defects:
   - D-25
   - D-43
-  status: NOT_STARTED
+  status: DONE_WITH_DEVIATION
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/notify/src/main/java/io/github/mariusbayizere/fraudshield/notify/sms
+  - backend/notify/src/main/java/io/github/mariusbayizere/fraudshield/notify/vault
+  evidence:
+  - backend/notify/src/test/java/io/github/mariusbayizere/fraudshield/notify/sms/SmsPolicyTest.java
+  - backend/notify/src/test/java/io/github/mariusbayizere/fraudshield/notify/verification/VerificationFlowTest.java
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/IngestApiTest.java (SMS
+    within 5 s of the block; no PII in logs, Kafka, Redis or spool)
+  - backend/notify/src/test/java/io/github/mariusbayizere/fraudshield/notify/vault/VaultContactsTest.java
+  deviations:
+  - docs/adr/0065-customer-sms-and-verification.md
+  - docs/adr/0069-pii-vault.md
+  notes: 'M6 (2026-09-24): the SMS path runs through the real PII vault adapters. Deviation: no contact
+    is enrolled in a real deployment until M7''s onboarding calls AccountTokens/VaultContacts, and there
+    is no real Africa''s Talking delivery.'
 - id: FR-03-05
   section: 3.3 FR-03 Risk decision and auto-block engine
   title: 'Customer verification: legitimate transaction verified via SMS link; block lifted within 10
@@ -346,11 +576,21 @@ requirements:
     in audit log; feature vector queued for retraining'
   defects:
   - D-25
-  status: NOT_STARTED
+  status: DONE_WITH_DEVIATION
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/notify/src/main/java/io/github/mariusbayizere/fraudshield/notify/verification
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/web/VerificationPageController.java
+  evidence:
+  - backend/notify/src/test/java/io/github/mariusbayizere/fraudshield/notify/verification/VerificationFlowTest.java
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/ResilienceApiTest.java
+    (lifted and webhook within 10 s)
+  deviations:
+  - docs/adr/0065-customer-sms-and-verification.md
+  notes: 'M6 (2026-09-24): owner decision 2026-09-23: the behaviour is correct per D-25, but with no SIM-swap
+    signal no production block offers the page, so the requirement as written is exercised only by tests
+    that issue the link directly (ADR 0065 point 1). A customer answer whose transition fails is reconciled
+    (V64).'
 - id: FR-03-06
   section: 3.3 FR-03 Risk decision and auto-block engine
   title: 'Account freeze logic: 3+ HIGH-risk transactions from same account within 1 hour triggers full
@@ -360,11 +600,18 @@ requirements:
   srs_text: 'Acceptance criterion: Third HIGH transaction triggers freeze at exactly 3; risk officer email
     dispatched; audit log records freeze with reason'
   defects: []
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/adapter/redis/RedisFreezes.java
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/adapter/jdbc
+  evidence:
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/redis/RedisAdaptersTest.java
+    (exactly the third HIGH in 60 min freezes)
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/application/DecisionServiceTest.java
   deviations: []
+  notes: 'M6 (2026-09-24): the production Lua freezes on exactly the third HIGH within the hour; one of
+    twenty racing thirds freezes.'
 - id: FR-03-07
   section: 3.3 FR-03 Risk decision and auto-block engine
   title: 'MCC circuit breaker: fraud rate > 5% from specific MCC in 15-minute rolling window flags all
@@ -375,11 +622,20 @@ requirements:
     60-minute clean window; circuit state visible in admin panel'
   defects:
   - D-18
-  status: NOT_STARTED
+  status: DONE_WITH_DEVIATION
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/domain/MccCircuitBreaker.java
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/adapter/redis/RedisCircuitBreakers.java
+  evidence:
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/domain/FreezeAndBreakerTest.java
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/application/TransitionsAndBreakerMonitorTest.java
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/redis/RedisAdaptersTest.java
+  deviations:
+  - docs/adr/0061-decision-engine-semantics.md
+  notes: 'Owner decision (ADR 0014 section 3): MCC circuit-breaker settings are under the same asymmetric
+    dual control; breaker state stays ADMIN-readable. M6 (2026-09-24): one-minute window granularity (ADR
+    0061 point 4); ''visible in admin panel'' is M7/M8''s.'
 - id: FR-03-08
   section: 3.3 FR-03 Risk decision and auto-block engine
   title: All auto-block decisions append-only in audit log; no decision deletable or modifiable; override
@@ -390,11 +646,18 @@ requirements:
     denied; confirmed by database security test'
   defects:
   - D-30
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/adapter/jdbc/PostgresSink.java
+  - backend/persistence/src/main/resources/db/migration
+  evidence:
+  - backend/persistence/src/test/java/io/github/mariusbayizere/fraudshield/persistence/DatabaseSecurityTest.java
+    (append-only tables, M1)
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/jdbc/PostgresAdaptersTest.java
+    (all writes are inserts into append-only tables)
   deviations: []
+  notes: 'M6 (2026-09-24): every decision fact is an insert into an append-only table.'
 - id: FR-04-01
   section: 3.4 FR-04 Analyst dashboard
   title: Analyst authenticates with email + password OR Google OAuth 2.0; JWT issued; first name, last
@@ -667,7 +930,11 @@ requirements:
   verification: test
   implementation: []
   evidence: []
-  deviations: []
+  deviations:
+  - docs/adr/0014-staff-authorisation-model.md
+  notes: 'Deviation (owner decision, ADR 0014 section 3): dual control as FR-02-06, including the MEDIUM
+    timeout policy. The two RISK_OFFICER demo accounts are seeded by make seed-demo with locally generated
+    credentials (ADR 0019, DemoDataSeederTest).'
 - id: FR-06-01
   section: 3.6 FR-06 Admin panel
   title: 'Admin creates staff accounts: first name, last name, email, phone (country code flag + dial
@@ -1087,16 +1354,22 @@ requirements:
   section: 4.2 Security
   title: PII tokenisation
   priority: M
-  milestone: M1
+  milestone: M7
   srs_text: 'Implementation: Account holder name and phone stored as opaque tokens; actual PII in separate
     encrypted PII store; no raw PII in analyst-facing API responses; Verification: API response audit:
     account_name field in all analyst endpoints shows masked token only; confirmed by inspector test'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation:
+  - contracts/openapi/fraudshield-api.yaml
+  - backend/persistence/src/main/resources/db/migration/V3__transactions_and_scoring.sql
   evidence: []
-  deviations: []
+  deviations:
+  - docs/adr/0021-m1-scope-replan.md
+  notes: 'Re-planned to M7 by ADR 0021. M1: contracts accept tokens only (contract tests) and every customer
+    identifier column is CHECK (is_token(...)) (SchemaPoliciesTest). Remaining: PII store and tokenisation
+    at ingestion (M6), analyst-endpoint inspector test (M7).'
 - id: NFR-SEC-04
   section: 4.2 Security
   title: No secrets in version control
@@ -1121,10 +1394,17 @@ requirements:
     denied from application DB user; confirmed by security test'
   defects:
   - D-32
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/persistence/src/main/resources/db/migration/V8__audit_log.sql
+  - backend/persistence/src/main/resources/db/migration/V11__grants.sql
+  evidence:
+  - 'backend/persistence/src/test/java/io/github/mariusbayizere/fraudshield/persistence/DatabaseSecurityTest.java
+    (appRoleCannotUpdateOrDeleteAppendOnlyTables: UPDATE, DELETE and TRUNCATE on audit_events return 42501
+    for fs_app)'
+  - docs/reviews/M1/milestone-review.md (M1 milestone review and delta re-check)
+  - 754ade1 (main)
   deviations: []
 - id: NFR-SEC-06
   section: 4.2 Security
@@ -1135,11 +1415,19 @@ requirements:
     zero raw SQL string concatenation; Verification: OWASP ZAP automated scan: 0 SQL injection findings;
     SonarQube: 0 injection hotspots'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/adapter/jdbc
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/jpa
+  - backend/notify/src/main/java/io/github/mariusbayizere/fraudshield/notify/vault
+  evidence:
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/jdbc/PostgresAdaptersTest.java
+  - backend/notify/src/test/java/io/github/mariusbayizere/fraudshield/notify/vault/AccountTokensTest.java
   deviations: []
+  notes: 'M6 (2026-09-24): every M6 statement is parameterised (JPA for configuration and jobs, prepared
+    statements for explicit SQL; ADR 0068); no M6 SQL is built by string concatenation of input. The verification
+    the row names (OWASP ZAP, SonarQube) has not been run; it belongs to the security scans of M9/M10.'
 - id: NFR-SEC-07
   section: 4.2 Security
   title: XSS prevention
@@ -1206,15 +1494,24 @@ requirements:
     with ML_UNAVAILABLE label; Recovery: ML service restart resumes scoring; backlog caught up within
     2 minutes; Test: Integration: ML service pod killed; fallback activates; Kafka lag clears after restart'
   defects: []
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/adapter/grpc
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/domain/FallbackRules.java
+  evidence:
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/grpc/GrpcScorerTest.java
+    (circuit opens within 5 s, closes after recovery)
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/ResilienceApiTest.java
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/domain/FallbackRulesTest.java
+  deviations:
+  - docs/adr/0061-decision-engine-semantics.md
   notes: 'M6: circuit-breaker integration test (ML scorer down -> rule-based fallback within 5 s) runs
     in a Spring Boot 4.1 context and is the compatibility proof for resilience4j-spring-boot4 2.4.0, built
     against Boot 4.0.0 (ADR 0007); fallback plan: resilience4j-circuitbreaker core with explicit beans.
-    Tagged requires-docker if it uses Testcontainers (ADR 0010).'
+    Tagged requires-docker if it uses Testcontainers (ADR 0010). M6 (2026-09-24): scorer down: decisions
+    continue on fallback-rules-2 (MEDIUM hold at 2,000,000 RWF or more, otherwise LOW; never blocks),
+    flagged; chaos at test scale.'
 - id: NFR-REL-02
   section: 4.3 Reliability
   title: Kafka broker failure
@@ -1226,11 +1523,21 @@ requirements:
     replay confirmed after restart'
   defects:
   - D-15
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/adapter/spool
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/adapter/kafka
+  evidence:
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/kafka/KafkaSpoolChaosTest.java
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/spool/DurableSpoolTest.java
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/spool/SpoolDrainerTest.java
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/ResilienceApiTest.java
+  deviations:
+  - docs/adr/0064-durable-spool-and-hold-reconciliation.md
+  notes: 'M6 (2026-09-24): Kafka down: decisions continue into the durable spool and are published in
+    order after recovery; the process-death case is an in-JVM close, not a forked-JVM kill (declared,
+    ADR 0064).'
 - id: NFR-REL-03
   section: 4.3 Reliability
   title: Redis feature store down
@@ -1241,11 +1548,19 @@ requirements:
     PostgreSQL within 5 minutes; Test: Unit: all Redis calls wrapped in try/except with DB fallback path
     tested'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/adapter/resilience
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/adapter/redis
+  evidence:
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/resilience/RedisOutageTest.java
+    (decisions continue while Redis is down and resume after)
+  deviations:
+  - docs/adr/0062-durable-account-profiles.md
+  notes: 'M6 (2026-09-24): the decision path''s own Redis state degrades to PostgreSQL and per-instance
+    fallbacks. The feature store''s database fallback (PB-69) is on m6/featurestore-fallback and closes
+    when that branch merges; ''rebuilt from PostgreSQL within 5 minutes'' is not measured.'
 - id: NFR-REL-04
   section: 4.3 Reliability
   title: PostgreSQL primary failure
@@ -1256,11 +1571,16 @@ requirements:
     zero data loss; Test: Chaos engineering: DB primary pod deleted; replica promotion timed'
   defects:
   - D-49
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/adapter/spool
+  evidence:
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/ResilienceApiTest.java
+    (decisions continue with PostgreSQL paused, through the spool)
   deviations: []
+  notes: 'M6 (2026-09-24): the application side holds: with PostgreSQL unavailable decisions continue
+    and are written after recovery. Replica promotion within 30 s by an operator is deployment work (M9).'
 - id: NFR-REL-05
   section: 4.3 Reliability
   title: Duplicate transaction storm
@@ -1270,13 +1590,18 @@ requirements:
     once; Recovery: Cache hit returns in < 1ms; no reprocessing; no duplicate blocks; Test: Load test:
     10,000 identical transaction_ids; exactly 1 scored; all return cached response'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/idempotency
+  evidence:
+  - 'backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/ResilienceApiTest.java
+    (10,000 identical transaction_ids: exactly one scored, all answered from the stored response)'
   deviations: []
   notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
-    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
+    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.
+    M6 (2026-09-24): the behaviour is evidenced; the ''< 1 ms cache hit'' is a benchmark criterion (ADR
+    0010) with no measurement file, for M10''s dedicated machine alongside PB-73.'
 - id: NFR-REL-06
   section: 4.3 Reliability
   title: Google OAuth service unavailable
@@ -1293,6 +1618,8 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M6 (2026-09-24): not M6''s: Google OAuth fallback is staff authentication (M7). M6 built nothing
+    here.'
 - id: UX-REG-01
   section: 5.3 Registration form
   title: First Name
@@ -1306,6 +1633,8 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'Deviation (ADR 0013, owner finding): 2-100 code points, Unicode letters and combining marks,
+    spaces, hyphens and apostrophes, NFC-normalised; close as DONE_WITH_DEVIATION citing docs/adr/0013-person-name-validation.md.'
 - id: UX-REG-02
   section: 5.3 Registration form
   title: Last Name
@@ -1319,6 +1648,8 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'Deviation (ADR 0013, owner finding): 2-100 code points, Unicode letters and combining marks,
+    spaces, hyphens and apostrophes, NFC-normalised; close as DONE_WITH_DEVIATION citing docs/adr/0013-person-name-validation.md.'
 - id: UX-REG-03
   section: 5.3 Registration form
   title: Email
@@ -2223,11 +2554,21 @@ requirements:
     Sufficient for XGBoost/LightGBM to learn rare fraud at realistic 0.87% fraud rate'
   defects:
   - D-07
-  status: NOT_STARTED
+  status: VERIFIED_AT_REDUCED_SCALE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - dataset/src/fraudshield_dataset/generator/pipeline.py
+  - dataset/src/fraudshield_dataset/generator/config.py
+  evidence:
+  - dataset/realism_report.md (1,006,212-row verification run; the size gate needs 5M and is PB-25)
+  - dataset/tests/test_generator.py (byte-identical output across chunk sizes, including across a Parquet
+    row-group boundary)
+  - docs/backlog/product.md (PB-25 records the release-size run as an M2 gate item)
   deviations: []
+  reduced_scale: 'Verified at 1,006,212 rows of the 5,000,000 ML-DATA-01 requires: every gate passes at
+    that size and the size gate itself is reported as not met. The release-size run must happen on a runner
+    (owner direction) and is blocked until main is the default branch, so that workflow_dispatch registers;
+    tracked as PB-25.'
 - id: ML-DATA-02
   section: 7.1 Dataset
   title: Fraud rate
@@ -2236,10 +2577,14 @@ requirements:
   srs_text: 'Specification: 0.87% overall; test set slightly higher (0.91%) to reflect growing fraud trend;
     Rationale: Realistic imbalance; no artificial oversampling of training set'
   defects: []
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - dataset/generator/params/fraud.yaml
+  - dataset/src/fraudshield_dataset/generator/fraud.py
+  evidence:
+  - dataset/realism_report.md (0.870% overall, 0.915% test, all 24 monthly intervals covering target)
+  - dataset/tests/test_realism_checks.py (the fraud-rate gate reacts when fraud is removed)
   deviations: []
 - id: ML-DATA-03
   section: 7.1 Dataset
@@ -2249,10 +2594,14 @@ requirements:
   srs_text: 'Specification: MOBILE_MONEY >= 40%, USSD >= 18%, AGENT_BANKING >= 14%, CARD 12%, ONLINE 9%,
     BANK_TRANSFER 6%; Rationale: Reflects East African payment landscape; essential for generalisability'
   defects: []
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - dataset/src/fraudshield_dataset/generator/config.py
+  - dataset/generator/params/channels.yaml
+  evidence:
+  - dataset/realism_report.md (channel mix within 0.17 pp)
+  - dataset/tests/test_generator.py (iterative proportional fitting reproduces the SRS mix exactly)
   deviations: []
 - id: ML-DATA-04
   section: 7.1 Dataset
@@ -2264,11 +2613,23 @@ requirements:
     overfitting to single dominant pattern'
   defects:
   - D-08
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - dataset/src/fraudshield_dataset/generator/fraud.py
+  - docs/ml/scenarios/README.md
+  evidence:
+  - dataset/realism_report.md (eight scenario types present, per-scenario rows by month)
+  - dataset/tests/test_scenario_notes.py (every scenario has a design note citing existing parameters)
   deviations: []
+  notes: 'CARRIES THE WEIGHT THE HEADLINE AUC NO LONGER CAN (2026-09-20, PB-46). Since a single velocity
+    threshold reaches 0.894 on this benchmark, the headline discrimination metrics are no longer where
+    a model shows it learned anything. Leave-one-country-out (ADR 0023 section 4, PB-34) and the novel
+    SIM-swap sub-variant confined to the test period are: burstiness is not country-specific, so a threshold
+    transfers trivially and LOCO measures what it cannot fake; and a variant never seen in training separates
+    a model that learned the shape of fraud from one that learned its rate. These were supporting experiments
+    and are now the primary evidence. Report each with its single-feature baseline, as the gate above
+    requires.'
 - id: ML-DATA-05
   section: 7.1 Dataset
   title: Geographic coverage
@@ -2277,10 +2638,14 @@ requirements:
   srs_text: 'Specification: Rwanda 42%, Kenya 28%, Tanzania 15%, Uganda 10%, DRC 5%; Rationale: Covers
     all EAC primary financial markets; enables per-country evaluation'
   defects: []
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - dataset/src/fraudshield_dataset/generator/population.py
+  - dataset/generator/params/geography.yaml
+  evidence:
+  - dataset/realism_report.md (country mix within 0.02 pp)
+  - dataset/tests/test_generator.py (every population prefix within one customer of its country quota)
   deviations: []
 - id: ML-DATA-06
   section: 7.1 Dataset
@@ -2291,16 +2656,19 @@ requirements:
     Prevents temporal data leakage; tests generalisation to future fraud patterns'
   defects:
   - D-07
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - dataset/src/fraudshield_dataset/generator/config.py
+  evidence:
+  - dataset/realism_report.md (24 months, 2024-01 to 2025-12, with the temporal split)
+  - dataset/tests/test_generator.py (month labels cross the year boundary)
   deviations: []
 - id: ML-DATA-07
   section: 7.1 Dataset
   title: Feature completeness
   priority: M
-  milestone: M2
+  milestone: M6
   srs_text: 'Specification: All 44 features computable for >= 98% of records; < 2% any missing feature;
     Rationale: Missing features handled by median imputation; completeness verified in pipeline'
   defects:
@@ -2310,6 +2678,15 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M3 measurement (PB-44, 2026-09-20): all 44 features are implemented on both paths, and SIX cannot
+    be computed on this benchmark because the data they read does not exist - account_age_days, counterparty_account_age_days,
+    kyc_tier, agent_float_utilisation_ratio, agent_distance_from_registered_km, round_sum_flag. They return
+    NaN for every row, which D-04''s missing handling covers, so nothing raises and the count still reads
+    44. The ''>= 98% computable'' clause is therefore satisfied in the sense of not raising while six
+    features carry nothing. The registry declares computable per feature and ''fs-features computability''
+    fails if a COMPUTABLE feature is NaN for 100% of rows or a NO_SOURCE_DATA one is not. See docs/features.md.
+    M6 (2026-09-24): not M6''s: feature completeness is measured on the feature pipeline (M3, PB-44) and
+    the scorer (M5). The row''s milestone should be revisited at integration.'
 - id: ML-DATA-08
   section: 7.1 Dataset
   title: Dataset release
@@ -2319,11 +2696,25 @@ requirements:
     DOI; Rationale: First public East African financial fraud benchmark dataset — standalone research
     contribution'
   defects: []
-  status: NOT_STARTED
+  status: REQUIRES_EXTERNAL_PARTY
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - dataset/src/fraudshield_dataset/release/export.py
+  - dataset/src/fraudshield_dataset/release/split.py
+  evidence:
+  - dataset/tests/test_export.py (release assembled, licence verbatim, SHA256SUMS verifiable)
+  - dataset/tests/test_split.py (the published split reproduces the realism report's table)
+  - dataset/realism_report.md
   deviations: []
+  notes: 'Requires two external parties and the owner''s accounts on both: HuggingFace Datasets Hub for
+    hosting and Zenodo for the DOI. The release itself is built and verifiable -- fs-dataset export writes
+    the Parquet partitions, a CSV copy, the licence verbatim with its SHA-256, the datasheet and a SHA256SUMS
+    a recipient checks with one command. Publication is an owner action, not a scheduling problem, so
+    this row is not reassigned to a later milestone (ADR 0024). SELF-DESCRIBING AS OF 2026-09-20 (PB-48):
+    manifest.json records the four D-07 boundaries the generator planned, fs-dataset split writes them
+    with measured segment counts, and release.json carries the same block -- a consumer holding only the
+    release can now say which rows are training rows, which it could not before. Datasets generated earlier
+    carry no block and the tooling refuses them rather than reconstructing boundaries it cannot recover.'
 - id: ML-GATE-01
   section: 7.2 Model deployment gate
   title: AUC-ROC (last-3-month test set)
@@ -2333,11 +2724,57 @@ requirements:
     across all thresholds'
   defects:
   - D-07
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation: &id001
+  - ml/src/fraudshield_ml/training/gate.py
+  - ml/src/fraudshield_ml/training/gate_run.py
+  - ml/src/fraudshield_ml/training/gate_report.py
+  - ml/src/fraudshield_ml/training/model.py
+  evidence:
+  - docs/benchmarks/m4_gate_d8083dbc_v3.txt (AUC 0.970 [0.962, 0.977], five seeds 0.967 +/- 0.004; +0.091
+    over velocity_ratio_1h_vs_30d (0.879) and +0.311 over the best trivial rule (0.659), same rows)
+  - docs/benchmarks/m4_gate_d8083dbc_v3/metrics.json
+  - ml/tests/training/test_gate.py
+  - ml/tests/cli/test_m4_commands.py
   deviations: []
+  notes: 'M3 evaluation-design constraint (E1, adopted 2026-09-19): seven of the 44 features aggregate
+    over an entity other than the account (counterparty, device, agent, geo cell), so account-grouped
+    folds do not isolate them, and component folding is unavailable - measured, the counterparty and geo-cell
+    graphs are single components spanning 100% of accounts and the agent graph reaches 38% (docs/research/component_sizes.json,
+    tree d85385f). The train/validation/test split is temporal with an embargo, and a validation row reading
+    earlier cross-account rows is what serving does, not leakage. The live exposure is OUT-OF-FOLD TARGET
+    ENCODING INSIDE THE TRAINING PERIOD, where folds are random and account-grouped - where M-8 lived.
+    Required: out-of-fold encodings are computed over rows strictly EARLIER IN TIME than the row being
+    encoded, never over random folds. This is settled, not open; M4 must not be designed as if it were.
+    M4 EVALUATION CAVEATS carried from M3 (2026-09-20). (1) Train on the features that carry information
+    and report that number with every metric - never ''44 features'' where fewer were used; six have no
+    source data (PB-44), and if one becomes computable later that is a documented change to the model''s
+    input and a reason to restate earlier numbers. (2) corridor_class is evaluated over two of its four
+    classes: CROSS_BLOC_AFRICA and INTERCONTINENTAL are implemented and unit-tested but no row of this
+    dataset produces either, so a model trained here has never seen them and an encoder fitted here has
+    no cell for them. No claim that a model generalises across corridor classes can rest on this benchmark
+    (PB-43, owner decision: keep the classes, do not broaden the simulated set). (3) accounts_per_device_7d
+    is constant and synthetic_identity_score is one term short until PB-40 is fixed before training. (4)
+    The synthetic-identity composite''s equal weights are a documented choice, not a derived optimum;
+    M4 may revisit them with evidence and must say so if it does. M3 -> M4 REPORTING GATE (owner decision
+    2026-09-20, PB-46). This benchmark is VELOCITY-SEPARABLE: a single feature, velocity_ratio_1h_vs_30d,
+    reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit 2c80ef6 (docs/benchmarks/single_feature_baseline.md).
+    NO MODEL METRIC MAY BE REPORTED WITHOUT ITS SINGLE-FEATURE BASELINE BESIDE IT - the best single feature
+    and the best trivial rule (one threshold on one feature), on the same split, at the same scale, with
+    the same account-grouped folds - and the comparison is reported as the MARGIN over that baseline.
+    ''AUC 0.94'' against a 0.894 baseline is a different claim from ''AUC 0.94'' against chance, and only
+    the first is honest. A metric quoted alone is inadmissible on the same terms as a metric quoted without
+    its scale (E2). CARRIES THE WEIGHT THE HEADLINE AUC NO LONGER CAN (2026-09-20, PB-46). Since a single
+    velocity threshold reaches 0.894 on this benchmark, the headline discrimination metrics are no longer
+    where a model shows it learned anything. Leave-one-country-out (ADR 0023 section 4, PB-34) and the
+    novel SIM-swap sub-variant confined to the test period are: burstiness is not country-specific, so
+    a threshold transfers trivially and LOCO measures what it cannot fake; and a variant never seen in
+    training separates a model that learned the shape of fraud from one that learned its rate. These were
+    supporting experiments and are now the primary evidence. Report each with its single-feature baseline,
+    as the gate above requires. M4 (2026-09-22): declared gate run at d40fca2, AUC 0.970 [0.962, 0.977],
+    five seeds 0.967 +/- 0.004; +0.091 over velocity_ratio_1h_vs_30d (0.879) and +0.311 over the best
+    trivial rule (0.659), same rows.'
 - id: ML-GATE-02
   section: 7.2 Model deployment gate
   title: Precision at 1% FPR
@@ -2347,11 +2784,36 @@ requirements:
     volume to manageable level'
   defects:
   - D-01
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation: *id001
+  evidence:
+  - docs/benchmarks/m4_gate_d8083dbc_v3.txt (recall at the 1% FPR budget 0.871 [0.847, 0.891] at a realised
+    FPR of 0.96%; +0.273 over the best single feature; precision there 0.471 against D-01's ceiling of
+    0.505 at that rate)
+  - docs/benchmarks/m4_gate_d8083dbc_v3/metrics.json
+  - ml/tests/training/test_gate.py
+  - ml/tests/cli/test_m4_commands.py
   deviations: []
+  notes: 'M3 evaluation-design constraint (E1, adopted 2026-09-19): seven of the 44 features aggregate
+    over an entity other than the account (counterparty, device, agent, geo cell), so account-grouped
+    folds do not isolate them, and component folding is unavailable - measured, the counterparty and geo-cell
+    graphs are single components spanning 100% of accounts and the agent graph reaches 38% (docs/research/component_sizes.json,
+    tree d85385f). The train/validation/test split is temporal with an embargo, and a validation row reading
+    earlier cross-account rows is what serving does, not leakage. The live exposure is OUT-OF-FOLD TARGET
+    ENCODING INSIDE THE TRAINING PERIOD, where folds are random and account-grouped - where M-8 lived.
+    Required: out-of-fold encodings are computed over rows strictly EARLIER IN TIME than the row being
+    encoded, never over random folds. This is settled, not open; M4 must not be designed as if it were.
+    M3 -> M4 REPORTING GATE (owner decision 2026-09-20, PB-46). This benchmark is VELOCITY-SEPARABLE:
+    a single feature, velocity_ratio_1h_vs_30d, reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit 2c80ef6
+    (docs/benchmarks/single_feature_baseline.md). NO MODEL METRIC MAY BE REPORTED WITHOUT ITS SINGLE-FEATURE
+    BASELINE BESIDE IT - the best single feature and the best trivial rule (one threshold on one feature),
+    on the same split, at the same scale, with the same account-grouped folds - and the comparison is
+    reported as the MARGIN over that baseline. ''AUC 0.94'' against a 0.894 baseline is a different claim
+    from ''AUC 0.94'' against chance, and only the first is honest. A metric quoted alone is inadmissible
+    on the same terms as a metric quoted without its scale (E2). M4 (2026-09-22): declared gate run at
+    d40fca2, recall at the 1% FPR budget 0.871 [0.847, 0.891] at a realised FPR of 0.96%; +0.273 over
+    the best single feature; precision there 0.471 against D-01''s ceiling of 0.505 at that rate.'
 - id: ML-GATE-03
   section: 7.2 Model deployment gate
   title: Recall (fraud capture rate)
@@ -2361,11 +2823,42 @@ requirements:
     against FPR'
   defects:
   - D-02
-  status: NOT_STARTED
+  status: DONE_WITH_DEVIATION
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation: *id001
+  evidence:
+  - 'docs/benchmarks/m4_gate_d8083dbc_v3.txt (recall at 0.60 0.736 [0.707, 0.765], five seeds 0.744 +/-
+    0.041: FAILS the 0.880 threshold)'
+  - docs/benchmarks/m4_gate_d8083dbc_v3/metrics.json
+  - ml/tests/training/test_gate.py
+  - ml/tests/cli/test_m4_commands.py
+  deviations:
+  - docs/adr/0031-closing-m4s-rows-and-the-two-that-fail.md
+  notes: 'M3 evaluation-design constraint (E1, adopted 2026-09-19): seven of the 44 features aggregate
+    over an entity other than the account (counterparty, device, agent, geo cell), so account-grouped
+    folds do not isolate them, and component folding is unavailable - measured, the counterparty and geo-cell
+    graphs are single components spanning 100% of accounts and the agent graph reaches 38% (docs/research/component_sizes.json,
+    tree d85385f). The train/validation/test split is temporal with an embargo, and a validation row reading
+    earlier cross-account rows is what serving does, not leakage. The live exposure is OUT-OF-FOLD TARGET
+    ENCODING INSIDE THE TRAINING PERIOD, where folds are random and account-grouped - where M-8 lived.
+    Required: out-of-fold encodings are computed over rows strictly EARLIER IN TIME than the row being
+    encoded, never over random folds. This is settled, not open; M4 must not be designed as if it were.
+    M3 -> M4 REPORTING GATE (owner decision 2026-09-20, PB-46). This benchmark is VELOCITY-SEPARABLE:
+    a single feature, velocity_ratio_1h_vs_30d, reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit 2c80ef6
+    (docs/benchmarks/single_feature_baseline.md). NO MODEL METRIC MAY BE REPORTED WITHOUT ITS SINGLE-FEATURE
+    BASELINE BESIDE IT - the best single feature and the best trivial rule (one threshold on one feature),
+    on the same split, at the same scale, with the same account-grouped folds - and the comparison is
+    reported as the MARGIN over that baseline. ''AUC 0.94'' against a 0.894 baseline is a different claim
+    from ''AUC 0.94'' against chance, and only the first is honest. A metric quoted alone is inadmissible
+    on the same terms as a metric quoted without its scale (E2). M4 (2026-09-22): declared gate run at
+    d40fca2, recall at 0.60 0.736 [0.707, 0.765], five seeds 0.744 +/- 0.041: FAILS the 0.880 threshold.
+    Recorded, not tuned (D.3). Analysis and options in PB-62; the owner decides (ADR 0031). OWNER DECISION
+    2026-09-22 (ADR 0031 amendment): GATE MISSED: recall at 0.60 is 0.736 [0.707, 0.765] at 30,000 training
+    rows, against the 0.880 threshold. A miss at the training volume used (30,000 rows, 260 frauds), not
+    deferrable and not a defect; not a property of the benchmark until PB-67 is tested. Cause: ranking,
+    not the threshold (recall is 0.871 even at the 1% FPR budget); not the reversal-scam variant (at most
+    0.789 without it); candidate, untested: training volume (PB-67). D-02''s threshold unchanged, nothing
+    tuned on test; reported as a finding in the paper.'
 - id: ML-GATE-04
   section: 7.2 Model deployment gate
   title: F1 Score
@@ -2375,11 +2868,34 @@ requirements:
     classes'
   defects:
   - D-02
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation: *id001
+  evidence:
+  - docs/benchmarks/m4_gate_d8083dbc_v3.txt (F1 at 0.60 0.821 [0.800, 0.840], five seeds 0.820 +/- 0.020)
+  - docs/benchmarks/m4_gate_d8083dbc_v3/metrics.json
+  - ml/tests/training/test_gate.py
+  - ml/tests/cli/test_m4_commands.py
   deviations: []
+  notes: 'M3 evaluation-design constraint (E1, adopted 2026-09-19): seven of the 44 features aggregate
+    over an entity other than the account (counterparty, device, agent, geo cell), so account-grouped
+    folds do not isolate them, and component folding is unavailable - measured, the counterparty and geo-cell
+    graphs are single components spanning 100% of accounts and the agent graph reaches 38% (docs/research/component_sizes.json,
+    tree d85385f). The train/validation/test split is temporal with an embargo, and a validation row reading
+    earlier cross-account rows is what serving does, not leakage. The live exposure is OUT-OF-FOLD TARGET
+    ENCODING INSIDE THE TRAINING PERIOD, where folds are random and account-grouped - where M-8 lived.
+    Required: out-of-fold encodings are computed over rows strictly EARLIER IN TIME than the row being
+    encoded, never over random folds. This is settled, not open; M4 must not be designed as if it were.
+    M3 -> M4 REPORTING GATE (owner decision 2026-09-20, PB-46). This benchmark is VELOCITY-SEPARABLE:
+    a single feature, velocity_ratio_1h_vs_30d, reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit 2c80ef6
+    (docs/benchmarks/single_feature_baseline.md). NO MODEL METRIC MAY BE REPORTED WITHOUT ITS SINGLE-FEATURE
+    BASELINE BESIDE IT - the best single feature and the best trivial rule (one threshold on one feature),
+    on the same split, at the same scale, with the same account-grouped folds - and the comparison is
+    reported as the MARGIN over that baseline. ''AUC 0.94'' against a 0.894 baseline is a different claim
+    from ''AUC 0.94'' against chance, and only the first is honest. A metric quoted alone is inadmissible
+    on the same terms as a metric quoted without its scale (E2). M4 (2026-09-22): declared gate run at
+    d40fca2, F1 at 0.60 0.821 [0.800, 0.840], five seeds 0.820 +/- 0.020. It sits at the threshold: 0.819
+    and 0.795 in the two earlier runs (lab notebook, 2026-09-22).'
 - id: ML-GATE-05
   section: 7.2 Model deployment gate
   title: False Positive Rate at threshold 0.85
@@ -2389,11 +2905,16 @@ requirements:
     friction rate'
   defects:
   - D-02
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation: *id001
+  evidence:
+  - docs/benchmarks/m4_gate_d8083dbc_v3.txt (FPR at 0.85 0.0003 [0.000, 0.000])
+  - docs/benchmarks/m4_gate_d8083dbc_v3/metrics.json
+  - ml/tests/training/test_gate.py
+  - ml/tests/cli/test_m4_commands.py
   deviations: []
+  notes: 'M4 (2026-09-22): declared gate run at d40fca2, FPR at 0.85 0.0003 [0.000, 0.000].'
 - id: ML-GATE-06
   section: 7.2 Model deployment gate
   title: False Negative Rate
@@ -2403,11 +2924,24 @@ requirements:
     threshold 0.85'
   defects:
   - D-02
-  status: NOT_STARTED
+  status: DONE_WITH_DEVIATION
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation: *id001
+  evidence:
+  - 'docs/benchmarks/m4_gate_d8083dbc_v3.txt (FNR at 0.60 0.264 [0.235, 0.293]: FAILS the 12.0% threshold)'
+  - docs/benchmarks/m4_gate_d8083dbc_v3/metrics.json
+  - ml/tests/training/test_gate.py
+  - ml/tests/cli/test_m4_commands.py
+  deviations:
+  - docs/adr/0031-closing-m4s-rows-and-the-two-that-fail.md
+  notes: 'M4 (2026-09-22): declared gate run at d40fca2, FNR at 0.60 0.264 [0.235, 0.293]: FAILS the 12.0%
+    threshold. The same shortfall as ML-GATE-03 (FNR = 1 - recall at 0.60). PB-62; ADR 0031. OWNER DECISION
+    2026-09-22 (ADR 0031 amendment): GATE MISSED: FNR at 0.60 is 0.264 [0.235, 0.293] at 30,000 training
+    rows, against the 12.0% threshold. A miss at the training volume used (30,000 rows, 260 frauds), not
+    deferrable and not a defect; not a property of the benchmark until PB-67 is tested. Cause: ranking,
+    not the threshold (recall is 0.871 even at the 1% FPR budget); not the reversal-scam variant (at most
+    0.789 without it); candidate, untested: training volume (PB-67). D-02''s threshold unchanged, nothing
+    tuned on test; reported as a finding in the paper.'
 - id: ML-GATE-07
   section: 7.2 Model deployment gate
   title: MOBILE_MONEY channel AUC-ROC
@@ -2416,11 +2950,33 @@ requirements:
   srs_text: 'Threshold: 0.920; Financial Justification: East African dominant channel requires explicit
     validation'
   defects: []
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation: *id001
+  evidence:
+  - docs/benchmarks/m4_gate_d8083dbc_v3.txt (MOBILE_MONEY AUC 0.953 [0.934, 0.969]; +0.070 over the best
+    single feature on the channel's rows (0.882))
+  - docs/benchmarks/m4_gate_d8083dbc_v3/metrics.json
+  - ml/tests/training/test_gate.py
+  - ml/tests/cli/test_m4_commands.py
   deviations: []
+  notes: 'M3 -> M4 REPORTING GATE (owner decision 2026-09-20, PB-46). This benchmark is VELOCITY-SEPARABLE:
+    a single feature, velocity_ratio_1h_vs_30d, reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit 2c80ef6
+    (docs/benchmarks/single_feature_baseline.md). NO MODEL METRIC MAY BE REPORTED WITHOUT ITS SINGLE-FEATURE
+    BASELINE BESIDE IT - the best single feature and the best trivial rule (one threshold on one feature),
+    on the same split, at the same scale, with the same account-grouped folds - and the comparison is
+    reported as the MARGIN over that baseline. ''AUC 0.94'' against a 0.894 baseline is a different claim
+    from ''AUC 0.94'' against chance, and only the first is honest. A metric quoted alone is inadmissible
+    on the same terms as a metric quoted without its scale (E2). CARRIES THE WEIGHT THE HEADLINE AUC NO
+    LONGER CAN (2026-09-20, PB-46). Since a single velocity threshold reaches 0.894 on this benchmark,
+    the headline discrimination metrics are no longer where a model shows it learned anything. Leave-one-country-out
+    (ADR 0023 section 4, PB-34) and the novel SIM-swap sub-variant confined to the test period are: burstiness
+    is not country-specific, so a threshold transfers trivially and LOCO measures what it cannot fake;
+    and a variant never seen in training separates a model that learned the shape of fraud from one that
+    learned its rate. These were supporting experiments and are now the primary evidence. Report each
+    with its single-feature baseline, as the gate above requires. M4 (2026-09-22): declared gate run at
+    d40fca2, MOBILE_MONEY AUC 0.953 [0.934, 0.969]; +0.070 over the best single feature on the channel''s
+    rows (0.882).'
 - id: ML-GATE-08
   section: 7.2 Model deployment gate
   title: USSD channel AUC-ROC
@@ -2429,11 +2985,33 @@ requirements:
   srs_text: 'Threshold: 0.900; Financial Justification: USSD lacks device fingerprint; harder problem;
     separate validation required'
   defects: []
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation: *id001
+  evidence:
+  - docs/benchmarks/m4_gate_d8083dbc_v3.txt (USSD AUC 0.953 [0.931, 0.972]; +0.049 over the best single
+    feature on the channel's rows (0.904), the narrowest margin)
+  - docs/benchmarks/m4_gate_d8083dbc_v3/metrics.json
+  - ml/tests/training/test_gate.py
+  - ml/tests/cli/test_m4_commands.py
   deviations: []
+  notes: 'M3 -> M4 REPORTING GATE (owner decision 2026-09-20, PB-46). This benchmark is VELOCITY-SEPARABLE:
+    a single feature, velocity_ratio_1h_vs_30d, reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit 2c80ef6
+    (docs/benchmarks/single_feature_baseline.md). NO MODEL METRIC MAY BE REPORTED WITHOUT ITS SINGLE-FEATURE
+    BASELINE BESIDE IT - the best single feature and the best trivial rule (one threshold on one feature),
+    on the same split, at the same scale, with the same account-grouped folds - and the comparison is
+    reported as the MARGIN over that baseline. ''AUC 0.94'' against a 0.894 baseline is a different claim
+    from ''AUC 0.94'' against chance, and only the first is honest. A metric quoted alone is inadmissible
+    on the same terms as a metric quoted without its scale (E2). CARRIES THE WEIGHT THE HEADLINE AUC NO
+    LONGER CAN (2026-09-20, PB-46). Since a single velocity threshold reaches 0.894 on this benchmark,
+    the headline discrimination metrics are no longer where a model shows it learned anything. Leave-one-country-out
+    (ADR 0023 section 4, PB-34) and the novel SIM-swap sub-variant confined to the test period are: burstiness
+    is not country-specific, so a threshold transfers trivially and LOCO measures what it cannot fake;
+    and a variant never seen in training separates a model that learned the shape of fraud from one that
+    learned its rate. These were supporting experiments and are now the primary evidence. Report each
+    with its single-feature baseline, as the gate above requires. M4 (2026-09-22): declared gate run at
+    d40fca2, USSD AUC 0.953 [0.931, 0.972]; +0.049 over the best single feature on the channel''s rows
+    (0.904), the narrowest margin.'
 - id: ML-GATE-09
   section: 7.2 Model deployment gate
   title: AGENT_BANKING channel AUC-ROC
@@ -2442,11 +3020,33 @@ requirements:
   srs_text: 'Threshold: 0.910; Financial Justification: Agent fraud is East African-specific; novel validation
     requirement'
   defects: []
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation: *id001
+  evidence:
+  - docs/benchmarks/m4_gate_d8083dbc_v3.txt (AGENT_BANKING AUC 0.979 [0.960, 0.993]; +0.136 over the best
+    single feature on the channel's rows (0.843))
+  - docs/benchmarks/m4_gate_d8083dbc_v3/metrics.json
+  - ml/tests/training/test_gate.py
+  - ml/tests/cli/test_m4_commands.py
   deviations: []
+  notes: 'M3 -> M4 REPORTING GATE (owner decision 2026-09-20, PB-46). This benchmark is VELOCITY-SEPARABLE:
+    a single feature, velocity_ratio_1h_vs_30d, reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit 2c80ef6
+    (docs/benchmarks/single_feature_baseline.md). NO MODEL METRIC MAY BE REPORTED WITHOUT ITS SINGLE-FEATURE
+    BASELINE BESIDE IT - the best single feature and the best trivial rule (one threshold on one feature),
+    on the same split, at the same scale, with the same account-grouped folds - and the comparison is
+    reported as the MARGIN over that baseline. ''AUC 0.94'' against a 0.894 baseline is a different claim
+    from ''AUC 0.94'' against chance, and only the first is honest. A metric quoted alone is inadmissible
+    on the same terms as a metric quoted without its scale (E2). CARRIES THE WEIGHT THE HEADLINE AUC NO
+    LONGER CAN (2026-09-20, PB-46). Since a single velocity threshold reaches 0.894 on this benchmark,
+    the headline discrimination metrics are no longer where a model shows it learned anything. Leave-one-country-out
+    (ADR 0023 section 4, PB-34) and the novel SIM-swap sub-variant confined to the test period are: burstiness
+    is not country-specific, so a threshold transfers trivially and LOCO measures what it cannot fake;
+    and a variant never seen in training separates a model that learned the shape of fraud from one that
+    learned its rate. These were supporting experiments and are now the primary evidence. Report each
+    with its single-feature baseline, as the gate above requires. M4 (2026-09-22): declared gate run at
+    d40fca2, AGENT_BANKING AUC 0.979 [0.960, 0.993]; +0.136 over the best single feature on the channel''s
+    rows (0.843).'
 - id: ML-GATE-10
   section: 7.2 Model deployment gate
   title: SHAP coverage
@@ -2455,11 +3055,18 @@ requirements:
   srs_text: 'Threshold: 100% for HIGH and MEDIUM risk transactions; Financial Justification: Non-negotiable
     for analyst trust and BNR regulatory explainability requirement'
   defects: []
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation: *id001
+  evidence:
+  - 'docs/benchmarks/m4_gate_d8083dbc_v3.txt (SHAP coverage for HIGH and MEDIUM 1.000: every flagged row''s
+    explanation complete and additive within 0.001)'
+  - docs/benchmarks/m4_gate_d8083dbc_v3/metrics.json
+  - ml/tests/training/test_gate.py
+  - ml/tests/cli/test_m4_commands.py
   deviations: []
+  notes: 'M4 (2026-09-22): declared gate run at d40fca2, SHAP coverage for HIGH and MEDIUM 1.000: every
+    flagged row''s explanation complete and additive within 0.001.'
 - id: ML-GATE-11
   section: 7.2 Model deployment gate
   title: Expected Calibration Error (ECE)
@@ -2469,11 +3076,27 @@ requirements:
     score = ~85% fraud probability'
   defects:
   - D-05
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation: *id001
+  evidence:
+  - docs/benchmarks/m4_gate_d8083dbc_v3.txt (ECE on 15 equal-mass bins 0.001 [0.001, 0.001]; equal-width
+    ECE 0.0014, Brier 0.0027)
+  - docs/benchmarks/m4_gate_d8083dbc_v3/metrics.json
+  - ml/tests/training/test_gate.py
+  - ml/tests/cli/test_m4_commands.py
   deviations: []
+  notes: 'M3 evaluation-design constraint (E1, adopted 2026-09-19): seven of the 44 features aggregate
+    over an entity other than the account (counterparty, device, agent, geo cell), so account-grouped
+    folds do not isolate them, and component folding is unavailable - measured, the counterparty and geo-cell
+    graphs are single components spanning 100% of accounts and the agent graph reaches 38% (docs/research/component_sizes.json,
+    tree d85385f). The train/validation/test split is temporal with an embargo, and a validation row reading
+    earlier cross-account rows is what serving does, not leakage. The live exposure is OUT-OF-FOLD TARGET
+    ENCODING INSIDE THE TRAINING PERIOD, where folds are random and account-grouped - where M-8 lived.
+    Required: out-of-fold encodings are computed over rows strictly EARLIER IN TIME than the row being
+    encoded, never over random folds. This is settled, not open; M4 must not be designed as if it were.
+    M4 (2026-09-22): declared gate run at d40fca2, ECE on 15 equal-mass bins 0.001 [0.001, 0.001]; equal-width
+    ECE 0.0014, Brier 0.0027.'
 - id: ML-GATE-12
   section: 7.2 Model deployment gate
   title: Inference latency p99
@@ -2483,13 +3106,19 @@ requirements:
     requirement; exceeding causes auto-block latency breach'
   defects:
   - D-16
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
-  notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
-    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
+  implementation:
+  - ml/src/fraudshield_ml/serving/benchmark.py
+  - ml/src/fraudshield_ml/serving/scorer.py
+  evidence:
+  - 'docs/benchmarks/m5_serve_laptop_4af4e5e.json (laptop, NOT gate evidence under ADR 0010: server-side
+    p99 39 ms against the 40 ms threshold, but only 0.38% of requests took the SHAP path)'
+  deviations:
+  - docs/adr/0035-closing-m5s-rows-what-serving-proves-and-what-it-cannot.md
+  - docs/adr/0032-the-scoring-latency-gate-is-a-throughput-requirement.md
+  notes: 'M5 (2026-09-23): unmeasured on the machine that decides. The laptop figure is recorded for analysis
+    only and is not a gate number (ADR 0010). Carried to M10.'
 - id: ML-GATE-13
   section: 7.2 Model deployment gate
   title: Shadow mode AUC-ROC delta
@@ -2499,11 +3128,20 @@ requirements:
     regression during model updates; minimum 24-hour shadow period'
   defects:
   - D-11
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - ml/src/fraudshield_ml/serving/shadow.py
+  - ml/src/fraudshield_ml/serving/registry.py
+  evidence:
+  - ml/tests/serving/test_shadow.py (every D-11 clause, each refusal naming its reason)
+  - ml/tests/serving/test_registry.py (promotion re-derives each clause from the comparator's own figures;
+    a report that refuses, omits a figure or reports a non-finite one does not promote)
+  deviations:
+  - docs/adr/0035-closing-m5s-rows-what-serving-proves-and-what-it-cannot.md
+  notes: 'M5 (2026-09-23): the gate logic is implemented and tested, and refuses. The metric itself --
+    a shadow AUC delta over 24 hours and at least 50,000 scores -- needs a deployment running the shadow
+    comparator, so the number does not yet exist. Carried to M10 (ADR 0035).'
 - id: OPS-CI-01
   section: 8.1 CI/CD pipeline
   title: Lint + Static Analysis
@@ -2602,7 +3240,11 @@ requirements:
   verification: test
   implementation: []
   evidence: []
-  deviations: []
+  deviations:
+  - docs/adr/0014-staff-authorisation-model.md
+  notes: 'Deviation (owner decision, ADR 0014 section 6): /api/v1/health/ml and /api/v1/health/kafka do
+    not exist; public /api/v1/health is status only, and the probe and smoke test use the management-port
+    /actuator/health/ml and /actuator/health/kafka; close as DONE_WITH_DEVIATION citing docs/adr/0014-staff-authorisation-model.md.'
 - id: OPS-CI-08
   section: 8.1 CI/CD pipeline
   title: Production Deploy
@@ -2690,7 +3332,11 @@ requirements:
   verification: test
   implementation: []
   evidence: []
-  deviations: []
+  deviations:
+  - docs/adr/0014-staff-authorisation-model.md
+  notes: 'Deviation (owner decision, ADR 0014 section 6): /api/v1/health/ml and /api/v1/health/kafka do
+    not exist; public /api/v1/health is status only, and the probe and smoke test use the management-port
+    /actuator/health/ml and /actuator/health/kafka; close as DONE_WITH_DEVIATION citing docs/adr/0014-staff-authorisation-model.md.'
 - id: OPS-OBS-06
   section: 8.2 Observability
   title: Fraud Rate Anomaly
@@ -2709,18 +3355,26 @@ requirements:
   section: 9 Testing requirements
   title: 'Unit: Feature Engineering'
   priority: M
-  milestone: M3
+  milestone: M4
   srs_text: 'Framework: pytest; Coverage Target: All 44 features; all 6 channel types; edge cases; Key
     Scenarios: USSD: 40 features computed without device_fingerprint; AGENT_BANKING: agent-specific features
     only computed for AGENT channel; round_sum_flag: correct for EAC cultural norms; velocity: correct
     with 0 historical transactions'
   defects:
   - D-04
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - ml/src/fraudshield_ml/features/vector.py
+  - ml/src/fraudshield_ml/features/batch.py
+  - ml/src/fraudshield_ml/features/online.py
+  evidence:
+  - ml/tests/features/test_vector.py (all 44 on all six channels with D-04's NaN pattern)
+  - ml/tests/features/test_amount_behaviour.py (round sums by the market's own denominations)
+  - ml/tests/features/test_velocity_group.py (zero history)
   deviations: []
+  notes: 'M4 (2026-09-22): no feature test used BANK_TRANSFER or ONLINE until the M4 review; now every
+    channel is exercised.'
 - id: TEST-02
   section: 9 Testing requirements
   title: 'Unit: ML Scoring'
@@ -2733,11 +3387,23 @@ requirements:
   defects:
   - D-05
   - D-06
-  status: NOT_STARTED
+  status: DONE_WITH_DEVIATION
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - ml/src/fraudshield_ml/training/model.py
+  - ml/src/fraudshield_ml/training/ensemble.py
+  - ml/src/fraudshield_ml/training/anomaly.py
+  - ml/src/fraudshield_ml/training/explain.py
+  - ml/src/fraudshield_ml/training/onnx_export.py
+  evidence:
+  - ml/tests/training/test_ensemble.py
+  - ml/tests/training/test_model.py
+  - ml/tests/training/test_anomaly.py
+  - ml/tests/training/test_explain.py
+  - ml/tests/training/test_onnx_export.py
+  deviations:
+  - docs/adr/0031-closing-m4s-rows-and-the-two-that-fail.md
+  notes: 'M4 (2026-09-22): the fallback rule engine on a 503 needs M5''s scoring service (PB-64).'
 - id: TEST-03
   section: 9 Testing requirements
   title: 'Unit: Risk Decision Engine'
@@ -2749,11 +3415,26 @@ requirements:
   defects:
   - D-17
   - D-18
-  status: NOT_STARTED
+  status: DONE_WITH_DEVIATION
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/domain
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/application
+  evidence:
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/domain/DecisionEngineTest.java
+    (threshold combinations, including a generative property)
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/domain/FreezeAndBreakerTest.java
+    (breaker above 5.0% with minimum volume)
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/application/HoldTimeoutServiceTest.java
+    (the 30 s timer)
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/idempotency/RedisIdempotencyTest.java
+    (no double decision)
+  deviations:
+  - docs/adr/0009-dependency-licence-policy.md
+  - docs/adr/0061-decision-engine-semantics.md
+  notes: 'M6 (2026-09-24): JUnit 5, not pytest (D-17); property tests use a fixed-seed generator because
+    jqwik was removed (ADR 0009). The breaker window is one-minute buckets and the breach test is exact
+    (ADR 0061 point 4).'
 - id: TEST-04
   section: 9 Testing requirements
   title: 'Unit: Auth (JWT + OAuth + API Key)'
@@ -2777,11 +3458,18 @@ requirements:
     Key Scenarios: Transaction ingested -> Kafka published -> ML scored -> risk decision -> auto-block
     OR analyst alert; p95 < 50ms confirmed; duplicate idempotency: 100 identical submissions = 1 scored'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision
+  evidence:
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/IngestApiTest.java (HTTP
+    to decision, auto-block or alert, 100 identical submissions scored once)
+  deviations:
+  - docs/adr/0059-m6-latency-gate-not-met-on-this-hardware.md
+  notes: 'M6 (2026-09-24): the pipeline is covered end to end with real PostgreSQL, Redis and Kafka; ''p95
+    < 50 ms confirmed'' is NOT MET on this hardware (ADR 0059, PB-73); the analyst dashboard end is M7/M8.'
 - id: TEST-06
   section: 9 Testing requirements
   title: 'Integration: Analyst Decision Flow'
@@ -2823,11 +3511,20 @@ requirements:
     MLflow comparison updated after each transaction'
   defects:
   - D-11
-  status: NOT_STARTED
+  status: DONE_WITH_DEVIATION
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - ml/src/fraudshield_ml/serving/shadow.py
+  - ml/src/fraudshield_ml/serving/server.py
+  evidence:
+  - ml/tests/serving/test_shadow.py (the shadow model scores every transaction; only the production result
+    is returned and only it triggers actions)
+  - ml/tests/serving/test_registry.py (the MLflow comparison is updated per shadow version, verified against
+    a real container)
+  deviations:
+  - docs/adr/0035-closing-m5s-rows-what-serving-proves-and-what-it-cannot.md
+  notes: 'M5 (2026-09-23): three of the four scenarios are proved here. ''Shadow score in audit log''
+    needs the backend''s audit store (M6/M7) and is carried there (ADR 0035).'
 - id: TEST-09
   section: 9 Testing requirements
   title: 'Performance: Load'
@@ -2854,13 +3551,23 @@ requirements:
     in memory (not reloaded)'
   defects:
   - D-16
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
-  notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
-    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
+  implementation:
+  - ml/src/fraudshield_ml/serving/benchmark.py
+  evidence:
+  - 'docs/benchmarks/m5_memory_laptop_4af4e5e.json (memory clause PASSES at the stated scale: 0.54 MB
+    growth over 10,000 consecutive scorings after a 500-scoring warm-up, against a 50 MB limit, model
+    loaded once)'
+  - 'docs/benchmarks/m5_serve_laptop_4af4e5e.json (latency clause FAILS here: client-observed p50 1,164
+    ms at 200 in flight, 183 req/s; laptop, NOT gate evidence under ADR 0010)'
+  - ml/tests/serving/test_benchmark.py
+  deviations:
+  - docs/adr/0035-closing-m5s-rows-what-serving-proves-and-what-it-cannot.md
+  - docs/adr/0032-the-scoring-latency-gate-is-a-throughput-requirement.md
+  notes: 'M5 (2026-09-23): split verdict, so the row stays open. The memory clause is verified at the
+    stated scale; the 200-concurrent latency clause is a throughput requirement (ADR 0032) and needs the
+    dedicated machine. Carried to M10.'
 - id: TEST-11
   section: 9 Testing requirements
   title: 'Frontend: Unit'
@@ -2916,11 +3623,24 @@ requirements:
   srs_text: 'Framework: evaluate.py; Coverage Target: All 13 metrics in Section 7.2; Key Scenarios: Automated
     CI gate; LaTeX table generated as artifact; shadow mode AUC-ROC delta computed and logged to MLflow'
   defects: []
-  status: NOT_STARTED
+  status: DONE_WITH_DEVIATION
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - ml/src/fraudshield_ml/training/gate.py
+  - ml/src/fraudshield_ml/training/gate_run.py
+  - ml/src/fraudshield_ml/training/gate_report.py
+  - ml/src/fraudshield_ml/cli.py
+  evidence:
+  - docs/benchmarks/m4_gate_d8083dbc_v3.txt
+  - docs/benchmarks/m4_gate_d8083dbc_v3/tables/gate.tex
+  - ml/tests/training/test_gate.py
+  - ml/tests/cli/test_m4_commands.py
+  deviations:
+  - docs/adr/0031-closing-m4s-rows-and-the-two-that-fail.md
+  - docs/adr/0030-m4-evidence-without-mlflow-tracking.md
+  notes: 'M4 (2026-09-22): eleven of thirteen metrics (12 and 13 are M5''s), LaTeX tables and --enforce.
+    The shadow delta and MLflow logging go with M5 (PB-64); running the gate inside CI needs a dataset
+    there (PB-63).'
 - id: RES-01
   section: 10 Research artifacts
   title: FraudShield-EAC-Transactions dataset
@@ -2932,11 +3652,24 @@ requirements:
   defects:
   - D-08
   - D-09
-  status: NOT_STARTED
+  status: VERIFIED_AT_REDUCED_SCALE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - dataset/src/fraudshield_dataset/generator/pipeline.py
+  - dataset/src/fraudshield_dataset/release/export.py
+  evidence:
+  - dataset/realism_report.md (1,006,249 rows, seed 20260917, fingerprint 6abde44e, all gate checks pass)
+  - dataset/tests/test_generator.py
+  - dataset/tests/test_realism_checks.py
+  - dataset/tests/test_export.py
   deviations: []
+  notes: See ADR 0024 for why the feature clause is not M2's to satisfy.
+  reduced_scale: 'Verified at 1,006,249 rows against a 5,000,000-row specification. Delivered at this
+    scale: CSV and Parquet output, 8 fraud types, 6 channels, 5 EAC countries, CC BY 4.0, determinism
+    from a seed, and every realism and anti-leakage gate. Carried: the 5,000,000-row count is PB-25, blocked
+    because workflow_dispatch registers only from the default branch, still m0/bootstrap, and the run
+    must not happen on the build laptop. The 44-feature clause moves to M3 with ML-DATA-07, since the
+    build prompt places feature engineering in M3 (ADR 0024).'
 - id: RES-02
   section: 10 Research artifacts
   title: Dataset datasheet
@@ -2946,11 +3679,17 @@ requirements:
     Platform: GitHub fraudshield repo docs/ + arXiv appendix'
   defects:
   - D-09
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - docs/ml/datasheet.md
+  evidence:
+  - dataset/tests/test_params.py (tagged RES-02)
+  - dataset/tests/test_realism_checks.py::test_the_datasheet_quotes_the_committed_report
   deviations: []
+  notes: Gebru template, CC BY 4.0, shipped by fs-dataset export. Its measured figures are guarded against
+    the committed realism report, after they were found to match no run the repository could produce (M2
+    milestone review, MAJOR M-1).
 - id: RES-03
   section: 10 Research artifacts
   title: Trained model weights
@@ -3024,12 +3763,16 @@ requirements:
   defects: []
   affects:
   - ML-GATE-02
-  status: IN_PROGRESS
+  status: DONE
   verification: test
   implementation:
-  - ml/src/fraudshield_ml/metrics/operating_points.py
-  evidence: []
+  - ml/src/fraudshield_ml/training/gate.py
+  evidence:
+  - ml/tests/training/test_gate.py
+  - docs/benchmarks/m4_gate_d8083dbc_v3.txt
   deviations: []
+  notes: 'M4 (2026-09-22): gate.py reports recall at 1% FPR as the gate and precision beside D-01''s ceiling
+    at the realised FPR.'
 - id: D-02
   section: Build prompt Part B defect register
   title: Recall, F1 and FNR thresholds lack a defined operating point.
@@ -3042,12 +3785,16 @@ requirements:
   - ML-GATE-04
   - ML-GATE-05
   - ML-GATE-06
-  status: IN_PROGRESS
+  status: DONE
   verification: test
   implementation:
-  - ml/src/fraudshield_ml/metrics/operating_points.py
-  evidence: []
+  - ml/src/fraudshield_ml/training/gate.py
+  evidence:
+  - ml/tests/training/test_gate.py
+  - docs/benchmarks/m4_gate_d8083dbc_v3.txt
   deviations: []
+  notes: 'M4 (2026-09-22): gate.py measures recall, F1 and FNR at 0.60 and FPR at 0.85, half-open as E.6
+    defines tiers.'
 - id: D-03
   section: Build prompt Part B defect register
   title: The feature breakdown sums to 46, not 44.
@@ -3057,11 +3804,20 @@ requirements:
   defects: []
   affects:
   - FR-02-02
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - ml/src/fraudshield_ml/features/registry.py
+  evidence:
+  - ml/tests/features/test_registry.py (the catalogue is 44 and its groups match Part E.2 group by group,
+    not just in total)
+  - ml/tests/features/test_completeness.py (every registry name has an implementation on both paths)
   deviations: []
+  notes: 'RESOLVED (M3, 2026-09-20): FR-02-02''s own register row lists group counts summing to 46 --
+    temporal (7) and account profile (5) where Part E.2''s catalogue names 6 and 4. E.2 enumerates every
+    feature by name, so it is authoritative and the registry is pinned to it group by group. A bare len
+    == 44 would pass with a temporal feature miscounted as account profile, which is the confusion this
+    defect is about, so the test asserts the group counts rather than the total.'
 - id: D-04
   section: Build prompt Part B defect register
   title: '"USSD: 40 features computed without device_fingerprint" is undefined.'
@@ -3074,10 +3830,15 @@ requirements:
   - FR-01-04
   - ML-DATA-07
   - TEST-01
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - ml/src/fraudshield_ml/features/registry.py
+  - ml/src/fraudshield_ml/features/vector.py
+  evidence:
+  - ml/tests/features/test_registry.py (the four device features and the four agent features are NaN together,
+    and nothing else is)
+  - ml/tests/metrics/test_single_feature.py (NaN scores are dropped with their labels, not scored as zero)
   deviations: []
   notes: 'M3 test case (owner, 2026-09-17): a transaction with a null device_fingerprint (USSD, and any
     channel) yields a 44-slot vector whose 4 device-derived features (device_is_new_for_account, accounts_per_device_7d,
@@ -3096,11 +3857,18 @@ requirements:
   - FR-02-04
   - ML-GATE-11
   - TEST-02
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - ml/src/fraudshield_ml/training/model.py
+  - ml/src/fraudshield_ml/training/explain.py
+  evidence:
+  - ml/tests/training/test_model.py
+  - ml/tests/training/test_explain.py
+  - docs/ml/explainability.md
   deviations: []
+  notes: 'M4 (2026-09-22): model.py (ensemble and one isotonic calibrator), explain.py (margin-space SHAP),
+    docs/ml/explainability.md.'
 - id: D-06
   section: Build prompt Part B defect register
   title: Isolation Forest score range and threshold conflict.
@@ -3111,11 +3879,16 @@ requirements:
   affects:
   - FR-02-05
   - TEST-02
-  status: NOT_STARTED
+  status: DONE_WITH_DEVIATION
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - ml/src/fraudshield_ml/training/anomaly.py
+  evidence:
+  - ml/tests/training/test_anomaly.py
+  deviations:
+  - docs/adr/0031-closing-m4s-rows-and-the-two-that-fail.md
+  notes: 'M4 (2026-09-22): anomaly_raw and the percentile anomaly_score exist as D-06 defines them; the
+    routing threshold is M6''s decision-engine configuration (PB-65).'
 - id: D-07
   section: Build prompt Part B defect register
   title: Temporal split definitions disagree
@@ -3128,11 +3901,24 @@ requirements:
   - ML-DATA-06
   - ML-GATE-01
   - OPS-CI-05
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - dataset/src/fraudshield_dataset/generator/config.py
+  - dataset/generator/params/split.yaml
+  - dataset/src/fraudshield_dataset/release/split.py
+  evidence:
+  - dataset/realism_report.md (train, validation, calibration, 7-day embargo and test, with measured rates)
+  - dataset/tests/test_generator.py (the split plan's boundaries and the embargo width)
+  - dataset/tests/test_split.py (the boundaries are published, ordered, and reproduce the report)
   deviations: []
+  notes: 'PUBLISHED AS OF 2026-09-20 (PB-48). The boundaries used to exist only inside the generator:
+    plan_split computed them from the calibrated volume and nothing carried them to a consumer, so a reader
+    holding the Parquet could not say which rows were training rows and any evaluation they computed was
+    incomparable with these gates without saying so. They are now recorded into manifest.json at generation
+    -- the only point where the target row count the planner scales by is still known -- and travel into
+    split.json and release.json from one function. The realism report''s split table is computed by that
+    same function, so the report and the release cannot drift.'
 - id: D-08
   section: Build prompt Part B defect register
   title: Results on synthetic data can look perfect and prove nothing.
@@ -3143,16 +3929,21 @@ requirements:
   affects:
   - ML-DATA-04
   - RES-01
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - dataset/src/fraudshield_dataset/realism/checks.py
+  - dataset/src/fraudshield_dataset/realism/stats.py
+  evidence:
+  - dataset/tests/test_realism_checks.py (eleven planted leaks, each caught by the gate it targets)
+  - dataset/realism_report.md (single-feature AUCs, shortcut and event detectors, label noise, novelty
+    placement)
   deviations: []
 - id: D-09
   section: Build prompt Part B defect register
   title: Unsupported numeric claims in the SRS
   priority: M
-  milestone: M4
+  milestone: M11
   srs_text: See docs/srs/defect_register.md
   defects: []
   affects:
@@ -3164,6 +3955,9 @@ requirements:
   - docs/research/claims_register.md
   evidence: []
   deviations: []
+  notes: 'M4 (2026-09-22): C-6 measured (docs/benchmarks/m4_seed_variance_d8083dbc_e1.txt); the card-style
+    ablation behind C-4 exists in the gate run. Moved to M11 by ADR 0031: five claims need primary sources
+    only the author can supply.'
 - id: D-10
   section: Build prompt Part B defect register
   title: Alert volume will overwhelm analysts; the 30-second MEDIUM timer then auto-releases most risky
@@ -3176,11 +3970,20 @@ requirements:
   - FR-02-05
   - FR-03-02
   - FR-04-02
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/domain/DecisionEngine.java
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/application/HoldTimeoutService.java
+  evidence:
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/domain/DecisionEngineTest.java
+    (LOW with a high anomaly percentile goes to ANOMALY_REVIEW without a hold)
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/application/HoldTimeoutServiceTest.java
+    (per-channel timeout policy)
+  deviations:
+  - docs/adr/0061-decision-engine-semantics.md
+  notes: 'M6 (2026-09-24): anomaly routing without a hold, and a per-channel timeout policy for MEDIUM
+    holds.'
 - id: D-11
   section: Build prompt Part B defect register
   title: Shadow "within 1%" is ambiguous and labels are delayed.
@@ -3192,11 +3995,18 @@ requirements:
   - FR-02-08
   - ML-GATE-13
   - TEST-08
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - ml/src/fraudshield_ml/serving/shadow.py
+  evidence:
+  - 'ml/tests/serving/test_shadow.py (promotion_gate: 24 hours, 50,000 scores, 30% label coverage, AUC
+    delta at or above -0.010, PSI below 0.2, each refusal naming itself)'
+  - ml/tests/serving/test_registry.py (the gate as a promotion condition)
   deviations: []
+  notes: 'M5 (2026-09-23): ''within 1%'' is resolved as D-11 specifies -- an AUC delta of at least -0.010
+    on labelled rows, with a minimum window, a minimum volume and a minimum label coverage, so delayed
+    labels cannot be read as agreement.'
 - id: D-12
   section: Build prompt Part B defect register
   title: 'Model extraction and privacy risk: returning the full ScoringResult (feature_vector, per-model
@@ -3208,11 +4018,19 @@ requirements:
   affects:
   - FR-01-03
   - FR-02-01
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/domain/ReasonCodes.java
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/web/IngestController.java
+  evidence:
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/IngestApiTest.java (the
+    decision response has exactly the contract fields)
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/domain/DecisionEngineTest.java
+  deviations:
+  - docs/adr/0061-decision-engine-semantics.md
+  notes: 'M6 (2026-09-24): the machine response carries at most three coarse reason codes, never the feature
+    vector, per-model scores or SHAP values (ADR 0061 point 5).'
 - id: D-13
   section: Build prompt Part B defect register
   title: The latency budget sums to 51 ms and puts PostgreSQL and Kafka round-trips in the synchronous
@@ -3225,11 +4043,22 @@ requirements:
   - FR-01-01
   - FR-03-01
   - NFR-PERF-02
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/adapter/spool
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/application/DecisionService.java
+  evidence:
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/kafka/KafkaSpoolChaosTest.java
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/application/DecisionServiceTest.java
+  - docs/benchmarks/2026-09-22-M6-decision-latency.json (Codespace, shape only, ADR 0059)
+  - docs/benchmarks/2026-09-23-M6-decision-latency.json (dev-laptop-01, shape only, ADR 0059)
+  deviations:
+  - docs/adr/0059-m6-latency-gate-not-met-on-this-hardware.md
+  - docs/adr/0064-durable-spool-and-hold-reconciliation.md
+  notes: 'M6 (2026-09-24): the resolution is built: Kafka and the PostgreSQL writes are off the synchronous
+    path (spool after the response), and the hot-path reads are bounded. Whether the p95 meets 50 ms is
+    PB-73''s measurement (ADR 0059).'
 - id: D-14
   section: Build prompt Part B defect register
   title: MEDIUM "hold for 30 seconds" cannot be an open HTTP request.
@@ -3239,11 +4068,17 @@ requirements:
   defects: []
   affects:
   - FR-03-02
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/adapter/jdbc
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/application/HoldTimeoutService.java
+  evidence:
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/jdbc/PostgresAdaptersTest.java
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/application/HoldTimeoutServiceTest.java
+  deviations:
+  - docs/adr/0064-durable-spool-and-hold-reconciliation.md
+  notes: 'M6 (2026-09-24): see ADR 0064.'
 - id: D-15
   section: Build prompt Part B defect register
   title: '"Buffer up to 10,000 transactions in memory" loses data if the pod dies.'
@@ -3253,11 +4088,19 @@ requirements:
   defects: []
   affects:
   - NFR-REL-02
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/adapter/spool
+  evidence:
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/spool/DurableSpoolTest.java
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/spool/SpoolDrainerTest.java
+    (nothing committed past a refused batch)
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/kafka/KafkaSpoolChaosTest.java
+  deviations:
+  - docs/adr/0064-durable-spool-and-hold-reconciliation.md
+  notes: 'M6 (2026-09-24): the durable spool; the forked-JVM kill test D-15 asks for is not built (the
+    chaos test''s process death is an in-JVM close, declared in ADR 0064).'
 - id: D-16
   section: Build prompt Part B defect register
   title: Python in the hot path at 10k TPS.
@@ -3269,11 +4112,23 @@ requirements:
   - FR-02-07
   - ML-GATE-12
   - TEST-10
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - ml/src/fraudshield_ml/serving/server.py
+  - ml/src/fraudshield_ml/models/bundle.py
+  - ml/src/fraudshield_ml/serving/benchmark.py
+  evidence:
+  - ml/tests/serving/test_entry_points.py (multi-process workers with SO_REUSEPORT, one OpenMP thread
+    per process)
+  - ml/tests/models/test_bundle.py (the ONNX path, exact against the native boosters)
+  - docs/benchmarks/m5_serve_laptop_4af4e5e.json (one worker scores about 61 req/s; laptop, not gate evidence)
+  deviations:
+  - docs/adr/0035-closing-m5s-rows-what-serving-proves-and-what-it-cannot.md
+  - docs/adr/0032-the-scoring-latency-gate-is-a-throughput-requirement.md
+  notes: 'M5 (2026-09-23): the resolution is implemented -- processes rather than threads, nthread=1,
+    a compiled ONNX path, SO_REUSEPORT -- and the measurement is what shows the remaining gap. The defect
+    closes when ADR 0032''s throughput is demonstrated on the dedicated machine.'
 - id: D-17
   section: Build prompt Part B defect register
   title: pytest is listed for the Risk Decision Engine, which is a Spring Boot service.
@@ -3283,13 +4138,17 @@ requirements:
   defects: []
   affects:
   - TEST-03
-  status: NOT_STARTED
+  status: DONE_WITH_DEVIATION
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
-  notes: jqwik removed (ADR 0009, A.4 item 1); M6 decision-engine property tests use a JUnit 5 extension
-    with per-run logged seeds; close as DONE_WITH_DEVIATION citing ADR 0009.
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/domain
+  evidence:
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/domain/DecisionEngineTest.java
+  deviations:
+  - docs/adr/0009-dependency-licence-policy.md
+  notes: 'jqwik removed (ADR 0009, A.4 item 1); M6 decision-engine property tests use a JUnit 5 extension
+    with per-run logged seeds; close as DONE_WITH_DEVIATION citing ADR 0009. M6 (2026-09-24): JUnit 5
+    for the decision engine; jqwik removed (ADR 0009), property tests on a fixed-seed generator.'
 - id: D-18
   section: Build prompt Part B defect register
   title: '"Exactly 30 s" and "exactly at 5%" need tolerances and minimum volume.'
@@ -3301,11 +4160,20 @@ requirements:
   - FR-03-02
   - FR-03-07
   - TEST-03
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/domain/MccCircuitBreaker.java
+  - backend/decision/src/main/java/io/github/mariusbayizere/fraudshield/decision/application/HoldTimeoutService.java
+  evidence:
+  - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/domain/FreezeAndBreakerTest.java
+    (exactly 5.0% does not open, one more fraud does)
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/IngestApiTest.java (30
+    s +-500 ms)
+  deviations:
+  - docs/adr/0061-decision-engine-semantics.md
+  - docs/adr/0064-durable-spool-and-hold-reconciliation.md
+  notes: 'M6 (2026-09-24): tolerances and minimum volume as ADR 0061 point 4 and ADR 0064 state.'
 - id: D-19
   section: Build prompt Part B defect register
   title: API keys "stored as bcrypt hash" cannot be verified at 10,000 TPS
@@ -3325,16 +4193,32 @@ requirements:
   section: Build prompt Part B defect register
   title: '"PostgreSQL TDE" does not exist in community PostgreSQL 16.'
   priority: M
-  milestone: M1
+  milestone: M6
   srs_text: See docs/srs/defect_register.md
   defects: []
   affects:
   - NFR-SEC-01
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/notify/src/main/java/io/github/mariusbayizere/fraudshield/notify/vault
+  - backend/persistence/src/main/resources/db/vault
+  - infrastructure/docker/pii-vault/init/20-vault-roles.sh
+  evidence:
+  - backend/notify/src/test/java/io/github/mariusbayizere/fraudshield/notify/vault/VaultContactsTest.java
+  - backend/notify/src/test/java/io/github/mariusbayizere/fraudshield/notify/vault/AccountTokensTest.java
+  - backend/notify/src/test/java/io/github/mariusbayizere/fraudshield/notify/vault/KmsKeyProviderTest.java
+  - backend/notify/src/test/java/io/github/mariusbayizere/fraudshield/notify/vault/InMemoryKmsTest.java
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/config/VaultConfigurationTest.java
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/IngestApiTest.java (no
+    PII in logs, Kafka, Redis or spool)
+  deviations:
+  - docs/adr/0069-pii-vault.md
+  notes: 'Re-planned from M1 to M6 by ADR 0021: vault schema, dedicated role and AES-256-GCM envelope
+    encryption behind a key-provider interface in M6; KMS, encrypted volumes, Redis TLS and network policy
+    in M9. M1 delivered only the separate Compose instance; no customer PII column exists in the main
+    schema. M6 (2026-09-24): application side and local stack (ADR 0069). M9''s: the vendor KmsClient
+    binding (M9_updates.md section 8), encrypted volumes, Redis TLS.'
 - id: D-21
   section: Build prompt Part B defect register
   title: 'Data residency: SRS says "af-south-1 or equivalent", but af-south-1 is Cape Town, outside the
@@ -3345,11 +4229,20 @@ requirements:
   defects: []
   affects:
   - NFR-SEC-09
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation:
+  - backend/persistence/src/main/java/io/github/mariusbayizere/fraudshield/persistence/demo/DemoSeedGuard.java
+  - backend/persistence/src/main/java/io/github/mariusbayizere/fraudshield/persistence/demo/SyntheticDataFlag.java
+  - backend/persistence/src/main/java/io/github/mariusbayizere/fraudshield/persistence/demo/SyntheticDataGuard.java
+  - frontend/src/lib/environment/syntheticDataBanner.ts
+  - tools/src/fraudshield_tools/seed_demo.py
   evidence: []
-  deviations: []
+  deviations:
+  - docs/adr/0019-demo-seeding-and-synthetic-data-banner.md
+  notes: 'M1: demo seeding only under dev/demo profiles, locally generated credentials, public synthetic_data
+    flag and banner logic (ADR 0019). The residency prerequisite (NFR-SEC-09) and the banner in the React
+    shell (M8) remain.'
 - id: D-22
   section: Build prompt Part B defect register
   title: Regulatory mapping is unverified.
@@ -3407,11 +4300,17 @@ requirements:
   affects:
   - FR-03-04
   - FR-03-05
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/notify/src/main/java/io/github/mariusbayizere/fraudshield/notify/sms/SelfServicePolicy.java
+  evidence:
+  - backend/notify/src/test/java/io/github/mariusbayizere/fraudshield/notify/sms/SmsPolicyTest.java (without
+    the SIM-swap signal no block offers self-service)
+  deviations:
+  - docs/adr/0065-customer-sms-and-verification.md
+  notes: 'M6 (2026-09-24): self-service refused when the SIM-swap age is unknown, which today is every
+    block: intended per D-25 (owner, 2026-09-23).'
 - id: D-26
   section: Build prompt Part B defect register
   title: '"10 attempts per 15 min per IP" will lock out whole bank offices and mobile users behind carrier-grade
@@ -3481,10 +4380,20 @@ requirements:
   defects: []
   affects:
   - FR-03-08
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/persistence/src/main/resources/db/migration/V5__blocking_verification_and_labels.sql
+  - backend/persistence/src/main/resources/db/migration/V4__alerts_rules_and_campaigns.sql
+  - backend/persistence/src/main/resources/db/migration/V1__tenancy_and_common_functions.sql
+  - docs/adr/0017-data-model-and-database-security.md
+  evidence:
+  - backend/persistence/src/test/java/io/github/mariusbayizere/fraudshield/persistence/DatabaseSecurityTest.java
+    (append-only tables deny UPDATE and DELETE to every application role)
+  - 'backend/persistence/src/test/java/io/github/mariusbayizere/fraudshield/persistence/SchemaPoliciesTest.java
+    (autoBlockStateIsDerivedFromAppendOnlyFacts: v_auto_block_status from blocked to frozen; other tenant
+    sees nothing)'
+  - docs/reviews/M1/milestone-review.md (M1 milestone review and delta re-check)
   deviations: []
 - id: D-31
   section: Build prompt Part B defect register
@@ -3497,27 +4406,47 @@ requirements:
   - FR-06-07
   - FR-07-08
   - FR-05-06
-  status: NOT_STARTED
+  status: DONE_WITH_DEVIATION
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/persistence/src/main/resources/db/migration/V2__identity_and_access.sql
+  - backend/persistence/src/main/resources/db/migration/V3__transactions_and_scoring.sql
+  - backend/persistence/src/main/resources/db/migration/V6__risk_configuration.sql
+  - backend/persistence/src/main/resources/db/migration/V7__models_and_training.sql
+  - backend/persistence/src/main/resources/db/migration/V9__outbox.sql
+  - backend/persistence/src/main/resources/db/migration/V11__grants.sql
+  evidence:
+  - backend/persistence/src/test/java/io/github/mariusbayizere/fraudshield/persistence/DatabaseSecurityTest.java
+    (tenant isolation, composite foreign keys, uniqueness rules)
+  - docs/reviews/M1/milestone-review.md (M1 milestone review and delta re-check)
+  deviations:
+  - docs/adr/0017-data-model-and-database-security.md
+  notes: 'Deviation (ADR 0017): TimescaleDB forbids compression with row-level security, so hypertables
+    are isolated by an insert guard and security-barrier views; outbox_events has no RLS (cross-tenant
+    relay, tokens only).'
 - id: D-32
   section: Build prompt Part B defect register
   title: Audit log needs tamper evidence, not only permissions, and "12 action types" are unnamed.
   priority: M
-  milestone: M1
+  milestone: M7
   srs_text: See docs/srs/defect_register.md
   defects: []
   affects:
   - FR-06-06
   - NFR-SEC-05
   - OPS-OBS-04
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation:
+  - backend/persistence/src/main/resources/db/migration/V8__audit_log.sql
+  - backend/persistence/src/main/resources/db/migration/V10__timescale_policies_and_aggregates.sql
   evidence: []
-  deviations: []
+  deviations:
+  - docs/adr/0021-m1-scope-replan.md
+  notes: 'Re-planned to M7 by ADR 0021. M1: 12 event types, database-assigned hash chain, verify_audit_chain,
+    audit_anchors, compliance role, compression 30 days and retention 7 years by recorded_at (DatabaseSecurityTest,
+    SchemaPoliciesTest). Remaining: daily signed Merkle-root job and the fraudshield audit verify CLI
+    (M7).'
 - id: D-33
   section: Build prompt Part B defect register
   title: Several SRS colour pairings fail WCAG 2.1 AA text contrast
@@ -3745,12 +4674,17 @@ requirements:
   - MOB-TOUCH-04
   - MOB-TOUCH-08
   - MOB-DEV-01
-  status: IN_PROGRESS
+  status: DONE
   verification: test
   implementation:
   - tools/src/fraudshield_tools/scope_guard.py
   - tools/src/fraudshield_tools/traceability_seed.py
-  evidence: []
+  evidence:
+  - 'tools/tests/test_scope_and_registers.py (5 tests tagged D-47: repository clean; detection in content,
+    paths, identifiers and compound names; allowlist and pragma; seeded rows)'
+  - docs/adr/0008-out-of-scope-content-guard.md (decision)
+  - docs/reviews/M0/milestone-review.md (M0 milestone review, APPROVED_WITH_MINORS)
+  - 83a9090 (reviewed merge candidate, fast-forwarded to main)
   deviations: []
 - id: D-48
   section: Build prompt Part B defect register
@@ -3760,27 +4694,36 @@ requirements:
   srs_text: See docs/srs/defect_register.md
   defects: []
   affects: []
-  status: IN_PROGRESS
+  status: DONE
   verification: inspection
   implementation:
   - docs/adr/0001-record-architecture-decisions.md
   - docs/traceability/requirements.yaml
-  evidence: []
+  evidence:
+  - 'docs/reviews/M0/milestone-review.md (inspection: all 258 rows carry milestones M0-M12, none a calendar
+    date)'
+  - docs/adr/0001-record-architecture-decisions.md (gated milestones replace the SRS roadmap dates)
   deviations: []
 - id: D-49
   section: Build prompt Part B defect register
   title: TimescaleDB availability and licensing.
   priority: M
-  milestone: M1
+  milestone: M9
   srs_text: See docs/srs/defect_register.md
   defects: []
   affects:
   - NFR-REL-04
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation:
+  - backend/persistence/src/main/resources/db/migration/V10__timescale_policies_and_aggregates.sql
+  - docs/adr/0018-timescaledb-licence-and-deployment.md
   evidence: []
-  deviations: []
+  deviations:
+  - docs/adr/0021-m1-scope-replan.md
+  notes: 'Re-planned to M9 by ADR 0021. M1: ADR 0018 (licence analysis and features used), pinned image,
+    hypertables, compression, retention and continuous aggregates exercised (SchemaPoliciesTest). Remaining:
+    self-hosted PostgreSQL + TimescaleDB on Kubernetes (M9).'
 - id: D-50
   section: Build prompt Part B defect register
   title: MLflow "stages" are deprecated in favour of registry aliases.
@@ -3790,11 +4733,17 @@ requirements:
   defects: []
   affects:
   - FR-06-03
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - ml/src/fraudshield_ml/serving/registry.py
+  - ml/src/fraudshield_ml/models/cli.py
+  evidence:
+  - ml/tests/serving/test_registry.py (aliases production, shadow and previous_production; rollback through
+    fs-model alias in one move, needing no shadow gate; verified against a real MLflow 3.16.0 container)
   deviations: []
+  notes: 'M5 (2026-09-23): aliases, never stages. A promotion records the outgoing version as previous_production
+    and tags the incoming one as having served, which is what a later rollback is allowed to rely on.'
 - id: D-51
   section: Build prompt Part B defect register
   title: External services must work locally and in CI without real credentials.
@@ -3805,8 +4754,18 @@ requirements:
   affects:
   - TEST-07
   - NFR-REL-06
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/notify/src/main/java/io/github/mariusbayizere/fraudshield/notify/sms
+  - backend/notify/src/main/java/io/github/mariusbayizere/fraudshield/notify/vault
+  evidence:
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/IngestApiTest.java (SMS
+    provider double)
+  - backend/notify/src/test/java/io/github/mariusbayizere/fraudshield/notify/vault/InMemoryKmsTest.java
+    (key service double)
   deviations: []
+  notes: 'M6 (2026-09-24): M6''s external services run locally and in CI without real credentials: the
+    SMS provider behind a gateway port (WireMock stub in the stack), the key service behind KmsClient
+    with an in-memory double, the vault with configured keys under dev/demo/test. Google OAuth (M7) is
+    not M6''s.'

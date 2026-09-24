@@ -1,0 +1,223 @@
+#!/usr/bin/env python3
+"""Prove the repository's gitleaks configuration still catches secrets (review finding CR-13).
+
+Builds a throw-away git repository containing the committed allowlisted fixtures plus planted fake
+secrets, scans it with the pinned tools/bin/gitleaks and the repository's .gitleaks.toml, and fails
+unless exactly the planted secrets are reported. The fake values are generated at run time, so no
+secret-shaped string is committed; they are random and valid for no service.
+
+Planted cases: secrets outside every allowlisted path (a tok_-shaped key, a bare API key, a
+signing secret, an AWS key ID); new values inside each allowlisted path in the alphabets of the
+allowed values; an AWS key ID inside an allowlisted fixture (catches allowlists that make
+`gitleaks dir` skip files); and every exact allowlisted value, read from .gitleaks.toml, copied to a
+file outside its path (catches widened or removed path scopes). Run with no arguments from anywhere
+in the repository; standard library only.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import secrets
+import shutil
+import string
+import subprocess
+import sys
+import tempfile
+import tomllib
+from collections import Counter
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+GITLEAKS = ROOT / "tools" / "bin" / "gitleaks"
+FIXTURES = [
+    "contracts/webhooks/signature-test-vectors.json",
+    "contracts/openapi/schema-examples.yaml",
+    *sorted(str(p.relative_to(ROOT)) for p in (ROOT / "contracts/kafka/examples").glob("*.json")),
+]
+ALNUM = string.ascii_letters + string.digits
+
+
+def random_text(alphabet: str, length: int) -> str:
+    return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+RULE_FOR_PREFIX = {
+    "tok_": "generic-api-key",
+    "fsk_": "fraudshield-api-key",
+    "whsec_": "fraudshield-webhook-signing-secret",
+}
+
+
+def allowlisted_values(config: Path) -> list[tuple[str, list[str]]]:
+    """Every exact allowed value with the places a copy must still be reported.
+
+    For each allowlist path the copies go next to the allowed file, once with an unrelated extension
+    and once with the fixture's own extension, so widening a path while keeping its file shape
+    (for example ``^contracts/webhooks/.*\\.json$``) is detected.
+    """
+    document = tomllib.loads(config.read_text(encoding="utf-8"))
+    for rule in document.get("rules", []):
+        if "allowlists" in rule or "allowlist" in rule:
+            sys.exit(f"gitleaks-selftest: rule {rule.get('id')} has its own allowlist; not allowed")
+    if (ROOT / ".gitleaksignore").exists() or (config.parent / ".gitleaksignore").exists():
+        sys.exit("gitleaks-selftest: .gitleaksignore is not allowed; use exact-value allowlists")
+    values: list[tuple[str, list[str]]] = []
+    for allowlist in document.get("allowlists", []):
+        if not allowlist.get("regexes") or not allowlist.get("paths"):
+            sys.exit("gitleaks-selftest: every allowlist needs exact regexes and paths")
+        places: list[str] = []
+        for path in allowlist["paths"]:
+            if not (path.startswith("^") and path.endswith("$")):
+                sys.exit(f"gitleaks-selftest: allowlist path {path!r} must be anchored")
+            directory = path.removeprefix("^").rpartition("/")[0].replace("\\.", ".")
+            extension = path.removesuffix("$").rpartition("\\.")[2]
+            prefix = f"{directory}/" if directory else ""
+            places += [f"{prefix}copied-{{index}}.txt", f"{prefix}copied-{{index}}.{extension}"]
+        for regex in allowlist["regexes"]:
+            if not (regex.startswith("^") and regex.endswith("$")):
+                sys.exit(f"gitleaks-selftest: allowlist regex {regex!r} is not an exact value")
+            inner = regex[1:-1]
+            value = inner.replace("\\.", ".")
+            if re.escape(value) != inner:
+                sys.exit(f"gitleaks-selftest: allowlist regex {regex!r} is a pattern, not a value")
+            values.append((value, places))
+    return values
+
+
+def secret_line(value: str) -> tuple[str, str]:
+    """A line that makes exactly one rule report the value, and that rule's id."""
+    for prefix, rule in RULE_FOR_PREFIX.items():
+        if value.startswith(prefix):
+            return (f'api_key = "{value}"\n' if prefix == "tok_" else f"{value}\n"), rule
+    sys.exit(f"gitleaks-selftest: no planting rule for allowlisted value {value[:6]}...")
+
+
+def plant(repo: Path) -> Counter[tuple[str, str]]:
+    """Write the planted secrets; return the (file, rule) findings the scan must produce."""
+    hexdigits = "0123456789abcdef"
+    lower_alnum = string.ascii_lowercase + string.digits
+    aws = "AKIA" + random_text(string.ascii_uppercase + "234567", 16)
+    api_key = f"fsk_prod_{random_text(lower_alnum, 12)}_{random_text(ALNUM + '_-', 43)}"
+    # (file, content, rule, append to an existing fixture?)
+    plants: list[tuple[str, str, str, bool]] = [
+        # Secrets outside every allowlisted path.
+        (
+            "backend/src/main/resources/application-prod.yml",
+            f'api_key: "tok_{random_text(ALNUM, 40)}"\n',
+            "generic-api-key",
+            False,
+        ),
+        (
+            "deploy/api-keys.yaml",
+            f"keys:\n  - fsk_prod_{random_text(lower_alnum, 12)}_{random_text(ALNUM + '_-', 43)}\n",
+            "fraudshield-api-key",
+            False,
+        ),
+        (
+            "config/webhook.txt",
+            f"whsec_prod_{random_text(ALNUM, 40)}\n",
+            "fraudshield-webhook-signing-secret",
+            False,
+        ),
+        ("infra/aws.env", f"{aws}\n", "aws-access-token", False),
+        # New values inside each allowlisted path, in the alphabets of the allowed values: catch
+        # allowlist values widened into patterns.
+        (
+            "contracts/webhooks/signature-test-vectors.json",
+            f"whsec_test_{random_text(hexdigits, 32)}\n",
+            "fraudshield-webhook-signing-secret",
+            True,
+        ),
+        (
+            "contracts/webhooks/signature-test-vectors.json",
+            f"whsec_test_{random_text(ALNUM, 32)}\n",
+            "fraudshield-webhook-signing-secret",
+            True,
+        ),
+        (
+            "contracts/kafka/examples/fs.planted.example.json",
+            json.dumps({"api_key": f"tok_{random_text(ALNUM, 24)}"}) + "\n",
+            "generic-api-key",
+            False,
+        ),
+        (
+            "contracts/openapi/schema-examples.yaml",
+            f"planted_raw_key: {api_key}\n",
+            "fraudshield-api-key",
+            True,
+        ),
+        (
+            "contracts/openapi/schema-examples.yaml",
+            f"planted_signing_secret: whsec_prod_{random_text(ALNUM, 32)}\n",
+            "fraudshield-webhook-signing-secret",
+            True,
+        ),
+        # Another kind of secret inside an allowlisted fixture: catches allowlists that make
+        # gitleaks dir skip the whole file.
+        ("contracts/kafka/examples/fs.alerts.high.json", f"{aws}\n", "aws-access-token", True),
+    ]
+    # Every exact allowed value copied outside its path: catches widened or removed path scopes.
+    # Copies go to an unrelated directory and next to the allowed file under a name its path
+    # regex does not match, so even a slightly widened path scope is detected.
+    for index, (value, places) in enumerate(allowlisted_values(repo / ".gitleaks.toml")):
+        content, rule = secret_line(value)
+        for place in ["elsewhere/copied-{index}.txt", *places]:
+            plants.append((place.format(index=index), content, rule, False))
+    for relative, content, _, append in plants:
+        path = repo / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a" if append else "w", encoding="utf-8") as handle:
+            handle.write(content)
+    return Counter((relative, rule) for relative, _, rule, _ in plants)
+
+
+def scan(repo: Path, mode: str) -> Counter[tuple[str, str]]:
+    """Scan from inside the repository so reported paths are relative, as in real scans."""
+    report = repo.parent / f"report-{mode}.json"
+    command = [str(GITLEAKS), mode, "--no-banner", "--redact", "--exit-code", "0"]
+    if mode == "git":
+        command += ["--log-opts=HEAD"]
+    command += ["--config", ".gitleaks.toml", "--report-format", "json"]
+    command += ["--report-path", str(report), "."]
+    # Fixed command: the pinned launcher with arguments built above, in a temporary repository.
+    subprocess.run(command, check=True, capture_output=True, cwd=repo)  # noqa: S603
+    findings = json.loads(report.read_text(encoding="utf-8"))
+    return Counter((Path(item["File"]).as_posix(), item["RuleID"]) for item in findings)
+
+
+def main() -> int:
+    with tempfile.TemporaryDirectory(prefix="gitleaks-selftest-") as temp:
+        repo = Path(temp) / "repo"
+        repo.mkdir()
+        shutil.copy(ROOT / ".gitleaks.toml", repo / ".gitleaks.toml")
+        for relative in FIXTURES:
+            (repo / relative).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(ROOT / relative, repo / relative)
+        expected = plant(repo)
+        git = ["git", "-C", str(repo), "-c", "user.name=selftest"]
+        git += ["-c", "user.email=selftest"]
+        # Fixed git commands against the temporary repository only.
+        subprocess.run([*git, "init", "-q"], check=True)  # noqa: S603
+        subprocess.run([*git, "add", "-A"], check=True)  # noqa: S603
+        subprocess.run([*git, "commit", "-q", "--no-gpg-sign", "-m", "planted"], check=True)  # noqa: S603
+        failed = False
+        for mode in ("git", "dir"):
+            found = scan(repo, mode)
+            missing, unexpected = expected - found, found - expected  # with multiplicity
+            for file, rule in sorted(missing):
+                print(f"gitleaks-selftest ({mode}): NOT DETECTED {rule} in {file}", file=sys.stderr)
+            for file, rule in sorted(unexpected):
+                print(f"gitleaks-selftest ({mode}): UNEXPECTED {rule} in {file}", file=sys.stderr)
+            failed = failed or bool(missing or unexpected)
+        if failed:
+            return 1
+        print(
+            f"gitleaks-selftest: {sum(expected.values())} planted secrets detected in git and dir "
+            f"scans; {len(FIXTURES)} allowlisted fixtures otherwise clean"
+        )
+        return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,38 @@
+# evidence-commit: 95b722cbf3285f657ea030f447619d51ff1bb396
+# evidence-tree-state: clean
+# command: .venv/bin/python -u -m fraudshield_ml.cli frontier dataset/output/features_full.parquet --requests 300 --repeats 3
+# exit: 0
+
+  50 trees, depth 3: done
+  100 trees, depth 4: done
+  200 trees, depth 5: done
+  400 trees, depth 6: done
+  800 trees, depth 8: done
+
+ACCURACY vs SINGLE-REQUEST LATENCY (D-16) — one row per request, never a batch: the
+scoring service handles one transaction per call, and a batch would amortise exactly the
+overhead a single request pays. 50 calls are discarded per configuration as warm-up.
+
+  NOT GATE NUMBERS. ADR 0010 permits latency percentiles as gate evidence only from the
+  dedicated machine in docs/benchmarks/hardware.md. What is measurable here is the shape
+  of the trade-off, over 900 timed requests per configuration.
+
+  trees depth  AUC            predict p50  +SHAP p50  SHAP cost  predict p99  +SHAP p99
+     50     3  0.995 +/-0.004        0.48       0.56      0.08ms        4.73       4.94
+    100     4  0.992 +/-0.005        0.48       0.81      0.33ms        6.41       5.31
+    200     5  0.991 +/-0.006        0.49       1.49      1.00ms        4.01       8.02
+    400     6  0.990 +/-0.006        0.52       2.38      1.86ms        4.63       9.00
+    800     8  0.990 +/-0.006        0.56       3.36      2.80ms       11.99       9.92
+
+  THE p99 COLUMNS ARE NOT MEASUREMENT ON THIS MACHINE, and they say so themselves:
+  2 of 5 configurations show a NEGATIVE explanation cost
+  at p99, which is impossible: explaining cannot be faster than not explaining. The
+  p99 of a single request here is dominated by scheduler jitter, not by model
+  complexity.
+  This is ADR 0010's rule demonstrated rather than asserted: a shared or busy machine
+  cannot produce a repeatable percentile, and D-16's 40 ms constraint cannot be
+  applied from here. The p50 columns are stable and are what this run reports.
+
+  From 50 trees at depth 3 to 800 at depth 8: AUC -0.004
+  (inside every interval), while the explanation cost at p50 goes 0.08 -> 2.80 ms.
+  Complexity buys no accuracy on this benchmark and costs explanation latency.

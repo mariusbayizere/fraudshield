@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fraudshield:kafka:envelope",
+  "title": "Event envelope for every FraudShield Kafka message value",
+  "type": "object",
+  "required": [
+    "event_id",
+    "event_type",
+    "schema_version",
+    "occurred_at",
+    "institution_id",
+    "producer",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "event_id": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid",
+      "description": "Unique per event; consumers deduplicate on it"
+    },
+    "event_type": {
+      "type": "string",
+      "pattern": "^[a-z]+(\\.[a-z_]+)+$",
+      "description": "Must equal the topic's event_type in topics.yaml"
+    },
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Must equal the topic's schema_version in topics.yaml; a breaking payload change adds a new version (ADR 0012)"
+    },
+    "occurred_at": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Timestamp"
+    },
+    "institution_id": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid",
+      "description": "Set by the producing FraudShield service from the authenticated principal (API key or staff token), never copied from client input (ADR 0012, tenant isolation)"
+    },
+    "producer": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{2,40}$"
+    },
+    "traceparent": {
+      "type": "string",
+      "pattern": "^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$"
+    },
+    "payload": {
+      "type": "object"
+    }
+  }
+}

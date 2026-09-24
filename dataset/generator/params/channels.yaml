@@ -1,0 +1,8 @@
+description: Payment channel mix of the transaction stream.
+parameters:
+  channel_share:
+    value: {MOBILE_MONEY: 0.41, USSD: 0.18, AGENT_BANKING: 0.14, CARD: 0.12, ONLINE: 0.09, BANK_TRANSFER: 0.06}
+    unit: fraction of transactions
+    provenance: CALIBRATED_TO_SRS_TARGET
+    citation: SRS v1.0 section 7.1, ML-DATA-03 (MOBILE_MONEY >= 40%, USSD >= 18%, AGENT_BANKING >= 14%, CARD 12%, ONLINE 9%, BANK_TRANSFER 6%)
+    rationale: The SRS figures sum to 99%; the remaining 1% is assigned to MOBILE_MONEY, the only share the SRS states as a lower bound with the largest weight, so every stated bound still holds.

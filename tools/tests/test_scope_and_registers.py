@@ -88,6 +88,22 @@ def test_allowlist_and_line_pragma(tmp_path: Path) -> None:
     assert found == {"docs/walkthrough/q.md": [_TRI], "docs/walkthrough/w.md": [_PAT]}
 
 
+@pytest.mark.req("D-47")
+def test_the_line_pragma_is_inert_inside_a_fenced_code_block(tmp_path: Path) -> None:
+    """GOV-6: a fence quotes text rather than asserting it, so it cannot exempt itself."""
+    page = tmp_path / "docs/walkthrough/fenced.md"
+    page.parent.mkdir(parents=True)
+    page.write_text(
+        f"exempt here {_PAT} <!-- {LINE_PRAGMA} -->\n"
+        "```\n"
+        f"quoted example {_TRI} <!-- {LINE_PRAGMA} -->\n"
+        "```\n"
+        f"exempt again {_PAT} <!-- {LINE_PRAGMA} -->\n"
+    )
+
+    assert violations(tmp_path, [page]) == {"docs/walkthrough/fenced.md": [_TRI]}
+
+
 def _seed_tree(tmp_path: Path) -> Path:
     for rel in (
         "docs/srs/FraudShield_SRS_v1_0.md",
@@ -192,3 +208,39 @@ def test_re_review_exemption_routes_are_closed(tmp_path: Path) -> None:
         "backend/src/main/java/Flow.java": [_PAT],
         f"docs/reviews/M1/{_PAT}-notes.md": [_PAT],
     }
+
+
+@pytest.mark.req("D-47")
+def test_the_scope_guard_reports_how_many_files_it_scanned(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """ADR 0009's generalisation: "passed" and "had nothing to check" must be distinguishable.
+
+    The Python runtime licence scope was empty from M0 until 2026-09-19, so that check passed on
+    every commit through three milestones while carrying no information — an empty input satisfies
+    almost any predicate. The first real input failed it. Every gate whose scope can be empty
+    therefore reports the size of what it checked, in its own output, rather than leaving it to be
+    inferred from an inventory nobody opens.
+    """
+    assert scope_guard.main() == 0
+    summary = capsys.readouterr().out.strip().splitlines()[-1]
+    assert "of" in summary, f"the summary does not report a total: {summary!r}"
+    assert "scanned" in summary, f"the summary does not say what it scanned: {summary!r}"
+    scanned = int(summary.rsplit("of", 1)[1].split()[0])
+    assert scanned > 0, "precondition: the repository has tracked files to scan"
+
+
+@pytest.mark.req("D-47")
+def test_the_scope_guard_refuses_to_pass_over_an_empty_scan(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Mutation: an empty file list must fail, not pass silently.
+
+    A pass over an empty set is the failure mode this reporting exists to make visible, so the
+    guard fails outright rather than printing a reassuring zero.
+    """
+    monkeypatch.setattr(scope_guard, "tracked_files", lambda _root: [])
+    assert scope_guard.main() == 1
+    captured = capsys.readouterr()
+    assert "scanned 0 files" in captured.err
+    assert "not a pass" in captured.err

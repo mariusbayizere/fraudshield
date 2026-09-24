@@ -1,0 +1,199 @@
+description: Fraud prevalence targets, scenario mix, incident shapes, adversarial adaptation and the novel test-period sub-variant.
+parameters:
+  fraud_rate_overall:
+    value: 0.0087
+    unit: fraction of transactions labelled fraud (true label)
+    provenance: CALIBRATED_TO_SRS_TARGET
+    citation: SRS v1.0 section 7.1, ML-DATA-02 (0.87% overall)
+  test_rate_tolerance:
+    value: 0.0002
+    unit: fraction of transactions, absolute deviation allowed in the planned test-period fraud rate
+    provenance: ASSUMED
+    rationale: How far the planned test-period rate may sit from the SRS figure before the intensity schedule is refused. 0.02 percentage points is well inside the plus or minus 0.5 point gate, so the schedule is rejected long before the dataset could miss the target.
+  monthly_intensity:
+    value: [0.9681, 0.9410, 0.9914, 0.9642, 1.0051, 0.9582, 0.9895, 0.9424, 1.0229, 0.9756, 1.0072, 0.9597, 1.0012, 1.0230, 0.9752, 1.0170, 0.9890, 1.0410, 0.9728, 1.0148, 1.0369, 0.9986, 1.0611, 1.0327]
+    unit: relative fraud intensity per simulation month (volume-weighted mean of one)
+    provenance: CALIBRATED_TO_SRS_TARGET
+    citation: SRS v1.0 section 7.1, ML-DATA-02 (0.87% overall, 0.91% in the test set) and binding resolution D-07
+    rationale: A rising trend (about 0.97 to 1.03 over the span) with month-to-month variation, solved so that the volume-weighted overall rate is 0.87% and the planned temporal hold-out test period is 0.91%. The generator re-normalises the schedule to the actual volume weights and refuses to run if the test-period rate deviates by more than 0.02 percentage points, so the targets hold by construction rather than by chance.
+  fraud_rate_test:
+    value: 0.0091
+    unit: fraction of transactions labelled fraud in the temporal hold-out test set (true label)
+    provenance: CALIBRATED_TO_SRS_TARGET
+    citation: SRS v1.0 section 7.1, ML-DATA-02 (test set slightly higher, 0.91%)
+  scenario_share:
+    value: {sim_swap: 0.16, account_takeover: 0.16, agent_fraud: 0.12, velocity: 0.12, card_not_present: 0.14, mule_account: 0.12, merchant_fraud: 0.08, synthetic_identity: 0.10}
+    unit: fraction of fraudulent transactions by scenario
+    provenance: ASSUMED
+    rationale: ML-DATA-04 requires eight distinct types without one dominating; the split is a modelling choice with no published East African breakdown consulted.
+  rows_per_incident:
+    value: {sim_swap: [2, 6], account_takeover: [2, 8], agent_fraud: [1, 3], velocity: [6, 15], card_not_present: [1, 5], mule_account: [4, 12], merchant_fraud: [1, 3], synthetic_identity: [3, 8]}
+    unit: inclusive range of fraudulent transactions per incident, by scenario
+    provenance: ASSUMED
+    rationale: Drains and bursts span several transactions while card fraud and merchant fraud are often single charges; ranges are modelling choices.
+  amount_multiplier:
+    value: {sim_swap: 2.5, account_takeover: 2.2, agent_fraud: 2.0, velocity: 0.4, card_not_present: 1.8, mule_account: 2.0, merchant_fraud: 1.4, synthetic_identity: 3.0}
+    unit: multiple of the channel's median legitimate amount used as the median fraudulent amount
+    provenance: ASSUMED
+    rationale: Drains and bust-outs move more money than typical payments while card testing uses small amounts; moderate multiples keep the amount alone from identifying fraud (single-feature AUC limit, D-08).
+  burst_minutes:
+    value: [2, 180]
+    unit: inclusive range of minutes over which the transactions of one incident are spread
+    provenance: ASSUMED
+    rationale: Fraudulent drains and bursts happen within minutes to hours of the enabling event; a modelling choice.
+  night_probability:
+    value: 0.25
+    unit: probability that a fraud incident starts at night (local 00:00-05:00)
+    provenance: ASSUMED
+    rationale: Account misuse is often timed when victims are asleep; legitimate night activity also exists (behaviour.night_activity_probability), so the hour alone is a weak signal.
+  new_device_probability:
+    value: 0.7
+    unit: probability that account takeover or card-not-present fraud uses a device never seen on the account
+    provenance: ASSUMED
+    rationale: Takeovers usually operate from the fraudster's own device, but not always (malware, remote access); a modelling choice.
+  mule_account_fraction:
+    value: 0.004
+    unit: fraction of customers acting as mule accounts
+    provenance: ASSUMED
+    rationale: A small set of accounts receives and forwards proceeds for many victims (fan-in, fan-out); a modelling choice.
+  compromised_agent_fraction:
+    value: 0.02
+    unit: fraction of cash agents involved in agent fraud
+    provenance: ASSUMED
+    rationale: A small share of agents perform fake cash-outs or float manipulation; a modelling choice.
+  colluding_merchant_fraction:
+    value: 0.01
+    unit: fraction of merchants that run fraudulent card charges
+    provenance: ASSUMED
+    rationale: A small share of merchants process charges with compromised card data; a modelling choice.
+  synthetic_identity_ring_size:
+    value: 4
+    unit: synthetic identities per ring, all of which transact from one handset
+    provenance: ASSUMED
+    rationale: >-
+      Part E.2 names "shared device and phone attributes across accounts" as a term of
+      synthetic_identity_score, and the scenario had no mechanism producing it (PB-40): every
+      synthetic identity had its own device, so the term could never fire. A ring of four shares
+      one handset. The size is a modelling choice and is deliberately small: a large ring would
+      make accounts_per_device_7d a near-perfect fraud detector and the realism gates would refuse
+      the dataset, which is the outcome this parameter has to be set to avoid as much as to
+      achieve. Realised rings are smaller than this: ring membership is drawn from a pool sized
+      by the synthetic-identity count, and a member with no handset (rural USSD) does not join
+      one, so the parameter sets the pool rather than the realised group.
+  synthetic_identity_fraction:
+    value: 0.12
+    unit: fraction of newly joining customers that are synthetic identities
+    provenance: ASSUMED
+    rationale: Chosen so the ASSUMED synthetic-identity share of fraud (fraud.scenario_share) can be met with at most one bust-out incident per identity; it is higher than a plausible real share of onboarding and is a calibration consequence, not an estimate.
+  synthetic_identity_bust_out_months:
+    value: [2, 6]
+    unit: inclusive range of months after joining before a synthetic identity busts out
+    provenance: ASSUMED
+    rationale: Synthetic identities build history for a few months before extracting funds; a modelling choice.
+  adaptation_start_month:
+    value: 12
+    unit: simulation month (0-based index) from which fraud adapts to published rules
+    provenance: CALIBRATED_TO_SRS_TARGET
+    citation: Build prompt Part E.3 and binding resolution D-08 (amounts drift just below rule thresholds after rules are published in simulation month 12)
+    rationale: Month 12 counted from the first simulated month as index 12, the thirteenth month.
+  rule_amount_threshold_rwf:
+    value: 500000
+    unit: RWF amount above which the simulated published rule flags a transfer
+    provenance: ASSUMED
+    rationale: Illustrative large-transfer rule threshold for the adversarial adaptation; not an actual institution's rule.
+  adaptation_band:
+    value: [0.90, 0.99]
+    unit: fraction of the rule threshold at which adapted fraudulent amounts are placed
+    provenance: ASSUMED
+    rationale: Amounts placed just below the threshold, as required by D-08; the band is a modelling choice.
+  adaptation_probability:
+    value: 0.6
+    unit: probability that an above-threshold fraudulent amount is adapted after the adaptation month
+    provenance: ASSUMED
+    rationale: Not every fraudster learns the rule; a modelling choice.
+  novelty_share_of_sim_swap:
+    value: 0.4
+    unit: fraction of SIM-swap incidents in the test period that use the novel sub-variant
+    provenance: ASSUMED
+    rationale: D-08 requires a sub-variant that appears only in the test period; its share within the test period is a modelling choice.
+  novelty_delay_days:
+    value: [2, 4]
+    unit: inclusive range of days between the enabling event and the drain in the novel sub-variant
+    provenance: ASSUMED
+    rationale: The novel sub-variant delays the drain so that recency-based signals learned from the earlier SIM-swap pattern do not fire; a modelling choice.
+  mule_cross_border_share:
+    value: 0.15
+    unit: fraction of mule-account forwarding transfers sent to another EAC country
+    provenance: ASSUMED
+    rationale: Mules move proceeds across borders more often than ordinary customers remit (behaviour.cross_border_share); the share is a modelling choice.
+  reversal_scam_probability:
+    value: 0.005
+    unit: probability, per active customer per test-period month, of planting one reversal-scam social-engineering transaction
+    provenance: ASSUMED
+    rationale: >-
+      PB-61's replacement generalisation test (ADR 0028), pre-registered 2026-09-22. Drawn
+      independently per customer per test-period month, not from mule_account's own incident
+      budget: that budget holds at most ~15 incidents in the test period even at 100% conversion
+      (measured directly against the 1,000,000-row plan before this parameter was set), too few
+      for a recall figure to rest on -- the same "a handful of fraud rows is not a measurement"
+      lesson this session already paid for once today (PB-55/PB-56). Sized against the ~17,000
+      customer-month draws the test period actually holds to land near 60-70 rows, the same order
+      as novel_esim_delayed_drain's realised 73. A power calculation made before generating, not a
+      result read back into the design: it decides how much evidence the experiment produces, not
+      whether the model catches it.
+  reversal_scam_amount_multiplier:
+    value: 3.5
+    unit: multiple of the channel's median legitimate amount used as the reversal-scam amount, in place of amount_multiplier.mule_account
+    provenance: ASSUMED
+    rationale: >-
+      Reversal ("sent by mistake, please return") scams work by asking the victim to send back an
+      amount described as an overpayment or a specific mistaken transfer -- typically notably
+      larger than the victim's habitual P2P transfer, since a trivial amount would not motivate
+      the deception. Set above mule_account's own 2.0x so the request reads as the outsized,
+      specific ask the scam depends on, not as an ordinary transfer; a modelling choice, not
+      calibrated to any source, since the sourcing pass of 2026-09-18 found no publication giving
+      reversal-scam amounts for these markets.
+  takeover_lead_minutes:
+    value: [5, 43200]
+    unit: >-
+      bounds, in minutes, on the delay between the enabling SIM swap or device change and the
+      first fraudulent transaction; the draw is lognormal and clipped to these
+    provenance: ASSUMED
+    rationale: >-
+      Five minutes to thirty days. This was [5, 60] drawn uniformly until 2026-09-22, which meant
+      every enabling event was followed by its drain inside the hour, with no long tail and no
+      unexploited event -- and C-11 recorded since M2 that part of the event-delay channel's
+      separation was an artefact of that window rather than of the scenario (PB-56, owner
+      decision, because widening it changes the draw). The bounds are a floor and a cap on a
+      lognormal, not a uniform range: a drain twelve seconds after a swap is implausible, and a
+      lead of months would be a different scenario rather than a slow takeover.
+  takeover_lead_median_minutes:
+    value: 45
+    unit: median minutes from the enabling event to the first fraudulent transaction
+    provenance: ASSUMED
+    rationale: >-
+      Takeovers are usually exploited quickly once control is gained, so the mode stays in the
+      first hour. 45 minutes is the centre of the range this replaced, chosen so the change is
+      visible in the tail rather than in a shifted body.
+  takeover_lead_log_sigma:
+    value: 1.8
+    unit: sigma of the lognormal from which the lead is drawn, in log-minutes
+    provenance: ASSUMED
+    rationale: >-
+      The tail's weight, and the whole point of the change. Measured over 200,000 draws: a quarter
+      inside 13 minutes, half inside 45, 43.6% beyond an hour, 95% inside 14 hours and 2.7% beyond
+      a day. A lognormal is chosen because it is the ordinary shape for a delay -- a mode early
+      and a tail that does not end -- and not because any source supports 1.8; the 2026-09-18
+      sourcing pass established that no publication found gives takeover-to-drain delays for these
+      markets. A two-component fast/slow mixture was rejected: two clusters are structure of their
+      own, and a model could learn the gap between them as readily as the old tight window.
+  drain_to_mule_probability:
+    value: 0.7
+    unit: probability that a drained or forwarded transfer goes to a known mule account rather than a one-off new account
+    provenance: ASSUMED
+    rationale: Proceeds concentrate in mule accounts, which creates fan-in, while some go to throwaway accounts; a modelling choice.
+  scenario_channel_share:
+    value: {sim_swap_round_sum: 0.5, velocity_card: 0.5, card_not_present_online: 0.7, mule_bank_transfer: 0.4, mule_round_sum: 0.6, synthetic_cash_out: 0.5}
+    unit: probabilities of channel or amount choices within scenarios (see fraud.py for each use)
+    provenance: ASSUMED
+    rationale: Within-scenario choices (round sums in drains and forwarding, card versus wallet in bursts, online versus card for card-not-present, cash-out versus transfer in bust-outs) are modelling choices.

@@ -1,0 +1,65 @@
+# evidence-commit: 07ed1ed6e95ed223e3c9c50f1d8668fb28e68c38
+# evidence-tree-state: clean
+# command: /tmp/claude-1000/-home-marius-fraudshield/d9f158ee-49ce-49e8-afa6-780adaf6043a/scratchpad/wt-evidence/.venv/bin/python -u -m fraudshield_ml.cli gate /tmp/claude-1000/-home-marius-fraudshield/d9f158ee-49ce-49e8-afa6-780adaf6043a/scratchpad/cache/features_gate.parquet --out docs/benchmarks/m4_gate_d8083dbc_v2 --seeds 1 2 3 4 5 --resamples 1000 --ablate
+# exit: 0
+
+M4 GATE — D-05's calibrated ensemble on D-07's test period, thresholds from D-01/D-02.
+  floor: strongest single feature velocity_ratio_1h_vs_30d at 0.879 on the same rows (PB-46)
+  rows/fraud  train 30,000/260  validation 20,000/165  calibration 20,000/172  test 101,909/985
+  XGBoost 111 rounds, LightGBM 45, scale_pos_weight 114.4, seed 1, 1000 stratified bootstrap resamples
+
+  gate        metric                             value  95% CI             threshold  result
+  ML-GATE-01  AUC-ROC                            0.966  [0.957, 0.973]       >= 0.94  PASS
+  ML-GATE-02  Recall at 1% FPR (D-01)            0.838  [0.814, 0.861]       >= 0.72  PASS
+  ML-GATE-03  Recall at 0.60                     0.726  [0.696, 0.754]       >= 0.88  FAIL
+  ML-GATE-04  F1 at 0.60                         0.795  [0.774, 0.814]        >= 0.8  FAIL
+  ML-GATE-05  FPR at 0.85                        0.000  [0.000, 0.000]       < 0.015  PASS
+  ML-GATE-06  FNR at 0.60                        0.274  [0.246, 0.304]        < 0.12  FAIL
+  ML-GATE-07  MOBILE_MONEY AUC-ROC               0.945  [0.924, 0.963]       >= 0.92  PASS
+  ML-GATE-08  USSD AUC-ROC                       0.945  [0.920, 0.967]        >= 0.9  PASS
+  ML-GATE-09  AGENT_BANKING AUC-ROC              0.980  [0.963, 0.992]       >= 0.91  PASS
+  ML-GATE-10  SHAP coverage, HIGH and MEDIUM     1.000  [1.000, 1.000]          >= 1  PASS
+  ML-GATE-11  ECE, 15 equal-mass bins            0.001  [0.001, 0.001]        < 0.05  PASS
+
+  at the 1% FPR budget's threshold the realised FPR is 0.0048 (ties are not charged); precision there 0.631 [0.610, 0.652]
+  against D-01's ceiling of 0.671 at that rate and 0.494 at exactly 1% FPR
+  at 0.60: precision 0.878, FPR 0.0010   at 0.85: precision 0.966, recall 0.630, F1 0.763   (D-02)
+  ECE equal-width 0.0017, Brier 0.00298
+  ONNX parity over 101,909 test rows: max |ONNX - native| XGBoost 1.79e-07, LightGBM 4.09e-07, combined 1.76e-07 -> PASS (E.4, < 1e-5)
+
+  8 of 11 gate metrics pass; FAILED: ML-GATE-03, ML-GATE-04, ML-GATE-06
+
+BASELINES — AUC with a Hanley-McNeil 95% interval; DeLong p against the ensemble.
+  status-quo rule engine       0.707 +/-0.018  R@1%FPR 0.019  p 4.5e-202
+  logistic regression          0.965 +/-0.008  R@1%FPR 0.818  p 0.52
+  random forest                0.966 +/-0.008  R@1%FPR 0.873  p 0.92
+  XGBoost alone                0.966 +/-0.008  R@1%FPR 0.856  p 0.62
+  LightGBM alone               0.936 +/-0.011  R@1%FPR 0.765  p 3.2e-11
+  Isolation Forest alone       0.941 +/-0.010  R@1%FPR 0.612  p 2.8e-16
+
+ABLATIONS (E.5.4) — refitted on the same split; delta and DeLong p vs the full model.
+  without agent features                 36 feat  AUC 0.965 (-0.0013, p 0.5)  R@1%FPR 0.873  ECE 0.0010
+  without the corridor feature           37 feat  AUC 0.963 (-0.0031, p 0.086)  R@1%FPR 0.837  ECE 0.0009
+  without round-sum awareness            37 feat  AUC 0.947 (-0.0186, p 1.7e-06)  R@1%FPR 0.841  ECE 0.0008
+  without month-end awareness            37 feat  AUC 0.965 (-0.0008, p 0.6)  R@1%FPR 0.872  ECE 0.0007
+  card-style features only               30 feat  AUC 0.929 (-0.0371, p 1.4e-16)  R@1%FPR 0.720  ECE 0.0015
+  without USSD-aware device handling     38 feat  AUC 0.966 (-0.0002, p 0.92)  R@1%FPR 0.859  ECE 0.0007
+
+SEEDS — mean and SD over 5 refits (E.5.2).
+  ML-GATE-01  0.9662 +/- 0.0018
+  ML-GATE-02  0.8534 +/- 0.0165
+  ML-GATE-03  0.7358 +/- 0.0193
+  ML-GATE-04  0.8162 +/- 0.0169
+  ML-GATE-05  0.0002 +/- 0.0001
+  ML-GATE-06  0.2642 +/- 0.0193
+  ML-GATE-07  0.9426 +/- 0.0027
+  ML-GATE-08  0.9504 +/- 0.0075
+  ML-GATE-09  0.9770 +/- 0.0021
+  ML-GATE-10  1.0000 +/- 0.0000
+  ML-GATE-11  0.0010 +/- 0.0001
+  wrote docs/benchmarks/m4_gate_d8083dbc_v2/figures/reliability.svg
+  wrote docs/benchmarks/m4_gate_d8083dbc_v2/figures/roc.svg
+  wrote docs/benchmarks/m4_gate_d8083dbc_v2/metrics.json
+  wrote docs/benchmarks/m4_gate_d8083dbc_v2/tables/ablations.tex
+  wrote docs/benchmarks/m4_gate_d8083dbc_v2/tables/baselines.tex
+  wrote docs/benchmarks/m4_gate_d8083dbc_v2/tables/gate.tex

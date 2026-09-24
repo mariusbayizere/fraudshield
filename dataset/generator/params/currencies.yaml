@@ -1,0 +1,15 @@
+description: >-
+  Cross-currency conversion used for amount_rwf. Per-country facts -- which currency a country uses,
+  its minor units, its UTC offset and where its customers live -- moved to the country packs in
+  countries/ (ADR 0023). What stays here is the rate table, which is a property of a pair of
+  currencies rather than of any one country.
+parameters:
+  base_currency:
+    value: RWF
+    unit: ISO 4217 code every amount_rwf figure is expressed in
+    provenance: CALIBRATED_TO_SRS_TARGET
+    citation: SRS v1.0 section 7.1, ML-DATA-05 — amounts are reported in RWF
+    rationale: >-
+      One currency has to be the unit of account for comparable amounts. Each country pack carries
+      its own rate to this base, so adding a country adds a file and nothing else; the base being
+      Rwandan is a reporting choice, not a structural one.

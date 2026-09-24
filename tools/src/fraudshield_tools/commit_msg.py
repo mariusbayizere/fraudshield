@@ -7,7 +7,9 @@ commits a push introduces (``fs-commit-msg --rev-range BASE..HEAD``). Rules:
   summary that does not end with a full stop, and not a placeholder such as "WIP" or "update".
 * Second line blank when a body exists; body lines at most 72 characters except lines that are
   a single URL or indented code.
-* No ``Co-Authored-By`` trailers or tool-generated signatures (G.1 rule 3).
+* No ``Co-Authored-By`` trailers or tool-generated signatures, and no attribution trailer or
+  "made with" line naming a tool (G.1 rule 3, GOV-7). The same trailers naming a person are the
+  owner's to use.
 """
 
 from __future__ import annotations
@@ -40,11 +42,27 @@ PLACEHOLDER_SUMMARIES = re.compile(
     r"more|minor( changes)?|tweaks?|cleanup|asdf|test|testing|commit)$",
     re.IGNORECASE,
 )
+# A vague object says nothing about what changed, whatever follows it: "updated things across
+# modules" is the same non-statement as "updated things" (GOV-7).
+VAGUE_OBJECTS = re.compile(
+    r"\b(things|stuff|misc|miscellaneous|various (things|files|changes)|several things|"
+    r"some (things|stuff|changes))\b",
+    re.IGNORECASE,
+)
+# Tools that have appeared, or could appear, as an author of a commit message.
+TOOL_NAMES = (
+    r"claude|anthropic|copilot|chatgpt|openai|gpt-?[0-9]|gemini|cursor|codeium|tabnine|"
+    r"code ?whisperer|an? (ai|llm|language model|assistant)|noreply@anthropic\.com"
+)
 # Co-author trailers and tool attribution in any form, including indented trailers and
 # sign-offs by automated tools (G.1 rule 3: commits are authored solely by the owner).
+# Attribution trailers that name a tool are rejected too; the same trailers naming a person are
+# the owner's to use (GOV-7).
 FORBIDDEN_TRAILERS = re.compile(
     r"^\s*(co-authored-by|generated[- ]by|generated with|🤖)\b"
-    r"|^\s*signed-off-by:.*\b(claude|anthropic|copilot|chatgpt|openai|noreply@anthropic\.com)\b",
+    rf"|^\s*signed-off-by:.*\b({TOOL_NAMES})\b"
+    rf"|^\s*(assisted|co-developed|co-created|pair[- ]programmed)[- ]by\s*:.*\b({TOOL_NAMES})\b"
+    rf"|^\s*(made|built|written|created|drafted)\s+(with|by)\b.*\b({TOOL_NAMES})\b",
     re.IGNORECASE | re.MULTILINE,
 )
 
@@ -60,7 +78,11 @@ def problems(message: str) -> list[str]:
     match = SUBJECT.match(subject)
     if match is None:
         found.append(f"subject must be '<type>(<scope>): <summary>' with type in {TYPES}")
-    elif PLACEHOLDER_SUMMARIES.match(match.group("summary")) or subject.endswith("."):
+    elif (
+        PLACEHOLDER_SUMMARIES.match(match.group("summary"))
+        or VAGUE_OBJECTS.search(match.group("summary"))
+        or subject.endswith(".")
+    ):
         found.append("subject summary is a placeholder or ends with a full stop")
     if len(subject) > MAX_LINE:
         found.append(f"subject is {len(subject)} characters (max {MAX_LINE})")

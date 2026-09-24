@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SpotBugs / FindSecBugs exclusions. Every entry is scoped to one class and one bug pattern and
+  states why the finding does not apply. Adding an entry requires review.
+-->
+<FindBugsFilter
+    xmlns="https://github.com/spotbugs/filter/3.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="https://github.com/spotbugs/filter/3.0.0 https://raw.githubusercontent.com/spotbugs/spotbugs/4.10.4/spotbugs/etc/findbugsfilter.xsd">
+  <!--
+    IMPROPER_UNICODE warns that normalising after validation can let crafted input bypass checks.
+    PersonName normalises to NFC *before* validating and validates the normalised value, which is
+    the recommended order (ADR 0013); PersonNameTest covers decomposed input.
+  -->
+  <Match>
+    <Class name="io.github.mariusbayizere.fraudshield.common.identity.PersonName"/>
+    <Bug pattern="IMPROPER_UNICODE"/>
+  </Match>
+  <!--
+    A JPA composite key (@IdClass) is a plain class whose fields Hibernate writes reflectively
+    when it builds a key from a row. SpotBugs sees no assignment and reports UWF_UNWRITTEN_FIELD.
+    The alternative is a constructor no code calls, which would hide the fact rather than state
+    it. Scoped to the key classes of the configuration entities (ADR 0068).
+  -->
+  <Match>
+    <Class name="~io\.github\.mariusbayizere\.fraudshield\.(decision\.adapter\.jpa|persistence\.schema)\..*Entity\$Key"/>
+    <Bug pattern="UWF_UNWRITTEN_FIELD"/>
+  </Match>
+</FindBugsFilter>

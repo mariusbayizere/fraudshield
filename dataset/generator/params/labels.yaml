@@ -1,0 +1,18 @@
+description: Label noise and label delay.
+parameters:
+  label_noise_rate:
+    value: 0.015
+    unit: fraction of fraud labels flipped in the observed label (both directions, see generator)
+    provenance: CALIBRATED_TO_SRS_TARGET
+    citation: Build prompt Part E.3 and binding resolution D-08 (1-2% label noise)
+    rationale: Midpoint of the required 1-2% range.
+  label_delay_median_hours:
+    value: 72
+    unit: hours from transaction to label availability (median)
+    provenance: ASSUMED
+    rationale: E.3 requires delays from hours to weeks; a three-day median reflects dispute and investigation cycles as a modelling choice, not a measured figure.
+  label_delay_log_sigma:
+    value: 1.2
+    unit: standard deviation of the natural log of the delay
+    provenance: ASSUMED
+    rationale: With a 72-hour median a log-normal sigma of 1.2 puts about 5% of labels beyond three weeks and about 5% within 10 hours, covering the required hours-to-weeks range.

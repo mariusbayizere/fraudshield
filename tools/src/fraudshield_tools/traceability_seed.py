@@ -153,10 +153,18 @@ DEFECT_LINKS: dict[str, tuple[str, ...]] = {
 
 DEFECT_MILESTONES: dict[str, str] = {
     **dict.fromkeys(("D-47", "D-48"), "M0"),
-    **dict.fromkeys(("D-20", "D-30", "D-31", "D-32", "D-49"), "M1"),
+    **dict.fromkeys(("D-30", "D-31"), "M1"),
+    # Re-planned out of M1 by ADR 0021 (M1 milestone review MAJOR-1): the M1 part is delivered and
+    # recorded in each row's notes; the remainder needs a later component.
+    "D-20": "M6",
+    "D-32": "M7",
+    "D-49": "M9",
     **dict.fromkeys(("D-07", "D-08"), "M2"),
     **dict.fromkeys(("D-03", "D-04"), "M3"),
-    **dict.fromkeys(("D-01", "D-02", "D-05", "D-06", "D-09"), "M4"),
+    **dict.fromkeys(("D-01", "D-02", "D-05", "D-06"), "M4"),
+    # ADR 0031: D-09's register closes when the paper states each claim, and five of its claims
+    # need primary sources only the author can supply. C-6 was measured in M4.
+    "D-09": "M11",
     **dict.fromkeys(("D-11", "D-16", "D-50"), "M5"),
     **dict.fromkeys(("D-10", "D-12", "D-13", "D-14", "D-15", "D-17", "D-18", "D-25", "D-51"), "M6"),
     **dict.fromkeys(("D-19", "D-23", "D-24", "D-26", "D-27"), "M7"),
@@ -187,7 +195,10 @@ DEFECT_MILESTONES: dict[str, str] = {
 FR_MILESTONE_OVERRIDES: dict[str, str] = {
     "FR-01-07": "M1",
     "FR-02-02": "M3",
-    "FR-02-09": "M3",
+    # ADR 0027: the build prompt's M5 gate reads "FR-02-01, 02-04 ... 02-10 tests pass", which
+    # includes FR-02-09, while the register filed the Redis feature store under M3. There is no
+    # feature store, no Redis and no Prometheus; M5 is the milestone that builds them.
+    "FR-02-09": "M5",
     "FR-02-03": "M4",
     "FR-02-04": "M4",
     "FR-06-01": "M7",
@@ -228,12 +239,24 @@ SECTION_MILESTONE = {
 }
 
 ROW_MILESTONE_OVERRIDES = {
+    # ADR 0024: the SRS files "all 44 features computable" under the dataset milestone, but the
+    # build prompt's own definitions place feature engineering in M3 ("M3 -- Feature engineering
+    # and feature store (Part E.2)", gate: "all 44 feature unit tests pass for all 6 channels")
+    # while M2's gate names rows, distribution targets, leakage and the datasheet and says nothing
+    # about features. A requirement filed under the wrong milestone, of the same family as D-01.
+    # ADR 0027: a completeness requirement cannot be judged before the data it counts exists.
+    # Six of the 44 are missing for 100% of records; kyc_tier and the two agent features need
+    # tables M6 builds, and the two account-age features need the per-account durable table
+    # PB-37 records as absent. M6 is the last of the enabling milestones.
+    "ML-DATA-07": "M6",
     "NFR-SEC-05": "M1",
     "NFR-SEC-06": "M6",
-    "NFR-SEC-03": "M1",
+    "NFR-SEC-03": "M7",  # ADR 0021: vault and tokenisation M6, analyst inspector test M7
     "ML-GATE-12": "M5",
     "ML-GATE-13": "M5",
-    "TEST-01": "M3",
+    # ADR 0027: three of TEST-01's four named scenarios are covered; the fourth needs
+    # round_sum_flag, whose source-data gap the registry schedules for M4.
+    "TEST-01": "M4",
     "TEST-02": "M4",
     "TEST-03": "M6",
     "TEST-04": "M7",

@@ -1,0 +1,57 @@
+# PB-44 — every feature's `computable` declaration checked against the benchmark.
+#
+# Command : uv run fs-features computability <dataset> --packs <packs.json> \
+#             --corpus-rows 200000 --sample-rows 10000
+# Commit  : fad43dd3977c60dd99ff8799a9a80fc800dfa3b2 (tree d7c06e50726b2e8381fe41e764b4279f6da7c835)
+# Dataset : 1,006,249 rows, seed 20260917, regenerated at this commit
+# Result  : PASSED. Exactly the six declared NO_SOURCE_DATA features are NaN for every row.
+#
+# Raw output follows, unedited.
+corpus: 200000 transactions from /tmp/claude-1000/-home-marius-fraudshield/d9f158ee-49ce-49e8-afa6-780adaf6043a/scratchpad/bench1m
+computability: 44 features over 10000 scored rows
+  account_age_days                       NaN 100.0%  [declared NO_SOURCE_DATA]
+  accounts_per_device_7d                 NaN  38.5%
+  agent_cashout_count_1h                 NaN  87.8%
+  agent_distance_from_registered_km      NaN 100.0%  [declared NO_SOURCE_DATA]
+  agent_float_utilisation_ratio          NaN 100.0%  [declared NO_SOURCE_DATA]
+  agent_unique_customers_1h              NaN  87.8%
+  amount_log1p                           NaN   0.0%
+  amount_sum_24h                         NaN   0.0%
+  amount_sum_7d                          NaN   0.0%
+  amount_to_max_90d_ratio                NaN   0.0%
+  amount_zscore_90d                      NaN   1.8%
+  channel                                NaN   0.0%
+  corridor_class                         NaN   0.0%
+  counterparty_account_age_days          NaN 100.0%  [declared NO_SOURCE_DATA]
+  counterparty_confirmed_fraud_90d       NaN   0.0%
+  counterparty_is_new_for_account        NaN   0.0%
+  counterparty_unique_senders_24h        NaN   0.0%
+  days_since_sim_swap                    NaN  88.7%
+  device_age_days                        NaN  38.5%
+  device_changes_24h                     NaN  38.5%
+  device_is_new_for_account              NaN  38.5%
+  distance_from_home_centroid_km         NaN   0.0%
+  distance_from_last_tx_km               NaN   0.0%
+  dormancy_reactivation_flag             NaN   0.0%
+  geo_cell_fraud_rate_30d                NaN   0.0%
+  implied_speed_kmh                      NaN   0.0%
+  is_local_night                         NaN   0.0%
+  is_month_end_window                    NaN   0.0%
+  is_new_country_for_account             NaN   0.0%
+  just_below_limit_flag                  NaN   0.0%
+  kyc_tier                               NaN 100.0%  [declared NO_SOURCE_DATA]
+  local_day_of_week                      NaN   0.0%
+  local_hour_cos                         NaN   0.0%
+  local_hour_sin                         NaN   0.0%
+  round_sum_flag                         NaN 100.0%  [declared NO_SOURCE_DATA]
+  seconds_since_last_tx                  NaN   0.0%
+  synthetic_identity_score               NaN   0.0%
+  tx_count_1h                            NaN   0.0%
+  tx_count_24h                           NaN   0.0%
+  tx_count_60s                           NaN   0.0%
+  tx_count_7d                            NaN   0.0%
+  tx_count_to_counterparty_30d           NaN   0.0%
+  unique_counterparties_24h              NaN   0.0%
+  velocity_ratio_1h_vs_30d               NaN   0.0%
+OK every feature's computability declaration matches the data
+exit=0

@@ -27,6 +27,11 @@
 
   <modules>
     <module>common</module>
+    <module>persistence</module>
+    <module>rules</module>
+    <module>decision</module>
+    <module>notify</module>
+    <module>ingest</module>
   </modules>
 
   <properties>
@@ -45,6 +50,13 @@
     <google-java-format.version>1.36.1</google-java-format.version>
     <maven-enforcer-plugin.version>3.6.3</maven-enforcer-plugin.version>
 
+    <!-- M6 runtime and build additions (licences recorded in ADR 0060). -->
+    <resilience4j.version>2.4.0</resilience4j.version>
+    <protobuf-maven-plugin.version>5.1.10</protobuf-maven-plugin.version>
+    <!-- gRPC 1.83.1 needs 2.50.0; Guava and Gson ask for older ones (dependencyConvergence). -->
+    <error-prone-annotations.version>2.50.0</error-prone-annotations.version>
+    <json-schema-validator.version>3.0.7</json-schema-validator.version>
+
     <!-- SRS 8.1: Java unit coverage >= 85%. -->
     <coverage.line.minimum>0.85</coverage.line.minimum>
   </properties>
@@ -55,6 +67,41 @@
         <groupId>com.tngtech.archunit</groupId>
         <artifactId>archunit-junit5</artifactId>
         <version>${archunit.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.google.errorprone</groupId>
+        <artifactId>error_prone_annotations</artifactId>
+        <version>${error-prone-annotations.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.networknt</groupId>
+        <artifactId>json-schema-validator</artifactId>
+        <version>${json-schema-validator.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.github.resilience4j</groupId>
+        <artifactId>resilience4j-circuitbreaker</artifactId>
+        <version>${resilience4j.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.github.mariusbayizere.fraudshield</groupId>
+        <artifactId>fraudshield-common</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.github.mariusbayizere.fraudshield</groupId>
+        <artifactId>fraudshield-rules</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.github.mariusbayizere.fraudshield</groupId>
+        <artifactId>fraudshield-decision</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.github.mariusbayizere.fraudshield</groupId>
+        <artifactId>fraudshield-notify</artifactId>
+        <version>${project.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
@@ -144,6 +191,7 @@
         </dependencies>
         <configuration>
           <effort>Max</effort>
+          <excludeFilterFile>${maven.multiModuleProjectDirectory}/spotbugs-exclude.xml</excludeFilterFile>
           <threshold>Low</threshold>
           <failOnError>true</failOnError>
           <plugins>
