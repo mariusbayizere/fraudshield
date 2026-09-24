@@ -2493,3 +2493,36 @@ mis-drawn, because every instrument agrees with every other. Only contact with t
 is outside that world. This is worth stating in the paper's limitations: the verification effort
 reported for this system is large, and it was still blind in exactly one direction until a
 container was started.
+
+### 2026-09-24 · A flag that enables a safeguard is not the safeguard running
+
+Every commit I made in this session ran with `git -c core.hooksPath=.githooks commit`. **There is
+no `.githooks/` directory in this repository.** The project installs its hooks into the common git
+directory (`make bootstrap`, `default_install_hook_types: [pre-commit, commit-msg]`), and they were
+installed and working. Pointing `core.hooksPath` at a directory that does not exist disables hooks
+silently: git finds no hook to run and reports nothing.
+
+So for the whole session the commit-msg and pre-commit checks did not run on a single commit, while
+I believed they were running and said so. No `--no-verify` was ever used -- and the effect was
+exactly the same as if it had been. The flag was written to *comply* with the rule that forbids
+`--no-verify`; it defeated it instead.
+
+**What it cost.** Seven commit messages violated G.3's 72-character body limit, 77 problems in all,
+and CI's commit-message job had been failing on this branch since `f606234`. I did not see it
+because I had no GitHub credentials and was reading CI second-hand, where the red run was
+attributed to a test failure that was also real. Fixing it needed a history rewrite of four commits
+another agent had already merged, which cost that agent a re-merge. Two trailing blank lines
+slipped through the same hole.
+
+**The rule.** *Verify that a safeguard is running; do not infer it from the flag you passed.* A
+configuration flag expresses an intention, and an intention that names a path, a file or a hook
+that does not exist fails open and says nothing. The check is cheap and direct: run the guard by
+hand once (`fs-commit-msg --rev-range …`, `pre-commit run --all-files`) and see it object to
+something it should object to. A safeguard that has never refused anything in your presence has not
+been observed working.
+
+The same shape appeared twice more in this milestone and is worth naming as a family: a fake that
+encodes a wrong reading of an API (2026-09-23), a guard whose condition was vacuous because it
+matched a substring always present, and now a hook path that silently matched nothing. Each was a
+check that reported success while checking nothing, and none of them was visible from inside the
+system that contained it.

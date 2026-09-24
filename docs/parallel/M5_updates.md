@@ -767,3 +767,71 @@ contracts 490, dataset 143, `uv lock --check` clean, ruff and mypy (162 files) c
 *before* the `m4-complete` tag (`b3c050e`, `4722ca7`). If M5 follows that precedent, the statuses
 and the FR-02-09 carry row from §15 want applying and re-rendering before the tag, not after the
 merge.
+
+## 20. History rewritten to fix seven commit messages (2026-09-24) -- M6 must re-merge
+
+**What happened.** CI's G.3 job had been failing on this branch since `f606234`, and the earlier
+reports attributed the red run to the ml test that ADR 0035's §19 fixed. It was a second,
+independent failure: seven of my commit messages have body lines over 72 characters, and two have
+over-length subjects. `fs-commit-msg --rev-range origin/main..HEAD` reported **77 problems across
+7 of 55 commits**.
+
+It mattered beyond this branch. A push to `main` is checked over the whole range it introduces, so
+fast-forwarding `main` would have failed the same job -- and a red G.3 run on `main` is the
+baseline every later milestone is measured against. The owner chose to rewrite (2026-09-24).
+
+**What was done.** `git filter-branch --msg-filter` over `origin/main..HEAD`, replacing only those
+seven messages. The working tree is unchanged: `git diff m5-prewrite-backup HEAD` is empty, and
+`fs-commit-msg --rev-range origin/main..HEAD` now reports **54 messages checked, 0 problems**. The
+pre-rewrite tip is kept locally as `m5-prewrite-backup` (`16035d2`) until the tag lands.
+
+**Where history diverges.** The first 44 commits of the range keep their ids exactly. Divergence
+begins at the 45th, old `2f475c4`:
+
+| Old id | New id | Subject |
+|---|---|---|
+| `2f475c4584ea` | `e54ee1c232e9` | fix(serving): close the promotion gate and restore rollback |
+| `6e7da2c3a9e1` | `7672c3dc9132` | fix(featurestore): make the missing-producer counter mean one thing |
+| `f60623452719` | `70314786dc6d` | fix(serving): rest the rollback exemption on having served |
+| `90078b2e6bc4` | `151e796f56de` | fix(serving): a figure that is not a number is a clause not applied |
+
+**For the M6 agent.** `origin/m6/featurestore-fallback` merged this branch at old **`90078b2`**,
+which is now **`151e796`**. Commits at or before `607cb15` are untouched, so only the four above
+moved. After the force-push, re-point at the new history:
+
+```
+git fetch origin
+git merge origin/m5/scoring      # content is identical, so the four duplicates resolve as no-ops
+```
+
+If git reports conflicts in files M6 has also edited, resolve them as usual; the M5 side of every
+one of those four commits is byte-for-byte what M6 already merged. Nothing in `ml/` changed in this
+rewrite -- only commit messages.
+
+## 21. A backlog row for `tools/`: the gitleaks self-test is flaky
+
+**Proposed row (M5 does not edit `docs/backlog/`; the id is a proposal to confirm at integration):**
+
+```yaml
+- id: PB-73            # next free after PB-72; confirm before using
+  title: "tools/bin/gitleaks-selftest fails about 3-4% of runs on generated secrets"
+  due_milestone: M9    # M9 owns the security workflows; tools/ is shared
+  raised_by: M5 (2026-09-24), from a red gitleaks job on m5/scoring
+  detail: >
+    The self-test plants randomly generated fake secrets and asserts gitleaks reports exactly
+    those. Some generated values do not match the generic-api-key rule, so the guard fails with
+    "NOT DETECTED generic-api-key in <path>" and the path differs run to run. Measured on
+    m5/scoring at 16035d2: 31 local runs, 1 failure (about 3%), on
+    backend/src/main/resources/application-prod.yml; CI run 35909780245 failed the same way on
+    contracts/kafka/examples/fs.planted.example.json. The gitleaks job passes on main, m6 and m7
+    by luck, not by difference: nothing in .gitleaks.toml or contracts/kafka/examples/ differs
+    between those branches and this one.
+  acceptance: >
+    tools/bin/gitleaks-selftest passes 200 consecutive runs. Generate planted values that the
+    pinned rules are guaranteed to match (fixed high-entropy shapes per rule, or assert the rule's
+    own regex against the generated value before planting it), so a failure means the
+    configuration regressed rather than that the generator was unlucky.
+```
+
+It will redden other milestones' CI eventually, and it is a guard on the secret scanner, so a
+flaky pass is worth as little as a flaky failure costs.
