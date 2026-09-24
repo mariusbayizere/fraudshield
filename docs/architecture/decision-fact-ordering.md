@@ -1,6 +1,8 @@
 # Decision facts: who writes what, in which order, and what readers may assume
 
-Status: **draft 5 for review** (2026-09-24). This is the ordering contract the owner asked for
+Status: **reviewed sound** (2026-09-24): draft 5 was reviewed sound, 0 BLOCKER, 0 MAJOR
+(`-contract-5.md`). Its 4 MINOR and 4 NIT, all wording or lifecycle rules, are applied below and
+cited `[5-…]`. This is the ordering contract the owner asked for
 before the next SMS-race fix. It has been reviewed on its own four times:
 
 - Draft 1 (`75a2509`) was not sound: 4 MAJOR (`docs/reviews/M6/m6-decision-2026-09-24-contract-1.md`).
@@ -179,18 +181,33 @@ decision's [NIT].
 
 ## 6. The bounded wait (S4)
 
-- **W-a. (change) Pausing a partition, not the thread** [4-m2]. A partition whose head record is
-  S4 is sought back to that record and paused with `KafkaConsumer.pause`. It is resumed when its
-  re-read is due: 500 ms after the answer, whatever other partitions are doing. The consumer thread
-  never sleeps for a waiting partition, so the other partitions keep flowing at full rate. The
-  exponential backoff stays for S5 and other transient failures, as today.
+- **W-a. (change) Pausing a partition, never the thread** [4-m2] [5-m1]. Every re-read is paused
+  per partition: an S4 wait, a grace re-read, S5, and any other transient RETRY (vault, provider,
+  DLQ send). The partition whose head record must be re-read is sought back to that record and
+  paused with `KafkaConsumer.pause`. It is resumed when its own re-read is due:
+  - 500 ms for S4 and grace re-reads;
+  - its own exponential backoff, up to `MAX_BACKOFF_MS`, for S5 and other transient failures.
+
+  The consumer thread never sleeps. It polls (100 ms), resumes the partitions that are due, and
+  handles what it is given. A re-read therefore happens when it is due, plus at most the time the
+  thread needs to finish the batch it is handling.
+  - **Lifecycle** [5-m2]. `pause`, `resume` and `seek` are called only on partitions in
+    `assignment()`. `onPartitionsRevoked` and `onPartitionsLost` drop every per-partition entry:
+    the due time, the backoff, the WARN state and the in-memory `spent`. The client clears the pause
+    on every eager rebalance, so a partition that comes back is unpaused and re-read at once, with
+    `spent` from its metadata (W-e).
+  - **No skipped records** [5-n3]. If any call between `poll` and the end-of-batch `commitSync`
+    throws, the loop seeks every partition of the batch back to its first unhandled offset before
+    polling again. A fetched record is never skipped without being handled or dead-lettered.
 - **W-b. (change) The wait budget, a leaky bucket per partition** [M4] [3-M1] [4-M1] [4-m1]. Each
   partition has `spent`, the waiting it has used, between 0 and the **bound**. Neither a record's
   outcome nor a change of record resets it.
 
   Every moment of an owned partition's time is exactly one of three kinds. An **attempt** is one
-  classification of the head record, including a dead-letter send where one follows. It succeeds
-  or fails (S5, or the DLQ send fails).
+  classification of the head record: the single statement of 5.1, plus the dead-letter send where
+  one follows. It succeeds or fails (S5, or the DLQ send fails). It ends when the statement returns,
+  or when the DLQ send is acknowledged. The SMS send and the outcome write of S2 come after the
+  attempt, and their time is draining [5-n4].
   - **Waiting.** From the end of a successful S4 answer for record X to the end of the next
     successful attempt for X, whatever that attempt answers (S4, S2, S3 and so on), except any
     neutral time inside it. The final interval of a wait therefore counts [4-m2]. Waiting adds to
@@ -198,19 +215,24 @@ decision's [NIT].
   - **Neutral.** From the start of a failed attempt to the end of the next successful attempt for
     the same record. This is outage time. It neither adds nor drains, and so neither uses up the
     budget nor refills it [4-m1].
-  - **Draining.** All other time: the partition idle with nothing to read, handling records that do
-    not wait (a replayed record returned to the DLQ is one of these), and paused for any reason
-    other than a wait. Draining lowers `spent` at the **drain rate**.
+  - **Draining.** All other time: the partition idle with nothing to read, and handling records that
+    do not wait. A replayed record returned to the DLQ at once is one of these [5-m3]. Draining
+    lowers `spent` at the **drain rate**.
 
-  Time a partition is **unowned**, from the `at` of its last checkpoint to its assignment to the
-  next owner, is draining (W-e).
+  After a change of owner, all time from the `at` of the last checkpoint to the assignment is
+  counted as draining. That includes, after a crash, time that was waiting or neutral on the old
+  owner. W-c2 still holds, because it charges the drain rate over the whole window [5-n1].
 
   Parameters, both ASSUMED and configurable so tests can shorten them [2-n6]: a **bound of 10
   minutes**, and a **drain rate of one sixth**, so a full budget empties in 60 minutes.
 - **W-c. (change) Trip.** A partition is **tripped** while `spent` equals the bound.
-  - The S4 answer that fills the budget dead-letters its record as `parent_not_recorded`.
-  - While the partition is tripped, each S4 record gets **one grace re-read, 500 ms later**, with the
-    partition paused (W-a). It is dead-lettered only if the re-read is still S4 [2-m1].
+  - The record whose waiting fills the budget is dead-lettered as `parent_not_recorded`, at its next
+    successful S4 answer, with no further re-read [5-n2].
+  - A record whose **first** answer, given while the partition is tripped, is S4 gets **one grace
+    re-read, 500 ms later**, with the partition paused (W-a). It is dead-lettered only if the
+    re-read is still S4 [2-m1].
+  - "Tripped" is usually momentary. Draining starts as soon as the tripping record is handled, so
+    in practice the next orphan is governed by the last bullet.
   - If the grace re-read fails (S5), the time is neutral, and the re-read is repeated on the
     backoff until it succeeds.
   - Once draining has taken `spent` below the bound, the next orphan waits only for what has
@@ -218,14 +240,17 @@ decision's [NIT].
 - **W-c2. What the budget guarantees** [3-M1] [4-m2]. The time a partition's records spend waiting
   equals the waiting time of W-b. `spent` counts that time, except while the partition is tripped,
   when each grace re-read adds up to 500 ms that `spent`, already at the bound, cannot count.
-  - So, in any window of length t, a partition spends at most **bound + drain rate × t + 500 ms ×
+  - So, in any window of length t, a partition spends at most **bound + drain rate × t + g ×
     (grace re-reads)** waiting, plus neutral time, which is PostgreSQL's outage and not the wait.
+    Here g, one grace interval, is 500 ms plus at most the time the thread needs to finish its
+    current batch (W-a) [5-m1].
   - That holds however orphans and valid intents are mixed.
   - A late parent after a quiet period gets up to the full bound. A steady stream of lost parents
     takes at most about one seventh of that partition's time.
-  - Because a waiting partition is paused rather than the thread (W-a), **other partitions are not
-    slowed**. While a partition is tripped and every intent on it is S4, as in a W2 write stall,
-    that partition handles about 2 intents a second. The lag this builds on that partition is
+  - Because a waiting or failing partition is paused rather than the thread (W-a), **other
+    partitions are not slowed**. While a partition is tripped and every intent on it is S4, as in a
+    W2 write stall, that partition handles up to 2 intents a second, less while other partitions'
+    batches are slow. The lag this builds on that partition is
     bounded by the stall, and clears when it ends.
   - Everything dead-lettered can be replayed (section 7). An intent that loses the race by more than
     500 ms while its partition is tripped is dead-lettered and recovered by a replay. That is the
@@ -239,7 +264,8 @@ decision's [NIT].
     `m = "fs-wait:v2 offset=<committed offset> spent_ms=<n> at=<epoch ms>"`. That includes the
     commit of X+1 after a dead-letter, and commits while the partition is tripped.
   - While a partition waits at head X, the consumer also checkpoints `OffsetAndMetadata(X, m)` at the
-    first S4 answer and on every re-read. Where `done` already holds the same partition, the two
+    first S4 answer and after every attempt, S5 included, so that `at` stays fresh during an
+    outage [5-n1]. Where `done` already holds the same partition, the two
     are merged into one entry in the same `commitSync` [4 task 3]. Committing X moves nothing,
     because X is already the position.
   - `onPartitionsRevoked` commits `OffsetAndMetadata(position(p), m)` synchronously for every
@@ -252,7 +278,8 @@ decision's [NIT].
   - Otherwise, including when there is no metadata, `spent` starts at zero.
   - Instances' clocks are assumed synchronised (NTP). With skew s, a takeover drains up to s × drain
     rate too much or too little, which is negligible at NTP skew.
-  - A crash loses at most the waiting since the last checkpoint, which is 500 ms. The time until the
+  - A crash loses at most the waiting since the last checkpoint: one re-read interval, 500 ms plus
+    at most the thread's current batch (W-a). The time until the
     new owner is assigned (up to the session timeout, 45 s by default) is draining, as W-b defines,
     so it lowers `spent` by at most 7.5 s. The bound still holds, because draining is part of the
     guarantee.
@@ -293,7 +320,7 @@ decision's [NIT].
   A replay made earlier only moves the records back to the DLQ (D-d). It costs nothing but a run.
 - **D-d. (change) A replayed record never waits** [M4]. The consumer treats a record carrying
   `fs-replayed` in S4 as done waiting: it goes straight back to the DLQ as `parent_not_recorded`,
-  and it neither adds to nor drains the partition's budget. Replaying before the parents exist therefore
+  and its handling time drains the budget like any record that does not wait (W-b) [5-m3]. Replaying before the parents exist therefore
   cannot stall a partition. It only moves the records back to the DLQ.
   - Repeating a replay is safe while each earlier send's outcome is visible: an already-sent intent
     lands in S1. That excludes the window between a successful send and its recorded outcome
@@ -328,13 +355,15 @@ decision's [NIT].
 | I4b | T submitted twice **with different bodies** (another account), both blocking, the first kept: the other body's intent is S3 and never sends; the kept intent is sent to the kept account [2-M1]. |
 | I5 | Link eligibility comes from the kept decision: when the discarded decision allowed a link and the kept one did not, the SMS carries no link. It also fails closed without a REQUESTED row. |
 | I6 | An intent that arrives before its record is written is sent once the record is written (S4, then S2). |
-| I7 | The partition's budget: once `spent` reaches the configured bound, the head intent is dead-lettered as `parent_not_recorded`. While tripped, an S4 intent gets one grace re-read and is dead-lettered if still S4, or sent if its parent arrived. Non-S4 time drains `spent` at the configured rate, and no outcome resets it. |
+| I7 | The partition's budget: once waiting has filled `spent` to the configured bound, that record is dead-lettered as `parent_not_recorded`. A record whose first answer while tripped is S4 gets one grace re-read, and is dead-lettered if still S4, or sent if its parent arrived. Draining time as defined in W-b drains `spent` at the configured rate, neutral time does not, and no outcome resets it [5-m4]. |
 | I7b | Orphans interleaved with valid intents (orphan, valid, orphan, valid, and so on) keep the partition within W-c2's limit: bound + t × drain rate of waiting in a window t, not k × bound [3-M1]. |
 | I7c | An orphan that arrives after an idle period following a trip waits for what the idle time drained: the full bound after 60 minutes idle at the default rate [4-M1]. |
-| I7d | While one partition waits or is tripped, another partition's intents are handled without delay (W-a). |
+| I7d | While one partition waits, is tripped, or backs off after S5 or a RETRY, another partition's intents are handled without delay: the thread never sleeps (W-a) [5-m1]. |
+| I7e | A partition paused on one member and moved to another: the first member's other partitions keep flowing and no `IllegalStateException` escapes; the second member re-reads at once, with `spent` resumed from the metadata [5-m2]. |
+| I7f | An exception between `poll` and the end-of-batch commit skips no fetched record [5-n3]. |
 | I8 | Neutral time, from a failed attempt (S5, or a failed DLQ send) to the next successful answer, neither adds to nor drains `spent`. A grace re-read that meets S5 is retried until it succeeds [4-m1] [4-n4]. |
 | I9 | The classification is one statement. A test holds W2's transaction open, writing `decision_states(T, 1)` and B together, and sees S4 (never S3) until the commit, then S2. |
-| I10 | A dead-lettered intent keeps its headers, for every reason. Replaying it republishes key, value and headers, plus `fs-replayed` incremented. Replayed after its parent arrived, it is sent; replayed before, it returns to the DLQ at once and neither adds to nor drains the budget. |
+| I10 | A dead-lettered intent keeps its headers, for every reason. Replaying it republishes key, value and headers, plus `fs-replayed` incremented. Replayed after its parent arrived, it is sent; replayed before, it returns to the DLQ at once and never waits; its handling time drains (W-b) [5-m3]. |
 | I11 | A replay stops at the end offsets taken when it starts, commits nothing, republishes only the newest copy per `event_id`, leaves other reasons for later runs, and refuses `rejected_by_the_database` unless asked. |
 | I12 | The one-minute WARN fires under intermittent S5 failures. |
 | I13 | A block that is resolved (unblocked, or its latest decision no longer DECLINE) before its SMS goes is not sent (S2r). |
