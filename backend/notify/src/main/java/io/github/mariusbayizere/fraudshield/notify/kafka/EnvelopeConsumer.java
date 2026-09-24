@@ -44,7 +44,10 @@ import tools.jackson.databind.ObjectMapper;
  * lost to an outage.
  *
  * <p>A record whose parent fact has not reached PostgreSQL yet ({@link NotYetRecordedException}) is
- * re-read the same way until it is {@link #PARENT_WAIT} old, then dead-lettered.
+ * re-read every {@value #PARENT_BACKOFF_MS} ms. The wait is timed only while PostgreSQL answers and
+ * the parent is still missing: the clock starts at the first such answer and restarts after any
+ * transient failure, so an outage, and the backlog a drainer writes after it, never uses up the
+ * wait. After {@link #PARENT_WAIT} of that, the record is dead-lettered (ADR 0057).
  */
 public final class EnvelopeConsumer implements AutoCloseable {
 
@@ -65,8 +68,12 @@ public final class EnvelopeConsumer implements AutoCloseable {
   private enum Outcome {
     HANDLED,
     RETRY,
+    WAIT_FOR_PARENT,
     DEAD_LETTER
   }
+
+  /** The record a partition is waiting on, and since when (monotonic nanoseconds). */
+  private record Waiting(long offset, long sinceNanos) {}
 
   private static final Logger LOG = LoggerFactory.getLogger(EnvelopeConsumer.class);
   private static final ObjectMapper JSON = new ObjectMapper();
@@ -77,11 +84,18 @@ public final class EnvelopeConsumer implements AutoCloseable {
   private static final long FIRST_BACKOFF_MS = 100;
 
   /**
-   * How long a record waits for its parent fact to reach PostgreSQL. The spool's PostgreSQL drainer
-   * normally trails its Kafka drainer by milliseconds. Ten minutes also covers a PostgreSQL outage
-   * the drainer retries through.
+   * How long PostgreSQL may answer without the record's parent fact before the record is
+   * dead-lettered: ASSUMED (ADR 0057). The spool's PostgreSQL drainer normally trails its Kafka
+   * drainer by milliseconds; after an outage it has a backlog to write, and this is the time it is
+   * given. Time during which PostgreSQL does not answer does not count.
    */
-  static final Duration PARENT_WAIT = Duration.ofMinutes(10);
+  static final Duration PARENT_WAIT = Duration.ofMinutes(30);
+
+  /**
+   * The pause between re-reads of a record waiting for its parent. It is fixed, not the exponential
+   * backoff, so the other partitions of this consumer keep flowing while one waits.
+   */
+  static final long PARENT_BACKOFF_MS = 500;
 
   private final KafkaConsumer<String, byte[]> consumer;
   private final Producer<String, byte[]> deadLetters;
@@ -89,6 +103,8 @@ public final class EnvelopeConsumer implements AutoCloseable {
   private final Handler handler;
   private final Thread thread;
   private final AtomicLong deadLettered = new AtomicLong();
+  private final Duration parentWait;
+  private final Map<TopicPartition, Waiting> waiting = new HashMap<>();
   private volatile boolean running = true;
   private long backoffMs;
 
@@ -107,6 +123,18 @@ public final class EnvelopeConsumer implements AutoCloseable {
       String topic,
       String group,
       Handler handler) {
+    this(bootstrapServers, extra, topic, group, handler, PARENT_WAIT);
+  }
+
+  /** Starts consuming with a shorter parent wait, for tests. */
+  EnvelopeConsumer(
+      String bootstrapServers,
+      Map<String, Object> extra,
+      String topic,
+      String group,
+      Handler handler,
+      Duration parentWait) {
+    this.parentWait = Objects.requireNonNull(parentWait, "parentWait");
     Map<String, Object> properties = new HashMap<>(extra);
     properties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
     properties.put(ConsumerConfig.GROUP_ID_CONFIG, group);
@@ -144,11 +172,14 @@ public final class EnvelopeConsumer implements AutoCloseable {
         ConsumerRecords<String, byte[]> records = consumer.poll(Duration.ofMillis(100));
         Map<TopicPartition, OffsetAndMetadata> done = new HashMap<>();
         boolean retrying = false;
+        boolean parked = false;
         for (TopicPartition partition : records.partitions()) {
           for (ConsumerRecord<String, byte[]> record : records.records(partition)) {
-            if (handle(record) == Outcome.RETRY) {
+            Outcome outcome = handle(record);
+            if (outcome == Outcome.RETRY || outcome == Outcome.WAIT_FOR_PARENT) {
               consumer.seek(partition, record.offset());
-              retrying = true;
+              retrying |= outcome == Outcome.RETRY;
+              parked |= outcome == Outcome.WAIT_FOR_PARENT;
               break;
             }
             done.put(partition, new OffsetAndMetadata(record.offset() + 1));
@@ -158,6 +189,9 @@ public final class EnvelopeConsumer implements AutoCloseable {
           consumer.commitSync(done);
         }
         backoff(retrying);
+        if (!retrying && parked) {
+          pause(PARENT_BACKOFF_MS);
+        }
       } catch (WakeupException stopping) {
         return;
       } catch (RuntimeException e) {
@@ -174,10 +208,15 @@ public final class EnvelopeConsumer implements AutoCloseable {
       return;
     }
     backoffMs = backoffMs == 0 ? FIRST_BACKOFF_MS : Math.min(backoffMs * 2, MAX_BACKOFF_MS);
+    pause(backoffMs);
+  }
+
+  /** Sleeps in steps of 100 ms, so closing the consumer is not held up. */
+  private void pause(long ms) {
     long waited = 0;
-    while (running && waited < backoffMs) {
+    while (running && waited < ms) {
       try {
-        Thread.sleep(Math.min(100, backoffMs - waited));
+        Thread.sleep(Math.min(100, ms - waited));
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
         return;
@@ -186,7 +225,21 @@ public final class EnvelopeConsumer implements AutoCloseable {
     }
   }
 
+  /**
+   * Handles a record and keeps its partition's parent-wait clock: the clock survives only while the
+   * same record keeps waiting for its parent, and any other outcome, a transient failure included,
+   * resets it.
+   */
   private Outcome handle(ConsumerRecord<String, byte[]> record) {
+    TopicPartition partition = new TopicPartition(record.topic(), record.partition());
+    Outcome outcome = handleOnce(record, partition);
+    if (outcome != Outcome.WAIT_FOR_PARENT) {
+      waiting.remove(partition);
+    }
+    return outcome;
+  }
+
+  private Outcome handleOnce(ConsumerRecord<String, byte[]> record, TopicPartition partition) {
     UUID institution;
     JsonNode payload;
     try {
@@ -201,9 +254,16 @@ public final class EnvelopeConsumer implements AutoCloseable {
       handler.handle(institution, payload);
       return Outcome.HANDLED;
     } catch (NotYetRecordedException e) {
-      if (stillWaiting(record.timestamp(), Instant.now())) {
+      // PostgreSQL answered, and the parent is not there yet.
+      long now = System.nanoTime();
+      Waiting since = waiting.get(partition);
+      if (since == null || since.offset() != record.offset()) {
+        since = new Waiting(record.offset(), now);
+        waiting.put(partition, since);
+      }
+      if (stillWaiting(since.sinceNanos(), now, parentWait)) {
         LOG.debug("a record's parent is not in PostgreSQL yet; it will be re-read", e);
-        return Outcome.RETRY;
+        return Outcome.WAIT_FOR_PARENT;
       }
       return deadLetter(record, "parent_not_recorded", e);
     } catch (SQLException e) {
@@ -226,16 +286,16 @@ public final class EnvelopeConsumer implements AutoCloseable {
   }
 
   /**
-   * Whether a record written at {@code timestampMs} may still wait for its parent. A record without
-   * a timestamp does not wait: it could otherwise stall its partition for ever.
+   * Whether a record may still wait for its parent. The record's own timestamp plays no part: after
+   * an outage every record is old, and its parent may still be in the drainer's backlog.
    *
-   * @param timestampMs the record's timestamp, or a negative value if it has none
-   * @param now the current instant
-   * @return true while the record is younger than {@link #PARENT_WAIT}
+   * @param sinceNanos when PostgreSQL first answered without the parent ({@link System#nanoTime})
+   * @param nowNanos now ({@link System#nanoTime})
+   * @param wait how long it may wait
+   * @return true while less than {@code wait} has passed
    */
-  static boolean stillWaiting(long timestampMs, Instant now) {
-    return timestampMs >= 0
-        && Duration.between(Instant.ofEpochMilli(timestampMs), now).compareTo(PARENT_WAIT) < 0;
+  static boolean stillWaiting(long sinceNanos, long nowNanos, Duration wait) {
+    return nowNanos - sinceNanos < wait.toNanos();
   }
 
   private static boolean permanentVaultFailure(Throwable e) {

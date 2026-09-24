@@ -301,6 +301,17 @@ class VerificationFlowTest {
   }
 
   @Test
+  @Tag("FR-03-04")
+  void anIntentReReadAfterItsOutcomeWasRecordedIsNotSentAgain() throws Exception {
+    // Review 11 (2026-09-24): a crash between the recorded outcome and the offset commit re-reads
+    // the intent; the customer must not get the SMS twice.
+    assertThat(sender.send(INSTITUTION, intent)).isEqualTo(CustomerSmsSender.Outcome.SENT);
+    int after = sent.size();
+    assertThat(sender.send(INSTITUTION, intent)).isEqualTo(CustomerSmsSender.Outcome.SENT);
+    assertThat(sent).hasSize(after);
+  }
+
+  @Test
   void customersTheVaultDoesNotKnowAreRecordedAsFailed() throws Exception {
     CustomerSmsSender unknown =
         new CustomerSmsSender(

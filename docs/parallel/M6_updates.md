@@ -744,6 +744,28 @@ not tagged:** `devcontainer` run 35970682163 executed and **failed**.
   - Local `./mvnw -pl notify verify`: 85 tests green, with checkstyle and spotbugs.
 - This is a code change, so it needs an independent review, and CI with the stack executed on the
   new head, before `main` moves again and before `m6-complete` is tagged.
+- **Review 11 of `3141763`: CHANGES_REQUIRED, 1 MAJOR**
+  (`docs/reviews/M6/m6-decision-2026-09-24-eleventh.md`).
+  - The MAJOR: the first fix timed the wait from the record's Kafka timestamp. After a PostgreSQL
+    outage longer than the wait, every intent written during it would have been dead-lettered as
+    soon as PostgreSQL answered, while the drainer was still writing its backlog. Those customers
+    would never have been told. That is worse than the race it fixed.
+  - This is the pattern the owner warned about: a fix round introducing a defect in the code it
+    fixed.
+  - **ADR 0057** records the rework, choosing the option safest for customers; the owner should
+    confirm it:
+    - The wait is timed only while PostgreSQL answers without the parent, restarts after any
+      transient failure, and ignores the record timestamp. The bound is 30 minutes, ASSUMED.
+    - A waiting record is re-read every 500 ms, not on the exponential backoff, so the other
+      partitions keep flowing.
+    - An intent whose outcome is already recorded is not sent again.
+    - ADR 0064 point 5 is amended.
+  - The rework's Kafka test covers two new cases: an intent written an hour earlier still waits,
+    and an outage outlasting the wait does not use it up. Neither passes with the reviewed code.
+  - Local `./mvnw -pl notify verify`: 86 tests green, with checkstyle and spotbugs.
+  - `3141763` itself was green in `ci`, `stack` (push and dispatched) and `devcontainer` (push; the
+    real job was path-filtered).
+  - The rework needs its own review (review 12) before `main` moves again.
 
 ## Resume here (final state, 2026-09-23, after CI)
 

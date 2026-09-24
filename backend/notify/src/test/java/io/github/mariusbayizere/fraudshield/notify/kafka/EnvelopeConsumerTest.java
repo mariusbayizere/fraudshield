@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -175,14 +176,22 @@ class EnvelopeConsumerTest {
 
   @Test
   @Tag("FR-03-04")
-  void recordsWaitForTheirParentAndAreDeadLetteredOnlyOnceTheWaitIsOver() throws Exception {
+  void recordsWaitForTheirParentWhilePostgresAnswersAndOnlyThenAreDeadLettered() throws Exception {
     // The spool drains to Kafka ahead of PostgreSQL: an SMS intent can arrive before its auto-block
-    // event. It is re-read until the event is recorded; one whose event never arrives is
-    // dead-lettered after PARENT_WAIT instead of stalling the partition.
+    // event. Review 11 (2026-09-24): timing the wait from the record's timestamp dead-lettered
+    // every
+    // intent written during an outage of more than the wait, as soon as PostgreSQL answered and
+    // before its drainer had written the backlog. The wait is timed only while PostgreSQL answers
+    // without the parent, and restarts after a transient failure.
+    Duration wait = Duration.ofSeconds(2);
     UUID institution = UUID.randomUUID();
     String topic = "fs.notifications.staff";
     List<Integer> handled = new CopyOnWriteArrayList<>();
     AtomicInteger notYet = new AtomicInteger(3);
+    AtomicInteger oldNotYet = new AtomicInteger(3);
+    AtomicInteger outage = new AtomicInteger(12);
+    AtomicLong outageStarted = new AtomicLong();
+    AtomicLong outageEnded = new AtomicLong();
     try (EnvelopeConsumer consumer =
         new EnvelopeConsumer(
             kafka.bootstrapServers(),
@@ -197,16 +206,41 @@ class EnvelopeConsumerTest {
               if (sequence == 2) {
                 throw new NotYetRecordedException("auto-block event never recorded (test)");
               }
+              if (sequence == 4 && oldNotYet.getAndDecrement() > 0) {
+                // Written an hour ago, during an outage: it still waits for its parent.
+                throw new NotYetRecordedException("auto-block event in the backlog (test)");
+              }
+              if (sequence == 5) {
+                outageStarted.compareAndSet(0, System.nanoTime());
+              }
+              int left = sequence == 5 ? outage.getAndDecrement() : 0;
+              if (left > 0) {
+                // PostgreSQL comes and goes for longer than the wait: each failure restarts it.
+                if (left % 2 == 0) {
+                  throw new SQLException("database unavailable (test)", "08006");
+                }
+                throw new NotYetRecordedException("auto-block event in the backlog (test)");
+              }
+              if (sequence == 5) {
+                outageEnded.set(System.nanoTime());
+              }
               handled.add(sequence);
-            })) {
+            },
+            wait)) {
       publish(topic, institution, 1);
-      publishAt(
-          topic, institution, 2, Instant.now().minus(EnvelopeConsumer.PARENT_WAIT).minusSeconds(1));
+      publish(topic, institution, 2);
       publish(topic, institution, 3);
+      publishAt(topic, institution, 4, Instant.now().minus(Duration.ofHours(1)));
+      publish(topic, institution, 5);
 
-      await().atMost(Duration.ofSeconds(30)).until(() -> handled.contains(3));
-      assertThat(handled).containsExactly(1, 3);
+      await().atMost(Duration.ofSeconds(60)).until(() -> handled.contains(5));
+      assertThat(handled).containsExactly(1, 3, 4, 5);
       assertThat(notYet.get()).isNegative();
+      assertThat(oldNotYet.get()).isNegative();
+      assertThat(outage.get()).isNegative();
+      assertThat(Duration.ofNanos(outageEnded.get() - outageStarted.get()))
+          .as("the outage outlasted the wait, and the record was still handled")
+          .isGreaterThan(wait);
       assertThat(consumer.deadLettered()).isEqualTo(1);
     }
     List<ConsumerRecord<String, byte[]>> dead = drain(topic + ".dlq", 1);

@@ -30,6 +30,10 @@ public final class CustomerSmsSender {
   private static final String BLOCK_RECORDED =
       "SELECT 1 FROM auto_block_events WHERE id = ? AND institution_id = ?";
 
+  private static final String OUTCOME =
+      "SELECT event FROM customer_notifications WHERE notification_id = ? AND institution_id = ?"
+          + " AND event IN ('SENT', 'FAILED') ORDER BY event DESC LIMIT 1";
+
   private static final String RECORD =
       """
       INSERT INTO customer_notifications (notification_id, institution_id, auto_block_event_id,
@@ -104,6 +108,12 @@ public final class CustomerSmsSender {
       // leave an SMS with no record, and a replayed dead letter would send it twice.
       throw new NotYetRecordedException("auto-block event " + block + " is not recorded yet");
     }
+    Optional<Outcome> already = outcome(institutionId, notification);
+    if (already.isPresent()) {
+      // A re-read after the outcome was recorded (a crash before the offset commit): the customer
+      // has had this SMS, or it failed for good; it is not sent again (review 11, 2026-09-24).
+      return already.get();
+    }
     Optional<ContactDirectory.Contact> contact = contacts.find(institutionId, account);
     Optional<InstitutionMessaging.Settings> settings = institutions.find(institutionId);
     if (contact.isEmpty() || settings.isEmpty()) {
@@ -174,22 +184,46 @@ public final class CustomerSmsSender {
   }
 
   private boolean recorded(UUID institution, UUID block) throws SQLException {
-    try (Connection c = dataSource.getConnection()) {
+    try (Connection c = tenant(institution);
+        PreparedStatement s = c.prepareStatement(BLOCK_RECORDED)) {
+      s.setObject(1, block);
+      s.setObject(2, institution);
+      try (ResultSet row = s.executeQuery()) {
+        boolean found = row.next();
+        c.commit();
+        return found;
+      }
+    }
+  }
+
+  private Optional<Outcome> outcome(UUID institution, UUID notification) throws SQLException {
+    try (Connection c = tenant(institution);
+        PreparedStatement s = c.prepareStatement(OUTCOME)) {
+      s.setObject(1, notification);
+      s.setObject(2, institution);
+      try (ResultSet row = s.executeQuery()) {
+        Optional<Outcome> found =
+            row.next() ? Optional.of(Outcome.valueOf(row.getString(1))) : Optional.empty();
+        c.commit();
+        return found;
+      }
+    }
+  }
+
+  /** A connection in a transaction scoped to the institution (row-level security). */
+  private Connection tenant(UUID institution) throws SQLException {
+    Connection c = dataSource.getConnection();
+    try {
       c.setAutoCommit(false);
       try (PreparedStatement tenant =
           c.prepareStatement("SELECT set_config('fraudshield.institution_id', ?, true)")) {
         tenant.setString(1, institution.toString());
         tenant.execute();
       }
-      try (PreparedStatement s = c.prepareStatement(BLOCK_RECORDED)) {
-        s.setObject(1, block);
-        s.setObject(2, institution);
-        try (ResultSet row = s.executeQuery()) {
-          boolean found = row.next();
-          c.commit();
-          return found;
-        }
-      }
+      return c;
+    } catch (SQLException | RuntimeException e) {
+      c.close();
+      throw e;
     }
   }
 
