@@ -1,13 +1,14 @@
 # Decision facts: who writes what, in which order, and what readers may assume
 
-Status: **draft 3 for review** (2026-09-24). This is the ordering contract the owner asked for
-before the next SMS-race fix. It has been reviewed on its own twice:
+Status: **draft 4 for review** (2026-09-24). This is the ordering contract the owner asked for
+before the next SMS-race fix. It has been reviewed on its own three times:
 
 - Draft 1 (`75a2509`) was not sound: 4 MAJOR (`docs/reviews/M6/m6-decision-2026-09-24-contract-1.md`).
-- Draft 2 (`cf79844`) was not sound: 2 MAJOR (`docs/reviews/M6/m6-decision-2026-09-24-contract-2.md`).
+- Draft 2 (`cf79844`) was not sound: 2 MAJOR (`-contract-2.md`).
+- Draft 3 (`d8b897b`) was not sound: 1 MAJOR (`-contract-3.md`).
 
 This draft answers each finding. Findings are cited in brackets: `[M1]` refers to draft 1's review,
-`[2-M1]` to draft 2's. Code follows the contract only after the contract is reviewed sound. **Every
+`[2-M1]` to draft 2's and `[3-M1]` to draft 3's. Code follows the contract only after the contract is reviewed sound. **Every
 difference from today's code is listed in section 11** and marked **(change)** where it is
 described.
 
@@ -72,8 +73,11 @@ against it.
 Consequences:
 
 - A duplicate decision **of the same submission** (same T, same body) that also auto-blocks yields
-  the same B, N and envelope `event_id` as the kept decision. Its payload is the same too: amount,
-  time and account come from the body, which is identical.
+  the same B, N and envelope `event_id` as the kept decision. Its amount, time, account and
+  reference code are the same too, because they come from the body and from B.
+- Two things can still differ: the envelope's `occurred_at`, which is the decision time, and
+  `verification_link_allowed`. Neither is used. The link comes from the kept decision (5.2)
+  [3-n2].
 - A duplicate of T **with a different body** gets a different B. That B is never written, because
   PostgreSQL keeps one decision per T. Its intent therefore lands in S3 (`kept` is true, `block` is
   false) and is never sent. Draft 2 derived B from T alone. Such an intent then found the kept B
@@ -139,7 +143,8 @@ dead-lettered the first record. The intent's decision-dependent field is `verifi
 the SIM-swap control from `SelfServicePolicy`, and it may differ between the two decisions.
 
 The consumer therefore takes link eligibility **only** from `requested_link_allowed`, the kept
-decision's REQUESTED row. W2 writes that row in the same transaction as B (G2). If B exists without
+decision's REQUESTED row. It also records that value, not the intent's, on the SENT or FAILED row
+[3-n3]. W2 writes that row in the same transaction as B (G2). If B exists without
 its REQUESTED row, which G2 rules out, the link is **not** issued:
 the control fails closed.
 
@@ -156,7 +161,7 @@ snapshot.
 
 | # | Snapshot shows | Meaning | Action |
 |---|---|---|---|
-| S0 | `block`, but `block_account` is not the intent's account | not this intent's block (cannot happen with derived ids) | as S3 |
+| S0 | `block`, but `block_account` is not the intent's account | not this intent's block (cannot happen with derived ids) | dead-letter at once, reason `not_the_kept_decision`, no send; log at ERROR [3-n5] |
 | S1 | `block`, and `outcome` present | already handled: a re-read, or a duplicate decision with derived ids | commit past it, **no send** |
 | S2r | `block`, no `outcome`, `resolved` | the block was lifted, or superseded by a later decision, before the SMS could go | commit past it, **no send**; log at INFO and count it [m3] (change) |
 | S2 | `block`, no `outcome`, not `resolved` | the normal case | issue a link only if `requested_link_allowed`; send; record the outcome; commit |
@@ -176,44 +181,55 @@ decision's [NIT].
 - **W-a.** A waiting intent is re-read every 500 ms, not on the exponential backoff, so the
   consumer's other partitions keep flowing. When another partition's record is failing in the same
   poll, the retry backoff applies instead.
-- **W-b. (change) The bound is per partition** [M4]. Each partition has one wait clock: the counted
-  time the partition has spent in S4 **in a row**. The clock:
-  - adds each interval between two consecutive S4 answers on that partition, whether for the same
-    record or for a following one;
-  - does not add an interval that contains an S5 failure, or a failed DLQ send;
-  - resets to zero, and clears the trip (W-c), only when a record on the partition reaches S0, S1,
-    S2, S2r or S3, or leaves for any reason other than S4 [2-m3].
+- **W-b. (change) A wait budget per partition, a leaky bucket** [M4] [3-M1]. Each partition has
+  `spent`, the waiting it has used, between 0 and the **bound**. Neither a record's outcome nor a
+  change of record resets it.
+  - Each interval between two consecutive S4 answers on the partition, for the same record or for a
+    following one, adds to `spent`, up to the bound. An interval that contains an S5 failure or a
+    failed DLQ send does not.
+  - Time in which the partition is not in S4 drains `spent` at the **drain rate**.
+  - A replayed record in S4 neither adds to nor drains `spent` (D-d).
+  - Parameters, both ASSUMED and configurable so tests can shorten them [2-n6]: a **bound of 10
+    minutes**, and a **drain rate of one sixth**, so a full budget empties in 60 minutes.
+- **W-c. (change) Trip.** A partition is **tripped** while `spent` equals the bound.
+  - The S4 record that fills the budget is dead-lettered as `parent_not_recorded`.
+  - While the partition is tripped, each S4 record gets **one grace re-read after 500 ms**, and is
+    dead-lettered only if it is still S4 [2-m1]. An intent whose parent is milliseconds behind is
+    therefore normally sent.
+  - A grace re-read does not add to `spent`, which is already at the bound.
+  - Once non-S4 time has drained `spent` below the bound, the next orphan can wait only for what has
+    drained, and is then dead-lettered.
+- **W-c2. What the budget guarantees.** In any window of length t, a partition spends at most
+  **bound + t × drain rate** waiting for parents, plus 500 ms per grace re-read. That holds however
+  orphans and valid intents are mixed [3-M1]:
+  - a single late parent may use the full 10 minutes;
+  - a steady stream of lost parents uses at most one seventh of the partition's time;
+  - the rest flows normally, so the lag cannot grow for that reason.
 
-  A replayed record in S4 never touches the clock (D-d).
-- **W-c. (change) Bound: 10 minutes of counted time, ASSUMED, configurable** (so tests can shorten
-  it) [2-n6]. When the partition's clock reaches the bound, the partition **trips**:
-  - the S4 record at its head is dead-lettered as `parent_not_recorded`;
-  - while the partition is tripped, each following S4 record gets **one grace re-read after 500 ms**,
-    and is dead-lettered only if it is still S4 [2-m1]. An intent whose parent is milliseconds
-    behind is therefore normally sent, not dead-lettered.
-  - One that loses the race by more than 500 ms while the partition is tripped is dead-lettered, and
-    recovered by a replay. This is the cost of the bound, and it is accepted.
-  - A partition therefore spends at most 10 counted minutes in S4 in a row, plus 500 ms per record
-    after the trip, however many consecutive intents lack their parent.
+  Everything dead-lettered can be replayed (section 7). An intent whose parent loses the race by more
+  than 500 ms while the partition is tripped is dead-lettered and recovered by a replay. That is the
+  cost of the bound, and it is accepted.
 - **W-d. (change)** A WARN is logged after the partition has spent 1 minute of wall time in S4 in a
   row, and every minute after that. It names the partition, the offset and B. S5 failures do not
-  reset it [review 13, MINOR 3].
-- **W-e. (change) The clock survives a change of owner** [2-M2]. The group uses the eager range
-  assignor, so every membership change revokes every partition. A clock kept only in memory would be
-  reset by every restart or scaling event, and an orphan could then stall its partition for ever.
-  So:
-  - While a partition waits at head offset X, the consumer commits `OffsetAndMetadata(X, m)`, where
-    `m = "fs-wait:v1 counted_ms=<n> tripped=<0|1>"`. It commits at most every 5 s, and synchronously
-    when the partition is revoked.
-  - A new owner reads the committed metadata when the partition is assigned. If it is for the
-    committed offset, the clock resumes from it.
-  - The first normal commit past X (offset X+1, no metadata) clears it.
-  - A crash, or a lost partition that cannot be committed, loses at most the last 5 s of counted
-    time. The bound therefore holds as long as each owner keeps the partition for more than 5 s.
-  - Committing offset X with metadata moves nothing: X is already the position.
-- **W-f.** Records behind a waiting intent on its partition wait with it: at most 10 counted
-  minutes, plus the time PostgreSQL was failing, plus the time lost to crashes (at most 5 s each),
-  plus 500 ms for each record re-read after the trip.
+  reset it [review 13, MINOR 3]. Each trip is logged at WARN as well.
+- **W-e. (change) The budget survives a change of owner** [2-M2] [3-m1] [3-m2] [3-m3]. The group
+  uses the eager range assignor, so every membership change revokes every partition, and a budget
+  kept only in memory would be reset by every restart.
+  - **Every commit** for a partition whose `spent` is above zero carries
+    `m = "fs-wait:v2 offset=<committed offset> spent_ms=<n> at=<epoch ms>"`. That includes the
+    commit of X+1 after a dead-letter, and commits while the partition is tripped.
+  - While a partition waits at head X, the consumer also commits `OffsetAndMetadata(X, m)` at the
+    **first** S4 answer and on **every** re-read after it, so a crash loses at most one 500 ms
+    interval. Committing X moves nothing, because X is already the position.
+  - `onPartitionsRevoked` commits `m` synchronously for every revoked partition whose `spent` is
+    above zero.
+  - `onPartitionsLost` is overridden: it commits nothing and drops the partitions' state.
+  - `onPartitionsAssigned` reads the committed metadata. If its `offset` equals the committed
+    offset, `spent` resumes from it, drained for the wall time since `at`. Otherwise `spent` starts
+    at zero.
+  - A commit made once `spent` has drained to zero carries no metadata.
+- **W-f.** Records behind a waiting intent on its partition wait with it, within W-c2's limit, plus
+  the time PostgreSQL was failing and at most 500 ms per crash.
 - ADR 0057 (no deadline) is **superseded** by this contract.
 
 ## 7. Dead letters and replay
@@ -239,14 +255,16 @@ decision's [NIT].
   - It refuses `rejected_by_the_database` unless the operator passes it explicitly, and then warns
     that each such SMS may already have been delivered.
 - **D-c2. (change) When to replay.** Replay `parent_not_recorded` only after W2 has caught up:
-  - the spool's `postgres` consumer lag, a new gauge `fraudshield_spool_lag_bytes{consumer}` taken
-    from `DurableSpool.lagBytes`, is zero on every instance;
+  - the spool's `postgres` consumer lag, a new gauge `fs_spool_lag{consumer}` (base unit bytes,
+    alongside `fs_spool_depth`) taken from `DurableSpool.lagBytes`, is zero on every running
+    instance, **and** the spool volume of every stopped instance has been drained by starting it
+    [3-n4];
   - and, for a lost parent, after W2's dead-letter files have been replayed (D-f).
 
   A replay made earlier only moves the records back to the DLQ (D-d). It costs nothing but a run.
 - **D-d. (change) A replayed record never waits** [M4]. The consumer treats a record carrying
   `fs-replayed` in S4 as done waiting: it goes straight back to the DLQ as `parent_not_recorded`,
-  and it neither starts, extends nor resets the partition's clock. Replaying before the parents exist therefore
+  and it neither adds to nor drains the partition's budget. Replaying before the parents exist therefore
   cannot stall a partition. It only moves the records back to the DLQ.
   - Repeating a replay is safe while each earlier send's outcome is visible: an already-sent intent
     lands in S1. That excludes the window between a successful send and its recorded outcome
@@ -281,15 +299,17 @@ decision's [NIT].
 | I4b | T submitted twice **with different bodies** (another account), both blocking, the first kept: the other body's intent is S3 and never sends; the kept intent is sent to the kept account [2-M1]. |
 | I5 | Link eligibility comes from the kept decision: when the discarded decision allowed a link and the kept one did not, the SMS carries no link. It also fails closed without a REQUESTED row. |
 | I6 | An intent that arrives before its record is written is sent once the record is written (S4, then S2). |
-| I7 | The partition's bound: after the configured counted time in S4 in a row, the head intent is dead-lettered as `parent_not_recorded`; a following S4 intent gets one grace re-read and is dead-lettered if still S4, or sent if its parent arrived. S0, S1, S2, S2r and S3 each reset the clock and the trip. |
-| I8 | Time during which PostgreSQL fails (S5), and a failed DLQ send, neither count towards the bound nor reset it. |
+| I7 | The partition's budget: once `spent` reaches the configured bound, the head intent is dead-lettered as `parent_not_recorded`. While tripped, an S4 intent gets one grace re-read and is dead-lettered if still S4, or sent if its parent arrived. Non-S4 time drains `spent` at the configured rate, and no outcome resets it. |
+| I7b | Orphans interleaved with valid intents (orphan, valid, orphan, valid, and so on) keep the partition within W-c2's limit: bound + t × drain rate of waiting in a window t, not k × bound [3-M1]. |
+| I8 | Time during which PostgreSQL fails (S5), and a failed DLQ send, neither count towards the budget nor reset it. |
 | I9 | The classification is one statement. A test holds W2's transaction open, writing `decision_states(T, 1)` and B together, and sees S4 (never S3) until the commit, then S2. |
-| I10 | A dead-lettered intent keeps its headers, for every reason. Replaying it republishes key, value and headers, plus `fs-replayed` incremented. Replayed after its parent arrived, it is sent; replayed before, it returns to the DLQ at once and neither starts, extends nor resets the clock. |
+| I10 | A dead-lettered intent keeps its headers, for every reason. Replaying it republishes key, value and headers, plus `fs-replayed` incremented. Replayed after its parent arrived, it is sent; replayed before, it returns to the DLQ at once and neither adds to nor drains the budget. |
 | I11 | A replay stops at the end offsets taken when it starts, commits nothing, republishes only the newest copy per `event_id`, leaves other reasons for later runs, and refuses `rejected_by_the_database` unless asked. |
 | I12 | The one-minute WARN fires under intermittent S5 failures. |
 | I13 | A block that is resolved (unblocked, or its latest decision no longer DECLINE) before its SMS goes is not sent (S2r). |
-| I14 | The clock survives a change of owner: after a revocation, the new owner resumes from the committed metadata, and the bound is reached in counted time as if the partition had not moved [2-M2]. |
+| I14 | The budget survives a change of owner. After a revocation, and after a crash with no revocation while the partition is tripped or waiting, the new owner resumes `spent` from the committed metadata, losing at most 500 ms. A lost partition commits nothing [2-M2] [3-m1] [3-m3]. |
 | I15 | A header-less intent (on the topic before deployment) is S4 with `kept` null, and is dead-lettered at the bound if its B never appears. |
+| I16 | S0: an intent whose B row belongs to another account is dead-lettered as `not_the_kept_decision` and never sends. It is tested with a crafted intent [3-n5]. |
 
 ## 9. Alternatives rejected
 
@@ -300,7 +320,8 @@ decision's [NIT].
 - **`transaction_id` in the payload:** allowed by ADR 0012 point 5 as an optional property, but the
   owner froze the contracts. The header carries the same fact [m5].
 - **Several statements, or several connections, for the checks:** not one snapshot (5.1).
-- **A per-record bound:** a partition could stall for k × the bound (W-b).
+- **A per-record bound, or a clock reset by any other outcome:** orphans could stall a partition
+  for k × the bound (W-b) [3-M1].
 - **Ids from T alone:** they let a different-body duplicate reach S2 (section 4).
 - **A clock kept only in memory:** every rebalance resets it (W-e).
 - **The record timestamp as the clock:** after an outage it trips at once, while W2 is still
@@ -320,17 +341,19 @@ fails, the job ends FAILED, as for any other unavailable dependency [NIT].
 
 ## 11. Changes to the code, in full [m7] [2-m4]
 
-1. `DecisionService.addAutoBlock` and `CustomerSmsPolicy.compose` derive B and N from (institution,
-   T, F) (section 4).
+1. `DecisionService` derives B and N from (institution, T, F), since F is already its parameter,
+   and passes both to the port. `CustomerNotificationPolicy.compose` gains an N parameter, which
+   `CustomerSmsPolicy` and the decision tests' `InMemoryPorts` implement (section 4) [3-n1].
 2. `KafkaMessage` gains headers. `KafkaMessages` sets `fs-transaction-id` on the SMS intent from the
    `AutoBlocked` fact in the same record, and `KafkaSink` writes the headers (section 4).
 3. `EnvelopeConsumer.Handler` receives the record's headers: T and the replayed flag.
 4. `CustomerSmsSender` classifies with one statement (5.1), takes link eligibility from the
    REQUESTED row (5.2), and implements S0 to S5 (5.3).
-5. `EnvelopeConsumer` implements the per-partition clock, the trip with its grace re-read, the WARN,
-   the offset-metadata checkpoint with a rebalance listener, and the new outcomes (section 6).
+5. `EnvelopeConsumer` implements the per-partition budget, the trip with its grace re-read, the
+   WARN, the offset-metadata checkpoint with a rebalance listener (revoked, lost, assigned), and
+   the new outcomes (section 6).
 6. Dead-letters keep the original headers for every reason (D-a). ADR 0064 point 5 is amended.
 7. New `DeadLetterReplay` (D-c).
-8. New gauge `fraudshield_spool_lag_bytes{consumer}` (D-c2).
+8. New gauge `fs_spool_lag{consumer}` in bytes (D-c2).
 9. ADR 0057 is superseded. ADR 0056 records this contract's decisions.
 10. `IngestService` answers 503 when the idempotency claim cannot be made (section 10).
