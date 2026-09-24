@@ -165,5 +165,9 @@ Settled by the owner on 2026-09-24:
    each owning milestone with the acceptance criterion M10 needs.
 4. **M10 does not run** until M6, M7, M8 and M9 are on `main` and the hardware is decided.
 
-Still open: **machine provisioning** (`m10_machine_spec.md`), and the owner's acceptance of ADR
-0100.
+ADR 0100 and ADR 0101 were accepted on 2026-09-24. ADR 0100's transaction-counting change is
+recorded for M6 as a defect to fix **before M6 merges**: as it stands the budget is charged in
+requests while the load is transactions, so the control can be bypassed by batching.
+
+Still open: **machine provisioning**. The owner decides before the campaign runs, and
+`m10_machine_spec.md` stands as the requirement in the meantime.

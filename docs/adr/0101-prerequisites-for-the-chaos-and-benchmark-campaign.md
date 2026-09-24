@@ -1,7 +1,8 @@
 # 0101 — Prerequisites for the chaos and benchmark campaign
 
-- **Status:** Accepted for M10's own conduct, 2026-09-24. The items it places on other milestones
-  are proposals recorded in their updates files, not changes made on their behalf.
+- **Status:** **Accepted as written, 2026-09-24 (owner).** The items it places on other milestones
+  are recorded in their updates files with the acceptance criterion M10 needs, not changed on their
+  behalf.
 - **Date:** 2026-09-24
 - **Requirements affected:** NFR-PERF-01…08, NFR-PERF-10, NFR-REL-01…06, TEST-09, TEST-12,
   MOB-DEV-01…07, FR-02-07, FR-02-09, ML-GATE-12, ML-GATE-13, TEST-10, ML-DATA-01
