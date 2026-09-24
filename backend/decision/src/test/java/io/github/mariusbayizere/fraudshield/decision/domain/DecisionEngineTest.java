@@ -32,6 +32,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 @Tag("D-02")
 @Tag("D-10")
 @Tag("D-17")
+@Tag("TEST-03")
 class DecisionEngineTest {
 
   private static final Duration REVIEW = Duration.ofSeconds(30);

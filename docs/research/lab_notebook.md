@@ -2526,3 +2526,33 @@ encodes a wrong reading of an API (2026-09-23), a guard whose condition was vacu
 matched a substring always present, and now a hook path that silently matched nothing. Each was a
 check that reported success while checking nothing, and none of them was visible from inside the
 system that contained it.
+
+## M6 — ingestion and decision engine
+
+### 2026-09-23 · Fix rounds are original work
+
+M6's reviews needed five fix rounds, and four introduced a new defect, each inside the code written
+to fix a previous finding: an idempotency fix stopped decisions during a PostgreSQL outage; wiring
+the database fallback in made an unreachable database stall the scorer and a key rotation drop
+customer SMS; bounding that made one slow statement disable the fallback for everyone; and a check
+added so `make up` would notice a failed migration failed on every healthy full stack, because it
+was tested on a subset where the timing differed.
+
+The fixes were tested against the finding that prompted them and not against their neighbours.
+**The rule.** *A fix round gets an independent review with the same scope and severity bar as the
+original work, and the loop ends on a clean review, not on a count.* The owner later bounded it:
+changes to code, schema, contracts, CI or build configuration are reviewed; documentation-only
+changes are not.
+
+### 2026-09-23 · Read CI, at job level, on the pushed head
+
+Five independent reviews and a passing local suite all missed a defect that CI caught on every
+push, because each of us ran a subset of the stack where the failing condition could not arise:
+the one-shot vault migration was still running whenever Compose inspected it locally, and had
+already exited in CI's full stack (`docker compose up --wait` fails on an exited one-shot unless a
+dependent waits for it with `service_completed_successfully`). Path filters then made later green
+runs meaningless, because the stack job was skipped.
+
+**The rule.** *Before declaring work done, read CI on the pushed head at job level and confirm
+that path-filtered jobs executed; a green local suite and a clean review are not substitutes for
+it.*

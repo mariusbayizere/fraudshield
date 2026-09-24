@@ -16,6 +16,7 @@ import java.util.List;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
+@Tag("TEST-03")
 class FreezeAndBreakerTest {
 
   private static final CircuitBreakerSettings SRS =

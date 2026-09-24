@@ -8,6 +8,7 @@ import io.github.mariusbayizere.fraudshield.ingest.application.IngestService;
 import io.github.mariusbayizere.fraudshield.ingest.application.Problems;
 import io.github.mariusbayizere.fraudshield.ingest.auth.ApiPrincipal;
 import io.github.mariusbayizere.fraudshield.ingest.auth.ApiScope;
+import io.github.mariusbayizere.fraudshield.ingest.ratelimit.RateLimiter;
 import io.github.mariusbayizere.fraudshield.ingest.request.RequestValidator;
 import io.github.mariusbayizere.fraudshield.ingest.request.ValidationError;
 import jakarta.servlet.http.HttpServletRequest;
@@ -48,6 +49,7 @@ public final class IngestController {
   private final IngestService ingest;
   private final BatchJobs batches;
   private final DecisionStatePort states;
+  private final RateLimiter limiter;
 
   /**
    * Creates the controller.
@@ -55,11 +57,14 @@ public final class IngestController {
    * @param ingest single submissions
    * @param batches batch jobs
    * @param states decision states
+   * @param limiter the per-key budget, which charges a batch by its item count
    */
-  public IngestController(IngestService ingest, BatchJobs batches, DecisionStatePort states) {
+  public IngestController(
+      IngestService ingest, BatchJobs batches, DecisionStatePort states, RateLimiter limiter) {
     this.ingest = Objects.requireNonNull(ingest, "ingest");
     this.batches = Objects.requireNonNull(batches, "batches");
     this.states = Objects.requireNonNull(states, "states");
+    this.limiter = Objects.requireNonNull(limiter, "limiter");
   }
 
   /**
@@ -127,21 +132,39 @@ public final class IngestController {
     Optional<ResponseEntity<byte[]>> refused =
         refuse(request, ApiScope.INGEST_WRITE, MAX_BATCH_BODY);
     if (refused.isPresent()) {
-      return refused.get();
+      // A refusal still costs one unit, as any request does (unless there is no key to charge).
+      return charged(request, 1, correlation, refused.get());
     }
     byte[] raw = request.getInputStream().readNBytes(MAX_BATCH_BODY + 1);
     if (raw.length > MAX_BATCH_BODY) {
-      return tooLarge(MAX_BATCH_BODY, correlation);
+      return charged(request, 1, correlation, tooLarge(MAX_BATCH_BODY, correlation));
     }
     JsonNode body;
     try {
       body = JSON.readTree(raw);
     } catch (JacksonException malformed) {
-      return problem(Problems.validation(RequestValidator.malformed(), correlation));
+      return charged(
+          request,
+          1,
+          correlation,
+          problem(Problems.validation(RequestValidator.malformed(), correlation)));
+    }
+    // The budget is counted in transactions (ADR 0058, adopting ADR 0100): a batch costs its item
+    // count, charged here once and all or nothing, before anything is accepted. An envelope that
+    // is not a valid batch costs one unit, like any other request.
+    int units = BatchJobs.chargeableUnits(body);
+    RateLimiter.Permit permit = limiter.take(principal(request).apiKeyId(), units);
+    if (!permit.allowed()) {
+      return withBudget(
+          ResponseEntity.status(429)
+              .header("Retry-After", Integer.toString(permit.retryAfterSeconds()))
+              .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+              .body(RateLimitFilter.refusal(permit, units, correlation)),
+          permit);
     }
     Object submitted = batches.submit(principal(request), body);
     if (submitted instanceof RequestValidator.Result invalid) {
-      return problem(Problems.validation(invalid, correlation));
+      return withBudget(problem(Problems.validation(invalid, correlation)), permit);
     }
     BatchJobs.Accepted accepted = (BatchJobs.Accepted) submitted;
     String location = "/api/v1/jobs/" + accepted.jobId();
@@ -149,10 +172,42 @@ public final class IngestController {
     node.put("job_id", accepted.jobId().toString());
     node.put("accepted", accepted.accepted());
     node.put("status_url", location);
-    return ResponseEntity.accepted()
-        .header(HttpHeaders.LOCATION, location)
-        .contentType(MediaType.APPLICATION_JSON)
-        .body(JSON.writeValueAsBytes(node));
+    return withBudget(
+        ResponseEntity.accepted()
+            .header(HttpHeaders.LOCATION, location)
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(JSON.writeValueAsBytes(node)),
+        permit);
+  }
+
+  /**
+   * Charges a batch request that ends in {@code answer} without a job: one unit, as any request.
+   * Over budget, the answer is the 429 instead; without an API key there is no budget to charge.
+   */
+  private ResponseEntity<byte[]> charged(
+      HttpServletRequest request, int units, UUID correlation, ResponseEntity<byte[]> answer) {
+    ApiPrincipal key = principal(request);
+    if (key == null) {
+      return answer;
+    }
+    RateLimiter.Permit permit = limiter.take(key.apiKeyId(), units);
+    if (!permit.allowed()) {
+      return withBudget(
+          ResponseEntity.status(429)
+              .header("Retry-After", Integer.toString(permit.retryAfterSeconds()))
+              .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+              .body(RateLimitFilter.refusal(permit, units, correlation)),
+          permit);
+    }
+    return withBudget(answer, permit);
+  }
+
+  private static ResponseEntity<byte[]> withBudget(
+      ResponseEntity<byte[]> answer, RateLimiter.Permit permit) {
+    HttpHeaders headers = new HttpHeaders();
+    headers.putAll(answer.getHeaders());
+    RateLimitFilter.headers(permit).forEach(headers::set);
+    return new ResponseEntity<>(answer.getBody(), headers, answer.getStatusCode());
   }
 
   /**

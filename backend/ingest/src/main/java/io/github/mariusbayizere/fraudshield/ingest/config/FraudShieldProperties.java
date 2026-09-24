@@ -25,7 +25,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param batchThreads threads deciding batch jobs
  * @param sms SMS provider, when customer SMS is enabled
  * @param vault the PII vault, when customer SMS is enabled (D-20)
- * @param rateLimit per-API-key request budget (E.1)
+ * @param rateLimit per-API-key budget in transactions (E.1, ADR 0058)
  * @param institutions per-institution SMS settings by institution id
  */
 @ConfigurationProperties(prefix = "fraudshield")
@@ -167,22 +167,36 @@ public record FraudShieldProperties(
   }
 
   /**
-   * The per-API-key request budget (E.1).
+   * The per-API-key budget (E.1), counted in transactions (ADR 0058, adopting ADR 0100): a single
+   * submission costs one unit, a batch its item count.
    *
-   * @param requestsPerSecond sustained requests per second per key
-   * @param burst how many may arrive at once
+   * @param transactionsPerSecond sustained transactions per second per key
+   * @param burst how many transactions may arrive at once; at least the largest batch, or a
+   *     full-size batch could never be accepted
    */
-  public record RateLimit(int requestsPerSecond, int burst) {
+  public record RateLimit(int transactionsPerSecond, int burst) {
 
-    /** The default budget, used when none is configured. */
-    public static final RateLimit DEFAULT = new RateLimit(200, 400);
+    /**
+     * The default budget: 2,000 transactions per second sustained, burst 4,000, per key.
+     * **ASSUMED** (ADR 0100, adopted by the owner on 2026-09-24 in ADR 0058): one fifth of the
+     * system's specified 10,000 per second, with two seconds of burst. Not sourced and not
+     * measured.
+     */
+    public static final RateLimit DEFAULT = new RateLimit(2_000, 4_000);
 
     /** Validates the budget. */
     public RateLimit {
-      if (requestsPerSecond < 1 || burst < requestsPerSecond) {
+      if (transactionsPerSecond < 1 || burst < transactionsPerSecond) {
         throw new IllegalArgumentException(
-            "fraudshield.rate-limit.requests-per-second must be at least 1 and burst at least"
-                + " requests-per-second");
+            "fraudshield.rate-limit.transactions-per-second must be at least 1 and burst at least"
+                + " transactions-per-second");
+      }
+      if (burst < io.github.mariusbayizere.fraudshield.ingest.application.BatchJobs.MAX_ITEMS) {
+        throw new IllegalArgumentException(
+            "fraudshield.rate-limit.burst must be at least "
+                + io.github.mariusbayizere.fraudshield.ingest.application.BatchJobs.MAX_ITEMS
+                + ", the largest batch: a batch is charged whole, so a smaller burst would refuse a"
+                + " full batch for ever");
       }
     }
   }

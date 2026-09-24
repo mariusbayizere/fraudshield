@@ -27,6 +27,7 @@ import org.junit.jupiter.api.Test;
 @Tag("FR-03-02")
 @Tag("D-14")
 @Tag("D-18")
+@Tag("TEST-03")
 class HoldTimeoutServiceTest {
 
   private InMemoryPorts ports;

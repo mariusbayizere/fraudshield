@@ -398,7 +398,8 @@ public class DecisionWiring {
   }
 
   /**
-   * The per-key request budget (E.1), shared in Redis with this instance's own as the fallback.
+   * The per-key budget in transactions (E.1, ADR 0058), shared in Redis with this instance's own as
+   * the fallback.
    *
    * @param redis shared connection
    * @param mode the degraded-mode flag
@@ -430,8 +431,12 @@ public class DecisionWiring {
             .register(registry);
     return new ResilientRateLimiter(
         new RedisRateLimiter(
-            redis, budget.requestsPerSecond(), budget.burst(), properties.redisTimeout(), clock),
-        new LocalRateLimiter(budget.requestsPerSecond(), budget.burst(), clock),
+            redis,
+            budget.transactionsPerSecond(),
+            budget.burst(),
+            properties.redisTimeout(),
+            clock),
+        new LocalRateLimiter(budget.transactionsPerSecond(), budget.burst(), clock),
         mode,
         wasDegraded -> (wasDegraded ? degraded : shared).increment());
   }

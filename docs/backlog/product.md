@@ -1182,3 +1182,23 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 - **Problem:** `docs/benchmarks/m4_frontier.md` and `m4_battery.md`'s prose were measured at
   `6abde44e`; the gate, battery and C-6 evidence are at `d8083dbc`, with the E1 encoding.
 - **Acceptance:** both re-run at `d8083dbc` through `fs-evidence`, prose restated from the output.
+
+### PB-73 · The M6 latency gate, measured on dedicated hardware with the real scorer
+- **Source:** M6 gate, ADR 0059 (owner decision 2026-09-23) · **Priority:** high · **Due:** M10
+- **Problem:** "end-to-end p95 decision latency < 50 ms at the largest achievable load" could not
+  be shown met or refuted: both measurements (`docs/benchmarks/2026-09-22-M6-decision-latency.json`,
+  `2026-09-23-…`) ran on shared hosts with a scorer double, and are recorded as shapes, not gate
+  figures. FR-01-01, FR-03-01, FR-03-03, TEST-05 and D-13 wait on it.
+- **Acceptance:** `DecisionLatencyBenchmark` (`-Dfs.benchmark=true`) on the dedicated benchmark
+  machine recorded in `docs/benchmarks/hardware.md`, with M5's real scorer, at rising rates up to
+  the largest the machine sustains without errors; the result file names the machine; p95 < 50 ms
+  at that rate. Also NFR-REL-05's "< 1 ms cache hit".
+
+### PB-74 · FR-01-06's 30-second batch, measured on dedicated hardware
+- **Source:** M6 final verify, ADR 0059 point 5 (owner decision 2026-09-23) · **Priority:** medium
+  · **Due:** M10
+- **Problem:** a 1,000-transaction batch measured 30.20 s against the 30 s limit once on
+  `dev-laptop-01` at load ~7, and timed out at loads 12-15 while passing at loads 9-13 in paired
+  runs: a ~0.2 s, load-sensitive margin is not evidence.
+- **Acceptance:** `IngestApiTest.thousandTransactionBatchesAreDecidedWithinThirtySeconds`, or a
+  dedicated batch benchmark, on the dedicated machine, with the margin recorded over repeated runs.

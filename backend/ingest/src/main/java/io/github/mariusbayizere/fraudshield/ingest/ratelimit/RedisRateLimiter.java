@@ -14,7 +14,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 /**
- * The deployment-wide request budget, as a token bucket in Redis (E.1).
+ * The deployment-wide budget in transactions, as a token bucket in Redis (E.1, ADR 0058).
  *
  * <p>One Lua script refills and takes in a single round trip, so every instance shares one budget
  * per API key. The bucket holds only two fields and expires after the time it would take to refill
@@ -29,6 +29,7 @@ public final class RedisRateLimiter implements RateLimiter {
       local limit = tonumber(ARGV[1])
       local burst = tonumber(ARGV[2])
       local now = tonumber(ARGV[3])
+      local units = tonumber(ARGV[4])
       local state = redis.call('HMGET', KEYS[1], 'tokens', 'at')
       local tokens = tonumber(state[1])
       local at = tonumber(state[2])
@@ -38,9 +39,9 @@ public final class RedisRateLimiter implements RateLimiter {
       end
       tokens = math.min(burst, tokens + (now - at) / 1000.0 * limit)
       local allowed = 0
-      if tokens >= 1 then
+      if tokens >= units then
         allowed = 1
-        tokens = tokens - 1
+        tokens = tokens - units
       end
       redis.call('HSET', KEYS[1], 'tokens', tokens, 'at', now)
       redis.call('PEXPIRE', KEYS[1], math.ceil(burst / limit * 1000) + 1000)
@@ -57,8 +58,8 @@ public final class RedisRateLimiter implements RateLimiter {
    * Creates the limiter.
    *
    * @param connection shared Lettuce connection
-   * @param limit requests per second
-   * @param burst how many requests may arrive at once
+   * @param limit transactions per second
+   * @param burst how many transactions may arrive at once
    * @param timeout bound on the call
    * @param clock clock, in milliseconds
    */
@@ -79,7 +80,10 @@ public final class RedisRateLimiter implements RateLimiter {
   }
 
   @Override
-  public Permit take(UUID apiKeyId) {
+  public Permit take(UUID apiKeyId, int units) {
+    if (units < 1) {
+      throw new IllegalArgumentException("a charge is at least one unit");
+    }
     List<Object> result =
         await(
             redis.eval(
@@ -88,13 +92,16 @@ public final class RedisRateLimiter implements RateLimiter {
                 new String[] {"fs:ratelimit:" + apiKeyId},
                 Integer.toString(limit),
                 Integer.toString(burst),
-                Long.toString(clock.millis())));
+                Long.toString(clock.millis()),
+                Integer.toString(units)));
     boolean allowed = ((Long) result.get(0)) == 1L;
     double tokens = Double.parseDouble((String) result.get(1));
     if (allowed) {
       return new Permit(true, limit, (int) tokens, 0, false);
     }
-    return new Permit(false, limit, 0, (int) Math.max(1, Math.ceil((1 - tokens) / limit)), false);
+    // All or nothing: the script took nothing, so the bucket still holds what it said.
+    return new Permit(
+        false, limit, (int) tokens, (int) Math.max(1, Math.ceil((units - tokens) / limit)), false);
   }
 
   private <T> T await(CompletionStage<T> stage) {

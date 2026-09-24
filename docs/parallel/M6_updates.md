@@ -37,8 +37,8 @@ M6 owns `backend/{ingest,decision,rules,notify}`.
 | `backend/persistence/src/main/resources/db/bootstrap/bootstrap.sql` | a fifth role, `fs_scorer` (no table grants; executes V67's `feature_fallback_*` functions) | the scorer's database fallback reads as its own role (ADR 0062). Bootstrap must be re-run before V67 on an existing database, or V67's `GRANT` fails loudly |
 | `infrastructure/docker/timescaledb/init/20-fraudshield-roles.sh` | sets `fs_scorer`'s password only when `FS_SCORER_DB_PASSWORD` is set | without it the role cannot log in and the fallback stays off (fail closed) |
 | `backend/persistence/src/test/.../TestDatabase.java`, `DatabaseSecurityTest.java` | `fs_scorer` gets a test password; one new test: the role reads no table or view and may execute exactly the five fallback functions | M1's security suite covers the new role |
-| `docker-compose.yml`, `.env.example`, `Makefile` (`up` checks the vault migration), `infrastructure/docker/pii-vault/init/20-vault-roles.sh` (new) | `FS_SCORER_DB_PASSWORD` for `timescaledb`; vault roles and schema on the vault's first start; the one-shot `pii-vault-migrate` service; three new `.env` variables | owner decision 2026-09-23; **flagged for M9**, which owns infrastructure |
-| `docs/benchmarks/hardware.md` | the core profile's budget table (4,096 of 4,096 MiB, `pii-vault-migrate` added) | the table records the compose totals `fs-compose-budget` enforces |
+| `docker-compose.yml`, `.env.example`, `Makefile` (`up` runs the vault migration with `docker compose run --rm`, `e7a5be5`), `infrastructure/docker/pii-vault/init/20-vault-roles.sh` (new) | `FS_SCORER_DB_PASSWORD` for `timescaledb`; vault roles and schema on the vault's first start; the one-shot `pii-vault-migrate` service; three new `.env` variables | owner decision 2026-09-23; **flagged for M9**, which owns infrastructure |
+| `docs/benchmarks/hardware.md` | the core profile's budget table (core back to 3,968 MiB with the migration listed under `full`, `e7a5be5`; it was 4,096 from `0747d6c` to `9f68ec7`) | the table records the compose totals `fs-compose-budget` enforces |
 | `tools/src/fraudshield_tools/licences.py` (again) | the owner's BSD-2-Clause election for `HdrHistogram@2.2.2` | owner decision 2026-09-23 |
 | `docs/adr/0059` | new; M6 counts down from 0059 now its block is full (ADR 0060, revised) | ADR 0059 |
 | `backend/spotbugs-exclude.xml` | one entry: `UWF_UNWRITTEN_FIELD` on the JPA key classes | Hibernate writes an `@IdClass` key's fields reflectively; the alternative is a constructor no code calls |
@@ -189,7 +189,7 @@ Evidence was produced on this branch; statuses are proposals for the reviewer, n
 | Row | Proposed | Evidence |
 |---|---|---|
 | FR-01-01 | IN_PROGRESS — latency criterion NOT MET on this hardware under ADR 0059; carried to M10 as PB-73 | Behaviour: `KafkaSpoolChaosTest`, `IngestApiTest` (SRS "publish to Kafka within 5 ms" is replaced by D-13/D-15: publication after the response, from the spool). Latency: Laptop shapes (`dev-laptop-01`, 2026-09-23, scorer double, load 3.4 → 17.6; **not gate figures**, ADR 0059): client p50/p95 36.7/120.9 ms at 25 req/s, 36.4/106.8 at 50, 88.1/290.9 at 100, 140.5/371.3 at 150, 141.2/392.0 at 200, 234.9/747.7 at 300 req/s (177 errors); server decision p95 42–43 ms at 25–50 req/s. Codespace shapes (2026-09-22, load 23): client p95 42.1 ms at 50 req/s (not reproduced by the reviewer: 325.3 ms), 69.1–108.6 ms at 100–200 req/s. **Reason**: both hosts are shared, with the load generator, the API and three stores on four hardware threads; ADR 0010 accepts gate numbers only from a dedicated machine, and M5's real scorer is not in either figure. **Carry**: PB-73, measured in M10 on the dedicated machine with the real scorer. `m6-complete`, when tagged, names ADR 0059 |
-| FR-01-02 | DONE | `RequestValidatorTest`, `IngestApiTest.everySharedValidationVectorGetsItsStatusAndErrorsOverHttp` (26 vectors); E.1's 429 is implemented (`RateLimitApiTest`), and an oversized chunked body is 413 rather than a truncated 400 |
+| FR-01-02 | DONE | `RequestValidatorTest`, `IngestApiTest.everySharedValidationVectorGetsItsStatusAndErrorsOverHttp` (26 vectors); E.1's 429 is implemented, counted in transactions so a batch costs its item count (ADR 0058; `RateLimitApiTest`, `TransactionBudgetTest`; budget 2,000/s, burst 4,000, ASSUMED), and an oversized chunked body is 413 rather than a truncated 400 |
 | FR-01-03 | (see above) | also `RedisIdempotencyTest` and `RequestValidatorTest`'s field-by-field fingerprint table (findings 1, 2, 4) |
 | FR-01-03 | DONE | `IngestApiTest` (100 identical, TTL 24 h, 409), `ResilienceApiTest` (10,000 duplicates) |
 | FR-01-04 | DONE_WITH_DEVIATION | M6's part: all six channels are accepted and decided as first-class values, USSD without a device (`IngestApiTest.everyChannelIsDecidedIncludingUssdWithoutDevices`). The channel-specific feature engineering is the scorer's since ADR 0033 (M5's feature pipeline and its D-04 structural-NaN tests); `HistoryCalculatorTest`, cited here before, was deleted with Java's feature code in `be470a4` |
@@ -269,7 +269,9 @@ decisions to continue.
   together by mistake, and the history is not rewritten because the branch is pushed.
 - **Rate limiting (E.1)**: a token bucket per API key in Redis, 429 with `Retry-After`, and a
   per-instance bucket when Redis is unavailable, marked `RateLimit-Degraded: true` and counted, so
-  an outage weakens the control instead of removing it.
+  an outage weakens the control instead of removing it. **As first built it counted requests, which
+  M10 found let a batch caller get up to 1,000 times the budget; corrected on 2026-09-24 to count
+  transactions (ADR 0058, section "The rate limit counted requests" below).**
 - **`/api/docs` (FR-01-07)**: the frozen contract served byte for byte from the jar, with a test
   that fails if the served document differs from `contracts/openapi/fraudshield-api.yaml`.
 
@@ -346,7 +348,7 @@ previous fix. Record: `docs/reviews/M6/m6-decision-2026-09-23-third.md`.
 |---|---|
 | MAJOR: the D1 cool-down started on any failure, so one statement cancelled at 100 ms turned the fallback off for every account in the worker for 5 s, and a frequently transacting account could keep it off (reproduced on a real server) | the cool-down starts only on connection-level failures; a cancelled or failed statement fails its own read and keeps the session; a TimescaleDB test at the production bounds; ADR 0062 point 5 corrected, and it now says the 100 ms bound is not yet shown for long histories (M10) (`5f74db3`, fallback branch) |
 | Surviving mutations P2 (unbounded lock wait), P3 (no re-check under the lock), P4 (2 s default socket timeout), J1 (unknown key id permanent for the passphrase provider) | a test for each; all four, and the original defect, now fail a test |
-| Observation: `make up` reported success when `pii-vault-migrate` failed (`--wait` ignores a one-shot's exit code) | `make up` checked the migration with `docker compose wait`, tested only with the two vault services, where the check still saw a running container. **That check was itself wrong** (fourth review, finding 1): replaced, see below |
+| Observation: `make up` reported success when `pii-vault-migrate` failed (the reason given here, "`--wait` ignores a one-shot's exit code", was **wrong**: `--wait` fails on an exited one-shot; see "CI was red") | `make up` checked the migration with `docker compose wait`, tested only with the two vault services, where the check still saw a running container. **That check was itself wrong** (fourth review, finding 1): replaced, see below |
 | Observation: comments in `VaultException` and `EnvelopeConsumer` still called an unknown key permanent | corrected, and pinned by the J1 test |
 
 D2, the compose change, ADRs 0059/0060/0065, the HdrHistogram election and the status rows had no
@@ -422,6 +424,37 @@ round, and none blocks):
   output differed, the script fails closed ("did not run"), never falsely passes. **The first
   `stack.yml` run on the pushed head must be green before tagging**; `gh` is not authenticated on
   this laptop, so this session could not read CI.
+
+### A green local suite and a clean review are not CI (owner, 2026-09-23)
+
+Five independent reviews and every local run (full backend `verify`, all four Python suites, the
+compose tests) passed a change that CI failed on **every push** from `0747d6c` to `9f68ec7`: `make
+up` in the `stack` job and a pinned compose-budget test in `ci`. Each of us ran a subset of the
+stack in which the failing condition could not arise (the vault migration was still running when
+Compose looked at it), and no one read CI on the pushed head until the owner did. **Rule: before
+declaring work done, read CI on the pushed head at job level** — every job's conclusion and
+duration, and for path-filtered workflows whether the real job executed or was skipped. A green
+local suite and a clean review are not substitutes for it.
+
+**For `lab_notebook.md`** (appended by whoever merges M6, after the fix-round entry above):
+
+> **2026-09-23 — Read CI, at job level, on the pushed head.** Five independent reviews and a
+> passing local suite all missed a defect that CI caught on every push, because each of us ran a
+> subset of the stack where the failing condition could not arise: the one-shot vault migration was
+> still running whenever Compose inspected it locally, and had already exited in CI's full stack.
+> Path filters then made later green runs meaningless, because the stack job was skipped. Before
+> declaring work done, read CI on the pushed head at job level and confirm that path-filtered jobs
+> executed; a green local suite and a clean review are not substitutes for it.
+
+### What needs an independent review (owner, 2026-09-23, for the rest of the project)
+
+**Independent review is required for changes to code, schema, contracts, CI or build
+configuration. Documentation-only changes need no review.** This bounds the review loop: it ends
+when the last change to code, schema, contracts, CI or build configuration has had a clean review,
+and documentation written afterwards does not reopen it. The seventh review (of `f73fc57`, whose
+only non-document change is a comment in `docker-compose.yml`) was stopped under this rule. Note
+that a comment in a stack input such as `docker-compose.yml` still triggers the path-filtered
+`stack` job, which is how the executed-stack evidence on `f73fc57` was obtained.
 
 ## Open items this branch did not take
 
@@ -529,7 +562,8 @@ check-run annotations do not), the history shows more:
   Whether the one-shot has exited when Compose looks at it is a race. Every local run and all five
   reviews checked a subset of services where Compose looked while Flyway was still running; I also
   could not reproduce it with Compose v2.29.7, v2.33.1 or v2.39.4 on subsets, so the exact runner
-  behaviour is inferred from CI's annotations, not reproduced. The round-5 `await-oneshot.sh`,
+  behaviour was inferred from CI's annotations at the time; **the sixth review then reproduced it**
+  (below). The round-5 `await-oneshot.sh`,
   which five reviews examined, was never the cause and never the cure: CI failed inside `up --wait`
   before reaching it.
 - **`devcontainer`** failed in post-create's `make ci` on the same budget test.
@@ -543,46 +577,115 @@ v2.39.4: exit 0 with V1–V3 applied; exit 1 with a wrong migrator password; too
 authoritative check is CI's `stack` job, which this push triggers because it changes stack inputs
 (`docker-compose.yml`, `Makefile`, `infrastructure/docker/`).
 
+**Result on `e7a5be5`, read at job level through the Actions API:** `ci` #311 green with every job
+executed (java 420 s; python 464 s with all four pytest steps), `stack` #313 green with its real job
+**executed** (146 s: `make up` including the vault migration, the smoke test, `make seed-demo`),
+`devcontainer` #314 green (1,104 s: post-create `make ci` and the smoke test inside). The commit
+that records this section touches `docker-compose.yml` (a documented comment) so that the stack job
+executes on it too; its runs are checked the same way before M6 is called ready.
+
+**`m6/featurestore-fallback` (`d71222e`) will stay red in CI for a reason that is M5's**: locally,
+run as CI runs it, tools 198, contracts 490, dataset 143 and ml 558 pass and one ml test fails,
+`tests/serving/test_registry.py::test_publish_and_hot_swap_against_the_mlflow_the_deployment_runs`
+(MLflow: "Registered model alias production not found"). It fails identically on a clean
+`origin/m5/scoring`, whose own `ci` #282 fails in the same step. Recorded for the M5 agent in
+`docs/parallel/M5_updates.md` on `m5/scoring` (`c59d543`, appended only); not fixed from an M6
+branch. The fallback branch merges after M5, so M5's fix reaches it then.
+
 **M6 is not ready** until `ci` is green and a `stack` job has **executed** (not skipped) on the same
 commit (owner, 2026-09-23). The rows of the fix-round and fifth-review sections above that describe
 `await-oneshot.sh` are superseded by this section.
 
-## Resume here (final state, 2026-09-23: review loop closed)
+### Sixth independent review (fresh reviewer, 2026-09-23): the review of `e7a5be5`
 
-**Stopped as instructed: nothing merged, nothing tagged.** The review loop ended with the fifth,
-fresh review: **APPROVED, 0 BLOCKER, 0 MAJOR** — but CI was red (section above), so M6 is **not**
-ready until `ci` is green and a `stack` job has executed on the same commit.
+Verdict **CHANGES_REQUIRED: 0 BLOCKER, 1 MAJOR, in documentation only**; the code of `e7a5be5` is
+correct. Record: `docs/reviews/M6/m6-decision-2026-09-23-sixth.md`.
 
-**Branches** (all pushed):
+- **The cause is reproduced, no longer inferred.** With `0747d6c`'s `pii-vault` and
+  `pii-vault-migrate` and a stand-in holding Compose's start phase open (as `mlflow` does in the
+  real stack, waiting for `timescaledb` and `object-store-init`), `up -d --wait` fails with
+  `container …-pii-vault-migrate-1 exited (0)` on Compose 5.5.1, 2.29.7 and 2.33.1; it passed
+  only when Flyway was still running at the check. A dependent with `service_completed_successfully`
+  makes it pass, confirming the protection `object-store-init` relies on.
+- **No other one-shot has the race on `m6/decision`.** The only other one-shot, `object-store-init`,
+  is protected by `mlflow` in every profile that starts it; `pii-vault-migrate` is `full`-only and
+  nothing runs `--profile full up --wait` here. Under `--profile full up -d --wait` the race
+  returns (reproduced): a latent trap, not a current defect.
+- **The new `make up` path holds** (5.5.1 and 2.29.7): first run exit 0 with V1–V3 applied, second
+  run "up to date", after `down` on the existing volume, and exit 1 with a wrong migrator password.
+- **MAJOR (docs): the M9 carry described the removed design** and said `up --wait` ignores a
+  one-shot's exit code, while `origin/m9/infra`'s `security.yml` already runs
+  `--profile full up -d --wait fraudshield-api`. **Fixed:** `M9_updates.md` section 8.4 on
+  `m9/infra` (`e20c1dd`, appended) states the current design, that `--wait` fails on an exited
+  one-shot, the rule that any service needing the vault migrated depends on `pii-vault-migrate`
+  with `service_completed_successfully` in the same profile, and the `security.yml` trap as an
+  acceptance item; the two stale rows of this file's "Files touched" table and the wrong claim
+  above are corrected.
 
-| Branch | Head | Merge order |
-|---|---|---|
-| `m6/decision` | the commit that adds this section (code last changed in `9f68ec7`) | after M5 |
-| `m6/featurestore-fallback` | the merge of this section (code last changed in `b89cc1f`, merged as `db250d8`) | after M5 and M6 |
+## The rate limit counted requests; it now counts transactions (M10's finding, 2026-09-24)
 
-**Verification of the code as approved:** the frozen-tree full `verify` of `8a83da8c` (every module
-green but one FR-01-06 timing failure, 30.20 s against 30 s at load ~7, green on re-run: now
-IN_PROGRESS and carried to M10 as PB-74); since then round 5 changed the `Makefile`, a new script and
-two notify test classes (`notify` `verify`: 81 tests passing), and fallback tests (15 passing). The
-fifth reviewer re-ran the round's tests and mutations.
+M10 found, while specifying the rate limit for its campaign (ADR 0100, `m10/verification`), that
+the control did not hold as built: the budget was counted in requests and the batch endpoint takes
+up to 1,000 transactions per request, so a batch caller got up to 1,000 times the throughput for
+the same budget. The owner decided (ADR 0058): charge the budget in transactions, once on
+acceptance, all or nothing, and replace the 200 per second implementation default with ADR 0100's
+2,000 per second, burst 4,000, per key, marked **ASSUMED**.
 
-**Reviews on 2026-09-23:** five, with five fix rounds between the first and the last; four of those
-rounds introduced a new defect in the code they changed (the table above, and the lab-notebook entry
-for whoever merges).
+- `RateLimiter.take(key, units)`; the Redis script and the per-instance fallback charge `units`
+  all or nothing, and a refusal reports what remains and how long until the charge would fit.
+- The filter charges one unit per request except the batch submission, which the controller
+  charges by its item count after parsing and before the job is recorded; a refused or invalid
+  batch envelope costs one unit.
+- `fraudshield.rate-limit.transactions-per-second` (renamed from `requests-per-second`) and
+  `burst`; the application refuses a burst below 1,000, the largest batch.
+- Tests: `TransactionBudgetTest` (both limiters) and
+  `RateLimitApiTest.batchCallersCannotExceedTheTransactionBudget`, with the API test rewritten to
+  spend a key's budget with one full batch.
+- Verified: `TransactionBudgetTest` 6/6, `RateLimitApiTest` 5/5 (after two fixes to the test's own
+  timing: the probes are sent concurrently, and the refill is counted from the batch's send, since
+  the server charges before it answers); a mutation that charges a batch as one request lets 2,400
+  transactions through against a bound of 1,022 and fails the new test. The ingest module's
+  `verify` passed 90 of 91: `IngestApiTest.thousandTransactionBatchesAreDecidedWithinThirtySeconds`
+  (FR-01-06) timed out at load 12 and again alone at load 15, while the pre-change tree passed it
+  at load 11; a paired run then passed both (this tree at load 9.5, the pre-change tree at load
+  13). Load, not the change: the same load-sensitivity already carried to M10 as PB-74. The load
+  came from another project's local Kubernetes cluster started on this laptop meanwhile.
+- This is a code change, so it needs an independent review before M6 merges (owner's rule). M6 is
+  **not** ready again until that review is clean and CI (with the stack job executed) is green on
+  the head that carries it.
 
-**`m6-complete`, per the owner's decision:** tag with the latency criterion NOT MET under ADR 0059,
-**once M5 has merged and the review is clean** — the review is now clean; M5 had not merged as of
-this commit (`origin/main` = `72e7790`). Preconditions at tagging: M5 merged; M6 merged after it
-(D.3 tags `main`); the first CI `stack.yml` and `ci.yml` runs on the merged head green (O4); the tag
-annotation names ADR 0059 and the M10 carries PB-73 and PB-74.
+## Resume here (final state, 2026-09-23, after CI)
 
-**Carried elsewhere:** M9 — `docs/parallel/M9_updates.md` section 8 on `m9/infra` (`6a7af4f`):
-compose into manifests, the `KmsClient` binding with `KmsClientContract`, the rotation runbook; plus
-O2. M10 — PB-73 (latency) and PB-74 (FR-01-06), proposed in the gate section above.
+**Stopped as instructed: nothing merged, nothing tagged.**
 
-**Needs the owner:** confirm CI green on the pushed heads (this laptop's `gh` is not authenticated);
-merge M5, then M6, then the fallback branch; tag.
+| Branch | State |
+|---|---|
+| `m6/decision` | **ready; waits on M5's merge.** `ci` #318, `stack` #320 (executed: 160 s, `make up`, smoke, seed-demo) and `devcontainer` #321 (executed: 1,112 s) green on `f73fc57`, read at job level. The commit after it adds only the review-scope note to this file (documentation, no review needed; its `stack` job is skipped by the path filter, as it should be for a documentation change) |
+| `m6/featurestore-fallback` | `d71222e`; red in CI only for M5's failing MLflow test (section above), which blocks it until M5 fixes it |
 
-**Next steps for a resumed session:** after M5 merges, merge `main` into `m6/decision`, re-run the
-full `verify`, merge; then merge `main` into `m6/featurestore-fallback`, re-run
-`uv run pytest ml/tests/featurestore ml/tests/serving`, merge; then tag as above. Rebase nothing.
+**Evidence split, for the tag annotation** (owner, 2026-09-23). Cite each commit for what it carries:
+
+| Commit | What it evidences |
+|---|---|
+| `f73fc57` | the last change to code, schema, CI or build configuration on `m6/decision` (a comment in the stack input `docker-compose.yml`), and the **executed-stack evidence**: `ci` #318 green with every job executed, `stack` #320 with its real job executed (160 s: `make up` including the vault migration, the smoke test, `make seed-demo`), `devcontainer` #321 executed (1,112 s: post-create `make ci` and the smoke test inside); read at job level through the Actions API |
+| `43143b9` and later documentation-only commits | documentation on top (`docs/parallel/M6_updates.md` only; `git diff --stat f73fc57 43143b9` lists that one file). `ci` #320 green with every job executed; `stack` #322 and `devcontainer` #323 green with their real jobs **skipped** by the path filter, as they should be for a documentation change |
+
+After the merge to `main`, the tag's own evidence is CI on the merged head: `ci` green and a `stack`
+job executed there (owner's instruction); `f73fc57` remains the branch-side evidence.
+
+**Reviews:** five fresh reviews; the fifth APPROVED. After it, CI showed that a change none of the
+reviewers could run end to end (the full `core` stack under CI's Compose) had broken `make up` and a
+pinned budget test since `0747d6c`; fixed in `e7a5be5` without a further review round, verified by
+CI itself at job level. The owner may want a review of `e7a5be5` (a compose/Makefile change only).
+
+**Tag `m6-complete`** (owner decision): after M5 merges and M6 merges after it, with the latency
+criterion NOT MET under ADR 0059 and the carries PB-73 and PB-74 named in the annotation, once `ci`
+and an executed `stack` job are green on the merged head.
+
+**Carried:** M9 — `M9_updates.md` section 8 (`6a7af4f`), corrected by section 8.4 (`e20c1dd`), plus O2 (`diagnose-stack.sh` should allow a
+finished `pii-vault-migrate`; with `run --rm` the container no longer lingers, so O2 is moot). M10 —
+PB-73, PB-74. M5 — the MLflow test (`c59d543`).
+
+**Next steps for a resumed session:** read CI for the head of `m6/decision` at job level (the
+stack job must have executed); after M5 merges, merge `main` into both M6 branches, re-run the full
+`verify` and the Python suites, confirm CI (stack executed) on each merged head, merge, tag.
