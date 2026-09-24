@@ -98,22 +98,40 @@ public final class EnvelopeConsumer implements AutoCloseable {
   }
 
   /**
-   * The wait budget's parameters (W-b), both ASSUMED.
+   * The wait budget's parameters (W-b), the bound and rate ASSUMED, and how often a long wait is
+   * logged (W-d).
    *
    * @param bound the most waiting a partition's budget holds
    * @param drainRate how much of each draining second it gives back
+   * @param warnAfter how long a partition waits before the wait is logged at WARN, and how often
    */
-  public record ParentWait(Duration bound, double drainRate) {
+  public record ParentWait(Duration bound, double drainRate, Duration warnAfter) {
 
-    /** Ten minutes, drained in sixty. */
+    /** Ten minutes, drained in sixty; a WARN after a minute of waiting, then every minute. */
     public static final ParentWait DEFAULT = new ParentWait(Duration.ofMinutes(10), 1.0 / 6);
 
     /** Validates the parameters. */
     public ParentWait {
       Objects.requireNonNull(bound, "bound");
-      if (bound.isNegative() || bound.isZero() || !(drainRate > 0 && drainRate <= 1)) {
-        throw new IllegalArgumentException("the bound must be positive and the rate in (0, 1]");
+      Objects.requireNonNull(warnAfter, "warnAfter");
+      if (bound.isNegative()
+          || bound.isZero()
+          || warnAfter.isNegative()
+          || warnAfter.isZero()
+          || !(drainRate > 0 && drainRate <= 1)) {
+        throw new IllegalArgumentException(
+            "the bound and WARN interval must be positive and the rate in (0, 1]");
       }
+    }
+
+    /**
+     * A budget with the default one-minute WARN.
+     *
+     * @param bound the most waiting a partition's budget holds
+     * @param drainRate how much of each draining second it gives back
+     */
+    public ParentWait(Duration bound, double drainRate) {
+      this(bound, drainRate, WARN_AFTER);
     }
   }
 
@@ -157,6 +175,7 @@ public final class EnvelopeConsumer implements AutoCloseable {
     long waitingSinceNanos = -1;
     long lastWaitingNanos = -1;
     long lastWarnNanos = -1;
+    String missing = "";
 
     PartitionState(WaitBudget budget) {
       this.budget = budget;
@@ -447,17 +466,18 @@ public final class EnvelopeConsumer implements AutoCloseable {
       state.waitingSinceNanos = now;
       return;
     }
-    long every = WARN_AFTER.toNanos();
+    long every = parentWait.warnAfter().toNanos();
     if (now - state.waitingSinceNanos >= every
         && (state.lastWarnNanos < 0 || now - state.lastWarnNanos >= every)) {
       state.lastWarnNanos = now;
       waitWarnings.incrementAndGet();
       LOG.warn(
-          "{} has had a record waiting for its parent in PostgreSQL for {} s (offset {}, spent"
-              + " {} s of its budget); see docs/architecture/decision-fact-ordering.md",
+          "{} has had a record waiting for its parent in PostgreSQL for {} s (offset {}: {};"
+              + " spent {} s of its budget); see docs/architecture/decision-fact-ordering.md",
           partition,
           Duration.ofNanos(now - state.waitingSinceNanos).toSeconds(),
           record.offset(),
+          state.missing,
           state.budget.spent(now).toSeconds());
     }
   }
@@ -479,7 +499,11 @@ public final class EnvelopeConsumer implements AutoCloseable {
       handler.handle(new Envelope(institution, payload, headers));
       return Outcome.HANDLED;
     } catch (NotYetRecordedException notYet) {
+      state.missing = String.valueOf(notYet.getMessage());
       return parentMissing(partition, state, record, headers, notYet);
+    } catch (MalformedPayloadException malformed) {
+      // Well-formed envelope, unreadable payload: no retry changes it.
+      return deadLetter(record, "malformed_envelope", malformed);
     } catch (NotTheKeptDecisionException notKept) {
       return deadLetter(record, "not_the_kept_decision", notKept);
     } catch (SQLException e) {
@@ -678,6 +702,21 @@ public final class EnvelopeConsumer implements AutoCloseable {
             new PartitionState(
                 new WaitBudget(parentWait.bound(), parentWait.drainRate(), resumed.spent(), now)));
       }
+    }
+  }
+
+  /**
+   * Stops consuming as a crashed process would: the thread ends, but the group is not left and
+   * nothing is revoked or committed, so the partitions stay with this member until its session
+   * times out. For tests of W-e; {@link #close()} still releases the clients afterwards.
+   */
+  void crash() {
+    running = false;
+    consumer.wakeup();
+    try {
+      thread.join(Duration.ofSeconds(10).toMillis());
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
     }
   }
 

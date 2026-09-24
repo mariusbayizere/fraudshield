@@ -21,6 +21,7 @@ import io.github.mariusbayizere.fraudshield.decision.testing.Fixtures;
 import io.github.mariusbayizere.fraudshield.decision.testing.InMemoryPorts;
 import io.github.mariusbayizere.fraudshield.decision.testing.MutableClock;
 import io.github.mariusbayizere.fraudshield.decision.testing.TestDatabase;
+import io.github.mariusbayizere.fraudshield.notify.kafka.MalformedPayloadException;
 import io.github.mariusbayizere.fraudshield.notify.kafka.NotTheKeptDecisionException;
 import io.github.mariusbayizere.fraudshield.notify.kafka.NotYetRecordedException;
 import io.github.mariusbayizere.fraudshield.notify.sms.ContactDirectory;
@@ -379,6 +380,7 @@ class SmsOrderingTest {
     }
     assertThat(send(intentOf(kept))).isEqualTo(CustomerSmsSender.Outcome.RESOLVED);
     assertThat(sent).isEmpty();
+    assertThat(sender.resolvedBeforeSend()).as("S2r is counted").isEqualTo(1);
   }
 
   @Test
@@ -437,6 +439,67 @@ class SmsOrderingTest {
     release.countDown();
     writer.join(Duration.ofSeconds(30).toMillis());
     assertThat(send(intent)).isEqualTo(CustomerSmsSender.Outcome.SENT);
+  }
+
+  @Test
+  void theClassificationIsOneStatementOnOneConnection() throws Exception {
+    // I9, structurally (the implementation review of bd48557): classifying an intent that must
+    // not be sent opens one connection and prepares one statement besides the tenant's, so the
+    // facts it reads come from one snapshot. Splitting the classification would fail this.
+    Transaction t =
+        Fixtures.transaction(UUID.randomUUID(), Fixtures.ACCOUNT, "15000", Channel.CARD);
+    byte[] f = fingerprint();
+    persist(decide(t, f, 0.1));
+    KafkaMessage intent = intentOf(decide(t, f, 0.9));
+    List<String> statements = new CopyOnWriteArrayList<>();
+    java.util.concurrent.atomic.AtomicInteger connections =
+        new java.util.concurrent.atomic.AtomicInteger();
+    CustomerSmsSender counted = sender(recording(db.dataSource("fs_app"), connections, statements));
+    assertThatThrownBy(() -> send(counted, payload(intent), intent))
+        .isInstanceOf(NotTheKeptDecisionException.class);
+    assertThat(connections.get()).isEqualTo(1);
+    assertThat(statements).hasSize(2);
+    assertThat(statements.getFirst()).contains("set_config");
+    assertThat(statements.getLast())
+        .contains("auto_block_events", "customer_notifications", "decision_states");
+  }
+
+  @Test
+  void anIntentWithoutReadableIdsIsMalformedNotRetriedForEver() {
+    // The implementation review of bd48557: a payload the sender cannot read is dead-lettered.
+    ObjectNode broken = JSON.createObjectNode();
+    broken.put("notification_id", "not-a-uuid");
+    assertThatThrownBy(() -> sender.send(INSTITUTION, broken))
+        .isInstanceOf(MalformedPayloadException.class);
+    assertThat(sent).isEmpty();
+  }
+
+  /** A data source that records the connections it lends and the statements they prepare. */
+  private static DataSource recording(
+      DataSource target,
+      java.util.concurrent.atomic.AtomicInteger connections,
+      List<String> statements) {
+    return (DataSource)
+        Proxy.newProxyInstance(
+            SmsOrderingTest.class.getClassLoader(),
+            new Class<?>[] {DataSource.class},
+            (proxy, method, args) -> {
+              Object result = invoke(target, method, args);
+              if (!method.getName().equals("getConnection")) {
+                return result;
+              }
+              connections.incrementAndGet();
+              Connection connection = (Connection) result;
+              return Proxy.newProxyInstance(
+                  SmsOrderingTest.class.getClassLoader(),
+                  new Class<?>[] {Connection.class},
+                  (p, m, a) -> {
+                    if (m.getName().equals("prepareStatement")) {
+                      statements.add((String) a[0]);
+                    }
+                    return invoke(connection, m, a);
+                  });
+            });
   }
 
   /** A data source whose connections stop at commit until released. */

@@ -914,7 +914,7 @@ over the four fix rounds before.
 - `IngestService` answers 503 when the idempotency claim cannot be made.
 - ADR 0056 records the decision. ADR 0057 is superseded. ADR 0064 point 5 is amended.
 
-**Tests**, one or more per invariant I1 to I16:
+**Tests** (corrected after the implementation review: the contract's section 8 now maps each invariant to its test, and names the two properties that rest on review only):
 
 - `SmsOrderingTest` (the decision table against the real `PostgresSink` and `KafkaMessages`,
   including the owner's ordering in both orders);
@@ -936,3 +936,20 @@ A transactional outbox is recommended for a later milestone.
 
 This is a code change: it needs an independent review until clean, then CI with `ci`, `stack` and
 `devcontainer` executed and green on one commit, before `main` moves and `m6-complete` is tagged.
+
+**Implementation review of `bd48557`**
+(`docs/reviews/M6/m6-decision-2026-09-24-implementation-1.md`):
+
+- The runtime code was found **clean**. No path was found to an indefinite stall, a send without B,
+  or a second send.
+- The MAJOR was a false claim in this file and in ADR 0056: that every invariant was tested. The
+  missing tests were added:
+  - the grace re-read, including through a transient failure;
+  - the WARN under intermittent S5;
+  - a partition moved while paused;
+  - a crash with no revocation;
+  - a structural one-statement check;
+  - the header on the wire;
+  - a malformed payload dead-lettered rather than retried for ever.
+- Section 8 of the contract maps each invariant to its test.
+- The fix is a code change, so it gets its own review.

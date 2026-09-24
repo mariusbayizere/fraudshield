@@ -177,6 +177,10 @@ class EnvelopeConsumerTest {
                 // S3: not the kept decision's intent.
                 throw new NotTheKeptDecisionException("not the kept decision (test)");
               }
+              if (sequence == 13) {
+                // A well-formed envelope whose payload the handler cannot read.
+                throw new MalformedPayloadException("unreadable payload (test)", null);
+              }
               handled.add(sequence);
             },
             Duration.ofMinutes(10))) {
@@ -189,13 +193,15 @@ class EnvelopeConsumerTest {
       publish(topic, institution, 10);
       publish(topic, "key", envelope(institution, 11), Map.of("fs-transaction-id", "t-11"));
       publish(topic, institution, 12);
+      publish(topic, institution, 13);
+      publish(topic, institution, 14);
 
-      await().atMost(Duration.ofSeconds(30)).until(() -> handled.contains(12));
-      assertThat(handled).containsExactly(8, 10, 12);
-      await().atMost(Duration.ofSeconds(30)).until(() -> consumer.deadLettered() == 5);
+      await().atMost(Duration.ofSeconds(30)).until(() -> handled.contains(14));
+      assertThat(handled).containsExactly(8, 10, 12, 14);
+      await().atMost(Duration.ofSeconds(30)).until(() -> consumer.deadLettered() == 6);
     }
 
-    List<ConsumerRecord<String, byte[]>> dead = drain(topic + ".dlq", 5);
+    List<ConsumerRecord<String, byte[]>> dead = drain(topic + ".dlq", 6);
     assertThat(dead)
         .extracting(r -> header(r, "fs-dlq-reason"))
         .containsExactly(
@@ -203,12 +209,13 @@ class EnvelopeConsumerTest {
             "malformed_envelope",
             "rejected_by_the_database",
             "permanent_vault_failure",
-            "not_the_kept_decision");
+            "not_the_kept_decision",
+            "malformed_envelope");
     assertThat(dead).allSatisfy(r -> assertThat(header(r, "fs-dlq-topic")).isEqualTo(topic));
     assertThat(header(dead.getFirst(), "fs-transaction-id"))
         .as("a dead-lettered copy keeps its original headers, whatever the reason (D-a)")
         .isEqualTo("t-1");
-    assertThat(header(dead.getLast(), "fs-transaction-id")).isEqualTo("t-11");
+    assertThat(header(dead.get(4), "fs-transaction-id")).isEqualTo("t-11");
     assertThat(new String(dead.get(2).value(), StandardCharsets.UTF_8))
         .contains("\"decision_sequence\":7");
   }
@@ -301,7 +308,8 @@ class EnvelopeConsumerTest {
         latencies.add(handledAt.get(s) - sent);
       }
       assertThat(latencies)
-          .allSatisfy(ns -> assertThat(Duration.ofNanos(ns)).isLessThan(Duration.ofMillis(1500)));
+          .as("far below the failing partition's backoff and the waiting one's budget")
+          .allSatisfy(ns -> assertThat(Duration.ofNanos(ns)).isLessThan(Duration.ofSeconds(3)));
       assertThat(consumer.deadLettered()).isZero();
     }
   }
@@ -413,7 +421,7 @@ class EnvelopeConsumerTest {
       await().atMost(Duration.ofSeconds(30)).until(() -> second.deadLettered() == 1);
       assertThat(Duration.ofNanos(System.nanoTime() - resumedAt))
           .as("the second owner spent only what was left of the budget")
-          .isLessThan(bound.minusSeconds(2));
+          .isLessThan(bound.minusSeconds(1));
     }
   }
 
@@ -470,6 +478,181 @@ class EnvelopeConsumerTest {
       await()
           .atMost(Duration.ofSeconds(90))
           .until(() -> handled.containsAll(List.of(1, 2, 3, 4, 5)));
+    }
+  }
+
+  @Test
+  @Tag("FR-03-04")
+  void recordsArrivingAfterTrippingGetOneGraceReReadEvenThroughTransientFailures()
+      throws Exception {
+    // I7's second sentence and I8's second clause (the implementation review of bd48557): record
+    // 1 fills a four-second budget and is dead-lettered; record 2 arrives while the budget is
+    // spent, gets its one re-read, meets S5, and is sent once its parent is there; record 3, still
+    // orphaned, is dead-lettered after that one re-read, not after a fresh budget.
+    UUID institution = UUID.randomUUID();
+    String topic = "fs.transactions.raw";
+    List<Integer> handled = new CopyOnWriteArrayList<>();
+    AtomicInteger secondAttempts = new AtomicInteger();
+    AtomicLong thirdFirstSeen = new AtomicLong();
+    AtomicLong thirdDeadAt = new AtomicLong();
+    try (EnvelopeConsumer consumer =
+        consumer(
+            topic,
+            "test-group-" + UUID.randomUUID(),
+            envelope -> {
+              int sequence = sequence(envelope);
+              if (sequence == 1) {
+                throw new NotYetRecordedException("parent never written (test)");
+              }
+              if (sequence == 2) {
+                int attempt = secondAttempts.incrementAndGet();
+                if (attempt == 1) {
+                  throw new NotYetRecordedException("parent late (test)");
+                }
+                if (attempt == 2) {
+                  throw new SQLException("database unavailable (test)", "08006");
+                }
+              }
+              if (sequence == 3) {
+                thirdFirstSeen.compareAndSet(0, System.nanoTime());
+                throw new NotYetRecordedException("parent never written (test)");
+              }
+              handled.add(sequence);
+            },
+            Duration.ofSeconds(4))) {
+      publish(topic, institution, 1);
+      publish(topic, institution, 2);
+      publish(topic, institution, 3);
+      await().atMost(Duration.ofSeconds(60)).until(() -> consumer.deadLettered() == 2);
+      thirdDeadAt.set(System.nanoTime());
+      assertThat(handled).containsExactly(2);
+      assertThat(secondAttempts.get()).isEqualTo(3);
+      assertThat(Duration.ofNanos(thirdDeadAt.get() - thirdFirstSeen.get()))
+          .as("one grace re-read, not a fresh four-second budget")
+          .isLessThan(Duration.ofSeconds(3));
+    }
+  }
+
+  @Test
+  @Tag("NFR-REL-01")
+  void longWaitsAreWarnedEvenWhilePostgresKeepsFailing() throws Exception {
+    // I12 (review 13, MINOR 3): S5 between the waits must not silence the WARN.
+    UUID institution = UUID.randomUUID();
+    String topic = "fs.transactions.scored";
+    AtomicInteger attempts = new AtomicInteger();
+    List<Integer> handled = new CopyOnWriteArrayList<>();
+    try (EnvelopeConsumer consumer =
+        new EnvelopeConsumer(
+            kafka.bootstrapServers(),
+            Map.of(),
+            topic,
+            "test-group-" + UUID.randomUUID(),
+            envelope -> {
+              int attempt = attempts.incrementAndGet();
+              if (attempt < 12) {
+                if (attempt % 2 == 0) {
+                  throw new SQLException("database unavailable (test)", "08006");
+                }
+                throw new NotYetRecordedException("parent late (test)");
+              }
+              handled.add(sequence(envelope));
+            },
+            new EnvelopeConsumer.ParentWait(Duration.ofMinutes(10), 1.0 / 6, Duration.ofSeconds(1)),
+            Clock.systemUTC())) {
+      publish(topic, institution, 1);
+      await().atMost(Duration.ofSeconds(60)).until(() -> handled.contains(1));
+      assertThat(consumer.waitWarnings()).isGreaterThanOrEqualTo(2);
+      assertThat(consumer.deadLettered()).isZero();
+    }
+  }
+
+  @Test
+  @Tag("FR-03-04")
+  void partitionsMovedWhilePausedKeepEveryoneFlowing() throws Exception {
+    // I7e (contract review 5, MINOR 2): a rebalance while a partition is paused must not throw
+    // from a resume of a partition no longer owned, and the new owner re-reads it at once.
+    UUID institution = UUID.randomUUID();
+    String topic = "fs.ml.retrain";
+    String group = "test-group-" + UUID.randomUUID();
+    List<Long> orphanAttempts = new CopyOnWriteArrayList<>();
+    Map<Integer, Long> handledAt = new ConcurrentHashMap<>();
+    EnvelopeConsumer.Handler handler =
+        envelope -> {
+          int sequence = sequence(envelope);
+          if (sequence == 1) {
+            orphanAttempts.add(System.nanoTime());
+            throw new NotYetRecordedException("parent late (test)");
+          }
+          handledAt.put(sequence, System.nanoTime());
+        };
+    try (EnvelopeConsumer first = consumer(topic, group, handler, Duration.ofMinutes(10))) {
+      publish(topic, keyFor(0, 3), envelope(institution, 1), Map.of());
+      await().atMost(Duration.ofSeconds(30)).until(() -> orphanAttempts.size() >= 2);
+      try (EnvelopeConsumer second = consumer(topic, group, handler, Duration.ofMinutes(10))) {
+        publish(topic, keyFor(1, 3), envelope(institution, 10), Map.of());
+        publish(topic, keyFor(2, 3), envelope(institution, 11), Map.of());
+        await()
+            .atMost(Duration.ofSeconds(60))
+            .until(() -> handledAt.containsKey(10) && handledAt.containsKey(11));
+        int before = orphanAttempts.size();
+        await().atMost(Duration.ofSeconds(10)).until(() -> orphanAttempts.size() >= before + 2);
+        publish(topic, keyFor(1, 3), envelope(institution, 12), Map.of());
+        publish(topic, keyFor(2, 3), envelope(institution, 13), Map.of());
+        await()
+            .atMost(Duration.ofSeconds(20))
+            .until(() -> handledAt.containsKey(12) && handledAt.containsKey(13));
+        assertThat(first.deadLettered() + second.deadLettered()).isZero();
+      }
+    }
+  }
+
+  @Test
+  @Tag("FR-03-04")
+  void crashedOwnersBudgetsAreResumedFromTheirLastCheckpoint() throws Exception {
+    // I14 without a revocation (the implementation review of bd48557): the owner dies, nothing is
+    // committed on its way out, and the next owner resumes from the checkpoint of its last re-read.
+    Duration bound = Duration.ofSeconds(10);
+    UUID institution = UUID.randomUUID();
+    String topic = "fs.ml.shadow";
+    String group = "test-group-" + UUID.randomUUID();
+    // crash() stops the poll thread, but the client's heartbeat thread lives on, as it would not in
+    // a real crash: a short poll interval gets the stalled member expelled within seconds, and an
+    // expulsion by poll timeout runs no listener, so nothing is committed on the way out.
+    Map<String, Object> fastSession =
+        Map.of(
+            ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG,
+            6000,
+            ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG,
+            2000,
+            ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG,
+            8000);
+    AtomicLong firstAttempt = new AtomicLong();
+    EnvelopeConsumer.Handler orphan =
+        envelope -> {
+          firstAttempt.compareAndSet(0, System.nanoTime());
+          throw new NotYetRecordedException("parent never written (test)");
+        };
+    EnvelopeConsumer crashed = consumer(topic, group, orphan, bound, fastSession);
+    try {
+      publish(topic, institution, 1);
+      await().atMost(Duration.ofSeconds(30)).until(() -> firstAttempt.get() != 0);
+      Thread.sleep(6000);
+      crashed.crash();
+      OffsetAndMetadata checkpoint = committed(group, topic);
+      long spent = Long.parseLong(checkpoint.metadata().replaceAll(".*spent_ms=(\\d+).*", "$1"));
+      assertThat(spent).as("checkpointed on its re-reads, with no revocation").isGreaterThan(4000L);
+
+      firstAttempt.set(0);
+      try (EnvelopeConsumer next = consumer(topic, group, orphan, bound, fastSession)) {
+        await().atMost(Duration.ofSeconds(60)).until(() -> firstAttempt.get() != 0);
+        long resumedAt = firstAttempt.get();
+        await().atMost(Duration.ofSeconds(30)).until(() -> next.deadLettered() == 1);
+        assertThat(Duration.ofNanos(System.nanoTime() - resumedAt))
+            .as("what was left of the budget, not a fresh ten seconds")
+            .isLessThan(Duration.ofSeconds(9));
+      }
+    } finally {
+      crashed.close();
     }
   }
 

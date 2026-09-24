@@ -46,13 +46,10 @@ code implements it. In short:
 
 ## Consequences
 
-- The invariants I1 to I16 of the contract are tested:
-  - `SmsOrderingTest`: the decision table against the real writer and renderer, including the
-    owner's "first decision not a block, second one was", in both orders;
-  - `WaitBudgetTest`: the budget on an explicit clock;
-  - `EnvelopeConsumerTest`: the consumer on Kafka, covering rebalance, replay, an expelled member,
-    and the other partitions flowing;
-  - `ResilienceApiTest`: the 503.
+- Each invariant is mapped to the test that proves it in the contract's section 8. Two
+  properties rest on review only: `seekBack` after a commit failure with membership kept, and a
+  lost partition committing nothing. The first version of this ADR said every invariant was tested;
+  the implementation review of `bd48557` showed it was not, and the tests were added.
 - **Carried to M9:**
   - a replay tool for `PostgresSink`'s dead-letter files (the first step of recovering a lost
     parent);

@@ -31,9 +31,9 @@ import tools.jackson.databind.ObjectMapper;
 
 /**
  * Replays dead-lettered records to the topic they came from (docs/architecture/decision-fact-
- * ordering.md, D-c). Operators run it from the ingest image once the cause is gone, for example
- * {@code parent_not_recorded} once {@code fs_spool_lag{consumer="postgres"}} is zero everywhere
- * (D-c2).
+ * ordering.md, D-c). Operators run it from a build (D-c; packaging is carried to M9) once the cause
+ * is gone, for example {@code parent_not_recorded} once {@code fs_spool_lag{consumer="postgres"}}
+ * is zero everywhere (D-c2).
  *
  * <p>It reads {@code <topic>.dlq} with no consumer group, from a time to the end offsets it finds
  * when it starts, so it commits nothing: records of reasons it was not asked to replay stay for a
@@ -160,7 +160,11 @@ public final class DeadLetterReplay {
         int replayed = 0;
         for (Header h : record.headers()) {
           if (h.key().equals(EnvelopeConsumer.REPLAYED_HEADER)) {
-            replayed = Integer.parseInt(new String(h.value(), StandardCharsets.UTF_8).trim());
+            try {
+              replayed = Integer.parseInt(new String(h.value(), StandardCharsets.UTF_8).trim());
+            } catch (NumberFormatException unreadable) {
+              replayed = 0;
+            }
           } else if (!h.key().startsWith(EnvelopeConsumer.DLQ_HEADER_PREFIX)) {
             again.headers().add(h.key(), h.value());
           }

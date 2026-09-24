@@ -2,6 +2,7 @@ package io.github.mariusbayizere.fraudshield.notify.sms;
 
 import io.github.mariusbayizere.fraudshield.common.money.CurrencyCode;
 import io.github.mariusbayizere.fraudshield.common.money.Money;
+import io.github.mariusbayizere.fraudshield.notify.kafka.MalformedPayloadException;
 import io.github.mariusbayizere.fraudshield.notify.kafka.NotTheKeptDecisionException;
 import io.github.mariusbayizere.fraudshield.notify.kafka.NotYetRecordedException;
 import io.github.mariusbayizere.fraudshield.notify.verification.VerificationService;
@@ -91,6 +92,8 @@ public final class CustomerSmsSender {
     RESOLVED
   }
 
+  private final java.util.concurrent.atomic.AtomicLong resolvedBeforeSend =
+      new java.util.concurrent.atomic.AtomicLong();
   private final DataSource dataSource;
   private final ContactDirectory contacts;
   private final InstitutionMessaging institutions;
@@ -128,14 +131,21 @@ public final class CustomerSmsSender {
   }
 
   /**
-   * Handles one intent.
+   * Intents not sent because their block was resolved first (S2r), since start-up.
+   *
+   * @return the count
+   */
+  public long resolvedBeforeSend() {
+    return resolvedBeforeSend.get();
+  }
+
+  /**
+   * Handles one intent whose record carried no transaction.
    *
    * @param institutionId institution from the envelope
    * @param intent the {@code notification-customer} payload
    * @return the outcome
-   * @throws SQLException when the outcome cannot be recorded
-   * @throws NotYetRecordedException when the intent's auto-block event is not in PostgreSQL yet;
-   *     nothing has been sent or issued
+   * @throws SQLException when PostgreSQL is unavailable or the outcome cannot be recorded
    */
   public Outcome send(UUID institutionId, JsonNode intent) throws SQLException {
     return send(institutionId, intent, Optional.empty());
@@ -155,9 +165,16 @@ public final class CustomerSmsSender {
    */
   public Outcome send(UUID institutionId, JsonNode intent, Optional<UUID> transactionId)
       throws SQLException {
-    UUID notification = UUID.fromString(intent.get("notification_id").asString());
-    UUID block = UUID.fromString(intent.get("auto_block_event_id").asString());
-    String account = intent.get("account_token").asString();
+    UUID notification;
+    UUID block;
+    String account;
+    try {
+      notification = UUID.fromString(intent.get("notification_id").asString());
+      block = UUID.fromString(intent.get("auto_block_event_id").asString());
+      account = Objects.requireNonNull(intent.get("account_token").asString());
+    } catch (RuntimeException unreadable) {
+      throw new MalformedPayloadException("an SMS intent without a readable id or account", null);
+    }
     Snapshot now = classify(institutionId, notification, block, transactionId);
     if (now.block() && !account.equals(now.blockAccount())) {
       // S0: cannot happen with ids derived from the submission; a second guard against sending
@@ -171,6 +188,7 @@ public final class CustomerSmsSender {
     }
     if (now.block() && now.resolved()) {
       // S2r: lifted or decided again before the SMS could go.
+      resolvedBeforeSend.incrementAndGet();
       LOG.info("auto-block event {} was resolved before its SMS could be sent", block);
       return Outcome.RESOLVED;
     }

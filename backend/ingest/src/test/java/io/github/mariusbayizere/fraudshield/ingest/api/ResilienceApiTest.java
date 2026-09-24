@@ -186,14 +186,22 @@ class ResilienceApiTest {
             .getContainerId();
     UUID id = UUID.randomUUID();
     final int scored = ApiHarness.SCORER.calls.get();
-    ApiHarness.REDIS.pause();
-    docker.pauseContainerCmd(postgres).exec();
     HttpResponse<String> refused;
+    boolean redisPaused = false;
+    boolean postgresPaused = false;
     try {
+      ApiHarness.REDIS.pause();
+      redisPaused = true;
+      docker.pauseContainerCmd(postgres).exec();
+      postgresPaused = true;
       refused = post("/api/v1/transactions/ingest", IngestApiTest.body(id, "CARD").toString());
     } finally {
-      docker.unpauseContainerCmd(postgres).exec();
-      ApiHarness.REDIS.unpause();
+      if (postgresPaused) {
+        docker.unpauseContainerCmd(postgres).exec();
+      }
+      if (redisPaused) {
+        ApiHarness.REDIS.unpause();
+      }
     }
     assertThat(refused.statusCode()).as(refused.body()).isEqualTo(503);
     assertThat(refused.headers().firstValue("Retry-After")).contains("1");

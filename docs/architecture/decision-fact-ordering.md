@@ -2,7 +2,18 @@
 
 Status: **reviewed sound** (2026-09-24): draft 5 was reviewed sound, 0 BLOCKER, 0 MAJOR
 (`-contract-5.md`). Its 4 MINOR and 4 NIT, all wording or lifecycle rules, are applied below and
-cited `[5-…]`. This is the ordering contract the owner asked for
+cited `[5-…]`.
+
+**Changed after the sound review, during implementation**, and flagged by the implementation review
+(`-implementation-1.md`, MINOR 1):
+
+1. W-b: an attempt ends when the handler returns, so for a record that waited, its SMS send counts
+   towards the end of its wait. The reviewed text had it as draining. The handler is one call, so
+   that is where an attempt can be observed.
+2. Section 11 item 4: a SENT row records the vault locale the SMS was rendered in, as before. Only
+   a FAILED row written before the vault answered records the REQUESTED row's locale.
+
+Neither change affects W-c2's bound. This is the ordering contract the owner asked for
 before the next SMS-race fix. It has been reviewed on its own four times:
 
 - Draft 1 (`75a2509`) was not sound: 4 MAJOR (`docs/reviews/M6/m6-decision-2026-09-24-contract-1.md`).
@@ -300,10 +311,13 @@ decision's [NIT].
   topic keeps them for 3 days.
 - **D-c. (change) Replay tool: `DeadLetterReplay`**, in the notify module, with a `main`. Until the
   deployable image exists (M9), it runs from a build:
-  `java -cp "notify/target/classes:$(./mvnw -q -pl notify dependency:build-classpath
-  -Dmdep.outputFile=/dev/stdout)" io.github.mariusbayizere.fraudshield.notify.kafka.DeadLetterReplay
-  --bootstrap-servers <servers> --topic fs.notifications.customer [--reason <r>]... [--from <instant>]
-  [--allow-rejected]`. Packaging it into the image is carried to M9. It reads `<topic>.dlq` with **no committed consumer group**
+  `./mvnw -q -pl notify -am -DskipTests package dependency:copy-dependencies -DincludeScope=runtime`,
+  then
+  `java -cp 'notify/target/classes:notify/target/dependency/*'
+  io.github.mariusbayizere.fraudshield.notify.kafka.DeadLetterReplay --bootstrap-servers <servers>
+  --topic fs.notifications.customer [--reason <r>]... [--from <instant>] [--allow-rejected]`.
+  `-am` takes the sibling modules from the reactor, not from a shared `~/.m2`. Packaging it into
+  the image is carried to M9. It reads `<topic>.dlq` with **no committed consumer group**
   [M3], from a time window the operator gives (default: the whole retention) to the DLQ's end
   offsets when the run starts. It takes the reasons to replay (default `parent_not_recorded`).
   - Within the run, it keeps **only the newest copy of each envelope `event_id`** among the matching
@@ -349,34 +363,40 @@ decision's [NIT].
 - **D-g.** Other reasons (`malformed_envelope`, `permanent_vault_failure`) are unchanged. They are
   replayed once their cause is fixed.
 
-## 8. Invariants, each to be proved by a test
+## 8. Invariants, and the test that proves each
 
-| # | Invariant |
-|---|---|
-| I1 | No SMS is sent, no verification is issued and no outcome is recorded while B is absent (S3, S4). |
-| I2 | Once an intent's outcome is visible, the intent is not sent again (S1). |
-| I3a | A transaction decided twice, first **not** blocking, then blocking, with the kept decision already written: the second intent is dead-lettered at once as `not_the_kept_decision`, never waits, and never sends. |
-| I3b | The same, with the intent read **before** W2 writes the kept decision: S4, then S3 once it is written, then dead-lettered. It never sends. |
-| I4 | A submission decided twice, blocking both times: exactly one SMS. |
-| I4b | T submitted twice **with different bodies** (another account), both blocking, the first kept: the other body's intent is S3 and never sends; the kept intent is sent to the kept account [2-M1]. |
-| I5 | Link eligibility comes from the kept decision: when the discarded decision allowed a link and the kept one did not, the SMS carries no link. It also fails closed without a REQUESTED row. |
-| I6 | An intent that arrives before its record is written is sent once the record is written (S4, then S2). |
-| I7 | The partition's budget: once waiting has filled `spent` to the configured bound, that record is dead-lettered as `parent_not_recorded`. A record whose first answer while tripped is S4 gets one grace re-read, and is dead-lettered if still S4, or sent if its parent arrived. Draining time as defined in W-b drains `spent` at the configured rate, neutral time does not, and no outcome resets it [5-m4]. |
-| I7b | Orphans interleaved with valid intents (orphan, valid, orphan, valid, and so on) keep the partition within W-c2's limit: bound + t × drain rate of waiting in a window t, not k × bound [3-M1]. |
-| I7c | An orphan that arrives after an idle period following a trip waits for what the idle time drained: the full bound after 60 minutes idle at the default rate [4-M1]. |
-| I7d | While one partition waits, is tripped, or backs off after S5 or a RETRY, another partition's intents are handled without delay: the thread never sleeps (W-a) [5-m1]. |
-| I7e | A partition paused on one member and moved to another: the first member's other partitions keep flowing and no `IllegalStateException` escapes; the second member re-reads at once, with `spent` resumed from the metadata [5-m2]. |
-| I7f | An exception between `poll` and the end-of-batch commit skips no fetched record [5-n3]. |
-| I8 | Neutral time, from a failed attempt (S5, or a failed DLQ send) to the next successful answer, neither adds to nor drains `spent`. A grace re-read that meets S5 is retried until it succeeds [4-m1] [4-n4]. |
-| I9 | The classification is one statement. A test holds W2's transaction open, writing `decision_states(T, 1)` and B together, and sees S4 (never S3) until the commit, then S2. |
-| I10 | A dead-lettered intent keeps its headers, for every reason. Replaying it republishes key, value and headers, plus `fs-replayed` incremented. Replayed after its parent arrived, it is sent; replayed before, it returns to the DLQ at once and never waits; its handling time drains (W-b) [5-m3]. |
-| I11 | A replay stops at the end offsets taken when it starts, commits nothing, republishes only the newest copy per `event_id`, leaves other reasons for later runs, and refuses `rejected_by_the_database` unless asked. |
-| I12 | The one-minute WARN fires under intermittent S5 failures. |
-| I13 | A block that is resolved (unblocked, or its latest decision no longer DECLINE) before its SMS goes is not sent (S2r). |
-| I14 | The budget survives a change of owner. After a revocation, and after a crash with no revocation while the partition is tripped or waiting, the new owner resumes `spent` from the committed metadata: at most 500 ms of waiting lost, and the unowned time drained. A lost partition commits nothing. A future `at` is clamped to zero [2-M2] [3-m1] [3-m3] [4-m3]. |
-| I14b | A crash between a dead-letter send and the commit past it re-reads the record. A second DLQ copy may result, and a replay republishes it once [4-n4]. |
-| I15 | A header-less intent (on the topic before deployment) is S4 with `kept` null, and is dead-lettered at the bound if its B never appears. |
-| I16 | S0: an intent whose B row belongs to another account is dead-lettered as `not_the_kept_decision` and never sends. It is tested with a crafted intent [3-n5]. |
+A test named here fails if the invariant is broken. Where a property is proved only in part, or
+only by review, the table says so: the implementation review of `bd48557` found that an earlier
+claim, "every invariant is tested", was not true.
+
+| # | Invariant | Proved by |
+|---|---|---|
+| I1 | No SMS is sent, no verification is issued and no outcome is recorded while B is absent (S3, S4). | `SmsOrderingTest`: `nothingDoneFor` in the S3, S4 and I4b tests |
+| I2 | Once an intent's outcome is visible, the intent is not sent again (S1). | `SmsOrderingTest.theSameSubmissionBlockingTwiceSendsOneSms`; `VerificationFlowTest.anIntentReReadAfterItsOutcomeWasRecordedIsNotSentAgain` |
+| I3a | A transaction decided twice, first **not** blocking, then blocking, with the kept decision already written: the second intent is dead-lettered at once as `not_the_kept_decision`, never waits, and never sends. | `SmsOrderingTest.keptDecisionWithoutBlockThenBlockIsDeadLetteredAtOnceAndNeverSent` (sender); `EnvelopeConsumerTest.poison…` (the consumer dead-letters it at once) |
+| I3b | The same, with the intent read **before** W2 writes the kept decision: S4, then S3 once it is written, then dead-lettered. It never sends. | `SmsOrderingTest.keptDecisionWithoutBlockReadBeforeItIsWrittenWaitsThenIsDeadLettered` |
+| I4 | A submission decided twice, blocking both times: exactly one SMS. | `SmsOrderingTest.theSameSubmissionBlockingTwiceSendsOneSms`, `…IdsDerivedFromTheSubmission` |
+| I4b | T submitted twice **with different bodies** (another account), both blocking, the first kept: the other body's intent is S3 and never sends; the kept intent is sent to the kept account [2-M1]. | `SmsOrderingTest.differentBodyForTheSameTransactionNeverReachesTheKeptAccount` |
+| I5 | Link eligibility comes from the kept decision: when the discarded decision allowed a link and the kept one did not, the SMS carries no link. It also fails closed without a REQUESTED row. | `SmsOrderingTest.theLinkIsTheKeptDecisionsAndFailsClosedWithoutItsRequestedRow` |
+| I6 | An intent that arrives before its record is written is sent once the record is written (S4, then S2). | `EnvelopeConsumerTest.intentsWaitWithinTheirPartitionsBudget…` (record 1); `SmsOrderingTest.intentReadWhileItsDecisionIsBeingWritten…` |
+| I7 | The partition's budget: once waiting has filled `spent` to the configured bound, that record is dead-lettered as `parent_not_recorded`. A record whose first answer while tripped is S4 gets one grace re-read, and is dead-lettered if still S4, or sent if its parent arrived. Draining time as defined in W-b drains `spent` at the configured rate, neutral time does not, and no outcome resets it [5-m4]. | `WaitBudgetTest` (fill, drain, no reset); `EnvelopeConsumerTest.intentsWaitWithinTheirPartitionsBudget…` (end to end); `…recordsArrivingAfterTrippingGetOneGraceReRead…` (the grace re-read: sent if the parent arrived, otherwise dead-lettered after one re-read, not a fresh budget). The consumer's `!first` guard is equivalent in practice to its absence: any draining since the trip leaves the budget just below full at a record's first answer. |
+| I7b | Orphans interleaved with valid intents keep the partition within W-c2's limit [3-M1]. | `WaitBudgetTest.orphansBetweenValidIntentsDoNotEachGetTheWholeBound` |
+| I7c | An orphan after an idle period following a trip waits for what the idle time drained [4-M1]. | `WaitBudgetTest.idleTimeAfterTrippingDrains…` |
+| I7d | While one partition waits, is tripped, or backs off after S5 or a RETRY, another partition's intents are handled without delay [5-m1]. | `EnvelopeConsumerTest.otherPartitionsFlowWhileOneWaits…AndAnotherBacksOff` |
+| I7e | A partition paused on one member and moved to another: the members keep flowing; the new owner re-reads at once, with `spent` resumed from the metadata [5-m2]. | `EnvelopeConsumerTest.partitionsMovedWhilePausedKeepEveryoneFlowing` (flow, and re-reads after the move); the resumed `spent`: I14 |
+| I7f | An exception between `poll` and the end-of-batch commit skips no fetched record [5-n3]. | **In part.** `EnvelopeConsumerTest.batchesThatCannotBeCommittedSkipNoRecord` covers a member expelled mid-batch, where the rejoin resets positions from the committed offsets. A commit failure while membership is kept, the case `seekBack` is for, is not produced by a test; `seekBack` is verified by review (implementation review, MINOR 5). |
+| I8 | Neutral time neither adds to nor drains `spent`. A grace re-read that meets S5 is retried until it succeeds. | `WaitBudgetTest.neutralTimeNeitherFillsNorDrainsTheBudget`; `EnvelopeConsumerTest.recordsArrivingAfterTrippingGetOneGraceReReadEvenThroughTransientFailures` |
+| I9 | The classification is one statement (one snapshot). | `SmsOrderingTest.theClassificationIsOneStatementOnOneConnection` (structural: one connection, one statement besides the tenant's); `…intentReadWhileItsDecisionIsBeingWritten…` (an uncommitted writer is seen as S4, never S3) |
+| I10 | A dead-lettered intent keeps its headers, for every reason. A replay republishes key, value and headers plus `fs-replayed`. Replayed after its parent arrived, it is sent; replayed before, it returns to the DLQ at once and never waits. | `EnvelopeConsumerTest.poison…` (headers, every reason); `…replayRepublishesTheNewestCopyOnceAndReplayedOrphansNeverWait` |
+| I11 | A replay stops at the end offsets taken when it starts, commits nothing, republishes only the newest copy per `event_id`, leaves other reasons, and refuses `rejected_by_the_database` unless asked. | `EnvelopeConsumerTest.replayRepublishes…` |
+| I12 | The WARN fires under intermittent S5 failures. | `EnvelopeConsumerTest.longWaitsAreWarnedEvenWhilePostgresKeepsFailing` (the WARN interval configurable) |
+| I13 | A block resolved before its SMS goes is not sent (S2r), and is counted. | `SmsOrderingTest.blockResolvedBeforeItsSmsIsNotSent` |
+| I14 | The budget survives a change of owner: after a revocation, and after a crash with no revocation. A future `at` is clamped. A lost partition commits nothing. | `EnvelopeConsumerTest.theBudgetSurvivesChangesOfOwner` (revocation); `…crashedOwnersBudgetsAreResumedFromTheirLastCheckpoint` (crash); `WaitBudgetTest.checkpointsFromTheFutureAreClamped…`. **By review only:** the lost path committing nothing (`onPartitionsLost` has no commit). |
+| I14b | A crash between a dead-letter and its commit may leave a second DLQ copy, which a replay republishes once. | `EnvelopeConsumerTest.replayRepublishes…` (two copies, one republish). The crash at that exact point is not produced. |
+| I15 | A header-less intent is S4 with `kept` null, and is dead-lettered at the bound if its B never appears. | `SmsOrderingTest.headerlessIntentWaitsRatherThanBeingJudgedPermanent`; the bound: I7 |
+| I16 | S0: an intent whose B row belongs to another account is dead-lettered and never sends. | `SmsOrderingTest.intentForAnotherAccountsBlockIsNeverSent` |
+| (wire) | The intent's record carries `fs-transaction-id` on Kafka. | `KafkaSpoolChaosTest.theSmsIntentCarriesItsTransactionOnTheWire` |
+| (malformed) | An intent whose payload cannot be read is dead-lettered (`malformed_envelope`), not retried for ever. | `SmsOrderingTest.anIntentWithoutReadableIdsIsMalformedNotRetriedForEver`; `EnvelopeConsumerTest.poison…` |
 
 ## 9. Alternatives rejected
 
