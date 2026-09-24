@@ -100,12 +100,43 @@ the review, fifteen fixed findings and sixteen mutation checks found.
 - **Not the reversal-scam variant.** About 725 fraud rows are flagged at 0.60 (0.736 × 985). Even
   if every one were among the 919 fraud rows that are not the variant, recall on those would be at
   most 725 / 919 ≈ 0.789.
-- **A candidate cause, untested:** the model is trained on 30,000 rows and 260 frauds of a train
-  period holding 792,162 (PB-67). Testing it means a larger training sample reported beside this
-  run, whichever way it lands.
+- **A candidate cause, since tested and ruled out:** the model was trained on 30,000 rows and 260
+  frauds of a train period holding 792,162 (PB-67). The learning curve was run at 30K, 60K, 120K
+  and 240K; see the amendment below.
 
 **Decision.** Both rows become `DONE_WITH_DEVIATION` against this ADR, carrying the measured value,
 its interval and the cause above. D-02's thresholds are not changed and nothing is tuned on the
 test period. The shortfall is a finding in `docs/research/paper/contributions.md`. M4 is listed as
 completed, and `m4-complete` is tagged on the first commit carrying this decision whose CI is green
 on that exact commit.
+
+
+## Amendment 2026-09-24 — PB-67 concluded: training volume is not the cause
+
+The learning curve pre-registered at `d071147` is complete. Four sizes, the same 101,909 test rows
+at each, five seeds and 1,000 bootstrap resamples per size, run on the laptop under a memory
+watchdog. Evidence: `docs/benchmarks/m4_learning_curve_{30k,60k,120k,240k}_d8083dbc.txt`.
+
+| Training rows (frauds) | Recall at 0.60 [95% CI] | Five seeds |
+|---|---|---|
+| 30,000 (259) | 0.795 [0.766, 0.818] | 0.767 ± 0.025 |
+| 60,000 (533) | 0.799 [0.773, 0.823] | 0.772 ± 0.038 |
+| 120,000 (1,066) | 0.798 [0.772, 0.821] | 0.779 ± 0.023 |
+| 240,000 (2,132) | 0.783 [0.755, 0.808] | 0.795 ± 0.024 |
+
+The pre-registered test for "the miss is a property of this benchmark and model" was that 120K→240K
+gains less than the 240K interval's half-width and that the 240K upper bound sits below 0.88. Both
+hold: the step is −0.015 against a half-width of 0.027, and the upper bound is 0.808. Across the
+full 8× range the five-seed mean rises 0.767 → 0.795, while the distance to 0.88 is 0.085.
+
+**Therefore ML-GATE-03 and ML-GATE-06 stay `DONE_WITH_DEVIATION`, and the reason changes.** The
+deviation was recorded as "recall 0.736 **at 30,000 training rows**", with the scope deliberately
+narrow while the cause was untested. It is now tested: more training data does not close the gap.
+The deviation is restated as a property of this benchmark and model **at the volumes measured**
+(30,000–240,000 rows of draw `d8083dbc`), which is what the paper may claim.
+
+Two things this amendment does not change: D-02's thresholds, and the fact that nothing was tuned
+on the test period. One thing it adds, from the curve itself: **which** training rows are used moves
+recall several times more than **how many** — this curve's 30K reads 0.795 against the declared
+gate's 0.736 at the same row count but a different corpus depth. That confound is PB-69's, and it
+is the larger effect.

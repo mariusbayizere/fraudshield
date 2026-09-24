@@ -2461,3 +2461,58 @@ training rows; they differ in which rows. The gate's come from a 400,000-row cor
 curve's from a 340,000-row one, so they cover different time spans with different amounts of
 truncated history (PB-69). Which training rows are used moves recall more than quadrupling them
 does. That is a warning about the 240K point too: it comes from a third corpus depth.
+
+### 2026-09-24 · PB-67 concluded: the recall shortfall is not training volume
+
+The fourth point ran on this laptop, not in a Codespace: the owner asked for it here once M6's
+tests freed the machine. The build that was reaped for memory on 2026-09-22 completed this time
+under a watchdog — `nice -n 15`, `oom_score_adj 800` so a squeeze would take this job rather than
+another agent's tests, and an abort at three consecutive readings below 500 MB available. It never
+struck: 381,909 rows featurised, peak RSS 1.4 GB. Evidence:
+`docs/benchmarks/m4_learning_curve_cache_240k_d8083dbc.txt` (cache, commit 2a876d8) and
+`docs/benchmarks/m4_learning_curve_240k_d8083dbc.txt` (gate, commit 6b36fc5), both
+`evidence-tree-state: clean`, both on the i5-6200U.
+
+**The curve, complete.** Same 101,909 test rows at every size, five seeds, 1,000 bootstrap
+resamples; seed 1 with its interval, then the five-seed mean.
+
+| Training rows (frauds) | Recall at 0.60 [95% CI] | Five seeds | Recall at 1% FPR budget (realised FPR) |
+|---|---|---|---|
+| 30,000 (259) | 0.795 [0.766, 0.818] | 0.767 ± 0.025 | 0.869 (0.30%) |
+| 60,000 (533) | 0.799 [0.773, 0.823] | 0.772 ± 0.038 | 0.854 (0.55%) |
+| 120,000 (1,066) | 0.798 [0.772, 0.821] | 0.779 ± 0.023 | 0.878 (0.82%) |
+| **240,000 (2,132)** | **0.783 [0.755, 0.808]** | **0.795 ± 0.024** | **0.860 (0.26%)** |
+
+**The pre-registered test, applied as written.** The rule was: *stays below 0.88 and flattens —
+120K to 240K gains less than the 240K interval's half-width, and the 240K interval's upper bound
+is below 0.88.*
+
+- 120K → 240K at seed 1: **−0.015**, a loss, not a gain, and smaller in size than the 240K
+  interval's half-width of 0.027.
+- The 240K interval's upper bound is **0.808**, below 0.88 by 0.072.
+- Across the whole 8× range the five-seed mean moves **0.767 → 0.795**, +0.028, while the gap to
+  0.88 is 0.085. Every interval at every size excludes 0.88.
+
+**Conclusion: the shortfall is a property of this benchmark and this model, not of training
+volume.** Eight times the training data, from 259 to 2,132 frauds, does not move recall at the 0.60
+flag threshold outside its own noise. The paper may say so, scoped to the volumes measured
+(30,000–240,000 rows of this draw) and to this model.
+
+**Against the prediction, including where it was wrong.**
+- *Recall at 0.60 stays below 0.88 at every size:* **held**, and not narrowly.
+- *Reaching 0.76–0.84 at 240K:* **held** on both estimates (0.783 seed 1, 0.795 five-seed) — but
+  the prediction said "rising to", and it did not rise. The range was right for the wrong reason.
+- *Recall at the 1% FPR budget rising to 0.87–0.91 at 240K:* **missed at seed 1** (0.860, interval
+  [0.838, 0.881]) and held on the five-seed mean (0.876 ± 0.013). It also did not rise: 120K
+  already read 0.878. These values stay hard to compare across sizes because the realised FPR at
+  the budget's threshold swings with isotonic ties — 0.26% to 0.82% across the four points — so
+  each is a different operating point in all but name.
+
+**The confound from the interim entry stands, and is now the larger effect.** This curve's 30K
+(0.795) remains 0.059 above the declared gate's 30K (0.736), and the four curve points span only
+0.016. Which training rows are used — how deep the corpus reaches, how much history is truncated
+(PB-69) — moves recall several times more than how many rows are used. That is the finding worth
+carrying into the paper, and it is not the finding PB-67 set out to test.
+
+**What this does not settle.** Whether a differently built model, or features that survive corpus
+truncation, would reach 0.88 on this benchmark. PB-69 is where that goes.
