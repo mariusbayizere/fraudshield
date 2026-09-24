@@ -204,6 +204,12 @@ EXCEPTIONS: dict[str, tuple[str, str]] = {
         "as BSD-3-Clause on the text actually bundled, not on the misleading declared field, "
         "which is the same 'read the file, not the label' rule every other exception here uses",
     ),
+    "python:sortedcontainers@2.4.0": (
+        "Apache-2.0",
+        "classifier says only 'Apache Software License'; METADATA 'License: Apache 2.0' and "
+        "dist-info/LICENSE is the Apache License, Version 2.0 notice (verified 2026-09-22). Dev "
+        "only, via fakeredis (M5 unit tests without Docker)",
+    ),
 }
 
 _NAME_PATTERNS: tuple[tuple[str, str], ...] = (

@@ -134,11 +134,20 @@ requirements:
     input; unit test confirms each field type'
   defects:
   - D-12
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - ml/src/fraudshield_ml/serving/scorer.py
+  - ml/src/fraudshield_ml/serving/server.py
+  - ml/src/fraudshield_ml/models/bundle.py
+  evidence:
+  - ml/tests/serving/test_scorer.py (all nine fields, their types, the 44-key vector)
+  - ml/tests/serving/test_server.py (over gRPC, mTLS, against the frozen contract)
+  - ml/tests/models/test_bundle.py
   deviations: []
+  notes: 'M5 (2026-09-23): every ScoringResult carries ensemble_score, xgboost_score, lightgbm_score,
+    anomaly_score, model_risk_tier, model_version, feature_vector and the SHAP contributions; scores come
+    from the ONNX path, exact against the native boosters to 8.27e-07 over the gate model''s test period.'
 - id: FR-02-02
   section: 3.2 FR-02 ML fraud scoring engine
   title: '44 features engineered per transaction within < 10ms: velocity (8 features), amount behaviour
@@ -242,11 +251,21 @@ requirements:
   defects:
   - D-06
   - D-10
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - ml/src/fraudshield_ml/models/forest.py
+  - ml/src/fraudshield_ml/serving/thresholds.py
+  - ml/src/fraudshield_ml/serving/scorer.py
+  evidence:
+  - ml/tests/models/test_forest_and_isotonic.py (the export scores as M4's fitted forest does, to 1e-12)
+  - 'ml/tests/serving/test_scorer.py (the acceptance scenario: extreme amount, new location, new device,
+    ensemble below 0.60, routed to review)'
+  - ml/tests/serving/test_entry_points.py (a worker serves D-06's production profile, 0.995, not the 0.7
+    test profile)
   deviations: []
+  notes: 'M5 (2026-09-23): D-06''s percentile anomaly score is computed for every transaction and carried
+    in model_risk_tier; the decision engine (M6) acts on it.'
 - id: FR-02-06
   section: 3.2 FR-02 ML fraud scoring engine
   title: Risk thresholds configurable at runtime without model reload via Redis config store; change takes
@@ -256,15 +275,18 @@ requirements:
   srs_text: 'Acceptance criterion: Admin API PATCH /api/v1/admin/thresholds; next transaction after 60s
     uses new threshold; confirmed by integration test'
   defects: []
-  status: NOT_STARTED
+  status: DONE_WITH_DEVIATION
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - ml/src/fraudshield_ml/serving/thresholds.py
+  evidence:
+  - ml/tests/serving/test_scorer.py (the scorer re-reads fs:config:model_thresholds every 10 s and applies
+    them to the next transaction, with no model reload)
   deviations:
-  - docs/adr/0014-staff-authorisation-model.md
-  notes: 'Deviation (owner decision, ADR 0014 section 3): asymmetric dual control; loosening takes effect
-    within 60 s of approval by a second RISK_OFFICER, tightening at once with 24 h confirmation or automatic
-    revert.'
+  - docs/adr/0035-closing-m5s-rows-what-serving-proves-and-what-it-cannot.md
+  notes: 'M5 (2026-09-23): the scorer half is complete. The acceptance criterion names PATCH /api/v1/admin/thresholds
+    and an integration test over it; that endpoint is M7''s, under ADR 0014''s dual control, and the clause
+    is carried there (ADR 0035).'
 - id: FR-02-07
   section: 3.2 FR-02 ML fraud scoring engine
   title: 'ML scoring latency: p50 < 15ms, p95 < 25ms, p99 < 40ms (ensemble + SHAP for flagged transactions
@@ -275,13 +297,21 @@ requirements:
     confirmed on target hardware spec'
   defects:
   - D-16
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
-  notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
-    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
+  implementation:
+  - ml/src/fraudshield_ml/serving/benchmark.py
+  - ml/src/fraudshield_ml/serving/server.py
+  evidence:
+  - 'docs/benchmarks/m5_serve_laptop_4af4e5e.json (laptop, NOT gate evidence under ADR 0010: server-side
+    p50 12 ms, p95 27 ms, p99 39 ms; client-observed p50 1,164 ms at 200 in flight; 183 req/s)'
+  - ml/tests/serving/test_benchmark.py
+  deviations:
+  - docs/adr/0035-closing-m5s-rows-what-serving-proves-and-what-it-cannot.md
+  - docs/adr/0032-the-scoring-latency-gate-is-a-throughput-requirement.md
+  notes: 'M5 (2026-09-23): open, not met. ADR 0032: p50 < 15 ms with 200 in flight is a throughput requirement
+    of about 13,000 req/s, and no number from dev-laptop-01 is gate evidence (ADR 0010). Carried to M10
+    with the dedicated machine.'
 - id: FR-02-08
   section: 3.2 FR-02 ML fraud scoring engine
   title: 'Shadow mode: new model scores every transaction alongside production model; only production
@@ -292,11 +322,21 @@ requirements:
     production score in ScoringResult; MLflow comparison dashboard showing metric delta'
   defects:
   - D-11
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - ml/src/fraudshield_ml/serving/shadow.py
+  - ml/src/fraudshield_ml/serving/registry.py
+  evidence:
+  - 'ml/tests/serving/test_shadow.py (off the hot path: a bounded queue that drops and counts, never blocks;
+    only the production result is returned)'
+  - ml/tests/serving/test_registry.py (the comparison flushed to MLflow per shadow version, including
+    against a real MLflow 3.16.0 container)
+  - contracts/kafka/schemas/ml-shadow.schema.json (the frozen event shape the runner emits, validated
+    in ml/tests/serving/test_shadow.py)
   deviations: []
+  notes: 'M5 (2026-09-23): the shadow model scores every transaction alongside production and the comparison
+    reaches MLflow. Turning shadow mode on is an alias move (fs-model alias shadow <version>).'
 - id: FR-02-09
   section: 3.2 FR-02 ML fraud scoring engine
   title: Redis feature store pre-computes and updates velocity features for every account within 100ms
@@ -306,13 +346,33 @@ requirements:
   srs_text: 'Acceptance criterion: Redis key TTL set to 30 days; stale key handled by DB fallback; update
     latency measured by Prometheus; p99 < 100ms'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
-  notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
-    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
+  implementation:
+  - ml/src/fraudshield_ml/featurestore/store.py
+  - ml/src/fraudshield_ml/featurestore/writer.py
+  - ml/src/fraudshield_ml/featurestore/ingest.py
+  - ml/src/fraudshield_ml/featurestore/fallback.py
+  evidence:
+  - ml/tests/featurestore/test_serving_parity.py (a prefix replay agreeing with the batch path at every
+    step, on fakeredis and on real Redis 7.2.16; window edges per Redis key)
+  - ml/tests/featurestore/test_store.py (30-day TTL on every key, refreshed while the account is active;
+    fs_feature_store_update_seconds)
+  - ml/tests/featurestore/test_ingest.py (apply_label restores both outcome features and honours E.2's
+    label_available_at)
+  - ml/tests/serving/test_store_loop.py (context, score and write over gRPC)
+  deviations:
+  - docs/adr/0034-serving-feeds-three-trained-features-from-state-nothing-writes.md
+  - docs/adr/0035-closing-m5s-rows-what-serving-proves-and-what-it-cannot.md
+  notes: 'M5 (2026-09-23): NOT DONE. The store is built and tested; production is not fed. Four trained
+    features are served from state no deployed component writes (ADR 0034, option 3, owner decision 2026-09-22):
+    fraud outcomes (no fs.labels consumer) and account reference state (no contract exists). Measured
+    on M4''s gate model over the whole test period, 101,909 rows and 985 frauds, twice and independently:
+    served AUC 0.9611 against 0.9700 as trained; 254 transactions change risk tier; 162 of 725 frauds
+    no longer reach the 0.60 flag threshold, a 22% fall in detections at the operating point. Blocked
+    on PB-69 (database fallback, M6), PB-70 (fs.labels consumer calling apply_label, M6), PB-71 (contract
+    and producer for account reference state, M6) and PB-72 (M10 re-measures this skew and requires zero).
+    Acceptance tests in docs/parallel/M6_updates.md, M9_updates.md and M10_updates.md.'
 - id: FR-02-10
   section: 3.2 FR-02 ML fraud scoring engine
   title: 'Model versioning: every ScoringResult records model_version string; old model continues scoring
@@ -322,11 +382,20 @@ requirements:
   srs_text: 'Acceptance criterion: Blue-green deployment: both model versions score simultaneously during
     switch window; no transactions score with unversioned model'
   defects: []
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - ml/src/fraudshield_ml/serving/registry.py
+  - ml/src/fraudshield_ml/serving/scorer.py
+  - ml/src/fraudshield_ml/models/bundle.py
+  evidence:
+  - ml/tests/serving/test_server.py (under concurrent load both versions score during a switch, and every
+    request begun after it gets the new one)
+  - ml/tests/serving/test_registry.py (alias polling at most every 10 s; a bundle that fails verification
+    is never swapped in; publish, hot swap and rollback against a real MLflow 3.16.0 container)
   deviations: []
+  notes: 'M5 (2026-09-23): every ScoringResult records its own model_version; a bundle without one cannot
+    be built or loaded.'
 - id: FR-03-01
   section: 3.3 FR-03 Risk decision and auto-block engine
   title: 'HIGH risk (ensemble_score >= 0.85): auto-blocked within 50ms of transaction receipt; account
@@ -2853,13 +2922,19 @@ requirements:
     requirement; exceeding causes auto-block latency breach'
   defects:
   - D-16
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
-  notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
-    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
+  implementation:
+  - ml/src/fraudshield_ml/serving/benchmark.py
+  - ml/src/fraudshield_ml/serving/scorer.py
+  evidence:
+  - 'docs/benchmarks/m5_serve_laptop_4af4e5e.json (laptop, NOT gate evidence under ADR 0010: server-side
+    p99 39 ms against the 40 ms threshold, but only 0.38% of requests took the SHAP path)'
+  deviations:
+  - docs/adr/0035-closing-m5s-rows-what-serving-proves-and-what-it-cannot.md
+  - docs/adr/0032-the-scoring-latency-gate-is-a-throughput-requirement.md
+  notes: 'M5 (2026-09-23): unmeasured on the machine that decides. The laptop figure is recorded for analysis
+    only and is not a gate number (ADR 0010). Carried to M10.'
 - id: ML-GATE-13
   section: 7.2 Model deployment gate
   title: Shadow mode AUC-ROC delta
@@ -2869,19 +2944,20 @@ requirements:
     regression during model updates; minimum 24-hour shadow period'
   defects:
   - D-11
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
-  notes: 'M3 -> M4 REPORTING GATE (owner decision 2026-09-20, PB-46). This benchmark is VELOCITY-SEPARABLE:
-    a single feature, velocity_ratio_1h_vs_30d, reaches max(AUC, 1-AUC) of 0.894 +/- 0.032 at commit 2c80ef6
-    (docs/benchmarks/single_feature_baseline.md). NO MODEL METRIC MAY BE REPORTED WITHOUT ITS SINGLE-FEATURE
-    BASELINE BESIDE IT - the best single feature and the best trivial rule (one threshold on one feature),
-    on the same split, at the same scale, with the same account-grouped folds - and the comparison is
-    reported as the MARGIN over that baseline. ''AUC 0.94'' against a 0.894 baseline is a different claim
-    from ''AUC 0.94'' against chance, and only the first is honest. A metric quoted alone is inadmissible
-    on the same terms as a metric quoted without its scale (E2).'
+  implementation:
+  - ml/src/fraudshield_ml/serving/shadow.py
+  - ml/src/fraudshield_ml/serving/registry.py
+  evidence:
+  - ml/tests/serving/test_shadow.py (every D-11 clause, each refusal naming its reason)
+  - ml/tests/serving/test_registry.py (promotion re-derives each clause from the comparator's own figures;
+    a report that refuses, omits a figure or reports a non-finite one does not promote)
+  deviations:
+  - docs/adr/0035-closing-m5s-rows-what-serving-proves-and-what-it-cannot.md
+  notes: 'M5 (2026-09-23): the gate logic is implemented and tested, and refuses. The metric itself --
+    a shadow AUC delta over 24 hours and at least 50,000 scores -- needs a deployment running the shadow
+    comparator, so the number does not yet exist. Carried to M10 (ADR 0035).'
 - id: OPS-CI-01
   section: 8.1 CI/CD pipeline
   title: Lint + Static Analysis
@@ -3229,11 +3305,20 @@ requirements:
     MLflow comparison updated after each transaction'
   defects:
   - D-11
-  status: NOT_STARTED
+  status: DONE_WITH_DEVIATION
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - ml/src/fraudshield_ml/serving/shadow.py
+  - ml/src/fraudshield_ml/serving/server.py
+  evidence:
+  - ml/tests/serving/test_shadow.py (the shadow model scores every transaction; only the production result
+    is returned and only it triggers actions)
+  - ml/tests/serving/test_registry.py (the MLflow comparison is updated per shadow version, verified against
+    a real container)
+  deviations:
+  - docs/adr/0035-closing-m5s-rows-what-serving-proves-and-what-it-cannot.md
+  notes: 'M5 (2026-09-23): three of the four scenarios are proved here. ''Shadow score in audit log''
+    needs the backend''s audit store (M6/M7) and is carried there (ADR 0035).'
 - id: TEST-09
   section: 9 Testing requirements
   title: 'Performance: Load'
@@ -3260,13 +3345,23 @@ requirements:
     in memory (not reloaded)'
   defects:
   - D-16
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
-  notes: 'Benchmark row (ADR 0010): gate numbers only from a dedicated machine recorded in docs/benchmarks/hardware.md,
-    never from shared CI runners; until then at most VERIFIED_AT_REDUCED_SCALE with ''machine: <id>''.'
+  implementation:
+  - ml/src/fraudshield_ml/serving/benchmark.py
+  evidence:
+  - 'docs/benchmarks/m5_memory_laptop_4af4e5e.json (memory clause PASSES at the stated scale: 0.54 MB
+    growth over 10,000 consecutive scorings after a 500-scoring warm-up, against a 50 MB limit, model
+    loaded once)'
+  - 'docs/benchmarks/m5_serve_laptop_4af4e5e.json (latency clause FAILS here: client-observed p50 1,164
+    ms at 200 in flight, 183 req/s; laptop, NOT gate evidence under ADR 0010)'
+  - ml/tests/serving/test_benchmark.py
+  deviations:
+  - docs/adr/0035-closing-m5s-rows-what-serving-proves-and-what-it-cannot.md
+  - docs/adr/0032-the-scoring-latency-gate-is-a-throughput-requirement.md
+  notes: 'M5 (2026-09-23): split verdict, so the row stays open. The memory clause is verified at the
+    stated scale; the 200-concurrent latency clause is a throughput requirement (ADR 0032) and needs the
+    dedicated machine. Carried to M10.'
 - id: TEST-11
   section: 9 Testing requirements
   title: 'Frontend: Unit'
@@ -3685,11 +3780,18 @@ requirements:
   - FR-02-08
   - ML-GATE-13
   - TEST-08
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - ml/src/fraudshield_ml/serving/shadow.py
+  evidence:
+  - 'ml/tests/serving/test_shadow.py (promotion_gate: 24 hours, 50,000 scores, 30% label coverage, AUC
+    delta at or above -0.010, PSI below 0.2, each refusal naming itself)'
+  - ml/tests/serving/test_registry.py (the gate as a promotion condition)
   deviations: []
+  notes: 'M5 (2026-09-23): ''within 1%'' is resolved as D-11 specifies -- an AUC delta of at least -0.010
+    on labelled rows, with a minimum window, a minimum volume and a minimum label coverage, so delayed
+    labels cannot be read as agreement.'
 - id: D-12
   section: Build prompt Part B defect register
   title: 'Model extraction and privacy risk: returning the full ScoringResult (feature_vector, per-model
@@ -3762,11 +3864,23 @@ requirements:
   - FR-02-07
   - ML-GATE-12
   - TEST-10
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - ml/src/fraudshield_ml/serving/server.py
+  - ml/src/fraudshield_ml/models/bundle.py
+  - ml/src/fraudshield_ml/serving/benchmark.py
+  evidence:
+  - ml/tests/serving/test_entry_points.py (multi-process workers with SO_REUSEPORT, one OpenMP thread
+    per process)
+  - ml/tests/models/test_bundle.py (the ONNX path, exact against the native boosters)
+  - docs/benchmarks/m5_serve_laptop_4af4e5e.json (one worker scores about 61 req/s; laptop, not gate evidence)
+  deviations:
+  - docs/adr/0035-closing-m5s-rows-what-serving-proves-and-what-it-cannot.md
+  - docs/adr/0032-the-scoring-latency-gate-is-a-throughput-requirement.md
+  notes: 'M5 (2026-09-23): the resolution is implemented -- processes rather than threads, nthread=1,
+    a compiled ONNX path, SO_REUSEPORT -- and the measurement is what shows the remaining gap. The defect
+    closes when ADR 0032''s throughput is demonstrated on the dedicated machine.'
 - id: D-17
   section: Build prompt Part B defect register
   title: pytest is listed for the Risk Decision Engine, which is a Spring Boot service.
@@ -4341,11 +4455,17 @@ requirements:
   defects: []
   affects:
   - FR-06-03
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - ml/src/fraudshield_ml/serving/registry.py
+  - ml/src/fraudshield_ml/models/cli.py
+  evidence:
+  - ml/tests/serving/test_registry.py (aliases production, shadow and previous_production; rollback through
+    fs-model alias in one move, needing no shadow gate; verified against a real MLflow 3.16.0 container)
   deviations: []
+  notes: 'M5 (2026-09-23): aliases, never stages. A promotion records the outgoing version as previous_production
+    and tags the incoming one as having served, which is what a later rollback is allowed to rely on.'
 - id: D-51
   section: Build prompt Part B defect register
   title: External services must work locally and in CI without real credentials.

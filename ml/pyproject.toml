@@ -26,10 +26,30 @@ dependencies = [
     "onnx==1.23.0",
     "onnxruntime==1.30.0",
     "onnxmltools==1.16.0",
+    # The scoring contract is gRPC (contracts/proto); the health service is the standard one the
+    # proto's header names for orchestration probes. Pinned to the grpcio-tools that compiles it.
+    "grpcio==1.84.0",
+    "grpcio-health-checking==1.84.0",
+    # FR-02-09 feature store and FR-02-06 threshold store. Redis server stays on 7.2 (ADR 0003);
+    # the client is protocol-compatible with it.
+    "redis==8.1.0",
+    "prometheus-client==0.26.0",
+    # The admin port (health, model status, shadow switch); never on the hot path.
+    "fastapi==0.141.1",
+    "uvicorn==0.53.0",
+]
+
+[dependency-groups]
+dev = [
+    # In-process Redis for unit tests on a machine without Docker; the real-Redis tests run in CI.
+    "fakeredis==2.35.1",
 ]
 
 [project.scripts]
 fs-features = "fraudshield_ml.cli:main"
+fs-model = "fraudshield_ml.models.cli:main"
+fs-scorer = "fraudshield_ml.serving.cli:main"
+fs-bench = "fraudshield_ml.serving.benchmark:main"
 
 [build-system]
 requires = ["hatchling==1.32.0"]
@@ -42,3 +62,7 @@ packages = ["src/fraudshield_ml"]
 testpaths = ["tests"]
 markers = ["req(*ids): links a test to requirement or defect IDs in docs/traceability/requirements.yaml"]
 addopts = "-rs --strict-markers --import-mode=importlib --cov=fraudshield_ml --cov-branch --cov-report=term-missing:skip-covered --cov-fail-under=90"
+
+[tool.coverage.run]
+# protoc's output, checked for freshness by test rather than exercised line by line.
+omit = ["*/serving/generated/scoring_pb2.py"]

@@ -2367,6 +2367,166 @@ against it.
 −0.6% against XGBoost alone (no reduction) and +12.5% against LightGBM alone. The first
 measurement's +62.9% was LightGBM being far more seed-sensitive under random-fold encoding.
 
+## M5 — the scoring service
+
+### 2026-09-22 · A small error, amplified: raw parity says nothing after a steep transformation
+
+**What was measured.** M5 serves M4's evaluated ensemble through ONNX Runtime. On the gate model's
+whole test period (101,909 rows, draw `d8083dbc`, bundle built at 894fbb4), E.4's parity test
+passes with a wide margin: the ONNX probabilities differ from the native boosters by at most
+**8.3e-7** per model and **4.1e-7** after the 0.55/0.45 combination, against a bound of 1e-5. The
+*calibrated* ensemble score, the number every threshold is read on, differs by up to **1.97e-4**,
+on **37 rows** above 1e-5. None of them crosses a risk tier at 0.60 or 0.85.
+
+**Why.** The isotonic calibrator is the same function on both paths. It is exact when reproduced
+as knots and interpolation: the difference between the knots and scikit-learn's own `predict` is
+0.0 on identical inputs. But the fitted calibrator is near-vertical on one segment, with a slope of
+about **1.2e5** between two adjacent thresholds, where the calibration split's labels jump over a
+tiny range of raw scores. A 4e-7 difference entering that segment leaves it roughly 1e5 times
+larger.
+
+**The general point.** A component's error can be small and still be amplified downstream, so a
+parity bound on raw outputs says nothing about outputs after a steep transformation. Bounding the
+calibrated score at 1e-5 would have been unmeetable by any inference path that is not bit-identical
+to the native boosters. Not bounding it at all would have hidden the one place the difference
+could matter: a decision threshold. The bound has to be stated in the space where the consequence
+is.
+
+**What M5 does with it** (`ml/src/fraudshield_ml/models/build.py`, ADR 0032 amended):
+- The build bounds E.4's quantity, raw probabilities, at 1e-5.
+- It requires **zero risk-tier changes** over the test period, which is the consequence that
+  matters.
+- It records the calibrated gap and its row count in the bundle's provenance, where a new model's
+  steeper calibrator would show.
+- The owner confirmed this handling on 2026-09-22.
+
+**What it does not establish.** The slope is a property of this calibrator on this calibration
+split (20,000 rows, 172 frauds). A different draw or a larger split will have its own steepest
+segment, and possibly a threshold inside it, which is why the tier check runs on every build rather
+than being argued once here.
+
+### 2026-09-22 · AUC moved 0.009; a fifth of the detections disappeared
+
+**What was measured.** M5 serves M4's evaluated ensemble. Four of its trained features read state
+that no deployed component writes — transaction outcomes and account reference state — so in
+production they are constants: `counterparty_confirmed_fraud_90d` is 0, `geo_cell_fraud_rate_30d`
+is the prior, `days_since_sim_swap` is NaN, and `synthetic_identity_score` silently loses terms.
+The gate model was rebuilt from `features_gate_d8083dbc.parquet` at seed 1 and scored over the
+whole test period (101,909 rows, 985 frauds), replacing each piece of state with what serving
+actually supplies:
+
+| Serving state | Test AUC | Risk-tier changes | Frauds reaching 0.60 |
+|---|---|---|---|
+| as trained | 0.9700 | — | 725 |
+| outcomes missing (no labels consumer) | 0.9619 | 235 | 585 |
+| SIM swaps missing (no topic exists) | 0.9699 | 25 | 712 |
+| **both, as M5 ships** | **0.9611** | **254** | **563** |
+
+Measured twice, independently: by the author and by the independent Principal Reviewer, who raised
+it (`docs/reviews/M5/principal-review.md`, finding 1).
+
+**The point.** **AUC fell by 0.0089 — about one half-width of the gate's own 95% interval
+(±0.0075), so the two intervals overlap heavily and the drop would not be called a regression —
+while
+162 of 725 frauds stopped reaching the 0.60 flag threshold: a 22% fall in detections at the
+operating point the system actually decides on.** A ranking metric averages over every pair of
+rows; a threshold reads one row at a time. Degrading a feature that matters near the threshold and
+nowhere else moves the second and barely touches the first. A gate expressed in AUC will pass a
+system whose decisions have materially changed, and the closer a model's AUC is to 1, the less room
+there is for such a change to show up in it at all.
+
+**Why it was invisible.** Nothing failed. Every feature had a defined value, the parity tests
+compared serving against the batch path with the *same* inputs, and the store answered every read.
+The skew lives between "the store returns a feature" and "something writes what the feature reads",
+which no per-feature test covers. It was found by asking who calls the store's writers — the
+question "where does this data come from in production?" rather than "does this code compute the
+right thing?".
+
+**What follows for reporting.** Any claim of the form "serving matches training" needs to name the
+quantity it holds for. Parity within 1e-9 on the same inputs says nothing about whether the inputs
+are the same in production. The honest statement is the table above, and the M5 rows say so: the
+owner carried the gap (ADR 0034, option 3) with acceptance tests against M6/M9, a metric counting
+every affected read, an alert on it, and M10 required to re-measure the skew and find zero.
+
+### 2026-09-23 · A fake is a hypothesis about an API, and 537 tests can confirm it wrongly
+
+`m5/scoring` had been reviewed four times — a principal review, a re-review of its fixes, a
+verification pass, and an adversarial pass over the promotion path — and CI was still red on one
+test. The failure:
+
+```
+RegistryError: GET /api/2.0/mlflow/registered-models/alias: HTTP 400
+{"error_code": "INVALID_PARAMETER_VALUE", "message": "Registered model alias production not found."}
+```
+
+**MLflow 3.16 reports an unset alias with HTTP 400 `INVALID_PARAMETER_VALUE`.** Everywhere else in
+its registry API an absent thing is HTTP 404 `RESOURCE_DOES_NOT_EXIST`, and that is what
+`MlflowRegistry.by_alias` was written to expect. So the client raised on a state that is not an
+error at all: *no production alias set yet*, which is the state every first deployment starts in.
+Publishing with `--alias production` reads the outgoing alias before moving it, so every first
+promotion into a fresh registry failed.
+
+**Why no review caught it.** `FakeMlflow`, the in-process double the serving tests run against,
+returned the 404 shape. It encodes the author's reading of the REST API — and every test that used
+it therefore tested the client against that reading, not against MLflow. 537 tests passed. Four
+reviewers read the code, mutated it, probed it adversarially, and found eleven real defects in the
+promotion path between them; none found this one, because each reasoned about the same double. The
+only thing that caught it was the single `requires_docker` test that starts a real MLflow container,
+and its whole purpose is stated in its docstring: "The fake above encodes my reading of MLflow's
+REST API; this checks it against MLflow 3.16.0, the image docker-compose.yml pins."
+
+**The rule.** A test double is a hypothesis about an external service, and tests written against it
+confirm the hypothesis rather than the service. So: **any fake standing in for an external service
+needs at least one test that exercises the real thing, and the fake's behaviour must be pinned
+against what that test observes.** Not a test per behaviour — a real-service test per *fake*, whose
+job is to catch the double drifting from its subject. When it fires, the fix has two halves: the
+client, and the double. Fixing only the client leaves the next wrong assumption undetectable.
+
+The fix here did both. `by_alias` accepts either wording (and still raises on an
+`INVALID_PARAMETER_VALUE` that is not about an absent alias, so a real client bug cannot hide as
+"no alias set"); `FakeMlflow` now answers as MLflow 3.16.0 does, with two tests pinning both shapes
+so this class of defect fails in the fast suite instead of only in CI.
+
+**The uncomfortable general point.** Mutation testing, adversarial probing and independent review
+all operate *inside* the world the test fixtures define. They cannot see a boundary that is
+mis-drawn, because every instrument agrees with every other. Only contact with the real dependency
+is outside that world. This is worth stating in the paper's limitations: the verification effort
+reported for this system is large, and it was still blind in exactly one direction until a
+container was started.
+
+### 2026-09-24 · A flag that enables a safeguard is not the safeguard running
+
+Every commit I made in this session ran with `git -c core.hooksPath=.githooks commit`. **There is
+no `.githooks/` directory in this repository.** The project installs its hooks into the common git
+directory (`make bootstrap`, `default_install_hook_types: [pre-commit, commit-msg]`), and they were
+installed and working. Pointing `core.hooksPath` at a directory that does not exist disables hooks
+silently: git finds no hook to run and reports nothing.
+
+So for the whole session the commit-msg and pre-commit checks did not run on a single commit, while
+I believed they were running and said so. No `--no-verify` was ever used -- and the effect was
+exactly the same as if it had been. The flag was written to *comply* with the rule that forbids
+`--no-verify`; it defeated it instead.
+
+**What it cost.** Seven commit messages violated G.3's 72-character body limit, 77 problems in all,
+and CI's commit-message job had been failing on this branch since `f606234`. I did not see it
+because I had no GitHub credentials and was reading CI second-hand, where the red run was
+attributed to a test failure that was also real. Fixing it needed a history rewrite of four commits
+another agent had already merged, which cost that agent a re-merge. Two trailing blank lines
+slipped through the same hole.
+
+**The rule.** *Verify that a safeguard is running; do not infer it from the flag you passed.* A
+configuration flag expresses an intention, and an intention that names a path, a file or a hook
+that does not exist fails open and says nothing. The check is cheap and direct: run the guard by
+hand once (`fs-commit-msg --rev-range …`, `pre-commit run --all-files`) and see it object to
+something it should object to. A safeguard that has never refused anything in your presence has not
+been observed working.
+
+The same shape appeared twice more in this milestone and is worth naming as a family: a fake that
+encodes a wrong reading of an API (2026-09-23), a guard whose condition was vacuous because it
+matched a substring always present, and now a hook path that silently matched nothing. Each was a
+check that reported success while checking nothing, and none of them was visible from inside the
+system that contained it.
+
 ## M7 — staff identity, authorisation and audit
 
 ### 2026-09-22 · A fix whose test never reached it

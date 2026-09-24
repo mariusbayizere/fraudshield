@@ -1,7 +1,9 @@
 // FraudShield scoring contract between fraudshield-api (Java) and fraudshield-ml (Python).
 //
-// Hot path (build prompt C.2): the API validates the request, reads account context from Redis in
-// one pipelined round-trip, then calls Score over gRPC with mTLS on a persistent HTTP/2 channel.
+// Hot path (build prompt C.2, as amended by ADR 0033): the API validates the request and calls Score
+// over gRPC with mTLS on a persistent HTTP/2 channel, sending the transaction, which carries the
+// account token. The scorer reads the account's context from the Redis feature store itself, in
+// one pipelined round-trip, so the parity-critical window arithmetic has one implementation (M3).
 // The scorer computes the 44 features, the calibrated XGBoost + LightGBM ensemble, the Isolation
 // Forest score and, for ensemble scores >= 0.60, exact TreeSHAP. Risk tiers, rules and the decision
 // are applied by the API, not here.
@@ -89,8 +91,11 @@ message Transaction {
   google.protobuf.Timestamp received_at = 14;
 }
 
-// Pre-computed state read from the Redis feature store before scoring (FR-02-09). Optional fields
-// are absent when there is no history; the scorer applies each feature's documented NaN rule.
+// The account's state as the scorer reads it from the Redis feature store (FR-02-09, ADR 0033).
+// No longer sent by the API: ScoreRequest field 2 is reserved. Kept because messages are never
+// deleted (ADR 0012) and because it documents the store's read model, which ScoringResult
+// field 18 returns for audit and replay. Optional fields are absent when there is no history; the
+// scorer applies each feature's documented NaN rule.
 message AccountContext {
   // Velocity windows (E.2 velocity group).
   uint32 tx_count_60s = 1;
@@ -158,8 +163,12 @@ message AgentContext {
 }
 
 message ScoreRequest {
+  // ADR 0033: the scorer reads the account context from the feature store; the API no longer
+  // sends it. Removed with its number and name reserved, as ADR 0012 requires.
+  reserved 2;
+  reserved "context";
+
   Transaction transaction = 1;
-  AccountContext context = 2;
   // Active rule and channel limits the just_below_limit_flag feature compares against (E.2).
   repeated Money configured_limits = 3;
   // W3C trace context propagated from the edge (E.10).
@@ -229,6 +238,12 @@ message ScoringResult {
   string feature_registry_version = 15;
   uint32 scoring_duration_ms = 16;
   repeated StageTiming stage_timings = 17;
+  // The account context the scorer read from the feature store for this transaction (ADR 0033), so
+  // a decision can be audited and replayed against exactly the state it saw.
+  AccountContext account_context = 18;
+  // True when the feature store was unreachable or held no state and the scorer answered from the
+  // database fallback or with the state unknown (C.4 DEGRADED_MODE), so the API can surface it.
+  bool feature_store_degraded = 19;
 }
 
 message ScoreResponse {
