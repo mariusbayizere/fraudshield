@@ -214,3 +214,37 @@ carry, not a precondition someone else supplies.
 Carried where M10 will see it: `docs/parallel/M10_updates.md`. The owner's condition:
 **M10's end-to-end verification re-measures this skew and requires it to be zero** — the served features must equal the trained ones for every row of the verification set, not
 merely be close on AUC.
+
+---
+
+## From M10 (branch `m10/verification`, 2026-09-24)
+
+**ADR 0100 proposes the ingest rate limit that the specification never states**, for the owner to
+accept and M6 to implement. M6 already built the mechanism — a token bucket per API key in Redis,
+`429` with `Retry-After`, a per-instance bucket marked `RateLimit-Degraded: true` when Redis is
+down — and the ADR changes only what the bucket counts and what the budget is:
+
+1. **Count transactions, not requests.** A single-transaction request costs one unit; a batch
+   costs its item count, charged once on acceptance, and a batch that exceeds the remaining burst
+   is refused whole. As it stands the filter takes one token per HTTP request, so a caller using
+   the batch endpoint can submit up to a thousand times the transactions of a caller using the
+   single endpoint for the same budget — the limit protects the request path rather than the
+   scoring, feature-store, Kafka and database capacity that the load actually costs.
+2. **Two budgets per API key**: the current default (200 per second, burst 400) for a newly minted
+   key, and an explicitly configured integrator budget of 2,000 per second, burst 4,000. The
+   figures are **ASSUMED** and derived in the ADR from the specified system throughput; no
+   integrator profile or measurement supports them, and the ADR says so.
+3. **Idempotent replays consume budget**, and `Retry-After` is the whole seconds until the next
+   unit refills, floored at one.
+
+Nothing in the frozen contract changes: the refusal, its problem type and `Retry-After` are
+already in the OpenAPI document, and `RateLimit-Limit` / `RateLimit-Remaining` are already emitted.
+
+**Until the ADR is accepted**, M10's load campaign records refusals as observations with the
+budget in force, classified as neither pass nor failure, and excludes them from the error
+percentage of NFR-PERF-10.
+
+**Also carried, for the record:** M10 inherits PB-73 (end-to-end decision latency with M5's real
+scorer) and PB-74 (the batch row) as ADR 0059 assigns them. The owner has confirmed that M6's
+allocation of `PB-73` stands and that M5's competing use of the same identifier is renumbered; see
+`docs/parallel/M10_updates.md`.

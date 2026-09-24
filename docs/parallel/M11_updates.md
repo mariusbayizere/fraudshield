@@ -267,3 +267,26 @@ every instrument agrees with every other. Contact with the real dependency is th
 outside that world. **What may not be claimed:** that the verification effort reported here
 establishes correctness against the services the system integrates with, beyond the three
 `requires_docker` tests that touch real Redis and real MLflow.
+
+---
+
+## From M10 (branch `m10/verification`, 2026-09-24)
+
+**A new assumed parameter for the limitations section: the ingest rate limit (ADR 0100).**
+
+The specification quantifies no ingest rate limit. The contract declares the refusal (`429` with
+`Retry-After`) and Part E.1 requires a per-key budget; M6 implements a token bucket per API key
+whose default budget is an implementation default, not a requirement. ADR 0100 proposes a number
+derived from the specified system throughput, marked **ASSUMED**, with the reasoning written so it
+can be argued with: no integrator profile, no contract and no measurement supports it.
+
+For M11 this belongs with the other assumed parameters rather than with the sourced ones. If the
+paper ever states what load the system accepts per client, that figure is a modelling choice of the
+same kind as the fraud parameters, and the same rule applies — it is labelled as assumed, or it is
+not stated.
+
+Nothing else from M10 affects the paper yet: the campaign has not run, and no measurement exists.
+When it does, the rows the paper marks "not yet measured (M10)" — the five-million-row scale, the
+serving and end-to-end latencies, the p99 frontier — will come with evidence files and the machine
+recorded in `docs/benchmarks/hardware.md`, which is what the paper's living-document procedure
+expects.

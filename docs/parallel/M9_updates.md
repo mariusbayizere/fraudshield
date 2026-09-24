@@ -296,3 +296,47 @@ confirmation at integration. M9's part is the deployment and the two alerts abov
 The full statements, with their acceptance tests, are in `docs/parallel/M6_updates.md` under "From
 M5"; PB-72 is carried in `docs/parallel/M10_updates.md`. The backlog numbers are proposals: M5 does
 not edit `docs/backlog/`, and PB-68 is already taken by the frontier write-up item.
+
+---
+
+## From M10 (branch `m10/verification`, 2026-09-24)
+
+Two prerequisites the verification campaign needs from M9, written here rather than discovered on
+the day the campaign starts (ADR 0101). Neither is a change to M9's work on this branch: M10 does
+not edit `infrastructure/`.
+
+### 1. Data-store manifests, or the chaos cases select nothing
+
+Three of the five Part C.4 failure cases target data stores: Kafka (NFR-REL-02 and D-15), Redis
+(NFR-REL-03) and PostgreSQL/TimescaleDB (NFR-REL-04, D-49). `infrastructure/k8s/README.md` records
+that these are not in the manifests yet and fixes their label contract as
+`fraudshield.io/datastore: postgresql | pii-vault | redis | kafka | mlflow | object-store`. M10's
+manifests (`tests/chaos/02`, `03`, `04`) select on exactly that label.
+
+**Why it matters more than it looks:** a Chaos Mesh experiment whose selector matches no pod
+reports success. Without these manifests the campaign would produce three green resilience cases
+that injected nothing at all.
+
+**Acceptance criterion M10 needs:** the data stores deployed with that label, and — for
+PostgreSQL — the operator's own role label on the pod currently serving writes, so that case 04
+can select the primary rather than a replica. `tests/chaos/04-postgres-primary-loss.yaml` assumes
+CloudNativePG's key and says so; tell M10 the real one if it differs.
+
+### 2. Chaos Mesh cannot run inside the application namespace
+
+The `fraudshield` namespace enforces Pod Security `restricted` (v1.34) and carries
+`default-deny-all` for ingress and egress. A chaos daemon needs privileges that policy refuses,
+and an agent with no network path to a pod fails silently in the same direction as above.
+
+**Acceptance criterion M10 needs:** the controller installed in its own namespace (`chaos-mesh`),
+with an explicit NetworkPolicy allowing it to act on `fraudshield`, and the policy recorded so a
+later reader can see what was opened and when it was closed. M10 will run a deliberate no-op
+experiment first to prove the controller can act at all; that check is in the campaign plan.
+
+### Also relevant to M9
+
+ADR 0090's chaos case is written as `tests/chaos/06-api-pod-loss-with-spool.yaml`, and the spool
+append measurement the ADR makes an M10 obligation is row 11 of `docs/benchmarks/m10_plan.md`. If
+the rented storage class cannot give predictable fsync latency on a ReadWriteMany volume, the
+ADR's named fallback (per-pod volumes, partitioned rolling update) becomes an owner decision, not
+a re-run.
