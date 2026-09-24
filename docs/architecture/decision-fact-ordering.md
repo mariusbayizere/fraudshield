@@ -204,10 +204,12 @@ decision's [NIT].
   outcome nor a change of record resets it.
 
   Every moment of an owned partition's time is exactly one of three kinds. An **attempt** is one
-  classification of the head record: the single statement of 5.1, plus the dead-letter send where
-  one follows. It succeeds or fails (S5, or the DLQ send fails). It ends when the statement returns,
-  or when the DLQ send is acknowledged. The SMS send and the outcome write of S2 come after the
-  attempt, and their time is draining [5-n4].
+  classification of the head record: the handler's call, plus the dead-letter send where one
+  follows. It succeeds or fails (S5, or the DLQ send fails). It ends when the handler returns, or
+  when the DLQ send is acknowledged. For S2 that includes the SMS send and the outcome write, so a
+  record that waited counts its send as the end of its wait; a record that did not wait counts it as
+  draining [5-n4]. (Implementation note: the handler is one call, so this is where the attempt can
+  be observed.)
   - **Waiting.** From the end of a successful S4 answer for record X to the end of the next
     successful attempt for X, whatever that attempt answers (S4, S2, S3 and so on), except any
     neutral time inside it. The final interval of a wait therefore counts [4-m2]. Waiting adds to
@@ -296,8 +298,12 @@ decision's [NIT].
   ADR 0064 point 5, which lists the DLQ headers, is amended to match [m6].
 - **D-b.** `<topic>.dlq` keeps records for 30 days (`topics.yaml`, `dlq_retention: P30D`). The source
   topic keeps them for 3 days.
-- **D-c. (change) Replay tool: `DeadLetterReplay`**, in the notify module, with a `main` that
-  operators run from the ingest image. It reads `<topic>.dlq` with **no committed consumer group**
+- **D-c. (change) Replay tool: `DeadLetterReplay`**, in the notify module, with a `main`. Until the
+  deployable image exists (M9), it runs from a build:
+  `java -cp "notify/target/classes:$(./mvnw -q -pl notify dependency:build-classpath
+  -Dmdep.outputFile=/dev/stdout)" io.github.mariusbayizere.fraudshield.notify.kafka.DeadLetterReplay
+  --bootstrap-servers <servers> --topic fs.notifications.customer [--reason <r>]... [--from <instant>]
+  [--allow-rejected]`. Packaging it into the image is carried to M9. It reads `<topic>.dlq` with **no committed consumer group**
   [M3], from a time window the operator gives (default: the whole retention) to the DLQ's end
   offsets when the run starts. It takes the reasons to replay (default `parent_not_recorded`).
   - Within the run, it keeps **only the newest copy of each envelope `event_id`** among the matching
@@ -411,9 +417,10 @@ fails, the job ends FAILED, as for any other unavailable dependency [NIT].
 3. `EnvelopeConsumer.Handler` receives the record's headers: T and the replayed flag. This applies
    to both consumers built on it: the SMS consumer, and the webhook dispatcher
    (`NotificationWiring`, group `webhook-dispatcher`), which ignores them [4-m4].
-4. `CustomerSmsSender` classifies with one statement (5.1), takes link eligibility, and the locale
-   it records on a SENT or FAILED row, from the REQUESTED row (5.2) [4-n2], and implements S0 to S5
-   (5.3).
+4. `CustomerSmsSender` classifies with one statement (5.1) and implements S0 to S5 (5.3). It takes
+   link eligibility from the REQUESTED row (5.2). It never records the intent's own locale [4-n2]: a
+   FAILED row before the vault answered records the REQUESTED row's locale, and a SENT or later
+   FAILED row records the vault locale the SMS was rendered in, as before.
 5. `EnvelopeConsumer` implements:
    - the per-partition pause (W-a);
    - the budget (W-b);

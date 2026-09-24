@@ -96,7 +96,13 @@ class VerificationFlowTest {
             clock);
     decisions.decide(Fixtures.transaction("15000"), new byte[32], System.nanoTime());
     List<SpoolRecord> records = new ArrayList<>();
-    for (DecisionEvent fact : ports.events) {
+    for (DecisionEvent decided : ports.events) {
+      // Link eligibility comes from the kept decision's REQUESTED row (the ordering contract,
+      // 5.2): the test double's policy refuses it, so the persisted intent allows it here.
+      DecisionEvent fact =
+          decided instanceof DecisionEvent.CustomerNotificationRequested n
+              ? SmsOrderingTest.withLink(n, true)
+              : decided;
       byte[] payload = FactCodec.encode(List.of(fact));
       records.add(new SpoolRecord(records.size(), records.size() + 1, payload));
     }
@@ -263,15 +269,6 @@ class VerificationFlowTest {
     assertThat(ports.latest.get(blockedTransaction).decision()).isEqualTo(DecisionValue.DECLINE);
     assertThat(ports.eventsOf(DecisionEvent.LabelRecorded.class).getFirst().fraud()).isTrue();
     assertThat(one("SELECT count(*) FROM fraudshield.unblock_events")).isEqualTo("0");
-  }
-
-  @Test
-  @Tag("D-25")
-  void withoutSelfServiceTheSmsHasNoLinkAndSaysWhoToCall() throws Exception {
-    ((tools.jackson.databind.node.ObjectNode) intent).put("verification_link_allowed", false);
-    assertThat(sender.send(INSTITUTION, intent)).isEqualTo(CustomerSmsSender.Outcome.SENT);
-    assertThat(sent.getLast()).doesNotContain("https://").contains("+250788100100");
-    assertThat(one("SELECT count(*) FROM fraudshield.customer_verifications")).isEqualTo("0");
   }
 
   @Test

@@ -129,7 +129,12 @@ class SmsPolicyTest {
     }
     assertThat(
             new CustomerSmsPolicy("en")
-                .compose(transaction("RWF", 30.06), BLOCK, model(0.9, features(null, 0.0, 0.0)), AT)
+                .compose(
+                    transaction("RWF", 30.06),
+                    BLOCK,
+                    UUID.randomUUID(),
+                    model(0.9, features(null, 0.0, 0.0)),
+                    AT)
                 .verificationLinkAllowed())
         .isFalse();
   }
@@ -139,7 +144,8 @@ class SmsPolicyTest {
   @Tag("D-25")
   void theIntentCarriesEverythingTheContractRequiresAndNoContactDetails() {
     DecisionEvent.CustomerNotificationRequested intent =
-        new CustomerSmsPolicy("en").compose(transaction("RWF", 30.06), BLOCK, model(0.9, SAFE), AT);
+        new CustomerSmsPolicy("en")
+            .compose(transaction("RWF", 30.06), BLOCK, UUID.randomUUID(), model(0.9, SAFE), AT);
     assertThat(intent.templateKey()).matches("^sms\\.[a-z_]+$");
     assertThat(intent.maskedAccount()).isEqualTo("***4821").matches("^\\*{3,}[0-9A-Za-z]{2,4}$");
     assertThat(intent.localTime())
@@ -150,7 +156,7 @@ class SmsPolicyTest {
     assertThat(intent.autoBlockEventId()).isEqualTo(BLOCK);
     assertThat(
             new CustomerSmsPolicy("rw")
-                .compose(transaction("RWF", 30.06), BLOCK, model(0.97, SAFE), AT)
+                .compose(transaction("RWF", 30.06), BLOCK, UUID.randomUUID(), model(0.97, SAFE), AT)
                 .verificationLinkAllowed())
         .isFalse();
     assertThatThrownBy(() -> new CustomerSmsPolicy("de"))

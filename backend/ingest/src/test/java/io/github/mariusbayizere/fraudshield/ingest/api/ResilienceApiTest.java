@@ -173,6 +173,59 @@ class ResilienceApiTest {
 
   @Test
   @Tag("NFR-REL-01")
+  @Tag("FR-01-03")
+  void withRedisAndPostgresBothDownSubmissionsAreToldToRetryNotThatTheServerBroke()
+      throws Exception {
+    // Seen under load (2026-09-24): with both idempotency stores unavailable the claim threw and
+    // the client got a 500. The claim precedes any decision, so the honest answer is 503 with
+    // Retry-After: core banking retries a 503 and escalates a 500.
+    post("/api/v1/transactions/ingest", IngestApiTest.body(UUID.randomUUID(), "CARD").toString());
+    var docker = org.testcontainers.DockerClientFactory.instance().client();
+    String postgres =
+        io.github.mariusbayizere.fraudshield.decision.testing.TestDatabase.container()
+            .getContainerId();
+    UUID id = UUID.randomUUID();
+    final int scored = ApiHarness.SCORER.calls.get();
+    ApiHarness.REDIS.pause();
+    docker.pauseContainerCmd(postgres).exec();
+    HttpResponse<String> refused;
+    try {
+      refused = post("/api/v1/transactions/ingest", IngestApiTest.body(id, "CARD").toString());
+    } finally {
+      docker.unpauseContainerCmd(postgres).exec();
+      ApiHarness.REDIS.unpause();
+    }
+    assertThat(refused.statusCode()).as(refused.body()).isEqualTo(503);
+    assertThat(refused.headers().firstValue("Retry-After")).contains("1");
+    assertThat(JSON.readTree(refused.body()).get("type").asString())
+        .isEqualTo("urn:fraudshield:problem:service-unavailable");
+    assertThat(ApiHarness.SCORER.calls.get()).as("nothing was decided").isEqualTo(scored);
+
+    // Retried once the stores are back, the same request is decided.
+    await()
+        .atMost(Duration.ofSeconds(30))
+        .pollInterval(Duration.ofMillis(500))
+        .until(
+            () ->
+                post("/api/v1/transactions/ingest", IngestApiTest.body(id, "CARD").toString())
+                        .statusCode()
+                    == 200);
+    // Leave no degraded window behind for the next test (the ci #343 lesson).
+    await()
+        .atMost(Duration.ofSeconds(10))
+        .pollInterval(Duration.ofMillis(500))
+        .until(
+            () ->
+                post(
+                                "/api/v1/transactions/ingest",
+                                IngestApiTest.body(UUID.randomUUID(), "CARD").toString())
+                            .statusCode()
+                        == 200
+                    && !degraded.degraded());
+  }
+
+  @Test
+  @Tag("NFR-REL-01")
   void withTheScorerDownTheFallbackDecidesAndSaysSo() throws Exception {
     ApiHarness.SCORER.failure = io.grpc.Status.UNAVAILABLE;
     for (int i = 0; i < 20; i++) {

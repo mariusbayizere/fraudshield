@@ -39,12 +39,16 @@ public final class CustomerSmsPolicy implements CustomerNotificationPolicy {
 
   @Override
   public DecisionEvent.CustomerNotificationRequested compose(
-      Transaction transaction, UUID autoBlockEventId, Scoring scoring, Instant at) {
+      Transaction transaction,
+      UUID autoBlockEventId,
+      UUID notificationId,
+      Scoring scoring,
+      Instant at) {
     SelfServicePolicy.Eligibility eligibility =
         SelfServicePolicy.evaluate(scoring, transaction.deviceToken() != null);
     String token = transaction.accountToken();
     return new DecisionEvent.CustomerNotificationRequested(
-        UUID.randomUUID(),
+        notificationId,
         transaction.institutionId(),
         token,
         autoBlockEventId,

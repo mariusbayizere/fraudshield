@@ -260,9 +260,9 @@ public class InMemoryPorts
 
   @Override
   public DecisionEvent.CustomerNotificationRequested compose(
-      Transaction transaction, UUID block, Scoring scoring, Instant at) {
+      Transaction transaction, UUID block, UUID notification, Scoring scoring, Instant at) {
     return new DecisionEvent.CustomerNotificationRequested(
-        UUID.randomUUID(),
+        notification,
         transaction.institutionId(),
         transaction.accountToken(),
         block,

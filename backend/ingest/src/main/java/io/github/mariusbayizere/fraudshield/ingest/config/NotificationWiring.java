@@ -253,7 +253,7 @@ public class NotificationWiring {
               Map.of(),
               "fs.decisions.final",
               "webhook-dispatcher",
-              dispatcher::enqueue));
+              envelope -> dispatcher.enqueue(envelope.institutionId(), envelope.payload())));
       ScheduledExecutorService delivery =
           Executors.newSingleThreadScheduledExecutor(
               Thread.ofPlatform().name("webhook-delivery").daemon(true).factory());
@@ -302,7 +302,9 @@ public class NotificationWiring {
               Map.of(),
               "fs.notifications.customer",
               "notification-service",
-              sender::send));
+              envelope ->
+                  sender.send(
+                      envelope.institutionId(), envelope.payload(), envelope.transactionId())));
     }
     return channels;
   }

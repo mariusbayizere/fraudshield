@@ -65,6 +65,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -134,6 +135,15 @@ public class DecisionWiring {
         .baseUnit("bytes")
         .description("Durable but not yet delivered to every consumer (D-15)")
         .register(registry);
+    for (String consumer : List.of(KAFKA_CONSUMER, POSTGRES_CONSUMER)) {
+      // Operators replay parent_not_recorded SMS intents only once the PostgreSQL consumer's lag
+      // is zero (docs/architecture/decision-fact-ordering.md, D-c2).
+      Gauge.builder("fs_spool_lag", spool, s -> s.lagBytes(consumer))
+          .tag("consumer", consumer)
+          .baseUnit("bytes")
+          .description("Durable but not yet delivered to this consumer")
+          .register(registry);
+    }
     return spool;
   }
 

@@ -186,8 +186,15 @@ public final class IngestService {
     long deadline = System.nanoTime() + duplicateWait.toNanos();
     while (true) {
       long mark = System.nanoTime();
-      IdempotencyStore.Claim claim =
-          idempotency.claim(institution, request.transactionId(), fingerprint);
+      IdempotencyStore.Claim claim;
+      try {
+        claim = idempotency.claim(institution, request.transactionId(), fingerprint);
+      } catch (RuntimeException unavailable) {
+        // Neither Redis nor PostgreSQL could answer the claim, and the claim precedes any decision:
+        // nothing was decided, so the answer is 503 "retry the same request", not a 500 an
+        // integrator would read as "the server broke" (the ordering contract, section 10).
+        return new Unavailable("idempotency is unavailable");
+      }
       metrics.stage("idempotency_claim", System.nanoTime() - mark);
       switch (claim) {
         case IdempotencyStore.Replay replay -> {

@@ -39,9 +39,13 @@ The decision must also reach PostgreSQL without putting PostgreSQL on the hot pa
    the source topic, partition, offset and time in its headers, and the consumer commits past it.
    Otherwise one poison record stalls every customer SMS or webhook on its partition. If the
    dead-letter send itself fails, the record is retried rather than dropped. **Amended
-   2026-09-24 (ADR 0057):** a customer SMS intent read before its auto-block event has reached
-   PostgreSQL is not sent and is not dead-lettered. It is re-read until the event is there, and a
-   wait of more than a minute is logged at WARN. The two drainers make that ordering possible.
+   2026-09-24 (ADR 0056, `docs/architecture/decision-fact-ordering.md`):**
+   - A dead-lettered copy keeps the record's original headers, for every reason.
+   - A customer SMS intent is classified against PostgreSQL before anything is sent. An intent that
+     is not the kept decision's is dead-lettered at once (`not_the_kept_decision`).
+   - An intent whose parent is not written yet waits within its partition's wait budget, and is then
+     dead-lettered (`parent_not_recorded`), to be replayed with `DeadLetterReplay`.
+   - Every re-read pauses its partition, never the consumer thread.
 6. **A caller that stops waiting for the spool** may already have had its record taken by the
    writer. `appendAndWait` withdraws a record only while it is still queued; once taken, the caller
    waits up to 5 s more, and a record whose fsync does not confirm in time raises "outcome

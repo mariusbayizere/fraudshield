@@ -20,6 +20,19 @@
     <Class name="io.github.mariusbayizere.fraudshield.notify.kafka.EnvelopeConsumer"/>
     <Bug pattern="CRLF_INJECTION_LOGS"/>
   </Match>
+  <!--
+    The rebalance listener logs a TopicPartition (a configured topic name and a number); the SMS
+    sender logs an auto-block event id, a UUID. Neither can carry a newline (the ordering contract,
+    W-e and S2r).
+  -->
+  <Match>
+    <Class name="io.github.mariusbayizere.fraudshield.notify.kafka.EnvelopeConsumer$Rebalance"/>
+    <Bug pattern="CRLF_INJECTION_LOGS"/>
+  </Match>
+  <Match>
+    <Class name="io.github.mariusbayizere.fraudshield.notify.sms.CustomerSmsSender"/>
+    <Bug pattern="CRLF_INJECTION_LOGS"/>
+  </Match>
   <Match>
     <Class name="io.github.mariusbayizere.fraudshield.notify.verification.UnblockReconciler"/>
     <Bug pattern="CRLF_INJECTION_LOGS"/>

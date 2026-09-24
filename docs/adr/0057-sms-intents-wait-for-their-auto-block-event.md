@@ -1,7 +1,9 @@
 # 0057: A customer SMS waits for its auto-block event, however long that takes
 
-- **Status:** Accepted (author decision under the brief's ambiguity rule, 2026-09-24; for the owner
-  to confirm)
+- **Status:** Superseded by ADR 0056 (2026-09-24). The owner confirmed "never silently drop a
+  waiting SMS", but rejected the unbounded wait: "an unbounded wait that can block a partition
+  forever is not 'safest for customers' either". The bounded wait with dead-letter and replay in
+  `docs/architecture/decision-fact-ordering.md` replaces this record.
 - **Date:** 2026-09-24
 - **Decided by:** the author, choosing the option safest for customers, as the M6 brief directs
   when a question is open

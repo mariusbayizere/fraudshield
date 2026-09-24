@@ -872,3 +872,67 @@ PB-73, PB-74. M5 — the MLflow test (`c59d543`).
 **Next steps for a resumed session:** read CI for the head of `m6/decision` at job level (the
 stack job must have executed); after M5 merges, merge `main` into both M6 branches, re-run the full
 `verify` and the Python suites, confirm CI (stack executed) on each merged head, merge, tag.
+
+## SMS race: the owner's decision, the ordering contract, the implementation (2026-09-24)
+
+**The owner decided:**
+
+- options 1 and 3 together;
+- ADR 0057 confirmed as "never silently drop a waiting SMS", but the wait must be bounded, with a
+  dead-letter and replay path making the bound safe;
+- the case "first decision not a block, second one was" handled explicitly and tested;
+- the idempotency 500 fixed;
+- and, as a **process change**: write the ordering contract first, get it reviewed on its own,
+  then implement against it.
+
+**The contract:** `docs/architecture/decision-fact-ordering.md`. It was reviewed on its own five
+times (`docs/reviews/M6/m6-decision-2026-09-24-contract-1.md` to `-contract-5.md`):
+
+| Draft | Verdict | What the review found |
+|---|---|---|
+| 1 | 4 MAJOR | Reads from two snapshots. The discarded decision's link. A replay tool with one committed group. A per-record bound. |
+| 2 | 2 MAJOR | A different body for the same transaction id reaching another account. Rebalances resetting the bound. |
+| 3 | 1 MAJOR | A clock reset by valid intents: orphans interleaved with valid intents cost the whole bound each. |
+| 4 | 1 MAJOR | The budget not precisely defined. |
+| 5 | **sound** | 4 MINOR and 4 NIT, applied before implementation. |
+
+Eight MAJORs were found in the design before any code was written, against four found in code
+over the four fix rounds before.
+
+**Implementation**, following the contract's section 11:
+
+- Ids derive from (institution, transaction, request fingerprint).
+- The intent carries the `fs-transaction-id` header.
+- `CustomerSmsSender` classifies each intent from one statement, S0 to S5, with link eligibility
+  from the kept decision's REQUESTED row.
+- `EnvelopeConsumer` has a per-partition pause (the thread never sleeps), a leaky wait budget (10
+  minutes, drained in 60, both ASSUMED; `WaitBudget`), a checkpoint in the committed offset's
+  metadata, and a rebalance listener.
+- Dead letters keep their headers.
+- `DeadLetterReplay` replays dead letters.
+- New gauge: `fs_spool_lag`.
+- `IngestService` answers 503 when the idempotency claim cannot be made.
+- ADR 0056 records the decision. ADR 0057 is superseded. ADR 0064 point 5 is amended.
+
+**Tests**, one or more per invariant I1 to I16:
+
+- `SmsOrderingTest` (the decision table against the real `PostgresSink` and `KafkaMessages`,
+  including the owner's ordering in both orders);
+- `WaitBudgetTest` (on an explicit clock);
+- `EnvelopeConsumerTest` (on Kafka: the budget end to end, other partitions flowing, replay,
+  rebalance, an expelled member);
+- `ResilienceApiTest` (the 503).
+
+I14b's crash between a dead-letter and its commit is tested through its consequence: two DLQ copies
+of one event, which a replay republishes once. A crash at that exact point is not reproduced.
+
+**Carried to M9:**
+
+- a replay tool for `PostgresSink`'s dead-letter files;
+- packaging `DeadLetterReplay` into the deployable image;
+- alerts on the budget WARN and on DLQ growth.
+
+A transactional outbox is recommended for a later milestone.
+
+This is a code change: it needs an independent review until clean, then CI with `ci`, `stack` and
+`devcontainer` executed and green on one commit, before `main` moves and `m6-complete` is tagged.
