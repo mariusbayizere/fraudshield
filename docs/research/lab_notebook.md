@@ -2526,3 +2526,47 @@ encodes a wrong reading of an API (2026-09-23), a guard whose condition was vacu
 matched a substring always present, and now a hook path that silently matched nothing. Each was a
 check that reported success while checking nothing, and none of them was visible from inside the
 system that contained it.
+
+---
+
+## M10 — the verification campaign
+
+### 2026-09-24 · A control whose unit of account is not the unit of load
+
+Preparing M10's load campaign, I needed to know what a `429` from the ingest API means, so that a
+refusal during a run could be classified as the control working or as a misconfiguration. The
+contract declares the refusal (`urn:fraudshield:problem:rate-limited`, `Retry-After` in whole
+seconds) and Part E.1 requires a per-key request budget. M6 implements it properly: a token bucket
+per API key in Redis, a per-instance bucket when Redis is down, marked `RateLimit-Degraded: true`
+and counted, so an outage weakens the control visibly rather than removing it.
+
+**No document states the budget.** The only number is an implementation default — 200 requests a
+second, burst 400 — which nothing justifies and nothing tests. Having to justify a number instead
+of inheriting one is what exposed the defect underneath it.
+
+**The budget is charged in requests. The load is transactions.** The filter takes one token per
+HTTP request, and the batch endpoint accepts up to a thousand transactions in one request. A
+caller who batches therefore gets up to a thousand times the throughput of a caller who does not,
+for the same budget — and the endpoint that bypasses the control is the one the contract
+advertises for volume. The limiter protects the request path; the cost it exists to bound is
+scoring, the feature store, Kafka and the database, none of which are counted by it.
+
+Fixed by charging the budget in transactions: one unit for a single transaction, the item count
+for a batch, charged once on acceptance, and a batch exceeding the remaining burst refused whole
+rather than partially accepted (ADR 0100, accepted 2026-09-24 with this change; recorded for M6 as
+a defect to fix before it merges, not as a later improvement).
+
+**The rule.** *A control whose unit of account differs from the unit of load is not a control.*
+Name the quantity the control exists to bound, then check that the counter counts that quantity —
+not a proxy that is usually proportional to it. Here the proxy was requests, and one endpoint
+breaks the proportionality by three orders of magnitude.
+
+This is the same family as the guards recorded in M2 and M4: the parameter digest that guarded the
+generator's inputs while the claim lived in its output, the D-08 ceiling that was true of the
+columns it measured and false of the features it was quoted about, and the statistical band whose
+fixed floor was wider than the band it bounded. Each was a check ranging over the wrong object.
+The generalisation that now has three instances: **for every guard, name the object it ranges over
+and the sentence it is meant to justify; if the nouns differ, it does not justify the sentence.**
+
+It is also an argument for the practice rather than the rule: the defect had been in the code and
+in review, and it survived both. It surfaced only because a number had to be defended in writing.

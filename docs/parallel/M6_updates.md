@@ -219,8 +219,11 @@ merely be close on AUC.
 
 ## From M10 (branch `m10/verification`, 2026-09-24)
 
-**ADR 0100 proposes the ingest rate limit that the specification never states**, for the owner to
-accept and M6 to implement. M6 already built the mechanism — a token bucket per API key in Redis,
+**ADR 0100 is accepted (owner, 2026-09-24), and point 1 below is a defect M6 must fix before it
+merges** — not a proposal for later. As it stands the rate limit is a security control that does
+not hold: the budget is charged in requests while the load is transactions, and the batch endpoint
+accepts up to a thousand transactions per request, so any caller holding a valid key can exceed its
+budget by up to three orders of magnitude simply by batching. M6 already built the mechanism — a token bucket per API key in Redis,
 `429` with `Retry-After`, a per-instance bucket marked `RateLimit-Degraded: true` when Redis is
 down — and the ADR changes only what the bucket counts and what the budget is:
 
@@ -240,9 +243,16 @@ down — and the ADR changes only what the bucket counts and what the budget is:
 Nothing in the frozen contract changes: the refusal, its problem type and `Retry-After` are
 already in the OpenAPI document, and `RateLimit-Limit` / `RateLimit-Remaining` are already emitted.
 
-**Until the ADR is accepted**, M10's load campaign records refusals as observations with the
-budget in force, classified as neither pass nor failure, and excludes them from the error
-percentage of NFR-PERF-10.
+**Merge condition.** Point 1 (the unit of account) is the defect and blocks M6's merge. Points 2
+and 3 (the budget figures) are ASSUMED and may be revised by the owner without reopening the ADR,
+so they are configuration rather than a merge condition. Until the fix ships, M10's load campaign
+records refusals as observations with the budget in force, classified as neither pass nor failure,
+and excludes them from the error percentage of NFR-PERF-10.
+
+The finding is also recorded in `docs/research/lab_notebook.md` (2026-09-24) with the other guard
+failures: a control whose unit of account differs from the unit of load is not a control, and this
+one survived both the code and its review — it surfaced only because a number had to be justified
+rather than defaulted.
 
 **Also carried, for the record:** M10 inherits PB-73 (end-to-end decision latency with M5's real
 scorer) and PB-74 (the batch row) as ADR 0059 assigns them. The owner has confirmed that M6's
