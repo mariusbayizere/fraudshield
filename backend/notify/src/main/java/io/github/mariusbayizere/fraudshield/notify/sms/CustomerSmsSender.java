@@ -2,10 +2,12 @@ package io.github.mariusbayizere.fraudshield.notify.sms;
 
 import io.github.mariusbayizere.fraudshield.common.money.CurrencyCode;
 import io.github.mariusbayizere.fraudshield.common.money.Money;
+import io.github.mariusbayizere.fraudshield.notify.kafka.NotYetRecordedException;
 import io.github.mariusbayizere.fraudshield.notify.verification.VerificationService;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Clock;
 import java.time.OffsetDateTime;
@@ -24,6 +26,9 @@ import tools.jackson.databind.JsonNode;
  * provider's reference or FAILED.
  */
 public final class CustomerSmsSender {
+
+  private static final String BLOCK_RECORDED =
+      "SELECT 1 FROM auto_block_events WHERE id = ? AND institution_id = ?";
 
   private static final String RECORD =
       """
@@ -84,6 +89,8 @@ public final class CustomerSmsSender {
    * @param intent the {@code notification-customer} payload
    * @return the outcome
    * @throws SQLException when the outcome cannot be recorded
+   * @throws NotYetRecordedException when the intent's auto-block event is not in PostgreSQL yet;
+   *     nothing has been sent or issued
    */
   public Outcome send(UUID institutionId, JsonNode intent) throws SQLException {
     UUID notification = UUID.fromString(intent.get("notification_id").asString());
@@ -91,6 +98,12 @@ public final class CustomerSmsSender {
     String account = intent.get("account_token").asString();
     String locale = intent.get("locale").asString();
     boolean linkAllowed = intent.get("verification_link_allowed").asBoolean();
+    if (!recorded(institutionId, block)) {
+      // The spool drains to Kafka and PostgreSQL independently, so this intent can arrive before
+      // its auto-block event is written. Nothing is sent or issued until it is. Sending first would
+      // leave an SMS with no record, and a replayed dead letter would send it twice.
+      throw new NotYetRecordedException("auto-block event " + block + " is not recorded yet");
+    }
     Optional<ContactDirectory.Contact> contact = contacts.find(institutionId, account);
     Optional<InstitutionMessaging.Settings> settings = institutions.find(institutionId);
     if (contact.isEmpty() || settings.isEmpty()) {
@@ -157,6 +170,26 @@ public final class CustomerSmsSender {
           Outcome.FAILED,
           null);
       return Outcome.FAILED;
+    }
+  }
+
+  private boolean recorded(UUID institution, UUID block) throws SQLException {
+    try (Connection c = dataSource.getConnection()) {
+      c.setAutoCommit(false);
+      try (PreparedStatement tenant =
+          c.prepareStatement("SELECT set_config('fraudshield.institution_id', ?, true)")) {
+        tenant.setString(1, institution.toString());
+        tenant.execute();
+      }
+      try (PreparedStatement s = c.prepareStatement(BLOCK_RECORDED)) {
+        s.setObject(1, block);
+        s.setObject(2, institution);
+        try (ResultSet row = s.executeQuery()) {
+          boolean found = row.next();
+          c.commit();
+          return found;
+        }
+      }
     }
   }
 

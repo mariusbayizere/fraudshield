@@ -702,9 +702,48 @@ acceptance, all or nothing, and replace the 200 per second implementation defaul
   - stack run 35969175673 (`workflow_dispatch`): the core compose stack job and its smoke test
     **executed** and succeeded. The push-triggered stack run was cancelled; the dispatch
     superseded it.
-  - devcontainer: path-filtered (skipped), since no devcontainer inputs changed. M6 is
-  **not** ready again until that review is clean and CI (with the stack job executed) is green on
-  the head that carries it.
+  - devcontainer: path-filtered (skipped), since no devcontainer inputs changed.
+
+## `main` fast-forwarded to `5c3f6b2`; the devcontainer run found an SMS race (2026-09-24)
+
+`main` was fast-forwarded from `0547539` (`m5-complete`) to `5c3f6b2`, as the owner's merge sequence
+says. On `5c3f6b2`, `ci` run 35970682153 was green on all 8 jobs, and the dispatched `stack` run
+35970693580 **executed** the core stack job and its smoke test, which succeeded. **`m6-complete` is
+not tagged:** `devcontainer` run 35970682163 executed and **failed**.
+
+- **What failed:** `IngestApiTest.customerNumbersAndPhonesReachTheSmsProviderAndNothingElse` timed
+  out after 20 s waiting for the customer notification to be recorded as SENT. The java job in `ci`
+  ran the same test on the same commit and passed.
+- **Why, from the log:** the notification consumer dead-lettered the test's SMS intent
+  (`rejected_by_the_database`). Its insert into `customer_notifications` violated the foreign key to
+  `auto_block_events`.
+  - The decision service's spool drains to Kafka and to PostgreSQL **independently**: the Kafka
+    drainer polls every 2 ms, the PostgreSQL drainer every 5 ms. An SMS intent can therefore be read
+    before the auto-block event it refers to has been written.
+  - `CustomerSmsSender` issued the verification link and **sent the SMS first**, and wrote the
+    record afterwards. When the write lost the race, the customer had an SMS with no record of it,
+    and the intent sat in the DLQ. Replaying the DLQ would have sent it twice.
+  - A foreign-key violation (SQLSTATE class 23) is classed as permanent, so nothing retried it.
+  - The code is M6's own (`08c4dc9`). The race was always there; CI's java job simply never lost it.
+- **Fix:**
+  - `CustomerSmsSender.send` first checks, under the tenant, that the auto-block event exists.
+    Until it does, it throws `NotYetRecordedException`, and nothing is sent, issued or recorded.
+  - `EnvelopeConsumer` re-reads such a record with its usual backoff until the record is
+    `PARENT_WAIT` (10 minutes) old, going by its Kafka timestamp. It then dead-letters the record
+    (`parent_not_recorded`), so a parent that never arrives cannot stall the partition. A record
+    with no timestamp does not wait.
+  - The webhook consumer has no such race: `webhook_deliveries` references only `institutions`.
+- **Tests:**
+  - `VerificationFlowTest.intentsThatOvertakeTheirAutoBlockEventSendNothingUntilItIsRecorded`:
+    nothing is sent, and no verification or notification row is written, until the event exists;
+    the same intent is then sent.
+  - `ParentWaitTest`: the wait bound.
+  - `EnvelopeConsumerTest.recordsWaitForTheirParentAndAreDeadLetteredOnlyOnceTheWaitIsOver`, run
+    on Kafka: a record that is not yet recorded is retried and then handled, an expired one is
+    dead-lettered with its reason, and the record behind it is handled.
+  - Local `./mvnw -pl notify verify`: 85 tests green, with checkstyle and spotbugs.
+- This is a code change, so it needs an independent review, and CI with the stack executed on the
+  new head, before `main` moves again and before `m6-complete` is tagged.
 
 ## Resume here (final state, 2026-09-23, after CI)
 

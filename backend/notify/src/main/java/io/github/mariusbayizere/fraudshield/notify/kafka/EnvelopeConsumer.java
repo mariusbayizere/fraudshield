@@ -42,6 +42,9 @@ import tools.jackson.databind.ObjectMapper;
  * behind it on that partition. A transient failure (the database or Redis is down) is retried with
  * exponential backoff up to {@value #MAX_BACKOFF_MS} ms and never dead-lettered, so no record is
  * lost to an outage.
+ *
+ * <p>A record whose parent fact has not reached PostgreSQL yet ({@link NotYetRecordedException}) is
+ * re-read the same way until it is {@link #PARENT_WAIT} old, then dead-lettered.
  */
 public final class EnvelopeConsumer implements AutoCloseable {
 
@@ -72,6 +75,13 @@ public final class EnvelopeConsumer implements AutoCloseable {
   static final long MAX_BACKOFF_MS = 30_000;
 
   private static final long FIRST_BACKOFF_MS = 100;
+
+  /**
+   * How long a record waits for its parent fact to reach PostgreSQL. The spool's PostgreSQL drainer
+   * normally trails its Kafka drainer by milliseconds. Ten minutes also covers a PostgreSQL outage
+   * the drainer retries through.
+   */
+  static final Duration PARENT_WAIT = Duration.ofMinutes(10);
 
   private final KafkaConsumer<String, byte[]> consumer;
   private final Producer<String, byte[]> deadLetters;
@@ -190,6 +200,12 @@ public final class EnvelopeConsumer implements AutoCloseable {
     try {
       handler.handle(institution, payload);
       return Outcome.HANDLED;
+    } catch (NotYetRecordedException e) {
+      if (stillWaiting(record.timestamp(), Instant.now())) {
+        LOG.debug("a record's parent is not in PostgreSQL yet; it will be re-read", e);
+        return Outcome.RETRY;
+      }
+      return deadLetter(record, "parent_not_recorded", e);
     } catch (SQLException e) {
       if (transientError(e)) {
         LOG.warn("a record could not be handled yet; it will be re-read", e);
@@ -207,6 +223,19 @@ public final class EnvelopeConsumer implements AutoCloseable {
       LOG.warn("a record could not be handled yet; it will be re-read", e);
       return Outcome.RETRY;
     }
+  }
+
+  /**
+   * Whether a record written at {@code timestampMs} may still wait for its parent. A record without
+   * a timestamp does not wait: it could otherwise stall its partition for ever.
+   *
+   * @param timestampMs the record's timestamp, or a negative value if it has none
+   * @param now the current instant
+   * @return true while the record is younger than {@link #PARENT_WAIT}
+   */
+  static boolean stillWaiting(long timestampMs, Instant now) {
+    return timestampMs >= 0
+        && Duration.between(Instant.ofEpochMilli(timestampMs), now).compareTo(PARENT_WAIT) < 0;
   }
 
   private static boolean permanentVaultFailure(Throwable e) {

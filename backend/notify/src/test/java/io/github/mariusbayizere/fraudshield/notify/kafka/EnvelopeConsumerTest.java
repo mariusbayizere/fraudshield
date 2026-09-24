@@ -7,6 +7,7 @@ import io.github.mariusbayizere.fraudshield.decision.testing.KafkaTestCluster;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -172,7 +173,81 @@ class EnvelopeConsumerTest {
                     .isEqualTo(topic));
   }
 
+  @Test
+  @Tag("FR-03-04")
+  void recordsWaitForTheirParentAndAreDeadLetteredOnlyOnceTheWaitIsOver() throws Exception {
+    // The spool drains to Kafka ahead of PostgreSQL: an SMS intent can arrive before its auto-block
+    // event. It is re-read until the event is recorded; one whose event never arrives is
+    // dead-lettered after PARENT_WAIT instead of stalling the partition.
+    UUID institution = UUID.randomUUID();
+    String topic = "fs.notifications.staff";
+    List<Integer> handled = new CopyOnWriteArrayList<>();
+    AtomicInteger notYet = new AtomicInteger(3);
+    try (EnvelopeConsumer consumer =
+        new EnvelopeConsumer(
+            kafka.bootstrapServers(),
+            Map.of(),
+            topic,
+            "test-group-" + UUID.randomUUID(),
+            (inst, payload) -> {
+              int sequence = payload.get("decision_sequence").asInt();
+              if (sequence == 1 && notYet.getAndDecrement() > 0) {
+                throw new NotYetRecordedException("auto-block event not recorded yet (test)");
+              }
+              if (sequence == 2) {
+                throw new NotYetRecordedException("auto-block event never recorded (test)");
+              }
+              handled.add(sequence);
+            })) {
+      publish(topic, institution, 1);
+      publishAt(
+          topic, institution, 2, Instant.now().minus(EnvelopeConsumer.PARENT_WAIT).minusSeconds(1));
+      publish(topic, institution, 3);
+
+      await().atMost(Duration.ofSeconds(30)).until(() -> handled.contains(3));
+      assertThat(handled).containsExactly(1, 3);
+      assertThat(notYet.get()).isNegative();
+      assertThat(consumer.deadLettered()).isEqualTo(1);
+    }
+    List<ConsumerRecord<String, byte[]>> dead = drain(topic + ".dlq", 1);
+    assertThat(dead).hasSize(1);
+    assertThat(
+            new String(
+                dead.getFirst().headers().lastHeader("fs-dlq-reason").value(),
+                StandardCharsets.UTF_8))
+        .isEqualTo("parent_not_recorded");
+    assertThat(new String(dead.getFirst().value(), StandardCharsets.UTF_8))
+        .contains("\"decision_sequence\":2");
+  }
+
+  private static void publishAt(String topic, UUID institution, int sequence, Instant at)
+      throws Exception {
+    try (KafkaProducer<String, byte[]> producer =
+        new KafkaProducer<>(
+            Map.of(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, kafka.bootstrapServers()),
+            new StringSerializer(),
+            new ByteArraySerializer())) {
+      String envelope =
+          "{\"event_id\":\""
+              + UUID.randomUUID()
+              + "\",\"institution_id\":\""
+              + institution
+              + "\",\"payload\":{\"decision_sequence\":"
+              + sequence
+              + "}}";
+      producer
+          .send(
+              new ProducerRecord<>(
+                  topic, null, at.toEpochMilli(), "key", envelope.getBytes(StandardCharsets.UTF_8)))
+          .get();
+    }
+  }
+
   private static List<ConsumerRecord<String, byte[]>> drain(String topic) {
+    return drain(topic, 4);
+  }
+
+  private static List<ConsumerRecord<String, byte[]>> drain(String topic, int expected) {
     List<ConsumerRecord<String, byte[]>> records = new java.util.ArrayList<>();
     try (KafkaConsumer<String, byte[]> consumer =
         new KafkaConsumer<>(
@@ -187,7 +262,7 @@ class EnvelopeConsumerTest {
             new ByteArrayDeserializer())) {
       consumer.subscribe(List.of(topic));
       long deadline = System.nanoTime() + Duration.ofSeconds(30).toNanos();
-      while (System.nanoTime() < deadline && records.size() < 4) {
+      while (System.nanoTime() < deadline && records.size() < expected) {
         ConsumerRecords<String, byte[]> polled = consumer.poll(Duration.ofMillis(500));
         polled.forEach(records::add);
       }
