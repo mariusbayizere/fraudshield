@@ -34,8 +34,8 @@ public final class LocalRateLimiter implements RateLimiter {
   /**
    * Creates the limiter.
    *
-   * @param limit requests per second
-   * @param burst how many requests may arrive at once
+   * @param limit transactions per second
+   * @param burst how many transactions may arrive at once
    * @param clock clock, in milliseconds
    */
   public LocalRateLimiter(int limit, int burst, Clock clock) {
@@ -48,19 +48,23 @@ public final class LocalRateLimiter implements RateLimiter {
   }
 
   @Override
-  public Permit take(UUID apiKeyId) {
+  public Permit take(UUID apiKeyId, int units) {
+    if (units < 1) {
+      throw new IllegalArgumentException("a charge is at least one unit");
+    }
     long now = clock.millis();
     Bucket bucket = buckets.computeIfAbsent(apiKeyId, key -> new Bucket(burst, now));
     synchronized (bucket) {
       double refill = (now - bucket.lastRefillMillis) / 1000.0 * limit;
       bucket.tokens = Math.min(burst, bucket.tokens + Math.max(0, refill));
       bucket.lastRefillMillis = now;
-      if (bucket.tokens >= 1) {
-        bucket.tokens -= 1;
+      if (bucket.tokens >= units) {
+        bucket.tokens -= units;
         return new Permit(true, limit, (int) bucket.tokens, 0, true);
       }
-      int retryAfter = (int) Math.max(1, Math.ceil((1 - bucket.tokens) / limit));
-      return new Permit(false, limit, 0, retryAfter, true);
+      // All or nothing: a refused charge takes nothing.
+      int retryAfter = (int) Math.max(1, Math.ceil((units - bucket.tokens) / limit));
+      return new Permit(false, limit, (int) bucket.tokens, retryAfter, true);
     }
   }
 }

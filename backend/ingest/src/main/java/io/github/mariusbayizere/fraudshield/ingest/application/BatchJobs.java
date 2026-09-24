@@ -122,6 +122,30 @@ public final class BatchJobs {
   }
 
   /**
+   * What a batch body costs against the key's budget (ADR 0058, adopting ADR 0100): its item count
+   * when the envelope is a valid batch, one unit otherwise (a refused request costs what any
+   * request does). Counting only valid envelopes keeps the charge equal to the work accepted.
+   *
+   * @param body the parsed body
+   * @return units, at least one and at most {@link #MAX_ITEMS}
+   */
+  public static int chargeableUnits(JsonNode body) {
+    if (body == null || !body.isObject()) {
+      return 1;
+    }
+    for (String name : body.propertyNames()) {
+      if (!name.equals("transactions")) {
+        return 1;
+      }
+    }
+    JsonNode items = body.get("transactions");
+    if (items == null || !items.isArray() || items.isEmpty() || items.size() > MAX_ITEMS) {
+      return 1;
+    }
+    return items.size();
+  }
+
+  /**
    * Validates the envelope, records the job and starts it.
    *
    * @param principal the key (with {@code ingest:write})

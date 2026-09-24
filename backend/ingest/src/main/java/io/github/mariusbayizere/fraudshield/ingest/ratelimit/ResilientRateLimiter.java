@@ -36,10 +36,10 @@ public final class ResilientRateLimiter implements RateLimiter {
   }
 
   @Override
-  public Permit take(UUID apiKeyId) {
+  public Permit take(UUID apiKeyId, int units) {
     if (!mode.skipPrimary()) {
       try {
-        Permit permit = redis.take(apiKeyId);
+        Permit permit = redis.take(apiKeyId, units);
         mode.recovered();
         reported.accept(false);
         return permit;
@@ -49,7 +49,7 @@ public final class ResilientRateLimiter implements RateLimiter {
     } else {
       mode.fellBack();
     }
-    Permit permit = local.take(apiKeyId);
+    Permit permit = local.take(apiKeyId, units);
     reported.accept(true);
     return permit;
   }

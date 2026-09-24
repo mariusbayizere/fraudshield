@@ -189,7 +189,7 @@ Evidence was produced on this branch; statuses are proposals for the reviewer, n
 | Row | Proposed | Evidence |
 |---|---|---|
 | FR-01-01 | IN_PROGRESS — latency criterion NOT MET on this hardware under ADR 0059; carried to M10 as PB-73 | Behaviour: `KafkaSpoolChaosTest`, `IngestApiTest` (SRS "publish to Kafka within 5 ms" is replaced by D-13/D-15: publication after the response, from the spool). Latency: Laptop shapes (`dev-laptop-01`, 2026-09-23, scorer double, load 3.4 → 17.6; **not gate figures**, ADR 0059): client p50/p95 36.7/120.9 ms at 25 req/s, 36.4/106.8 at 50, 88.1/290.9 at 100, 140.5/371.3 at 150, 141.2/392.0 at 200, 234.9/747.7 at 300 req/s (177 errors); server decision p95 42–43 ms at 25–50 req/s. Codespace shapes (2026-09-22, load 23): client p95 42.1 ms at 50 req/s (not reproduced by the reviewer: 325.3 ms), 69.1–108.6 ms at 100–200 req/s. **Reason**: both hosts are shared, with the load generator, the API and three stores on four hardware threads; ADR 0010 accepts gate numbers only from a dedicated machine, and M5's real scorer is not in either figure. **Carry**: PB-73, measured in M10 on the dedicated machine with the real scorer. `m6-complete`, when tagged, names ADR 0059 |
-| FR-01-02 | DONE | `RequestValidatorTest`, `IngestApiTest.everySharedValidationVectorGetsItsStatusAndErrorsOverHttp` (26 vectors); E.1's 429 is implemented (`RateLimitApiTest`), and an oversized chunked body is 413 rather than a truncated 400 |
+| FR-01-02 | DONE | `RequestValidatorTest`, `IngestApiTest.everySharedValidationVectorGetsItsStatusAndErrorsOverHttp` (26 vectors); E.1's 429 is implemented, counted in transactions so a batch costs its item count (ADR 0058; `RateLimitApiTest`, `TransactionBudgetTest`; budget 2,000/s, burst 4,000, ASSUMED), and an oversized chunked body is 413 rather than a truncated 400 |
 | FR-01-03 | (see above) | also `RedisIdempotencyTest` and `RequestValidatorTest`'s field-by-field fingerprint table (findings 1, 2, 4) |
 | FR-01-03 | DONE | `IngestApiTest` (100 identical, TTL 24 h, 409), `ResilienceApiTest` (10,000 duplicates) |
 | FR-01-04 | DONE_WITH_DEVIATION | M6's part: all six channels are accepted and decided as first-class values, USSD without a device (`IngestApiTest.everyChannelIsDecidedIncludingUssdWithoutDevices`). The channel-specific feature engineering is the scorer's since ADR 0033 (M5's feature pipeline and its D-04 structural-NaN tests); `HistoryCalculatorTest`, cited here before, was deleted with Java's feature code in `be470a4` |
@@ -269,7 +269,9 @@ decisions to continue.
   together by mistake, and the history is not rewritten because the branch is pushed.
 - **Rate limiting (E.1)**: a token bucket per API key in Redis, 429 with `Retry-After`, and a
   per-instance bucket when Redis is unavailable, marked `RateLimit-Degraded: true` and counted, so
-  an outage weakens the control instead of removing it.
+  an outage weakens the control instead of removing it. **As first built it counted requests, which
+  M10 found let a batch caller get up to 1,000 times the budget; corrected on 2026-09-24 to count
+  transactions (ADR 0058, section "The rate limit counted requests" below).**
 - **`/api/docs` (FR-01-07)**: the frozen contract served byte for byte from the jar, with a test
   that fails if the served document differs from `contracts/openapi/fraudshield-api.yaml`.
 
@@ -619,6 +621,38 @@ correct. Record: `docs/reviews/M6/m6-decision-2026-09-23-sixth.md`.
   with `service_completed_successfully` in the same profile, and the `security.yml` trap as an
   acceptance item; the two stale rows of this file's "Files touched" table and the wrong claim
   above are corrected.
+
+## The rate limit counted requests; it now counts transactions (M10's finding, 2026-09-24)
+
+M10 found, while specifying the rate limit for its campaign (ADR 0100, `m10/verification`), that
+the control did not hold as built: the budget was counted in requests and the batch endpoint takes
+up to 1,000 transactions per request, so a batch caller got up to 1,000 times the throughput for
+the same budget. The owner decided (ADR 0058): charge the budget in transactions, once on
+acceptance, all or nothing, and replace the 200 per second implementation default with ADR 0100's
+2,000 per second, burst 4,000, per key, marked **ASSUMED**.
+
+- `RateLimiter.take(key, units)`; the Redis script and the per-instance fallback charge `units`
+  all or nothing, and a refusal reports what remains and how long until the charge would fit.
+- The filter charges one unit per request except the batch submission, which the controller
+  charges by its item count after parsing and before the job is recorded; a refused or invalid
+  batch envelope costs one unit.
+- `fraudshield.rate-limit.transactions-per-second` (renamed from `requests-per-second`) and
+  `burst`; the application refuses a burst below 1,000, the largest batch.
+- Tests: `TransactionBudgetTest` (both limiters) and
+  `RateLimitApiTest.batchCallersCannotExceedTheTransactionBudget`, with the API test rewritten to
+  spend a key's budget with one full batch.
+- Verified: `TransactionBudgetTest` 6/6, `RateLimitApiTest` 5/5 (after two fixes to the test's own
+  timing: the probes are sent concurrently, and the refill is counted from the batch's send, since
+  the server charges before it answers); a mutation that charges a batch as one request lets 2,400
+  transactions through against a bound of 1,022 and fails the new test. The ingest module's
+  `verify` passed 90 of 91: `IngestApiTest.thousandTransactionBatchesAreDecidedWithinThirtySeconds`
+  (FR-01-06) timed out at load 12 and again alone at load 15, while the pre-change tree passed it
+  at load 11; a paired run then passed both (this tree at load 9.5, the pre-change tree at load
+  13). Load, not the change: the same load-sensitivity already carried to M10 as PB-74. The load
+  came from another project's local Kubernetes cluster started on this laptop meanwhile.
+- This is a code change, so it needs an independent review before M6 merges (owner's rule). M6 is
+  **not** ready again until that review is clean and CI (with the stack job executed) is green on
+  the head that carries it.
 
 ## Resume here (final state, 2026-09-23, after CI)
 

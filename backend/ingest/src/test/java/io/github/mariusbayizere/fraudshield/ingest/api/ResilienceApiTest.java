@@ -58,7 +58,7 @@ class ResilienceApiTest {
     // These tests are about idempotency and fallbacks, not about E.1's budget: a 10,000-duplicate
     // storm from one key would be rate-limited in production, and RateLimitApiTest is where that
     // is asserted. The budget here is lifted so the storm reaches the idempotency store.
-    registry.add("fraudshield.rate-limit.requests-per-second", () -> "50000");
+    registry.add("fraudshield.rate-limit.transactions-per-second", () -> "50000");
     registry.add("fraudshield.rate-limit.burst", () -> "50000");
   }
 

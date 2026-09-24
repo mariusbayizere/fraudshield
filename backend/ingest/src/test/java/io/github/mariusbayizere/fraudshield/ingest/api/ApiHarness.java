@@ -67,6 +67,24 @@ public final class ApiHarness {
   /** A third key with its own budget. */
   public static final String BUDGET_KEY_THREE = "fsk_test_ffffffffffff_" + "d".repeat(43);
 
+  /** A fourth key with its own budget, for batches against the transaction budget (ADR 0058). */
+  public static final String BUDGET_KEY_FOUR = "fsk_test_gggggggggggg_" + "e".repeat(43);
+
+  /** A fifth key with its own budget, for batches while Redis is down. */
+  public static final String BUDGET_KEY_FIVE = "fsk_test_hhhhhhhhhhhh_" + "f".repeat(43);
+
+  /**
+   * The {@code api_keys} row ids of the budget keys: fixed, and inserted, because a batch job
+   * references its key's row.
+   */
+  public static final Map<String, UUID> BUDGET_KEY_IDS =
+      Map.of(
+          BUDGET_KEY_ONE, UUID.fromString("6c1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a01"),
+          BUDGET_KEY_TWO, UUID.fromString("6c1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a02"),
+          BUDGET_KEY_THREE, UUID.fromString("6c1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a03"),
+          BUDGET_KEY_FOUR, UUID.fromString("6c1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a04"),
+          BUDGET_KEY_FIVE, UUID.fromString("6c1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a05"));
+
   /** The api_keys row id of {@link #KEY}. */
   public static final UUID KEY_ID = UUID.fromString("5b1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a5b");
 
@@ -153,6 +171,18 @@ public final class ApiHarness {
           KEY_ID,
           Fixtures.INSTITUTION,
           admin);
+      for (Map.Entry<String, UUID> budget : BUDGET_KEY_IDS.entrySet()) {
+        TestDatabase.exec(
+            c,
+            "INSERT INTO fraudshield.api_keys (id, institution_id, key_id, name,"
+                + " secret_hmac, pepper_version, last_four, scopes, created_by) VALUES (?, ?,"
+                + " ?, 'Budget test', decode(repeat('00', 32), 'hex'), 1, 'bbbb',"
+                + " ARRAY['ingest:write', 'decisions:read', 'jobs:read'], ?)",
+            budget.getValue(),
+            Fixtures.INSTITUTION,
+            budget.getKey().substring("fsk_test_".length(), "fsk_test_".length() + 12),
+            admin);
+      }
     }
   }
 
@@ -195,6 +225,11 @@ public final class ApiHarness {
   @TestConfiguration(proxyBeanMethods = false)
   public static class Collaborators {
 
+    private static ApiPrincipal budget(String key) {
+      return new ApiPrincipal(
+          BUDGET_KEY_IDS.get(key), Fixtures.INSTITUTION, Set.of(ApiScope.values()));
+    }
+
     @Bean
     ApiKeyAuthenticator apiKeys() {
       Map<String, ApiPrincipal> keys =
@@ -205,15 +240,11 @@ public final class ApiHarness {
               READ_ONLY_KEY,
                   new ApiPrincipal(
                       UUID.randomUUID(), Fixtures.INSTITUTION, Set.of(ApiScope.DECISIONS_READ)),
-              BUDGET_KEY_ONE,
-                  new ApiPrincipal(
-                      UUID.randomUUID(), Fixtures.INSTITUTION, Set.of(ApiScope.values())),
-              BUDGET_KEY_TWO,
-                  new ApiPrincipal(
-                      UUID.randomUUID(), Fixtures.INSTITUTION, Set.of(ApiScope.values())),
-              BUDGET_KEY_THREE,
-                  new ApiPrincipal(
-                      UUID.randomUUID(), Fixtures.INSTITUTION, Set.of(ApiScope.values())));
+              BUDGET_KEY_ONE, budget(BUDGET_KEY_ONE),
+              BUDGET_KEY_TWO, budget(BUDGET_KEY_TWO),
+              BUDGET_KEY_THREE, budget(BUDGET_KEY_THREE),
+              BUDGET_KEY_FOUR, budget(BUDGET_KEY_FOUR),
+              BUDGET_KEY_FIVE, budget(BUDGET_KEY_FIVE));
       return raw -> Optional.ofNullable(raw == null ? null : keys.get(raw));
     }
 
