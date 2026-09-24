@@ -2576,3 +2576,73 @@ it produced a false positive about a fix. The review table read "Fixed; test; mu
 killed for K2, which removed *both* defences. A reader of the record would have seen three
 confirmations of a fix that did nothing in its own scenario. Counting killed mutations measures the
 tests; only investigating the survivors measures the claims.
+
+### 2026-09-24 · The guard could not detect what it had just planted, 4% of the time
+
+`tools/bin/gitleaks-selftest` exists to prove the secret scanner still catches secrets. It builds a
+throw-away repository, plants randomly generated fake credentials, scans it, and fails unless
+exactly those credentials are reported. It is the control for every "no leaks found" line in this
+repository's CI.
+
+It failed in a devcontainer run with `NOT DETECTED generic-api-key in
+contracts/kafka/examples/fs.planted.example.json`. The same self-test had passed on the same
+commit forty minutes earlier.
+
+**The scanner's own allowlists were skipping the planted secret.** gitleaks' `generic-api-key`
+rule discards two kinds of value before reporting, as its trace log says plainly
+(`skipping finding: rule allowlist`):
+
+- a value that is **all letters**, the standard filter for placeholders like `your-api-key`. A
+  random 24-character alphanumeric body is all letters with probability (52/62)^24 ≈ 1.5%.
+  Measured: 0 of 100 all-letter values reported, 98 of 100 with at least one digit.
+- a value containing a **stopword substring** — `http`, `text`, `rail` and several hundred more,
+  compiled into the binary. About 0.4% of 24-character bodies, 6 of 1,500 measured.
+
+Together, about 4% per planted value; end to end, **2 failures in 25 local runs**.
+
+**Why this is the vacuous-check family, and worse.** The earlier entries (2026-09-19, fixtures that
+lack the condition they test; 2026-09-22, a fix whose test never reached it) are all cases where an
+artefact is correct in isolation and wrong in context. Here the self-test is correct, the planted
+secret is correct, the scanner is correct — and the *composition* is unsound about 4% of the time,
+for a reason that is invisible in both the test and the configuration, because it lives in the
+scanner's compiled-in allowlist. Reading either file forever would not find it. The trace log
+found it in one command.
+
+There is a second, sharper reading. A guard that fails randomly trains its readers to re-run it.
+The failure mode of "flaky control" is not a red CI: it is that the next real regression gets
+re-run too, and passes on the second draw, because the secret it fails to plant is drawn again.
+The fix therefore could not be "retry the self-test". It had to be "never plant a secret the
+scanner would skip": the generator now scans its own candidates in a neutral path and regenerates
+the ones that come back undetected, bounded at eight attempts, with exhaustion reported as a
+finding rather than retried away. A digit is planted in each value first, which removes the 1.5%
+branch cheaply.
+
+*The test the fix needed:* `tools/tests/test_gitleaks_selftest.py` asserts that 120 generated
+values are all detected — and, because that assertion would pass vacuously if the probe reported
+everything as detectable, a control asserts that a known-skipped value (all letters, and one
+containing `http`) comes back **not** detected. The probe has to be able to say no.
+
+### 2026-09-24 · A green tick for a job that never ran
+
+While diagnosing the above, the `devcontainer` workflow reported **success** on the commit after
+the failing one. I nearly reported that as proof the earlier failure was transient.
+
+It proved nothing. The workflow gates its only real job behind a path filter,
+`DEVCONTAINER_INPUTS` (`.devcontainer/**`, `Makefile`, `docker-compose*.yml`, `uv.lock`, `pom.xml`,
+lockfiles). The commit in between was documentation only, so the build job was **skipped** — and a
+run whose only substantive job is skipped still reports success, because nothing failed.
+
+**What caught it** was not suspicion of the tick. It was asking a different question:
+`gh run view <id> --json jobs` and reading each job's conclusion, where the job says `skipped`
+rather than `success`. The workflow-level conclusion is a summary of what ran, and it cannot
+distinguish "everything passed" from "nothing ran".
+
+This is the same shape as the entry above, one level up: the artefact (the green tick) is correct,
+and the inference from it (the pull failure was transient) does not follow. The difference is that
+here the evidence needed no reasoning at all — one flag on the command already in use.
+
+*Standing rule, now applied:* when a CI result is used as evidence for anything, check that the job
+that would have produced the evidence actually executed. A conditional job, a path filter, a
+matrix exclusion or a cancelled run all produce ticks that mean "not run". The gates this project
+cites — the Java suite, the licence inventory, the all-files hook run — each live in a job that can
+be skipped, so each citation needs the job-level check, not the run-level one.

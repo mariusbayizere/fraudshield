@@ -320,6 +320,38 @@ switch branches in it. Use a git worktree, and run `uv sync --all-packages` insi
 tool code against your files (it produced a false `fs-traceability-seed` failure on 2026-09-22).
 `fs-licences` also needs `frontend/node_modules`, or every npm package is reported "Unknown".
 
+## Shared files changed to unblock a milestone (2026-09-24)
+
+Two flaky failures in shared tooling were blocking M7's CI. The owner asked M7 to fix them rather
+than route them, so M7 changed files it does not own. **For M9 (the workflow owner) and whoever
+owns `tools/`:** review these, and move them if they belong elsewhere.
+
+| File | Change | Why |
+|---|---|---|
+| `tools/bin/gitleaks-selftest` | every random value is now proved detectable before it is planted, and generated values carry a digit | the self-test failed about 4% of runs, measured at 2 of 25 locally |
+| `tools/tests/test_gitleaks_selftest.py` | new: the generator's output is always detected, with a control that the probe can fail | otherwise the probe could report everything as detectable and check nothing |
+| `infrastructure/docker/scripts/pull-images.sh` | new: pulls a profile's images with bounded retries and backoff | a Docker Hub CDN reset failed a whole devcontainer run |
+| `Makefile` (`up`) | pulls through that script before `compose up` | separates a registry failure from a stack failure |
+
+**The self-test flake, diagnosed.** It plants random secrets and requires gitleaks to report each
+one. gitleaks' *own* rule allowlists silently skip two kinds of value, which the trace shows as
+`skipping finding: rule allowlist`:
+
+- **all-letter values.** A random 24-character alphanumeric body is all letters with probability
+  (52/62)^24 ≈ 1.5%. Measured: 0 of 100 all-letter values detected, 98 of 100 with a digit.
+- **values containing a stopword substring**, such as `http`, `text` or `rail`, at about 0.4% for a
+  24-character body (6 of 1,500 measured).
+
+Neither is avoidable by a construction rule alone, because the stopword list is embedded in the
+gitleaks binary. So the generator now scans its own candidates in a neutral path with the
+repository's config and regenerates any the scanner would skip, bounded at 8 attempts; exhausting
+those attempts is reported as a finding, not retried away. The probe adds one gitleaks run, about
+3.5 s.
+
+**The pull retry** covers the pull only: attempts default to 3 with 5 s doubling backoff
+(`PULL_ATTEMPTS`, `PULL_BACKOFF_SECONDS`). Container creation, healthchecks and the smoke test are
+**not** retried, because a stack that only comes up on the second attempt is a defect.
+
 **At merge (checklist):**
 1. Confirm M6 is on `main`
    (`git merge-base --is-ancestor origin/m6/decision origin/main`), then merge `origin/main` into

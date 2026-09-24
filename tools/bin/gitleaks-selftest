@@ -6,6 +6,12 @@ secrets, scans it with the pinned tools/bin/gitleaks and the repository's .gitle
 unless exactly the planted secrets are reported. The fake values are generated at run time, so no
 secret-shaped string is committed; they are random and valid for no service.
 
+Every random value is checked against the scanner before it is planted (``fresh_secrets``):
+gitleaks' own rule allowlists silently skip a value that is all letters, or that contains a
+stopword substring such as ``http``, ``text`` or ``rail``, which made this self-test fail about 4%
+of runs (see the lab notebook, 2026-09-24). A value the scanner would skip is regenerated rather
+than planted, so the test cannot plant a secret it then fails to find.
+
 Planted cases: secrets outside every allowlisted path (a tok_-shaped key, a bare API key, a
 signing secret, an AWS key ID); new values inside each allowlisted path in the alphabets of the
 allowed values; an AWS key ID inside an allowlisted fixture (catches allowlists that make
@@ -26,6 +32,7 @@ import sys
 import tempfile
 import tomllib
 from collections import Counter
+from collections.abc import Callable
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -38,11 +45,70 @@ FIXTURES = [
 ALNUM = string.ascii_letters + string.digits
 
 
-def random_text(alphabet: str, length: int) -> str:
-    return "".join(secrets.choice(alphabet) for _ in range(length))
+def random_text(alphabet: str, length: int, *, digit: bool = False) -> str:
+    """A random value; with ``digit``, one position is a digit.
+
+    An all-letter value matches a gitleaks rule allowlist and is never reported, which happens to
+    about 1.5% of random 24-character alphanumeric values ((52/62) ** 24). Forcing one digit
+    removes that case; ``fresh_secrets`` covers the rest.
+    """
+    body = [secrets.choice(alphabet) for _ in range(length)]
+    if digit:
+        body[0] = secrets.choice(string.digits)
+        secrets.SystemRandom().shuffle(body)
+    return "".join(body)
+
+
+DETECTABLE_ATTEMPTS = 8
+
+
+def detectable(values: dict[str, str]) -> set[str]:
+    """Of these values, the ones gitleaks reports in a neutral file with this repository's config.
+
+    The probe deliberately uses a path no allowlist covers, so it measures only the rule's own
+    allowlists (all-letter values, stopword substrings) and never weakens the path-scope
+    assertions that this self-test exists to make.
+    """
+    with tempfile.TemporaryDirectory(prefix="gitleaks-probe-") as temp:
+        probe = Path(temp)
+        shutil.copy(ROOT / ".gitleaks.toml", probe / ".gitleaks.toml")
+        for key, value in values.items():
+            line, _ = secret_line(value)
+            (probe / f"{key}.txt").write_text(line, encoding="utf-8")
+        report = probe / "report.json"
+        command = [str(GITLEAKS), "dir", "--no-banner", "--redact", "--exit-code", "0"]
+        command += ["--config", ".gitleaks.toml", "--report-format", "json"]
+        command += ["--report-path", str(report), "."]
+        # Fixed command: the pinned launcher in a temporary directory.
+        subprocess.run(command, check=True, capture_output=True, cwd=probe)  # noqa: S603
+        findings = json.loads(report.read_text(encoding="utf-8"))
+    return {Path(item["File"]).stem for item in findings}
+
+
+def fresh_secrets(specs: dict[str, Callable[[], str]]) -> dict[str, str]:
+    """Random values that the scanner really reports, regenerating any it would skip.
+
+    Bounded: if a value cannot be made detectable in ``DETECTABLE_ATTEMPTS`` tries, the rule no
+    longer reports values of that shape at all, which is a finding, not a flake.
+    """
+    values = {key: make() for key, make in specs.items()}
+    for attempt in range(1, DETECTABLE_ATTEMPTS + 1):
+        missing = sorted(set(values) - detectable(values))
+        if not missing:
+            return values
+        if attempt == DETECTABLE_ATTEMPTS:
+            sys.exit(
+                "gitleaks-selftest: no detectable value for "
+                + ", ".join(missing)
+                + f" in {DETECTABLE_ATTEMPTS} attempts; the rule allowlists may have widened"
+            )
+        for key in missing:
+            values[key] = specs[key]()
+    raise AssertionError("unreachable")
 
 
 RULE_FOR_PREFIX = {
+    "AKIA": "aws-access-token",
     "tok_": "generic-api-key",
     "fsk_": "fraudshield-api-key",
     "whsec_": "fraudshield-webhook-signing-secret",
@@ -97,26 +163,46 @@ def plant(repo: Path) -> Counter[tuple[str, str]]:
     """Write the planted secrets; return the (file, rule) findings the scan must produce."""
     hexdigits = "0123456789abcdef"
     lower_alnum = string.ascii_lowercase + string.digits
-    aws = "AKIA" + random_text(string.ascii_uppercase + "234567", 16)
-    api_key = f"fsk_prod_{random_text(lower_alnum, 12)}_{random_text(ALNUM + '_-', 43)}"
+    # Every random value is proved detectable before it is planted; see fresh_secrets.
+    values = fresh_secrets(
+        {
+            "aws": lambda: "AKIA" + random_text(string.ascii_uppercase + "234567", 16),
+            "api_key": lambda: (
+                f"fsk_prod_{random_text(lower_alnum, 12, digit=True)}"
+                f"_{random_text(ALNUM + '_-', 43, digit=True)}"
+            ),
+            "prod_tok": lambda: f"tok_{random_text(ALNUM, 40, digit=True)}",
+            "deploy_key": lambda: (
+                f"fsk_prod_{random_text(lower_alnum, 12, digit=True)}"
+                f"_{random_text(ALNUM + '_-', 43, digit=True)}"
+            ),
+            "webhook": lambda: f"whsec_prod_{random_text(ALNUM, 40, digit=True)}",
+            "vector_hex": lambda: f"whsec_test_{random_text(hexdigits, 32)}",
+            "vector_alnum": lambda: f"whsec_test_{random_text(ALNUM, 32, digit=True)}",
+            "kafka_tok": lambda: f"tok_{random_text(ALNUM, 24, digit=True)}",
+            "schema_secret": lambda: f"whsec_prod_{random_text(ALNUM, 32, digit=True)}",
+        }
+    )
+    aws = values["aws"]
+    api_key = values["api_key"]
     # (file, content, rule, append to an existing fixture?)
     plants: list[tuple[str, str, str, bool]] = [
         # Secrets outside every allowlisted path.
         (
             "backend/src/main/resources/application-prod.yml",
-            f'api_key: "tok_{random_text(ALNUM, 40)}"\n',
+            f'api_key: "{values["prod_tok"]}"\n',
             "generic-api-key",
             False,
         ),
         (
             "deploy/api-keys.yaml",
-            f"keys:\n  - fsk_prod_{random_text(lower_alnum, 12)}_{random_text(ALNUM + '_-', 43)}\n",
+            f"keys:\n  - {values['deploy_key']}\n",
             "fraudshield-api-key",
             False,
         ),
         (
             "config/webhook.txt",
-            f"whsec_prod_{random_text(ALNUM, 40)}\n",
+            f"{values['webhook']}\n",
             "fraudshield-webhook-signing-secret",
             False,
         ),
@@ -125,19 +211,19 @@ def plant(repo: Path) -> Counter[tuple[str, str]]:
         # allowlist values widened into patterns.
         (
             "contracts/webhooks/signature-test-vectors.json",
-            f"whsec_test_{random_text(hexdigits, 32)}\n",
+            f"{values['vector_hex']}\n",
             "fraudshield-webhook-signing-secret",
             True,
         ),
         (
             "contracts/webhooks/signature-test-vectors.json",
-            f"whsec_test_{random_text(ALNUM, 32)}\n",
+            f"{values['vector_alnum']}\n",
             "fraudshield-webhook-signing-secret",
             True,
         ),
         (
             "contracts/kafka/examples/fs.planted.example.json",
-            json.dumps({"api_key": f"tok_{random_text(ALNUM, 24)}"}) + "\n",
+            json.dumps({"api_key": values["kafka_tok"]}) + "\n",
             "generic-api-key",
             False,
         ),
@@ -149,7 +235,7 @@ def plant(repo: Path) -> Counter[tuple[str, str]]:
         ),
         (
             "contracts/openapi/schema-examples.yaml",
-            f"planted_signing_secret: whsec_prod_{random_text(ALNUM, 32)}\n",
+            f"planted_signing_secret: {values['schema_secret']}\n",
             "fraudshield-webhook-signing-secret",
             True,
         ),

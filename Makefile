@@ -31,6 +31,7 @@ env: ## Create .env with random local development credentials (never overwrites)
 
 .PHONY: up
 up: env ## Start the core local stack and wait until every service is healthy
+	@./infrastructure/docker/scripts/pull-images.sh core
 	$(COMPOSE) --profile core up -d --wait --wait-timeout 300
 	$(COMPOSE) --profile core ps
 
