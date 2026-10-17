@@ -2556,3 +2556,45 @@ runs meaningless, because the stack job was skipped.
 **The rule.** *Before declaring work done, read CI on the pushed head at job level and confirm
 that path-filtered jobs executed; a green local suite and a clean review are not substitutes for
 it.*
+
+### 2026-10-17 · A test that passes with the guarded code deleted is not evidence for the guard
+
+The fresh review of amendment 1's code (`docs/reviews/M6/m6-decision-2026-10-17-implementation-3.md`,
+MAJOR 1) put it in one example: *"No test has the SMS gateway throw an unchecked exception. Deleting
+`CustomerSmsSender.java:354-358` would re-send up to the bound (about 25 SMS) with every test
+green."* The contract's section 8 named a test for that guard, the test passed, and the guard could
+have been removed without any test noticing. The same review found the same shape in five other
+rows: an envelope without a payload that no test sent, an "`outcome_unrecorded` at the bound" whose
+cited record was refused by the database at once and never reached the bound, a batch-budget test
+that passed with the budget deleted.
+
+**It is the third consecutive review where this is the headline finding.** The second
+implementation review of M6 (MAJOR 3) found a "malformed payload is dead-lettered" claim that held
+for three fields of one handler; the first (`-implementation-1.md`) found "every invariant is
+tested" untrue. Each time the rows were corrected one by one, and each time the next review found
+more.
+
+**The family is older than M6:**
+
+- *The parameter digest* (2026-09-18, "A guard with two doors"): it hashed parameter values only, so
+  adding two checks left it matching and the shipped report described a run with two fewer checks.
+  The guard was green and guarded the wrong thing.
+- *The D-08 ceiling* (2026-09-19, "Out-of-fold by row is not out-of-fold by incident"): the
+  single-feature AUC stayed under the 0.80 leakage ceiling while the out-of-fold encoding itself
+  leaked an incident's siblings into its own score. The check passed on an inflated measurement.
+- *The gitleaks self-test* (`PB-75`): about 3 % of runs fail on generated secrets, so its passes
+  are partly luck. A pass that can happen by chance says as little as a flaky failure.
+- *The MLflow fake* (2026-09-23, "A fake is a hypothesis about an API"): 537 tests passed against a
+  fake that returned the wrong error shape. Every one of them confirmed the author's reading of the
+  API, not the API.
+
+**Why it keeps recurring.** Writing the claim and writing the test are separate acts. A claim is
+written once, against what the code is meant to do; a test is written against what was convenient
+to set up; and until now nothing checked one against the other. A review reads the claim, sees a
+test named next to it and a green run, and moves on.
+
+**The rule** (owner, 2026-10-17). *For every claim that a property is tested, ask: would this test
+fail if the code it claims to prove were deleted? Where the answer is not yes, the claim says so in
+those terms, "deleting X would not fail any test", not in softer words, and the count of such rows
+is reported rather than closed with wording.* Every review of section 8 applies it row by row.
+
