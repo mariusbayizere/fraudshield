@@ -296,3 +296,34 @@ inaccuracies are listed as R-n4.
    returns at least five of the eight records. That is expected with default fetch sizes, since all
    eight are published before the consumer starts, but CI cannot show the counterfactual.
 2. R-n2: whether an in-range out-of-range answer can recur.
+
+## Delta check of 953cafc
+
+Static and read-only, as before. Read `git diff a89a0f4 953cafc` in full: `EnvelopeConsumer.java`,
+`stack.yml`, the contract (D-c, D-d, the section 8 preamble, I17, I26), `M6_updates.md` and the lab
+notebook.
+
+### Verdict: APPROVED_WITH_MINORS. 0 BLOCKER, 0 MAJOR, 0 MINOR open, 1 new NIT
+
+All three MINORs of the re-check and all five of its NITs are resolved. One narrow shutdown race is
+new (D-n1, NIT).
+
+### Closure
+
+| Finding | Status | Evidence |
+|---|---|---|
+| R-m1 (I17, F1 time) | Resolved | The F1-time part moved to **Not proved** in deletion terms: deleting the consumer's `failedOutage` or `attemptStarts` would not fail any test. `HeadRetryTest` is credited with the clock's arithmetic only. That matches the code. |
+| R-m2 (I26 wording) | Resolved | The stopping flag, the off-thread listener rule with `close()`'s longer wait, and the multi-partition seek-back are added to I26's **Not proved**. I26's wording is now accurate and complete as far as I can find. |
+| R-m3 (D-c, D-d) | Resolved | D-c describes the newest copy across every reason, replayed only if its own reason was requested, and every `fs-kept-result` the copy carries dropped. That matches `DeadLetterReplay` at `7047567`. D-d's "what remains" is true within the tool's window: an older copy is always older than the newer one, so if a `--from` includes it, the newer copy is included too. |
+| R-n1 (section 8 preamble) | Resolved | The preamble states the deletion standard and the 13/24/1 count, which is unchanged because I17 and I26 were already partial. |
+| R-n2 (in-range reset branch) | Resolved | The branch now logs at WARN with the offset and the log's bounds. It still has no backoff, but a recurrence is now visible in the log. That was the concern. |
+| R-n3 (client left open) | Resolved, with D-n1 | When `close()` gives up, it sets `closeOnExit`. The poll thread's new `finally` closes the client on its own thread. Its revoke listener then sees `currentThread == thread` with `stopping` set, and commits nothing. No double close: `close()` closes only when the thread is not alive (the `else if`), `finally` only when `closeOnExit && !consumerClosed`, and `stop()` sets `consumerClosed` itself, so after an `Error` the `finally` is a no-op. `crash()` leaves `closeOnExit` false, so a later `close()` closes from the caller once the thread is dead, as before. The 380 s shutdown is carried to M9 in `M6_updates.md`. |
+| R-n4 (notebook) | Resolved | It now says "the third consecutive review with this finding as a MAJOR, and the headline of this one"; names implementation-2's headline correctly (MAJOR 1, unbounded retries); and puts the batch budget among the owner-accepted partial rows. Accurate against the three reviews. |
+| R-n5 (stack.yml) | Resolved, safe under `bash -e` | `[[ -f "$dir/resources.txt" ]] && echo …`: a failing test on the left of `&&` does not trigger errexit, and the list is not the step's last command. The `if [[ job.status … ]] … fi` after it ends with status 0 when its condition is false. A missing `resources.txt` therefore cannot fail the step. |
+| n5, n6 | Carried | Recorded as M9 carries in `M6_updates.md`, with the corrected mechanism for n5. They live on the M6 side; `M9_updates.md` 8.4 on `m9/infra` is unchanged. Acceptable for NITs. |
+
+### New finding
+
+| # | Sev | Where | What | Minimal fix |
+|---|---|---|---|---|
+| D-n1 | NIT | `EnvelopeConsumer.close()` vs the `finally` in `run()` | A check-then-act race. `close()` reads `thread.isAlive()` as true and only then sets `closeOnExit`. If the poll thread's `finally` runs in that gap, it sees `closeOnExit` false and does not close, and `close()` does not close either (it took the alive branch). The client is never closed: its sockets and heartbeat thread linger, and the member leaves the group only at `max.poll.interval.ms`. This needs a 190 s join timeout followed by the thread ending within a few instructions of the check, so it is very unlikely. Separately, `close()` closes the dead-letter producer while the poll thread may still be mid-attempt. A send then fails, is classed as an outage, and is re-read by the next owner, so nothing is lost. | Set `closeOnExit = true` before the final `isAlive()` check. If the thread turns out dead, close here, guarded by an atomic compare-and-set on a closed flag shared with the `finally`. |

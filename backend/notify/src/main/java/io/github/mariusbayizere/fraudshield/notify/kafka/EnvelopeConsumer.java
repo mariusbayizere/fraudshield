@@ -313,7 +313,15 @@ public final class EnvelopeConsumer implements AutoCloseable {
   private volatile boolean running = true;
   private volatile boolean stopping;
   private volatile boolean consumerClosed;
-  private volatile boolean closeOnExit;
+
+  /**
+   * Hands the client's close between {@link #close()} and the poll thread's exit: whichever comes
+   * second closes it, so it is closed once, on a thread not using it (implementation-3, D-n1).
+   */
+  private final Object closeLock = new Object();
+
+  private boolean pollThreadDone;
+  private boolean closeOnExit;
   private long pollBackoffMs;
 
   /**
@@ -490,15 +498,18 @@ public final class EnvelopeConsumer implements AutoCloseable {
     } catch (Error error) {
       stop(batch, error);
     } finally {
-      if (closeOnExit && !consumerClosed) {
-        // close() gave up waiting: the client is closed here, on its own thread, as the thread
-        // ends (implementation-3, R-n3).
-        try {
-          consumer.close(Duration.ofSeconds(5));
-        } catch (RuntimeException closeFailed) {
-          LOG.error("could not close consumer {} on its way out", group, closeFailed);
+      synchronized (closeLock) {
+        pollThreadDone = true;
+        if (closeOnExit && !consumerClosed) {
+          // close() gave up waiting: the client is closed here, on its own thread, as the thread
+          // ends (implementation-3, R-n3).
+          try {
+            consumer.close(Duration.ofSeconds(5));
+          } catch (RuntimeException closeFailed) {
+            LOG.error("could not close consumer {} on its way out", group, closeFailed);
+          }
+          consumerClosed = true;
         }
-        consumerClosed = true;
       }
     }
   }
@@ -1471,14 +1482,20 @@ public final class EnvelopeConsumer implements AutoCloseable {
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
     }
-    if (thread.isAlive()) {
-      // The listener will commit nothing (it checks the thread), so nothing passes an
-      // unhandled record; the next owner resumes from the last commit. The client is closed by
-      // the poll thread itself when it ends, since it cannot be closed from here while in use.
+    boolean pollThreadEnded;
+    synchronized (closeLock) {
+      pollThreadEnded = pollThreadDone;
+      if (!pollThreadEnded) {
+        // The listener will commit nothing (it checks the thread), so nothing passes an
+        // unhandled record; the next owner resumes from the last commit. The client is closed
+        // by the poll thread itself when it ends, since it cannot be closed from here in use.
+        stopping = true;
+        closeOnExit = true;
+      }
+    }
+    if (!pollThreadEnded) {
       LOG.error(
           "consumer {} did not stop within {}; it closes without a final checkpoint", group, wait);
-      stopping = true;
-      closeOnExit = true;
     } else if (!consumerClosed) {
       try {
         consumer.close();
