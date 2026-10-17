@@ -585,6 +585,86 @@ class ApiKeyLifecycleTest {
         .isInstanceOf(org.springframework.dao.DataAccessException.class);
   }
 
+  @Test
+  @Tag("D-15")
+  void requestsBlockedOnTheSameReadAreAllAdmitted() throws Exception {
+    // Two requests for one busy key both block on the hanging database. The first to fail renews
+    // the record; the second must still be served it (review of the delta fixes, finding A).
+    java.util.concurrent.atomic.AtomicBoolean down =
+        new java.util.concurrent.atomic.AtomicBoolean();
+    java.util.concurrent.CountDownLatch bothBlocked = new java.util.concurrent.CountDownLatch(2);
+    java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+    javax.sql.DataSource hanging =
+        new org.springframework.jdbc.datasource.DelegatingDataSource(app.jdbc().getDataSource()) {
+          @Override
+          public Connection getConnection() throws java.sql.SQLException {
+            if (down.get()) {
+              bothBlocked.countDown();
+              try {
+                release.await(10, java.util.concurrent.TimeUnit.SECONDS);
+              } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+              }
+              throw new java.sql.SQLException("connection refused", "08001");
+            }
+            return super.getConnection();
+          }
+        };
+    FakeTime time = new FakeTime();
+    ApiKeyAuthenticator instance = outageProof(hanging, time);
+    String raw = issue(service(authenticator(redisA, "test")));
+    long read = time.now();
+    assertThat(instance.authenticate(raw)).isPresent();
+    down.set(true);
+    time.set(read + 3_000);
+    var executor = java.util.concurrent.Executors.newFixedThreadPool(2);
+    try {
+      final var first = executor.submit(() -> instance.authenticate(raw));
+      final var second = executor.submit(() -> instance.authenticate(raw));
+      assertThat(bothBlocked.await(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+      release.countDown();
+      assertThat(first.get()).as("first blocked request").isPresent();
+      assertThat(second.get()).as("second blocked request").isPresent();
+    } finally {
+      executor.shutdownNow();
+    }
+  }
+
+  @Test
+  @Tag("D-15")
+  void failedReadThatBlockedPastTheCacheTtlIsNotRepeatedOnTheNextRequest() {
+    // The read blocks for 2.5 s, longer than the 2 s TTL. The renewal is timed from its end, so the
+    // next request within the TTL is served from the cache and does not block again (finding D).
+    java.util.concurrent.atomic.AtomicBoolean down =
+        new java.util.concurrent.atomic.AtomicBoolean();
+    java.util.concurrent.atomic.AtomicInteger attempts =
+        new java.util.concurrent.atomic.AtomicInteger();
+    FakeTime time = new FakeTime();
+    javax.sql.DataSource slow =
+        new org.springframework.jdbc.datasource.DelegatingDataSource(app.jdbc().getDataSource()) {
+          @Override
+          public Connection getConnection() throws java.sql.SQLException {
+            if (down.get()) {
+              attempts.incrementAndGet();
+              time.set(time.now() + 2_500);
+              throw new java.sql.SQLException("connection refused", "08001");
+            }
+            return super.getConnection();
+          }
+        };
+    ApiKeyAuthenticator instance = outageProof(slow, time);
+    String raw = issue(service(authenticator(redisA, "test")));
+    long read = time.now();
+    assertThat(instance.authenticate(raw)).isPresent();
+    down.set(true);
+    time.set(read + 3_000);
+    assertThat(instance.authenticate(raw)).isPresent();
+    assertThat(attempts).hasValue(1);
+    time.set(time.now() + 1_000);
+    assertThat(instance.authenticate(raw)).as("a second later: from the cache").isPresent();
+    assertThat(attempts).as("no second blocked read").hasValue(1);
+  }
+
   private ApiKeyAuthenticator outageProof(javax.sql.DataSource dataSource, FakeTime time) {
     return new ApiKeyAuthenticator(
         new ApiKeyRepository(
