@@ -58,6 +58,10 @@ public final class ApiKeyAuthenticator {
   private final LongSupplier nanoTime;
   private final Executor executor;
   private final Map<String, Cached> cache = new ConcurrentHashMap<>();
+  // Counts announcements. A read that overlapped one does not cache its result, which may predate
+  // the change the announcement reported (review of the delta fixes, N1).
+  private final java.util.concurrent.atomic.AtomicLong announcements =
+      new java.util.concurrent.atomic.AtomicLong();
   private final Map<String, Instant> lastTouched = new ConcurrentHashMap<>();
 
   /**
@@ -200,6 +204,7 @@ public final class ApiKeyAuthenticator {
   private Optional<ApiKeyRepository.Credential> credential(String keyId) {
     Cached cached = cache.get(keyId);
     long now = nanoTime.getAsLong(); // before the read: anchors the analytic bound
+    long announcedBefore = announcements.get();
     // A record renewed while the database was down is still held to the cap from its last read.
     if (cached != null
         && cached.expiresAtNanos() - now > 0
@@ -245,7 +250,13 @@ public final class ApiKeyAuthenticator {
           cache.clear();
         }
       }
-      cache.put(keyId, new Cached(loaded, now + cacheTtlNanos, now));
+      // A record read while an announcement arrived is used for this request only: cached, it
+      // could outlive the announcement through an outage (stale-if-error). An announcement counts
+      // before it removes, and compute holds the key against that removal, so none slips between
+      // the check and the insert.
+      Cached fresh = new Cached(loaded, now + cacheTtlNanos, now);
+      cache.compute(
+          keyId, (key, previous) -> announcements.get() == announcedBefore ? fresh : previous);
     }
     return loaded;
   }
@@ -284,6 +295,7 @@ public final class ApiKeyAuthenticator {
    * @param keyId public key ID
    */
   public void keyChanged(String keyId) {
+    announcements.incrementAndGet();
     cache.remove(keyId);
     redis.publish(CHANNEL, keyId);
   }
@@ -294,6 +306,7 @@ public final class ApiKeyAuthenticator {
    * @param keyId public key ID
    */
   public void onMessage(String keyId) {
+    announcements.incrementAndGet();
     cache.remove(keyId);
   }
 }
