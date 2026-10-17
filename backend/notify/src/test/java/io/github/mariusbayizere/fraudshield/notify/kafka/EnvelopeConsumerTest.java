@@ -113,6 +113,25 @@ class EnvelopeConsumerTest {
         Clock.systemUTC());
   }
 
+  private static EnvelopeConsumer consumer(
+      String topic,
+      String group,
+      EnvelopeConsumer.Handler handler,
+      EnvelopeConsumer.RetryBound retryBound,
+      io.micrometer.core.instrument.MeterRegistry meters,
+      Map<String, Object> extra) {
+    return new EnvelopeConsumer(
+        kafka.bootstrapServers(),
+        extra,
+        topic,
+        group,
+        handler,
+        new EnvelopeConsumer.ParentWait(Duration.ofMinutes(10), 1.0 / 6, Duration.ofSeconds(1)),
+        retryBound,
+        meters,
+        Clock.systemUTC());
+  }
+
   private static int sequence(EnvelopeConsumer.Envelope envelope) {
     return envelope.payload().get("decision_sequence").asInt();
   }
@@ -570,25 +589,30 @@ class EnvelopeConsumerTest {
   @Tag("FR-03-04")
   void partitionsMovedWhilePausedKeepEveryoneFlowing() throws Exception {
     // I7e (contract review 5, MINOR 2): a rebalance while a partition is paused must not throw
-    // from a resume of a partition no longer owned, and the new owner re-reads it at once.
+    // from a resume of a partition no longer owned, and the new owner re-reads it at once. The
+    // paused partition is then moved to the second member for certain, by closing the first, and
+    // the second member is shown to re-read it (implementation-2 m3, PB-78).
     UUID institution = UUID.randomUUID();
     String topic = "fs.ml.retrain";
     String group = "test-group-" + UUID.randomUUID();
-    List<Long> orphanAttempts = new CopyOnWriteArrayList<>();
+    List<String> orphanAttempts = new CopyOnWriteArrayList<>();
     Map<Integer, Long> handledAt = new ConcurrentHashMap<>();
-    EnvelopeConsumer.Handler handler =
-        envelope -> {
-          int sequence = sequence(envelope);
-          if (sequence == 1) {
-            orphanAttempts.add(System.nanoTime());
-            throw new NotYetRecordedException("parent late (test)");
-          }
-          handledAt.put(sequence, System.nanoTime());
-        };
-    try (EnvelopeConsumer first = consumer(topic, group, handler, Duration.ofMinutes(10))) {
+    java.util.function.Function<String, EnvelopeConsumer.Handler> handler =
+        member ->
+            envelope -> {
+              int sequence = sequence(envelope);
+              if (sequence == 1) {
+                orphanAttempts.add(member);
+                throw new NotYetRecordedException("parent late (test)");
+              }
+              handledAt.put(sequence, System.nanoTime());
+            };
+    try (EnvelopeConsumer first =
+        consumer(topic, group, handler.apply("first"), Duration.ofMinutes(10))) {
       publish(topic, keyFor(0, 3), envelope(institution, 1), Map.of());
       await().atMost(Duration.ofSeconds(30)).until(() -> orphanAttempts.size() >= 2);
-      try (EnvelopeConsumer second = consumer(topic, group, handler, Duration.ofMinutes(10))) {
+      try (EnvelopeConsumer second =
+          consumer(topic, group, handler.apply("second"), Duration.ofMinutes(10))) {
         publish(topic, keyFor(1, 3), envelope(institution, 10), Map.of());
         publish(topic, keyFor(2, 3), envelope(institution, 11), Map.of());
         await()
@@ -602,6 +626,19 @@ class EnvelopeConsumerTest {
             .atMost(Duration.ofSeconds(20))
             .until(() -> handledAt.containsKey(12) && handledAt.containsKey(13));
         assertThat(first.deadLettered() + second.deadLettered()).isZero();
+
+        // Move the paused partition to the second member for certain.
+        first.close();
+        int closedAt = orphanAttempts.size();
+        await()
+            .atMost(Duration.ofSeconds(30))
+            .until(
+                () ->
+                    orphanAttempts.size() > closedAt && orphanAttempts.getLast().equals("second"));
+        assertThat(orphanAttempts.subList(closedAt, orphanAttempts.size()))
+            .as("after the move, only the second member re-reads the paused partition")
+            .containsOnly("second");
+        assertThat(second.deadLettered()).isZero();
       }
     }
   }
@@ -638,9 +675,18 @@ class EnvelopeConsumerTest {
       await().atMost(Duration.ofSeconds(30)).until(() -> firstAttempt.get() != 0);
       Thread.sleep(6000);
       crashed.crash();
+      // Read once the poll thread has ended, so no checkpoint can follow it.
+      long crashedAt = System.currentTimeMillis();
       OffsetAndMetadata checkpoint = committed(group, topic);
       long spent = Long.parseLong(checkpoint.metadata().replaceAll(".*spent_ms=(\\d+).*", "$1"));
       assertThat(spent).as("checkpointed on its re-reads, with no revocation").isGreaterThan(4000L);
+      long at = Long.parseLong(checkpoint.metadata().replaceAll(".*at=(\\d+).*", "$1"));
+      // I14's loss bound (W-e): the waiting lost is the time from the last checkpoint to the crash,
+      // at most one re-read interval (500 ms) plus the thread's current batch, here one record. One
+      // second is added for scheduling on a shared CI runner.
+      assertThat(crashedAt - at)
+          .as("waiting lost to the crash: at most one re-read interval, plus scheduling")
+          .isBetween(0L, 1500L);
 
       firstAttempt.set(0);
       try (EnvelopeConsumer next = consumer(topic, group, orphan, bound, fastSession)) {
@@ -654,6 +700,609 @@ class EnvelopeConsumerTest {
     } finally {
       crashed.close();
     }
+  }
+
+  // ---- Amendment 1 (docs/architecture/decision-fact-ordering.md, section 12) ----
+
+  /** A topic of its own, one partition, with its DLQ, so the test sees only its records. */
+  private static String newTopic() throws Exception {
+    String topic = "test-" + UUID.randomUUID();
+    try (org.apache.kafka.clients.admin.Admin admin =
+        org.apache.kafka.clients.admin.Admin.create(
+            Map.of(
+                org.apache.kafka.clients.admin.AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG,
+                kafka.bootstrapServers()))) {
+      admin
+          .createTopics(
+              List.of(
+                  new org.apache.kafka.clients.admin.NewTopic(topic, 1, (short) 1),
+                  new org.apache.kafka.clients.admin.NewTopic(topic + ".dlq", 1, (short) 1)))
+          .all()
+          .get();
+    }
+    return topic;
+  }
+
+  private static double count(
+      io.micrometer.core.instrument.MeterRegistry meters, String name, String... tags) {
+    io.micrometer.core.instrument.Counter counter = meters.find(name).tags(tags).counter();
+    return counter == null ? 0 : counter.count();
+  }
+
+  private static final ProviderResult SENT = ProviderResult.sent("en", true, "ATXid_42");
+
+  @Test
+  @Tag("NFR-REL-01")
+  void everyDeadLetterReasonKeepsTheRecordsHeaders() throws Exception {
+    // I10 for every reason of D-a, and the dead-letter counter of 12.6 (I23).
+    String topic = newTopic();
+    UUID institution = UUID.randomUUID();
+    var meters = new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+    List<Integer> handled = new CopyOnWriteArrayList<>();
+    EnvelopeConsumer.Handler handler =
+        envelope -> {
+          int sequence = sequence(envelope);
+          switch (sequence) {
+            case 2 -> throw new MalformedHeaderException("S3m (test)");
+            case 3 -> throw new NotTheKeptDecisionException("S3 (test)");
+            case 4 -> throw new SQLException("duplicate key value (test)", "23505");
+            case 5 ->
+                throw io.github.mariusbayizere.fraudshield.notify.vault.VaultException.permanent(
+                    "does not verify (test)", null);
+            case 6 -> throw new IllegalStateException("always fails (test)");
+            case 7 -> throw new NotYetRecordedException("parent missing (test)");
+            case 8 -> {
+              envelope.keeper().keep(SENT);
+              throw new SQLException("check violation after the send (test)", "23514");
+            }
+            default -> handled.add(sequence);
+          }
+        };
+    try (EnvelopeConsumer consumer =
+        consumer(
+            topic,
+            "test-group-" + UUID.randomUUID(),
+            handler,
+            new EnvelopeConsumer.RetryBound(2, Duration.ZERO, Duration.ofSeconds(60)),
+            meters,
+            Map.of())) {
+      publish(topic, "key", "{not json", Map.of("fs-transaction-id", "t-1", "x-test", "1"));
+      for (int sequence = 2; sequence <= 9; sequence++) {
+        Map<String, String> headers = new HashMap<>();
+        headers.put("fs-transaction-id", "t-" + sequence);
+        headers.put("x-test", Integer.toString(sequence));
+        if (sequence == 7) {
+          headers.put(EnvelopeConsumer.REPLAYED_HEADER, "1");
+        }
+        publish(topic, "key", envelope(institution, sequence), headers);
+      }
+      await().atMost(Duration.ofSeconds(60)).until(() -> handled.contains(9));
+      await().atMost(Duration.ofSeconds(30)).until(() -> consumer.deadLettered() == 8);
+    }
+    List<ConsumerRecord<String, byte[]>> dead = drain(topic + ".dlq", 8);
+    assertThat(dead)
+        .extracting(r -> header(r, "fs-dlq-reason"))
+        .containsExactly(
+            "malformed_envelope",
+            "malformed_header",
+            "not_the_kept_decision",
+            "rejected_by_the_database",
+            "permanent_vault_failure",
+            "handler_failure",
+            "parent_not_recorded",
+            "outcome_unrecorded");
+    assertThat(dead)
+        .as("every reason keeps the original headers (D-a)")
+        .allSatisfy(
+            r -> {
+              assertThat(header(r, "x-test")).isNotNull();
+              assertThat(header(r, "fs-transaction-id")).isEqualTo("t-" + header(r, "x-test"));
+              assertThat(header(r, "fs-dlq-topic")).isEqualTo(topic);
+            });
+    assertThat(header(dead.getLast(), EnvelopeConsumer.DLQ_RESULT_HEADER))
+        .as("a dead letter after a send carries its result (12.4)")
+        .isEqualTo(SENT.text());
+    for (String reason :
+        List.of(
+            "malformed_envelope",
+            "malformed_header",
+            "not_the_kept_decision",
+            "rejected_by_the_database",
+            "permanent_vault_failure",
+            "handler_failure",
+            "parent_not_recorded",
+            "outcome_unrecorded")) {
+      assertThat(count(meters, "fs_notify_dead_letters_total", "reason", reason))
+          .as(reason)
+          .isEqualTo(1.0);
+    }
+  }
+
+  @Test
+  @Tag("NFR-REL-01")
+  void recordsThatKeepFailingAreDeadLetteredAtTheBoundAndTheNextIsHandled() throws Exception {
+    // I17: F4 is re-read on the backoff up to the bound of 12.3 (here 3 attempts and 2 s), then
+    // dead-lettered as handler_failure, and the record behind it is handled.
+    String topic = newTopic();
+    UUID institution = UUID.randomUUID();
+    var meters = new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+    List<Long> attempts = new CopyOnWriteArrayList<>();
+    List<Integer> handled = new CopyOnWriteArrayList<>();
+    try (EnvelopeConsumer consumer =
+        consumer(
+            topic,
+            "test-group-" + UUID.randomUUID(),
+            envelope -> {
+              if (sequence(envelope) == 1) {
+                attempts.add(System.nanoTime());
+                throw new NullPointerException("parameters (test)");
+              }
+              handled.add(sequence(envelope));
+            },
+            new EnvelopeConsumer.RetryBound(3, Duration.ofSeconds(2), Duration.ofSeconds(60)),
+            meters,
+            Map.of())) {
+      publish(topic, institution, 1);
+      publish(topic, institution, 2);
+      await().atMost(Duration.ofSeconds(60)).until(() -> handled.contains(2));
+      assertThat(consumer.deadLettered()).isEqualTo(1);
+    }
+    assertThat(attempts).hasSizeGreaterThanOrEqualTo(3);
+    assertThat(Duration.ofNanos(attempts.getLast() - attempts.getFirst()))
+        .as("not before the bound's time")
+        .isGreaterThanOrEqualTo(Duration.ofSeconds(2));
+    assertThat(header(drain(topic + ".dlq", 1).getFirst(), "fs-dlq-reason"))
+        .isEqualTo("handler_failure");
+    assertThat(count(meters, "fs_notify_retries_total", "class", "may_be_own"))
+        .as("every failed attempt but the one that dead-letters")
+        .isEqualTo(attempts.size() - 1.0);
+  }
+
+  @Test
+  @Tag("NFR-REL-01")
+  void theRetryStateSurvivesChangesOfOwnerWhenNothingIsSpent() throws Exception {
+    // I17 and amendment-1 review A1-M3: the F4 count is checkpointed whatever the wait budget, so a
+    // rebalance does not restart it. Six attempts in all, across two owners.
+    String topic = newTopic();
+    String group = "test-group-" + UUID.randomUUID();
+    UUID institution = UUID.randomUUID();
+    AtomicInteger attempts = new AtomicInteger();
+    EnvelopeConsumer.Handler poison =
+        envelope -> {
+          attempts.incrementAndGet();
+          throw new IllegalStateException("always fails (test)");
+        };
+    EnvelopeConsumer.RetryBound bound =
+        new EnvelopeConsumer.RetryBound(6, Duration.ZERO, Duration.ofSeconds(60));
+    try (EnvelopeConsumer first =
+        consumer(
+            topic,
+            group,
+            poison,
+            bound,
+            new io.micrometer.core.instrument.simple.SimpleMeterRegistry(),
+            Map.of())) {
+      publish(topic, institution, 1);
+      await().atMost(Duration.ofSeconds(30)).until(() -> attempts.get() >= 2);
+    }
+    int byFirst = attempts.get();
+    OffsetAndMetadata committed = committed(group, topic);
+    assertThat(committed.metadata())
+        .as("nothing spent waiting, yet the retry state is carried")
+        .contains("spent_ms=0 ")
+        .contains("f4_count=" + byFirst + " ");
+    try (EnvelopeConsumer second =
+        consumer(
+            topic,
+            group,
+            poison,
+            bound,
+            new io.micrometer.core.instrument.simple.SimpleMeterRegistry(),
+            Map.of())) {
+      await().atMost(Duration.ofSeconds(60)).until(() -> second.deadLettered() == 1);
+    }
+    assertThat(attempts.get()).as("the second owner went on from the first's count").isEqualTo(6);
+  }
+
+  @Test
+  @Tag("NFR-REL-01")
+  void recordsWaitingAndFailingInTurnReachTheBound() throws Exception {
+    // I17 and amendment-1 review A1-m3: an S4 answer does not clear the retry state, so a record
+    // alternating S4 and F4 is dead-lettered at the F4 bound, not kept alive by the wait budget.
+    String topic = newTopic();
+    UUID institution = UUID.randomUUID();
+    AtomicInteger attempts = new AtomicInteger();
+    try (EnvelopeConsumer consumer =
+        consumer(
+            topic,
+            "test-group-" + UUID.randomUUID(),
+            envelope -> {
+              if (attempts.incrementAndGet() % 2 == 1) {
+                throw new NotYetRecordedException("parent late (test)");
+              }
+              throw new SQLException("statement timeout (test)", "57014");
+            },
+            new EnvelopeConsumer.RetryBound(3, Duration.ofSeconds(1), Duration.ofSeconds(60)),
+            new io.micrometer.core.instrument.simple.SimpleMeterRegistry(),
+            Map.of())) {
+      publish(topic, institution, 1);
+      await().atMost(Duration.ofSeconds(60)).until(() -> consumer.deadLettered() == 1);
+    }
+    assertThat(header(drain(topic + ".dlq", 1).getFirst(), "fs-dlq-reason"))
+        .isEqualTo("handler_failure");
+  }
+
+  @Test
+  @Tag("NFR-REL-01")
+  void outagesAreRetriedWithoutBoundAndCounted() throws Exception {
+    // I18: an outage never reaches the F4 bound (here 2 attempts, no time), and each failed attempt
+    // is counted as an outage.
+    String topic = newTopic();
+    UUID institution = UUID.randomUUID();
+    var meters = new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+    AtomicInteger attempts = new AtomicInteger();
+    List<Integer> handled = new CopyOnWriteArrayList<>();
+    try (EnvelopeConsumer consumer =
+        consumer(
+            topic,
+            "test-group-" + UUID.randomUUID(),
+            envelope -> {
+              if (attempts.incrementAndGet() <= 6) {
+                throw new SQLException("database unavailable (test)", "08006");
+              }
+              handled.add(sequence(envelope));
+            },
+            new EnvelopeConsumer.RetryBound(2, Duration.ZERO, Duration.ofSeconds(60)),
+            meters,
+            Map.of())) {
+      publish(topic, institution, 1);
+      await().atMost(Duration.ofSeconds(60)).until(() -> handled.contains(1));
+      assertThat(consumer.deadLettered()).isZero();
+    }
+    assertThat(count(meters, "fs_notify_retries_total", "class", "outage")).isEqualTo(6.0);
+    assertThat(count(meters, "fs_notify_retries_total", "class", "may_be_own")).isZero();
+  }
+
+  @Test
+  @Tag("FR-03-04")
+  void keptResultsAreWrittenOnReReadsAndAcrossOwnersAndNeverSentAgain() throws Exception {
+    // I20 at the consumer: once the provider has been called, a failed outcome write re-reads the
+    // record with the result kept, on this owner and the next, and the provider is not called
+    // again.
+    String topic = newTopic();
+    String group = "test-group-" + UUID.randomUUID();
+    UUID institution = UUID.randomUUID();
+    AtomicInteger sends = new AtomicInteger();
+    AtomicInteger rereadsWithResult = new AtomicInteger();
+    List<ProviderResult> written = new CopyOnWriteArrayList<>();
+    AtomicBoolean outcomeWriteWorks = new AtomicBoolean(false);
+    EnvelopeConsumer.Handler handler =
+        envelope -> {
+          if (envelope.kept().isEmpty()) {
+            sends.incrementAndGet();
+            envelope.keeper().keep(SENT);
+          } else {
+            rereadsWithResult.incrementAndGet();
+          }
+          if (!outcomeWriteWorks.get()) {
+            throw new SQLException("outcome write failed (test)", "08006");
+          }
+          written.add(envelope.kept().orElseThrow());
+        };
+    try (EnvelopeConsumer first =
+        consumer(
+            topic,
+            group,
+            handler,
+            EnvelopeConsumer.RetryBound.DEFAULT,
+            new io.micrometer.core.instrument.simple.SimpleMeterRegistry(),
+            Map.of())) {
+      publish(topic, institution, 1);
+      await().atMost(Duration.ofSeconds(30)).until(() -> rereadsWithResult.get() >= 2);
+    }
+    assertThat(committed(group, topic).metadata())
+        .as("the result is in the checkpoint (W-e2)")
+        .endsWith(" result=" + SENT.text());
+    outcomeWriteWorks.set(true);
+    try (EnvelopeConsumer second =
+        consumer(
+            topic,
+            group,
+            handler,
+            EnvelopeConsumer.RetryBound.DEFAULT,
+            new io.micrometer.core.instrument.simple.SimpleMeterRegistry(),
+            Map.of())) {
+      await().atMost(Duration.ofSeconds(30)).until(() -> written.size() == 1);
+    }
+    assertThat(sends.get()).as("one provider call, whatever happened after it").isEqualTo(1);
+    assertThat(written).containsExactly(SENT);
+  }
+
+  @Test
+  @Tag("FR-03-04")
+  void theTransactionHeadersStateReachesTheHandlerAndMalformedOnesAreCountedOnce()
+      throws Exception {
+    // I21 through the real consumer, not by parsing the header in the test (impl-2 m2).
+    String topic = newTopic();
+    UUID institution = UUID.randomUUID();
+    var meters = new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+    Map<Integer, TransactionHeader> seen = new ConcurrentHashMap<>();
+    AtomicInteger failuresLeft = new AtomicInteger(2);
+    UUID valid = UUID.randomUUID();
+    try (EnvelopeConsumer consumer =
+        consumer(
+            topic,
+            "test-group-" + UUID.randomUUID(),
+            envelope -> {
+              int sequence = sequence(envelope);
+              if (sequence == 2 && failuresLeft.getAndDecrement() > 0) {
+                throw new SQLException("database unavailable (test)", "08006");
+              }
+              seen.put(sequence, envelope.transaction());
+            },
+            EnvelopeConsumer.RetryBound.DEFAULT,
+            meters,
+            Map.of())) {
+      publish(topic, "key", envelope(institution, 1), Map.of());
+      publish(topic, "key", envelope(institution, 2), Map.of("fs-transaction-id", "1-2-3-4-5"));
+      publish(
+          topic, "key", envelope(institution, 3), Map.of("fs-transaction-id", valid.toString()));
+      await().atMost(Duration.ofSeconds(30)).until(() -> seen.containsKey(3));
+    }
+    assertThat(seen.get(1)).isEqualTo(TransactionHeader.ABSENT);
+    assertThat(seen.get(2)).isEqualTo(TransactionHeader.MALFORMED);
+    assertThat(seen.get(3)).isEqualTo(TransactionHeader.valid(valid));
+    assertThat(count(meters, "fs_notify_malformed_headers_total"))
+        .as("once per record, though it was read three times")
+        .isEqualTo(1.0);
+  }
+
+  @Test
+  @Tag("NFR-REL-01")
+  void offsetsBelowTheLogStartAreCountedNotSkippedSilently() throws Exception {
+    // I22: retention deleted records behind a held partition. The reset to the log start is
+    // counted; the records still there are handled.
+    String topic = newTopic();
+    String group = "test-group-" + UUID.randomUUID();
+    UUID institution = UUID.randomUUID();
+    for (int sequence = 0; sequence < 10; sequence++) {
+      publish(topic, institution, sequence);
+    }
+    TopicPartition partition = new TopicPartition(topic, 0);
+    try (KafkaConsumer<String, byte[]> committer =
+        new KafkaConsumer<>(
+            Map.of(
+                ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
+                kafka.bootstrapServers(),
+                ConsumerConfig.GROUP_ID_CONFIG,
+                group),
+            new StringDeserializer(),
+            new ByteArrayDeserializer())) {
+      committer.assign(List.of(partition));
+      committer.commitSync(Map.of(partition, new OffsetAndMetadata(0)));
+    }
+    try (org.apache.kafka.clients.admin.Admin admin =
+        org.apache.kafka.clients.admin.Admin.create(
+            Map.of(
+                org.apache.kafka.clients.admin.AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG,
+                kafka.bootstrapServers()))) {
+      admin
+          .deleteRecords(
+              Map.of(partition, org.apache.kafka.clients.admin.RecordsToDelete.beforeOffset(5)))
+          .all()
+          .get();
+    }
+    var meters = new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+    List<Integer> handled = new CopyOnWriteArrayList<>();
+    try (EnvelopeConsumer consumer =
+        consumer(
+            topic,
+            group,
+            envelope -> handled.add(sequence(envelope)),
+            EnvelopeConsumer.RetryBound.DEFAULT,
+            meters,
+            Map.of())) {
+      await().atMost(Duration.ofSeconds(30)).until(() -> handled.contains(9));
+    }
+    assertThat(handled).containsExactly(5, 6, 7, 8, 9);
+    assertThat(count(meters, "fs_notify_offsets_skipped_total")).isEqualTo(5.0);
+  }
+
+  /** A JVM {@code Error} a handler might meet; any {@code Throwable} that is not an exception. */
+  private static final class TestError extends Error {
+    private static final long serialVersionUID = 1L;
+
+    TestError() {
+      super("an Error from a handler (test)");
+    }
+  }
+
+  @Test
+  @Tag("NFR-REL-01")
+  void anErrorMidBatchSkipsNoRecordAndStopsOnlyThatMember() throws Exception {
+    // I26 (amendment-1 review A2-M1): the stopping member seeks back and commits before it closes,
+    // so the record that threw and every record after it are handled by the next owner.
+    String topic = newTopic();
+    String group = "test-group-" + UUID.randomUUID();
+    UUID institution = UUID.randomUUID();
+    for (int sequence = 1; sequence <= 5; sequence++) {
+      publish(topic, institution, sequence);
+    }
+    List<Integer> byFirst = new CopyOnWriteArrayList<>();
+    List<Integer> bySecond = new CopyOnWriteArrayList<>();
+    var meters = new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+    EnvelopeConsumer first =
+        consumer(
+            topic,
+            group,
+            envelope -> {
+              if (sequence(envelope) == 3) {
+                throw new TestError();
+              }
+              byFirst.add(sequence(envelope));
+            },
+            EnvelopeConsumer.RetryBound.DEFAULT,
+            meters,
+            Map.of());
+    try {
+      await().atMost(Duration.ofSeconds(30)).until(() -> !first.running());
+      assertThat(byFirst).containsExactly(1, 2);
+      assertThat(count(meters, "fs_notify_consumer_errors_total")).isEqualTo(1.0);
+      assertThat(meters.find("fs_notify_consumer_running").gauge().value()).isZero();
+      try (EnvelopeConsumer second =
+          consumer(
+              topic,
+              group,
+              envelope -> bySecond.add(sequence(envelope)),
+              EnvelopeConsumer.RetryBound.DEFAULT,
+              new io.micrometer.core.instrument.simple.SimpleMeterRegistry(),
+              Map.of())) {
+        await().atMost(Duration.ofSeconds(60)).until(() -> bySecond.contains(5));
+      }
+      assertThat(bySecond).containsExactly(3, 4, 5);
+    } finally {
+      first.close();
+    }
+  }
+
+  @Test
+  @Tag("NFR-REL-01")
+  void batchesPastTheirTimeBudgetPollAgainWithoutSkipping() throws Exception {
+    // I26: a 50 ms batch budget with 30 ms records: the consumer polls again many times, and every
+    // record is handled once, in order.
+    String topic = newTopic();
+    UUID institution = UUID.randomUUID();
+    for (int sequence = 1; sequence <= 10; sequence++) {
+      publish(topic, institution, sequence);
+    }
+    List<Integer> handled = new CopyOnWriteArrayList<>();
+    try (EnvelopeConsumer consumer =
+        consumer(
+            topic,
+            "test-group-" + UUID.randomUUID(),
+            envelope -> {
+              try {
+                Thread.sleep(30);
+              } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+              }
+              handled.add(sequence(envelope));
+            },
+            new EnvelopeConsumer.RetryBound(5, Duration.ofMinutes(10), Duration.ofMillis(50)),
+            new io.micrometer.core.instrument.simple.SimpleMeterRegistry(),
+            Map.of())) {
+      await().atMost(Duration.ofSeconds(60)).until(() -> handled.contains(10));
+    }
+    assertThat(handled).containsExactly(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+  }
+
+  @Test
+  @Tag("NFR-REL-01")
+  void deadLettersTooLargeAreResentWithoutTheirErrorThenDroppedAtTheBound() throws Exception {
+    // I27 (amendment-1 review A2-M2): the producer's max.request.size is set low. Record 1's dead
+    // letter fits once fs-dlq-error is left out; record 2's never fits and is dropped, counted, at
+    // the bound; record 3 is handled.
+    String topic = newTopic();
+    UUID institution = UUID.randomUUID();
+    var meters = new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+    List<Integer> handled = new CopyOnWriteArrayList<>();
+    String longReason = "x".repeat(3000);
+    try (EnvelopeConsumer consumer =
+        consumer(
+            topic,
+            "test-group-" + UUID.randomUUID(),
+            envelope -> {
+              int sequence = sequence(envelope);
+              if (sequence == 1 || sequence == 2) {
+                throw new MalformedPayloadException(longReason, null);
+              }
+              handled.add(sequence);
+            },
+            new EnvelopeConsumer.RetryBound(2, Duration.ZERO, Duration.ofSeconds(60)),
+            meters,
+            Map.of(ProducerConfig.MAX_REQUEST_SIZE_CONFIG, 2000))) {
+      publish(topic, institution, 1);
+      String padded =
+          "{\"event_id\":\""
+              + UUID.randomUUID()
+              + "\",\"institution_id\":\""
+              + institution
+              + "\",\"payload\":{\"decision_sequence\":2,\"pad\":\""
+              + "p".repeat(4000)
+              + "\"}}";
+      publish(topic, "key", padded, Map.of());
+      publish(topic, institution, 3);
+      await().atMost(Duration.ofSeconds(60)).until(() -> handled.contains(3));
+    }
+    List<ConsumerRecord<String, byte[]>> dead = drain(topic + ".dlq", 1);
+    assertThat(dead).hasSize(1);
+    assertThat(header(dead.getFirst(), "fs-dlq-reason")).isEqualTo("malformed_envelope");
+    assertThat(dead.getFirst().headers().lastHeader("fs-dlq-error"))
+        .as("re-sent without its error (D-a)")
+        .isNull();
+    assertThat(count(meters, "fs_notify_dropped_total")).isEqualTo(1.0);
+  }
+
+  @Test
+  @Tag("FR-03-04")
+  void replayingAnOutcomeUnrecordedRecordsItsResultAndSendsNothing() throws Exception {
+    // I28: the copy's fs-dlq-result is republished as one fs-kept-result; the consumer hands it to
+    // the handler as a kept result. A fs-kept-result on a record that was not replayed is ignored.
+    String topic = newTopic();
+    String group = "test-group-" + UUID.randomUUID();
+    UUID institution = UUID.randomUUID();
+    var meters = new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+    AtomicBoolean recordable = new AtomicBoolean(false);
+    AtomicInteger sends = new AtomicInteger();
+    Map<Integer, java.util.Optional<ProviderResult>> keptSeen = new ConcurrentHashMap<>();
+    EnvelopeConsumer.Handler handler =
+        envelope -> {
+          int sequence = sequence(envelope);
+          keptSeen.put(sequence, envelope.kept());
+          if (sequence == 1 && envelope.kept().isEmpty()) {
+            sends.incrementAndGet();
+            envelope.keeper().keep(SENT);
+          }
+          if (sequence == 1 && !recordable.get()) {
+            throw new SQLException("check violation (test)", "23514");
+          }
+        };
+    try (EnvelopeConsumer first =
+        consumer(topic, group, handler, EnvelopeConsumer.RetryBound.DEFAULT, meters, Map.of())) {
+      publish(topic, institution, 1);
+      publish(
+          topic,
+          "key",
+          envelope(institution, 2),
+          Map.of(EnvelopeConsumer.KEPT_RESULT_HEADER, SENT.text()));
+      await().atMost(Duration.ofSeconds(30)).until(() -> keptSeen.containsKey(2));
+      await().atMost(Duration.ofSeconds(30)).until(() -> first.deadLettered() == 1);
+    }
+    assertThat(keptSeen.get(2)).as("not replayed: the header is ignored").isEmpty();
+    assertThat(count(meters, "fs_notify_ignored_kept_results_total")).isEqualTo(1.0);
+
+    recordable.set(true);
+    keptSeen.clear();
+    DeadLetterReplay.Result replayed =
+        DeadLetterReplay.replay(
+            Map.of(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, kafka.bootstrapServers()),
+            topic,
+            Set.of("outcome_unrecorded"),
+            Instant.EPOCH,
+            false);
+    assertThat(replayed.republished()).isEqualTo(1);
+    try (EnvelopeConsumer second =
+        consumer(
+            topic,
+            group,
+            handler,
+            EnvelopeConsumer.RetryBound.DEFAULT,
+            new io.micrometer.core.instrument.simple.SimpleMeterRegistry(),
+            Map.of())) {
+      await().atMost(Duration.ofSeconds(30)).until(() -> keptSeen.containsKey(1));
+    }
+    assertThat(keptSeen.get(1)).contains(SENT);
+    assertThat(sends.get()).as("the replay recorded the result; it did not send").isEqualTo(1);
   }
 
   private static List<ConsumerRecord<String, byte[]>> drain(String topic, int expected) {

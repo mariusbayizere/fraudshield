@@ -1144,14 +1144,14 @@ public final class EnvelopeConsumer implements AutoCloseable {
     Exception sendFailure;
     try {
       send(record, actual, why, state.kept, true);
-      return deadLettered(record, actual, why);
+      return recordDeadLetter(record, actual, why);
     } catch (DeadLetterNotSent notSent) {
       sendFailure = (Exception) notSent.getCause();
     }
     if (FailureClass.tooLarge(sendFailure)) {
       try {
         send(record, actual, why, state.kept, false);
-        return deadLettered(record, actual, why);
+        return recordDeadLetter(record, actual, why);
       } catch (DeadLetterNotSent stillNot) {
         sendFailure = (Exception) stillNot.getCause();
       }
@@ -1209,7 +1209,7 @@ public final class EnvelopeConsumer implements AutoCloseable {
     }
   }
 
-  private Outcome deadLettered(
+  private Outcome recordDeadLetter(
       ConsumerRecord<String, byte[]> record, String reason, Exception why) {
     deadLettered.incrementAndGet();
     counter("fs_notify_dead_letters_total", "reason", reason).increment();

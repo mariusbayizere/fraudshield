@@ -99,7 +99,24 @@ class SmsOrderingTest {
   }
 
   private CustomerSmsSender sender(DataSource dataSource) {
-    return new CustomerSmsSender(
+    return sender(
+        dataSource,
+        institution ->
+            Optional.of(
+                new InstitutionMessaging.Settings(
+                    "FSBANK", "+250788100100", "https://verify.fsbank.rw/v/")),
+        (senderId, phone, text) -> {
+          sent.add(text);
+          phones.add(phone);
+          return "ATXid_" + sent.size();
+        });
+  }
+
+  private CustomerSmsSender sender(
+      DataSource dataSource,
+      InstitutionMessaging institutions,
+      io.github.mariusbayizere.fraudshield.notify.sms.SmsGateway gateway) {
+    return sender(
         dataSource,
         (institution, account) ->
             Optional.of(
@@ -107,17 +124,22 @@ class SmsOrderingTest {
                     account.equals(OTHER_ACCOUNT) ? "+250788000002" : "+250788000001",
                     "en",
                     "***" + account.substring(account.length() - 4))),
-        institution ->
-            Optional.of(
-                new InstitutionMessaging.Settings(
-                    "FSBANK", "+250788100100", "https://verify.fsbank.rw/v/")),
+        institutions,
+        gateway);
+  }
+
+  private CustomerSmsSender sender(
+      DataSource dataSource,
+      ContactDirectory contacts,
+      InstitutionMessaging institutions,
+      io.github.mariusbayizere.fraudshield.notify.sms.SmsGateway gateway) {
+    return new CustomerSmsSender(
+        dataSource,
+        contacts,
+        institutions,
         new VerificationService(
             dataSource, new DecisionTransitionService(ports, ports, ports, clock), clock),
-        (senderId, phone, text) -> {
-          sent.add(text);
-          phones.add(phone);
-          return "ATXid_" + sent.size();
-        },
+        gateway,
         new SmsCatalogue(),
         clock);
   }
@@ -475,6 +497,232 @@ class SmsOrderingTest {
   }
 
   /** A data source that records the connections it lends and the statements they prepare. */
+  // ---- Amendment 1 (docs/architecture/decision-fact-ordering.md, section 12) ----
+
+  private static final io.github.mariusbayizere.fraudshield.notify.kafka.EnvelopeConsumer
+          .ResultKeeper
+      IGNORE = result -> {};
+
+  /** A blocking decision of a fresh transaction, persisted, with its link allowed or not. */
+  private KafkaMessage persistedBlock(boolean linkAllowed) throws Exception {
+    Transaction t =
+        Fixtures.transaction(UUID.randomUUID(), Fixtures.ACCOUNT, "15000", Channel.CARD);
+    List<DecisionEvent> facts =
+        decide(t, fingerprint(), 0.9).stream()
+            .map(
+                e ->
+                    e instanceof DecisionEvent.CustomerNotificationRequested n
+                        ? (DecisionEvent) withLink(n, linkAllowed)
+                        : e)
+            .toList();
+    persist(facts);
+    return intentOf(facts);
+  }
+
+  private static io.github.mariusbayizere.fraudshield.notify.kafka.TransactionHeader header(
+      KafkaMessage intent) {
+    return io.github.mariusbayizere.fraudshield.notify.kafka.TransactionHeader.parse(
+        intent.headers().get(KafkaMessage.TRANSACTION_ID_HEADER));
+  }
+
+  @Test
+  @Tag("NFR-REL-01")
+  void everyFieldTheSenderReadsIsValidatedBeforeAnythingIsDone() throws Exception {
+    // I19, the SMS intent's field groups (12.1): each is refused as malformed, with B persisted,
+    // and
+    // nothing is sent, issued or recorded.
+    KafkaMessage intent = persistedBlock(true);
+    List<java.util.function.Consumer<ObjectNode>> breakages =
+        List.of(
+            p -> p.remove("parameters"),
+            p -> p.put("parameters", "not an object"),
+            p -> ((ObjectNode) p.get("parameters")).remove("amount"),
+            p -> ((ObjectNode) p.get("parameters").get("amount")).put("currency", "XXX"),
+            p -> ((ObjectNode) p.get("parameters").get("amount")).put("amount", "abc"),
+            p -> ((ObjectNode) p.get("parameters")).remove("local_time"),
+            p -> ((ObjectNode) p.get("parameters")).put("reference_code", ""),
+            p -> p.put("account_token", ""),
+            p -> p.put("auto_block_event_id", "1-2-3-4-5"),
+            p -> p.remove("notification_id"));
+    for (java.util.function.Consumer<ObjectNode> breakage : breakages) {
+      ObjectNode broken = ((ObjectNode) payload(intent)).deepCopy();
+      breakage.accept(broken);
+      assertThatThrownBy(
+              () -> sender.send(INSTITUTION, broken, header(intent), Optional.empty(), IGNORE))
+          .isInstanceOf(MalformedPayloadException.class);
+    }
+    nothingDoneFor(intent);
+  }
+
+  @Test
+  void providerRepliesThatCannotBeReadAreFailedOnceAndNeverResent() throws Exception {
+    // I20 through the real AfricasTalkingGateway: a 2xx reply that is not the provider's JSON is a
+    // FAILED result that may have been delivered, kept, recorded once, and never sent again.
+    com.sun.net.httpserver.HttpServer server =
+        com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+    java.util.concurrent.atomic.AtomicInteger hits =
+        new java.util.concurrent.atomic.AtomicInteger();
+    server.createContext(
+        "/version1/messaging",
+        exchange -> {
+          hits.incrementAndGet();
+          byte[] body =
+              "<html>maintenance</html>".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+          exchange.sendResponseHeaders(200, body.length);
+          exchange.getResponseBody().write(body);
+          exchange.close();
+        });
+    server.start();
+    try {
+      CustomerSmsSender real =
+          sender(
+              db.dataSource("fs_app"),
+              institution ->
+                  Optional.of(
+                      new InstitutionMessaging.Settings(
+                          "FSBANK", "+250788100100", "https://verify.fsbank.rw/v/")),
+              new io.github.mariusbayizere.fraudshield.notify.sms.AfricasTalkingGateway(
+                  "http://127.0.0.1:" + server.getAddress().getPort(), "sandbox", "test-key"));
+      KafkaMessage intent = persistedBlock(false);
+      List<io.github.mariusbayizere.fraudshield.notify.kafka.ProviderResult> kept =
+          new CopyOnWriteArrayList<>();
+      assertThat(
+              real.send(INSTITUTION, payload(intent), header(intent), Optional.empty(), kept::add))
+          .isEqualTo(CustomerSmsSender.Outcome.FAILED);
+      assertThat(kept).hasSize(1);
+      assertThat(kept.getFirst().sent()).isFalse();
+      assertThat(kept.getFirst().mayBeDelivered()).isTrue();
+      assertThat(
+              one(
+                  "SELECT count(*) FROM fraudshield.customer_notifications WHERE event ="
+                      + " 'FAILED'"))
+          .isEqualTo("1");
+      // A re-read finds the outcome (S1) and sends nothing.
+      assertThat(real.send(INSTITUTION, payload(intent), header(intent), Optional.empty(), IGNORE))
+          .isEqualTo(CustomerSmsSender.Outcome.FAILED);
+      assertThat(hits.get()).isEqualTo(1);
+    } finally {
+      server.stop(0);
+    }
+  }
+
+  @Test
+  void failedOutcomeWritesKeepTheResultAndTheReReadWritesItWithoutSending() throws Exception {
+    // I20 at the sender: the outcome write fails after the provider accepted; the result handed to
+    // the consumer is written on the re-read, and the provider is not called again.
+    java.util.concurrent.atomic.AtomicBoolean failRecord =
+        new java.util.concurrent.atomic.AtomicBoolean(true);
+    CustomerSmsSender flaky = sender(failingRecord(db.dataSource("fs_app"), failRecord));
+    KafkaMessage intent = persistedBlock(false);
+    List<io.github.mariusbayizere.fraudshield.notify.kafka.ProviderResult> kept =
+        new CopyOnWriteArrayList<>();
+    assertThatThrownBy(
+            () ->
+                flaky.send(
+                    INSTITUTION, payload(intent), header(intent), Optional.empty(), kept::add))
+        .isInstanceOf(java.sql.SQLException.class);
+    assertThat(sent).hasSize(1);
+    assertThat(kept).hasSize(1);
+    assertThat(kept.getFirst().sent()).isTrue();
+
+    failRecord.set(false);
+    assertThat(
+            flaky.send(
+                INSTITUTION, payload(intent), header(intent), Optional.of(kept.getFirst()), IGNORE))
+        .isEqualTo(CustomerSmsSender.Outcome.SENT);
+    assertThat(sent).as("written, not sent again").hasSize(1);
+    assertThat(
+            one(
+                "SELECT provider_reference FROM fraudshield.customer_notifications WHERE event ="
+                    + " 'SENT'"))
+        .isEqualTo("ATXid_1");
+  }
+
+  @Test
+  void malformedTransactionHeadersDecideNoSend() throws Exception {
+    // I21 at the sender: with B absent the intent is S3m and nothing is done; with B visible it is
+    // sent exactly as with a valid header.
+    Transaction t =
+        Fixtures.transaction(UUID.randomUUID(), Fixtures.ACCOUNT, "15000", Channel.CARD);
+    List<DecisionEvent> facts = decide(t, fingerprint(), 0.9);
+    KafkaMessage intent = intentOf(facts);
+    var malformed = io.github.mariusbayizere.fraudshield.notify.kafka.TransactionHeader.MALFORMED;
+    assertThatThrownBy(
+            () -> sender.send(INSTITUTION, payload(intent), malformed, Optional.empty(), IGNORE))
+        .isInstanceOf(
+            io.github.mariusbayizere.fraudshield.notify.kafka.MalformedHeaderException.class);
+    nothingDoneFor(intent);
+
+    persist(facts);
+    assertThat(sender.send(INSTITUTION, payload(intent), malformed, Optional.empty(), IGNORE))
+        .isEqualTo(CustomerSmsSender.Outcome.SENT);
+    assertThat(sent).hasSize(1);
+  }
+
+  @Test
+  void theMessageIsRenderedBeforeItsLinkIsIssued() throws Exception {
+    // I25 (amendment-1 review A1-m6): a rendering failure that is not a refusal (a vault contact
+    // without its masked account) leaves no verification behind, so once the contact is fixed the
+    // SMS still carries the block's one link.
+    java.util.concurrent.atomic.AtomicReference<String> masked =
+        new java.util.concurrent.atomic.AtomicReference<>();
+    CustomerSmsSender withContact =
+        sender(
+            db.dataSource("fs_app"),
+            (institution, account) ->
+                Optional.of(new ContactDirectory.Contact("+250788000001", "en", masked.get())),
+            institution ->
+                Optional.of(
+                    new InstitutionMessaging.Settings(
+                        "FSBANK", "+250788100100", "https://verify.fsbank.rw/v/")),
+            (senderId, to, text) -> {
+              sent.add(text);
+              return "ATXid_" + sent.size();
+            });
+    KafkaMessage intent = persistedBlock(true);
+    assertThatThrownBy(
+            () ->
+                withContact.send(
+                    INSTITUTION, payload(intent), header(intent), Optional.empty(), IGNORE))
+        .isInstanceOf(NullPointerException.class);
+    assertThat(one("SELECT count(*) FROM fraudshield.customer_verifications")).isEqualTo("0");
+    assertThat(sent).isEmpty();
+
+    masked.set("***0001");
+    assertThat(
+            withContact.send(
+                INSTITUTION, payload(intent), header(intent), Optional.empty(), IGNORE))
+        .isEqualTo(CustomerSmsSender.Outcome.SENT);
+    assertThat(sent.getLast()).contains("https://verify.fsbank.rw/v/");
+  }
+
+  /** A data source whose outcome write fails as an outage while {@code fail} is set. */
+  private static DataSource failingRecord(
+      DataSource target, java.util.concurrent.atomic.AtomicBoolean fail) {
+    return (DataSource)
+        Proxy.newProxyInstance(
+            SmsOrderingTest.class.getClassLoader(),
+            new Class<?>[] {DataSource.class},
+            (proxy, method, args) -> {
+              Object result = invoke(target, method, args);
+              if (!method.getName().equals("getConnection")) {
+                return result;
+              }
+              Connection connection = (Connection) result;
+              return Proxy.newProxyInstance(
+                  SmsOrderingTest.class.getClassLoader(),
+                  new Class<?>[] {Connection.class},
+                  (p, m, a) -> {
+                    if (m.getName().equals("prepareStatement")
+                        && ((String) a[0]).contains("INSERT INTO customer_notifications")
+                        && fail.get()) {
+                      throw new java.sql.SQLException("outcome write failed (test)", "08006");
+                    }
+                    return invoke(connection, m, a);
+                  });
+            });
+  }
+
   private static DataSource recording(
       DataSource target,
       java.util.concurrent.atomic.AtomicInteger connections,
@@ -494,8 +742,12 @@ class SmsOrderingTest {
                   SmsOrderingTest.class.getClassLoader(),
                   new Class<?>[] {Connection.class},
                   (p, m, a) -> {
-                    if (m.getName().equals("prepareStatement")) {
+                    if (m.getName().equals("prepareStatement")
+                        || m.getName().equals("prepareCall")) {
                       statements.add((String) a[0]);
+                    } else if (m.getName().equals("createStatement")) {
+                      // A split classification by any statement kind counts (impl-2 n7).
+                      statements.add("<createStatement>");
                     }
                     return invoke(connection, m, a);
                   });
