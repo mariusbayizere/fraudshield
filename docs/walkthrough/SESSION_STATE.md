@@ -1,85 +1,52 @@
-# Session state — M4 closed with two gate metrics missed and recorded; M8 next
+# Session state — M6 complete; M7 assembled with M6, awaiting the owner's review
 
-Rewritten 2026-09-22 (evening). Facts only; where something is unverified, assumed or open it says
-so.
+Rewritten 2026-10-17 on `m7/staff-auth`. Facts only; where something is unverified, assumed or open
+it says so. The previous version described the state at M4's close (2026-09-22) and was not updated
+by M5 or M6.
 
 ## Read this first
 
-**M4 is complete.** The declared gate run (`docs/benchmarks/m4_gate_d8083dbc_v3.txt`) passes 9 of
-11. **ML-GATE-03 (recall at 0.60, 0.736 at 30,000 training rows, against 0.88) and ML-GATE-06 (FNR at 0.60, 0.264
-against 0.12) are missed**, and on the owner's decision they are `DONE_WITH_DEVIATION` against ADR 0031's
-amendment: a miss at the training volume used, not deferrable and not a defect, recorded with value,
-interval and cause, reported in the paper, D-02's threshold unchanged. PB-67 (a larger training
-sample) is the open test of the candidate cause.
+- **`main` is at `b77008e`, tagged `m6-complete`.** M0 to M6 are complete
+  (`docs/traceability/milestones.yaml`, `current: M7`). Each was closed on the owner's decision, with
+  its open Must rows carried to the milestones that close them.
+- **M7 (`m7/staff-auth`) is not merged and not tagged.** `main` is merged into it (`8c8cf48`). The
+  merge round's review found that nobody assembled the API application and that M6's audit events
+  never reached the hash chain; the owner gave both to M7, and this round did them
+  (`docs/adr/0073-assembling-the-api-application.md`). Everything M7 owes is in
+  `docs/parallel/M7_updates.md`, which is the resume point.
+- **Owner decisions open** (M7_updates.md, "Items"): D-15 against the key cache (threat model R-13);
+  who builds the analyst API, which no milestone does; keeping `DemoUserEntity`.
+- **The deletion standard governs every claim** (master prompt): a test is evidence for code only
+  if deleting that code fails it. M7's rows are 8 of 25 proved in full and 17 in part; what is not
+  proved is in the backlog (PB-102 to PB-120), one row each.
 
-**The M4 milestone review is APPROVED_WITH_MINORS** (`docs/reviews/M4/milestone-review.md`):
-fifteen BLOCKER and MAJOR findings, all fixed. The reviewer is the author, and the record says so.
+## Branches
 
-**Next is M8 (front-end), as the owner planned**, in its own worktree. M5–M7 are not complete;
-`backend/` belongs to the M7 agent.
-
-## Branches and CI
-
-- **`main` is at `m3-complete` (`f8885d6`)**, green on every job. It is fast-forwarded to the M4
-  head only after CI is green there.
-- **`m4/generalisation`** is PR #1 against `main`. The default branch is still `m0/bootstrap`, a
-  repository setting only the owner can change (PB-25 stays blocked).
-- `m2-complete` sits on a commit whose python CI job fails; it was tagged before any CI run on it
-  (lab notebook). Not moved.
-
-## What M4 now contains
-
-| | Where |
+| Branch | State |
 |---|---|
-| D-05's ensemble: XGBoost and LightGBM, early-stopped on validation average precision, imbalance-weighted, one isotonic calibrator on the 0.55/0.45 combination, float32-exact | `ml/src/fraudshield_ml/training/model.py` |
-| D-06's Isolation Forest, raw score and percentile score | `training/anomaly.py` |
-| Per-model exact SHAP, the margin-space combination, top-5, coverage | `training/explain.py`, `docs/ml/explainability.md` |
-| The eleven M4 gate metrics, bootstrap CIs, DeLong, baselines, ablations, seeds, `metrics.json`, LaTeX, SVG | `training/gate*.py`, `fs-features gate` |
-| ONNX export and parity | `training/onnx_export.py` |
-| Test-set access log, back-filled | `docs/benchmarks/test_set_access.jsonl` |
-| E1's time-ordered target encoding | `training/smoke.py` |
+| `main` | `b77008e`, `m6-complete` |
+| `m7/staff-auth` | M7, merged with `main`; this round's commits on top |
+| `m7/round2-wip` | scratch branch for this round's CI iterations; delete once the round is on `m7/staff-auth` |
+| `m8/frontend`, `m9/infra`, `m10/verification`, `m11/paper` | in progress on their own branches |
+| `m6/featurestore-fallback` | PB-69, not merged (its Java CI was red when last read) |
+| `m4/generalisation` | the M4 tail with PB-76 (`bb1d17a`), not merged |
 
-## The results that matter
-
-| | Evidence |
-|---|---|
-| Gate: AUC 0.970 [0.962, 0.977], +0.091 over the best single feature, +0.311 over the best trivial rule | `m4_gate_d8083dbc_v3.txt` |
-| Gate fails: recall at 0.60 0.736, FNR 0.264; even at the 1% FPR budget recall is 0.871 | same, PB-62 |
-| ONNX parity < 1e-6 on all 101,909 test rows | same |
-| Reversal-scam variant **9.1%** (6/66, [4.2%, 18.4%]) vs base 94.4%; below the pre-registered 0.15 as a point estimate, not as a whole interval | `m4_battery_d8083dbc_e1.txt` |
-| C-6: ensemble −0.6% vs XGBoost, +12.5% vs LightGBM | `m4_seed_variance_d8083dbc_e1.txt` |
-| Ablation: card-style features only −0.042 AUC (C-4's measurement; PB-60's redundancy caveat applies) | gate run |
-
-## Open, in the order I would take them
-
-| Item | What |
-|---|---|
-| **Owner** | ADR 0030 (MLflow deferred to M5) awaits confirmation |
-| PB-67 | a larger training sample, reported beside the current run |
-| PB-63 | the CI ML gate needs a dataset in CI (M9) |
-| PB-64, 65 | clauses carried to M5 and M6 |
-| PB-66 | E.5 items beyond the gate |
-| PB-68 | frontier and battery prose at `d8083dbc` |
-| M8 | next, in its own worktree |
+The default branch is still `m0/bootstrap`, a repository setting only the owner can change (GOV-9).
 
 ## Things that will bite whoever picks this up
 
-- **Read a requirement's notes before building it.** E1 and PB-46's reporting rule were both
-  written on the M4 rows as settled decisions, and both were missed until the register was being
-  updated at the very end.
-- **A parity test on random data proves little.** The ONNX test passed on normals and the real
-  data failed on 0.39% of rows; the new test builds doubles that collapse to one float32.
-- **An impossible number is the best bug report** — precision above its own ceiling pointed
-  straight at isotonic ties.
-- **Commit before running a mutation script that restores from git.** One run reset an
-  uncommitted fix; a stash taken beforehand is what saved it.
-- **Never let a cleanup step run after a refused evidence run.** One reverted the access log and
-  lost a line, now reconstructed and marked.
-- **Several sessions share `/home/marius/fraudshield`; `backend/` belongs to the M7 agent.** Work in
-  a worktree with its own `UV_PROJECT_ENVIRONMENT`, with absolute paths.
-- **Read CI on the branch you push to.** This branch's python job was red for 22 runs.
-- **`fs-evidence` refuses on a dirty tree, untracked files included** — which is why evidence runs
-  from a separate frozen worktree here.
-- **Unauthenticated GitHub API: 60 requests an hour.**
-- Timings: ml suite ~1–2 min with coverage; dataset suite 30–60 min under load; gate cache build
-  ~13 min; `fs-features gate` with ablations and five seeds ~5 min; battery ~3 min.
+- **Memory is the constraint** on this laptop (7.6 GB, often under 2.5 GB free). Check `free -h`
+  before any build; one heavy job at a time; run Docker verification on GitHub Actions where a
+  dispatch can. This machine has no local Maven repository, so Java is compiled and tested in CI.
+- **Read CI at job level.** `ci` runs on every push; `stack` and `devcontainer` are path-filtered on
+  push, so dispatch them for evidence (`gh workflow run stack.yml --ref <branch>`), and check that
+  each job executed rather than being skipped.
+- **Several sessions share `/home/marius/fraudshield`.** Work in a worktree (`/home/marius/fs-wt/…`)
+  with its own `UV_PROJECT_ENVIRONMENT` and absolute paths.
+- **`requirements_matrix.md` is generated** (`uv run fs-traceability render`), never merged by
+  hand; `requirements.yaml`'s milestone column comes from `traceability_seed.py`, whose carries say
+  why each row moved.
+- **Claim an id before using it** (`docs/backlog/product.md`, claims table): ADR numbers, Flyway
+  versions and backlog ids are global, and parallel branches have taken the same number twice.
+- **A dependency's declared licence is not its licence**, and a root cause is proved by the
+  mechanism, not by the fix working (lab notebook, 2026-10-17).

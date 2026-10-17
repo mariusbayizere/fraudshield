@@ -297,34 +297,62 @@ The full statements, with their acceptance tests, are in `docs/parallel/M6_updat
 M5"; PB-72 is carried in `docs/parallel/M10_updates.md`. The backlog numbers are proposals: M5 does
 not edit `docs/backlog/`, and PB-68 is already taken by the frontier write-up item.
 
-## From M7 — the ML image redistributes NCCL, OpenBLAS, LAPACK, the GCC runtime and libquadmath (owner, 2026-10-17)
+## From M7 — the ML image redistributes third-party binaries whose notices must travel with it (owner, 2026-10-17; widened the same day)
 
 M7 read the licence files shipped inside the wheels, not their metadata, when it settled the three
-Python licence flags (`tools/src/fraudshield_tools/licences.py`). Two facts bear on the images M9
-builds:
+Python licence flags (`tools/src/fraudshield_tools/licences.py`). Every fact below was read from the
+locked wheels for Linux x86-64 and CPython 3.12 on 2026-10-17; nothing is taken from a package's
+declared licence.
 
-- `xgboost` 3.0.2 is a **runtime** dependency of `fraudshield-ml`, not a dev one. On Linux x86-64 it
-  pulls in `scipy` 1.18.1 and `nvidia-nccl-cu12` 2.31.2, so an ML container image built from the
-  lock redistributes both, in binary form.
-- What they carry, from the shipped texts:
+### What the image redistributes
 
-  | Component | Comes in with | Licence (shipped text) | Notice file |
-  |---|---|---|---|
-  | NCCL | `nvidia-nccl-cu12` | BSD-3-Clause (NVIDIA, LBNL, US DoE named); the metadata tag `LicenseRef-NVIDIA-Proprietary` disagrees with it, and the text governs | `nvidia_nccl_cu12-2.31.2.dist-info/licenses/License.txt` |
-  | NVTX files inside NCCL | `nvidia-nccl-cu12` | Apache-2.0 WITH LLVM-exception | NVTX's `LICENSE.txt` (github.com/NVIDIA/NVTX) |
-  | OpenBLAS | `scipy` (`scipy.libs/libscipy_openblas*.so`) | BSD-3-Clause | `scipy-1.18.1.dist-info/LICENSE.txt` |
-  | LAPACK | `scipy` (inside OpenBLAS) | BSD-3-Clause-Open-MPI | the same file |
-  | GCC runtime (`libgfortran`) | `scipy` | GPL-3.0-or-later WITH GCC-exception-3.1 | the same file |
-  | `libquadmath` | `scipy` | LGPL-2.1-or-later, dynamically linked | the same file |
+`xgboost` 3.0.2 is a **runtime** dependency of `fraudshield-ml`, not a dev one. A container image
+built from the lock therefore redistributes, in binary form, the following (examples, not the
+list):
 
-  Each permits redistribution in binary form on condition that its notice travels with it. M4
-  established on 2026-09-22 (the NCCL entry in `licences.py`) that `libxgboost.so` links no NVIDIA
-  library and the project trains on CPU only, so NCCL is shipped but never loaded: leaving it out
-  of the image costs nothing.
+| Component | Comes in with | Licence (shipped text) | Where its text is |
+|---|---|---|---|
+| NCCL | `nvidia-nccl-cu12` 2.31.2 | BSD-3-Clause (NVIDIA, LBNL, US DoE named); the metadata tag `LicenseRef-NVIDIA-Proprietary` disagrees, and the text governs | `nvidia_nccl_cu12-2.31.2.dist-info/licenses/License.txt` |
+| NVTX files inside NCCL | `nvidia-nccl-cu12` | Apache-2.0 WITH LLVM-exception | **not in the wheel**: NCCL's `License.txt` names the NVTX project and points to github.com/NVIDIA/NVTX for its licence, so the text must be fetched from there |
+| CUDA device code and the CUDA runtime, statically linked | `xgboost`'s `manylinux_2_28_x86_64` wheel (253,887,220 bytes) | NVIDIA's CUDA Toolkit EULA governs the CUDA runtime it links (`libcudart_static` symbols are present), **not** Apache-2.0; the wheel ships no licence file at all | none in the wheel; see below |
+| `libgomp` (GCC runtime) | `xgboost` (`xgboost.libs/libgomp-*.so`) and `scikit-learn` (`scikit_learn.libs/libgomp-*.so`) | GPL-3.0-or-later WITH GCC-exception-3.1 | `scikit-learn`: `dist-info/licenses/COPYING` (whether it covers libgomp is not yet read); `xgboost`: **no file** |
+| OpenBLAS, LAPACK, `libgfortran`, `libquadmath` | `scipy` 1.18.1 (`scipy.libs/`) **and `numpy` 2.5.3** (`numpy.libs/`) | BSD-3-Clause; BSD-3-Clause-Open-MPI; GPL-3.0-or-later WITH GCC-exception-3.1; LGPL-2.1-or-later, dynamically linked | each package's `dist-info/licenses/LICENSE.txt` |
+| Arrow's bundled libraries | `pyarrow` 25.0.1 | its own and its bundled components' licences (not yet read) | `dist-info/licenses/LICENSE.txt` and `NOTICE.txt` |
+| ONNX Runtime's bundled libraries | `onnxruntime` 1.30.0 | its own and its bundled components' licences (not yet read) | `onnxruntime/ThirdPartyNotices.txt`, **inside the package directory, not in `dist-info`** |
 
-**Acceptance criterion, needed before M9's image gate:** the ML image carries the notice files for
-NCCL (with NVTX's), OpenBLAS, LAPACK, the GCC runtime and libquadmath, **or** NCCL is excluded from
-the image because training and serving run on CPU only (for example a CPU-only xgboost build, or the
-image built without the `nvidia-*` wheels), in which case the scipy-bundled notices are still
-required. A test or image-scan step that fails when a notice is missing makes the criterion
-checkable.
+Each of these permits redistribution in binary form on condition that its notice travels with it.
+
+### What xgboost's x86-64 wheel ships (inspected 2026-10-17)
+
+- `libxgboost.so` is 405,981,153 bytes. Its `.nv_fatbin` section is 323,896,200 bytes of compiled
+  CUDA device code. The CUDA runtime is linked statically: `libcudart_static` symbols are present,
+  and no `libcudart` appears among the library's `NEEDED` entries.
+- NCCL is not linked; it is loaded with `dlopen` at run time. That is why `ldd` showing no NVIDIA
+  library proves nothing about whether NCCL is used. What keeps NCCL unloaded is training and
+  serving on CPU only, which is this project's configuration (M4's NCCL entry in `licences.py`,
+  2026-09-22).
+- The `manylinux_2_28_x86_64` wheel declares `Requires-Dist: nvidia-nccl-cu12` on Linux x86-64.
+  pip and uv choose it over the `manylinux2014_x86_64` wheel on any glibc 2.28 or later, which
+  includes every current base image.
+- The `manylinux2014_x86_64` wheel of the same release (4,904,451 bytes) has no `.nv_fatbin`
+  section, links no CUDA runtime, and **does not** declare `nvidia-nccl-cu12`. It still bundles
+  `libgomp`. Upstream treats it as a legacy CPU build; a maintained CPU-only route is the separate
+  `xgboost-cpu` distribution, which M7 has not inspected.
+
+### The decision that is M9's
+
+Excluding only the `nvidia-*` wheels does not remove NVIDIA code from the image: the CUDA runtime
+and device code are inside `libxgboost.so` itself. A CPU-only xgboost build (the `xgboost-cpu`
+distribution, a `manylinux2014` pin, or a source build without CUDA) removes both, and with them
+the NCCL dependency. Which route, if any, is M9's packaging decision. The CUDA EULA's terms for
+redistributing a statically linked runtime have not been read by M7 and must be, if the CUDA wheel
+stays.
+
+**Acceptance criterion, needed before M9's image gate:** every distribution installed in an image
+has its licence and notice files in that image, including the texts for components it bundles, and
+an image-scan step fails the build when one is missing. The scan looks in each distribution's
+`dist-info/licenses/` and in the package directories (`onnxruntime/ThirdPartyNotices.txt` is not in
+`dist-info`), and it carries an explicit list of the texts that no wheel ships and must be supplied:
+NVTX's licence, `libgomp`'s for xgboost, and, if the CUDA wheel stays, NVIDIA's terms for the CUDA
+runtime. The rows above are examples the scan must pass, not the list. If NCCL and the CUDA code are
+excluded by a CPU-only xgboost, the other rows still apply.

@@ -23,6 +23,7 @@ taken twice. Claims made on branches not yet merged, as of 2026-10-17:
 | PB-72 | M5, owned by M10 (owner confirmed 2026-10-17) | `M5_updates.md` §15 | re-measuring training-serving skew |
 | PB-76 | M4 | `M4_updates.md` on `m4/generalisation` | training rows near the corpus's start see truncated history (was a second `PB-69`) |
 | PB-77 to PB-101 | M6 | `M6_updates.md`, "Numbering reserved by this branch" | amendment 1's known gaps and the 22 section-8 rows proved only in part |
+| PB-102 to PB-130 | M7 | `M7_updates.md`, "Numbering reserved by this branch" | the merge round's unowned items and M7's rows proved only in part (PB-102 to PB-120 used) |
 
 ---
 
@@ -1356,3 +1357,98 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 - **Source:** M6 section-8 audit under the deletion standard, 2026-10-17 (`docs/architecture/decision-fact-ordering.md`, row I29) · **Priority:** low · **Due:** M10
 - **Problem:** the overflow guards on numbers past `long` or `int`.
 - **Acceptance:** a test that fails when the code named above is deleted, and row I29 restated as proved; or the row's claim narrowed to what is proved, by a reviewed contract change.
+
+### PB-102 · The MNO SIM-swap adapter, for when a source exists
+- **Source:** threat model R-10, assigned in M7's merge round, 2026-10-17 · **Priority:** low · **Due:** REQUIRES_EXTERNAL_PARTY
+- **Problem:** with no SIM-swap signal, D-25 refuses customer self-service for every block, so no customer reaches the verification page in production. The refusal is correct (owner, 2026-09-23); the adapter cannot be built without an MNO data agreement, which only the project owner can make.
+- **Acceptance:** once a source exists, an adapter behind ADR 0065's port with a fake in the local stack (D-51), and R-10 closed.
+
+### PB-103 · An operator command and runbook for dead-letter replay
+- **Source:** threat model R-11, assigned in M7's merge round, 2026-10-17 · **Priority:** medium · **Due:** M9
+- **Problem:** M6's `DeadLetterReplay` replays `<topic>.dlq` (now including `fs.audit.events.dlq`), but an operator has no packaged way to run it (docs/architecture/decision-fact-ordering.md D-c carries packaging to M9).
+- **Acceptance:** a packaged command with a runbook entry, exercised once in the stack against a planted dead letter.
+
+### PB-104 · FR-07-01: three things no test would catch if deleted
+- **Source:** M7 traceability audit under the deletion standard, 2026-10-17 (`docs/parallel/M7_updates.md`, FR-07-01; ADR 0070 §1) · **Priority:** high · **Due:** M7
+- **Problem:** (1) changing which roles or scopes `ContractPolicy` reads for an operation would not fail `AuthorisationMatrixTest`, because the test takes its expected answers from `ContractPolicy` itself; only four operations are pinned independently (`ContractPolicyTest.accessComesFromTheMatrix`). (2) Deleting `@EnableMethodSecurity` from `SecurityConfiguration` would not fail any test, because the URL layer refuses first. (3) Deleting the last-active-administrator guard in `UserAdministrationService.update` would not fail any test, because no request can reach it: the self-modification guard and the acting-administrator check, both proved, already leave one active administrator.
+- **Acceptance:** the matrix test reads `authorisation-matrix.yaml` itself for its expected answers; a test invoking a controller method with a wrong-role authentication expects `AccessDeniedException`; the guard removed as unreachable or kept as stated defence in depth, by the owner's choice.
+
+### PB-105 · FR-07-06: the unlock email and the 15-minute window
+- **Source:** M7 traceability audit under the deletion standard, 2026-10-17 (FR-07-06) · **Priority:** medium · **Due:** M7
+- **Problem:** deleting `SmtpStaffMailer`'s send would not fail any test, because the "unlock email sent within 30 seconds" assertion uses `RecordingStaffMailer`; and the 15-minute window is never advanced, so changing it to an hour would not fail any test.
+- **Acceptance:** an SMTP test against Mailpit that the unlock email arrives within 30 s; a test that advances past the window.
+
+### PB-106 · FR-07-08: the reset code's delivery
+- **Source:** M7 traceability audit under the deletion standard, 2026-10-17 (FR-07-08) · **Priority:** medium · **Due:** M7
+- **Problem:** deleting `SmtpStaffMailer`'s send would not fail "OTP email delivered within 30 seconds", which is measured against `RecordingStaffMailer`. (The 10-minute expiry is now pinned; the "change form" clause is M8's.)
+- **Acceptance:** the same SMTP test for the reset code.
+
+### PB-107 · FR-06-01: the Google set-up link, the stored fields and the database backstop
+- **Source:** M7 traceability audit under the deletion standard, 2026-10-17 (FR-06-01) · **Priority:** medium · **Due:** M7
+- **Problem:** the welcome email carries no Google OAuth set-up link (`fraudshield/auth/mail.properties`), so that clause is not built; of the stored fields only role, status and phone are asserted, so dropping first name, last name, department or locale from the insert would not fail any test; and with the duplicate pre-check in front, whether the database constraint's path still answers 409 is untested.
+- **Acceptance:** the link built and asserted; every field asserted after creation; a concurrent-duplicate test answering 409 from the constraint.
+
+### PB-108 · FR-06-02: the version bump alone, and Google within 5 s of a deactivation
+- **Source:** M7 traceability audit under the deletion standard, 2026-10-17 (FR-06-02) · **Priority:** medium · **Due:** M7
+- **Problem:** the deactivation test passes with the token-version bump deleted as long as the refresh revocation remains, because each ends the session it checks; and `GoogleSignInTest.deactivatedAccountIsBlockedFromGoogleSignIn` uses an account created deactivated, so deleting the deactivation's effect on Google sign-in within 5 s of an administrator's action would not fail any test.
+- **Acceptance:** a test that fails when the bump alone is deleted; Google sign-in refused within 5 s of an administrator deactivating a linked account.
+
+### PB-109 · FR-06-06: audit types written by real actions, and every write audited
+- **Source:** M7 traceability audit under the deletion standard, 2026-10-17 (FR-06-06) · **Priority:** medium · **Due:** M7
+- **Problem:** `AuditSearchTest` writes all 12 types itself. A real action is asserted to emit TRANSACTION_DECISION (`AssembledApplicationTest`), AUTH, USER_ADMIN and API_KEY_LIFECYCLE; AUTO_BLOCK, CUSTOMER_VERIFICATION, ANALYST_DECISION, SENIOR_OVERRIDE and THRESHOLD_CHANGE are emitted by M6 code with no end-to-end assertion, and RULE_CHANGE, MODEL_LIFECYCLE and REGULATORY_REPORT have no emitter yet. "All write operations audited" has no test.
+- **Acceptance:** each type asserted from a real action as its emitter lands; a test that every write endpoint records an audit event.
+
+### PB-110 · D-26: unlocks by password reset or change are not audited as unlocks
+- **Source:** M7 traceability audit under the deletion standard, 2026-10-17 (D-26) · **Priority:** medium · **Due:** M7
+- **Problem:** D-26 says every lock and unlock is audited. `StaffUserJpaRepository.changePassword` lifts LOCKED, but the reset and change paths write only `PASSWORD_*` events: the behaviour is missing, not merely untested.
+- **Acceptance:** an unlock event on both paths, asserted.
+
+### PB-111 · D-32: the daily anchoring trigger
+- **Source:** M7 traceability audit under the deletion standard, 2026-10-17 (D-32) · **Priority:** medium · **Due:** M7
+- **Problem:** deleting `@Scheduled` from `AuditAnchorScheduler` would not fail any test, because `schedulerAnchorsThePreviousUtcDay` calls the method directly. Anchoring is off by default, and PB-11 (a dedicated anchoring role) is open.
+- **Acceptance:** a context test that the cron task is registered when anchoring is enabled.
+
+### PB-112 · NFR-REL-06: OAuth-only users' recovery during a Google outage
+- **Source:** M7 audit of the rows carried to M7, 2026-10-17 (NFR-REL-06) · **Priority:** medium · **Due:** M7
+- **Problem:** "OAuth-only users prompted to set password via email OTP" has no test; whether the reset path accepts an account without a password is unproved. (The button text is M8's.)
+- **Acceptance:** an OAuth-only account completes a reset and signs in by password while Google is down.
+
+### PB-113 · D-51: Google without real credentials in the local stack
+- **Source:** M7 audit of the rows carried to M7, 2026-10-17 (D-51) · **Priority:** low · **Due:** M9
+- **Problem:** tests use `FakeGoogle`, an in-process fake, but D-51 also asks for WireMock stubs of Google's JWKS and token endpoints in the local stack, and a sandbox contract suite reported as skipped without credentials. Neither exists.
+- **Acceptance:** the stubs in the compose stack (M9 owns compose) and the skipped-when-no-credentials suite.
+
+### PB-114 · NFR-SEC-03: the analyst-endpoint inspector test
+- **Source:** M7 audit of the rows carried to M7, 2026-10-17 (NFR-SEC-03) · **Priority:** high · **Due:** owner decision
+- **Problem:** the test that every analyst endpoint shows only masked tokens cannot be written: no milestone builds the analyst-facing API (`listAlerts`, `decideAlert` and their neighbours). M8 builds its console against mocks.
+- **Acceptance:** the inspector test, once the owner has placed the analyst API and it exists.
+
+### PB-115 · D-19: verification at 10,000 TPS
+- **Source:** M7 traceability audit under the deletion standard, 2026-10-17 (D-19) · **Priority:** medium · **Due:** M10
+- **Problem:** D-19 chose HMAC over bcrypt so keys verify at 10,000 TPS; that rate is not measured. (HMAC with pepper, the 2 s cache and pub/sub revocation are now proved.)
+- **Acceptance:** M10 measures key verification at the target rate on the dedicated machine.
+
+### PB-116 · Review finding 4: concurrent sign-ins prove nothing about where bcrypt runs
+- **Source:** M7 audit of the other claim tables, 2026-10-17 (`docs/reviews/M7/staff-auth.md`, finding 4) · **Priority:** low · **Due:** M7
+- **Problem:** `concurrentSignInsAllSucceed` asserts only 200s, so moving bcrypt back inside the transaction would serialise sign-ins and still pass.
+- **Acceptance:** a test that fails when the hash runs while a row lock is held.
+
+### PB-117 · ADR 0071: the `validate` default
+- **Source:** M7 audit of the other claim tables, 2026-10-17 (ADR 0071) · **Priority:** low · **Due:** M7
+- **Problem:** `HybridPersistenceTest.schemaValidation…` would pass if the shipped configuration stopped setting `validate`, because `JpaTestStack` sets it itself.
+- **Acceptance:** a test against the shipped configuration that a mapping mismatch stops the application.
+
+### PB-118 · ADR 0071: the key list's N + 1 check compares nothing
+- **Source:** M7 audit of the other claim tables, 2026-10-17 (ADR 0071) · **Priority:** low · **Due:** M7
+- **Problem:** `QueryCountTest` creates no API keys, so its key-list comparison is 0 statements against 0: an N + 1 in the key list would not fail it.
+- **Acceptance:** the test lists keys after creating several.
+
+### PB-119 · Walkthrough claim 4: inactive accounts' 423 and the unknown-email bcrypt burn
+- **Source:** M7 audit of the other claim tables, 2026-10-17 (`docs/walkthrough/M7.md`, claim 4) · **Priority:** low · **Due:** M7
+- **Problem:** deleting `hasher.burn()` for an unknown email (`AuthenticationService`) would not fail any test, and inactive accounts' 423 is untested.
+- **Acceptance:** tests that fail on each deletion, or the claim narrowed.
+
+### PB-120 · Walkthrough claim 5: the measured revocation time
+- **Source:** M7 audit of the other claim tables, 2026-10-17 (walkthrough claim 5) · **Priority:** low · **Due:** M7
+- **Problem:** the walkthrough said a revoked key stopped working in under 100 ms; the last measurement (`85aff03`) was 103 ms at worst with the announcement, and no test asserts any figure. The walkthrough now states the measured value.
+- **Acceptance:** a test asserting a bound for the announced revocation, or the figure removed by a reviewed change.

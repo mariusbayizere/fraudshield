@@ -2764,3 +2764,70 @@ evidence. The evidence is the licence text it ships and, for a binary wheel, eve
 component's text too. Record what the text says, and where the two disagree, say so.* It is the
 same family as the deletion standard of the same day: a claim, here a tag, accepted without checking
 it against the thing it describes.
+
+### 2026-10-17 · A revoke that revoked nothing, and a cause I named wrongly
+
+M6's `DatabaseSecurityTest` failed on M7's branch the moment the two met: five of V70's SECURITY
+DEFINER functions were executable by `fs_scorer`. I fixed it by revoking each function from PUBLIC,
+and wrote in V70 and in the commit (`3c13c5c`) that V11's default privileges "apply only to objects
+created by the role that set them". The independent review showed that was false. Flyway runs every
+migration as `fs_migrator`, the same role that ran V11. The real cause: V11's
+`ALTER DEFAULT PRIVILEGES IN SCHEMA fraudshield REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC` has never
+done anything. Per-schema default privileges are added to the global ones; they cannot take away
+PUBLIC's built-in EXECUTE, which only the global form can (PostgreSQL, ALTER DEFAULT PRIVILEGES).
+Every function created since V11 was executable by every role unless its migration revoked it by
+hand; M6's migrations did so for each of their SECURITY DEFINER functions, and V70 did not.
+
+The fix was right and the explanation wrong, and the wrong explanation would have taught the next
+migration author the wrong lesson ("use the same role") while the real hole stayed open. V71 now sets
+the global default, and `DatabaseSecurityTest` checks it on a function created after the migrations.
+It also pins every SECURITY DEFINER function to its callers and its `search_path`. Before, deleting
+`SET search_path` from a V70 function, or granting it to the wrong role, failed no test.
+
+The same review corrected the entry above. NCCL's `License.txt` does not contain NVTX's licence; it
+points to NVTX's repository for it, so the text must be fetched. And the rule "for a binary wheel,
+every bundled component's text too" had been applied to scipy and NCCL but not to the package that
+brought them in. `xgboost`'s x86-64 wheel carries 309 MiB of compiled CUDA code and a statically
+linked CUDA runtime under NVIDIA's terms, plus `libgomp`, with no licence file for either
+(M9_updates.md, From M7).
+
+**The rule.** *A root cause is a claim like any other: it is proved by the mechanism, not by the
+fix working. A fix can succeed for a reason its author did not understand, and an explanation that
+was never checked against the documentation becomes the next person's mistake.*
+
+### 2026-10-17 · Two modules that each passed, and an application that would not start
+
+M6 and M7 each had a test application, and each module's suite was green. Neither milestone had
+started the real API application with the other's code in it: M6 waited for M7's adapters, M7
+waited for M6 to depend on its modules. When M7 assembled it, the first CI run did not get past
+start-up, and each later run found something the module suites could not:
+
+- **Three bean-name collisions, where review had predicted two.** The third was M7's
+  auto-configuration package: the API application's root package already covered it, so Spring Data
+  registered every staff repository twice.
+- **A fix that broke the other side.** Registering the package only when no package covered it
+  worked for the API and emptied `AuthTestApplication`: asking Boot which packages were registered
+  created the bean that holds them, frozen before M7's own package was added. Reading the bean
+  definition instead fixed both.
+- **A design conflict no module could show.** M7 reads a key's record from PostgreSQL once its
+  2-second cache expires; M6 promises decisions while PostgreSQL is down (D-15). M6's outage test
+  failed on the assembled application, and failed with **401**: the database exception escaped the
+  filter, the error dispatch went through the contract chain, and the client was told its key was
+  bad. That is now a 503; which way to resolve D-15 itself is the owner's decision.
+- **Tests that interfered through Kafka.** The new test runs with no doubles. Spring kept its
+  context alive, and its real SMS gateway joined the same consumer group as the other tests'
+  doubles and took some of their messages.
+- **A test with no doubles that had two.** To reuse M7's HTTP helper I put M7's test-jar on the
+  ingest tests' classpath. The API application scans the whole root package, so it found M7's test
+  application and took its beans: a recording mailer and a fixed `@Primary` clock. The "no doubles"
+  test passed with both inside it, and the fixed clock stopped M6's rate-limit refill and its hold
+  timer in every other API test, which is how it was found (a diagnostic showed a bucket with fewer
+  tokens after the advertised wait than before it). The test now fails if any bean in the context
+  comes from test code; the claim "no doubles" is asserted, not stated.
+
+The test the owner asked for passed as soon as the application started, and once while it was not
+yet the test it claimed to be. Its value came from every run in which something failed.
+
+**The rule.** *"Assembled" is a claim, and its evidence is the assembled thing running: the real
+application, started with nothing replaced, doing one journey that crosses the parts. Two green
+module suites prove two modules.*

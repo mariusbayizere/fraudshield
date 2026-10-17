@@ -3,8 +3,9 @@
 
 Builds a throw-away git repository containing the committed allowlisted fixtures plus planted fake
 secrets, scans it with the pinned tools/bin/gitleaks and the repository's .gitleaks.toml, and fails
-unless exactly the planted secrets are reported. The fake values are generated at run time, so no
-secret-shaped string is committed; they are random and valid for no service.
+unless exactly the planted secrets are reported. The planted values are generated at run time and
+are valid for no service. One fixed value of the same shape is committed: the control ``GOOD`` in
+tools/tests/test_gitleaks_selftest.py, also valid for no service.
 
 Every random value is checked against the scanner before it is planted (``fresh_secrets``):
 gitleaks' own rule allowlists silently skip a value that is all letters, or that contains a

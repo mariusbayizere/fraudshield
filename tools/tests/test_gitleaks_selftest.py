@@ -36,8 +36,10 @@ def load() -> ModuleType:
     return module
 
 
-# Letters and digits alternate, so no English stopword (three letters or more) can occur in it:
-# detectable on every run, unlike a random draw.
+# After the shared "tok_" prefix, letters and digits alternate, so no stopword of three letters or
+# more can occur in the body. The value is fixed, so for a given gitleaks binary and config it is
+# reported on every run or on none; a gitleaks bump that stopped reporting it fails the control
+# loudly instead of flaking.
 GOOD = "tok_7Q9z3K8w2M4x6B1v5N0c7P2d"
 
 
@@ -48,13 +50,13 @@ def selftest() -> ModuleType:
     return load()
 
 
-def test_generated_values_are_all_detected(selftest: ModuleType) -> None:
-    """One scan over many values drawn as the self-test draws them: every one must be reported.
+def test_values_shaped_like_the_planted_ones_remain_reportable(selftest: ModuleType) -> None:
+    """Convergence: 120 values drawn as the self-test draws them all end up reportable.
 
-    The draw goes through fresh_secrets, which probes each value with the scanner and regenerates
-    any it would skip. Raw random_text values are not enough: a digit avoids the all-letters
-    allowlist but not a stopword substring, about 0.4% per value, so 120 raw draws fail about a
-    third of runs.
+    fresh_secrets already guarantees this for what it returns, so this test does not prove the
+    regeneration; ``test_a_value_the_scanner_skips_is_regenerated`` does, deterministically. What it
+    proves is that the scanner still reports this shape at all: a widened allowlist or a rule change
+    that skipped every ``tok_`` value would make fresh_secrets exhaust its attempts and fail here.
     """
 
     def draw() -> str:

@@ -167,7 +167,14 @@ DEFECT_MILESTONES: dict[str, str] = {
     "D-09": "M11",
     **dict.fromkeys(("D-11", "D-50"), "M5"),
     **dict.fromkeys(("D-10", "D-12", "D-14", "D-15", "D-17", "D-18", "D-25"), "M6"),
-    **dict.fromkeys(("D-19", "D-23", "D-24", "D-26", "D-27"), "M7"),
+    **dict.fromkeys(("D-23", "D-24", "D-26"), "M7"),
+    # Carried M7 -> M10 (owner decision 2026-10-17): HMAC with pepper, the 2 s cache and pub/sub
+    # revocation are proved; what remains is the 10,000 TPS rationale, measured on M10's machine
+    # (PB-115), as D-13 and D-16 were carried.
+    "D-19": "M10",
+    # Carried M7 -> M8 (owner decision 2026-10-17): the server side is proved; what remains is the
+    # browser holding access tokens in memory only, which is the console's.
+    "D-27": "M8",
     **dict.fromkeys(
         (
             "D-22",
@@ -218,7 +225,16 @@ FR_MILESTONE_OVERRIDES: dict[str, str] = {
     "FR-06-01": "M7",
     "FR-06-02": "M7",
     "FR-06-06": "M7",
-    "FR-06-07": "M7",
+    # Carried M7 -> M8 (owner decision 2026-10-17): the server side is proved; the remaining
+    # clause, the raw key shown once in the UI, is the console's.
+    "FR-06-07": "M8",
+    # Carried M7 -> M8 (owner decision 2026-10-17: a row with an unowned UI clause is not DONE):
+    # each row's server side is proved, and its remaining clauses are the console's. FR-07-02: the
+    # confirm field, the four-level meter, submit disabled. FR-07-03: sign-in on the login and
+    # registration pages. FR-07-04: the httpOnly cookie confirmed in the browser.
+    "FR-07-02": "M8",
+    "FR-07-03": "M8",
+    "FR-07-04": "M8",
     "FR-06-05": "M9",
     # Carried M6 -> M10 (owner decision 2026-10-17, ADR 0059): the behaviour is built; the latency
     # criteria (PB-73) and the 30 s batch (PB-74) are measured on the dedicated machine.

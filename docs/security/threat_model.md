@@ -89,6 +89,17 @@ developer machine ↔ public repository.
 | Customer verification (5) | S: guessed or reused links | Token hash lookup, single use (`verificationTokenAnswersOnce`), expiry trigger | schema M1, page M6 |
 | Front end (2) | I: cached alert data on shared phones (D-29) | No offline decision replay without re-validation, cache limits | M8 |
 
+### 3.5 Development and CI (carried from the M0 review)
+
+| Element | Threat | Control | Residual |
+|---|---|---|---|
+| Local `core` stack | I/E: plaintext Kafka, Redis without TLS, MLflow and Mailpit without auth | Ports on 127.0.0.1; random credentials in `.env`; synthetic data only | Dev only; production controls M9 |
+| CI | T: action or tool supply chain; I: token misuse | Actions pinned by SHA; read-only permissions; gitleaks, buf and uv checksum-verified; frozen lockfiles | Images by tag, not digest (GOV-8) |
+| Secret scanning | I: secrets committed | Pre-commit gitleaks on staged changes, CI history scan, committable working-tree scan, self-test with planted secrets | Git-ignored local files are not scanned by design (ADR 0019) |
+| CI stack diagnostics (public annotations and artifacts) | I: credentials in MLflow, object-store or TimescaleDB logs published with the run | Redaction of every `.env` value of 8+ characters and of `://user:pass@` in command lines, in pure bash, dropping the logs when `.env` is unreadable; CI credentials are throw-away per run | Secrets not in `.env` (for example `.demo-credentials`) or shorter than 8 characters are not redacted; move to an allowlisted excerpt if logs grow |
+| `fs_migrator` credential | T/R: the schema owner can disable or drop append-only triggers and rewrite decisions, blocks, labels or configuration versions | Owner used only by the migration job, never by services (M9); audit log tamper-evident through the hash chain and signed anchors (M7) | Non-audit append-only tables have no tamper evidence beyond grants and triggers |
+| Devcontainer | E: Docker-in-Docker privileged | Base image by digest | Feature versions not digest-pinned |
+
 ### 3.6 Staff identity, administration and audit (M7: implemented, ADR 0070)
 
 | STRIDE | Threat | Control | Evidence |
@@ -102,22 +113,14 @@ developer machine ↔ public repository.
 | E | Self-elevation | Registration records a requested role only; administrators cannot change their own role or status; admin writes re-check the actor's role in the database | `RegistrationTest`, `UserAdministrationTest` |
 | E | Two administrators demoting each other | Admin-affecting edits lock the institution's active administrators first | `concurrentMutualDemotionLeavesOneActiveAdmin` |
 | S | API-key guessing or timing | 256-bit secrets, HMAC with pepper, constant-time compare, unknown key IDs hashed too; 2 s cache and pub/sub revocation | `ApiKeyLifecycleTest`, `NetworkAndKeysTest` |
-| T | SSRF through webhook URLs | HTTPS, no user info, no IP literals, every resolved address public; the dispatcher must re-check at delivery (M6) | `WebhookUrlValidatorTest` |
+| T | SSRF through webhook URLs | Two checks with different jobs. When a key is created or rotated, M7's `WebhookUrlValidator` accepts only HTTPS, no user info, no IP literals and a host whose every resolved address is public. At every delivery, M6's dispatcher resolves the host again and checks each address against its special-purpose deny-list (ADR 0066, 3.7), so a name re-pointed after registration is caught then; rebinding between that check and the connection is R-12 | `WebhookUrlValidatorTest` (registration); M6's `HttpWebhookTransport` tests, one per denied range (delivery) |
 | T/R | Audit rows edited, deleted or re-ordered, including by a superuser who recomputes hashes | Database-assigned chain (V8); daily Ed25519-signed RFC 6962 anchors over sequence ranges; `fraudshield audit verify` | `AuditAnchoringTest`, `AuditVerifyCommandTest` |
+| R | Decisions, holds and blocks missing from the audit trail, which would then look complete while covering staff actions only | The decision engine's audit events, published to `fs.audit.events`, are appended to the same chain by the audit writer's consumer (group `audit-writer`), once each: the envelope's `event_id` goes into `audit_event_receipts` in the append's transaction (V72); a record the database refuses as data goes to `fs.audit.events.dlq` | `RelayedAuditAppenderTest`; `AssembledApplicationTest` (a hold made through the API is found by audit search and passes `audit verify`) |
+| S | Ingestion authenticated by something other than the key store | In the assembled API the ingestion port is M7's authenticator (`StaffIdentityWiring`); M7's chain authorises the request against the contract before M6's filter runs | `AssembledApplicationTest` (a key issued through the admin API submits, and is refused within 5 s of its revocation) |
+| T | Functions created by later migrations executable by every role | `ALTER DEFAULT PRIVILEGES FOR ROLE fs_migrator REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC` (V71), the global form; V11's per-schema form never had an effect. Every SECURITY DEFINER function is pinned to its callers | `DatabaseSecurityTest` (`functionsTheMigratorCreatesAreNotExecutableByPublic`, `everyOwnerRightsFunctionPinsItsSearchPathAndHasOnlyItsDeclaredCallers`) |
 | I | Secrets at rest | Password bcrypt; OTP HMAC; API keys HMAC; webhook and Google tokens AES-256-GCM with associated data; unlock and reset tokens stateless; emails with credentials never written to the outbox | `CryptoTest`, `ApiKeyLifecycleTest` |
 
-### 3.5 Development and CI (carried from the M0 review)
-
-| Element | Threat | Control | Residual |
-|---|---|---|---|
-| Local `core` stack | I/E: plaintext Kafka, Redis without TLS, MLflow and Mailpit without auth | Ports on 127.0.0.1; random credentials in `.env`; synthetic data only | Dev only; production controls M9 |
-| CI | T: action or tool supply chain; I: token misuse | Actions pinned by SHA; read-only permissions; gitleaks, buf and uv checksum-verified; frozen lockfiles | Images by tag, not digest (GOV-8) |
-| Secret scanning | I: secrets committed | Pre-commit gitleaks on staged changes, CI history scan, committable working-tree scan, self-test with planted secrets | Git-ignored local files are not scanned by design (ADR 0019) |
-| CI stack diagnostics (public annotations and artifacts) | I: credentials in MLflow, object-store or TimescaleDB logs published with the run | Redaction of every `.env` value of 8+ characters and of `://user:pass@` in command lines, in pure bash, dropping the logs when `.env` is unreadable; CI credentials are throw-away per run | Secrets not in `.env` (for example `.demo-credentials`) or shorter than 8 characters are not redacted; move to an allowlisted excerpt if logs grow |
-| `fs_migrator` credential | T/R: the schema owner can disable or drop append-only triggers and rewrite decisions, blocks, labels or configuration versions | Owner used only by the migration job, never by services (M9); audit log tamper-evident through the hash chain and signed anchors (M7) | Non-audit append-only tables have no tamper evidence beyond grants and triggers |
-| Devcontainer | E: Docker-in-Docker privileged | Base image by digest | Feature versions not digest-pinned |
-
-### 3.7 The M6 decision path, as built (numbered 3.7 because M7's branch takes 3.6)
+### 3.7 The M6 decision path, as built
 
 | Component | Threat | Control as built | Residual |
 |---|---|---|---|
@@ -142,6 +145,7 @@ developer machine ↔ public repository.
 | R-7 | Two colluding administrators, or one who approves a sock-puppet account, bypass separation of duties (ADR 0014) | Dual control on role grants (not built) |
 | R-8 | Rate limits and caches degrade to per-instance behaviour while Redis is down | Accepted degraded mode (C.4); per-account lockout stays in the database |
 | R-9 | The vault's master keys live in configuration until M9's KMS; whoever holds a vault backup and the process configuration holds customer PII | M9 (D-20, ADR 0069) |
-| R-10 | The MNO SIM-swap signal does not exist, so D-25 refuses self-service for every block and no customer reaches the verification page in production | M7/M8 adapter (ADR 0065) |
-| R-11 | Nothing replays a dead-lettered notification; a poison record is preserved and counted, not recovered | M7 operations tooling (ADR 0064 point 5) |
+| R-10 | The MNO SIM-swap signal does not exist, so D-25 refuses self-service for every block and no customer reaches the verification page in production | REQUIRES_EXTERNAL_PARTY: an MNO data agreement, for the project owner. No milestone can build the adapter without a source; the refusal is correct per D-25 (owner, 2026-09-23). PB-102 holds the adapter for when a source exists |
+| R-11 | A dead-lettered record is preserved and counted, but an operator has no packaged way to replay it | M6 built the replay (`DeadLetterReplay`, docs/architecture/decision-fact-ordering.md D-c), and it now also covers `fs.audit.events.dlq`; packaging it as an operator command with a runbook is M9's (PB-103) |
 | R-12 | Webhook DNS rebinding between the destination check and the connection | Pinning or a proxy with an address allow-list (ADR 0066) |
+| R-13 | In the assembled API, an API key's record is read from PostgreSQL once its 2 s cache expires, so a PostgreSQL outage longer than that refuses ingestion at authentication, which D-15 says must keep deciding. M6's `ResilienceApiTest.withPostgresDownDecisionsContinueAndArePersistedAfterRecovery` fails on the assembled application for this reason (CI, 2026-10-17); it first failed with 401, because the outage escaped the filter and the error dispatch was refused as unauthenticated, and now fails with 503 and `Retry-After` (`ApiKeyAuthenticationFilterTest`) | Owner decision pending (M7 round, 2026-10-17): keep refusing, or serve a key's last verified record while the database cannot answer, bounded, with the revocation window that implies |

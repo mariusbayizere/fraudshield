@@ -168,7 +168,12 @@ EXCEPTIONS: dict[str, tuple[str, str]] = {
         "no License-Expression; no LICENSE file ships in the wheel's dist-info. Confirmed against "
         "the tagged source (github.com/dmlc/xgboost, tag v3.0.2, LICENSE) on 2026-09-22: the "
         "Apache License, Version 2.0 (C-6, first runtime dependency of the ml/pyproject.toml "
-        "ensemble baseline)",
+        "ensemble baseline). The expression is xgboost's own code. The manylinux_2_28_x86_64 "
+        "wheel also carries, inside libxgboost.so, 323,896,200 bytes of compiled CUDA device code "
+        "and a statically linked CUDA runtime (NVIDIA's CUDA EULA, not Apache-2.0), and bundles "
+        "libgomp (GPL-3.0-or-later WITH GCC-exception-3.1), with no licence file for either; the "
+        "manylinux2014 wheel is CPU-only (read 2026-10-17). Whether the image keeps the CUDA "
+        "wheel is M9's decision (docs/parallel/M9_updates.md, From M7)",
     ),
     "python:scipy@1.18.1": (
         "BSD-3-Clause",
@@ -212,13 +217,16 @@ EXCEPTIONS: dict[str, tuple[str, str]] = {
         "subcontract 7078610), matching the upstream project's own licensing summary "
         "(github.com/NVIDIA/nccl, LICENSE.txt: 'parts of the project retain their original BSD "
         "license'), confirmed 2026-09-22. A transitive, platform-conditional dependency of "
-        "xgboost's published wheel (`platform_system == 'Linux' and platform_machine != "
-        "'aarch64'`) for its optional GPU code path; `ldd` on the installed libxgboost.so shows it "
-        "links no NVIDIA library, and this project trains CPU-only (missing=nan, nthread=1, no "
-        "device='cuda' anywhere in the tree), so the wheel is present but never loaded. Recorded "
+        "xgboost's manylinux_2_28 wheel (`platform_system == 'Linux' and platform_machine != "
+        "'aarch64'`) for its optional GPU code path. libxgboost.so loads NCCL with dlopen, so "
+        "`ldd` showing no NVIDIA library proves nothing; what keeps it unloaded is that this "
+        "project trains CPU-only (missing=nan, nthread=1, no device='cuda' anywhere in the tree), "
+        "so the wheel is present but never loaded. Recorded "
         "as BSD-3-Clause on the text actually bundled, not on the misleading declared field, "
         "which is the same 'read the file, not the label' rule every other exception here uses. "
-        "The text also covers NVTX files under Apache-2.0 WITH LLVM-exception (read 2026-10-17). "
+        "License.txt also names files from the NVTX project and points to github.com/NVIDIA/NVTX "
+        "for their licence, Apache-2.0 WITH LLVM-exception, whose text is not in the wheel (read "
+        "2026-10-17). "
         "Redistribution position (owner decision 2026-10-17): an ML image built from the lock "
         "carries the wheel, so it either carries License.txt and NVTX's notice or leaves NCCL out, "
         "which CPU-only training allows (acceptance criterion in docs/parallel/M9_updates.md)",
