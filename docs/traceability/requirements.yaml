@@ -1565,7 +1565,7 @@ requirements:
   section: 4.3 Reliability
   title: PostgreSQL primary failure
   priority: M
-  milestone: M9
+  milestone: M10
   srs_text: 'System Behaviour: TimescaleDB replica promoted within 30 seconds via Kubernetes operator;
     brief write pause; Recovery: Automatic failover; < 30 second write downtime; synchronous replica ensures
     zero data loss; Test: Chaos engineering: DB primary pod deleted; replica promotion timed'

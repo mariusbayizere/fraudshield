@@ -268,20 +268,24 @@ ROW_MILESTONE_OVERRIDES = {
     # while M2's gate names rows, distribution targets, leakage and the datasheet and says nothing
     # about features. A requirement filed under the wrong milestone, of the same family as D-01.
     # ADR 0027: a completeness requirement cannot be judged before the data it counts exists.
-    # Six of the 44 are missing for 100% of records; kyc_tier and the two agent features need
-    # tables M6 builds, and the two account-age features need the per-account durable table
-    # PB-37 records as absent. M6 is the last of the enabling milestones.
+    # Six of the 44 are missing for 100% of records because the benchmark has no data for them
+    # (account opening dates, KYC tier history, agent float and location, round sums). It was
+    # filed under M6 as the last milestone expected to supply tables for them; M6 supplied none
+    # of that data, and no planned milestone does. It stays under M6, unmoved, until the owner
+    # decides its home or a recorded deviation (2026-10-17); see milestones.yaml.
     "ML-DATA-07": "M6",
     "NFR-SEC-05": "M1",
     # Carried M6 -> M9 (owner decision 2026-10-17): every M6 statement is parameterised; the
     # verification the row names (OWASP ZAP, SonarQube) is M9's security scanning.
     "NFR-SEC-06": "M9",
     # Carried M6 -> M10 (owner decision 2026-10-17): the unmeasured "rebuilt from PostgreSQL within
-    # 5 minutes" is verification-campaign work; the feature store's fallback (PB-69, on
-    # m6/featurestore-fallback) must be merged first.
+    # 5 minutes" belongs to M10's chaos suite (build prompt, M10); the feature store's fallback
+    # (PB-69, on m6/featurestore-fallback) must be merged first. Filed under M10, PB-69 is not
+    # seen by M6's rule-7 check, so M6's close reports on it (docs/backlog/product.md).
     "NFR-REL-03": "M10",
-    # Carried M6 -> M9 (owner decision 2026-10-17): replica promotion by an operator is deployment.
-    "NFR-REL-04": "M9",
+    # Carried M6 -> M10 (owner decision 2026-10-17): replica promotion by an operator is deployment
+    # (M9, D-49), and the row's test, deleting the primary, is M10's chaos suite, where it closes.
+    "NFR-REL-04": "M10",
     # Carried M6 -> M10 (owner decision 2026-10-17): the "< 1 ms cache hit" is a benchmark
     # (ADR 0010).
     "NFR-REL-05": "M10",
