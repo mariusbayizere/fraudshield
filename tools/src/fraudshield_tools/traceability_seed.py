@@ -198,11 +198,11 @@ DEFECT_MILESTONES: dict[str, str] = {
 FR_MILESTONE_OVERRIDES: dict[str, str] = {
     "FR-01-07": "M1",
     "FR-02-02": "M3",
-    # ADR 0027: the build prompt's M5 gate reads "FR-02-01, 02-04 ... 02-10 tests pass", which
-    # includes FR-02-09, while the register filed the Redis feature store under M3. There is no
-    # feature store, no Redis and no Prometheus; M5 is the milestone that builds them.
-    # Carried M5 -> M10 (owner decision 2026-10-17): the store is built in M5; production is fed
-    # only once PB-69..PB-71 land, and PB-72's skew re-measurement in M10 closes it (ADR 0034).
+    # ADR 0027 filed FR-02-09 under M5, the milestone that built the feature store. Carried
+    # M5 -> M10 (owner decision 2026-10-17): production is fed only once PB-69..PB-71 land, which
+    # are M6's (docs/backlog/product.md), and PB-72's skew re-measurement in M10 closes it
+    # (ADR 0034). Filing it under M10 means M6's rule-7 check does not see PB-69..PB-71; M6's
+    # merge checklist must (docs/parallel/M6_updates.md).
     "FR-02-09": "M10",
     # Carried M5 -> M10 (owner decision 2026-10-17): a throughput requirement (ADR 0032) that no
     # shared machine can evidence (ADR 0010).
@@ -262,7 +262,7 @@ ROW_MILESTONE_OVERRIDES = {
     "NFR-SEC-03": "M7",  # ADR 0021: vault and tokenisation M6, analyst inspector test M7
     # Carried M5 -> M10 (owner decision 2026-10-17, ADR 0035): ML-GATE-12 needs the dedicated
     # machine; ML-GATE-13's gate logic is built and needs a deployment running the shadow
-    # comparator for 24 hours.
+    # comparator for 24 hours and at least 50,000 scores.
     "ML-GATE-12": "M10",
     "ML-GATE-13": "M10",
     # ADR 0027: three of TEST-01's four named scenarios are covered; the fourth needs
