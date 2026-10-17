@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 
 /** Cost 12 bcrypt (FR-07-07) and constant-work comparisons. */
 @Tag("FR-07-07")
+@Tag("TEST-04")
 class PasswordHasherTest {
 
   private final PasswordHasher hasher = new PasswordHasher();

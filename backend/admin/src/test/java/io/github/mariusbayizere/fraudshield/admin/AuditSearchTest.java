@@ -44,6 +44,16 @@ class AuditSearchTest extends AuthIntegrationTest {
               .at(base.plusSeconds(3600L * i));
       tenants.runInTenant(institution, () -> audit.record(event));
     }
+    // One event by someone else, older than the samples so it is never the newest of its type: the
+    // user filter must leave it out.
+    AuditEvent other =
+        AuditEvent.of(institution, AuditEventType.USER_ADMIN, "SAMPLE_OTHER_ACTOR")
+            .entity("sample", "other")
+            .actor(new AuditActor(admin.id(), "Amani", "Uwase", StaffRole.ADMIN))
+            .before(Map.of("value", 100))
+            .after(Map.of("value", 101))
+            .at(base.minusSeconds(3600));
+    tenants.runInTenant(institution, () -> audit.record(other));
     Session session = issueSession(admin);
     for (AuditEventType type : types) {
       Http.Response byType =
@@ -59,6 +69,13 @@ class AuditSearchTest extends AuthIntegrationTest {
     Http.Response byUser =
         http.get("/api/v1/admin/audit-events?limit=200&user_id=" + analyst.id(), session.bearer());
     assertThat(byUser.json().get("items")).hasSize(12);
+    byUser
+        .json()
+        .get("items")
+        .forEach(
+            item ->
+                assertThat(item.get("actor").get("user_id").asString())
+                    .isEqualTo(analyst.id().toString()));
     Http.Response range =
         http.get(
             "/api/v1/admin/audit-events?from=2026-01-01T02:00:00Z&to=2026-01-01T05:00:00Z&user_id="

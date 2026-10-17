@@ -52,6 +52,7 @@ import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandl
  */
 @Tag("FR-07-01")
 @Tag("FR-07-05")
+@Tag("TEST-04")
 class AuthorisationMatrixTest extends AuthIntegrationTest {
 
   private static final Pattern ROLE_RULE =

@@ -82,6 +82,15 @@ class UserAdministrationTest extends AuthIntegrationTest {
                 .status())
         .as("UNIQUE(institution, employee_id)")
         .isEqualTo(409);
+    Session otherBank = issueSession(createAccount(BANK_B, "ADMIN", "ACTIVE"));
+    assertThat(
+            http.post(
+                    "/api/v1/admin/users",
+                    newUser(uniqueEmail("other-bank"), employeeId, "ANALYST"),
+                    headers(otherBank, UUID.randomUUID()))
+                .status())
+        .as("the same employee ID at another institution (D-31, ADR 0072)")
+        .isEqualTo(201);
 
     var welcome = mailer.await(email, StaffMailer.Template.WELCOME, Duration.ofSeconds(10));
     assertThat(welcome).isPresent();
@@ -121,6 +130,11 @@ class UserAdministrationTest extends AuthIntegrationTest {
     assertThat(promoted.header("ETag")).hasValue("\"" + (before + 1) + "\"");
     assertThat(http.get("/api/v1/auth/me", analystSession.bearer()).status())
         .as("role claim is immutable: the old token ends")
+        .isEqualTo(401);
+    // The account is still active, so only the revocation stops the old refresh cookie minting a
+    // token with the new role (SessionService.revokeAfterVersionChange).
+    assertThat(http.post("/api/v1/auth/refresh", null, analystSession.refreshHeaders()).status())
+        .as("the refresh token issued before the role change is revoked")
         .isEqualTo(401);
 
     Http.Response stale = patch(admin, analyst.id(), Map.of("version", before, "department", "IT"));

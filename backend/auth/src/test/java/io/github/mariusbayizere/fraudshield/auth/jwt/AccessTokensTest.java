@@ -19,6 +19,7 @@ import org.springframework.security.oauth2.jwt.JwtException;
 
 /** RS256 access tokens: claims, 15-minute expiry, key rotation (FR-07-04, D-27). */
 @Tag("FR-07-04")
+@Tag("TEST-04")
 class AccessTokensTest {
 
   private final MutableClock clock = new MutableClock(Instant.parse("2026-09-22T08:00:00Z"));

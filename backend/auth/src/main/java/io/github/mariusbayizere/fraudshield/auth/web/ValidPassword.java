@@ -9,6 +9,8 @@ import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * The FR-07-07 password policy as a Bean Validation constraint; the message names the failed rule
@@ -48,16 +50,17 @@ public @interface ValidPassword {
       if (value == null) {
         return true;
       }
-      return PasswordPolicy.check(value)
-          .map(
-              rejection -> {
-                context.disableDefaultConstraintViolation();
-                context
-                    .buildConstraintViolationWithTemplate(reason(rejection))
-                    .addConstraintViolation();
-                return false;
-              })
-          .orElse(true);
+      List<PasswordPolicy.Rejection> failed = PasswordPolicy.failures(value);
+      if (failed.isEmpty()) {
+        return true;
+      }
+      // One message naming every failed rule, in check order, so the first rule still leads.
+      context.disableDefaultConstraintViolation();
+      context
+          .buildConstraintViolationWithTemplate(
+              failed.stream().map(Validator::reason).collect(Collectors.joining("; ")))
+          .addConstraintViolation();
+      return false;
     }
 
     static String reason(PasswordPolicy.Rejection rejection) {

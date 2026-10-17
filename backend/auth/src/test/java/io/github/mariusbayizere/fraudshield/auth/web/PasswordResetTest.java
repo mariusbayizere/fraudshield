@@ -57,6 +57,9 @@ class PasswordResetTest extends AuthIntegrationTest {
         .as("reset token is single use")
         .isEqualTo(410);
     assertThat(http.get("/api/v1/auth/me", session.bearer()).status()).isEqualTo(401);
+    assertThat(http.post("/api/v1/auth/refresh", null, session.refreshHeaders()).status())
+        .as("a refresh token issued before the reset is revoked; the account itself is active")
+        .isEqualTo(401);
     assertThat(
             http.post(
                     "/api/v1/auth/login",
@@ -82,6 +85,24 @@ class PasswordResetTest extends AuthIntegrationTest {
     Http.Response response = verify(account.email(), code);
     assertThat(response.status()).isEqualTo(422);
     assertThat(response.json().get("errors").get(0).get("field").asString()).isEqualTo("code");
+  }
+
+  @Test
+  @Tag("FR-07-08")
+  void codeIsValidForExactlyTenMinutes() {
+    Account early = createAccount(BANK_A, "ANALYST", "ACTIVE");
+    String code = requestCode(early.email());
+    clock.advance(Duration.ofMinutes(10).minusSeconds(1));
+    assertThat(verify(early.email(), code).status())
+        .as("9 min 59 s after it was sent")
+        .isEqualTo(200);
+
+    Account late = createAccount(BANK_A, "ANALYST", "ACTIVE");
+    String lateCode = requestCode(late.email());
+    clock.advance(Duration.ofMinutes(10));
+    assertThat(verify(late.email(), lateCode).status())
+        .as("10 min after it was sent")
+        .isEqualTo(422);
   }
 
   @Test

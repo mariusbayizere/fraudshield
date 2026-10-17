@@ -97,8 +97,15 @@ class SessionTest extends AuthIntegrationTest {
 
     Session refreshed = session(http.post("/api/v1/auth/refresh", null, session.refreshHeaders()));
     assertThat(me(refreshed).status()).isEqualTo(200);
-    clock.advance(Duration.ofDays(7));
-    assertThat(http.post("/api/v1/auth/refresh", null, refreshed.refreshHeaders()).status())
+    // Signed in at t; refreshed at t + 15 min. One second before t + 7 days the family still
+    // refreshes; a millisecond after t + 7 days it does not, although its newest token is a second
+    // old. Were each rotation to restart the seven days, that last refresh would succeed. (Not at
+    // exactly t + 7 days: PostgreSQL stores the expiry to the microsecond, rounding the clock's
+    // nanoseconds, so equality would depend on the instant the test started.)
+    clock.advance(Duration.ofDays(7).minusMinutes(15).minusSeconds(1));
+    Session last = session(http.post("/api/v1/auth/refresh", null, refreshed.refreshHeaders()));
+    clock.advance(Duration.ofSeconds(1).plusMillis(1));
+    assertThat(http.post("/api/v1/auth/refresh", null, last.refreshHeaders()).status())
         .as("rotation does not extend the seven-day sign-in")
         .isEqualTo(401);
   }
@@ -165,6 +172,11 @@ class SessionTest extends AuthIntegrationTest {
             session.bearerWithCsrf());
     assertThat(changed.status()).isEqualTo(204);
     assertThat(me(session).status()).as("old JWT after password change").isEqualTo(401);
+    // The account is active, so only the revocation stops a stolen refresh cookie from minting new
+    // access tokens after the password change (SessionService.revokeAfterVersionChange).
+    assertThat(http.post("/api/v1/auth/refresh", null, session.refreshHeaders()).status())
+        .as("refresh token issued before the password change")
+        .isEqualTo(401);
     assertThat(
             http.post("/api/v1/auth/login", Map.of("email", account.email(), "password", PASSWORD))
                 .status())

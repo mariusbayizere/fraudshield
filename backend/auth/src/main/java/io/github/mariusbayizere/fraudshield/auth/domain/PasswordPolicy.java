@@ -1,6 +1,8 @@
 package io.github.mariusbayizere.fraudshield.auth.domain;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -51,29 +53,41 @@ public final class PasswordPolicy {
    * @return the first failed rule, or empty if the password is acceptable
    */
   public static Optional<Rejection> check(String password) {
+    return failures(password).stream().findFirst();
+  }
+
+  /**
+   * Every rule a candidate password fails, so that a user can be told all of them at once
+   * (FR-07-02, FR-07-07: specific failure reasons listed).
+   *
+   * @param password the candidate
+   * @return the failed rules in check order, empty if the password is acceptable
+   */
+  public static List<Rejection> failures(String password) {
+    List<Rejection> failed = new ArrayList<>();
     int codePoints = password.codePointCount(0, password.length());
     if (codePoints < MIN_CODE_POINTS || codePoints > MAX_CODE_POINTS) {
-      return Optional.of(Rejection.LENGTH);
+      failed.add(Rejection.LENGTH);
     }
     if (!fitsBcrypt(password)) {
-      return Optional.of(Rejection.BYTES);
+      failed.add(Rejection.BYTES);
     }
     if (password.codePoints().anyMatch(PasswordPolicy::isForbidden)) {
-      return Optional.of(Rejection.CHARACTERS);
+      failed.add(Rejection.CHARACTERS);
     }
     if (password.chars().noneMatch(c -> c >= 'A' && c <= 'Z')) {
-      return Optional.of(Rejection.UPPER);
+      failed.add(Rejection.UPPER);
     }
     if (password.chars().noneMatch(c -> c >= 'a' && c <= 'z')) {
-      return Optional.of(Rejection.LOWER);
+      failed.add(Rejection.LOWER);
     }
     if (password.chars().noneMatch(c -> c >= '0' && c <= '9')) {
-      return Optional.of(Rejection.DIGIT);
+      failed.add(Rejection.DIGIT);
     }
     if (password.codePoints().noneMatch(PasswordPolicy::isSpecial)) {
-      return Optional.of(Rejection.SPECIAL);
+      failed.add(Rejection.SPECIAL);
     }
-    return Optional.empty();
+    return List.copyOf(failed);
   }
 
   /**

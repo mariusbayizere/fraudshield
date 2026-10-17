@@ -77,13 +77,21 @@ class ApiKeyLifecycleTest {
 
   private ApiKeyAuthenticator authenticator(
       StringRedisTemplate redis, String environment, java.util.function.LongSupplier nanoTime) {
+    return authenticator(redis, environment, nanoTime, Duration.ofSeconds(2));
+  }
+
+  private ApiKeyAuthenticator authenticator(
+      StringRedisTemplate redis,
+      String environment,
+      java.util.function.LongSupplier nanoTime,
+      Duration cacheTtl) {
     return new ApiKeyAuthenticator(
         new ApiKeyRepository(app.jdbc(), app.apiKeys(), app.entities(), clock),
         app.tenants(),
         Instances.safe(redis),
         PEPPERS,
         environment,
-        Duration.ofSeconds(2),
+        cacheTtl,
         clock,
         nanoTime,
         DIRECT);
@@ -364,6 +372,56 @@ class ApiKeyLifecycleTest {
       assertThat(withoutPubSub[4]).isLessThan(5000);
     } finally {
       subscription.stop();
+    }
+  }
+
+  @Test
+  @Tag("D-19")
+  void revocationAnnouncementAloneEvictsAnotherInstancesCachedKey() throws Exception {
+    // A ten-minute cache: within the two seconds asserted, only the announcement can make this
+    // instance read the key again.
+    ApiKeyAuthenticator listening =
+        authenticator(redisA, "test", System::nanoTime, Duration.ofMinutes(10));
+    var subscription =
+        Instances.subscribe(redisA, ApiKeyAuthenticator.CHANNEL, listening::onMessage);
+    Thread.sleep(300);
+    try {
+      ApiKeyService other = service(authenticator(redisB, "test"));
+      ApiKeyService.Issued key =
+          other.create(
+              bank, name(), List.of(ApiKeyScope.INGEST_WRITE), null, admin, RequestContext.SYSTEM);
+      assertThat(listening.authenticate(key.rawKey())).isPresent();
+      other.revoke(bank, key.record().keyId(), admin, RequestContext.SYSTEM);
+      assertThat(millisUntilRefused(listening, key.rawKey()))
+          .as("ms until the listening instance refuses")
+          .isLessThan(2000);
+    } finally {
+      subscription.stop();
+    }
+  }
+
+  @Test
+  @Tag("D-19")
+  void theStoredSecretIsTheHmacOfTheSecretUnderTheCurrentPepper() throws Exception {
+    ApiKeyService.Issued key =
+        service(authenticator(redisA, "test"))
+            .create(
+                bank, name(), List.of(ApiKeyScope.JOBS_READ), null, admin, RequestContext.SYSTEM);
+    String secret = key.rawKey().substring(key.rawKey().length() - 43);
+    try (Connection superuser = db.superuser();
+        PreparedStatement select =
+            superuser.prepareStatement(
+                "SELECT secret_hmac, pepper_version FROM fraudshield.api_keys WHERE key_id = ?")) {
+      select.setString(1, key.record().keyId());
+      try (java.sql.ResultSet row = select.executeQuery()) {
+        assertThat(row.next()).isTrue();
+        assertThat(row.getInt(2)).isEqualTo(1);
+        // Not bcrypt, not a bare SHA-256: HMAC-SHA256 keyed by pepper version 1 (D-19).
+        assertThat(row.getBytes(1))
+            .isEqualTo(
+                Crypto.hmacSha256(
+                    PEPPERS.get(1), secret.getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
+      }
     }
   }
 

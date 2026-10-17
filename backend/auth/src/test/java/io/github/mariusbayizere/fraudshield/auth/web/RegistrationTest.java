@@ -113,6 +113,19 @@ class RegistrationTest extends AuthIntegrationTest {
   }
 
   @Test
+  @Tag("FR-07-02")
+  @Tag("FR-07-07")
+  void everyFailedPasswordRuleIsListedNotOnlyTheFirst() {
+    Http.Response response =
+        http.post(
+            "/api/v1/auth/register",
+            registration(uniqueEmail("weaker"), uniqueEmployeeId(), "weakpassword"));
+    assertThat(response.status()).isEqualTo(422);
+    String message = response.json().get("errors").get(0).get("message").asString();
+    assertThat(message).startsWith("UPPER").contains("DIGIT", "SPECIAL").doesNotContain("LOWER");
+  }
+
+  @Test
   void invalidFieldsAreReportedTogetherWithContractCodes() {
     Map<String, Object> body = registration(uniqueEmail("bad"), "no", PASSWORD);
     body.put("first_name", "J4ne");

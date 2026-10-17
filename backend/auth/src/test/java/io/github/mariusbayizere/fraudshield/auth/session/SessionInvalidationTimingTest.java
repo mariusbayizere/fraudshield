@@ -307,6 +307,21 @@ class SessionInvalidationTimingTest {
   }
 
   @Test
+  void announcementAloneEndsAnotherInstancesCachedSession() throws Exception {
+    // Ten-minute caches: within the two seconds asserted, only the announcement can make A look
+    // again.
+    SessionStateCache a =
+        cache(Instances.safe(redisA), Duration.ofMinutes(10), Duration.ofMinutes(10));
+    CONTAINERS.add(Instances.subscribe(redisA, SessionStateCache.CHANNEL, a::onMessage));
+    Thread.sleep(300);
+    StaffClaims claims = signedIn();
+    assertThat(a.isCurrent(claims)).isTrue();
+    endAllSessions(
+        cache(Instances.safe(redisB), Duration.ofMinutes(10), Duration.ofMinutes(10)), claims);
+    assertThat(millisUntilRefused(a, claims)).as("ms until A refuses").isLessThan(2000);
+  }
+
+  @Test
   void signedOutSessionIsRefusedAndRedisOutageFallsBackToTheDatabase() throws Exception {
     SessionStateCache noRedis =
         cache(Instances.safe(null), Duration.ofSeconds(2), Duration.ofMillis(1));

@@ -123,12 +123,16 @@ class LoginTest extends AuthIntegrationTest {
       Account staff = createAccount(BANK_A, "ANALYST", "ACTIVE");
       assertThat(login(staff.email(), PASSWORD).status()).as("attempt %d", attempt).isEqualTo(200);
     }
+    // Correct passwords, so the five-failure lock cannot answer for the limit: the per-IP count is
+    // 22 of the office's 100, and only the per-(IP, email) limit of 10 can refuse the eleventh.
     for (int attempt = 1; attempt <= 10; attempt++) {
-      login(colleague.email(), "Wr0ng!Password");
+      assertThat(login(colleague.email(), PASSWORD).status())
+          .as("colleague's attempt %d", attempt)
+          .isEqualTo(200);
     }
     assertThat(login(colleague.email(), PASSWORD).status())
         .as("the per-(IP, email) limit still applies behind the office address")
-        .isIn(423, 429);
+        .isEqualTo(429);
     superuser("DELETE FROM fraudshield.office_ip_allowlist WHERE institution_id = ?", BANK_A);
   }
 

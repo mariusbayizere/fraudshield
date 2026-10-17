@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 
 /** Google sign-in against a local fake of Google's endpoints (FR-07-03, FR-07-09, D-23). */
 @Tag("FR-07-03")
+@Tag("TEST-04")
 class GoogleSignInTest extends AuthIntegrationTest {
 
   private static final String VERIFIER = "v".repeat(43);
@@ -152,12 +153,25 @@ class GoogleSignInTest extends AuthIntegrationTest {
   }
 
   @Test
-  void googleOutageIsServiceUnavailableWithRetryAfter() {
+  @Tag("NFR-REL-06")
+  @Tag("TEST-07")
+  void googleOutageIsServiceUnavailableWithRetryAfterAndPasswordSignInStillWorks() {
+    Account account = createAccount(BANK_A, "ANALYST", "ACTIVE");
     GOOGLE.nextIdentity("g-" + UUID.randomUUID(), uniqueEmail("outage"), true, "Amani", "Uwase");
-    GOOGLE.tokenStatus(503);
-    Http.Response response = google();
-    assertThat(response.status()).isEqualTo(503);
-    assertThat(response.header("Retry-After")).isPresent();
+    GOOGLE.outage(true);
+    try {
+      Http.Response response = google();
+      assertThat(response.status()).isEqualTo(503);
+      assertThat(response.header("Retry-After")).isPresent();
+      assertThat(
+              http.post(
+                      "/api/v1/auth/login", Map.of("email", account.email(), "password", PASSWORD))
+                  .status())
+          .as("email and password sign-in while Google's token and JWKS endpoints are down")
+          .isEqualTo(200);
+    } finally {
+      GOOGLE.outage(false);
+    }
   }
 
   @Test

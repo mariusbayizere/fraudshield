@@ -42,6 +42,7 @@ public final class FakeGoogle implements AutoCloseable {
   private final AtomicReference<Map<String, Object>> nextIdentity = new AtomicReference<>();
   private final AtomicReference<String> nextAudience = new AtomicReference<>(CLIENT_ID);
   private final AtomicInteger tokenStatus = new AtomicInteger(200);
+  private final AtomicInteger jwksStatus = new AtomicInteger(200);
   private final AtomicReference<Boolean> signWithForeignKey = new AtomicReference<>(false);
   private final List<String> revoked = new CopyOnWriteArrayList<>();
   private final AtomicInteger issued = new AtomicInteger();
@@ -62,7 +63,11 @@ public final class FakeGoogle implements AutoCloseable {
     server.createContext("/token", this::token);
     server.createContext(
         "/jwks",
-        exchange -> respond(exchange, 200, new JWKSet(signingKey.toPublicJWK()).toString()));
+        exchange ->
+            respond(
+                exchange,
+                jwksStatus.get(),
+                jwksStatus.get() == 200 ? new JWKSet(signingKey.toPublicJWK()).toString() : ""));
     server.createContext("/revoke", this::revoke);
     server.start();
   }
@@ -97,6 +102,7 @@ public final class FakeGoogle implements AutoCloseable {
             "picture", "https://lh3.googleusercontent.com/a/" + sub));
     nextAudience.set(CLIENT_ID);
     tokenStatus.set(200);
+    jwksStatus.set(200);
     signWithForeignKey.set(false);
   }
 
@@ -116,6 +122,16 @@ public final class FakeGoogle implements AutoCloseable {
    */
   public void tokenStatus(int status) {
     tokenStatus.set(status);
+  }
+
+  /**
+   * Makes the whole of Google unavailable: the token and JWKS endpoints both answer 503.
+   *
+   * @param down whether Google is down
+   */
+  public void outage(boolean down) {
+    tokenStatus.set(down ? 503 : 200);
+    jwksStatus.set(down ? 503 : 200);
   }
 
   /** Makes the next ID token be signed by a key Google never published. */
