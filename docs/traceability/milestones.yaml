@@ -1,11 +1,10 @@
 # Milestone gate state (build prompt D.3). A milestone is listed in "completed" only
 # after its gate passed and its milestone review verdict was APPROVED or APPROVED_WITH_MINORS.
 # M4 closed with two gate metrics missed and recorded, on the owner's decision (ADR 0031).
-# M5 is tagged (m5-complete, 0547539) but is not listed: six of its Must rows (FR-02-07,
-# FR-02-09, ML-GATE-12, ML-GATE-13, TEST-10, D-16) are carried to M10 and stay IN_PROGRESS,
-# and check rule 7 refuses a completed milestone with an open Must row. It is listed once those
-# rows reach a final status or are re-filed under M10 (an owner decision, 2026-10-17).
+# M5 (m5-complete, 0547539) is listed after its six open Must rows (FR-02-07, FR-02-09,
+# ML-GATE-12, ML-GATE-13, TEST-10, D-16) were re-filed under M10, where their measurements
+# are taken (owner decision 2026-10-17; traceability_seed.py records each carry).
 # "current" is the milestone on the integration path: M6, the next to merge and tag. M7-M11
 # progress on their own branches (docs/parallel/).
 current: M6
-completed: [M0, M1, M2, M3, M4]
+completed: [M0, M1, M2, M3, M4, M5]

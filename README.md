@@ -12,9 +12,9 @@ Rwanda, Kenya, Tanzania, Uganda and the DRC.
 > misses two: recall at the 0.60 flag threshold is 0.736 at 30,000 training rows, against 0.88,
 > and the matching FNR
 > (ADR 0031). All results are on the FraudShield-EAC synthetic benchmark, not on real data. M5
-> (the scoring service) is tagged, with its latency, throughput, shadow-gate and production
-> feature-feed rows carried to M10 and still open. M6 and M7 (decision engine, staff identity)
-> are not complete, so the system cannot yet be run end to end. This README states only what exists and has been verified; measured results are
+> (the scoring service) is complete; its latency, throughput, shadow-gate and production
+> feature-feed rows are carried to M10, where they are measured, and are still open. M6 and M7
+> (decision engine, staff identity) are not complete, so the system cannot yet be run end to end. This README states only what exists and has been verified; measured results are
 > given with their scale and the run that produced them.
 > FraudShield is an independent research project. It is not deployed at, endorsed by, or
 > validated with any financial institution or regulator.

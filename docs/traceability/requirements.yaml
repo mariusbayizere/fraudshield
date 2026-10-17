@@ -358,7 +358,7 @@ requirements:
   title: 'ML scoring latency: p50 < 15ms, p95 < 25ms, p99 < 40ms (ensemble + SHAP for flagged transactions
     combined)'
   priority: M
-  milestone: M5
+  milestone: M10
   srs_text: 'Acceptance criterion: Locust benchmark: 200 concurrent scoring requests; all percentiles
     confirmed on target hardware spec'
   defects:
@@ -408,7 +408,7 @@ requirements:
   title: Redis feature store pre-computes and updates velocity features for every account within 100ms
     of transaction completion
   priority: M
-  milestone: M5
+  milestone: M10
   srs_text: 'Acceptance criterion: Redis key TTL set to 30 days; stale key handled by DB fallback; update
     latency measured by Prometheus; p99 < 100ms'
   defects: []
@@ -3101,7 +3101,7 @@ requirements:
   section: 7.2 Model deployment gate
   title: Inference latency p99
   priority: M
-  milestone: M5
+  milestone: M10
   srs_text: 'Threshold: < 40ms (ensemble + SHAP for flagged); Financial Justification: Financial system
     requirement; exceeding causes auto-block latency breach'
   defects:
@@ -3123,7 +3123,7 @@ requirements:
   section: 7.2 Model deployment gate
   title: Shadow mode AUC-ROC delta
   priority: M
-  milestone: M5
+  milestone: M10
   srs_text: 'Threshold: New model within 1% of production before promotion; Financial Justification: Prevents
     regression during model updates; minimum 24-hour shadow period'
   defects:
@@ -3545,7 +3545,7 @@ requirements:
   section: 9 Testing requirements
   title: 'Performance: ML Throughput'
   priority: M
-  milestone: M5
+  milestone: M10
   srs_text: 'Framework: Custom benchmark (benchmark.py); Coverage Target: 200 concurrent scoring requests;
     Key Scenarios: p50 < 15ms; p99 < 40ms; no memory growth > 50MB over 10,000 consecutive scorings; model
     in memory (not reloaded)'
@@ -4105,7 +4105,7 @@ requirements:
   section: Build prompt Part B defect register
   title: Python in the hot path at 10k TPS.
   priority: M
-  milestone: M5
+  milestone: M10
   srs_text: See docs/srs/defect_register.md
   defects: []
   affects:
