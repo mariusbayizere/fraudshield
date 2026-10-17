@@ -66,3 +66,13 @@ is closed in code but was untested; N2 is closed in part (the comparator is prov
 | B | MINOR | The window is not "the 2 s before the outage": an idle key's record read up to 10 minutes before the outage is still served, so an unannounced revocation in those 10 minutes is missed even when every instance is down | R-13, ADR 0073, the Javadoc and M7_updates state that window; **the owner's decision is requested** |
 | C | NIT | A pooled connection can block for the 10 s socket timeout, not the pool's 2 s | ADR 0073 says so |
 | D | NIT | The post-read renewal timestamp was untested | `failedReadThatBlockedPastTheCacheTtlIsNotRepeatedOnTheNextRequest`: a failed read that advances the clock 2.5 s, then a request a second later must not read again |
+
+## Third delta re-check (`0de4d0e..0bc26fb`): APPROVED_WITH_MINORS, and the response
+
+A fresh reviewer closed A to D, found the stale branch race-free against announcements, and raised
+two MINORs:
+
+| # | Finding | Response |
+|---|---|---|
+| N1 | A successful read begun before a revocation could cache the old record after its announcement had arrived; an outage then served it for up to 10 minutes, outside R-13's "announcement not received" | Closed in code rather than widening the risk: announcements are counted, and a read that overlapped one is not cached (atomically, by `compute` against the announcement's removal). `recordReadWhileAnAnnouncementArrivedIsNotKeptForAnOutage` |
+| N2 | The fresher-record branch was untested | `requestBlockedOnFailedReadIsServedTheRecordAnotherReadSince` |

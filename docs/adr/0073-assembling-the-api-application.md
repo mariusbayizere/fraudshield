@@ -98,8 +98,9 @@ default 10 minutes, `AuthProperties`).
   `Retry-After: 1`**, never 401. M7's filter and M6's filter both answer it so
   (`ApiKeyAuthenticationFilterTest`, `ApiKeyFilterTest`).
 - An announced revocation or rotation evicts the record at once, so it is never served stale, even
-  when the announcement arrives while a read of that record is blocked: the stale renewal replaces
-  only the entry its read started from (`ApiKeyLifecycleTest`,
+  when the announcement arrives while a read of that record is blocked or in flight: the stale
+  renewal replaces only the entry its read started from, and a read that overlapped an
+  announcement is not cached (`recordReadWhileAnAnnouncementArrivedIsNotKeptForAnOutage`) (`ApiKeyLifecycleTest`,
   `announcementDuringBlockedReadIsNotUndoneByTheStaleRenewal`; review of round 3, MAJOR 1).
 - **Residual risk (threat model R-13), stated per instance:** a revocation this instance is not
   told about is missed until it reads the database again or 10 minutes have passed since its last
