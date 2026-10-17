@@ -1,0 +1,206 @@
+# M6 decision: implementation review 3 (amendment 1 code round, final contract edits, `e7a5be5`)
+
+Date: 2026-10-17. Reviewer: an independent Principal reviewer who wrote none of the material reviewed.
+
+## Scope
+
+1. The code round implementing amendment 1 of `docs/architecture/decision-fact-ordering.md`:
+   `git diff e8341d7 fb42eb8` on `m6/amendment-1` (commits `72f24a3`, `1b9f322`, `207f9d5`,
+   `acc405e`, `cf3e762`, `3496a26`, `fb42eb8`). Main code in `backend/notify/.../notify/`
+   (`kafka/EnvelopeConsumer`, `FailureClass`, `Checkpoint`, `ProviderResult`, `TransactionHeader`,
+   `WaitBudget`, `DeadLetterReplay`; `sms/CustomerSmsSender`, `AfricasTalkingGateway`,
+   `ProviderReplyUnknownException`; `webhook/WebhookDispatcher`; `vault/KmsClient`,
+   `KmsUnavailableException`, `VaultException`; `verification/VerificationService`) and
+   `backend/ingest/.../config/NotificationWiring.java`. Tests: `EnvelopeConsumerTest`,
+   `SmsOrderingTest`, `FailureClassTest`, `CheckpointTest`, `WaitBudgetTest`.
+2. The final contract edits: `42e55ef` (the delta check's MINORs and NITs) and section 8's proof
+   column (`3496a26`). The contract at `fb42eb8` is the specification.
+3. `e7a5be5` ("run the vault migration after up, not inside it"), checked against
+   `docker-compose.yml`, `Makefile`, `infrastructure/docker/pii-vault/`, `.github/workflows/stack.yml`,
+   `infrastructure/docker/scripts/diagnose-stack.sh` at HEAD, and against `security.yml` and
+   `docs/parallel/M9_updates.md` section 8.4 as they stand on `origin/m9/infra` (neither file
+   exists at `fb42eb8` or on `main`; `security.yml` lives only on `m9/infra`, which does not contain
+   `e7a5be5`).
+
+## Method
+
+Static only. Nothing was built or run. The CI evidence is taken as given: run 39010096021 on
+`fb42eb8`, all 7 jobs executed and green (notify 169 tests, ingest 101). The whole contract was
+read, then every changed main and test file in full. For every section 8 row the round touched,
+the named test was opened and checked against the row's wording, asking whether the test would fail
+if the property were broken (the owner's standing rule). Kafka client and Compose behaviour are
+stated from the public APIs and documentation; anything that only a run could settle is in (d).
+
+## Verdict: CHANGES_REQUIRED. 0 BLOCKER, 3 MAJOR, 7 MINOR, 7 NIT
+
+The code implements amendment 1 closely: the classification and its cause-chain rules, the F4
+bound with its clock, exclusions and clearing rule, the kept provider result with its commit,
+`outcome_unrecorded` and `fs-dlq-result`, the `v3` grammar, leader epochs, the revoke and stop
+commits, the `Error` rule, and the reset handling are all where the contract puts them, and the
+behaviour reviewed sound before (wait budget, grace re-read, W-d WARN, replay) is intact. Three
+things stop approval: section 8 still claims more than its tests prove in several rows, two of
+them guarding defects found by earlier reviews (M1); an exception inside the reset handler kills the
+poll thread silently while the stop gauge keeps reading 1 (M2); and the replay tool can send a
+second SMS for an intent whose outcome was not recorded, a path that neither D-d nor section 13
+admits (M3). `e7a5be5` is sound: `make up` migrates the vault idempotently and fails loudly. Its
+only defect is diagnostic (m6).
+
+## Findings
+
+| # | Sev | Where | What | Failure scenario | Minimal fix |
+|---|---|---|---|---|---|
+| M1 | MAJOR | contract section 8: I17 (l. 522), I19 (l. 524), I20 (l. 525), I22 (l. 527), I28 (l. 533), I7e (l. 508); known-partial I26 (l. 531) and I27 (l. 532) wording; preamble l. 490 | Section 8 still says a named test proves properties that no test would catch if they broke. Details in (b). The worst gaps: (1) I20's "any unchecked exception from the adapter" becomes FAILED and is never re-sent: no test has a gateway throw a `RuntimeException`. (2) I19's "an envelope whose `payload` is absent or not an object": the cited poison test covers unreadable JSON and a missing `institution_id` only. (3) I17's "`outcome_unrecorded` at the bound": the cited record throws `23514` (F3) and is dead-lettered at once, never at the F4 bound. (4) I26's batch budget: `batchesPastTheirTimeBudgetPollAgainWithoutSkipping` passes with the budget code deleted. | (1) is implementation-2 M2: delete `catch (RuntimeException unexpected)` at `CustomerSmsSender.java:354-358` and an adapter that throws after the provider accepted (Jackson, a proxy) makes an F4 failure with no kept result. The record is re-read and the SMS re-sent on every attempt up to the bound, about 25 times. All 169 tests stay green. (2) is implementation-2 M1's trigger: delete the check at `EnvelopeConsumer.java:916-919` and nothing fails. | Add the cheap tests: a gateway that throws `IllegalStateException` (FAILED kept with `mayBeDelivered`, one call, re-read writes it); an envelope with `payload` absent and `payload: 1`; a kept result whose outcome write fails F4 until the bound (`outcome_unrecorded`, `fs-dlq-result`); F1 interleaved with F4 (count kept; F1 time not in `f4_ms`); a DLQ copy that already carries `fs-kept-result` (replaced, one header). Or move each gap into the row's "in part" text. Reword I26 and I27 as in (b). |
+| M2 | MAJOR | `EnvelopeConsumer.java:503-505` (`outOfRange` called inside a `catch`), `:714-715` (`beginningOffsets`, `endOffsets`, no handler), `:523` (only `Error` is caught around the loop) | A `RuntimeException` thrown inside the `catch (OffsetOutOfRangeException)` body is not caught by the sibling `catch (RuntimeException)`. It leaves the `while`, and the outer `try` catches only `Error`. The poll thread dies uncaught: no seek-back, no ERROR log through SLF4J (the default handler prints to stderr), `fs_notify_consumer_running` stays **1**, `fs_notify_consumer_errors_total` is not counted, and the consumer is not closed. | Retention deletes a head during a long PostgreSQL outage, which is 12.5's own scenario. The fetch reports `OffsetOutOfRangeException`, and `beginningOffsets` times out after `default.api.timeout.ms` (60 s) because the broker is slow, or throws `WakeupException` or an authorisation error. The thread dies. After `max.poll.interval.ms` the member leaves the group and the partition moves. If the broker trouble lasts, each next owner hits the same reset and dies in turn. There is no health indicator by design, so nothing restarts them, and the gauge M9 alerts on says every member is running while the topic ages out under retention. | Wrap the body of both reset `catch` blocks (`outOfRange`, `seekToBeginning`) in `try { ... } catch (RuntimeException e) { LOG.warn(...); pollBackoff(); }`: the next poll raises the reset again. Also add a final `catch (RuntimeException)` around the loop that logs at ERROR and sets the gauge to 0, so that no unchecked exception can stop the thread silently. A unit test can call `outOfRange` with a consumer whose `beginningOffsets` throws. |
+| M3 | MAJOR | `DeadLetterReplay.java:128-138` (newest copy chosen only among records of the requested reasons), `:195` ("run it again: it is idempotent"); contract D-c l. 257-259, D-d l. 461-466, 13.1 | The "newest copy per `event_id`" rule is applied after filtering by reason. An event whose newest DLQ copy is `outcome_unrecorded` can therefore still be replayed from an **older** copy of another reason, which carries no result. | An intent is dead-lettered `parent_not_recorded` (copy A). The operator replays: the parent now exists, the SMS is sent, and the outcome write fails F3 (or F4 to the bound), so copy B is `outcome_unrecorded` with `fs-dlq-result`. Days later the operator runs the default replay again for other orphans, as D-c2 invites and the tool calls idempotent. Copy A matches, is the only `parent_not_recorded` copy of that event, and is republished without a result. The consumer finds B visible and no outcome (S2), and **sends a second SMS** (without a link, since `issue` runs once per block). The same happens with `--reason handler_failure`. D-d lists only 13.1's window and pre-amendment `rejected_by_the_database` copies as remaining re-send paths. | Choose the newest copy per `event_id` over **every** record in the window, then replay it only if its reason was requested; count the others as superseded. Alternatively, when any copy of the event carries `fs-dlq-result`, put that result on the replayed copy as `fs-kept-result`. Add the case to D-c/D-d and to I28's test (two copies, older `parent_not_recorded`, newer `outcome_unrecorded`: nothing sent). |
+| m1 | MINOR | `EnvelopeConsumer.java:1071-1075` (kept, "may have been delivered"), `:1048-1052` (`fs-kept-result` honoured), `:735-744` (reset below the log start), `:1240-1252` (drop) | N is never logged. 12.4 requires N on the ERROR for a possibly-delivered result and on the INFO for a result taken from `fs-kept-result`. 12.5 requires "its N and R" on the reset ERROR, and 12.2 "N with the kept result" on the drop ERROR. The consumer logs partition, offset and R only. | A dropped record, or a head skipped by a reset, whose kept result is never written: the operator has R but not the notification it belongs to. Recovering it from the value's SHA-256, or from a topic offset that retention is about to delete, is impractical. | Read `notification_id` from the validated payload (when present) into `PartitionState` and add it to these four log lines. |
+| m2 | MINOR | `NotificationWiring.java:268-301` | `fs_notify_webhook_delivery_running` is registered with Micrometer's default **weak** reference to a local `AtomicInteger`. The only strong reference is the lambda of the periodic task, and the returned `ScheduledFuture` is discarded. After the `Error`, the task is not re-queued and becomes unreachable. At the next GC the gauge reads `NaN`, not 0. | An `Error` stops webhook delivery. The gauge reads 0 until the next collection, then `NaN`, so an alert on `== 0` stops matching. Only the counter remains as a signal. **Needs execution** to observe, but this is Micrometer's documented behaviour. | `.strongReference(true)` on the builder, or keep the `AtomicInteger` in `Channels`. |
+| m3 | MINOR | `DeadLetterReplay.java:172` (an existing `fs-kept-result` is dropped only when the copy has `fs-dlq-result`) | The replay tool forwards an `fs-kept-result` that the consumer ignored. A record published without `fs-replayed` but with `fs-kept-result` is ignored and counted (12.4, [A3-m6]). If it is then dead-lettered for any reason and replayed, the copy gains `fs-replayed` and keeps the stray header, which the consumer now honours. | A manual or foreign publish carries a stale `fs-kept-result`. The intent waits, is dead-lettered `parent_not_recorded`, and is replayed. The consumer writes the stray result as the outcome and the customer is never told. The guarantee that the header "cannot suppress a first send" is lost after one replay. | Drop `fs-kept-result` from every replayed copy that has no `fs-dlq-result`. The consumer's own dead letters always carry `fs-dlq-result` while a result is kept. State it in D-c. |
+| m4 | MINOR | `EnvelopeConsumer.java:729-753` | Two deviations from 12.5 in the non-divergent branch. (a) A partition a `LogTruncationException` names without a divergent offset is compared with the log start and, if its fetch offset is below it, counted as skipped and reset to the log start. 12.5 (as `42e55ef` amended it) says to treat it as above the log end. (b) Any fetch offset at or above the log start seeks to the log **end**, even when the end has meanwhile moved past the fetch offset. The offsets between are skipped with no count. | (b) An out-of-range fetch above a lagging leader's end, after a leader change, is followed by `endOffsets` once that leader has caught up. Records in [fetch, end) are skipped silently. **Needs execution** to say how reachable this is with epoch validation on. | (a) Handle named-without-divergent partitions of a `LogTruncationException` as above the log end. (b) Seek to `min(fetch, end)` when `fetch >= logStart`; log ERROR only when `fetch > end`. |
+| m5 | MINOR | `EnvelopeConsumer.java:1410-1426` (pre-existing `close()`, more exposed now) | `close()` joins the poll thread for 10 s and then calls `consumer.close()` from the caller's thread. 12.3 sizes one attempt at about 110 s. If the join times out mid-attempt, `onPartitionsRevoked` runs on the closing thread. It races on the `partitions` `HashMap` and commits `position(p)` for partitions with metadata, which mid-batch is past the unhandled records. It can also throw `ConcurrentModificationException`, which leaves later consumers in `Channels` unclosed. | A deploy during a database slowdown. A partition whose budget is non-zero, with records fetched but unhandled, has its position committed past them: they are skipped without being handled. A kept result committed by the revoke before `keep()` runs widens 13.1. | Join for at least the batch budget plus one attempt (about 180 s, 12.3), or let the poll thread close the consumer itself on its way out and have `close()` only signal and join. |
+| m6 | MINOR | `Makefile:36`; `diagnose-stack.sh:20-33`; `stack.yml:126-128` | With `run --rm`, a failed migration's container is removed, and `diagnose-stack.sh` lists only `--profile core ps -a` services (and `ps` omits one-off `run` containers). A failed `pii-vault-migrate` therefore yields "services with problems: 0" and no annotation. Its output exists only in the `make up` step log, which needs authentication: the very thing `diagnose-stack` exists to avoid. | CI's `stack` job fails at the migration (a wrong password, a bad V4). The annotations show a healthy stack, and the cause is only in the authenticated log. | In `make up`, capture the run's output (`... run --rm pii-vault-migrate 2>&1 | tee build/stack-diagnostics/vault-migrate.log`, with `pipefail`), and have the workflow annotate its tail on failure. Or run without `--rm` and remove the container after `diagnose-stack`. |
+| m7 | MINOR | contract I20 (l. 525) "in part" | I20 admits only the commit-before-write order as by review. The wiring lambda that passes `envelope.kept()` and `envelope.keeper()` to the sender (`NotificationWiring.java:340-347`) is untested, as I3a admits for the header. The consumer tests use stub handlers and `SmsOrderingTest` calls the sender directly. | A wiring regression that passes `Optional.empty()` and a no-op keeper re-sends on every re-read after a failed outcome write, and every test stays green. | Add the wiring lambda to I20's "in part", or one test that drives a real intent through `EnvelopeConsumer` into the real sender with a failing outcome write. |
+| n1 | NIT | `EnvelopeConsumer.java:845-853` | The 1-minute failing WARN (12.5) omits "the last exception". Each failed attempt logs its own WARN with the exception, so the information is nearby. | n/a | Add the last exception's class and message. |
+| n2 | NIT | `EnvelopeConsumer.java:541-551`, `:596-600` | The stop commit, and the seek when the batch budget is spent, use the partition's previous `lastEpoch` for a record fetched but not yet attempted. 12.5 asks for "the epoch of the record at the committed offset when the consumer has read it". | n/a | Set `lastEpoch` from the fetched record before the budget check, and in `stop()` from `records.records(p)` at the first unhandled offset. |
+| n3 | NIT | `EnvelopeConsumer.java:1104` vs `:1025` | "Carrying `fs-replayed`" is decided two ways: through the header map, which drops null values (S4/D-d), and through `lastHeader != null` (kept result). A null-valued `fs-replayed` honours a kept result but still waits. | n/a | Use one predicate. |
+| n4 | NIT | `FailureClass.java:42-53`, `:73-79` | The cause-chain walks have no cycle guard. `initCause` can build A→B→A, and the walk then never ends on the poll thread. | n/a | Stop after a visited set or a depth of, say, 32. |
+| n5 | NIT | `docs/parallel/M9_updates.md` 8.4 (on `origin/m9/infra`) | The "latent trap" names the wrong mechanism. `docker compose --profile full up -d --wait fraudshield-api` targets one service, so `up` starts only `fraudshield-api` and its `depends_on`: `pii-vault-migrate` is **not** started unless the API depends on it. The real traps are an API that starts against an unmigrated vault (no dependency), and the race if the dependency uses a weaker condition than `service_completed_successfully`. The acceptance item 6 that follows is right. The ZAP job is in any case gated off until a `fraudshield-api` service exists. | n/a | Reword the bullet. |
+| n6 | NIT | `docker-compose.yml:65-70` (pii-vault healthcheck) | `pg_isready` without `-h` uses the Unix socket, which the image's temporary init-time server also answers. On a fresh volume `pii-vault` can report healthy before its init scripts finish. Under `make up` this is masked by the rest of the stack's start-up time, and a migration that ran too early would fail loudly (connection refused), not silently. **Needs execution** to see whether it ever triggers. | n/a | `pg_isready -h 127.0.0.1 ...`, or `FLYWAY_CONNECT_RETRIES=10` on the migration. |
+| n7 | NIT | `CheckpointTest`; contract I29 (l. 534) | "read as no metadata **with a WARN**": the WARN is in `EnvelopeConsumer.resumeFrom` and no test asserts it. | n/a | Say "the WARN by review", or assert it. |
+
+## (a) Contract conformance
+
+**12.1 validation.** The envelope (JSON, canonical `institution_id`, payload object), the SMS intent
+(all fields 12.1 lists, before `classify`) and the webhook payload (integer sequence from 1 to
+2³¹−1, canonical ids from sequence 2) are validated before any side effect. A replayed
+`fs-kept-result` is validated (one value, identical repeats collapsed, `none` and unparsable values
+refused) before the handler runs; on a record without `fs-replayed` it is ignored, warned and counted
+once per head. Conformant.
+
+**12.2 classification.** `FailureClass.of` makes two passes: an exception carrying its own class
+anywhere in the chain decides, outermost first, then the first SQL match. That is a faithful reading
+of rule 2, given that the F4 row is the default and not a matching row. The SQLSTATE table matches
+12.2 exactly, including `08P01`, null states and the transient connection types. Rule 1 (the
+dead-letter send's exception decides) is implemented in `deadLetter`: anything but
+`RecordTooLargeException` is F1, too-large is retried once without `fs-dlq-error` and is then F4 with
+a drop at the bound. The `Error` path on the poll thread does what 12.2 lists, in order: stopping
+flag, seek back, commit only if every seek succeeded, log, count, gauge 0, close; and the revoke
+listener commits nothing while stopping. The executor's `Error` rule is in the wiring (gauge: m2).
+Exception: M2, an unchecked exception that escapes classification altogether.
+
+**12.3 F4 bound.** `f4_count` and `f4_ms` are per head. `f4_ms` excludes each interval from an F1
+failure to the next attempt (including at checkpoint time, while an outage is open) and starts at
+the first F4 failure. The state is cleared only by `newHead` (handled, dead-lettered, dropped,
+reset); S4 and F1 neither clear nor add to it. The bound is checked only after an F4 failure
+(`failed()` default branch, and the too-large path). A failed DLQ send at the bound keeps the
+increment. A checkpoint follows every failed attempt (the RETRY commit at the end of the batch) and
+resumes on assignment with the unowned time excluded. Timeouts: `statement_timeout` 5 s in every
+consumer transaction (sender, verification issue, webhook tenant), vault socket 10 s, connect and
+login 5 s, statement 5 s as a connection option, producer 15/0/30/10 s, a 35 s wait on the future,
+10 s on every `commitSync`, and a 60 s batch budget. Conformant. The batch budget's test proves
+nothing (M1).
+
+**12.4 kept result.** Render before issue, with a placeholder of `MAX_LINK_LENGTH`. The real link's
+length is bounded by `InstitutionMessaging.Settings`, so the second render cannot fail on length.
+Any exception from `gateway.send` becomes FAILED: `ProviderReplyUnknownException` marks
+"may be delivered", and so does any `RuntimeException`. `keeper.keep(R)` commits `(X, epoch(X), m)`
+for X's partition alone before `record`. A failed commit is logged, and R rides on every later
+commit of the partition (RETRY checkpoint, revoke) until the head changes. A re-read holding R
+classifies first: S0, then S1, then R is written; it never reaches the vault, `issue` or the
+provider. Any dead letter while R is held becomes `outcome_unrecorded` with `fs-dlq-result`, once per
+dead letter. The `mayBeDelivered` count and ERROR happen once, when R is kept. The reference is
+normalised (U+0000, 128 code points, `~`, empty as null) in R and the row alike. Conformant, except
+that N is not logged (m1).
+
+**W-e/W-e2/W-e3.** `Checkpoint.text()` writes metadata whenever `spent_ms > 0` or head state
+exists, in the exact `v3` field order, with no leading zeros. `v2` is read with no head state, and
+anything else is none plus a WARN. Every commit (end of batch, RETRY, keep, revoke, stop) carries an
+epoch per 12.5: the record's own for keep and RETRY, the last read for end-of-batch and revoke, and
+`committed()`'s after assignment (n2 for two corner cases). The revoke commit uses `position(p)`.
+`onPartitionsLost` commits nothing. Conformant.
+
+**12.5 resets.** `auto.offset.reset=none`. `NoOffsetForPartitionException` seeks to the log start.
+Below the log start: ERROR, counted by the difference, seek. Above the end: ERROR, uncounted, seek
+to the end. A divergent offset is honoured. Head state is dropped and the partition resumed in every
+case. Deviations: m4. Robustness: M2.
+
+**12.6 metrics.** All 13 meters exist with the defined tags and are exported through the
+application's registry (`fb42eb8` disambiguates the bean). The `retries_total` semantics (not counted
+on the attempt that dead-letters or drops) and the once-per-head counts match. The head-failing gauge
+is computed on the poll thread and published through an `AtomicLong`, so it is safe to read off-thread.
+Defect: m2.
+
+**Replay tool.** It refuses `rejected_by_the_database` without the flag, replays `outcome_unrecorded`
+on request with `fs-dlq-result` turned into `fs-kept-result`, and replaces an existing one. Defects:
+M3, m3.
+
+**Cross-institution leakage.** None found. The kept result is bound to (partition, head offset),
+and the leader epoch on each commit is what protects it against a truncated log reusing an offset.
+The institution always comes from the envelope.
+
+**Regressions to behaviour reviewed sound before.** The wait budget, grace re-read (`!first` guard,
+`headAnsweredS4` reset only on a new head), W-d WARN and the replay's newest-copy and end-offset
+logic are unchanged in behaviour. None found.
+
+## (b) Section 8, row by row (rows the round touched)
+
+| Row | Ruling |
+|---|---|
+| I3a | Accurate. The sender test proves S3 with nothing done. `everyDeadLetterReasonKeepsTheRecordsHeaders` (record 3) fails if `NotTheKeptDecisionException` were waited on or retried into `handler_failure`. The "in part" (the wiring lambda by review) is accurate and complete. |
+| I7e | **Over-claims slightly.** The test proves the move and that later re-reads are the second member's. It does not prove "re-reads at once" (a 30 s await, no timing). "No `IllegalStateException` escapes rests on the same test completing" is not a proof: an ISE from `resume` would be caught by the poll loop's generic handler and the test would still complete; with the `assignment()` guard and per-revoke state removal it cannot occur anyway. Say "by review". (Part of M1.) |
+| I9 | Accurate. The held-open-writer test proves S4 before the commit and S2 after. The structural test (one connection, two statements of any kind) is what fails on a split classification. |
+| I10 | Accurate. All eight reasons with original headers, the result on `outcome_unrecorded`, the per-reason counter; the replay half in the replay test. |
+| I14 | Accurate, including the 1.5 s loss bound and the lost path by review. |
+| I17 | **Over-claims (M1).** Proved: the bound in both count and time, the next record handled, the retry count, state surviving a revocation with nothing spent, S4 not clearing. Not proved and not admitted: (i) `outcome_unrecorded` **at the F4 bound**, since the cited record (`23514`) is F3 and dead-lettered at once; (ii) "F1 failures ... nor reset it", since no test interleaves F1 with F4; (iii) F1 time excluded from `f4_ms` (the outage test's bound has zero time). The admitted part (DLQ failure at the bound, too-large via I27) is accurate. |
+| I18 | Accurate. Six outages counted, no dead letter at a bound of two; the 1-minute WARN by review is admitted. |
+| I19 | **Over-claims (M1).** The SMS intent's ten field groups are proved, with nothing done. The envelope's "payload absent or not an object" is cited to the poison test, which covers unreadable JSON and a missing `institution_id` only; removing the payload check fails nothing. The webhook payload (by review) and the replayed `fs-kept-result` (by review) are admitted. |
+| I20 | **Over-claims (M1, m7).** Proved: the real adapter's unreadable 2xx gives a FAILED, possibly delivered result, one call; the sender writes a kept result without sending; the consumer keeps R across owners after F1 outcome failures, one send; the dead letter's reason and result, and the replay recording it (I28). Not proved and not admitted: "any unchecked exception from the adapter" (no test throws one), "whatever class the failed outcome write was" (only F1 is re-read in a test; F4 is not), and the wiring lambda (m7). The admitted part (commit before write) is accurate. |
+| I21 | Accurate. Through the real consumer (absent, short form, valid; counted once over three reads); S3m and the B-visible send at the sender; the strict parse. |
+| I22 | **Over-claims (M1).** Proved: below the log start, five counted, the rest handled; a new group at the log start (every test). Not proved and not admitted: "the old head's retry state and kept result are dropped", and "a failed lookup never counts as no offset". The admitted part (log end and divergence by review) is accurate. |
+| I23 | Accurate. Each counter claimed is asserted exactly (dead letters per reason, retries by class, dropped, malformed headers, skipped offsets, consumer errors, ignored kept results) along with the running gauge, and the five meters listed as by review are the ones with no assertion. |
+| I24 | Accurate. `FailureClassTest` covers every listed SQLSTATE, the type rules, own-class precedence, the chain and the DLQ split, and "the class decides the action" is carried by the consumer tests. |
+| I25 | Accurate. Issuing before rendering would leave a verification row, and the test checks for it. |
+| I26 (known partial) | **The "in part" wording is incomplete.** It omits: the batch budget (the cited test passes with the budget removed); the seek-failure branch (commit nothing), which no test produces; and the stopping flag, which the test cannot distinguish because the revoke listener would commit nothing there anyway (empty metadata); also, the multi-partition seek-back is untested (one-partition topic). What it does admit is stated accurately. |
+| I27 (known partial) | **The "in part" wording is incomplete.** The test proves the re-send without `fs-dlq-error`, the drop at the bound, the count and the next record handled. It does not prove "logged at ERROR in full (with N and R)", and the code does not log N (m1). The rest is accurate. |
+| I28 | **Over-claims (M1).** Proved: the refusal, the replay of `outcome_unrecorded` without the flag, the result handed to the handler and no second send, the ignored header counted. Not proved: "replacing any it already carries", since the copy in the test carries none. M3's case is not covered either. |
+| I29 | Accurate, except that the WARN is untested (n7). |
+
+## (c) `e7a5be5`
+
+- **Core stack, fresh volume.** `--profile core up -d --wait` no longer starts the one-shot, which
+  is now `full`-only, so the `--wait` race on an exited one-shot cannot occur. `run --rm
+  pii-vault-migrate` explicitly targets the service, which Compose v2 allows whatever its profiles
+  (an explicitly targeted service's profile is enabled). Its only dependency, `pii-vault`, is in
+  `core` and already healthy. `run` returns Flyway's exit status and each Makefile line aborts `make`
+  on failure: nothing is ignored. On a fresh volume, `20-vault-roles.sh` creates the roles before the
+  server accepts TCP, so the migration authenticates. See n6 for the healthcheck caveat (loud if it
+  ever triggers).
+- **Existing volume.** Flyway on an up-to-date schema is a no-op (exit 0), and re-running `make up`
+  on a running stack is idempotent. A vault volume created before `0747d6c` has no
+  `fs_vault_migrator`, so `make up` fails loudly at the migration. The remedy (`docker compose exec
+  pii-vault bash /docker-entrypoint-initdb.d/20-vault-roles.sh`) is documented in
+  `M6_updates.md:486` but not printed by `make up`. Acceptable.
+- **Waiters.** `stack.yml` runs `make up`, then smoke and seed. Nothing else in the repository runs
+  `up --wait` with the `full` profile. `down -v` with `--profile full` is fine. `security.yml`
+  exists only on `origin/m9/infra`, which lacks `e7a5be5`. Its ZAP job is gated off until a
+  `fraudshield-api` service exists, and its targeted `up --wait fraudshield-api` would not start the
+  one-shot at all unless the API depends on it (n5). M9 8.4's acceptance 6 (a
+  `service_completed_successfully` dependent in the same profile) is the right rule.
+- **Secrets.** No password is echoed: `make` prints the commands, which carry no secrets, and
+  Flyway prints the URL and user only. The migrator's password reaches only the one-shot. No
+  exposure found.
+- **Diagnostics.** m6: a failed migration is invisible to `diagnose-stack.sh`.
+
+## (d) Needs execution
+
+1. m2: the webhook gauge reading `NaN` after a GC following an executor `Error` (Micrometer's weak
+   reference semantics make this expected).
+2. m4(b): whether an above-end out-of-range with the end since moved past the fetch offset is
+   reachable with leader-epoch validation on.
+3. M2: confirming the thread death by having `beginningOffsets` throw inside `outOfRange` (the
+   language semantics are certain; this is for a regression test).
+4. n6: whether `pii-vault` reports healthy during initdb under CI timing.
+5. Batch fairness: whether, with slow records, the fixed partition order in `handleBatch` starves a
+   later partition across consecutive budget-limited batches. Not claimed by the contract; noted
+   for I7d's spirit.
+6. I7e's "at once": the elapsed time from the first member's close to the second member's first
+   re-read.
