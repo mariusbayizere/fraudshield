@@ -2959,7 +2959,7 @@ reason. It does not decide it: the pre-registered test is the 120K-to-240K step.
 the declared gate's 30K (0.736), with intervals that only just fail to overlap. Both use 30,000
 training rows; they differ in which rows. The gate's come from a 400,000-row corpus and this
 curve's from a 340,000-row one, so they cover different time spans with different amounts of
-truncated history (PB-69). Which training rows are used moves recall more than quadrupling them
+truncated history (PB-76). Which training rows are used moves recall more than quadrupling them
 does. That is a warning about the 240K point too: it comes from a third corpus depth.
 
 ### 2026-09-24 · PB-67 concluded: the recall shortfall is not training volume
@@ -3011,11 +3011,11 @@ flag threshold outside its own noise. The paper may say so, scoped to the volume
 **The confound from the interim entry stands, and is now the larger effect.** This curve's 30K
 (0.795) remains 0.059 above the declared gate's 30K (0.736), and the four curve points span only
 0.016. Which training rows are used — how deep the corpus reaches, how much history is truncated
-(PB-69) — moves recall several times more than how many rows are used. That is the finding worth
+(PB-76) — moves recall several times more than how many rows are used. That is the finding worth
 carrying into the paper, and it is not the finding PB-67 set out to test.
 
 **What this does not settle.** Whether a differently built model, or features that survive corpus
-truncation, would reach 0.88 on this benchmark. PB-69 is where that goes.
+truncation, would reach 0.88 on this benchmark. PB-76 is where that goes.
 
 ### 2026-09-24 · The watchdog that made the 240K run possible, and the pattern to reuse
 

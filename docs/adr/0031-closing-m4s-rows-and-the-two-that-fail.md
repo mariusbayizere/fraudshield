@@ -138,5 +138,5 @@ The deviation is restated as a property of this benchmark and model **at the vol
 Two things this amendment does not change: D-02's thresholds, and the fact that nothing was tuned
 on the test period. One thing it adds, from the curve itself: **which** training rows are used moves
 recall several times more than **how many** — this curve's 30K reads 0.795 against the declared
-gate's 0.736 at the same row count but a different corpus depth. That confound is PB-69's, and it
+gate's 0.736 at the same row count but a different corpus depth. That confound is PB-76's, and it
 is the larger effect.

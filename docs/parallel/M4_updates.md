@@ -4,6 +4,16 @@ Written by the M4 agent for the owner and the M11 agent. M4 owns `ml/`, the M4 b
 `docs/research/paper/contributions.md`; everything else under `docs/research/paper/` is M11's and
 is not edited from this branch.
 
+## Identifiers claimed by M4
+
+- **`PB-76`** (claimed 2026-10-17): "Training rows near the corpus's start see truncated history;
+  test rows do not". This branch first numbered it `PB-69`, the next free id on this branch, while
+  M5 had already proposed `PB-69` for the feature store's PostgreSQL fallback, which M6 built under
+  that number. M5's claim was first and is cited in commit messages, so it stands, and this item is
+  renumbered here, in `docs/backlog/product.md`, ADR 0031, `contributions.md` and the lab notebook.
+  `main`'s `docs/backlog/product.md` lists the claim. Identifiers are claimed in this file before use
+  (owner decision, 2026-09-24).
+
 ## PB-67 is concluded (2026-09-24) — for the paper
 
 The pre-registered learning curve (`d071147`) is complete. **The recall shortfall at the 0.60 flag
@@ -40,7 +50,7 @@ volume.**
    the train period; the curve's come from a 340,000-row corpus reaching further back, and the 240K
    point from a 520,000-row one. A shallower corpus truncates each account's history, so the
    velocity, recency and account-profile features are computed over less past and are systematically
-   flatter for the same account. That is PB-69: the features degrade with corpus depth, and the
+   flatter for the same account. That is PB-76: the features degrade with corpus depth, and the
    training rows inherit that degradation.
 
    *What is not yet known.* Two things, and the paper should say both.
@@ -52,7 +62,7 @@ volume.**
      400K, 520K) and several windows at each depth, so the result is a spread rather than two
      points. Report the truncation profile beside each — how much history each training row actually
      has — so the effect is attributed to the mechanism rather than inferred from it. That is a
-     measured experiment PB-69 can carry; it does not exist yet.
+     measured experiment PB-76 can carry; it does not exist yet.
 
    *Why it belongs in the discussion.* It qualifies **every single-number result in the paper that
    was measured at one sampling**, including the headline gate numbers: each is a measurement of one
