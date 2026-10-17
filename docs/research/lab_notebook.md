@@ -2597,4 +2597,3 @@ test named next to it and a green run, and moves on.
 fail if the code it claims to prove were deleted? Where the answer is not yes, the claim says so in
 those terms, "deleting X would not fail any test", not in softer words, and the count of such rows
 is reported rather than closed with wording.* Every review of section 8 applies it row by row.
-

@@ -1039,4 +1039,3 @@ tests, ingest 101), section 8 re-held to the deletion standard in `a89a0f4` (13 
   that starts against a vault not yet migrated (implementation-3, n5).
 - The vault's healthcheck uses the Unix socket and may pass during initdb; whether it matters needs
   a run (implementation-3, n6).
-
