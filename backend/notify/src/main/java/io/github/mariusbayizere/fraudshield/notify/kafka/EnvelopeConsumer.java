@@ -1306,7 +1306,8 @@ public final class EnvelopeConsumer implements AutoCloseable {
       WaitBudget.Resumed resumed =
           offset == null
               ? new WaitBudget.Resumed(Duration.ZERO, false)
-              : WaitBudget.resume(checkpoint, offset.offset(), epochMillis, parentWait.drainRate());
+              : WaitBudget.resumeFrom(
+                  checkpoint, offset.offset(), epochMillis, parentWait.drainRate());
       if (resumed.futureCheckpoint()) {
         LOG.warn("{}'s wait checkpoint lies in the future (clock skew); clamped", partition);
       }

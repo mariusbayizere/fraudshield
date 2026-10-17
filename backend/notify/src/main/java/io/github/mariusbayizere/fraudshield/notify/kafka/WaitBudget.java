@@ -134,7 +134,7 @@ final class WaitBudget {
    * @return the spent waiting to resume from, and whether its time lay in the future
    */
   static Resumed resume(String metadata, long committedOffset, long epochMillis, double drainRate) {
-    return resume(Checkpoint.parse(metadata), committedOffset, epochMillis, drainRate);
+    return resumeFrom(Checkpoint.parse(metadata), committedOffset, epochMillis, drainRate);
   }
 
   /**
@@ -146,7 +146,7 @@ final class WaitBudget {
    * @param drainRate the drain rate
    * @return the spent waiting to resume from, and whether its time lay in the future
    */
-  static Resumed resume(
+  static Resumed resumeFrom(
       Optional<Checkpoint> checkpoint, long committedOffset, long epochMillis, double drainRate) {
     if (checkpoint.isEmpty() || checkpoint.get().offset() != committedOffset) {
       return new Resumed(Duration.ZERO, false);
