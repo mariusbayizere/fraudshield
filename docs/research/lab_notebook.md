@@ -2736,3 +2736,31 @@ that would have produced the evidence actually executed. A conditional job, a pa
 matrix exclusion or a cancelled run all produce ticks that mean "not run". The gates this project
 cites — the Java suite, the licence inventory, the all-files hook run — each live in a job that can
 be skipped, so each citation needs the job-level check, not the run-level one.
+
+### 2026-10-17 · A dependency's declared licence is not evidence of its licence
+
+`nvidia-nccl-cu12` 2.31.2 declares `License-Expression: LicenseRef-NVIDIA-Proprietary`. The
+`License.txt` the same wheel ships is **BSD-3-Clause**, with NVIDIA, Lawrence Berkeley National
+Laboratory and the US Department of Energy named in the endorsement clause, plus NVTX files under
+Apache-2.0 with LLVM exceptions. **The metadata tag and the shipped text disagreed, and the shipped
+text governed**: a licence is the grant that comes with the software; a tag is someone's summary of
+it.
+
+M4 found this first, on 2026-09-22, and wrote it into the NCCL entry in `licences.py` ("read the
+file, not the label"). M7's updates file, written on a branch cut before that entry, still carried
+NCCL as a proprietary, non-OSI flag; the owner's decision was taken on that note, and the M7 session
+read the wheel again before finding M4's entry on `main`. The lesson has two halves. The first is
+the rule itself. The second is that a note about a dependency goes stale the moment another branch
+settles the question, so the merged tree, not the branch's own notes, is what to read first.
+
+Reading the texts again was not wasted: it showed what the label-reading had also hidden. `scipy`
+1.18.1's own code is BSD-3-Clause, but its Linux wheel bundles OpenBLAS, LAPACK, the GCC runtime
+(GPL-3.0+ with the GCC exception) and `libquadmath` (LGPL-2.1+), each with notice obligations; and
+`xgboost` is a runtime dependency of `fraudshield-ml`, so all of it reaches any ML image. Both are
+flagged to M9 with an acceptance criterion (`docs/parallel/M9_updates.md`).
+
+**The rule.** *A dependency's declared licence (metadata, classifier, SPDX tag) is a pointer, not
+evidence. The evidence is the licence text it ships and, for a binary wheel, every bundled
+component's text too. Record what the text says, and where the two disagree, say so.* It is the
+same family as the deletion standard of the same day: a claim, here a tag, accepted without checking
+it against the thing it describes.

@@ -175,7 +175,14 @@ EXCEPTIONS: dict[str, tuple[str, str]] = {
         "classifier says only 'BSD License'; dist-info/licenses/LICENSE.txt is headed 'Copyright "
         "(c) 2001-2002 Enthought, Inc. 2003, SciPy Developers' with the 3-clause disclaimer, "
         "confirmed against the tagged source (github.com/scipy/scipy, tag v1.18.1) on 2026-09-22. "
-        "A transitive dependency of xgboost and lightgbm, not declared directly",
+        "A transitive dependency of xgboost and lightgbm, not declared directly. The expression "
+        "is scipy's own code: the Linux wheel also bundles, in scipy.libs/, OpenBLAS "
+        "(BSD-3-Clause), LAPACK (BSD-3-Clause-Open-MPI), the GCC runtime libgfortran "
+        "(GPL-3.0-or-later WITH GCC-exception-3.1) and libquadmath (LGPL-2.1-or-later, dynamically "
+        "linked), each listed with its text in dist-info/LICENSE.txt (read 2026-10-17). A runtime "
+        "dependency, so an ML image redistributes them: allowed on condition that their notices "
+        "travel with the image (owner decision 2026-10-17; acceptance criterion in "
+        "docs/parallel/M9_updates.md)",
     ),
     "python:flatbuffers@25.12.19": (
         "Apache-2.0",
@@ -210,7 +217,11 @@ EXCEPTIONS: dict[str, tuple[str, str]] = {
         "links no NVIDIA library, and this project trains CPU-only (missing=nan, nthread=1, no "
         "device='cuda' anywhere in the tree), so the wheel is present but never loaded. Recorded "
         "as BSD-3-Clause on the text actually bundled, not on the misleading declared field, "
-        "which is the same 'read the file, not the label' rule every other exception here uses",
+        "which is the same 'read the file, not the label' rule every other exception here uses. "
+        "The text also covers NVTX files under Apache-2.0 WITH LLVM-exception (read 2026-10-17). "
+        "Redistribution position (owner decision 2026-10-17): an ML image built from the lock "
+        "carries the wheel, so it either carries License.txt and NVTX's notice or leaves NCCL out, "
+        "which CPU-only training allows (acceptance criterion in docs/parallel/M9_updates.md)",
     ),
     "python:sortedcontainers@2.4.0": (
         "Apache-2.0",

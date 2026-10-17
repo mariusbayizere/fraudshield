@@ -296,3 +296,35 @@ confirmation at integration. M9's part is the deployment and the two alerts abov
 The full statements, with their acceptance tests, are in `docs/parallel/M6_updates.md` under "From
 M5"; PB-72 is carried in `docs/parallel/M10_updates.md`. The backlog numbers are proposals: M5 does
 not edit `docs/backlog/`, and PB-68 is already taken by the frontier write-up item.
+
+## From M7 — the ML image redistributes NCCL, OpenBLAS, LAPACK, the GCC runtime and libquadmath (owner, 2026-10-17)
+
+M7 read the licence files shipped inside the wheels, not their metadata, when it settled the three
+Python licence flags (`tools/src/fraudshield_tools/licences.py`). Two facts bear on the images M9
+builds:
+
+- `xgboost` 3.0.2 is a **runtime** dependency of `fraudshield-ml`, not a dev one. On Linux x86-64 it
+  pulls in `scipy` 1.18.1 and `nvidia-nccl-cu12` 2.31.2, so an ML container image built from the
+  lock redistributes both, in binary form.
+- What they carry, from the shipped texts:
+
+  | Component | Comes in with | Licence (shipped text) | Notice file |
+  |---|---|---|---|
+  | NCCL | `nvidia-nccl-cu12` | BSD-3-Clause (NVIDIA, LBNL, US DoE named); the metadata tag `LicenseRef-NVIDIA-Proprietary` disagrees with it, and the text governs | `nvidia_nccl_cu12-2.31.2.dist-info/licenses/License.txt` |
+  | NVTX files inside NCCL | `nvidia-nccl-cu12` | Apache-2.0 WITH LLVM-exception | NVTX's `LICENSE.txt` (github.com/NVIDIA/NVTX) |
+  | OpenBLAS | `scipy` (`scipy.libs/libscipy_openblas*.so`) | BSD-3-Clause | `scipy-1.18.1.dist-info/LICENSE.txt` |
+  | LAPACK | `scipy` (inside OpenBLAS) | BSD-3-Clause-Open-MPI | the same file |
+  | GCC runtime (`libgfortran`) | `scipy` | GPL-3.0-or-later WITH GCC-exception-3.1 | the same file |
+  | `libquadmath` | `scipy` | LGPL-2.1-or-later, dynamically linked | the same file |
+
+  Each permits redistribution in binary form on condition that its notice travels with it. M4
+  established on 2026-09-22 (the NCCL entry in `licences.py`) that `libxgboost.so` links no NVIDIA
+  library and the project trains on CPU only, so NCCL is shipped but never loaded: leaving it out
+  of the image costs nothing.
+
+**Acceptance criterion, needed before M9's image gate:** the ML image carries the notice files for
+NCCL (with NVTX's), OpenBLAS, LAPACK, the GCC runtime and libquadmath, **or** NCCL is excluded from
+the image because training and serving run on CPU only (for example a CPU-only xgboost build, or the
+image built without the `nvidia-*` wheels), in which case the scipy-bundled notices are still
+required. A test or image-scan step that fails when a notice is missing makes the criterion
+checkable.
