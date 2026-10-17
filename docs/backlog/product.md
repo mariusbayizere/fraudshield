@@ -1240,7 +1240,7 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 ### PB-78 · I7e's test did not show the paused partition moving (resolved)
 - **Source:** M6 implementation-2 review m3, 2026-10-17 · **Priority:** low · **Due:** M6
 - **Problem:** the test never showed the paused partition moved to the second member.
-- **Resolution:** resolved in M6's amendment-1 round: `EnvelopeConsumerTest.partitionsMovedWhilePausedKeepEveryoneFlowing` moves it while the old owner runs, and fails if a resume of a partition no longer owned is attempted. Kept so the id is not reused.
+- **Resolution:** resolved in M6's amendment-1 round: `EnvelopeConsumerTest.partitionsMovedWhilePausedKeepEveryoneFlowing` moves it while the old owner runs, with the rebalance made to land inside a 6.4 s pause on every run, and fails if the old owner then resumes the partition it no longer owns. Kept so the id is not reused.
 
 ### PB-79 · A provider outage records FAILED and the customer is never told
 - **Source:** M6 amendment-1 draft-3 review n9 (contract 13.2), 2026-10-17 · **Priority:** medium · **Due:** later than M6; the FAILED-rate alert with M9
@@ -1329,7 +1329,7 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 
 ### PB-96 · Ordering contract I23: a clause no test would catch if its code were deleted
 - **Source:** M6 section-8 audit under the deletion standard, 2026-10-17 (`docs/architecture/decision-fact-ordering.md`, row I23) · **Priority:** low · **Due:** M10
-- **Problem:** `fs_notify_wait_warnings_total`, `fs_notify_sms_outcome_unknown_total`, `fs_notify_resolved_before_send_total`, `fs_notify_webhook_delivery_running` and `fs_notify_head_failing_seconds`.
+- **Problem:** deleting the code that moves `fs_notify_wait_warnings_total`, `fs_notify_sms_outcome_unknown_total`, `fs_notify_resolved_before_send_total`, `fs_notify_webhook_delivery_running` or `fs_notify_head_failing_seconds`, or the 1 of `fs_notify_consumer_running`, would not fail any test.
 - **Acceptance:** a test that fails when the code named above is deleted, and row I23 restated as proved; or the row's claim narrowed to what is proved, by a reviewed contract change.
 
 ### PB-97 · Ordering contract I24: a clause no test would catch if its code were deleted

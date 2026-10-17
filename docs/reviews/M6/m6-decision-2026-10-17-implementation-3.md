@@ -359,3 +359,106 @@ after it has already waited about 190 s. Nothing else waits on the lock. Negligi
 Unchanged and already accepted: in the timeout path, `close()` still closes the dead-letter
 producer under a running attempt. That send fails as an outage and the record is re-read by the
 next owner, so nothing is lost.
+
+## Delta check of acd8ce0 and 0f6268e
+
+Static and read-only. Read: `git diff 3f666cd acd8ce0` (the four tests); `git show 0f6268e`
+(section 8, the status block, `docs/backlog/product.md` PB-77 to PB-101, `M6_updates.md`, the lab
+notebook); and the master prompt's anchors for the proposal (`docs/prompts/FraudShield_Master_Build_Prompt.md`).
+
+### Verdict: APPROVED_WITH_MINORS. 0 BLOCKER, 0 MAJOR, 1 MINOR, 3 NIT
+
+Three of the four new tests meet the deletion standard outright. I7e's test meets it only with high
+probability (D2-m1). The 16/22 count is right, and the 22 backlog entries carry their rows' wording
+verbatim.
+
+### (1) The four tests under deletion
+
+- **I8, `outageTimeAfterWaitingIsNeutralNotWaiting`: sound.** With `budget.failed(start)` deleted,
+  the kind stays WAITING after the first S4 answer. The 6 s of F1 attempts then fill the 3 s
+  budget, and the next S4 answer (not the record's first, so the `!first` guard does not apply)
+  dead-letters it. `handled` never gets the record and the await fails. With the call present,
+  about 1.5 s of waiting is spent, well under 3 s.
+- **I12, `outagesAfterWaitingKeepTheWaitWarnGoing`: sound.** After one S4 answer, six F1 attempts
+  (backoff 0.1 s doubling, about 6 s) run before the record is handled. With the
+  `failed && headAnsweredS4` clause deleted, only S4 answers count as waiting: one answer gives no
+  WARN, and `waitWarnings() >= 1` fails. With it present, the WARN fires at the 1 s interval (the
+  run continues within `4 × MAX_BACKOFF_MS`).
+- **I14 revocation, `theRevocationCommitCarriesWaitingNoOtherCommitDoes`: sound.**
+  - `close()` is called once attempt 5 has started (the latch). It sets `running = false` and
+    calls `wakeup()`.
+  - Between the wakeup and the end-of-batch `commitSync`, the poll thread makes only `seek` and
+    `pause`, which do not check the wakeup flag; the stub handler calls no `keep()`. The first
+    blocking call is the classic coordinator's `commitSync`, whose network poll calls
+    `maybeTriggerWakeup` and throws `WakeupException`, which `cycle()` rethrows.
+  - `run()` returns, and `close()` finds the thread done (3f666cd) and closes from its own thread.
+    The thread is no longer alive, so the listener commits `position(p) = X` with the projected
+    `spent`, slow attempt included.
+  - With the revocation commit deleted, the last commit is attempt 4's RETRY checkpoint, about
+    1.5–2 s spent, against `waited − 1000` of about 4 s. The test fails.
+- **I7e, `partitionsMovedWhilePausedKeepEveryoneFlowing`: sound in its positive assertions,
+  probabilistic in its counterfactual (D2-m1).**
+  - *Assignment.* Range assignment by client id is deterministic under the classic protocol (the
+    default for this client). The coordinator's member id is `clientId + "-" + UUID`,
+    `RangeAssignor` sorts members by member id (no `group.instance.id` is set), and the client's
+    default assignor list puts `range` first. With 3 partitions, `a-first-…` gets 0 and 1 and
+    `b-second-…` gets 2, so the paused partition moves while its old owner runs. Confirmed.
+  - *The log watch.* "cycle failed" is logged only by `run()`'s catch around `cycle()`. During
+    the join, a failed batch commit is caught inside `cycle()` and logs "a batch could not be
+    completed", the listener catches its own failures, and `resolveCommitted` catches its own. I
+    see no other source that would make the watch flaky.
+  - *The counterfactual.* With both the owned-partition check and the revocation's `remove`
+    deleted, an `IllegalStateException` arises only if partition 2's stale state still has
+    `resumeAtNanos >= 0` when the eager rebalance revokes it. `resumeDue` sets `resumeAtNanos = -1`
+    before it resumes. If the rebalance's poll is the one in which partition 2 had just been
+    resumed and its record not yet handled, the stale state carries -1, `resumeDue` never touches
+    it, no ISE occurs, and the test passes with both deleted. Partition 2 is unpaused for a few to
+    about 100 ms of each 500 ms re-read cycle, so the deletion goes unnoticed with a small but real
+    probability per run. **Needs execution** to measure it.
+
+### (2) The rewritten rows and the count
+
+- **I8, I12: exact.** Each Proved clause names the deletion its test catches.
+- **I14: exact.** The revocation clause moved to Proved with a correct mechanism. The remaining
+  Not proved clause (a crash while tripped; `onPartitionsLost`) is right: deleting the override
+  would bring back the default, which calls `onPartitionsRevoked` and so commits, and no test would
+  notice. "Deleting the lost path's absence of a commit" is awkward wording for that.
+- **I7e: claims slightly more than the test.** "Deleting both … fails the test" holds with high
+  probability, not always (D2-m1). "The second member re-reads it" is asserted within 30 s, which
+  is "promptly" rather than the invariant's "at once" (D2-n1).
+- **Count: right.** At the audit: 13 full, 24 partial, 1 none. I7e moves from none to full; I8 and
+  I12 from partial to full; I14 stays partial. That gives 16 full and 22 partial, 38 in all,
+  consistent across the status block (line 77) and the section 8 preamble (lines 505–506).
+
+### (3) PB-80 to PB-101
+
+Twenty-two entries, one per partial row: I3a, I7, I7d, I7f, I10, I11, I13, I14, I14b, I15, I17–I24,
+I26–I29. That is exactly the partial set. Each Problem line is the row's Not proved text verbatim
+(I checked all 22; I17's and I26's include the R-m1 and R-m2 additions, and I14's is the post-acd8ce0
+text). The ids are unique in `product.md`, and the index row and `M6_updates.md` claim
+PB-77 to PB-101. PB-77 and PB-79 match contract 13.1 and 13.2. **PB-78's resolution** ("fails if a
+resume of a partition no longer owned is attempted") inherits D2-m1's overstatement. PB-96's Problem
+line is a bare list of meter names without the "deleting … would not fail any test" frame, faithful
+to its row but unlike the others (D2-n2).
+
+### (4) Notebook and proposal
+
+- **Notebook: accurate in what it cites.** The audit's 13/24/1 and the later 16/22 are right, and
+  the rows written before amendment 1 that over-claimed are real cases (I7's `!first`, I8's
+  `budget.failed`, I12's clause, I13's "decided again", I14's revocation commit). The figure
+  "21 of the 24 partial rows claimed more than their tests prove" comes from the author's own
+  audit. It cannot be checked against the reviews: implementation-3 named six rows and two wordings,
+  not an exhaustive count (D2-n3: attribute it to the audit).
+- **Master-prompt proposal: accurate.** Its three anchors exist as quoted in
+  `docs/prompts/FraudShield_Master_Build_Prompt.md`: "Docs and traceability" (line 752), I.3 step 2
+  with the exact quoted phrase (line 759), and I.5's "Mutation spot checks" heading (line 783). It
+  is correctly framed as a proposal for the owner, not an edit.
+
+### Findings
+
+| # | Sev | Where | What | Minimal fix |
+|---|---|---|---|---|
+| D2-m1 | MINOR | `EnvelopeConsumerTest.partitionsMovedWhilePausedKeepEveryoneFlowing`; contract I7e; `product.md` PB-78 | The counterfactual is probabilistic. If the eager rebalance happens in the poll right after partition 2 was resumed, the stale state has `resumeAtNanos = -1`, no resume of the unowned partition is ever attempted, and the test passes with both guards deleted. The row and PB-78 state it as certain. | Make partition 2's pause long and stable before the second member joins. For example, let the orphan fail F1 a few times first, so its backoff is several seconds, or join only after observing it paused. Or word the row "fails with high probability" and keep I7e partial. |
+| D2-n1 | NIT | contract I7e | "Re-reads at once" is asserted as "within 30 s". Nothing in this code delays it beyond the client's own unpausing of a new assignment. | Say "within 30 s (the client unpauses a new assignment; nothing here delays it)". |
+| D2-n2 | NIT | `product.md` PB-96 (and row I23) | The Problem line lists meter names without the deletion frame the standard asks for. | "Deleting the code that moves `…` would not fail any test." |
+| D2-n3 | NIT | `docs/research/lab_notebook.md`, audit paragraph | "21 of the 24 partial rows claimed more than their tests prove" is the author's audit figure, not a review's. | Attribute it: "the audit found 21 of 24 …". |

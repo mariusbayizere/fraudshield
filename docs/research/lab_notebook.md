@@ -2599,8 +2599,9 @@ those terms, "deleting X would not fail any test", not in softer words, and the 
 is reported rather than closed with wording.* Every review of section 8 applies it row by row.
 
 **The audit that followed** (2026-10-17). Held to the deletion standard, the 38 rows of section 8
-gave 13 proved in full, 24 in part and 1 (I7e) not at all. **21 of the 24 partial rows claimed more
-than their tests prove, and they include rows written before amendment 1 that had passed every
+gave 13 proved in full, 24 in part and 1 (I7e) not at all, in an audit made for the author by a
+separate agent and then checked by the reviewer. **That audit found 21 of the 24 partial rows claiming
+more than their tests prove, and they include rows written before amendment 1 that had passed every
 earlier review** (I7, I8, I12, I13, the revocation clause of I14). The reviews were not negligent:
 each checked the claims and checked the tests, but separately, and the gap lives exactly between
 the two. A row and its test can each look right, and still not meet. The deletion question is the

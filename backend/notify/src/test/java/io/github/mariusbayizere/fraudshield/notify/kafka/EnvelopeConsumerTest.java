@@ -588,14 +588,16 @@ class EnvelopeConsumerTest {
   @Test
   @Tag("FR-03-04")
   void partitionsMovedWhilePausedKeepEveryoneFlowing() throws Exception {
-    // I7e (contract review 5, MINOR 2; PB-78). The orphan sits on partition 2 and pauses it. When
-    // the second member joins, the range assignor gives partitions 0 and 1 to the first member,
-    // whose client id sorts first, and partition 2 to the second: the paused partition moves while
-    // its old owner keeps running. A resume of the partition the first member no longer owns would
-    // throw IllegalStateException inside its poll cycle; the cycle's catch keeps the thread alive
-    // but logs "cycle failed", which this test watches for. Deleting both the owned-partition check
-    // before resume and the revocation's drop of the partition's state fails it; either one alone
-    // still prevents the resume.
+    // I7e (contract review 5, MINOR 2; PB-78). The orphan sits on partition 2. On the first
+    // member it fails as an outage until its backoff reaches 6.4 s, so the partition is paused
+    // with a resume deadline far ahead. The second member joins right after an attempt, with a
+    // 500 ms heartbeat, so the rebalance lands inside that pause, every run: the range assignor
+    // gives partitions 0 and 1 to the first member, whose client id sorts first, and partition 2,
+    // still paused, to the second. When the first member's stale deadline passes, a resume of the
+    // partition it no longer owns would throw IllegalStateException inside its poll cycle; the
+    // cycle's catch keeps the thread alive but logs "cycle failed", which this test watches for.
+    // Deleting both the owned-partition check before resume and the revocation's drop of the
+    // partition's state fails it; either one alone still prevents the resume, by design.
     UUID institution = UUID.randomUUID();
     String topic = "fs.ml.retrain";
     String group = "test-group-" + UUID.randomUUID();
@@ -608,36 +610,37 @@ class EnvelopeConsumerTest {
               int sequence = sequence(envelope);
               if (sequence == 1) {
                 orphanAttempts.add(member);
-                if (member.equals("second")) {
-                  secondOrphanAt.add(System.nanoTime());
+                if (member.equals("first")) {
+                  throw new SQLException("database unavailable (test)", "08006");
                 }
+                secondOrphanAt.add(System.nanoTime());
                 throw new NotYetRecordedException("parent late (test)");
               }
               handledAt.put(sequence, System.nanoTime());
             };
+    Map<String, Object> fastHeartbeat =
+        Map.of(
+            ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG, 500,
+            ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, 10_000);
     var logs = captureLogs();
     // Client ids fix the members' order for the range assignor: "a-…" sorts before "b-…".
+    Map<String, Object> firstProperties = new HashMap<>(fastHeartbeat);
+    firstProperties.put(ConsumerConfig.CLIENT_ID_CONFIG, "a-first-" + UUID.randomUUID());
+    Map<String, Object> secondProperties = new HashMap<>(fastHeartbeat);
+    secondProperties.put(ConsumerConfig.CLIENT_ID_CONFIG, "b-second-" + UUID.randomUUID());
     try (EnvelopeConsumer first =
-        consumer(
-            topic,
-            group,
-            handler.apply("first"),
-            Duration.ofMinutes(10),
-            Map.of(ConsumerConfig.CLIENT_ID_CONFIG, "a-first-" + UUID.randomUUID()))) {
+        consumer(topic, group, handler.apply("first"), Duration.ofMinutes(10), firstProperties)) {
       publish(topic, keyFor(2, 3), envelope(institution, 1), Map.of());
-      await().atMost(Duration.ofSeconds(30)).until(() -> orphanAttempts.size() >= 2);
+      // Seven failed attempts: the next backoff is 6.4 s (100 ms doubling).
+      await().atMost(Duration.ofSeconds(60)).until(() -> orphanAttempts.size() >= 7);
       long joinedAt = System.nanoTime();
       try (EnvelopeConsumer second =
           consumer(
-              topic,
-              group,
-              handler.apply("second"),
-              Duration.ofMinutes(10),
-              Map.of(ConsumerConfig.CLIENT_ID_CONFIG, "b-second-" + UUID.randomUUID()))) {
+              topic, group, handler.apply("second"), Duration.ofMinutes(10), secondProperties)) {
         await().atMost(Duration.ofSeconds(60)).until(() -> !secondOrphanAt.isEmpty());
         assertThat(Duration.ofNanos(secondOrphanAt.getFirst() - joinedAt))
-            .as("the new owner re-reads the moved partition at once, not after a pause")
-            .isLessThan(Duration.ofSeconds(30));
+            .as("the new owner re-reads before the old owner's 6.4 s pause would have ended")
+            .isLessThan(Duration.ofMillis(6400));
         // The first member keeps its partitions and keeps flowing.
         publish(topic, keyFor(0, 3), envelope(institution, 10), Map.of());
         publish(topic, keyFor(1, 3), envelope(institution, 11), Map.of());
@@ -645,7 +648,9 @@ class EnvelopeConsumerTest {
             .atMost(Duration.ofSeconds(30))
             .until(() -> handledAt.containsKey(10) && handledAt.containsKey(11));
         int movedAt = orphanAttempts.indexOf("second");
-        Thread.sleep(3000); // several of the old owner's resume deadlines pass
+        // Past the first member's stale resume deadline, with margin.
+        long waitUntil = joinedAt + Duration.ofSeconds(10).toNanos();
+        Thread.sleep(Math.max(0, Duration.ofNanos(waitUntil - System.nanoTime()).toMillis()));
         assertThat(orphanAttempts.subList(movedAt, orphanAttempts.size()))
             .as("after the move only the second member re-reads the paused partition")
             .containsOnly("second");
