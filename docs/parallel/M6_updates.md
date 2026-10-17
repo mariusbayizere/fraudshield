@@ -11,6 +11,7 @@ those files. Facts only; where something is unverified or open it says so.
 | ADR | `0060`–`0069`, then down from `0059` (block full; ADR 0060 revised) | 0060–0069 (0068 hybrid persistence, 0069 the PII vault), 0059 (the latency gate) |
 | Flyway | `V60`–`V69` | V60 account profiles, V61 FX rates, V62 hold reconciliation, V63 webhook deliveries, V64 unblock reconciliation, V65 unfinished batch jobs, V66 the scorer's account context on `fraud_scores`, V67 the feature-store fallback (tables, `fs_scorer` functions) |
 | Vault Flyway (`db/vault`) | M6 only | V1 contacts, V2 tokenisation map, V3 contact token length |
+| Backlog | `PB-77`, `PB-78` (claimed 2026-10-17, after reading every branch's backlog and updates files: `PB-76` is M4's) | PB-77 the window between the provider's acceptance and the recorded outcome (contract 13.1); PB-78 the rebalance test that does not show the move (implementation-2 m3, due M10) |
 
 `0027` and `0028` already exist on `m4/generalisation` and `m5/scoring`; M7 will add identity
 migrations. Flyway refuses out-of-order versions on a database that already has a higher one, so
@@ -953,3 +954,47 @@ This is a code change: it needs an independent review until clean, then CI with 
   - a malformed payload dead-lettered rather than retried for ever.
 - Section 8 of the contract maps each invariant to its test.
 - The fix is a code change, so it gets its own review.
+
+## Second implementation review and amendment 1 (2026-10-17, after the laptop was replaced)
+
+The follow-up to `3729de8` was lost with the old machine: GitHub's push events show `3729de8` as the
+last push. The independent review the record above asked for was written on 2026-10-17
+(`docs/reviews/M6/m6-decision-2026-10-17-implementation-2.md`, `752eb9b`): **CHANGES_REQUIRED, 3
+MAJOR, 8 MINOR, 8 NIT.** The "(malformed)" claim in this file's previous section, that a malformed
+payload is now dead-lettered rather than retried for ever, held for three fields of one handler
+(MAJOR 3).
+
+**The owner's scope for one fix round** (2026-10-17): M1, M2, M3, m1, m2, m4, m6 and m8. m5: the
+four invariants are restored to their reviewed wording in this round. m7: named in the contract now
+as a known gap, implemented later as `PB-77`. m3: carried to M10 as `PB-78`. The NITs are fixed
+where the round touches their code. Order: the contract amendment first, reviewed on its own; then
+the code; then a fresh independent review that also covers `e7a5be5`.
+
+**Standing rule for the reviews** (owner, 2026-10-17): where the contract or this file says a
+property is tested, the review checks that the named test proves it as worded. That was the MAJOR
+in both implementation reviews.
+
+**Amendment 1** (`docs/architecture/decision-fact-ordering.md`, sections 12 and 13, and the changes
+listed in its status block) is a draft awaiting its own review.
+
+**Backlog rows to apply at merge:**
+
+```yaml
+- id: PB-77
+  title: "A second SMS when the outcome cannot be recorded after the provider accepted"
+  due_milestone: later than M6 (with the transactional outbox, if adopted)
+  raised_by: M6 implementation-2 review, m7 (2026-10-17)
+  detail: contract 13.1. Two designs on record: a SENDING row before the provider call, read as
+    "outcome unknown, do not send"; or the transactional outbox (contract section 9).
+- id: PB-78
+  title: "I7e's test does not show the paused partition moving to the second member"
+  due_milestone: M10
+  raised_by: M6 implementation-2 review, m3 (2026-10-17)
+  detail: assert which member handles partition 0 after the join, or force the move; needs
+    execution against a real broker.
+```
+
+**For M6's close** (from the traceability housekeeping, `m6/housekeeping`): FR-02-09 is now filed
+under M10, so the rule-7 check at M6's close does not see PB-69, PB-70 and PB-71, which M6 owns. M6's
+close reports their state: PB-69 is built on `m6/featurestore-fallback`; PB-70 (the `fs.labels`
+consumer) and PB-71 (the reference-state contract and producer) are not started.
