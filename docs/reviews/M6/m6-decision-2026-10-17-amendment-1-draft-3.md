@@ -281,3 +281,91 @@ Two details remain: a split surrogate, and U+0000 (`22021`) (n4).
    replay records R.
 5. A2-M1 and I26: an `Error` thrown mid-batch on a partition with `spent` > 0. Assert that the next
    owner re-reads the record that threw and every one behind it.
+
+## Delta check of f47b3cb
+
+Scope: `git diff a21e428 f47b3cb` (contract, ADR 0056, `M6_updates.md`). Where a change touches
+other sections, I re-read them in full: 12.2–12.5 and 13, W-e, D-a, D-c, D-g, section 8 (I17, I19
+to I22, I26, I28) and section 11. Code was read again only to check claims the fixes make:
+`WebhookDispatcher.attempt` and `deliverDue`, `RetryPolicy.exhausted`, V63's `webhook_deliveries`
+and `webhook_deliveries_due`. Backlog id `PB-79` was searched for on every local and remote branch;
+it is unused elsewhere. The method is the same as above: static only, nothing built or run.
+
+### Closure of draft 3's findings
+
+| Finding | Resolved? | Why |
+|---|---|---|
+| m1 | **resolved** | There is no health indicator for either stop. `fs_notify_consumer_running`, `fs_notify_webhook_delivery_running` and the counter are the signals, and M9 alerts on them. I26 now asserts that `/actuator/health` stays UP. |
+| m2 | **resolved** | The executor has its own rule and touches no consumer. The claim that "deliveries stay `PENDING` and are delivered after a restart" holds in the code. `attempt` runs in a transaction that is never committed when an `Error` escapes: `catch (SQLException)` does not catch it, and closing the pooled connection rolls it back. The row therefore stays `PENDING` with its `next_attempt_at`, and the row lock is released. Any instance's executor picks it up through `webhook_deliveries_due` and `FOR UPDATE SKIP LOCKED`. Wording: D-n4. |
+| m3 | **partly** | `LogTruncationException` is now handled wherever the divergence lies, and every commit carries a leader epoch. A partition the exception names *without* a divergent offset still has no rule (D-m2). |
+| m4 | **resolved** | I22 matches 12.5: the log end, or the divergent offset, and never the log start. |
+| m5 | **resolved, with a new defect** | `max.block.ms` 10 s, a 10 s timeout on every `commitSync`, and vault `connectTimeout` and `loginTimeout` of 5 s. My recomputation: three statements at 10 s each, a vault read of 10 s plus up to 5 s of login, KMS 5 s, provider 8 s, the commit 10 s and the DLQ send 45 s give about 115 s. Adding Hikari's 2 s acquisitions, the 60 s budget and the final 10 s commit gives about 190 s, below 300 s. The text's "about 110 s / 180 s" is close enough. The new sentence "a commit that times out is an F1 failure of the attempt" contradicts 12.4 (D-m1). |
+| m6 | **resolved** | `fs-kept-result` is honoured only on a record carrying `fs-replayed`. Elsewhere it is ignored, logged at WARN and counted (`fs_notify_ignored_kept_results_total`). A result from the header is a kept result in every respect. Repeated identical values count as one, and `none` is refused. The tool replaces the header rather than adding one. I19 and I28 cover these rules. **Can a legitimate path lose the result?** No. 12.1 and D-d test whether `fs-replayed` is *present*, not whether its value parses, and the tool always sets it when it republishes. A replayed copy whose `fs-replayed` value is malformed is still "replayed", so its result is honoured. |
+| m7 | **resolved** | D-g now agrees with D-c and 12.4. |
+| n1 | **resolved** | D-d is listed; section 11 item 11 says "too large to send". |
+| n2 | **resolved** | `ProviderReplyUnknownException` (an `IOException` subtype) covers an unreadable 2xx and a request that timed out after it was sent. The adapter can tell these apart from `HttpConnectTimeoutException`. |
+| n3 | **resolved** | `KmsUnavailableException` is a non-permanent `VaultException`; the 5 s limit is on M9's binding. |
+| n4 | **resolved** | The limit is in code points; U+0000 becomes U+FFFD; `~` is a convention only; the line is about 900 bytes. |
+| n5 | **resolved** | I21 adds "nothing sent, issued or recorded"; I17 defers to I27; I20 claims that R is committed before the write. |
+| n6 | **resolved** | See the next subsection. |
+| n7 | **partly** | The text chose that the re-read *waits* for the commit carrying R, the opposite of my suggestion, and that choice widens 13.1 (D-m1). "At offset X (its position …)" is inaccurate mid-batch (D-n2). |
+| n8 | **resolved** | D-a notes that a copy re-sent for size lacks `fs-dlq-error`. |
+| n9 | **resolved** | 13.2 and `PB-79` (claimed in the ADR, the contract and `M6_updates.md`). One wording point: D-n3. |
+
+### The `Error` rule as amended
+
+- **The `stopping` flag.** It makes the revoke listener commit nothing during the close, so the
+  only commit is step 3's. That removes the old dependence on the revoke commit using a seeked
+  `position(p)`.
+- **"Commit only if every seek succeeded" is safe.** When a seek fails, nothing is committed, and
+  the group resumes from the last successful commit. Every commit the contract makes is at or before
+  the first unhandled offset of its partition:
+  - `done` offsets of handled records;
+  - head checkpoints at X;
+  - the R commit at X.
+
+  So the claim "never past an unhandled record" holds.
+- **The cost** is the metadata since the last commit, and possibly a kept R whose commit had not
+  succeeded. 13.1 now names an `Error` in that interval.
+- **When a seek can fail.** Revocation happens only inside `poll`, so every partition of the batch
+  is still assigned. A seek can therefore fail only through a second `Error`.
+
+### New findings
+
+| # | Severity | Location | Finding | Failure scenario | Minimal change to the text |
+|---|---|---|---|---|---|
+| D-m1 | MINOR | 12.3 "Commits" ("a commit that times out is an F1 failure of the attempt"); 12.4 order ("If that commit fails, the outcome write still proceeds. If the outcome write also fails, X is not re-read until a commit carrying R has succeeded …"); 13.1 | (a) 12.3 makes a timed-out R commit an F1 failure of the attempt, which ends the attempt before the outcome write. 12.4 says the write proceeds. For the end-of-batch commit, "the attempt" is undefined, because no attempt is running. (b) Both readings, and 12.4's new wait, put the outcome write behind a successful commit. Commits time out when the group coordinator is in trouble, which is exactly when the partition is likely to be lost. While the outcome is unwritten and R is not committed, losing the partition re-sends the SMS (13.1). Writing the outcome is the other way to close that window, and the text now delays it. | A broker hosting the group coordinator degrades. An S2 send succeeds and the R commit times out after 10 s. Under 12.3 the attempt is F1, so X's partition is paused without the outcome written. Or, under 12.4, the database blips at the same moment, and the re-read waits for a commit that keeps failing. The member's session then expires and the partition moves. The next owner finds B, no outcome and no R, and sends a second SMS. If the outcome write had gone ahead, or the re-read had written R as soon as the database answered, the next owner would have found S1. | 12.3: "A commit that fails or times out is a failed commit, not a failure of an attempt. For the commit that keeps R, 12.4 applies. For the end-of-batch commit, W-a's seek-back applies." 12.4: "If the outcome write also fails, the commit carrying R is retried on the backoff, but a re-read of X that holds R does not wait for it: writing the outcome closes the window as well." 13.1: "until a later commit carrying R, or the outcome row, succeeds". |
+| D-m2 | MINOR | 12.5, the `LogTruncationException` bullet ("seeks each named partition to the divergent offset the exception reports") | `LogTruncationException.divergentOffsets()` may leave out a partition the exception names. The client does that when the leader cannot give an end offset for the committed epoch, for example an epoch older than the log start or a re-created topic. With `auto.offset.reset=none`, that partition stays awaiting a reset, and every `poll` throws again. No branch covers it: the "above the log end" rule sits under the plain `OffsetOutOfRangeException`, and a handler that catches the subclass first never reaches it. This is m3's unbounded loop in a narrower case. | After an unclean election and a topic re-creation, partition 7's committed epoch is unknown to the new leader. `poll` throws `LogTruncationException` naming partition 7 with no divergent offset. The consumer seeks nothing, and the next `poll` throws again. Every partition of that member stops. | "A partition the exception names without a divergent offset is handled as an offset above the log end: logged at ERROR with its committed offset and the log end, and sought to the log end." Add this case to I22. |
+| D-n1 | NIT | Section 11 | The items run 18, 19, **22**, 20, 21. | | Renumber, with the new item last. |
+| D-n2 | NIT | 12.4 ("at offset X (its position; …)"); W-e's revoke and checkpoint bullets; 12.5 ("as `OffsetAndMetadata` allows") | Mid-batch, X is not the position: the position is past X. W-e's bullets do not mention the leader epoch that 12.5 requires on every commit. `KafkaConsumer.position()` returns no epoch, so the revoke commit needs an epoch the consumer tracks itself. That epoch comes from the last record read on the partition (`ConsumerRecord.leaderEpoch()`), or from the `OffsetAndMetadata` returned by `committed()` when nothing has been read since assignment. It is empty after a reset seek. | | "At offset X, the head"; in W-e: "with the leader epoch of 12.5"; in 12.5: "the epoch is that of the last record read on the partition, else the committed one, else none". |
+| D-n3 | NIT | 13.2 ("needs to know the provider did not accept it, which 12.4's 'not known to be accepted' cannot give") | Some failures are known not to have reached the provider: `ConnectException`, `HttpConnectTimeoutException`, `UnknownHostException`, and a TLS handshake failure. These are the safe candidates for PB-79. As written, 13.2 suggests no case can be known. | | "… except a failure to connect, which is known not to have reached the provider; PB-79 starts there." |
+| D-n4 | NIT | 12.2, webhook executor ("delivered after a restart") | The claim is true but narrower than the code. Any other instance's executor delivers the due `PENDING` rows without a restart (the due query is shared, with `SKIP LOCKED`). A POST that went out before the `Error` is sent again: at least once, deduplicated on `event_id`. A row whose first attempt is older than `GIVE_UP_AFTER` is dead-lettered at its next failing attempt (`RetryPolicy.exhausted`). | | "… are delivered by another instance's executor, or after a restart; a delivery in flight at the `Error` may be posted again." |
+
+### Other checks
+
+- **Leader epochs** can be implemented on the commits the contract makes:
+  - the mid-batch R commit at X uses record X's epoch;
+  - the end-of-batch commit at X+1 uses X's epoch;
+  - head checkpoints use the head record's epoch;
+  - the revoke commit needs the epoch the consumer tracks (D-n2).
+
+  An epoch from a later record than the committed offset cannot cause a false divergence. A
+  divergence is flagged only when the epoch's end offset lies below the position.
+- **I22** is faithful to 12.5, apart from D-m2's case.
+- **13.2 and PB-79** are consistent across the contract, ADR 0056 and `M6_updates.md`, and the id
+  is free on every branch. The status block lists the applied changes, but not the "commit timeout
+  is F1" behaviour (D-m1).
+- **W-b, W-c2, the W-e checkpoints, D-c/D-d replay and the restored invariants** are not touched,
+  apart from the epoch on commits, which changes no offset or metadata.
+
+### Verdict of the delta check: still SOUND
+
+0 BLOCKER, 0 MAJOR, 2 MINOR (D-m1, D-m2), 4 NIT (D-n1 to D-n4). All 7 MINORs and 9 NITs of draft 3
+are resolved except m3 and n7, which are partly resolved. The two new MINORs come from the fixes:
+
+- **D-m1** postpones the outcome write behind a commit, which widens 13.1's resend window during
+  coordinator trouble. It is a contradiction between 12.3 and 12.4 with a one-sentence fix.
+- **D-m2** leaves a rarer truncation case looping.
+
+Neither creates a common-path resend, skip or loss. I recommend applying D-m1's text before the
+code round, because it decides how the R commit is coded.
