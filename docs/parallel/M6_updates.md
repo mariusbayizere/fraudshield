@@ -1008,3 +1008,19 @@ check of those changes precedes the code.
 under M10, so the rule-7 check at M6's close does not see PB-69, PB-70 and PB-71, which M6 owns. M6's
 close reports their state: PB-69 is built on `m6/featurestore-fallback`; PB-70 (the `fs.labels`
 consumer) and PB-71 (the reference-state contract and producer) are not started.
+
+**Code round of amendment 1** (work branch `m6/amendment-1`, 2026-10-17): `72f24a3` the
+implementation; `1b9f322` the tests of I17 to I29, I7e moving the paused partition for certain
+(`PB-78` resolved), I14's loss bound asserted, I10 for every reason, the structural test counting
+every statement kind; `207f9d5` the matrix re-rendered; `acc405e` and `cf3e762` a test-compile
+ambiguity and two spotbugs findings. CI run 39008470954 on `acc405e`: all 169 notify tests passed
+(`EnvelopeConsumerTest` 23 on Kafka, `SmsOrderingTest` 17 on PostgreSQL, `FailureClassTest` 36,
+`CheckpointTest` 6); the run then failed on the two spotbugs findings, fixed in `cf3e762`.
+
+Section 8 names a test for every row. Rows the tests prove only in part say so, with the gap:
+I3a, I17, I18, I19, I20, I22, I23, and **I26 and I27, known partial by the owner's decision
+(2026-10-17)**: a statement actually timing out, the vault's timeouts, the webhook executor's
+`Error` rule and the health endpoint (I26), and a real dead-letter send timing out (I27) are by
+review. Next: a fresh independent review of the code round, the final contract edits and
+`e7a5be5`.
+
