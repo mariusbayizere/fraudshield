@@ -61,9 +61,11 @@ CREATE FUNCTION audit_chain_last_seq_before(p_writer_partition smallint, p_befor
     WHERE e.writer_partition = p_writer_partition AND e.recorded_at < p_before
   $$;
 
--- SECURITY DEFINER functions are executable by PUBLIC on creation: V11's default privileges apply
--- only to objects created by the role that set them, so each function is closed explicitly before
--- its grant, as M6's migrations do (otherwise every role, fs_scorer included, could call them).
+-- A new function is executable by PUBLIC, whatever V11 says: V11's ALTER DEFAULT PRIVILEGES IN SCHEMA
+-- ... REVOKE EXECUTE ... FROM PUBLIC is a no-op, because per-schema default privileges only add to the
+-- global defaults and cannot take away PUBLIC's built-in EXECUTE (PostgreSQL, ALTER DEFAULT
+-- PRIVILEGES). So each function is closed explicitly before its grant, as M6's migrations do
+-- (otherwise every role, fs_scorer included, could call them). V71 closes the gap for later ones.
 REVOKE ALL ON FUNCTION auth_employee_id_registered(text), auth_find_user_institution(uuid),
   audit_chain_head(smallint), audit_chain_hashes(smallint, bigint, bigint),
   audit_chain_last_seq_before(smallint, timestamptz) FROM PUBLIC;
