@@ -1023,4 +1023,3 @@ I3a, I17, I18, I19, I20, I22, I23, and **I26 and I27, known partial by the owner
 `Error` rule and the health endpoint (I26), and a real dead-letter send timing out (I27) are by
 review. Next: a fresh independent review of the code round, the final contract edits and
 `e7a5be5`.
-

@@ -237,7 +237,7 @@ public class NotificationWiring {
       ObjectProvider<WebhookTransport> transport,
       ObjectProvider<ContactDirectory> contacts,
       ObjectProvider<SmsGateway> gateway,
-      io.micrometer.core.instrument.MeterRegistry registry) {
+      io.micrometer.core.instrument.MeterRegistry meterRegistry) {
     Channels channels = new Channels();
     WebhookEndpoints registry = endpoints.getIfAvailable();
     if (registry == null) {
@@ -263,7 +263,7 @@ public class NotificationWiring {
               envelope -> dispatcher.enqueue(envelope.institutionId(), envelope.payload()),
               EnvelopeConsumer.ParentWait.DEFAULT,
               EnvelopeConsumer.RetryBound.DEFAULT,
-              registry,
+              meterRegistry,
               clock));
       java.util.concurrent.atomic.AtomicInteger deliveryRunning =
           new java.util.concurrent.atomic.AtomicInteger(1);
@@ -271,7 +271,7 @@ public class NotificationWiring {
               "fs_notify_webhook_delivery_running",
               deliveryRunning,
               java.util.concurrent.atomic.AtomicInteger::get)
-          .register(registry);
+          .register(meterRegistry);
       ScheduledExecutorService delivery =
           Executors.newSingleThreadScheduledExecutor(
               Thread.ofPlatform().name("webhook-delivery").daemon(true).factory());
@@ -285,7 +285,7 @@ public class NotificationWiring {
               // The executor owns no consumer (12.2): the task is abandoned, its transaction rolls
               // back, the row stays PENDING for another instance or a restart, and the executor
               // accepts no further task, because a periodic task that throws is not run again.
-              registry
+              meterRegistry
                   .counter("fs_notify_consumer_errors_total", "group", "webhook-delivery")
                   .increment();
               deliveryRunning.set(0);
@@ -330,7 +330,7 @@ public class NotificationWiring {
       io.micrometer.core.instrument.FunctionCounter.builder(
               "fs_notify_resolved_before_send_total", sender, CustomerSmsSender::resolvedBeforeSend)
           .tag("group", "notification-service")
-          .register(registry);
+          .register(meterRegistry);
       channels.running.add(
           new EnvelopeConsumer(
               properties.kafkaBootstrapServers(),
@@ -346,7 +346,7 @@ public class NotificationWiring {
                       envelope.keeper()),
               EnvelopeConsumer.ParentWait.DEFAULT,
               EnvelopeConsumer.RetryBound.DEFAULT,
-              registry,
+              meterRegistry,
               clock));
     }
     return channels;
