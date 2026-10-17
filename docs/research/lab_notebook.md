@@ -2597,3 +2597,21 @@ test named next to it and a green run, and moves on.
 fail if the code it claims to prove were deleted? Where the answer is not yes, the claim says so in
 those terms, "deleting X would not fail any test", not in softer words, and the count of such rows
 is reported rather than closed with wording.* Every review of section 8 applies it row by row.
+
+**The audit that followed** (2026-10-17). Held to the deletion standard, the 38 rows of section 8
+gave 13 proved in full, 24 in part and 1 (I7e) not at all. **21 of the 24 partial rows claimed more
+than their tests prove, and they include rows written before amendment 1 that had passed every
+earlier review** (I7, I8, I12, I13, the revocation clause of I14). The reviews were not negligent:
+each checked the claims and checked the tests, but separately, and the gap lives exactly between
+the two. A row and its test can each look right, and still not meet. The deletion question is the
+check that joins them: it cannot be answered by reading the claim alone, or the test alone.
+
+Four rows were then closed with tests (I7e, I8, I12, I14's revocation clause); the 22 still partial
+went to the backlog one row each (`PB-80` to `PB-101`), with their "deleting X would not fail any
+test" wording, so nobody has to rediscover the gap.
+
+**Beyond M6.** Every remaining milestone that writes a claim table of the same kind (requirement
+rows naming their tests, gate criteria naming their evidence, contract invariants) applies the
+same standard before its tag, row by row, and reports the count rather than closing it with
+wording. The owner asked for it to be written into the master prompt's review section, so that M7
+to M12 inherit it (`docs/parallel/M6_updates.md`, "Proposed amendment to the master prompt").

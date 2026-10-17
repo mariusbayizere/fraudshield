@@ -11,7 +11,7 @@ those files. Facts only; where something is unverified or open it says so.
 | ADR | `0060`–`0069`, then down from `0059` (block full; ADR 0060 revised) | 0060–0069 (0068 hybrid persistence, 0069 the PII vault), 0059 (the latency gate) |
 | Flyway | `V60`–`V69` | V60 account profiles, V61 FX rates, V62 hold reconciliation, V63 webhook deliveries, V64 unblock reconciliation, V65 unfinished batch jobs, V66 the scorer's account context on `fraud_scores`, V67 the feature-store fallback (tables, `fs_scorer` functions) |
 | Vault Flyway (`db/vault`) | M6 only | V1 contacts, V2 tokenisation map, V3 contact token length |
-| Backlog | `PB-77`, `PB-78`, `PB-79` (claimed 2026-10-17, after reading every branch's backlog and updates files: `PB-76` is M4's) | PB-77 the window between the provider's acceptance and the recorded outcome (contract 13.1); PB-78 the rebalance test that does not show the move (implementation-2 m3; first carried to M10, then folded into this round by the owner, 2026-10-17: to be resolved by this round); PB-79 a provider outage ends the notice (contract 13.2) |
+| Backlog | `PB-77` to `PB-101` (claimed 2026-10-17, after reading every branch's backlog and updates files: `PB-76` is M4's) | PB-77 the window between the provider's acceptance and the recorded outcome (contract 13.1); PB-78 the rebalance test that does not show the move (implementation-2 m3; first carried to M10, then folded into this round by the owner, 2026-10-17: to be resolved by this round); PB-79 a provider outage ends the notice (contract 13.2); PB-80 to PB-101 the 22 section-8 rows proved only in part, one row each, their "not proved" wording carried into `docs/backlog/product.md` (owner, 2026-10-17) |
 
 `0027` and `0028` already exist on `m4/generalisation` and `m5/scoring`; M7 will add identity
 migrations. Flyway refuses out-of-order versions on a database that already has a higher one, so
@@ -1039,3 +1039,27 @@ tests, ingest 101), section 8 re-held to the deletion standard in `a89a0f4` (13 
   that starts against a vault not yet migrated (implementation-3, n5).
 - The vault's healthcheck uses the Unix socket and may pass during initdb; whether it matters needs
   a run (implementation-3, n6).
+
+**Section 8 after the owner's decision** (2026-10-17): I7e, I8, I12 and I14's revocation clause
+closed with tests (`acd8ce0`); 16 rows proved in full, 22 in part, each partial row carried to
+`docs/backlog/product.md` as `PB-80` to `PB-101` with its exact "not proved" wording. PB-77 to PB-79
+are written into the backlog too, PB-78 as resolved.
+
+### Proposed amendment to the master prompt (for the owner to approve)
+
+The owner asked that the deletion standard become part of every review brief, so that M7 to M12
+inherit it. The master prompt governs, so it is not edited from this branch; the proposed text, for
+the owner to apply or change:
+
+- **Part I, PR-level checklist, "Docs and traceability"**, a new item: *"[ ] For every claim that a
+  property is tested (a traceability row, a gate criterion, a contract invariant), the reviewer asks:
+  would the named test fail if the code it claims to prove were deleted? Each claim that does not
+  pass says so in those terms ("deleting X would not fail any test"); none is accepted on the test's
+  name, its presence or a green run."*
+- **I.3, step 2**, after "open the test for each and confirm it asserts the criterion": *"and that it
+  would fail if the code meeting the criterion were deleted (the deletion standard, lab notebook
+  2026-10-17). Report the count of rows proved in full, in part and not at all; a gap is closed by a
+  test or carried to the backlog row by row, never by rewording."*
+- **I.5, review record template**: rename "Mutation spot checks (what was broken → which test
+  failed)" to "Deletion checks (code deleted → which test failed, or none)", and require one line per
+  claimed-tested row in scope.
