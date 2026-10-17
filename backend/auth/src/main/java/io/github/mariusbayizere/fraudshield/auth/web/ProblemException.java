@@ -126,6 +126,24 @@ public final class ProblemException extends RuntimeException {
   }
 
   /**
+   * 503 with Retry-After: a store the request depends on cannot answer, so the client should retry
+   * rather than conclude that its credentials or request are wrong.
+   *
+   * @param retryAfterSeconds seconds to wait, at least 1
+   * @return the exception
+   */
+  public static ProblemException serviceUnavailable(long retryAfterSeconds) {
+    return new ProblemException(
+        "service-unavailable",
+        503,
+        "Service unavailable",
+        "A store this request depends on is unavailable; retry shortly",
+        List.of(),
+        Map.of(),
+        Math.max(1, retryAfterSeconds));
+  }
+
+  /**
    * Adds an extension member (for example the current account on a stale-version conflict).
    *
    * @param name member name

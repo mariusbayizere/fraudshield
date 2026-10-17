@@ -14,7 +14,7 @@ ArchUnit tests enforce this per module.
 | `common` | Money and ISO 4217 minor units (D-43) | M0 |
 | `rules` | Custom-rule DSL (FR-05-05) | M6 |
 | `decision` | Decision engine, holds, freeze, breaker, spool, adapters | M6 |
-| `ingest` | Ingestion API and composition root | M6 |
+| `ingest` | Ingestion API and the API application's composition root, which assembles M7's modules (ADR 0073) | M6, assembly M7 |
 | `notify` | Customer SMS, verification, webhooks | M6 |
 | `audit` | Hash-chained audit writer, tenant transactions, signed anchors, `fraudshield audit verify` | M7 |
 | `auth` | Staff sign-in, sessions, lockout, Google sign-in, API keys, contract-driven authorisation | M7 |

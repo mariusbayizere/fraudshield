@@ -29,6 +29,17 @@ spring:
       hibernate:
         jdbc:
           time_zone: UTC
+  # Staff identity (M7) reaches Redis through Spring Data; the same instance as fraudshield.redis-uri,
+  # with timeouts of a few hundred milliseconds so a slow Redis degrades to the database fallbacks.
+  data:
+    redis:
+      url: ${FRAUDSHIELD_REDIS_URI:redis://127.0.0.1:6379}
+      timeout: 300ms
+      connect-timeout: 300ms
+  # Staff email (registration, unlock, password reset); Mailpit locally (D-51).
+  mail:
+    host: ${FRAUDSHIELD_SMTP_HOST:127.0.0.1}
+    port: ${FRAUDSHIELD_SMTP_PORT:1025}
 
 server:
   port: ${FRAUDSHIELD_API_PORT:8080}
@@ -62,3 +73,20 @@ fraudshield:
   idempotency-lease: 10s
   duplicate-wait: 1s
   batch-threads: 16
+  # Staff identity and API keys (M7, backend/auth/README.md). Every secret is required: without one
+  # the application refuses to start (H.1).
+  auth:
+    environment: ${FRAUDSHIELD_API_KEY_ENVIRONMENT:dev}
+    console-base-url: ${FRAUDSHIELD_CONSOLE_BASE_URL:}
+    mail-from: ${FRAUDSHIELD_MAIL_FROM:}
+    token-key-hex: ${FRAUDSHIELD_TOKEN_KEY_HEX:}
+    secret-box-key-id: ${FRAUDSHIELD_SECRET_BOX_KEY_ID:}
+    secret-box-key-hex: ${FRAUDSHIELD_SECRET_BOX_KEY_HEX:}
+    jwt:
+      signing-keys:
+        - kid: ${FRAUDSHIELD_JWT_KEY_ID:}
+          private-key: ${FRAUDSHIELD_JWT_PRIVATE_KEY_FILE:}
+    api-keys:
+      peppers:
+        1: ${FRAUDSHIELD_API_KEY_PEPPER_1:}
+      current-pepper-version: 1

@@ -137,8 +137,11 @@ public class AuthAutoConfiguration {
     return new AccessTokens(keys, jwt.issuer(), jwt.audience(), jwt.accessTokenTtl(), clock);
   }
 
+  // Not "persistenceSettingsGuard": the API application has its own guard of that name, which
+  // checks the same settings (ADR 0068); both run there, and each module stays safe on its own.
   @Bean
-  PersistenceSettingsGuard persistenceSettingsGuard(org.springframework.core.env.Environment env) {
+  PersistenceSettingsGuard authPersistenceSettingsGuard(
+      org.springframework.core.env.Environment env) {
     return new PersistenceSettingsGuard(env);
   }
 

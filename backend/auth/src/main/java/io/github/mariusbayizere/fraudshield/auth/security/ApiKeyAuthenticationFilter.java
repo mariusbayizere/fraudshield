@@ -1,6 +1,7 @@
 package io.github.mariusbayizere.fraudshield.auth.security;
 
 import io.github.mariusbayizere.fraudshield.auth.apikey.ApiKeyAuthenticator;
+import io.github.mariusbayizere.fraudshield.auth.apikey.ApiKeyPrincipal;
 import io.github.mariusbayizere.fraudshield.auth.ratelimit.RateLimiter;
 import io.github.mariusbayizere.fraudshield.auth.web.ProblemException;
 import io.github.mariusbayizere.fraudshield.auth.web.ProblemWriter;
@@ -11,6 +12,8 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Objects;
+import java.util.Optional;
+import org.springframework.dao.DataAccessException;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -56,7 +59,16 @@ public final class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
       ProblemWriter.write(ProblemException.unauthorized(), request, response);
       return;
     }
-    var principal = authenticator.authenticate(key);
+    Optional<ApiKeyPrincipal> principal;
+    try {
+      principal = authenticator.authenticate(key);
+    } catch (DataAccessException storeDown) {
+      // The key's record could not be read (PostgreSQL unavailable past the cache). Answering 401
+      // would tell the client its key is bad; it is not, so it is told to retry (threat model
+      // R-13).
+      ProblemWriter.write(ProblemException.serviceUnavailable(1), request, response);
+      return;
+    }
     if (principal.isEmpty()) {
       RateLimiter.Decision decision =
           limiter.attempt(FAILURE_KEY + request.getRemoteAddr(), MAX_FAILURES, FAILURE_WINDOW);

@@ -62,7 +62,9 @@ public final class ApiKeyFilter extends OncePerRequestFilter {
   protected void doFilterInternal(
       HttpServletRequest request, HttpServletResponse response, FilterChain chain)
       throws ServletException, IOException {
-    UUID correlation = UUID.randomUUID();
+    // An earlier filter (the staff module's, in the assembled application) may already have given
+    // the request its id; keeping it means the response header, problem body and logs agree.
+    UUID correlation = existingCorrelation(response).orElseGet(UUID::randomUUID);
     request.setAttribute(CORRELATION, correlation);
     response.setHeader("X-Correlation-Id", correlation.toString());
     String path = request.getRequestURI().substring(request.getContextPath().length());
@@ -85,6 +87,18 @@ public final class ApiKeyFilter extends OncePerRequestFilter {
     }
     request.setAttribute(PRINCIPAL, principal.get());
     chain.doFilter(request, response);
+  }
+
+  private static Optional<UUID> existingCorrelation(HttpServletResponse response) {
+    String header = response.getHeader("X-Correlation-Id");
+    if (header == null) {
+      return Optional.empty();
+    }
+    try {
+      return Optional.of(UUID.fromString(header));
+    } catch (IllegalArgumentException e) {
+      return Optional.empty();
+    }
   }
 
   static void write(HttpServletResponse response, int status, Object body) throws IOException {

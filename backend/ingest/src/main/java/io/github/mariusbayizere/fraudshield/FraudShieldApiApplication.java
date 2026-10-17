@@ -5,11 +5,10 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
 /**
- * The FraudShield API process (C.1 {@code fraudshield-api}). Scans the whole {@code
- * io.github.mariusbayizere.fraudshield} package, so modules built in parallel contribute their
- * beans: the API-key module (M7) must provide an {@link
- * io.github.mariusbayizere.fraudshield.ingest.auth.ApiKeyAuthenticator}, and the application
- * refuses to start without one.
+ * The FraudShield API process (C.1 {@code fraudshield-api}): the ingestion and decision path (M6)
+ * assembled with staff identity, API keys, administration and audit (M7). It scans the whole {@code
+ * io.github.mariusbayizere.fraudshield} package; M7's modules contribute their auto-configurations,
+ * and {@code StaffIdentityWiring} binds the ingestion API's ports to them.
  */
 @SpringBootApplication
 @ConfigurationPropertiesScan

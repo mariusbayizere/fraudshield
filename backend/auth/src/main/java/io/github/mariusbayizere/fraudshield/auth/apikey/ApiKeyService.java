@@ -18,6 +18,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -246,6 +247,72 @@ public final class ApiKeyService {
                 .webhookSecretCiphertext(apiKeyId)
                 .map(ciphertext -> secretBox.open(ciphertext, webhookAad(keyId)))
                 .orElse(null));
+  }
+
+  /**
+   * Where an institution's {@code decision.final} webhooks go, and the secrets that sign them.
+   *
+   * @param url the HTTPS URL registered with the institution's newest live key
+   * @param secrets the signing secret of every live key registered with that URL, newest first: two
+   *     during a rotation overlap, so a receiver that has not yet switched still verifies
+   */
+  public record WebhookEndpoint(String url, List<String> secrets) {
+
+    /** Copies the secrets. */
+    public WebhookEndpoint {
+      Objects.requireNonNull(url, "url");
+      secrets = List.copyOf(secrets);
+    }
+
+    @Override
+    public String toString() {
+      return "WebhookEndpoint[url=" + url + ", secrets=<" + secrets.size() + " redacted>]";
+    }
+  }
+
+  /**
+   * The webhook endpoint of an institution, for the webhook dispatcher (M6's {@code
+   * WebhookEndpoints}). A key is live while it is active, or rotating within its overlap; a revoked
+   * or expired key's secret no longer signs anything.
+   *
+   * @param institutionId institution
+   * @return the endpoint, or empty when no live key has a webhook
+   */
+  public Optional<WebhookEndpoint> webhookEndpoint(UUID institutionId) {
+    return tenants.inTenant(
+        institutionId,
+        () -> {
+          Instant now = clock.instant();
+          List<ApiKeyRecord> live =
+              repository.list().stream()
+                  .filter(key -> key.webhookUrl() != null && live(key, now))
+                  .toList();
+          if (live.isEmpty()) {
+            return Optional.empty();
+          }
+          String url = live.getFirst().webhookUrl();
+          List<String> secrets =
+              live.stream()
+                  .filter(key -> key.webhookUrl().equals(url))
+                  .flatMap(
+                      key ->
+                          repository
+                              .webhookSecretCiphertext(key.id())
+                              .map(box -> secretBox.open(box, webhookAad(key.keyId())))
+                              .stream())
+                  .toList();
+          return secrets.isEmpty()
+              ? Optional.empty()
+              : Optional.of(new WebhookEndpoint(url, secrets));
+        });
+  }
+
+  private static boolean live(ApiKeyRecord key, Instant now) {
+    return switch (key.state()) {
+      case "ACTIVE" -> true;
+      case "ROTATING" -> key.expiresAt() != null && key.expiresAt().isAfter(now);
+      default -> false;
+    };
   }
 
   private Issued issue(
