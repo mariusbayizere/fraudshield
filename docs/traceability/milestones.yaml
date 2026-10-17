@@ -6,11 +6,12 @@
 # (FR-02-07, FR-02-09, ML-GATE-12, ML-GATE-13, TEST-10, D-16) were re-filed under M10, where
 # they close (owner decision 2026-10-17; traceability_seed.py records each carry). FR-02-09
 # also needs M6's PB-69..PB-71 first.
-# M6's open Must rows were re-filed under the milestones that close them (owner decision
-# 2026-10-17; traceability_seed.py records each carry), except ML-DATA-07, which no planned
-# milestone closes: six features read data the benchmark does not have. Until the owner decides
-# its home, M6 cannot be listed as completed (check rule 7).
-# "current" is the milestone on the integration path. M7-M11 progress on their own branches
-# (docs/parallel/).
-current: M6
-completed: [M0, M1, M2, M3, M4, M5]
+# M6 (m6-complete; implementation-3 review and its delta checks, docs/reviews/M6/) is listed after
+# its open Must rows were re-filed under the milestones that close them (owner decision
+# 2026-10-17; traceability_seed.py records each carry), and ML-DATA-07, which no milestone can
+# close by doing work, was closed as DONE_WITH_DEVIATION (ADR 0055: five features have no source
+# data on this benchmark).
+# "current" is the milestone on the integration path: M7, the next to merge. M8-M11 progress on
+# their own branches (docs/parallel/).
+current: M7
+completed: [M0, M1, M2, M3, M4, M5, M6]

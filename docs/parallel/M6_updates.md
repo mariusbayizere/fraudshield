@@ -8,7 +8,7 @@ those files. Facts only; where something is unverified or open it says so.
 
 | Kind | Reserved for M6 | Used |
 |---|---|---|
-| ADR | `0060`–`0069`, then down from `0059` (block full; ADR 0060 revised) | 0060–0069 (0068 hybrid persistence, 0069 the PII vault), 0059 (the latency gate) |
+| ADR | `0060`–`0069`, then down from `0059` (block full; ADR 0060 revised) | 0060–0069 (0068 hybrid persistence, 0069 the PII vault), 0059 (the latency gate), 0058, 0057, 0056, 0055 (claimed 2026-10-17: ML-DATA-07's deviation) |
 | Flyway | `V60`–`V69` | V60 account profiles, V61 FX rates, V62 hold reconciliation, V63 webhook deliveries, V64 unblock reconciliation, V65 unfinished batch jobs, V66 the scorer's account context on `fraud_scores`, V67 the feature-store fallback (tables, `fs_scorer` functions) |
 | Vault Flyway (`db/vault`) | M6 only | V1 contacts, V2 tokenisation map, V3 contact token length |
 | Backlog | `PB-77` to `PB-101` (claimed 2026-10-17, after reading every branch's backlog and updates files: `PB-76` is M4's) | PB-77 the window between the provider's acceptance and the recorded outcome (contract 13.1); PB-78 the rebalance test that does not show the move (implementation-2 m3; first carried to M10, then folded into this round by the owner, 2026-10-17: to be resolved by this round); PB-79 a provider outage ends the notice (contract 13.2); PB-80 to PB-101 the 22 section-8 rows proved only in part, one row each, their "not proved" wording carried into `docs/backlog/product.md` (owner, 2026-10-17) |
@@ -1063,3 +1063,10 @@ the owner to apply or change:
 - **I.5, review record template**: rename "Mutation spot checks (what was broken → which test
   failed)" to "Deletion checks (code deleted → which test failed, or none)", and require one line per
   claimed-tested row in scope.
+
+**M6's close in the register** (owner decision, 2026-10-17): its open Must rows are re-filed under
+the milestones that close them (`7f4f21d`, `95a0192`, reviewed APPROVED), and ML-DATA-07 is
+`DONE_WITH_DEVIATION` under ADR 0055: five features (not six: `round_sum_flag` became computable on
+2026-09-20) have no source data on this benchmark. `milestones.yaml` lists M6 as completed, and
+`current` is M7. The master-prompt amendment proposed above was approved by the owner as drafted and
+is applied in its own commit.

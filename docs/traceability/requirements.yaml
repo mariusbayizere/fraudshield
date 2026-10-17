@@ -2673,20 +2673,26 @@ requirements:
     Rationale: Missing features handled by median imputation; completeness verified in pipeline'
   defects:
   - D-04
-  status: NOT_STARTED
+  status: DONE_WITH_DEVIATION
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
-  notes: 'M3 measurement (PB-44, 2026-09-20): all 44 features are implemented on both paths, and SIX cannot
-    be computed on this benchmark because the data they read does not exist - account_age_days, counterparty_account_age_days,
-    kyc_tier, agent_float_utilisation_ratio, agent_distance_from_registered_km, round_sum_flag. They return
-    NaN for every row, which D-04''s missing handling covers, so nothing raises and the count still reads
-    44. The ''>= 98% computable'' clause is therefore satisfied in the sense of not raising while six
-    features carry nothing. The registry declares computable per feature and ''fs-features computability''
-    fails if a COMPUTABLE feature is NaN for 100% of rows or a NO_SOURCE_DATA one is not. See docs/features.md.
-    M6 (2026-09-24): not M6''s: feature completeness is measured on the feature pipeline (M3, PB-44) and
-    the scorer (M5). The row''s milestone should be revisited at integration.'
+  implementation:
+  - ml/src/fraudshield_ml/features/registry.py
+  - ml/src/fraudshield_ml/cli.py
+  evidence:
+  - ml/tests/features/test_completeness.py
+  - docs/features.md
+  deviations:
+  - docs/adr/0055-five-features-have-no-source-data-on-this-benchmark.md
+  notes: 'Owner decision 2026-10-17 (ADR 0055): DONE_WITH_DEVIATION. All 44 features are implemented on
+    both paths; FIVE cannot be computed on this benchmark because the data they read does not exist -
+    account_age_days, counterparty_account_age_days, kyc_tier, agent_float_utilisation_ratio, agent_distance_from_registered_km.
+    They return NaN for every record, which D-04''s missing handling covers, so the pipeline degrades
+    without error. The ''>= 98% computable'' criterion is NOT met in substance: five of 44 features are
+    missing for every record. A deployment fed by an institution''s account master, KYC records and agent
+    ledger would supply them; the gap is a property of the benchmark, not of the design. The registry
+    declares the five NO_SOURCE_DATA and ''fs-features computability'' fails if one produces a number.
+    round_sum_flag, the sixth in M3''s measurement (PB-44, 2026-09-20), became computable that day through
+    the packs'' round_denominations (ADR 0023), whose values are ASSUMED. Flagged to M11 for the limitations.'
 - id: ML-DATA-08
   section: 7.1 Dataset
   title: Dataset release
