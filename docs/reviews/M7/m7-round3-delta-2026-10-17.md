@@ -53,3 +53,16 @@ recomputed from the contract and the controllers, and the M8 mock claim was chec
 | N2 | `ApiKeyService.ACTIVE_FIRST` is unit-tested directly (`WebhookOrderTest`) |
 | N3 | The dead-letter wiring test also sends a well-formed payload without its `event_id` header, which must reach the dead-letter topic as `malformed_envelope`. The narrowing itself stays untested: no reachable input raises an `IllegalArgumentException` inside the append's transaction, since `parse` validates every field first and the database constrains the role |
 | N4 | Stated: the 48 less the public `/environment` |
+
+## Second delta re-check (`6ec6ef3..0de4d0e`): CHANGES_REQUIRED, and the response
+
+A fresh reviewer re-checked the fixes. Findings 1 to 4, N1, N3 and N4 above are closed; finding 5
+is closed in code but was untested; N2 is closed in part (the comparator is proved, not its use in
+`webhookEndpoint`). Its new findings:
+
+| # | Severity | Finding | Response |
+|---|---|---|---|
+| A | MAJOR | The fix for finding 1 refused every request but the first that was blocked on the same read: the others' `replace` failed against the first one's renewal, and they answered 503 through a hanging outage, against D-15 | When `replace` fails, the entry is read again: a renewal of the same read (same last-read time, same record instance) is served, and so is a record a request has read successfully since; only an evicted entry is refused. `requestsBlockedOnTheSameReadAreAllAdmitted` releases two blocked reads at once and requires both to be admitted |
+| B | MINOR | The window is not "the 2 s before the outage": an idle key's record read up to 10 minutes before the outage is still served, so an unannounced revocation in those 10 minutes is missed even when every instance is down | R-13, ADR 0073, the Javadoc and M7_updates state that window; **the owner's decision is requested** |
+| C | NIT | A pooled connection can block for the 10 s socket timeout, not the pool's 2 s | ADR 0073 says so |
+| D | NIT | The post-read renewal timestamp was untested | `failedReadThatBlockedPastTheCacheTtlIsNotRepeatedOnTheNextRequest`: a failed read that advances the clock 2.5 s, then a request a second later must not read again |
