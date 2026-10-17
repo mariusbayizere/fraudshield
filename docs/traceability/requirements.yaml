@@ -9,7 +9,7 @@ requirements:
   title: POST /api/v1/transactions/ingest accepts transaction payload; validates schema; publishes to
     Kafka within 5ms
   priority: M
-  milestone: M6
+  milestone: M10
   srs_text: 'Acceptance criterion: Locust load test: 10,000 req/sec for 60 seconds; all within 5ms Kafka
     publish latency; zero data loss confirmed by consumer offset check'
   defects:
@@ -124,7 +124,7 @@ requirements:
   title: API key authentication for core banking system (machine-to-machine); JWT for human-facing endpoints;
     keys scoped to ingestion endpoints only
   priority: M
-  milestone: M6
+  milestone: M7
   srs_text: 'Acceptance criterion: API key cannot access /api/v1/alerts or /api/v1/admin; confirmed by
     permission test; key rotation supported without downtime'
   defects: []
@@ -144,7 +144,7 @@ requirements:
   title: Batch ingestion POST /api/v1/transactions/ingest/batch accepts up to 1,000 transactions; returns
     202 Accepted with job_id; results queryable
   priority: S
-  milestone: M6
+  milestone: M10
   srs_text: 'Acceptance criterion: Job status endpoint GET /api/v1/jobs/{id} returns progress; all 1,000
     transactions scored within 30 seconds'
   defects: []
@@ -467,7 +467,7 @@ requirements:
   title: 'HIGH risk (ensemble_score >= 0.85): auto-blocked within 50ms of transaction receipt; account
     flagged; customer SMS dispatched asynchronously'
   priority: M
-  milestone: M6
+  milestone: M10
   srs_text: 'Acceptance criterion: Load test: 1,000 HIGH-risk events/sec; all blocked within 50ms p95;
     0 incorrectly approved; SMS dispatched within 5s'
   defects:
@@ -520,7 +520,7 @@ requirements:
   section: 3.3 FR-03 Risk decision and auto-block engine
   title: 'LOW risk (< 0.60): approved and processed within total pipeline latency budget; no analyst involvement'
   priority: M
-  milestone: M6
+  milestone: M10
   srs_text: 'Acceptance criterion: Approval decision within 50ms total; approval rate consistent with
     expected 0.87% fraud rate in test set'
   defects: []
@@ -1410,7 +1410,7 @@ requirements:
   section: 4.2 Security
   title: SQL injection prevention
   priority: M
-  milestone: M6
+  milestone: M9
   srs_text: 'Implementation: Spring Data JPA parameterised queries; Python SQLAlchemy ORM throughout;
     zero raw SQL string concatenation; Verification: OWASP ZAP automated scan: 0 SQL injection findings;
     SonarQube: 0 injection hotspots'
@@ -1542,7 +1542,7 @@ requirements:
   section: 4.3 Reliability
   title: Redis feature store down
   priority: M
-  milestone: M6
+  milestone: M10
   srs_text: 'System Behaviour: Feature engineering uses DB fallback for velocity features; performance
     degrades but system continues; Recovery: Redis reconnects automatically; feature store rebuilt from
     PostgreSQL within 5 minutes; Test: Unit: all Redis calls wrapped in try/except with DB fallback path
@@ -1565,7 +1565,7 @@ requirements:
   section: 4.3 Reliability
   title: PostgreSQL primary failure
   priority: M
-  milestone: M6
+  milestone: M9
   srs_text: 'System Behaviour: TimescaleDB replica promoted within 30 seconds via Kubernetes operator;
     brief write pause; Recovery: Automatic failover; < 30 second write downtime; synchronous replica ensures
     zero data loss; Test: Chaos engineering: DB primary pod deleted; replica promotion timed'
@@ -1585,7 +1585,7 @@ requirements:
   section: 4.3 Reliability
   title: Duplicate transaction storm
   priority: M
-  milestone: M6
+  milestone: M10
   srs_text: 'System Behaviour: Idempotency key in Redis (24h TTL) ensures each transaction_id scored exactly
     once; Recovery: Cache hit returns in < 1ms; no reprocessing; no duplicate blocks; Test: Load test:
     10,000 identical transaction_ids; exactly 1 scored; all return cached response'
@@ -1606,7 +1606,7 @@ requirements:
   section: 4.3 Reliability
   title: Google OAuth service unavailable
   priority: M
-  milestone: M6
+  milestone: M7
   srs_text: 'System Behaviour: Email + password auth continues; Google OAuth button shows ''Temporarily
     unavailable''; no system downtime; Recovery: OAuth-only users prompted to set password via email OTP;
     all other auth unaffected; Test: Integration: Google JWKS endpoint mocked as 503; email auth confirmed
@@ -3453,7 +3453,7 @@ requirements:
   section: 9 Testing requirements
   title: 'Integration: Transaction Pipeline'
   priority: M
-  milestone: M6
+  milestone: M10
   srs_text: 'Framework: JUnit 5 + Testcontainers; Coverage Target: End-to-end from HTTP to analyst dashboard;
     Key Scenarios: Transaction ingested -> Kafka published -> ML scored -> risk decision -> auto-block
     OR analyst alert; p95 < 50ms confirmed; duplicate idempotency: 100 identical submissions = 1 scored'
@@ -4036,7 +4036,7 @@ requirements:
   title: The latency budget sums to 51 ms and puts PostgreSQL and Kafka round-trips in the synchronous
     path, but the p95 target is 50 ms.
   priority: M
-  milestone: M6
+  milestone: M10
   srs_text: See docs/srs/defect_register.md
   defects: []
   affects:
@@ -4748,7 +4748,7 @@ requirements:
   section: Build prompt Part B defect register
   title: External services must work locally and in CI without real credentials.
   priority: M
-  milestone: M6
+  milestone: M7
   srs_text: See docs/srs/defect_register.md
   defects: []
   affects:

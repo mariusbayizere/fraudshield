@@ -166,7 +166,7 @@ DEFECT_MILESTONES: dict[str, str] = {
     # need primary sources only the author can supply. C-6 was measured in M4.
     "D-09": "M11",
     **dict.fromkeys(("D-11", "D-50"), "M5"),
-    **dict.fromkeys(("D-10", "D-12", "D-13", "D-14", "D-15", "D-17", "D-18", "D-25", "D-51"), "M6"),
+    **dict.fromkeys(("D-10", "D-12", "D-14", "D-15", "D-17", "D-18", "D-25"), "M6"),
     **dict.fromkeys(("D-19", "D-23", "D-24", "D-26", "D-27"), "M7"),
     **dict.fromkeys(
         (
@@ -193,6 +193,12 @@ DEFECT_MILESTONES: dict[str, str] = {
     # Carried M5 -> M10 (owner decision 2026-10-17): the resolution is built and the remaining
     # gap is ADR 0032's throughput measurement, which needs M10's dedicated machine (ADR 0010).
     "D-16": "M10",
+    # Carried M6 -> M10 (owner decision 2026-10-17): the resolution is built; whether the p95 meets
+    # 50 ms is PB-73's measurement on the dedicated machine (ADR 0059, ADR 0010).
+    "D-13": "M10",
+    # Carried M6 -> M7 (owner decision 2026-10-17): M6's external services run without real
+    # credentials; what remains is Google OAuth, which is staff authentication.
+    "D-51": "M7",
 }
 
 FR_MILESTONE_OVERRIDES: dict[str, str] = {
@@ -214,6 +220,15 @@ FR_MILESTONE_OVERRIDES: dict[str, str] = {
     "FR-06-06": "M7",
     "FR-06-07": "M7",
     "FR-06-05": "M9",
+    # Carried M6 -> M10 (owner decision 2026-10-17, ADR 0059): the behaviour is built; the latency
+    # criteria (PB-73) and the 30 s batch (PB-74) are measured on the dedicated machine.
+    "FR-01-01": "M10",
+    "FR-01-06": "M10",
+    "FR-03-01": "M10",
+    "FR-03-03": "M10",
+    # Carried M6 -> M7 (owner decision 2026-10-17): M6 built the ApiKeyAuthenticator port and the
+    # machine-path scopes; key verification, rotation and staff-path 403s are M7's.
+    "FR-01-05": "M7",
 }
 
 FR_GROUP_MILESTONE = {
@@ -258,7 +273,20 @@ ROW_MILESTONE_OVERRIDES = {
     # PB-37 records as absent. M6 is the last of the enabling milestones.
     "ML-DATA-07": "M6",
     "NFR-SEC-05": "M1",
-    "NFR-SEC-06": "M6",
+    # Carried M6 -> M9 (owner decision 2026-10-17): every M6 statement is parameterised; the
+    # verification the row names (OWASP ZAP, SonarQube) is M9's security scanning.
+    "NFR-SEC-06": "M9",
+    # Carried M6 -> M10 (owner decision 2026-10-17): the unmeasured "rebuilt from PostgreSQL within
+    # 5 minutes" is verification-campaign work; the feature store's fallback (PB-69, on
+    # m6/featurestore-fallback) must be merged first.
+    "NFR-REL-03": "M10",
+    # Carried M6 -> M9 (owner decision 2026-10-17): replica promotion by an operator is deployment.
+    "NFR-REL-04": "M9",
+    # Carried M6 -> M10 (owner decision 2026-10-17): the "< 1 ms cache hit" is a benchmark
+    # (ADR 0010).
+    "NFR-REL-05": "M10",
+    # Moved M6 -> M7 (owner decision 2026-10-17): Google OAuth fallback is staff authentication.
+    "NFR-REL-06": "M7",
     "NFR-SEC-03": "M7",  # ADR 0021: vault and tokenisation M6, analyst inspector test M7
     # Carried M5 -> M10 (owner decision 2026-10-17, ADR 0035): ML-GATE-12 needs the dedicated
     # machine; ML-GATE-13's gate logic is built and needs a deployment running the shadow
@@ -271,7 +299,9 @@ ROW_MILESTONE_OVERRIDES = {
     "TEST-02": "M4",
     "TEST-03": "M6",
     "TEST-04": "M7",
-    "TEST-05": "M6",
+    # Carried M6 -> M10 (owner decision 2026-10-17): "p95 < 50 ms confirmed" is PB-73's measurement;
+    # the analyst-dashboard end (M7/M8) lands before M10.
+    "TEST-05": "M10",
     "TEST-06": "M8",
     "TEST-07": "M7",
     "TEST-08": "M5",
