@@ -22,10 +22,14 @@ of them read data that this benchmark does not contain, so they cannot be comput
 | `agent_float_utilisation_ratio` | the agent's float balance and float limit as of the transaction | the agent network's float ledger |
 | `agent_distance_from_registered_km` | the agent's registered premises as of the transaction | the agent network's registry |
 
-A sixth, `round_sum_flag`, was on the same list until 2026-09-20, when the country packs gained a
-`round_denominations` field (ADR 0023) and it became computable. Its denominations are themselves
-ASSUMED, not a sourced banknote series (`docs/features.md`); that is a separate limitation of the
-packs, not of this row.
+A sixth, `round_sum_flag`, was on the same list until 2026-09-20. It closed **only** because the
+country packs gained a `round_denominations` field (ADR 0023) whose values are **ASSUMED**: plausible
+note and typing steps for each currency, not a banknote series read from any central-bank source
+(`docs/features.md`). **An assumed value is not source data.** `round_sum_flag` is computable in the
+registry's sense, it produces a number for every record, but that number rests on an assumption
+the project wrote, not on data it observed. So the count here is five features with *no* data, and
+a sixth whose data is *assumed*; they are different limitations and must not be merged into one
+figure, nor the sixth left out.
 
 ML-DATA-07 was filed under M6 as the last milestone expected to supply tables for these features
 (ADR 0027). M6 created no source for this data, and no planned milestone does: the synthetic
@@ -58,7 +62,8 @@ milestones (M9, M10) operate the system rather than feed it a bank's master data
   because the missing thing is data the benchmark does not have, so a home for it would be a
   fiction.
 - **It is reported where the results are.** Every model figure in this project is trained and
-  evaluated without these five features. The paper's limitations section states it beside the two
+  evaluated without these five features, and with `round_sum_flag` computed from assumed
+  denominations. The paper's limitations section states it beside the two
   generalisation nulls, not in a footnote (flagged to M11, `docs/parallel/M11_updates.md`).
 
 ## Consequences

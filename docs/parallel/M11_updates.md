@@ -277,6 +277,13 @@ figure in the paper is trained and evaluated without them. A deployment fed by a
 account master, KYC records and agent ledger would supply them; the gap is the benchmark's, not the
 design's.
 
+**A sixth feature is a different limitation, and must be stated as one.** `round_sum_flag` is
+computable only because the country packs supply `round_denominations`, whose values are ASSUMED
+(plausible note and typing steps, not a sourced banknote series). An assumed value is not source
+data: the feature produces a number for every record, but the number rests on the project's own
+assumption. Write it as "five features with no source data, and one computed from assumed
+denominations", not as "six missing" and not by leaving the sixth out.
+
 The owner's instruction: this belongs **in the limitations section beside the two generalisation
 nulls, not in a footnote**. State the count (five of 44, about 11 %), what each needs, and that the
 reported metrics are therefore those of a 39-feature model on this benchmark. The README's M3 line ("36
