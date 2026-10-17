@@ -36,6 +36,11 @@ def load() -> ModuleType:
     return module
 
 
+# Letters and digits alternate, so no English stopword (three letters or more) can occur in it:
+# detectable on every run, unlike a random draw.
+GOOD = "tok_7Q9z3K8w2M4x6B1v5N0c7P2d"
+
+
 @pytest.fixture(scope="module")
 def selftest() -> ModuleType:
     if not (ROOT / "tools" / "bin" / "gitleaks").exists():
@@ -44,11 +49,18 @@ def selftest() -> ModuleType:
 
 
 def test_generated_values_are_all_detected(selftest: ModuleType) -> None:
-    """One scan over many generated values: every one must be reported."""
-    values = {
-        f"tok{index:03d}": f"tok_{selftest.random_text(selftest.ALNUM, 24, digit=True)}"
-        for index in range(120)
-    }
+    """One scan over many values drawn as the self-test draws them: every one must be reported.
+
+    The draw goes through fresh_secrets, which probes each value with the scanner and regenerates
+    any it would skip. Raw random_text values are not enough: a digit avoids the all-letters
+    allowlist but not a stopword substring, about 0.4% per value, so 120 raw draws fail about a
+    third of runs.
+    """
+
+    def draw() -> str:
+        return f"tok_{selftest.random_text(selftest.ALNUM, 24, digit=True)}"
+
+    values = selftest.fresh_secrets({f"tok{index:03d}": draw for index in range(120)})
     assert selftest.detectable(values) == set(values)
 
 
@@ -60,7 +72,7 @@ def test_the_probe_can_fail_so_the_check_is_not_vacuous(selftest: ModuleType) ->
     """
     letters_only = "tok_" + selftest.random_text(string.ascii_letters, 24)
     stopword = "tok_" + f"httpA1{selftest.random_text(string.ascii_letters, 18)}"
-    good = "tok_" + selftest.random_text(selftest.ALNUM, 24, digit=True)
+    good = GOOD
     found = selftest.detectable({"letters": letters_only, "stop": stopword, "good": good})
     assert found == {"good"}
 
@@ -73,7 +85,7 @@ def test_a_value_the_scanner_skips_is_regenerated(selftest: ModuleType) -> None:
         drawn.append("call")
         if len(drawn) == 1:
             return "tok_" + str(selftest.random_text(string.ascii_letters, 24))  # all letters
-        return "tok_" + str(selftest.random_text(selftest.ALNUM, 24, digit=True))
+        return GOOD
 
     values = selftest.fresh_secrets({"key": undetectable_then_good})
     assert len(drawn) > 1, "the first, undetectable value was planted"

@@ -61,6 +61,12 @@ CREATE FUNCTION audit_chain_last_seq_before(p_writer_partition smallint, p_befor
     WHERE e.writer_partition = p_writer_partition AND e.recorded_at < p_before
   $$;
 
+-- SECURITY DEFINER functions are executable by PUBLIC on creation: V11's default privileges apply
+-- only to objects created by the role that set them, so each function is closed explicitly before
+-- its grant, as M6's migrations do (otherwise every role, fs_scorer included, could call them).
+REVOKE ALL ON FUNCTION auth_employee_id_registered(text), auth_find_user_institution(uuid),
+  audit_chain_head(smallint), audit_chain_hashes(smallint, bigint, bigint),
+  audit_chain_last_seq_before(smallint, timestamptz) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION auth_employee_id_registered(text), auth_find_user_institution(uuid) TO fs_app;
 GRANT EXECUTE ON FUNCTION audit_chain_last_seq_before(smallint, timestamptz) TO fs_compliance_ro;
 GRANT EXECUTE ON FUNCTION audit_chain_head(smallint), audit_chain_hashes(smallint, bigint, bigint)
