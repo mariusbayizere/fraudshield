@@ -13,6 +13,8 @@ public interface SmsGateway {
    * @param phoneE164 recipient
    * @param text GSM-7 text, one segment
    * @return the provider's message reference
+   * @throws ProviderReplyUnknownException when the provider may have accepted the message but no
+   *     readable acceptance came back
    * @throws IOException when the provider did not accept the message
    */
   String send(String senderId, String phoneE164, String text) throws IOException;

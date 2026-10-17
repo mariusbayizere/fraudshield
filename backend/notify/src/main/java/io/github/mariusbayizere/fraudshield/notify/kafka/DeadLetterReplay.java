@@ -158,16 +158,30 @@ public final class DeadLetterReplay {
         ProducerRecord<String, byte[]> again =
             new ProducerRecord<>(target == null ? topic : target, record.key(), record.value());
         int replayed = 0;
+        String result = header(record, EnvelopeConsumer.DLQ_RESULT_HEADER);
         for (Header h : record.headers()) {
           if (h.key().equals(EnvelopeConsumer.REPLAYED_HEADER)) {
             try {
-              replayed = Integer.parseInt(new String(h.value(), StandardCharsets.UTF_8).trim());
+              replayed =
+                  h.value() == null
+                      ? 0
+                      : Integer.parseInt(new String(h.value(), StandardCharsets.UTF_8).trim());
             } catch (NumberFormatException unreadable) {
               replayed = 0;
             }
+          } else if (h.key().equals(EnvelopeConsumer.KEPT_RESULT_HEADER) && result != null) {
+            // Replaced below: a record never carries more than one kept result (D-c).
+            continue;
           } else if (!h.key().startsWith(EnvelopeConsumer.DLQ_HEADER_PREFIX)) {
             again.headers().add(h.key(), h.value());
           }
+        }
+        if (result != null) {
+          // A dead letter written after a send carries its result; replayed, the consumer records
+          // it and sends nothing (12.4, D-c).
+          again
+              .headers()
+              .add(EnvelopeConsumer.KEPT_RESULT_HEADER, result.getBytes(StandardCharsets.UTF_8));
         }
         again
             .headers()

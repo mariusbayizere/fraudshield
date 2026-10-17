@@ -3,8 +3,6 @@ package io.github.mariusbayizere.fraudshield.notify.kafka;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * One partition's wait budget: a leaky bucket of the time its records have spent waiting for their
@@ -26,9 +24,6 @@ final class WaitBudget {
     NEUTRAL,
     DRAINING
   }
-
-  private static final Pattern CHECKPOINT =
-      Pattern.compile("^fs-wait:v2 offset=(\\d+) spent_ms=(\\d+) at=(\\d+)$");
 
   private final long boundNanos;
   private final double drainRate;
@@ -116,7 +111,8 @@ final class WaitBudget {
   }
 
   /**
-   * The checkpoint carried by a commit of {@code offset}, or empty when nothing is spent (W-e).
+   * The checkpoint carried by a commit of {@code offset} when the head holds no retry state and no
+   * kept result, or empty when nothing is spent (W-e, W-e2).
    *
    * @param offset the committed offset
    * @param nowNanos now
@@ -124,10 +120,7 @@ final class WaitBudget {
    * @return the metadata, or an empty string
    */
   String checkpoint(long offset, long nowNanos, long epochMillis) {
-    long spentMillis = spent(nowNanos).toMillis();
-    return spentMillis <= 0
-        ? ""
-        : "fs-wait:v2 offset=" + offset + " spent_ms=" + spentMillis + " at=" + epochMillis;
+    return new Checkpoint(offset, spent(nowNanos).toMillis(), epochMillis, 0, 0, null).text();
   }
 
   /**
@@ -141,15 +134,25 @@ final class WaitBudget {
    * @return the spent waiting to resume from, and whether its time lay in the future
    */
   static Resumed resume(String metadata, long committedOffset, long epochMillis, double drainRate) {
-    if (metadata == null) {
+    return resume(Checkpoint.parse(metadata), committedOffset, epochMillis, drainRate);
+  }
+
+  /**
+   * What a new owner starts from, given a parsed checkpoint (W-e).
+   *
+   * @param checkpoint the committed checkpoint, if one parsed
+   * @param committedOffset the committed offset
+   * @param epochMillis now, on the wall clock
+   * @param drainRate the drain rate
+   * @return the spent waiting to resume from, and whether its time lay in the future
+   */
+  static Resumed resume(
+      Optional<Checkpoint> checkpoint, long committedOffset, long epochMillis, double drainRate) {
+    if (checkpoint.isEmpty() || checkpoint.get().offset() != committedOffset) {
       return new Resumed(Duration.ZERO, false);
     }
-    Matcher m = CHECKPOINT.matcher(metadata);
-    if (!m.matches() || Long.parseLong(m.group(1)) != committedOffset) {
-      return new Resumed(Duration.ZERO, false);
-    }
-    long spent = Long.parseLong(m.group(2));
-    long at = Long.parseLong(m.group(3));
+    long spent = checkpoint.get().spentMillis();
+    long at = checkpoint.get().atEpochMillis();
     long elapsed = Math.max(0, epochMillis - at);
     long left = Math.max(0, spent - (long) (elapsed * drainRate));
     return new Resumed(Duration.ofMillis(left), at > epochMillis);
@@ -170,8 +173,7 @@ final class WaitBudget {
    * @return the offset it names
    */
   static Optional<Long> checkpointOffset(String metadata) {
-    Matcher m = CHECKPOINT.matcher(metadata == null ? "" : metadata);
-    return m.matches() ? Optional.of(Long.parseLong(m.group(1))) : Optional.empty();
+    return Checkpoint.parse(metadata).map(Checkpoint::offset);
   }
 
   private void settle(long nowNanos) {

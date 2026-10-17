@@ -116,7 +116,9 @@ class WaitBudgetTest {
     WaitBudget budget = empty(0);
     budget.succeeded(0, Kind.WAITING);
     String checkpoint = budget.checkpoint(42, 6 * MIN, 1_000_000L);
-    assertThat(checkpoint).isEqualTo("fs-wait:v2 offset=42 spent_ms=360000 at=1000000");
+    assertThat(checkpoint)
+        .isEqualTo(
+            "fs-wait:v3 offset=42 spent_ms=360000 at=1000000 f4_count=0 f4_ms=0 result=none");
     assertThat(WaitBudget.resume(checkpoint, 42, 1_000_000L, RATE).spent())
         .isEqualTo(Duration.ofMinutes(6));
     assertThat(WaitBudget.resume(checkpoint, 42, 1_000_000L + 60_000, RATE).spent())

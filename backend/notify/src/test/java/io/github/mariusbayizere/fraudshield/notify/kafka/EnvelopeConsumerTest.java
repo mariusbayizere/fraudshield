@@ -410,7 +410,7 @@ class EnvelopeConsumerTest {
       assertThat(first.deadLettered()).isZero();
     }
     OffsetAndMetadata committed = committed(group, topic);
-    assertThat(committed.metadata()).startsWith("fs-wait:v2 offset=" + committed.offset() + " ");
+    assertThat(committed.metadata()).startsWith("fs-wait:v3 offset=" + committed.offset() + " ");
     long spent = Long.parseLong(committed.metadata().replaceAll(".*spent_ms=(\\d+).*", "$1"));
     assertThat(spent).isBetween(3000L, 8000L);
 

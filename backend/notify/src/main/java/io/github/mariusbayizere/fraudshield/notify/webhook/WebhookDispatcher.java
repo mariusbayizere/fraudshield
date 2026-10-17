@@ -1,5 +1,6 @@
 package io.github.mariusbayizere.fraudshield.notify.webhook;
 
+import io.github.mariusbayizere.fraudshield.notify.kafka.MalformedPayloadException;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
@@ -133,12 +134,22 @@ public final class WebhookDispatcher {
    * @throws SQLException when the database is unavailable
    */
   public boolean enqueue(UUID institutionId, JsonNode state) throws SQLException {
-    byte[] finalDecision = JSON.writeValueAsBytes(state);
-    int sequence = state.get("decision_sequence").asInt();
+    // Every field read is validated before anything is written (12.1).
+    JsonNode sequenceNode = state.get("decision_sequence");
+    if (sequenceNode == null
+        || !sequenceNode.isIntegralNumber()
+        || !sequenceNode.canConvertToInt()
+        || sequenceNode.asInt() < 1) {
+      throw new MalformedPayloadException(
+          "a FinalDecision whose decision_sequence is not an integer from 1 to 2^31-1", null);
+    }
+    int sequence = sequenceNode.asInt();
     if (sequence < 2) {
       return false;
     }
-    UUID transaction = UUID.fromString(state.get("transaction_id").asString());
+    UUID transaction = canonicalUuid(state, "transaction_id");
+    UUID eventId = canonicalUuid(state, "event_id");
+    byte[] finalDecision = JSON.writeValueAsBytes(state);
     try (Connection c = dataSource.getConnection()) {
       c.setAutoCommit(false);
       try {
@@ -165,7 +176,7 @@ public final class WebhookDispatcher {
         try (PreparedStatement s = c.prepareStatement(INSERT)) {
           s.setObject(1, institutionId);
           s.setObject(2, transaction);
-          s.setObject(3, UUID.fromString(state.get("event_id").asString()));
+          s.setObject(3, eventId);
           s.setInt(4, sequence);
           s.setString(5, new String(finalDecision, StandardCharsets.UTF_8));
           s.setString(6, pending ? "PENDING" : "SUPERSEDED");
@@ -291,9 +302,25 @@ public final class WebhookDispatcher {
     }
   }
 
+  private static UUID canonicalUuid(JsonNode state, String field) {
+    JsonNode value = state.get(field);
+    if (value == null || !value.isString() || !CANONICAL_UUID.matcher(value.asString()).matches()) {
+      throw new MalformedPayloadException(
+          "a FinalDecision whose " + field + " is not a canonical UUID", null);
+    }
+    return UUID.fromString(value.asString());
+  }
+
+  private static final java.util.regex.Pattern CANONICAL_UUID =
+      java.util.regex.Pattern.compile(
+          "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
+
   private static void tenant(Connection c, UUID institutionId) throws SQLException {
+    // The tenant, and a statement timeout below the pool's socket timeout (12.3).
     try (PreparedStatement s =
-        c.prepareStatement("SELECT set_config('fraudshield.institution_id', ?, true)")) {
+        c.prepareStatement(
+            "SELECT set_config('fraudshield.institution_id', ?, true),"
+                + " set_config('statement_timeout', '5s', true)")) {
       s.setString(1, institutionId.toString());
       s.execute();
     }

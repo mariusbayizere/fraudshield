@@ -154,6 +154,11 @@ public final class VerificationService {
     try (Connection c = dataSource.getConnection()) {
       c.setAutoCommit(false);
       tenant(c, institutionId);
+      // Issued from the SMS consumer: its statements are bounded below the socket timeout (12.3).
+      try (PreparedStatement timeout =
+          c.prepareStatement("SELECT set_config('statement_timeout', '5s', true)")) {
+        timeout.execute();
+      }
       try (PreparedStatement s = c.prepareStatement(ISSUE)) {
         s.setObject(1, institutionId);
         s.setObject(2, autoBlockEventId);

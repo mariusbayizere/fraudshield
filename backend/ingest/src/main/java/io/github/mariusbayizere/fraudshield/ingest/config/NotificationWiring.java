@@ -217,6 +217,12 @@ public class NotificationWiring {
     source.setUrl(vault.url());
     source.setUser(vault.username());
     source.setPassword(vault.password());
+    // Every vault statement is bounded, in a transaction or not (12.3): the statement timeout below
+    // the socket timeout, and the connection itself bounded too.
+    source.setSocketTimeout(10);
+    source.setConnectTimeout(5);
+    source.setLoginTimeout(5);
+    source.setOptions("-c statement_timeout=5000");
     return source;
   }
 
@@ -230,7 +236,8 @@ public class NotificationWiring {
       ObjectProvider<WebhookEndpoints> endpoints,
       ObjectProvider<WebhookTransport> transport,
       ObjectProvider<ContactDirectory> contacts,
-      ObjectProvider<SmsGateway> gateway) {
+      ObjectProvider<SmsGateway> gateway,
+      io.micrometer.core.instrument.MeterRegistry registry) {
     Channels channels = new Channels();
     WebhookEndpoints registry = endpoints.getIfAvailable();
     if (registry == null) {
@@ -253,7 +260,18 @@ public class NotificationWiring {
               Map.of(),
               "fs.decisions.final",
               "webhook-dispatcher",
-              envelope -> dispatcher.enqueue(envelope.institutionId(), envelope.payload())));
+              envelope -> dispatcher.enqueue(envelope.institutionId(), envelope.payload()),
+              EnvelopeConsumer.ParentWait.DEFAULT,
+              EnvelopeConsumer.RetryBound.DEFAULT,
+              registry,
+              clock));
+      java.util.concurrent.atomic.AtomicInteger deliveryRunning =
+          new java.util.concurrent.atomic.AtomicInteger(1);
+      io.micrometer.core.instrument.Gauge.builder(
+              "fs_notify_webhook_delivery_running",
+              deliveryRunning,
+              java.util.concurrent.atomic.AtomicInteger::get)
+          .register(registry);
       ScheduledExecutorService delivery =
           Executors.newSingleThreadScheduledExecutor(
               Thread.ofPlatform().name("webhook-delivery").daemon(true).factory());
@@ -263,6 +281,19 @@ public class NotificationWiring {
               dispatcher.deliverDue(100);
             } catch (SQLException | RuntimeException e) {
               LOG.warn("webhook delivery failed; retrying", e);
+            } catch (Error error) {
+              // The executor owns no consumer (12.2): the task is abandoned, its transaction rolls
+              // back, the row stays PENDING for another instance or a restart, and the executor
+              // accepts no further task, because a periodic task that throws is not run again.
+              registry
+                  .counter("fs_notify_consumer_errors_total", "group", "webhook-delivery")
+                  .increment();
+              deliveryRunning.set(0);
+              LOG.error(
+                  "webhook delivery stopped on an Error; pending deliveries stay PENDING"
+                      + " (docs/architecture/decision-fact-ordering.md, 12.2)",
+                  error);
+              throw error;
             }
           },
           100,
@@ -296,6 +327,10 @@ public class NotificationWiring {
               new SmsCatalogue(),
               clock);
       channels.sender = sender;
+      io.micrometer.core.instrument.FunctionCounter.builder(
+              "fs_notify_resolved_before_send_total", sender, CustomerSmsSender::resolvedBeforeSend)
+          .tag("group", "notification-service")
+          .register(registry);
       channels.running.add(
           new EnvelopeConsumer(
               properties.kafkaBootstrapServers(),
@@ -304,7 +339,15 @@ public class NotificationWiring {
               "notification-service",
               envelope ->
                   sender.send(
-                      envelope.institutionId(), envelope.payload(), envelope.transactionId())));
+                      envelope.institutionId(),
+                      envelope.payload(),
+                      envelope.transaction(),
+                      envelope.kept(),
+                      envelope.keeper()),
+              EnvelopeConsumer.ParentWait.DEFAULT,
+              EnvelopeConsumer.RetryBound.DEFAULT,
+              registry,
+              clock));
     }
     return channels;
   }
