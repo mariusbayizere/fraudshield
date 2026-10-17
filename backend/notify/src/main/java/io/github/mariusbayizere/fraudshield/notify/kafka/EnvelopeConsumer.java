@@ -824,7 +824,7 @@ public final class EnvelopeConsumer implements AutoCloseable {
   /** A failed attempt the record is re-read after, and its class (12.2). */
   private static final class RetryableFailure extends RuntimeException {
     private static final long serialVersionUID = 1L;
-    private final transient FailureClass failureClass;
+    private final FailureClass failureClass;
 
     RetryableFailure(FailureClass failureClass) {
       super(null, null, false, false);
@@ -1141,19 +1141,19 @@ public final class EnvelopeConsumer implements AutoCloseable {
   private Outcome deadLetter(
       PartitionState state, ConsumerRecord<String, byte[]> record, String reason, Exception why) {
     String actual = state.kept != null ? "outcome_unrecorded" : reason;
-    Exception sendFailure;
+    Throwable sendFailure;
     try {
       send(record, actual, why, state.kept, true);
       return recordDeadLetter(record, actual, why);
     } catch (DeadLetterNotSent notSent) {
-      sendFailure = (Exception) notSent.getCause();
+      sendFailure = notSent.getCause();
     }
     if (FailureClass.tooLarge(sendFailure)) {
       try {
         send(record, actual, why, state.kept, false);
         return recordDeadLetter(record, actual, why);
       } catch (DeadLetterNotSent stillNot) {
-        sendFailure = (Exception) stillNot.getCause();
+        sendFailure = stillNot.getCause();
       }
     }
     if (FailureClass.ofDeadLetterSend(sendFailure) == FailureClass.OUTAGE) {
