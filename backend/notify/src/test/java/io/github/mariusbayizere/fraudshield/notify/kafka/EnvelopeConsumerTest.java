@@ -588,14 +588,19 @@ class EnvelopeConsumerTest {
   @Test
   @Tag("FR-03-04")
   void partitionsMovedWhilePausedKeepEveryoneFlowing() throws Exception {
-    // I7e (contract review 5, MINOR 2): a rebalance while a partition is paused must not throw
-    // from a resume of a partition no longer owned, and the new owner re-reads it at once. The
-    // paused partition is then moved to the second member for certain, by closing the first, and
-    // the second member is shown to re-read it (implementation-2 m3, PB-78).
+    // I7e (contract review 5, MINOR 2; PB-78). The orphan sits on partition 2 and pauses it. When
+    // the second member joins, the range assignor gives partitions 0 and 1 to the first member,
+    // whose client id sorts first, and partition 2 to the second: the paused partition moves while
+    // its old owner keeps running. A resume of the partition the first member no longer owns would
+    // throw IllegalStateException inside its poll cycle; the cycle's catch keeps the thread alive
+    // but logs "cycle failed", which this test watches for. Deleting both the owned-partition check
+    // before resume and the revocation's drop of the partition's state fails it; either one alone
+    // still prevents the resume.
     UUID institution = UUID.randomUUID();
     String topic = "fs.ml.retrain";
     String group = "test-group-" + UUID.randomUUID();
     List<String> orphanAttempts = new CopyOnWriteArrayList<>();
+    List<Long> secondOrphanAt = new CopyOnWriteArrayList<>();
     Map<Integer, Long> handledAt = new ConcurrentHashMap<>();
     java.util.function.Function<String, EnvelopeConsumer.Handler> handler =
         member ->
@@ -603,44 +608,176 @@ class EnvelopeConsumerTest {
               int sequence = sequence(envelope);
               if (sequence == 1) {
                 orphanAttempts.add(member);
+                if (member.equals("second")) {
+                  secondOrphanAt.add(System.nanoTime());
+                }
                 throw new NotYetRecordedException("parent late (test)");
               }
               handledAt.put(sequence, System.nanoTime());
             };
+    var logs = captureLogs();
+    // Client ids fix the members' order for the range assignor: "a-…" sorts before "b-…".
     try (EnvelopeConsumer first =
-        consumer(topic, group, handler.apply("first"), Duration.ofMinutes(10))) {
-      publish(topic, keyFor(0, 3), envelope(institution, 1), Map.of());
+        consumer(
+            topic,
+            group,
+            handler.apply("first"),
+            Duration.ofMinutes(10),
+            Map.of(ConsumerConfig.CLIENT_ID_CONFIG, "a-first-" + UUID.randomUUID()))) {
+      publish(topic, keyFor(2, 3), envelope(institution, 1), Map.of());
       await().atMost(Duration.ofSeconds(30)).until(() -> orphanAttempts.size() >= 2);
+      long joinedAt = System.nanoTime();
       try (EnvelopeConsumer second =
-          consumer(topic, group, handler.apply("second"), Duration.ofMinutes(10))) {
-        publish(topic, keyFor(1, 3), envelope(institution, 10), Map.of());
-        publish(topic, keyFor(2, 3), envelope(institution, 11), Map.of());
-        await()
-            .atMost(Duration.ofSeconds(60))
-            .until(() -> handledAt.containsKey(10) && handledAt.containsKey(11));
-        int before = orphanAttempts.size();
-        await().atMost(Duration.ofSeconds(10)).until(() -> orphanAttempts.size() >= before + 2);
-        publish(topic, keyFor(1, 3), envelope(institution, 12), Map.of());
-        publish(topic, keyFor(2, 3), envelope(institution, 13), Map.of());
-        await()
-            .atMost(Duration.ofSeconds(20))
-            .until(() -> handledAt.containsKey(12) && handledAt.containsKey(13));
-        assertThat(first.deadLettered() + second.deadLettered()).isZero();
-
-        // Move the paused partition to the second member for certain.
-        first.close();
-        int closedAt = orphanAttempts.size();
+          consumer(
+              topic,
+              group,
+              handler.apply("second"),
+              Duration.ofMinutes(10),
+              Map.of(ConsumerConfig.CLIENT_ID_CONFIG, "b-second-" + UUID.randomUUID()))) {
+        await().atMost(Duration.ofSeconds(60)).until(() -> !secondOrphanAt.isEmpty());
+        assertThat(Duration.ofNanos(secondOrphanAt.getFirst() - joinedAt))
+            .as("the new owner re-reads the moved partition at once, not after a pause")
+            .isLessThan(Duration.ofSeconds(30));
+        // The first member keeps its partitions and keeps flowing.
+        publish(topic, keyFor(0, 3), envelope(institution, 10), Map.of());
+        publish(topic, keyFor(1, 3), envelope(institution, 11), Map.of());
         await()
             .atMost(Duration.ofSeconds(30))
-            .until(
-                () ->
-                    orphanAttempts.size() > closedAt && orphanAttempts.getLast().equals("second"));
-        assertThat(orphanAttempts.subList(closedAt, orphanAttempts.size()))
-            .as("after the move, only the second member re-reads the paused partition")
+            .until(() -> handledAt.containsKey(10) && handledAt.containsKey(11));
+        int movedAt = orphanAttempts.indexOf("second");
+        Thread.sleep(3000); // several of the old owner's resume deadlines pass
+        assertThat(orphanAttempts.subList(movedAt, orphanAttempts.size()))
+            .as("after the move only the second member re-reads the paused partition")
             .containsOnly("second");
-        assertThat(second.deadLettered()).isZero();
+        assertThat(logs.list)
+            .as("no poll cycle of either member failed (no IllegalStateException from a resume)")
+            .noneMatch(e -> e.getFormattedMessage().contains("cycle failed"));
+        assertThat(first.deadLettered() + second.deadLettered()).isZero();
       }
+    } finally {
+      release(logs);
     }
+  }
+
+  @Test
+  @Tag("FR-03-04")
+  void outageTimeAfterWaitingIsNeutralNotWaiting() throws Exception {
+    // I8 at the consumer: a record answers S4 once, then PostgreSQL is down for 6 s, then the
+    // record answers S4 twice more and is handled. With a 3 s budget, counting the outage as
+    // waiting would fill it and dead-letter the record at its next S4 answer; neutral, it waits
+    // and is handled. Deleting the consumer's budget.failed(start) call fails this test.
+    String topic = newTopic();
+    UUID institution = UUID.randomUUID();
+    AtomicLong outageEndsAt = new AtomicLong();
+    AtomicInteger waitsAfter = new AtomicInteger();
+    AtomicInteger attempts = new AtomicInteger();
+    List<Integer> handled = new CopyOnWriteArrayList<>();
+    try (EnvelopeConsumer consumer =
+        consumer(
+            topic,
+            "test-group-" + UUID.randomUUID(),
+            envelope -> {
+              int attempt = attempts.incrementAndGet();
+              if (attempt == 1) {
+                outageEndsAt.set(System.nanoTime() + Duration.ofSeconds(6).toNanos());
+                throw new NotYetRecordedException("parent late (test)");
+              }
+              if (System.nanoTime() < outageEndsAt.get()) {
+                throw new SQLException("database unavailable (test)", "08006");
+              }
+              if (waitsAfter.getAndIncrement() < 2) {
+                throw new NotYetRecordedException("parent still late (test)");
+              }
+              handled.add(sequence(envelope));
+            },
+            Duration.ofSeconds(3))) {
+      publish(topic, institution, 1);
+      await().atMost(Duration.ofSeconds(60)).until(() -> handled.contains(1));
+      assertThat(consumer.deadLettered()).isZero();
+    }
+  }
+
+  @Test
+  @Tag("NFR-REL-01")
+  void outagesAfterWaitingKeepTheWaitWarnGoing() throws Exception {
+    // I12 (review 13, MINOR 3): after one S4 answer, PostgreSQL is down and the record is never
+    // answered S4 again before it is handled. The WARN, every 1 s here, must still fire, because
+    // failed attempts after S4 count as waiting for W-d. Deleting that clause leaves no WARN.
+    String topic = newTopic();
+    UUID institution = UUID.randomUUID();
+    AtomicInteger attempts = new AtomicInteger();
+    List<Integer> handled = new CopyOnWriteArrayList<>();
+    try (EnvelopeConsumer consumer =
+        new EnvelopeConsumer(
+            kafka.bootstrapServers(),
+            Map.of(),
+            topic,
+            "test-group-" + UUID.randomUUID(),
+            envelope -> {
+              int attempt = attempts.incrementAndGet();
+              if (attempt == 1) {
+                throw new NotYetRecordedException("parent late (test)");
+              }
+              if (attempt <= 7) {
+                throw new SQLException("database unavailable (test)", "08006");
+              }
+              handled.add(sequence(envelope));
+            },
+            new EnvelopeConsumer.ParentWait(Duration.ofMinutes(10), 1.0 / 6, Duration.ofSeconds(1)),
+            Clock.systemUTC())) {
+      publish(topic, institution, 1);
+      await().atMost(Duration.ofSeconds(60)).until(() -> handled.contains(1));
+      assertThat(consumer.waitWarnings()).isGreaterThanOrEqualTo(1);
+      assertThat(consumer.deadLettered()).isZero();
+    }
+  }
+
+  @Test
+  @Tag("FR-03-04")
+  void theRevocationCommitCarriesWaitingNoOtherCommitDoes() throws Exception {
+    // I14 after a revocation (implementation-3 audit): the revocation's commit is the only one that
+    // carries waiting when the batch's own commit fails. Here close() is called while an S4 attempt
+    // runs for 3 s; the wakeup makes the batch's commitSync throw WakeupException, so the waiting
+    // of
+    // that attempt reaches the next owner only through the revocation commit. Deleting it leaves
+    // the checkpoint about 3 s short.
+    String topic = newTopic();
+    String group = "test-group-" + UUID.randomUUID();
+    UUID institution = UUID.randomUUID();
+    AtomicLong firstAnswerAt = new AtomicLong();
+    AtomicLong slowEndsAt = new AtomicLong();
+    java.util.concurrent.CountDownLatch slowStarted = new java.util.concurrent.CountDownLatch(1);
+    AtomicInteger attempts = new AtomicInteger();
+    EnvelopeConsumer consumer =
+        consumer(
+            topic,
+            group,
+            envelope -> {
+              int attempt = attempts.incrementAndGet();
+              if (attempt == 1) {
+                firstAnswerAt.set(System.currentTimeMillis());
+              }
+              if (attempt == 5) {
+                slowStarted.countDown();
+                try {
+                  Thread.sleep(3000);
+                } catch (InterruptedException e) {
+                  Thread.currentThread().interrupt();
+                }
+                slowEndsAt.set(System.currentTimeMillis());
+              }
+              throw new NotYetRecordedException("parent never written (test)");
+            },
+            Duration.ofSeconds(60));
+    publish(topic, institution, 1);
+    assertThat(slowStarted.await(60, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+    consumer.close();
+    OffsetAndMetadata committed = committed(group, topic);
+    long spent = Long.parseLong(committed.metadata().replaceAll(".*spent_ms=(\\d+).*", "$1"));
+    long waited = slowEndsAt.get() - firstAnswerAt.get();
+    assertThat(spent)
+        .as("the revocation commit carries the slow attempt's waiting")
+        .isGreaterThanOrEqualTo(waited - 1000);
   }
 
   @Test

@@ -327,3 +327,35 @@ new (D-n1, NIT).
 | # | Sev | Where | What | Minimal fix |
 |---|---|---|---|---|
 | D-n1 | NIT | `EnvelopeConsumer.close()` vs the `finally` in `run()` | A check-then-act race. `close()` reads `thread.isAlive()` as true and only then sets `closeOnExit`. If the poll thread's `finally` runs in that gap, it sees `closeOnExit` false and does not close, and `close()` does not close either (it took the alive branch). The client is never closed: its sockets and heartbeat thread linger, and the member leaves the group only at `max.poll.interval.ms`. This needs a 190 s join timeout followed by the thread ending within a few instructions of the check, so it is very unlikely. Separately, `close()` closes the dead-letter producer while the poll thread may still be mid-attempt. A send then fails, is classed as an outage, and is re-read by the next owner, so nothing is lost. | Set `closeOnExit = true` before the final `isAlive()` check. If the thread turns out dead, close here, guarded by an atomic compare-and-set on a closed flag shared with the `finally`. |
+
+## Delta check of 3f666cd
+
+Static and read-only. Read `git diff 953cafc 3f666cd` (`EnvelopeConsumer.java` only, apart from
+this file).
+
+### Verdict: APPROVED. 0 BLOCKER, 0 MAJOR, 0 MINOR, 0 new NIT; D-n1 resolved; n5 and n6 remain M9 carries
+
+**D-n1: resolved.** `close()` and the poll thread's `finally` now decide who closes under one
+monitor, `closeLock`, which guards `pollThreadDone` and `closeOnExit`. Whichever takes the lock
+second closes the client. Every interleaving:
+
+| Interleaving | Who closes | Once? | Thread not using it? |
+|---|---|---|---|
+| Normal close (the thread ends within the wait) | The `finally` sets `pollThreadDone` and does not close (`closeOnExit` is false). `close()` then sees it done and closes. | yes | yes: the thread is dead, or at the very end of `run()` with no further client calls |
+| `close()` times out, takes the lock first | `close()` sets `stopping` and `closeOnExit` and does not close. The `finally` later closes on the poll thread. | yes | yes: its own thread, and the revoke listener inside that close sees `currentThread == thread` with `stopping` set, so it commits nothing |
+| `close()` times out, but the `finally` takes the lock first (the old gap) | The `finally` sets done and does not close. `close()` sees done and closes. | yes | yes: the `finally` is the thread's last act |
+| `crash()` then `close()` | `crash()` leaves `closeOnExit` false, so the `finally` only marks done. `close()` finds the thread ended and closes from the caller. If `crash()`'s 10 s join itself timed out, `close()` falls into one of the two timeout rows. | yes | yes |
+| `Error` stop | `stop()` closes on the poll thread and sets `consumerClosed`. The `finally` sees `consumerClosed` (and normally `closeOnExit` false) and does nothing. `close()` sees done and `consumerClosed` and does nothing. If `close()` timed out during `stop()`, the `finally` still finds `consumerClosed` set. | yes | yes |
+
+The client is never closed twice, and never from a thread using it. It stays unclosed only while
+the poll thread never ends, when it is still in use, which is correct.
+
+**Lock held during the 5 s close.** No deadlock. Only `close()` and the `finally` take `closeLock`.
+`consumer.close(5 s)` runs `onPartitionsRevoked` on the poll thread, which never takes `closeLock`,
+and Java monitors are re-entrant in any case. With `stopping` set, the listener does no client work
+beyond removing state. At worst, `close()` blocks on the lock for the bounded close (about 5 s),
+after it has already waited about 190 s. Nothing else waits on the lock. Negligible.
+
+Unchanged and already accepted: in the timeout path, `close()` still closes the dead-letter
+producer under a running attempt. That send fails as an outage and the record is re-read by the
+next owner, so nothing is lost.
