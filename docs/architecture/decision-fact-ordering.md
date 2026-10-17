@@ -15,14 +15,15 @@ cited `[5-…]`.
 
 Neither change affects W-c2's bound.
 
-**Amendment 1, draft 3 (2026-10-17): not yet reviewed.** It answers the second implementation
+**Amendment 1 (2026-10-17): reviewed sound in draft 3, its MINORs and NITs applied.** It answers the second implementation
 review (`-2026-10-17-implementation-2.md`: M1, M2, M3, m1, m2, m3, m4, m6, m8, with m5 and m7) on
 the owner's scope of the same day. Draft 1 (`b7eefd5`) was reviewed on its own and was **not sound**:
 3 MAJOR, 7 MINOR, 6 NIT (`-2026-10-17-amendment-1.md`, cited `[A1-…]`). Draft 2 (`2dafbf0`) closed
 those MAJORs and was **not sound** either: 2 MAJOR, 9 MINOR, 8 NIT (`-amendment-1-draft-2.md`,
 cited `[A2-…]`): an `Error` closing the consumer committed past unhandled records, and shared Kafka
-faults on the dead-letter send were dropped at the bound. This is **draft 3**. Code follows only
-after the amendment is reviewed sound. It changes:
+faults on the dead-letter send were dropped at the bound. Draft 3 (`d7c1554`) was reviewed **sound**: 0 BLOCKER, 0 MAJOR,
+7 MINOR, 9 NIT (`-amendment-1-draft-3.md`, cited `[A3-…]`), applied below before any code, as draft
+5's were. It changes:
 
 - **Section 12 (new): failures of an attempt.** Every failure is in exactly one class (12.2). Only
   an outage of a shared dependency is retried without bound; a failure that may be the record's own
@@ -43,7 +44,7 @@ after the amendment is reviewed sound. It changes:
   [A1-m6]; the SMS is rendered before the verification is issued, so a rendering failure no longer
   uses up the block's only link [A1-m6]; statements run under a `statement_timeout` below the
   socket timeout [A1-m7].
-- **D-a, D-c, D-g, section 9 and section 11** are changed to match.
+- **D-a, D-c, D-d, D-g, section 9 and section 11** are changed to match [A3-n1].
 - **Section 8**: I7e, I8, I9 and I14 are restored to the wording reviewed sound in draft 5 (the
   implementation round had narrowed them without saying so, implementation-2 m5). Every row was
   checked against its named test (owner, 2026-10-17): where a test proves less than the row says,
@@ -56,8 +57,12 @@ after the amendment is reviewed sound. It changes:
   on the dead letter, so replaying `outcome_unrecorded` records the outcome without a send
   [A2-m1] [A2-m9]; a batch time budget, vault timeouts and a typed KMS outage [A2-m3] [A2-m4]; a
   truncation no longer rewinds to the log start [A2-m5].
+- **Applied from draft 3's review:** no health indicator for a stopped consumer, so the liveness
+  probe is never affected; the webhook executor's own `Error` rule; commits carry the leader epoch
+  and a log divergence resumes at its divergent offset; the full timeout arithmetic; and a
+  `fs-kept-result` honoured only on replayed records [A3-m1…m7].
 - **Section 13 (new): known gaps**: a crash between the provider call and the commit that keeps
-  its result (m7, `PB-77`).
+  its result (m7, `PB-77`); a provider outage ending the notice (`PB-79`).
 
 **Rule for every row of section 8** (owner, 2026-10-17): a row that names a test is a claim that the
 test fails when the invariant is broken. Each review checks that the named test proves the row as
@@ -384,11 +389,12 @@ decision's [NIT].
   - `r` is `none`; `FAILED:<locale>:<link>`; or `SENT:<locale>:<link>:<reference>`. `<locale>` is
     the BCP 47 tag the SMS was rendered in (letters, digits and hyphens only), `<link>` is `1` or
     `0` for whether it carried a link, and `<reference>` is the provider's message id as kept in R
-    (at most 128 characters, 12.4), UTF-8 encoded and then base64url-encoded without padding. The
-    128-character limit applies to the raw reference, before encoding. An empty reference is
-    allowed, encodes as the empty string, and is recorded as null [A2-n1] [A2-m9].
-  - With those limits the line is at most about 300 bytes, below Kafka's default
-    `offset.metadata.max.bytes` (4,096).
+    (at most 128 Unicode code points, 12.4), UTF-8 encoded and then base64url-encoded without
+    padding. The limit applies to the raw reference, before encoding. An empty reference is
+    allowed, encodes as the empty string, and is recorded as null [A2-n1] [A2-m9]. A U+0000 in a
+    reference, which PostgreSQL's `text` refuses, is replaced by U+FFFD before it is kept [A3-n4].
+  - With those limits the line is at most about 900 bytes, below Kafka's default
+    `offset.metadata.max.bytes` (4,096) [A3-n4].
   - The same `result` form is carried by the `fs-dlq-result` and `fs-kept-result` headers (12.4,
     D-c).
   - A reader accepts `v2` (as before, with no retry state and no kept result) and `v3`. Anything
@@ -407,7 +413,7 @@ decision's [NIT].
   `fs-dlq-topic`, `fs-dlq-offset` and `fs-dlq-at`. This applies to **every** dead-letter reason:
   `not_the_kept_decision`, `parent_not_recorded`, `malformed_envelope`, `malformed_header`,
   `rejected_by_the_database`, `permanent_vault_failure`, `handler_failure` and `outcome_unrecorded`,
-  in both consumers.
+  in both consumers. A copy re-sent because it was too large lacks `fs-dlq-error` (12.2) [A3-n8].
   ADR 0064 point 5, which lists the DLQ headers, is amended to match [m6].
 - **D-b.** `<topic>.dlq` keeps records for 30 days (`topics.yaml`, `dlq_retention: P30D`). The source
   topic keeps them for 3 days.
@@ -435,8 +441,9 @@ decision's [NIT].
     each such SMS may already have been delivered [A2-n5]. Since amendment 1 no new
     `rejected_by_the_database` follows a send (12.4), but copies written before it may.
   - **(change, amendment 1)** It replays `outcome_unrecorded` when asked with `--reason`, without
-    `--allow-rejected`: it republishes the copy's `fs-dlq-result` as `fs-kept-result`, and the
-    consumer then records that result and sends nothing (12.4) [A2-m9].
+    `--allow-rejected`: it republishes the copy's `fs-dlq-result` as `fs-kept-result`, replacing any
+    `fs-kept-result` the copy already carries, so a record never carries more than one; the
+    consumer then records that result and sends nothing (12.4) [A2-m9] [A3-m6].
 - **D-c2. (change) When to replay.** Replay `parent_not_recorded` only after W2 has caught up:
   - the spool's `postgres` consumer lag, a new gauge `fs_spool_lag{consumer}` (base unit bytes,
     alongside `fs_spool_depth`) taken from `DurableSpool.lagBytes`, is zero on every running
@@ -472,9 +479,9 @@ decision's [NIT].
 - **D-g. (change, amendment 1)** `malformed_envelope`, `permanent_vault_failure` and
   `handler_failure` (12.3) are replayed once their cause is fixed, with `--reason`; `malformed_header`
   under D-c2's condition (S3m). A replayed `handler_failure` whose cause persists returns to the DLQ
-  after the bound of 12.3 again; it never loops without bound. `outcome_unrecorded` was sent or may
-  have been: replaying it sends again unless its outcome has since been recorded, so D-c refuses it
-  by default. The default reason of a replay stays `parent_not_recorded`.
+  after the bound of 12.3 again; it never loops without bound. `outcome_unrecorded` carries its
+  provider result; replaying it records that result and sends nothing (12.4, D-c). The default
+  reason of a replay stays `parent_not_recorded` [A3-m7].
 
 ## 8. Invariants, and the test that proves each
 
@@ -510,18 +517,18 @@ claim, "every invariant is tested", was not true.
 | I16 | S0: an intent whose B row belongs to another account is dead-lettered and never sends. | `SmsOrderingTest.intentForAnotherAccountsBlockIsNeverSent` |
 | (wire) | The intent's record carries `fs-transaction-id` on Kafka. | `KafkaSpoolChaosTest.theSmsIntentCarriesItsTransactionOnTheWire` |
 | (malformed) | Replaced by I19 (amendment 1). The earlier row claimed this for every unreadable payload; it held for three fields of one handler (implementation-2, M3). | I19 |
-| I17 | A record that fails in F4 (12.2) is retried on the backoff and dead-lettered once the bound of 12.3 is reached, as `handler_failure`, or as `outcome_unrecorded` if a provider result is kept (12.4); the record behind it is then handled. The retry state survives a change of owner, on a partition whose budget is empty too (W-e). An S4 answer does not clear it; F1 failures neither use up nor reset it. If the dead-letter send fails at the bound, the state stands and the next attempt dead-letters the record. | to be written: through `EnvelopeConsumer` with the real sender, an intent that fails deterministically (implementation-2, needs-execution item 2); a poison record across repeated rebalances with `spent` at zero [A1-M3]; a record alternating S4 and F4 [A1-m3] |
+| I17 | A record that fails in F4 (12.2) is retried on the backoff and dead-lettered once the bound of 12.3 is reached, as `handler_failure`, or as `outcome_unrecorded` if a provider result is kept (12.4); the record behind it is then handled. The retry state survives a change of owner, on a partition whose budget is empty too (W-e). An S4 answer does not clear it; F1 failures neither use up nor reset it. If the dead-letter send fails at the bound, the state stands and the next attempt that fails in F4 dead-letters the record; if the dead letter is too large, I27 applies. | to be written: through `EnvelopeConsumer` with the real sender, an intent that fails deterministically (implementation-2, needs-execution item 2); a poison record across repeated rebalances with `spent` at zero [A1-M3]; a record alternating S4 and F4 [A1-m3] |
 | I18 | An F1 failure is retried without bound and without a dead letter. Failed attempts are counted as 12.6 defines (`fs_notify_retries_total`), and a head that has failed (F1 or F4) for 1 minute of wall time in a row is warned at WARN, and every minute after, naming topic, partition, offset, class and the last exception [A2-m7]. | to be written |
-| I19 | Every field a handler reads from the record is validated before any side effect: an envelope whose `payload` is absent or not an object, an SMS intent with any required field absent or unreadable (12.1), and a webhook payload with any required field absent or unreadable are each dead-lettered as `malformed_envelope`, and nothing is sent, issued or recorded. | to be written: one test per required field group, in each consumer |
-| I20 | Once the provider has been called for a record, its result is kept and checkpointed: SENT when the reply was read and accepted, FAILED otherwise, a 2xx reply that cannot be read and any unchecked exception from the adapter included. A re-read of that record, on this owner or the next, writes the kept outcome and never calls the provider again, whatever class the failed outcome write was; exactly one send is made. A dead letter after a send is `outcome_unrecorded` and carries R; replayed, it records R and sends nothing. | to be written: a gateway answering HTTP 200 with a non-JSON body through the real `AfricasTalkingGateway` parsing (implementation-2, needs-execution item 1); an outcome write that fails after the send, in F1 and in F4, with an owner change between [A1-M1] |
-| I21 | A malformed `fs-transaction-id` (5.1) with B visible is classified exactly as with a valid header; with B absent it is dead-lettered at once as `malformed_header` (S3m); it is logged and counted. An absent header is S4 (I15). A short form such as `1-2-3-4-5` is malformed. | to be written, through `Envelope` and the wiring, not by parsing the header in the test (implementation-2, m2) |
-| I22 | A committed offset that has fallen below the log start is never skipped silently: the reset to the log start is logged at ERROR with the number of offsets skipped, and counted; the old head's retry state and kept result are dropped. An offset above the log end is logged at ERROR and restarted from the log start, uncounted. A partition the client reports as having no committed offset starts at the log start; a failed lookup never counts as "no offset" [A1-m2]. | to be written: a short-retention topic behind a held partition (implementation-2, needs-execution item 4); a new group |
+| I19 | Every field a handler reads from the record is validated before any side effect: an envelope whose `payload` is absent or not an object, an SMS intent with any required field absent or unreadable (12.1), a webhook payload with any required field absent or unreadable, and a replayed record whose `fs-kept-result` does not parse are each dead-lettered as `malformed_envelope`, and nothing is sent, issued or recorded. | to be written: one test per required field group, in each consumer |
+| I20 | Once the provider has been called for a record, its result is kept and committed before the outcome is written: SENT when the reply was read and accepted, FAILED otherwise, a 2xx reply that cannot be read and any unchecked exception from the adapter included. A re-read of that record, on this owner or the next, writes the kept outcome and never calls the provider again, whatever class the failed outcome write was; exactly one send is made. A dead letter after a send is `outcome_unrecorded` and carries R; replayed, it records R and sends nothing. | to be written: a gateway answering HTTP 200 with a non-JSON body through the real `AfricasTalkingGateway` parsing (implementation-2, needs-execution item 1); an outcome write that fails after the send, in F1 and in F4, with an owner change between [A1-M1] |
+| I21 | A malformed `fs-transaction-id` (5.1) with B visible is classified exactly as with a valid header; with B absent it is dead-lettered at once as `malformed_header` (S3m), and nothing is sent, issued or recorded; it is logged and counted. An absent header is S4 (I15). A short form such as `1-2-3-4-5` is malformed. | to be written, through `Envelope` and the wiring, not by parsing the header in the test (implementation-2, m2) |
+| I22 | A committed offset that has fallen below the log start is never skipped silently: the reset to the log start is logged at ERROR with the number of offsets skipped, and counted; the old head's retry state and kept result are dropped. An offset above the log end with no divergent offset reported is logged at ERROR and resumed from the log end, uncounted; a `LogTruncationException` resumes from its divergent offset, and every commit carries the leader epoch so that one is reported [A3-m3] [A3-m4]. A partition the client reports as having no committed offset starts at the log start; a failed lookup never counts as "no offset" [A1-m2]. | to be written: a short-retention topic behind a held partition (implementation-2, needs-execution item 4); a new group |
 | I23 | Each counter and the gauge of 12.6 moves exactly as 12.6 defines its count. | to be written: one assertion per metric, including a re-read that must not count twice |
 | I24 | Every failure of an attempt is in exactly one class of 12.2, the cause chain walked, and the class decides the action. | by review of the classification function, plus a table-driven test over every SQLSTATE and exception type 12.2 names |
 | I25 | The SMS is rendered before a verification is issued: a rendering failure leaves no verification behind [A1-m6]. | to be written: a settings row without `official_phone`, then the row fixed and the record replayed: the SMS carries a link |
-| I26 | Every external call in an attempt is bounded by a timeout, and a batch by its time budget (12.3). An `Error` on the poll thread or the webhook delivery executor seeks every partition of the batch back to its first unhandled offset, commits those offsets, then logs, counts, sets `fs_notify_consumer_running` to 0 and closes; the next owner re-reads the record that threw and every unhandled record after it; the readiness and liveness groups stay UP [A2-M1] [A2-m7] [A2-m8]. | to be written: a statement held past `statement_timeout` is F4, not F1; a vault statement past its timeout fails; a batch past its budget polls again without skipping; an `Error` thrown mid-batch: no record skipped, the next owner re-reads them, readiness UP |
+| I26 | Every external call in an attempt is bounded by a timeout, and a batch by its time budget (12.3). An `Error` on the poll thread marks the consumer stopping, seeks every partition of the batch back to its first unhandled offset, commits those offsets only if every seek succeeded, then logs, counts, sets `fs_notify_consumer_running` to 0 and closes; the next owner re-reads the record that threw and every unhandled record after it. An `Error` on the webhook delivery executor stops it, leaving deliveries `PENDING`. No health indicator reports either stop [A2-M1] [A3-m1] [A3-m2] [A3-n6]. | to be written: a statement held past `statement_timeout` is F4, not F1; a vault statement past its timeout fails; a batch past its budget polls again without skipping; an `Error` thrown mid-batch: no record skipped, the next owner re-reads them, `/actuator/health` stays UP; an `Error` in a delivery task: the executor stops, the row stays `PENDING` |
 | I27 | A dead-letter send that fails with `RecordTooLargeException` is retried without `fs-dlq-error`; if it still fails, the record is F4 and, at the bound, logged at ERROR in full (with N and R if a result is kept), counted as dropped, and committed past. Every other dead-letter send failure is F1 and never drops a record [A2-M2] [A2-n7]. | to be written: a dead letter over `max.request.size`; a DLQ send timing out (F1, not dropped) |
-| I28 | The replay tool refuses `rejected_by_the_database` unless `--allow-rejected` is given; it replays `outcome_unrecorded` with `--reason`, carrying `fs-dlq-result` as `fs-kept-result`, and the consumer records that result without sending [A2-m7]. | to be written |
+| I28 | The replay tool refuses `rejected_by_the_database` unless `--allow-rejected` is given; it replays `outcome_unrecorded` with `--reason`, carrying `fs-dlq-result` as `fs-kept-result`, replacing any it already carries, and the consumer records that result without sending; a `fs-kept-result` on a record that was not replayed is ignored and counted [A2-m7] [A3-m6]. | to be written |
 | I29 | The checkpoint metadata follows W-e2 exactly: `v3` written and read back field for field, a `v2` line read with no retry state and no kept result, and anything else read as no metadata with a WARN; a reference over 128 characters is cut to 127 and `~`, and an empty one is recorded as null [A2-m7]. | to be written |
 
 ## 9. Alternatives rejected
@@ -611,8 +618,8 @@ Amendment 1 adds:
 11. `EnvelopeConsumer` classifies every failure of an attempt into one class of 12.2, walking the
     cause chain; keeps the retry state and the kept provider result per head in memory and in the
     `v3` checkpoint (12.3, 12.4, W-e, W-e2); dead-letters `handler_failure` and
-    `outcome_unrecorded`; drops a record whose dead letter cannot be written; stops on an `Error`;
-    and warns (12.5).
+    `outcome_unrecorded`; drops a record whose dead letter is too large to send; stops on an
+    `Error`; and warns (12.5) [A3-n1].
 12. Validation before any side effect (12.1): `EnvelopeConsumer` for the envelope; `CustomerSmsSender`
     for the whole intent; `WebhookDispatcher` for its payload.
 13. `AfricasTalkingGateway` converts any failure to read a reply into `IOException`;
@@ -627,11 +634,15 @@ Amendment 1 adds:
 17. Each transaction the consumers open sets `statement_timeout`; the vault data source gets its
     socket and statement timeouts; the KMS client and the dead-letter producer get the timeouts of
     12.3; a batch gets its time budget (12.3).
-18. The `KmsClient` contract gains `KmsUnavailableException` for an unreachable, timed-out,
-    throttled or failing service; the reference implementation throws it, and M9's vendor binding
-    must (12.2) [A2-m4].
-19. A `notify` health group, outside readiness and liveness, reports a stopped consumer; the
-    webhook delivery executor applies the `Error` rule (12.2).
+18. The `KmsClient` contract gains `KmsUnavailableException`, a non-permanent `VaultException`,
+    for an unreachable, timed-out, throttled or failing service, and a 5 s limit per call. The only
+    implementation in this repository is the tests' in-memory KMS; M9's vendor binding must honour
+    both (12.2, 12.3) [A2-m4] [A3-n3].
+19. No health indicator for the consumers; `fs_notify_consumer_running` and
+    `fs_notify_webhook_delivery_running` report a stop, and the webhook delivery executor applies
+    its own `Error` rule (12.2) [A3-m1] [A3-m2].
+22. Every commit carries the record's leader epoch (12.5); the replay tool replaces
+    `fs-kept-result`; the consumer honours it only on replayed records (12.1, 12.4).
 20. Dead letters after a send carry `fs-dlq-result`; the replay tool republishes it as
     `fs-kept-result`, which the consumer honours (12.4, D-c).
 21. ADR 0056 records amendment 1; the test claims of section 8 are corrected.
@@ -661,8 +672,11 @@ are not part of the record; their failures are classified by 12.2.
   when it is 2 or more, `transaction_id` and `event_id` are canonical UUIDs. A sequence of 1 is
   returned from without reading them, as today [A1-n1].
 - The `fs-transaction-id` header is not validated here: its malformed state is a classification
-  input (5.1, S3m), not a reason to refuse a send. A `fs-kept-result` header (12.4) is validated by
-  W-e2's grammar for `result`; one that does not parse is `malformed_envelope`.
+  input (5.1, S3m), not a reason to refuse a send. On a replayed record (one carrying
+  `fs-replayed`), a `fs-kept-result` header (12.4) is validated: exactly one value, matching W-e2's
+  grammar for `result` and not `none`; repeated identical values count as one. Anything else is
+  `malformed_envelope` [A3-m6]. On a record without `fs-replayed` the header is ignored, logged at
+  WARN and counted (12.4).
 
 A field the frozen schema allows but the handler does not read is not validated.
 
@@ -691,19 +705,27 @@ Every failed attempt is in exactly one class. Two rules decide which [A2-n2]:
   in full (topic, partition, offset, key, every header, the value's SHA-256 and length, and N with
   the kept result if one is held), counted as dropped (12.6), and committed past. This is the only
   case in which a record leaves without being handled or dead-lettered [A2-M2] [A2-n7].
-- **An `Error`** (a `Throwable` that is not an `Exception`) is not classified [A1-m1] [A2-M1]. The
-  thread that catches it, the poll thread or the webhook delivery executor, does in order:
-  1. seeks every partition of the batch in hand back to its first unhandled offset (W-a's "no
-     skipped records"), the record that threw included;
-  2. commits those offsets synchronously, with each partition's metadata (W-e), so that the
-     revocation commit of step 3 cannot move past them;
-  3. logs the `Error` at ERROR, counts it, sets the consumer's running gauge to 0 (12.6), and
-     closes the consumer, releasing its partitions to the group. It is not restarted by itself.
-
-  The `Error` is reported through a health indicator in the `notify` group, which is **not** part
-  of the application's readiness or liveness groups: a stopped consumer must not take the ingest
-  API out of service [A2-m8]. An `Error` caused by one record stops each member that reads it, in
-  turn; that is loud by design, and the operator removes the record.
+- **An `Error`** (a `Throwable` that is not an `Exception`) is not classified [A1-m1] [A2-M1].
+  - **On the poll thread**, which owns the `KafkaConsumer`, in order:
+    1. it marks the consumer as stopping, so that the revocation listener commits nothing during
+       the close [A3-n6];
+    2. it seeks every partition of the batch in hand back to its first unhandled offset (W-a's "no
+       skipped records"), the record that threw included;
+    3. if every seek succeeded, it commits those offsets synchronously, with each partition's
+       metadata (W-e); if a seek failed, it commits nothing, and the group resumes from the last
+       commit, which is never past an unhandled record;
+    4. it logs the `Error` at ERROR, counts it, sets `fs_notify_consumer_running` to 0 (12.6), and
+       closes the consumer, releasing its partitions to the group. It is not restarted by itself.
+  - **On the webhook delivery executor**, which owns no consumer: the task that threw is abandoned,
+    the executor logs the `Error` at ERROR, counts it, sets `fs_notify_webhook_delivery_running` to
+    0 and accepts no further task. Deliveries already queued stay `PENDING` in `webhook_deliveries`
+    and are delivered after a restart; the consumer keeps enqueuing [A3-m2].
+  - **No health indicator** reports either stop: the root `/actuator/health` is the liveness and
+    uptime probe (ADR 0011, ADR 0014, OPS-OBS-05), and a stopped consumer must not make every
+    instance report DOWN and restart. The gauges and the counter of 12.6 are the signals, and M9
+    alerts on them [A3-m1].
+  - An `Error` caused by one record stops each member that reads it, in turn, until every member of
+    the group has stopped; that is loud by design, and the operator removes the record [A3-n6].
 - Once the provider has been called for the head record, a failure does not repeat the call: 12.4.
 
 ### 12.3 The bound on F4, and timeouts (change)
@@ -736,18 +758,26 @@ Every failed attempt is in exactly one class. Two rules decide which [A2-n2]:
     timeout (`08006`, F1). The API's own transactions are unaffected.
   - **The vault database** (its own data source): `socketTimeout` 10 s and `statement_timeout` 5 s
     set as connection options, so they apply to every vault statement, in a transaction or not.
+  - **A hung statement** is bounded by the socket timeout (10 s) even if `statement_timeout` is
+    not reached; the vault data source also sets `connectTimeout` and `loginTimeout` to 5 s
+    [A3-m5].
   - **The SMS provider:** 3 s to connect and 5 s for the request, as today.
   - **The KMS client:** at most 5 s per call; a timeout is `KmsUnavailableException`.
-  - **The dead-letter send:** the producer sets `request.timeout.ms` 15 s, `linger.ms` 0 and
+  - **The dead-letter send:** the producer sets `request.timeout.ms` 15 s, `linger.ms` 0,
     `delivery.timeout.ms` 30 s (the client requires `delivery.timeout.ms` ≥ `linger.ms` +
-    `request.timeout.ms`), and the consumer waits for the send's future for 35 s [A2-n6].
+    `request.timeout.ms`) and `max.block.ms` 10 s, and the consumer waits for the send's future for
+    35 s [A2-n6] [A3-m5].
+  - **Commits:** every `commitSync`, the one that keeps a provider result and the end-of-batch one,
+    passes a timeout of 10 s; a commit that times out is an F1 failure of the attempt [A3-m5].
   - **Webhook delivery:** its existing per-request timeout.
 - **A batch has a time budget of 60 s** (ASSUMED) [A2-m3]. When it is spent, the consumer stops
   handling the batch, seeks every partition with unhandled records back to its first unhandled
-  offset (W-a), commits what is done, and polls again. One attempt is bounded by the timeouts above
-  (about 60 s in the worst case: two statements, a vault read, a KMS call, the provider call, and a
-  dead-letter send), so the time between polls is at most the budget plus one attempt, about
-  2 minutes, below the consumers' `max.poll.interval.ms` (300 s, the client default).
+  offset (W-a), commits what is done, and polls again. One attempt is bounded by the timeouts above:
+  in the worst case two statements and the outcome write (10 s each, the socket timeout), a vault
+  read (10 s), a KMS call (5 s), the provider call (8 s), the commit that keeps the result (10 s)
+  and a dead-letter send (10 s to block plus 35 s), about 110 s. The time between polls is at most
+  the budget, one attempt and the end-of-batch commit (10 s), about 180 s, below the consumers'
+  `max.poll.interval.ms` (300 s, the client default) [A3-m5].
 
 ### 12.4 One send per record: the provider's result is kept (change)
 
@@ -764,21 +794,28 @@ Every failed attempt is in exactly one class. Two rules decide which [A2-n2]:
   else, a 2xx reply that cannot be read and any unchecked exception from the adapter included
   (`AfricasTalkingGateway` turns an unreadable reply into `IOException`; `CustomerSmsSender`
   catches any exception from the call). R also holds the locale the SMS was rendered in and
-  whether it carried a link. The reference is at most 128 characters, the limit of
-  `customer_notifications.provider_reference`: a longer one is cut to 127 characters followed by
-  `~`, in R and in the row alike [A2-m9].
+  whether it carried a link. The reference is at most 128 code points, the limit of
+  `customer_notifications.provider_reference` (`char_length`): a longer one is cut to 127 code
+  points followed by `~`, in R and in the row alike [A2-m9] [A3-n4]. The `~` marks a cut by
+  convention only; a reference that already ends in `~` is kept as it is.
 - **FAILED means "not known to be accepted by the provider"**, for every reader [A1-m6]. A FAILED R
-  whose call returned a 2xx reply that could not be read, or threw an exception other than
-  `IOException`, may have been delivered: it is logged at ERROR with N and counted once, when R is
-  kept (12.6) [A2-n4]. No reader may treat FAILED as safe to send again; today only `classify` reads
+  whose call may have reached the provider without a readable acceptance may have been delivered:
+  a 2xx reply that could not be read, a request that timed out after it was sent, or an exception
+  other than `IOException`. The adapter reports the first two as `ProviderReplyUnknownException`, a
+  subtype of `IOException`. Such an R is logged at ERROR with N and counted once, when it is kept
+  (12.6) [A2-n4] [A3-n2]. No reader may treat FAILED as safe to send again; today only `classify` reads
   it, as S1.
 - **The order within the attempt** [A2-m1]: the provider call returns or throws; R is kept in the
   partition's state; the consumer commits `OffsetAndMetadata(X, m)` for X's partition alone,
-  synchronously, with R in m (W-e2); then the outcome is written. If that commit fails, the outcome
-  write still proceeds, and the commit is retried before X is re-read.
+  synchronously, at offset X (its position; the end-of-batch commit merges as W-e says), with R in
+  m (W-e2); then the outcome is written. If that commit fails, the outcome write still proceeds. If
+  the outcome write also fails, X is not re-read until a commit carrying R has succeeded: the
+  partition stays paused and the commit is retried on the backoff, as an F1 failure [A3-n7].
 - **A re-read of X that holds R**, on this owner or the next (from the metadata), or a replayed
-  copy of X that carries R in `fs-kept-result` (D-c), **writes R and never calls the provider
-  again**. It skips the vault read, the rendering and `issue`. It runs the classification first:
+  copy of X that carries a valid `fs-kept-result` (12.1, D-c), **writes R and never calls the
+  provider again**. A result from the header is a kept result in every respect, checkpointed like
+  one, and logged at INFO with N and R. A `fs-kept-result` on a record without `fs-replayed` is
+  ignored, logged at WARN and counted, so it cannot suppress a first send [A3-m6]. It skips the vault read, the rendering and `issue`. It runs the classification first:
   an outcome already visible is S1; otherwise, with B visible, it writes R whichever state the
   statement shows (S2, or S2r if the block was resolved meanwhile) [A2-m2].
 - If the outcome cannot be written, the attempt fails in its class: F1 is retried without bound,
@@ -806,10 +843,14 @@ Every failed attempt is in exactly one class. Two rules decide which [A2-n2]:
       at ERROR the topic, partition, committed offset and log start, counts the difference as
       skipped (12.6), and seeks to the log start. If the head held a kept provider result, the
       ERROR names its N and R, whose outcome is now never recorded;
-    - **above the log end** (`LogTruncationException`, after an unclean election or a re-created
-      topic): it logs at ERROR, counts nothing, and seeks to the divergent offset the exception
-      reports, or, if it reports none, to the log end. It does **not** rewind to the log start,
-      which would re-read the whole retention [A2-m5].
+    - **above the log end**, with no divergent offset reported: it logs at ERROR, counts nothing,
+      and seeks to the log end. It does **not** rewind to the log start, which would re-read the
+      whole retention and re-send [A2-m5].
+  - `LogTruncationException` (the log diverged after an unclean election, wherever the divergence
+    lies): the consumer seeks each named partition to the divergent offset the exception reports,
+    logs at ERROR, and counts nothing. So that the client can detect a divergence after a change of
+    owner, **every commit carries the leader epoch** of the record at its offset, or of the last
+    record read, as `OffsetAndMetadata` allows [A3-m3].
   - In every case the old head's retry state and kept result are dropped, the partition is resumed
     if it was paused, and the next commit carries metadata for the new head only.
 - With 12.3, only an F1 outage can hold a partition long enough for retention to delete its head:
@@ -833,6 +874,8 @@ count is defined so that a test can assert it exactly [A1-m5]:
 | `fs_notify_offsets_skipped_total` | counter | `group` | offsets below the log start skipped by a reset (12.5), as the difference between the log start and the committed offset |
 | `fs_notify_consumer_errors_total` | counter | `group` | each `Error` that stopped a consumer thread (12.2) |
 | `fs_notify_consumer_running` | gauge | `group` | 1 while the consumer's poll thread runs, 0 once it has stopped |
+| `fs_notify_webhook_delivery_running` | gauge | none | 1 while the webhook delivery executor accepts tasks, 0 once an `Error` stopped it |
+| `fs_notify_ignored_kept_results_total` | counter | `group` | each record without `fs-replayed` that carried `fs-kept-result` (12.4) |
 | `fs_notify_head_failing_seconds` | gauge | `group` | at scrape, over the owned partitions, the longest time since the current head's first failed attempt (F1 or F4) in its current run of failures; a run ends when the head changes or an attempt on it succeeds. 0 when no head is failing |
 
 ## 13. Known gaps (amendment 1)
@@ -841,7 +884,8 @@ count is defined so that a test can assert it exactly [A1-m5]:
 
 12.4 keeps the provider's result for a record and commits it before the outcome is written, so a
 failed outcome write no longer sends again. One window remains: the member crashes or is expelled
-after the provider call returns and before the commit carrying R is acknowledged. If that commit
+after the provider call returns and before the commit carrying R is acknowledged; an `Error` in
+that interval stops the consumer the same way (12.2) [A3-n6]. If that commit
 fails, the window stays open until a later commit carrying R succeeds, which is retried before the
 record is re-read. The next owner then finds B and no outcome, with no kept result, and **sends a
 second SMS**. `VerificationService.issue` runs once per block, so the second SMS carries no link.
@@ -851,3 +895,12 @@ second SMS**. `VerificationService.issue` runs once per block, so the second SMS
 - Not closed in M6. It is carried as **`PB-77`** (claimed in `docs/parallel/M6_updates.md`). Two
   designs are on record: a `SENDING` row written before the provider call and read as "outcome
   unknown, do not send", and the transactional outbox of section 9.
+
+### 13.2 A provider outage ends the notice [A3-n9]
+
+A provider call that fails, an outage of the provider included, records FAILED (12.4), and the
+intent is committed past: the customer is never told. That is today's behaviour, unchanged by this
+amendment, and FAILED rows are visible to an operator. Retrying a FAILED send safely needs to know
+the provider did not accept it, which 12.4's "not known to be accepted" cannot give. Carried as
+**`PB-79`** (claimed in `docs/parallel/M6_updates.md`), together with an alert on the rate of FAILED
+outcomes (M9).

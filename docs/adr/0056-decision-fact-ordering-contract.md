@@ -59,13 +59,14 @@ code implements it. In short:
 - **Recommended for a later milestone:** a transactional outbox, publishing the intent from
   PostgreSQL after its commit. It removes the race for this reader altogether.
 
-## Amendment 1 (2026-10-17, draft 3, awaiting its own review)
+## Amendment 1 (2026-10-17, reviewed sound in draft 3)
 
 The second implementation review (`docs/reviews/M6/m6-decision-2026-10-17-implementation-2.md`)
 found that every unchecked exception was retried without bound, that a provider reply which could
 not be read caused repeated sends, and that two test claims were wider than their tests. Drafts 1 and 2
 of the amendment were reviewed on their own and were not sound (`-2026-10-17-amendment-1.md`,
-`-amendment-1-draft-2.md`). The
+`-amendment-1-draft-2.md`); draft 3 was sound (`-amendment-1-draft-3.md`), its MINORs and NITs
+applied. The
 contract's sections 12 and 13 now classify every failure of an attempt: an outage of a shared
 dependency is retried without bound; a failure that may be the record's own is dead-lettered as
 `handler_failure` after 10 minutes and 5 attempts (ASSUMED), with that state checkpointed across
@@ -75,5 +76,6 @@ provider has been called for a record its result is kept and checkpointed, so a 
 never sends again; a dead letter after a send is `outcome_unrecorded` and carries the result, so replaying it
 records the outcome without a send. An `Error` stops the consumer without skipping a record. A malformed `fs-transaction-id` is told apart from an absent one; a reset across a retention
 gap is logged and counted; the consumer's counters are exported. A crash between the provider call
-and the checkpoint of its result is a known gap (`PB-77`). Section 8 of the contract, not this ADR,
+and the commit that keeps its result is a known gap (`PB-77`), and so is a provider outage ending
+the notice (`PB-79`). Section 8 of the contract, not this ADR,
 says which properties rest on review only or are proved in part.

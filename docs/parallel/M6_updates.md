@@ -11,7 +11,7 @@ those files. Facts only; where something is unverified or open it says so.
 | ADR | `0060`–`0069`, then down from `0059` (block full; ADR 0060 revised) | 0060–0069 (0068 hybrid persistence, 0069 the PII vault), 0059 (the latency gate) |
 | Flyway | `V60`–`V69` | V60 account profiles, V61 FX rates, V62 hold reconciliation, V63 webhook deliveries, V64 unblock reconciliation, V65 unfinished batch jobs, V66 the scorer's account context on `fraud_scores`, V67 the feature-store fallback (tables, `fs_scorer` functions) |
 | Vault Flyway (`db/vault`) | M6 only | V1 contacts, V2 tokenisation map, V3 contact token length |
-| Backlog | `PB-77`, `PB-78` (claimed 2026-10-17, after reading every branch's backlog and updates files: `PB-76` is M4's) | PB-77 the window between the provider's acceptance and the recorded outcome (contract 13.1); PB-78 the rebalance test that does not show the move (implementation-2 m3; first carried to M10, then folded into this round by the owner, 2026-10-17: to be resolved by this round) |
+| Backlog | `PB-77`, `PB-78`, `PB-79` (claimed 2026-10-17, after reading every branch's backlog and updates files: `PB-76` is M4's) | PB-77 the window between the provider's acceptance and the recorded outcome (contract 13.1); PB-78 the rebalance test that does not show the move (implementation-2 m3; first carried to M10, then folded into this round by the owner, 2026-10-17: to be resolved by this round); PB-79 a provider outage ends the notice (contract 13.2) |
 
 `0027` and `0028` already exist on `m4/generalisation` and `m5/scoring`; M7 will add identity
 migrations. Flyway refuses out-of-order versions on a database that already has a higher one, so
@@ -979,7 +979,9 @@ in both implementation reviews.
 **Amendment 1** (`docs/architecture/decision-fact-ordering.md`, sections 12 and 13, and the changes
 listed in its status block). Draft 1 (`b7eefd5`) was reviewed on its own and was not sound: 3 MAJOR,
 7 MINOR, 6 NIT (`docs/reviews/M6/m6-decision-2026-10-17-amendment-1.md`). Draft 2 (`2dafbf0`) was not sound either: 2 MAJOR, 9 MINOR, 8 NIT
-(`-amendment-1-draft-2.md`). Draft 3 answers every finding and awaits its own review.
+(`-amendment-1-draft-2.md`). Draft 3 (`d7c1554`) was reviewed **sound**: 0 BLOCKER, 0 MAJOR, 7 MINOR, 9 NIT
+(`-amendment-1-draft-3.md`); its MINORs and NITs are applied before the code round, and a delta
+check of those changes precedes the code.
 
 **Backlog rows to apply at merge:**
 
@@ -990,6 +992,12 @@ listed in its status block). Draft 1 (`b7eefd5`) was reviewed on its own and was
   raised_by: M6 implementation-2 review, m7 (2026-10-17)
   detail: contract 13.1. Two designs on record: a SENDING row before the provider call, read as
     "outcome unknown, do not send"; or the transactional outbox (contract section 9).
+- id: PB-79
+  title: "A provider outage records FAILED and the customer is never told"
+  due_milestone: later than M6; the FAILED-rate alert with M9
+  raised_by: M6 amendment-1 draft-3 review, n9 (2026-10-17)
+  detail: contract 13.2. Today's behaviour, unchanged by amendment 1. A safe retry needs to know the
+    provider did not accept the SMS, which "not known to be accepted" cannot give.
 - id: PB-78
   title: "I7e's test does not show the paused partition moving to the second member"
   status: to be resolved by M6's amendment-1 code round (owner, 2026-10-17); kept so the id is not reused
