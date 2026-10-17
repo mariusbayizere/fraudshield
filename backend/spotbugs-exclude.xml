@@ -16,4 +16,14 @@
     <Class name="io.github.mariusbayizere.fraudshield.common.identity.PersonName"/>
     <Bug pattern="IMPROPER_UNICODE"/>
   </Match>
+  <!--
+    A JPA composite key (@IdClass) is a plain class whose fields Hibernate writes reflectively
+    when it builds a key from a row. SpotBugs sees no assignment and reports UWF_UNWRITTEN_FIELD.
+    The alternative is a constructor no code calls, which would hide the fact rather than state
+    it. Scoped to the key classes of the configuration entities (ADR 0068).
+  -->
+  <Match>
+    <Class name="~io\.github\.mariusbayizere\.fraudshield\.(decision\.adapter\.jpa|persistence\.schema)\..*Entity\$Key"/>
+    <Bug pattern="UWF_UNWRITTEN_FIELD"/>
+  </Match>
 </FindBugsFilter>

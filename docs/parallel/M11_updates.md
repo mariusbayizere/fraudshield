@@ -267,3 +267,25 @@ every instrument agrees with every other. Contact with the real dependency is th
 outside that world. **What may not be claimed:** that the verification effort reported here
 establishes correctness against the services the system integrates with, beyond the three
 `requires_docker` tests that touch real Redis and real MLflow.
+
+## From M6 — five features unusable on this benchmark (owner decision, 2026-10-17)
+
+ADR 0055 closes ML-DATA-07 as a deviation: **five of the 44 features have no source data on this
+benchmark** and are NaN for every record: `account_age_days`, `counterparty_account_age_days`,
+`kyc_tier`, `agent_float_utilisation_ratio` and `agent_distance_from_registered_km`. Every model
+figure in the paper is trained and evaluated without them. A deployment fed by an institution's
+account master, KYC records and agent ledger would supply them; the gap is the benchmark's, not the
+design's.
+
+**A sixth feature is a different limitation, and must be stated as one.** `round_sum_flag` is
+computable only because the country packs supply `round_denominations`, whose values are ASSUMED
+(plausible note and typing steps, not a sourced banknote series). An assumed value is not source
+data: the feature produces a number for every record, but the number rests on the project's own
+assumption. Write it as "five features with no source data, and one computed from assumed
+denominations", not as "six missing" and not by leaving the sixth out.
+
+The owner's instruction: this belongs **in the limitations section beside the two generalisation
+nulls, not in a footnote**. State the count (five of 44, about 11 %), what each needs, and that the
+reported metrics are therefore those of a 39-feature model on this benchmark. The README's M3 line ("36
+of them computable") is an earlier count and differs from ADR 0055's; quote ADR 0055's, which the
+registry's computability check backs, and reconcile the README line before the paper is final.

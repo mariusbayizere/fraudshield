@@ -18,10 +18,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.transaction.support.TransactionTemplate;
 
 /** The demo seed creates the dual-control accounts with generated credentials only (ADR 0019). */
 @Tag("requires-docker")
@@ -53,11 +51,36 @@ class DemoDataSeederTest {
     DriverManagerDataSource dataSource =
         new DriverManagerDataSource(
             database.url(), "fs_migrator", database.password("fs_migrator"));
+    io.github.mariusbayizere.fraudshield.persistence.schema.SchemaJpa jpa =
+        new io.github.mariusbayizere.fraudshield.persistence.schema.SchemaJpa(dataSource);
+    JPA.add(jpa);
     return new DemoDataSeeder(
         properties,
         new JdbcTemplate(dataSource),
-        new TransactionTemplate(new DataSourceTransactionManager(dataSource)),
-        Clock.systemUTC());
+        jpa.transactions(),
+        Clock.systemUTC(),
+        jpa.repository(
+            io.github.mariusbayizere.fraudshield.persistence.schema.InstitutionRepository.class),
+        jpa.repository(
+            io.github.mariusbayizere.fraudshield.persistence.schema.DemoUserRepository.class),
+        jpa.repository(
+            io.github.mariusbayizere.fraudshield.persistence.schema.ThresholdVersionRepository
+                .class),
+        jpa.repository(
+            io.github.mariusbayizere.fraudshield.persistence.schema.ThresholdSeedRepository.class),
+        jpa.repository(
+            io.github.mariusbayizere.fraudshield.persistence.schema.BreakerSettingsSeedRepository
+                .class),
+        jpa.entityManager());
+  }
+
+  private static final java.util.List<
+          io.github.mariusbayizere.fraudshield.persistence.schema.SchemaJpa>
+      JPA = new java.util.ArrayList<>();
+
+  @org.junit.jupiter.api.AfterAll
+  static void closeJpa() {
+    JPA.forEach(io.github.mariusbayizere.fraudshield.persistence.schema.SchemaJpa::close);
   }
 
   @Test

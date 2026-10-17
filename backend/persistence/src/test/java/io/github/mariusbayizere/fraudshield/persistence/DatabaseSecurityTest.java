@@ -302,6 +302,68 @@ class DatabaseSecurityTest {
   }
 
   @Test
+  void theScorerMayCallTheFeatureFallbackAndReadNothingElse() throws SQLException {
+    // ADR 0062 point 6: fs_scorer answers the feature store's database fallback through five
+    // SECURITY DEFINER functions and holds no grant on any table or view.
+    try (Connection admin = db.superuser()) {
+      assertThat(
+              strings(
+                  admin,
+                  """
+                  SELECT table_name FROM information_schema.role_table_grants
+                  WHERE grantee = 'fs_scorer'
+                  """))
+          .isEmpty();
+      assertThat(
+              strings(
+                  admin,
+                  """
+                  SELECT p.proname FROM pg_proc p
+                  JOIN pg_namespace n ON n.oid = p.pronamespace AND n.nspname = 'fraudshield'
+                  WHERE p.prosecdef AND has_function_privilege('fs_scorer', p.oid, 'EXECUTE')
+                  ORDER BY 1
+                  """))
+          .containsExactly(
+              "feature_fallback_account",
+              "feature_fallback_device_first_seen",
+              "feature_fallback_kyc_tiers",
+              "feature_fallback_sim_swaps",
+              "feature_fallback_transactions");
+      assertThat(
+              strings(
+                  admin,
+                  """
+                  SELECT p.proname FROM pg_proc p
+                  JOIN pg_namespace n ON n.oid = p.pronamespace AND n.nspname = 'fraudshield'
+                  WHERE p.proname LIKE 'feature_fallback_%'
+                    AND (has_function_privilege('fs_app', p.oid, 'EXECUTE')
+                      OR has_function_privilege('fs_app_readonly', p.oid, 'EXECUTE')
+                      OR NOT coalesce(p.proconfig::text LIKE '%search_path=fraudshield, pg_temp%',
+                                      false))
+                  """))
+          .as("only the scorer may call them, and each pins its search_path")
+          .isEmpty();
+    }
+    try (Connection scorer = db.as("fs_scorer");
+        Statement statement = scorer.createStatement()) {
+      for (String relation :
+          List.of("transactions", "v_transactions", "account_profiles", "decision_states")) {
+        assertThatThrownBy(() -> statement.executeQuery("SELECT 1 FROM " + relation + " LIMIT 1"))
+            .as(relation)
+            .isInstanceOf(SQLException.class)
+            .hasMessageContaining("permission denied");
+      }
+      assertThat(
+              strings(
+                  scorer,
+                  "SELECT count(*)::text FROM feature_fallback_transactions('tok_"
+                      + "A".repeat(24)
+                      + "', now() - interval '1 day', now())"))
+          .containsExactly("0");
+    }
+  }
+
+  @Test
   void applicationRolesHaveNoElevatedAttributesAndOwnNothing() throws SQLException {
     try (Connection admin = db.superuser()) {
       assertThat(
@@ -309,7 +371,8 @@ class DatabaseSecurityTest {
                   admin,
                   """
                   SELECT rolname FROM pg_roles
-                  WHERE rolname IN ('fs_migrator', 'fs_app', 'fs_app_readonly', 'fs_compliance_ro')
+                  WHERE rolname IN ('fs_migrator', 'fs_app', 'fs_app_readonly', 'fs_compliance_ro',
+                                    'fs_scorer')
                     AND (rolsuper OR rolbypassrls OR rolcreaterole OR rolcreatedb OR rolreplication)
                   """))
           .isEmpty();

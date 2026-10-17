@@ -2527,6 +2527,96 @@ matched a substring always present, and now a hook path that silently matched no
 check that reported success while checking nothing, and none of them was visible from inside the
 system that contained it.
 
+## M6 — ingestion and decision engine
+
+### 2026-09-23 · Fix rounds are original work
+
+M6's reviews needed five fix rounds, and four introduced a new defect, each inside the code written
+to fix a previous finding: an idempotency fix stopped decisions during a PostgreSQL outage; wiring
+the database fallback in made an unreachable database stall the scorer and a key rotation drop
+customer SMS; bounding that made one slow statement disable the fallback for everyone; and a check
+added so `make up` would notice a failed migration failed on every healthy full stack, because it
+was tested on a subset where the timing differed.
+
+The fixes were tested against the finding that prompted them and not against their neighbours.
+**The rule.** *A fix round gets an independent review with the same scope and severity bar as the
+original work, and the loop ends on a clean review, not on a count.* The owner later bounded it:
+changes to code, schema, contracts, CI or build configuration are reviewed; documentation-only
+changes are not.
+
+### 2026-09-23 · Read CI, at job level, on the pushed head
+
+Five independent reviews and a passing local suite all missed a defect that CI caught on every
+push, because each of us ran a subset of the stack where the failing condition could not arise:
+the one-shot vault migration was still running whenever Compose inspected it locally, and had
+already exited in CI's full stack (`docker compose up --wait` fails on an exited one-shot unless a
+dependent waits for it with `service_completed_successfully`). Path filters then made later green
+runs meaningless, because the stack job was skipped.
+
+**The rule.** *Before declaring work done, read CI on the pushed head at job level and confirm
+that path-filtered jobs executed; a green local suite and a clean review are not substitutes for
+it.*
+
+### 2026-10-17 · A test that passes with the guarded code deleted is not evidence for the guard
+
+The fresh review of amendment 1's code (`docs/reviews/M6/m6-decision-2026-10-17-implementation-3.md`,
+MAJOR 1) put it in one example: *"No test has the SMS gateway throw an unchecked exception. Deleting
+`CustomerSmsSender.java:354-358` would re-send up to the bound (about 25 SMS) with every test
+green."* The contract's section 8 named a test for that guard, the test passed, and the guard could
+have been removed without any test noticing. The same review found the same shape in other rows: an
+envelope without a payload that no test sent, and an "`outcome_unrecorded` at the bound" whose cited
+record was refused by the database at once and never reached the bound. In the rows the owner had
+accepted as partial, it found a batch-budget test that passed with the budget deleted.
+
+**It is the third consecutive review with this finding as a MAJOR, and the headline of this one.**
+The second implementation review of M6, whose headline was unbounded retries (MAJOR 1), also found
+(MAJOR 3) a "malformed payload is dead-lettered" claim that held for three fields of one handler;
+the first (`-implementation-1.md`) found "every invariant is tested" untrue. Each time the rows were
+corrected one by one, and each time the next review found more.
+
+**The family is older than M6:**
+
+- *The parameter digest* (2026-09-18, "A guard with two doors"): it hashed parameter values only, so
+  adding two checks left it matching and the shipped report described a run with two fewer checks.
+  The guard was green and guarded the wrong thing.
+- *The D-08 ceiling* (2026-09-19, "Out-of-fold by row is not out-of-fold by incident"): the
+  single-feature AUC stayed under the 0.80 leakage ceiling while the out-of-fold encoding itself
+  leaked an incident's siblings into its own score. The check passed on an inflated measurement.
+- *The gitleaks self-test* (`PB-75`): about 3 % of runs fail on generated secrets, so its passes
+  are partly luck. A pass that can happen by chance says as little as a flaky failure.
+- *The MLflow fake* (2026-09-23, "A fake is a hypothesis about an API"): 537 tests passed against a
+  fake that returned the wrong error shape. Every one of them confirmed the author's reading of the
+  API, not the API.
+
+**Why it keeps recurring.** Writing the claim and writing the test are separate acts. A claim is
+written once, against what the code is meant to do; a test is written against what was convenient
+to set up; and until now nothing checked one against the other. A review reads the claim, sees a
+test named next to it and a green run, and moves on.
+
+**The rule** (owner, 2026-10-17). *For every claim that a property is tested, ask: would this test
+fail if the code it claims to prove were deleted? Where the answer is not yes, the claim says so in
+those terms, "deleting X would not fail any test", not in softer words, and the count of such rows
+is reported rather than closed with wording.* Every review of section 8 applies it row by row.
+
+**The audit that followed** (2026-10-17). Held to the deletion standard, the 38 rows of section 8
+gave 13 proved in full, 24 in part and 1 (I7e) not at all, in an audit made for the author by a
+separate agent and then checked by the reviewer. **That audit found 21 of the 24 partial rows claiming
+more than their tests prove, and they include rows written before amendment 1 that had passed every
+earlier review** (I7, I8, I12, I13, the revocation clause of I14). The reviews were not negligent:
+each checked the claims and checked the tests, but separately, and the gap lives exactly between
+the two. A row and its test can each look right, and still not meet. The deletion question is the
+check that joins them: it cannot be answered by reading the claim alone, or the test alone.
+
+Four rows were then closed with tests (I7e, I8, I12, I14's revocation clause); the 22 still partial
+went to the backlog one row each (`PB-80` to `PB-101`), with their "deleting X would not fail any
+test" wording, so nobody has to rediscover the gap.
+
+**Beyond M6.** Every remaining milestone that writes a claim table of the same kind (requirement
+rows naming their tests, gate criteria naming their evidence, contract invariants) applies the
+same standard before its tag, row by row, and reports the count rather than closing it with
+wording. The owner asked for it to be written into the master prompt's review section, so that M7
+to M12 inherit it (`docs/parallel/M6_updates.md`, "Proposed amendment to the master prompt").
+
 ## M7 — staff identity, authorisation and audit
 
 ### 2026-09-22 · A fix whose test never reached it

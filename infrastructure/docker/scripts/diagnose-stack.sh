@@ -31,4 +31,12 @@ for container in $(docker compose --profile core ps -a -q); do
   printf '\n== %s (%s)\n%s\n-- last healthcheck output:\n%s\n' "$service" "$state" "$logs" "$health_log"
   annotate "stack: ${service} ${state}" "$(printf '%s\n--- logs ---\n%s\n--- healthcheck ---\n%s' "$state" "$logs" "$health_log" | tail -c 3500)"
 done
+# The vault migration runs with `run --rm` (make up), so a failure leaves no container: make records
+# it in build/stack-diagnostics instead.
+if [[ -f build/stack-diagnostics/vault-migrate.failed ]]; then
+  problems=$((problems + 1))
+  logs=$(tail -n 40 build/stack-diagnostics/vault-migrate.log 2>/dev/null)
+  printf '\n== pii-vault-migrate (failed; run --rm left no container)\n%s\n' "$logs"
+  annotate "stack: pii-vault-migrate failed" "$(printf '%s' "$logs" | tail -c 3500)"
+fi
 echo "services with problems: $problems"
