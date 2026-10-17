@@ -607,6 +607,45 @@ class SmsOrderingTest {
   }
 
   @Test
+  void gatewaysThatThrowUncheckedAreFailedOnceAndNeverResent() throws Exception {
+    // I20 (implementation-3, MAJOR 1): an adapter that throws an unchecked exception after the call
+    // may have reached the provider. It is FAILED, kept as possibly delivered, recorded once, and a
+    // re-read sends nothing. With the sender's catch of RuntimeException deleted, the exception
+    // escapes and this test fails.
+    java.util.concurrent.atomic.AtomicInteger calls =
+        new java.util.concurrent.atomic.AtomicInteger();
+    CustomerSmsSender throwing =
+        sender(
+            db.dataSource("fs_app"),
+            institution ->
+                Optional.of(
+                    new InstitutionMessaging.Settings(
+                        "FSBANK", "+250788100100", "https://verify.fsbank.rw/v/")),
+            (senderId, phone, text) -> {
+              calls.incrementAndGet();
+              throw new IllegalStateException("adapter failed after the request (test)");
+            });
+    KafkaMessage intent = persistedBlock(false);
+    List<io.github.mariusbayizere.fraudshield.notify.kafka.ProviderResult> kept =
+        new CopyOnWriteArrayList<>();
+    assertThat(
+            throwing.send(
+                INSTITUTION, payload(intent), header(intent), Optional.empty(), kept::add))
+        .isEqualTo(CustomerSmsSender.Outcome.FAILED);
+    assertThat(kept).hasSize(1);
+    assertThat(kept.getFirst().mayBeDelivered()).isTrue();
+    assertThat(
+            throwing.send(INSTITUTION, payload(intent), header(intent), Optional.empty(), IGNORE))
+        .isEqualTo(CustomerSmsSender.Outcome.FAILED);
+    assertThat(calls.get()).isEqualTo(1);
+    assertThat(
+            one(
+                "SELECT count(*) FROM fraudshield.customer_notifications WHERE event ="
+                    + " 'FAILED'"))
+        .isEqualTo("1");
+  }
+
+  @Test
   void failedOutcomeWritesKeepTheResultAndTheReReadWritesItWithoutSending() throws Exception {
     // I20 at the sender: the outcome write fails after the provider accepted; the result handed to
     // the consumer is written on the re-read, and the provider is not called again.

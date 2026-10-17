@@ -5,6 +5,10 @@ import io.github.mariusbayizere.fraudshield.notify.vault.VaultException;
 import java.sql.SQLException;
 import java.sql.SQLRecoverableException;
 import java.sql.SQLTransientConnectionException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Set;
 import org.apache.kafka.common.errors.RecordTooLargeException;
 
@@ -37,19 +41,30 @@ enum FailureClass {
    * @return its class
    */
   static FailureClass of(Throwable failure) {
-    for (Throwable t = failure; t != null; t = t.getCause()) {
+    List<Throwable> chain = chain(failure);
+    for (Throwable t : chain) {
       FailureClass own = own(t);
       if (own != null) {
         return own;
       }
     }
-    for (Throwable t = failure; t != null; t = t.getCause()) {
+    for (Throwable t : chain) {
       FailureClass matched = matched(t);
       if (matched != null) {
         return matched;
       }
     }
     return MAY_BE_OWN;
+  }
+
+  /** The cause chain, outermost first, stopping at a cycle (implementation-3, n4). */
+  private static List<Throwable> chain(Throwable failure) {
+    List<Throwable> chain = new ArrayList<>();
+    Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+    for (Throwable t = failure; t != null && seen.add(t); t = t.getCause()) {
+      chain.add(t);
+    }
+    return chain;
   }
 
   /**
@@ -70,12 +85,7 @@ enum FailureClass {
    * @return true for {@link RecordTooLargeException} anywhere in the chain
    */
   static boolean tooLarge(Throwable failure) {
-    for (Throwable t = failure; t != null; t = t.getCause()) {
-      if (t instanceof RecordTooLargeException) {
-        return true;
-      }
-    }
-    return false;
+    return chain(failure).stream().anyMatch(t -> t instanceof RecordTooLargeException);
   }
 
   private static FailureClass own(Throwable t) {

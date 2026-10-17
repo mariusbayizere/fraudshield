@@ -226,6 +226,10 @@ public final class EnvelopeConsumer implements AutoCloseable {
 
   private static final long FIRST_BACKOFF_MS = 100;
   private static final Duration COMMIT_TIMEOUT = Duration.ofSeconds(10);
+
+  /** The longest one attempt can take under the timeouts of 12.3 (about 110 s), with a margin. */
+  private static final Duration LONGEST_ATTEMPT = Duration.ofSeconds(120);
+
   private static final Duration DEAD_LETTER_WAIT = Duration.ofSeconds(35);
   private static final Logger LOG = LoggerFactory.getLogger(EnvelopeConsumer.class);
   private static final ObjectMapper JSON = new ObjectMapper();
@@ -252,11 +256,9 @@ public final class EnvelopeConsumer implements AutoCloseable {
     String missing = "";
     Optional<Integer> lastEpoch = Optional.empty();
     // The head record's state (12.3, 12.4), cleared only when the head changes.
-    int f4Count;
-    long f4BaseMillis;
-    long f4SinceNanos = -1;
-    long f4ExcludedNanos;
-    long outageSinceNanos = -1;
+    HeadRetry retry = new HeadRetry();
+    String notification = "";
+    Throwable lastFailure;
     ProviderResult kept;
     boolean keptCounted;
     boolean headerCounted;
@@ -271,28 +273,15 @@ public final class EnvelopeConsumer implements AutoCloseable {
     void newHead(long offset) {
       headOffset = offset;
       headAnsweredS4 = false;
-      f4Count = 0;
-      f4BaseMillis = 0;
-      f4SinceNanos = -1;
-      f4ExcludedNanos = 0;
-      outageSinceNanos = -1;
+      retry = new HeadRetry();
+      notification = "";
+      lastFailure = null;
       kept = null;
       keptCounted = false;
       headerCounted = false;
       ignoredResultCounted = false;
       failingSinceNanos = -1;
       lastFailWarnNanos = -1;
-    }
-
-    long f4Millis(long nowNanos) {
-      if (f4SinceNanos < 0) {
-        return f4BaseMillis;
-      }
-      long excluded = f4ExcludedNanos;
-      if (outageSinceNanos >= 0) {
-        excluded += Math.max(0, nowNanos - outageSinceNanos);
-      }
-      return f4BaseMillis + Math.max(0, nowNanos - f4SinceNanos - excluded) / 1_000_000;
     }
   }
 
@@ -484,45 +473,57 @@ public final class EnvelopeConsumer implements AutoCloseable {
   }
 
   private void run() {
-    ConsumerRecords<String, byte[]> records = null;
     try {
       while (running) {
-        records = null;
         try {
-          resolveCommitted();
-          resumeDue();
-          records = consumer.poll(Duration.ofMillis(100));
-          pollBackoffMs = 0;
+          cycle();
         } catch (WakeupException stopped) {
           return;
-        } catch (NoOffsetForPartitionException none) {
-          // The client says these partitions have no committed offset: start at the log start.
-          LOG.info("{} have no committed offset; starting at the log start", none.partitions());
-          consumer.seekToBeginning(none.partitions());
-          continue;
-        } catch (OffsetOutOfRangeException outOfRange) {
-          outOfRange(outOfRange);
-          continue;
-        } catch (RuntimeException e) {
-          LOG.warn("consumer poll failed; continuing", e);
+        } catch (RuntimeException unexpected) {
+          // Nothing that is not an Error may end the poll thread (implementation-3, MAJOR 2):
+          // a failure anywhere in a cycle, a reset's offset lookup included, is retried.
+          LOG.warn("consumer {} cycle failed; it backs off and goes on", group, unexpected);
           pollBackoff();
-          continue;
         }
-        try {
-          handleBatch(records);
-        } catch (WakeupException stopped) {
-          return;
-        } catch (RuntimeException e) {
-          // Positions have advanced past the whole batch: seek back so that no fetched record is
-          // skipped without being handled or dead-lettered (5-n3, I7f).
-          LOG.warn("a batch could not be completed; its unhandled records will be re-read", e);
-          seekBack(records);
-        }
-        publishFailing();
       }
     } catch (Error error) {
-      stop(records, error);
+      stop(batch, error);
     }
+  }
+
+  /** The batch in hand, for {@link #stop} when an {@code Error} interrupts it. */
+  private ConsumerRecords<String, byte[]> batch;
+
+  /** One poll and the batch it returns. */
+  private void cycle() {
+    batch = null;
+    ConsumerRecords<String, byte[]> records;
+    try {
+      resolveCommitted();
+      resumeDue();
+      records = consumer.poll(Duration.ofMillis(100));
+      pollBackoffMs = 0;
+    } catch (NoOffsetForPartitionException none) {
+      // The client says these partitions have no committed offset: start at the log start.
+      LOG.info("{} have no committed offset; starting at the log start", none.partitions());
+      consumer.seekToBeginning(none.partitions());
+      return;
+    } catch (OffsetOutOfRangeException outOfRange) {
+      outOfRange(outOfRange);
+      return;
+    }
+    batch = records;
+    try {
+      handleBatch(records);
+    } catch (WakeupException stopped) {
+      throw stopped;
+    } catch (RuntimeException e) {
+      // Positions have advanced past the whole batch: seek back so that no fetched record is
+      // skipped without being handled or dead-lettered (5-n3, I7f).
+      LOG.warn("a batch could not be completed; its unhandled records will be re-read", e);
+      seekBack(records);
+    }
+    publishFailing();
   }
 
   /**
@@ -547,6 +548,7 @@ public final class EnvelopeConsumer implements AutoCloseable {
             consumer.seek(partition, offset);
             PartitionState state = partitions.get(partition);
             if (state != null) {
+              epochAt(records, partition, offset).ifPresent(e -> state.lastEpoch = Optional.of(e));
               back.put(partition, checkpoint(state, offset));
             }
           } catch (RuntimeException | Error seekFailed) {
@@ -574,6 +576,17 @@ public final class EnvelopeConsumer implements AutoCloseable {
       }
       consumerClosed = true;
     }
+  }
+
+  /** The leader epoch of the fetched record at {@code offset}, if the batch holds it (W-e3). */
+  private static Optional<Integer> epochAt(
+      ConsumerRecords<String, byte[]> records, TopicPartition partition, long offset) {
+    for (ConsumerRecord<String, byte[]> record : records.records(partition)) {
+      if (record.offset() == offset) {
+        return record.leaderEpoch();
+      }
+    }
+    return Optional.empty();
   }
 
   /** Where each partition of the batch stands; read by {@link #seekBack} after a failure. */
@@ -646,8 +659,8 @@ public final class EnvelopeConsumer implements AutoCloseable {
             offset,
             state.budget.spent(now).toMillis(),
             wall.instant().toEpochMilli(),
-            head ? state.f4Count : 0,
-            head ? state.f4Millis(now) : 0,
+            head ? state.retry.count() : 0,
+            head ? state.retry.millis(now) : 0,
             head ? state.kept : null);
     return new OffsetAndMetadata(offset, state.lastEpoch, checkpoint.text());
   }
@@ -707,50 +720,64 @@ public final class EnvelopeConsumer implements AutoCloseable {
    */
   private void outOfRange(OffsetOutOfRangeException e) {
     Map<TopicPartition, Long> named = e.offsetOutOfRangePartitions();
+    boolean truncation = e instanceof LogTruncationException;
     Map<TopicPartition, OffsetAndMetadata> divergent =
-        e instanceof LogTruncationException truncation ? truncation.divergentOffsets() : Map.of();
+        truncation ? ((LogTruncationException) e).divergentOffsets() : Map.of();
     Set<TopicPartition> all = new HashSet<>(named.keySet());
     all.addAll(divergent.keySet());
-    Map<TopicPartition, Long> start = consumer.beginningOffsets(all);
-    Map<TopicPartition, Long> end = consumer.endOffsets(all);
-    Set<TopicPartition> assigned = consumer.assignment();
+    all.retainAll(consumer.assignment());
+    if (all.isEmpty()) {
+      return;
+    }
+    Map<TopicPartition, Long> start = consumer.beginningOffsets(all, COMMIT_TIMEOUT);
+    Map<TopicPartition, Long> end = consumer.endOffsets(all, COMMIT_TIMEOUT);
     for (TopicPartition partition : all) {
-      if (!assigned.contains(partition)) {
-        continue;
-      }
       PartitionState state = state(partition);
+      String lost =
+          state.kept == null
+              ? ""
+              : "; the head's kept result "
+                  + state.kept.text()
+                  + " (N "
+                  + state.notification
+                  + ") is never recorded";
+      long fetch = named.getOrDefault(partition, -1L);
+      long logStart = start.getOrDefault(partition, 0L);
+      long logEnd = end.getOrDefault(partition, logStart);
       long target;
       if (divergent.containsKey(partition)) {
         target = divergent.get(partition).offset();
         LOG.error(
-            "{}'s log diverged (an unclean election?); resuming at the divergent offset {}",
+            "{}'s log diverged (an unclean election?); resuming at the divergent offset {}{}",
             partition,
-            target);
+            target,
+            lost);
+      } else if (!truncation && fetch >= 0 && fetch < logStart) {
+        long skipped = logStart - fetch;
+        counter("fs_notify_offsets_skipped_total").increment(skipped);
+        LOG.error(
+            "{}: committed offset {} is below the log start {}: {} records were deleted by"
+                + " retention before they were handled and are lost{}",
+            partition,
+            fetch,
+            logStart,
+            skipped,
+            lost);
+        target = logStart;
+      } else if (!truncation && fetch >= logStart && fetch <= logEnd) {
+        // The log has grown back over the offset since the fetch: nothing is lost.
+        target = fetch;
       } else {
-        long fetch = named.getOrDefault(partition, -1L);
-        long logStart = start.getOrDefault(partition, 0L);
-        if (fetch >= 0 && fetch < logStart) {
-          long skipped = logStart - fetch;
-          counter("fs_notify_offsets_skipped_total").increment(skipped);
-          LOG.error(
-              "{}: committed offset {} is below the log start {}: {} records were deleted by"
-                  + " retention before they were handled and are lost{}",
-              partition,
-              fetch,
-              logStart,
-              skipped,
-              state.kept == null
-                  ? ""
-                  : "; the head's kept result " + state.kept.text() + " is never recorded");
-          target = logStart;
-        } else {
-          target = end.getOrDefault(partition, logStart);
-          LOG.error(
-              "{}: committed offset {} is beyond the log end; resuming at the log end {}",
-              partition,
-              fetch,
-              target);
-        }
+        // Above the log end, or a divergence the client could not locate: never the log start,
+        // which would re-read the whole retention (12.5).
+        target = logEnd;
+        LOG.error(
+            "{}: committed offset {} is beyond the log end, or its divergence is unknown;"
+                + " resuming at the log end {}{}",
+            partition,
+            fetch,
+            target,
+            lost);
       }
       consumer.seek(partition, target);
       state.newHead(target);
@@ -777,13 +804,8 @@ public final class EnvelopeConsumer implements AutoCloseable {
       state.newHead(record.offset());
     }
     long start = System.nanoTime();
-    if (state.outageSinceNanos >= 0) {
-      // An outage interval ends at the next attempt; it is not F4 time (12.3).
-      if (state.f4SinceNanos >= 0) {
-        state.f4ExcludedNanos += Math.max(0, start - state.outageSinceNanos);
-      }
-      state.outageSinceNanos = -1;
-    }
+    // An outage interval ends at the next attempt; it is not F4 time (12.3).
+    state.retry.attemptStarts(start);
     Outcome outcome;
     FailureClass failure = null;
     try {
@@ -791,12 +813,13 @@ public final class EnvelopeConsumer implements AutoCloseable {
     } catch (RetryableFailure retry) {
       outcome = Outcome.RETRY;
       failure = retry.failureClass;
+      state.lastFailure = retry.getCause();
     }
     long end = System.nanoTime();
     if (failure != null) {
       state.budget.failed(start);
       if (failure == FailureClass.OUTAGE) {
-        state.outageSinceNanos = end;
+        state.retry.failedOutage(end);
       }
       counter(
               "fs_notify_retries_total",
@@ -826,8 +849,8 @@ public final class EnvelopeConsumer implements AutoCloseable {
     private static final long serialVersionUID = 1L;
     private final FailureClass failureClass;
 
-    RetryableFailure(FailureClass failureClass) {
-      super(null, null, false, false);
+    RetryableFailure(FailureClass failureClass, Throwable cause) {
+      super(null, cause, false, false);
       this.failureClass = failureClass;
     }
   }
@@ -843,14 +866,16 @@ public final class EnvelopeConsumer implements AutoCloseable {
         && (state.lastFailWarnNanos < 0 || now - state.lastFailWarnNanos >= every)) {
       state.lastFailWarnNanos = now;
       LOG.warn(
-          "{} offset {} has been failing for {} s ({}, {} F4 failures, {} s of F4 time); see"
-              + " docs/architecture/decision-fact-ordering.md, 12.5",
+          "{} offset {} (N {}) has been failing for {} s ({}, {} F4 failures, {} s of F4 time;"
+              + " last failure: {}); see docs/architecture/decision-fact-ordering.md, 12.5",
           partition,
           record.offset(),
+          state.notification,
           Duration.ofNanos(now - state.failingSinceNanos).toSeconds(),
           failure == FailureClass.OUTAGE ? "an outage" : "a failure that may be the record's own",
-          state.f4Count,
-          state.f4Millis(now) / 1000);
+          state.retry.count(),
+          state.retry.millis(now) / 1000,
+          String.valueOf(state.lastFailure));
     }
   }
 
@@ -917,6 +942,7 @@ public final class EnvelopeConsumer implements AutoCloseable {
       if (payload == null || !payload.isObject()) {
         throw new IllegalArgumentException("payload is absent or not an object");
       }
+      state.notification = payload.path("notification_id").asString("");
     } catch (RuntimeException malformed) {
       // Not an envelope this consumer will ever read: no amount of retrying changes it (12.1).
       return deadLetter(state, record, "malformed_envelope", malformed);
@@ -944,7 +970,7 @@ public final class EnvelopeConsumer implements AutoCloseable {
       return Outcome.HANDLED;
     } catch (NotYetRecordedException notYet) {
       state.missing = String.valueOf(notYet.getMessage());
-      return parentMissing(partition, state, record, headers, notYet);
+      return parentMissing(partition, state, record, notYet);
     } catch (NotTheKeptDecisionException notKept) {
       return deadLetter(state, record, "not_the_kept_decision", notKept);
     } catch (Exception e) {
@@ -969,7 +995,7 @@ public final class EnvelopeConsumer implements AutoCloseable {
       }
       case OUTAGE -> {
         LOG.warn("a record could not be handled during an outage; it will be re-read", e);
-        throw new RetryableFailure(FailureClass.OUTAGE);
+        throw new RetryableFailure(FailureClass.OUTAGE, e);
       }
       default -> {
         countF4(state);
@@ -978,7 +1004,7 @@ public final class EnvelopeConsumer implements AutoCloseable {
           return deadLetter(state, record, "handler_failure", e);
         }
         LOG.warn("a record could not be handled; it will be re-read up to the bound of 12.3", e);
-        throw new RetryableFailure(FailureClass.MAY_BE_OWN);
+        throw new RetryableFailure(FailureClass.MAY_BE_OWN, e);
       }
     }
   }
@@ -994,15 +1020,12 @@ public final class EnvelopeConsumer implements AutoCloseable {
   }
 
   private void countF4(PartitionState state) {
-    state.f4Count++;
-    if (state.f4SinceNanos < 0) {
-      state.f4SinceNanos = System.nanoTime();
-    }
+    state.retry.failedOwn(System.nanoTime());
   }
 
   private boolean bounded(PartitionState state) {
-    return state.f4Count >= retryBound.attempts()
-        && state.f4Millis(System.nanoTime()) >= retryBound.time().toMillis();
+    return state.retry.bounded(
+        retryBound.attempts(), retryBound.time().toMillis(), System.nanoTime());
   }
 
   /**
@@ -1022,7 +1045,7 @@ public final class EnvelopeConsumer implements AutoCloseable {
     if (values.isEmpty()) {
       return;
     }
-    if (record.headers().lastHeader(REPLAYED_HEADER) == null) {
+    if (!replayed(record)) {
       if (!state.ignoredResultCounted) {
         state.ignoredResultCounted = true;
         counter("fs_notify_ignored_kept_results_total").increment();
@@ -1046,9 +1069,11 @@ public final class EnvelopeConsumer implements AutoCloseable {
     if (state.kept == null) {
       state.kept = result.get();
       LOG.info(
-          "{} offset {}: a replayed copy carries its provider result {}; it is recorded, not sent",
+          "{} offset {} (N {}): a replayed copy carries its provider result {}; it is recorded,"
+              + " not sent",
           partition,
           record.offset(),
+          state.notification,
           result.get().text());
     }
   }
@@ -1069,10 +1094,11 @@ public final class EnvelopeConsumer implements AutoCloseable {
       state.keptCounted = true;
       counter("fs_notify_sms_outcome_unknown_total").increment();
       LOG.error(
-          "{} offset {}: the SMS provider's answer could not be read; the SMS may have been"
-              + " delivered and is recorded FAILED",
+          "{} offset {} (N {}): the SMS provider's answer could not be read; the SMS may have"
+              + " been delivered and is recorded FAILED",
           partition,
-          record.offset());
+          record.offset(),
+          state.notification);
     }
     try {
       consumer.commitSync(
@@ -1099,9 +1125,8 @@ public final class EnvelopeConsumer implements AutoCloseable {
       TopicPartition partition,
       PartitionState state,
       ConsumerRecord<String, byte[]> record,
-      Map<String, String> headers,
       NotYetRecordedException notYet) {
-    if (headers.containsKey(REPLAYED_HEADER)) {
+    if (replayed(record)) {
       // A replayed record never waits: replayed before its parent exists, it goes straight back.
       return deadLetter(state, record, "parent_not_recorded", notYet);
     }
@@ -1117,6 +1142,11 @@ public final class EnvelopeConsumer implements AutoCloseable {
     // Waits: while tripped, a record's first S4 answer earns exactly one grace re-read.
     LOG.debug("a record's parent is not in PostgreSQL yet; it will be re-read", notYet);
     return Outcome.WAIT_FOR_PARENT;
+  }
+
+  /** Whether a record was replayed: it carries {@code fs-replayed}, whatever its value. */
+  private static boolean replayed(ConsumerRecord<String, byte[]> record) {
+    return record.headers().lastHeader(REPLAYED_HEADER) != null;
   }
 
   private static Map<String, String> headers(ConsumerRecord<String, byte[]> record) {
@@ -1144,31 +1174,31 @@ public final class EnvelopeConsumer implements AutoCloseable {
     Throwable sendFailure;
     try {
       send(record, actual, why, state.kept, true);
-      return recordDeadLetter(record, actual, why);
+      return recordDeadLetter(state, record, actual, why);
     } catch (DeadLetterNotSent notSent) {
       sendFailure = notSent.getCause();
     }
     if (FailureClass.tooLarge(sendFailure)) {
       try {
         send(record, actual, why, state.kept, false);
-        return recordDeadLetter(record, actual, why);
+        return recordDeadLetter(state, record, actual, why);
       } catch (DeadLetterNotSent stillNot) {
         sendFailure = stillNot.getCause();
       }
     }
     if (FailureClass.ofDeadLetterSend(sendFailure) == FailureClass.OUTAGE) {
       LOG.warn("a record could not be dead-lettered; it will be re-read", sendFailure);
-      throw new RetryableFailure(FailureClass.OUTAGE);
+      throw new RetryableFailure(FailureClass.OUTAGE, sendFailure);
     }
     // Too large even without fs-dlq-error: the record's own failure (F4), dropped at the bound.
-    if (state.f4Count == 0 || !bounded(state)) {
+    if (state.retry.count() == 0 || !bounded(state)) {
       countF4(state);
     }
     if (bounded(state)) {
       return drop(state, record, actual, why);
     }
     LOG.warn("a record's dead letter is too large to send; it will be re-read", sendFailure);
-    throw new RetryableFailure(FailureClass.MAY_BE_OWN);
+    throw new RetryableFailure(FailureClass.MAY_BE_OWN, sendFailure);
   }
 
   private void send(
@@ -1210,13 +1240,16 @@ public final class EnvelopeConsumer implements AutoCloseable {
   }
 
   private Outcome recordDeadLetter(
-      ConsumerRecord<String, byte[]> record, String reason, Exception why) {
+      PartitionState state, ConsumerRecord<String, byte[]> record, String reason, Exception why) {
     deadLettered.incrementAndGet();
     counter("fs_notify_dead_letters_total", "reason", reason).increment();
     LOG.error(
-        "a record was dead-lettered to {} ({}); the consumer commits past it",
+        "offset {} (N {}) was dead-lettered to {} ({}{}); the consumer commits past it",
+        record.offset(),
+        state.notification,
         deadLetterTopic,
         reason,
+        state.kept == null ? "" : ", provider result " + state.kept.text(),
         why);
     return Outcome.DEAD_LETTERED;
   }
@@ -1239,7 +1272,7 @@ public final class EnvelopeConsumer implements AutoCloseable {
     counter("fs_notify_dropped_total").increment();
     LOG.error(
         "a record is DROPPED: its dead letter is too large to send. topic {} partition {} offset"
-            + " {} key {} headers {} value sha256 {} length {} reason {} kept result {}",
+            + " {} key {} headers {} value sha256 {} length {} reason {} N {} kept result {}",
         record.topic(),
         record.partition(),
         record.offset(),
@@ -1248,6 +1281,7 @@ public final class EnvelopeConsumer implements AutoCloseable {
         sha256(record.value()),
         record.value() == null ? 0 : record.value().length,
         reason,
+        state.notification,
         state.kept == null ? "none" : state.kept.text(),
         why);
     return Outcome.DROPPED;
@@ -1319,11 +1353,7 @@ public final class EnvelopeConsumer implements AutoCloseable {
         state.newHead(offset.offset());
         if (checkpoint.isPresent() && checkpoint.get().offset() == offset.offset()) {
           Checkpoint c = checkpoint.get();
-          state.f4Count = c.f4Count();
-          state.f4BaseMillis = c.f4Millis();
-          if (c.f4Count() > 0 || c.f4Millis() > 0) {
-            state.f4SinceNanos = now;
-          }
+          state.retry = new HeadRetry(c.f4Count(), c.f4Millis(), now);
           state.kept = c.result();
         }
       }
@@ -1340,8 +1370,10 @@ public final class EnvelopeConsumer implements AutoCloseable {
       for (TopicPartition partition : revoked) {
         PartitionState state = partitions.remove(partition);
         unresolved.remove(partition);
-        if (state == null || stopping) {
+        if (state == null || stopping || (Thread.currentThread() != thread && thread.isAlive())) {
           // Stopping on an Error commits nothing here: the stop already committed what is safe.
+          // Off the poll thread while it still runs (a close that outlived its wait), the state
+          // may be mid-update, so nothing is committed either (implementation-3, m5).
           continue;
         }
         try {
@@ -1412,13 +1444,27 @@ public final class EnvelopeConsumer implements AutoCloseable {
     if (!consumerClosed) {
       consumer.wakeup();
     }
+    // Wait as long as a batch can take: its budget, one attempt and the end-of-batch commit
+    // (implementation-3, m5); a shorter wait would close the consumer under a running attempt.
+    Duration wait = retryBound.batchBudget().plus(LONGEST_ATTEMPT).plus(COMMIT_TIMEOUT);
     try {
-      thread.join(Duration.ofSeconds(10).toMillis());
+      thread.join(wait.toMillis());
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
     }
+    if (thread.isAlive()) {
+      // The listener will commit nothing (it checks the thread), so nothing passes an
+      // unhandled record; the next owner resumes from the last commit.
+      LOG.error(
+          "consumer {} did not stop within {}; closing without a final checkpoint", group, wait);
+      stopping = true;
+    }
     if (!consumerClosed) {
-      consumer.close();
+      try {
+        consumer.close();
+      } catch (RuntimeException closeFailed) {
+        LOG.error("could not close consumer {}", group, closeFailed);
+      }
       consumerClosed = true;
     }
     runningGauge.set(0);

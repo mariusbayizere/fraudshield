@@ -57,8 +57,9 @@ public final class DeadLetterReplay {
    * What a run did.
    *
    * @param republished records republished
-   * @param olderCopies copies not republished because a newer copy of the same event was
-   * @param skipped records left in place, by reason
+   * @param olderCopies copies not republished because a newer copy of the same event exists,
+   *     whatever that copy's reason
+   * @param skipped newest copies left in place because their reason was not asked for, by reason
    */
   public record Result(int republished, int olderCopies, Map<String, Integer> skipped) {
 
@@ -97,7 +98,7 @@ public final class DeadLetterReplay {
     }
     String dlq = topic + ".dlq";
     Map<String, ConsumerRecord<String, byte[]>> newest = new LinkedHashMap<>();
-    Map<String, Integer> skipped = new TreeMap<>();
+    final Map<String, Integer> skipped = new TreeMap<>();
     int olderCopies = 0;
     Map<String, Object> consumerProperties = new HashMap<>(kafka);
     consumerProperties.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
@@ -124,11 +125,9 @@ public final class DeadLetterReplay {
           if (record.offset() >= end.get(p)) {
             continue;
           }
-          String reason = header(record, "fs-dlq-reason");
-          if (reason == null || !reasons.contains(reason)) {
-            skipped.merge(reason == null ? "unknown" : reason, 1, Integer::sum);
-            continue;
-          }
+          // The newest copy of each event is chosen across every reason, and replayed only if
+          // its own reason was asked for: an older copy must never be republished over a newer
+          // one, such as an intent already sent (implementation-3, MAJOR 3).
           String event = eventId(record);
           ConsumerRecord<String, byte[]> previous = newest.put(event, record);
           if (previous != null) {
@@ -149,6 +148,13 @@ public final class DeadLetterReplay {
                     && !ProducerConfig.configNames().contains(name));
     producerProperties.put(ProducerConfig.ACKS_CONFIG, "all");
     producerProperties.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
+    for (var it = newest.entrySet().iterator(); it.hasNext(); ) {
+      String reason = header(it.next().getValue(), "fs-dlq-reason");
+      if (reason == null || !reasons.contains(reason)) {
+        skipped.merge(reason == null ? "unknown" : reason, 1, Integer::sum);
+        it.remove();
+      }
+    }
     int republished = 0;
     try (KafkaProducer<String, byte[]> producer =
         new KafkaProducer<>(
@@ -169,8 +175,9 @@ public final class DeadLetterReplay {
             } catch (NumberFormatException unreadable) {
               replayed = 0;
             }
-          } else if (h.key().equals(EnvelopeConsumer.KEPT_RESULT_HEADER) && result != null) {
-            // Replaced below: a record never carries more than one kept result (D-c).
+          } else if (h.key().equals(EnvelopeConsumer.KEPT_RESULT_HEADER)) {
+            // Only the result this copy's dead letter recorded is carried, never one a consumer
+            // ignored, and a record never carries more than one (D-c; implementation-3, m3).
             continue;
           } else if (!h.key().startsWith(EnvelopeConsumer.DLQ_HEADER_PREFIX)) {
             again.headers().add(h.key(), h.value());

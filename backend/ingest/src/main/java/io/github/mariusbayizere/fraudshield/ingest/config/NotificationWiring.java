@@ -51,6 +51,10 @@ public class NotificationWiring {
   /** The running notification channels, closed with the application. */
   public static final class Channels implements AutoCloseable {
     private final List<AutoCloseable> running = new ArrayList<>();
+
+    /** Held here because a gauge holds its state weakly (implementation-3, m2). */
+    private final List<Object> gaugeStates = new ArrayList<>();
+
     private WebhookDispatcher dispatcher;
     private CustomerSmsSender sender;
 
@@ -267,6 +271,7 @@ public class NotificationWiring {
               clock));
       java.util.concurrent.atomic.AtomicInteger deliveryRunning =
           new java.util.concurrent.atomic.AtomicInteger(1);
+      channels.gaugeStates.add(deliveryRunning);
       io.micrometer.core.instrument.Gauge.builder(
               "fs_notify_webhook_delivery_running",
               deliveryRunning,

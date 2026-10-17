@@ -1305,6 +1305,401 @@ class EnvelopeConsumerTest {
     assertThat(sends.get()).as("the replay recorded the result; it did not send").isEqualTo(1);
   }
 
+  // ---- Implementation-3 review: each test fails if the code it names is deleted ----
+
+  /** Captures what the consumer logs, for rows that claim a log line. */
+  private static ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>
+      captureLogs() {
+    var appender =
+        new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+    appender.start();
+    ((ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(EnvelopeConsumer.class))
+        .addAppender(appender);
+    return appender;
+  }
+
+  private static void release(
+      ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent> appender) {
+    ((ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(EnvelopeConsumer.class))
+        .detachAppender(appender);
+  }
+
+  @Test
+  @Tag("NFR-REL-01")
+  void envelopesWithoutAnObjectPayloadAreMalformed() throws Exception {
+    // I19, the envelope: a payload that is absent, null or not an object is dead-lettered at once
+    // as malformed_envelope; the handler is never called with it.
+    String topic = newTopic();
+    UUID institution = UUID.randomUUID();
+    List<Integer> handled = new CopyOnWriteArrayList<>();
+    try (EnvelopeConsumer consumer =
+        consumer(
+            topic,
+            "test-group-" + UUID.randomUUID(),
+            envelope -> handled.add(sequence(envelope)),
+            EnvelopeConsumer.RetryBound.DEFAULT,
+            new io.micrometer.core.instrument.simple.SimpleMeterRegistry(),
+            Map.of())) {
+      String prefix =
+          "{\"event_id\":\"" + UUID.randomUUID() + "\",\"institution_id\":\"" + institution + "\"";
+      publish(topic, "key", prefix + "}", Map.of());
+      publish(topic, "key", prefix + ",\"payload\":null}", Map.of());
+      publish(topic, "key", prefix + ",\"payload\":[1,2]}", Map.of());
+      publish(topic, "key", prefix + ",\"payload\":\"text\"}", Map.of());
+      publish(topic, institution, 5);
+      await().atMost(Duration.ofSeconds(30)).until(() -> handled.contains(5));
+      assertThat(consumer.deadLettered()).isEqualTo(4);
+    }
+    assertThat(handled).containsExactly(5);
+    assertThat(drain(topic + ".dlq", 4))
+        .extracting(r -> header(r, "fs-dlq-reason"))
+        .containsOnly("malformed_envelope");
+  }
+
+  @Test
+  @Tag("FR-03-04")
+  void recordsThatKeepFailingAfterTheirSendLeaveAsOutcomeUnrecordedWithTheResult()
+      throws Exception {
+    // I17 with I20: a kept result, then F4 until the bound: the dead letter is outcome_unrecorded,
+    // not handler_failure, and carries the result.
+    String topic = newTopic();
+    UUID institution = UUID.randomUUID();
+    AtomicInteger attempts = new AtomicInteger();
+    try (EnvelopeConsumer consumer =
+        consumer(
+            topic,
+            "test-group-" + UUID.randomUUID(),
+            envelope -> {
+              if (attempts.incrementAndGet() == 1) {
+                envelope.keeper().keep(SENT);
+              }
+              throw new IllegalStateException("outcome write keeps failing (test)");
+            },
+            new EnvelopeConsumer.RetryBound(3, Duration.ZERO, Duration.ofSeconds(60)),
+            new io.micrometer.core.instrument.simple.SimpleMeterRegistry(),
+            Map.of())) {
+      publish(topic, institution, 1);
+      await().atMost(Duration.ofSeconds(30)).until(() -> consumer.deadLettered() == 1);
+    }
+    ConsumerRecord<String, byte[]> dead = drain(topic + ".dlq", 1).getFirst();
+    assertThat(attempts.get()).as("the F4 bound, not an immediate dead letter").isEqualTo(3);
+    assertThat(header(dead, "fs-dlq-reason")).isEqualTo("outcome_unrecorded");
+    assertThat(header(dead, EnvelopeConsumer.DLQ_RESULT_HEADER)).isEqualTo(SENT.text());
+  }
+
+  @Test
+  @Tag("NFR-REL-01")
+  void outagesBetweenOwnFailuresNeitherCountTowardsTheBoundNorClearIt() throws Exception {
+    // I17: with a bound of three F4 failures and no time, the pattern F4, F1, F1, F4, F1, F4 is
+    // dead-lettered at its sixth attempt. Counting F1 would stop it at the third; clearing on F1
+    // would never reach three.
+    String topic = newTopic();
+    UUID institution = UUID.randomUUID();
+    List<String> pattern = List.of("F4", "F1", "F1", "F4", "F1", "F4", "F4", "F4");
+    AtomicInteger attempts = new AtomicInteger();
+    AtomicInteger attemptsAtDeadLetter = new AtomicInteger();
+    List<Integer> handled = new CopyOnWriteArrayList<>();
+    try (EnvelopeConsumer consumer =
+        consumer(
+            topic,
+            "test-group-" + UUID.randomUUID(),
+            envelope -> {
+              if (sequence(envelope) == 2) {
+                attemptsAtDeadLetter.compareAndSet(0, attempts.get());
+                handled.add(2);
+                return;
+              }
+              int attempt = attempts.incrementAndGet();
+              if (pattern.get(Math.min(attempt, pattern.size()) - 1).equals("F1")) {
+                throw new SQLException("database unavailable (test)", "08006");
+              }
+              throw new IllegalStateException("the record's own failure (test)");
+            },
+            new EnvelopeConsumer.RetryBound(3, Duration.ZERO, Duration.ofSeconds(60)),
+            new io.micrometer.core.instrument.simple.SimpleMeterRegistry(),
+            Map.of())) {
+      publish(topic, institution, 1);
+      publish(topic, institution, 2);
+      await().atMost(Duration.ofSeconds(60)).until(() -> handled.contains(2));
+    }
+    assertThat(attemptsAtDeadLetter.get()).isEqualTo(6);
+  }
+
+  @Test
+  @Tag("NFR-REL-01")
+  void resetsDropTheOldHeadsRetryState() throws Exception {
+    // I22: the committed checkpoint carries four F4 failures for offset 0, which retention then
+    // deletes. With a bound of five, an inherited count would dead-letter record 5 at its first
+    // failure; dropped, record 5 fails once and is then handled. The drop is made twice, by the
+    // reset handler and by the consumer's head check, so deleting one of them alone does not fail
+    // this test; deleting both does.
+    String topic = newTopic();
+    String group = "test-group-" + UUID.randomUUID();
+    UUID institution = UUID.randomUUID();
+    for (int sequence = 0; sequence < 7; sequence++) {
+      publish(topic, institution, sequence);
+    }
+    TopicPartition partition = new TopicPartition(topic, 0);
+    try (KafkaConsumer<String, byte[]> committer =
+        new KafkaConsumer<>(
+            Map.of(
+                ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
+                kafka.bootstrapServers(),
+                ConsumerConfig.GROUP_ID_CONFIG,
+                group),
+            new StringDeserializer(),
+            new ByteArrayDeserializer())) {
+      committer.assign(List.of(partition));
+      committer.commitSync(
+          Map.of(
+              partition,
+              new OffsetAndMetadata(
+                  0, "fs-wait:v3 offset=0 spent_ms=0 at=1 f4_count=4 f4_ms=600000 result=none")));
+    }
+    try (org.apache.kafka.clients.admin.Admin admin =
+        org.apache.kafka.clients.admin.Admin.create(
+            Map.of(
+                org.apache.kafka.clients.admin.AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG,
+                kafka.bootstrapServers()))) {
+      admin
+          .deleteRecords(
+              Map.of(partition, org.apache.kafka.clients.admin.RecordsToDelete.beforeOffset(5)))
+          .all()
+          .get();
+    }
+    AtomicInteger failuresLeft = new AtomicInteger(1);
+    List<Integer> handled = new CopyOnWriteArrayList<>();
+    try (EnvelopeConsumer consumer =
+        consumer(
+            topic,
+            group,
+            envelope -> {
+              if (sequence(envelope) == 5 && failuresLeft.getAndDecrement() > 0) {
+                throw new IllegalStateException("one failure (test)");
+              }
+              handled.add(sequence(envelope));
+            },
+            new EnvelopeConsumer.RetryBound(5, Duration.ZERO, Duration.ofSeconds(60)),
+            new io.micrometer.core.instrument.simple.SimpleMeterRegistry(),
+            Map.of())) {
+      await().atMost(Duration.ofSeconds(30)).until(() -> handled.contains(6));
+      assertThat(consumer.deadLettered()).isZero();
+    }
+    assertThat(handled).containsExactly(5, 6);
+  }
+
+  @Test
+  @Tag("NFR-REL-01")
+  void theBatchBudgetKeepsEachMemberWithinItsPollInterval() throws Exception {
+    // I26: eight 700 ms records in one batch take 5.6 s, past a 3 s max.poll.interval.ms. With a
+    // 1 s batch budget the consumer polls in time and every record is handled once; without the
+    // budget the member is expelled, its commit fails, and the re-read handles records twice.
+    String topic = newTopic();
+    UUID institution = UUID.randomUUID();
+    for (int sequence = 1; sequence <= 8; sequence++) {
+      publish(topic, institution, sequence);
+    }
+    List<Integer> handled = new CopyOnWriteArrayList<>();
+    try (EnvelopeConsumer consumer =
+        consumer(
+            topic,
+            "test-group-" + UUID.randomUUID(),
+            envelope -> {
+              try {
+                Thread.sleep(700);
+              } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+              }
+              handled.add(sequence(envelope));
+            },
+            new EnvelopeConsumer.RetryBound(5, Duration.ofMinutes(10), Duration.ofSeconds(1)),
+            new io.micrometer.core.instrument.simple.SimpleMeterRegistry(),
+            Map.of(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, 3000))) {
+      await().atMost(Duration.ofSeconds(90)).until(() -> handled.contains(8));
+      Thread.sleep(2000); // a duplicate, had there been an expulsion, would arrive by now
+    }
+    assertThat(handled).containsExactly(1, 2, 3, 4, 5, 6, 7, 8);
+  }
+
+  @Test
+  @Tag("FR-03-04")
+  void replayTakesTheNewestCopyAcrossReasonsAndCarriesOnlyTheResultItRecorded() throws Exception {
+    // I28 and implementation-3 MAJOR 3 and m3, on DLQ copies made by hand. Event E1 has an older
+    // parent_not_recorded copy and a newer outcome_unrecorded one carrying its result and a stale
+    // fs-kept-result; event E2 is handler_failure with an fs-kept-result it never recorded.
+    String topic = newTopic();
+    UUID institution = UUID.randomUUID();
+    String e1 = envelope(institution, 1);
+    String e2 = envelope(institution, 2);
+    publish(
+        topic + ".dlq",
+        "key",
+        e1,
+        Map.of("fs-dlq-reason", "parent_not_recorded", "fs-dlq-topic", topic));
+    publish(
+        topic + ".dlq",
+        "key",
+        e1,
+        Map.of(
+            "fs-dlq-reason",
+            "outcome_unrecorded",
+            "fs-dlq-topic",
+            topic,
+            EnvelopeConsumer.DLQ_RESULT_HEADER,
+            SENT.text(),
+            EnvelopeConsumer.KEPT_RESULT_HEADER,
+            "SENT:en:0:c3RhbGU",
+            EnvelopeConsumer.REPLAYED_HEADER,
+            "1"));
+    publish(
+        topic + ".dlq",
+        "key",
+        e2,
+        Map.of(
+            "fs-dlq-reason",
+            "handler_failure",
+            "fs-dlq-topic",
+            topic,
+            EnvelopeConsumer.KEPT_RESULT_HEADER,
+            SENT.text()));
+    Map<String, Object> kafkaProperties =
+        Map.of(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, kafka.bootstrapServers());
+
+    DeadLetterReplay.Result parents =
+        DeadLetterReplay.replay(
+            kafkaProperties, topic, Set.of("parent_not_recorded"), Instant.EPOCH, false);
+    assertThat(parents.republished())
+        .as("E1's newest copy is outcome_unrecorded: its older copy is not replayed over it")
+        .isZero();
+
+    DeadLetterReplay.Result rest =
+        DeadLetterReplay.replay(
+            kafkaProperties,
+            topic,
+            Set.of("outcome_unrecorded", "handler_failure"),
+            Instant.EPOCH,
+            false);
+    assertThat(rest.republished()).isEqualTo(2);
+    List<ConsumerRecord<String, byte[]>> again = drain(topic, 2);
+    ConsumerRecord<String, byte[]> first =
+        again.stream()
+            .filter(r -> new String(r.value(), StandardCharsets.UTF_8).equals(e1))
+            .findFirst()
+            .orElseThrow();
+    ConsumerRecord<String, byte[]> second =
+        again.stream()
+            .filter(r -> new String(r.value(), StandardCharsets.UTF_8).equals(e2))
+            .findFirst()
+            .orElseThrow();
+    List<String> keptOnFirst = new ArrayList<>();
+    first
+        .headers()
+        .headers(EnvelopeConsumer.KEPT_RESULT_HEADER)
+        .forEach(h -> keptOnFirst.add(new String(h.value(), StandardCharsets.UTF_8)));
+    assertThat(keptOnFirst).as("exactly one, the recorded result").containsExactly(SENT.text());
+    assertThat(second.headers().headers(EnvelopeConsumer.KEPT_RESULT_HEADER))
+        .as("a result the dead letter did not record is not carried")
+        .isEmpty();
+  }
+
+  @Test
+  @Tag("NFR-REL-01")
+  void droppedRecordsAreLoggedInFull() throws Exception {
+    // I27's log line: a record whose dead letter never fits is logged at ERROR with its offset,
+    // key, headers, value digest and length, its notification id and its kept result.
+    String topic = newTopic();
+    UUID institution = UUID.randomUUID();
+    var logs = captureLogs();
+    try (EnvelopeConsumer consumer =
+        consumer(
+            topic,
+            "test-group-" + UUID.randomUUID(),
+            envelope -> {
+              envelope.keeper().keep(SENT);
+              throw new MalformedPayloadException("unreadable (test)", null);
+            },
+            new EnvelopeConsumer.RetryBound(2, Duration.ZERO, Duration.ofSeconds(60)),
+            new io.micrometer.core.instrument.simple.SimpleMeterRegistry(),
+            Map.of(ProducerConfig.MAX_REQUEST_SIZE_CONFIG, 2000))) {
+      UUID notification = UUID.randomUUID();
+      String padded =
+          "{\"event_id\":\""
+              + UUID.randomUUID()
+              + "\",\"institution_id\":\""
+              + institution
+              + "\",\"payload\":{\"decision_sequence\":1,\"notification_id\":\""
+              + notification
+              + "\",\"pad\":\""
+              + "p".repeat(4000)
+              + "\"}}";
+      publish(topic, "drop-key", padded, Map.of("x-test", "drop"));
+      await()
+          .atMost(Duration.ofSeconds(60))
+          .until(
+              () ->
+                  logs.list.stream().anyMatch(e -> e.getFormattedMessage().contains("is DROPPED")));
+      String line =
+          logs.list.stream()
+              .map(ch.qos.logback.classic.spi.ILoggingEvent::getFormattedMessage)
+              .filter(m -> m.contains("is DROPPED"))
+              .findFirst()
+              .orElseThrow();
+      assertThat(line)
+          .contains("offset 0")
+          .contains("key drop-key")
+          .contains("x-test=drop")
+          .contains("sha256")
+          .contains("length " + padded.getBytes(StandardCharsets.UTF_8).length)
+          .contains("N " + notification)
+          .contains("kept result " + SENT.text());
+    } finally {
+      release(logs);
+    }
+  }
+
+  @Test
+  @Tag("NFR-REL-01")
+  void committedMetadataThatDoesNotParseIsWarnedAndReadAsNone() throws Exception {
+    // I29's WARN: a checkpoint that is not v2 or v3 is logged and read as no metadata.
+    String topic = newTopic();
+    String group = "test-group-" + UUID.randomUUID();
+    UUID institution = UUID.randomUUID();
+    publish(topic, institution, 1);
+    TopicPartition partition = new TopicPartition(topic, 0);
+    try (KafkaConsumer<String, byte[]> committer =
+        new KafkaConsumer<>(
+            Map.of(
+                ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
+                kafka.bootstrapServers(),
+                ConsumerConfig.GROUP_ID_CONFIG,
+                group),
+            new StringDeserializer(),
+            new ByteArrayDeserializer())) {
+      committer.assign(List.of(partition));
+      committer.commitSync(Map.of(partition, new OffsetAndMetadata(0, "fs-wait:v9 garbage")));
+    }
+    var logs = captureLogs();
+    List<Integer> handled = new CopyOnWriteArrayList<>();
+    try (EnvelopeConsumer consumer =
+        consumer(
+            topic,
+            group,
+            envelope -> handled.add(sequence(envelope)),
+            EnvelopeConsumer.RetryBound.DEFAULT,
+            new io.micrometer.core.instrument.simple.SimpleMeterRegistry(),
+            Map.of())) {
+      await().atMost(Duration.ofSeconds(30)).until(() -> handled.contains(1));
+      assertThat(logs.list)
+          .anySatisfy(
+              e -> {
+                assertThat(e.getLevel()).isEqualTo(ch.qos.logback.classic.Level.WARN);
+                assertThat(e.getFormattedMessage()).contains("does not parse");
+              });
+    } finally {
+      release(logs);
+    }
+  }
+
   private static List<ConsumerRecord<String, byte[]>> drain(String topic, int expected) {
     List<ConsumerRecord<String, byte[]>> records = new ArrayList<>();
     try (KafkaConsumer<String, byte[]> consumer =
