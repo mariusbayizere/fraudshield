@@ -11,7 +11,7 @@ those files. Facts only; where something is unverified or open it says so.
 | ADR | `0060`–`0069`, then down from `0059` (block full; ADR 0060 revised) | 0060–0069 (0068 hybrid persistence, 0069 the PII vault), 0059 (the latency gate) |
 | Flyway | `V60`–`V69` | V60 account profiles, V61 FX rates, V62 hold reconciliation, V63 webhook deliveries, V64 unblock reconciliation, V65 unfinished batch jobs, V66 the scorer's account context on `fraud_scores`, V67 the feature-store fallback (tables, `fs_scorer` functions) |
 | Vault Flyway (`db/vault`) | M6 only | V1 contacts, V2 tokenisation map, V3 contact token length |
-| Backlog | `PB-77`, `PB-78` (claimed 2026-10-17, after reading every branch's backlog and updates files: `PB-76` is M4's) | PB-77 the window between the provider's acceptance and the recorded outcome (contract 13.1); PB-78 the rebalance test that does not show the move (implementation-2 m3, due M10) |
+| Backlog | `PB-77`, `PB-78` (claimed 2026-10-17, after reading every branch's backlog and updates files: `PB-76` is M4's) | PB-77 the window between the provider's acceptance and the recorded outcome (contract 13.1); PB-78 the rebalance test that does not show the move (implementation-2 m3; first carried to M10, then folded into this round by the owner, 2026-10-17: resolved in this round) |
 
 `0027` and `0028` already exist on `m4/generalisation` and `m5/scoring`; M7 will add identity
 migrations. Flyway refuses out-of-order versions on a database that already has a higher one, so
@@ -965,8 +965,10 @@ payload is now dead-lettered rather than retried for ever, held for three fields
 (MAJOR 3).
 
 **The owner's scope for one fix round** (2026-10-17): M1, M2, M3, m1, m2, m4, m6 and m8. m5: the
-four invariants are restored to their reviewed wording in this round. m7: named in the contract now
-as a known gap, implemented later as `PB-77`. m3: carried to M10 as `PB-78`. The NITs are fixed
+four invariants are restored to their reviewed wording in this round, and every section-8 row whose
+test proves less than it says is marked "in part" with the gap stated. m7: named in the contract now
+as a known gap, implemented later as `PB-77`. m3: folded into this round (CI's java job runs it
+against a real broker); `PB-78` stays claimed and is resolved in this round. The NITs are fixed
 where the round touches their code. Order: the contract amendment first, reviewed on its own; then
 the code; then a fresh independent review that also covers `e7a5be5`.
 
@@ -975,7 +977,9 @@ property is tested, the review checks that the named test proves it as worded. T
 in both implementation reviews.
 
 **Amendment 1** (`docs/architecture/decision-fact-ordering.md`, sections 12 and 13, and the changes
-listed in its status block) is a draft awaiting its own review.
+listed in its status block). Draft 1 (`b7eefd5`) was reviewed on its own and was not sound: 3 MAJOR,
+7 MINOR, 6 NIT (`docs/reviews/M6/m6-decision-2026-10-17-amendment-1.md`). Draft 2 answers every
+finding and awaits its own review.
 
 **Backlog rows to apply at merge:**
 
@@ -988,10 +992,8 @@ listed in its status block) is a draft awaiting its own review.
     "outcome unknown, do not send"; or the transactional outbox (contract section 9).
 - id: PB-78
   title: "I7e's test does not show the paused partition moving to the second member"
-  due_milestone: M10
+  status: resolved in M6's amendment-1 code round (owner, 2026-10-17); kept so the id is not reused
   raised_by: M6 implementation-2 review, m3 (2026-10-17)
-  detail: assert which member handles partition 0 after the join, or force the move; needs
-    execution against a real broker.
 ```
 
 **For M6's close** (from the traceability housekeeping, `m6/housekeeping`): FR-02-09 is now filed

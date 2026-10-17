@@ -59,17 +59,20 @@ code implements it. In short:
 - **Recommended for a later milestone:** a transactional outbox, publishing the intent from
   PostgreSQL after its commit. It removes the race for this reader altogether.
 
-## Amendment 1 (2026-10-17, draft, awaiting its own review)
+## Amendment 1 (2026-10-17, draft 2, awaiting its own review)
 
 The second implementation review (`docs/reviews/M6/m6-decision-2026-10-17-implementation-2.md`)
 found that every unchecked exception was retried without bound, that a provider reply which could
-not be read caused repeated sends, and that two test claims were wider than their tests. The
-contract's sections 12 and 13 now classify every failure of an attempt: only an outage of a shared
-dependency is retried without bound, and anything else that keeps failing is dead-lettered as
-`handler_failure` after a bound of 10 minutes and 5 attempts (ASSUMED), replayable. Every field read
-from the record is validated before any side effect; a started provider call ends in SENT or FAILED
-and is never retried; a malformed `fs-transaction-id` is told apart from an absent one; a reset
-across a retention gap is logged and counted; the consumer's counters are exported. The window
-between a provider's acceptance and the recorded outcome is a known gap (`PB-77`). Section 8 of the
-contract, not this ADR, says which properties rest on review only.
-
+not be read caused repeated sends, and that two test claims were wider than their tests. Draft 1 of
+the amendment was reviewed on its own and was not sound (`-2026-10-17-amendment-1.md`). The
+contract's sections 12 and 13 now classify every failure of an attempt: an outage of a shared
+dependency is retried without bound; a failure that may be the record's own is dead-lettered as
+`handler_failure` after 10 minutes and 5 attempts (ASSUMED), with that state checkpointed across
+owners, and can be replayed; only data and integrity errors are permanent. Every field read from
+the record is validated before any side effect, and every external call has a timeout. Once the
+provider has been called for a record its result is kept and checkpointed, so a failed outcome write
+never sends again; a dead letter after a send is `outcome_unrecorded`, which replay refuses unless
+asked. A malformed `fs-transaction-id` is told apart from an absent one; a reset across a retention
+gap is logged and counted; the consumer's counters are exported. A crash between the provider call
+and the checkpoint of its result is a known gap (`PB-77`). Section 8 of the contract, not this ADR,
+says which properties rest on review only or are proved in part.
