@@ -14,11 +14,14 @@ by M5 or M6.
   never reached the hash chain; the owner gave both to M7, and this round did them
   (`docs/adr/0073-assembling-the-api-application.md`). Everything M7 owes is in
   `docs/parallel/M7_updates.md`, which is the resume point.
-- **Owner decisions open** (M7_updates.md, "Items"): D-15 against the key cache (threat model R-13);
-  who builds the analyst API, which no milestone does; keeping `DemoUserEntity`.
+- **Owner decisions (2026-10-17):** D-15 resolved as option B (a verified key admitted for up to 10
+  minutes of a PostgreSQL outage; R-13 records the residual risk); `DemoUserEntity` kept, with the
+  reason in ADR 0068; the last-active-administrator guard kept as defence in depth (PB-104).
+  **Open:** where the analyst API goes, which no milestone builds: 48 contract operations, scoped in
+  M7_updates.md ("Unowned work") and PB-121.
 - **The deletion standard governs every claim** (master prompt): a test is evidence for code only
   if deleting that code fails it. M7's rows are 8 of 25 proved in full and 17 in part; what is not
-  proved is in the backlog (PB-102 to PB-120), one row each.
+  proved is in the backlog (PB-102 to PB-124), one row each.
 
 ## Branches
 

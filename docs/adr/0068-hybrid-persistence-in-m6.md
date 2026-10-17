@@ -140,3 +140,14 @@ this point requires (ADR 0073). What changes from point 2's wording:
 - Each event is appended once, however often Kafka delivers it: its `event_id` is recorded in
   `audit_event_receipts` (V72) in the append's transaction.
 - Staff actions (M7) still write their audit rows in the transaction of the change, as point 2 says.
+
+## Amendment 2026-10-17 — point 4's `DemoUserEntity` stays (owner decision)
+
+Point 4 says `DemoUserEntity` should be deleted at merge and the seeder pointed at M7's
+`StaffUserEntity`. The owner decided on 2026-10-17 to keep it. Pointing the seeder at M7's entity
+would make the database tool (`backend/persistence`) depend on `fraudshield-auth`, and so load staff
+security and require its secrets, in order to delete one entity: the worse trade. The two entities
+never share a persistence unit: the database tool maps `users` with `DemoUserEntity`, and the API
+with `StaffUserEntity` alone, which `AssembledApplicationTest` asserts. Each application's
+`validate` start-up checks its own mapping against the schema, so a migration that changes `users`
+fails loudly in whichever one falls behind. This is settled; a review should not re-raise it.

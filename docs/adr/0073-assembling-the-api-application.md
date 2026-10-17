@@ -31,7 +31,9 @@ The owner assigned both to M7 (2026-10-17), with an acceptance test each.
      context, a change to M6's code that buys nothing measurable.
    - `WebhookEndpoints` is `ApiKeyService.webhookEndpoint`: the URL of the institution's newest live
      key that has one, and the signing secret of every live key with that URL, so both keys sign
-     during a rotation overlap.
+     during a rotation overlap. `ApiKeyLifecycleTest` proves it, in
+     `webhookEndpointIsTheNewestLiveUrlSignedByEveryLiveSecretOfThatInstitutionOnly`: overlap,
+     expiry, revocation, keys without a webhook, another institution.
    - `/api/docs` gets its own chain, ordered first, which permits `GET` on exactly the two paths
      `ApiDocsController` serves. It is the only route M6 serves that the contract does not list
      (the document *is* the contract), and M7's chain denies whatever the contract does not list.
@@ -53,8 +55,10 @@ The owner assigned both to M7 (2026-10-17), with an acceptance test each.
      transaction, and a conflicting insert means the event was appended before;
    - **to the producer's partition:** the payload's `writer_partition` (0–63, D-32), so M6's choice
      of chain is kept;
-   - **with the actor's name and role** looked up when the event names a staff member, as every
-     audit row stores them;
+   - **with the actor's name and role** looked up when the event is appended, as every audit row
+     stores them. M6 leaves the payload's `actor_role` null today, so a replay from the dead-letter
+     topic days later records the role the staff member holds then; M6 filling `actor_role`, and
+     the appender preferring it, is proposed in M7_updates;
    - a payload that is not an audit event is refused before any database access and dead-lettered
      at once.
 5. **The proof is a test that boots the real application with no test bean**
@@ -66,29 +70,36 @@ The owner assigned both to M7 (2026-10-17), with an acceptance test each.
    verify`; and the revoked key is refused within 5 seconds. The same class asserts that no bean in
    the context comes from test code (a test-jar on the classpath once leaked M7's test application,
    with a fixed clock, into every API test's context), that each port is bound by
-   `StaffIdentityWiring`, that there is one transaction manager and it is JPA's, and that one entity
-   maps `users`.
+   `StaffIdentityWiring`, that there is one transaction manager and it is JPA's, that one entity
+   maps `users`, and that Spring Security's proxy runs ahead of M6's filters. Two more tests cover
+   the edges: `/api/docs` opens its two paths to `GET` and nothing else, and a record that is not an
+   audit event reaches `fs.audit.events.dlq` on its first attempt.
 
-## Open conflict, for the owner: D-15 against FR-06-07's cache
+## D-15 against FR-06-07's cache: decided (owner, 2026-10-17, option B)
 
-M7's authenticator reads a key's record from PostgreSQL when its 2-second cache entry expires.
-D-15 and NFR-REL-02 require decisions to continue while PostgreSQL is down, and M6 built and
-tested that (`ResilienceApiTest`). In the assembled application a PostgreSQL outage longer than two
-seconds therefore refuses ingestion at authentication. CI showed it on 2026-10-17: M6's
-`ResilienceApiTest.withPostgresDownDecisionsContinueAndArePersistedAfterRecovery` fails on the
-assembled application. It first failed with **401**: the database exception escaped M7's filter,
-the servlet container's error dispatch went through the contract chain, and the chain refused it
-as unauthenticated, so the client was told its key was bad. The filter now answers **503 with
-`Retry-After: 1`** when the key store cannot be read (`ApiKeyAuthenticationFilterTest`), which is
-right under either option; the test still fails, because it expects 200. The two options:
+M7's authenticator reads a key's record from PostgreSQL when its 2-second cache entry expires,
+while D-15 and NFR-REL-02 require decisions to continue while PostgreSQL is down. CI showed the
+conflict on 2026-10-17: M6's
+`ResilienceApiTest.withPostgresDownDecisionsContinueAndArePersistedAfterRecovery` failed on the
+assembled application, first with **401** (the database exception
+escaped M7's filter, the error dispatch went through the contract chain, and the client was told
+its key was bad), then, once the filter answered the outage itself, with 503.
 
-- **keep refusing:** strict revocation, ingestion down with the database;
-- **serve a key's last verified record while the database cannot answer**, for a bounded time:
-  ingestion continues, at the price that a revocation committed in the last two seconds before the
-  outage, whose Redis announcement was also lost, is honoured only when the database returns. No
-  revocation can be committed during the outage itself.
+The owner chose option B: **a key's last verified record keeps being used while the database cannot
+answer, for at most 10 minutes after that record was last read** (`fraudshield.auth.api-keys.stale-if-error`,
+default 10 minutes, `AuthProperties`).
 
-This ADR does not choose; threat model R-13 records the risk until the owner does.
+- A key verified by this instance within the last 10 minutes is admitted through an outage, and its
+  record is retried once per cache TTL, not once per request.
+- A key this instance has not verified, or verified longer ago, is refused with **503 and
+  `Retry-After: 1`**, never 401. M7's filter and M6's filter both answer it so
+  (`ApiKeyAuthenticationFilterTest`, `ApiKeyFilterTest`).
+- An announced revocation or rotation evicts the record at once, so it is never served stale.
+- **Residual risk, accepted (threat model R-13):** a revocation committed in the 2 s before the
+  outage, whose Redis announcement was also lost, is not seen until the database answers or the
+  10 minutes run out. No revocation can be committed during the outage.
+- D-15 therefore holds for outages up to 10 minutes. `ResilienceApiTest` asserts both halves:
+  decisions continue for the warmed key, and a key never verified gets 503 with `Retry-After`.
 
 ## Consequences
 

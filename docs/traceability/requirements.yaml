@@ -145,8 +145,8 @@ requirements:
     (rotation keeps the old key for the 24-hour overlap)
   - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/AssembledApplicationTest.java
     (an admin-issued key submits in the real application)
-  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/IngestApiTest.java (keys
-    required and scoped, on M7's real key verification)
+  - 'backend/admin/src/test/java/io/github/mariusbayizere/fraudshield/admin/AuthorisationMatrixTest.java
+    (apiKeysReachOnlyTheMachinePathsByTheContractFileAlone: an oracle read from the contract file alone)'
   deviations: []
   notes: 'M6 (2026-09-24): M6''s side is done: the ApiKeyAuthenticator port, scopes on the machine paths.
     Key verification, rotation and staff-path 403s are M7''s. M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md):
@@ -1199,6 +1199,8 @@ requirements:
   - backend/admin/src/test/java/io/github/mariusbayizere/fraudshield/admin/AuthorisationMatrixTest.java
   - backend/admin/src/test/java/io/github/mariusbayizere/fraudshield/admin/NetworkAndKeysTest.java (403
     on /alerts and /admin)
+  - 'backend/admin/src/test/java/io/github/mariusbayizere/fraudshield/admin/AuthorisationMatrixTest.java
+    (apiKeysReachOnlyTheMachinePathsByTheContractFileAlone: an oracle read from the contract file alone)'
   deviations: []
   notes: 'M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md): proved in full.'
 - id: FR-07-06
@@ -1267,7 +1269,7 @@ requirements:
   deviations: []
   notes: 'M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md): proved in part. Not proved:
     delivery within 30 s, measured against a recording mailer (PB-106). The ''change form'' clause is
-    M8''s.'
+    M8''s. M7 (2026-10-17): the ''change form'' clause is backlog PB-123, due M8.'
 - id: FR-07-09
   section: 3.7 FR-07 Authentication and authorisation
   title: All sessions invalidated on password change; Google OAuth session revoked via Google token revocation
@@ -1490,7 +1492,8 @@ requirements:
     identifier column is CHECK (is_token(...)) (SchemaPoliciesTest). Remaining: PII store and tokenisation
     at ingestion (M6), analyst-endpoint inspector test (M7). M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md):
     the analyst-endpoint inspector test cannot be written: no milestone builds the analyst API (owner
-    decision; PB-114).'
+    decision; PB-114). M7 (2026-10-17): the analyst API is scoped and recorded as unowned work, PB-121
+    (48 operations).'
 - id: NFR-SEC-04
   section: 4.2 Security
   title: No secrets in version control
@@ -1654,11 +1657,16 @@ requirements:
   - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/spool/DurableSpoolTest.java
   - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/spool/SpoolDrainerTest.java
   - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/ResilienceApiTest.java
+  - 'backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/ResilienceApiTest.java
+    (assembled API: the warmed key keeps deciding with PostgreSQL paused; a key never verified gets 503
+    with Retry-After, not 401)'
   deviations:
   - docs/adr/0064-durable-spool-and-hold-reconciliation.md
   notes: 'M6 (2026-09-24): Kafka down: decisions continue into the durable spool and are published in
     order after recovery; the process-death case is an in-JVM close, not a forked-JVM kill (declared,
-    ADR 0064).'
+    ADR 0064). M7 (2026-10-17): the evidence now runs on the assembled API with M7''s key verification;
+    its expectation follows the owner''s D-15 decision of 2026-10-17 (ADR 0073, threat model R-13): decisions
+    continue for keys verified in the 10 minutes before the outage.'
 - id: NFR-REL-03
   section: 4.3 Reliability
   title: Redis feature store down
@@ -1744,7 +1752,8 @@ requirements:
   deviations: []
   notes: 'M6 (2026-09-24): not M6''s: Google OAuth fallback is staff authentication (M7). M6 built nothing
     here. M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md): proved in part. Not proved:
-    OAuth-only users'' recovery by email OTP (PB-112). The ''Temporarily unavailable'' button is M8''s.'
+    OAuth-only users'' recovery by email OTP (PB-112). The ''Temporarily unavailable'' button is M8''s.
+    M7 (2026-10-17): the ''Temporarily unavailable'' button is backlog PB-124, due M8.'
 - id: UX-REG-01
   section: 5.3 Registration form
   title: First Name
@@ -3588,6 +3597,8 @@ requirements:
   - backend/admin/src/test/java/io/github/mariusbayizere/fraudshield/admin/AuthorisationMatrixTest.java
   - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/web/GoogleSignInTest.java
   - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/account/PasswordHasherTest.java
+  - 'backend/admin/src/test/java/io/github/mariusbayizere/fraudshield/admin/AuthorisationMatrixTest.java
+    (apiKeysReachOnlyTheMachinePathsByTheContractFileAlone: an oracle read from the contract file alone)'
   deviations: []
   notes: 'M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md): proved in full: each key scenario
     has a test that fails if its code is deleted.'
@@ -4245,10 +4256,21 @@ requirements:
   - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/spool/SpoolDrainerTest.java
     (nothing committed past a refused batch)
   - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/kafka/KafkaSpoolChaosTest.java
+  - 'backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/ResilienceApiTest.java
+    (on the assembled API: decisions continue for a key verified before the outage; a key never verified
+    gets 503 with Retry-After)'
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/apikey/ApiKeyLifecycleTest.java
+    (a verified key admitted through an outage for 10 minutes, then refused; an announced change never
+    served stale)
   deviations:
   - docs/adr/0064-durable-spool-and-hold-reconciliation.md
   notes: 'M6 (2026-09-24): the durable spool; the forked-JVM kill test D-15 asks for is not built (the
-    chaos test''s process death is an in-JVM close, declared in ADR 0064).'
+    chaos test''s process death is an in-JVM close, declared in ADR 0064). M7 (2026-10-17): since M7 assembled
+    the API (ADR 0073), ingestion depends on API-key verification, which reads PostgreSQL once a record''s
+    2 s cache expires. Owner decision 2026-10-17 (option B): a key''s last verified record keeps being
+    used for up to 10 minutes while the database cannot answer, so D-15 holds for outages up to 10 minutes;
+    a key not verified by the instance is refused with 503 and Retry-After. Residual risk in threat model
+    R-13.'
 - id: D-16
   section: Build prompt Part B defect register
   title: Python in the hot path at 10k TPS.

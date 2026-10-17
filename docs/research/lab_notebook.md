@@ -2831,3 +2831,39 @@ yet the test it claimed to be. Its value came from every run in which something 
 **The rule.** *"Assembled" is a claim, and its evidence is the assembled thing running: the real
 application, started with nothing replaced, doing one journey that crosses the parts. Two green
 module suites prove two modules.*
+
+### 2026-10-17 · A test of an absence that looked only where its author looked
+
+`AssembledApplicationTest` exists to prove one absence: the API application, started as it ships,
+contains no test bean. It passed twice while it contained two. To reuse M7's HTTP helper I had put
+M7's test-jar on the ingest tests' classpath. The API application scans the whole root package, so
+it found M7's test application and registered its beans, a recording mailer and a fixed `@Primary`
+clock. The test checked the two beans its author had in mind, the ingestion API's ports, and those
+were the real ones. Nothing looked at the rest of the context.
+
+The fixed clock also reached every other API test's context. It stopped M6's rate-limit refill and
+its hold timer, so tests that had nothing to do with M7 failed with timeouts for several CI runs. A
+diagnostic found it: four seconds after a `Retry-After: 4`, the key's bucket held fewer tokens than
+before the wait, so time was not passing at all.
+
+The fix is enforced now. The test-jar is gone, and the test enumerates every bean in the context and
+fails if any class was loaded from test code.
+
+**The rule.** *A test that asserts an absence must assert it over the whole of what it guards (here,
+every bean in the context), not over the parts its author remembered. "No doubles" checked by
+naming two beans is a claim about two beans.*
+
+### 2026-10-17 · A check that ran, failed, and did not stop the push
+
+I pushed this round's four commits with a command chain that ran the commit-message check, then the
+push. The check failed: two lines of 73 characters. The push ran anyway, because the chain joined the
+check to the next step with `;`, not `&&`. The two commits were reworded and replaced within minutes,
+with a force-push guarded by a lease on the exact head pushed.
+
+It is the same failure as the matrix committed stale behind `| tail` (the pipe returned the exit
+status of `tail`, not of the check) and as the `hooksPath` incident, where the hook that should have
+refused a commit never ran. Each time a check existed and ran, or appeared to, and what followed did
+not depend on its result.
+
+**The rule.** *A check guards a step only if the step cannot run when the check fails. Join them with
+`&&` or `set -e`, never `;` or a pipe, and confirm that a deliberately failing input stops the chain.*

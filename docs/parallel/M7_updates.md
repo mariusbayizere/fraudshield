@@ -14,7 +14,7 @@ ADR and Flyway numbers are global.
 |---|---|---|
 | ADR | `0070`–`0079` | `0070` (staff identity, authorisation enforcement and audit anchoring), `0071` (hybrid persistence), `0072` (employee IDs unique per institution), `0073` (assembling the API application) |
 | Flyway | `V70`–`V79` | `V70__staff_identity_and_audit_anchoring.sql`, `V71__close_new_functions_to_public.sql`, `V72__audit_event_receipts.sql` |
-| Backlog | `PB-102`–`PB-130` (claimed 2026-10-17, after reading every branch's updates files; the highest id in use anywhere was `PB-101`) | `PB-102`–`PB-120` |
+| Backlog | `PB-102`–`PB-130` (claimed 2026-10-17, after reading every branch's updates files; the highest id in use anywhere was `PB-101`) | `PB-102`–`PB-124` |
 
 **Owner decision (2026-09-22), superseding the earlier "M7 owns V12":** migrations are reserved in
 ranges, so that merge order can never put an unmerged migration below a merged one (PB-24).
@@ -119,6 +119,8 @@ M7 owns `backend/{audit,auth,admin}`. These edits outside those modules could no
 | `docs/adr/0068-…` | amendment: how the decision path's audit records reach the chain | review finding 2: ADR 0068 and this file disagreed |
 | `docs/parallel/M9_updates.md` | the licence criterion widened to every installed distribution, and xgboost's wheel | owner, 2026-10-17 |
 | `docs/security/threat_model.md` | 3.6 rows for assembly, the audit relay and V71; the SSRF row; 3.5 before 3.6; R-10, R-11 owners; R-13 | review findings 8 and 12 |
+| `.../ingest/web/ApiKeyFilter.java` (503 on a key-store outage), `ResilienceApiTest` (the D-15 expectation, a key never verified), `IngestApiTest` (a comment), `ApiDocsTest`-adjacent assertions in `AssembledApplicationTest` | M6 files | the owner's D-15 decision and the round-2 review (`docs/reviews/M7/m7-round2-2026-10-17.md`) |
+| `docs/traceability/requirements.yaml` D-15, NFR-REL-02 (M6 rows) | notes and evidence for the assembled API's outage behaviour | round-2 review, finding 4 |
 
 ### Schema additions (V70, V71, V72)
 
@@ -168,23 +170,23 @@ killed by `UserAdministrationTest.selfEditRacingFailureLockDecidesOnTheLockedRow
 
 | Row | Proved | Status at merge | Evidence (each fails if the code it names is deleted) | What is not proved, and where it goes |
 |---|---|---|---|---|
-| FR-01-05 | in full | DONE | `AuthorisationMatrixTest` (every key scope against every operation: 403 on `/alerts`, `/admin`); `ApiKeyLifecycleTest.rotationKeepsTheOldKeyForTwentyFourHours`; `AssembledApplicationTest` (an admin-issued key submits in the real application); `IngestApiTest` on real keys | — |
+| FR-01-05 | in full | DONE | `AuthorisationMatrixTest` (every key scope against every operation: 403 on `/alerts`, `/admin`; and `apiKeysReachOnlyTheMachinePathsByTheContractFileAlone`, an oracle independent of `ContractPolicy`); `ApiKeyLifecycleTest.rotationKeepsTheOldKeyForTwentyFourHours`; `AssembledApplicationTest` (an admin-issued key submits in the real application); `IngestApiTest` on real keys | — |
 | FR-07-01 | in part | IN_PROGRESS | `AuthorisationMatrixTest` against `ContractAuthorizationManager`; `UserAdministrationTest.adminCannotChangeOwnRoleOrStatus`, `adminDemotedInsideTheCacheWindowCannotAct`; `SessionTest.tamperedOrForeignTokensAreRefused` | PB-104: the matrix test's expected answers come from `ContractPolicy` itself; method security; the unreachable last-active-administrator guard |
 | FR-07-02 | in part | IN_PROGRESS, **re-filed to M8** | `RegistrationTest` (every failed rule listed: `everyFailedPasswordRuleIsListedNotOnlyTheFirst`), `PasswordPolicyTest` | UI: confirm field, four-level meter, submit disabled (M8) |
 | FR-07-03 | in part | IN_PROGRESS, **re-filed to M8** | `GoogleSignInTest` (401 for invalid tokens; linking by verified email; names and avatar on the new-user path) | UI: sign-in on the login and registration pages (M8); "< 3 s" measured against a local fake (D-51), a deviation to record when it closes |
 | FR-07-04 | in part | IN_PROGRESS, **re-filed to M8** | `AccessTokensTest`; `SessionTest.accessTokenExpiresAfterFifteenMinutesAndTheFamilyAfterSevenDays` (no longer vacuous: the family ends at sign-in + 7 days however recently it rotated); `LoginTest.signInReturnsBearerTokenAndHardenedCookies` | UI: "httpOnly cookie confirmed in browser DevTools" (M8's Playwright) |
-| FR-07-05 | in full | DONE | `AuthorisationMatrixTest`; `NetworkAndKeysTest.rawKeyIsShownOnceListShowsOnlyNameScopesAndLastFour` | — |
+| FR-07-05 | in full | DONE | `AuthorisationMatrixTest`, including `apiKeysReachOnlyTheMachinePathsByTheContractFileAlone` (operations read from the contract file, the rule from FR-07-05: no key gets 2xx off the machine paths); `NetworkAndKeysTest.rawKeyIsShownOnceListShowsOnlyNameScopesAndLastFour` | — |
 | FR-07-06 | in part | IN_PROGRESS | `LoginTest` (11th attempt 429 with Retry-After; 5th failure locks; auto-unlock at 30 min) | PB-105: email measured against `RecordingStaffMailer`; the 15-minute window never advanced |
 | FR-07-07 | in full | DONE_WITH_DEVIATION (422 per ADR 0011, not 400) | `PasswordPolicyTest`; `PasswordHasherTest` (cost 12); `RegistrationTest.everyFailedPasswordRuleIsListedNotOnlyTheFirst` | — |
-| FR-07-08 | in part | IN_PROGRESS | `PasswordResetTest` (single use; `codeIsValidForExactlyTenMinutes`; 422 per ADR 0011) | PB-106: delivery within 30 s measured against `RecordingStaffMailer`; UI "change form" (M8) |
+| FR-07-08 | in part | IN_PROGRESS | `PasswordResetTest` (single use; `codeIsValidForExactlyTenMinutes`; 422 per ADR 0011) | PB-106: delivery within 30 s measured against `RecordingStaffMailer`; UI "change form", PB-123 (M8) |
 | FR-07-09 | in full | DONE | `SessionTest.passwordChangeEndsEverySessionAndOldJwtReturns401` (old JWT and old refresh cookie both refused); `GoogleSignInTest` (revocation call recorded) | — |
 | FR-06-01 | in part | IN_PROGRESS | `UserAdministrationTest.adminCreatesAccountThatSignsInWithTheEmailedTemporaryPassword` (UNIQUE email; UNIQUE (institution, employee ID) and the same ID accepted at another institution, ADR 0072) | PB-107: no Google set-up link in the welcome email; most fields unasserted; the database backstop behind the pre-check |
 | FR-06-02 | in part | IN_PROGRESS | `UserAdministrationTest.deactivationEndsSessionsAndBlocksPasswordSignIn`, `roleChangeEndsTheOldTokenAndStaleVersionsConflict` (refresh revoked) | PB-108: the version bump proved only together with the revocation; Google refusal within 5 s of a deactivation |
 | FR-06-06 | in part | IN_PROGRESS | `AuditSearchTest` (filters, the user filter now proved); `RelayedAuditAppenderTest`; `AssembledApplicationTest` (a hold is found by audit search); `DatabaseSecurityTest` | PB-109: most types written synthetically; "all write operations audited" untested |
 | FR-06-07 | in part | IN_PROGRESS, **re-filed to M8** | `ApiKeyLifecycleTest`; `NetworkAndKeysTest` (401 within 5 s, raw key once); `AuthPropertiesTest` (24 h and 2 s defaults); `AssembledApplicationTest` (revoked key refused within 5 s in the real application) | UI: the raw key visible once (M8) |
 | NFR-SEC-03 | in part | IN_PROGRESS | M1's token-only schema and contracts (`SchemaPoliciesTest`) | PB-114: the analyst-endpoint inspector test needs the analyst API, which no milestone builds (owner decision) |
-| NFR-REL-06 | in part | IN_PROGRESS | `GoogleSignInTest.googleOutageIsServiceUnavailableWithRetryAfterAndPasswordSignInStillWorks` (token and JWKS endpoints both 503) | PB-112: OAuth-only users' recovery by email OTP untested; UI "Temporarily unavailable" (M8) |
-| TEST-04 | in full | DONE | `AccessTokensTest`, `SessionTest`, `AuthorisationMatrixTest`, `GoogleSignInTest`, `PasswordHasherTest` | — |
+| NFR-REL-06 | in part | IN_PROGRESS | `GoogleSignInTest.googleOutageIsServiceUnavailableWithRetryAfterAndPasswordSignInStillWorks` (token and JWKS endpoints both 503) | PB-112: OAuth-only users' recovery by email OTP untested; UI "Temporarily unavailable", PB-124 (M8) |
+| TEST-04 | in full | DONE | `AccessTokensTest`, `SessionTest`, `AuthorisationMatrixTest` (with the independent key oracle), `GoogleSignInTest`, `PasswordHasherTest` | — |
 | TEST-07 | in full | DONE_WITH_DEVIATION (D-23: a new Google user is PENDING_APPROVAL, not an active ANALYST) | `GoogleSignInTest` (JWKS verification, invalid token 401, linking, new user, outage with password sign-in working) | — |
 | D-19 | in part | IN_PROGRESS, **re-filed to M10** | `ApiKeyFormatTest`; `ApiKeyLifecycleTest.theStoredSecretIsTheHmacOfTheSecretUnderTheCurrentPepper`, `revocationAnnouncementAloneEvictsAnotherInstancesCachedKey` (pub/sub, with a ten-minute cache), `revokedKeyIsRefusedWithinTheAnalyticBoundHoweverSlowTheRead` | PB-115: the 10,000 TPS rationale, measured on M10's machine (as D-13 and D-16 were carried) |
 | D-23 | in full | DONE | `GoogleSignInTest.newGoogleUserOnAnAllowedDomainCreatesAnAnalystAccountPendingApproval`, `googleUserOutsideTheAllowlistIsRefusedAndNothingIsCreated` | — |
@@ -224,27 +226,33 @@ and mutation tables, the evidence table):
 proposals are decided when the contracts are next opened.
 4. FR-07-07 and FR-07-08 say 400 where ADR 0011 prescribes 422. They are recorded as deviations
    above. If the owner prefers the SRS wording, a 400-class code is needed.
+5. `contracts/kafka/schemas/audit-event.schema.json` allows `writer_partition` up to 1023, while
+   `audit_events` (V8) and the audit writer accept 0–63 (D-32). An event from a producer using 64 or
+   more (the contract also lists `fraudshield-ml-worker`) would be dead-lettered. Proposal: maximum
+   63 in the schema (review of round 2, finding 12).
+6. M6 publishes audit events with `actor_role` null, so the appender takes the staff member's role
+   when it appends, and a replay days later records the role they hold then. Proposal: M6 fills
+   `actor_role` from the acting session, and the appender prefers it (finding 11).
 
 ## Items for the owner or other milestones
 
-- **Decisions for the owner (2026-10-17).**
-  - **D-15 against FR-06-07's cache** (ADR 0073, threat model R-13): in the assembled application a
-    PostgreSQL outage longer than the key cache's 2 seconds refuses ingestion at authentication.
-    M6's `ResilienceApiTest.withPostgresDownDecisionsContinueAndArePersistedAfterRecovery`
-    (NFR-REL-02, D-15) fails on the assembled application for this reason, so `ci` cannot be green
-    until this is decided. Keep refusing (and change M6's test and NFR-REL-02's evidence to say so),
-    or serve a key's last verified record, bounded, while the database cannot answer. Either way
-    the refusal is now 503 with `Retry-After`, not the 401 it first was.
-  - **Nobody builds the analyst API** (`listAlerts`, `decideAlert`, escalations, overrides, the
-    dashboard, rules, thresholds, SAR, models): the contract defines it, M8 builds its console
-    against mocks, and M6's `analystDecidesHold` and `countConfirmedFraud` wait for it. NFR-SEC-03's
-    inspector test (PB-114) cannot be written until it exists.
-  - **`DemoUserEntity`** stays, as a decision rather than an oversight. ADR 0068 point 4 says to
-    delete it in favour of `StaffUserEntity`, but that would make the database tool
-    (`backend/persistence`) depend on `fraudshield-auth` and so load its security and secrets. The two
-    entities are never in one persistence unit: `AssembledApplicationTest` asserts the API maps
-    `users` with `StaffUserEntity` alone. The cost is two mappings to keep in step, which each
-    application's `validate` start-up checks. Reverse it if you prefer the dependency.
+- **Owner decisions (2026-10-17, after round 2).**
+  - **D-15 against the key cache: option B, capped at 10 minutes.** A key's last verified record
+    keeps being used for up to 10 minutes after its last successful read while PostgreSQL cannot
+    answer; a key the instance has not verified gets 503 with `Retry-After`, never 401. Residual
+    risk, recorded in threat model R-13: a revocation committed in the 2 s before the outage whose
+    Redis announcement was also lost. M6's `ResilienceApiTest` and NFR-REL-02's evidence now expect
+    this (ADR 0073).
+  - **The analyst API: scoped, unowned, not yet assigned.** The owner decides between M7's
+    successor round and a milestone of its own on the scope below ("Unowned work"); PB-121.
+  - **`DemoUserEntity` stays**, by decision, and should not be re-raised. ADR 0068 point 4 asked for
+    it to be deleted in favour of `StaffUserEntity`, but that would make the database tool
+    (`backend/persistence`) depend on `fraudshield-auth`, and so load staff security and require
+    its secrets, to delete one entity: the worse trade. The two entities never share a persistence
+    unit (`AssembledApplicationTest` asserts the API maps `users` with `StaffUserEntity` alone), and
+    each application's `validate` start-up checks its own mapping against the schema.
+  - **The last-active-administrator guard stays as defence in depth** (PB-104): no request can
+    reach it today, so the first route that can must bring its test.
 - **Licences (decided 2026-10-17).** scipy and xgboost approved and recorded; NCCL recorded from its
   shipped text. M9's image criterion covers every installed distribution (`M9_updates.md`, From M7).
 - **Application assembly: done** (ADR 0073). The API application depends on `fraudshield-admin`
@@ -261,9 +269,47 @@ proposals are decided when the contracts are next opened.
   `ApiKeyService.webhookEndpoint`.
 - **Staff email translations (D-43).** `fraudshield/auth/mail.properties` is English only;
   Kinyarwanda, French and Kiswahili fall back to English until reviewed catalogues exist.
-- **Backlog.** PB-102 to PB-120 (this round). PB-11 (dedicated anchoring role) remains open; a
+- **Backlog.** PB-102 to PB-124 (this round). PB-11 (dedicated anchoring role) remains open; a
   forged anchor is detected but can block that day's anchor. PB-1 … PB-4 and PB-7 are
   risk-configuration and compliance-grant items that are not part of this branch's scope.
+
+## Unowned work: the analyst API (scoped 2026-10-17, PB-121)
+
+The frozen contract defines **89 operations**. **36 are implemented**: 7 by M6 (`ingest`: ingestion,
+batch, jobs, final decision, public health, the verification page and its form) and 29 by M7 (15
+`auth`, 14 `admin`). **5 are management-port only**, served by Actuator configuration and tested by
+nothing. **48 have no implementation on any branch and no owner** (m8, m9 and m10 have no backend
+controllers):
+
+| Group | Operations | Requirements waiting on it | Code that already backs it | Size (estimate) |
+|---|---|---|---|---|
+| Alerts and decisions | 8: `listAlerts`, `getAlert`, `getAlertExplanation`, `decideAlert`, `undoAlertDecision`, `escalateAlert`, `overrideAlertDecision`, `getScoringResult` | FR-04-02…05, FR-04-09, FR-04-10, FR-05-01, D-29, D-44, TEST-06, NFR-PERF-07 (M8/M10, not started); NFR-SEC-03 (M7) | alert queue and decision tables; `PostgresSink` writes queue entries and labels; `fraud_scores.shap_all`; `analystDecidesHold`, `countConfirmedFraud` | L |
+| Investigation | 3: account transactions, behaviour profile, network | FR-04-06…08 | tables and the feature store; no query service | M |
+| Dashboards, performance, portfolio | 5 | FR-04-01, FR-04-11, FR-05-02, FR-05-03, D-46, NFR-PERF-05 | labels, decisions, V10 aggregates | M |
+| Campaigns | 2 | FR-05-04 | tables only; no detection code anywhere | S (endpoints), M–L (detection) |
+| Rules | 5 | FR-05-05 | the rule DSL and compiler; JPA rule entities and cache | M |
+| Thresholds, circuit breakers, dual-control config changes | 11 | FR-05-07; the API halves carried from FR-02-06 (M5) and FR-03-07 (M6); D-18 | `DualControlWorkflow` (in memory only), config tables and JPA entities, breaker ports | M–L |
+| SAR reports | 3 | FR-05-06, D-22 | the table only; no draft generator | M |
+| Models, datasets, retraining | 8 | FR-06-03, FR-06-04 | Python's MLflow registry; tables with no Java user; no orchestrator | L |
+| Admin health, failed webhook deliveries | 2 | FR-06-05 (M9) | `webhook_deliveries`, Prometheus | S–M |
+| Deployment environment | 1 (public) | D-21 | the `fraudshield.auth.environment` property | S |
+
+**Who is waiting on it.**
+- M6's `DecisionTransitionService.analystDecidesHold` and `CircuitBreakerPort.countConfirmedFraud`:
+  implemented, called only by tests.
+- NFR-SEC-03's inspector test (PB-114).
+- M8's console. Its analyst and risk screens are placeholders, and of the 48 operations only
+  `getSystemHealth` is mocked so far (`frontend/src/mocks/handlers.ts` on `m8/frontend`).
+- The WebSocket alert feed (FR-04-02, consumer `websocket-fanout` in `topics.yaml`), outside the
+  REST contract, is also unbuilt.
+
+**Size.** 47 analyst operations against M7's 29. At M7's admin rate (about 130 lines of code and 95 of
+tests per operation), roughly 6,000 and 4,500 for the endpoints. The domain work beyond them adds
+more: campaign detection, SAR drafting, a persistent dual-control workflow, retraining
+orchestration and WebSocket fan-out. Altogether about 8,000 to 12,000 lines, 15 to 18 controllers
+and 15 to 20 services: one backend milestone, larger than M7. Suggested order, if built: alerts and
+decisions first (M6's hooks, PB-114, M8's core screens), then thresholds and dual control and rules
+(most backing code exists), then models, campaigns and SAR (new domain work).
 
 ## Evidence record
 

@@ -23,7 +23,7 @@ taken twice. Claims made on branches not yet merged, as of 2026-10-17:
 | PB-72 | M5, owned by M10 (owner confirmed 2026-10-17) | `M5_updates.md` §15 | re-measuring training-serving skew |
 | PB-76 | M4 | `M4_updates.md` on `m4/generalisation` | training rows near the corpus's start see truncated history (was a second `PB-69`) |
 | PB-77 to PB-101 | M6 | `M6_updates.md`, "Numbering reserved by this branch" | amendment 1's known gaps and the 22 section-8 rows proved only in part |
-| PB-102 to PB-130 | M7 | `M7_updates.md`, "Numbering reserved by this branch" | the merge round's unowned items and M7's rows proved only in part (PB-102 to PB-120 used) |
+| PB-102 to PB-130 | M7 | `M7_updates.md`, "Numbering reserved by this branch" | the merge round's unowned items and M7's rows proved only in part (PB-102 to PB-124 used) |
 
 ---
 
@@ -1371,7 +1371,8 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 ### PB-104 · FR-07-01: three things no test would catch if deleted
 - **Source:** M7 traceability audit under the deletion standard, 2026-10-17 (`docs/parallel/M7_updates.md`, FR-07-01; ADR 0070 §1) · **Priority:** high · **Due:** M7
 - **Problem:** (1) changing which roles or scopes `ContractPolicy` reads for an operation would not fail `AuthorisationMatrixTest`, because the test takes its expected answers from `ContractPolicy` itself; only four operations are pinned independently (`ContractPolicyTest.accessComesFromTheMatrix`). (2) Deleting `@EnableMethodSecurity` from `SecurityConfiguration` would not fail any test, because the URL layer refuses first. (3) Deleting the last-active-administrator guard in `UserAdministrationService.update` would not fail any test, because no request can reach it: the self-modification guard and the acting-administrator check, both proved, already leave one active administrator.
-- **Acceptance:** the matrix test reads `authorisation-matrix.yaml` itself for its expected answers; a test invoking a controller method with a wrong-role authentication expects `AccessDeniedException`; the guard removed as unreachable or kept as stated defence in depth, by the owner's choice.
+- **Owner decision (2026-10-17) on (3):** the guard is **kept as defence in depth**. No request can reach it today; a future route that does reach it inherits a guard tested by nothing, so whoever adds such a route adds the test. Removing it would be tidier and wrong. (The API-key half of (1) now has an independent oracle: `AuthorisationMatrixTest.apiKeysReachOnlyTheMachinePathsByTheContractFileAlone`.)
+- **Acceptance:** the matrix test reads `authorisation-matrix.yaml` itself for the roles' expected answers; a test invoking a controller method with a wrong-role authentication expects `AccessDeniedException`; a test that reaches the last-active-administrator guard, added with the first route that can.
 
 ### PB-105 · FR-07-06: the unlock email and the 15-minute window
 - **Source:** M7 traceability audit under the deletion standard, 2026-10-17 (FR-07-06) · **Priority:** medium · **Due:** M7
@@ -1450,5 +1451,25 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 
 ### PB-120 · Walkthrough claim 5: the measured revocation time
 - **Source:** M7 audit of the other claim tables, 2026-10-17 (walkthrough claim 5) · **Priority:** low · **Due:** M7
-- **Problem:** the walkthrough said a revoked key stopped working in under 100 ms; the last measurement (`85aff03`) was 103 ms at worst with the announcement, and no test asserts any figure. The walkthrough now states the measured value.
-- **Acceptance:** a test asserting a bound for the announced revocation, or the figure removed by a reviewed change.
+- **Problem:** the walkthrough said a revoked key stopped working in under 100 ms; the last measurement (`85aff03`) was 103 ms at worst with the announcement. `revocationAnnouncementAloneEvictsAnotherInstancesCachedKey` asserts a 2 s bound for the announced path, but nothing asserts the measured figure. The walkthrough now states the measured value.
+- **Acceptance:** a test asserting a tighter bound for the announced revocation, or the figure removed by a reviewed change.
+
+### PB-121 · The analyst API: 48 contract operations no milestone builds
+- **Source:** M7 merge round 2, scoped 2026-10-17 at the owner's request (`docs/parallel/M7_updates.md`, "Unowned work: the analyst API") · **Priority:** high · **Due:** owner decision (M7's successor round or a milestone of its own)
+- **Problem:** the frozen contract defines 89 operations; 36 are implemented (7 by M6, 29 by M7), 5 are management-port only, and 48 have no implementation and no owner: alerts and decisions (8), investigation (3), dashboards and portfolio (5), campaigns (2), rules (5), thresholds, circuit breakers and dual-control config changes (11), SAR reports (3), models, datasets and retraining (8), admin health and webhook deliveries (2), the deployment environment (1). Waiting on it: M6's `DecisionTransitionService.analystDecidesHold` and `CircuitBreakerPort.countConfirmedFraud`, both with no production caller; NFR-SEC-03's inspector test (PB-114); M8's console, whose analyst and risk screens are placeholders over mocks; FR-04-01 to FR-04-11, FR-05-01 to FR-05-07, FR-06-03 to FR-06-05, D-22, D-29, D-44, D-46, TEST-06, TEST-12, NFR-PERF-05, NFR-PERF-07; the WebSocket alert feed (FR-04-02), also unbuilt. Estimate: 15 to 18 controllers, 15 to 20 services, about 8,000 to 12,000 lines of code and tests, larger than M7.
+- **Acceptance:** the owner places it; then each group's operations implemented to the contract, with NFR-SEC-03's inspector test, `decideAlert` calling `analystDecidesHold`, and confirmed fraud reaching `countConfirmedFraud`.
+
+### PB-122 · `audit_event_receipts` grows without bound
+- **Source:** review of M7 round 2, finding 5, 2026-10-17 (V72) · **Priority:** medium · **Due:** M9
+- **Problem:** the receipts that deduplicate relayed audit events are append-only, never compressed and never purged, though deduplication is needed only while a redelivery is possible: the topic's P7D retention, plus the dead-letter topic's for replays. At the design load that is millions of rows a day kept for ever, and append-only forbids deleting them.
+- **Acceptance:** a bounded window (for example time partitions dropped past the redelivery horizon, with a stated exemption from the append-only rule) and an ADR note on why receipts may go before their audit rows.
+
+### PB-123 · FR-07-08's password change form (UI)
+- **Source:** review of M7 round 2, finding 7, 2026-10-17 · **Priority:** medium · **Due:** M8
+- **Problem:** FR-07-08's "a verified OTP triggers the password change form" is a console clause; the row stays with M7 for its delivery gap (PB-106), so without this row the clause had no owner.
+- **Acceptance:** the console shows the change form after a verified code, with a component or end-to-end test.
+
+### PB-124 · NFR-REL-06's "Temporarily unavailable" Google button (UI)
+- **Source:** review of M7 round 2, finding 7, 2026-10-17 · **Priority:** medium · **Due:** M8
+- **Problem:** NFR-REL-06 says the Google button shows "Temporarily unavailable" while Google is down; the server answers 503 with `Retry-After` (proved), but the console clause had no owner while the row stays with M7 (PB-112).
+- **Acceptance:** the console shows the state on a 503 from `/auth/google`, with a component test.
