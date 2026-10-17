@@ -89,15 +89,25 @@ The owner chose option B: **a key's last verified record keeps being used while 
 answer, for at most 10 minutes after that record was last read** (`fraudshield.auth.api-keys.stale-if-error`,
 default 10 minutes, `AuthProperties`).
 
-- A key verified by this instance within the last 10 minutes is admitted through an outage, and its
-  record is retried once per cache TTL, not once per request.
+- A key verified by this instance within the last 10 minutes is admitted through an outage. Its
+  record is retried once per cache TTL counted from the end of the failed read, not once per
+  request, however long the read blocked (up to the pool's 2 s timeout).
 - A key this instance has not verified, or verified longer ago, is refused with **503 and
   `Retry-After: 1`**, never 401. M7's filter and M6's filter both answer it so
   (`ApiKeyAuthenticationFilterTest`, `ApiKeyFilterTest`).
-- An announced revocation or rotation evicts the record at once, so it is never served stale.
-- **Residual risk, accepted (threat model R-13):** a revocation committed in the 2 s before the
-  outage, whose Redis announcement was also lost, is not seen until the database answers or the
-  10 minutes run out. No revocation can be committed during the outage.
+- An announced revocation or rotation evicts the record at once, so it is never served stale, even
+  when the announcement arrives while a read of that record is blocked: the stale renewal replaces
+  only the entry its read started from (`ApiKeyLifecycleTest`,
+  `announcementDuringBlockedReadIsNotUndoneByTheStaleRenewal`; review of round 3, MAJOR 1).
+- **Residual risk (threat model R-13), stated per instance:** a revocation committed after this
+  instance's last successful read of the key, either in the 2 s before it lost the database or
+  while it cannot reach it, whose announcement it did not receive, is not seen until it reads the
+  database again or the 10 minutes run out. "No revocation can be committed during the outage" is
+  true only when the database is down for every instance. When the outage is local to one instance
+  (its pool exhausted, a partition, a connection limit), the others still commit revocations, and
+  this instance learns of them only from the announcement, which Redis pub/sub drops while the
+  subscriber reconnects. The owner accepted the 2-second case on 2026-10-17; this wider statement
+  awaits the owner's confirmation.
 - D-15 therefore holds for outages up to 10 minutes. `ResilienceApiTest` asserts both halves:
   decisions continue for the warmed key, and a key never verified gets 503 with `Retry-After`.
 

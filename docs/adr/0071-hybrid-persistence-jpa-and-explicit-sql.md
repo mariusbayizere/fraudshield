@@ -224,3 +224,13 @@ triggers and a hash-chained audit log.
   decision path.
 - Anyone adding an entity over an append-only or hypertable table must mark it `@Immutable` and
   justify it here; code review enforces this.
+
+## Amendment 2026-10-17 — §6's API-key bound holds while the instance can read the database
+
+§6 bounds a missed API-key revocation at T = 2 s because "the next check reads the database, which
+has the change". Since the owner's D-15 decision (2026-10-17, option B; ADR 0073), that holds only
+while the instance can read the database. While it cannot, `ApiKeyAuthenticator` keeps using a
+key's last verified record for up to `staleIfError` (10 minutes) after that record's last read, so
+an unannounced revocation can be missed for up to that long, and FR-06-07's 5 seconds does not hold
+for it. An announced revocation still takes effect at once. Threat model R-13 states the exact
+window. `worstCaseStaleness()` remains T, and its Javadoc now says so.

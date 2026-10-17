@@ -140,13 +140,12 @@ requirements:
   - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/IngestApiTest.java (keys
     required and scoped; no 2xx on staff paths)
   - 'backend/admin/src/test/java/io/github/mariusbayizere/fraudshield/admin/AuthorisationMatrixTest.java
-    (every key scope against every operation: 403 on /alerts and /admin)'
+    (every key scope against every operation: 403 on /alerts and /admin; apiKeysReachOnlyTheMachinePathsByTheContractFileAlone:
+    an oracle read from the contract file alone)'
   - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/apikey/ApiKeyLifecycleTest.java
     (rotation keeps the old key for the 24-hour overlap)
   - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/AssembledApplicationTest.java
     (an admin-issued key submits in the real application)
-  - 'backend/admin/src/test/java/io/github/mariusbayizere/fraudshield/admin/AuthorisationMatrixTest.java
-    (apiKeysReachOnlyTheMachinePathsByTheContractFileAlone: an oracle read from the contract file alone)'
   deviations: []
   notes: 'M6 (2026-09-24): M6''s side is done: the ApiKeyAuthenticator port, scopes on the machine paths.
     Key verification, rotation and staff-path 403s are M7''s. M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md):
@@ -1084,7 +1083,9 @@ requirements:
     (a revoked key refused within 5 s in the real application)
   deviations: []
   notes: 'M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md): server side proved in full;
-    carried to M8, whose remaining clause is the raw key shown once in the UI.'
+    carried to M8, whose remaining clause is the raw key shown once in the UI. M7 (2026-10-17): the 5
+    s bound holds while the instance can read the database. During an outage, an unannounced revocation
+    can be missed for up to 10 minutes (D-15 option B; ADR 0071 amendment, ADR 0073, threat model R-13).'
 - id: FR-07-01
   section: 3.7 FR-07 Authentication and authorisation
   title: 'Four roles with distinct access scopes: ANALYST, SENIOR_ANALYST, RISK_OFFICER, ADMIN; role embedded
@@ -1196,11 +1197,12 @@ requirements:
   - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/security
   - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/apikey/ApiKeyScope.java
   evidence:
-  - backend/admin/src/test/java/io/github/mariusbayizere/fraudshield/admin/AuthorisationMatrixTest.java
+  - 'backend/admin/src/test/java/io/github/mariusbayizere/fraudshield/admin/AuthorisationMatrixTest.java
+    (every caller against every operation; and apiKeysReachOnlyTheMachinePathsByTheContractFileAlone,
+    an oracle read from the contract file alone: 401 or 403 on every non-public operation off the machine
+    paths)'
   - backend/admin/src/test/java/io/github/mariusbayizere/fraudshield/admin/NetworkAndKeysTest.java (403
     on /alerts and /admin)
-  - 'backend/admin/src/test/java/io/github/mariusbayizere/fraudshield/admin/AuthorisationMatrixTest.java
-    (apiKeysReachOnlyTheMachinePathsByTheContractFileAlone: an oracle read from the contract file alone)'
   deviations: []
   notes: 'M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md): proved in full.'
 - id: FR-07-06
@@ -1656,7 +1658,6 @@ requirements:
   - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/kafka/KafkaSpoolChaosTest.java
   - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/spool/DurableSpoolTest.java
   - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/spool/SpoolDrainerTest.java
-  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/ResilienceApiTest.java
   - 'backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/ResilienceApiTest.java
     (assembled API: the warmed key keeps deciding with PostgreSQL paused; a key never verified gets 503
     with Retry-After, not 401)'
@@ -3594,11 +3595,12 @@ requirements:
   evidence:
   - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/jwt/AccessTokensTest.java
   - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/web/SessionTest.java
-  - backend/admin/src/test/java/io/github/mariusbayizere/fraudshield/admin/AuthorisationMatrixTest.java
+  - 'backend/admin/src/test/java/io/github/mariusbayizere/fraudshield/admin/AuthorisationMatrixTest.java
+    (every caller against every operation; and apiKeysReachOnlyTheMachinePathsByTheContractFileAlone,
+    an oracle read from the contract file alone: 401 or 403 on every non-public operation off the machine
+    paths)'
   - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/web/GoogleSignInTest.java
   - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/account/PasswordHasherTest.java
-  - 'backend/admin/src/test/java/io/github/mariusbayizere/fraudshield/admin/AuthorisationMatrixTest.java
-    (apiKeysReachOnlyTheMachinePathsByTheContractFileAlone: an oracle read from the contract file alone)'
   deviations: []
   notes: 'M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md): proved in full: each key scenario
     has a test that fails if its code is deleted.'

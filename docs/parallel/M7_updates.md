@@ -239,10 +239,12 @@ proposals are decided when the contracts are next opened.
 - **Owner decisions (2026-10-17, after round 2).**
   - **D-15 against the key cache: option B, capped at 10 minutes.** A key's last verified record
     keeps being used for up to 10 minutes after its last successful read while PostgreSQL cannot
-    answer; a key the instance has not verified gets 503 with `Retry-After`, never 401. Residual
-    risk, recorded in threat model R-13: a revocation committed in the 2 s before the outage whose
-    Redis announcement was also lost. M6's `ResilienceApiTest` and NFR-REL-02's evidence now expect
-    this (ADR 0073).
+    answer; a key the instance has not verified gets 503 with `Retry-After`, never 401. M6's
+    `ResilienceApiTest` and NFR-REL-02's evidence now expect this (ADR 0073). Residual risk: the
+    owner accepted a revocation committed in the 2 s before the outage whose announcement was also
+    lost. The round-3 re-check showed the window is wider when the outage is local to one instance:
+    other instances can commit revocations meanwhile, and only the announcement reaches it. R-13
+    now states the window per instance, **awaiting the owner's confirmation**.
   - **The analyst API: scoped, unowned, not yet assigned.** The owner decides between M7's
     successor round and a milestone of its own on the scope below ("Unowned work"); PB-121.
   - **`DemoUserEntity` stays**, by decision, and should not be re-raised. ADR 0068 point 4 asked for
@@ -303,7 +305,8 @@ controllers):
 - The WebSocket alert feed (FR-04-02, consumer `websocket-fanout` in `topics.yaml`), outside the
   REST contract, is also unbuilt.
 
-**Size.** 47 analyst operations against M7's 29. At M7's admin rate (about 130 lines of code and 95 of
+**Size.** 47 analyst operations (the 48 less the public `/environment`, which is a one-line
+read of configuration) against M7's 29. At M7's admin rate (about 130 lines of code and 95 of
 tests per operation), roughly 6,000 and 4,500 for the endpoints. The domain work beyond them adds
 more: campaign detection, SAR drafting, a persistent dual-control workflow, retraining
 orchestration and WebSocket fan-out. Altogether about 8,000 to 12,000 lines, 15 to 18 controllers
