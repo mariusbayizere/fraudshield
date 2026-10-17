@@ -204,3 +204,95 @@ logic are unchanged in behaviour. None found.
    for I7d's spirit.
 6. I7e's "at once": the elapsed time from the first member's close to the second member's first
    re-read.
+
+## Re-check of 7047567 and a89a0f4
+
+Same constraints: static, read-only, CI taken as given (run 39014509277 on `7047567`: all 7 jobs
+executed and green; notify 183 tests, ingest 101). Read: `git diff fb42eb8 7047567` in full (main,
+tests, `Makefile`, `diagnose-stack.sh`, wiring), section 8 and the status block at `a89a0f4`, and
+the new lab notebook entry, checked against the reviews it cites.
+
+### Verdict: APPROVED_WITH_MINORS. 0 BLOCKER, 0 MAJOR, 3 MINOR, 5 NIT (new), n5 and n6 carried
+
+All three MAJORs are resolved. Under the owner's deletion standard, section 8 now states what it
+proves and what it does not, row by row, and the 13/24/1 count is right. Three MINORs remain: one
+sub-clause of I17 still claims a consumer behaviour that only a class test covers (R-m1); I26's
+known-partial wording still omits three mechanisms (R-m2); and D-c still describes the replay's old
+selection rule (R-m3). None affects runtime correctness.
+
+### Closure table
+
+| Finding | Status | Evidence at `7047567` / `a89a0f4` |
+|---|---|---|
+| M1 section 8 over-claims | **Resolved**, apart from R-m1 and R-m2 | New tests for each gap I named. I checked each against deletion: `gatewaysThatThrowUncheckedAreFailedOnceAndNeverResent` fails if the sender's `catch (RuntimeException)` is removed; `envelopesWithoutAnObjectPayloadAreMalformed` fails if the payload check is removed (null or array payloads become F4 and block record 5 past the 30 s await); `recordsThatKeepFailingAfterTheirSendLeaveAsOutcomeUnrecordedWithTheResult` reaches the real F4 bound; `outagesBetweenOwnFailuresNeitherCountTowardsTheBoundNorClearIt` (F4,F1,F1,F4,F1,F4 is dead-lettered at 6: at 3 if F1 counted, at 8 if F1 cleared); `theBatchBudgetKeepsEachMemberWithinItsPollInterval` fails without the budget, provided one poll returns the whole batch (see (d)); `replayTakesTheNewestCopyAcrossReasons…`; `droppedRecordsAreLoggedInFull`; `committedMetadataThatDoesNotParseIsWarnedAndReadAsNone`. Every remaining gap is written as **Not proved:** in deletion terms. |
+| M2 poll thread dies on a reset | **Resolved** | `run()` now catches `RuntimeException` around `cycle()` and backs off. The reset handlers, `outOfRange` included, run inside `cycle()`. `WakeupException` is not caught inside `cycle()` (it is rethrown from the batch's catch) and returns from `run()`. An `Error` anywhere reaches `stop(batch, …)`. `batch` is cleared at the start of each cycle and set only after a successful poll, so an `Error` in a reset or a poll stops with nothing to seek, and an `Error` mid-batch seeks that batch. `beginningOffsets`/`endOffsets` now take a 10 s timeout and only assigned partitions. No regression found. |
+| M3 replay re-sends from an older copy | **Resolved in code**; contract not updated (R-m3) | The newest copy per `event_id` is chosen over every record in the window, and dropped unless its own reason was requested. The new test fails if the old order (filter first, then pick newest) comes back. |
+| m1 N not logged | Resolved | N, read from the validated payload, is on the possibly-delivered ERROR, the `fs-kept-result` INFO, the reset ERRORs, the drop ERROR, the dead-letter ERROR and the failing WARN. A UUID is not PII. |
+| m2 webhook gauge weakly held | Resolved | `Channels.gaugeStates` holds the `AtomicInteger` for the bean's lifetime. |
+| m3 replay forwards an ignored `fs-kept-result` | Resolved | Every `fs-kept-result` on a copy is dropped, and only the copy's `fs-dlq-result` is carried. Tested (E2). |
+| m4 12.5 branches | Resolved | A truncation without a divergent offset goes to the log end, uncounted. A fetch offset in [log start, log end] is resumed, not skipped. Below the start (non-truncation) is counted. See R-n2 for the in-range branch. |
+| m5 close() under a running attempt | Resolved; residue in R-n3 | `close()` waits batch budget + 120 s + 10 s. If the thread is still alive it sets `stopping`, and the revoke listener commits nothing off the poll thread while that thread lives. During `stop()` the listener runs on the poll thread, so the `stopping` check applies. After a clean join the listener runs on the closing thread with a happens-before from `join`. |
+| m6 failed migration invisible | Resolved | `make up` writes the run's output to `build/stack-diagnostics/vault-migrate.log`, marks `vault-migrate.failed` on failure, prints the log and exits 1. `diagnose-stack.sh` counts and annotates the failure. The marker is cleared on each `up`, and `build/` is ignored by git. The log carries Flyway's URL and user, never the password. R-n5 is cosmetic. |
+| m7 I20's wiring gap | Resolved | I20's **Not proved** names the wiring lambda. |
+| n1 to n4 | Resolved | The failing WARN carries the last failure. The stop commit takes the epoch of the record at the committed offset (`epochAt`). One predicate decides "replayed". The cause-chain walk has an identity cycle guard. |
+| n5 (M9 8.4 wording, on `m9/infra`) | Open | Not touched. NIT, carried. |
+| n6 (vault healthcheck on the socket) | Open | Not touched. NIT, carried. |
+| n7 (I29 WARN untested) | Resolved | A new test asserts the WARN. |
+
+### (2) Section 8 under the deletion standard
+
+The count: 38 rows (the "(malformed)" pointer row excluded). With no **Not proved** clause: I1, I2,
+I3b, I4, I4b, I5, I6, I7b, I7c, I9, I16, (wire), I25, which is 13. With one: I3a, I7, I7d, I7f, I8,
+I10–I15, I14b, I17–I24, I26–I29, which is 24. I7e: 1. **The arithmetic is right.** I spot-checked
+the 13 full rows by deletion: the S1, S3 and trial-render branches, the link fallback, and the
+held-open writer all fail their named tests if removed. I7b and I7c are proved at the level of
+`WaitBudget`, the level the row states. (wire) I did not re-read.
+
+For the 24 partial rows, each **Proved** clause I checked survives deletion of the code it names.
+Each **Not proved** clause states a real deletion that survives, and several are sharp and correct:
+I7f (deleting `seekBack` and the cycle's catch), I11 (the timestamp comparison: copies arrive in
+offset order), I14 (the revocation commit, made redundant by the re-read checkpoints), I15 (the
+CASE that makes `kept` null), I20 (the adapter's catch of an unreadable 2xx, covered by the
+sender's catch), I22 (the double drop). Exceptions:
+
+- **R-m1, I17.** "`HeadRetryTest` (F1 neither counts, clears nor adds time)" is in **Proved**. The
+  "nor adds time" part is proved only for the class. Deleting the consumer's
+  `state.retry.failedOutage(end)` (`EnvelopeConsumer.java`, in `attempt()`) or
+  `state.retry.attemptStarts(start)` fails no test: the consumer tests that mix F1 and F4 use a
+  zero time bound. This is exactly what the I7 row (the consumer's `!first`) and the I8 row (the
+  consumer's `budget.failed`) mark as **Not proved**.
+- **R-m2, I26 (known partial): the wording is still incomplete.** It omits (a) the stopping flag:
+  deleting `stopping = true` in `stop()`, or the listener's check of it, fails no test, because in
+  `anErrorMidBatch…` the revoke would carry empty metadata and commit nothing anyway; (b) the new
+  `close()` rule (the long join, `stopping` when the thread is alive, the listener's off-thread
+  check), for which no test exists; (c) the seek-back across several partitions, since the test
+  topic has one partition. What it does list is accurate.
+- I27 (known partial): **accurate and complete.**
+- I7e: "Not proved" is accurate as worded.
+
+### New findings
+
+| # | Sev | Where | What | Minimal fix |
+|---|---|---|---|---|
+| R-m1 | MINOR | contract I17 (Proved clause) | See (2): "F1 adds no F4 time" is claimed for the consumer, but deleting either consumer call into `HeadRetry` fails no test. | Move it to **Not proved** ("deleting the consumer's `failedOutage`/`attemptStarts` calls would not fail any test"), or add a consumer test with a non-zero time bound and outages between F4 failures. |
+| R-m2 | MINOR | contract I26 (known partial wording) | It omits the stopping flag, the new `close()`/listener thread rule and the multi-partition seek-back, none of which a test would catch if deleted. | Add the three to I26's **Not proved**. |
+| R-m3 | MINOR | contract D-c l. 439 (and D-d l. 470) | D-c still says the newest copy is chosen "among the matching records". The code now chooses across every reason and replays only if the newest copy's reason was asked, and it drops every `fs-kept-result` a copy carries unless it has `fs-dlq-result`. The specification and the code disagree, and D-d's "what remains" never mentions the older-copy case the fix closes. | Reword D-c to the new rule, and add the `fs-kept-result` drop. |
+| R-n1 | NIT | contract section 8 preamble | It still opens "A test named here fails if the invariant is broken", which the 13/24/1 count contradicts. The count is stated in the status block near the top (l. 70–75), not in section 8's preamble as the hand-off says. | Replace the sentence with the standard and the count, or point to the status block. |
+| R-n2 | NIT | `EnvelopeConsumer.outOfRange`, in-range branch | `target = fetch` with no log line and no backoff. If the broker keeps answering out-of-range for an offset that `ListOffsets` reports in range, the partition loops with no backoff and no log line, holding its records without a word. **Needs execution** to know whether a broker can do that. | Log at WARN and back off the partition in that branch. |
+| R-n3 | NIT | `EnvelopeConsumer.close()` | On the timed-out path, `consumer.close()` from the caller's thread can throw `ConcurrentModificationException` (now caught) while the poll thread is inside a client call. `consumerClosed` is then set true while the client stays open, and nothing closes it when the poll thread exits, so the member lingers until `max.poll.interval.ms`. Separately, a 190 s wait per consumer (two in sequence) exceeds common pod grace periods, which turns the shutdown into 13.1's crash case. | Let the poll thread close the client on its way out if `close()` could not, and note the grace period for M9. |
+| R-n4 | NIT | `docs/research/lab_notebook.md`, last entry | Two small inaccuracies. "The third consecutive review where this is the headline finding": implementation-1's only MAJOR was indeed the claim, but implementation-2's headline was M1 (unbounded retries); its false claim was M3. And of the three examples given for the "five other rows", the batch budget belonged to I26's known-partial wording, not to those five rows (I17, I19, I22, I28, I7e). The family examples (the parameter digest, the D-08 ceiling, `PB-75` at about 3 %, the 537-test MLflow fake) match their entries. | "the third consecutive review to find over-claimed tests among its MAJORs"; take the batch budget out of the five-row examples. |
+| R-n5 | NIT | `.github/workflows/stack.yml` "Stack diagnostics" step | `make up` now always creates `build/stack-diagnostics`. On a failure before the smoke test, the step no longer prints "no stack diagnostics collected": it emits an empty notice and a `head` error for the missing `resources.txt`. Cosmetic: the migration's own annotation comes from `diagnose-stack.sh`. | Test for `resources.txt` rather than the directory. |
+
+### (3) The lab notebook entry
+
+Accurate in substance. The quotation from MAJOR 1 is verbatim. Implementation-1 (`bd48557`) did find
+"every invariant tested" untrue as its only MAJOR, and implementation-2 M3 is described correctly.
+The four older cases match their entries. The rule is stated as the owner set it. Two framing
+inaccuracies are listed as R-n4.
+
+### (d) Needs execution (re-check)
+
+1. `theBatchBudgetKeepsEachMemberWithinItsPollInterval` fails without the budget only if one poll
+   returns at least five of the eight records. That is expected with default fetch sizes, since all
+   eight are published before the consumer starts, but CI cannot show the counterfactual.
+2. R-n2: whether an in-range out-of-range answer can recur.

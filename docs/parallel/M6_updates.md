@@ -1023,3 +1023,20 @@ I3a, I17, I18, I19, I20, I22, I23, and **I26 and I27, known partial by the owner
 `Error` rule and the health endpoint (I26), and a real dead-letter send timing out (I27) are by
 review. Next: a fresh independent review of the code round, the final contract edits and
 `e7a5be5`.
+
+**Implementation-3 review and its re-check** (`docs/reviews/M6/m6-decision-2026-10-17-implementation-3.md`):
+CHANGES_REQUIRED, 3 MAJOR, 7 MINOR, 7 NIT; fixed in `7047567` (CI run 39014509277 green, notify 183
+tests, ingest 101), section 8 re-held to the deletion standard in `a89a0f4` (13 rows proved in full,
+24 in part, 1 not at all); re-check **APPROVED_WITH_MINORS**, its MINORs and NITs applied after it.
+
+**Carried to M9 from this round:**
+
+- A consumer's `close()` now waits as long as a batch can take, about 190 s; the application closes
+  its two consumers in turn, so a pod needs a termination grace period above about 400 s, or the
+  consumers must be closed in parallel (implementation-3, R-n3).
+- M9's section 8.4 names the wrong mechanism for its latent trap: `docker compose up --wait
+  fraudshield-api` starts the vault migration only if the API depends on it; the real risk is an API
+  that starts against a vault not yet migrated (implementation-3, n5).
+- The vault's healthcheck uses the Unix socket and may pass during initdb; whether it matters needs
+  a run (implementation-3, n6).
+

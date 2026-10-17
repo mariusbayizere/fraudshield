@@ -2563,16 +2563,16 @@ The fresh review of amendment 1's code (`docs/reviews/M6/m6-decision-2026-10-17-
 MAJOR 1) put it in one example: *"No test has the SMS gateway throw an unchecked exception. Deleting
 `CustomerSmsSender.java:354-358` would re-send up to the bound (about 25 SMS) with every test
 green."* The contract's section 8 named a test for that guard, the test passed, and the guard could
-have been removed without any test noticing. The same review found the same shape in five other
-rows: an envelope without a payload that no test sent, an "`outcome_unrecorded` at the bound" whose
-cited record was refused by the database at once and never reached the bound, a batch-budget test
-that passed with the budget deleted.
+have been removed without any test noticing. The same review found the same shape in other rows: an
+envelope without a payload that no test sent, and an "`outcome_unrecorded` at the bound" whose cited
+record was refused by the database at once and never reached the bound. In the rows the owner had
+accepted as partial, it found a batch-budget test that passed with the budget deleted.
 
-**It is the third consecutive review where this is the headline finding.** The second
-implementation review of M6 (MAJOR 3) found a "malformed payload is dead-lettered" claim that held
-for three fields of one handler; the first (`-implementation-1.md`) found "every invariant is
-tested" untrue. Each time the rows were corrected one by one, and each time the next review found
-more.
+**It is the third consecutive review with this finding as a MAJOR, and the headline of this one.**
+The second implementation review of M6, whose headline was unbounded retries (MAJOR 1), also found
+(MAJOR 3) a "malformed payload is dead-lettered" claim that held for three fields of one handler;
+the first (`-implementation-1.md`) found "every invariant is tested" untrue. Each time the rows were
+corrected one by one, and each time the next review found more.
 
 **The family is older than M6:**
 

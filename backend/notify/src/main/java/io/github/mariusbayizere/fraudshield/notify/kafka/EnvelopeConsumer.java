@@ -313,6 +313,7 @@ public final class EnvelopeConsumer implements AutoCloseable {
   private volatile boolean running = true;
   private volatile boolean stopping;
   private volatile boolean consumerClosed;
+  private volatile boolean closeOnExit;
   private long pollBackoffMs;
 
   /**
@@ -488,6 +489,17 @@ public final class EnvelopeConsumer implements AutoCloseable {
       }
     } catch (Error error) {
       stop(batch, error);
+    } finally {
+      if (closeOnExit && !consumerClosed) {
+        // close() gave up waiting: the client is closed here, on its own thread, as the thread
+        // ends (implementation-3, R-n3).
+        try {
+          consumer.close(Duration.ofSeconds(5));
+        } catch (RuntimeException closeFailed) {
+          LOG.error("could not close consumer {} on its way out", group, closeFailed);
+        }
+        consumerClosed = true;
+      }
     }
   }
 
@@ -767,6 +779,13 @@ public final class EnvelopeConsumer implements AutoCloseable {
       } else if (!truncation && fetch >= logStart && fetch <= logEnd) {
         // The log has grown back over the offset since the fetch: nothing is lost.
         target = fetch;
+        LOG.warn(
+            "{}: committed offset {} was reported out of range but lies within the log [{}, {}];"
+                + " resuming there",
+            partition,
+            fetch,
+            logStart,
+            logEnd);
       } else {
         // Above the log end, or a divergence the client could not locate: never the log start,
         // which would re-read the whole retention (12.5).
@@ -1454,12 +1473,13 @@ public final class EnvelopeConsumer implements AutoCloseable {
     }
     if (thread.isAlive()) {
       // The listener will commit nothing (it checks the thread), so nothing passes an
-      // unhandled record; the next owner resumes from the last commit.
+      // unhandled record; the next owner resumes from the last commit. The client is closed by
+      // the poll thread itself when it ends, since it cannot be closed from here while in use.
       LOG.error(
-          "consumer {} did not stop within {}; closing without a final checkpoint", group, wait);
+          "consumer {} did not stop within {}; it closes without a final checkpoint", group, wait);
       stopping = true;
-    }
-    if (!consumerClosed) {
+      closeOnExit = true;
+    } else if (!consumerClosed) {
       try {
         consumer.close();
       } catch (RuntimeException closeFailed) {
