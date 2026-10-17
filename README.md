@@ -4,16 +4,17 @@ Real-time explainable fraud detection and analyst intelligence platform for East
 digital payments: mobile money, USSD, agent banking, cards, online and bank transfers across
 Rwanda, Kenya, Tanzania, Uganda and the DRC.
 
-> **Project status: M8 — front-end.** M0 (bootstrap and governance), M1 (contracts and database),
+> **Project status: M6 — ingestion and the decision engine.** M0 (bootstrap and governance), M1 (contracts and database),
 > M2 (the synthetic dataset generator, verified at 1,006,249 rows) and M3 (44 features on two
 > independent paths, 36 of them computable on this benchmark) are complete, and so is M4 (the
 > calibrated XGBoost + LightGBM ensemble, evaluated on the benchmark's held-out test period). M4
 > passes 9 of its 11 gate metrics — AUC 0.970, +0.091 over the strongest single feature — and
 > misses two: recall at the 0.60 flag threshold is 0.736 at 30,000 training rows, against 0.88,
 > and the matching FNR
-> (ADR 0031). All results are on the FraudShield-EAC synthetic benchmark, not on real data. M5–M7
-> (scoring service, decision engine, staff identity) are not complete, so no running service
-> exists yet. This README states only what exists and has been verified; measured results are
+> (ADR 0031). All results are on the FraudShield-EAC synthetic benchmark, not on real data. M5
+> (the scoring service) is tagged, with its latency, throughput, shadow-gate and production
+> feature-feed rows carried to M10 and still open. M6 and M7 (decision engine, staff identity)
+> are not complete, so the system cannot yet be run end to end. This README states only what exists and has been verified; measured results are
 > given with their scale and the run that produced them.
 > FraudShield is an independent research project. It is not deployed at, endorsed by, or
 > validated with any financial institution or regulator.

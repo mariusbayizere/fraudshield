@@ -9,6 +9,20 @@ Format: ID · title · source · priority · due · problem · acceptance. Due d
 from build prompt Part D.3 (M2 is the dataset generator; the scoring service is M5, ingestion and
 the decision engine M6, staff identity, admin and audit M7).
 
+**Identifiers are claimed before they are used** (owner decision, 2026-09-24, applied 2026-10-17).
+A milestone that needs a backlog id, an ADR number or a migration version writes the claim into
+`docs/parallel/<milestone>_updates.md` first, after reading the other milestones' updates files on
+every branch, and only then uses it. "Next free" is only true on the branch that asks: parallel
+branches do not see each other's edits to this file, which is how `PB-69` and `PB-73` were each
+taken twice. Claims made on branches not yet merged, as of 2026-10-17:
+
+| Id | Claimed by | Where | Subject |
+|---|---|---|---|
+| PB-69 | M5, built by M6 | `M5_updates.md` §12, §15; `m6/featurestore-fallback` | the feature store's PostgreSQL fallback |
+| PB-70, PB-71 | M5, owned by M6 (owner confirmed 2026-10-17) | `M5_updates.md` §15 | the `fs.labels` consumer; the reference-state contract and producer |
+| PB-72 | M5, owned by M10 (owner confirmed 2026-10-17) | `M5_updates.md` §15 | re-measuring training-serving skew |
+| PB-76 | M4 | `M4_updates.md` on `m4/generalisation` | training rows near the corpus's start see truncated history (was a second `PB-69`) |
+
 ---
 
 ### PB-1 · Test rejecting and confirming a folded tightening
@@ -1202,3 +1216,17 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
   runs: a ~0.2 s, load-sensitive margin is not evidence.
 - **Acceptance:** `IngestApiTest.thousandTransactionBatchesAreDecidedWithinThirtySeconds`, or a
   dedicated batch benchmark, on the dedicated machine, with the margin recorded over repeated runs.
+
+### PB-75 · The gitleaks self-test fails on some generated secrets
+- **Source:** M5, 2026-09-24, a red gitleaks job on `m5/scoring` (`M5_updates.md` §21, proposed
+  as `PB-73`; renumbered by owner decision 2026-09-24, M10_updates.md §1) · **Priority:** medium
+  · **Due:** M9 (the security workflows; `tools/` is shared)
+- **Problem:** `tools/bin/gitleaks-selftest` plants randomly generated fake secrets and asserts
+  gitleaks reports exactly those. Some generated values do not match the `generic-api-key` rule,
+  so the guard fails with "NOT DETECTED generic-api-key in <path>", on a different path each run:
+  1 failure in 31 local runs at `16035d2` (about 3%), and CI run 35909780245. A flaky pass of a
+  guard on the secret scanner is worth as little as a flaky failure costs.
+- **Acceptance:** the self-test passes 200 consecutive runs, with planted values the pinned rules
+  are guaranteed to match (fixed high-entropy shapes per rule, or each rule's own regex asserted
+  against the generated value before planting it), so a failure means the configuration
+  regressed.

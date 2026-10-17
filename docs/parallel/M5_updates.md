@@ -810,10 +810,10 @@ rewrite -- only commit messages.
 
 ## 21. A backlog row for `tools/`: the gitleaks self-test is flaky
 
-**Proposed row (M5 does not edit `docs/backlog/`; the id is a proposal to confirm at integration):**
+**Proposed row, integrated as `PB-75` on 2026-10-17** (M6 had already taken `PB-73`; M10_updates.md §1 records the owner's renumbering):
 
 ```yaml
-- id: PB-73            # next free after PB-72; confirm before using
+- id: PB-75            # proposed as PB-73; renumbered by owner decision 2026-09-24 (M6 keeps PB-73)
   title: "tools/bin/gitleaks-selftest fails about 3-4% of runs on generated secrets"
   due_milestone: M9    # M9 owns the security workflows; tools/ is shared
   raised_by: M5 (2026-09-24), from a red gitleaks job on m5/scoring
