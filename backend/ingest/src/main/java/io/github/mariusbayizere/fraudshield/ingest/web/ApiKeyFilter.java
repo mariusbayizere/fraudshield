@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.dao.DataAccessException;
 import org.springframework.web.filter.OncePerRequestFilter;
 import tools.jackson.databind.ObjectMapper;
 
@@ -72,7 +73,23 @@ public final class ApiKeyFilter extends OncePerRequestFilter {
       chain.doFilter(request, response);
       return;
     }
-    Optional<ApiPrincipal> principal = authenticator.authenticate(request.getHeader("X-API-Key"));
+    Optional<ApiPrincipal> principal;
+    try {
+      principal = authenticator.authenticate(request.getHeader("X-API-Key"));
+    } catch (DataAccessException storeDown) {
+      // The key store cannot answer: the key is not known to be bad, so the client retries.
+      response.setHeader("Retry-After", "1");
+      write(
+          response,
+          503,
+          Problems.problem(
+              "service-unavailable",
+              "Temporarily unavailable",
+              503,
+              "retry the same request",
+              correlation));
+      return;
+    }
     if (principal.isEmpty()) {
       write(
           response,

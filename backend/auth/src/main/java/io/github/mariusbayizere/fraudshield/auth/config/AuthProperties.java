@@ -170,18 +170,22 @@ public record AuthProperties(
    * @param currentPepperVersion version used for new keys
    * @param cacheTtl how long a verified key record is cached (default 2 seconds, FR-06-07)
    * @param rotationOverlap how long a rotated key stays valid (default 24 hours)
+   * @param staleIfError how long after its last successful read a key record is still used while
+   *     the database cannot answer (default 10 minutes; D-15, owner decision 2026-10-17)
    */
   public record ApiKeys(
       Map<Integer, String> peppers,
       Integer currentPepperVersion,
       Duration cacheTtl,
-      Duration rotationOverlap) {
+      Duration rotationOverlap,
+      Duration staleIfError) {
 
     /** Applies defaults. */
     public ApiKeys {
       peppers = peppers == null ? Map.of() : Map.copyOf(peppers);
       cacheTtl = Objects.requireNonNullElse(cacheTtl, Duration.ofSeconds(2));
       rotationOverlap = Objects.requireNonNullElse(rotationOverlap, Duration.ofHours(24));
+      staleIfError = Objects.requireNonNullElse(staleIfError, Duration.ofMinutes(10));
     }
   }
 

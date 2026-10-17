@@ -38,6 +38,19 @@ public final class RelayedAuditAppender {
   private static final int PARTITIONS = 64;
   private static final TypeReference<Map<String, Object>> MAP = new TypeReference<>() {};
 
+  /**
+   * The payload is not an audit event. Thrown before any database access, so a consumer can
+   * dead-letter it at once; failures inside the append's transaction are other exceptions.
+   */
+  public static final class MalformedAuditEvent extends IllegalArgumentException {
+
+    private static final long serialVersionUID = 1L;
+
+    MalformedAuditEvent(String message, Throwable cause) {
+      super(message, cause);
+    }
+  }
+
   private final TenantTransactions tenants;
   private final JdbcTemplate jdbc;
   private final JdbcAuditLog[] writers = new JdbcAuditLog[PARTITIONS];
@@ -64,14 +77,19 @@ public final class RelayedAuditAppender {
    * @param institutionId the envelope's institution
    * @param payload the envelope's payload ({@code contracts/kafka/schemas/audit-event.schema.json})
    * @return true if the event was appended now, false if it had been already
-   * @throws IllegalArgumentException if the payload is not an audit event, checked before any
-   *     database access
+   * @throws MalformedAuditEvent if the payload is not an audit event, checked before any database
+   *     access
    * @throws IllegalStateException if the staff member it names does not exist in the institution
    */
   public boolean append(UUID eventId, UUID institutionId, JsonNode payload) {
     Objects.requireNonNull(eventId, "eventId");
     Objects.requireNonNull(institutionId, "institutionId");
-    Relayed relayed = parse(institutionId, payload);
+    Relayed relayed;
+    try {
+      relayed = parse(institutionId, payload);
+    } catch (IllegalArgumentException malformed) {
+      throw new MalformedAuditEvent(malformed.getMessage(), malformed);
+    }
     return tenants.inTenant(
         institutionId,
         () -> {

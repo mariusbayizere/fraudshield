@@ -14,6 +14,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.function.LongSupplier;
+import org.springframework.dao.DataAccessException;
 
 /**
  * Authenticates {@code X-API-Key} (D-19, FR-06-07, FR-07-05).
@@ -26,6 +27,14 @@ import java.util.function.LongSupplier;
  * channel after it commits and evicts the record everywhere at once; if the announcement is lost,
  * the time to live still makes a revoked key fail within 2 seconds, inside the required 5. The
  * cache holds the stored HMAC, never the secret, so a cached record cannot admit a wrong secret.
+ *
+ * <p>While the database cannot answer, a record verified within the last {@code staleIfError} (10
+ * minutes in production) keeps being used, so ingestion keeps deciding through a PostgreSQL outage
+ * (D-15; owner decision 2026-10-17, threat model R-13). No revocation can commit while the database
+ * is down, and an announced revocation evicts the record, so the one revocation this can miss is
+ * one committed in the {@code cacheTtl} before the outage whose announcement was also lost. A key
+ * with no record in this instance, or one read longer ago than the cap, is refused with the
+ * database's exception, which the filter answers 503.
  */
 public final class ApiKeyAuthenticator {
 
@@ -42,13 +51,22 @@ public final class ApiKeyAuthenticator {
   private final Map<Integer, byte[]> peppers;
   private final String environment;
   private final long cacheTtlNanos;
+  private final long staleIfErrorNanos;
   private final Clock clock;
   private final LongSupplier nanoTime;
   private final Executor executor;
   private final Map<String, Cached> cache = new ConcurrentHashMap<>();
   private final Map<String, Instant> lastTouched = new ConcurrentHashMap<>();
 
-  private record Cached(Optional<ApiKeyRepository.Credential> credential, long expiresAtNanos) {}
+  /**
+   * A cached record.
+   *
+   * @param credential the record
+   * @param expiresAtNanos when it must be read again
+   * @param readAtNanos when it was last read successfully, which bounds its use during an outage
+   */
+  private record Cached(
+      Optional<ApiKeyRepository.Credential> credential, long expiresAtNanos, long readAtNanos) {}
 
   /**
    * Creates the authenticator.
@@ -73,6 +91,46 @@ public final class ApiKeyAuthenticator {
       Clock clock,
       LongSupplier nanoTime,
       Executor executor) {
+    this(
+        repository,
+        tenants,
+        redis,
+        peppers,
+        environment,
+        cacheTtl,
+        Duration.ZERO,
+        clock,
+        nanoTime,
+        executor);
+  }
+
+  /**
+   * Creates the authenticator, serving a recently verified record while the database cannot answer.
+   *
+   * @param repository key repository
+   * @param tenants tenant transactions (for last-used updates)
+   * @param redis Redis (for revocation announcements)
+   * @param peppers peppers by version, each at least 32 bytes
+   * @param environment the deployment's key environment segment
+   * @param cacheTtl record cache time to live
+   * @param staleIfError how long after its last successful read a record may still be used while
+   *     the database cannot answer; zero refuses at once
+   * @param clock clock
+   * @param nanoTime monotonic clock
+   * @param executor executor for last-used updates
+   */
+  public ApiKeyAuthenticator(
+      ApiKeyRepository repository,
+      TenantTransactions tenants,
+      SafeRedis redis,
+      Map<Integer, byte[]> peppers,
+      String environment,
+      Duration cacheTtl,
+      Duration staleIfError,
+      Clock clock,
+      LongSupplier nanoTime,
+      Executor executor) {
+    this.staleIfErrorNanos = staleIfError.toNanos();
     this.repository = Objects.requireNonNull(repository, "repository");
     this.tenants = Objects.requireNonNull(tenants, "tenants");
     this.redis = Objects.requireNonNull(redis, "redis");
@@ -140,10 +198,25 @@ public final class ApiKeyAuthenticator {
   private Optional<ApiKeyRepository.Credential> credential(String keyId) {
     Cached cached = cache.get(keyId);
     long now = nanoTime.getAsLong(); // before the read: anchors the analytic bound
-    if (cached != null && cached.expiresAtNanos() - now > 0) {
+    // A record renewed while the database was down is still held to the cap from its last read.
+    if (cached != null
+        && cached.expiresAtNanos() - now > 0
+        && now - cached.readAtNanos() <= Math.max(cacheTtlNanos, staleIfErrorNanos)) {
       return cached.credential();
     }
-    Optional<ApiKeyRepository.Credential> loaded = repository.findCredential(keyId);
+    Optional<ApiKeyRepository.Credential> loaded;
+    try {
+      loaded = repository.findCredential(keyId);
+    } catch (DataAccessException storeDown) {
+      // Usable for staleIfError after its last successful read (D-15, R-13). It is not retried
+      // for another TTL, so an outage costs each key one blocked read per TTL, not one per request.
+      if (cached != null && now - cached.readAtNanos() <= staleIfErrorNanos) {
+        cache.put(
+            keyId, new Cached(cached.credential(), now + cacheTtlNanos, cached.readAtNanos()));
+        return cached.credential();
+      }
+      throw storeDown;
+    }
     // Only existing keys are cached: caching misses would let random key IDs grow the map without
     // bound (review finding 2). The map is also capped.
     if (loaded.isPresent()) {
@@ -153,7 +226,7 @@ public final class ApiKeyAuthenticator {
           cache.clear();
         }
       }
-      cache.put(keyId, new Cached(loaded, now + cacheTtlNanos));
+      cache.put(keyId, new Cached(loaded, now + cacheTtlNanos, now));
     }
     return loaded;
   }

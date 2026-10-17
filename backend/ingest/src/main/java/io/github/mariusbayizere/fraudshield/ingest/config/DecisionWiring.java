@@ -205,8 +205,7 @@ public class DecisionWiring {
    */
   @Bean
   // Not "tenantTransactions": the audit module's own TenantTransactions has that bean name, and
-  // Boot
-  // refuses to let one bean definition override another.
+  // Boot refuses to let one bean definition override another.
   TenantTransactions decisionTenantTransactions(
       org.springframework.transaction.PlatformTransactionManager transactionManager,
       DataSource dataSource) {

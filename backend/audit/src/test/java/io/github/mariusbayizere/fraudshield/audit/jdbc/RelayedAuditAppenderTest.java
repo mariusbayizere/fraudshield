@@ -40,21 +40,27 @@ class RelayedAuditAppenderTest {
     app = AppDatabase.of(db, "fs_app");
     bank = db.createInstitution("relay-bank");
     analyst = UUID.randomUUID();
+    staffMember(analyst, "RELAY0001");
+    appender = new RelayedAuditAppender(app.tenants(), app.jdbc());
+  }
+
+  private static void staffMember(UUID id, String employeeId) throws SQLException {
     try (Connection superuser = db.superuser();
         PreparedStatement insert =
             superuser.prepareStatement(
                 """
                 INSERT INTO fraudshield.users (id, institution_id, first_name, last_name, email,
                   password_hash, role, status, employee_id, department)
-                VALUES (?, ?, 'Aline', 'Mukamana', 'aline.relay@bank.rw',
+                VALUES (?, ?, 'Aline', 'Mukamana', ?,
                   '$2a$12$abcdefghijklmnopqrstuuv0123456789abcdefghijklmnopqrst', 'ANALYST',
-                  'ACTIVE', 'RELAY0001', 'FRAUD_OPERATIONS')
+                  'ACTIVE', ?, 'FRAUD_OPERATIONS')
                 """)) {
-      insert.setObject(1, analyst);
+      insert.setObject(1, id);
       insert.setObject(2, bank);
+      insert.setString(3, "relay." + id + "@bank.rw");
+      insert.setString(4, employeeId);
       insert.executeUpdate();
     }
-    appender = new RelayedAuditAppender(app.tenants(), app.jdbc());
   }
 
   /** The payload the decision engine's {@code KafkaMessages} renders for a hold. */
@@ -128,10 +134,27 @@ class RelayedAuditAppenderTest {
     ObjectNode badPartition = held(transaction, 64);
     for (ObjectNode payload : List.of(unknownType, badPartition)) {
       assertThatThrownBy(() -> appender.append(eventId, bank, payload))
-          .isInstanceOf(IllegalArgumentException.class);
+          .isInstanceOf(RelayedAuditAppender.MalformedAuditEvent.class);
     }
     assertThat(appender.append(eventId, bank, held(transaction, 0)))
         .as("no receipt was left behind by the refused attempts")
         .isTrue();
+  }
+
+  @Test
+  void appendThatFailsInsideItsTransactionLeavesNoReceiptBehind() throws SQLException {
+    // The staff member the event names does not exist yet, so the append fails after the receipt
+    // insert. Were the receipt committed on its own, every redelivery would then be skipped and
+    // the event lost from the chain.
+    UUID transaction = UUID.randomUUID();
+    UUID eventId = UUID.randomUUID();
+    UUID lateArrival = UUID.randomUUID();
+    ObjectNode payload = held(transaction, 9);
+    payload.put("actor_user_id", lateArrival.toString());
+    assertThatThrownBy(() -> appender.append(eventId, bank, payload))
+        .isInstanceOf(IllegalStateException.class);
+    staffMember(lateArrival, "RELAY0002");
+    assertThat(appender.append(eventId, bank, payload)).as("the redelivery is appended").isTrue();
+    assertThat(rows(transaction.toString())).hasSize(1);
   }
 }

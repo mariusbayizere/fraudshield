@@ -252,9 +252,11 @@ public final class ApiKeyService {
   /**
    * Where an institution's {@code decision.final} webhooks go, and the secrets that sign them.
    *
-   * @param url the HTTPS URL registered with the institution's newest live key
-   * @param secrets the signing secret of every live key registered with that URL, newest first: two
-   *     during a rotation overlap, so a receiver that has not yet switched still verifies
+   * @param url the HTTPS URL registered with the institution's newest active key (or, failing one,
+   *     its newest key still in a rotation overlap)
+   * @param secrets the signing secret of every live key registered with that URL, the active key's
+   *     first: two during a rotation overlap, so a receiver that has not yet switched still
+   *     verifies
    */
   public record WebhookEndpoint(String url, List<String> secrets) {
 
@@ -283,9 +285,15 @@ public final class ApiKeyService {
         institutionId,
         () -> {
           Instant now = clock.instant();
+          // Active keys first, then those rotating out; newest first within each. A replacement is
+          // active and its predecessor rotating, so the replacement leads even when both were
+          // created in the same instant (creation times then tie).
           List<ApiKeyRecord> live =
               repository.list().stream()
                   .filter(key -> key.webhookUrl() != null && live(key, now))
+                  .sorted(
+                      java.util.Comparator.comparing(
+                          (ApiKeyRecord key) -> !"ACTIVE".equals(key.state())))
                   .toList();
           if (live.isEmpty()) {
             return Optional.empty();

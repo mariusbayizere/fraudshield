@@ -140,6 +140,29 @@ class AssembledApplicationTest {
       }
     }
     assertThat(fromTests).as("beans defined by test code").isEmpty();
+    // M7's chain authorises every request before M6's filters run: Spring Security's proxy is
+    // registered ahead of M6's ApiKeyFilter and RateLimitFilter.
+    Map<String, org.springframework.boot.web.servlet.AbstractFilterRegistrationBean<?>> filters =
+        new java.util.HashMap<>();
+    for (var registration :
+        context
+            .getBeansOfType(
+                org.springframework.boot.web.servlet.AbstractFilterRegistrationBean.class)
+            .entrySet()) {
+      filters.put(registration.getKey(), registration.getValue());
+    }
+    int security =
+        filters.values().stream()
+            .filter(
+                r ->
+                    r
+                        instanceof
+                        org.springframework.boot.web.servlet.DelegatingFilterProxyRegistrationBean)
+            .mapToInt(org.springframework.boot.web.servlet.AbstractFilterRegistrationBean::getOrder)
+            .findFirst()
+            .orElseThrow();
+    assertThat(security).isLessThan(filters.get("apiKeyFilter").getOrder());
+    assertThat(security).isLessThan(filters.get("rateLimitFilter").getOrder());
     // The ingestion API's two ports are bound by StaffIdentityWiring, not by any test bean.
     for (Class<?> port : List.of(ApiKeyAuthenticator.class, WebhookEndpoints.class)) {
       String[] names = context.getBeanNamesForType(port);
@@ -239,6 +262,72 @@ class AssembledApplicationTest {
                         .status()
                     == 401);
     assertThat(Duration.ofNanos(System.nanoTime() - revokedAt)).isLessThan(Duration.ofSeconds(5));
+  }
+
+  @Test
+  @Tag("FR-01-07")
+  void apiDocsChainOpensTheTwoDocumentPathsToGetAndNothingElse() throws Exception {
+    assertThat(get("/api/docs").status()).isEqualTo(200);
+    assertThat(get("/api/docs/openapi.yaml").status()).isEqualTo(200);
+    assertThat(get("/api/docs/x").status()).as("another path under it").isIn(401, 403);
+    assertThat(send("HEAD", "/api/docs", null).status()).as("another method").isIn(401, 403);
+    assertThat(post("/api/docs", Map.of()).status()).as("a write").isIn(401, 403);
+  }
+
+  @Test
+  @Tag("D-32")
+  void recordThatIsNotAnAuditEventIsDeadLetteredOnItsFirstAttempt() throws Exception {
+    // A record any later attempt would refuse too goes to the dead-letter topic at once; a failure
+    // that may be the record's own would be retried for ten minutes first (RetryBound.DEFAULT).
+    final String key = "not-an-audit-event-" + UUID.randomUUID();
+    tools.jackson.databind.node.ObjectNode envelope = JSON.createObjectNode();
+    envelope.put("event_id", UUID.randomUUID().toString());
+    envelope.put("event_type", "audit.appended");
+    envelope.put("schema_version", 1);
+    envelope.put("occurred_at", java.time.Instant.now().toString());
+    envelope.put("institution_id", Fixtures.INSTITUTION.toString());
+    envelope.put("producer", "fraudshield-api");
+    envelope.putObject("payload").put("event_type", "NOT_A_TYPE").put("writer_partition", 0);
+    java.util.Map<String, Object> client =
+        Map.of(
+            "bootstrap.servers",
+            ApiHarness.KAFKA.bootstrapServers(),
+            "acks",
+            "all",
+            "group.id",
+            "dlq-reader-" + UUID.randomUUID(),
+            "auto.offset.reset",
+            "earliest");
+    try (var producer =
+        new org.apache.kafka.clients.producer.KafkaProducer<String, byte[]>(
+            client,
+            new org.apache.kafka.common.serialization.StringSerializer(),
+            new org.apache.kafka.common.serialization.ByteArraySerializer())) {
+      var record =
+          new org.apache.kafka.clients.producer.ProducerRecord<String, byte[]>(
+              "fs.audit.events", key, JSON.writeValueAsBytes(envelope));
+      record.headers().add("event_id", UUID.randomUUID().toString().getBytes());
+      producer.send(record).get();
+    }
+    String reason = null;
+    long deadline = System.nanoTime() + Duration.ofSeconds(30).toNanos();
+    try (var consumer =
+        new org.apache.kafka.clients.consumer.KafkaConsumer<String, byte[]>(
+            client,
+            new org.apache.kafka.common.serialization.StringDeserializer(),
+            new org.apache.kafka.common.serialization.ByteArrayDeserializer())) {
+      consumer.subscribe(List.of("fs.audit.events.dlq"));
+      while (reason == null && System.nanoTime() < deadline) {
+        for (var dead : consumer.poll(Duration.ofMillis(500))) {
+          if (key.equals(dead.key())) {
+            reason = new String(dead.headers().lastHeader("fs-dlq-reason").value());
+          }
+        }
+      }
+    }
+    assertThat(reason)
+        .as("dead-lettered within 30 s, not after ten minutes of retries")
+        .isEqualTo("malformed_envelope");
   }
 
   private static UUID adminAccount() throws Exception {

@@ -74,7 +74,7 @@ public class StaffIdentityWiring {
                 HttpMethod.GET.matches(request.getMethod())
                     && API_DOCS.contains(
                         request.getRequestURI().substring(request.getContextPath().length())))
-        .csrf(csrf -> csrf.disable())
+        // CSRF protection stays on: the chain matches GET only, which it never checks.
         .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
         .build();

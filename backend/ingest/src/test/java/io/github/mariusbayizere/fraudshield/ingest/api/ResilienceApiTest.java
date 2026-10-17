@@ -266,7 +266,10 @@ class ResilienceApiTest {
   @Tag("NFR-REL-02")
   @Tag("D-15")
   void withPostgresDownDecisionsContinueAndArePersistedAfterRecovery() throws Exception {
-    // Warm the configuration cache, then take PostgreSQL away.
+    // Warm the configuration cache and the key's record, then take PostgreSQL away. In the
+    // assembled API a key verified in the last ten minutes keeps being admitted while the database
+    // cannot answer; a key no instance has verified is told to retry, not that it is bad (owner
+    // decision 2026-10-17, threat model R-13).
     post("/api/v1/transactions/ingest", IngestApiTest.body(UUID.randomUUID(), "CARD").toString());
     var docker = org.testcontainers.DockerClientFactory.instance().client();
     String container =
@@ -282,6 +285,20 @@ class ResilienceApiTest {
         assertThat(response.statusCode()).isEqualTo(200);
         decided.add(id);
       }
+      HttpResponse<String> unseen =
+          HTTP.send(
+              HttpRequest.newBuilder(URI.create(url("/api/v1/transactions/ingest")))
+                  .header("X-API-Key", ApiHarness.UNSEEN_KEY)
+                  .header("Content-Type", "application/json")
+                  .POST(
+                      HttpRequest.BodyPublishers.ofString(
+                          IngestApiTest.body(UUID.randomUUID(), "CARD").toString()))
+                  .build(),
+              HttpResponse.BodyHandlers.ofString());
+      assertThat(unseen.statusCode()).as(unseen.body()).isEqualTo(503);
+      assertThat(unseen.headers().firstValue("Retry-After")).contains("1");
+      assertThat(JSON.readTree(unseen.body()).get("type").asString())
+          .isEqualTo("urn:fraudshield:problem:service-unavailable");
     } finally {
       docker.unpauseContainerCmd(container).exec();
     }

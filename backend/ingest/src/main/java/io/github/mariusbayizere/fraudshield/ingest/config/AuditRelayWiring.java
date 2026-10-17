@@ -51,12 +51,15 @@ public class AuditRelayWiring {
         KafkaMessages.AUDIT,
         GROUP,
         envelope -> {
+          UUID eventId;
           try {
-            appender.append(
-                UUID.fromString(String.valueOf(envelope.headers().get(EVENT_ID_HEADER))),
-                envelope.institutionId(),
-                envelope.payload());
-          } catch (IllegalArgumentException malformed) {
+            eventId = UUID.fromString(String.valueOf(envelope.headers().get(EVENT_ID_HEADER)));
+          } catch (IllegalArgumentException missing) {
+            throw new MalformedPayloadException("no event_id header", missing);
+          }
+          try {
+            appender.append(eventId, envelope.institutionId(), envelope.payload());
+          } catch (RelayedAuditAppender.MalformedAuditEvent malformed) {
             // No retry changes a record that is not an audit event: dead-lettered at once.
             throw new MalformedPayloadException(
                 "not an audit event: " + malformed.getMessage(), malformed);

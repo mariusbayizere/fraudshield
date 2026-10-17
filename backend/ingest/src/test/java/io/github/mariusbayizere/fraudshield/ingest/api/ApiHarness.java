@@ -89,6 +89,12 @@ public final class ApiHarness {
   public static final String BUDGET_KEY_EIGHT = "fsk_test_kkkkkkkkkkkk_" + "i".repeat(43);
 
   /**
+   * A key no test uses before the PostgreSQL outage, so no instance holds its record when the
+   * database goes away (D-15, threat model R-13).
+   */
+  public static final String UNSEEN_KEY = "fsk_test_llllllllllll_" + "u".repeat(43);
+
+  /**
    * The {@code api_keys} row ids of the budget keys: fixed, and inserted, because a batch job
    * references its key's row.
    */
@@ -187,6 +193,7 @@ public final class ApiHarness {
       apiKeyRow(c, KEY_ID, KEY, "Core banking test", all, admin);
       apiKeyRow(c, UUID.randomUUID(), ROTATED_KEY, "Core banking rotated", all, admin);
       apiKeyRow(c, UUID.randomUUID(), READ_ONLY_KEY, "Read only", "ARRAY['decisions:read']", admin);
+      apiKeyRow(c, UUID.randomUUID(), UNSEEN_KEY, "Unseen before the outage", all, admin);
       for (Map.Entry<String, UUID> budget : BUDGET_KEY_IDS.entrySet()) {
         apiKeyRow(
             c,

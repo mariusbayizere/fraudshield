@@ -42,4 +42,10 @@
     <Class name="io.github.mariusbayizere.fraudshield.ingest.web.IngestController"/>
     <Bug pattern="SERVLET_CONTENT_TYPE"/>
   </Match>
+  <!-- HttpSecurity.build() declares Exception; the bean method that builds the /api/docs chain can
+       only propagate it (the same entry as auth's SecurityConfiguration). -->
+  <Match>
+    <Class name="io.github.mariusbayizere.fraudshield.ingest.config.StaffIdentityWiring"/>
+    <Bug pattern="THROWS_METHOD_THROWS_CLAUSE_BASIC_EXCEPTION"/>
+  </Match>
 </FindBugsFilter>

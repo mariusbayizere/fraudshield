@@ -458,6 +458,7 @@ public class AuthAutoConfiguration {
         peppers(properties),
         properties.environment(),
         properties.apiKeys().cacheTtl(),
+        properties.apiKeys().staleIfError(),
         clock,
         System::nanoTime,
         authExecutor);

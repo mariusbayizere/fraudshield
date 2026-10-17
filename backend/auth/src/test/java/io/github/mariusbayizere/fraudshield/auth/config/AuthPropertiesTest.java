@@ -37,4 +37,12 @@ class AuthPropertiesTest {
     // Two seconds keeps a revoked key's worst case inside FR-06-07's five (ADR 0071 section 6).
     assertThat(apiKeysWithOnlyPeppers().cacheTtl()).isEqualTo(Duration.ofSeconds(2));
   }
+
+  @Test
+  @Tag("D-15")
+  void verifiedKeyOutlivesItsCacheForTenMinutesWhileTheDatabaseIsDownByDefault() {
+    // The owner's cap (2026-10-17): long enough for an ordinary outage, short enough to bound
+    // R-13's unannounced-revocation window.
+    assertThat(apiKeysWithOnlyPeppers().staleIfError()).isEqualTo(Duration.ofMinutes(10));
+  }
 }

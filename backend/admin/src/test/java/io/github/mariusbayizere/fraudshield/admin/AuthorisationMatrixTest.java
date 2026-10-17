@@ -258,6 +258,81 @@ class AuthorisationMatrixTest extends AuthIntegrationTest {
     assertThat(calls).isGreaterThan(policy.operations().size() * 8);
   }
 
+  /**
+   * The same property with an oracle of its own (review of M7 round 2, finding 3): the operations
+   * come straight from the packaged OpenAPI file, and the rule from FR-01-05 and FR-07-05, not from
+   * {@code ContractPolicy} or the authorisation matrix. A key reaches only the machine paths, so it
+   * gets no 2xx anywhere else, and exactly 401 or 403 under {@code /alerts} and {@code /admin}.
+   * Only the operations the file itself declares public (security: []) are exempt.
+   */
+  @Test
+  @Tag("FR-07-05")
+  @Tag("FR-01-05")
+  @Tag("TEST-04")
+  @SuppressWarnings("unchecked")
+  void apiKeysReachOnlyTheMachinePathsByTheContractFileAlone() throws Exception {
+    AuditActor admin =
+        new AuditActor(
+            createAccount(BANK_A, "ADMIN", "ACTIVE").id(), "Amani", "Uwase", StaffRole.ADMIN);
+    String raw =
+        apiKeys
+            .create(
+                BANK_A,
+                "Oracle " + UUID.randomUUID().toString().substring(0, 8),
+                List.of(ApiKeyScope.values()),
+                null,
+                admin,
+                RequestContext.SYSTEM)
+            .rawKey();
+    Map<String, Object> openapi;
+    try (var in = getClass().getClassLoader().getResourceAsStream(ContractPolicy.OPENAPI)) {
+      openapi =
+          new org.yaml.snakeyaml.Yaml(
+                  new org.yaml.snakeyaml.constructor.SafeConstructor(
+                      new org.yaml.snakeyaml.LoaderOptions()))
+              .load(in);
+    }
+    Set<String> machine = Set.of("/transactions/ingest", "/jobs/", "/decisions/");
+    List<String> violations = new ArrayList<>();
+    int checked = 0;
+    for (var path : ((Map<String, Object>) openapi.get("paths")).entrySet()) {
+      Map<String, Object> item = (Map<String, Object>) path.getValue();
+      Object servers = item.get("servers");
+      String url =
+          servers == null
+              ? "/api/v1"
+              : (String) ((Map<String, Object>) ((List<Object>) servers).getFirst()).get("url");
+      if (!url.equals("/api/v1") && !url.equals("/")) {
+        continue; // another port, such as management
+      }
+      String template = path.getKey();
+      if (machine.stream().anyMatch(template::startsWith)) {
+        continue;
+      }
+      for (String method : List.of("get", "post", "put", "patch", "delete")) {
+        Map<String, Object> operation = (Map<String, Object>) item.get(method);
+        if (operation == null || List.of().equals(operation.get("security"))) {
+          continue; // absent, or callable by anyone
+        }
+        String full = (url.equals("/") ? "" : url) + template;
+        Http.Response response =
+            http.send(
+                method.toUpperCase(java.util.Locale.ROOT),
+                full.replaceAll("\\{[a-z_]+}", "x" + UUID.randomUUID()),
+                Set.of("post", "put", "patch").contains(method) ? "{}" : null,
+                csrf("X-API-Key", raw));
+        checked++;
+        int status = response.status();
+        boolean staffOnly = template.startsWith("/alerts") || template.startsWith("/admin");
+        if (status / 100 == 2 || (staffOnly && status != 401 && status != 403)) {
+          violations.add(method + " " + full + " gave " + status);
+        }
+      }
+    }
+    assertThat(violations).isEmpty();
+    assertThat(checked).as("operations checked").isGreaterThan(60);
+  }
+
   private static boolean listed(Access access, Caller caller) {
     if (access.isPublic() || access.refreshCookie()) {
       return true;

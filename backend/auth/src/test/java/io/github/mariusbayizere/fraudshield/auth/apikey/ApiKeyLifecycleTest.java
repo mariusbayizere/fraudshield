@@ -425,6 +425,137 @@ class ApiKeyLifecycleTest {
     }
   }
 
+  @Test
+  @Tag("D-15")
+  void duringDatabaseOutageKeysVerifiedInTheLastTenMinutesAreStillAdmitted() {
+    // PostgreSQL goes away after the keys are read: every connection attempt then fails.
+    java.util.concurrent.atomic.AtomicBoolean down =
+        new java.util.concurrent.atomic.AtomicBoolean();
+    javax.sql.DataSource switchable =
+        new org.springframework.jdbc.datasource.DelegatingDataSource(app.jdbc().getDataSource()) {
+          @Override
+          public Connection getConnection() throws java.sql.SQLException {
+            if (down.get()) {
+              throw new java.sql.SQLException("connection refused", "08001");
+            }
+            return super.getConnection();
+          }
+        };
+    FakeTime time = new FakeTime();
+    ApiKeyAuthenticator outageProof =
+        new ApiKeyAuthenticator(
+            new ApiKeyRepository(
+                new org.springframework.jdbc.core.JdbcTemplate(switchable),
+                app.apiKeys(),
+                app.entities(),
+                clock),
+            app.tenants(),
+            Instances.safe(null),
+            PEPPERS,
+            "test",
+            Duration.ofSeconds(2),
+            Duration.ofMinutes(10),
+            clock,
+            time::nanos,
+            DIRECT);
+    ApiKeyService issuer = service(authenticator(redisA, "test"));
+    String verified = issue(issuer);
+    String announced = issue(issuer);
+    final String neverSeen = issue(issuer);
+    final long read = time.now();
+    assertThat(outageProof.authenticate(verified)).isPresent();
+    assertThat(outageProof.authenticate(announced)).isPresent();
+    outageProof.onMessage(ApiKeyFormat.parse(announced).orElseThrow().keyId());
+
+    down.set(true);
+    time.set(read + Duration.ofMinutes(10).toMillis());
+    assertThat(outageProof.authenticate(verified))
+        .as("verified ten minutes before, past its 2 s cache: still admitted")
+        .isPresent();
+    org.assertj.core.api.Assertions.assertThatThrownBy(() -> outageProof.authenticate(neverSeen))
+        .as("a key this instance never verified is not admitted unseen")
+        .isInstanceOf(org.springframework.dao.DataAccessException.class);
+    org.assertj.core.api.Assertions.assertThatThrownBy(() -> outageProof.authenticate(announced))
+        .as("an announced change evicted the record, so it is not served stale")
+        .isInstanceOf(org.springframework.dao.DataAccessException.class);
+    time.set(read + Duration.ofMinutes(10).toMillis() + 1);
+    org.assertj.core.api.Assertions.assertThatThrownBy(() -> outageProof.authenticate(verified))
+        .as("past the ten-minute cap")
+        .isInstanceOf(org.springframework.dao.DataAccessException.class);
+  }
+
+  @Test
+  @Tag("FR-06-07")
+  void webhookEndpointIsTheNewestLiveUrlSignedByEveryLiveSecretOfThatInstitutionOnly()
+      throws Exception {
+    UUID hooks = db.createInstitution("hook-" + UUID.randomUUID().toString().substring(0, 8));
+    AuditActor hooksAdmin = adminOf(hooks);
+    ApiKeyService keys = service(authenticator(redisA, "test"));
+    final String url = "https://hooks.bank.example/fraudshield";
+    assertThat(keys.webhookEndpoint(hooks)).isEmpty();
+
+    keys.create(
+        hooks, name(), List.of(ApiKeyScope.JOBS_READ), null, hooksAdmin, RequestContext.SYSTEM);
+    assertThat(keys.webhookEndpoint(hooks)).as("a key without a webhook is ignored").isEmpty();
+
+    ApiKeyService.Issued first =
+        keys.create(
+            hooks,
+            name(),
+            List.of(ApiKeyScope.INGEST_WRITE),
+            url,
+            hooksAdmin,
+            RequestContext.SYSTEM);
+    ApiKeyService.WebhookEndpoint one = keys.webhookEndpoint(hooks).orElseThrow();
+    assertThat(one.url()).isEqualTo(url);
+    assertThat(one.secrets()).containsExactly(first.webhookSigningSecret());
+
+    ApiKeyService.Issued second =
+        keys.rotate(hooks, first.record().keyId(), hooksAdmin, RequestContext.SYSTEM);
+    assertThat(keys.webhookEndpoint(hooks).orElseThrow().secrets())
+        .as("during the overlap both sign, the active replacement first")
+        .containsExactly(second.webhookSigningSecret(), first.webhookSigningSecret());
+
+    clock.advance(Duration.ofHours(24).plusSeconds(1));
+    assertThat(keys.webhookEndpoint(hooks).orElseThrow().secrets())
+        .as("past the overlap the rotated key's secret no longer signs")
+        .containsExactly(second.webhookSigningSecret());
+
+    UUID quiet = db.createInstitution("quiet-" + UUID.randomUUID().toString().substring(0, 8));
+    assertThat(keys.webhookEndpoint(quiet))
+        .as("another institution sees none of these keys")
+        .isEmpty();
+
+    keys.revoke(hooks, second.record().keyId(), hooksAdmin, RequestContext.SYSTEM);
+    assertThat(keys.webhookEndpoint(hooks)).as("a revoked key's secret no longer signs").isEmpty();
+  }
+
+  private static AuditActor adminOf(UUID institution) throws Exception {
+    UUID id = UUID.randomUUID();
+    try (Connection superuser = db.superuser();
+        PreparedStatement insert =
+            superuser.prepareStatement(
+                """
+                INSERT INTO fraudshield.users (id, institution_id, first_name, last_name, email,
+                  password_hash, role, status, employee_id, department)
+                VALUES (?, ?, 'Hook', 'Admin', ?,
+                  '$2a$12$abcdefghijklmnopqrstuuv0123456789abcdefghijklmnopqrst', 'ADMIN', 'ACTIVE',
+                  'HOOKADMIN1', 'IT')
+                """)) {
+      insert.setObject(1, id);
+      insert.setObject(2, institution);
+      insert.setString(3, "hook.admin." + id + "@bank.rw");
+      insert.executeUpdate();
+    }
+    return new AuditActor(id, "Hook", "Admin", StaffRole.ADMIN);
+  }
+
+  private String issue(ApiKeyService issuer) {
+    return issuer
+        .create(bank, name(), List.of(ApiKeyScope.INGEST_WRITE), null, admin, RequestContext.SYSTEM)
+        .rawKey();
+  }
+
   private static long millisUntilRefused(ApiKeyAuthenticator authenticator, String rawKey) {
     long start = System.nanoTime();
     while (authenticator.authenticate(rawKey).isPresent()) {
