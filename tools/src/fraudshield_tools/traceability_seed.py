@@ -201,8 +201,8 @@ FR_MILESTONE_OVERRIDES: dict[str, str] = {
     # ADR 0027 filed FR-02-09 under M5, the milestone that built the feature store. Carried
     # M5 -> M10 (owner decision 2026-10-17): production is fed only once PB-69..PB-71 land, which
     # are M6's (docs/backlog/product.md), and PB-72's skew re-measurement in M10 closes it
-    # (ADR 0034). Filing it under M10 means M6's rule-7 check does not see PB-69..PB-71; M6's
-    # merge checklist must (docs/parallel/M6_updates.md).
+    # (ADR 0034). Filing it under M10 means M6's rule-7 check does not see PB-69..PB-71; they are
+    # tracked in the backlog's claims table with owner M6, and M6's close must report on them.
     "FR-02-09": "M10",
     # Carried M5 -> M10 (owner decision 2026-10-17): a throughput requirement (ADR 0032) that no
     # shared machine can evidence (ADR 0010).
