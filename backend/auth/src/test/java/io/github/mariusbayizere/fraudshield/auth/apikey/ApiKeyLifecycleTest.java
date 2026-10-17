@@ -442,22 +442,7 @@ class ApiKeyLifecycleTest {
           }
         };
     FakeTime time = new FakeTime();
-    ApiKeyAuthenticator outageProof =
-        new ApiKeyAuthenticator(
-            new ApiKeyRepository(
-                new org.springframework.jdbc.core.JdbcTemplate(switchable),
-                app.apiKeys(),
-                app.entities(),
-                clock),
-            app.tenants(),
-            Instances.safe(null),
-            PEPPERS,
-            "test",
-            Duration.ofSeconds(2),
-            Duration.ofMinutes(10),
-            clock,
-            time::nanos,
-            DIRECT);
+    ApiKeyAuthenticator outageProof = outageProof(switchable, time);
     ApiKeyService issuer = service(authenticator(redisA, "test"));
     String verified = issue(issuer);
     String announced = issue(issuer);
@@ -548,6 +533,74 @@ class ApiKeyLifecycleTest {
       insert.executeUpdate();
     }
     return new AuditActor(id, "Hook", "Admin", StaffRole.ADMIN);
+  }
+
+  @Test
+  @Tag("D-15")
+  void announcementDuringBlockedReadIsNotUndoneByTheStaleRenewal() throws Exception {
+    // The record's cache entry has expired and the database is down: a request blocks reading it.
+    // While it is blocked the revocation's announcement arrives and evicts the record. When the
+    // read fails, the request must not put the revoked record back (review of round 3, MAJOR 1).
+    java.util.concurrent.atomic.AtomicBoolean down =
+        new java.util.concurrent.atomic.AtomicBoolean();
+    java.util.concurrent.CountDownLatch blocked = new java.util.concurrent.CountDownLatch(1);
+    java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+    javax.sql.DataSource stalling =
+        new org.springframework.jdbc.datasource.DelegatingDataSource(app.jdbc().getDataSource()) {
+          @Override
+          public Connection getConnection() throws java.sql.SQLException {
+            if (down.get()) {
+              blocked.countDown();
+              try {
+                release.await(10, java.util.concurrent.TimeUnit.SECONDS);
+              } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+              }
+              throw new java.sql.SQLException("connection refused", "08001");
+            }
+            return super.getConnection();
+          }
+        };
+    FakeTime time = new FakeTime();
+    ApiKeyAuthenticator instance = outageProof(stalling, time);
+    String raw = issue(service(authenticator(redisA, "test")));
+    long read = time.now();
+    assertThat(instance.authenticate(raw)).isPresent();
+    down.set(true);
+    time.set(read + 3_000);
+    var executor = java.util.concurrent.Executors.newSingleThreadExecutor();
+    try {
+      final var request = executor.submit(() -> instance.authenticate(raw));
+      assertThat(blocked.await(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+      instance.onMessage(ApiKeyFormat.parse(raw).orElseThrow().keyId());
+      release.countDown();
+      org.assertj.core.api.Assertions.assertThatThrownBy(request::get)
+          .as("the blocked request is refused, not served the evicted record")
+          .hasCauseInstanceOf(org.springframework.dao.DataAccessException.class);
+    } finally {
+      executor.shutdownNow();
+    }
+    org.assertj.core.api.Assertions.assertThatThrownBy(() -> instance.authenticate(raw))
+        .as("and the record stays evicted")
+        .isInstanceOf(org.springframework.dao.DataAccessException.class);
+  }
+
+  private ApiKeyAuthenticator outageProof(javax.sql.DataSource dataSource, FakeTime time) {
+    return new ApiKeyAuthenticator(
+        new ApiKeyRepository(
+            new org.springframework.jdbc.core.JdbcTemplate(dataSource),
+            app.apiKeys(),
+            app.entities(),
+            clock),
+        app.tenants(),
+        Instances.safe(null),
+        PEPPERS,
+        "test",
+        Duration.ofSeconds(2),
+        Duration.ofMinutes(10),
+        clock,
+        time::nanos,
+        DIRECT);
   }
 
   private String issue(ApiKeyService issuer) {

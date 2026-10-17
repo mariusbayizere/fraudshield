@@ -28,6 +28,12 @@ import java.util.UUID;
  */
 public final class ApiKeyService {
 
+  /**
+   * Active keys before keys in a rotation overlap; stable, so newest-first order is kept within.
+   */
+  static final java.util.Comparator<ApiKeyRecord> ACTIVE_FIRST =
+      java.util.Comparator.comparing(key -> !"ACTIVE".equals(key.state()));
+
   private final TenantTransactions tenants;
   private final ApiKeyRepository repository;
   private final ApiKeyAuthenticator authenticator;
@@ -291,9 +297,7 @@ public final class ApiKeyService {
           List<ApiKeyRecord> live =
               repository.list().stream()
                   .filter(key -> key.webhookUrl() != null && live(key, now))
-                  .sorted(
-                      java.util.Comparator.comparing(
-                          (ApiKeyRecord key) -> !"ACTIVE".equals(key.state())))
+                  .sorted(ACTIVE_FIRST)
                   .toList();
           if (live.isEmpty()) {
             return Optional.empty();

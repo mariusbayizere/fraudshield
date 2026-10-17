@@ -308,8 +308,24 @@ class AssembledApplicationTest {
               "fs.audit.events", key, JSON.writeValueAsBytes(envelope));
       record.headers().add("event_id", UUID.randomUUID().toString().getBytes());
       producer.send(record).get();
+      // A well-formed audit payload without the event_id header cannot be deduplicated either.
+      tools.jackson.databind.node.ObjectNode valid = envelope.deepCopy();
+      valid
+          .putObject("payload")
+          .put("event_type", "TRANSACTION_DECISION")
+          .put("action", "HELD")
+          .put("entity_type", "transaction")
+          .put("entity_id", UUID.randomUUID().toString())
+          .put("event_at", java.time.Instant.now().toString())
+          .put("writer_partition", 0);
+      producer
+          .send(
+              new org.apache.kafka.clients.producer.ProducerRecord<String, byte[]>(
+                  "fs.audit.events", key + "-no-id", JSON.writeValueAsBytes(valid)))
+          .get();
     }
     String reason = null;
+    String noIdReason = null;
     long deadline = System.nanoTime() + Duration.ofSeconds(30).toNanos();
     try (var consumer =
         new org.apache.kafka.clients.consumer.KafkaConsumer<String, byte[]>(
@@ -317,16 +333,21 @@ class AssembledApplicationTest {
             new org.apache.kafka.common.serialization.StringDeserializer(),
             new org.apache.kafka.common.serialization.ByteArrayDeserializer())) {
       consumer.subscribe(List.of("fs.audit.events.dlq"));
-      while (reason == null && System.nanoTime() < deadline) {
+      while ((reason == null || noIdReason == null) && System.nanoTime() < deadline) {
         for (var dead : consumer.poll(Duration.ofMillis(500))) {
           if (key.equals(dead.key())) {
             reason = new String(dead.headers().lastHeader("fs-dlq-reason").value());
+          } else if ((key + "-no-id").equals(dead.key())) {
+            noIdReason = new String(dead.headers().lastHeader("fs-dlq-reason").value());
           }
         }
       }
     }
     assertThat(reason)
         .as("dead-lettered within 30 s, not after ten minutes of retries")
+        .isEqualTo("malformed_envelope");
+    assertThat(noIdReason)
+        .as("a record without its event_id header, likewise")
         .isEqualTo("malformed_envelope");
   }
 

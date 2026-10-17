@@ -262,8 +262,8 @@ class AuthorisationMatrixTest extends AuthIntegrationTest {
    * The same property with an oracle of its own (review of M7 round 2, finding 3): the operations
    * come straight from the packaged OpenAPI file, and the rule from FR-01-05 and FR-07-05, not from
    * {@code ContractPolicy} or the authorisation matrix. A key reaches only the machine paths, so it
-   * gets no 2xx anywhere else, and exactly 401 or 403 under {@code /alerts} and {@code /admin}.
-   * Only the operations the file itself declares public (security: []) are exempt.
+   * is refused with 401 or 403 on every other operation that is not public, built or not. Only the
+   * operations the file itself declares public (security: []) are exempt.
    */
   @Test
   @Tag("FR-07-05")
@@ -323,8 +323,9 @@ class AuthorisationMatrixTest extends AuthIntegrationTest {
                 csrf("X-API-Key", raw));
         checked++;
         int status = response.status();
-        boolean staffOnly = template.startsWith("/alerts") || template.startsWith("/admin");
-        if (status / 100 == 2 || (staffOnly && status != 401 && status != 403)) {
+        // Refused by the security chain, before any handler: not a 404 from an unbuilt endpoint,
+        // nor a 400 from a handler that let the key through (review of round 3, MINOR 4).
+        if (status != 401 && status != 403) {
           violations.add(method + " " + full + " gave " + status);
         }
       }

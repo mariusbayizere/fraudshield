@@ -30,11 +30,13 @@ import org.springframework.dao.DataAccessException;
  *
  * <p>While the database cannot answer, a record verified within the last {@code staleIfError} (10
  * minutes in production) keeps being used, so ingestion keeps deciding through a PostgreSQL outage
- * (D-15; owner decision 2026-10-17, threat model R-13). No revocation can commit while the database
- * is down, and an announced revocation evicts the record, so the one revocation this can miss is
- * one committed in the {@code cacheTtl} before the outage whose announcement was also lost. A key
- * with no record in this instance, or one read longer ago than the cap, is refused with the
- * database's exception, which the filter answers 503.
+ * (D-15; owner decision 2026-10-17, threat model R-13). An announced revocation evicts the record,
+ * even while a read is blocked. What this can miss is a revocation this instance is not told about:
+ * one committed after its last successful read of the key, either in the {@code cacheTtl} before it
+ * lost the database or while it cannot reach it (other instances may still commit, if the outage is
+ * local to this one), whose announcement it did not receive. A key with no record in this instance,
+ * or one read longer ago than the cap, is refused with the database's exception, which the filter
+ * answers 503.
  */
 public final class ApiKeyAuthenticator {
 
@@ -208,12 +210,17 @@ public final class ApiKeyAuthenticator {
     try {
       loaded = repository.findCredential(keyId);
     } catch (DataAccessException storeDown) {
-      // Usable for staleIfError after its last successful read (D-15, R-13). It is not retried
-      // for another TTL, so an outage costs each key one blocked read per TTL, not one per request.
+      // Usable for staleIfError after its last successful read (D-15, R-13). The renewal runs from
+      // the end of the failed read, so the next read is a TTL away however long this one blocked;
+      // the cap stays anchored to readAtNanos. It replaces only the entry this read started from:
+      // an announcement that evicted the record while the read was blocked must stay in force.
       if (cached != null && now - cached.readAtNanos() <= staleIfErrorNanos) {
-        cache.put(
-            keyId, new Cached(cached.credential(), now + cacheTtlNanos, cached.readAtNanos()));
-        return cached.credential();
+        Cached renewed =
+            new Cached(
+                cached.credential(), nanoTime.getAsLong() + cacheTtlNanos, cached.readAtNanos());
+        if (cache.replace(keyId, cached, renewed)) {
+          return cached.credential();
+        }
       }
       throw storeDown;
     }
@@ -233,9 +240,12 @@ public final class ApiKeyAuthenticator {
 
   /**
    * The longest this instance can keep admitting a key after its revocation committed, when the
-   * announcement is lost (ADR 0071 §6). A record is cached until the time taken <em>before</em> its
-   * database read plus the cache TTL, and a record read before the revocation committed was read
-   * after that time, so it expires no later than the commit plus the TTL, however slow the read.
+   * announcement is lost, <em>while this instance can read the database</em> (ADR 0071 §6). A
+   * record is cached until the time taken <em>before</em> its database read plus the cache TTL, and
+   * a record read before the revocation committed was read after that time, so it expires no later
+   * than the commit plus the TTL, however slow the read. While this instance cannot read the
+   * database, an unannounced revocation can be missed for up to {@code staleIfError} after the
+   * record's last read (D-15, threat model R-13).
    *
    * @return the cache time to live
    */
