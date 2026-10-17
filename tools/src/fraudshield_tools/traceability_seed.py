@@ -165,7 +165,7 @@ DEFECT_MILESTONES: dict[str, str] = {
     # ADR 0031: D-09's register closes when the paper states each claim, and five of its claims
     # need primary sources only the author can supply. C-6 was measured in M4.
     "D-09": "M11",
-    **dict.fromkeys(("D-11", "D-16", "D-50"), "M5"),
+    **dict.fromkeys(("D-11", "D-50"), "M5"),
     **dict.fromkeys(("D-10", "D-12", "D-13", "D-14", "D-15", "D-17", "D-18", "D-25", "D-51"), "M6"),
     **dict.fromkeys(("D-19", "D-23", "D-24", "D-26", "D-27"), "M7"),
     **dict.fromkeys(
@@ -190,15 +190,23 @@ DEFECT_MILESTONES: dict[str, str] = {
         "M8",
     ),
     **dict.fromkeys(("D-21", "D-28"), "M9"),
+    # Carried M5 -> M10 (owner decision 2026-10-17): the resolution is built and the remaining
+    # gap is ADR 0032's throughput measurement, which needs M10's dedicated machine (ADR 0010).
+    "D-16": "M10",
 }
 
 FR_MILESTONE_OVERRIDES: dict[str, str] = {
     "FR-01-07": "M1",
     "FR-02-02": "M3",
-    # ADR 0027: the build prompt's M5 gate reads "FR-02-01, 02-04 ... 02-10 tests pass", which
-    # includes FR-02-09, while the register filed the Redis feature store under M3. There is no
-    # feature store, no Redis and no Prometheus; M5 is the milestone that builds them.
-    "FR-02-09": "M5",
+    # ADR 0027 filed FR-02-09 under M5, the milestone that built the feature store. Carried
+    # M5 -> M10 (owner decision 2026-10-17): production is fed only once PB-69..PB-71 land, which
+    # are M6's (docs/backlog/product.md), and PB-72's skew re-measurement in M10 closes it
+    # (ADR 0034). Filing it under M10 means M6's rule-7 check does not see PB-69..PB-71; they are
+    # tracked in the backlog's claims table with owner M6, and M6's close must report on them.
+    "FR-02-09": "M10",
+    # Carried M5 -> M10 (owner decision 2026-10-17): a throughput requirement (ADR 0032) that no
+    # shared machine can evidence (ADR 0010).
+    "FR-02-07": "M10",
     "FR-02-03": "M4",
     "FR-02-04": "M4",
     "FR-06-01": "M7",
@@ -252,8 +260,11 @@ ROW_MILESTONE_OVERRIDES = {
     "NFR-SEC-05": "M1",
     "NFR-SEC-06": "M6",
     "NFR-SEC-03": "M7",  # ADR 0021: vault and tokenisation M6, analyst inspector test M7
-    "ML-GATE-12": "M5",
-    "ML-GATE-13": "M5",
+    # Carried M5 -> M10 (owner decision 2026-10-17, ADR 0035): ML-GATE-12 needs the dedicated
+    # machine; ML-GATE-13's gate logic is built and needs a deployment running the shadow
+    # comparator for 24 hours and at least 50,000 scores.
+    "ML-GATE-12": "M10",
+    "ML-GATE-13": "M10",
     # ADR 0027: three of TEST-01's four named scenarios are covered; the fourth needs
     # round_sum_flag, whose source-data gap the registry schedules for M4.
     "TEST-01": "M4",
@@ -264,7 +275,7 @@ ROW_MILESTONE_OVERRIDES = {
     "TEST-06": "M8",
     "TEST-07": "M7",
     "TEST-08": "M5",
-    "TEST-10": "M5",
+    "TEST-10": "M10",  # carried M5 -> M10 (owner decision 2026-10-17): the latency clause, ADR 0032
     "TEST-11": "M8",
     "TEST-12": "M8",
     "TEST-13": "M9",
