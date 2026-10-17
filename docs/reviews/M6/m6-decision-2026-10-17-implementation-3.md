@@ -462,3 +462,54 @@ to its row but unlike the others (D2-n2).
 | D2-n1 | NIT | contract I7e | "Re-reads at once" is asserted as "within 30 s". Nothing in this code delays it beyond the client's own unpausing of a new assignment. | Say "within 30 s (the client unpauses a new assignment; nothing here delays it)". |
 | D2-n2 | NIT | `product.md` PB-96 (and row I23) | The Problem line lists meter names without the deletion frame the standard asks for. | "Deleting the code that moves `…` would not fail any test." |
 | D2-n3 | NIT | `docs/research/lab_notebook.md`, audit paragraph | "21 of the 24 partial rows claimed more than their tests prove" is the author's audit figure, not a review's. | Attribute it: "the audit found 21 of 24 …". |
+
+## Delta check of b914389
+
+Static and read-only. Read `git diff 0f6268e 44cafe4`: the I7e test; the I7e and I23 rows;
+PB-78 and PB-96 in `product.md`; the notebook. The matrix change is a re-render.
+
+### Verdict: APPROVED. 0 BLOCKER, 0 MAJOR, 0 MINOR, 1 NIT
+
+**D2-m1: resolved.** I7e's counterfactual is now deterministic, apart from a timing sliver that is
+almost always caught (D3-n1).
+
+- **The backoff is 100 ms doubling, with nothing to reset it.** On the first member the orphan
+  throws `08006` (F1) on every attempt. Each attempt is RETRY, and `nextBackoff` goes 100, 200, 400,
+  800, 1,600, 3,200, so after the seventh failure the next is 6,400 ms. `backoffMs` resets only on
+  an outcome other than RETRY or WAIT, or with a new `PartitionState` on assignment. Before the join
+  the member is alone, so no rebalance occurs. No other record is published until after the join,
+  and a failed batch commit after a RETRY leaves the pause and `resumeAtNanos` in place (both are
+  set before the `commitSync`). The 6.4 s is exact.
+- **The rebalance lands inside the pause.** `joinedAt` is taken after the seventh attempt is seen
+  (awaitility polls every 100 ms), so the first member's deadline is attempt 7's end + 6.4 s,
+  shortly before `joinedAt + 6.4 s`. The eager rebalance needs the second member's JoinGroup (with
+  the member-id round trip), then the first member learning of it on its next 500 ms heartbeat and
+  rejoining on its next 100 ms poll: typically 1–3 s. The initial rebalance delay applies only to an
+  empty group. While that happens, partition 2's state has `resumeAtNanos >= 0`. With both guards
+  deleted, the stale state survives the revoke, and at the deadline `resumeDue` resumes an
+  unassigned partition. The classic `KafkaConsumer.resume` throws `IllegalStateException`, and the
+  cycle logs "cycle failed".
+- **The wait does not race the deadline.** The test sleeps until `joinedAt + 10 s`. The stale
+  deadline falls before `joinedAt + 6.4 s`, which leaves at least 3.6 s of margin for the stale
+  resume and its log line.
+- **The timing assumption checks itself.** If a slow CI rebalance pushed the revoke past the
+  deadline, partition 2 would be resumed while still owned, and the counterfactual would be
+  missed. But the second member's first re-read would then also come more than 6.4 s after
+  `joinedAt`, and the new assertion would fail the test rather than let it pass silently. The only
+  gap is the width of the measurement (D3-n1).
+- **"Re-reads before the old pause would have ended" is sound, if approximate.** The bound is
+  `joinedAt + 6.4 s`, slightly later (by the detection lag, about 100–200 ms) than the old pause's
+  true end. As a proof of "at once" it is meaningful: the new owner is not held by the old owner's
+  backoff, because the client unpauses a new assignment and `resumeFrom` starts with no due time.
+
+**Wording.**
+- I7e row: matches the test, with D3-n1's approximation.
+- I23 row and PB-96: now in the deletion frame, adding the untested 1 of
+  `fs_notify_consumer_running`. Correct.
+- PB-78: accurate.
+- Notebook: the 21-of-24 figure is attributed to the audit, and the 13/24/1 count to an audit
+  checked by the reviewer. I did verify that count in the re-check; I did not verify the 21. Accurate.
+
+| # | Sev | Where | What | Minimal fix |
+|---|---|---|---|---|
+| D3-n1 | NIT | `partitionsMovedWhilePausedKeepEveryoneFlowing`; I7e row | The 6.4 s bound is measured from `joinedAt`, not from the end of attempt 7. A rebalance that completes within those last 100–200 ms after the old deadline would miss the counterfactual without failing the bound. It needs a rebalance of about 6.3 s, so it is negligible. | Record the time attempt 7 ended (in the handler, before the throw) and assert the re-read before that time + 6.4 s; or say "within 6.4 s of the join" in the row. |
