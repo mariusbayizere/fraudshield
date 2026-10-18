@@ -1,0 +1,66 @@
+{
+  "stats": {
+    "label": "Hali ya leo kwa ufupi",
+    "high": "HIGH zilizo wazi",
+    "medium": "MEDIUM zilizo wazi",
+    "filterTier": "Onyesha arifa za {{tier}} pekee ({{count}} zilizo wazi)",
+    "autoBlocked": "Zimezuiwa kiotomatiki leo",
+    "reviewed": "Zimekaguliwa leo",
+    "fraudPrevented": "Ulaghai uliozuiwa leo",
+    "averageReview": "Wastani wa ukaguzi",
+    "seconds": "{{value}} s",
+    "analystsOnline": "Wachambuzi walio mtandaoni",
+    "error": "Takwimu za leo hazikuweza kupakiwa."
+  },
+  "filters": {
+    "label": "Vichujio",
+    "tier": "Kiwango cha hatari",
+    "channel": "Njia",
+    "status": "Hali",
+    "anyStatus": "Hali yoyote",
+    "severalStatuses_one": "Hali {{count}}",
+    "severalStatuses_other": "Hali {{count}}",
+    "sort": "Mpangilio",
+    "clear": "Futa vichujio"
+  },
+  "sort": {
+    "priority": "Kipaumbele: HIGH kwanza",
+    "expected_loss": "Hasara inayotarajiwa",
+    "newest": "Mpya kwanza"
+  },
+  "tier": {
+    "HIGH": "HIGH",
+    "MEDIUM": "MEDIUM",
+    "ANOMALY": "Isiyo ya kawaida"
+  },
+  "status": {
+    "PENDING": "Inasubiri",
+    "IN_REVIEW": "Inakaguliwa",
+    "CONFIRMED_FRAUD": "Ulaghai umethibitishwa",
+    "MARKED_LEGITIMATE": "Imethibitishwa halali",
+    "AUTO_RELEASED": "Imeachiliwa kiotomatiki",
+    "ESCALATED": "Imepelekwa juu",
+    "OVERRIDDEN": "Uamuzi umebadilishwa"
+  },
+  "card": {
+    "label": "Arifa ya {{name}}",
+    "noMerchant": "Hakuna mfanyabiashara",
+    "reasons": "Sababu kuu"
+  },
+  "reason": {
+    "increases": "{{feature}} inaongeza hatari kwa {{value}}",
+    "decreases": "{{feature}} inapunguza hatari kwa {{value}}"
+  },
+  "feed": {
+    "list": "Arifa",
+    "loading": "Inapakia arifa…",
+    "error": "Arifa hazikuweza kupakiwa.",
+    "emptyTitle": "Hakuna arifa zilizo wazi",
+    "emptyDescription": "Arifa mpya zinaonekana hapa zinapotolewa.",
+    "noMatchTitle": "Hakuna arifa zinazolingana na vichujio hivi",
+    "noMatchDescription": "Badilisha au futa vichujio ili kuona zaidi.",
+    "shown_one": "Arifa {{count}} imeonyeshwa",
+    "shown_other": "Arifa {{count}} zimeonyeshwa",
+    "loadMore": "Pakia zaidi"
+  }
+}

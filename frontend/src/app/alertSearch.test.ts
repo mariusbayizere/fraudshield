@@ -12,7 +12,7 @@ import {
   type AlertSearch,
 } from './alertSearch';
 
-describe('alert feed filters in the URL (FR-04-09)', () => {
+describe('[FR-04-09] alert feed filters in the URL', () => {
   it('keeps valid filters, under listAlerts parameter names', () => {
     const search = {
       tier: ['HIGH', 'ANOMALY'],

@@ -1,0 +1,66 @@
+{
+  "stats": {
+    "label": "Today at a glance",
+    "high": "HIGH open",
+    "medium": "MEDIUM open",
+    "filterTier": "Show only {{tier}} alerts ({{count}} open)",
+    "autoBlocked": "Auto-blocked today",
+    "reviewed": "Reviewed today",
+    "fraudPrevented": "Fraud prevented today",
+    "averageReview": "Average review",
+    "seconds": "{{value}} s",
+    "analystsOnline": "Analysts online",
+    "error": "Today's figures could not be loaded."
+  },
+  "filters": {
+    "label": "Filters",
+    "tier": "Risk tier",
+    "channel": "Channel",
+    "status": "Status",
+    "anyStatus": "Any status",
+    "severalStatuses_one": "{{count}} status",
+    "severalStatuses_other": "{{count}} statuses",
+    "sort": "Order",
+    "clear": "Clear filters"
+  },
+  "sort": {
+    "priority": "Priority: HIGH first",
+    "expected_loss": "Expected loss",
+    "newest": "Newest first"
+  },
+  "tier": {
+    "HIGH": "HIGH",
+    "MEDIUM": "MEDIUM",
+    "ANOMALY": "Anomaly"
+  },
+  "status": {
+    "PENDING": "Pending",
+    "IN_REVIEW": "In review",
+    "CONFIRMED_FRAUD": "Confirmed fraud",
+    "MARKED_LEGITIMATE": "Marked legitimate",
+    "AUTO_RELEASED": "Auto-released",
+    "ESCALATED": "Escalated",
+    "OVERRIDDEN": "Overridden"
+  },
+  "card": {
+    "label": "Alert for {{name}}",
+    "noMerchant": "No merchant",
+    "reasons": "Top reasons"
+  },
+  "reason": {
+    "increases": "{{feature}} increases the risk by {{value}}",
+    "decreases": "{{feature}} lowers the risk by {{value}}"
+  },
+  "feed": {
+    "list": "Alerts",
+    "loading": "Loading alerts…",
+    "error": "The alerts could not be loaded.",
+    "emptyTitle": "No open alerts",
+    "emptyDescription": "New alerts appear here as they are raised.",
+    "noMatchTitle": "No alerts match these filters",
+    "noMatchDescription": "Change or clear the filters to see more.",
+    "shown_one": "{{count}} alert shown",
+    "shown_other": "{{count}} alerts shown",
+    "loadMore": "Load more"
+  }
+}

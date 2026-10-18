@@ -1,4 +1,5 @@
 import 'i18next';
+import type alerts from './locales/en/alerts.json';
 import type auth from './locales/en/auth.json';
 import type common from './locales/en/common.json';
 import type designSystem from './locales/en/designSystem.json';
@@ -7,6 +8,11 @@ import type designSystem from './locales/en/designSystem.json';
 declare module 'i18next' {
   interface CustomTypeOptions {
     defaultNS: 'common';
-    resources: { common: typeof common; designSystem: typeof designSystem; auth: typeof auth };
+    resources: {
+      common: typeof common;
+      designSystem: typeof designSystem;
+      auth: typeof auth;
+      alerts: typeof alerts;
+    };
   }
 }

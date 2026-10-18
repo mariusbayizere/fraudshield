@@ -1,0 +1,68 @@
+{
+  "stats": {
+    "label": "Aujourd'hui en bref",
+    "high": "HIGH ouvertes",
+    "medium": "MEDIUM ouvertes",
+    "filterTier": "Afficher seulement les alertes {{tier}} ({{count}} ouvertes)",
+    "autoBlocked": "Bloquées automatiquement aujourd'hui",
+    "reviewed": "Examinées aujourd'hui",
+    "fraudPrevented": "Fraude évitée aujourd'hui",
+    "averageReview": "Examen moyen",
+    "seconds": "{{value}} s",
+    "analystsOnline": "Analystes en ligne",
+    "error": "Les chiffres du jour n'ont pas pu être chargés."
+  },
+  "filters": {
+    "label": "Filtres",
+    "tier": "Niveau de risque",
+    "channel": "Canal",
+    "status": "Statut",
+    "anyStatus": "Tous les statuts",
+    "severalStatuses_one": "{{count}} statut",
+    "severalStatuses_many": "{{count}} statuts",
+    "severalStatuses_other": "{{count}} statuts",
+    "sort": "Ordre",
+    "clear": "Effacer les filtres"
+  },
+  "sort": {
+    "priority": "Priorité : HIGH d'abord",
+    "expected_loss": "Perte attendue",
+    "newest": "Plus récentes d'abord"
+  },
+  "tier": {
+    "HIGH": "HIGH",
+    "MEDIUM": "MEDIUM",
+    "ANOMALY": "Anomalie"
+  },
+  "status": {
+    "PENDING": "En attente",
+    "IN_REVIEW": "En cours d'examen",
+    "CONFIRMED_FRAUD": "Fraude confirmée",
+    "MARKED_LEGITIMATE": "Jugée légitime",
+    "AUTO_RELEASED": "Libérée automatiquement",
+    "ESCALATED": "Transmise",
+    "OVERRIDDEN": "Décision remplacée"
+  },
+  "card": {
+    "label": "Alerte pour {{name}}",
+    "noMerchant": "Aucun commerçant",
+    "reasons": "Principales raisons"
+  },
+  "reason": {
+    "increases": "{{feature}} augmente le risque de {{value}}",
+    "decreases": "{{feature}} réduit le risque de {{value}}"
+  },
+  "feed": {
+    "list": "Alertes",
+    "loading": "Chargement des alertes…",
+    "error": "Les alertes n'ont pas pu être chargées.",
+    "emptyTitle": "Aucune alerte ouverte",
+    "emptyDescription": "Les nouvelles alertes apparaissent ici dès qu'elles sont levées.",
+    "noMatchTitle": "Aucune alerte ne correspond à ces filtres",
+    "noMatchDescription": "Modifiez ou effacez les filtres pour en voir davantage.",
+    "shown_one": "{{count}} alerte affichée",
+    "shown_many": "{{count}} alertes affichées",
+    "shown_other": "{{count}} alertes affichées",
+    "loadMore": "Afficher plus"
+  }
+}

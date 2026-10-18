@@ -1,0 +1,66 @@
+{
+  "stats": {
+    "label": "Uko bihagaze uyu munsi",
+    "high": "HIGH zifunguye",
+    "medium": "MEDIUM zifunguye",
+    "filterTier": "Erekana gusa imenyesha rya {{tier}} ({{count}} zifunguye)",
+    "autoBlocked": "Zahagaritswe mu buryo bwikora uyu munsi",
+    "reviewed": "Zasuzumwe uyu munsi",
+    "fraudPrevented": "Uburiganya bwakumiriwe uyu munsi",
+    "averageReview": "Igihe cyo gusuzuma ugereranyije",
+    "seconds": "{{value}} s",
+    "analystsOnline": "Abasesenguzi bari ku murongo",
+    "error": "Imibare y'uyu munsi ntiyashoboye kuboneka."
+  },
+  "filters": {
+    "label": "Muyunguruzi",
+    "tier": "Urwego rw'ibyago",
+    "channel": "Umuyoboro",
+    "status": "Imiterere",
+    "anyStatus": "Imiterere iyo ari yo yose",
+    "severalStatuses_one": "Imiterere {{count}}",
+    "severalStatuses_other": "Imiterere {{count}}",
+    "sort": "Uko bikurikirana",
+    "clear": "Siba muyunguruzi"
+  },
+  "sort": {
+    "priority": "Iby'ibanze: HIGH mbere",
+    "expected_loss": "Igihombo giteganyijwe",
+    "newest": "Ibishya mbere"
+  },
+  "tier": {
+    "HIGH": "HIGH",
+    "MEDIUM": "MEDIUM",
+    "ANOMALY": "Ibidasanzwe"
+  },
+  "status": {
+    "PENDING": "Birategereje",
+    "IN_REVIEW": "Birimo gusuzumwa",
+    "CONFIRMED_FRAUD": "Uburiganya bwemejwe",
+    "MARKED_LEGITIMATE": "Byemejwe ko ari byo",
+    "AUTO_RELEASED": "Byarekuwe mu buryo bwikora",
+    "ESCALATED": "Byoherejwe hejuru",
+    "OVERRIDDEN": "Icyemezo cyasimbuwe"
+  },
+  "card": {
+    "label": "Imenyesha rya {{name}}",
+    "noMerchant": "Nta mucuruzi",
+    "reasons": "Impamvu z'ingenzi"
+  },
+  "reason": {
+    "increases": "{{feature}} yongera ibyago ku {{value}}",
+    "decreases": "{{feature}} igabanya ibyago ku {{value}}"
+  },
+  "feed": {
+    "list": "Imenyesha",
+    "loading": "Imenyesha riri gufunguka…",
+    "error": "Imenyesha ntiryashoboye kuboneka.",
+    "emptyTitle": "Nta menyesha rifunguye",
+    "emptyDescription": "Imenyesha rishya rigaragara hano rikimara kuzamuka.",
+    "noMatchTitle": "Nta menyesha rihuye n'iyi muyunguruzi",
+    "noMatchDescription": "Hindura cyangwa usibe muyunguruzi kugira ngo ubone andi.",
+    "shown_one": "Imenyesha {{count}} rigaragara",
+    "shown_other": "Imenyesha {{count}} rigaragara",
+    "loadMore": "Erekana andi"
+  }
+}

@@ -15,6 +15,7 @@ const rootRoute = createRootRoute();
 // Everything past the providers loads as its own chunk, on first visit (D-39, ADR 0080 §10):
 // the shell's navigation, app bar and drawers are not in the initial bundle either.
 const SectionPage = lazyRouteComponent(() => import('./pages/SectionPage'));
+const AlertFeedPage = lazyRouteComponent(() => import('../alerts/AlertFeedPage'));
 const AppShell = lazyRouteComponent(() => import('./AppShell'), 'AppShell');
 const LoginPage = lazyRouteComponent(() => import('../auth/LoginPage'));
 const RegisterPage = lazyRouteComponent(() => import('../auth/registration/RegisterPage'));
@@ -41,13 +42,22 @@ const index = createRoute({
   },
 });
 
-const sections: AnyRoute[] = SECTIONS.map((section) =>
-  createRoute({
-    getParentRoute: () => shell,
-    path: section.path,
-    ...(section.path === '/alerts' ? { validateSearch: alertSearch } : {}),
-    component: () => <SectionPage title={section.title} />,
-  }),
+// The screens that are built; every other section shows that it is not built yet.
+const alerts = createRoute({
+  getParentRoute: () => shell,
+  path: '/alerts',
+  validateSearch: alertSearch,
+  component: AlertFeedPage,
+});
+const builtSections = new Set(['/alerts']);
+
+const sections: AnyRoute[] = SECTIONS.filter((section) => !builtSections.has(section.path)).map(
+  (section) =>
+    createRoute({
+      getParentRoute: () => shell,
+      path: section.path,
+      component: () => <SectionPage title={section.title} />,
+    }),
 );
 
 const alertDetail = createRoute({
@@ -85,7 +95,7 @@ const publicPages: AnyRoute[] = PUBLIC_PAGES.filter((page) => !built.has(page.pa
 );
 
 export const routeTree = rootRoute.addChildren([
-  shell.addChildren([index, ...sections, alertDetail]),
+  shell.addChildren([index, alerts, ...sections, alertDetail]),
   login,
   registerRoute,
   ...authPages,
