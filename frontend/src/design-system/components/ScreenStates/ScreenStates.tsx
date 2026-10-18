@@ -6,7 +6,8 @@ import Typography from '@mui/material/Typography';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { formatClock } from '../../../region/region';
-import { useFormatLocale, useRegion } from '../../../region/RegionContext';
+import { useRegion } from '../../../region/RegionContext';
+import { useFormatLocale } from '../../../region/formatLocale';
 
 // The reusable parts of E.9's screen state contract. Loading skeletons are per layout, so each
 // view draws its own, matching its final shape (CLS < 0.1).

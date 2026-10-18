@@ -1,5 +1,4 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
-import { useTranslation } from 'react-i18next';
 import { minorUnitsByCurrency, PACKS } from './packs';
 import type { Region } from './region';
 
@@ -31,11 +30,4 @@ export function useRegion(): RegionValue {
   const value = useContext(RegionContext);
   if (value === null) throw new Error('useRegion() needs a RegionProvider above it');
   return value;
-}
-
-/** The locale numbers and times are written in: the UI language in the region's country. */
-export function useFormatLocale(): string {
-  const { i18n } = useTranslation();
-  const { region } = useRegion();
-  return `${i18n.resolvedLanguage ?? i18n.language}-${region.country}`;
 }

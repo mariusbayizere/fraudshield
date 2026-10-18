@@ -1,6 +1,7 @@
 import Typography from '@mui/material/Typography';
 import { formatMoney, type DecimalString } from '../../../region/region';
-import { useFormatLocale, useRegion } from '../../../region/RegionContext';
+import { useRegion } from '../../../region/RegionContext';
+import { useFormatLocale } from '../../../region/formatLocale';
 
 export interface MoneyProps {
   /** The contract's decimal string (ADR 0011), never a JSON number. */
