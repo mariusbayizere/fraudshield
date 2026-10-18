@@ -4,6 +4,7 @@ import io.github.mariusbayizere.fraudshield.audit.jdbc.TenantTransactions;
 import io.github.mariusbayizere.fraudshield.auth.crypto.Crypto;
 import io.github.mariusbayizere.fraudshield.auth.support.SafeRedis;
 import java.nio.charset.StandardCharsets;
+import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -13,8 +14,12 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.LongSupplier;
-import org.springframework.dao.DataAccessException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Authenticates {@code X-API-Key} (D-19, FR-06-07, FR-07-05).
@@ -23,32 +28,38 @@ import org.springframework.dao.DataAccessException;
  * the record's version and compared in constant time. bcrypt is deliberately not used: at 10,000
  * requests per second its 100-300 ms per check is a denial of service (D-19).
  *
- * <p>Records are cached in process for 2 seconds. A revocation or rotation is announced on a Redis
- * channel after it commits and evicts the record everywhere at once; if the announcement is lost,
- * the time to live still makes a revoked key fail within 2 seconds, inside the required 5. The
- * cache holds the stored HMAC, never the secret, so a cached record cannot admit a wrong secret.
+ * <p>The record cache implements docs/architecture/api-key-cache-contract.md, whose rule numbers
+ * the comments cite. Records are cached for 2 seconds. A revocation or rotation is announced on a
+ * Redis channel after it commits and evicts the record everywhere at once; if the announcement is
+ * lost, the time to live still makes a revoked key fail within 2 seconds while this instance can
+ * read the database. The cache holds the stored HMAC, never the secret.
  *
- * <p>While the database cannot answer, a record verified within the last {@code staleIfError} (10
- * minutes in production) keeps being used, so ingestion keeps deciding through a PostgreSQL outage
- * (D-15; owner decision 2026-10-17, threat model R-13). An announced revocation evicts the record,
- * even while a read is blocked, and a read in flight when it arrives is not cached. What this can
- * miss is a revocation this instance is not told about: any committed after its last successful
- * read of the key, which may be up to {@code staleIfError} before the outage began, or during the
- * outage if it is local to this instance (other instances can still commit), whose announcement it
- * did not receive. A key with no record in this instance, or one read longer ago than the cap, is
- * refused with the database's exception, which the filter answers 503.
+ * <p>While the database is unavailable (R8), a cached record keeps being used until {@code
+ * staleIfError} (10 minutes in production) after the read that produced it, so ingestion keeps
+ * deciding through a PostgreSQL outage (D-15; owner decision 2026-10-17, threat model R-13). A
+ * received announcement is never undone. What this can miss is a revocation committed after the
+ * record's read whose announcement this instance did not receive, for up to {@code staleIfError}. A
+ * key with no cached record is refused with {@link KeyStoreUnavailableException}, which the filters
+ * answer 503; so is a read of an uncached key when the bulkhead (R9) is full.
  */
 public final class ApiKeyAuthenticator {
 
   /** Pub/sub channel of API-key changes. */
   public static final String CHANNEL = "fs:auth:api-keys";
 
+  /** Default bulkhead size for reads of uncached keys (R9). */
+  public static final int DEFAULT_UNCACHED_READ_PERMITS = 4;
+
+  /** Default wait for a bulkhead permit (R9). */
+  public static final Duration DEFAULT_UNCACHED_READ_WAIT = Duration.ofMillis(500);
+
+  private static final Logger LOG = LoggerFactory.getLogger(ApiKeyAuthenticator.class);
   private static final Duration TOUCH_INTERVAL = Duration.ofMinutes(1);
   private static final byte[] DUMMY_HMAC = new byte[32];
   private static final int MAX_CACHED_KEYS = 10_000;
 
-  private final ApiKeyRepository repository;
-  private final TenantTransactions tenants;
+  private final CredentialReader reader;
+  private final UseRecorder recorder;
   private final SafeRedis redis;
   private final Map<Integer, byte[]> peppers;
   private final String environment;
@@ -57,25 +68,52 @@ public final class ApiKeyAuthenticator {
   private final Clock clock;
   private final LongSupplier nanoTime;
   private final Executor executor;
+  private final Semaphore uncachedReads;
+  private final long uncachedReadWaitNanos;
   private final Map<String, Cached> cache = new ConcurrentHashMap<>();
-  // Counts announcements. A read that overlapped one does not cache its result, which may predate
-  // the change the announcement reported (review of the delta fixes, N1).
-  private final java.util.concurrent.atomic.AtomicLong announcements =
-      new java.util.concurrent.atomic.AtomicLong();
+  // R4(a): every announcement counts here before it removes, so a read that overlapped one is not
+  // installed (R2(c)).
+  private final AtomicLong announcements = new AtomicLong();
   private final Map<String, Instant> lastTouched = new ConcurrentHashMap<>();
 
-  /**
-   * A cached record.
-   *
-   * @param credential the record
-   * @param expiresAtNanos when it must be read again
-   * @param readAtNanos when it was last read successfully, which bounds its use during an outage
-   */
-  private record Cached(
-      Optional<ApiKeyRepository.Credential> credential, long expiresAtNanos, long readAtNanos) {}
+  /** The cache's read: the repository in production, a scripted reader in the contract tests. */
+  @FunctionalInterface
+  interface CredentialReader {
+
+    /**
+     * Reads a key's record.
+     *
+     * @param keyId public key ID
+     * @return the record, or empty if no such key exists
+     */
+    Optional<ApiKeyRepository.Credential> find(String keyId);
+  }
+
+  /** Records that a key was used. */
+  @FunctionalInterface
+  interface UseRecorder {
+
+    /**
+     * Records a use.
+     *
+     * @param credential the key's record
+     * @param at when
+     */
+    void used(ApiKeyRepository.Credential credential, Instant at);
+  }
 
   /**
-   * Creates the authenticator.
+   * A cache entry. Replaced, never mutated, and only inside the key's {@code compute}.
+   *
+   * @param credential the record, always usable when installed (R2(e))
+   * @param expiresAtNanos e: when it must be read again
+   * @param readAtNanos r: the start of the read that produced it, which bounds stale use
+   */
+  private record Cached(
+      ApiKeyRepository.Credential credential, long expiresAtNanos, long readAtNanos) {}
+
+  /**
+   * Creates the authenticator without stale use: a key whose record cannot be read is refused.
    *
    * @param repository key repository
    * @param tenants tenant transactions (for last-used updates)
@@ -111,7 +149,7 @@ public final class ApiKeyAuthenticator {
   }
 
   /**
-   * Creates the authenticator, serving a recently verified record while the database cannot answer.
+   * Creates the authenticator, serving a cached record while the database is unavailable.
    *
    * @param repository key repository
    * @param tenants tenant transactions (for last-used updates)
@@ -119,8 +157,8 @@ public final class ApiKeyAuthenticator {
    * @param peppers peppers by version, each at least 32 bytes
    * @param environment the deployment's key environment segment
    * @param cacheTtl record cache time to live
-   * @param staleIfError how long after its last successful read a record may still be used while
-   *     the database cannot answer; zero refuses at once
+   * @param staleIfError how long after the read that produced it a record may still be used while
+   *     the database is unavailable; zero refuses at once
    * @param clock clock
    * @param nanoTime monotonic clock
    * @param executor executor for last-used updates
@@ -136,9 +174,88 @@ public final class ApiKeyAuthenticator {
       Clock clock,
       LongSupplier nanoTime,
       Executor executor) {
+    this(
+        repository,
+        tenants,
+        redis,
+        peppers,
+        environment,
+        cacheTtl,
+        staleIfError,
+        DEFAULT_UNCACHED_READ_PERMITS,
+        DEFAULT_UNCACHED_READ_WAIT,
+        clock,
+        nanoTime,
+        executor);
+  }
+
+  /**
+   * Creates the authenticator with an explicit bulkhead for reads of uncached keys (R9).
+   *
+   * @param repository key repository
+   * @param tenants tenant transactions (for last-used updates)
+   * @param redis Redis (for revocation announcements)
+   * @param peppers peppers by version, each at least 32 bytes
+   * @param environment the deployment's key environment segment
+   * @param cacheTtl record cache time to live
+   * @param staleIfError how long after the read that produced it a record may still be used while
+   *     the database is unavailable; zero refuses at once
+   * @param uncachedReadPermits how many reads of uncached keys may run at once; must be below the
+   *     connection pool's size
+   * @param uncachedReadWait how long a read of an uncached key waits for a permit
+   * @param clock clock
+   * @param nanoTime monotonic clock
+   * @param executor executor for last-used updates
+   */
+  public ApiKeyAuthenticator(
+      ApiKeyRepository repository,
+      TenantTransactions tenants,
+      SafeRedis redis,
+      Map<Integer, byte[]> peppers,
+      String environment,
+      Duration cacheTtl,
+      Duration staleIfError,
+      int uncachedReadPermits,
+      Duration uncachedReadWait,
+      Clock clock,
+      LongSupplier nanoTime,
+      Executor executor) {
+    this(
+        Objects.requireNonNull(repository, "repository")::findCredential,
+        recordUseWith(repository, tenants),
+        redis,
+        peppers,
+        environment,
+        cacheTtl,
+        staleIfError,
+        uncachedReadPermits,
+        uncachedReadWait,
+        clock,
+        nanoTime,
+        executor);
+  }
+
+  ApiKeyAuthenticator(
+      CredentialReader reader,
+      UseRecorder recorder,
+      SafeRedis redis,
+      Map<Integer, byte[]> peppers,
+      String environment,
+      Duration cacheTtl,
+      Duration staleIfError,
+      int uncachedReadPermits,
+      Duration uncachedReadWait,
+      Clock clock,
+      LongSupplier nanoTime,
+      Executor executor) {
+    if (uncachedReadPermits < 1) {
+      throw new IllegalStateException("uncached key reads need at least one permit");
+    }
     this.staleIfErrorNanos = staleIfError.toNanos();
-    this.repository = Objects.requireNonNull(repository, "repository");
-    this.tenants = Objects.requireNonNull(tenants, "tenants");
+    this.uncachedReads = new Semaphore(uncachedReadPermits);
+    this.uncachedReadWaitNanos = uncachedReadWait.toNanos();
+    this.reader = Objects.requireNonNull(reader, "reader");
+    this.recorder = Objects.requireNonNull(recorder, "recorder");
     this.redis = Objects.requireNonNull(redis, "redis");
     this.peppers = Map.copyOf(peppers);
     if (this.peppers.isEmpty()) {
@@ -203,62 +320,128 @@ public final class ApiKeyAuthenticator {
 
   private Optional<ApiKeyRepository.Credential> credential(String keyId) {
     Cached cached = cache.get(keyId);
-    long now = nanoTime.getAsLong(); // before the read: anchors the analytic bound
-    long announcedBefore = announcements.get();
-    // A record renewed while the database was down is still held to the cap from its last read.
-    if (cached != null
-        && cached.expiresAtNanos() - now > 0
+    return cached == null ? uncached(keyId) : cachedOrRead(keyId, cached);
+  }
+
+  // R1. With staleIfError below the TTL, an entry is still served within its TTL.
+  private Optional<ApiKeyRepository.Credential> cachedOrRead(String keyId, Cached cached) {
+    long now = nanoTime.getAsLong();
+    if (cached.expiresAtNanos() - now > 0
         && now - cached.readAtNanos() <= Math.max(cacheTtlNanos, staleIfErrorNanos)) {
-      return cached.credential();
+      return Optional.of(cached.credential());
     }
+    return read(keyId);
+  }
+
+  // R9: a key with no entry reads only with a permit, so a flood of unknown key IDs holds at most
+  // the bulkhead's connections. After the wait the key is looked up again: another request may
+  // have installed it meanwhile.
+  private Optional<ApiKeyRepository.Credential> uncached(String keyId) {
+    boolean permit;
+    try {
+      permit = uncachedReads.tryAcquire(uncachedReadWaitNanos, TimeUnit.NANOSECONDS);
+    } catch (InterruptedException interrupted) {
+      Thread.currentThread().interrupt();
+      throw new KeyStoreUnavailableException("interrupted waiting to read a key", interrupted);
+    }
+    Cached arrived = cache.get(keyId);
+    if (arrived != null) {
+      if (permit) {
+        uncachedReads.release();
+      }
+      return cachedOrRead(keyId, arrived);
+    }
+    if (!permit) {
+      throw new KeyStoreUnavailableException("too many reads of uncached keys in flight", null);
+    }
+    try {
+      return read(keyId);
+    } finally {
+      uncachedReads.release();
+    }
+  }
+
+  private Optional<ApiKeyRepository.Credential> read(String keyId) {
+    long start = nanoTime.getAsLong();
+    final long announced = announcements.get();
     Optional<ApiKeyRepository.Credential> loaded;
     try {
-      loaded = repository.findCredential(keyId);
-    } catch (DataAccessException storeDown) {
-      // Usable for staleIfError after its last successful read (D-15, R-13). The renewal runs from
-      // the end of the failed read, so the next read is a TTL away however long this one blocked;
-      // the cap stays anchored to readAtNanos. It replaces only the entry this read started from:
-      // an announcement that evicted the record while the read was blocked must stay in force.
-      if (cached != null && now - cached.readAtNanos() <= staleIfErrorNanos) {
-        Cached renewed =
-            new Cached(
-                cached.credential(), nanoTime.getAsLong() + cacheTtlNanos, cached.readAtNanos());
-        if (cache.replace(keyId, cached, renewed)) {
-          return cached.credential();
-        }
-        // Another request got there first. If it renewed the same record (same read, same
-        // instance), serve it; if it read the database successfully since, its record is fresher
-        // and is served. An entry that is gone was evicted by an announcement, and is not.
-        Cached current = cache.get(keyId);
-        if (current != null
-            && current.readAtNanos() == cached.readAtNanos()
-            && current.credential() == cached.credential()) {
-          return cached.credential();
-        }
-        if (current != null && current.readAtNanos() - cached.readAtNanos() > 0) {
-          return current.credential();
-        }
+      loaded = reader.find(keyId);
+    } catch (RuntimeException error) {
+      if (!KeyStoreUnavailability.isUnavailable(error)) {
+        throw error; // R7: a bug or a data problem, answered 500, cache untouched
       }
-      throw storeDown;
+      return Optional.of(stale(keyId, start, error));
     }
-    // Only existing keys are cached: caching misses would let random key IDs grow the map without
-    // bound (review finding 2). The map is also capped.
-    if (loaded.isPresent()) {
+    if (loaded.isEmpty()) {
+      // R2(d): never cached; an older entry of a key that no longer exists is not left behind.
+      cache.computeIfPresent(keyId, (key, entry) -> entry.readAtNanos() - start < 0 ? null : entry);
+      return loaded;
+    }
+    ApiKeyRepository.Credential record = loaded.get();
+    if (!usable(record)) {
+      // R2(e): a key seen revoked or past its overlap ends this instance's use of it, whatever
+      // the entry's age. Best effort: an older read in flight may still install afterwards.
+      cache.remove(keyId);
+      return loaded;
+    }
+    // R6, before and outside the key's compute: dropping touches other keys.
+    if (cache.size() >= MAX_CACHED_KEYS) {
+      long now = nanoTime.getAsLong();
+      cache.values().removeIf(entry -> entry.expiresAtNanos() - now <= 0);
       if (cache.size() >= MAX_CACHED_KEYS) {
-        cache.values().removeIf(entry -> entry.expiresAtNanos() - now <= 0);
-        if (cache.size() >= MAX_CACHED_KEYS) {
-          cache.clear();
-        }
+        cache.clear();
       }
-      // A record read while an announcement arrived is used for this request only: cached, it
-      // could outlive the announcement through an outage (stale-if-error). An announcement counts
-      // before it removes, and compute holds the key against that removal, so none slips between
-      // the check and the insert.
-      Cached fresh = new Cached(loaded, now + cacheTtlNanos, now);
-      cache.compute(
-          keyId, (key, previous) -> announcements.get() == announcedBefore ? fresh : previous);
     }
+    // R2(b), R2(c): the announcement count is compared inside the compute, which holds the key
+    // against R4(b)'s removal; an older read never replaces a newer entry.
+    Cached fresh = new Cached(record, start + cacheTtlNanos, start);
+    cache.compute(
+        keyId,
+        (key, previous) ->
+            announcements.get() != announced
+                    || (previous != null && previous.readAtNanos() - start > 0)
+                ? previous
+                : fresh);
     return loaded;
+  }
+
+  // R3, in one compute on the key with now read inside it.
+  private ApiKeyRepository.Credential stale(String keyId, long start, RuntimeException error) {
+    LOG.error("API-key store unavailable (SQLSTATE {})", rootState(error));
+    ApiKeyRepository.Credential[] served = new ApiKeyRepository.Credential[1];
+    cache.computeIfPresent(
+        keyId,
+        (key, entry) -> {
+          if (start - entry.readAtNanos() < 0) {
+            served[0] = entry.credential(); // R3(b): a read begun after this one succeeded
+            return entry;
+          }
+          long now = nanoTime.getAsLong();
+          if (now - entry.readAtNanos() <= staleIfErrorNanos) {
+            served[0] = entry.credential(); // R3(c)
+            return new Cached(entry.credential(), now + cacheTtlNanos, entry.readAtNanos());
+          }
+          return entry;
+        });
+    if (served[0] == null) {
+      throw new KeyStoreUnavailableException(
+          "the key store is unavailable and no usable record is cached", error);
+    }
+    return served[0];
+  }
+
+  private static String rootState(Throwable error) {
+    String state = null;
+    for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+      if (cause instanceof SQLException sql && sql.getSQLState() != null) {
+        state = sql.getSQLState();
+      }
+      if (cause.getCause() == cause) {
+        break;
+      }
+    }
+    return state == null ? "none" : state;
   }
 
   /**
@@ -267,8 +450,8 @@ public final class ApiKeyAuthenticator {
    * record is cached until the time taken <em>before</em> its database read plus the cache TTL, and
    * a record read before the revocation committed was read after that time, so it expires no later
    * than the commit plus the TTL, however slow the read. While this instance cannot read the
-   * database, an unannounced revocation can be missed for up to {@code staleIfError} after the
-   * record's last read (D-15, threat model R-13).
+   * database, an unannounced revocation can be missed for up to {@code staleIfError} after the read
+   * that produced the record (D-15, threat model R-13).
    *
    * @return the cache time to live
    */
@@ -283,10 +466,15 @@ public final class ApiKeyAuthenticator {
       return;
     }
     lastTouched.put(credential.id().toString(), now);
-    executor.execute(
-        () ->
-            tenants.runInTenant(
-                credential.institutionId(), () -> repository.touch(credential.id(), now)));
+    executor.execute(() -> recorder.used(credential, now));
+  }
+
+  private static UseRecorder recordUseWith(
+      ApiKeyRepository repository, TenantTransactions tenants) {
+    Objects.requireNonNull(tenants, "tenants");
+    return (credential, at) ->
+        tenants.runInTenant(
+            credential.institutionId(), () -> repository.touch(credential.id(), at));
   }
 
   /**

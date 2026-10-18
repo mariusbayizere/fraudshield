@@ -17,6 +17,7 @@ public interface ApiKeyAuthenticator {
    *
    * @param rawKey the header value, possibly null or malformed
    * @return the principal, or empty for a missing, malformed, unknown, expired or revoked key
+   * @throws ApiKeyStoreUnavailableException if the key store is unavailable (answered 503)
    */
   Optional<ApiPrincipal> authenticate(String rawKey);
 }

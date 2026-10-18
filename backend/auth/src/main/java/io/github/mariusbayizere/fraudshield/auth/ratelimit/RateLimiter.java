@@ -28,4 +28,16 @@ public interface RateLimiter {
    * @return the decision
    */
   Decision attempt(String key, int limit, Duration window);
+
+  /**
+   * Whether a key is already at its limit, without counting anything: lets a caller refuse before
+   * doing expensive work (docs/architecture/api-key-cache-contract.md R0(a)). Falls back like
+   * {@link #attempt} and never throws for an unreachable store.
+   *
+   * @param key limit key
+   * @param limit attempts allowed per window
+   * @param window window length
+   * @return refused with Retry-After if {@code limit} attempts are in the window, else allowed
+   */
+  Decision check(String key, int limit, Duration window);
 }

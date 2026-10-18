@@ -304,6 +304,50 @@ class ApiKeyLifecycleTest {
 
   @Test
   @Tag("FR-06-07")
+  void revokedAndExpiredRotatedKeysNeverBecomeUsableAgain() {
+    // The premise of rule R2(e) of the cache contract (property P37): no operation moves a key
+    // out of REVOKED, or out of ROTATING once its overlap has ended.
+    ApiKeyAuthenticator authenticator = authenticator(redisA, "test");
+    ApiKeyService service = service(authenticator);
+    final ApiKeyRepository records =
+        new ApiKeyRepository(app.jdbc(), app.apiKeys(), app.entities(), clock);
+    ApiKeyService.Issued revoked =
+        service.create(
+            bank, name(), List.of(ApiKeyScope.INGEST_WRITE), null, admin, RequestContext.SYSTEM);
+    final String revokedId = revoked.record().keyId();
+    service.revoke(bank, revokedId, admin, RequestContext.SYSTEM);
+    assertThatThrownBy(() -> service.rotate(bank, revokedId, admin, RequestContext.SYSTEM))
+        .isInstanceOf(ProblemException.class)
+        .satisfies(e -> assertThat(((ProblemException) e).status()).isEqualTo(409));
+    try {
+      service.revoke(bank, revokedId, admin, RequestContext.SYSTEM);
+    } catch (ProblemException expected) {
+      // refusing a second revocation is as good as accepting it: the key stays revoked
+    }
+    assertThat(records.findCredential(revokedId).orElseThrow().state()).isEqualTo("REVOKED");
+    assertThat(authenticator.authenticate(revoked.rawKey())).isEmpty();
+
+    ApiKeyService.Issued rotated =
+        service.create(
+            bank, name(), List.of(ApiKeyScope.INGEST_WRITE), null, admin, RequestContext.SYSTEM);
+    final String rotatedId = rotated.record().keyId();
+    service.rotate(bank, rotatedId, admin, RequestContext.SYSTEM);
+    clock.advance(Duration.ofHours(24).plusMillis(1));
+    assertThatThrownBy(() -> service.rotate(bank, rotatedId, admin, RequestContext.SYSTEM))
+        .isInstanceOf(ProblemException.class)
+        .satisfies(e -> assertThat(((ProblemException) e).status()).isEqualTo(409));
+    try {
+      service.revoke(bank, rotatedId, admin, RequestContext.SYSTEM);
+    } catch (ProblemException expected) {
+      // either way the key is not usable again
+    }
+    assertThat(records.findCredential(rotatedId).orElseThrow().state()).isIn("ROTATING", "REVOKED");
+    authenticator.onMessage(rotatedId);
+    assertThat(authenticator.authenticate(rotated.rawKey())).isEmpty();
+  }
+
+  @Test
+  @Tag("FR-06-07")
   void rotationKeepsTheOldKeyForTwentyFourHours() {
     ApiKeyAuthenticator authenticator = authenticator(redisA, "test");
     ApiKeyService service = service(authenticator);
@@ -459,14 +503,14 @@ class ApiKeyLifecycleTest {
         .isPresent();
     org.assertj.core.api.Assertions.assertThatThrownBy(() -> outageProof.authenticate(neverSeen))
         .as("a key this instance never verified is not admitted unseen")
-        .isInstanceOf(org.springframework.dao.DataAccessException.class);
+        .isInstanceOf(KeyStoreUnavailableException.class);
     org.assertj.core.api.Assertions.assertThatThrownBy(() -> outageProof.authenticate(announced))
         .as("an announced change evicted the record, so it is not served stale")
-        .isInstanceOf(org.springframework.dao.DataAccessException.class);
+        .isInstanceOf(KeyStoreUnavailableException.class);
     time.set(read + Duration.ofMinutes(10).toMillis() + 1);
     org.assertj.core.api.Assertions.assertThatThrownBy(() -> outageProof.authenticate(verified))
         .as("past the ten-minute cap")
-        .isInstanceOf(org.springframework.dao.DataAccessException.class);
+        .isInstanceOf(KeyStoreUnavailableException.class);
   }
 
   @Test
@@ -576,13 +620,13 @@ class ApiKeyLifecycleTest {
       release.countDown();
       org.assertj.core.api.Assertions.assertThatThrownBy(request::get)
           .as("the blocked request is refused, not served the evicted record")
-          .hasCauseInstanceOf(org.springframework.dao.DataAccessException.class);
+          .hasCauseInstanceOf(KeyStoreUnavailableException.class);
     } finally {
       executor.shutdownNow();
     }
     org.assertj.core.api.Assertions.assertThatThrownBy(() -> instance.authenticate(raw))
         .as("and the record stays evicted")
-        .isInstanceOf(org.springframework.dao.DataAccessException.class);
+        .isInstanceOf(KeyStoreUnavailableException.class);
   }
 
   @Test
@@ -713,7 +757,7 @@ class ApiKeyLifecycleTest {
     time.set(time.now() + 3_000);
     org.assertj.core.api.Assertions.assertThatThrownBy(() -> instance.authenticate(raw))
         .as("the record that overlapped the announcement was not cached")
-        .isInstanceOf(org.springframework.dao.DataAccessException.class);
+        .isInstanceOf(KeyStoreUnavailableException.class);
   }
 
   @Test

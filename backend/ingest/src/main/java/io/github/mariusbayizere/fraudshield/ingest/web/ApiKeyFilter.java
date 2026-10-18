@@ -2,6 +2,7 @@ package io.github.mariusbayizere.fraudshield.ingest.web;
 
 import io.github.mariusbayizere.fraudshield.ingest.application.Problems;
 import io.github.mariusbayizere.fraudshield.ingest.auth.ApiKeyAuthenticator;
+import io.github.mariusbayizere.fraudshield.ingest.auth.ApiKeyStoreUnavailableException;
 import io.github.mariusbayizere.fraudshield.ingest.auth.ApiPrincipal;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -13,7 +14,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
-import org.springframework.dao.DataAccessException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.filter.OncePerRequestFilter;
 import tools.jackson.databind.ObjectMapper;
 
@@ -35,6 +37,7 @@ public final class ApiKeyFilter extends OncePerRequestFilter {
   public static final List<String> PROTECTED =
       List.of("/api/v1/transactions/", "/api/v1/decisions/", "/api/v1/jobs/");
 
+  private static final Logger LOG = LoggerFactory.getLogger(ApiKeyFilter.class);
   private static final ObjectMapper JSON = new ObjectMapper();
 
   private final ApiKeyAuthenticator authenticator;
@@ -76,7 +79,7 @@ public final class ApiKeyFilter extends OncePerRequestFilter {
     Optional<ApiPrincipal> principal;
     try {
       principal = authenticator.authenticate(request.getHeader("X-API-Key"));
-    } catch (DataAccessException storeDown) {
+    } catch (ApiKeyStoreUnavailableException storeDown) {
       // The key store cannot answer: the key is not known to be bad, so the client retries.
       response.setHeader("Retry-After", "1");
       write(
@@ -87,6 +90,19 @@ public final class ApiKeyFilter extends OncePerRequestFilter {
               "Temporarily unavailable",
               503,
               "retry the same request",
+              correlation));
+      return;
+    } catch (RuntimeException error) {
+      // Not an outage, so not a 503; not the client's fault, so not a 401.
+      LOG.error("API-key verification failed", error);
+      write(
+          response,
+          500,
+          Problems.problem(
+              "internal",
+              "Internal error",
+              500,
+              "the request could not be completed",
               correlation));
       return;
     }

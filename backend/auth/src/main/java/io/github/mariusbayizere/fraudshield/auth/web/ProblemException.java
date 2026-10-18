@@ -144,6 +144,22 @@ public final class ProblemException extends RuntimeException {
   }
 
   /**
+   * 500: an unexpected error, neither the client's fault nor an outage.
+   *
+   * @return the exception
+   */
+  public static ProblemException internal() {
+    return new ProblemException(
+        "internal",
+        500,
+        "Internal error",
+        "The request could not be completed",
+        List.of(),
+        Map.of(),
+        null);
+  }
+
+  /**
    * Adds an extension member (for example the current account on a stale-version conflict).
    *
    * @param name member name

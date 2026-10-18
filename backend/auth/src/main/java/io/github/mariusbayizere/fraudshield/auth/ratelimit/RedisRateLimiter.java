@@ -36,6 +36,23 @@ public final class RedisRateLimiter implements RateLimiter {
           """,
           List.class);
 
+  // Counts without adding: the same refusal as SCRIPT, for a check before the work (R0(a)).
+  private static final RedisScript<List> CHECK =
+      new DefaultRedisScript<>(
+          """
+          local now = tonumber(ARGV[1])
+          local window = tonumber(ARGV[2])
+          local limit = tonumber(ARGV[3])
+          local count = redis.call('ZCOUNT', KEYS[1], '(' .. (now - window), '+inf')
+          if count >= limit then
+            local oldest = redis.call(
+                'ZRANGEBYSCORE', KEYS[1], '(' .. (now - window), '+inf', 'WITHSCORES', 'LIMIT', 0, 1)
+            return {0, tonumber(oldest[2]) + window - now}
+          end
+          return {1, 0}
+          """,
+          List.class);
+
   private final SafeRedis redis;
   private final RateLimiter fallback;
   private final Clock clock;
@@ -69,6 +86,26 @@ public final class RedisRateLimiter implements RateLimiter {
     }
     long allowed = ((Number) result.get().get(0)).longValue();
     if (allowed == 1) {
+      return Decision.ALLOWED;
+    }
+    long retryMillis = ((Number) result.get().get(1)).longValue();
+    return new Decision(false, Math.max(1, (retryMillis + 999) / 1000));
+  }
+
+  @Override
+  public Decision check(String key, int limit, Duration window) {
+    long now = clock.millis();
+    Optional<List> result =
+        redis.execute(
+            CHECK,
+            List.of(PREFIX + key),
+            Long.toString(now),
+            Long.toString(window.toMillis()),
+            Integer.toString(limit));
+    if (result.isEmpty() || result.get().size() != 2) {
+      return fallback.check(key, limit, window);
+    }
+    if (((Number) result.get().get(0)).longValue() == 1) {
       return Decision.ALLOWED;
     }
     long retryMillis = ((Number) result.get().get(1)).longValue();

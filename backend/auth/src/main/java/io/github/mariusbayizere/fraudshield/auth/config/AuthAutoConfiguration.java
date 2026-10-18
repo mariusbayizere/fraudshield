@@ -64,6 +64,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.support.ResourceBundleMessageSource;
 import org.springframework.core.Ordered;
+import org.springframework.core.env.Environment;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.listener.ChannelTopic;
@@ -449,8 +450,21 @@ public class AuthAutoConfiguration {
       TenantTransactions tenants,
       SafeRedis redis,
       AuthProperties properties,
+      Environment environment,
       Clock clock,
       ExecutorService authExecutor) {
+    int permits = properties.apiKeys().uncachedReadPermits();
+    // R9: the bulkhead must leave connections for everything else.
+    int pool =
+        environment.getProperty("spring.datasource.hikari.maximum-pool-size", Integer.class, 10);
+    if (permits >= pool) {
+      throw new IllegalStateException(
+          "fraudshield.auth.api-keys.uncached-read-permits ("
+              + permits
+              + ") must be below the connection pool size ("
+              + pool
+              + ")");
+    }
     return new ApiKeyAuthenticator(
         repository,
         tenants,
@@ -459,6 +473,8 @@ public class AuthAutoConfiguration {
         properties.environment(),
         properties.apiKeys().cacheTtl(),
         properties.apiKeys().staleIfError(),
+        permits,
+        properties.apiKeys().uncachedReadWait(),
         clock,
         System::nanoTime,
         authExecutor);

@@ -3,7 +3,9 @@ package io.github.mariusbayizere.fraudshield.ingest.config;
 import io.github.mariusbayizere.fraudshield.auth.apikey.ApiKeyPrincipal;
 import io.github.mariusbayizere.fraudshield.auth.apikey.ApiKeyScope;
 import io.github.mariusbayizere.fraudshield.auth.apikey.ApiKeyService;
+import io.github.mariusbayizere.fraudshield.auth.apikey.KeyStoreUnavailableException;
 import io.github.mariusbayizere.fraudshield.ingest.auth.ApiKeyAuthenticator;
+import io.github.mariusbayizere.fraudshield.ingest.auth.ApiKeyStoreUnavailableException;
 import io.github.mariusbayizere.fraudshield.ingest.auth.ApiPrincipal;
 import io.github.mariusbayizere.fraudshield.ingest.auth.ApiScope;
 import io.github.mariusbayizere.fraudshield.notify.webhook.WebhookEndpoints;
@@ -33,7 +35,9 @@ public class StaffIdentityWiring {
 
   /**
    * The ingestion port over M7's authenticator. Both check the same key against the same cached
-   * record, so a key revoked in M7 is refused here within the same 2 seconds (FR-06-07).
+   * record, so a key revoked in M7 is refused here within the same 2 seconds (FR-06-07). M7's
+   * "store unavailable" becomes the port's own, which M6's filter answers 503; any other error
+   * passes through and is answered 500 (api-key-cache-contract.md §3).
    *
    * @param keys M7's authenticator
    * @return the port
@@ -41,7 +45,13 @@ public class StaffIdentityWiring {
   @Bean
   ApiKeyAuthenticator ingestApiKeys(
       io.github.mariusbayizere.fraudshield.auth.apikey.ApiKeyAuthenticator keys) {
-    return rawKey -> keys.authenticate(rawKey).map(StaffIdentityWiring::principal);
+    return rawKey -> {
+      try {
+        return keys.authenticate(rawKey).map(StaffIdentityWiring::principal);
+      } catch (KeyStoreUnavailableException storeDown) {
+        throw new ApiKeyStoreUnavailableException(storeDown);
+      }
+    };
   }
 
   /**

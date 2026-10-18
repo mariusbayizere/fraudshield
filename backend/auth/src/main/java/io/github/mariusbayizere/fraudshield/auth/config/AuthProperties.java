@@ -170,15 +170,20 @@ public record AuthProperties(
    * @param currentPepperVersion version used for new keys
    * @param cacheTtl how long a verified key record is cached (default 2 seconds, FR-06-07)
    * @param rotationOverlap how long a rotated key stays valid (default 24 hours)
-   * @param staleIfError how long after its last successful read a key record is still used while
-   *     the database cannot answer (default 10 minutes; D-15, owner decision 2026-10-17)
+   * @param staleIfError how long after the read that produced it a key record is still used while
+   *     the database is unavailable (default 10 minutes; D-15, owner decision 2026-10-17)
+   * @param uncachedReadPermits how many reads of uncached keys may run at once (default 4; must be
+   *     below the connection pool's size; api-key-cache-contract.md R9)
+   * @param uncachedReadWait how long a read of an uncached key waits for a permit (default 500 ms)
    */
   public record ApiKeys(
       Map<Integer, String> peppers,
       Integer currentPepperVersion,
       Duration cacheTtl,
       Duration rotationOverlap,
-      Duration staleIfError) {
+      Duration staleIfError,
+      Integer uncachedReadPermits,
+      Duration uncachedReadWait) {
 
     /** Applies defaults. */
     public ApiKeys {
@@ -186,6 +191,8 @@ public record AuthProperties(
       cacheTtl = Objects.requireNonNullElse(cacheTtl, Duration.ofSeconds(2));
       rotationOverlap = Objects.requireNonNullElse(rotationOverlap, Duration.ofHours(24));
       staleIfError = Objects.requireNonNullElse(staleIfError, Duration.ofMinutes(10));
+      uncachedReadPermits = Objects.requireNonNullElse(uncachedReadPermits, 4);
+      uncachedReadWait = Objects.requireNonNullElse(uncachedReadWait, Duration.ofMillis(500));
     }
   }
 

@@ -55,4 +55,22 @@ public final class InMemoryRateLimiter implements RateLimiter {
       return Decision.ALLOWED;
     }
   }
+
+  @Override
+  public Decision check(String key, int limit, Duration window) {
+    Deque<Long> deque = attempts.get(key);
+    if (deque == null) {
+      return Decision.ALLOWED;
+    }
+    long now = clock.millis();
+    long windowMillis = window.toMillis();
+    synchronized (deque) {
+      long inWindow = deque.stream().filter(at -> at > now - windowMillis).count();
+      if (inWindow < limit) {
+        return Decision.ALLOWED;
+      }
+      long oldest = deque.stream().filter(at -> at > now - windowMillis).findFirst().orElse(now);
+      return new Decision(false, Math.max(1, (oldest + windowMillis - now + 999) / 1000));
+    }
+  }
 }
