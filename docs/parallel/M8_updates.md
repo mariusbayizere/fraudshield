@@ -211,4 +211,3 @@ contract change was made only on the owner's explicit instruction.
   contract operations it needs. Two have **no contract operation at all**: UX-ROLE-SN-02 (alert
   reassignment) and UX-ROLE-SN-04 (team performance); each needs a reviewed contract change for
   M8B first.
-

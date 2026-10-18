@@ -87,8 +87,11 @@ describe('the production build (ADR 0080)', () => {
   });
 
   it('H.4: leaves the generated response schemas out', () => {
+    // The canary is a pattern only a response carries: ShapContribution's template_key, inside
+    // Explanation. The Token pattern was the canary until the alert filters validated
+    // account_id against it, which is a request parameter the console checks on purpose.
     for (const [name, content] of text(/\.js$/)) {
-      expect(content.includes('tok_[A-Za-z0-9]{24,64}'), name).toBe(false);
+      expect(content.includes('feature\\.[a-z0-9_]+\\.[a-z_]+'), name).toBe(false);
     }
   });
 
