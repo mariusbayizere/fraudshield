@@ -52,8 +52,13 @@ class CryptoTest {
                 .verify(token, SignedToken.Purpose.ACCOUNT_UNLOCK, NOW))
         .as("other key")
         .isEmpty();
-    char last = token.charAt(token.length() - 1);
-    String tampered = token.substring(0, token.length() - 1) + (last == 'A' ? 'B' : 'A');
+    // A character in the middle: the last character of unpadded base64url can carry padding bits,
+    // and changing only those decodes to the same bytes, so the "tampered" token verified whenever
+    // the random token ended that way (seen in CI on 6303efe, 2026-10-17).
+    int middle = token.length() / 2;
+    char original = token.charAt(middle);
+    String tampered =
+        token.substring(0, middle) + (original == 'A' ? 'B' : 'A') + token.substring(middle + 1);
     assertThat(codec.verify(tampered, SignedToken.Purpose.ACCOUNT_UNLOCK, NOW)).isEmpty();
     assertThat(codec.verify("not*base64", SignedToken.Purpose.ACCOUNT_UNLOCK, NOW)).isEmpty();
     assertThat(codec.verify("c2hvcnQ", SignedToken.Purpose.ACCOUNT_UNLOCK, NOW)).isEmpty();

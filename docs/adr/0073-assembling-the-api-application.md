@@ -100,8 +100,13 @@ default 10 minutes, `AuthProperties`).
 - An announced revocation or rotation evicts the record at once, so it is never served stale, even
   when the announcement arrives while a read of that record is blocked or in flight: the stale
   renewal replaces only the entry its read started from, and a read that overlapped an
-  announcement is not cached (`recordReadWhileAnAnnouncementArrivedIsNotKeptForAnOutage`) (`ApiKeyLifecycleTest`,
-  `announcementDuringBlockedReadIsNotUndoneByTheStaleRenewal`; review of round 3, MAJOR 1).
+  announcement answers its own request but is not cached (`ApiKeyLifecycleTest`:
+  `announcementDuringBlockedReadIsNotUndoneByTheStaleRenewal`,
+  `recordReadWhileAnAnnouncementArrivedIsNotKeptForAnOutage`). The overlap is counted across all
+  keys, not per key: an announcement stops caching for every read in flight at that moment, so a
+  burst of announcements (a mass revocation) costs extra database reads and, if an outage starts
+  then, earlier 503s for keys left uncached. That availability cost is accepted for simplicity; a
+  per-key counter would remove it.
 - **Residual risk (threat model R-13), stated per instance:** a revocation this instance is not
   told about is missed until it reads the database again or 10 minutes have passed since its last
   successful read of the key. That covers any revocation committed after that read, which may be up

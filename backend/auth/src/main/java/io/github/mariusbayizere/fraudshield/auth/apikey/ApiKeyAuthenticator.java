@@ -31,12 +31,12 @@ import org.springframework.dao.DataAccessException;
  * <p>While the database cannot answer, a record verified within the last {@code staleIfError} (10
  * minutes in production) keeps being used, so ingestion keeps deciding through a PostgreSQL outage
  * (D-15; owner decision 2026-10-17, threat model R-13). An announced revocation evicts the record,
- * even while a read is blocked. What this can miss is a revocation this instance is not told about:
- * any committed after its last successful read of the key, which may be up to {@code staleIfError}
- * before the outage began, or during the outage if it is local to this instance (other instances
- * can still commit), whose announcement it did not receive. A key with no record in this instance,
- * or one read longer ago than the cap, is refused with the database's exception, which the filter
- * answers 503.
+ * even while a read is blocked, and a read in flight when it arrives is not cached. What this can
+ * miss is a revocation this instance is not told about: any committed after its last successful
+ * read of the key, which may be up to {@code staleIfError} before the outage began, or during the
+ * outage if it is local to this instance (other instances can still commit), whose announcement it
+ * did not receive. A key with no record in this instance, or one read longer ago than the cap, is
+ * refused with the database's exception, which the filter answers 503.
  */
 public final class ApiKeyAuthenticator {
 

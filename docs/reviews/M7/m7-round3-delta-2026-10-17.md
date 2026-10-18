@@ -76,3 +76,21 @@ two MINORs:
 |---|---|---|
 | N1 | A successful read begun before a revocation could cache the old record after its announcement had arrived; an outage then served it for up to 10 minutes, outside R-13's "announcement not received" | Closed in code rather than widening the risk: announcements are counted, and a read that overlapped one is not cached (atomically, by `compute` against the announcement's removal). `recordReadWhileAnAnnouncementArrivedIsNotKeptForAnOutage` |
 | N2 | The fresher-record branch was untested | `requestBlockedOnFailedReadIsServedTheRecordAnotherReadSince` |
+
+## Fourth re-check (`0bc26fb..6303efe`): APPROVED_WITH_MINORS, and the response
+
+N1 and N2 closed; the counter and `compute` insert were found atomic against an announcement's
+removal, keeping `previous` resurrects nothing, and both tests fail on revert and are deterministic.
+
+| # | Finding | Response |
+|---|---|---|
+| N3 | The global counter stops caching for every in-flight read on any announcement: an availability cost under announcement bursts | Accepted and stated in ADR 0073, with the per-key alternative |
+| N4 | R-13's evidence omitted the two new tests | Listed |
+| N5 | The class Javadoc did not say an in-flight read is not cached | Says so |
+| N6 | ADR 0073's double parenthetical and long line | Merged and re-wrapped |
+
+**CI on `6303efe`.** `stack` and `devcontainer` passed; `ci`'s java job failed in
+`CryptoTest.signedTokensVerifyOnceForTheirPurposeAndState`, a test from M7's first build that this
+round did not touch. It "tampered" the token by changing its last base64url character, which in an
+unpadded string can carry only padding bits; when it did, the bytes decoded unchanged and the token
+verified. The test now changes a middle character, which always alters the bytes.
