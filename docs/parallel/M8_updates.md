@@ -211,3 +211,14 @@ contract change was made only on the owner's explicit instruction.
   contract operations it needs. Two have **no contract operation at all**: UX-ROLE-SN-02 (alert
   reassignment) and UX-ROLE-SN-04 (team performance); each needs a reviewed contract change for
   M8B first.
+
+## 8. Numbering reserved by this branch
+
+Claimed 2026-10-18, after reading every branch: the highest backlog id in use anywhere is PB-130
+(`main`, M7's block). ADR and Flyway numbers are global.
+
+| Kind | Reserved for M8 | Used |
+|---|---|---|
+| ADR | `0080`–`0089` | `0080` (console architecture), `0081` (the `/system/status` proposal, on `m8/system-status-proposal`), `0082` (SRS v5.0 adoption) |
+| Backlog | `PB-131`–`PB-140` | `PB-131` (only `validate.ts` imports the generated Zod) |
+

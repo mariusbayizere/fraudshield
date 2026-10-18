@@ -23,6 +23,7 @@ taken twice. Claims made on branches not yet merged, as of 2026-10-17:
 | PB-76 | M4 | `M4_updates.md` on `m4/generalisation` | training rows near the corpus's start see truncated history (was a second `PB-69`) |
 | PB-77 to PB-101 | M6 | `M6_updates.md`, "Numbering reserved by this branch" | amendment 1's known gaps and the 22 section-8 rows proved only in part |
 | PB-102 to PB-130 | M7 | `M7_updates.md`, "Numbering reserved by this branch" | the merge round's unowned items and M7's rows proved only in part (PB-102 to PB-124 used) |
+| PB-131 to PB-140 | M8 | `M8_updates.md`, "Numbering reserved by this branch" | the console's own follow-ups (PB-131 used) |
 
 ---
 
@@ -1472,6 +1473,11 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 - **Source:** review of M7 round 2, finding 7, 2026-10-17 · **Priority:** medium · **Due:** M8
 - **Problem:** NFR-REL-06 says the Google button shows "Temporarily unavailable" while Google is down; the server answers 503 with `Retry-After` (proved), but the console clause had no owner while the row stays with M7 (PB-112).
 - **Acceptance:** the console shows the state on a 503 from `/auth/google`, with a component test.
+
+### PB-131 · Only `validate.ts` may import the generated Zod schemas
+- **Source:** review of M8's bundle canary (`6afebd4`), 2026-10-18 · **Priority:** medium · **Due:** M8
+- **Problem:** `productionBundle.build.test.ts`'s H.4 check looks for one response-only pattern (ShapContribution's `template_key`) in the production JavaScript. `validate.ts` imports the whole generated module dynamically, so a leak through it ships that pattern and is caught; but a future static named import of one schema from `generated/zod.gen` would be tree-shaken down to that schema, and 81 of the 88 response schemas do not contain the canary, so a partial leak would pass.
+- **Acceptance:** a source-level test fails if any file under `frontend/src` other than `api/validate.ts` (and the generated directory itself) imports `generated/zod.gen`, and deleting that rule's check makes a planted import pass; the H.4 comment names every response schema that carries the canary, not only Explanation.
 
 ### PB-76 · Training rows near the corpus's start see truncated history; test rows do not
 - **Source:** PB-67's laptop cache, 2026-09-22 · **Priority:** high · **Due:** before the paper's
