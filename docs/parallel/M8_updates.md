@@ -229,6 +229,10 @@ copies `contracts/openapi/schema-examples.yaml`, which the contract tests valida
 `frontend/src/mocks/generated/examples.json` (`examplesDrift.test.ts` pins it). Test fixtures start
 from the same examples, and every response a screen reads is parsed by the generated Zod in tests.
 None of this is evidence that the API works (section 7; `M8B_updates.md`).
+The generator leaves out `ApiKeyCreated`, whose placeholders have the shape of real credentials:
+`.gitleaks.toml` allows those exact values in the contract's file only. The first version copied
+them and CI's history scan failed; the branch's history was rewritten before merge (2026-10-18) so
+no copy is in it, and `examplesDrift.test.ts` fails if one returns.
 
 **Order.** Each screen reuses the one before it.
 
