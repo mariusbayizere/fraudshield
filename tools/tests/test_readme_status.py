@@ -34,3 +34,10 @@ def test_a_readme_without_a_status_line_is_an_error(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(readme_status, "readme_milestone", missing)
 
     assert readme_status.main([]) == 1
+
+
+def test_a_status_line_naming_m8b_is_read_whole(monkeypatch: pytest.MonkeyPatch) -> None:
+    """M8B must not be read as M8, or the check would compare the wrong milestone."""
+    found = readme_status.STATUS.search("> **Project status: M8B — the analyst API.**")
+    assert found is not None
+    assert found.group(1) == "M8B"

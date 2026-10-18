@@ -1035,7 +1035,7 @@ requirements:
   title: 'Full audit log: every system action with user first name + last name, role, timestamp, action
     type, entity, before/after values; searchable; immutable'
   priority: M
-  milestone: M7
+  milestone: M8B
   srs_text: 'Acceptance criterion: 12 action types logged; all write operations audited; no DELETE or
     UPDATE on audit_events; searchable by user, date range, action type'
   defects:
@@ -1477,7 +1477,7 @@ requirements:
   section: 4.2 Security
   title: PII tokenisation
   priority: M
-  milestone: M7
+  milestone: M8B
   srs_text: 'Implementation: Account holder name and phone stored as opaque tokens; actual PII in separate
     encrypted PII store; no raw PII in analyst-facing API responses; Verification: API response audit:
     account_name field in all analyst endpoints shows masked token only; confirmed by inspector test'
@@ -4966,7 +4966,7 @@ requirements:
   section: Build prompt Part B defect register
   title: External services must work locally and in CI without real credentials.
   priority: M
-  milestone: M7
+  milestone: M9
   srs_text: See docs/srs/defect_register.md
   defects: []
   affects:

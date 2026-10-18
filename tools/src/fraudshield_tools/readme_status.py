@@ -22,13 +22,13 @@ from fraudshield_tools import REPO_ROOT
 README = REPO_ROOT / "README.md"
 MILESTONES = REPO_ROOT / "docs" / "traceability" / "milestones.yaml"
 # > **Project status: M2 — the synthetic dataset generator.** ...
-STATUS = re.compile(r"^>\s*\*\*Project status:\s*(M\d+)\b", re.MULTILINE)
+STATUS = re.compile(r"^>\s*\*\*Project status:\s*(M\d+B?)\b", re.MULTILINE)
 
 
 def current_milestone() -> str:
     register = yaml.safe_load(MILESTONES.read_text(encoding="utf-8"))
     current = register.get("current")
-    if not isinstance(current, str) or not re.fullmatch(r"M\d+", current):
+    if not isinstance(current, str) or not re.fullmatch(r"M\d+B?", current):
         raise ValueError(
             f"{MILESTONES.name}: 'current' must be a milestone like M2, got {current!r}"
         )

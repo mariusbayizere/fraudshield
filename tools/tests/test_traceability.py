@@ -9,6 +9,7 @@ import yaml
 
 from fraudshield_tools.evidence import RunVerdict
 from fraudshield_tools.traceability import (
+    MILESTONES,
     TaggedTest,
     check,
     discover_tagged_tests,
@@ -226,3 +227,18 @@ def test_main_check_fails_on_stale_matrix_and_passes_after_render(
 
     (tmp_path / "tools/tests/test_x.py").write_text("def test_x(): ...\n")
     assert main(["check", "--root", str(tmp_path)]) == 1
+
+
+def test_m8b_sorts_after_m9_and_before_m10() -> None:
+    """The analyst API (owner, 2026-10-18) runs alongside M9 and must land before M10."""
+    assert MILESTONES.index("M9") < MILESTONES.index("M8B") < MILESTONES.index("M10")
+
+
+def test_completing_m9_does_not_close_rows_filed_under_m8b(tmp_path: Path) -> None:
+    """A Must row under M8B is held to rule 7 only once M8B, or M10 after it, is completed."""
+    report = check(
+        [_row(milestone="M8B")], {"completed": [f"M{n}" for n in range(10)]}, [], tmp_path
+    )
+    assert report.errors == []
+    report = check([_row(milestone="M8B")], {"completed": ["M8B"]}, [], tmp_path)
+    assert report.errors

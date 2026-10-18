@@ -378,6 +378,31 @@ surface runs in the real API application (`AssembledApplicationTest`), not only 
 - **The surviving mutation was resolved.** A stale-read path existed. It is now tested, and
   finding it also fixed a defect (`8f6bdba`). See the review addendum.
 
+## Tagged, and the carries (2026-10-18)
+
+M7 is on `main` at `71b0ec9`, tagged `m7-complete`. On the owner's decision of 2026-10-18, each of
+M7's ten open Must rows was re-filed to the milestone that actually closes it. Each was decided by
+reading what the row still lacks, not by its label.
+
+| Row | Still lacks | Goes to |
+|---|---|---|
+| NFR-SEC-03 | The inspector test over the analyst endpoints (PB-114) | **M8B** |
+| FR-06-06 | Audit types from real actions: six emitted only by analyst endpoints; every write endpoint audited (PB-109) | **M8B** |
+| D-51 | WireMock Google stubs in the compose stack, and the skipped-without-credentials sandbox suite (PB-113) | **M9** |
+| FR-06-01 | The Google set-up link in the welcome email (not built); every stored field asserted; the constraint's 409 (PB-107) | **no later home: M7** |
+| FR-06-02 | A test that fails when the version bump alone is deleted; Google refused within 5 s of a deactivation (PB-108) | **no later home: M7** |
+| FR-07-01 | An oracle independent of `ContractPolicy`; a method-security test (PB-104) | **no later home: M7** |
+| FR-07-06 | The unlock email over SMTP within 30 s; the 15-minute window advanced (PB-105) | **no later home: M7** |
+| NFR-REL-06 | An OAuth-only account recovering by email OTP while Google is down (PB-112) | **no later home: M7** |
+| D-26 | Unlocks by password reset or change audited as unlocks: the behaviour is missing (PB-110) | **no later home: M7** |
+| D-32 | A context test that the anchoring cron task is registered (PB-111) | **no later home: M7** |
+
+**Why seven rows stay in M7.** FR-07-01, FR-07-06, NFR-REL-06 and D-26 were expected to be screens.
+Their UI clauses already went to M8 on 2026-10-17 (PB-123, PB-124, and FR-07-02 to FR-07-04), and
+what is left is backend tests and two missing behaviours. No later milestone does M7's backend work:
+M8 builds the frontend, M8B the analyst endpoints, M9 the infrastructure, and M10 measures. So
+`milestones.yaml` keeps M7 uncompleted (`current: M7`) until these close.
+
 ## Merge state — resume from here (rewritten 2026-10-17 after merging M6)
 
 **Status:** M7 is not merged and not tagged. M6 is on `main` (`b77008e`, tagged `m6-complete`), and
