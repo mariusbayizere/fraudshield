@@ -358,4 +358,3 @@ when its tab is opened).
   still finds its card; Back after closing is tested not to reopen the drawer; the SHAP tab is
   under axe too. Each fails a test when removed. Not tested: the theme's SHAP colours on the bars
   (their contrast is, in `contrastPairs.ts`).
-
