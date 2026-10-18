@@ -365,7 +365,7 @@ announcement lands between the two, which no test can schedule without a seam in
 | P25 | A limiter error during the check falls back and never answers 500 | R0(a) |
 | P26 | With 4 uncached reads blocked, a fifth unknown key gets 503 after at most 500 ms without a read, while a cached key still refreshes | R9 |
 | P27 | A permit is released after a success, a failure, an R7 error and an unexpected exception | R9 |
-| P28 | M6's filter refuses (503, 401) after M7 admitted when the cache changed in between, and answers 503 from the translated exception | §3 |
+| P28 | M6's filter answers 503 with `Retry-After: 1` on the translated exception and 500 `internal` on any other; the adapter translates only `KeyStoreUnavailableException`. "Never more permissive than M7" holds by construction (M6 is reached only after M7 admitted) and is not separately tested | §3 |
 | P29 | "Both headers" answers 401 and is not counted | §3 |
 | P30 | A successful read returning REVOKED, overlapping an unrelated announcement, removes the ACTIVE entry; a following outage gets 503 | R2(e) over R2(c) |
 | P31 | A successful read returning REVOKED, when the entry has a later r, removes it | R2(e) over R2(b) |

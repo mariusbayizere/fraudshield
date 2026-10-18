@@ -142,4 +142,20 @@ class ApiKeyAuthenticationFilterTest {
     assertThat(connections).hasValue(0);
     assertThat(nothingCounted()).isTrue();
   }
+
+  @Test
+  void overLimitAddressStillGetsTheEarlierAnswersFirst() throws Exception {
+    // §3's order: no key, then both headers, then the limiter check.
+    for (int n = 0; n < 100; n++) {
+      limiter.attempt(FAILURES, 100, WINDOW);
+    }
+    assertThat(send(keysFailingWith("08001"), true).getStatus())
+        .as("both headers: 401 before the limiter")
+        .isEqualTo(401);
+    MockHttpServletRequest anonymous = new MockHttpServletRequest("GET", "/api/v1/environment");
+    AtomicBoolean passedOn = new AtomicBoolean();
+    new ApiKeyAuthenticationFilter(keysFailingWith("08001"), limiter)
+        .doFilter(anonymous, new MockHttpServletResponse(), (req, res) -> passedOn.set(true));
+    assertThat(passedOn).as("no key: passed on before the limiter").isTrue();
+  }
 }

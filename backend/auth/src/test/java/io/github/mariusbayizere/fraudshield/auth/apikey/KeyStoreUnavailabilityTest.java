@@ -8,8 +8,10 @@ import java.sql.SQLException;
 import java.sql.SQLRecoverableException;
 import java.sql.SQLTimeoutException;
 import java.sql.SQLTransientConnectionException;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.jdbc.BadSqlGrammarException;
@@ -48,26 +50,32 @@ class KeyStoreUnavailabilityTest {
 
   @Test
   void corruptedIndexAndBadSqlAreNotFailures() {
-    assertThat(KeyStoreUnavailability.isUnavailable(new SQLException("index", "XX002"))).isFalse();
+    SQLException index = new SQLException("index", "XX002");
+    assertThat(KeyStoreUnavailability.isUnavailable(index)).isFalse();
+    assertThat(KeyStoreUnavailability.isUnavailable(new UncategorizedSQLException("q", "s", index)))
+        .isFalse();
     assertThat(
             KeyStoreUnavailability.isUnavailable(
                 new BadSqlGrammarException("q", "select", new SQLException("syntax", "42601"))))
         .isFalse();
   }
 
-  @Test
-  void connectionAndTimeoutTypesAreFailuresWhereverTheyAreInTheChain() {
-    assertThat(KeyStoreUnavailability.isUnavailable(new SQLTransientConnectionException("pool")))
-        .isTrue();
-    assertThat(KeyStoreUnavailability.isUnavailable(new SQLRecoverableException("gone"))).isTrue();
-    assertThat(KeyStoreUnavailability.isUnavailable(new SQLTimeoutException("slow"))).isTrue();
+  static List<Throwable> unavailableTypes() {
+    return List.of(
+        new SQLTransientConnectionException("pool"),
+        new SQLRecoverableException("gone"),
+        new SQLTimeoutException("slow"),
+        new SocketTimeoutException("read timed out"),
+        new ConnectException("refused"));
+  }
+
+  @ParameterizedTest
+  @MethodSource("unavailableTypes")
+  void connectionAndTimeoutTypesAreFailuresBareAndWrapped(Throwable type) {
+    assertThat(KeyStoreUnavailability.isUnavailable(type)).as("bare").isTrue();
     assertThat(
-            KeyStoreUnavailability.isUnavailable(
-                new SQLException("io", null, new SocketTimeoutException("read timed out"))))
-        .isTrue();
-    assertThat(
-            KeyStoreUnavailability.isUnavailable(
-                new DataAccessResourceFailureException("x", new ConnectException("refused"))))
+            KeyStoreUnavailability.isUnavailable(new DataAccessResourceFailureException("x", type)))
+        .as("wrapped")
         .isTrue();
   }
 

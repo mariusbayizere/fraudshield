@@ -34,10 +34,11 @@ public class StaffIdentityWiring {
   private static final Set<String> API_DOCS = Set.of("/api/docs", "/api/docs/openapi.yaml");
 
   /**
-   * The ingestion port over M7's authenticator. Both check the same key against the same cached
-   * record, so a key revoked in M7 is refused here within the same 2 seconds (FR-06-07). M7's
-   * "store unavailable" becomes the port's own, which M6's filter answers 503; any other error
-   * passes through and is answered 500 (api-key-cache-contract.md §3).
+   * The ingestion port over M7's authenticator, which checks the key a second time against M7's
+   * cache: while the database is readable, a key revoked in M7 is refused here within the same 2
+   * seconds (FR-06-07); during an outage the contract's stale use applies. M7's "store unavailable"
+   * becomes the port's own, which M6's filter answers 503; any other error passes through and is
+   * answered 500 (api-key-cache-contract.md §3).
    *
    * @param keys M7's authenticator
    * @return the port

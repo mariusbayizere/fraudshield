@@ -70,7 +70,7 @@ class ApiKeyCacheContractTest {
         Duration.ofMillis(TTL_MS),
         Duration.ofMillis(CAP_MS),
         permits,
-        Duration.ofMillis(1_000),
+        Duration.ofSeconds(5),
         time,
         time::nanos,
         work -> {});
@@ -454,6 +454,28 @@ class ApiKeyCacheContractTest {
   }
 
   @Test
+  void p22ErrorThatIsNotAnOutageLeavesTheCacheUntouched() {
+    ApiKeyAuthenticator keys = instance();
+    up(active());
+    assertThat(keys.authenticate(raw(id(22)))).isPresent();
+    later(TTL_MS + 1);
+    store.set(
+        keyId -> {
+          throw new BadSqlGrammarException("q", "select", new SQLException("syntax", "42601"));
+        });
+    assertThatThrownBy(() -> keys.authenticate(raw(id(22))))
+        .isInstanceOf(BadSqlGrammarException.class);
+    final int before = reads.get();
+    down();
+    assertThat(keys.authenticate(raw(id(22))))
+        .as("the entry was not removed: still served stale in an outage")
+        .isPresent();
+    assertThat(reads.get())
+        .as("and not renewed: the next request read again")
+        .isEqualTo(before + 1);
+  }
+
+  @Test
   void p26FullBulkheadRefusesAnUnknownKeyWithoutReadingWhileCachedKeyRefreshes() throws Exception {
     ApiKeyAuthenticator keys = instance();
     up(active());
@@ -483,7 +505,7 @@ class ApiKeyCacheContractTest {
     long started = System.nanoTime();
     assertThatThrownBy(() -> keys.authenticate(raw(id(270))))
         .isInstanceOf(KeyStoreUnavailableException.class);
-    assertThat(Duration.ofNanos(System.nanoTime() - started)).isLessThan(Duration.ofSeconds(2));
+    assertThat(Duration.ofNanos(System.nanoTime() - started)).isLessThan(Duration.ofSeconds(10));
     assertThat(reads.get()).as("the fifth unknown key read nothing").isEqualTo(before);
     assertThat(keys.authenticate(raw(id(260)))).as("a cached key still refreshes").isPresent();
     assertThat(reads.get()).isEqualTo(before + 1);

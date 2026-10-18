@@ -8,10 +8,13 @@ import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collections;
 import java.util.EnumSet;
+import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Semaphore;
@@ -103,7 +106,8 @@ public final class ApiKeyAuthenticator {
   }
 
   /**
-   * A cache entry. Replaced, never mutated, and only inside the key's {@code compute}.
+   * A cache entry. Replaced, never mutated: installs and renewals happen inside the key's {@code
+   * compute}; removals (R2(e), R4, R6) are atomic map operations of their own.
    *
    * @param credential the record, always usable when installed (R2(e))
    * @param expiresAtNanos e: when it must be read again
@@ -113,7 +117,8 @@ public final class ApiKeyAuthenticator {
       ApiKeyRepository.Credential credential, long expiresAtNanos, long readAtNanos) {}
 
   /**
-   * Creates the authenticator without stale use: a key whose record cannot be read is refused.
+   * Creates the authenticator without stale use: a key whose record cannot be read is refused,
+   * unless a read begun after the failed one has already installed a fresher record (R3(b)).
    *
    * @param repository key repository
    * @param tenants tenant transactions (for last-used updates)
@@ -433,12 +438,10 @@ public final class ApiKeyAuthenticator {
 
   private static String rootState(Throwable error) {
     String state = null;
-    for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+    Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+    for (Throwable cause = error; cause != null && seen.add(cause); cause = cause.getCause()) {
       if (cause instanceof SQLException sql && sql.getSQLState() != null) {
         state = sql.getSQLState();
-      }
-      if (cause.getCause() == cause) {
-        break;
       }
     }
     return state == null ? "none" : state;
