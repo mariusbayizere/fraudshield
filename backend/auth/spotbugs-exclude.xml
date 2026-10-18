@@ -104,4 +104,18 @@
       <Bug pattern="EI_EXPOSE_REP2"/>
     </Or>
   </Match>
+
+  <!--
+    ApiKeyAuthenticator logs only a SQLSTATE it has checked to be five characters of [0-9A-Z]
+    (rootState), which cannot carry CR or LF. Its read rethrows an error R8 does not class as
+    unavailability unchanged, so the filters answer 500 (api-key-cache-contract.md R7): the
+    RuntimeException is the caller's, not one the method invents.
+  -->
+  <Match>
+    <Class name="io.github.mariusbayizere.fraudshield.auth.apikey.ApiKeyAuthenticator"/>
+    <Or>
+      <Bug pattern="CRLF_INJECTION_LOGS"/>
+      <Bug pattern="THROWS_METHOD_THROWS_RUNTIMEEXCEPTION"/>
+    </Or>
+  </Match>
 </FindBugsFilter>

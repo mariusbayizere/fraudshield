@@ -444,7 +444,8 @@ public final class ApiKeyAuthenticator {
         state = sql.getSQLState();
       }
     }
-    return state == null ? "none" : state;
+    // Logged: only a five-character SQLSTATE passes, so the log line cannot carry CR or LF.
+    return state == null ? "none" : state.matches("[0-9A-Z]{5}") ? state : "other";
   }
 
   /**
