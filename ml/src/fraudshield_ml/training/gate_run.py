@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from fraudshield_ml.features.registry import REGISTRY, Dtype
+from fraudshield_ml.features.vector import FeatureValue
 from fraudshield_ml.metrics.single_feature import auc_standard_error
 from fraudshield_ml.training import anomaly, baselines, explain, gate, model, onnx_export, smoke
 
@@ -126,6 +127,46 @@ class Report:
     roc: list[tuple[float, float]] = field(default_factory=list)
     mcc_available: bool = True
     parity: onnx_export.Parity | None = None
+
+
+def load(vectors: Sequence[dict[str, FeatureValue]], extras: dict[str, list[str]]) -> Loaded:
+    """Decode a cache held as one dict per row. Refuses one without all four of D-07's row sets.
+
+    The bundle build (`models.build`, M5) reads its cache this way; the gate run reads a
+    release-scale cache column-wise with `load_cache`, which this does not replace.
+    """
+    names = smoke.trainable_features()
+    labels = [v == "True" for v in extras[smoke.CACHE_LABEL]]
+    segment = extras[smoke.CACHE_SEGMENT]
+    by = {
+        s: tuple(i for i, v in enumerate(segment) if v == s)
+        for s in ("train", "validation", "calibration", "test")
+    }
+    missing = [s for s, rows in by.items() if not rows]
+    if missing:
+        raise ValueError(
+            f"the cache holds no {', '.join(missing)} rows. The gate needs all four of D-07's "
+            "sets; write one with fs-features evaluate --calibration-rows N --validation-rows N"
+        )
+    encoded = smoke.encode_categoricals(
+        vectors,
+        labels,
+        extras[smoke.CACHE_ACCOUNT],
+        by["train"],
+    )
+    matrix = [
+        [encoded[n][i] if n in encoded else float(vectors[i][n]) for n in names]
+        for i in range(len(vectors))
+    ]
+    return Loaded(
+        names=names,
+        matrix=matrix,
+        labels=labels,
+        channels=extras[smoke.CACHE_CHANNEL],
+        mcc=extras.get(smoke.CACHE_MCC),
+        split=model.RowSplit(by["train"], by["validation"], by["calibration"]),
+        test=by["test"],
+    )
 
 
 def load_cache(path: Path, *, train_rows: int | None = None) -> Loaded:
