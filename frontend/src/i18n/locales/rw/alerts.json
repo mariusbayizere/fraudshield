@@ -123,7 +123,6 @@
     "feature": "Ikintu",
     "value": "Agaciro",
     "effect": "Ingaruka",
-    "bar": "Ingaruka ku gipimo",
     "missing": "ntigihari",
     "others_one": "Ikindi kintu {{count}}, igiteranyo",
     "others_other": "Ibindi bintu {{count}}, igiteranyo",

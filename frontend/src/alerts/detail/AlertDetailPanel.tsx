@@ -15,6 +15,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AlertSearch } from '../../app/alertSearch';
 import { EmptyState, ErrorState } from '../../design-system/components/ScreenStates/ScreenStates';
+import { DRAWER_WIDTH } from '../layout';
 import { ApiError } from '../queries';
 import { useAlertDetail, useExplanation, useScoringResult } from './queries';
 import { ShapChart } from './ShapChart';
@@ -22,9 +23,6 @@ import { SummaryTab } from './SummaryTab';
 
 const feedRoute = getRouteApi('/shell/alerts');
 const detailRoute = getRouteApi('/shell/alerts/$alertId');
-
-/** UX-DASH-04's drawer width on large screens. */
-export const DRAWER_WIDTH = 560;
 
 type TabName = 'summary' | 'shap';
 
@@ -84,6 +82,8 @@ export default function AlertDetailPanel() {
   const search: AlertSearch = feedRoute.useSearch();
   const navigate = feedRoute.useNavigate();
   const wide = useMediaQuery((theme) => theme.breakpoints.up('lg'), { noSsr: true });
+  // MOB-COMP-08's phone view is below 600 px (xs), not everything below the drawer's breakpoint.
+  const phone = useMediaQuery((theme) => theme.breakpoints.down('sm'), { noSsr: true });
   // The tab belongs to the alert it was chosen on: another alert opens on its summary.
   const [chosen, setChosen] = useState<{ alertId: string; tab: TabName }>({
     alertId,
@@ -96,8 +96,15 @@ export default function AlertDetailPanel() {
   const scoring = useScoringResult(alert.data?.transaction_id);
   const explanation = useExplanation(alertId, tab === 'shap');
 
+  // Closing replaces the drawer's history entry, so Back does not reopen it, and returns focus to
+  // the card that opened it, or to the page's main region when the drawer came from a link.
   const close = () => {
-    void navigate({ to: '/alerts', search, replace: false });
+    void navigate({ to: '/alerts', search, replace: true }).then(() => {
+      const opener = document.querySelector<HTMLElement>(
+        `a[href="/alerts/${alertId}"], a[href^="/alerts/${alertId}?"]`,
+      );
+      (opener ?? document.getElementById('main'))?.focus();
+    });
   };
 
   // Focus moves to the alert's heading when it opens, so a keyboard or screen-reader user lands
@@ -146,13 +153,13 @@ export default function AlertDetailPanel() {
             value="summary"
             label={t('detail.summary')}
             id="fs-tab-summary"
-            aria-controls="fs-panel-summary"
+            {...(tab === 'summary' ? { 'aria-controls': 'fs-panel-summary' } : {})}
           />
           <Tab
             value="shap"
             label={t('detail.shap')}
             id="fs-tab-shap"
-            aria-controls="fs-panel-shap"
+            {...(tab === 'shap' ? { 'aria-controls': 'fs-panel-shap' } : {})}
           />
         </Tabs>
         <Box
@@ -175,7 +182,7 @@ export default function AlertDetailPanel() {
               }}
             />
           ) : (
-            <ShapChart explanation={explanation.data} phone={!wide} />
+            <ShapChart explanation={explanation.data} phone={phone} />
           )}
         </Box>
       </>

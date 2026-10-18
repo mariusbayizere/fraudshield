@@ -26,6 +26,12 @@ const page = examples.AlertPage[0] as AlertPage;
 const stats = examples.DashboardStats[0] as DashboardStats;
 const explanation = examples.Explanation[0] as unknown as Explanation;
 const scoring = examples.ScoringResult[0] as ScoringResult;
+function firstDecision() {
+  const [first] = alert.decisions;
+  if (first === undefined) throw new Error('the contract example has a decision');
+  return first;
+}
+const decided = firstDecision();
 const PROBLEM = {
   type: 'about:blank',
   title: 'Unexpected error',
@@ -37,6 +43,7 @@ interface Served {
   alertBody?: AlertDetail;
   scoringStatus?: number;
   scoringBody?: ScoringResult;
+  explanationStatus?: number;
 }
 
 /** Answers the feed and the drawer's three operations; counts the drawer's requests. */
@@ -45,6 +52,7 @@ function serve({
   alertBody = alert,
   scoringStatus = 200,
   scoringBody = scoring,
+  explanationStatus = 200,
 }: Served = {}) {
   const asked = { alert: 0, explanation: 0, scoring: 0 };
   vi.stubGlobal('fetch', (request: Request) => {
@@ -59,7 +67,7 @@ function serve({
     if (path.endsWith('/dashboard/stats')) return json(stats);
     if (path.endsWith('/explanation')) {
       asked.explanation += 1;
-      return json(explanation);
+      return json(explanation, explanationStatus);
     }
     if (path.endsWith('/scoring-result')) {
       asked.scoring += 1;
@@ -77,7 +85,8 @@ function serve({
 
 function screenWidth(wide: boolean) {
   vi.stubGlobal('matchMedia', (query: string): Partial<MediaQueryList> => ({
-    matches: wide && query.includes('min-width'),
+    // A wide screen meets every min-width query; a phone meets every max-width one.
+    matches: query.includes('min-width') ? wide : !wide,
     media: query,
     addEventListener: () => undefined,
     removeEventListener: () => undefined,
@@ -92,12 +101,14 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-async function openAlert(search: Record<string, unknown> = {}, queryClient?: QueryClient) {
+async function openAlert(
+  search: Record<string, unknown> = {},
+  queryClient?: QueryClient,
+  path = `/alerts/${alert.alert_id}`,
+) {
   const router = createRouter({
     routeTree,
-    history: createMemoryHistory({
-      initialEntries: [`/alerts/${alert.alert_id}${defaultStringifySearch(search)}`],
-    }),
+    history: createMemoryHistory({ initialEntries: [`${path}${defaultStringifySearch(search)}`] }),
   });
   render(
     <Providers {...(queryClient === undefined ? {} : { queryClient })}>
@@ -155,6 +166,78 @@ describe('the investigation drawer (UX-DASH-04, UX-ROLE-AN-02, FR-04-05)', () =>
     expect(within(drawer).queryByRole('alert')).toBeNull();
   });
 
+  it('[UX-DASH-04] keeps the feed clear of the docked drawer, and gives the room back on close', async () => {
+    serve();
+    const router = await openAlert();
+    await screen.findByRole('region', { name: drawerName });
+    // jsdom has no layout, so the reserved room is checked as the style that makes it.
+    expect(screen.getByTestId('alert-feed')).toHaveStyle({ marginInlineEnd: '560px' });
+    await userEvent.click(screen.getByRole('button', { name: 'Close the investigation' }));
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/alerts');
+    });
+    expect(screen.getByTestId('alert-feed')).not.toHaveStyle({ marginInlineEnd: '560px' });
+  });
+
+  it('returns focus to the card that opened it, or to the main region', async () => {
+    serve();
+    await openAlert({}, undefined, '/alerts');
+    const link = await screen.findByRole('link', { name: 'J*** M***' });
+    await userEvent.click(link);
+    const drawer = await screen.findByRole('region', { name: drawerName });
+    const heading = within(drawer).getByRole('heading', { level: 2, name: 'J*** M***' });
+    await waitFor(() => {
+      expect(heading).toHaveFocus();
+    });
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: 'J*** M***' })).toHaveFocus();
+    });
+
+    // Opened from a link to an alert the feed does not list: focus goes to the main region.
+    document.body.innerHTML = '';
+    await openAlert({}, undefined, '/alerts/7d1e2f3a-4b5c-4d6e-8f70-8192a3b4c5d6');
+    await userEvent.click(await screen.findByRole('button', { name: 'Close the investigation' }));
+    await waitFor(() => {
+      expect(screen.getByRole('main')).toHaveFocus();
+    });
+  });
+
+  it('shows who decided, whether it is final, and the anomaly tier without a risk badge', async () => {
+    serve({
+      alertBody: {
+        ...alert,
+        tier: 'ANOMALY',
+        review_deadline_at: null,
+        decisions: [
+          { ...decided, state: 'UNDONE' },
+          {
+            ...decided,
+            decision_id: '2c3d4e5f-6071-4b8c-9d0e-1f2a3b4c5d6e',
+            decision: 'AUTO_RELEASED',
+            analyst: null,
+            comment: null,
+            state: 'COMMITTED',
+          },
+        ],
+      },
+    });
+    await openAlert();
+    const drawer = await screen.findByRole('region', { name: drawerName });
+    await within(drawer).findByText('93%');
+    expect(within(drawer).getByText('Anomaly')).toBeInTheDocument();
+    expect(within(drawer).queryByText('REVIEW')).toBeNull();
+    const decisions = within(drawer).getByRole('region', { name: 'Decisions' });
+    const [undone, released] = within(decisions).getAllByRole('listitem');
+    if (undone === undefined || released === undefined) throw new Error('two decisions');
+    expect(within(undone).getByText('Undone')).toBeInTheDocument();
+    expect(within(released).getByText('Released automatically')).toBeInTheDocument();
+    expect(within(released).getByText(/^System/)).toBeInTheDocument();
+    // A final decision carries no state chip, and a missing comment no empty paragraph.
+    expect(within(released).queryByText('Final')).toBeNull();
+    expect(released.querySelectorAll('p')).toHaveLength(1);
+  });
+
   it('says when the model was unavailable and rules decided', async () => {
     serve({ scoringBody: { ...scoring, ml_unavailable_fallback: true } });
     await openAlert();
@@ -197,6 +280,10 @@ describe('the investigation drawer (UX-DASH-04, UX-ROLE-AN-02, FR-04-05)', () =>
     await openAlert();
     const dialog = await screen.findByRole('dialog', { name: drawerName });
     expect(within(dialog).getByRole('heading', { level: 2, name: 'J*** M***' })).toBeVisible();
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
   });
 
   it('says plainly when the alert is not the analyst’s to see, and does not ask again', async () => {
@@ -285,6 +372,34 @@ describe('the SHAP explanation (FR-04-05, UX-DASH-05, D-45)', () => {
     expect(screen.getByRole('button', { name: 'Show the top 10 only' })).toHaveAttribute(
       'aria-expanded',
       'true',
+    );
+  });
+
+  it('says when the explanation cannot be read, and retries', async () => {
+    const asked = serve({ explanationStatus: 503 });
+    await openAlert();
+    await userEvent.click(await screen.findByRole('tab', { name: 'SHAP explanation' }));
+    const error = await screen.findByRole('alert');
+    expect(error).toHaveTextContent('The explanation could not be loaded.');
+    await userEvent.click(within(error).getByRole('button', { name: 'Try again' }));
+    await waitFor(() => {
+      expect(asked.explanation).toBe(2);
+    });
+  });
+
+  it('opens another alert on its summary, whichever tab was open', async () => {
+    serve();
+    const router = await openAlert();
+    await openShap();
+    await router.navigate({
+      to: '/alerts/$alertId',
+      params: { alertId: '7d1e2f3a-4b5c-4d6e-8f70-8192a3b4c5d6' },
+    });
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Summary' })).toHaveAttribute('aria-selected', 'true');
+    });
+    expect(screen.getByRole('tab', { name: 'SHAP explanation' })).not.toHaveAttribute(
+      'aria-controls',
     );
   });
 

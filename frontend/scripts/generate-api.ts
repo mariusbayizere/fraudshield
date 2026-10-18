@@ -45,12 +45,22 @@ export async function generateApi(output: string): Promise<void> {
     plugins: ['@hey-api/client-fetch', '@hey-api/typescript', 'zod', '@hey-api/sdk'],
     logs: { level: 'silent' },
   });
+  const removed = new Set<string>();
   for (const file of tsFiles(output)) {
     let text = readFileSync(file, 'utf8');
     for (const { file: name, text: unsatisfiable } of UNSATISFIABLE) {
-      if (file.endsWith(`/${name}`)) text = text.replaceAll(unsatisfiable, '');
+      if (file.endsWith(`/${name}`) && text.includes(unsatisfiable)) {
+        text = text.replaceAll(unsatisfiable, '');
+        removed.add(name);
+      }
     }
     writeFileSync(file, HEADER + text);
+  }
+  // A generator upgrade that writes these differently must be looked at, not silently passed.
+  for (const { file } of UNSATISFIABLE) {
+    if (!removed.has(file)) {
+      throw new Error(`${file}: the never index this script removes was not found; review it`);
+    }
   }
 }
 

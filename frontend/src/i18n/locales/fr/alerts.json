@@ -125,7 +125,6 @@
     "feature": "Variable",
     "value": "Valeur",
     "effect": "Effet",
-    "bar": "Effet à l'échelle",
     "missing": "absente",
     "others_one": "{{count}} autre variable, net",
     "others_many": "{{count}} autres variables, net",

@@ -319,8 +319,10 @@ when its tab is opened).
   signature of `never`: the TypeScript type made every property `never`, so code typed with it
   compiled unchecked, and the Zod schema rejected the contract's own example, so the development
   and test check would have failed on every real alert. `scripts/generate-api.ts` now removes the
-  two unsatisfiable fragments, and `src/api/contractExamples.test.ts` parses every contract example
-  with its generated schema (68 examples); restoring the fragment fails it.
+  two unsatisfiable fragments and fails if a generator upgrade stops producing them, and
+  `src/api/contractExamples.test.ts` parses all 68 examples in `schema-examples.yaml` (66 schemas,
+  `ApiKeyCreated` included) with their generated schemas; restoring the fragment fails it. The 13
+  inline examples in `fraudshield-api.yaml` are not covered.
 - **SHAP is a table, not Recharts.** FR-04-05 and UX-DASH-05 name Recharts' HorizontalBarChart.
   The explanation is an accessible table with bars to scale, ranked by effect, with D-45's top 10
   (5 on a phone) and one netted row for the rest. No dependency is added; like the DataGrid, it is
@@ -334,3 +336,19 @@ when its tab is opened).
 - **Deletion checks:** reading the explanation before its tab opens, dropping the sort, the top-10
   cut, the 404 no-retry rule (tested with a client that retries), the focus move, Escape, the
   non-modal drawer, the fallback warning and the direction arrow each fail a test when removed.
+- **Independent review: CHANGES_REQUIRED, 2 MAJOR, 7 MINOR, 4 NIT; fixed in the next commit.**
+  MAJOR: the docked drawer covered the right 560 px of the feed, so "the feed stays usable" was
+  not true (the feed now keeps that width clear while the drawer is docked); closing dropped
+  keyboard focus to the page (it now returns to the card that opened the drawer, or to the main
+  region). MINOR, all fixed: the explanation's error path, switching alerts with the SHAP tab open,
+  the decision-state chip, the anomaly tier, a system decision without a comment and Escape on the
+  phone dialog are now tested; the examples test reads the contract itself, asserts an exact count
+  and covers `ApiKeyCreated` (the "68" was right for the contract, not for the mocks' copy); the
+  bars use the theme's SHAP colours; `aria-controls` is set only on the selected tab; the phone
+  view starts below 600 px, not below the drawer's breakpoint; three register notes corrected.
+  NIT, fixed: closing replaces the history entry, so Back does not reopen the drawer; the hidden
+  bar column's header is hidden too; the generator fails if its fix stops matching. Not changed:
+  the mocks answer any alert id with the example.
+- **Deletion checks of that round:** the feed's reserved width, the focus return and its fallback,
+  the per-alert tab reset, the state chip, the anomaly chip and the selected-only `aria-controls`
+  each fail a test when removed.

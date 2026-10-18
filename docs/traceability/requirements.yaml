@@ -2091,12 +2091,14 @@ requirements:
     mocks generated from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS
     until the M8B operation exists on main and the screen is exercised against it. M8 screen 2 (2026-10-18,
     the investigation drawer at /alerts/$alertId, against contract-example mocks): a 560 px drawer on
-    the right on large screens, not modal, over a feed that stays usable; focus moves to it; Escape and
-    the close button return to the feed with its filters. Tabs built: Summary and SHAP explanation; Account
-    History, Behavioural Fingerprint and Network Graph are screen 4. Not measured: opens within 200 ms.
-    Depends on the analyst API (M8B): getAlert, getScoringResult and getAlertExplanation. Built against
-    mocks generated from the contract, which are not evidence: this row stays at most IN_PROGRESS until
-    those operations exist on main and the screen is exercised against them.'
+    the right on large screens, not modal; the feed keeps 560 px clear beside it, so nothing in the feed
+    sits under the panel (checked as the style, since jsdom has no layout); focus moves to the drawer,
+    and Escape or the close button returns to the feed with its filters and puts focus back on the card
+    that opened it. Tabs built: Summary and SHAP explanation; Account History, Behavioural Fingerprint
+    and Network Graph are screen 4. Not measured: opens within 200 ms. Depends on the analyst API (M8B):
+    getAlert, getScoringResult and getAlertExplanation. Built against mocks generated from the contract,
+    which are not evidence: this row stays at most IN_PROGRESS until those operations exist on main and
+    the screen is exercised against them.'
 - id: UX-DASH-05
   section: 5.4 Analyst dashboard components
   title: SHAP Waterfall Chart
@@ -2653,11 +2655,12 @@ requirements:
   evidence: []
   deviations: []
   notes: 'M8 screen 2 (2026-10-18, the investigation drawer at /alerts/$alertId, against contract-example
-    mocks): the same content as a drawer on lg and wider and a full-screen dialog below. Not built: swipe
-    down to dismiss, and the browser''s back button closing the dialog. Depends on the analyst API (M8B):
-    getAlert, getScoringResult and getAlertExplanation. Built against mocks generated from the contract,
-    which are not evidence: this row stays at most IN_PROGRESS until those operations exist on main and
-    the screen is exercised against them.'
+    mocks): the same content as a drawer on lg and wider and a full-screen dialog below. Back closes it
+    when it was opened from the feed (the URL carries the alert); from a shared link, Back leaves the
+    page. Not built: swipe down to dismiss. Depends on the analyst API (M8B): getAlert, getScoringResult
+    and getAlertExplanation. Built against mocks generated from the contract, which are not evidence:
+    this row stays at most IN_PROGRESS until those operations exist on main and the screen is exercised
+    against them.'
 - id: MOB-COMP-03
   section: 05B A.7 Mobile component behaviour
   title: Stats Header
@@ -2745,11 +2748,11 @@ requirements:
   evidence: []
   deviations: []
   notes: 'M8 screen 2 (2026-10-18, the investigation drawer at /alerts/$alertId, against contract-example
-    mocks): phones show the top 5 with "Show all" expanding in place. Not built: vertical orientation
-    and the bottom sheet (SwipeableDrawer); the expansion is inline. Depends on the analyst API (M8B):
-    getAlert, getScoringResult and getAlertExplanation. Built against mocks generated from the contract,
-    which are not evidence: this row stays at most IN_PROGRESS until those operations exist on main and
-    the screen is exercised against them.'
+    mocks): below 600 px (xs) the top 5 show, with "Show all" expanding in place; tests can reach only
+    phone and wide, not the widths between. Not built: vertical orientation and the bottom sheet (SwipeableDrawer);
+    the expansion is inline. Depends on the analyst API (M8B): getAlert, getScoringResult and getAlertExplanation.
+    Built against mocks generated from the contract, which are not evidence: this row stays at most IN_PROGRESS
+    until those operations exist on main and the screen is exercised against them.'
 - id: MOB-COMP-09
   section: 05B A.7 Mobile component behaviour
   title: Password Strength Meter
@@ -4150,10 +4153,11 @@ requirements:
     most IN_PROGRESS until the M8B operation exists on main and the screen is exercised against it. M8
     screen 2 (2026-10-18, the investigation drawer at /alerts/$alertId, against contract-example mocks):
     the SHAP explanation and the transaction detail with the model''s scores and the decision history;
-    masked account name only, no raw PII. Account history and behavioural fingerprint are screen 4. Depends
-    on the analyst API (M8B): getAlert, getScoringResult and getAlertExplanation. Built against mocks
-    generated from the contract, which are not evidence: this row stays at most IN_PROGRESS until those
-    operations exist on main and the screen is exercised against them.'
+    masked account name only, no raw PII. Account history and behavioural fingerprint are screen 4. The
+    decision history is a list, not the MUI Timeline the row names. Depends on the analyst API (M8B):
+    getAlert, getScoringResult and getAlertExplanation. Built against mocks generated from the contract,
+    which are not evidence: this row stays at most IN_PROGRESS until those operations exist on main and
+    the screen is exercised against them.'
 - id: UX-ROLE-AN-03
   section: 'v5 12.1 Per-role frontend: ANALYST'
   title: Decision Panel

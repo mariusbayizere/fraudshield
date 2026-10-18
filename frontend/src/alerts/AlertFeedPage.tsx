@@ -1,13 +1,16 @@
+import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import { getRouteApi, Outlet } from '@tanstack/react-router';
+import useMediaQuery from '@mui/material/useMediaQuery';
+import { getRouteApi, Outlet, useChildMatches } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import type { AlertSearch } from '../app/alertSearch';
 import { EmptyState, ErrorState } from '../design-system/components/ScreenStates/ScreenStates';
 import { AlertCard } from './AlertCard';
 import { FeedFilters, isFiltered, toggled } from './FeedFilters';
+import { DRAWER_WIDTH } from './layout';
 import { ApiError, distinctAlerts, useAlertFeed } from './queries';
 import { StatsHeader } from './StatsHeader';
 
@@ -29,6 +32,10 @@ export default function AlertFeedPage() {
   const search: AlertSearch = route.useSearch();
   const navigate = route.useNavigate();
   const feed = useAlertFeed('standard', search);
+  // While the investigation drawer is docked beside the feed (lg and wider), the feed keeps its
+  // width clear, so no card, filter or button sits under the panel (UX-DASH-04).
+  const drawerOpen = useChildMatches().length > 0;
+  const wide = useMediaQuery((theme) => theme.breakpoints.up('lg'), { noSsr: true });
 
   const change = (next: AlertSearch) => {
     void navigate({ to: '/alerts', search: next, replace: true });
@@ -95,7 +102,10 @@ export default function AlertFeedPage() {
   }
 
   return (
-    <>
+    <Box
+      data-testid="alert-feed"
+      style={drawerOpen && wide ? { marginInlineEnd: DRAWER_WIDTH } : undefined}
+    >
       <Typography variant="h5" component="h1" sx={{ mb: 2 }}>
         {tCommon('nav.alerts')}
       </Typography>
@@ -114,6 +124,6 @@ export default function AlertFeedPage() {
       </section>
       {/* The investigation drawer, when the URL names an alert (/alerts/$alertId). */}
       <Outlet />
-    </>
+    </Box>
   );
 }

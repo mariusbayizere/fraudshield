@@ -123,7 +123,6 @@
     "feature": "Feature",
     "value": "Value",
     "effect": "Effect",
-    "bar": "Effect to scale",
     "missing": "missing",
     "others_one": "{{count}} other feature, net",
     "others_other": "{{count}} other features, net",

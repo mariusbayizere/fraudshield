@@ -23,9 +23,9 @@ export function byEffect(contributions: readonly ShapContribution[]): ShapContri
 
 /**
  * The SHAP explanation (FR-04-05, UX-DASH-05, D-45): every contribution in margin space, largest
- * first, each with its feature, raw value, signed effect and a bar to scale. Increases are drawn
- * in the high-risk colour and decreases in the low-risk one, with an arrow and a sign as well, so
- * colour is never the only cue. The base value and the final margin are stated above the table.
+ * first, each with its feature, raw value, signed effect and a bar to scale. Bars use the theme's
+ * SHAP colours (checked by contrastPairs.ts), with an arrow and a sign as well, so colour is never
+ * the only cue. The base value and the final margin are stated above the table.
  *
  * A table, not a chart library: it reads in order for a screen reader, needs no new dependency
  * and no chunk of its own (D-39). The plain-language description per feature (D-45's templates)
@@ -75,11 +75,8 @@ export function ShapChart({ explanation, phone }: { explanation: Explanation; ph
             <TableCell component="th" scope="col" align="right">
               {t('shap.effect')}
             </TableCell>
-            <TableCell component="th" scope="col" sx={{ width: '35%' }}>
-              <Box component="span" sx={visuallyHidden}>
-                {t('shap.bar')}
-              </Box>
-            </TableCell>
+            {/* The bars repeat the effect column to scale; they are hidden from assistive tech. */}
+            <TableCell component="th" scope="col" aria-hidden sx={{ width: '35%' }} />
           </TableRow>
         </TableHead>
         <TableBody>
@@ -108,7 +105,7 @@ export function ShapChart({ explanation, phone }: { explanation: Explanation; ph
                       height: 12,
                       borderRadius: 0.5,
                       width: `${String((Math.abs(c.shap) / largest) * 100)}%`,
-                      bgcolor: theme.palette.risk[increases ? 'high' : 'low'].border,
+                      bgcolor: theme.palette.shap[increases ? 'increasesFraud' : 'decreasesFraud'],
                     })}
                   />
                 </TableCell>
@@ -146,12 +143,3 @@ export function ShapChart({ explanation, phone }: { explanation: Explanation; ph
     </Box>
   );
 }
-
-const visuallyHidden = {
-  position: 'absolute',
-  width: 1,
-  height: 1,
-  overflow: 'hidden',
-  clip: 'rect(0 0 0 0)',
-  whiteSpace: 'nowrap',
-} as const;
