@@ -219,7 +219,7 @@ Claimed 2026-10-18, after reading every branch: the highest backlog id in use an
 
 | Kind | Reserved for M8 | Used |
 |---|---|---|
-| ADR | `0080`–`0089` | `0080` (console architecture), `0081` (the `/system/status` proposal, on `m8/system-status-proposal`), `0082` (SRS v5.0 adoption) |
+| ADR | `0080`–`0089` | `0080` (console architecture), `0081` (the `/system/status` proposal, on `m8/system-status-proposal`), `0082` (SRS v5.0 adoption), `0083` (the feed is a card list) |
 | Backlog | `PB-131`–`PB-140` | `PB-131` (only `validate.ts` imports the generated Zod) |
 
 ## 9. The analyst screens (from 2026-10-18)
@@ -246,6 +246,17 @@ no copy is in it, and `examplesDrift.test.ts` fails if one returns.
 | 6 | Escalations | `/escalations` | listAlerts (queue=escalated) | not started |
 | 7 | Search | `/search` | listAlerts (identifiers, amounts, dates) | not started |
 | 8 | My performance | `/me/performance` | getMyPerformance | not started |
+
+**Owner decisions on screen 1 (2026-10-18).**
+
+- `/system/status` belongs to M8B, with three design questions open (`M8B_updates.md`).
+- **No real-time channel is invented.** FR-04-02 and UX-DASH-01 are BLOCKED on a contract addition
+  M8B must serve; the screen polls every 60 s and the rows say so.
+- **Cards, not the DataGrid** (ADR 0083). UX-DASH-02 records the deviation. The owner directed
+  DONE_WITH_DEVIATION; the row stays IN_PROGRESS because the owner's earlier rule keeps rows fed by
+  the analyst API below DONE until it exists, and that conflict is put back to the owner.
+- **UX-ROLE-SN-02 and UX-ROLE-SN-04** are unowned work for M8B; no screen is built for them.
+- **The bundle limit** is not moved; what it protects is reported to the owner first.
 
 **Screen 1, the alert feed.** Today's figures (the HIGH and MEDIUM counts filter the feed), the
 tier, channel and status filters and the order, all in the URL as listAlerts parameters, and the

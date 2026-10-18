@@ -45,6 +45,34 @@ from that clause, not quoted:
 - `decideAlert` calls M6's `DecisionTransitionService.analystDecidesHold`.
 - Confirmed fraud reaches `CircuitBreakerPort.countConfirmedFraud`.
 
+## Contract additions and operations M8B owns (owner, 2026-10-18)
+
+Recorded from M8's analyst screens. Each is a contract change first, reviewed on its own, then the
+implementation; M8's console does not build against any of them until both exist.
+
+1. **`GET /system/status`, the staff-readable degraded modes** (E.9's banners). The proposal is on
+   `m8/system-status-proposal` (ADR 0081, Proposed; reviewed SOUND_WITH_MINORS after one MAJOR was
+   fixed). Main implements neither it nor `GET /admin/health`. **Three design decisions are open,
+   and the proposal does not settle them:**
+   - **How `KAFKA_SPOOLING` is detected.** Every event passes through `DurableSpool`, which exposes
+     only byte gauges (`depthBytes`, `lagBytes`); there is no "spooling" state, so a threshold or a
+     Kafka-failure signal has to be defined.
+   - **Whether `REALTIME_PAUSED` belongs on the server at all.** Nothing on main tracks it, and
+     there is no real-time channel yet (item 2); it may be the console's own state (a dropped
+     socket) and leave the server's enum.
+   - **How instances agree.** `ML_UNAVAILABLE` (the scorer's circuit breaker) and `DEGRADED_MODE`
+     (`DegradedMode`, true while the last Redis call failed) are per JVM, so two instances can
+     answer differently and the banners can flap behind a load balancer.
+2. **The real-time alert channel** (FR-04-02's "new alert on all connected dashboards within 1
+   second", UX-DASH-01's real-time figures). It is not in `contracts/` at all. Until the contract
+   has it and M8B serves it, the console re-reads every 60 s, and FR-04-02 and UX-DASH-01 are
+   BLOCKED. The console will not design the channel itself.
+3. **Alert reassignment** (UX-ROLE-SN-02: a senior analyst reassigns an alert or self-assigns from
+   the unassigned pool). No contract operation exists. Unowned work, filed here like the analyst
+   API.
+4. **Team performance** (UX-ROLE-SN-04: every analyst's reviews per hour, accuracy, average review
+   time, CSV export). Only `getMyPerformance` exists. Unowned work, filed here.
+
 ## Before starting
 
 Claim backlog, ADR and Flyway ids in `docs/backlog/product.md`'s claims table before use. Any

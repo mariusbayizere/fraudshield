@@ -704,7 +704,7 @@ requirements:
   defects:
   - D-10
   - D-35
-  status: IN_PROGRESS
+  status: BLOCKED
   verification: test
   implementation: &id001
   - frontend/src/alerts/AlertFeedPage.tsx
@@ -722,7 +722,11 @@ requirements:
     /alerts, against contract-example mocks): the standard queue in the server''s priority order, a page
     at a time, and a MEDIUM alert''s countdown. Not built: the WebSocket push, which the contract does
     not define, so the feed re-reads every 60 s (E.9''s degraded cadence); the DataGrid virtualisation
-    (see UX-DASH-02).'
+    (see UX-DASH-02). M8 (2026-10-18, owner decision): blocked on a contract addition M8B must serve.
+    The screen polls listAlerts every 60 s; it does not stream.'
+  blocked_reason: The contract defines no real-time alert channel; M8B must add it to the contract, have
+    it reviewed, and serve it (M8B_updates.md, 'Contract additions and operations M8B owns', item 2).
+    The console will not design one.
 - id: FR-04-03
   section: 3.4 FR-04 Analyst dashboard
   title: 'Alert card shows: risk badge (HIGH/MEDIUM), fraud probability MUI CircularProgress gauge, amount
@@ -1989,7 +1993,7 @@ requirements:
     click any badge to filter; fraud amount animates on update; currency formatted with RWF prefix'
   defects:
   - D-33
-  status: IN_PROGRESS
+  status: BLOCKED
   verification: test
   implementation: *id001
   evidence: []
@@ -2002,7 +2006,11 @@ requirements:
     counts toggle the tier filter. Not built: sticky placement, real-time updates (no channel in the contract),
     the animated amount. Deviation: the row''s "currency formatted with RWF prefix" is not followed; the
     amount carries its own currency code (ADR 0023, no currency named in source), so it reads RWF only
-    where the data is in RWF.'
+    where the data is in RWF. M8 (2026-10-18, owner decision): blocked on a contract addition M8B must
+    serve. The screen polls listAlerts and getDashboardStats every 60 s; it does not stream.'
+  blocked_reason: The contract defines no real-time alert channel; M8B must add it to the contract, have
+    it reviewed, and serve it (M8B_updates.md, 'Contract additions and operations M8B owns', item 2).
+    The console will not design one.
 - id: UX-DASH-02
   section: 5.4 Analyst dashboard components
   title: Alert Feed (MUI DataGrid virtualised)
@@ -2015,18 +2023,24 @@ requirements:
   defects:
   - D-34
   - D-35
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation:
+  - frontend/src/alerts/AlertFeedPage.tsx
+  - frontend/src/alerts/AlertCard.tsx
   evidence: []
-  deviations: []
+  deviations:
+  - docs/adr/0083-the-alert-feed-is-a-card-list.md
   notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
     on main implements yet (M8B). Operations: listAlerts. The console is built against mocks generated
     from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until the M8B operation
     exists on main and the screen is exercised against it. M8 screen 1 (2026-10-18, the alert feed at
     /alerts, against contract-example mocks): the feed is a card list on every width; the free MUI X DataGrid
     this row names is not a dependency yet (the owner''s to approve under ADR 0080/0009), so the row is
-    not started.'
+    not started. M8 (2026-10-18, owner decision): cards, not the DataGrid (ADR 0083): the requirement''s
+    intent is a scannable list, which the cards give, each with every column''s content. The owner directed
+    DONE_WITH_DEVIATION; it stays IN_PROGRESS here only because the same owner''s rule keeps every row
+    fed by the analyst API below DONE until listAlerts exists (M8B), and that conflict is put to the owner.'
 - id: UX-DASH-03
   section: 5.4 Analyst dashboard components
   title: Risk Score Gauge
@@ -4183,7 +4197,8 @@ requirements:
     on main implements yet (M8B). Gap: the contract has no operation to reassign an alert; a contract
     change for M8B is needed first. The console is built against mocks generated from the contract, and
     a mock is not evidence: this row stays at most IN_PROGRESS until the M8B operation exists on main
-    and the screen is exercised against it.'
+    and the screen is exercised against it. M8 (2026-10-18, owner decision): unowned work filed for M8B
+    (M8B_updates.md, items 3); no screen is built against an operation that does not exist.'
 - id: UX-ROLE-SN-03
   section: 'v5 12.2 Per-role frontend: SENIOR_ANALYST'
   title: Senior Override
@@ -4220,7 +4235,8 @@ requirements:
     on main implements yet (M8B). Gap: the contract has no team-performance operation (only getMyPerformance);
     a contract change for M8B is needed first. The console is built against mocks generated from the contract,
     and a mock is not evidence: this row stays at most IN_PROGRESS until the M8B operation exists on main
-    and the screen is exercised against it.'
+    and the screen is exercised against it. M8 (2026-10-18, owner decision): unowned work filed for M8B
+    (M8B_updates.md, items 4); no screen is built against an operation that does not exist.'
 - id: UX-ROLE-SN-05
   section: 'v5 12.2 Per-role frontend: SENIOR_ANALYST'
   title: Fraud Campaigns

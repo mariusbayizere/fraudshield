@@ -130,7 +130,7 @@ afterEach(() => {
 });
 
 describe('the alert feed (FR-04-02, FR-04-03, FR-04-09)', () => {
-  it("[FR-04-03, UX-DASH-07] shows every alert card's eight elements, and a MEDIUM alert's countdown", async () => {
+  it("[FR-04-03, UX-DASH-02, UX-DASH-07] shows every alert card's eight elements, and a MEDIUM alert's countdown", async () => {
     serve();
     await renderFeed();
     const card = await screen.findByRole('article', { name: 'Alert for A*** K***' });

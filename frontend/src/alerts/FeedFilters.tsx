@@ -110,8 +110,8 @@ export function FeedFilters({
   const set = (patch: Partial<AlertSearch>) => {
     onChange({ ...search, ...patch });
   };
-  // A control that removes itself (a link's chip, "Clear filters") leaves focus in the filters,
-  // not on the page body.
+  // A link's chip removes itself; focus stays in the filters, not on the page body. ("Clear
+  // filters" does the same below.)
   const removeAndKeepFocus = (patch: Partial<AlertSearch>) => {
     set(patch);
     region.current?.focus();
