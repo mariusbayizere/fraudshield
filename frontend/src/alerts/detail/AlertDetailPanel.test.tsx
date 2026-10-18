@@ -181,8 +181,10 @@ describe('the investigation drawer (UX-DASH-04, UX-ROLE-AN-02, FR-04-05)', () =>
 
   it('returns focus to the card that opened it, or to the main region', async () => {
     serve();
-    await openAlert({}, undefined, '/alerts');
+    // With a filter set, the card's link carries it (?tier=...), as an analyst's usually does.
+    const router = await openAlert({ tier: ['MEDIUM'] }, undefined, '/alerts');
     const link = await screen.findByRole('link', { name: 'J*** M***' });
+    expect(link.getAttribute('href')).toContain('?');
     await userEvent.click(link);
     const drawer = await screen.findByRole('region', { name: drawerName });
     const heading = within(drawer).getByRole('heading', { level: 2, name: 'J*** M***' });
@@ -190,6 +192,17 @@ describe('the investigation drawer (UX-DASH-04, UX-ROLE-AN-02, FR-04-05)', () =>
       expect(heading).toHaveFocus();
     });
     await userEvent.keyboard('{Escape}');
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: 'J*** M***' })).toHaveFocus();
+    });
+
+    // The browser's Back closes it too, and focus comes back the same way.
+    await userEvent.click(screen.getByRole('link', { name: 'J*** M***' }));
+    await screen.findByRole('region', { name: drawerName });
+    router.history.back();
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: drawerName })).toBeNull();
+    });
     await waitFor(() => {
       expect(screen.getByRole('link', { name: 'J*** M***' })).toHaveFocus();
     });
@@ -274,6 +287,21 @@ describe('the investigation drawer (UX-DASH-04, UX-ROLE-AN-02, FR-04-05)', () =>
     });
   });
 
+  it('does not reopen on Back once closed', async () => {
+    serve();
+    const router = await openAlert({}, undefined, '/alerts');
+    await userEvent.click(await screen.findByRole('link', { name: 'J*** M***' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Close the investigation' }));
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/alerts');
+    });
+    router.history.back();
+    // Closing replaced the drawer's entry, so Back does not land on it again.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(router.state.location.pathname).not.toBe(`/alerts/${alert.alert_id}`);
+    expect(screen.queryByRole('region', { name: drawerName })).toBeNull();
+  });
+
   it('[MOB-COMP-02] opens as a full-screen dialog below the large breakpoint', async () => {
     screenWidth(false);
     serve();
@@ -320,6 +348,9 @@ describe('the investigation drawer (UX-DASH-04, UX-ROLE-AN-02, FR-04-05)', () =>
     serve();
     await openAlert();
     await screen.findByText('93%');
+    expect(await axeViolations(document.body)).toEqual([]);
+    await userEvent.click(screen.getByRole('tab', { name: 'SHAP explanation' }));
+    await screen.findByRole('table', { name: "Each feature's effect on the score" });
     expect(await axeViolations(document.body)).toEqual([]);
   });
 });

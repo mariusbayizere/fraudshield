@@ -22,6 +22,21 @@ import { ShapChart } from './ShapChart';
 import { SummaryTab } from './SummaryTab';
 
 const feedRoute = getRouteApi('/shell/alerts');
+
+/**
+ * Puts focus back where the drawer was opened from once it has gone: the card's link to this
+ * alert, or the page's main region when no card shows it (a shared link). Only when focus was
+ * lost with the drawer, never taken from somewhere the user moved it to.
+ */
+function returnFocus(alertId: string) {
+  const active = document.activeElement;
+  if (active !== null && active !== document.body && active.isConnected) return;
+  // Compared as paths, so an id the router percent-encodes, or a link carrying filters, matches.
+  const opener = [...document.querySelectorAll<HTMLAnchorElement>('main a[href]')].find(
+    (link) => decodeURIComponent(new URL(link.href).pathname) === `/alerts/${alertId}`,
+  );
+  (opener ?? document.getElementById('main'))?.focus();
+}
 const detailRoute = getRouteApi('/shell/alerts/$alertId');
 
 type TabName = 'summary' | 'shap';
@@ -96,21 +111,19 @@ export default function AlertDetailPanel() {
   const scoring = useScoringResult(alert.data?.transaction_id);
   const explanation = useExplanation(alertId, tab === 'shap');
 
-  // Closing replaces the drawer's history entry, so Back does not reopen it, and returns focus to
-  // the card that opened it, or to the page's main region when the drawer came from a link.
+  // Closing replaces the drawer's history entry, so Back does not reopen it.
   const close = () => {
-    void navigate({ to: '/alerts', search, replace: true }).then(() => {
-      const opener = document.querySelector<HTMLElement>(
-        `a[href="/alerts/${alertId}"], a[href^="/alerts/${alertId}?"]`,
-      );
-      (opener ?? document.getElementById('main'))?.focus();
-    });
+    void navigate({ to: '/alerts', search, replace: true });
   };
 
   // Focus moves to the alert's heading when it opens, so a keyboard or screen-reader user lands
   // in the drawer rather than behind it.
+  // However the drawer goes (close, Escape, the browser's Back), focus returns to its opener.
   useEffect(() => {
     heading.current?.focus();
+    return () => {
+      returnFocus(alertId);
+    };
   }, [alertId]);
 
   const title = alert.data?.masked_account_name ?? t('detail.title');
