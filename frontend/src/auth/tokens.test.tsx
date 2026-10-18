@@ -1,4 +1,4 @@
-import { getSystemStatus } from '../api/generated/sdk.gen';
+import { getCurrentUser } from '../api/generated/sdk.gen';
 import { getAccessToken, installAuthInterceptor, setAccessToken } from './tokens';
 
 afterEach(() => {
@@ -29,15 +29,15 @@ describe('the access token (D-27, ADR 0014)', () => {
     vi.stubGlobal('fetch', (request: Request) => {
       sent.push(request.headers.get('Authorization'));
       return Promise.resolve(
-        new Response(JSON.stringify({ degraded_modes: [] }), {
+        new Response(JSON.stringify({}), {
           headers: { 'Content-Type': 'application/json' },
         }),
       );
     });
     setAccessToken('secret-token');
-    await getSystemStatus();
+    await getCurrentUser();
     setAccessToken(null);
-    await getSystemStatus();
+    await getCurrentUser();
     expect(sent).toEqual(['Bearer secret-token', null]);
   });
 });

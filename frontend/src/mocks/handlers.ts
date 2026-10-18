@@ -2,7 +2,6 @@ import { http, HttpResponse } from 'msw';
 import type {
   StaffUser,
   SystemHealth,
-  SystemStatus,
   TokenResponse,
 } from '../api/generated/types.gen';
 
@@ -22,15 +21,6 @@ const health: SystemHealth = {
   alert_queue_depth: { HIGH: 3, MEDIUM: 12, ANOMALY: 2 },
   review_duration_seconds: { p50: 42, p90: 95 },
   degraded_modes: [],
-};
-
-// Set VITE_FS_DEGRADED (e.g. "ML_UNAVAILABLE,REALTIME_PAUSED") to see the banners in development.
-const degraded = (import.meta.env['VITE_FS_DEGRADED'] as string | undefined) ?? '';
-const status: SystemStatus = {
-  degraded_modes: degraded
-    .split(',')
-    .map((mode) => mode.trim())
-    .filter((mode) => mode !== '') as SystemStatus['degraded_modes'],
 };
 
 const analyst: StaffUser = {
@@ -86,9 +76,6 @@ export const handlers = [
     const value = new URL(request.url).searchParams.get('value') ?? '';
     return HttpResponse.json({ available: !['taken@example.test', 'EMP-TAKEN'].includes(value) });
   }),
-  http.get('/api/v1/system/status', () =>
-    HttpResponse.json(status, { headers: { 'x-mock': MOCK_MARKER } }),
-  ),
   http.get('/api/v1/admin/health', () =>
     HttpResponse.json(health, { headers: { 'x-mock': MOCK_MARKER } }),
   ),

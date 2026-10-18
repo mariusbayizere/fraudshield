@@ -22,9 +22,7 @@ import { useEffect, useId, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { tokens } from '../design-system/tokens';
 import { RequireSession } from '../auth/RequireSession';
-import { SystemBanners } from '../design-system/components/SystemBanner/SystemBanner';
 import { LanguageSwitcher } from './LanguageSwitcher';
-import { useSystemConditions } from './systemStatus';
 import { SECTIONS, type SectionGroup } from './sections';
 
 const DRAWER_WIDTH = 240;
@@ -90,7 +88,6 @@ function SignedInShell() {
   const [menuOpen, setMenuOpen] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const primary = SECTIONS.filter((s) => s.primary === true);
-  const conditions = useSystemConditions();
 
   useEffect(() => {
     document.documentElement.lang = i18n.resolvedLanguage ?? i18n.language;
@@ -168,11 +165,8 @@ function SignedInShell() {
         sx={{ flexGrow: 1, minWidth: 0, p: { xs: 2, md: 3 }, pb: wide ? 3 : 10 }}
       >
         <Toolbar />
-        {conditions.length === 0 ? null : (
-          <Box sx={{ mb: 2 }}>
-            <SystemBanners conditions={conditions} />
-          </Box>
-        )}
+        {/* E.9's degraded-mode banners have nothing to read until a staff-readable status is in
+            the contract: /system/status is a proposal under review (ADR 0081), not an operation. */}
         <Outlet />
       </Box>
       {wide ? null : (

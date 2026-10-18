@@ -25,15 +25,16 @@ describe('SystemBanners', () => {
       join(import.meta.dirname, '../../../../../contracts/openapi/fraudshield-api.yaml'),
       'utf8',
     );
-    // Both schemas that carry the list: SystemStatus (every staff role, ADR 0081) and
-    // SystemHealth (admins). Anchored on the schema name so a path description cannot match.
-    const enums = ['SystemStatus', 'SystemHealth'].map((schema) => {
+    // SystemHealth (admins) is the only schema that carries the list; ADR 0081's SystemStatus is
+    // a proposal, not yet in the contract. Anchored on the schema name so a path description
+    // cannot match.
+    const enums = ['SystemHealth'].map((schema) => {
       const match = new RegExp(
         `\n    ${schema}:[\\s\\S]*?degraded_modes:[\\s\\S]*?enum: \\[([^\\]]+)\\]`,
       ).exec(contract);
       return match?.[1]?.split(',').map((value) => value.trim());
     });
-    expect(enums).toEqual([[...SYSTEM_CONDITIONS], [...SYSTEM_CONDITIONS]]);
+    expect(enums).toEqual([[...SYSTEM_CONDITIONS]]);
     expect(Object.keys(CONDITION_SEVERITY)).toEqual([...SYSTEM_CONDITIONS]);
   });
 });
