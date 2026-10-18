@@ -889,7 +889,7 @@ export const zAlertDetail = zAlertSummaryBase.and(z.object({
     ])).optional(),
     anomaly_score: zProbability,
     decisions: z.array(zDecisionRecord)
-})).and(z.record(z.string(), z.never()));
+}));
 
 export const zRule = zRuleDraftBase.and(z.object({
     rule_id: z.uuid(),
@@ -903,7 +903,7 @@ export const zRule = zRuleDraftBase.and(z.object({
     created_at: zTimestamp,
     trigger_count: z.int().gte(0),
     last_triggered_at: zTimestamp.nullable()
-})).and(z.record(z.string(), z.never()));
+}));
 
 /**
  * A risk-configuration change under dual control (ADR 0014)
@@ -1071,7 +1071,7 @@ export const zIpAllowlistEntry = zIpAllowlistEntryBase.and(z.object({
     entry_id: z.uuid(),
     created_by: zStaffReference,
     created_at: zTimestamp
-})).and(z.record(z.string(), z.never()));
+}));
 
 export const zApiKeyScope = z.enum([
     'ingest:write',
@@ -1108,7 +1108,7 @@ export const zApiKey = zApiKeyBase;
 export const zApiKeyCreated = zApiKeyBase.and(z.object({
     raw_key: z.string().regex(/^fsk_(dev|test|stg|prod)_[a-z0-9]{12}_[A-Za-z0-9_-]{43}$/),
     webhook_signing_secret: z.string().regex(/^whsec_(dev|test|stg|prod)_[A-Za-z0-9]{32,64}$/).nullish()
-})).and(z.record(z.string(), z.never()));
+}));
 
 /**
  * Promotion requirements (D-11)

@@ -24,6 +24,20 @@ function tsFiles(dir: string): string[] {
   );
 }
 
+/**
+ * The contract closes a composed schema (AlertDetail, Rule, IpAllowlistEntry, ApiKeyCreated) by
+ * listing every member's property names beside `additionalProperties: false` (NF-01). The
+ * generator turns that into an index signature of `never`, which makes every property of the
+ * TypeScript type `never` and makes the Zod schema reject every object with a property, the
+ * contract's own examples included. Both are removed here; the closed shape stays the contract
+ * tests' to enforce, as for every other schema (the generated Zod drops unknown fields).
+ * contractExamples.test.ts fails if a generated schema rejects a contract example again.
+ */
+export const UNSATISFIABLE = [
+  { file: 'types.gen.ts', text: ' & {\n    [key: string]: never;\n}' },
+  { file: 'zod.gen.ts', text: '.and(z.record(z.string(), z.never()))' },
+] as const;
+
 export async function generateApi(output: string): Promise<void> {
   await createClient({
     input: CONTRACT,
@@ -32,7 +46,11 @@ export async function generateApi(output: string): Promise<void> {
     logs: { level: 'silent' },
   });
   for (const file of tsFiles(output)) {
-    writeFileSync(file, HEADER + readFileSync(file, 'utf8'));
+    let text = readFileSync(file, 'utf8');
+    for (const { file: name, text: unsatisfiable } of UNSATISFIABLE) {
+      if (file.endsWith(`/${name}`)) text = text.replaceAll(unsatisfiable, '');
+    }
+    writeFileSync(file, HEADER + text);
   }
 }
 

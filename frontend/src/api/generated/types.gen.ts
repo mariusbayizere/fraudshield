@@ -401,8 +401,6 @@ export type AlertDetail = AlertSummaryBase & {
     };
     anomaly_score: Probability;
     decisions: Array<DecisionRecord>;
-} & {
-    [key: string]: never;
 };
 
 export type AlertPage = {
@@ -653,8 +651,6 @@ export type Rule = RuleDraftBase & {
     created_at: Timestamp;
     trigger_count: number;
     last_triggered_at: Timestamp | null;
-} & {
-    [key: string]: never;
 };
 
 /**
@@ -904,8 +900,6 @@ export type IpAllowlistEntry = IpAllowlistEntryBase & {
     entry_id: string;
     created_by: StaffReference;
     created_at: Timestamp;
-} & {
-    [key: string]: never;
 };
 
 export type ApiKeyScope = 'ingest:write' | 'decisions:read' | 'jobs:read';
@@ -954,8 +948,6 @@ export type ApiKeyCreated = ApiKeyBase & {
      * Shown exactly once; verifies decision.final webhooks. Null when the key has no webhook_url. The fixed prefix lets secret scanners recognise it.
      */
     webhook_signing_secret?: string | null;
-} & {
-    [key: string]: never;
 };
 
 /**
