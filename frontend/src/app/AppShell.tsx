@@ -166,7 +166,8 @@ function SignedInShell() {
       >
         <Toolbar />
         {/* E.9's degraded-mode banners have nothing to read until a staff-readable status is in
-            the contract: /system/status is a proposal under review (ADR 0081), not an operation. */}
+            the contract: /system/status is a proposal under review (ADR 0081, on
+            m8/system-status-proposal), not an operation. */}
         <Outlet />
       </Box>
       {wide ? null : (

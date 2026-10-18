@@ -18,19 +18,35 @@ export const ALERT_STATUSES = [
 
 export const ALERT_SORTS = ['priority', 'expected_loss', 'newest'] as const;
 
-// The contract's Token and DecimalAmount patterns.
-const TOKEN = /^tok_[A-Za-z0-9]{24,64}$/;
-const DECIMAL_AMOUNT = /^(0|[1-9][0-9]{0,13})(\.[0-9]{1,4})?$/;
+// The contract's Token and DecimalAmount patterns; a test compares them with the contract.
+export const TOKEN = /^tok_[A-Za-z0-9]{24,64}$/;
+export const DECIMAL_AMOUNT = /^(0|[1-9][0-9]{0,13})(\.[0-9]{1,4})?$/;
 
 const distinct = (list: readonly string[]) => new Set(list).size === list.length;
+
+/**
+ * An amount, which the contract carries as a decimal string. The router JSON-parses each search
+ * value, so a typed or pasted `?amount_min=1000` arrives as a number and is read back as text.
+ */
+const amount = z.catch(
+  z.optional(
+    z.pipe(
+      z.pipe(
+        z.union([z.string(), z.number()]),
+        z.transform((value: string | number) => String(value)),
+      ),
+      z.string().check(z.regex(DECIMAL_AMOUNT)),
+    ),
+  ),
+  undefined,
+);
 
 /**
  * The alert feed's filters, carried in the URL so a filtered view can be shared and restored
  * (FR-04-09). Each one is a listAlerts query parameter with the contract's name and type: the
  * screen filters by what the API can filter by, and nothing else. The list filters take one or
- * more values, none repeated (`uniqueItems`). `queue` is not here because the route chooses it
- * (/alerts, /anomalies, /escalations), nor are `cursor` and `limit`, which page the feed rather
- * than filter it. Anything unrecognised is dropped rather than failing the page: a stale or
+ * more values, none repeated (`uniqueItems`). `queue` is not here because the screen, not the
+ * URL, chooses it, nor are `cursor` and `limit`, which page the feed rather than filter it. Anything unrecognised is dropped rather than failing the page: a stale or
  * hand-edited link opens the unfiltered feed. zod/mini keeps the initial bundle small (D-39).
  */
 export const alertSearch = z.object({
@@ -48,8 +64,8 @@ export const alertSearch = z.object({
   ),
   transaction_id: z.catch(z.optional(z.uuid()), undefined),
   account_id: z.catch(z.optional(z.string().check(z.regex(TOKEN))), undefined),
-  amount_min: z.catch(z.optional(z.string().check(z.regex(DECIMAL_AMOUNT))), undefined),
-  amount_max: z.catch(z.optional(z.string().check(z.regex(DECIMAL_AMOUNT))), undefined),
+  amount_min: amount,
+  amount_max: amount,
   from: z.catch(z.optional(z.iso.datetime()), undefined),
   to: z.catch(z.optional(z.iso.datetime()), undefined),
   analyst_id: z.catch(z.optional(z.uuid()), undefined),

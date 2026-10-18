@@ -1,8 +1,16 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { defaultParseSearch } from '@tanstack/react-router';
 import type { ListAlertsData } from '../api/generated/types.gen';
 import { CHANNELS } from '../design-system/tokens';
-import { ALERT_STATUSES, ALERT_TIERS, alertSearch, type AlertSearch } from './alertSearch';
+import {
+  ALERT_STATUSES,
+  ALERT_TIERS,
+  alertSearch,
+  DECIMAL_AMOUNT,
+  TOKEN,
+  type AlertSearch,
+} from './alertSearch';
 
 describe('alert feed filters in the URL (FR-04-09)', () => {
   it('keeps valid filters, under listAlerts parameter names', () => {
@@ -41,8 +49,23 @@ describe('alert feed filters in the URL (FR-04-09)', () => {
     expect(alertSearch.parse({})).toEqual({});
   });
 
-  it('takes lists, as listAlerts does, and drops a list that repeats a value', () => {
-    expect(alertSearch.parse({ tier: 'HIGH', channel: ['USSD', 'USSD'] })).toEqual({});
+  it('takes lists, as listAlerts does, and drops a list that is empty or repeats a value', () => {
+    expect(alertSearch.parse({ tier: 'HIGH', channel: 'USSD', outcome: 'PENDING' })).toEqual({});
+    expect(alertSearch.parse({ tier: [], channel: [], outcome: [] })).toEqual({});
+    expect(
+      alertSearch.parse({
+        tier: ['HIGH', 'HIGH'],
+        channel: ['USSD', 'USSD'],
+        outcome: ['PENDING', 'PENDING'],
+      }),
+    ).toEqual({});
+  });
+
+  it('reads amounts from a typed or pasted link, which the router parses as numbers', () => {
+    expect(alertSearch.parse(defaultParseSearch('?amount_min=1000&amount_max=25000.5'))).toEqual({
+      amount_min: '1000',
+      amount_max: '25000.5',
+    });
   });
 
   it('has no free-text search: listAlerts has no such parameter', () => {
@@ -51,8 +74,9 @@ describe('alert feed filters in the URL (FR-04-09)', () => {
 
   it('carries exactly the filters listAlerts takes, with their types', () => {
     type Filters = Omit<NonNullable<ListAlertsData['query']>, 'queue' | 'cursor' | 'limit'>;
-    expectTypeOf<Required<{ [K in keyof AlertSearch]: NonNullable<AlertSearch[K]> }>>()
-      .toEqualTypeOf<Required<{ [K in keyof Filters]: NonNullable<Filters[K]> }>>();
+    expectTypeOf<
+      Required<{ [K in keyof AlertSearch]: NonNullable<AlertSearch[K]> }>
+    >().toEqualTypeOf<Required<{ [K in keyof Filters]: NonNullable<Filters[K]> }>>();
   });
 
   it('offers exactly the values the OpenAPI contract defines', () => {
@@ -69,5 +93,11 @@ describe('alert feed filters in the URL (FR-04-09)', () => {
     expect(enumOf('AlertTier')).toEqual([...ALERT_TIERS]);
     expect(enumOf('AlertStatus')).toEqual([...ALERT_STATUSES]);
     expect(new Set(enumOf('Channel'))).toEqual(new Set(CHANNELS));
+    const patternOf = (schema: string) =>
+      new RegExp(`\n    ${schema}:\n      type: string\n      pattern: "([^"]+)"`)
+        .exec(contract)?.[1]
+        ?.replaceAll('\\\\', '\\');
+    expect(patternOf('Token')).toBe(TOKEN.source);
+    expect(patternOf('DecimalAmount')).toBe(DECIMAL_AMOUNT.source);
   });
 });

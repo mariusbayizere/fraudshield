@@ -26,7 +26,7 @@ describe('SystemBanners', () => {
       'utf8',
     );
     // SystemHealth (admins) is the only schema that carries the list; ADR 0081's SystemStatus is
-    // a proposal, not yet in the contract. Anchored on the schema name so a path description
+    // a proposal on m8/system-status-proposal, not yet in the contract. Anchored on the schema name so a path description
     // cannot match.
     const enums = ['SystemHealth'].map((schema) => {
       const match = new RegExp(

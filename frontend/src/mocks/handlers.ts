@@ -1,9 +1,5 @@
 import { http, HttpResponse } from 'msw';
-import type {
-  StaffUser,
-  SystemHealth,
-  TokenResponse,
-} from '../api/generated/types.gen';
+import type { StaffUser, SystemHealth, TokenResponse } from '../api/generated/types.gen';
 
 /**
  * Searched for by productionBundle.test.ts: if this string is ever in a production build, the

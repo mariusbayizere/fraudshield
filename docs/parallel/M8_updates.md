@@ -12,6 +12,9 @@ blocks.
 
 ## 1. What exists
 
+The commit ids in this table and in sections 2 to 6 are the pre-rebase ids, on
+`m8/frontend-pre-rebase-40f5bdc`; section 7 says what the rebase changed.
+
 | Step (D.3 order) | Commits | Checked by |
 |---|---|---|
 | Design tokens | 2f6cb5c, da3166d | `tokens.test.ts`: WCAG AA for every colour pair the theme draws, both schemes; generated CSS pinned to the generator; D-36 breakpoints identical in MUI and Tailwind; D-34 motion. ESLint rejects raw hex outside the token sources (D-37). |
