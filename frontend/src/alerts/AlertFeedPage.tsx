@@ -2,7 +2,7 @@ import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import { getRouteApi } from '@tanstack/react-router';
+import { getRouteApi, Outlet } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import type { AlertSearch } from '../app/alertSearch';
 import { EmptyState, ErrorState } from '../design-system/components/ScreenStates/ScreenStates';
@@ -112,6 +112,8 @@ export default function AlertFeedPage() {
         </Typography>
         {body}
       </section>
+      {/* The investigation drawer, when the URL names an alert (/alerts/$alertId). */}
+      <Outlet />
     </>
   );
 }

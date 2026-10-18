@@ -29,7 +29,8 @@ import { useFormatLocale } from '../region/formatLocale';
 
 const RouterLink = createLink(Link);
 
-const OPEN: ReadonlySet<AlertStatus> = new Set(['PENDING', 'IN_REVIEW']);
+/** The statuses in which an alert still waits for a decision, and so counts down. */
+export const OPEN: ReadonlySet<AlertStatus> = new Set(['PENDING', 'IN_REVIEW']);
 
 /**
  * The feed's tiers drawn in the risk colours: HIGH and MEDIUM are the risk tiers' high and

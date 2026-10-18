@@ -1,7 +1,10 @@
 import { http, HttpResponse } from 'msw';
 import type {
+  AlertDetail,
   AlertPage,
   DashboardStats,
+  Explanation,
+  ScoringResult,
   StaffUser,
   SystemHealth,
   TokenResponse,
@@ -55,6 +58,11 @@ const session: TokenResponse = {
 const alertPage = examples.AlertPage[0] as AlertPage;
 const lastAlertPage: AlertPage = { items: [], next_cursor: null };
 const dashboardStats = examples.DashboardStats[0] as DashboardStats;
+const alertDetail = examples.AlertDetail[0] as AlertDetail;
+// The contract's 44 contributions are a 44-element tuple type; JSON imports as an array. The
+// example's shape is checked against the generated schema by contractExamples.test.ts.
+const explanation = examples.Explanation[0] as unknown as Explanation;
+const scoringResult = examples.ScoringResult[0] as ScoringResult;
 
 /** Development-only responses, typed by the contract, for operations the console reads. */
 export const handlers = [
@@ -62,6 +70,19 @@ export const handlers = [
     HttpResponse.json(new URL(request.url).searchParams.has('cursor') ? lastAlertPage : alertPage, {
       headers: { 'x-mock': MOCK_MARKER },
     }),
+  ),
+  // Any alert id opens the example alert; the drawer's data comes from the same examples.
+  http.get('/api/v1/alerts/:alertId', ({ params }) =>
+    HttpResponse.json(
+      { ...alertDetail, alert_id: String(params['alertId']) },
+      { headers: { 'x-mock': MOCK_MARKER } },
+    ),
+  ),
+  http.get('/api/v1/alerts/:alertId/explanation', () =>
+    HttpResponse.json(explanation, { headers: { 'x-mock': MOCK_MARKER } }),
+  ),
+  http.get('/api/v1/transactions/:transactionId/scoring-result', () =>
+    HttpResponse.json(scoringResult, { headers: { 'x-mock': MOCK_MARKER } }),
   ),
   http.get('/api/v1/dashboard/stats', () =>
     HttpResponse.json(dashboardStats, { headers: { 'x-mock': MOCK_MARKER } }),

@@ -16,6 +16,7 @@ const rootRoute = createRootRoute();
 // the shell's navigation, app bar and drawers are not in the initial bundle either.
 const SectionPage = lazyRouteComponent(() => import('./pages/SectionPage'));
 const AlertFeedPage = lazyRouteComponent(() => import('../alerts/AlertFeedPage'));
+const AlertDetailPanel = lazyRouteComponent(() => import('../alerts/detail/AlertDetailPanel'));
 const AppShell = lazyRouteComponent(() => import('./AppShell'), 'AppShell');
 const LoginPage = lazyRouteComponent(() => import('../auth/LoginPage'));
 const RegisterPage = lazyRouteComponent(() => import('../auth/registration/RegisterPage'));
@@ -60,11 +61,12 @@ const sections: AnyRoute[] = SECTIONS.filter((section) => !builtSections.has(sec
     }),
 );
 
+// The investigation drawer is a child of the feed, so the feed stays on screen and usable
+// behind it (UX-DASH-04), and a deep link opens both (E.9).
 const alertDetail = createRoute({
-  getParentRoute: () => shell,
-  path: '/alerts/$alertId',
-  validateSearch: alertSearch,
-  component: () => <SectionPage title="nav.alerts" />,
+  getParentRoute: () => alerts,
+  path: '$alertId',
+  component: AlertDetailPanel,
 });
 
 const login = createRoute({
@@ -95,7 +97,7 @@ const publicPages: AnyRoute[] = PUBLIC_PAGES.filter((page) => !built.has(page.pa
 );
 
 export const routeTree = rootRoute.addChildren([
-  shell.addChildren([index, alerts, ...sections, alertDetail]),
+  shell.addChildren([index, alerts.addChildren([alertDetail]), ...sections]),
   login,
   registerRoute,
   ...authPages,

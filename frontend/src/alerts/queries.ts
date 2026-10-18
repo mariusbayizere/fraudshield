@@ -16,20 +16,22 @@ export type AlertQueue = NonNullable<NonNullable<ListAlertsData['query']>['queue
 /** A failed call, with the correlation ID the contract's Problem carries for support. */
 export class ApiError extends Error {
   readonly correlationId: string | undefined;
+  /** The Problem's HTTP status, when the server sent one (404: not in the caller's institution). */
+  readonly status: number | undefined;
 
   constructor(error: unknown) {
     super('the API call failed');
     this.name = 'ApiError';
-    const id: unknown =
-      typeof error === 'object' && error !== null && 'correlation_id' in error
-        ? error.correlation_id
-        : undefined;
+    const problem = typeof error === 'object' && error !== null ? error : {};
+    const id: unknown = 'correlation_id' in problem ? problem.correlation_id : undefined;
+    const status: unknown = 'status' in problem ? problem.status : undefined;
     this.correlationId = typeof id === 'string' ? id : undefined;
+    this.status = typeof status === 'number' ? status : undefined;
   }
 }
 
 /** The body of a successful call, or an ApiError carrying the Problem's correlation ID. */
-function bodyOrThrow<T>(result: { data?: T; error?: unknown }): NonNullable<T> {
+export function bodyOrThrow<T>(result: { data?: T; error?: unknown }): NonNullable<T> {
   if (result.error !== undefined || result.data === undefined) {
     throw new ApiError(result.error);
   }
