@@ -139,6 +139,18 @@ EXCEPTIONS: dict[str, tuple[str, str]] = {
         "POM lists 'EPL 2.0' and 'GPL2 w/ CPE'; the jar's META-INF/NOTICE.md declares "
         "SPDX 'EPL-2.0 OR GPL-2.0-only with Classpath-exception-2.0' (verified 2026-09-17)",
     ),
+    "maven:jakarta.mail:jakarta.mail-api@2.1.5": (
+        "EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0",
+        "POM lists 'EDL 1.0', 'EPL 2.0' and 'GPL2 w/ CPE'; the jar's META-INF/NOTICE.md declares "
+        "SPDX 'EPL-2.0 OR GPL-2.0-only with Classpath-exception-2.0'. Runtime dependency of the "
+        "M7 staff mailer via spring-boot-starter-mail; allowed by ADR 0020 (verified 2026-09-22)",
+    ),
+    "maven:org.eclipse.angus:angus-mail@2.0.5": (
+        "EPL-2.0 OR GPL-2.0-only WITH Classpath-exception-2.0",
+        "POM lists 'EDL 1.0', 'EPL 2.0' and 'GPL2 w/ CPE'; the jar's META-INF/NOTICE.md declares "
+        "SPDX 'EPL-2.0 OR GPL-2.0 WITH Classpath-exception-2.0'. Jakarta Mail implementation "
+        "used by the M7 staff mailer; allowed by ADR 0020 (verified 2026-09-22)",
+    ),
     "maven:org.hdrhistogram:HdrHistogram@2.2.2": (
         "BSD-2-Clause",
         "Offered as 'CC0-1.0 OR BSD-2-Clause': the POM lists 'Public Domain, per Creative Commons "
@@ -174,14 +186,26 @@ EXCEPTIONS: dict[str, tuple[str, str]] = {
         "no License-Expression; no LICENSE file ships in the wheel's dist-info. Confirmed against "
         "the tagged source (github.com/dmlc/xgboost, tag v3.0.2, LICENSE) on 2026-09-22: the "
         "Apache License, Version 2.0 (C-6, first runtime dependency of the ml/pyproject.toml "
-        "ensemble baseline)",
+        "ensemble baseline). The expression is xgboost's own code. The manylinux_2_28_x86_64 "
+        "wheel also carries, inside libxgboost.so, 323,896,200 bytes of compiled CUDA device code "
+        "and a statically linked CUDA runtime (NVIDIA's CUDA EULA, not Apache-2.0), and bundles "
+        "libgomp (GPL-3.0-or-later WITH GCC-exception-3.1), with no licence file for either; the "
+        "manylinux2014 wheel is CPU-only (read 2026-10-17). Whether the image keeps the CUDA "
+        "wheel is M9's decision (docs/parallel/M9_updates.md, From M7)",
     ),
     "python:scipy@1.18.1": (
         "BSD-3-Clause",
         "classifier says only 'BSD License'; dist-info/licenses/LICENSE.txt is headed 'Copyright "
         "(c) 2001-2002 Enthought, Inc. 2003, SciPy Developers' with the 3-clause disclaimer, "
         "confirmed against the tagged source (github.com/scipy/scipy, tag v1.18.1) on 2026-09-22. "
-        "A transitive dependency of xgboost and lightgbm, not declared directly",
+        "A transitive dependency of xgboost and lightgbm, not declared directly. The expression "
+        "is scipy's own code: the Linux wheel also bundles, in scipy.libs/, OpenBLAS "
+        "(BSD-3-Clause), LAPACK (BSD-3-Clause-Open-MPI), the GCC runtime libgfortran "
+        "(GPL-3.0-or-later WITH GCC-exception-3.1) and libquadmath (LGPL-2.1-or-later, dynamically "
+        "linked), each listed with its text in dist-info/LICENSE.txt (read 2026-10-17). A runtime "
+        "dependency, so an ML image redistributes them: allowed on condition that their notices "
+        "travel with the image (owner decision 2026-10-17; acceptance criterion in "
+        "docs/parallel/M9_updates.md)",
     ),
     "python:flatbuffers@25.12.19": (
         "Apache-2.0",
@@ -211,12 +235,19 @@ EXCEPTIONS: dict[str, tuple[str, str]] = {
         "subcontract 7078610), matching the upstream project's own licensing summary "
         "(github.com/NVIDIA/nccl, LICENSE.txt: 'parts of the project retain their original BSD "
         "license'), confirmed 2026-09-22. A transitive, platform-conditional dependency of "
-        "xgboost's published wheel (`platform_system == 'Linux' and platform_machine != "
-        "'aarch64'`) for its optional GPU code path; `ldd` on the installed libxgboost.so shows it "
-        "links no NVIDIA library, and this project trains CPU-only (missing=nan, nthread=1, no "
-        "device='cuda' anywhere in the tree), so the wheel is present but never loaded. Recorded "
+        "xgboost's manylinux_2_28 wheel (`platform_system == 'Linux' and platform_machine != "
+        "'aarch64'`) for its optional GPU code path. libxgboost.so loads NCCL with dlopen, so "
+        "`ldd` showing no NVIDIA library proves nothing; what keeps it unloaded is that this "
+        "project trains CPU-only (missing=nan, nthread=1, no device='cuda' anywhere in the tree), "
+        "so the wheel is present but never loaded. Recorded "
         "as BSD-3-Clause on the text actually bundled, not on the misleading declared field, "
-        "which is the same 'read the file, not the label' rule every other exception here uses",
+        "which is the same 'read the file, not the label' rule every other exception here uses. "
+        "License.txt also names files from the NVTX project and points to github.com/NVIDIA/NVTX "
+        "for their licence, Apache-2.0 WITH LLVM-exception, whose text is not in the wheel (read "
+        "2026-10-17). "
+        "Redistribution position (owner decision 2026-10-17): an ML image built from the lock "
+        "carries the wheel, so it either carries License.txt and NVTX's notice or leaves NCCL out, "
+        "which CPU-only training allows (acceptance criterion in docs/parallel/M9_updates.md)",
     ),
     "python:sortedcontainers@2.4.0": (
         "Apache-2.0",

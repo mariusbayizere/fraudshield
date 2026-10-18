@@ -156,4 +156,73 @@ class KafkaSpoolChaosTest {
       assertThat(newDrainer.delivered()).isPositive();
     }
   }
+
+  @Test
+  @Tag("FR-03-04")
+  void theSmsIntentCarriesItsTransactionOnTheWire() throws Exception {
+    // The implementation review of bd48557: without the header on the record itself, the SMS
+    // consumer could never tell an intent that is not the kept decision's from a late one.
+    InMemoryPorts ports = new InMemoryPorts();
+    ports.scores = t -> Optional.of(0.95);
+    DecisionService service =
+        new DecisionService(
+            ports,
+            ports,
+            ports,
+            ports,
+            ports,
+            ports,
+            ports,
+            ports,
+            ports,
+            DecisionMetrics.NONE,
+            DecisionSettings.DEFAULTS,
+            new MutableClock(NOW));
+    UUID id = UUID.randomUUID();
+    service.decide(
+        Fixtures.transaction(id, "tok_WireAccountAaaaBbbbCccc01", "15000", Channel.CARD),
+        new byte[32],
+        System.nanoTime());
+    try (KafkaSink sink = sink()) {
+      sink.accept(
+          List.of(
+              new io.github.mariusbayizere.fraudshield.decision.adapter.spool.SpoolRecord(
+                  0,
+                  1,
+                  io.github.mariusbayizere.fraudshield.decision.adapter.events.FactCodec.encode(
+                      // Only the block and its intent: the chaos test counts fs.transactions.raw
+                      // exactly, and the header comes from the AutoBlocked fact.
+                      ports.events.stream()
+                          .filter(
+                              e ->
+                                  e
+                                          instanceof
+                                          io.github.mariusbayizere.fraudshield.decision.application
+                                              .event.DecisionEvent.AutoBlocked
+                                      || e
+                                          instanceof
+                                          io.github.mariusbayizere.fraudshield.decision.application
+                                              .event.DecisionEvent.CustomerNotificationRequested)
+                          .toList()))));
+    }
+    List<ConsumerRecord<String, byte[]>> intents =
+        kafka.readAll(
+            "fs.notifications.customer",
+            r -> {
+              var h = r.headers().lastHeader("fs-transaction-id");
+              return h == null
+                  ? ""
+                  : new String(h.value(), java.nio.charset.StandardCharsets.UTF_8);
+            },
+            1_000,
+            Duration.ofSeconds(10));
+    assertThat(intents)
+        .anySatisfy(
+            r ->
+                assertThat(
+                        new String(
+                            r.headers().lastHeader("fs-transaction-id").value(),
+                            java.nio.charset.StandardCharsets.UTF_8))
+                    .isEqualTo(id.toString()));
+  }
 }

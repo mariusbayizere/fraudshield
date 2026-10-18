@@ -95,6 +95,13 @@ public final class KafkaSink implements SpoolDrainer.Sink, AutoCloseable {
         kafkaRecord
             .headers()
             .add(new RecordHeader("event_id", message.eventId().getBytes(StandardCharsets.UTF_8)));
+        message
+            .headers()
+            .forEach(
+                (name, value) ->
+                    kafkaRecord
+                        .headers()
+                        .add(new RecordHeader(name, value.getBytes(StandardCharsets.UTF_8))));
         sent.add(producer.send(kafkaRecord));
       }
     }

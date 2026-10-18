@@ -4,7 +4,7 @@ package io.github.mariusbayizere.fraudshield.notify.vault;
  * The vault could not answer. Its message never carries a plaintext value, a key or a ciphertext:
  * the vault's failures are logged like any other, and a log line is not a place for PII (D-20).
  */
-public final class VaultException extends RuntimeException {
+public class VaultException extends RuntimeException {
 
   private static final long serialVersionUID = 1L;
 

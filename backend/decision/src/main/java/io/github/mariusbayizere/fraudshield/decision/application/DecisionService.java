@@ -233,7 +233,7 @@ public final class DecisionService {
                         outcome.reasonCodes(),
                         decidedAt)));
     if (outcome.autoBlock()) {
-      addAutoBlock(events, transaction, record, outcome, scoring, decidedAt);
+      addAutoBlock(events, transaction, requestFingerprint, record, outcome, scoring, decidedAt);
     }
 
     mark = stage("decide", mark);
@@ -312,11 +312,12 @@ public final class DecisionService {
   private void addAutoBlock(
       List<DecisionEvent> events,
       Transaction transaction,
+      byte[] requestFingerprint,
       DecisionEvent.ScoringRecord record,
       DecisionOutcome outcome,
       Scoring scoring,
       Instant decidedAt) {
-    UUID block = UUID.randomUUID();
+    UUID block = derivedId("auto-block", transaction, requestFingerprint);
     events.add(
         new DecisionEvent.AutoBlocked(
             block,
@@ -326,7 +327,13 @@ public final class DecisionService {
             transaction.accountToken(),
             decidedAt,
             String.join(",", outcome.reasonCodes())));
-    events.add(notifications.compose(transaction, block, scoring, decidedAt));
+    events.add(
+        notifications.compose(
+            transaction,
+            block,
+            derivedId("customer-notification", transaction, requestFingerprint),
+            scoring,
+            decidedAt));
     FreezePort.FreezeCheck check =
         freezes.recordHigh(
             transaction.institutionId(),
@@ -342,6 +349,31 @@ public final class DecisionService {
               check.highDecisionsInWindow(),
               decidedAt));
     }
+  }
+
+  /**
+   * An id derived from the submission: the institution, the transaction id and the request
+   * fingerprint. A transaction decided twice for the same submission (a crash before the response,
+   * then a retry) yields the same auto-block and notification ids, so its second SMS intent is the
+   * same notification and is not sent twice; a different submission of the same transaction id
+   * yields ids that PostgreSQL never holds, so its intent can never reach another account's block
+   * (docs/architecture/decision-fact-ordering.md, section 4).
+   *
+   * @param kind what the id names
+   * @param transaction the transaction
+   * @param requestFingerprint SHA-256 of the canonical request
+   * @return a name-based UUID
+   */
+  static UUID derivedId(String kind, Transaction transaction, byte[] requestFingerprint) {
+    return UUID.nameUUIDFromBytes(
+        (kind
+                + "|"
+                + transaction.institutionId()
+                + "|"
+                + transaction.transactionId()
+                + "|"
+                + java.util.HexFormat.of().formatHex(requestFingerprint))
+            .getBytes(java.nio.charset.StandardCharsets.UTF_8));
   }
 
   /**

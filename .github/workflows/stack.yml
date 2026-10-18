@@ -121,7 +121,7 @@ jobs:
           dir=build/stack-diagnostics
           [[ -d "$dir" ]] || { echo "no stack diagnostics collected"; exit 0; }
           escape() { local t=$1; t=${t//'%'/'%25'}; t=${t//$'\r'/'%0D'}; t=${t//$'\n'/'%0A'}; printf '%s' "$t"; }
-          echo "::notice title=stack stack resources::$(escape "$(head -c 3500 "$dir/resources.txt")")"
+          [[ -f "$dir/resources.txt" ]] && echo "::notice title=stack stack resources::$(escape "$(head -c 3500 "$dir/resources.txt")")"
           if [[ "${{ job.status }}" != "success" ]]; then
             for service in mlflow object-store; do
               [[ -f "$dir/logs-$service.txt" ]] || continue

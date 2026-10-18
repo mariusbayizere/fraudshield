@@ -22,7 +22,7 @@ import pytest
 
 from fraudshield_ml import cli
 from fraudshield_ml.features.registry import REGISTRY, Dtype
-from fraudshield_ml.training import access, gate, smoke
+from fraudshield_ml.training import access, gate, gate_run, smoke
 from fraudshield_ml.training import battery as battery_module
 from fraudshield_ml.training.battery import NOVEL_VARIANT
 
@@ -373,3 +373,52 @@ def test_the_gate_refuses_a_cache_without_all_four_row_sets(
 
 def test_no_test_writes_to_the_committed_access_log() -> None:
     assert access.log_path() != access.DEFAULT
+
+
+def test_the_column_wise_loader_decodes_exactly_what_the_row_wise_path_did(
+    gate_cache: Path,
+) -> None:
+    """The declared gate run used the row-wise decoding; PB-67's curve uses this one. They must
+    be the same matrix, NaN for NaN, or the curve's 30K point is not the gate's model.
+    """
+    # gate_run.load is the row-wise decoding M5's bundle build uses (models.build).
+    vectors, extras = smoke.cache_read_any(gate_cache)  # type: ignore[misc]
+    row_wise = np.asarray(gate_run.load(vectors, extras).matrix)
+    column_wise = gate_run.load_cache(gate_cache).matrix
+    assert np.array_equal(row_wise, np.asarray(column_wise), equal_nan=True)
+
+
+@pytest.mark.req("TEST-14")
+def test_train_rows_keeps_that_many_cached_training_rows_in_time_order(gate_cache: Path) -> None:
+    full = gate_run.load_cache(gate_cache)
+    part = gate_run.load_cache(gate_cache, train_rows=200)
+    assert len(part.split.train) == 200
+    assert set(part.split.train) <= set(full.split.train)
+    assert list(part.split.train) == sorted(part.split.train), "the encoding needs time order"
+    assert part.split.validation == full.split.validation
+    assert part.split.calibration == full.split.calibration
+    assert part.test == full.test, "every size is scored on the same evaluation rows"
+    with pytest.raises(ValueError, match="training rows were asked for"):
+        gate_run.load_cache(gate_cache, train_rows=len(full.split.train) + 1)
+
+
+def test_a_metrics_only_gate_run_says_what_it_skipped(
+    gate_cache: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    args = ["gate", str(gate_cache), "--out", str(tmp_path), "--seeds", "1", "--resamples", "10"]
+    assert cli.main([*args, "--metrics-only", "--train-rows", "300"]) == 0
+    printed = capsys.readouterr().out
+    assert "(not run: --metrics-only)" in printed
+    assert "ONNX parity: not measured" in printed
+    assert "ABLATIONS" not in printed
+    assert "train 300/" in printed
+
+
+def test_a_learning_curve_run_is_logged_as_one(
+    gate_cache: Path, tmp_path: Path, private_access_log: Path
+) -> None:
+    """The access log says what each look was for; a curve point is not the declared gate."""
+    args = ["gate", str(gate_cache), "--out", str(tmp_path), "--seeds", "1", "--resamples", "5"]
+    assert cli.main([*args, "--metrics-only", "--train-rows", "300"]) == 0
+    last = json.loads(private_access_log.read_text().splitlines()[-1])
+    assert last["purpose"] == "PB-67 learning curve at 300 training rows"

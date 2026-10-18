@@ -173,6 +173,67 @@ class ResilienceApiTest {
 
   @Test
   @Tag("NFR-REL-01")
+  @Tag("FR-01-03")
+  void withRedisAndPostgresBothDownSubmissionsAreToldToRetryNotThatTheServerBroke()
+      throws Exception {
+    // Seen under load (2026-09-24): with both idempotency stores unavailable the claim threw and
+    // the client got a 500. The claim precedes any decision, so the honest answer is 503 with
+    // Retry-After: core banking retries a 503 and escalates a 500.
+    post("/api/v1/transactions/ingest", IngestApiTest.body(UUID.randomUUID(), "CARD").toString());
+    var docker = org.testcontainers.DockerClientFactory.instance().client();
+    String postgres =
+        io.github.mariusbayizere.fraudshield.decision.testing.TestDatabase.container()
+            .getContainerId();
+    UUID id = UUID.randomUUID();
+    final int scored = ApiHarness.SCORER.calls.get();
+    HttpResponse<String> refused;
+    boolean redisPaused = false;
+    boolean postgresPaused = false;
+    try {
+      ApiHarness.REDIS.pause();
+      redisPaused = true;
+      docker.pauseContainerCmd(postgres).exec();
+      postgresPaused = true;
+      refused = post("/api/v1/transactions/ingest", IngestApiTest.body(id, "CARD").toString());
+    } finally {
+      if (postgresPaused) {
+        docker.unpauseContainerCmd(postgres).exec();
+      }
+      if (redisPaused) {
+        ApiHarness.REDIS.unpause();
+      }
+    }
+    assertThat(refused.statusCode()).as(refused.body()).isEqualTo(503);
+    assertThat(refused.headers().firstValue("Retry-After")).contains("1");
+    assertThat(JSON.readTree(refused.body()).get("type").asString())
+        .isEqualTo("urn:fraudshield:problem:service-unavailable");
+    assertThat(ApiHarness.SCORER.calls.get()).as("nothing was decided").isEqualTo(scored);
+
+    // Retried once the stores are back, the same request is decided.
+    await()
+        .atMost(Duration.ofSeconds(30))
+        .pollInterval(Duration.ofMillis(500))
+        .until(
+            () ->
+                post("/api/v1/transactions/ingest", IngestApiTest.body(id, "CARD").toString())
+                        .statusCode()
+                    == 200);
+    // Leave no degraded window behind for the next test (the ci #343 lesson).
+    await()
+        .atMost(Duration.ofSeconds(10))
+        .pollInterval(Duration.ofMillis(500))
+        .until(
+            () ->
+                post(
+                                "/api/v1/transactions/ingest",
+                                IngestApiTest.body(UUID.randomUUID(), "CARD").toString())
+                            .statusCode()
+                        == 200
+                    && !degraded.degraded());
+  }
+
+  @Test
+  @Tag("NFR-REL-01")
   void withTheScorerDownTheFallbackDecidesAndSaysSo() throws Exception {
     ApiHarness.SCORER.failure = io.grpc.Status.UNAVAILABLE;
     for (int i = 0; i < 20; i++) {
@@ -205,7 +266,10 @@ class ResilienceApiTest {
   @Tag("NFR-REL-02")
   @Tag("D-15")
   void withPostgresDownDecisionsContinueAndArePersistedAfterRecovery() throws Exception {
-    // Warm the configuration cache, then take PostgreSQL away.
+    // Warm the configuration cache and the key's record, then take PostgreSQL away. In the
+    // assembled API a key verified in the last ten minutes keeps being admitted while the database
+    // cannot answer; a key no instance has verified is told to retry, not that it is bad (owner
+    // decision 2026-10-17, threat model R-13).
     post("/api/v1/transactions/ingest", IngestApiTest.body(UUID.randomUUID(), "CARD").toString());
     var docker = org.testcontainers.DockerClientFactory.instance().client();
     String container =
@@ -221,6 +285,20 @@ class ResilienceApiTest {
         assertThat(response.statusCode()).isEqualTo(200);
         decided.add(id);
       }
+      HttpResponse<String> unseen =
+          HTTP.send(
+              HttpRequest.newBuilder(URI.create(url("/api/v1/transactions/ingest")))
+                  .header("X-API-Key", ApiHarness.UNSEEN_KEY)
+                  .header("Content-Type", "application/json")
+                  .POST(
+                      HttpRequest.BodyPublishers.ofString(
+                          IngestApiTest.body(UUID.randomUUID(), "CARD").toString()))
+                  .build(),
+              HttpResponse.BodyHandlers.ofString());
+      assertThat(unseen.statusCode()).as(unseen.body()).isEqualTo(503);
+      assertThat(unseen.headers().firstValue("Retry-After")).contains("1");
+      assertThat(JSON.readTree(unseen.body()).get("type").asString())
+          .isEqualTo("urn:fraudshield:problem:service-unavailable");
     } finally {
       docker.unpauseContainerCmd(container).exec();
     }

@@ -67,15 +67,28 @@ public final class AfricasTalkingGateway implements SmsGateway {
     HttpResponse<String> response;
     try {
       response = client.send(request, HttpResponse.BodyHandlers.ofString());
+    } catch (java.net.http.HttpConnectTimeoutException notConnected) {
+      // Never connected: the request did not leave.
+      throw notConnected;
+    } catch (java.net.http.HttpTimeoutException timedOut) {
+      // Sent, and no answer in time: the provider may have accepted it (12.4).
+      throw new ProviderReplyUnknownException("SMS provider did not answer in time", timedOut);
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
-      throw new IOException("interrupted", e);
+      throw new ProviderReplyUnknownException("interrupted while waiting for the provider", e);
     }
     if (response.statusCode() / 100 != 2) {
       throw new IOException("SMS provider answered HTTP " + response.statusCode());
     }
-    JsonNode recipient =
-        JSON.readTree(response.body()).path("SMSMessageData").path("Recipients").path(0);
+    JsonNode recipient;
+    try {
+      recipient = JSON.readTree(response.body()).path("SMSMessageData").path("Recipients").path(0);
+    } catch (RuntimeException unreadable) {
+      // A 2xx reply that is not the provider's JSON: it may have been accepted (12.4).
+      throw new ProviderReplyUnknownException(
+          "SMS provider answered HTTP " + response.statusCode() + " with an unreadable body",
+          unreadable);
+    }
     if (!"Success".equals(recipient.path("status").asString())) {
       throw new IOException("SMS provider did not accept the message");
     }

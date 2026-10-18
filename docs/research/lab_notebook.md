@@ -2556,3 +2556,493 @@ runs meaningless, because the stack job was skipped.
 **The rule.** *Before declaring work done, read CI on the pushed head at job level and confirm
 that path-filtered jobs executed; a green local suite and a clean review are not substitutes for
 it.*
+
+### 2026-10-17 · A test that passes with the guarded code deleted is not evidence for the guard
+
+The fresh review of amendment 1's code (`docs/reviews/M6/m6-decision-2026-10-17-implementation-3.md`,
+MAJOR 1) put it in one example: *"No test has the SMS gateway throw an unchecked exception. Deleting
+`CustomerSmsSender.java:354-358` would re-send up to the bound (about 25 SMS) with every test
+green."* The contract's section 8 named a test for that guard, the test passed, and the guard could
+have been removed without any test noticing. The same review found the same shape in other rows: an
+envelope without a payload that no test sent, and an "`outcome_unrecorded` at the bound" whose cited
+record was refused by the database at once and never reached the bound. In the rows the owner had
+accepted as partial, it found a batch-budget test that passed with the budget deleted.
+
+**It is the third consecutive review with this finding as a MAJOR, and the headline of this one.**
+The second implementation review of M6, whose headline was unbounded retries (MAJOR 1), also found
+(MAJOR 3) a "malformed payload is dead-lettered" claim that held for three fields of one handler;
+the first (`-implementation-1.md`) found "every invariant is tested" untrue. Each time the rows were
+corrected one by one, and each time the next review found more.
+
+**The family is older than M6:**
+
+- *The parameter digest* (2026-09-18, "A guard with two doors"): it hashed parameter values only, so
+  adding two checks left it matching and the shipped report described a run with two fewer checks.
+  The guard was green and guarded the wrong thing.
+- *The D-08 ceiling* (2026-09-19, "Out-of-fold by row is not out-of-fold by incident"): the
+  single-feature AUC stayed under the 0.80 leakage ceiling while the out-of-fold encoding itself
+  leaked an incident's siblings into its own score. The check passed on an inflated measurement.
+- *The gitleaks self-test* (`PB-75`): about 3 % of runs fail on generated secrets, so its passes
+  are partly luck. A pass that can happen by chance says as little as a flaky failure.
+- *The MLflow fake* (2026-09-23, "A fake is a hypothesis about an API"): 537 tests passed against a
+  fake that returned the wrong error shape. Every one of them confirmed the author's reading of the
+  API, not the API.
+
+**Why it keeps recurring.** Writing the claim and writing the test are separate acts. A claim is
+written once, against what the code is meant to do; a test is written against what was convenient
+to set up; and until now nothing checked one against the other. A review reads the claim, sees a
+test named next to it and a green run, and moves on.
+
+**The rule** (owner, 2026-10-17). *For every claim that a property is tested, ask: would this test
+fail if the code it claims to prove were deleted? Where the answer is not yes, the claim says so in
+those terms, "deleting X would not fail any test", not in softer words, and the count of such rows
+is reported rather than closed with wording.* Every review of section 8 applies it row by row.
+
+**The audit that followed** (2026-10-17). Held to the deletion standard, the 38 rows of section 8
+gave 13 proved in full, 24 in part and 1 (I7e) not at all, in an audit made for the author by a
+separate agent and then checked by the reviewer. **That audit found 21 of the 24 partial rows claiming
+more than their tests prove, and they include rows written before amendment 1 that had passed every
+earlier review** (I7, I8, I12, I13, the revocation clause of I14). The reviews were not negligent:
+each checked the claims and checked the tests, but separately, and the gap lives exactly between
+the two. A row and its test can each look right, and still not meet. The deletion question is the
+check that joins them: it cannot be answered by reading the claim alone, or the test alone.
+
+Four rows were then closed with tests (I7e, I8, I12, I14's revocation clause); the 22 still partial
+went to the backlog one row each (`PB-80` to `PB-101`), with their "deleting X would not fail any
+test" wording, so nobody has to rediscover the gap.
+
+**Beyond M6.** Every remaining milestone that writes a claim table of the same kind (requirement
+rows naming their tests, gate criteria naming their evidence, contract invariants) applies the
+same standard before its tag, row by row, and reports the count rather than closing it with
+wording. The owner asked for it to be written into the master prompt's review section, so that M7
+to M12 inherit it (`docs/parallel/M6_updates.md`, "Proposed amendment to the master prompt").
+
+## M7 — staff identity, authorisation and audit
+
+### 2026-09-22 · A fix whose test never reached it
+
+This belongs with the vacuous-test entries (2026-09-19, "A test whose fixture lacks the condition it
+tests passes vacuously"). It is the same defect one level up: there the *test* was vacuous; here the
+*fix* was, and a test existed but never reached the fix.
+
+**The defect.** After M7 moved staff accounts onto JPA (ADR 0071), the independent review found
+that a row-locking query hands back the entity the transaction already holds, without refreshing it.
+The case is an administrator editing their own account, whom the service reads as the actor before
+locking the target. A full-row flush could then write an old password hash and token version back
+over a concurrent password change. The fix added a `refresh` after the locking query, plus
+`@DynamicUpdate`. Its test passed, and the review record said "fixed".
+
+**The fix did not work in the case it was written for.** Hibernate 7 compares the version of the row
+the locking query returns with the copy it holds. When the version has moved, which is exactly
+when the copy is stale, it throws "conflicting version of entity already held in persistence
+context" *from the query itself*. The `refresh` on the next line never ran, and the race answered
+500 instead of 409. The test had seeded the conflict with a password change, which does not advance
+the version, so the query succeeded and the refresh ran. It only ever exercised the branch where the
+fix was not needed. `@DynamicUpdate` independently blocked the write-back, so every assertion held.
+
+**How it was found.** Mutation K1 removed only the refresh, and it survived. The survivor had a
+ready explanation ("defence in depth: `@DynamicUpdate` covers it"), and the review record briefly
+filed it that way. The owner asked instead whether the refresh protects anything the column-only
+save does not, and required either a test that fails without it or a written argument that nothing
+does. Writing that test meant forcing the real interleaving: holding the row lock while a lockout
+committed, which advanced the version. The first run failed *with the fix in place*, and the stack
+trace pointed at the locking query, not at the refresh. The fix became lock-by-refresh,
+`refresh(entity, PESSIMISTIC_WRITE)`, which has no query to reject the row (`8f6bdba`).
+
+**It happened again the same day.** The analytic staleness bound for the session cache had a
+surviving mutation too: B1, which anchors only the version tier after the read. The ready
+explanation was that a missing session entry reloads both tiers, so the version tier can never act
+alone. That is true for one instance and one session. It is false once another instance has cached
+a second session of the same account in Redis. The test for that path kills B1 at exactly 2,000 ms
+(`5b728a1`).
+
+**The rule.** A surviving mutation is a question, not a verdict. "Equivalent" and "defence in
+depth" are claims, and each needs the same evidence as any other: a test that fails without the
+code, or a written argument covering every path. Two survivors were explained away with a
+plausible sentence, and both sentences were wrong.
+
+*Why it belongs in the paper:* the earlier vacuous tests were silent. This one was worse, because
+it produced a false positive about a fix. The review table read "Fixed; test; mutation killed" —
+killed for K2, which removed *both* defences. A reader of the record would have seen three
+confirmations of a fix that did nothing in its own scenario. Counting killed mutations measures the
+tests; only investigating the survivors measures the claims.
+
+### 2026-09-24 · The guard could not detect what it had just planted, 4% of the time
+
+`tools/bin/gitleaks-selftest` exists to prove the secret scanner still catches secrets. It builds a
+throw-away repository, plants randomly generated fake credentials, scans it, and fails unless
+exactly those credentials are reported. It is the control for every "no leaks found" line in this
+repository's CI.
+
+It failed in a devcontainer run with `NOT DETECTED generic-api-key in
+contracts/kafka/examples/fs.planted.example.json`. The same self-test had passed on the same
+commit forty minutes earlier.
+
+**The scanner's own allowlists were skipping the planted secret.** gitleaks' `generic-api-key`
+rule discards two kinds of value before reporting, as its trace log says plainly
+(`skipping finding: rule allowlist`):
+
+- a value that is **all letters**, the standard filter for placeholders like `your-api-key`. A
+  random 24-character alphanumeric body is all letters with probability (52/62)^24 ≈ 1.5%.
+  Measured: 0 of 100 all-letter values reported, 98 of 100 with at least one digit.
+- a value containing a **stopword substring** — `http`, `text`, `rail` and several hundred more,
+  compiled into the binary. About 0.4% of 24-character bodies, 6 of 1,500 measured.
+
+Together, about 4% per planted value; end to end, **2 failures in 25 local runs**.
+
+**Why this is the vacuous-check family, and worse.** The earlier entries (2026-09-19, fixtures that
+lack the condition they test; 2026-09-22, a fix whose test never reached it) are all cases where an
+artefact is correct in isolation and wrong in context. Here the self-test is correct, the planted
+secret is correct, the scanner is correct — and the *composition* is unsound about 4% of the time,
+for a reason that is invisible in both the test and the configuration, because it lives in the
+scanner's compiled-in allowlist. Reading either file forever would not find it. The trace log
+found it in one command.
+
+There is a second, sharper reading. A guard that fails randomly trains its readers to re-run it.
+The failure mode of "flaky control" is not a red CI: it is that the next real regression gets
+re-run too, and passes on the second draw, because the secret it fails to plant is drawn again.
+The fix therefore could not be "retry the self-test". It had to be "never plant a secret the
+scanner would skip": the generator now scans its own candidates in a neutral path and regenerates
+the ones that come back undetected, bounded at eight attempts, with exhaustion reported as a
+finding rather than retried away. A digit is planted in each value first, which removes the 1.5%
+branch cheaply.
+
+*The test the fix needed:* `tools/tests/test_gitleaks_selftest.py` asserts that 120 generated
+values are all detected — and, because that assertion would pass vacuously if the probe reported
+everything as detectable, a control asserts that a known-skipped value (all letters, and one
+containing `http`) comes back **not** detected. The probe has to be able to say no.
+
+### 2026-09-24 · A green tick for a job that never ran
+
+While diagnosing the above, the `devcontainer` workflow reported **success** on the commit after
+the failing one. I nearly reported that as proof the earlier failure was transient.
+
+It proved nothing. The workflow gates its only real job behind a path filter,
+`DEVCONTAINER_INPUTS` (`.devcontainer/**`, `Makefile`, `docker-compose*.yml`, `uv.lock`, `pom.xml`,
+lockfiles). The commit in between was documentation only, so the build job was **skipped** — and a
+run whose only substantive job is skipped still reports success, because nothing failed.
+
+**What caught it** was not suspicion of the tick. It was asking a different question:
+`gh run view <id> --json jobs` and reading each job's conclusion, where the job says `skipped`
+rather than `success`. The workflow-level conclusion is a summary of what ran, and it cannot
+distinguish "everything passed" from "nothing ran".
+
+This is the same shape as the entry above, one level up: the artefact (the green tick) is correct,
+and the inference from it (the pull failure was transient) does not follow. The difference is that
+here the evidence needed no reasoning at all — one flag on the command already in use.
+
+*Standing rule, now applied:* when a CI result is used as evidence for anything, check that the job
+that would have produced the evidence actually executed. A conditional job, a path filter, a
+matrix exclusion or a cancelled run all produce ticks that mean "not run". The gates this project
+cites — the Java suite, the licence inventory, the all-files hook run — each live in a job that can
+be skipped, so each citation needs the job-level check, not the run-level one.
+
+### 2026-10-17 · A dependency's declared licence is not evidence of its licence
+
+`nvidia-nccl-cu12` 2.31.2 declares `License-Expression: LicenseRef-NVIDIA-Proprietary`. The
+`License.txt` the same wheel ships is **BSD-3-Clause**, with NVIDIA, Lawrence Berkeley National
+Laboratory and the US Department of Energy named in the endorsement clause, plus NVTX files under
+Apache-2.0 with LLVM exceptions. **The metadata tag and the shipped text disagreed, and the shipped
+text governed**: a licence is the grant that comes with the software; a tag is someone's summary of
+it.
+
+M4 found this first, on 2026-09-22, and wrote it into the NCCL entry in `licences.py` ("read the
+file, not the label"). M7's updates file, written on a branch cut before that entry, still carried
+NCCL as a proprietary, non-OSI flag; the owner's decision was taken on that note, and the M7 session
+read the wheel again before finding M4's entry on `main`. The lesson has two halves. The first is
+the rule itself. The second is that a note about a dependency goes stale the moment another branch
+settles the question, so the merged tree, not the branch's own notes, is what to read first.
+
+Reading the texts again was not wasted: it showed what the label-reading had also hidden. `scipy`
+1.18.1's own code is BSD-3-Clause, but its Linux wheel bundles OpenBLAS, LAPACK, the GCC runtime
+(GPL-3.0+ with the GCC exception) and `libquadmath` (LGPL-2.1+), each with notice obligations; and
+`xgboost` is a runtime dependency of `fraudshield-ml`, so all of it reaches any ML image. Both are
+flagged to M9 with an acceptance criterion (`docs/parallel/M9_updates.md`).
+
+**The rule.** *A dependency's declared licence (metadata, classifier, SPDX tag) is a pointer, not
+evidence. The evidence is the licence text it ships and, for a binary wheel, every bundled
+component's text too. Record what the text says, and where the two disagree, say so.* It is the
+same family as the deletion standard of the same day: a claim, here a tag, accepted without checking
+it against the thing it describes.
+
+### 2026-10-17 · A revoke that revoked nothing, and a cause I named wrongly
+
+M6's `DatabaseSecurityTest` failed on M7's branch the moment the two met: five of V70's SECURITY
+DEFINER functions were executable by `fs_scorer`. I fixed it by revoking each function from PUBLIC,
+and wrote in V70 and in the commit (`3c13c5c`) that V11's default privileges "apply only to objects
+created by the role that set them". The independent review showed that was false. Flyway runs every
+migration as `fs_migrator`, the same role that ran V11. The real cause: V11's
+`ALTER DEFAULT PRIVILEGES IN SCHEMA fraudshield REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC` has never
+done anything. Per-schema default privileges are added to the global ones; they cannot take away
+PUBLIC's built-in EXECUTE, which only the global form can (PostgreSQL, ALTER DEFAULT PRIVILEGES).
+Every function created since V11 was executable by every role unless its migration revoked it by
+hand; M6's migrations did so for each of their SECURITY DEFINER functions, and V70 did not.
+
+The fix was right and the explanation wrong, and the wrong explanation would have taught the next
+migration author the wrong lesson ("use the same role") while the real hole stayed open. V71 now sets
+the global default, and `DatabaseSecurityTest` checks it on a function created after the migrations.
+It also pins every SECURITY DEFINER function to its callers and its `search_path`. Before, deleting
+`SET search_path` from a V70 function, or granting it to the wrong role, failed no test.
+
+The same review corrected the entry above. NCCL's `License.txt` does not contain NVTX's licence; it
+points to NVTX's repository for it, so the text must be fetched. And the rule "for a binary wheel,
+every bundled component's text too" had been applied to scipy and NCCL but not to the package that
+brought them in. `xgboost`'s x86-64 wheel carries 309 MiB of compiled CUDA code and a statically
+linked CUDA runtime under NVIDIA's terms, plus `libgomp`, with no licence file for either
+(M9_updates.md, From M7).
+
+**The rule.** *A root cause is a claim like any other: it is proved by the mechanism, not by the
+fix working. A fix can succeed for a reason its author did not understand, and an explanation that
+was never checked against the documentation becomes the next person's mistake.*
+
+### 2026-10-17 · Two modules that each passed, and an application that would not start
+
+M6 and M7 each had a test application, and each module's suite was green. Neither milestone had
+started the real API application with the other's code in it: M6 waited for M7's adapters, M7
+waited for M6 to depend on its modules. When M7 assembled it, the first CI run did not get past
+start-up, and each later run found something the module suites could not:
+
+- **Three bean-name collisions, where review had predicted two.** The third was M7's
+  auto-configuration package: the API application's root package already covered it, so Spring Data
+  registered every staff repository twice.
+- **A fix that broke the other side.** Registering the package only when no package covered it
+  worked for the API and emptied `AuthTestApplication`: asking Boot which packages were registered
+  created the bean that holds them, frozen before M7's own package was added. Reading the bean
+  definition instead fixed both.
+- **A design conflict no module could show.** M7 reads a key's record from PostgreSQL once its
+  2-second cache expires; M6 promises decisions while PostgreSQL is down (D-15). M6's outage test
+  failed on the assembled application, and failed with **401**: the database exception escaped the
+  filter, the error dispatch went through the contract chain, and the client was told its key was
+  bad. That is now a 503; which way to resolve D-15 itself is the owner's decision.
+- **Tests that interfered through Kafka.** The new test runs with no doubles. Spring kept its
+  context alive, and its real SMS gateway joined the same consumer group as the other tests'
+  doubles and took some of their messages.
+- **A test with no doubles that had two.** To reuse M7's HTTP helper I put M7's test-jar on the
+  ingest tests' classpath. The API application scans the whole root package, so it found M7's test
+  application and took its beans: a recording mailer and a fixed `@Primary` clock. The "no doubles"
+  test passed with both inside it, and the fixed clock stopped M6's rate-limit refill and its hold
+  timer in every other API test, which is how it was found (a diagnostic showed a bucket with fewer
+  tokens after the advertised wait than before it). The test now fails if any bean in the context
+  comes from test code; the claim "no doubles" is asserted, not stated.
+
+The test the owner asked for passed as soon as the application started, and once while it was not
+yet the test it claimed to be. Its value came from every run in which something failed.
+
+**The rule.** *"Assembled" is a claim, and its evidence is the assembled thing running: the real
+application, started with nothing replaced, doing one journey that crosses the parts. Two green
+module suites prove two modules.*
+
+### 2026-10-17 · A test of an absence that looked only where its author looked
+
+`AssembledApplicationTest` exists to prove one absence: the API application, started as it ships,
+contains no test bean. It passed twice while it contained two. To reuse M7's HTTP helper I had put
+M7's test-jar on the ingest tests' classpath. The API application scans the whole root package, so
+it found M7's test application and registered its beans, a recording mailer and a fixed `@Primary`
+clock. The test checked the two beans its author had in mind, the ingestion API's ports, and those
+were the real ones. Nothing looked at the rest of the context.
+
+The fixed clock also reached every other API test's context. It stopped M6's rate-limit refill and
+its hold timer, so tests that had nothing to do with M7 failed with timeouts for several CI runs. A
+diagnostic found it: four seconds after a `Retry-After: 4`, the key's bucket held fewer tokens than
+before the wait, so time was not passing at all.
+
+The fix is enforced now. The test-jar is gone, and the test enumerates every bean in the context and
+fails if any class was loaded from test code.
+
+**The rule.** *A test that asserts an absence must assert it over the whole of what it guards (here,
+every bean in the context), not over the parts its author remembered. "No doubles" checked by
+naming two beans is a claim about two beans.*
+
+### 2026-10-17 · A check that ran, failed, and did not stop the push
+
+I pushed this round's four commits with a command chain that ran the commit-message check, then the
+push. The check failed: two lines of 73 characters. The push ran anyway, because the chain joined the
+check to the next step with `;`, not `&&`. The two commits were reworded and replaced within minutes,
+with a force-push guarded by a lease on the exact head pushed.
+
+It is the same failure as the matrix committed stale behind `| tail` (the pipe returned the exit
+status of `tail`, not of the check) and as the `hooksPath` incident, where the hook that should have
+refused a commit never ran. Each time a check existed and ran, or appeared to, and what followed did
+not depend on its result.
+
+**The rule.** *A check guards a step only if the step cannot run when the check fails. Join them with
+`&&` or `set -e`, never `;` or a pipe, and confirm that a deliberately failing input stops the chain.*
+
+*The entries below were written on `m4/generalisation` in September and merged on 2026-10-18;
+the notebook is append-only, so they follow later dates.*
+
+### 2026-09-22 · Pre-registration: the PB-67 learning curve, before any size is run
+
+Committed before the cache is built and before any model is fitted at a new size. M4 closed with
+recall at the 0.60 flag threshold missed **at 30,000 training rows** (0.736 against 0.88; ADR
+0031). The owner asked whether that is a property of the benchmark or of the training volume: 260
+frauds is about 3% of the benchmark's fraud.
+
+**Design, fixed now.** One feature cache from a 520,000-row corpus, so the train period's pool
+holds about 306,000 rows. It carries **240,000 training rows** spread evenly across that pool, and
+the **same evaluation rows as the declared gate run**: 20,000 validation rows outside the
+calibration tail, 20,000 calibration rows, and all 101,909 test rows. Sizes **30K, 60K and 120K**
+are spread evenly within the cached 240K, in time order. At every size `fs-features gate
+--metrics-only --train-rows N --seeds 1 2 3 4 5 --resamples 1000`: the same model, the same
+thresholds, seed 1 reported with its bootstrap interval and all five seeds as mean ± SD. One job at
+a time, memory checked before each.
+
+**One difference from the declared gate, stated in advance.** The gate's 30,000 rows came from the
+last 128 days of the train period (a 400,000-row corpus); this curve's 30K comes from a pool
+reaching further back. The curve is compared with itself, and its 30K point with the gate's.
+
+**Prediction.** Recall at 0.60 stays **below 0.88 at every size**, rising to **between 0.76 and
+0.84 at 240K**. Recall at the 1% FPR budget rises to **between 0.87 and 0.91** at 240K. The reason:
+the ensemble ranks well already and the calibrated score is conservative at 0.60 (precision 0.927
+at 30K). More training data should sharpen confident fraud a little without changing that. About
+7% of test fraud is the reversal-scam variant, which the model misses by construction.
+
+**What each outcome would mean, decided now:**
+- **Recall at 0.60 reaches 0.88** at some size (point estimate): the gate miss was a
+  training-scale artefact, and the smallest such size is the volume at which the gate is met.
+- **It stays below 0.88 and flattens** — 120K to 240K gains less than the 240K interval's
+  half-width, and the 240K interval's upper bound is below 0.88: the miss is a property of this
+  benchmark and model, and the paper can say so.
+- **It stays below 0.88 but is still rising at 240K**: neither conclusion holds, and the claim
+  stays "at the volumes measured", with the largest volume named.
+
+This entry will not be edited after the runs.
+
+### 2026-09-22 · PB-67's design changes: three points here, 240K in a Codespace
+
+The pre-registered design (`d071147`, the entry above) built one 240,000-row cache from a
+520,000-row corpus. On this laptop (7.6 GiB, 4 cores, shared with other sessions) the build was
+stopped by the system for low memory before it finished: the corpus alone is about 2 KB a row in
+memory, and swap was already full. Nothing was written and nothing was scored. **The
+pre-registration is unchanged, its prediction included.** What changes, on the owner's decision:
+
+- **30K, 60K and 120K run here**, one at a time, under a memory watchdog. They come from one cache
+  built from a **360,000-row corpus** (a train-period pool of about 146,000 rows) holding 120,000
+  training rows spread across it, with the same 20,000 validation, 20,000 calibration and 101,909
+  test rows as the declared gate run. 30K and 60K are spread within the cached 120K.
+- **240K runs in a GitHub Codespace** (16 GB) with the pre-registered design as written: its own
+  520,000-row corpus and 240,000 training rows. Every artefact now names its machine
+  (`# evidence-machine:`), since accuracy results are admissible from any machine and ADR 0010
+  restricts only latency.
+- **The two pools differ.** The laptop's three points sample the last ~146,000 train-period rows;
+  the Codespace's 240K samples the last ~306,000. The 240K point therefore also reaches further
+  back in time, and the curve's last step changes both volume and span. That is stated beside the
+  result rather than discovered later.
+- **Nothing is concluded until all four points exist.** The three laptop points are reported as an
+  interim result against the prediction; ADR 0031 and the paper's contribution wait for 240K.
+
+### 2026-09-22 · PB-67, INTERIM: three laptop points, 240K still to run
+
+**Interim, and labelled so.** Three of the four pre-registered sizes, from one laptop cache
+(`m4_learning_curve_cache_120k_d8083dbc.txt`: a 340,000-row corpus rather than the 360,000 the
+design entry named, trimmed to widen the memory margin). They are scored on the declared gate
+run's test and calibration rows, which match its cache exactly. ADR 0031 and the paper's
+contribution are **not** updated until the 240K point exists.
+
+| Training rows (fraud) | Recall at 0.60, seed 1 [95% CI] | Five seeds | Recall at the 1% FPR budget (realised FPR) |
+|---|---|---|---|
+| 30,000 (259) | 0.795 [0.766, 0.818] | 0.767 ± 0.025 | 0.869 (0.68%) |
+| 60,000 (532) | 0.799 [0.773, 0.823] | 0.772 ± 0.038 | 0.854 (0.30%) |
+| 120,000 (1,066) | 0.798 [0.772, 0.821] | 0.779 ± 0.023 | 0.878 (0.82%) |
+
+**Against the pre-registered prediction.**
+- *Recall at 0.60 stays below 0.88 at every size:* **so far, yes**, and not narrowly. Every upper
+  bound is at or below 0.823.
+- *It reaches 0.76–0.84 at 240K:* not yet measurable. The 30K–120K points already sit inside that
+  range.
+- *Recall at the 1% FPR budget reaches 0.87–0.91 at 240K:* not yet measurable. The three values
+  are not strictly comparable with each other, because the realised FPR at the budget's threshold
+  swings with isotonic ties (0.30% to 0.82%).
+
+**What the three points show, and what they do not.** Quadrupling the training data, from 259 to
+1,066 frauds, moves recall at 0.60 by +0.003 at seed 1 and +0.012 on the five-seed means — inside
+every interval. That is consistent with the plateau outcome and with the pre-registration's
+reason. It does not decide it: the pre-registered test is the 120K-to-240K step.
+
+**A larger effect than volume, found on the way.** This curve's 30K point (0.795) is 0.059 above
+the declared gate's 30K (0.736), with intervals that only just fail to overlap. Both use 30,000
+training rows; they differ in which rows. The gate's come from a 400,000-row corpus and this
+curve's from a 340,000-row one, so they cover different time spans with different amounts of
+truncated history (PB-76). Which training rows are used moves recall more than quadrupling them
+does. That is a warning about the 240K point too: it comes from a third corpus depth.
+
+### 2026-09-24 · PB-67 concluded: the recall shortfall is not training volume
+
+The fourth point ran on this laptop, not in a Codespace: the owner asked for it here once M6's
+tests freed the machine. The build that was reaped for memory on 2026-09-22 completed this time
+under a watchdog — `nice -n 15`, `oom_score_adj 800` so a squeeze would take this job rather than
+another agent's tests, and an abort at three consecutive readings below 500 MB available. It never
+struck: 381,909 rows featurised, peak RSS 1.4 GB. Evidence:
+`docs/benchmarks/m4_learning_curve_cache_240k_d8083dbc.txt` (cache, commit 2a876d8) and
+`docs/benchmarks/m4_learning_curve_240k_d8083dbc.txt` (gate, commit 6b36fc5), both
+`evidence-tree-state: clean`, both on the i5-6200U.
+
+**The curve, complete.** Same 101,909 test rows at every size, five seeds, 1,000 bootstrap
+resamples; seed 1 with its interval, then the five-seed mean.
+
+| Training rows (frauds) | Recall at 0.60 [95% CI] | Five seeds | Recall at 1% FPR budget (realised FPR) |
+|---|---|---|---|
+| 30,000 (259) | 0.795 [0.766, 0.818] | 0.767 ± 0.025 | 0.869 (0.30%) |
+| 60,000 (533) | 0.799 [0.773, 0.823] | 0.772 ± 0.038 | 0.854 (0.55%) |
+| 120,000 (1,066) | 0.798 [0.772, 0.821] | 0.779 ± 0.023 | 0.878 (0.82%) |
+| **240,000 (2,132)** | **0.783 [0.755, 0.808]** | **0.795 ± 0.024** | **0.860 (0.26%)** |
+
+**The pre-registered test, applied as written.** The rule was: *stays below 0.88 and flattens —
+120K to 240K gains less than the 240K interval's half-width, and the 240K interval's upper bound
+is below 0.88.*
+
+- 120K → 240K at seed 1: **−0.015**, a loss, not a gain, and smaller in size than the 240K
+  interval's half-width of 0.027.
+- The 240K interval's upper bound is **0.808**, below 0.88 by 0.072.
+- Across the whole 8× range the five-seed mean moves **0.767 → 0.795**, +0.028, while the gap to
+  0.88 is 0.085. Every interval at every size excludes 0.88.
+
+**Conclusion: the shortfall is a property of this benchmark and this model, not of training
+volume.** Eight times the training data, from 259 to 2,132 frauds, does not move recall at the 0.60
+flag threshold outside its own noise. The paper may say so, scoped to the volumes measured
+(30,000–240,000 rows of this draw) and to this model.
+
+**Against the prediction, including where it was wrong.**
+- *Recall at 0.60 stays below 0.88 at every size:* **held**, and not narrowly.
+- *Reaching 0.76–0.84 at 240K:* **held** on both estimates (0.783 seed 1, 0.795 five-seed) — but
+  the prediction said "rising to", and it did not rise. The range was right for the wrong reason.
+- *Recall at the 1% FPR budget rising to 0.87–0.91 at 240K:* **missed at seed 1** (0.860, interval
+  [0.838, 0.881]) and held on the five-seed mean (0.876 ± 0.013). It also did not rise: 120K
+  already read 0.878. These values stay hard to compare across sizes because the realised FPR at
+  the budget's threshold swings with isotonic ties — 0.26% to 0.82% across the four points — so
+  each is a different operating point in all but name.
+
+**The confound from the interim entry stands, and is now the larger effect.** This curve's 30K
+(0.795) remains 0.059 above the declared gate's 30K (0.736), and the four curve points span only
+0.016. Which training rows are used — how deep the corpus reaches, how much history is truncated
+(PB-76) — moves recall several times more than how many rows are used. That is the finding worth
+carrying into the paper, and it is not the finding PB-67 set out to test.
+
+**What this does not settle.** Whether a differently built model, or features that survive corpus
+truncation, would reach 0.88 on this benchmark. PB-76 is where that goes.
+
+### 2026-09-24 · The watchdog that made the 240K run possible, and the pattern to reuse
+
+The 240K cache build was reaped by the system for low memory on 2026-09-22 and completed on
+2026-09-24 on the same 7.6 GiB laptop. What changed was not the work but how it was run. **This is
+the pattern for every long run on this machine from now on** (owner, 2026-09-24):
+
+1. **Low priority** — `nice -n 15`. The run yields to whatever else is on the machine; several
+   agents share it.
+2. **Volunteer for the OOM killer** — `oom_score_adj 800` on the worker and every child, refreshed
+   while it runs. If memory runs short the kernel takes *this* job, not another agent's test suite.
+   On 2026-09-22 the reaping was indiscriminate; this makes it predictable and self-inflicted.
+3. **Abort before thrashing** — a loop reading `MemAvailable` every 10 s, stopping the run after
+   **three consecutive readings below 500 MB**. Three, not one: a single dip during a large
+   allocation is normal, a sustained one is the machine swapping.
+4. **Measure what it cost** — `/usr/bin/time -f "PEAK_RSS_KB %M ELAPSED %e"` inside the evidence
+   wrapper, so the artefact records peak memory next to the result.
+
+On the 240K build the watchdog never struck: peak RSS 1.4 GB against about 2 GB available at the
+start, and the machine stayed responsive. The scripts are
+`scratchpad/lc_cache_240k.sh` and `scratchpad/lc_gate_240k.sh`.
+
+**Why this is worth a notebook entry rather than a habit.** The earlier reaping cost a day and made
+the 240K point look like it needed a 16 GB Codespace, which it did not. The constraint was never
+total memory; it was that a long run and another agent's test suite were competing for the last
+gigabyte with no policy about who should lose.

@@ -9,7 +9,7 @@ requirements:
   title: POST /api/v1/transactions/ingest accepts transaction payload; validates schema; publishes to
     Kafka within 5ms
   priority: M
-  milestone: M6
+  milestone: M10
   srs_text: 'Acceptance criterion: Locust load test: 10,000 req/sec for 60 seconds; all within 5ms Kafka
     publish latency; zero data loss confirmed by consumer offset check'
   defects:
@@ -124,27 +124,38 @@ requirements:
   title: API key authentication for core banking system (machine-to-machine); JWT for human-facing endpoints;
     keys scoped to ingestion endpoints only
   priority: M
-  milestone: M6
+  milestone: M7
   srs_text: 'Acceptance criterion: API key cannot access /api/v1/alerts or /api/v1/admin; confirmed by
     permission test; key rotation supported without downtime'
   defects: []
-  status: IN_PROGRESS
+  status: DONE
   verification: test
   implementation:
   - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/auth
   - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/web/ApiKeyFilter.java
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/apikey
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/security
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/config/StaffIdentityWiring.java
   evidence:
   - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/IngestApiTest.java (keys
     required and scoped; no 2xx on staff paths)
+  - 'backend/admin/src/test/java/io/github/mariusbayizere/fraudshield/admin/AuthorisationMatrixTest.java
+    (every key scope against every operation: 403 on /alerts and /admin; apiKeysReachOnlyTheMachinePathsByTheContractFileAlone:
+    an oracle read from the contract file alone)'
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/apikey/ApiKeyLifecycleTest.java
+    (rotation keeps the old key for the 24-hour overlap)
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/AssembledApplicationTest.java
+    (an admin-issued key submits in the real application)
   deviations: []
   notes: 'M6 (2026-09-24): M6''s side is done: the ApiKeyAuthenticator port, scopes on the machine paths.
-    Key verification, rotation and staff-path 403s are M7''s.'
+    Key verification, rotation and staff-path 403s are M7''s. M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md):
+    proved in full. M7''s verifier is bound to M6''s port in the assembled API (ADR 0073).'
 - id: FR-01-06
   section: 3.1 FR-01 Transaction ingestion API
   title: Batch ingestion POST /api/v1/transactions/ingest/batch accepts up to 1,000 transactions; returns
     202 Accepted with job_id; results queryable
   priority: S
-  milestone: M6
+  milestone: M10
   srs_text: 'Acceptance criterion: Job status endpoint GET /api/v1/jobs/{id} returns progress; all 1,000
     transactions scored within 30 seconds'
   defects: []
@@ -358,7 +369,7 @@ requirements:
   title: 'ML scoring latency: p50 < 15ms, p95 < 25ms, p99 < 40ms (ensemble + SHAP for flagged transactions
     combined)'
   priority: M
-  milestone: M5
+  milestone: M10
   srs_text: 'Acceptance criterion: Locust benchmark: 200 concurrent scoring requests; all percentiles
     confirmed on target hardware spec'
   defects:
@@ -408,7 +419,7 @@ requirements:
   title: Redis feature store pre-computes and updates velocity features for every account within 100ms
     of transaction completion
   priority: M
-  milestone: M5
+  milestone: M10
   srs_text: 'Acceptance criterion: Redis key TTL set to 30 days; stale key handled by DB fallback; update
     latency measured by Prometheus; p99 < 100ms'
   defects: []
@@ -467,7 +478,7 @@ requirements:
   title: 'HIGH risk (ensemble_score >= 0.85): auto-blocked within 50ms of transaction receipt; account
     flagged; customer SMS dispatched asynchronously'
   priority: M
-  milestone: M6
+  milestone: M10
   srs_text: 'Acceptance criterion: Load test: 1,000 HIGH-risk events/sec; all blocked within 50ms p95;
     0 incorrectly approved; SMS dispatched within 5s'
   defects:
@@ -520,7 +531,7 @@ requirements:
   section: 3.3 FR-03 Risk decision and auto-block engine
   title: 'LOW risk (< 0.60): approved and processed within total pipeline latency budget; no analyst involvement'
   priority: M
-  milestone: M6
+  milestone: M10
   srs_text: 'Acceptance criterion: Approval decision within 50ms total; approval rate consistent with
     expected 0.87% fraud rate in test set'
   defects: []
@@ -944,11 +955,18 @@ requirements:
   srs_text: 'Acceptance criterion: All fields stored; UNIQUE(email); UNIQUE(employee_id); new account
     receives welcome email with temporary password + Google OAuth setup link'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/admin/src/main/java/io/github/mariusbayizere/fraudshield/admin/users
+  evidence:
+  - backend/admin/src/test/java/io/github/mariusbayizere/fraudshield/admin/UserAdministrationTest.java
+    (UNIQUE email; UNIQUE (institution, employee ID), the same ID accepted at another institution)
+  deviations:
+  - docs/adr/0072-employee-ids-are-unique-per-institution.md
+  notes: 'M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md): proved in part. Employee IDs
+    are unique per institution (D-31, ADR 0072). Not proved: the Google set-up link in the welcome email
+    (not built); most stored fields; the database backstop (PB-107).'
 - id: FR-06-02
   section: 3.6 FR-06 Admin panel
   title: Admin views, updates, and deactivates any account; deactivated accounts blocked from all auth
@@ -959,11 +977,16 @@ requirements:
     confirmed by login attempt test'
   defects:
   - D-27
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/admin/src/main/java/io/github/mariusbayizere/fraudshield/admin/users/UserAdministrationService.java
+  evidence:
+  - backend/admin/src/test/java/io/github/mariusbayizere/fraudshield/admin/UserAdministrationTest.java
+    (deactivation ends sessions; role change revokes refresh tokens)
   deviations: []
+  notes: 'M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md): proved in part. Not proved:
+    the version bump alone; Google refusal within 5 s of a deactivation (PB-108).'
 - id: FR-06-03
   section: 3.6 FR-06 Admin panel
   title: 'Model management: list all MLflow model versions with training date, dataset size, AUC-ROC,
@@ -1017,27 +1040,52 @@ requirements:
     UPDATE on audit_events; searchable by user, date range, action type'
   defects:
   - D-32
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/audit/src/main/java/io/github/mariusbayizere/fraudshield/audit/jdbc
+  - backend/admin/src/main/java/io/github/mariusbayizere/fraudshield/admin/audit/AuditSearchController.java
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/config/AuditRelayWiring.java
+  evidence:
+  - backend/admin/src/test/java/io/github/mariusbayizere/fraudshield/admin/AuditSearchTest.java (filters
+    by type, user, date range, entity)
+  - backend/audit/src/test/java/io/github/mariusbayizere/fraudshield/audit/jdbc/RelayedAuditAppenderTest.java
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/AssembledApplicationTest.java
+    (a hold made through the API is found by audit search)
+  - backend/persistence/src/test/java/io/github/mariusbayizere/fraudshield/persistence/DatabaseSecurityTest.java
+    (no UPDATE or DELETE on audit_events)
   deviations: []
+  notes: 'M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md): proved in part. Not proved:
+    most types are written synthetically; ''all write operations audited'' (PB-109).'
 - id: FR-06-07
   section: 3.6 FR-06 Admin panel
   title: 'API key management: create, rotate, revoke keys for core banking integrations; each key scoped
     to specific endpoint groups; key name and last-4 chars visible in UI'
   priority: M
-  milestone: M7
+  milestone: M8
   srs_text: 'Acceptance criterion: Revoked key returns 401 within 5 seconds; rotation creates new key
     with 24-hour overlap period; raw key shown exactly once at creation'
   defects:
   - D-19
   - D-31
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/apikey
+  - backend/admin/src/main/java/io/github/mariusbayizere/fraudshield/admin/apikeys
+  evidence:
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/apikey/ApiKeyLifecycleTest.java
+  - backend/admin/src/test/java/io/github/mariusbayizere/fraudshield/admin/NetworkAndKeysTest.java (401
+    within 5 s; raw key once)
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/config/AuthPropertiesTest.java
+    (24-hour overlap and 2 s cache by default)
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/AssembledApplicationTest.java
+    (a revoked key refused within 5 s in the real application)
   deviations: []
+  notes: 'M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md): server side proved in full;
+    carried to M8, whose remaining clause is the raw key shown once in the UI. M7 (2026-10-17): the 5
+    s bound holds while the instance can read the database. During an outage, an unannounced revocation
+    can be missed for up to 10 minutes (D-15 option B; ADR 0071 amendment, ADR 0073, threat model R-13).'
 - id: FR-07-01
   section: 3.7 FR-07 Authentication and authorisation
   title: 'Four roles with distinct access scopes: ANALYST, SENIOR_ANALYST, RISK_OFFICER, ADMIN; role embedded
@@ -1048,57 +1096,92 @@ requirements:
     role claim immutable after issue'
   defects:
   - D-24
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/security
+  - backend/admin/src/main/java/io/github/mariusbayizere/fraudshield/admin/users/UserAdministrationService.java
+  evidence:
+  - backend/admin/src/test/java/io/github/mariusbayizere/fraudshield/admin/AuthorisationMatrixTest.java
+  - backend/admin/src/test/java/io/github/mariusbayizere/fraudshield/admin/UserAdministrationTest.java
+    (own role and status; demoted inside the cache window)
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/web/SessionTest.java (tampered
+    or foreign tokens)
   deviations: []
+  notes: 'M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md): proved in part. Not proved:
+    the matrix test takes its expected answers from ContractPolicy itself; method security; the last-active-administrator
+    guard is unreachable (PB-104).'
 - id: FR-07-02
   section: 3.7 FR-07 Authentication and authorisation
   title: 'Email + password registration: first name, last name, country-code phone (flag + dial code selector,
     249 countries), employee ID, department, password + confirm password; strength meter and complexity
     requirements'
   priority: M
-  milestone: M7
+  milestone: M8
   srs_text: 'Acceptance criterion: Confirm password mismatch blocks submit; strength meter 4 levels; specific
     failure reasons listed; submit disabled until all validations pass'
   defects:
   - D-24
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/account/RegistrationService.java
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/domain/PasswordPolicy.java
+  evidence:
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/web/RegistrationTest.java (every
+    failed password rule listed)
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/domain/PasswordPolicyTest.java
   deviations: []
+  notes: 'M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md): server side proved in full;
+    carried to M8 (owner decision 2026-10-17), whose remaining clauses are UI: the confirm field, the
+    four-level meter, submit disabled.'
 - id: FR-07-03
   section: 3.7 FR-07 Authentication and authorisation
   title: Google OAuth 2.0 sign-in on login and registration pages; Google ID token verified server-side
     against Google JWKS; account linked by email
   priority: M
-  milestone: M7
+  milestone: M8
   srs_text: 'Acceptance criterion: OAuth flow < 3 seconds; invalid token returns 401; account linking
     by email confirmed; first name, last name, avatar from Google stored'
   defects:
   - D-23
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/google
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/account/GoogleSignInService.java
+  evidence:
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/web/GoogleSignInTest.java (401
+    for invalid tokens; linking by verified email; names and avatar)
   deviations: []
+  notes: 'M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md): server side proved; carried
+    to M8, whose remaining clause is sign-in on the login and registration pages. ''< 3 s'' is measured
+    against a local fake (D-51): record the deviation when the row closes.'
 - id: FR-07-04
   section: 3.7 FR-07 Authentication and authorisation
   title: 'JWT access tokens: 15-minute expiry; RS256; containing user_id, role, first_name, email; refresh
     tokens: 7-day expiry in httpOnly SameSite=Strict cookie'
   priority: M
-  milestone: M7
+  milestone: M8
   srs_text: 'Acceptance criterion: Expired access token returns 401; RS256 signature verified; refresh
     token rotation confirmed; httpOnly cookie confirmed in browser DevTools'
   defects:
   - D-27
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/jwt
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/session
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/web/SessionCookies.java
+  evidence:
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/jwt/AccessTokensTest.java
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/web/SessionTest.java (15-minute
+    expiry; the family ends seven days after sign-in however recently it rotated)
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/web/LoginTest.java (httpOnly,
+    Secure, SameSite=Strict, path-scoped cookie)
   deviations: []
+  notes: 'M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md): server side proved; carried
+    to M8, whose remaining clause is the httpOnly cookie confirmed in the browser.'
 - id: FR-07-05
   section: 3.7 FR-07 Authentication and authorisation
   title: Machine-to-machine API keys for transaction ingestion; keys scoped to ingestion endpoints only;
@@ -1108,11 +1191,20 @@ requirements:
   srs_text: 'Acceptance criterion: API key returns 403 on /api/v1/alerts and /api/v1/admin; confirmed
     by explicit permission test for every key-accessible endpoint combination'
   defects: []
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/security
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/apikey/ApiKeyScope.java
+  evidence:
+  - 'backend/admin/src/test/java/io/github/mariusbayizere/fraudshield/admin/AuthorisationMatrixTest.java
+    (every caller against every operation; and apiKeysReachOnlyTheMachinePathsByTheContractFileAlone,
+    an oracle read from the contract file alone: 401 or 403 on every non-public operation off the machine
+    paths)'
+  - backend/admin/src/test/java/io/github/mariusbayizere/fraudshield/admin/NetworkAndKeysTest.java (403
+    on /alerts and /admin)
   deviations: []
+  notes: 'M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md): proved in full.'
 - id: FR-07-06
   section: 3.7 FR-07 Authentication and authorisation
   title: 'Login rate limited: 10 attempts per 15 minutes per IP; 5 failed attempts locks analyst account
@@ -1123,11 +1215,17 @@ requirements:
     triggers account lock; unlock email sent within 30 seconds'
   defects:
   - D-26
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/account/LoginThrottle.java
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/account/AuthenticationService.java
+  evidence:
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/web/LoginTest.java (11th attempt
+    429 with Retry-After; 5th failure locks; auto-unlock at 30 minutes)
   deviations: []
+  notes: 'M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md): proved in part. Not proved:
+    the unlock email is measured against a recording mailer; the 15-minute window is never advanced (PB-105).'
 - id: FR-07-07
   section: 3.7 FR-07 Authentication and authorisation
   title: 'Password policy: minimum 8 characters, 1 uppercase, 1 lowercase, 1 digit, 1 special character;
@@ -1137,11 +1235,22 @@ requirements:
   srs_text: 'Acceptance criterion: Weak password returns 400 with specific failure reasons; bcrypt cost
     12 confirmed by timing test (> 100ms per hash)'
   defects: []
-  status: NOT_STARTED
+  status: DONE_WITH_DEVIATION
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/domain/PasswordPolicy.java
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/account/PasswordHasher.java
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/web/ValidPassword.java
+  evidence:
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/domain/PasswordPolicyTest.java
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/account/PasswordHasherTest.java
+    (cost 12, > 100 ms)
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/web/RegistrationTest.java (every
+    failed rule listed, not only the first)
+  deviations:
+  - docs/adr/0011-api-contract-conventions.md
+  notes: 'M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md): proved in full. A weak password
+    is 422 password_policy per ADR 0011, not 400.'
 - id: FR-07-08
   section: 3.7 FR-07 Authentication and authorisation
   title: 'Password reset: email OTP (6 digits, 10-minute expiry); OTP verified server-side; single-use;
@@ -1152,11 +1261,17 @@ requirements:
     OTP cannot be reused; confirmed by integration test'
   defects:
   - D-31
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/account/PasswordResetService.java
+  evidence:
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/web/PasswordResetTest.java (single
+    use; valid for exactly ten minutes; 422 per ADR 0011)
   deviations: []
+  notes: 'M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md): proved in part. Not proved:
+    delivery within 30 s, measured against a recording mailer (PB-106). The ''change form'' clause is
+    M8''s. M7 (2026-10-17): the ''change form'' clause is backlog PB-123, due M8.'
 - id: FR-07-09
   section: 3.7 FR-07 Authentication and authorisation
   title: All sessions invalidated on password change; Google OAuth session revoked via Google token revocation
@@ -1167,11 +1282,19 @@ requirements:
     API call confirmed by mock in integration test'
   defects:
   - D-27
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/session/SessionService.java
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/account/PasswordChangeService.java
+  evidence:
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/web/SessionTest.java (old JWT
+    and old refresh cookie refused after a password change)
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/web/GoogleSignInTest.java (Google
+    revocation call recorded by the fake)
   deviations: []
+  notes: 'M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md): proved in full; refresh-token
+    revocation on password change, reset and role change is now asserted.'
 - id: NFR-PERF-01
   section: 4.1 Performance
   title: Transaction ingestion throughput
@@ -1369,7 +1492,10 @@ requirements:
   - docs/adr/0021-m1-scope-replan.md
   notes: 'Re-planned to M7 by ADR 0021. M1: contracts accept tokens only (contract tests) and every customer
     identifier column is CHECK (is_token(...)) (SchemaPoliciesTest). Remaining: PII store and tokenisation
-    at ingestion (M6), analyst-endpoint inspector test (M7).'
+    at ingestion (M6), analyst-endpoint inspector test (M7). M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md):
+    the analyst-endpoint inspector test cannot be written: no milestone builds the analyst API (owner
+    decision; PB-114). M7 (2026-10-17): the analyst API is scoped and recorded as unowned work, PB-121
+    (48 operations).'
 - id: NFR-SEC-04
   section: 4.2 Security
   title: No secrets in version control
@@ -1410,7 +1536,7 @@ requirements:
   section: 4.2 Security
   title: SQL injection prevention
   priority: M
-  milestone: M6
+  milestone: M9
   srs_text: 'Implementation: Spring Data JPA parameterised queries; Python SQLAlchemy ORM throughout;
     zero raw SQL string concatenation; Verification: OWASP ZAP automated scan: 0 SQL injection findings;
     SonarQube: 0 injection hotspots'
@@ -1532,17 +1658,21 @@ requirements:
   - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/kafka/KafkaSpoolChaosTest.java
   - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/spool/DurableSpoolTest.java
   - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/spool/SpoolDrainerTest.java
-  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/ResilienceApiTest.java
+  - 'backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/ResilienceApiTest.java
+    (assembled API: the warmed key keeps deciding with PostgreSQL paused; a key never verified gets 503
+    with Retry-After, not 401)'
   deviations:
   - docs/adr/0064-durable-spool-and-hold-reconciliation.md
   notes: 'M6 (2026-09-24): Kafka down: decisions continue into the durable spool and are published in
     order after recovery; the process-death case is an in-JVM close, not a forked-JVM kill (declared,
-    ADR 0064).'
+    ADR 0064). M7 (2026-10-17): the evidence now runs on the assembled API with M7''s key verification;
+    its expectation follows the owner''s D-15 decision of 2026-10-17 (ADR 0073, threat model R-13): decisions
+    continue for keys verified in the 10 minutes before the outage.'
 - id: NFR-REL-03
   section: 4.3 Reliability
   title: Redis feature store down
   priority: M
-  milestone: M6
+  milestone: M10
   srs_text: 'System Behaviour: Feature engineering uses DB fallback for velocity features; performance
     degrades but system continues; Recovery: Redis reconnects automatically; feature store rebuilt from
     PostgreSQL within 5 minutes; Test: Unit: all Redis calls wrapped in try/except with DB fallback path
@@ -1565,7 +1695,7 @@ requirements:
   section: 4.3 Reliability
   title: PostgreSQL primary failure
   priority: M
-  milestone: M6
+  milestone: M10
   srs_text: 'System Behaviour: TimescaleDB replica promoted within 30 seconds via Kubernetes operator;
     brief write pause; Recovery: Automatic failover; < 30 second write downtime; synchronous replica ensures
     zero data loss; Test: Chaos engineering: DB primary pod deleted; replica promotion timed'
@@ -1585,7 +1715,7 @@ requirements:
   section: 4.3 Reliability
   title: Duplicate transaction storm
   priority: M
-  milestone: M6
+  milestone: M10
   srs_text: 'System Behaviour: Idempotency key in Redis (24h TTL) ensures each transaction_id scored exactly
     once; Recovery: Cache hit returns in < 1ms; no reprocessing; no duplicate blocks; Test: Load test:
     10,000 identical transaction_ids; exactly 1 scored; all return cached response'
@@ -1606,20 +1736,25 @@ requirements:
   section: 4.3 Reliability
   title: Google OAuth service unavailable
   priority: M
-  milestone: M6
+  milestone: M7
   srs_text: 'System Behaviour: Email + password auth continues; Google OAuth button shows ''Temporarily
     unavailable''; no system downtime; Recovery: OAuth-only users prompted to set password via email OTP;
     all other auth unaffected; Test: Integration: Google JWKS endpoint mocked as 503; email auth confirmed
     working'
   defects:
   - D-51
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/google
+  evidence:
+  - 'backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/web/GoogleSignInTest.java (token
+    and JWKS endpoints 503: Google sign-in 503 with Retry-After, password sign-in 200)'
   deviations: []
   notes: 'M6 (2026-09-24): not M6''s: Google OAuth fallback is staff authentication (M7). M6 built nothing
-    here.'
+    here. M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md): proved in part. Not proved:
+    OAuth-only users'' recovery by email OTP (PB-112). The ''Temporarily unavailable'' button is M8''s.
+    M7 (2026-10-17): the ''Temporarily unavailable'' button is backlog PB-124, due M8.'
 - id: UX-REG-01
   section: 5.3 Registration form
   title: First Name
@@ -2673,20 +2808,26 @@ requirements:
     Rationale: Missing features handled by median imputation; completeness verified in pipeline'
   defects:
   - D-04
-  status: NOT_STARTED
+  status: DONE_WITH_DEVIATION
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
-  notes: 'M3 measurement (PB-44, 2026-09-20): all 44 features are implemented on both paths, and SIX cannot
-    be computed on this benchmark because the data they read does not exist - account_age_days, counterparty_account_age_days,
-    kyc_tier, agent_float_utilisation_ratio, agent_distance_from_registered_km, round_sum_flag. They return
-    NaN for every row, which D-04''s missing handling covers, so nothing raises and the count still reads
-    44. The ''>= 98% computable'' clause is therefore satisfied in the sense of not raising while six
-    features carry nothing. The registry declares computable per feature and ''fs-features computability''
-    fails if a COMPUTABLE feature is NaN for 100% of rows or a NO_SOURCE_DATA one is not. See docs/features.md.
-    M6 (2026-09-24): not M6''s: feature completeness is measured on the feature pipeline (M3, PB-44) and
-    the scorer (M5). The row''s milestone should be revisited at integration.'
+  implementation:
+  - ml/src/fraudshield_ml/features/registry.py
+  - ml/src/fraudshield_ml/cli.py
+  evidence:
+  - ml/tests/features/test_completeness.py
+  - docs/features.md
+  deviations:
+  - docs/adr/0055-five-features-have-no-source-data-on-this-benchmark.md
+  notes: 'Owner decision 2026-10-17 (ADR 0055): DONE_WITH_DEVIATION. All 44 features are implemented on
+    both paths; FIVE cannot be computed on this benchmark because the data they read does not exist -
+    account_age_days, counterparty_account_age_days, kyc_tier, agent_float_utilisation_ratio, agent_distance_from_registered_km.
+    They return NaN for every record, which D-04''s missing handling covers, so the pipeline degrades
+    without error. The ''>= 98% computable'' criterion is NOT met in substance: five of 44 features are
+    missing for every record. A deployment fed by an institution''s account master, KYC records and agent
+    ledger would supply them; the gap is a property of the benchmark, not of the design. The registry
+    declares the five NO_SOURCE_DATA and ''fs-features computability'' fails if one produces a number.
+    round_sum_flag, the sixth in M3''s measurement (PB-44, 2026-09-20), became computable that day through
+    the packs'' round_denominations (ADR 0023), whose values are ASSUMED. Flagged to M11 for the limitations.'
 - id: ML-DATA-08
   section: 7.1 Dataset
   title: Dataset release
@@ -3101,7 +3242,7 @@ requirements:
   section: 7.2 Model deployment gate
   title: Inference latency p99
   priority: M
-  milestone: M5
+  milestone: M10
   srs_text: 'Threshold: < 40ms (ensemble + SHAP for flagged); Financial Justification: Financial system
     requirement; exceeding causes auto-block latency breach'
   defects:
@@ -3123,7 +3264,7 @@ requirements:
   section: 7.2 Model deployment gate
   title: Shadow mode AUC-ROC delta
   priority: M
-  milestone: M5
+  milestone: M10
   srs_text: 'Threshold: New model within 1% of production before promotion; Financial Justification: Prevents
     regression during model updates; minimum 24-hour shadow period'
   defects:
@@ -3444,16 +3585,30 @@ requirements:
     Key Scenarios: RS256 JWT verified; expired token 401; API key returns 403 on analyst endpoints; Google
     mock verified; account linking confirmed; bcrypt cost 12 timing > 100ms'
   defects: []
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/jwt
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/google
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/apikey
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/security
+  evidence:
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/jwt/AccessTokensTest.java
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/web/SessionTest.java
+  - 'backend/admin/src/test/java/io/github/mariusbayizere/fraudshield/admin/AuthorisationMatrixTest.java
+    (every caller against every operation; and apiKeysReachOnlyTheMachinePathsByTheContractFileAlone,
+    an oracle read from the contract file alone: 401 or 403 on every non-public operation off the machine
+    paths)'
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/web/GoogleSignInTest.java
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/account/PasswordHasherTest.java
   deviations: []
+  notes: 'M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md): proved in full: each key scenario
+    has a test that fails if its code is deleted.'
 - id: TEST-05
   section: 9 Testing requirements
   title: 'Integration: Transaction Pipeline'
   priority: M
-  milestone: M6
+  milestone: M10
   srs_text: 'Framework: JUnit 5 + Testcontainers; Coverage Target: End-to-end from HTTP to analyst dashboard;
     Key Scenarios: Transaction ingested -> Kafka published -> ML scored -> risk decision -> auto-block
     OR analyst alert; p95 < 50ms confirmed; duplicate idempotency: 100 identical submissions = 1 scored'
@@ -3496,11 +3651,17 @@ requirements:
   defects:
   - D-23
   - D-51
-  status: NOT_STARTED
+  status: DONE_WITH_DEVIATION
   verification: test
-  implementation: []
-  evidence: []
-  deviations: []
+  implementation:
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/google
+  evidence:
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/web/GoogleSignInTest.java (JWKS
+    verification, invalid token 401, linking, new user, outage with password sign-in working)
+  deviations:
+  - docs/adr/0070-staff-identity-and-audit-implementation.md
+  notes: 'M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md): proved in full. A new Google
+    user is PENDING_APPROVAL with ANALYST requested, not an active ANALYST (D-23, ADR 0070).'
 - id: TEST-08
   section: 9 Testing requirements
   title: 'Integration: Model Shadow Mode'
@@ -3545,7 +3706,7 @@ requirements:
   section: 9 Testing requirements
   title: 'Performance: ML Throughput'
   priority: M
-  milestone: M5
+  milestone: M10
   srs_text: 'Framework: Custom benchmark (benchmark.py); Coverage Target: 200 concurrent scoring requests;
     Key Scenarios: p50 < 15ms; p99 < 40ms; no memory growth > 50MB over 10,000 consecutive scorings; model
     in memory (not reloaded)'
@@ -4036,7 +4197,7 @@ requirements:
   title: The latency budget sums to 51 ms and puts PostgreSQL and Kafka round-trips in the synchronous
     path, but the p95 target is 50 ms.
   priority: M
-  milestone: M6
+  milestone: M10
   srs_text: See docs/srs/defect_register.md
   defects: []
   affects:
@@ -4097,15 +4258,31 @@ requirements:
   - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/spool/SpoolDrainerTest.java
     (nothing committed past a refused batch)
   - backend/decision/src/test/java/io/github/mariusbayizere/fraudshield/decision/adapter/kafka/KafkaSpoolChaosTest.java
+  - 'backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/ResilienceApiTest.java
+    (on the assembled API: decisions continue for a key verified before the outage; a key never verified
+    gets 503 with Retry-After)'
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/apikey/ApiKeyLifecycleTest.java
+    (a verified key admitted through an outage for 10 minutes, then refused; an announced change never
+    served stale)
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/apikey/ApiKeyCacheContractTest.java
+    (the cache contract's properties P1-P35)
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/apikey/KeyStoreUnavailabilityTest.java
+    (503 only for database unavailability)
   deviations:
   - docs/adr/0064-durable-spool-and-hold-reconciliation.md
   notes: 'M6 (2026-09-24): the durable spool; the forked-JVM kill test D-15 asks for is not built (the
-    chaos test''s process death is an in-JVM close, declared in ADR 0064).'
+    chaos test''s process death is an in-JVM close, declared in ADR 0064). M7 (2026-10-17): since M7 assembled
+    the API (ADR 0073), ingestion depends on API-key verification, which reads PostgreSQL once a record''s
+    2 s cache expires. Owner decision 2026-10-17 (option B): a key''s last verified record keeps being
+    used for up to 10 minutes while the database cannot answer, so D-15 holds for outages up to 10 minutes;
+    a key not verified by the instance is refused with 503 and Retry-After. Residual risk in threat model
+    R-13. M7 (2026-10-18): the cache''s rules are docs/architecture/api-key-cache-contract.md (option
+    1, written and reviewed before the code); ApiKeyCacheContractTest proves them property by property.'
 - id: D-16
   section: Build prompt Part B defect register
   title: Python in the hot path at 10k TPS.
   priority: M
-  milestone: M5
+  milestone: M10
   srs_text: See docs/srs/defect_register.md
   defects: []
   affects:
@@ -4178,17 +4355,23 @@ requirements:
   section: Build prompt Part B defect register
   title: API keys "stored as bcrypt hash" cannot be verified at 10,000 TPS
   priority: M
-  milestone: M7
+  milestone: M10
   srs_text: See docs/srs/defect_register.md
   defects: []
   affects:
   - NFR-SEC-08
   - FR-06-07
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/apikey
+  evidence:
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/apikey/ApiKeyFormatTest.java
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/apikey/ApiKeyLifecycleTest.java
+    (HMAC under the pepper; pub/sub with a ten-minute cache; the analytic bound)
   deviations: []
+  notes: 'M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md): proved in part; carried to
+    M10, whose remaining clause is the 10,000 TPS rationale, measured on the dedicated machine (PB-115).'
 - id: D-20
   section: Build prompt Part B defect register
   title: '"PostgreSQL TDE" does not exist in community PostgreSQL 16.'
@@ -4268,11 +4451,15 @@ requirements:
   affects:
   - FR-07-03
   - TEST-07
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/account/GoogleSignInService.java
+  evidence:
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/web/GoogleSignInTest.java (new
+    user PENDING_APPROVAL; outside the allowlist refused, nothing created)
   deviations: []
+  notes: 'M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md): proved in full.'
 - id: D-24
   section: Build prompt Part B defect register
   title: The registration form lets users pick a role (Department = role); FR-07-01 says users cannot
@@ -4285,11 +4472,17 @@ requirements:
   - FR-07-01
   - FR-07-02
   - UX-REG-06
-  status: NOT_STARTED
+  status: DONE
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/account/RegistrationService.java
+  - backend/admin/src/main/java/io/github/mariusbayizere/fraudshield/admin/users/UserAdministrationService.java
+  evidence:
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/web/RegistrationTest.java
+  - backend/admin/src/test/java/io/github/mariusbayizere/fraudshield/admin/UserAdministrationTest.java
+    (approval only after email verification; rejection deactivates)
   deviations: []
+  notes: 'M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md): proved in full.'
 - id: D-25
   section: Build prompt Part B defect register
   title: Customer verification by SMS link defeats itself in SIM-swap fraud,
@@ -4321,27 +4514,41 @@ requirements:
   defects: []
   affects:
   - FR-07-06
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/account/LoginThrottle.java
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/account/OfficeIpAllowlist.java
+  evidence:
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/web/LoginTest.java (office ceiling;
+    per-(IP, email) limit isolated from the lock; auto-unlock)
   deviations: []
+  notes: 'M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md): proved in part. Not built:
+    an unlock by password reset or change writes no unlock event (PB-110).'
 - id: D-27
   section: Build prompt Part B defect register
   title: Stateless JWTs cannot be invalidated "within 5 seconds" on deactivation or password change.
   priority: M
-  milestone: M7
+  milestone: M8
   srs_text: See docs/srs/defect_register.md
   defects: []
   affects:
   - FR-06-02
   - FR-07-04
   - FR-07-09
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
-  evidence: []
+  implementation:
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/session
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/security/CsrfDoubleSubmitFilter.java
+  evidence:
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/web/SessionTest.java (version
+    check, reuse detection, CSRF, refresh revoked on password change)
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/session/SessionInvalidationTimingTest.java
+    (pub/sub with ten-minute caches; the analytic bound)
   deviations: []
+  notes: 'M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md): server side proved; carried
+    to M8, whose remaining clause is the browser holding access tokens in memory only.'
 - id: D-28
   section: Build prompt Part B defect register
   title: A third-party penetration test cannot be performed by the build agent.
@@ -4440,13 +4647,24 @@ requirements:
   implementation:
   - backend/persistence/src/main/resources/db/migration/V8__audit_log.sql
   - backend/persistence/src/main/resources/db/migration/V10__timescale_policies_and_aggregates.sql
-  evidence: []
+  - backend/audit/src/main/java/io/github/mariusbayizere/fraudshield/audit/anchor
+  - backend/audit/src/main/java/io/github/mariusbayizere/fraudshield/audit/cli
+  - backend/audit/src/main/java/io/github/mariusbayizere/fraudshield/audit/jdbc
+  evidence:
+  - backend/audit/src/test/java/io/github/mariusbayizere/fraudshield/audit/anchor/AuditAnchoringTest.java
+  - backend/audit/src/test/java/io/github/mariusbayizere/fraudshield/audit/cli/AuditVerifyCommandTest.java
+  - backend/audit/src/test/java/io/github/mariusbayizere/fraudshield/audit/MerkleRootTest.java
+  - backend/audit/src/test/java/io/github/mariusbayizere/fraudshield/audit/jdbc/RelayedAuditAppenderTest.java
+  - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/AssembledApplicationTest.java
+    (a decision's event passes audit verify)
+  - backend/persistence/src/test/java/io/github/mariusbayizere/fraudshield/persistence/DatabaseSecurityTest.java
   deviations:
   - docs/adr/0021-m1-scope-replan.md
   notes: 'Re-planned to M7 by ADR 0021. M1: 12 event types, database-assigned hash chain, verify_audit_chain,
     audit_anchors, compliance role, compression 30 days and retention 7 years by recorded_at (DatabaseSecurityTest,
     SchemaPoliciesTest). Remaining: daily signed Merkle-root job and the fraudshield audit verify CLI
-    (M7).'
+    (M7). M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md): proved in part. Not proved:
+    the daily @Scheduled trigger (PB-111); anchoring off by default (PB-11).'
 - id: D-33
   section: Build prompt Part B defect register
   title: Several SRS colour pairings fail WCAG 2.1 AA text contrast
@@ -4748,7 +4966,7 @@ requirements:
   section: Build prompt Part B defect register
   title: External services must work locally and in CI without real credentials.
   priority: M
-  milestone: M6
+  milestone: M7
   srs_text: See docs/srs/defect_register.md
   defects: []
   affects:
@@ -4759,13 +4977,17 @@ requirements:
   implementation:
   - backend/notify/src/main/java/io/github/mariusbayizere/fraudshield/notify/sms
   - backend/notify/src/main/java/io/github/mariusbayizere/fraudshield/notify/vault
+  - backend/auth/src/main/java/io/github/mariusbayizere/fraudshield/auth/google/GoogleIdentityClient.java
   evidence:
   - backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/IngestApiTest.java (SMS
     provider double)
   - backend/notify/src/test/java/io/github/mariusbayizere/fraudshield/notify/vault/InMemoryKmsTest.java
     (key service double)
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/testing/FakeGoogle.java (Google
+    OAuth without real credentials in CI)
   deviations: []
   notes: 'M6 (2026-09-24): M6''s external services run locally and in CI without real credentials: the
     SMS provider behind a gateway port (WireMock stub in the stack), the key service behind KmsClient
     with an in-memory double, the vault with configured keys under dev/demo/test. Google OAuth (M7) is
-    not M6''s.'
+    not M6''s. M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md): M7''s share proved in
+    part. Not built: a Google fake in the local stack; a sandbox contract suite reported as skipped (PB-113).'

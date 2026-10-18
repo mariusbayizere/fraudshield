@@ -71,7 +71,9 @@ class VaultContactsTest {
                     + " FROM vault.contacts")) {
       assertThat(row.next()).isTrue();
       String stored = new String(row.getBytes(1), StandardCharsets.ISO_8859_1);
-      assertThat(stored).doesNotContain("+250788123456", "788123456", "4821", "rw");
+      // Not the two-letter locale: random ciphertext of this length contains any given two bytes
+      // about once in 650 runs, and ci #bd48557 met it. Four bytes and more cannot be chance.
+      assertThat(stored).doesNotContain("+250788123456", "788123456", "4821");
       assertThat(row.getBytes(2)).hasSizeGreaterThan(32);
       assertThat(row.getString(3)).isEqualTo("m6");
       assertThat(row.getInt(4)).isEqualTo(12);

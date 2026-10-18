@@ -9,6 +9,22 @@ Format: ID · title · source · priority · due · problem · acceptance. Due d
 from build prompt Part D.3 (M2 is the dataset generator; the scoring service is M5, ingestion and
 the decision engine M6, staff identity, admin and audit M7).
 
+**Identifiers are claimed before they are used** (owner decision, 2026-09-24, applied 2026-10-17).
+A milestone that needs a backlog id, an ADR number or a migration version writes the claim into
+`docs/parallel/<milestone>_updates.md` first, after reading the other milestones' updates files on
+every branch, and only then uses it. "Next free" is only true on the branch that asks: parallel
+branches do not see each other's edits to this file, which is how `PB-69` and `PB-73` were each
+taken twice. Claims made on branches not yet merged, as of 2026-10-17:
+
+| Id | Claimed by | Where | Subject |
+|---|---|---|---|
+| PB-69 | M5, built by M6 | `M5_updates.md` §12, §15; `m6/featurestore-fallback` | the feature store's PostgreSQL fallback |
+| PB-70, PB-71 | M5, owned by M6 (owner confirmed 2026-10-17) | `M5_updates.md` §15 | the `fs.labels` consumer; the reference-state contract and producer |
+| PB-72 | M5, owned by M10 (owner confirmed 2026-10-17) | `M5_updates.md` §15 | re-measuring training-serving skew |
+| PB-76 | M4 | `M4_updates.md` on `m4/generalisation` | training rows near the corpus's start see truncated history (was a second `PB-69`) |
+| PB-77 to PB-101 | M6 | `M6_updates.md`, "Numbering reserved by this branch" | amendment 1's known gaps and the 22 section-8 rows proved only in part |
+| PB-102 to PB-130 | M7 | `M7_updates.md`, "Numbering reserved by this branch" | the merge round's unowned items and M7's rows proved only in part (PB-102 to PB-124 used) |
+
 ---
 
 ### PB-1 · Test rejecting and confirming a folded tightening
@@ -1202,3 +1218,280 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
   runs: a ~0.2 s, load-sensitive margin is not evidence.
 - **Acceptance:** `IngestApiTest.thousandTransactionBatchesAreDecidedWithinThirtySeconds`, or a
   dedicated batch benchmark, on the dedicated machine, with the margin recorded over repeated runs.
+
+### PB-75 · The gitleaks self-test fails on some generated secrets
+- **Source:** M5, 2026-09-24, a red gitleaks job on `m5/scoring` (`M5_updates.md` §21, proposed
+  as `PB-73`; renumbered by owner decision 2026-09-24, M10_updates.md §1) · **Priority:** medium
+  · **Due:** M9 (the security workflows; `tools/` is shared)
+- **Problem:** `tools/bin/gitleaks-selftest` plants randomly generated fake secrets and asserts
+  gitleaks reports exactly those. Some generated values do not match the `generic-api-key` rule,
+  so the guard fails with "NOT DETECTED generic-api-key in <path>", on a different path each run:
+  1 failure in 31 local runs at `16035d2` (about 3%), and CI run 35909780245. A flaky pass of a
+  guard on the secret scanner is worth as little as a flaky failure costs.
+- **Acceptance:** the self-test passes 200 consecutive runs, with planted values the pinned rules
+  are guaranteed to match (fixed high-entropy shapes per rule, or each rule's own regex asserted
+  against the generated value before planting it), so a failure means the configuration
+  regressed.
+
+### PB-77 · A second SMS when the outcome cannot be committed after the provider was called
+- **Source:** M6 implementation-2 review m7, and amendment 1 (contract 13.1), 2026-10-17 · **Priority:** medium · **Due:** later than M6
+- **Problem:** a crash or eviction after the provider call and before the commit that keeps its result lets the next owner find B with no outcome and no kept result, and send a second SMS, without its link.
+- **Acceptance:** one of the two designs on record: a `SENDING` row written before the provider call and read as "outcome unknown, do not send", or the transactional outbox (contract section 9).
+
+### PB-78 · I7e's test did not show the paused partition moving (resolved)
+- **Source:** M6 implementation-2 review m3, 2026-10-17 · **Priority:** low · **Due:** M6
+- **Problem:** the test never showed the paused partition moved to the second member.
+- **Resolution:** resolved in M6's amendment-1 round: `EnvelopeConsumerTest.partitionsMovedWhilePausedKeepEveryoneFlowing` moves it while the old owner runs, with the rebalance made to land inside a 6.4 s pause on every run, and fails if the old owner then resumes the partition it no longer owns. Kept so the id is not reused.
+
+### PB-79 · A provider outage records FAILED and the customer is never told
+- **Source:** M6 amendment-1 draft-3 review n9 (contract 13.2), 2026-10-17 · **Priority:** medium · **Due:** later than M6; the FAILED-rate alert with M9
+- **Problem:** a provider call that fails records FAILED and the intent is committed past; nothing retries it. Today's behaviour, unchanged by amendment 1.
+- **Acceptance:** a retry for failures known not to have reached the provider (a failure to connect), and an alert on the rate of FAILED outcomes.
+
+### PB-80 · Ordering contract I3a: a clause no test would catch if its code were deleted
+- **Source:** M6 section-8 audit under the deletion standard, 2026-10-17 (`docs/architecture/decision-fact-ordering.md`, row I3a) · **Priority:** low · **Due:** M10
+- **Problem:** replacing `envelope.transaction()` with `ABSENT` in the `NotificationWiring` lambda would not fail any test.
+- **Acceptance:** a test that fails when the code named above is deleted, and row I3a restated as proved; or the row's claim narrowed to what is proved, by a reviewed contract change.
+
+### PB-81 · Ordering contract I7: a clause no test would catch if its code were deleted
+- **Source:** M6 section-8 audit under the deletion standard, 2026-10-17 (`docs/architecture/decision-fact-ordering.md`, row I7) · **Priority:** low · **Due:** M10
+- **Problem:** deleting the consumer's `!first` guard would not fail any test: any draining since a trip leaves the budget just below full at a record's first answer, so the grace re-read happens without it.
+- **Acceptance:** a test that fails when the code named above is deleted, and row I7 restated as proved; or the row's claim narrowed to what is proved, by a reviewed contract change.
+
+### PB-82 · Ordering contract I7d: a clause no test would catch if its code were deleted
+- **Source:** M6 section-8 audit under the deletion standard, 2026-10-17 (`docs/architecture/decision-fact-ordering.md`, row I7d) · **Priority:** low · **Due:** M10
+- **Problem:** a tripped partition and an F4 backoff are never produced; the row's "is tripped" and F4 clauses rest on review.
+- **Acceptance:** a test that fails when the code named above is deleted, and row I7d restated as proved; or the row's claim narrowed to what is proved, by a reviewed contract change.
+
+### PB-83 · Ordering contract I7f: a clause no test would catch if its code were deleted
+- **Source:** M6 section-8 audit under the deletion standard, 2026-10-17 (`docs/architecture/decision-fact-ordering.md`, row I7f) · **Priority:** low · **Due:** M10
+- **Problem:** deleting `seekBack` and the cycle's catch would not fail it: the rejoin resets positions from the committed offsets. It proves only that commits happen at the end of a batch; a commit failure while membership is kept, which `seekBack` is for, is never produced.
+- **Acceptance:** a test that fails when the code named above is deleted, and row I7f restated as proved; or the row's claim narrowed to what is proved, by a reviewed contract change.
+
+### PB-84 · Ordering contract I10: a clause no test would catch if its code were deleted
+- **Source:** M6 section-8 audit under the deletion standard, 2026-10-17 (`docs/architecture/decision-fact-ordering.md`, row I10) · **Priority:** low · **Due:** M10
+- **Problem:** the replay republishing the original key is never asserted.
+- **Acceptance:** a test that fails when the code named above is deleted, and row I10 restated as proved; or the row's claim narrowed to what is proved, by a reviewed contract change.
+
+### PB-85 · Ordering contract I11: a clause no test would catch if its code were deleted
+- **Source:** M6 section-8 audit under the deletion standard, 2026-10-17 (`docs/architecture/decision-fact-ordering.md`, row I11) · **Priority:** low · **Due:** M10
+- **Problem:** stopping at the end offsets taken at the start, committing nothing, and choosing the newest by timestamp would not fail any test if deleted: nothing is written to the DLQ during a read, the replay seeks explicitly, and the copies compared are identical.
+- **Acceptance:** a test that fails when the code named above is deleted, and row I11 restated as proved; or the row's claim narrowed to what is proved, by a reviewed contract change.
+
+### PB-86 · Ordering contract I13: a clause no test would catch if its code were deleted
+- **Source:** M6 section-8 audit under the deletion standard, 2026-10-17 (`docs/architecture/decision-fact-ordering.md`, row I13) · **Priority:** low · **Due:** M10
+- **Problem:** the "decided again" half of `resolved` (a later decision that is not DECLINE) is never produced; deleting it would not fail any test.
+- **Acceptance:** a test that fails when the code named above is deleted, and row I13 restated as proved; or the row's claim narrowed to what is proved, by a reviewed contract change.
+
+### PB-87 · Ordering contract I14: a clause no test would catch if its code were deleted
+- **Source:** M6 section-8 audit under the deletion standard, 2026-10-17 (`docs/architecture/decision-fact-ordering.md`, row I14) · **Priority:** low · **Due:** M10
+- **Problem:** a crash while the partition is tripped is never produced, and deleting the lost path's absence of a commit (`onPartitionsLost`) would not be noticed by any test.
+- **Acceptance:** a test that fails when the code named above is deleted, and row I14 restated as proved; or the row's claim narrowed to what is proved, by a reviewed contract change.
+
+### PB-88 · Ordering contract I14b: a clause no test would catch if its code were deleted
+- **Source:** M6 section-8 audit under the deletion standard, 2026-10-17 (`docs/architecture/decision-fact-ordering.md`, row I14b) · **Priority:** low · **Due:** M10
+- **Problem:** the crash between a dead letter and its commit is never produced.
+- **Acceptance:** a test that fails when the code named above is deleted, and row I14b restated as proved; or the row's claim narrowed to what is proved, by a reviewed contract change.
+
+### PB-89 · Ordering contract I15: a clause no test would catch if its code were deleted
+- **Source:** M6 section-8 audit under the deletion standard, 2026-10-17 (`docs/architecture/decision-fact-ordering.md`, row I15) · **Priority:** low · **Due:** M10
+- **Problem:** deleting the CASE that makes `kept` null without a header would not fail it: `kept` is then false, which classifies the same. The bound is I7's.
+- **Acceptance:** a test that fails when the code named above is deleted, and row I15 restated as proved; or the row's claim narrowed to what is proved, by a reviewed contract change.
+
+### PB-90 · Ordering contract I17: a clause no test would catch if its code were deleted
+- **Source:** M6 section-8 audit under the deletion standard, 2026-10-17 (`docs/architecture/decision-fact-ordering.md`, row I17) · **Priority:** medium · **Due:** M10
+- **Problem:** deleting the consumer's `failedOutage` or `attemptStarts` call would not fail any test, because the consumer tests that mix F1 and F4 use a zero time bound, so "F1 adds no F4 time" is proved for the clock but not for the consumer (implementation-3 R-m1); "on the backoff" (the 2 s bound alone meets the timing assertion), and the next F4 attempt dead-lettering after a failed dead-letter send, which is never produced.
+- **Acceptance:** a test that fails when the code named above is deleted, and row I17 restated as proved; or the row's claim narrowed to what is proved, by a reviewed contract change.
+
+### PB-91 · Ordering contract I18: a clause no test would catch if its code were deleted
+- **Source:** M6 section-8 audit under the deletion standard, 2026-10-17 (`docs/architecture/decision-fact-ordering.md`, row I18) · **Priority:** low · **Due:** M10
+- **Problem:** the 1-minute failing WARN; deleting it would not fail any test.
+- **Acceptance:** a test that fails when the code named above is deleted, and row I18 restated as proved; or the row's claim narrowed to what is proved, by a reviewed contract change.
+
+### PB-92 · Ordering contract I19: a clause no test would catch if its code were deleted
+- **Source:** M6 section-8 audit under the deletion standard, 2026-10-17 (`docs/architecture/decision-fact-ordering.md`, row I19) · **Priority:** low · **Due:** M10
+- **Problem:** deleting the webhook payload's validation, or the check of a replayed `fs-kept-result`, would not fail any test.
+- **Acceptance:** a test that fails when the code named above is deleted, and row I19 restated as proved; or the row's claim narrowed to what is proved, by a reviewed contract change.
+
+### PB-93 · Ordering contract I20: a clause no test would catch if its code were deleted
+- **Source:** M6 section-8 audit under the deletion standard, 2026-10-17 (`docs/architecture/decision-fact-ordering.md`, row I20) · **Priority:** medium · **Due:** M10
+- **Problem:** deleting `AfricasTalkingGateway`'s catch of an unreadable 2xx reply would not fail `…providerRepliesThatCannotBeReadAreFailedOnceAndNeverResent`, because the sender's catch gives the same result; only an outage is produced for "whatever class"; the commit-before-write order and the wiring lambda that passes the kept result and keeper are by review.
+- **Acceptance:** a test that fails when the code named above is deleted, and row I20 restated as proved; or the row's claim narrowed to what is proved, by a reviewed contract change.
+
+### PB-94 · Ordering contract I21: a clause no test would catch if its code were deleted
+- **Source:** M6 section-8 audit under the deletion standard, 2026-10-17 (`docs/architecture/decision-fact-ordering.md`, row I21) · **Priority:** low · **Due:** M10
+- **Problem:** the WARN line; deleting it would not fail any test.
+- **Acceptance:** a test that fails when the code named above is deleted, and row I21 restated as proved; or the row's claim narrowed to what is proved, by a reviewed contract change.
+
+### PB-95 · Ordering contract I22: a clause no test would catch if its code were deleted
+- **Source:** M6 section-8 audit under the deletion standard, 2026-10-17 (`docs/architecture/decision-fact-ordering.md`, row I22) · **Priority:** medium · **Due:** M10
+- **Problem:** the drop is made twice, by the reset handler and the head check, so deleting either alone would not fail any test; the kept-result drop, the ERROR line, a failed lookup never read as "no offset", the leader epoch on commits, and the log-end and divergence branches (an unclean election cannot be produced on one broker) would not fail any test if deleted.
+- **Acceptance:** a test that fails when the code named above is deleted, and row I22 restated as proved; or the row's claim narrowed to what is proved, by a reviewed contract change.
+
+### PB-96 · Ordering contract I23: a clause no test would catch if its code were deleted
+- **Source:** M6 section-8 audit under the deletion standard, 2026-10-17 (`docs/architecture/decision-fact-ordering.md`, row I23) · **Priority:** low · **Due:** M10
+- **Problem:** deleting the code that moves `fs_notify_wait_warnings_total`, `fs_notify_sms_outcome_unknown_total`, `fs_notify_resolved_before_send_total`, `fs_notify_webhook_delivery_running` or `fs_notify_head_failing_seconds`, or the 1 of `fs_notify_consumer_running`, would not fail any test.
+- **Acceptance:** a test that fails when the code named above is deleted, and row I23 restated as proved; or the row's claim narrowed to what is proved, by a reviewed contract change.
+
+### PB-97 · Ordering contract I24: a clause no test would catch if its code were deleted
+- **Source:** M6 section-8 audit under the deletion standard, 2026-10-17 (`docs/architecture/decision-fact-ordering.md`, row I24) · **Priority:** low · **Due:** M10
+- **Problem:** the cause chain's cycle guard; deleting it would not fail any test.
+- **Acceptance:** a test that fails when the code named above is deleted, and row I24 restated as proved; or the row's claim narrowed to what is proved, by a reviewed contract change.
+
+### PB-98 · Ordering contract I26: a clause no test would catch if its code were deleted
+- **Source:** M6 section-8 audit under the deletion standard, 2026-10-17 (`docs/architecture/decision-fact-ordering.md`, row I26) · **Priority:** medium · **Due:** M10
+- **Problem:** (known partial, owner's decision) the seek in the stop and the commit-only-if-every-seek-succeeded gate, the ERROR line, a statement actually timing out, the vault's, provider's, producer's and commit timeouts, the webhook executor's `Error` rule, the health endpoint staying UP, a reset's lookup failing without ending the thread, the stopping flag, the rule that the revoke listener commits nothing off the poll thread while it runs (with `close()`'s longer wait), and the seek back across several partitions: deleting any of them would not fail any test (implementation-3 R-m2). `…batchesPastTheirTimeBudgetPollAgainWithoutSkipping` passes with the budget deleted and proves only the seek back.
+- **Acceptance:** a test that fails when the code named above is deleted, and row I26 restated as proved; or the row's claim narrowed to what is proved, by a reviewed contract change.
+
+### PB-99 · Ordering contract I27: a clause no test would catch if its code were deleted
+- **Source:** M6 section-8 audit under the deletion standard, 2026-10-17 (`docs/architecture/decision-fact-ordering.md`, row I27) · **Priority:** medium · **Due:** M10
+- **Problem:** (known partial, owner's decision) the consumer's outage branch for a failed dead-letter send, a real send timing out, and the line's ERROR level: deleting any of them would not fail any test.
+- **Acceptance:** a test that fails when the code named above is deleted, and row I27 restated as proved; or the row's claim narrowed to what is proved, by a reviewed contract change.
+
+### PB-100 · Ordering contract I28: a clause no test would catch if its code were deleted
+- **Source:** M6 section-8 audit under the deletion standard, 2026-10-17 (`docs/architecture/decision-fact-ordering.md`, row I28) · **Priority:** low · **Due:** M10
+- **Problem:** the command line's `--allow-rejected` and `--reason` parsing.
+- **Acceptance:** a test that fails when the code named above is deleted, and row I28 restated as proved; or the row's claim narrowed to what is proved, by a reviewed contract change.
+
+### PB-101 · Ordering contract I29: a clause no test would catch if its code were deleted
+- **Source:** M6 section-8 audit under the deletion standard, 2026-10-17 (`docs/architecture/decision-fact-ordering.md`, row I29) · **Priority:** low · **Due:** M10
+- **Problem:** the overflow guards on numbers past `long` or `int`.
+- **Acceptance:** a test that fails when the code named above is deleted, and row I29 restated as proved; or the row's claim narrowed to what is proved, by a reviewed contract change.
+
+### PB-102 · The MNO SIM-swap adapter, for when a source exists
+- **Source:** threat model R-10, assigned in M7's merge round, 2026-10-17 · **Priority:** low · **Due:** REQUIRES_EXTERNAL_PARTY
+- **Problem:** with no SIM-swap signal, D-25 refuses customer self-service for every block, so no customer reaches the verification page in production. The refusal is correct (owner, 2026-09-23); the adapter cannot be built without an MNO data agreement, which only the project owner can make.
+- **Acceptance:** once a source exists, an adapter behind ADR 0065's port with a fake in the local stack (D-51), and R-10 closed.
+
+### PB-103 · An operator command and runbook for dead-letter replay
+- **Source:** threat model R-11, assigned in M7's merge round, 2026-10-17 · **Priority:** medium · **Due:** M9
+- **Problem:** M6's `DeadLetterReplay` replays `<topic>.dlq` (now including `fs.audit.events.dlq`), but an operator has no packaged way to run it (docs/architecture/decision-fact-ordering.md D-c carries packaging to M9).
+- **Acceptance:** a packaged command with a runbook entry, exercised once in the stack against a planted dead letter.
+
+### PB-104 · FR-07-01: three things no test would catch if deleted
+- **Source:** M7 traceability audit under the deletion standard, 2026-10-17 (`docs/parallel/M7_updates.md`, FR-07-01; ADR 0070 §1) · **Priority:** high · **Due:** M7
+- **Problem:** (1) changing which roles or scopes `ContractPolicy` reads for an operation would not fail `AuthorisationMatrixTest`, because the test takes its expected answers from `ContractPolicy` itself; only four operations are pinned independently (`ContractPolicyTest.accessComesFromTheMatrix`). (2) Deleting `@EnableMethodSecurity` from `SecurityConfiguration` would not fail any test, because the URL layer refuses first. (3) Deleting the last-active-administrator guard in `UserAdministrationService.update` would not fail any test, because no request can reach it: the self-modification guard and the acting-administrator check, both proved, already leave one active administrator.
+- **Owner decision (2026-10-17) on (3):** the guard is **kept as defence in depth**. No request can reach it today; a future route that does reach it inherits a guard tested by nothing, so whoever adds such a route adds the test. Removing it would be tidier and wrong. (The API-key half of (1) now has an independent oracle: `AuthorisationMatrixTest.apiKeysReachOnlyTheMachinePathsByTheContractFileAlone`.)
+- **Acceptance:** the matrix test reads `authorisation-matrix.yaml` itself for the roles' expected answers; a test invoking a controller method with a wrong-role authentication expects `AccessDeniedException`; a test that reaches the last-active-administrator guard, added with the first route that can.
+
+### PB-105 · FR-07-06: the unlock email and the 15-minute window
+- **Source:** M7 traceability audit under the deletion standard, 2026-10-17 (FR-07-06) · **Priority:** medium · **Due:** M7
+- **Problem:** deleting `SmtpStaffMailer`'s send would not fail any test, because the "unlock email sent within 30 seconds" assertion uses `RecordingStaffMailer`; and the 15-minute window is never advanced, so changing it to an hour would not fail any test.
+- **Acceptance:** an SMTP test against Mailpit that the unlock email arrives within 30 s; a test that advances past the window.
+
+### PB-106 · FR-07-08: the reset code's delivery
+- **Source:** M7 traceability audit under the deletion standard, 2026-10-17 (FR-07-08) · **Priority:** medium · **Due:** M7
+- **Problem:** deleting `SmtpStaffMailer`'s send would not fail "OTP email delivered within 30 seconds", which is measured against `RecordingStaffMailer`. (The 10-minute expiry is now pinned; the "change form" clause is M8's.)
+- **Acceptance:** the same SMTP test for the reset code.
+
+### PB-107 · FR-06-01: the Google set-up link, the stored fields and the database backstop
+- **Source:** M7 traceability audit under the deletion standard, 2026-10-17 (FR-06-01) · **Priority:** medium · **Due:** M7
+- **Problem:** the welcome email carries no Google OAuth set-up link (`fraudshield/auth/mail.properties`), so that clause is not built; of the stored fields only role, status and phone are asserted, so dropping first name, last name, department or locale from the insert would not fail any test; and with the duplicate pre-check in front, whether the database constraint's path still answers 409 is untested.
+- **Acceptance:** the link built and asserted; every field asserted after creation; a concurrent-duplicate test answering 409 from the constraint.
+
+### PB-108 · FR-06-02: the version bump alone, and Google within 5 s of a deactivation
+- **Source:** M7 traceability audit under the deletion standard, 2026-10-17 (FR-06-02) · **Priority:** medium · **Due:** M7
+- **Problem:** the deactivation test passes with the token-version bump deleted as long as the refresh revocation remains, because each ends the session it checks; and `GoogleSignInTest.deactivatedAccountIsBlockedFromGoogleSignIn` uses an account created deactivated, so deleting the deactivation's effect on Google sign-in within 5 s of an administrator's action would not fail any test.
+- **Acceptance:** a test that fails when the bump alone is deleted; Google sign-in refused within 5 s of an administrator deactivating a linked account.
+
+### PB-109 · FR-06-06: audit types written by real actions, and every write audited
+- **Source:** M7 traceability audit under the deletion standard, 2026-10-17 (FR-06-06) · **Priority:** medium · **Due:** M7
+- **Problem:** `AuditSearchTest` writes all 12 types itself. A real action is asserted to emit TRANSACTION_DECISION (`AssembledApplicationTest`), AUTH, USER_ADMIN and API_KEY_LIFECYCLE; AUTO_BLOCK, CUSTOMER_VERIFICATION, ANALYST_DECISION, SENIOR_OVERRIDE and THRESHOLD_CHANGE are emitted by M6 code with no end-to-end assertion, and RULE_CHANGE, MODEL_LIFECYCLE and REGULATORY_REPORT have no emitter yet. "All write operations audited" has no test.
+- **Acceptance:** each type asserted from a real action as its emitter lands; a test that every write endpoint records an audit event.
+
+### PB-110 · D-26: unlocks by password reset or change are not audited as unlocks
+- **Source:** M7 traceability audit under the deletion standard, 2026-10-17 (D-26) · **Priority:** medium · **Due:** M7
+- **Problem:** D-26 says every lock and unlock is audited. `StaffUserJpaRepository.changePassword` lifts LOCKED, but the reset and change paths write only `PASSWORD_*` events: the behaviour is missing, not merely untested.
+- **Acceptance:** an unlock event on both paths, asserted.
+
+### PB-111 · D-32: the daily anchoring trigger
+- **Source:** M7 traceability audit under the deletion standard, 2026-10-17 (D-32) · **Priority:** medium · **Due:** M7
+- **Problem:** deleting `@Scheduled` from `AuditAnchorScheduler` would not fail any test, because `schedulerAnchorsThePreviousUtcDay` calls the method directly. Anchoring is off by default, and PB-11 (a dedicated anchoring role) is open.
+- **Acceptance:** a context test that the cron task is registered when anchoring is enabled.
+
+### PB-112 · NFR-REL-06: OAuth-only users' recovery during a Google outage
+- **Source:** M7 audit of the rows carried to M7, 2026-10-17 (NFR-REL-06) · **Priority:** medium · **Due:** M7
+- **Problem:** "OAuth-only users prompted to set password via email OTP" has no test; whether the reset path accepts an account without a password is unproved. (The button text is M8's.)
+- **Acceptance:** an OAuth-only account completes a reset and signs in by password while Google is down.
+
+### PB-113 · D-51: Google without real credentials in the local stack
+- **Source:** M7 audit of the rows carried to M7, 2026-10-17 (D-51) · **Priority:** low · **Due:** M9
+- **Problem:** tests use `FakeGoogle`, an in-process fake, but D-51 also asks for WireMock stubs of Google's JWKS and token endpoints in the local stack, and a sandbox contract suite reported as skipped without credentials. Neither exists.
+- **Acceptance:** the stubs in the compose stack (M9 owns compose) and the skipped-when-no-credentials suite.
+
+### PB-114 · NFR-SEC-03: the analyst-endpoint inspector test
+- **Source:** M7 audit of the rows carried to M7, 2026-10-17 (NFR-SEC-03) · **Priority:** high · **Due:** owner decision
+- **Problem:** the test that every analyst endpoint shows only masked tokens cannot be written: no milestone builds the analyst-facing API (`listAlerts`, `decideAlert` and their neighbours). M8 builds its console against mocks.
+- **Acceptance:** the inspector test, once the owner has placed the analyst API and it exists.
+
+### PB-115 · D-19: verification at 10,000 TPS
+- **Source:** M7 traceability audit under the deletion standard, 2026-10-17 (D-19) · **Priority:** medium · **Due:** M10
+- **Problem:** D-19 chose HMAC over bcrypt so keys verify at 10,000 TPS; that rate is not measured. (HMAC with pepper, the 2 s cache and pub/sub revocation are now proved.)
+- **Acceptance:** M10 measures key verification at the target rate on the dedicated machine.
+
+### PB-116 · Review finding 4: concurrent sign-ins prove nothing about where bcrypt runs
+- **Source:** M7 audit of the other claim tables, 2026-10-17 (`docs/reviews/M7/staff-auth.md`, finding 4) · **Priority:** low · **Due:** M7
+- **Problem:** `concurrentSignInsAllSucceed` asserts only 200s, so moving bcrypt back inside the transaction would serialise sign-ins and still pass.
+- **Acceptance:** a test that fails when the hash runs while a row lock is held.
+
+### PB-117 · ADR 0071: the `validate` default
+- **Source:** M7 audit of the other claim tables, 2026-10-17 (ADR 0071) · **Priority:** low · **Due:** M7
+- **Problem:** `HybridPersistenceTest.schemaValidation…` would pass if the shipped configuration stopped setting `validate`, because `JpaTestStack` sets it itself.
+- **Acceptance:** a test against the shipped configuration that a mapping mismatch stops the application.
+
+### PB-118 · ADR 0071: the key list's N + 1 check compares nothing
+- **Source:** M7 audit of the other claim tables, 2026-10-17 (ADR 0071) · **Priority:** low · **Due:** M7
+- **Problem:** `QueryCountTest` creates no API keys, so its key-list comparison is 0 statements against 0: an N + 1 in the key list would not fail it.
+- **Acceptance:** the test lists keys after creating several.
+
+### PB-119 · Walkthrough claim 4: inactive accounts' 423 and the unknown-email bcrypt burn
+- **Source:** M7 audit of the other claim tables, 2026-10-17 (`docs/walkthrough/M7.md`, claim 4) · **Priority:** low · **Due:** M7
+- **Problem:** deleting `hasher.burn()` for an unknown email (`AuthenticationService`) would not fail any test, and inactive accounts' 423 is untested.
+- **Acceptance:** tests that fail on each deletion, or the claim narrowed.
+
+### PB-120 · Walkthrough claim 5: the measured revocation time
+- **Source:** M7 audit of the other claim tables, 2026-10-17 (walkthrough claim 5) · **Priority:** low · **Due:** M7
+- **Problem:** the walkthrough said a revoked key stopped working in under 100 ms; the last measurement (`85aff03`) was 103 ms at worst with the announcement. `revocationAnnouncementAloneEvictsAnotherInstancesCachedKey` asserts a 2 s bound for the announced path, but nothing asserts the measured figure. The walkthrough now states the measured value.
+- **Acceptance:** a test asserting a tighter bound for the announced revocation, or the figure removed by a reviewed change.
+
+### PB-121 · The analyst API: 48 contract operations no milestone builds
+- **Source:** M7 merge round 2, scoped 2026-10-17 at the owner's request (`docs/parallel/M7_updates.md`, "Unowned work: the analyst API") · **Priority:** high · **Due:** owner decision (M7's successor round or a milestone of its own)
+- **Problem:** the frozen contract defines 89 operations; 36 are implemented (7 by M6, 29 by M7), 5 are management-port only, and 48 have no implementation and no owner: alerts and decisions (8), investigation (3), dashboards and portfolio (5), campaigns (2), rules (5), thresholds, circuit breakers and dual-control config changes (11), SAR reports (3), models, datasets and retraining (8), admin health and webhook deliveries (2), the deployment environment (1). Waiting on it: M6's `DecisionTransitionService.analystDecidesHold` and `CircuitBreakerPort.countConfirmedFraud`, both with no production caller; NFR-SEC-03's inspector test (PB-114); M8's console, whose analyst and risk screens are placeholders over mocks; FR-04-01 to FR-04-11, FR-05-01 to FR-05-07, FR-06-03 to FR-06-05, D-22, D-29, D-44, D-46, TEST-06, TEST-12, NFR-PERF-05, NFR-PERF-07; the WebSocket alert feed (FR-04-02), also unbuilt. Estimate: 15 to 18 controllers, 15 to 20 services, about 8,000 to 12,000 lines of code and tests, larger than M7.
+- **Acceptance:** the owner places it; then each group's operations implemented to the contract, with NFR-SEC-03's inspector test, `decideAlert` calling `analystDecidesHold`, and confirmed fraud reaching `countConfirmedFraud`.
+
+### PB-122 · `audit_event_receipts` grows without bound
+- **Source:** review of M7 round 2, finding 5, 2026-10-17 (V72) · **Priority:** medium · **Due:** M9
+- **Problem:** the receipts that deduplicate relayed audit events are append-only, never compressed and never purged, though deduplication is needed only while a redelivery is possible: the topic's P7D retention, plus the dead-letter topic's for replays. At the design load that is millions of rows a day kept for ever, and append-only forbids deleting them.
+- **Acceptance:** a bounded window (for example time partitions dropped past the redelivery horizon, with a stated exemption from the append-only rule) and an ADR note on why receipts may go before their audit rows.
+
+### PB-123 · FR-07-08's password change form (UI)
+- **Source:** review of M7 round 2, finding 7, 2026-10-17 · **Priority:** medium · **Due:** M8
+- **Problem:** FR-07-08's "a verified OTP triggers the password change form" is a console clause; the row stays with M7 for its delivery gap (PB-106), so without this row the clause had no owner.
+- **Acceptance:** the console shows the change form after a verified code, with a component or end-to-end test.
+
+### PB-124 · NFR-REL-06's "Temporarily unavailable" Google button (UI)
+- **Source:** review of M7 round 2, finding 7, 2026-10-17 · **Priority:** medium · **Due:** M8
+- **Problem:** NFR-REL-06 says the Google button shows "Temporarily unavailable" while Google is down; the server answers 503 with `Retry-After` (proved), but the console clause had no owner while the row stays with M7 (PB-112).
+- **Acceptance:** the console shows the state on a 503 from `/auth/google`, with a component test.
+
+### PB-76 · Training rows near the corpus's start see truncated history; test rows do not
+- **Source:** PB-67's laptop cache, 2026-09-22 · **Priority:** high · **Due:** before the paper's
+  results, and before PB-67 is concluded
+- **Measured:** the laptop learning-curve cache (340,000-row corpus) and the declared gate cache
+  (400,000 rows) carry the same 20,000 validation rows, and four features differ between them:
+  `amount_to_max_90d_ratio`, `amount_zscore_90d`, `counterparty_confirmed_fraud_90d` and
+  `distance_from_home_centroid_km`. Test and calibration rows are identical. The only difference
+  between the caches is how far back the corpus reaches.
+- **Why it matters:** windowed features see only rows inside the corpus. A training row within 90
+  days of the corpus's start has its 90-day history truncated. Test rows, which sit at the newest
+  end, always have full history. So every M4 model — the declared gate run included — trained on
+  some rows whose features were computed differently from the rows it is scored on. M3-1 found the
+  same mechanism for `velocity_ratio_1h_vs_30d`; this is its general form. It is a candidate
+  contributor to the recall shortfall at 0.60, not a demonstrated one.
+- **It also confounds PB-67.** Sizes drawn from one pool share one truncation profile, so the
+  laptop's 30K, 60K and 120K compare with each other. The declared gate's 30K (400,000-row corpus)
+  and the Codespace's 240K (520,000) have different ones, so the curve's last step changes volume,
+  time span and truncation together.
+- **Acceptance:** measure the share of training rows whose windows reach before the corpus start,
+  and either build training features from a corpus that reaches at least 90 days before the
+  earliest training row, or report every model figure with that share stated. The owner decides.

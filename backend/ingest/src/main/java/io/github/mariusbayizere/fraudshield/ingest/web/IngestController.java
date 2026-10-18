@@ -128,43 +128,56 @@ public final class IngestController {
    */
   @PostMapping("/api/v1/transactions/ingest/batch")
   public ResponseEntity<byte[]> batch(HttpServletRequest request) throws IOException, SQLException {
+    // The rate-limit filter has already charged this request one unit, before its body was read,
+    // so a key over its budget is refused without the server reading or parsing anything
+    // (review 8 of 2026-09-24). Here a valid batch is charged the rest of its item count.
     UUID correlation = ApiKeyFilter.correlation(request);
     Optional<ResponseEntity<byte[]>> refused =
         refuse(request, ApiScope.INGEST_WRITE, MAX_BATCH_BODY);
     if (refused.isPresent()) {
-      // A refusal still costs one unit, as any request does (unless there is no key to charge).
-      return charged(request, 1, correlation, refused.get());
+      return refused.get();
     }
     byte[] raw = request.getInputStream().readNBytes(MAX_BATCH_BODY + 1);
     if (raw.length > MAX_BATCH_BODY) {
-      return charged(request, 1, correlation, tooLarge(MAX_BATCH_BODY, correlation));
+      return tooLarge(MAX_BATCH_BODY, correlation);
     }
     JsonNode body;
     try {
       body = JSON.readTree(raw);
     } catch (JacksonException malformed) {
-      return charged(
-          request,
-          1,
-          correlation,
-          problem(Problems.validation(RequestValidator.malformed(), correlation)));
+      return problem(Problems.validation(RequestValidator.malformed(), correlation));
     }
     // The budget is counted in transactions (ADR 0058, adopting ADR 0100): a batch costs its item
-    // count, charged here once and all or nothing, before anything is accepted. An envelope that
-    // is not a valid batch costs one unit, like any other request.
+    // count. One unit was taken on admission; the remaining units are taken here, once and all or
+    // nothing, before anything is accepted. An envelope that is not a valid batch costs only the
+    // admission unit, like any other request.
     int units = BatchJobs.chargeableUnits(body);
-    RateLimiter.Permit permit = limiter.take(principal(request).apiKeyId(), units);
-    if (!permit.allowed()) {
-      return withBudget(
-          ResponseEntity.status(429)
-              .header("Retry-After", Integer.toString(permit.retryAfterSeconds()))
-              .contentType(MediaType.APPLICATION_PROBLEM_JSON)
-              .body(RateLimitFilter.refusal(permit, units, correlation)),
-          permit);
+    Optional<RateLimiter.Permit> rest = Optional.empty();
+    if (units > 1) {
+      RateLimiter.Permit charge = limiter.take(principal(request).apiKeyId(), units - 1);
+      if (!charge.allowed()) {
+        // The admission unit is kept, as for any refused request (ADR 0058 point 6), so a retry
+        // costs the whole batch again: Retry-After is the wait for all of it, not for the rest
+        // (review 9 of 2026-09-24).
+        RateLimiter.Permit permit =
+            new RateLimiter.Permit(
+                false,
+                charge.limit(),
+                charge.remaining(),
+                retryAfterForWholeBatch(units, charge.remaining(), charge.limit()),
+                charge.degraded());
+        return withBudget(
+            ResponseEntity.status(429)
+                .header("Retry-After", Integer.toString(permit.retryAfterSeconds()))
+                .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .body(RateLimitFilter.refusal(permit, units, correlation)),
+            permit);
+      }
+      rest = Optional.of(charge);
     }
     Object submitted = batches.submit(principal(request), body);
     if (submitted instanceof RequestValidator.Result invalid) {
-      return withBudget(problem(Problems.validation(invalid, correlation)), permit);
+      return withBudget(problem(Problems.validation(invalid, correlation)), rest);
     }
     BatchJobs.Accepted accepted = (BatchJobs.Accepted) submitted;
     String location = "/api/v1/jobs/" + accepted.jobId();
@@ -177,29 +190,27 @@ public final class IngestController {
             .header(HttpHeaders.LOCATION, location)
             .contentType(MediaType.APPLICATION_JSON)
             .body(JSON.writeValueAsBytes(node)),
-        permit);
+        rest);
   }
 
   /**
-   * Charges a batch request that ends in {@code answer} without a job: one unit, as any request.
-   * Over budget, the answer is the 429 instead; without an API key there is no budget to charge.
+   * Seconds until a batch refused at its second charge would be accepted if sent again: a retry
+   * pays the admission unit again, so the wait is for the whole batch, not for the rest (ADR 0058
+   * point 6), floored at one second.
+   *
+   * @param units the batch's item count
+   * @param remaining units left after the admission unit
+   * @param limit units refilled per second
+   * @return whole seconds, at least one
    */
-  private ResponseEntity<byte[]> charged(
-      HttpServletRequest request, int units, UUID correlation, ResponseEntity<byte[]> answer) {
-    ApiPrincipal key = principal(request);
-    if (key == null) {
-      return answer;
-    }
-    RateLimiter.Permit permit = limiter.take(key.apiKeyId(), units);
-    if (!permit.allowed()) {
-      return withBudget(
-          ResponseEntity.status(429)
-              .header("Retry-After", Integer.toString(permit.retryAfterSeconds()))
-              .contentType(MediaType.APPLICATION_PROBLEM_JSON)
-              .body(RateLimitFilter.refusal(permit, units, correlation)),
-          permit);
-    }
-    return withBudget(answer, permit);
+  static int retryAfterForWholeBatch(int units, int remaining, int limit) {
+    return (int) Math.max(1, Math.ceil((units - remaining) / (double) limit));
+  }
+
+  /** The answer with the budget headers of the controller's own charge, when it made one. */
+  private static ResponseEntity<byte[]> withBudget(
+      ResponseEntity<byte[]> answer, Optional<RateLimiter.Permit> permit) {
+    return permit.map(p -> withBudget(answer, p)).orElse(answer);
   }
 
   private static ResponseEntity<byte[]> withBudget(

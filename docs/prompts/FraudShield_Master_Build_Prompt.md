@@ -752,11 +752,12 @@ These are the standards the Principal Reviewer enforces. "It works" is not the b
 **Docs and traceability**
 - [ ] Traceability rows updated with real evidence (commands, artifact paths, and — after merge — commit SHA).
 - [ ] ADRs written for any deviation; module READMEs and runbooks updated.
+- [ ] For every claim that a property is tested (a traceability row, a gate criterion, a contract invariant), the reviewer asks: would the named test fail if the code it claims to prove were deleted? Each claim that does not pass says so in those terms ("deleting X would not fail any test"); none is accepted on the test's name, its presence or a green run.
 
 ### I.3 Milestone-level review (before tagging `m<N>-complete`)
 
 1. Check out `main` at the merge commit into a **clean worktree** (`git worktree add ../fs-review-mN main`), run the full milestone gate from scratch with no caches, and compare results with the numbers claimed.
-2. Walk every requirement in the milestone's scope in the traceability matrix; open the test for each and confirm it asserts the criterion.
+2. Walk every requirement in the milestone's scope in the traceability matrix; open the test for each and confirm it asserts the criterion, and that it would fail if the code meeting the criterion were deleted (the deletion standard, lab notebook 2026-10-17). Report the count of rows proved in full, in part and not at all; a gap is closed by a test or carried to the backlog row by row, never by rewording.
 3. Cross-component review: contracts between Java, Python, Kafka and front-end still agree (contract tests green; schemas identical to generated code).
 4. Threat-model delta: update `docs/security/threat_model.md` for new components or data flows.
 5. Architecture fitness: latency budget table (C.2) re-measured if the hot path changed; dependency graph and module boundaries unchanged or ADR-documented.
@@ -780,7 +781,7 @@ Date: <UTC>   Branch/commit: <sha>   Requirements: <IDs>   Defects: <D-xx>
 Verdict: APPROVED | APPROVED_WITH_MINORS | CHANGES_REQUIRED
 
 ## Checks re-run (command → result)
-## Mutation spot checks (what was broken → which test failed)
+## Deletion checks (code deleted → which test failed, or none; one line per claimed-tested row in scope)
 ## Findings
 | # | Severity | Location | Finding | Required action | Status |
 ## Evidence reproduced (claimed vs measured)

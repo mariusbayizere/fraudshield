@@ -32,6 +32,9 @@
     <module>decision</module>
     <module>notify</module>
     <module>ingest</module>
+    <module>audit</module>
+    <module>auth</module>
+    <module>admin</module>
   </modules>
 
   <properties>

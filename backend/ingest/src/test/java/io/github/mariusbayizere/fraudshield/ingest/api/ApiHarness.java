@@ -1,14 +1,12 @@
 package io.github.mariusbayizere.fraudshield.ingest.api;
 
 import com.sun.net.httpserver.HttpServer;
+import io.github.mariusbayizere.fraudshield.auth.crypto.Crypto;
 import io.github.mariusbayizere.fraudshield.decision.testing.Fixtures;
 import io.github.mariusbayizere.fraudshield.decision.testing.KafkaTestCluster;
 import io.github.mariusbayizere.fraudshield.decision.testing.RedisTestServer;
 import io.github.mariusbayizere.fraudshield.decision.testing.ScorerDouble;
 import io.github.mariusbayizere.fraudshield.decision.testing.TestDatabase;
-import io.github.mariusbayizere.fraudshield.ingest.auth.ApiKeyAuthenticator;
-import io.github.mariusbayizere.fraudshield.ingest.auth.ApiPrincipal;
-import io.github.mariusbayizere.fraudshield.ingest.auth.ApiScope;
 import io.github.mariusbayizere.fraudshield.notify.sms.SmsGateway;
 import io.github.mariusbayizere.fraudshield.notify.vault.TestVault;
 import io.github.mariusbayizere.fraudshield.notify.webhook.HttpWebhookTransport;
@@ -20,26 +18,34 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.KeyPairGenerator;
+import java.security.NoSuchAlgorithmException;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.Base64;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import org.springframework.test.context.DynamicPropertyRegistry;
 
 /**
  * Everything the API needs, real where it can be: TimescaleDB, Redis and Kafka containers, and the
  * scorer as a gRPC double on a real Netty port (M5 builds the real one), and the PII vault as its
- * own PostgreSQL instance with the application's own vault adapters over it (D-20). The API-key
- * module, the webhook endpoint registry and the SMS provider are M7's and third parties'; here they
- * are test beans, registered only by these tests.
+ * own PostgreSQL instance with the application's own vault adapters over it (D-20). API keys are
+ * M7's real ones: each test key is an {@code api_keys} row with the HMAC of its secret under the
+ * test pepper. Three collaborators stay test beans, registered only by these tests: the SMS
+ * provider, a loopback webhook transport, and a webhook registry pointing at the plain-HTTP
+ * receiver below, which M7's real registry cannot hold because {@code api_keys.webhook_url} must be
+ * HTTPS.
  */
 public final class ApiHarness {
 
@@ -73,6 +79,21 @@ public final class ApiHarness {
   /** A fifth key with its own budget, for batches while Redis is down. */
   public static final String BUDGET_KEY_FIVE = "fsk_test_hhhhhhhhhhhh_" + "f".repeat(43);
 
+  /** A sixth key with its own budget, for an exhausted key's stalled batch. */
+  public static final String BUDGET_KEY_SIX = "fsk_test_iiiiiiiiiiii_" + "g".repeat(43);
+
+  /** A seventh key with its own budget, for what refused and invalid batches cost. */
+  public static final String BUDGET_KEY_SEVEN = "fsk_test_jjjjjjjjjjjj_" + "h".repeat(43);
+
+  /** An eighth key with its own budget, for a batch refused at its second charge. */
+  public static final String BUDGET_KEY_EIGHT = "fsk_test_kkkkkkkkkkkk_" + "i".repeat(43);
+
+  /**
+   * A key no test uses before the PostgreSQL outage, so no instance holds its record when the
+   * database goes away (D-15, threat model R-13).
+   */
+  public static final String UNSEEN_KEY = "fsk_test_llllllllllll_" + "u".repeat(43);
+
   /**
    * The {@code api_keys} row ids of the budget keys: fixed, and inserted, because a batch job
    * references its key's row.
@@ -83,10 +104,16 @@ public final class ApiHarness {
           BUDGET_KEY_TWO, UUID.fromString("6c1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a02"),
           BUDGET_KEY_THREE, UUID.fromString("6c1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a03"),
           BUDGET_KEY_FOUR, UUID.fromString("6c1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a04"),
-          BUDGET_KEY_FIVE, UUID.fromString("6c1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a05"));
+          BUDGET_KEY_FIVE, UUID.fromString("6c1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a05"),
+          BUDGET_KEY_SIX, UUID.fromString("6c1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a06"),
+          BUDGET_KEY_SEVEN, UUID.fromString("6c1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a07"),
+          BUDGET_KEY_EIGHT, UUID.fromString("6c1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a08"));
 
   /** The api_keys row id of {@link #KEY}. */
   public static final UUID KEY_ID = UUID.fromString("5b1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a5b");
+
+  /** The API-key pepper (version 1), random per run. */
+  static final byte[] PEPPER = Crypto.randomBytes(32);
 
   /** Webhook signing secret for the test receiver. */
   public static final String WEBHOOK_SECRET = "hook-" + "s".repeat(40);
@@ -117,7 +144,7 @@ public final class ApiHarness {
     try {
       DB = TestDatabase.create();
       DB.institution(Fixtures.INSTITUTION);
-      apiKeyRow();
+      apiKeyRows();
       VAULT = new TestVault();
       REDIS = new RedisTestServer();
       KAFKA = new KafkaTestCluster();
@@ -151,7 +178,7 @@ public final class ApiHarness {
 
   private ApiHarness() {}
 
-  private static void apiKeyRow() throws SQLException {
+  private static void apiKeyRows() throws SQLException {
     UUID admin = UUID.randomUUID();
     try (Connection c = DB.superuser()) {
       TestDatabase.exec(
@@ -162,27 +189,65 @@ public final class ApiHarness {
               + " '$2b$12$notARealHashJustTheShapeOfOne.............')",
           admin,
           Fixtures.INSTITUTION);
-      TestDatabase.exec(
-          c,
-          "INSERT INTO fraudshield.api_keys (id, institution_id, key_id, name,"
-              + " secret_hmac, pepper_version, last_four, scopes, created_by) VALUES (?, ?,"
-              + " 'aaaaaaaaaaaa', 'Core banking test', decode(repeat('00', 32), 'hex'), 1, 'kkkk',"
-              + " ARRAY['ingest:write', 'decisions:read', 'jobs:read'], ?)",
-          KEY_ID,
-          Fixtures.INSTITUTION,
-          admin);
+      String all = "ARRAY['ingest:write', 'decisions:read', 'jobs:read']";
+      apiKeyRow(c, KEY_ID, KEY, "Core banking test", all, admin);
+      apiKeyRow(c, UUID.randomUUID(), ROTATED_KEY, "Core banking rotated", all, admin);
+      apiKeyRow(c, UUID.randomUUID(), READ_ONLY_KEY, "Read only", "ARRAY['decisions:read']", admin);
+      apiKeyRow(c, UUID.randomUUID(), UNSEEN_KEY, "Unseen before the outage", all, admin);
       for (Map.Entry<String, UUID> budget : BUDGET_KEY_IDS.entrySet()) {
-        TestDatabase.exec(
+        apiKeyRow(
             c,
-            "INSERT INTO fraudshield.api_keys (id, institution_id, key_id, name,"
-                + " secret_hmac, pepper_version, last_four, scopes, created_by) VALUES (?, ?,"
-                + " ?, 'Budget test', decode(repeat('00', 32), 'hex'), 1, 'bbbb',"
-                + " ARRAY['ingest:write', 'decisions:read', 'jobs:read'], ?)",
             budget.getValue(),
-            Fixtures.INSTITUTION,
-            budget.getKey().substring("fsk_test_".length(), "fsk_test_".length() + 12),
+            budget.getKey(),
+            "Budget test " + budget.getValue().toString().substring(34),
+            all,
             admin);
       }
+    }
+  }
+
+  private static void apiKeyRow(
+      Connection c, UUID id, String rawKey, String name, String scopes, UUID admin)
+      throws SQLException {
+    String keyId = rawKey.substring("fsk_test_".length(), "fsk_test_".length() + 12);
+    String secret = rawKey.substring("fsk_test_".length() + 13);
+    TestDatabase.exec(
+        c,
+        "INSERT INTO fraudshield.api_keys (id, institution_id, key_id, name, secret_hmac,"
+            + " pepper_version, last_four, scopes, created_by) VALUES (?, ?, ?, ?, ?, 1, ?, "
+            + scopes
+            + ", ?)",
+        id,
+        Fixtures.INSTITUTION,
+        keyId,
+        name,
+        Crypto.hmacSha256(PEPPER, secret.getBytes(StandardCharsets.US_ASCII)),
+        secret.substring(secret.length() - 4),
+        admin);
+  }
+
+  private static Path jwtSigningKey() {
+    try {
+      KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+      generator.initialize(2048);
+      Path file = Files.createTempFile("fs-api-jwt", ".pem");
+      file.toFile().deleteOnExit();
+      String label = "PRIVATE" + " KEY"; // split, so no scanner mistakes the code for a key
+      Files.writeString(
+          file,
+          "-----BEGIN "
+              + label
+              + "-----\n"
+              + Base64.getMimeEncoder(64, "\n".getBytes(StandardCharsets.US_ASCII))
+                  .encodeToString(generator.generateKeyPair().getPrivate().getEncoded())
+              + "\n-----END "
+              + label
+              + "-----\n");
+      return file;
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
+    } catch (NoSuchAlgorithmException e) {
+      throw new IllegalStateException(e);
     }
   }
 
@@ -210,6 +275,22 @@ public final class ApiHarness {
     registry.add("fraudshield.vault.current-key-id", () -> "harness");
     registry.add("fraudshield.vault.master-keys.harness", () -> VAULT_MASTER_KEY);
     registry.add("fraudshield.vault.index-key", () -> VAULT_INDEX_KEY);
+    registry.add("spring.data.redis.url", REDIS::uri);
+    registry.add("spring.data.redis.timeout", () -> "500ms");
+    registry.add("fraudshield.auth.environment", () -> "test");
+    registry.add(
+        "fraudshield.auth.console-base-url", () -> "https://console.test.fraudshield.local");
+    registry.add("fraudshield.auth.mail-from", () -> "no-reply@fraudshield.local");
+    registry.add(
+        "fraudshield.auth.token-key-hex", () -> HexFormat.of().formatHex(Crypto.randomBytes(32)));
+    registry.add("fraudshield.auth.secret-box-key-id", () -> "harness");
+    registry.add(
+        "fraudshield.auth.secret-box-key-hex",
+        () -> HexFormat.of().formatHex(Crypto.randomBytes(32)));
+    Path jwt = jwtSigningKey();
+    registry.add("fraudshield.auth.jwt.signing-keys[0].kid", () -> "harness");
+    registry.add("fraudshield.auth.jwt.signing-keys[0].private-key", jwt::toString);
+    registry.add("fraudshield.auth.api-keys.peppers.1", () -> HexFormat.of().formatHex(PEPPER));
     registry.add("server.port", () -> "0");
     registry.add("management.server.port", () -> "0");
     registry.add("fraudshield.institutions." + Fixtures.INSTITUTION + ".sender-id", () -> "FSBANK");
@@ -221,35 +302,19 @@ public final class ApiHarness {
         () -> "https://verify.fsbank.rw/v/");
   }
 
-  /** Test-only beans standing in for M7, the PII vault and the SMS provider. */
+  /** Test-only beans standing in for the SMS provider and an integrator's webhook receiver. */
   @TestConfiguration(proxyBeanMethods = false)
   public static class Collaborators {
 
-    private static ApiPrincipal budget(String key) {
-      return new ApiPrincipal(
-          BUDGET_KEY_IDS.get(key), Fixtures.INSTITUTION, Set.of(ApiScope.values()));
-    }
-
+    /**
+     * Webhooks to the plain-HTTP receiver, in place of M7's registry ({@code StaffIdentityWiring}),
+     * which holds HTTPS URLs only.
+     *
+     * @return the registry
+     */
     @Bean
-    ApiKeyAuthenticator apiKeys() {
-      Map<String, ApiPrincipal> keys =
-          Map.of(
-              KEY, new ApiPrincipal(KEY_ID, Fixtures.INSTITUTION, Set.of(ApiScope.values())),
-              ROTATED_KEY,
-                  new ApiPrincipal(KEY_ID, Fixtures.INSTITUTION, Set.of(ApiScope.values())),
-              READ_ONLY_KEY,
-                  new ApiPrincipal(
-                      UUID.randomUUID(), Fixtures.INSTITUTION, Set.of(ApiScope.DECISIONS_READ)),
-              BUDGET_KEY_ONE, budget(BUDGET_KEY_ONE),
-              BUDGET_KEY_TWO, budget(BUDGET_KEY_TWO),
-              BUDGET_KEY_THREE, budget(BUDGET_KEY_THREE),
-              BUDGET_KEY_FOUR, budget(BUDGET_KEY_FOUR),
-              BUDGET_KEY_FIVE, budget(BUDGET_KEY_FIVE));
-      return raw -> Optional.ofNullable(raw == null ? null : keys.get(raw));
-    }
-
-    @Bean
-    WebhookEndpoints webhookEndpoints() {
+    @Primary
+    WebhookEndpoints loopbackWebhookEndpoints() {
       URI url = URI.create("http://127.0.0.1:" + RECEIVER.getAddress().getPort() + "/hooks");
       return institution ->
           institution.equals(Fixtures.INSTITUTION)

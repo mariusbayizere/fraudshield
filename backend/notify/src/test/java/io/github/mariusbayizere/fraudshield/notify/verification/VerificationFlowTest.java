@@ -3,6 +3,7 @@ package io.github.mariusbayizere.fraudshield.notify.verification;
 import static io.github.mariusbayizere.fraudshield.decision.testing.Fixtures.INSTITUTION;
 import static io.github.mariusbayizere.fraudshield.decision.testing.Fixtures.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.sun.net.httpserver.HttpServer;
 import io.github.mariusbayizere.fraudshield.decision.adapter.events.FactCodec;
@@ -21,6 +22,7 @@ import io.github.mariusbayizere.fraudshield.decision.testing.Fixtures;
 import io.github.mariusbayizere.fraudshield.decision.testing.InMemoryPorts;
 import io.github.mariusbayizere.fraudshield.decision.testing.MutableClock;
 import io.github.mariusbayizere.fraudshield.decision.testing.TestDatabase;
+import io.github.mariusbayizere.fraudshield.notify.kafka.NotYetRecordedException;
 import io.github.mariusbayizere.fraudshield.notify.sms.AfricasTalkingGateway;
 import io.github.mariusbayizere.fraudshield.notify.sms.ContactDirectory;
 import io.github.mariusbayizere.fraudshield.notify.sms.CustomerSmsSender;
@@ -48,6 +50,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 /**
  * FR-03-04, FR-03-05, E.7 and D-25 end to end from an auto-block: the intent becomes one GSM-7 SMS
@@ -93,7 +96,13 @@ class VerificationFlowTest {
             clock);
     decisions.decide(Fixtures.transaction("15000"), new byte[32], System.nanoTime());
     List<SpoolRecord> records = new ArrayList<>();
-    for (DecisionEvent fact : ports.events) {
+    for (DecisionEvent decided : ports.events) {
+      // Link eligibility comes from the kept decision's REQUESTED row (the ordering contract,
+      // 5.2): the test double's policy refuses it, so the persisted intent allows it here.
+      DecisionEvent fact =
+          decided instanceof DecisionEvent.CustomerNotificationRequested n
+              ? SmsOrderingTest.withLink(n, true)
+              : decided;
       byte[] payload = FactCodec.encode(List.of(fact));
       records.add(new SpoolRecord(records.size(), records.size() + 1, payload));
     }
@@ -263,12 +272,40 @@ class VerificationFlowTest {
   }
 
   @Test
-  @Tag("D-25")
-  void withoutSelfServiceTheSmsHasNoLinkAndSaysWhoToCall() throws Exception {
-    ((tools.jackson.databind.node.ObjectNode) intent).put("verification_link_allowed", false);
-    assertThat(sender.send(INSTITUTION, intent)).isEqualTo(CustomerSmsSender.Outcome.SENT);
-    assertThat(sent.getLast()).doesNotContain("https://").contains("+250788100100");
+  @Tag("FR-03-04")
+  void intentsThatOvertakeTheirAutoBlockEventSendNothingUntilItIsRecorded() throws Exception {
+    // The devcontainer run on 5c3f6b2: the spool's Kafka drainer ran ahead of its PostgreSQL
+    // drainer. The SMS was sent, the row recording it was refused (foreign key), and the intent was
+    // dead-lettered. Nothing may be sent, issued or recorded before the auto-block event exists.
+    ObjectNode early = ((ObjectNode) intent).deepCopy();
+    early.put("auto_block_event_id", UUID.randomUUID().toString());
+    early.put("notification_id", UUID.randomUUID().toString());
+    int before = sent.size();
+    assertThatThrownBy(() -> sender.send(INSTITUTION, early))
+        .isInstanceOf(NotYetRecordedException.class)
+        .hasMessageContaining(early.get("auto_block_event_id").asString());
+    assertThat(sent).hasSize(before);
     assertThat(one("SELECT count(*) FROM fraudshield.customer_verifications")).isEqualTo("0");
+    assertThat(
+            one(
+                "SELECT count(*) FROM fraudshield.customer_notifications WHERE event <>"
+                    + " 'REQUESTED'"))
+        .isEqualTo("0");
+
+    // An intent whose event is recorded (the fixture's) is sent as usual.
+    assertThat(sender.send(INSTITUTION, intent)).isEqualTo(CustomerSmsSender.Outcome.SENT);
+    assertThat(sent).hasSize(before + 1);
+  }
+
+  @Test
+  @Tag("FR-03-04")
+  void anIntentReReadAfterItsOutcomeWasRecordedIsNotSentAgain() throws Exception {
+    // Review 11 (2026-09-24): a crash between the recorded outcome and the offset commit re-reads
+    // the intent; the customer must not get the SMS twice.
+    assertThat(sender.send(INSTITUTION, intent)).isEqualTo(CustomerSmsSender.Outcome.SENT);
+    int after = sent.size();
+    assertThat(sender.send(INSTITUTION, intent)).isEqualTo(CustomerSmsSender.Outcome.SENT);
+    assertThat(sent).hasSize(after);
   }
 
   @Test

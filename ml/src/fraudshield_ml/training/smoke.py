@@ -355,14 +355,24 @@ def cache_write(
     extras: Mapping[str, Sequence[object]],
 ) -> None:
     """The feature matrix plus the per-row facts a breakdown needs, under a key that names them."""
+    names = trainable_features()
+    cache_write_columns(path, key, {name: [row[name] for row in rows] for name in names}, extras)
+
+
+def cache_write_columns(
+    path: Path,
+    key: dict[str, str],
+    columns: Mapping[str, Sequence[object]],
+    extras: Mapping[str, Sequence[object]],
+) -> None:
+    """`cache_write` from columns already built, so a large pass need not hold a dict per row."""
     missing = set(CACHE_EXTRAS) - set(extras)
     if missing:
         raise ValueError(f"the cache needs {sorted(missing)} alongside the features")
     names = trainable_features()
-    columns: dict[str, list[object]] = {name: [row[name] for row in rows] for name in names}
     carried = CACHE_EXTRAS + tuple(k for k in CACHE_OPTIONAL if k in extras)
     table = pa.table(
-        {**columns, **{k: list(extras[k]) for k in carried}},
+        {**{name: list(columns[name]) for name in names}, **{k: list(extras[k]) for k in carried}},
         metadata={k.encode(): v.encode() for k, v in key.items()},
     )
     path.parent.mkdir(parents=True, exist_ok=True)

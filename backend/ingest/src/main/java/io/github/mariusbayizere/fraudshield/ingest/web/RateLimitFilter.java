@@ -18,10 +18,12 @@ import tools.jackson.databind.ObjectMapper;
  * Holds each API key to its budget on the machine paths (E.1), counted in transactions (ADR 0058,
  * adopting ADR 0100).
  *
- * <p>Every request costs one unit here, except the batch submission: its cost is its item count,
- * which is known only once the body is read, so {@link IngestController} charges it, once and all
- * or nothing, before the job is accepted. Charging the batch one unit here would let a caller
- * submit a thousand transactions for the price of one.
+ * <p>Every request costs one unit here, before its body is read, the batch submission included, so
+ * a key over its budget is refused without the server reading or parsing anything. A batch costs
+ * its item count, which is known only once the body is read, so {@link IngestController} charges
+ * the rest (items minus the unit taken here), once and all or nothing, before the job is accepted.
+ * Exempting the batch from this charge let an exhausted key make the server read and parse 4 MiB
+ * bodies without limit (review 8 of 2026-09-24).
  *
  * <p>It runs after {@link ApiKeyFilter}, so the budget belongs to the authenticated key rather than
  * to an address: an unauthenticated request is refused before it costs anything. A refused request
@@ -52,15 +54,9 @@ public final class RateLimitFilter extends OncePerRequestFilter {
     this.limiter = Objects.requireNonNull(limiter, "limiter");
   }
 
-  /** The batch submission, which the controller charges by item count. */
-  static final String BATCH_PATH = "/api/v1/transactions/ingest/batch";
-
   @Override
   protected boolean shouldNotFilter(HttpServletRequest request) {
     String path = request.getRequestURI();
-    if ("POST".equals(request.getMethod()) && path.equals(BATCH_PATH)) {
-      return true;
-    }
     return ApiKeyFilter.PROTECTED.stream().noneMatch(path::startsWith);
   }
 

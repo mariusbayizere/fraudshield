@@ -119,3 +119,35 @@ Hibernate 7.4 and Spring Data JPA 4.1 enter the runtime classpath of the decisio
 modules; the API's start-up gains a mapping validation,
 which is a check, not a cost worth measuring. The hot path is unchanged: it never touches an
 entity.
+
+## Amendment 2026-10-17 — how the decision path's audit records reach the chain (M7 merge)
+
+Point 2 says every audit record goes through the audit writer "in the transaction of the change
+they record". For the decision path that is not what was built, and the M7 merge review found that
+the two milestones' records disagreed (finding 2). As built, the decision engine does not write
+`audit_events` itself: `KafkaMessages` renders each audited fact (a hold, a frozen-account decline,
+an auto-block, a freeze, an analyst or timeout decision, a circuit-breaker change, an idempotency
+conflict) as an `audit.appended` envelope, and the durable spool publishes it to `fs.audit.events`
+with the decision's other facts (ADR 0064). Nothing consumed that topic until M7 assembled the API.
+
+The records now reach the chain through the audit writer's consumer (group `audit-writer`,
+`contracts/kafka/topics.yaml`), which appends each with the audit module's writer, explicit SQL as
+this point requires (ADR 0073). What changes from point 2's wording:
+
+- An audit row of a decision commits **after** the decision, by the spool's and the consumer's lag,
+  not in the same transaction. A decision whose audit event has not been appended yet is not
+  missing: the spool and Kafka hold it, and the consumer re-reads until it is appended.
+- Each event is appended once, however often Kafka delivers it: its `event_id` is recorded in
+  `audit_event_receipts` (V72) in the append's transaction.
+- Staff actions (M7) still write their audit rows in the transaction of the change, as point 2 says.
+
+## Amendment 2026-10-17 — point 4's `DemoUserEntity` stays (owner decision)
+
+Point 4 says `DemoUserEntity` should be deleted at merge and the seeder pointed at M7's
+`StaffUserEntity`. The owner decided on 2026-10-17 to keep it. Pointing the seeder at M7's entity
+would make the database tool (`backend/persistence`) depend on `fraudshield-auth`, and so load staff
+security and require its secrets, in order to delete one entity: the worse trade. The two entities
+never share a persistence unit: the database tool maps `users` with `DemoUserEntity`, and the API
+with `StaffUserEntity` alone, which `AssembledApplicationTest` asserts. Each application's
+`validate` start-up checks its own mapping against the schema, so a migration that changes `users`
+fails loudly in whichever one falls behind. This is settled; a review should not re-raise it.

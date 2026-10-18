@@ -12,7 +12,9 @@ import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import tools.jackson.databind.node.ObjectNode;
 
@@ -81,14 +83,23 @@ public final class KafkaMessages {
    * @return the Kafka records, in order
    */
   public List<KafkaMessage> render(List<DecisionEvent> events) {
+    // A customer SMS intent carries its transaction as a header, taken from the AutoBlocked fact
+    // of the same spool record (docs/architecture/decision-fact-ordering.md, section 4).
+    Map<UUID, UUID> blockTransactions = new HashMap<>();
+    for (DecisionEvent event : events) {
+      if (event instanceof DecisionEvent.AutoBlocked blocked) {
+        blockTransactions.put(blocked.autoBlockEventId(), blocked.transactionId());
+      }
+    }
     List<KafkaMessage> messages = new ArrayList<>();
     for (DecisionEvent event : events) {
-      render(event, messages);
+      render(event, messages, blockTransactions);
     }
     return messages;
   }
 
-  private void render(DecisionEvent event, List<KafkaMessage> out) {
+  private void render(
+      DecisionEvent event, List<KafkaMessage> out, Map<UUID, UUID> blockTransactions) {
     switch (event) {
       case DecisionEvent.TransactionDecided e -> {
         Transaction t = e.transaction();
@@ -183,16 +194,22 @@ public final class KafkaMessages {
                 e.frozenAt(),
                 frozen(e, base)));
       }
-      case DecisionEvent.CustomerNotificationRequested e ->
-          out.add(
-              message(
-                  CUSTOMER,
-                  "notification.requested",
-                  e.accountToken(),
-                  e.notificationId().toString(),
-                  e.institutionId(),
-                  e.requestedAt(),
-                  customer(e)));
+      case DecisionEvent.CustomerNotificationRequested e -> {
+        KafkaMessage intent =
+            message(
+                CUSTOMER,
+                "notification.requested",
+                e.accountToken(),
+                e.notificationId().toString(),
+                e.institutionId(),
+                e.requestedAt(),
+                customer(e));
+        UUID transaction = blockTransactions.get(e.autoBlockEventId());
+        out.add(
+            transaction == null
+                ? intent
+                : intent.withHeader(KafkaMessage.TRANSACTION_ID_HEADER, transaction.toString()));
+      }
       case DecisionEvent.DecisionChanged e -> {
         DecisionState s = e.state();
         out.add(decision(s));

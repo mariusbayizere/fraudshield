@@ -31,9 +31,15 @@ env: ## Create .env with random local development credentials (never overwrites)
 
 .PHONY: up
 up: env ## Start the core local stack and wait until every service is healthy
+	@./infrastructure/docker/scripts/pull-images.sh core
 	$(COMPOSE) --profile core up -d --wait --wait-timeout 300
 	@# The vault's migrations, after the stack is healthy: `run` returns their exit status (ADR 0069).
-	$(COMPOSE) --profile core run --rm pii-vault-migrate
+	@# `--rm` leaves no container behind, so a failure is recorded for diagnose-stack.sh.
+	@mkdir -p build/stack-diagnostics && rm -f build/stack-diagnostics/vault-migrate.failed
+	@if ! $(COMPOSE) --profile core run --rm pii-vault-migrate > build/stack-diagnostics/vault-migrate.log 2>&1; then \
+	  cat build/stack-diagnostics/vault-migrate.log; touch build/stack-diagnostics/vault-migrate.failed; \
+	  echo "the vault migration failed; see build/stack-diagnostics/vault-migrate.log" >&2; exit 1; \
+	fi; cat build/stack-diagnostics/vault-migrate.log
 	$(COMPOSE) --profile core ps
 
 .PHONY: smoke

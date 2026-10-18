@@ -1,85 +1,83 @@
-# Session state — M4 closed with two gate metrics missed and recorded; M8 next
+# Session state: M7 tagged; the plan now completes every milestone before the paper
 
-Rewritten 2026-09-22 (evening). Facts only; where something is unverified, assumed or open it says
-so.
+Rewritten 2026-10-18 on `main`. Facts only; anything unverified, assumed or open says so.
 
 ## Read this first
 
-**M4 is complete.** The declared gate run (`docs/benchmarks/m4_gate_d8083dbc_v3.txt`) passes 9 of
-11. **ML-GATE-03 (recall at 0.60, 0.736 at 30,000 training rows, against 0.88) and ML-GATE-06 (FNR at 0.60, 0.264
-against 0.12) are missed**, and on the owner's decision they are `DONE_WITH_DEVIATION` against ADR 0031's
-amendment: a miss at the training volume used, not deferrable and not a defect, recorded with value,
-interval and cause, reported in the paper, D-02's threshold unchanged. PB-67 (a larger training
-sample) is the open test of the candidate cause.
+- **`main` is at `71b0ec9`, tagged `m7-complete`.** It was fast-forwarded from `b77008e`
+  (`m6-complete`), with no merge commit.
+  - The evidence on that commit, read at job level, was all green: ci 39106652850 (all 7 jobs),
+    stack 39106653690 and devcontainer 39106656199.
+  - The tag message lists what is met and what is not.
+- **`milestones.yaml` still says `current: M7`, and M7 is not in `completed`.** This is an open
+  owner decision, and it is deliberate. Ten Must rows remain IN_PROGRESS under M7: FR-06-01,
+  FR-06-02, FR-06-06, FR-07-01, FR-07-06, NFR-SEC-03, NFR-REL-06, D-26, D-32 and D-51. Their gaps
+  are backlog rows PB-104 to PB-114.
+  - The traceability check fails a completed milestone that has open Must rows.
+  - M5 and M6 were listed only after the owner re-filed such rows to the milestones that close
+    them.
+  - **Next:** the owner decides those carries. Then list M7 complete, set `current` to the next
+    milestone, and update the README status line (`readme_status.py` checks it).
+- **The API-key cache follows `docs/architecture/api-key-cache-contract.md`** (option 1: stale use
+  up to 10 minutes from the cached read; R-13 accepted).
+  - ADR 0073 records why option 1 replaced the approved option 2 (30 s): draft 3 of option 2's
+    contract was found unsound, and the owner's stop rule, set in advance, required the switch.
+  - Review history: `docs/reviews/M7/m7-cache-contract-2026-10-18.md`.
+  - **Rule for any change to that cache:** amend the contract first, have it reviewed on its own,
+    then change the code.
+- **The deletion standard governs every claim:** a test is evidence for code only if deleting that
+  code fails it.
 
-**The M4 milestone review is APPROVED_WITH_MINORS** (`docs/reviews/M4/milestone-review.md`):
-fifteen BLOCKER and MAJOR findings, all fixed. The reviewer is the author, and the record says so.
+## The owner's plan (2026-10-18): every milestone before the paper
 
-**Next is M8 (front-end), as the owner planned**, in its own worktree. M5–M7 are not complete;
-`backend/` belongs to the M7 agent.
+M11 waits until M8, M9, M10 and the measurements are done, so it folds in the final numbers once.
 
-## Branches and CI
+| # | Step | Notes |
+|---|---|---|
+| 1 | **The M4 tail** | Rebase `m4/generalisation`'s 12 commits onto `main`, get ci green at job level, merge. Small, no Docker |
+| 2 | **`m6/featurestore-fallback`** | Merge `main` into it, fix its red java job, green at job level, merge. PB-69 must land before M10 measures NFR-REL-03 |
+| 3 | **M8** | Rebase on `main`, then build the analyst screens. The analyst API question below comes first |
+| 4 | **M9** | Infrastructure, with the owner's decisions already recorded in `docs/parallel/M9_updates.md` |
+| 5 | **M10** | The verification campaign, once M6 to M9 are all on `main` |
+| 6 | **M11** | The paper, with final numbers |
+| 7 | **M12** | The final audit and v1.0.0 |
 
-- **`main` is at `m3-complete` (`f8885d6`)**, green on every job. It is fast-forwarded to the M4
-  head only after CI is green there.
-- **`m4/generalisation`** is PR #1 against `main`. The default branch is still `m0/bootstrap`, a
-  repository setting only the owner can change (PB-25 stays blocked).
-- `m2-complete` sits on a commit whose python CI job fails; it was tagged before any CI run on it
-  (lab notebook). Not moved.
+**Open before M8 starts: who builds the analyst API.** It has 48 unimplemented contract operations,
+about 15 to 18 controllers and roughly 8,000 to 12,000 lines, and no owner (PB-121; scope in
+`docs/parallel/M7_updates.md`, "Unowned work").
+- **Recommendation given to the owner on 2026-10-18:** M8 builds the console against mocks generated
+  from the frozen contract, and the analyst API becomes its own milestone, landing before M10.
+- **Status:** the owner has not answered yet.
 
-## What M4 now contains
+## Branches
 
-| | Where |
+| Branch | State |
 |---|---|
-| D-05's ensemble: XGBoost and LightGBM, early-stopped on validation average precision, imbalance-weighted, one isotonic calibrator on the 0.55/0.45 combination, float32-exact | `ml/src/fraudshield_ml/training/model.py` |
-| D-06's Isolation Forest, raw score and percentile score | `training/anomaly.py` |
-| Per-model exact SHAP, the margin-space combination, top-5, coverage | `training/explain.py`, `docs/ml/explainability.md` |
-| The eleven M4 gate metrics, bootstrap CIs, DeLong, baselines, ablations, seeds, `metrics.json`, LaTeX, SVG | `training/gate*.py`, `fs-features gate` |
-| ONNX export and parity | `training/onnx_export.py` |
-| Test-set access log, back-filled | `docs/benchmarks/test_set_access.jsonl` |
-| E1's time-ordered target encoding | `training/smoke.py` |
+| `main` | `71b0ec9`, `m7-complete` |
+| `m7/staff-auth` | the same commit as `main` (merged) |
+| `m4/generalisation` | the M4 tail, 12 commits including PB-76 (`bb1d17a`); not merged; plan step 1 |
+| `m6/featurestore-fallback` | PB-69; not merged; its java job was red when last read; plan step 2 |
+| `m8/frontend`, `m9/infra`, `m10/verification`, `m11/paper` | in progress on their own branches |
 
-## The results that matter
-
-| | Evidence |
-|---|---|
-| Gate: AUC 0.970 [0.962, 0.977], +0.091 over the best single feature, +0.311 over the best trivial rule | `m4_gate_d8083dbc_v3.txt` |
-| Gate fails: recall at 0.60 0.736, FNR 0.264; even at the 1% FPR budget recall is 0.871 | same, PB-62 |
-| ONNX parity < 1e-6 on all 101,909 test rows | same |
-| Reversal-scam variant **9.1%** (6/66, [4.2%, 18.4%]) vs base 94.4%; below the pre-registered 0.15 as a point estimate, not as a whole interval | `m4_battery_d8083dbc_e1.txt` |
-| C-6: ensemble −0.6% vs XGBoost, +12.5% vs LightGBM | `m4_seed_variance_d8083dbc_e1.txt` |
-| Ablation: card-style features only −0.042 AUC (C-4's measurement; PB-60's redundancy caveat applies) | gate run |
-
-## Open, in the order I would take them
-
-| Item | What |
-|---|---|
-| **Owner** | ADR 0030 (MLflow deferred to M5) awaits confirmation |
-| PB-67 | a larger training sample, reported beside the current run |
-| PB-63 | the CI ML gate needs a dataset in CI (M9) |
-| PB-64, 65 | clauses carried to M5 and M6 |
-| PB-66 | E.5 items beyond the gate |
-| PB-68 | frontier and battery prose at `d8083dbc` |
-| M8 | next, in its own worktree |
+`m7/round2-wip` was deleted on 2026-10-18. The default branch is still `m0/bootstrap`, a repository
+setting only the owner can change (GOV-9).
 
 ## Things that will bite whoever picks this up
 
-- **Read a requirement's notes before building it.** E1 and PB-46's reporting rule were both
-  written on the M4 rows as settled decisions, and both were missed until the register was being
-  updated at the very end.
-- **A parity test on random data proves little.** The ONNX test passed on normals and the real
-  data failed on 0.39% of rows; the new test builds doubles that collapse to one float32.
-- **An impossible number is the best bug report** — precision above its own ceiling pointed
-  straight at isotonic ties.
-- **Commit before running a mutation script that restores from git.** One run reset an
-  uncommitted fix; a stash taken beforehand is what saved it.
-- **Never let a cleanup step run after a refused evidence run.** One reverted the access log and
-  lost a line, now reconstructed and marked.
-- **Several sessions share `/home/marius/fraudshield`; `backend/` belongs to the M7 agent.** Work in
-  a worktree with its own `UV_PROJECT_ENVIRONMENT`, with absolute paths.
-- **Read CI on the branch you push to.** This branch's python job was red for 22 runs.
-- **`fs-evidence` refuses on a dirty tree, untracked files included** — which is why evidence runs
-  from a separate frozen worktree here.
-- **Unauthenticated GitHub API: 60 requests an hour.**
-- Timings: ml suite ~1–2 min with coverage; dataset suite 30–60 min under load; gate cache build
-  ~13 min; `fs-features gate` with ablations and five seeds ~5 min; battery ~3 min.
+- **Memory is the constraint.** The laptop has 7.6 GB, often under 2 GB free.
+  - Check `free -h` before any build, and stop below 1.5 GB.
+  - Run one heavy job at a time.
+  - Run Docker verification on GitHub Actions wherever a dispatch can do it.
+  - There is no local Maven repository: Java is compiled and tested in CI only.
+- **Read CI at job level.** `ci` runs on every push. `stack` and `devcontainer` are path-filtered on
+  push, so dispatch them (`gh workflow run stack.yml --ref <branch>`) and check that each job ran
+  rather than being skipped.
+- **Traceability, in order.** After editing `requirements.yaml`, run `fs-traceability-seed`, then
+  `fs-traceability render`, then `fs-traceability check`. A re-seed can re-wrap notes, which makes
+  the generated matrix stale. That failed CI twice on 2026-10-18.
+- **Commit messages.** Chain `fs-commit-msg` and `git push` with `&&`, never `;`: a failed check was
+  once pushed anyway.
+- **Several sessions share `/home/marius/fraudshield`.** Work in a worktree (`/home/marius/fs-wt/…`)
+  with its own `UV_PROJECT_ENVIRONMENT`, and use absolute paths.
+- **Claim an id before using it** (`docs/backlog/product.md`, claims table). ADR numbers, Flyway
+  versions and backlog ids are global.

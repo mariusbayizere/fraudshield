@@ -1,0 +1,874 @@
+package io.github.mariusbayizere.fraudshield.auth.apikey;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import io.github.mariusbayizere.fraudshield.audit.AuditActor;
+import io.github.mariusbayizere.fraudshield.audit.RequestContext;
+import io.github.mariusbayizere.fraudshield.audit.jdbc.JdbcAuditLog;
+import io.github.mariusbayizere.fraudshield.audit.testing.TestDatabase;
+import io.github.mariusbayizere.fraudshield.auth.crypto.Crypto;
+import io.github.mariusbayizere.fraudshield.auth.crypto.SecretBox;
+import io.github.mariusbayizere.fraudshield.auth.testing.FakeTime;
+import io.github.mariusbayizere.fraudshield.auth.testing.Instances;
+import io.github.mariusbayizere.fraudshield.auth.testing.JpaTestStack;
+import io.github.mariusbayizere.fraudshield.auth.testing.MutableClock;
+import io.github.mariusbayizere.fraudshield.auth.web.ProblemException;
+import io.github.mariusbayizere.fraudshield.common.config.StaffRole;
+import java.net.InetAddress;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.Executor;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+import org.springframework.data.redis.core.StringRedisTemplate;
+
+/** API keys end to end on a real database and Redis (FR-06-07, D-19, FR-07-05). */
+@Tag("requires-docker")
+@Tag("FR-06-07")
+class ApiKeyLifecycleTest {
+
+  private static final Map<Integer, byte[]> PEPPERS = Map.of(1, Crypto.randomBytes(32));
+  private static final Executor DIRECT = Runnable::run;
+  private static final SecretBox BOX = new SecretBox("box-1", Crypto.randomBytes(32));
+  private static TestDatabase db;
+  private static JpaTestStack app;
+  private static UUID bank;
+  private static AuditActor admin;
+  private static StringRedisTemplate redisA;
+  private static StringRedisTemplate redisB;
+
+  private final MutableClock clock = new MutableClock(Instant.now());
+
+  @BeforeAll
+  static void start() throws Exception {
+    db = TestDatabase.create();
+    app = JpaTestStack.of(db, "fs_app");
+    bank = db.createInstitution("key-bank");
+    UUID adminId = UUID.randomUUID();
+    try (Connection superuser = db.superuser();
+        PreparedStatement insert =
+            superuser.prepareStatement(
+                """
+                INSERT INTO fraudshield.users (id, institution_id, first_name, last_name, email,
+                  password_hash, role, status, employee_id, department)
+                VALUES (?, ?, 'Key', 'Admin', 'key.admin@bank.rw',
+                  '$2a$12$abcdefghijklmnopqrstuuv0123456789abcdefghijklmnopqrst', 'ADMIN', 'ACTIVE', 'KEYADMIN1', 'IT')
+                """)) {
+      insert.setObject(1, adminId);
+      insert.setObject(2, bank);
+      insert.executeUpdate();
+    }
+    admin = new AuditActor(adminId, "Key", "Admin", StaffRole.ADMIN);
+    redisA = Instances.redis();
+    redisB = Instances.redis();
+  }
+
+  private ApiKeyAuthenticator authenticator(StringRedisTemplate redis, String environment) {
+    return authenticator(redis, environment, System::nanoTime);
+  }
+
+  private ApiKeyAuthenticator authenticator(
+      StringRedisTemplate redis, String environment, java.util.function.LongSupplier nanoTime) {
+    return authenticator(redis, environment, nanoTime, Duration.ofSeconds(2));
+  }
+
+  private ApiKeyAuthenticator authenticator(
+      StringRedisTemplate redis,
+      String environment,
+      java.util.function.LongSupplier nanoTime,
+      Duration cacheTtl) {
+    return new ApiKeyAuthenticator(
+        new ApiKeyRepository(app.jdbc(), app.apiKeys(), app.entities(), clock),
+        app.tenants(),
+        Instances.safe(redis),
+        PEPPERS,
+        environment,
+        cacheTtl,
+        clock,
+        nanoTime,
+        DIRECT);
+  }
+
+  private ApiKeyService service(ApiKeyAuthenticator authenticator) {
+    return new ApiKeyService(
+        app.tenants(),
+        new ApiKeyRepository(app.jdbc(), app.apiKeys(), app.entities(), clock),
+        authenticator,
+        new WebhookUrlValidator(host -> new InetAddress[] {InetAddress.getByName("203.0.113.7")}),
+        BOX,
+        new JdbcAuditLog(app.jdbc(), (short) 11),
+        clock,
+        "test",
+        PEPPERS,
+        1,
+        Duration.ofHours(24));
+  }
+
+  private static String name() {
+    return "Core banking " + UUID.randomUUID().toString().substring(0, 8).toUpperCase(Locale.ROOT);
+  }
+
+  @Test
+  @Tag("D-19")
+  void createdKeyAuthenticatesWithItsScopesAndStoresOnlyAnHmac() {
+    ApiKeyAuthenticator authenticator = authenticator(redisA, "test");
+    ApiKeyService.Issued issued =
+        service(authenticator)
+            .create(
+                bank,
+                name(),
+                List.of(ApiKeyScope.INGEST_WRITE, ApiKeyScope.DECISIONS_READ),
+                "https://hooks.bank.example/fs",
+                admin,
+                RequestContext.SYSTEM);
+    assertThat(issued.rawKey()).startsWith("fsk_test_");
+    assertThat(issued.webhookSigningSecret()).startsWith("whsec_test_");
+    assertThat(issued.record().lastFour())
+        .isEqualTo(issued.rawKey().substring(issued.rawKey().length() - 4));
+
+    ApiKeyPrincipal principal = authenticator.authenticate(issued.rawKey()).orElseThrow();
+    assertThat(principal.scopes())
+        .containsExactlyInAnyOrder(ApiKeyScope.INGEST_WRITE, ApiKeyScope.DECISIONS_READ);
+    assertThat(principal.institutionId()).isEqualTo(bank);
+
+    String secret = issued.rawKey().substring(issued.rawKey().lastIndexOf('_') + 1);
+    try (Connection superuser = db.superuser();
+        var rows =
+            superuser
+                .createStatement()
+                .executeQuery(
+                    "SELECT encode(secret_hmac, 'escape')"
+                        + " || coalesce(encode(webhook_secret_ciphertext, 'escape'), '')"
+                        + " FROM fraudshield.api_keys WHERE key_id = '"
+                        + issued.record().keyId()
+                        + "'")) {
+      rows.next();
+      assertThat(rows.getString(1))
+          .doesNotContain(secret)
+          .doesNotContain(issued.webhookSigningSecret());
+    } catch (java.sql.SQLException e) {
+      throw new IllegalStateException(e);
+    }
+    assertThat(
+            service(authenticator)
+                .webhookSecret(bank, issued.record().id(), issued.record().keyId()))
+        .isEqualTo(issued.webhookSigningSecret());
+  }
+
+  @Test
+  void wrongSecretsOtherEnvironmentsAndMalformedKeysAreRefused() {
+    ApiKeyAuthenticator authenticator = authenticator(redisA, "test");
+    ApiKeyService.Issued issued =
+        service(authenticator)
+            .create(
+                bank, name(), List.of(ApiKeyScope.JOBS_READ), null, admin, RequestContext.SYSTEM);
+    String raw = issued.rawKey();
+    String wrongSecret = raw.substring(0, raw.length() - 1) + (raw.endsWith("A") ? "B" : "A");
+    assertThat(authenticator.authenticate(wrongSecret)).isEmpty();
+    assertThat(authenticator(redisA, "prod").authenticate(raw))
+        .as("key of another environment")
+        .isEmpty();
+    assertThat(authenticator.authenticate("fsk_test_unknownkey01_" + "a".repeat(43))).isEmpty();
+    assertThat(authenticator.authenticate("Bearer something")).isEmpty();
+    assertThat(issued.webhookSigningSecret()).isNull();
+  }
+
+  /**
+   * Two administrators rotating the same key at once: the key row lock serialises them, and the
+   * second sees the key already ROTATING (ADR 0071 §4). A held row lock forces the interleaving.
+   */
+  @Test
+  @Tag("FR-06-07")
+  void concurrentRotationsOfOneKeyIssueOneReplacement() throws Exception {
+    ApiKeyService service = service(authenticator(redisA, "test"));
+    String name = name();
+    ApiKeyService.Issued original =
+        service.create(
+            bank, name, List.of(ApiKeyScope.INGEST_WRITE), null, admin, RequestContext.SYSTEM);
+    String keyId = original.record().keyId();
+    java.util.List<Object> outcomes;
+    // The pool is declared first so it closes last: the holder's lock is released before the pool
+    // waits for its tasks.
+    try (var pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+        Connection holder = db.superuser();
+        Connection observer = db.superuser()) {
+      holder.setAutoCommit(false);
+      try (PreparedStatement lock =
+          holder.prepareStatement(
+              "SELECT 1 FROM fraudshield.api_keys WHERE key_id = ? FOR UPDATE")) {
+        lock.setString(1, keyId);
+        lock.executeQuery().close();
+      }
+      java.util.concurrent.Callable<Object> rotate =
+          () -> {
+            try {
+              return service.rotate(bank, keyId, admin, RequestContext.SYSTEM);
+            } catch (ProblemException e) {
+              return e.status();
+            }
+          };
+      var first = pool.submit(rotate);
+      var second = pool.submit(rotate);
+      awaitWaitingOnLocks(observer, 2);
+      holder.commit();
+      outcomes = java.util.List.of(first.get(), second.get());
+    }
+    assertThat(outcomes).filteredOn(ApiKeyService.Issued.class::isInstance).hasSize(1);
+    assertThat(outcomes).as("the second sees ROTATING").contains(409);
+    try (Connection superuser = db.superuser();
+        PreparedStatement live =
+            superuser.prepareStatement(
+                "SELECT count(*) FROM fraudshield.api_keys WHERE name = ?"
+                    + " AND state <> 'REVOKED'")) {
+      live.setString(1, name);
+      try (var rows = live.executeQuery()) {
+        rows.next();
+        assertThat(rows.getLong(1)).as("the old key and one replacement").isEqualTo(2);
+      }
+    }
+  }
+
+  /** Polls from an autocommit connection: inside a transaction the view is a frozen snapshot. */
+  private static void awaitWaitingOnLocks(Connection observer, int waiters) throws Exception {
+    long deadline = System.nanoTime() + Duration.ofSeconds(20).toNanos();
+    while (System.nanoTime() < deadline) {
+      try (var rows =
+          observer
+              .createStatement()
+              .executeQuery(
+                  "SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock'")) {
+        rows.next();
+        if (rows.getLong(1) >= waiters) {
+          return;
+        }
+      }
+      Thread.sleep(20);
+    }
+    throw new AssertionError("the rotations never waited for the row lock");
+  }
+
+  /**
+   * FR-06-07 stated analytically (ADR 0071 §6): with the announcement lost, a revoked key is
+   * admitted for at most the cache TTL after the read that cached it began, however long that read
+   * took. Fake time, so the bound holds to the millisecond whatever the machine load.
+   */
+  @Test
+  @Tag("FR-06-07")
+  void revokedKeyIsRefusedWithinTheAnalyticBoundHoweverSlowTheRead() throws Exception {
+    for (Duration stall :
+        List.of(Duration.ZERO, Duration.ofMillis(1500), Duration.ofMillis(2500))) {
+      FakeTime time = new FakeTime();
+      ApiKeyAuthenticator deaf = authenticator(null, "test", time::nanos);
+      Duration bound = deaf.worstCaseStaleness();
+      assertThat(bound).isEqualTo(Duration.ofSeconds(2));
+      ApiKeyService other = service(authenticator(redisB, "test"));
+      ApiKeyService.Issued key =
+          other.create(
+              bank, name(), List.of(ApiKeyScope.INGEST_WRITE), null, admin, RequestContext.SYSTEM);
+      long anchor = time.now();
+      try (Connection lock = db.superuser();
+          Connection observer = db.superuser()) {
+        assertThat(
+                time.withSlowRead(
+                    lock,
+                    observer,
+                    "fraudshield.api_keys",
+                    stall,
+                    () -> deaf.authenticate(key.rawKey())))
+            .isPresent();
+      }
+      other.revoke(bank, key.record().keyId(), admin, RequestContext.SYSTEM); // deaf never hears
+      long end = anchor + bound.toMillis();
+      if (stall.compareTo(bound) < 0) {
+        time.set(end - 1);
+        assertThat(deaf.authenticate(key.rawKey()))
+            .as("still cached just inside the bound (read took %s)", stall)
+            .isPresent();
+      }
+      for (long at = end; at <= end + 2000; at += 250) {
+        time.set(at);
+        assertThat(deaf.authenticate(key.rawKey()))
+            .as("refused %d ms after the read began (read took %s)", at - anchor, stall)
+            .isEmpty();
+      }
+    }
+  }
+
+  @Test
+  @Tag("FR-06-07")
+  void revokedAndExpiredRotatedKeysNeverBecomeUsableAgain() {
+    // The premise of rule R2(e) of the cache contract (property P37): no operation moves a key
+    // out of REVOKED, or out of ROTATING once its overlap has ended.
+    ApiKeyAuthenticator authenticator = authenticator(redisA, "test");
+    ApiKeyService service = service(authenticator);
+    final ApiKeyRepository records =
+        new ApiKeyRepository(app.jdbc(), app.apiKeys(), app.entities(), clock);
+    ApiKeyService.Issued revoked =
+        service.create(
+            bank, name(), List.of(ApiKeyScope.INGEST_WRITE), null, admin, RequestContext.SYSTEM);
+    final String revokedId = revoked.record().keyId();
+    service.revoke(bank, revokedId, admin, RequestContext.SYSTEM);
+    assertThatThrownBy(() -> service.rotate(bank, revokedId, admin, RequestContext.SYSTEM))
+        .isInstanceOf(ProblemException.class)
+        .satisfies(e -> assertThat(((ProblemException) e).status()).isEqualTo(409));
+    try {
+      service.revoke(bank, revokedId, admin, RequestContext.SYSTEM);
+    } catch (ProblemException expected) {
+      // refusing a second revocation is as good as accepting it: the key stays revoked
+    }
+    assertThat(records.findCredential(revokedId).orElseThrow().state()).isEqualTo("REVOKED");
+    assertThat(authenticator.authenticate(revoked.rawKey())).isEmpty();
+
+    ApiKeyService.Issued rotated =
+        service.create(
+            bank, name(), List.of(ApiKeyScope.INGEST_WRITE), null, admin, RequestContext.SYSTEM);
+    final String rotatedId = rotated.record().keyId();
+    service.rotate(bank, rotatedId, admin, RequestContext.SYSTEM);
+    clock.advance(Duration.ofHours(24).plusMillis(1));
+    assertThatThrownBy(() -> service.rotate(bank, rotatedId, admin, RequestContext.SYSTEM))
+        .isInstanceOf(ProblemException.class)
+        .satisfies(e -> assertThat(((ProblemException) e).status()).isEqualTo(409));
+    try {
+      service.revoke(bank, rotatedId, admin, RequestContext.SYSTEM);
+    } catch (ProblemException expected) {
+      // either way the key is not usable again
+    }
+    assertThat(records.findCredential(rotatedId).orElseThrow().state()).isIn("ROTATING", "REVOKED");
+    authenticator.onMessage(rotatedId);
+    assertThat(authenticator.authenticate(rotated.rawKey())).isEmpty();
+  }
+
+  @Test
+  @Tag("FR-06-07")
+  void rotationKeepsTheOldKeyForTwentyFourHours() {
+    ApiKeyAuthenticator authenticator = authenticator(redisA, "test");
+    ApiKeyService service = service(authenticator);
+    ApiKeyService.Issued original =
+        service.create(
+            bank, name(), List.of(ApiKeyScope.INGEST_WRITE), null, admin, RequestContext.SYSTEM);
+    ApiKeyService.Issued replacement =
+        service.rotate(bank, original.record().keyId(), admin, RequestContext.SYSTEM);
+    assertThat(replacement.record().scopes()).containsExactly(ApiKeyScope.INGEST_WRITE);
+    assertThat(authenticator.authenticate(original.rawKey()))
+        .as("old key during the overlap")
+        .isPresent();
+    assertThat(authenticator.authenticate(replacement.rawKey())).isPresent();
+    assertThatThrownBy(
+            () -> service.rotate(bank, original.record().keyId(), admin, RequestContext.SYSTEM))
+        .isInstanceOf(ProblemException.class)
+        .satisfies(e -> assertThat(((ProblemException) e).status()).isEqualTo(409));
+
+    // PostgreSQL rounds the stored expiry to the microsecond, so step just past it.
+    clock.advance(Duration.ofHours(24).plusMillis(1));
+    authenticator.onMessage(original.record().keyId());
+    assertThat(authenticator.authenticate(original.rawKey())).as("overlap over").isEmpty();
+    assertThat(authenticator.authenticate(replacement.rawKey())).isPresent();
+  }
+
+  @Test
+  @Tag("FR-06-07")
+  void revokedKeyFailsOnAnotherInstanceWithinFiveSeconds() throws Exception {
+    ApiKeyAuthenticator instanceA = authenticator(redisA, "test");
+    ApiKeyAuthenticator instanceB = authenticator(redisB, "test");
+    var subscription =
+        Instances.subscribe(redisA, ApiKeyAuthenticator.CHANNEL, instanceA::onMessage);
+    Thread.sleep(300);
+    try {
+      long[] withPubSub = new long[5];
+      long[] withoutPubSub = new long[5];
+      ApiKeyAuthenticator deaf = authenticator(null, "test");
+      for (int i = 0; i < withPubSub.length; i++) {
+        ApiKeyService.Issued key =
+            service(instanceB)
+                .create(
+                    bank,
+                    name(),
+                    List.of(ApiKeyScope.INGEST_WRITE),
+                    null,
+                    admin,
+                    RequestContext.SYSTEM);
+        assertThat(instanceA.authenticate(key.rawKey())).isPresent();
+        assertThat(deaf.authenticate(key.rawKey())).isPresent();
+        service(instanceB).revoke(bank, key.record().keyId(), admin, RequestContext.SYSTEM);
+        withPubSub[i] = millisUntilRefused(instanceA, key.rawKey());
+        withoutPubSub[i] = millisUntilRefused(deaf, key.rawKey());
+      }
+      java.util.Arrays.sort(withPubSub);
+      java.util.Arrays.sort(withoutPubSub);
+      Instances.record(
+          "M7-api-key-revocation.json",
+          String.format(
+              Locale.ROOT,
+              "{\"runs\": 5, \"gate_ms\": 5000, \"with_pubsub_max_ms\": %d,"
+                  + " \"announcement_lost_max_ms\": %d,"
+                  + " \"cache_ttl_ms\": 2000}%n",
+              withPubSub[4],
+              withoutPubSub[4]));
+      assertThat(withPubSub[4]).isLessThan(5000);
+      assertThat(withoutPubSub[4]).isLessThan(5000);
+    } finally {
+      subscription.stop();
+    }
+  }
+
+  @Test
+  @Tag("D-19")
+  void revocationAnnouncementAloneEvictsAnotherInstancesCachedKey() throws Exception {
+    // A ten-minute cache: within the two seconds asserted, only the announcement can make this
+    // instance read the key again.
+    ApiKeyAuthenticator listening =
+        authenticator(redisA, "test", System::nanoTime, Duration.ofMinutes(10));
+    var subscription =
+        Instances.subscribe(redisA, ApiKeyAuthenticator.CHANNEL, listening::onMessage);
+    Thread.sleep(300);
+    try {
+      ApiKeyService other = service(authenticator(redisB, "test"));
+      ApiKeyService.Issued key =
+          other.create(
+              bank, name(), List.of(ApiKeyScope.INGEST_WRITE), null, admin, RequestContext.SYSTEM);
+      assertThat(listening.authenticate(key.rawKey())).isPresent();
+      other.revoke(bank, key.record().keyId(), admin, RequestContext.SYSTEM);
+      assertThat(millisUntilRefused(listening, key.rawKey()))
+          .as("ms until the listening instance refuses")
+          .isLessThan(2000);
+    } finally {
+      subscription.stop();
+    }
+  }
+
+  @Test
+  @Tag("D-19")
+  void theStoredSecretIsTheHmacOfTheSecretUnderTheCurrentPepper() throws Exception {
+    ApiKeyService.Issued key =
+        service(authenticator(redisA, "test"))
+            .create(
+                bank, name(), List.of(ApiKeyScope.JOBS_READ), null, admin, RequestContext.SYSTEM);
+    String secret = key.rawKey().substring(key.rawKey().length() - 43);
+    try (Connection superuser = db.superuser();
+        PreparedStatement select =
+            superuser.prepareStatement(
+                "SELECT secret_hmac, pepper_version FROM fraudshield.api_keys WHERE key_id = ?")) {
+      select.setString(1, key.record().keyId());
+      try (java.sql.ResultSet row = select.executeQuery()) {
+        assertThat(row.next()).isTrue();
+        assertThat(row.getInt(2)).isEqualTo(1);
+        // Not bcrypt, not a bare SHA-256: HMAC-SHA256 keyed by pepper version 1 (D-19).
+        assertThat(row.getBytes(1))
+            .isEqualTo(
+                Crypto.hmacSha256(
+                    PEPPERS.get(1), secret.getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
+      }
+    }
+  }
+
+  @Test
+  @Tag("D-15")
+  void duringDatabaseOutageKeysVerifiedInTheLastTenMinutesAreStillAdmitted() {
+    // PostgreSQL goes away after the keys are read: every connection attempt then fails.
+    java.util.concurrent.atomic.AtomicBoolean down =
+        new java.util.concurrent.atomic.AtomicBoolean();
+    javax.sql.DataSource switchable =
+        new org.springframework.jdbc.datasource.DelegatingDataSource(app.jdbc().getDataSource()) {
+          @Override
+          public Connection getConnection() throws java.sql.SQLException {
+            if (down.get()) {
+              throw new java.sql.SQLException("connection refused", "08001");
+            }
+            return super.getConnection();
+          }
+        };
+    FakeTime time = new FakeTime();
+    ApiKeyAuthenticator outageProof = outageProof(switchable, time);
+    ApiKeyService issuer = service(authenticator(redisA, "test"));
+    String verified = issue(issuer);
+    String announced = issue(issuer);
+    final String neverSeen = issue(issuer);
+    final long read = time.now();
+    assertThat(outageProof.authenticate(verified)).isPresent();
+    assertThat(outageProof.authenticate(announced)).isPresent();
+    outageProof.onMessage(ApiKeyFormat.parse(announced).orElseThrow().keyId());
+
+    down.set(true);
+    time.set(read + Duration.ofMinutes(10).toMillis());
+    assertThat(outageProof.authenticate(verified))
+        .as("verified ten minutes before, past its 2 s cache: still admitted")
+        .isPresent();
+    org.assertj.core.api.Assertions.assertThatThrownBy(() -> outageProof.authenticate(neverSeen))
+        .as("a key this instance never verified is not admitted unseen")
+        .isInstanceOf(KeyStoreUnavailableException.class);
+    org.assertj.core.api.Assertions.assertThatThrownBy(() -> outageProof.authenticate(announced))
+        .as("an announced change evicted the record, so it is not served stale")
+        .isInstanceOf(KeyStoreUnavailableException.class);
+    time.set(read + Duration.ofMinutes(10).toMillis() + 1);
+    org.assertj.core.api.Assertions.assertThatThrownBy(() -> outageProof.authenticate(verified))
+        .as("past the ten-minute cap")
+        .isInstanceOf(KeyStoreUnavailableException.class);
+  }
+
+  @Test
+  @Tag("FR-06-07")
+  void webhookEndpointIsTheNewestLiveUrlSignedByEveryLiveSecretOfThatInstitutionOnly()
+      throws Exception {
+    UUID hooks = db.createInstitution("hook-" + UUID.randomUUID().toString().substring(0, 8));
+    AuditActor hooksAdmin = adminOf(hooks);
+    ApiKeyService keys = service(authenticator(redisA, "test"));
+    final String url = "https://hooks.bank.example/fraudshield";
+    assertThat(keys.webhookEndpoint(hooks)).isEmpty();
+
+    keys.create(
+        hooks, name(), List.of(ApiKeyScope.JOBS_READ), null, hooksAdmin, RequestContext.SYSTEM);
+    assertThat(keys.webhookEndpoint(hooks)).as("a key without a webhook is ignored").isEmpty();
+
+    ApiKeyService.Issued first =
+        keys.create(
+            hooks,
+            name(),
+            List.of(ApiKeyScope.INGEST_WRITE),
+            url,
+            hooksAdmin,
+            RequestContext.SYSTEM);
+    ApiKeyService.WebhookEndpoint one = keys.webhookEndpoint(hooks).orElseThrow();
+    assertThat(one.url()).isEqualTo(url);
+    assertThat(one.secrets()).containsExactly(first.webhookSigningSecret());
+
+    ApiKeyService.Issued second =
+        keys.rotate(hooks, first.record().keyId(), hooksAdmin, RequestContext.SYSTEM);
+    assertThat(keys.webhookEndpoint(hooks).orElseThrow().secrets())
+        .as("during the overlap both sign, the active replacement first")
+        .containsExactly(second.webhookSigningSecret(), first.webhookSigningSecret());
+
+    clock.advance(Duration.ofHours(24).plusSeconds(1));
+    assertThat(keys.webhookEndpoint(hooks).orElseThrow().secrets())
+        .as("past the overlap the rotated key's secret no longer signs")
+        .containsExactly(second.webhookSigningSecret());
+
+    UUID quiet = db.createInstitution("quiet-" + UUID.randomUUID().toString().substring(0, 8));
+    assertThat(keys.webhookEndpoint(quiet))
+        .as("another institution sees none of these keys")
+        .isEmpty();
+
+    keys.revoke(hooks, second.record().keyId(), hooksAdmin, RequestContext.SYSTEM);
+    assertThat(keys.webhookEndpoint(hooks)).as("a revoked key's secret no longer signs").isEmpty();
+  }
+
+  private static AuditActor adminOf(UUID institution) throws Exception {
+    UUID id = UUID.randomUUID();
+    try (Connection superuser = db.superuser();
+        PreparedStatement insert =
+            superuser.prepareStatement(
+                """
+                INSERT INTO fraudshield.users (id, institution_id, first_name, last_name, email,
+                  password_hash, role, status, employee_id, department)
+                VALUES (?, ?, 'Hook', 'Admin', ?,
+                  '$2a$12$abcdefghijklmnopqrstuuv0123456789abcdefghijklmnopqrst', 'ADMIN', 'ACTIVE',
+                  'HOOKADMIN1', 'IT')
+                """)) {
+      insert.setObject(1, id);
+      insert.setObject(2, institution);
+      insert.setString(3, "hook.admin." + id + "@bank.rw");
+      insert.executeUpdate();
+    }
+    return new AuditActor(id, "Hook", "Admin", StaffRole.ADMIN);
+  }
+
+  @Test
+  @Tag("D-15")
+  void announcementDuringBlockedReadIsNotUndoneByTheStaleRenewal() throws Exception {
+    // The record's cache entry has expired and the database is down: a request blocks reading it.
+    // While it is blocked the revocation's announcement arrives and evicts the record. When the
+    // read fails, the request must not put the revoked record back (review of round 3, MAJOR 1).
+    java.util.concurrent.atomic.AtomicBoolean down =
+        new java.util.concurrent.atomic.AtomicBoolean();
+    java.util.concurrent.CountDownLatch blocked = new java.util.concurrent.CountDownLatch(1);
+    java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+    javax.sql.DataSource stalling =
+        new org.springframework.jdbc.datasource.DelegatingDataSource(app.jdbc().getDataSource()) {
+          @Override
+          public Connection getConnection() throws java.sql.SQLException {
+            if (down.get()) {
+              blocked.countDown();
+              try {
+                release.await(10, java.util.concurrent.TimeUnit.SECONDS);
+              } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+              }
+              throw new java.sql.SQLException("connection refused", "08001");
+            }
+            return super.getConnection();
+          }
+        };
+    FakeTime time = new FakeTime();
+    ApiKeyAuthenticator instance = outageProof(stalling, time);
+    String raw = issue(service(authenticator(redisA, "test")));
+    long read = time.now();
+    assertThat(instance.authenticate(raw)).isPresent();
+    down.set(true);
+    time.set(read + 3_000);
+    var executor = java.util.concurrent.Executors.newSingleThreadExecutor();
+    try {
+      final var request = executor.submit(() -> instance.authenticate(raw));
+      assertThat(blocked.await(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+      instance.onMessage(ApiKeyFormat.parse(raw).orElseThrow().keyId());
+      release.countDown();
+      org.assertj.core.api.Assertions.assertThatThrownBy(request::get)
+          .as("the blocked request is refused, not served the evicted record")
+          .hasCauseInstanceOf(KeyStoreUnavailableException.class);
+    } finally {
+      executor.shutdownNow();
+    }
+    org.assertj.core.api.Assertions.assertThatThrownBy(() -> instance.authenticate(raw))
+        .as("and the record stays evicted")
+        .isInstanceOf(KeyStoreUnavailableException.class);
+  }
+
+  @Test
+  @Tag("D-15")
+  void requestsBlockedOnTheSameReadAreAllAdmitted() throws Exception {
+    // Two requests for one busy key both block on the hanging database. The first to fail renews
+    // the record; the second must still be served it (review of the delta fixes, finding A).
+    java.util.concurrent.atomic.AtomicBoolean down =
+        new java.util.concurrent.atomic.AtomicBoolean();
+    java.util.concurrent.CountDownLatch bothBlocked = new java.util.concurrent.CountDownLatch(2);
+    java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+    javax.sql.DataSource hanging =
+        new org.springframework.jdbc.datasource.DelegatingDataSource(app.jdbc().getDataSource()) {
+          @Override
+          public Connection getConnection() throws java.sql.SQLException {
+            if (down.get()) {
+              bothBlocked.countDown();
+              try {
+                release.await(10, java.util.concurrent.TimeUnit.SECONDS);
+              } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+              }
+              throw new java.sql.SQLException("connection refused", "08001");
+            }
+            return super.getConnection();
+          }
+        };
+    FakeTime time = new FakeTime();
+    ApiKeyAuthenticator instance = outageProof(hanging, time);
+    String raw = issue(service(authenticator(redisA, "test")));
+    long read = time.now();
+    assertThat(instance.authenticate(raw)).isPresent();
+    down.set(true);
+    time.set(read + 3_000);
+    var executor = java.util.concurrent.Executors.newFixedThreadPool(2);
+    try {
+      final var first = executor.submit(() -> instance.authenticate(raw));
+      final var second = executor.submit(() -> instance.authenticate(raw));
+      assertThat(bothBlocked.await(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+      release.countDown();
+      assertThat(first.get()).as("first blocked request").isPresent();
+      assertThat(second.get()).as("second blocked request").isPresent();
+    } finally {
+      executor.shutdownNow();
+    }
+  }
+
+  @Test
+  @Tag("D-15")
+  void failedReadThatBlockedPastTheCacheTtlIsNotRepeatedOnTheNextRequest() {
+    // The read blocks for 2.5 s, longer than the 2 s TTL. The renewal is timed from its end, so the
+    // next request within the TTL is served from the cache and does not block again (finding D).
+    java.util.concurrent.atomic.AtomicBoolean down =
+        new java.util.concurrent.atomic.AtomicBoolean();
+    java.util.concurrent.atomic.AtomicInteger attempts =
+        new java.util.concurrent.atomic.AtomicInteger();
+    FakeTime time = new FakeTime();
+    javax.sql.DataSource slow =
+        new org.springframework.jdbc.datasource.DelegatingDataSource(app.jdbc().getDataSource()) {
+          @Override
+          public Connection getConnection() throws java.sql.SQLException {
+            if (down.get()) {
+              attempts.incrementAndGet();
+              time.set(time.now() + 2_500);
+              throw new java.sql.SQLException("connection refused", "08001");
+            }
+            return super.getConnection();
+          }
+        };
+    ApiKeyAuthenticator instance = outageProof(slow, time);
+    String raw = issue(service(authenticator(redisA, "test")));
+    long read = time.now();
+    assertThat(instance.authenticate(raw)).isPresent();
+    down.set(true);
+    time.set(read + 3_000);
+    assertThat(instance.authenticate(raw)).isPresent();
+    assertThat(attempts).hasValue(1);
+    time.set(time.now() + 1_000);
+    assertThat(instance.authenticate(raw)).as("a second later: from the cache").isPresent();
+    assertThat(attempts).as("no second blocked read").hasValue(1);
+  }
+
+  @Test
+  @Tag("D-15")
+  void recordReadWhileAnAnnouncementArrivedIsNotKeptForAnOutage() throws Exception {
+    // A successful read begins before the revocation, the announcement arrives while it is in
+    // flight, then the database goes away: the record it read must not be cached and served
+    // through the outage (review of the delta fixes, N1).
+    java.util.concurrent.atomic.AtomicBoolean pause =
+        new java.util.concurrent.atomic.AtomicBoolean();
+    java.util.concurrent.atomic.AtomicBoolean down =
+        new java.util.concurrent.atomic.AtomicBoolean();
+    java.util.concurrent.CountDownLatch inFlight = new java.util.concurrent.CountDownLatch(1);
+    java.util.concurrent.CountDownLatch resume = new java.util.concurrent.CountDownLatch(1);
+    javax.sql.DataSource controllable =
+        new org.springframework.jdbc.datasource.DelegatingDataSource(app.jdbc().getDataSource()) {
+          @Override
+          public Connection getConnection() throws java.sql.SQLException {
+            if (down.get()) {
+              throw new java.sql.SQLException("connection refused", "08001");
+            }
+            if (pause.compareAndSet(true, false)) {
+              inFlight.countDown();
+              try {
+                resume.await(10, java.util.concurrent.TimeUnit.SECONDS);
+              } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+              }
+            }
+            return super.getConnection();
+          }
+        };
+    FakeTime time = new FakeTime();
+    ApiKeyAuthenticator instance = outageProof(controllable, time);
+    String raw = issue(service(authenticator(redisA, "test")));
+    pause.set(true);
+    var executor = java.util.concurrent.Executors.newSingleThreadExecutor();
+    try {
+      final var read = executor.submit(() -> instance.authenticate(raw));
+      assertThat(inFlight.await(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+      instance.onMessage(ApiKeyFormat.parse(raw).orElseThrow().keyId());
+      resume.countDown();
+      assertThat(read.get()).as("the in-flight request itself is answered").isPresent();
+    } finally {
+      executor.shutdownNow();
+    }
+    down.set(true);
+    time.set(time.now() + 3_000);
+    org.assertj.core.api.Assertions.assertThatThrownBy(() -> instance.authenticate(raw))
+        .as("the record that overlapped the announcement was not cached")
+        .isInstanceOf(KeyStoreUnavailableException.class);
+  }
+
+  @Test
+  @Tag("D-15")
+  void requestBlockedOnFailedReadIsServedTheRecordAnotherReadSince() throws Exception {
+    // One request blocks on a read that will fail; meanwhile another reads the database
+    // successfully. The blocked request is then served the fresher record, not refused (N2).
+    java.util.concurrent.atomic.AtomicInteger calls =
+        new java.util.concurrent.atomic.AtomicInteger();
+    java.util.concurrent.atomic.AtomicBoolean outage =
+        new java.util.concurrent.atomic.AtomicBoolean();
+    java.util.concurrent.CountDownLatch blocked = new java.util.concurrent.CountDownLatch(1);
+    java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+    javax.sql.DataSource flaky =
+        new org.springframework.jdbc.datasource.DelegatingDataSource(app.jdbc().getDataSource()) {
+          @Override
+          public Connection getConnection() throws java.sql.SQLException {
+            if (outage.get() && calls.incrementAndGet() == 1) {
+              blocked.countDown();
+              try {
+                release.await(10, java.util.concurrent.TimeUnit.SECONDS);
+              } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+              }
+              throw new java.sql.SQLException("connection refused", "08001");
+            }
+            return super.getConnection();
+          }
+        };
+    FakeTime time = new FakeTime();
+    ApiKeyAuthenticator instance = outageProof(flaky, time);
+    String raw = issue(service(authenticator(redisA, "test")));
+    long read = time.now();
+    assertThat(instance.authenticate(raw)).isPresent();
+    outage.set(true);
+    time.set(read + 3_000);
+    var executor = java.util.concurrent.Executors.newSingleThreadExecutor();
+    try {
+      final var stuck = executor.submit(() -> instance.authenticate(raw));
+      assertThat(blocked.await(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+      time.set(read + 3_001);
+      assertThat(instance.authenticate(raw)).as("a second request reads successfully").isPresent();
+      release.countDown();
+      assertThat(stuck.get()).as("the blocked request is served the fresher record").isPresent();
+    } finally {
+      executor.shutdownNow();
+    }
+  }
+
+  private ApiKeyAuthenticator outageProof(javax.sql.DataSource dataSource, FakeTime time) {
+    return new ApiKeyAuthenticator(
+        new ApiKeyRepository(
+            new org.springframework.jdbc.core.JdbcTemplate(dataSource),
+            app.apiKeys(),
+            app.entities(),
+            clock),
+        app.tenants(),
+        Instances.safe(null),
+        PEPPERS,
+        "test",
+        Duration.ofSeconds(2),
+        Duration.ofMinutes(10),
+        clock,
+        time::nanos,
+        DIRECT);
+  }
+
+  private String issue(ApiKeyService issuer) {
+    return issuer
+        .create(bank, name(), List.of(ApiKeyScope.INGEST_WRITE), null, admin, RequestContext.SYSTEM)
+        .rawKey();
+  }
+
+  private static long millisUntilRefused(ApiKeyAuthenticator authenticator, String rawKey) {
+    long start = System.nanoTime();
+    while (authenticator.authenticate(rawKey).isPresent()) {
+      if (System.nanoTime() - start > Duration.ofSeconds(10).toNanos()) {
+        break;
+      }
+      Thread.onSpinWait();
+    }
+    return (System.nanoTime() - start) / 1_000_000;
+  }
+
+  @Test
+  void duplicateLiveNamesAndUnsafeWebhooksAreRefused() {
+    ApiKeyService service = service(authenticator(redisA, "test"));
+    String name = name();
+    service.create(bank, name, List.of(ApiKeyScope.JOBS_READ), null, admin, RequestContext.SYSTEM);
+    assertThatThrownBy(
+            () ->
+                service.create(
+                    bank, name, List.of(ApiKeyScope.JOBS_READ), null, admin, RequestContext.SYSTEM))
+        .isInstanceOf(ProblemException.class)
+        .satisfies(e -> assertThat(((ProblemException) e).status()).isEqualTo(409));
+    assertThatThrownBy(
+            () ->
+                service.create(
+                    bank,
+                    name(),
+                    List.of(ApiKeyScope.JOBS_READ),
+                    "http://hooks.bank.example",
+                    admin,
+                    RequestContext.SYSTEM))
+        .isInstanceOf(ProblemException.class)
+        .satisfies(
+            e ->
+                assertThat(((ProblemException) e).errors().getFirst().code())
+                    .isEqualTo("webhook_url_not_allowed"));
+    assertThatThrownBy(() -> service.revoke(bank, "nosuchkey000", admin, RequestContext.SYSTEM))
+        .isInstanceOf(ProblemException.class)
+        .satisfies(e -> assertThat(((ProblemException) e).status()).isEqualTo(404));
+  }
+}

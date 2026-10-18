@@ -17,10 +17,16 @@ public interface CustomerNotificationPolicy {
    *
    * @param transaction the blocked transaction
    * @param autoBlockEventId the block
+   * @param notificationId the notification, derived from the submission like the block
+   *     (docs/architecture/decision-fact-ordering.md, section 4)
    * @param scoring the scoring the block was based on
    * @param at request time
    * @return the intent
    */
   DecisionEvent.CustomerNotificationRequested compose(
-      Transaction transaction, UUID autoBlockEventId, Scoring scoring, Instant at);
+      Transaction transaction,
+      UUID autoBlockEventId,
+      UUID notificationId,
+      Scoring scoring,
+      Instant at);
 }

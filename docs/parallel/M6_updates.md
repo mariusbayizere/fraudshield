@@ -8,9 +8,10 @@ those files. Facts only; where something is unverified or open it says so.
 
 | Kind | Reserved for M6 | Used |
 |---|---|---|
-| ADR | `0060`–`0069`, then down from `0059` (block full; ADR 0060 revised) | 0060–0069 (0068 hybrid persistence, 0069 the PII vault), 0059 (the latency gate) |
+| ADR | `0060`–`0069`, then down from `0059` (block full; ADR 0060 revised) | 0060–0069 (0068 hybrid persistence, 0069 the PII vault), 0059 (the latency gate), 0058, 0057, 0056, 0055 (claimed 2026-10-17: ML-DATA-07's deviation) |
 | Flyway | `V60`–`V69` | V60 account profiles, V61 FX rates, V62 hold reconciliation, V63 webhook deliveries, V64 unblock reconciliation, V65 unfinished batch jobs, V66 the scorer's account context on `fraud_scores`, V67 the feature-store fallback (tables, `fs_scorer` functions) |
 | Vault Flyway (`db/vault`) | M6 only | V1 contacts, V2 tokenisation map, V3 contact token length |
+| Backlog | `PB-77` to `PB-101` (claimed 2026-10-17, after reading every branch's backlog and updates files: `PB-76` is M4's) | PB-77 the window between the provider's acceptance and the recorded outcome (contract 13.1); PB-78 the rebalance test that does not show the move (implementation-2 m3; first carried to M10, then folded into this round by the owner, 2026-10-17: to be resolved by this round); PB-79 a provider outage ends the notice (contract 13.2); PB-80 to PB-101 the 22 section-8 rows proved only in part, one row each, their "not proved" wording carried into `docs/backlog/product.md` (owner, 2026-10-17) |
 
 `0027` and `0028` already exist on `m4/generalisation` and `m5/scoring`; M7 will add identity
 migrations. Flyway refuses out-of-order versions on a database that already has a higher one, so
@@ -633,9 +634,11 @@ acceptance, all or nothing, and replace the 200 per second implementation defaul
 
 - `RateLimiter.take(key, units)`; the Redis script and the per-instance fallback charge `units`
   all or nothing, and a refusal reports what remains and how long until the charge would fit.
-- The filter charges one unit per request except the batch submission, which the controller
-  charges by its item count after parsing and before the job is recorded; a refused or invalid
-  batch envelope costs one unit.
+- The filter charges one unit per request before the body is read, the batch submission included;
+  the controller then charges a valid batch the rest of its item count, all or nothing, before the
+  job is recorded; a refused or invalid batch envelope costs the one admission unit. (The first
+  version exempted the batch from the filter; review 8 found that an exhausted key could then make
+  the server read and parse 4 MiB bodies without limit, reproduced with a stalled body. Fixed.)
 - `fraudshield.rate-limit.transactions-per-second` (renamed from `requests-per-second`) and
   `burst`; the application refuses a burst below 1,000, the largest batch.
 - Tests: `TransactionBudgetTest` (both limiters) and
@@ -650,9 +653,190 @@ acceptance, all or nothing, and replace the 200 per second implementation defaul
   at load 11; a paired run then passed both (this tree at load 9.5, the pre-change tree at load
   13). Load, not the change: the same load-sensitivity already carried to M10 as PB-74. The load
   came from another project's local Kubernetes cluster started on this laptop meanwhile.
-- This is a code change, so it needs an independent review before M6 merges (owner's rule). M6 is
-  **not** ready again until that review is clean and CI (with the stack job executed) is green on
-  the head that carries it.
+- **Review 8** (fresh reviewer, 2026-09-24): CHANGES_REQUIRED, 1 MAJOR (the one above), plus two
+  surviving mutations (a refused envelope charged nothing; the burst startup check untested) and
+  the TEST-03 tag change checked with no finding. Record: `docs/reviews/M6/m6-decision-2026-09-24-eighth.md`.
+  Fixed with the admission unit restored in the filter; new tests for the stalled body, for what
+  refused, invalid and valid batches cost, and for the configuration (`RateLimitConfigurationTest`);
+  the reviewer's defect and a batch charged one unit each fail the new tests.
+- **Review 9** (fresh reviewer, 2026-09-24): CHANGES_REQUIRED, 2 MAJOR, both in the round-8 fix:
+  the stalled-body test passed only if the host answered within one refill (200 ms), and a batch
+  refused at its second charge kept its admission unit while its `Retry-After` covered one unit too
+  few, contrary to ADR 0058. Record: `docs/reviews/M6/m6-decision-2026-09-24-ninth.md`. Fixed:
+  `RateLimitFilterTest` proves deterministically that an over-budget request is refused before its
+  body is read, on every machine path; the API test opens ten stalled requests and allows for
+  refill; `Retry-After` for a batch refused at its second charge covers the whole batch, tested by a
+  client that waits exactly that long and is accepted; a two-item batch is now tested; ADR 0058
+  points 1 and 6 say what a refused batch costs.
+- **CI on `2f92169` failed** (`ci` #343, java job): `batchCallersCannotExceedTheTransactionBudget`
+  accepted 1,800 transactions against a bound of 1,021. The Redis-down test had run just before;
+  for a second after a Redis failure the limiter answers from its per-instance fallback with a
+  fresh bucket, so the key spent 900 there and 900 more once Redis answered again: the documented
+  outage trade-off (ADR 0058 point 7), and a test-isolation defect. The Redis-down test now waits
+  until answers are no longer degraded, and the budget test fails loudly if any answer it counts
+  was degraded.
+- **Open, found while verifying this round (2026-09-24), not fixed here:** on a heavily loaded
+  host (load ~10), `ResilienceApiTest.tenThousandDuplicatesAreScoredOnceAndAnsweredIdentically`
+  got a 500. The log shows the host starving both stores: PostgreSQL connections timing out on
+  socket reads, then the pool exhausted (20 active, 25 waiting). With Redis failing, or its degraded
+  window open, `ResilientIdempotency.claim` falls back to `JdbcIdempotency.claim`
+  (`ResilientIdempotency.java:72`), whose `IllegalStateException("idempotency is unavailable")` is
+  not caught and reaches the client as **500 rather than a retryable 503**. Nothing was accepted, so
+  no money or data is at risk; the answer is only the wrong status. It is not caused by the
+  rate-limit change, CI's runs of this test are green, and fixing it would widen a round already
+  under review, so it is recorded for the owner: when both idempotency stores are unavailable,
+  answer 503 `service-unavailable` with `Retry-After`.
+- Local `./mvnw -pl ingest verify` on this round's tree (load 10–13): 100 tests, the rate-limit
+  suites all green (`RateLimitApiTest` 8, `TransactionBudgetTest` 6, `RateLimitFilterTest` 2,
+  `RetryAfterTest` 1, `RateLimitConfigurationTest` 3, `ResilienceApiTest` 5); the one error is
+  FR-01-06's thirty-second batch under load, carried as PB-74. CI is the authority.
+- This is a code change, so it needs an independent review before M6 merges (owner's rule).
+- **Review 10 (2026-09-24) of the rate-limit fix at `7a86405`: clean** (0 BLOCKER, 0 MAJOR, 3
+  MINOR, 4 NIT; `docs/reviews/M6/m6-decision-2026-09-24-tenth.md`). The review loop for the fix
+  ends here, as the owner's rule says. MINORs 2 and 3 and NIT 7 are fixed in ADR 0058; the ADR
+  change is documentation-only and needs no review. MINOR 1 is also handled by correcting the ADR,
+  which now rests all or nothing on `TransactionBudgetTest`. NITs 4, 5 and 6 are recorded; none of
+  them admits extra work. The fix took three review rounds (8, 9 and 10). The first two found a
+  MAJOR each, and round 9's fix also let a stale degraded window reach CI (ci #343).
+- CI at job level on `7a86405`:
+  - ci run 35969165956: all 8 jobs success, java included.
+  - stack run 35969175673 (`workflow_dispatch`): the core compose stack job and its smoke test
+    **executed** and succeeded. The push-triggered stack run was cancelled; the dispatch
+    superseded it.
+  - devcontainer: path-filtered (skipped), since no devcontainer inputs changed.
+
+## `main` fast-forwarded to `5c3f6b2`; the devcontainer run found an SMS race (2026-09-24)
+
+`main` was fast-forwarded from `0547539` (`m5-complete`) to `5c3f6b2`, as the owner's merge sequence
+says. On `5c3f6b2`, `ci` run 35970682153 was green on all 8 jobs, and the dispatched `stack` run
+35970693580 **executed** the core stack job and its smoke test, which succeeded. **`m6-complete` is
+not tagged:** `devcontainer` run 35970682163 executed and **failed**.
+
+- **What failed:** `IngestApiTest.customerNumbersAndPhonesReachTheSmsProviderAndNothingElse` timed
+  out after 20 s waiting for the customer notification to be recorded as SENT. The java job in `ci`
+  ran the same test on the same commit and passed.
+- **Why, from the log:** the notification consumer dead-lettered the test's SMS intent
+  (`rejected_by_the_database`). Its insert into `customer_notifications` violated the foreign key to
+  `auto_block_events`.
+  - The decision service's spool drains to Kafka and to PostgreSQL **independently**: the Kafka
+    drainer polls every 2 ms, the PostgreSQL drainer every 5 ms. An SMS intent can therefore be read
+    before the auto-block event it refers to has been written.
+  - `CustomerSmsSender` issued the verification link and **sent the SMS first**, and wrote the
+    record afterwards. When the write lost the race, the customer had an SMS with no record of it,
+    and the intent sat in the DLQ. Replaying the DLQ would have sent it twice.
+  - A foreign-key violation (SQLSTATE class 23) is classed as permanent, so nothing retried it.
+  - The code is M6's own (`08c4dc9`). The race was always there; CI's java job simply never lost it.
+- **Fix:**
+  - `CustomerSmsSender.send` first checks, under the tenant, that the auto-block event exists.
+    Until it does, it throws `NotYetRecordedException`, and nothing is sent, issued or recorded.
+  - `EnvelopeConsumer` re-reads such a record with its usual backoff until the record is
+    `PARENT_WAIT` (10 minutes) old, going by its Kafka timestamp. It then dead-letters the record
+    (`parent_not_recorded`), so a parent that never arrives cannot stall the partition. A record
+    with no timestamp does not wait.
+  - The webhook consumer has no such race: `webhook_deliveries` references only `institutions`.
+- **Tests:**
+  - `VerificationFlowTest.intentsThatOvertakeTheirAutoBlockEventSendNothingUntilItIsRecorded`:
+    nothing is sent, and no verification or notification row is written, until the event exists;
+    the same intent is then sent.
+  - `ParentWaitTest`: the wait bound.
+  - `EnvelopeConsumerTest.recordsWaitForTheirParentAndAreDeadLetteredOnlyOnceTheWaitIsOver`, run
+    on Kafka: a record that is not yet recorded is retried and then handled, an expired one is
+    dead-lettered with its reason, and the record behind it is handled.
+  - Local `./mvnw -pl notify verify`: 85 tests green, with checkstyle and spotbugs.
+- This is a code change, so it needs an independent review, and CI with the stack executed on the
+  new head, before `main` moves again and before `m6-complete` is tagged.
+- **Review 11 of `3141763`: CHANGES_REQUIRED, 1 MAJOR**
+  (`docs/reviews/M6/m6-decision-2026-09-24-eleventh.md`).
+  - The MAJOR: the first fix timed the wait from the record's Kafka timestamp. After a PostgreSQL
+    outage longer than the wait, every intent written during it would have been dead-lettered as
+    soon as PostgreSQL answered, while the drainer was still writing its backlog. Those customers
+    would never have been told. That is worse than the race it fixed.
+  - This is the pattern the owner warned about: a fix round introducing a defect in the code it
+    fixed.
+  - **ADR 0057** records the rework, choosing the option safest for customers; the owner should
+    confirm it:
+    - The wait is timed only while PostgreSQL answers without the parent, restarts after any
+      transient failure, and ignores the record timestamp. The bound is 30 minutes, ASSUMED.
+    - A waiting record is re-read every 500 ms, not on the exponential backoff, so the other
+      partitions keep flowing.
+    - An intent whose outcome is already recorded is not sent again.
+    - ADR 0064 point 5 is amended.
+  - The rework's Kafka test covers two new cases: an intent written an hour earlier still waits,
+    and an outage outlasting the wait does not use it up. Neither passes with the reviewed code.
+  - Local `./mvnw -pl notify verify`: 86 tests green, with checkstyle and spotbugs.
+  - `3141763` itself was green in `ci`, `stack` (push and dispatched) and `devcontainer` (push; the
+    real job was path-filtered).
+  - The rework needs its own review (review 12) before `main` moves again.
+- **Review 12 of `098c5dc`: CHANGES_REQUIRED, 1 MAJOR**
+  (`docs/reviews/M6/m6-decision-2026-09-24-twelfth.md`).
+  - The MAJOR: a writer held up while PostgreSQL still answers reads (a full disk, a lock, the
+    writer's own path) would still dead-letter intents after 30 minutes. The reviewed design traded
+    a lost customer notice against a partition's delay, and the consumer cannot tell a late writer
+    from a lost parent.
+  - Two deadline designs had now failed review, so the design changed rather than the number
+    (**ADR 0057, rewritten**):
+    - An intent is never dead-lettered for waiting. It is re-read every 500 ms, and a wait longer
+      than a minute is logged at WARN every minute.
+    - A parent that will never arrive is one `PostgresSink` wrote to its dead-letter file, which is
+      already an incident. Replaying that file releases the SMS.
+    - As a last resort, an operator can move the partition's offset past the record.
+  - Open for the owner: a replay tool for those files, and an alert on the WARN.
+  - Local `./mvnw -pl notify verify`: 85 tests green, with checkstyle and spotbugs.
+  - `098c5dc`'s own CI is superseded by this change.
+  - The change needs review 13.
+
+## SMS race: stopped for the owner (2026-09-24)
+
+**Review 13 of `b6f79a9`: CHANGES_REQUIRED, 1 MAJOR**
+(`docs/reviews/M6/m6-decision-2026-09-24-thirteenth.md`). The author stopped the fix loop here.
+
+**Why stop:** reviews 11, 12 and 13 each found a new MAJOR in this one path, and each fix round
+introduced the next defect. The remaining choices are design trade-offs for the owner, not defects
+the author can close.
+
+**The MAJOR:** a transaction decided twice gets a second random auto-block id. `PostgresSink` keeps
+the first decision and silently skips the second decision's rows, but Kafka still carries the second
+SMS intent.
+
+- At `b6f79a9` that intent waits for ever and stalls its partition. Replaying the writer's
+  dead-letter file does not help, because nothing was dead-lettered.
+- The intent carries nothing that identifies its transaction: the reference code is a hash of the
+  random block id. So the consumer cannot tell this orphan from a late parent without a change
+  elsewhere.
+
+**State of the branches:**
+
+- `main` = `5c3f6b2`. It has the original race: the SMS is sent before the parent is checked. With a
+  verification link allowed, the link's insert fails on the foreign key before sending, and the
+  intent is dead-lettered with no SMS sent. Without a link, the SMS is sent but its record is
+  refused.
+- `m6/decision` = `b6f79a9` plus this record. It sends nothing before the parent exists and never
+  loses an intent, but an intent whose parent never arrives stalls its partition, and the duplicate
+  decision above produces exactly that.
+- **`m6-complete` is not tagged.**
+
+**Options, for the owner to choose:**
+
+1. **Deterministic ids in the decision service.** Derive the auto-block id and the notification id
+   from the transaction id (name-based UUID). A re-decided transaction's intent then points at the
+   first decision's block, which exists, and the outcome check drops the duplicate SMS. No contract
+   change is needed.
+   - Residue: if the first decision was not an auto-block but the second was, the second block
+     still never exists. That case needs option 2 or 3 as well.
+2. **Add `transaction_id` to the customer-notification payload.** This is a frozen-contract change,
+   so it needs the owner. The consumer could then commit past an intent whose transaction's
+   persisted first decision has no such block.
+3. **Bound the wait again, with a replay.** Keep the no-deadline wait for a late writer, but give
+   operators a tool that replays `fs.notifications.customer.dlq`, and dead-letter after a bound. An
+   SMS dead-lettered wrongly can then be recovered rather than lost. This needs the replay tool and
+   an alert.
+4. **Accept `b6f79a9` as it is** for M6, carrying MAJOR 1 and MINORs 2 to 4 to a later milestone
+   with an alert on the WARN (the duplicate decision is rare: a crash between the spool append and
+   the response, or Redis down during a race).
+
+The author's recommendation is **option 1 plus option 3**. Deterministic ids remove the common
+orphan without a contract change. The replay tool makes any bound recoverable, so no deadline can
+lose a notice for good.
 
 ## Resume here (final state, 2026-09-23, after CI)
 
@@ -689,3 +873,200 @@ PB-73, PB-74. M5 — the MLflow test (`c59d543`).
 **Next steps for a resumed session:** read CI for the head of `m6/decision` at job level (the
 stack job must have executed); after M5 merges, merge `main` into both M6 branches, re-run the full
 `verify` and the Python suites, confirm CI (stack executed) on each merged head, merge, tag.
+
+## SMS race: the owner's decision, the ordering contract, the implementation (2026-09-24)
+
+**The owner decided:**
+
+- options 1 and 3 together;
+- ADR 0057 confirmed as "never silently drop a waiting SMS", but the wait must be bounded, with a
+  dead-letter and replay path making the bound safe;
+- the case "first decision not a block, second one was" handled explicitly and tested;
+- the idempotency 500 fixed;
+- and, as a **process change**: write the ordering contract first, get it reviewed on its own,
+  then implement against it.
+
+**The contract:** `docs/architecture/decision-fact-ordering.md`. It was reviewed on its own five
+times (`docs/reviews/M6/m6-decision-2026-09-24-contract-1.md` to `-contract-5.md`):
+
+| Draft | Verdict | What the review found |
+|---|---|---|
+| 1 | 4 MAJOR | Reads from two snapshots. The discarded decision's link. A replay tool with one committed group. A per-record bound. |
+| 2 | 2 MAJOR | A different body for the same transaction id reaching another account. Rebalances resetting the bound. |
+| 3 | 1 MAJOR | A clock reset by valid intents: orphans interleaved with valid intents cost the whole bound each. |
+| 4 | 1 MAJOR | The budget not precisely defined. |
+| 5 | **sound** | 4 MINOR and 4 NIT, applied before implementation. |
+
+Eight MAJORs were found in the design before any code was written, against four found in code
+over the four fix rounds before.
+
+**Implementation**, following the contract's section 11:
+
+- Ids derive from (institution, transaction, request fingerprint).
+- The intent carries the `fs-transaction-id` header.
+- `CustomerSmsSender` classifies each intent from one statement, S0 to S5, with link eligibility
+  from the kept decision's REQUESTED row.
+- `EnvelopeConsumer` has a per-partition pause (the thread never sleeps), a leaky wait budget (10
+  minutes, drained in 60, both ASSUMED; `WaitBudget`), a checkpoint in the committed offset's
+  metadata, and a rebalance listener.
+- Dead letters keep their headers.
+- `DeadLetterReplay` replays dead letters.
+- New gauge: `fs_spool_lag`.
+- `IngestService` answers 503 when the idempotency claim cannot be made.
+- ADR 0056 records the decision. ADR 0057 is superseded. ADR 0064 point 5 is amended.
+
+**Tests** (corrected after the implementation review: the contract's section 8 now maps each invariant to its test, and names the two properties that rest on review only):
+
+- `SmsOrderingTest` (the decision table against the real `PostgresSink` and `KafkaMessages`,
+  including the owner's ordering in both orders);
+- `WaitBudgetTest` (on an explicit clock);
+- `EnvelopeConsumerTest` (on Kafka: the budget end to end, other partitions flowing, replay,
+  rebalance, an expelled member);
+- `ResilienceApiTest` (the 503).
+
+I14b's crash between a dead-letter and its commit is tested through its consequence: two DLQ copies
+of one event, which a replay republishes once. A crash at that exact point is not reproduced.
+
+**Carried to M9:**
+
+- a replay tool for `PostgresSink`'s dead-letter files;
+- packaging `DeadLetterReplay` into the deployable image;
+- alerts on the budget WARN and on DLQ growth.
+
+A transactional outbox is recommended for a later milestone.
+
+This is a code change: it needs an independent review until clean, then CI with `ci`, `stack` and
+`devcontainer` executed and green on one commit, before `main` moves and `m6-complete` is tagged.
+
+**Implementation review of `bd48557`**
+(`docs/reviews/M6/m6-decision-2026-09-24-implementation-1.md`):
+
+- The runtime code was found **clean**. No path was found to an indefinite stall, a send without B,
+  or a second send.
+- The MAJOR was a false claim in this file and in ADR 0056: that every invariant was tested. The
+  missing tests were added:
+  - the grace re-read, including through a transient failure;
+  - the WARN under intermittent S5;
+  - a partition moved while paused;
+  - a crash with no revocation;
+  - a structural one-statement check;
+  - the header on the wire;
+  - a malformed payload dead-lettered rather than retried for ever.
+- Section 8 of the contract maps each invariant to its test.
+- The fix is a code change, so it gets its own review.
+
+## Second implementation review and amendment 1 (2026-10-17, after the laptop was replaced)
+
+The follow-up to `3729de8` was lost with the old machine: GitHub's push events show `3729de8` as the
+last push. The independent review the record above asked for was written on 2026-10-17
+(`docs/reviews/M6/m6-decision-2026-10-17-implementation-2.md`, `752eb9b`): **CHANGES_REQUIRED, 3
+MAJOR, 8 MINOR, 8 NIT.** The "(malformed)" claim in this file's previous section, that a malformed
+payload is now dead-lettered rather than retried for ever, held for three fields of one handler
+(MAJOR 3).
+
+**The owner's scope for one fix round** (2026-10-17): M1, M2, M3, m1, m2, m4, m6 and m8. m5: the
+four invariants are restored to their reviewed wording in this round, and every section-8 row whose
+test proves less than it says is marked "in part" with the gap stated. m7: named in the contract now
+as a known gap, implemented later as `PB-77`. m3: folded into this round (CI's java job runs it
+against a real broker); `PB-78` stays claimed and is to be resolved by this round. The NITs are fixed
+where the round touches their code. Order: the contract amendment first, reviewed on its own; then
+the code; then a fresh independent review that also covers `e7a5be5`.
+
+**Standing rule for the reviews** (owner, 2026-10-17): where the contract or this file says a
+property is tested, the review checks that the named test proves it as worded. That was the MAJOR
+in both implementation reviews.
+
+**Amendment 1** (`docs/architecture/decision-fact-ordering.md`, sections 12 and 13, and the changes
+listed in its status block). Draft 1 (`b7eefd5`) was reviewed on its own and was not sound: 3 MAJOR,
+7 MINOR, 6 NIT (`docs/reviews/M6/m6-decision-2026-10-17-amendment-1.md`). Draft 2 (`2dafbf0`) was not sound either: 2 MAJOR, 9 MINOR, 8 NIT
+(`-amendment-1-draft-2.md`). Draft 3 (`d7c1554`) was reviewed **sound**: 0 BLOCKER, 0 MAJOR, 7 MINOR, 9 NIT
+(`-amendment-1-draft-3.md`); its MINORs and NITs are applied before the code round, and a delta
+check of those changes precedes the code.
+
+**Backlog rows to apply at merge:**
+
+```yaml
+- id: PB-77
+  title: "A second SMS when the outcome cannot be recorded after the provider accepted"
+  due_milestone: later than M6 (with the transactional outbox, if adopted)
+  raised_by: M6 implementation-2 review, m7 (2026-10-17)
+  detail: contract 13.1. Two designs on record: a SENDING row before the provider call, read as
+    "outcome unknown, do not send"; or the transactional outbox (contract section 9).
+- id: PB-79
+  title: "A provider outage records FAILED and the customer is never told"
+  due_milestone: later than M6; the FAILED-rate alert with M9
+  raised_by: M6 amendment-1 draft-3 review, n9 (2026-10-17)
+  detail: contract 13.2. Today's behaviour, unchanged by amendment 1. A safe retry needs to know the
+    provider did not accept the SMS, which "not known to be accepted" cannot give.
+- id: PB-78
+  title: "I7e's test does not show the paused partition moving to the second member"
+  status: to be resolved by M6's amendment-1 code round (owner, 2026-10-17); kept so the id is not reused
+  raised_by: M6 implementation-2 review, m3 (2026-10-17)
+```
+
+**For M6's close** (from the traceability housekeeping, `m6/housekeeping`): FR-02-09 is now filed
+under M10, so the rule-7 check at M6's close does not see PB-69, PB-70 and PB-71, which M6 owns. M6's
+close reports their state: PB-69 is built on `m6/featurestore-fallback`; PB-70 (the `fs.labels`
+consumer) and PB-71 (the reference-state contract and producer) are not started.
+
+**Code round of amendment 1** (work branch `m6/amendment-1`, 2026-10-17): `72f24a3` the
+implementation; `1b9f322` the tests of I17 to I29, I7e moving the paused partition for certain
+(`PB-78` resolved), I14's loss bound asserted, I10 for every reason, the structural test counting
+every statement kind; `207f9d5` the matrix re-rendered; `acc405e` and `cf3e762` a test-compile
+ambiguity and two spotbugs findings. CI run 39008470954 on `acc405e`: all 169 notify tests passed
+(`EnvelopeConsumerTest` 23 on Kafka, `SmsOrderingTest` 17 on PostgreSQL, `FailureClassTest` 36,
+`CheckpointTest` 6); the run then failed on the two spotbugs findings, fixed in `cf3e762`.
+
+Section 8 names a test for every row. Rows the tests prove only in part say so, with the gap:
+I3a, I17, I18, I19, I20, I22, I23, and **I26 and I27, known partial by the owner's decision
+(2026-10-17)**: a statement actually timing out, the vault's timeouts, the webhook executor's
+`Error` rule and the health endpoint (I26), and a real dead-letter send timing out (I27) are by
+review. Next: a fresh independent review of the code round, the final contract edits and
+`e7a5be5`.
+
+**Implementation-3 review and its re-check** (`docs/reviews/M6/m6-decision-2026-10-17-implementation-3.md`):
+CHANGES_REQUIRED, 3 MAJOR, 7 MINOR, 7 NIT; fixed in `7047567` (CI run 39014509277 green, notify 183
+tests, ingest 101), section 8 re-held to the deletion standard in `a89a0f4` (13 rows proved in full,
+24 in part, 1 not at all); re-check **APPROVED_WITH_MINORS**, its MINORs and NITs applied after it.
+
+**Carried to M9 from this round:**
+
+- A consumer's `close()` now waits as long as a batch can take, about 190 s; the application closes
+  its two consumers in turn, so a pod needs a termination grace period above about 400 s, or the
+  consumers must be closed in parallel (implementation-3, R-n3).
+- M9's section 8.4 names the wrong mechanism for its latent trap: `docker compose up --wait
+  fraudshield-api` starts the vault migration only if the API depends on it; the real risk is an API
+  that starts against a vault not yet migrated (implementation-3, n5).
+- The vault's healthcheck uses the Unix socket and may pass during initdb; whether it matters needs
+  a run (implementation-3, n6).
+
+**Section 8 after the owner's decision** (2026-10-17): I7e, I8, I12 and I14's revocation clause
+closed with tests (`acd8ce0`); 16 rows proved in full, 22 in part, each partial row carried to
+`docs/backlog/product.md` as `PB-80` to `PB-101` with its exact "not proved" wording. PB-77 to PB-79
+are written into the backlog too, PB-78 as resolved.
+
+### Proposed amendment to the master prompt (for the owner to approve)
+
+The owner asked that the deletion standard become part of every review brief, so that M7 to M12
+inherit it. The master prompt governs, so it is not edited from this branch; the proposed text, for
+the owner to apply or change:
+
+- **Part I, PR-level checklist, "Docs and traceability"**, a new item: *"[ ] For every claim that a
+  property is tested (a traceability row, a gate criterion, a contract invariant), the reviewer asks:
+  would the named test fail if the code it claims to prove were deleted? Each claim that does not
+  pass says so in those terms ("deleting X would not fail any test"); none is accepted on the test's
+  name, its presence or a green run."*
+- **I.3, step 2**, after "open the test for each and confirm it asserts the criterion": *"and that it
+  would fail if the code meeting the criterion were deleted (the deletion standard, lab notebook
+  2026-10-17). Report the count of rows proved in full, in part and not at all; a gap is closed by a
+  test or carried to the backlog row by row, never by rewording."*
+- **I.5, review record template**: rename "Mutation spot checks (what was broken → which test
+  failed)" to "Deletion checks (code deleted → which test failed, or none)", and require one line per
+  claimed-tested row in scope.
+
+**M6's close in the register** (owner decision, 2026-10-17): its open Must rows are re-filed under
+the milestones that close them (`7f4f21d`, `95a0192`, reviewed APPROVED), and ML-DATA-07 is
+`DONE_WITH_DEVIATION` under ADR 0055: five features (not six: `round_sum_flag` became computable on
+2026-09-20) have no source data on this benchmark. `milestones.yaml` lists M6 as completed, and
+`current` is M7. The master-prompt amendment proposed above was approved by the owner as drafted and
+is applied in its own commit.

@@ -51,6 +51,10 @@ public class NotificationWiring {
   /** The running notification channels, closed with the application. */
   public static final class Channels implements AutoCloseable {
     private final List<AutoCloseable> running = new ArrayList<>();
+
+    /** Held here because a gauge holds its state weakly (implementation-3, m2). */
+    private final List<Object> gaugeStates = new ArrayList<>();
+
     private WebhookDispatcher dispatcher;
     private CustomerSmsSender sender;
 
@@ -217,6 +221,12 @@ public class NotificationWiring {
     source.setUrl(vault.url());
     source.setUser(vault.username());
     source.setPassword(vault.password());
+    // Every vault statement is bounded, in a transaction or not (12.3): the statement timeout below
+    // the socket timeout, and the connection itself bounded too.
+    source.setSocketTimeout(10);
+    source.setConnectTimeout(5);
+    source.setLoginTimeout(5);
+    source.setOptions("-c statement_timeout=5000");
     return source;
   }
 
@@ -230,7 +240,8 @@ public class NotificationWiring {
       ObjectProvider<WebhookEndpoints> endpoints,
       ObjectProvider<WebhookTransport> transport,
       ObjectProvider<ContactDirectory> contacts,
-      ObjectProvider<SmsGateway> gateway) {
+      ObjectProvider<SmsGateway> gateway,
+      io.micrometer.core.instrument.MeterRegistry meterRegistry) {
     Channels channels = new Channels();
     WebhookEndpoints registry = endpoints.getIfAvailable();
     if (registry == null) {
@@ -253,7 +264,19 @@ public class NotificationWiring {
               Map.of(),
               "fs.decisions.final",
               "webhook-dispatcher",
-              dispatcher::enqueue));
+              envelope -> dispatcher.enqueue(envelope.institutionId(), envelope.payload()),
+              EnvelopeConsumer.ParentWait.DEFAULT,
+              EnvelopeConsumer.RetryBound.DEFAULT,
+              meterRegistry,
+              clock));
+      java.util.concurrent.atomic.AtomicInteger deliveryRunning =
+          new java.util.concurrent.atomic.AtomicInteger(1);
+      channels.gaugeStates.add(deliveryRunning);
+      io.micrometer.core.instrument.Gauge.builder(
+              "fs_notify_webhook_delivery_running",
+              deliveryRunning,
+              java.util.concurrent.atomic.AtomicInteger::get)
+          .register(meterRegistry);
       ScheduledExecutorService delivery =
           Executors.newSingleThreadScheduledExecutor(
               Thread.ofPlatform().name("webhook-delivery").daemon(true).factory());
@@ -263,6 +286,19 @@ public class NotificationWiring {
               dispatcher.deliverDue(100);
             } catch (SQLException | RuntimeException e) {
               LOG.warn("webhook delivery failed; retrying", e);
+            } catch (Error error) {
+              // The executor owns no consumer (12.2): the task is abandoned, its transaction rolls
+              // back, the row stays PENDING for another instance or a restart, and the executor
+              // accepts no further task, because a periodic task that throws is not run again.
+              meterRegistry
+                  .counter("fs_notify_consumer_errors_total", "group", "webhook-delivery")
+                  .increment();
+              deliveryRunning.set(0);
+              LOG.error(
+                  "webhook delivery stopped on an Error; pending deliveries stay PENDING"
+                      + " (docs/architecture/decision-fact-ordering.md, 12.2)",
+                  error);
+              throw error;
             }
           },
           100,
@@ -296,13 +332,27 @@ public class NotificationWiring {
               new SmsCatalogue(),
               clock);
       channels.sender = sender;
+      io.micrometer.core.instrument.FunctionCounter.builder(
+              "fs_notify_resolved_before_send_total", sender, CustomerSmsSender::resolvedBeforeSend)
+          .tag("group", "notification-service")
+          .register(meterRegistry);
       channels.running.add(
           new EnvelopeConsumer(
               properties.kafkaBootstrapServers(),
               Map.of(),
               "fs.notifications.customer",
               "notification-service",
-              sender::send));
+              envelope ->
+                  sender.send(
+                      envelope.institutionId(),
+                      envelope.payload(),
+                      envelope.transaction(),
+                      envelope.kept(),
+                      envelope.keeper()),
+              EnvelopeConsumer.ParentWait.DEFAULT,
+              EnvelopeConsumer.RetryBound.DEFAULT,
+              meterRegistry,
+              clock));
     }
     return channels;
   }

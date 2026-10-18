@@ -317,7 +317,8 @@ class IngestApiTest {
     for (String staff : List.of("/api/v1/alerts", "/api/v1/admin/users")) {
       assertThat(get(staff, ApiHarness.KEY).statusCode() / 100).as(staff).isNotEqualTo(2);
     }
-    // Rotation overlap: both of the institution's keys work at once.
+    // A second live key of the same institution works at once beside the first, as during a
+    // rotation overlap (the overlap itself is M7's ApiKeyLifecycleTest).
     assertThat(
             post(
                     "/api/v1/transactions/ingest",

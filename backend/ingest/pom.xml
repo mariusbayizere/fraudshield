@@ -23,6 +23,13 @@
       <groupId>io.github.mariusbayizere.fraudshield</groupId>
       <artifactId>fraudshield-notify</artifactId>
     </dependency>
+    <!-- Staff identity, API keys, administration and audit (M7): the API application assembles
+         them with the decision path; they also supply the ingestion API's two ports. -->
+    <dependency>
+      <groupId>io.github.mariusbayizere.fraudshield</groupId>
+      <artifactId>fraudshield-admin</artifactId>
+      <version>${project.version}</version>
+    </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-webmvc</artifactId>

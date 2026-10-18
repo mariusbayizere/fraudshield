@@ -364,6 +364,92 @@ class DatabaseSecurityTest {
   }
 
   @Test
+  void everyOwnerRightsFunctionPinsItsSearchPathAndHasOnlyItsDeclaredCallers() throws SQLException {
+    // A SECURITY DEFINER function runs with fs_migrator's rights, so who may call it is a grant
+    // like
+    // any table's (M7 merge review, finding 4). Every one is listed here with its callers; a new
+    // one
+    // fails this test until its migration closes it to PUBLIC and grants it to the roles named
+    // here.
+    try (Connection admin = db.superuser()) {
+      assertThat(
+              strings(
+                  admin,
+                  """
+                  SELECT p.proname || ' -> ' || coalesce((
+                      SELECT string_agg(r.name, ', ' ORDER BY r.name COLLATE "C")
+                      FROM (SELECT CASE WHEN a.grantee = 0 THEN 'PUBLIC'
+                                        ELSE pg_get_userbyid(a.grantee) END AS name
+                            FROM aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+                            WHERE a.privilege_type = 'EXECUTE' AND a.grantee <> p.proowner) r),
+                    'nobody')
+                  FROM pg_proc p
+                  JOIN pg_namespace n ON n.oid = p.pronamespace AND n.nspname = 'fraudshield'
+                  WHERE p.prosecdef
+                  """))
+          .containsExactlyInAnyOrder(
+              "audit_chain_hashes -> fs_app, fs_compliance_ro",
+              "audit_chain_head -> fs_app, fs_compliance_ro",
+              "audit_chain_last_seq_before -> fs_compliance_ro",
+              "audit_events_chain -> nobody",
+              "auth_employee_id_registered -> fs_app",
+              "auth_find_api_key -> fs_app",
+              "auth_find_email_verification -> fs_app",
+              "auth_find_refresh_token -> fs_app",
+              "auth_find_user_by_email -> fs_app",
+              "auth_find_user_institution -> fs_app",
+              "deployment_has_synthetic_data -> fs_app, fs_app_readonly, fs_compliance_ro",
+              "feature_fallback_account -> fs_scorer",
+              "feature_fallback_device_first_seen -> fs_scorer",
+              "feature_fallback_kyc_tiers -> fs_scorer",
+              "feature_fallback_sim_swaps -> fs_scorer",
+              "feature_fallback_transactions -> fs_scorer",
+              "institutions_with_overdue_holds -> fs_app",
+              "institutions_with_unapplied_unblocks -> fs_app",
+              "institutions_with_unfinished_batch_jobs -> fs_app",
+              "verification_find_by_token -> fs_app",
+              "verify_audit_chain -> fs_compliance_ro",
+              "webhook_deliveries_due -> fs_app");
+      assertThat(
+              strings(
+                  admin,
+                  """
+                  SELECT p.proname FROM pg_proc p
+                  JOIN pg_namespace n ON n.oid = p.pronamespace AND n.nspname = 'fraudshield'
+                  WHERE p.prosecdef
+                    AND NOT coalesce('search_path=fraudshield, pg_temp' = ANY (p.proconfig), false)
+                  """))
+          .as("each pins search_path, so a caller's schema or pg_temp cannot shadow a table")
+          .isEmpty();
+    }
+  }
+
+  @Test
+  void functionsTheMigratorCreatesAreNotExecutableByPublic() throws SQLException {
+    // V71: the global default privilege, which V11's per-schema form could not set. Checked on a
+    // function created after the migrations, as the next migration would create it.
+    try (Connection migrator = db.as("fs_migrator")) {
+      exec(
+          migrator,
+          "CREATE FUNCTION fraudshield.v71_probe() RETURNS int LANGUAGE sql AS $$ SELECT 1 $$");
+      try {
+        for (String role : List.of("public", "fs_app", "fs_app_readonly", "fs_scorer")) {
+          assertThat(
+                  bool(
+                      migrator,
+                      "SELECT has_function_privilege('"
+                          + role
+                          + "', 'fraudshield.v71_probe()', 'EXECUTE')"))
+              .as(role)
+              .isFalse();
+        }
+      } finally {
+        exec(migrator, "DROP FUNCTION fraudshield.v71_probe()");
+      }
+    }
+  }
+
+  @Test
   void applicationRolesHaveNoElevatedAttributesAndOwnNothing() throws SQLException {
     try (Connection admin = db.superuser()) {
       assertThat(

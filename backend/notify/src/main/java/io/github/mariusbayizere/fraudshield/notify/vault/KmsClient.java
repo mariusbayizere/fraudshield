@@ -18,6 +18,12 @@ import java.util.Map;
  * service that cannot be reached, or a key it does not have (yet), is not, because the notification
  * consumers dead-letter the first and retry the second, and a key rotation must never drop a
  * customer's message.
+ *
+ * <p>A service that is unavailable - unreachable, timed out, throttled, or failing on its side - is
+ * reported as {@link KmsUnavailableException}, which the consumers retry without bound as an
+ * outage; any other failure that is not permanent is retried up to a bound and then dead-lettered
+ * for replay. Every call returns or throws within 5 seconds, a timeout being {@link
+ * KmsUnavailableException} (docs/architecture/decision-fact-ordering.md, 12.2 and 12.3).
  */
 public interface KmsClient {
 
@@ -57,7 +63,8 @@ public interface KmsClient {
    * @param kekId the service's identifier of the key-encryption key
    * @param context bound to the wrapping; the same map must be given to unwrap
    * @return the key
-   * @throws VaultException when the service refuses or cannot be reached
+   * @throws KmsUnavailableException when the service is unavailable
+   * @throws VaultException when the service refuses
    */
   GeneratedKey generateDataKey(String kekId, Map<String, String> context);
 
@@ -68,8 +75,8 @@ public interface KmsClient {
    * @param wrapped what {@link #generateDataKey} returned as {@code wrapped}
    * @param context the context given when it was made
    * @return the 32-byte key material
-   * @throws VaultException when the wrapping, key or context does not verify, or the service cannot
-   *     be reached
+   * @throws KmsUnavailableException when the service is unavailable
+   * @throws VaultException when the wrapping, key or context does not verify
    */
   byte[] decrypt(String kekId, byte[] wrapped, Map<String, String> context);
 }
