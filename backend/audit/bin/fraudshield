@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+# fraudshield audit verify --from YYYY-MM-DD --to YYYY-MM-DD   (D-32)
+# Connection and keys come from the environment; see backend/audit/README.md. Build the jar first
+# with: ./mvnw -pl audit -am package -DskipTests
+set -eu
+here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+jar=$(ls "$here"/../target/fraudshield-audit-*-exec.jar 2>/dev/null | head -n 1)
+if [ -z "$jar" ]; then
+  echo "fraudshield: build the audit module first (./mvnw -pl audit -am package -DskipTests)" >&2
+  exit 2
+fi
+exec java -jar "$jar" "$@"

@@ -1,0 +1,1303 @@
+# Valid examples for every object schema used by an operation request or response (CR-01).
+# contracts/tests/test_openapi_examples.py validates each one and checks that adding an unknown
+# property makes it invalid, so an unsatisfiable or accidentally open schema fails the build.
+# All values are synthetic: example.com addresses, documentation IP ranges, unassigned E.164
+# country code 999, placeholder secrets that match only the format.
+examples:
+  AccountNetwork:
+  - nodes:
+    - token: tok_exampleAccount0000000001
+      degree: 0
+      confirmed_fraud: false
+    - token: tok_exampleCounterparty000001
+      degree: 1
+      confirmed_fraud: true
+    edges:
+    - source: tok_exampleAccount0000000001
+      target: tok_exampleCounterparty000001
+      transaction_count: 4
+  AccountTransactionPage:
+  - items:
+    - transaction_id: 3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11
+      amount:
+        amount: '15000'
+        currency: RWF
+      channel: MOBILE_MONEY
+      transaction_timestamp: '2026-09-17T08:15:30Z'
+      risk_score: 0.71
+      risk_tier: MEDIUM
+      outcome: PENDING
+    next_cursor: null
+  AlertDecisionAccepted:
+  - decision_id: 1b2c3d4e-5f60-4a7b-9c8d-0e1f2a3b4c5d
+    state: PENDING_COMMIT
+    undo_until: '2026-09-17T08:15:57Z'
+  AlertDecisionRequest:
+  - decision: CONFIRM_FRAUD
+    comment: Velocity spike after SIM swap
+    alert_version: 2
+  AlertDetail:
+  - alert_id: 0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d
+    version: 2
+    transaction_id: 3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11
+    tier: MEDIUM
+    status: PENDING
+    fraud_probability: 0.71
+    expected_loss_rwf: '10650'
+    amount:
+      amount: '15000'
+      currency: RWF
+    channel: MOBILE_MONEY
+    masked_account_name: J*** M***
+    merchant: null
+    transaction_timestamp: '2026-09-17T08:15:30Z'
+    top_reasons:
+    - feature: tx_count_60s
+      value: 0.5
+      shap: 0.9
+      direction: INCREASES_RISK
+      template_key: feature.tx_count_60s.high
+    - feature: tx_count_1h
+      value: 0.75
+      shap: 0.86
+      direction: INCREASES_RISK
+      template_key: feature.tx_count_1h.high
+    - feature: tx_count_24h
+      value: 1.0
+      shap: 0.82
+      direction: INCREASES_RISK
+      template_key: feature.tx_count_24h.high
+    review_deadline_at: '2026-09-17T08:16:00Z'
+    escalated_from_alert_id: null
+    account_token: tok_exampleAccount0000000001
+    counterparty_token: tok_exampleCounterparty000001
+    summary_template_key: summary.velocity_new_counterparty
+    summary_parameters:
+      count: 6
+    anomaly_score: 0.42
+    decisions:
+    - decision_id: 1b2c3d4e-5f60-4a7b-9c8d-0e1f2a3b4c5d
+      decision: CONFIRM_FRAUD
+      analyst:
+        user_id: 5b1f0a2c-3d4e-4f60-8a7b-9c0d1e2f3a4b
+        first_name: Amani
+        last_name: Uwase
+        role: ANALYST
+      comment: Velocity spike to a new counterparty after a SIM swap
+      decided_at: '2026-09-17T08:15:52Z'
+      state: COMMITTED
+      override_of_decision_id: null
+      false_positive_confirmed: null
+  AlertPage:
+  - items:
+    - alert_id: 0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d
+      version: 2
+      transaction_id: 3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11
+      tier: MEDIUM
+      status: PENDING
+      fraud_probability: 0.71
+      expected_loss_rwf: '10650'
+      amount:
+        amount: '15000'
+        currency: RWF
+      channel: MOBILE_MONEY
+      masked_account_name: J*** M***
+      merchant: null
+      transaction_timestamp: '2026-09-17T08:15:30Z'
+      top_reasons:
+      - feature: tx_count_60s
+        value: 0.5
+        shap: 0.9
+        direction: INCREASES_RISK
+        template_key: feature.tx_count_60s.high
+      - feature: tx_count_1h
+        value: 0.75
+        shap: 0.86
+        direction: INCREASES_RISK
+        template_key: feature.tx_count_1h.high
+      - feature: tx_count_24h
+        value: 1.0
+        shap: 0.82
+        direction: INCREASES_RISK
+        template_key: feature.tx_count_24h.high
+      review_deadline_at: '2026-09-17T08:16:00Z'
+      escalated_from_alert_id: null
+    next_cursor: eyJvZmZzZXQiOjUwfQ
+  AlertSummary:
+  - alert_id: 0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d
+    version: 2
+    transaction_id: 3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11
+    tier: MEDIUM
+    status: PENDING
+    fraud_probability: 0.71
+    expected_loss_rwf: '10650'
+    amount:
+      amount: '15000'
+      currency: RWF
+    channel: MOBILE_MONEY
+    masked_account_name: J*** M***
+    merchant: null
+    transaction_timestamp: '2026-09-17T08:15:30Z'
+    top_reasons:
+    - feature: tx_count_60s
+      value: 0.5
+      shap: 0.9
+      direction: INCREASES_RISK
+      template_key: feature.tx_count_60s.high
+    - feature: tx_count_1h
+      value: 0.75
+      shap: 0.86
+      direction: INCREASES_RISK
+      template_key: feature.tx_count_1h.high
+    - feature: tx_count_24h
+      value: 1.0
+      shap: 0.82
+      direction: INCREASES_RISK
+      template_key: feature.tx_count_24h.high
+    review_deadline_at: '2026-09-17T08:16:00Z'
+    escalated_from_alert_id: null
+  AnalystPerformance:
+  - reviewed_today: 38
+    average_review_seconds: 21.4
+    backlog: 5
+    accuracy_rate: null
+    verified_decisions: 0
+  ApiKey:
+  - key_id: a1b2c3d4e5f6
+    name: Core banking production
+    scopes:
+    - ingest:write
+    - decisions:read
+    last_four: Xy9Z
+    state: ACTIVE
+    created_at: '2026-09-17T08:15:30Z'
+    expires_at: null
+    last_used_at: null
+  ApiKeyCreate:
+  - name: Core banking production
+    scopes:
+    - ingest:write
+    - decisions:read
+    webhook_url: https://hooks.example.com/fraudshield
+  ApiKeyCreated:
+  - key_id: a1b2c3d4e5f6
+    name: Core banking production
+    scopes:
+    - ingest:write
+    - decisions:read
+    last_four: Xy9Z
+    state: ACTIVE
+    created_at: '2026-09-17T08:15:30Z'
+    expires_at: null
+    last_used_at: null
+    raw_key: fsk_prod_a1b2c3d4e5f6_EXAMPLEexampleEXAMPLEexampleEXAMPLEexample0
+    webhook_signing_secret: whsec_prod_EXAMPLEexampleEXAMPLEexample0000
+  AuditEventPage:
+  - items:
+    - event_id: 4e5f6071-8a9b-4cad-9e0f-3a4b5c6d7e8f
+      event_type: THRESHOLD_CHANGE
+      action: UPDATE
+      entity_type: threshold_set
+      entity_id: '4'
+      event_at: '2026-09-17T08:15:30Z'
+      actor:
+        user_id: 6c2a1b3d-4e5f-4a71-9b8c-0d1e2f3a4b5c
+        first_name: Hélène
+        last_name: Ngũgĩ
+        role: RISK_OFFICER
+      before_value:
+        channel: CARD
+        high_threshold: 0.85
+      after_value:
+        channel: CARD
+        high_threshold: 0.8
+      ip_address: 203.0.113.10
+      row_hash: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+    next_cursor: null
+  BehaviourProfile:
+  - window_days: 90
+    hourly_counts:
+    - 0
+    - 0
+    - 0
+    - 0
+    - 0
+    - 1
+    - 3
+    - 6
+    - 9
+    - 8
+    - 7
+    - 6
+    - 8
+    - 7
+    - 6
+    - 5
+    - 6
+    - 8
+    - 9
+    - 7
+    - 4
+    - 2
+    - 1
+    - 0
+    amount_histogram:
+    - lower_rwf: '0'
+      upper_rwf: '10000'
+      count: 80
+    - lower_rwf: '10000'
+      upper_rwf: '50000'
+      count: 22
+    channel_mix:
+    - channel: MOBILE_MONEY
+      count: 95
+    - channel: USSD
+      count: 7
+    comparison:
+    - attribute: local_hour
+      this_transaction: 2
+      normal: 07-21
+      anomalous: true
+  Campaign:
+  - campaign_id: 3d4e5f60-7a8b-4c9d-8e0f-2a3b4c5d6e7f
+    campaign_name: CMP-20260917-DEVICE-0042
+    detected_at: '2026-09-17T08:15:30Z'
+    shared_feature_type: DEVICE
+    shared_feature_value: tok_exampleDevice00000000001
+    transaction_count: 7
+    total_amount:
+      amount: '910000'
+      currency: RWF
+    status: ACTIVE
+    version: 1
+  CampaignPage:
+  - items:
+    - campaign_id: 3d4e5f60-7a8b-4c9d-8e0f-2a3b4c5d6e7f
+      campaign_name: CMP-20260917-DEVICE-0042
+      detected_at: '2026-09-17T08:15:30Z'
+      shared_feature_type: DEVICE
+      shared_feature_value: tok_exampleDevice00000000001
+      transaction_count: 7
+      total_amount:
+        amount: '910000'
+        currency: RWF
+      status: ACTIVE
+      version: 1
+    next_cursor: null
+  ChannelThreshold:
+  - channel: CARD
+    medium_threshold: 0.6
+    high_threshold: 0.85
+    medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+  CircuitBreaker:
+  - merchant_category_code: '5732'
+    state: OPEN
+    window_fraud_rate: 0.062
+    window_transactions: 180
+    opened_at: '2026-09-17T08:15:30Z'
+    clean_since: null
+  CircuitBreakerSettings:
+  - version: 1
+    fraud_rate_threshold: 0.05
+    window_minutes: 15
+    minimum_transactions: 100
+    clean_reset_minutes: 60
+  CircuitBreakerSettingsUpdate:
+  - base_version: 1
+    reason: Campaign on MCC 4829 needs earlier trips
+    fraud_rate_threshold: 0.04
+    window_minutes: 15
+    minimum_transactions: 100
+    clean_reset_minutes: 60
+  ComponentHealth:
+  - status: DEGRADED
+    detail: rule-based fallback active
+  ConfigChange:
+  - change_id: c6d7e8f9-0a1b-4c2d-8e3f-4a5b6c7d8e9f
+    kind: CHANNEL_THRESHOLDS
+    direction: TIGHTENING
+    status: APPLIED_PENDING_CONFIRMATION
+    proposed_by:
+      user_id: 6c2a1b3d-4e5f-4a71-9b8c-0d1e2f3a4b5c
+      first_name: Hélène
+      last_name: Ngũgĩ
+      role: RISK_OFFICER
+    proposed_at: '2026-09-17T08:15:30Z'
+    reason: Card fraud wave in September
+    base_version: 3
+    previous:
+      version: 3
+      effective_at: '2026-09-10T08:00:00Z'
+      channels:
+      - channel: MOBILE_MONEY
+        medium_threshold: 0.6
+        high_threshold: 0.85
+        medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+      - channel: CARD
+        medium_threshold: 0.6
+        high_threshold: 0.85
+        medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+      - channel: AGENT_BANKING
+        medium_threshold: 0.6
+        high_threshold: 0.85
+        medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+      - channel: USSD
+        medium_threshold: 0.6
+        high_threshold: 0.85
+        medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+      - channel: ONLINE
+        medium_threshold: 0.6
+        high_threshold: 0.85
+        medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+      - channel: BANK_TRANSFER
+        medium_threshold: 0.6
+        high_threshold: 0.85
+        medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+    proposed:
+      version: 4
+      effective_at: '2026-09-17T08:15:30Z'
+      channels:
+      - channel: MOBILE_MONEY
+        medium_threshold: 0.6
+        high_threshold: 0.85
+        medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+      - channel: CARD
+        medium_threshold: 0.6
+        high_threshold: 0.8
+        medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+      - channel: AGENT_BANKING
+        medium_threshold: 0.6
+        high_threshold: 0.85
+        medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+      - channel: USSD
+        medium_threshold: 0.6
+        high_threshold: 0.85
+        medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+      - channel: ONLINE
+        medium_threshold: 0.6
+        high_threshold: 0.85
+        medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+      - channel: BANK_TRANSFER
+        medium_threshold: 0.6
+        high_threshold: 0.85
+        medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+    confirm_by: '2026-09-18T08:15:30Z'
+    reviewed_by: null
+    reviewed_at: null
+    review_reason: null
+    effective_at: '2026-09-17T08:15:30Z'
+    reverted_at: null
+    revert_cause: null
+  ConfigChangePage:
+  - items:
+    - change_id: c6d7e8f9-0a1b-4c2d-8e3f-4a5b6c7d8e9f
+      kind: CHANNEL_THRESHOLDS
+      direction: TIGHTENING
+      status: APPLIED_PENDING_CONFIRMATION
+      proposed_by:
+        user_id: 6c2a1b3d-4e5f-4a71-9b8c-0d1e2f3a4b5c
+        first_name: Hélène
+        last_name: Ngũgĩ
+        role: RISK_OFFICER
+      proposed_at: '2026-09-17T08:15:30Z'
+      reason: Card fraud wave in September
+      base_version: 3
+      previous:
+        version: 3
+        effective_at: '2026-09-10T08:00:00Z'
+        channels:
+        - channel: MOBILE_MONEY
+          medium_threshold: 0.6
+          high_threshold: 0.85
+          medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+        - channel: CARD
+          medium_threshold: 0.6
+          high_threshold: 0.85
+          medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+        - channel: AGENT_BANKING
+          medium_threshold: 0.6
+          high_threshold: 0.85
+          medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+        - channel: USSD
+          medium_threshold: 0.6
+          high_threshold: 0.85
+          medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+        - channel: ONLINE
+          medium_threshold: 0.6
+          high_threshold: 0.85
+          medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+        - channel: BANK_TRANSFER
+          medium_threshold: 0.6
+          high_threshold: 0.85
+          medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+      proposed:
+        version: 4
+        effective_at: '2026-09-17T08:15:30Z'
+        channels:
+        - channel: MOBILE_MONEY
+          medium_threshold: 0.6
+          high_threshold: 0.85
+          medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+        - channel: CARD
+          medium_threshold: 0.6
+          high_threshold: 0.8
+          medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+        - channel: AGENT_BANKING
+          medium_threshold: 0.6
+          high_threshold: 0.85
+          medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+        - channel: USSD
+          medium_threshold: 0.6
+          high_threshold: 0.85
+          medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+        - channel: ONLINE
+          medium_threshold: 0.6
+          high_threshold: 0.85
+          medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+        - channel: BANK_TRANSFER
+          medium_threshold: 0.6
+          high_threshold: 0.85
+          medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+      confirm_by: '2026-09-18T08:15:30Z'
+      reviewed_by: null
+      reviewed_at: null
+      review_reason: null
+      effective_at: '2026-09-17T08:15:30Z'
+      reverted_at: null
+      revert_cause: null
+    - change_id: d7e8f90a-1b2c-4d3e-9f4a-5b6c7d8e9f0a
+      kind: MCC_CIRCUIT_BREAKER
+      direction: LOOSENING
+      status: PENDING_APPROVAL
+      proposed_by:
+        user_id: 8e4c3d5f-6a71-4c93-9dae-2f3a4b5c6d7e
+        first_name: Wanjirũ
+        last_name: Uwase
+        role: RISK_OFFICER
+      proposed_at: '2026-09-17T08:15:30Z'
+      reason: MCC 5732 trips on normal weekend volume
+      base_version: 1
+      previous:
+        version: 1
+        fraud_rate_threshold: 0.05
+        window_minutes: 15
+        minimum_transactions: 100
+        clean_reset_minutes: 60
+      proposed:
+        version: 2
+        fraud_rate_threshold: 0.05
+        window_minutes: 15
+        minimum_transactions: 200
+        clean_reset_minutes: 60
+      confirm_by: null
+      reviewed_by: null
+      reviewed_at: null
+      review_reason: null
+      effective_at: null
+      reverted_at: null
+      revert_cause: null
+    next_cursor: null
+  ConfigRejectionRequest:
+  - reason: Fraud on this channel is still rising
+  ConfigReviewRequest:
+  - comment: Confirmed with fraud operations
+  DashboardStats:
+  - high_open: 3
+    medium_open: 11
+    auto_blocked_today: 42
+    reviewed_today: 120
+    fraud_prevented_today:
+      amount: '8450000'
+      currency: RWF
+    average_review_seconds: 19.5
+    analysts_online: 6
+  DecisionRecord:
+  - decision_id: 1b2c3d4e-5f60-4a7b-9c8d-0e1f2a3b4c5d
+    decision: CONFIRM_FRAUD
+    analyst:
+      user_id: 5b1f0a2c-3d4e-4f60-8a7b-9c0d1e2f3a4b
+      first_name: Amani
+      last_name: Uwase
+      role: ANALYST
+    comment: Velocity spike to a new counterparty after a SIM swap
+    decided_at: '2026-09-17T08:15:52Z'
+    state: COMMITTED
+    override_of_decision_id: null
+    false_positive_confirmed: null
+  DeploymentEnvironment:
+  - synthetic_data: true
+  - synthetic_data: false
+  EscalationRequest:
+  - target_role: SENIOR_ANALYST
+    reason: Linked to an active device campaign
+    alert_version: 2
+  Explanation:
+  - transaction_id: 3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11
+    base_value: -4.2
+    final_margin: 0.9
+    calibrated_probability: 0.71
+    contributions:
+    - feature: tx_count_60s
+      value: 0.5
+      shap: 0.9
+      direction: INCREASES_RISK
+      template_key: feature.tx_count_60s.high
+    - feature: tx_count_1h
+      value: 0.75
+      shap: 0.86
+      direction: INCREASES_RISK
+      template_key: feature.tx_count_1h.high
+    - feature: tx_count_24h
+      value: 1.0
+      shap: 0.82
+      direction: INCREASES_RISK
+      template_key: feature.tx_count_24h.high
+    - feature: tx_count_7d
+      value: 1.25
+      shap: 0.78
+      direction: INCREASES_RISK
+      template_key: feature.tx_count_7d.high
+    - feature: amount_sum_24h
+      value: 1.5
+      shap: 0.74
+      direction: INCREASES_RISK
+      template_key: feature.amount_sum_24h.high
+    - feature: amount_sum_7d
+      value: 1.75
+      shap: 0.7
+      direction: INCREASES_RISK
+      template_key: feature.amount_sum_7d.high
+    - feature: unique_counterparties_24h
+      value: 2.0
+      shap: 0.66
+      direction: INCREASES_RISK
+      template_key: feature.unique_counterparties_24h.high
+    - feature: velocity_ratio_1h_vs_30d
+      value: 2.25
+      shap: 0.62
+      direction: INCREASES_RISK
+      template_key: feature.velocity_ratio_1h_vs_30d.high
+    - feature: amount_log1p
+      value: 2.5
+      shap: 0.58
+      direction: INCREASES_RISK
+      template_key: feature.amount_log1p.high
+    - feature: amount_zscore_90d
+      value: 2.75
+      shap: 0.54
+      direction: INCREASES_RISK
+      template_key: feature.amount_zscore_90d.high
+    - feature: amount_to_max_90d_ratio
+      value: 3.0
+      shap: 0.5
+      direction: INCREASES_RISK
+      template_key: feature.amount_to_max_90d_ratio.high
+    - feature: round_sum_flag
+      value: 3.25
+      shap: 0.46
+      direction: INCREASES_RISK
+      template_key: feature.round_sum_flag.high
+    - feature: just_below_limit_flag
+      value: 3.5
+      shap: 0.42
+      direction: INCREASES_RISK
+      template_key: feature.just_below_limit_flag.high
+    - feature: local_hour_sin
+      value: 3.75
+      shap: 0.38
+      direction: INCREASES_RISK
+      template_key: feature.local_hour_sin.high
+    - feature: local_hour_cos
+      value: 4.0
+      shap: 0.34
+      direction: INCREASES_RISK
+      template_key: feature.local_hour_cos.high
+    - feature: local_day_of_week
+      value: 4.25
+      shap: 0.3
+      direction: INCREASES_RISK
+      template_key: feature.local_day_of_week.high
+    - feature: is_local_night
+      value: 4.5
+      shap: 0.26
+      direction: INCREASES_RISK
+      template_key: feature.is_local_night.high
+    - feature: is_month_end_window
+      value: 4.75
+      shap: 0.22
+      direction: INCREASES_RISK
+      template_key: feature.is_month_end_window.high
+    - feature: seconds_since_last_tx
+      value: 5.0
+      shap: 0.18
+      direction: INCREASES_RISK
+      template_key: feature.seconds_since_last_tx.high
+    - feature: distance_from_last_tx_km
+      value: 5.25
+      shap: 0.14
+      direction: INCREASES_RISK
+      template_key: feature.distance_from_last_tx_km.high
+    - feature: implied_speed_kmh
+      value: 5.5
+      shap: 0.1
+      direction: INCREASES_RISK
+      template_key: feature.implied_speed_kmh.high
+    - feature: distance_from_home_centroid_km
+      value: 5.75
+      shap: 0.06
+      direction: INCREASES_RISK
+      template_key: feature.distance_from_home_centroid_km.high
+    - feature: is_new_country_for_account
+      value: 6.0
+      shap: 0.02
+      direction: INCREASES_RISK
+      template_key: feature.is_new_country_for_account.high
+    - feature: geo_cell_fraud_rate_30d
+      value: 6.25
+      shap: -0.02
+      direction: DECREASES_RISK
+      template_key: feature.geo_cell_fraud_rate_30d.low
+    - feature: counterparty_is_new_for_account
+      value: 6.5
+      shap: -0.06
+      direction: DECREASES_RISK
+      template_key: feature.counterparty_is_new_for_account.low
+    - feature: counterparty_account_age_days
+      value: 6.75
+      shap: -0.1
+      direction: DECREASES_RISK
+      template_key: feature.counterparty_account_age_days.low
+    - feature: counterparty_unique_senders_24h
+      value: 7.0
+      shap: -0.14
+      direction: DECREASES_RISK
+      template_key: feature.counterparty_unique_senders_24h.low
+    - feature: counterparty_confirmed_fraud_90d
+      value: 7.25
+      shap: -0.18
+      direction: DECREASES_RISK
+      template_key: feature.counterparty_confirmed_fraud_90d.low
+    - feature: tx_count_to_counterparty_30d
+      value: 7.5
+      shap: -0.22
+      direction: DECREASES_RISK
+      template_key: feature.tx_count_to_counterparty_30d.low
+    - feature: channel
+      value: MOBILE_MONEY
+      shap: -0.26
+      direction: DECREASES_RISK
+      template_key: feature.channel.low
+    - feature: device_is_new_for_account
+      value: 8.0
+      shap: -0.3
+      direction: DECREASES_RISK
+      template_key: feature.device_is_new_for_account.low
+    - feature: accounts_per_device_7d
+      value: 8.25
+      shap: -0.34
+      direction: DECREASES_RISK
+      template_key: feature.accounts_per_device_7d.low
+    - feature: device_changes_24h
+      value: 8.5
+      shap: -0.38
+      direction: DECREASES_RISK
+      template_key: feature.device_changes_24h.low
+    - feature: device_age_days
+      value: 8.75
+      shap: -0.42
+      direction: DECREASES_RISK
+      template_key: feature.device_age_days.low
+    - feature: account_age_days
+      value: 9.0
+      shap: -0.46
+      direction: DECREASES_RISK
+      template_key: feature.account_age_days.low
+    - feature: kyc_tier
+      value: 9.25
+      shap: -0.5
+      direction: DECREASES_RISK
+      template_key: feature.kyc_tier.low
+    - feature: days_since_sim_swap
+      value: 9.5
+      shap: -0.54
+      direction: DECREASES_RISK
+      template_key: feature.days_since_sim_swap.low
+    - feature: dormancy_reactivation_flag
+      value: 9.75
+      shap: -0.58
+      direction: DECREASES_RISK
+      template_key: feature.dormancy_reactivation_flag.low
+    - feature: agent_float_utilisation_ratio
+      value: null
+      shap: -0.62
+      direction: DECREASES_RISK
+      template_key: feature.agent_float_utilisation_ratio.low
+    - feature: agent_cashout_count_1h
+      value: null
+      shap: -0.66
+      direction: DECREASES_RISK
+      template_key: feature.agent_cashout_count_1h.low
+    - feature: agent_unique_customers_1h
+      value: null
+      shap: -0.7
+      direction: DECREASES_RISK
+      template_key: feature.agent_unique_customers_1h.low
+    - feature: agent_distance_from_registered_km
+      value: null
+      shap: -0.74
+      direction: DECREASES_RISK
+      template_key: feature.agent_distance_from_registered_km.low
+    - feature: corridor_class
+      value: DOMESTIC
+      shap: -0.78
+      direction: DECREASES_RISK
+      template_key: feature.corridor_class.low
+    - feature: synthetic_identity_score
+      value: 11.25
+      shap: -0.82
+      direction: DECREASES_RISK
+      template_key: feature.synthetic_identity_score.low
+    summary_template_key: summary.velocity_new_counterparty
+    summary_parameters:
+      count: 6
+  FinalDecision:
+  - event_id: 5f607182-9a0b-4cbe-8f1a-4b5c6d7e8f90
+    transaction_id: 7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60
+    decision_sequence: 2
+    decision: DECLINE
+    final: true
+    decided_at: '2026-09-17T06:02:35Z'
+    decided_by: ANALYST
+    reason_codes:
+    - UNUSUAL_HOUR
+    review_deadline_at: null
+    supersedes_decision: HOLD
+  GoogleSignInRequest:
+  - authorization_code: 4/0AbCdEfGhIjKlMnOp
+    code_verifier: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    redirect_uri: https://console.example.com/auth/google/callback
+  Heatmap:
+  - period: week
+    k_anonymity_threshold: 10
+    cells:
+    - country: RW
+      district_code: RW-01-GASABO
+      fraud_events: 14
+  IpAllowlistEntry:
+  - cidr: 203.0.113.0/24
+    description: Head office egress (documentation range)
+    entry_id: 60718293-a0b1-4cdf-9a2b-5c6d7e8f9a01
+    created_by:
+      user_id: 7d3b2c4e-5f60-4b82-8c9d-1e2f3a4b5c6d
+      first_name: Jean Bosco
+      last_name: N'Dri
+      role: ADMIN
+    created_at: '2026-09-17T08:15:30Z'
+  IpAllowlistEntryCreate:
+  - cidr: 203.0.113.0/24
+    description: Head office egress (documentation range)
+  JobAccepted:
+  - job_id: 718293a4-b1c2-4de0-8b3c-6d7e8f9a0b12
+    accepted: 250
+    status_url: /api/v1/jobs/718293a4-b1c2-4de0-8b3c-6d7e8f9a0b12
+  JobStatus:
+  - job_id: 718293a4-b1c2-4de0-8b3c-6d7e8f9a0b12
+    state: RUNNING
+    total: 250
+    processed: 3
+    failed: 2
+    results:
+    - transaction_id: 0b9a8c7d-6e5f-4a3b-9c2d-1e0f9a8b7c6d
+      outcome: DECIDED
+      decision:
+        transaction_id: 0b9a8c7d-6e5f-4a3b-9c2d-1e0f9a8b7c6d
+        decision: APPROVE
+        risk_tier: LOW
+        reason_codes: []
+        scoring_result_id: 1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f
+        model_version: fs-ensemble-2026.09.1
+        decision_latency_ms: 19
+        review_deadline_at: null
+        ml_unavailable_fallback: false
+    - transaction_id: 3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11
+      outcome: REJECTED
+      problem:
+        type: urn:fraudshield:problem:validation
+        title: Request validation failed
+        status: 422
+        correlation_id: 6f1c2d8e-5b0a-4c55-9f7a-2a1d3c4b5e6f
+        errors:
+        - field: amount
+          code: out_of_range
+          message: amount must be greater than 0
+    - transaction_id: 5e6f7a8b-9c0d-4e1f-a2b3-c4d5e6f7a8b9
+      outcome: REJECTED
+      problem:
+        type: urn:fraudshield:problem:idempotency-conflict
+        title: Transaction already submitted with different content
+        status: 409
+        correlation_id: 6f1c2d8e-5b0a-4c55-9f7a-2a1d3c4b5e6f
+    next_cursor: null
+  LoginRequest:
+  - email: analyst@example.com
+    password: Str0ng!pass
+  ModelPerformance:
+  - model_version: fs-ensemble-2026.09.1
+    window_hours: 24
+    label_coverage: 0.34
+    auc_roc: 0.951
+    baseline_auc_roc: 0.962
+    precision: 0.41
+    recall: 0.69
+    f1: 0.51
+    false_positive_rate: 0.009
+    drift_alert: false
+    top_feature_psi:
+    - feature: amount_log1p
+      psi: 0.03
+  ModelVersion:
+  - model_version: fs-ensemble-2026.09.1
+    aliases:
+    - production
+    training_date: '2026-09-10T02:00:00Z'
+    training_dataset_size: 1200000
+    metrics:
+      auc_roc: 0.962
+      recall_at_1pct_fpr: 0.71
+      precision_at_1pct_fpr: 0.38
+      ece: 0.012
+    mlflow_run_id: 0f1e2d3c4b5a69788796a5b4c3d2e1f0
+    shadow_gate: null
+  OverrideRequest:
+  - original_decision_id: 1b2c3d4e-5f60-4a7b-9c8d-0e1f2a3b4c5d
+    new_decision: MARK_LEGITIMATE
+    reason: Customer confirmed at branch with national ID
+    alert_version: 3
+  PendingApproval:
+  - status: PENDING_APPROVAL
+    message_key: registration.pending_approval
+  PortfolioSummary:
+  - period: day
+    fraud_prevented:
+      amount: '8450000'
+      currency: RWF
+    fraud_prevented_count: 42
+    fraud_rate_by_channel:
+    - channel: MOBILE_MONEY
+      rate: 0.004
+      transactions: 90000
+    fraud_rate_by_mcc:
+    - merchant_category_code: '4829'
+      rate: 0.006
+      transactions: 50000
+    top_counterparties:
+    - counterparty_token: tok_exampleCounterparty000001
+      confirmed_fraud_count: 5
+      amount:
+        amount: '640000'
+        currency: RWF
+  ProbeStatus:
+  - status: UP
+  Problem:
+  - type: urn:fraudshield:problem:forbidden
+    title: Forbidden
+    status: 403
+    correlation_id: 6f1c2d8e-5b0a-4c55-9f7a-2a1d3c4b5e6f
+  PromotionGateProblem:
+  - type: urn:fraudshield:problem:promotion-gate-failed
+    title: Promotion gate not met
+    status: 409
+    correlation_id: 6f1c2d8e-5b0a-4c55-9f7a-2a1d3c4b5e6f
+    gate:
+      shadow_hours: 12.5
+      shadow_scored: 21000
+      auc_delta: null
+      label_coverage: 0.18
+      psi: 0.04
+      passed: false
+      reasons:
+      - SHADOW_UNDER_24_HOURS
+      - SHADOW_UNDER_50000_SCORED
+      - INSUFFICIENT_LABELS
+  RegistrationRequest:
+  - first_name: Marie Claire
+    last_name: Uwimana-Mukamana
+    email: new.analyst@example.com
+    phone: '+999000000001'
+    employee_id: EMP0107
+    department: FRAUD_OPERATIONS
+    requested_role: ANALYST
+    password: Str0ng!pass
+    preferred_locale: fr
+  RetrainingJob:
+  - job_id: 8293a4b5-c2d3-4ef1-9c4d-7e8f9a0b1c23
+    dataset_id: 93a4b5c6-d3e4-4f02-8d5e-8f9a0b1c2d34
+    state: TRAINING
+    progress_percent: 40
+    started_at: '2026-09-17T08:15:30Z'
+    candidate_model_version: null
+    evaluation_passed: null
+  Rule:
+  - rule_name: Night cash-out burst
+    description: Three or more agent cash-outs at night within an hour
+    expression:
+      all:
+      - field: is_local_night
+        op: eq
+        value: 1
+      - field: agent_cashout_count_1h
+        op: gte
+        value: 3
+    risk_tier_override: MEDIUM
+    rule_id: a4b5c6d7-e4f5-4013-9e6f-9a0b1c2d3e45
+    version: 2
+    state: ENABLED
+    created_by:
+      user_id: 6c2a1b3d-4e5f-4a71-9b8c-0d1e2f3a4b5c
+      first_name: Hélène
+      last_name: Ngũgĩ
+      role: RISK_OFFICER
+    created_at: '2026-09-17T08:15:30Z'
+    trigger_count: 17
+    last_triggered_at: '2026-09-17T08:15:30Z'
+  RuleDraft:
+  - rule_name: Night cash-out burst
+    description: Three or more agent cash-outs at night within an hour
+    expression:
+      all:
+      - field: is_local_night
+        op: eq
+        value: 1
+      - field: agent_cashout_count_1h
+        op: gte
+        value: 3
+    risk_tier_override: MEDIUM
+  RuleExpression:
+  - all:
+    - field: is_local_night
+      op: eq
+      value: 1
+    - field: agent_cashout_count_1h
+      op: gte
+      value: 3
+  SarReport:
+  - report_id: 2c3d4e5f-6a7b-4c8d-9e0f-1a2b3c4d5e6f
+    version: 0
+    template_version: sar-2026.1
+    status: DRAFT
+    transaction_ids:
+    - 3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11
+    created_at: '2026-09-17T08:15:30Z'
+    watermark: Draft — requires compliance review
+    fields:
+    - key: amount
+      value: 15000 RWF
+      confirmation: CONFIRMED_FROM_PRIMARY_SOURCE
+    - key: subject_occupation
+      value: null
+      confirmation: UNCONFIRMED_FIELD
+  SarReportPage:
+  - items:
+    - report_id: 2c3d4e5f-6a7b-4c8d-9e0f-1a2b3c4d5e6f
+      version: 0
+      template_version: sar-2026.1
+      status: DRAFT
+      transaction_ids:
+      - 3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11
+      created_at: '2026-09-17T08:15:30Z'
+      watermark: Draft — requires compliance review
+      fields:
+      - key: amount
+        value: 15000 RWF
+        confirmation: CONFIRMED_FROM_PRIMARY_SOURCE
+      - key: subject_occupation
+        value: null
+        confirmation: UNCONFIRMED_FIELD
+    next_cursor: null
+  ScoringResult:
+  - scoring_result_id: 2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d
+    transaction_id: 3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11
+    ensemble_score: 0.93
+    xgboost_score: 0.95
+    lightgbm_score: 0.91
+    anomaly_score: 0.88
+    risk_tier: HIGH
+    shap_top5:
+    - feature: tx_count_60s
+      value: 0.5
+      shap: 0.9
+      direction: INCREASES_RISK
+      template_key: feature.tx_count_60s.high
+    - feature: tx_count_1h
+      value: 0.75
+      shap: 0.86
+      direction: INCREASES_RISK
+      template_key: feature.tx_count_1h.high
+    - feature: tx_count_24h
+      value: 1.0
+      shap: 0.82
+      direction: INCREASES_RISK
+      template_key: feature.tx_count_24h.high
+    - feature: tx_count_7d
+      value: 1.25
+      shap: 0.78
+      direction: INCREASES_RISK
+      template_key: feature.tx_count_7d.high
+    - feature: amount_sum_24h
+      value: 1.5
+      shap: 0.74
+      direction: INCREASES_RISK
+      template_key: feature.amount_sum_24h.high
+    feature_vector:
+      tx_count_60s: 0.5
+      tx_count_1h: 0.75
+      tx_count_24h: 1.0
+      tx_count_7d: 1.25
+      amount_sum_24h: 1.5
+      amount_sum_7d: 1.75
+      unique_counterparties_24h: 2.0
+      velocity_ratio_1h_vs_30d: 2.25
+      amount_log1p: 2.5
+      amount_zscore_90d: 2.75
+      amount_to_max_90d_ratio: 3.0
+      round_sum_flag: 3.25
+      just_below_limit_flag: 3.5
+      local_hour_sin: 3.75
+      local_hour_cos: 4.0
+      local_day_of_week: 4.25
+      is_local_night: 4.5
+      is_month_end_window: 4.75
+      seconds_since_last_tx: 5.0
+      distance_from_last_tx_km: 5.25
+      implied_speed_kmh: 5.5
+      distance_from_home_centroid_km: 5.75
+      is_new_country_for_account: 6.0
+      geo_cell_fraud_rate_30d: 6.25
+      counterparty_is_new_for_account: 6.5
+      counterparty_account_age_days: 6.75
+      counterparty_unique_senders_24h: 7.0
+      counterparty_confirmed_fraud_90d: 7.25
+      tx_count_to_counterparty_30d: 7.5
+      channel: MOBILE_MONEY
+      device_is_new_for_account: 8.0
+      accounts_per_device_7d: 8.25
+      device_changes_24h: 8.5
+      device_age_days: 8.75
+      account_age_days: 9.0
+      kyc_tier: 9.25
+      days_since_sim_swap: 9.5
+      dormancy_reactivation_flag: 9.75
+      agent_float_utilisation_ratio: null
+      agent_cashout_count_1h: null
+      agent_unique_customers_1h: null
+      agent_distance_from_registered_km: null
+      corridor_class: DOMESTIC
+      synthetic_identity_score: 11.25
+    model_version: fs-ensemble-2026.09.1
+    scoring_duration_ms: 12
+    ml_unavailable_fallback: false
+  SingleUseTokenRequest:
+  - token: exampleSingleUseToken0000000000
+  StaffUser:
+  - user_id: 5b1f0a2c-3d4e-4f60-8a7b-9c0d1e2f3a4b
+    first_name: Amani
+    last_name: Uwase
+    email: analyst@example.com
+    phone: null
+    avatar_url: null
+    role: ANALYST
+    requested_role: ANALYST
+    status: ACTIVE
+    employee_id: EMP0042
+    department: FRAUD_OPERATIONS
+    preferred_locale: rw
+    email_verified: true
+    linked_providers: []
+    last_login_at: '2026-09-17T08:15:30Z'
+    created_at: '2026-09-01T07:00:00Z'
+  StaffUserCreate:
+  - first_name: Ngũgĩ
+    last_name: Wanjirũ
+    email: officer@example.com
+    employee_id: EMP0200
+    department: RISK
+    role: RISK_OFFICER
+    preferred_locale: sw
+  StaffUserPage:
+  - items:
+    - user_id: 5b1f0a2c-3d4e-4f60-8a7b-9c0d1e2f3a4b
+      first_name: Amani
+      last_name: Uwase
+      email: analyst@example.com
+      phone: null
+      avatar_url: null
+      role: ANALYST
+      requested_role: ANALYST
+      status: ACTIVE
+      employee_id: EMP0042
+      department: FRAUD_OPERATIONS
+      preferred_locale: rw
+      email_verified: true
+      linked_providers: []
+      last_login_at: '2026-09-17T08:15:30Z'
+      created_at: '2026-09-01T07:00:00Z'
+    next_cursor: null
+  StaffUserUpdate:
+  - version: 4
+    status: DEACTIVATED
+  StaleAlertProblem:
+  - type: urn:fraudshield:problem:stale-alert
+    title: Alert changed
+    status: 409
+    correlation_id: 6f1c2d8e-5b0a-4c55-9f7a-2a1d3c4b5e6f
+    current:
+      alert_id: 0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d
+      version: 2
+      transaction_id: 3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11
+      tier: MEDIUM
+      status: PENDING
+      fraud_probability: 0.71
+      expected_loss_rwf: '10650'
+      amount:
+        amount: '15000'
+        currency: RWF
+      channel: MOBILE_MONEY
+      masked_account_name: J*** M***
+      merchant: null
+      transaction_timestamp: '2026-09-17T08:15:30Z'
+      top_reasons:
+      - feature: tx_count_60s
+        value: 0.5
+        shap: 0.9
+        direction: INCREASES_RISK
+        template_key: feature.tx_count_60s.high
+      - feature: tx_count_1h
+        value: 0.75
+        shap: 0.86
+        direction: INCREASES_RISK
+        template_key: feature.tx_count_1h.high
+      - feature: tx_count_24h
+        value: 1.0
+        shap: 0.82
+        direction: INCREASES_RISK
+        template_key: feature.tx_count_24h.high
+      review_deadline_at: '2026-09-17T08:16:00Z'
+      escalated_from_alert_id: null
+  SystemHealth:
+  - kafka_consumer_lag:
+    - topic: fs.transactions.scored
+      group: alert-router
+      lag: 12
+    scoring_latency_ms:
+      p50: 8.0
+      p95: 21.0
+      p99: 33.0
+    api_error_rate: 0.001
+    redis_hit_ratio: 0.98
+    db_pool_in_use: 0.35
+    auto_block_rate: 0.002
+    alert_queue_depth:
+      HIGH: 3
+      MEDIUM: 11
+      ANOMALY: 40
+    review_duration_seconds:
+      p50: 18.0
+      p90: 45.0
+    degraded_modes: []
+  ThresholdSet:
+  - version: 4
+    effective_at: '2026-09-17T08:15:30Z'
+    channels:
+    - channel: MOBILE_MONEY
+      medium_threshold: 0.6
+      high_threshold: 0.85
+      medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+    - channel: CARD
+      medium_threshold: 0.6
+      high_threshold: 0.8
+      medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+    - channel: AGENT_BANKING
+      medium_threshold: 0.6
+      high_threshold: 0.85
+      medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+    - channel: USSD
+      medium_threshold: 0.6
+      high_threshold: 0.85
+      medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+    - channel: ONLINE
+      medium_threshold: 0.6
+      high_threshold: 0.85
+      medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+    - channel: BANK_TRANSFER
+      medium_threshold: 0.6
+      high_threshold: 0.85
+      medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+  ThresholdUpdate:
+  - base_version: 3
+    reason: Card fraud wave in September
+    channels:
+    - channel: CARD
+      medium_threshold: 0.6
+      high_threshold: 0.85
+      medium_timeout_policy: RELEASE_WITH_TIMEOUT_LABEL
+  TokenResponse:
+  - access_token: example-access-token-not-a-real-jwt
+    token_type: Bearer
+    expires_in: 900
+    user:
+      user_id: 5b1f0a2c-3d4e-4f60-8a7b-9c0d1e2f3a4b
+      first_name: Amani
+      last_name: Uwase
+      email: analyst@example.com
+      phone: null
+      avatar_url: null
+      role: ANALYST
+      requested_role: ANALYST
+      status: ACTIVE
+      employee_id: EMP0042
+      department: FRAUD_OPERATIONS
+      preferred_locale: rw
+      email_verified: true
+      linked_providers: []
+      last_login_at: '2026-09-17T08:15:30Z'
+      created_at: '2026-09-01T07:00:00Z'
+  TrainingDataset:
+  - dataset_id: 93a4b5c6-d3e4-4f02-8d5e-8f9a0b1c2d34
+    name: FraudShield-EAC synthetic 2026-09
+    rows: 1200000
+    uploaded_at: '2026-09-17T08:15:30Z'
+    sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    validation_state: ACCEPTED
+    rejection_reasons: []
+  TransactionBatchRequest:
+  - transactions:
+    - transaction_id: 3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11
+      account_id: tok_A1b2C3d4E5f6G7h8J9k0L1m2
+      counterparty_id: tok_Z9y8X7w6V5u4T3s2R1q0P9o8
+      amount: '15000'
+      currency: RWF
+      channel: MOBILE_MONEY
+      merchant_category_code: '4829'
+      latitude: -1.9441
+      longitude: 30.0619
+      device_fingerprint: tok_D3v1c3F1ng3rpr1ntAaBbCc0
+      counterparty_country: RW
+      transaction_timestamp: '2026-09-17T08:15:30Z'
+  ValidationProblem:
+  - type: urn:fraudshield:problem:validation
+    title: Request validation failed
+    status: 400
+    correlation_id: 6f1c2d8e-5b0a-4c55-9f7a-2a1d3c4b5e6f
+    errors:
+    - field: currency
+      code: required
+      message: currency is required
+  WebhookDeliveryPage:
+  - items:
+    - delivery_id: b5c6d7e8-f506-4124-8f70-0b1c2d3e4f56
+      event: decision.final
+      transaction_id: 7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60
+      attempts: 14
+      last_status: 503
+      last_attempt_at: '2026-09-17T08:15:30Z'
+    next_cursor: null

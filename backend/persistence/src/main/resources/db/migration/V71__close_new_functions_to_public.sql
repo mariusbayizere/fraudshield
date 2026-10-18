@@ -1,0 +1,12 @@
+-- New functions are not executable by PUBLIC (ADR 0017; M7 merge review, finding 3).
+--
+-- V11 meant to do this with ALTER DEFAULT PRIVILEGES IN SCHEMA fraudshield REVOKE EXECUTE ON
+-- FUNCTIONS FROM PUBLIC, which does nothing: per-schema default privileges are added to the global
+-- ones and cannot revoke PUBLIC's built-in EXECUTE. Only the global form, without IN SCHEMA, can.
+-- Every migration runs as fs_migrator, so this covers every function created from here on. Functions
+-- that already exist keep the grants their migrations gave them; DatabaseSecurityTest pins each one.
+--
+-- Trigger functions are unaffected (EXECUTE is checked when a trigger is created, not when it
+-- fires). A function a role calls directly, or one a CHECK constraint or policy calls as the querying
+-- role, now needs an explicit GRANT EXECUTE, as V11 intended all along.
+ALTER DEFAULT PRIVILEGES FOR ROLE fs_migrator REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;

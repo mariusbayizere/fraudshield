@@ -1,0 +1,50 @@
+#!/usr/bin/env sh
+# Pinned, checksum-verified buf launcher for protobuf lint and breaking-change checks (ADR 0016).
+#
+# buf is Apache-2.0. The release archive is downloaded once into a per-user cache, verified against
+# the SHA-256 in the release's sha256.txt, and the extracted binary is re-verified on every run.
+# v1.72.0 is used rather than the newest release so the version has aged past a release cooldown.
+set -eu
+
+BUF_VERSION="1.72.0"
+BUF_SHA256_LINUX_X64="a9c6186cf6fcf062b247345e1b7b12c26f580c1b2a4bbf4d3fe080abf85ceee8"
+BUF_BINARY_SHA256_LINUX_X64="8720830e26a733da55bb89bcd3cb44849c0965fc0c44fb5d691cccdc64dca5af"
+
+case "$(uname -s)-$(uname -m)" in
+  Linux-x86_64)
+    platform="Linux-x86_64"
+    expected_sha="$BUF_SHA256_LINUX_X64"
+    expected_binary_sha="$BUF_BINARY_SHA256_LINUX_X64"
+    ;;
+  *)
+    echo "tools/bin/buf: no pinned checksum for $(uname -s)-$(uname -m); add one before use" >&2
+    exit 2
+    ;;
+esac
+
+cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/fraudshield/buf-${BUF_VERSION}-${platform}"
+binary="$cache_dir/buf/bin/buf"
+
+if [ ! -x "$binary" ]; then
+  mkdir -p "$cache_dir"
+  archive="$cache_dir/buf.tar.gz"
+  url="https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-${platform}.tar.gz"
+  curl -sSLf --retry 3 -o "$archive" "$url"
+  actual_sha=$(sha256sum "$archive" | cut -d' ' -f1)
+  if [ "$actual_sha" != "$expected_sha" ]; then
+    rm -f "$archive"
+    echo "tools/bin/buf: checksum mismatch for $url (got $actual_sha)" >&2
+    exit 1
+  fi
+  tar -xzf "$archive" -C "$cache_dir" buf/bin/buf buf/LICENSE
+  rm -f "$archive"
+fi
+
+actual_binary_sha=$(sha256sum "$binary" | cut -d' ' -f1)
+if [ "$actual_binary_sha" != "$expected_binary_sha" ]; then
+  echo "tools/bin/buf: cached binary $binary does not match the pinned SHA-256; deleting it" >&2
+  rm -f "$binary"
+  exit 1
+fi
+
+exec "$binary" "$@"

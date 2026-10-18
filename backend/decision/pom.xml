@@ -1,0 +1,229 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.github.mariusbayizere.fraudshield</groupId>
+    <artifactId>fraudshield-backend</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>fraudshield-decision</artifactId>
+  <name>FraudShield risk decision engine</name>
+  <description>Tiering, rules, holds and deadlines, auto-block, freeze, MCC circuit breaker, scoring client and the durable Kafka spool (E.6, C.2, C.4, D-13, D-14, D-15, D-18)</description>
+
+  <dependencies>
+    <dependency>
+      <groupId>io.github.mariusbayizere.fraudshield</groupId>
+      <artifactId>fraudshield-common</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.github.mariusbayizere.fraudshield</groupId>
+      <artifactId>fraudshield-rules</artifactId>
+    </dependency>
+
+    <!-- Adapters. The domain and application packages import none of these (ArchitectureTest). -->
+    <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-protobuf</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-stub</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-netty-shaded</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.lettuce</groupId>
+      <artifactId>lettuce-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.kafka</groupId>
+      <artifactId>kafka-clients</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.github.resilience4j</groupId>
+      <artifactId>resilience4j-circuitbreaker</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-jdbc</artifactId>
+    </dependency>
+    <!-- ADR 0068 (following ADR 0071): JPA for the configuration tables, explicit SQL for the
+         hot path, the append-only tables and the hypertables. Each module maps the tables it
+         reads or writes: the persistence module's demo seeder writes configuration versions, this
+         one reads them, and the two are never on one classpath (ADR 0068 point 7). -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-jpa</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.postgresql</groupId>
+      <artifactId>postgresql</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>tools.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.micrometer</groupId>
+      <artifactId>micrometer-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-params</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.platform</groupId>
+      <artifactId>junit-platform-launcher</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.awaitility</groupId>
+      <artifactId>awaitility</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.tngtech.archunit</groupId>
+      <artifactId>archunit-junit5</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Validates rendered Kafka envelopes against contracts/kafka (test only). -->
+    <dependency>
+      <groupId>com.networknt</groupId>
+      <artifactId>json-schema-validator</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-inprocess</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-postgresql</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Applies backend/persistence's migrations to test databases (test only). -->
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-database-postgresql</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-kafka</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>ch.qos.logback</groupId>
+      <artifactId>logback-classic</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <profiles>
+    <!-- Without Docker the container tests are excluded (ADR 0010), so the coverage gate is
+         enforced only where they run: CI and Codespaces. -->
+    <profile>
+      <id>without-docker-tests</id>
+      <activation>
+        <property>
+          <name>excludedGroups</name>
+          <value>requires-docker</value>
+        </property>
+      </activation>
+      <properties>
+        <coverage.line.minimum>0.00</coverage.line.minimum>
+      </properties>
+    </profile>
+  </profiles>
+
+  <build>
+    <plugins>
+      <!-- The test harness (TestDatabase, KafkaTestCluster, RedisTestServer, scorer double) is
+           shared with the notify and ingest modules' tests; never a runtime dependency. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <executions>
+          <execution>
+            <goals><goal>test-jar</goal></goals>
+          </execution>
+        </executions>
+      </plugin>
+      <!-- Java messages and stubs from the frozen scoring contract (contracts/proto, ADR 0012).
+           Generated into target/, never committed, never edited. -->
+      <plugin>
+        <groupId>io.github.ascopes</groupId>
+        <artifactId>protobuf-maven-plugin</artifactId>
+        <version>${protobuf-maven-plugin.version}</version>
+        <configuration>
+          <protoc>${protobuf-java.version}</protoc>
+          <sourceDirectories>
+            <sourceDirectory>${maven.multiModuleProjectDirectory}/../contracts/proto</sourceDirectory>
+          </sourceDirectories>
+          <plugins>
+            <plugin kind="binary-maven">
+              <groupId>io.grpc</groupId>
+              <artifactId>protoc-gen-grpc-java</artifactId>
+              <version>${grpc-java.version}</version>
+            </plugin>
+          </plugins>
+        </configuration>
+        <!-- The generate execution is inherited from spring-boot-starter-parent. -->
+      </plugin>
+      <!-- Generated code is the contract's, not ours: excluded from coverage and static analysis. -->
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <configuration>
+          <excludes>
+            <exclude>io/github/mariusbayizere/fraudshield/contracts/**</exclude>
+          </excludes>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>com.github.spotbugs</groupId>
+        <artifactId>spotbugs-maven-plugin</artifactId>
+        <configuration>
+          <onlyAnalyze>io.github.mariusbayizere.fraudshield.decision.-</onlyAnalyze>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

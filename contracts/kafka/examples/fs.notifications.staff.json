@@ -1,0 +1,20 @@
+{
+  "event_id": "7f9fa31d-8741-5509-a352-54c3ad6569a3",
+  "event_type": "notification.requested",
+  "schema_version": 1,
+  "occurred_at": "2026-09-17T08:15:30Z",
+  "institution_id": "5b1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+  "producer": "fraudshield-api",
+  "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+  "payload": {
+    "notification_id": "6f7a8b9c-0d1e-4f2a-9b3c-4d5e6f7a8b9c",
+    "recipient_user_id": null,
+    "recipient_role": "RISK_OFFICER",
+    "kind": "ACCOUNT_FROZEN",
+    "template_key": "email.account_frozen",
+    "parameters": {
+      "account_token": "tok_exampleAccount0000000001",
+      "high_risk_count": 3
+    }
+  }
+}

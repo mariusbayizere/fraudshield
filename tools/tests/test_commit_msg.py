@@ -39,6 +39,13 @@ def test_good_message_passes() -> None:
         ("feat: add x\n\nGenerated-by: Claude Code", "co-author"),
         ("feat: add x\n\nSigned-off-by: Claude <noreply@anthropic.com>", "co-author"),
         ("feat: updated things", "placeholder"),
+        # GOV-7: a placeholder stays a placeholder when words follow it.
+        ("feat: updated things across modules", "placeholder"),
+        ("chore: clean up misc files in the tree", "placeholder"),
+        ("feat: add x\n\nAssisted-by: Claude Code", "co-author"),
+        ("feat: add x\n\nCo-developed-by: GitHub Copilot", "co-author"),
+        ("feat: add x\n\nMade with Claude", "co-author"),
+        ("feat: add x\n\n  pair-programmed-by: an AI assistant", "co-author"),
         ("chore: minor", "placeholder"),
         ("", "empty"),
     ],
@@ -52,6 +59,12 @@ def test_owner_sign_off_and_real_summaries_are_allowed() -> None:
     assert (
         problems("docs: add testing guide\n\nSigned-off-by: Marius Bayizere <m@example.org>") == []
     )
+
+
+def test_attribution_trailers_naming_a_person_remain_allowed() -> None:
+    """GOV-7 rejects trailers that name a tool; crediting a person is the owner's to do."""
+    assert problems("feat(api): add the rate limiter\n\nAssisted-by: a colleague") == []
+    assert problems("feat(api): add the rate limiter\n\nCo-developed-by: a teammate") == []
 
 
 def test_comment_lines_and_indented_code_are_ignored() -> None:

@@ -1,0 +1,69 @@
+# evidence-commit: e0268c55d94dd2f2908364283cfd372787e9003f
+# evidence-tree-state: clean
+# command: .venv/bin/python -u -m fraudshield_ml.cli evaluate dataset/output/bench1m --packs dataset/output/packs.json --split dataset/output/split.json --corpus-rows 400000 --train-rows 12000 --test-rows 8000
+# exit: 0
+
+computing 38 features for 20000 rows...
+  500/20000 rows  9/s  ~34.7 min left
+  1000/20000 rows  9/s  ~33.5 min left
+  1500/20000 rows  9/s  ~33.1 min left
+  2000/20000 rows  9/s  ~32.5 min left
+  2500/20000 rows  9/s  ~31.6 min left
+  3000/20000 rows  9/s  ~31.0 min left
+  3500/20000 rows  9/s  ~30.0 min left
+  4000/20000 rows  9/s  ~29.2 min left
+  4500/20000 rows  9/s  ~28.4 min left
+  5000/20000 rows  9/s  ~27.5 min left
+  5500/20000 rows  9/s  ~26.6 min left
+  6000/20000 rows  9/s  ~25.6 min left
+  6500/20000 rows  9/s  ~24.7 min left
+  7000/20000 rows  9/s  ~23.8 min left
+  7500/20000 rows  9/s  ~22.9 min left
+  8000/20000 rows  9/s  ~22.0 min left
+  8500/20000 rows  9/s  ~21.1 min left
+  9000/20000 rows  9/s  ~20.2 min left
+  9500/20000 rows  9/s  ~19.3 min left
+  10000/20000 rows  9/s  ~18.4 min left
+  10500/20000 rows  9/s  ~17.5 min left
+  11000/20000 rows  9/s  ~16.5 min left
+  11500/20000 rows  9/s  ~15.6 min left
+  12000/20000 rows  9/s  ~14.7 min left
+  12500/20000 rows  9/s  ~13.8 min left
+  13000/20000 rows  9/s  ~12.9 min left
+  13500/20000 rows  9/s  ~12.0 min left
+  14000/20000 rows  9/s  ~11.1 min left
+  14500/20000 rows  9/s  ~10.2 min left
+  15000/20000 rows  9/s  ~9.3 min left
+  15500/20000 rows  9/s  ~8.3 min left
+  16000/20000 rows  9/s  ~7.4 min left
+  16500/20000 rows  9/s  ~6.5 min left
+  17000/20000 rows  9/s  ~5.6 min left
+  17500/20000 rows  9/s  ~4.6 min left
+  18000/20000 rows  9/s  ~3.7 min left
+  18500/20000 rows  9/s  ~2.8 min left
+  19000/20000 rows  9/s  ~1.9 min left
+  19500/20000 rows  9/s  ~0.9 min left
+  20000/20000 rows  9/s  ~0.0 min left
+MODEL ON D-07's PUBLISHED SPLIT — fitted on the train period, scored on the test
+period, embargo excluded. Not tuned and not calibrated: the validation and calibration
+periods are identified and deliberately unused.
+
+  split                        train < 2025-08-25 05:24 <= validation (calibration from 2025-09-26 13:13) < 2025-10-21 22:02 <= embargo < 2025-10-28 22:02 <= test
+  features trained on          38 (the computable ones, never 44)
+  corpus rows scanned          400000
+  train rows / fraud           12000 / 111 (0.925%)
+  test rows / fraud            8000 / 55 (0.688%)
+
+  best single feature          1.000  (days_since_sim_swap)
+  best trivial rule            0.774  (amount_log1p)
+  model AUC                    0.998 +/-0.008
+  MARGIN OVER THE FEATURE      -0.002
+  MARGIN OVER THE TRIVIAL RULE +0.224
+  recall at 1% FPR             0.945
+
+  TRAINED ON THE LAST 9 DAYS of the train period, not all
+  of it: the corpus is bounded and the feature pass is its cost. A figure from here is
+  comparable with the gates in its split and not in its training volume.
+
+  The model does not beat one threshold on one feature. On this benchmark that is
+  the number to watch, not the AUC.

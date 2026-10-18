@@ -1,0 +1,2 @@
+[576637f] unflagged n=2185 p50 0.91 p99 3.05 ms; flagged n=15 p50 2.79 ms; per-worker capacity ~908/s
+   stage p50 ms: {'STAGE_FEATURES': 0.141, 'STAGE_ENSEMBLE': 0.291, 'STAGE_CALIBRATION': 0.045, 'STAGE_ISOLATION_FOREST': 0.252, 'STAGE_SHAP': 1.629}

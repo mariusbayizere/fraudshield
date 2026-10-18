@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fraudshield:kafka:common",
+  "title": "Shared definitions for FraudShield event payloads",
+  "$defs": {
+    "Token": {
+      "type": "string",
+      "pattern": "^tok_[A-Za-z0-9]{24,64}$",
+      "description": "Opaque token; never raw personal data"
+    },
+    "Uuid": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "DecimalAmount": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,13})(\\.[0-9]{1,4})?$"
+    },
+    "CurrencyCode": {
+      "type": "string",
+      "enum": [
+        "RWF",
+        "KES",
+        "TZS",
+        "UGX",
+        "CDF",
+        "BIF",
+        "SSP",
+        "SOS",
+        "USD",
+        "EUR"
+      ]
+    },
+    "Money": {
+      "type": "object",
+      "required": [
+        "amount",
+        "currency"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/DecimalAmount"
+        },
+        "currency": {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/CurrencyCode"
+        }
+      }
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "Channel": {
+      "type": "string",
+      "enum": [
+        "MOBILE_MONEY",
+        "CARD",
+        "AGENT_BANKING",
+        "USSD",
+        "ONLINE",
+        "BANK_TRANSFER"
+      ]
+    },
+    "RiskTier": {
+      "type": "string",
+      "enum": [
+        "HIGH",
+        "MEDIUM",
+        "LOW"
+      ]
+    },
+    "FinalDecisionValue": {
+      "type": "string",
+      "enum": [
+        "APPROVE",
+        "DECLINE",
+        "HOLD",
+        "TIMEOUT_RELEASE"
+      ]
+    },
+    "Probability": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "ReasonCode": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]{2,63}$"
+    },
+    "Locale": {
+      "type": "string",
+      "enum": [
+        "en",
+        "rw",
+        "fr",
+        "sw"
+      ]
+    },
+    "Role": {
+      "type": "string",
+      "enum": [
+        "ANALYST",
+        "SENIOR_ANALYST",
+        "RISK_OFFICER",
+        "ADMIN"
+      ]
+    },
+    "AuditEventType": {
+      "type": "string",
+      "enum": [
+        "AUTH",
+        "USER_ADMIN",
+        "TRANSACTION_DECISION",
+        "AUTO_BLOCK",
+        "CUSTOMER_VERIFICATION",
+        "ANALYST_DECISION",
+        "SENIOR_OVERRIDE",
+        "THRESHOLD_CHANGE",
+        "RULE_CHANGE",
+        "MODEL_LIFECYCLE",
+        "API_KEY_LIFECYCLE",
+        "REGULATORY_REPORT"
+      ]
+    }
+  }
+}

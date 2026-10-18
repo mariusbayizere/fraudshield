@@ -1,0 +1,149 @@
+{
+  "benchmark" : "M6 end-to-end decision latency (POST /api/v1/transactions/ingest)",
+  "measured_at" : "2026-09-23T12:15:25.932033582Z",
+  "what_is_measured" : "client-observed latency from each request's scheduled send time to the full response, on one host that also runs the load generator and the PostgreSQL, Redis and Kafka containers; the scorer is a gRPC double answering at once, so model inference (M5) is excluded; decision mix about 90% LOW, 7% MEDIUM, 3% HIGH; 10% USSD; payments cycle through 1,000 accounts; the feature-store update and MCC counting run after the response",
+  "hardware" : {
+    "available_processors" : 4,
+    "max_heap_mb" : 1958,
+    "load_average_1m_at_end" : 17.560546875,
+    "shared_with" : "the dev-container compose stack (PostgreSQL, Kafka, Redis, MLflow, object store, PII vault, WireMock, Mailpit) and the editor; none was stopped for the run",
+    "cpu" : "Intel(R) Core(TM) i5-6200U CPU @ 2.30GHz",
+    "memory" : "MemTotal:        8013568 kB",
+    "java" : "21.0.12.1"
+  },
+  "server_stage_ms_over_all_runs" : {
+    "spool" : {
+      "p50" : 56.36096,
+      "p95" : 243.007488,
+      "p99" : 385.613824,
+      "mean" : 68.93745101883663
+    },
+    "configuration" : {
+      "p50" : 0.002044,
+      "p95" : 0.003964,
+      "p99" : 0.009724,
+      "mean" : 0.38661903794969
+    },
+    "breaker_count" : {
+      "p50" : 6.553596,
+      "p95" : 58.720252,
+      "p99" : 79.691772,
+      "mean" : 14.772737574142084
+    },
+    "account_status" : {
+      "p50" : 7.33184,
+      "p95" : 54.51776,
+      "p99" : 142.598144,
+      "mean" : 15.59473130533507
+    },
+    "decide" : {
+      "p50" : 0.034688,
+      "p95" : 0.507776,
+      "p99" : 12.582784,
+      "mean" : 0.7089979649725546
+    },
+    "fast_state_writes" : {
+      "p50" : 5.767136,
+      "p95" : 54.52592,
+      "p99" : 75.49744,
+      "mean" : 11.943159930932355
+    },
+    "idempotency_claim" : {
+      "p50" : 20.905984,
+      "p95" : 226.42688,
+      "p99" : 503.250944,
+      "mean" : 41.718171636930855
+    },
+    "score" : {
+      "p50" : 9.43616,
+      "p95" : 54.524928,
+      "p99" : 109.05088,
+      "mean" : 12.987182126446315
+    },
+    "idempotency_complete" : {
+      "p50" : 22.003712,
+      "p95" : 88.064,
+      "p99" : 159.367168,
+      "mean" : 26.18808140848241
+    }
+  },
+  "runs" : [ {
+    "target_rate_per_s" : 25,
+    "achieved_rate_per_s" : 25,
+    "requests_ok" : 750,
+    "errors" : 0,
+    "client_p50_ms" : 36.739,
+    "client_p95_ms" : 120.929,
+    "client_p99_ms" : 232.372,
+    "client_max_ms" : 368.297,
+    "server_decision_p50_ms" : 12.0,
+    "server_decision_p95_ms" : 43.0,
+    "server_decision_p99_ms" : 85.0,
+    "p95_under_50_ms" : false
+  }, {
+    "target_rate_per_s" : 50,
+    "achieved_rate_per_s" : 50,
+    "requests_ok" : 1500,
+    "errors" : 0,
+    "client_p50_ms" : 36.388,
+    "client_p95_ms" : 106.849,
+    "client_p99_ms" : 221.224,
+    "client_max_ms" : 353.149,
+    "server_decision_p50_ms" : 9.0,
+    "server_decision_p95_ms" : 42.0,
+    "server_decision_p99_ms" : 99.0,
+    "p95_under_50_ms" : false
+  }, {
+    "target_rate_per_s" : 100,
+    "achieved_rate_per_s" : 100,
+    "requests_ok" : 3000,
+    "errors" : 0,
+    "client_p50_ms" : 88.051,
+    "client_p95_ms" : 290.898,
+    "client_p99_ms" : 508.52,
+    "client_max_ms" : 620.516,
+    "server_decision_p50_ms" : 12.0,
+    "server_decision_p95_ms" : 63.0,
+    "server_decision_p99_ms" : 122.0,
+    "p95_under_50_ms" : false
+  }, {
+    "target_rate_per_s" : 150,
+    "achieved_rate_per_s" : 150,
+    "requests_ok" : 4500,
+    "errors" : 0,
+    "client_p50_ms" : 140.481,
+    "client_p95_ms" : 371.259,
+    "client_p99_ms" : 511.353,
+    "client_max_ms" : 765.719,
+    "server_decision_p50_ms" : 28.0,
+    "server_decision_p95_ms" : 113.0,
+    "server_decision_p99_ms" : 199.0,
+    "p95_under_50_ms" : false
+  }, {
+    "target_rate_per_s" : 200,
+    "achieved_rate_per_s" : 200,
+    "requests_ok" : 6000,
+    "errors" : 0,
+    "client_p50_ms" : 141.186,
+    "client_p95_ms" : 391.972,
+    "client_p99_ms" : 482.001,
+    "client_max_ms" : 628.458,
+    "server_decision_p50_ms" : 28.0,
+    "server_decision_p95_ms" : 126.0,
+    "server_decision_p99_ms" : 217.0,
+    "p95_under_50_ms" : false
+  }, {
+    "target_rate_per_s" : 300,
+    "achieved_rate_per_s" : 293,
+    "requests_ok" : 8823,
+    "errors" : 177,
+    "client_p50_ms" : 234.891,
+    "client_p95_ms" : 747.743,
+    "client_p99_ms" : 1182.933,
+    "client_max_ms" : 2072.802,
+    "server_decision_p50_ms" : 56.0,
+    "server_decision_p95_ms" : 397.0,
+    "server_decision_p99_ms" : 683.0,
+    "p95_under_50_ms" : false
+  } ]
+}

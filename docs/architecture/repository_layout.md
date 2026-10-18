@@ -7,6 +7,7 @@ table is the record of intent (M0 review finding 16).
 | C.5 path | Purpose | Created in | Status at M0 |
 |---|---|---|---|
 | `backend/` (`common`) | Maven multi-module build, money primitives | M0 | present |
+| `backend/persistence` | database bootstrap, Flyway migrations, database security tests, demo seed tool (ADR 0017, ADR 0019) | M1 | present |
 | `backend/{ingest,decision,rules,notify,verify-web}` | ingestion, decision engine, rules DSL, notifications, verification page | M6 | planned |
 | `backend/{auth,staff-api}` | identity, authorisation, staff APIs | M7 | planned |
 | `backend/sar` | SAR draft generation | M8 | planned |
@@ -22,9 +23,11 @@ table is the record of intent (M0 review finding 16).
 | `infrastructure/docker` | compose support, smoke test, diagnostics | M0 | present |
 | `infrastructure/{k8s,prometheus,alertmanager,grafana,argo-rollouts}` | deployment and observability as code | M9 | planned |
 | `notebooks/` | SHAP, model comparison, calibration, fairness | M4 | README only |
-| `tests/security` | DB permission and authorisation matrix tests | M1, M7 | README only |
+| `tests/security` | authorisation matrix tests across services | M7 | README only (the M1 database permission tests live with the migrations in `backend/persistence`, so they run in the `java` CI job against the same Flyway scripts; ADR 0017) |
 | `tests/{contract,performance,chaos}` | cross-component, load and chaos suites | M5, M6, M10 | README only |
 | `tests/e2e` | Playwright journeys | M8 | README only |
 | `docs/{adr,traceability,srs,prompts,research,benchmarks,walkthrough,reviews}` | governance and evidence | M0 | present |
 | `docs/architecture` | this file; design notes as components land | M0 | present |
-| `docs/{ml,security,compliance,runbooks,ux}` | explainability and capacity notes, threat model, DPIA and regulatory mapping, runbooks, screen-reader script | M1–M9 (first files: `docs/security/threat_model.md` in M1, `docs/ml/capacity_model.md` in M4) | planned |
+| `docs/security` | threat model (`threat_model.md`), later pen-test readiness | M1 | present |
+| `docs/{ml,compliance,runbooks,ux}` | explainability and capacity notes, DPIA and regulatory mapping, runbooks, screen-reader script | M4–M9 (first file: `docs/ml/capacity_model.md` in M4) | planned |
+| `docs/backlog` | governance and product backlogs | M0, M1 | present |
