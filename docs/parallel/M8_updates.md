@@ -354,7 +354,10 @@ when its tab is opened).
   each fail a test when removed.
 - **Re-review of that round: APPROVED_WITH_MINORS**, both MAJORs fixed and each caught by a test.
   Its minors were fixed after it: focus now returns however the drawer goes (close, Escape or the
-  browser's Back), matched by path so a card link carrying filters, or an id the router encodes,
-  still finds its card; Back after closing is tested not to reopen the drawer; the SHAP tab is
+  browser's Back), matched by path so a card link carrying filters still finds its card (tested;
+  an id the router percent-encodes should match too, but the fixtures are UUIDs, so it is not); Back after closing is tested not to reopen the drawer; the SHAP tab is
   under axe too. Each fails a test when removed. Not tested: the theme's SHAP colours on the bars
   (their contrast is, in `contrastPairs.ts`).
+- **Last check of that round: APPROVED_WITH_MINORS**, fixed after it: a malformed escape in any
+  link can no longer throw from the lookup, and returning focus does not scroll the feed. Neither
+  has a test of its own.

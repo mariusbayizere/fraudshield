@@ -22,6 +22,17 @@ import { ShapChart } from './ShapChart';
 import { SummaryTab } from './SummaryTab';
 
 const feedRoute = getRouteApi('/shell/alerts');
+const detailRoute = getRouteApi('/shell/alerts/$alertId');
+
+/** A link's path, decoded; a malformed escape in some other link must not break the lookup. */
+function pathOf(link: HTMLAnchorElement): string {
+  const path = new URL(link.href).pathname;
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    return path;
+  }
+}
 
 /**
  * Puts focus back where the drawer was opened from once it has gone: the card's link to this
@@ -31,14 +42,13 @@ const feedRoute = getRouteApi('/shell/alerts');
 function returnFocus(alertId: string) {
   const active = document.activeElement;
   if (active !== null && active !== document.body && active.isConnected) return;
-  // Compared as paths, so an id the router percent-encodes, or a link carrying filters, matches.
+  // Compared as paths, so a link carrying filters matches.
   const opener = [...document.querySelectorAll<HTMLAnchorElement>('main a[href]')].find(
-    (link) => decodeURIComponent(new URL(link.href).pathname) === `/alerts/${alertId}`,
+    (link) => pathOf(link) === `/alerts/${alertId}`,
   );
-  (opener ?? document.getElementById('main'))?.focus();
+  // Without scrolling: when the drawer switches alerts, the next heading takes focus at once.
+  (opener ?? document.getElementById('main'))?.focus({ preventScroll: true });
 }
-const detailRoute = getRouteApi('/shell/alerts/$alertId');
-
 type TabName = 'summary' | 'shap';
 
 /**
