@@ -504,8 +504,9 @@ that a comment in a stack input such as `docker-compose.yml` still triggers the 
   tokenisation map, the `KmsClient` port with its contract suite, the dev/demo/test-only guard for
   configured keys, and the no-plaintext test. What remains is not M6's: contacts are enrolled by
   M7's onboarding, and the vendor key-service binding is M9's (ADR 0021).
-- **PB-69 (FR-02-09 DB fallback, carried from M5) — close when `m6/featurestore-fallback`
-  merges.**
+- **PB-69 (FR-02-09 DB fallback, carried from M5) — closed 2026-10-18: `m6/featurestore-fallback`
+  merged.** Follow-ups: `Worker.stop` does not close the fallback's pooled connection (released at
+  process exit); no deployment passes `--feature-store-database` until M9 adds a scorer service.
 - **New — producers for `account_sim_swaps` and `account_kyc_tiers`** (V67): the MNO feed and a
   KYC endpoint. The feature store's Redis keys for the same facts have no producer either (ADR
   0034).
