@@ -430,6 +430,7 @@ requirements:
   - ml/src/fraudshield_ml/featurestore/writer.py
   - ml/src/fraudshield_ml/featurestore/ingest.py
   - ml/src/fraudshield_ml/featurestore/fallback.py
+  - ml/src/fraudshield_ml/featurestore/postgres.py
   evidence:
   - ml/tests/featurestore/test_serving_parity.py (a prefix replay agreeing with the batch path at every
     step, on fakeredis and on real Redis 7.2.16; window edges per Redis key)
@@ -438,6 +439,12 @@ requirements:
   - ml/tests/featurestore/test_ingest.py (apply_label restores both outcome features and honours E.2's
     label_available_at)
   - ml/tests/serving/test_store_loop.py (context, score and write over gRPC)
+  - ml/tests/featurestore/test_db_fallback.py (on a PostgreSQL migrated with every V*__*.sql, a read through
+    the fallback equals the Redis read; an account never seen is new, not unknown; the session is bounded
+    and read-only)
+  - ml/tests/featurestore/test_postgres_fallback.py (a failure is "unavailable", never "never seen"; an
+    unreachable or blackholed database fails reads fast; the password comes from the caller and the socket
+    is bounded)
   deviations:
   - docs/adr/0034-serving-feeds-three-trained-features-from-state-nothing-writes.md
   - docs/adr/0035-closing-m5s-rows-what-serving-proves-and-what-it-cannot.md
@@ -449,7 +456,8 @@ requirements:
     no longer reach the 0.60 flag threshold, a 22% fall in detections at the operating point. Blocked
     on PB-69 (database fallback, M6), PB-70 (fs.labels consumer calling apply_label, M6), PB-71 (contract
     and producer for account reference state, M6) and PB-72 (M10 re-measures this skew and requires zero).
-    Acceptance tests in docs/parallel/M6_updates.md, M9_updates.md and M10_updates.md.'
+    Acceptance tests in docs/parallel/M6_updates.md, M9_updates.md and M10_updates.md. 2026-10-18: PB-69,
+    the database fallback, merged from m6/featurestore-fallback; still blocked on PB-70, PB-71 and PB-72.'
 - id: FR-02-10
   section: 3.2 FR-02 ML fraud scoring engine
   title: 'Model versioning: every ScoringResult records model_version string; old model continues scoring
@@ -1693,7 +1701,9 @@ requirements:
   - docs/adr/0062-durable-account-profiles.md
   notes: 'M6 (2026-09-24): the decision path''s own Redis state degrades to PostgreSQL and per-instance
     fallbacks. The feature store''s database fallback (PB-69) is on m6/featurestore-fallback and closes
-    when that branch merges; ''rebuilt from PostgreSQL within 5 minutes'' is not measured.'
+    when that branch merges; ''rebuilt from PostgreSQL within 5 minutes'' is not measured. 2026-10-18:
+    PB-69 merged (ml/tests/featurestore/test_db_fallback.py); "rebuilt from PostgreSQL within 5 minutes"
+    is still unmeasured and left to M10.'
 - id: NFR-REL-04
   section: 4.3 Reliability
   title: PostgreSQL primary failure

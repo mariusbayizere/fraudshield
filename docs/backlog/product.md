@@ -18,7 +18,6 @@ taken twice. Claims made on branches not yet merged, as of 2026-10-17:
 
 | Id | Claimed by | Where | Subject |
 |---|---|---|---|
-| PB-69 | M5, built by M6 | `M5_updates.md` §12, §15; `m6/featurestore-fallback` | the feature store's PostgreSQL fallback |
 | PB-70, PB-71 | M5, owned by M6 (owner confirmed 2026-10-17) | `M5_updates.md` §15 | the `fs.labels` consumer; the reference-state contract and producer |
 | PB-72 | M5, owned by M10 (owner confirmed 2026-10-17) | `M5_updates.md` §15 | re-measuring training-serving skew |
 | PB-76 | M4 | `M4_updates.md` on `m4/generalisation` | training rows near the corpus's start see truncated history (was a second `PB-69`) |
