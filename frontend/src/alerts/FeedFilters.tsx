@@ -9,6 +9,9 @@ import { useTranslation } from 'react-i18next';
 import type { AlertStatus } from '../api/generated/types.gen';
 import { ALERT_SORTS, ALERT_STATUSES, type AlertSearch } from '../app/alertSearch';
 import { CHANNELS } from '../design-system/tokens';
+import { useFormatLocale } from '../region/formatLocale';
+import { formatDateTime } from '../region/region';
+import { useRegion } from '../region/RegionContext';
 
 /** Adds the value to a list filter, or removes it; an emptied list is no filter at all. */
 export function toggled<T extends string>(
@@ -70,6 +73,20 @@ function ToggleChip({
   );
 }
 
+/** A filter from a link: the whole chip removes it, and its name says so. */
+function RemovableChip({ label, onRemove }: { label: string; onRemove: () => void }) {
+  const { t } = useTranslation('alerts');
+  return (
+    <Chip
+      label={label}
+      aria-label={t('filters.remove', { filter: label })}
+      onClick={onRemove}
+      onDelete={onRemove}
+      sx={{ minHeight: 48, borderRadius: 6 }}
+    />
+  );
+}
+
 /**
  * The feed's filters (FR-04-09, UX-ROLE-AN-01: tier, channel, status), each one a listAlerts
  * parameter carried in the URL. Filters a shared link carries that have no control here (a date,
@@ -96,6 +113,20 @@ export function FeedFilters({
   const offered: readonly string[] = tiers;
   const otherTiers = (search.tier ?? []).filter((tier) => !offered.includes(tier));
   const linkOnly = LINK_ONLY.filter((key) => search[key] !== undefined);
+  const { region: where } = useRegion();
+  const locale = useFormatLocale();
+  const shown = (key: (typeof LINK_ONLY)[number], value: string): string => {
+    if (key === 'from' || key === 'to') {
+      return formatDateTime(new Date(value), where.utcOffsetHours, locale);
+    }
+    if (key === 'amount_min' || key === 'amount_max') {
+      // A decimal string; Intl formats it exactly (see formatMoney).
+      return new Intl.NumberFormat(locale, { maximumFractionDigits: 4 }).format(
+        value as unknown as number,
+      );
+    }
+    return value;
+  };
 
   return (
     <Stack
@@ -104,7 +135,7 @@ export function FeedFilters({
       tabIndex={-1}
       aria-label={t('filters.label')}
       spacing={1.5}
-      sx={{ mb: 2, '&:focus': { outline: 'none' } }}
+      sx={{ mb: 2 }}
     >
       <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
         <Typography component="span" variant="body2" color="text.secondary">
@@ -147,23 +178,21 @@ export function FeedFilters({
         >
           {otherTiers.map((tier) => (
             <li key={`tier-${tier}`}>
-              <Chip
+              <RemovableChip
                 label={`${t('filters.tier')}: ${t(`tier.${tier}`)}`}
-                onDelete={() => {
+                onRemove={() => {
                   set({ tier: toggled(search.tier, tier) });
                 }}
-                sx={{ minHeight: 48, borderRadius: 6 }}
               />
             </li>
           ))}
           {linkOnly.map((key) => (
             <li key={key}>
-              <Chip
-                label={`${t(`filters.param.${key}`)}: ${String(search[key])}`}
-                onDelete={() => {
+              <RemovableChip
+                label={`${t(`filters.param.${key}`)}: ${shown(key, String(search[key]))}`}
+                onRemove={() => {
                   set({ [key]: undefined });
                 }}
-                sx={{ minHeight: 48, borderRadius: 6 }}
               />
             </li>
           ))}

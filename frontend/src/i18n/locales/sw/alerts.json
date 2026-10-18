@@ -31,7 +31,8 @@
       "from": "Kuanzia",
       "to": "Hadi",
       "analyst_id": "Mchambuzi"
-    }
+    },
+    "remove": "Ondoa kichujio {{filter}}"
   },
   "sort": {
     "priority": "Kipaumbele: HIGH kwanza",

@@ -31,7 +31,8 @@
       "from": "Guhera",
       "to": "Kugeza",
       "analyst_id": "Umusesenguzi"
-    }
+    },
+    "remove": "Kuraho muyunguruzi {{filter}}"
   },
   "sort": {
     "priority": "Iby'ibanze: HIGH mbere",

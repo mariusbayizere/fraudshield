@@ -32,7 +32,8 @@
       "from": "Du",
       "to": "Jusqu'au",
       "analyst_id": "Analyste"
-    }
+    },
+    "remove": "Retirer le filtre {{filter}}"
   },
   "sort": {
     "priority": "Priorité : HIGH d'abord",

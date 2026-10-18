@@ -35,10 +35,11 @@ export default function AlertFeedPage() {
   };
   const alerts = distinctAlerts(feed.data?.pages ?? []);
   // One live region, always mounted, so a screen reader hears each new count or state.
+  // The error is announced by ErrorState's alert; this region says nothing then.
   const announcement = feed.isPending
     ? t('feed.loading')
     : feed.isError
-      ? t('feed.error')
+      ? ''
       : t('feed.shown', { count: alerts.length });
 
   let body;

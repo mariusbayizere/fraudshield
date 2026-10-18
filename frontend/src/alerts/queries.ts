@@ -1,4 +1,4 @@
-import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { getDashboardStats, listAlerts } from '../api/generated/sdk.gen';
 import type { AlertPage, DashboardStats, ListAlertsData } from '../api/generated/types.gen';
 import { checked } from '../api/validate';
@@ -81,9 +81,9 @@ export async function fetchDashboardStats(): Promise<DashboardStats> {
 }
 
 /**
- * One queue's alerts under the URL's filters, a page at a time (cursor paging). The previous
- * filter's alerts stay on screen, marked busy, while a new filter loads. The 60 s refresh re-reads
- * every loaded page in turn, so an alert can move between pages: the feed shows it once.
+ * One queue's alerts under the URL's filters, a page at a time (cursor paging). A new filter
+ * starts from its own first page, so stale results are never shown under it. The 60 s refresh
+ * re-reads every loaded page in turn, so an alert can move between pages: the feed shows it once.
  */
 export function useAlertFeed(queue: AlertQueue, search: AlertSearch) {
   return useInfiniteQuery({
@@ -92,7 +92,6 @@ export function useAlertFeed(queue: AlertQueue, search: AlertSearch) {
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.next_cursor ?? undefined,
     refetchInterval: FEED_REFRESH_MS,
-    placeholderData: keepPreviousData,
   });
 }
 

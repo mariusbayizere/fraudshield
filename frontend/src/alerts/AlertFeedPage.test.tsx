@@ -262,6 +262,8 @@ describe('the alert feed (FR-04-02, FR-04-03, FR-04-09)', () => {
     await renderFeed();
     const error = await screen.findByRole('alert');
     expect(error).toHaveTextContent('The alerts could not be loaded.');
+    // Announced once, by the alert: the feed's status region stays quiet.
+    expect(screen.getAllByText('The alerts could not be loaded.')).toHaveLength(1);
     expect(within(error).getByText('9f2c4b1e-7d3a-4c5b-8e6f-0a1b2c3d4e5f')).toBeInTheDocument();
     const before = asked.length;
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
@@ -328,20 +330,35 @@ describe('the alert feed (FR-04-02, FR-04-03, FR-04-09)', () => {
 
   it('[FR-04-09] shows the filters a link carries that this screen has no control for', async () => {
     const asked = serve();
-    const router = await renderFeed({ tier: ['HIGH', 'ANOMALY'], amount_min: '1000' });
+    const router = await renderFeed({
+      tier: ['HIGH', 'ANOMALY'],
+      amount_min: '25000.5',
+      from: '2026-10-01T00:00:00Z',
+    });
     await screen.findByRole('article', { name: 'Alert for A*** K***' });
-    expect(asked[0]?.get('amount_min')).toBe('1000');
+    expect(asked[0]?.get('amount_min')).toBe('25000.5');
     const fromLink = screen.getByRole('list', { name: 'Filters from the link' });
-    const amount = within(fromLink).getByRole('button', { name: 'Amount from: 1000' });
-    expect(within(fromLink).getByRole('button', { name: 'Risk tier: Anomaly' })).toBeVisible();
+    // Values are written for people: the amount in the locale, the time in the region's zone.
+    const amount = within(fromLink).getByRole('button', {
+      name: 'Remove filter Amount from: 25,000.5',
+    });
+    expect(
+      within(fromLink).getByRole('button', {
+        name: 'Remove filter From: Oct 1, 2026, 07:00 UTC+7',
+      }),
+    ).toBeVisible();
 
-    await userEvent.click(within(amount).getByTestId('CancelIcon'));
+    await userEvent.click(amount);
     await waitFor(() => {
-      expect(router.state.location.search).toEqual({ tier: ['HIGH', 'ANOMALY'] });
+      expect(router.state.location.search).toEqual({
+        tier: ['HIGH', 'ANOMALY'],
+        from: '2026-10-01T00:00:00Z',
+      });
     });
     await userEvent.click(
-      within(screen.getByRole('list', { name: 'Filters from the link' })).getByTestId('CancelIcon'),
+      screen.getByRole('button', { name: 'Remove filter From: Oct 1, 2026, 07:00 UTC+7' }),
     );
+    await userEvent.click(screen.getByRole('button', { name: 'Remove filter Risk tier: Anomaly' }));
     await waitFor(() => {
       expect(router.state.location.search).toEqual({ tier: ['HIGH'] });
     });

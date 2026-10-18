@@ -72,6 +72,20 @@ function offsetZone(utcOffsetHours: number): string {
   return `${sign}${hh}:${mm}`;
 }
 
+/** A date and time in the region, with its zone: "Oct 18, 2026, 14:02 UTC+2" in English (D-43). */
+export function formatDateTime(at: Date, utcOffsetHours: number, locale: string): string {
+  const when = new Intl.DateTimeFormat(locale, {
+    timeZone: offsetZone(utcOffsetHours),
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(at);
+  return `${when} ${offsetLabel(utcOffsetHours)}`;
+}
+
 /** A wall-clock time in the region, with its zone: "14:02 UTC+2" (D-43: the zone is always shown). */
 export function formatClock(at: Date, utcOffsetHours: number, locale: string): string {
   const time = new Intl.DateTimeFormat(locale, {

@@ -275,6 +275,16 @@ standard queue as cards with FR-04-03's eight elements, a page at a time.
   notes overstated; `aria-pressed` was untested; every catalogue loaded at start (now `common` and
   `designSystem` only, the rest on the route that asks). Not changed: one timer per countdown chip,
   and filter changes replace the history entry rather than adding one.
+- **Re-review of that round: APPROVED_WITH_MINORS**, both MAJORs and every listed item fixed and
+  each caught by a test when deleted. Its own minors were fixed after it: the empty-body guards are
+  now tested with the schema check off, as in production (`queries.test.ts`); the previous
+  filter's results are no longer kept while a new filter loads (they could show the wrong empty
+  state); an error is announced once; a link's dates and amounts are written in the locale and the
+  region's zone, and each such chip removes its filter when pressed, with a name that says so; the
+  filters keep a visible focus ring. Open, recorded: the on-demand catalogues suspend under the
+  app's one Suspense boundary (`App.tsx`, no fallback), the same mechanism every lazy route
+  already uses; the component tests load all catalogues eagerly, so only the Playwright journeys
+  exercise it.
 - **What `[FR-04-12]` covers here:** axe in jsdom, on a wide and a phone width, finds no
   violations. It does not measure contrast (`tokens.test.ts` checks every colour pair the theme
   draws, D-33) or target size (no layout in jsdom; the 48 px is set in code, not measured).

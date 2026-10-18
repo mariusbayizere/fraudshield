@@ -221,7 +221,8 @@
       "filters.param.amount_max": "machine_draft",
       "filters.param.from": "machine_draft",
       "filters.param.to": "machine_draft",
-      "filters.param.analyst_id": "machine_draft"
+      "filters.param.analyst_id": "machine_draft",
+      "filters.remove": "machine_draft"
     }
   },
   "fr": {
@@ -449,7 +450,8 @@
       "filters.param.amount_max": "machine_draft",
       "filters.param.from": "machine_draft",
       "filters.param.to": "machine_draft",
-      "filters.param.analyst_id": "machine_draft"
+      "filters.param.analyst_id": "machine_draft",
+      "filters.remove": "machine_draft"
     }
   },
   "sw": {
@@ -674,7 +676,8 @@
       "filters.param.amount_max": "machine_draft",
       "filters.param.from": "machine_draft",
       "filters.param.to": "machine_draft",
-      "filters.param.analyst_id": "machine_draft"
+      "filters.param.analyst_id": "machine_draft",
+      "filters.remove": "machine_draft"
     }
   }
 }

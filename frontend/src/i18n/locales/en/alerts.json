@@ -31,7 +31,8 @@
       "from": "From",
       "to": "Until",
       "analyst_id": "Analyst"
-    }
+    },
+    "remove": "Remove filter {{filter}}"
   },
   "sort": {
     "priority": "Priority: HIGH first",
