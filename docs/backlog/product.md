@@ -1395,7 +1395,7 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 - **Acceptance:** a test that fails when the bump alone is deleted; Google sign-in refused within 5 s of an administrator deactivating a linked account.
 
 ### PB-109 · FR-06-06: audit types written by real actions, and every write audited
-- **Source:** M7 traceability audit under the deletion standard, 2026-10-17 (FR-06-06) · **Priority:** medium · **Due:** M7
+- **Source:** M7 traceability audit under the deletion standard, 2026-10-17 (FR-06-06) · **Priority:** medium · **Due:** M8B (carried 2026-10-18)
 - **Problem:** `AuditSearchTest` writes all 12 types itself. A real action is asserted to emit TRANSACTION_DECISION (`AssembledApplicationTest`), AUTH, USER_ADMIN and API_KEY_LIFECYCLE; AUTO_BLOCK, CUSTOMER_VERIFICATION, ANALYST_DECISION, SENIOR_OVERRIDE and THRESHOLD_CHANGE are emitted by M6 code with no end-to-end assertion, and RULE_CHANGE, MODEL_LIFECYCLE and REGULATORY_REPORT have no emitter yet. "All write operations audited" has no test.
 - **Acceptance:** each type asserted from a real action as its emitter lands; a test that every write endpoint records an audit event.
 
@@ -1420,9 +1420,9 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 - **Acceptance:** the stubs in the compose stack (M9 owns compose) and the skipped-when-no-credentials suite.
 
 ### PB-114 · NFR-SEC-03: the analyst-endpoint inspector test
-- **Source:** M7 audit of the rows carried to M7, 2026-10-17 (NFR-SEC-03) · **Priority:** high · **Due:** owner decision
+- **Source:** M7 audit of the rows carried to M7, 2026-10-17 (NFR-SEC-03) · **Priority:** high · **Due:** M8B (owner decision 2026-10-18)
 - **Problem:** the test that every analyst endpoint shows only masked tokens cannot be written: no milestone builds the analyst-facing API (`listAlerts`, `decideAlert` and their neighbours). M8 builds its console against mocks.
-- **Acceptance:** the inspector test, once the owner has placed the analyst API and it exists.
+- **Acceptance:** the inspector test over every analyst endpoint, built in M8B (`docs/parallel/M8B_updates.md`).
 
 ### PB-115 · D-19: verification at 10,000 TPS
 - **Source:** M7 traceability audit under the deletion standard, 2026-10-17 (D-19) · **Priority:** medium · **Due:** M10
@@ -1455,9 +1455,9 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 - **Acceptance:** a test asserting a tighter bound for the announced revocation, or the figure removed by a reviewed change.
 
 ### PB-121 · The analyst API: 48 contract operations no milestone builds
-- **Source:** M7 merge round 2, scoped 2026-10-17 at the owner's request (`docs/parallel/M7_updates.md`, "Unowned work: the analyst API") · **Priority:** high · **Due:** owner decision (M7's successor round or a milestone of its own)
+- **Source:** M7 merge round 2, scoped 2026-10-17 at the owner's request (`docs/parallel/M7_updates.md`, "Unowned work: the analyst API") · **Priority:** high · **Due:** M8B (owner decision 2026-10-18: a milestone of its own, alongside M9, on `main` before M10; `docs/parallel/M8B_updates.md`)
 - **Problem:** the frozen contract defines 89 operations; 36 are implemented (7 by M6, 29 by M7), 5 are management-port only, and 48 have no implementation and no owner: alerts and decisions (8), investigation (3), dashboards and portfolio (5), campaigns (2), rules (5), thresholds, circuit breakers and dual-control config changes (11), SAR reports (3), models, datasets and retraining (8), admin health and webhook deliveries (2), the deployment environment (1). Waiting on it: M6's `DecisionTransitionService.analystDecidesHold` and `CircuitBreakerPort.countConfirmedFraud`, both with no production caller; NFR-SEC-03's inspector test (PB-114); M8's console, whose analyst and risk screens are placeholders over mocks; FR-04-01 to FR-04-11, FR-05-01 to FR-05-07, FR-06-03 to FR-06-05, D-22, D-29, D-44, D-46, TEST-06, TEST-12, NFR-PERF-05, NFR-PERF-07; the WebSocket alert feed (FR-04-02), also unbuilt. Estimate: 15 to 18 controllers, 15 to 20 services, about 8,000 to 12,000 lines of code and tests, larger than M7.
-- **Acceptance:** the owner places it; then each group's operations implemented to the contract, with NFR-SEC-03's inspector test, `decideAlert` calling `analystDecidesHold`, and confirmed fraud reaching `countConfirmedFraud`.
+- **Acceptance:** placed in M8B (owner decision 2026-10-18); each group's operations implemented to the contract, with NFR-SEC-03's inspector test, `decideAlert` calling `analystDecidesHold`, and confirmed fraud reaching `countConfirmedFraud`.
 
 ### PB-122 · `audit_event_receipts` grows without bound
 - **Source:** review of M7 round 2, finding 5, 2026-10-17 (V72) · **Priority:** medium · **Due:** M9

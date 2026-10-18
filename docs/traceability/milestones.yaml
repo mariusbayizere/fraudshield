@@ -11,7 +11,14 @@
 # 2026-10-17; traceability_seed.py records each carry), and ML-DATA-07, which no milestone can
 # close by doing work, was closed as DONE_WITH_DEVIATION (ADR 0055: five features have no source
 # data on this benchmark).
-# "current" is the milestone on the integration path: M7, the next to merge. M8-M11 progress on
+# M7 (m7-complete, 71b0ec9, 2026-10-18) is tagged but NOT listed: on the owner's decision of
+# 2026-10-18 its open Must rows were re-filed where a later milestone closes them (NFR-SEC-03 and
+# FR-06-06 to M8B, D-51 to M9; traceability_seed.py records each), and seven have no later home,
+# because what each still lacks is M7's own backend work, not a screen, an analyst endpoint or a
+# measurement: FR-06-01 (PB-107), FR-06-02 (PB-108), FR-07-01 (PB-104), FR-07-06 (PB-105),
+# NFR-REL-06 (PB-112), D-26 (PB-110) and D-32 (PB-111). M7 stays uncompleted until they close.
+# M8B is the analyst API (owner decision 2026-10-18), alongside M9 and on main before M10.
+# "current" is the milestone on the integration path: M7, until its seven rows close. M8-M11 progress on
 # their own branches (docs/parallel/).
 current: M7
 completed: [M0, M1, M2, M3, M4, M5, M6]

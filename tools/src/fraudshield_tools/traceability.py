@@ -71,7 +71,11 @@ STATUSES = {
 EVIDENCED_STATUSES = {"DONE", "DONE_WITH_DEVIATION", "VERIFIED_AT_REDUCED_SCALE"}
 FINAL_STATUSES = EVIDENCED_STATUSES | {"REQUIRES_EXTERNAL_PARTY"}
 VERIFICATIONS = {"test", "inspection", "manual", "external"}
-MILESTONES = [f"M{n}" for n in range(13)]
+# M8B, the analyst API, was added by the owner on 2026-10-18 as its own milestone so the existing
+# numbering holds. It runs alongside M9 and must be on main before M10. Rule 7 closes milestones
+# cumulatively by position, so M8B sorts after M9 (completing M9 does not hold M8B's rows closed)
+# and before M10 (completing M10 does).
+MILESTONES = [*(f"M{n}" for n in range(10)), "M8B", *(f"M{n}" for n in range(10, 13))]
 
 
 @dataclass

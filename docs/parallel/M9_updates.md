@@ -356,3 +356,9 @@ an image-scan step fails the build when one is missing. The scan looks in each d
 NVTX's licence, `libgomp`'s for xgboost, and, if the CUDA wheel stays, NVIDIA's terms for the CUDA
 runtime. The rows above are examples the scan must pass, not the list. If NCCL and the CUDA code are
 excluded by a CPU-only xgboost, the other rows still apply.
+
+## Carried to M9 (owner decision 2026-10-18)
+
+- **D-51** (from M7): WireMock stubs of Google's JWKS and token endpoints in the compose stack,
+  and a Google sandbox contract suite reported as skipped without credentials (PB-113). M7's
+  in-process `FakeGoogle` already backs the tests.

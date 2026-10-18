@@ -204,8 +204,11 @@ DEFECT_MILESTONES: dict[str, str] = {
     # 50 ms is PB-73's measurement on the dedicated machine (ADR 0059, ADR 0010).
     "D-13": "M10",
     # Carried M6 -> M7 (owner decision 2026-10-17): M6's external services run without real
-    # credentials; what remains is Google OAuth, which is staff authentication.
-    "D-51": "M7",
+    # credentials; what remains is Google OAuth, which is staff authentication. Carried M7 -> M9
+    # (owner decision 2026-10-18): the in-process FakeGoogle is built; what remains is WireMock
+    # stubs of Google's JWKS and token endpoints in the compose stack, which M9 owns, and the
+    # sandbox suite reported as skipped without credentials (PB-113).
+    "D-51": "M9",
 }
 
 FR_MILESTONE_OVERRIDES: dict[str, str] = {
@@ -224,7 +227,12 @@ FR_MILESTONE_OVERRIDES: dict[str, str] = {
     "FR-02-04": "M4",
     "FR-06-01": "M7",
     "FR-06-02": "M7",
-    "FR-06-06": "M7",
+    # Carried M7 -> M8B (owner decision 2026-10-18): search and the hash chain are proved; what
+    # remains is each audit type asserted from a real action, and six of them (ANALYST_DECISION,
+    # SENIOR_OVERRIDE, THRESHOLD_CHANGE, RULE_CHANGE, MODEL_LIFECYCLE, REGULATORY_REPORT) are
+    # emitted end to end only by the analyst API's endpoints, plus a test that every write endpoint
+    # is audited, which needs those endpoints to exist (PB-109).
+    "FR-06-06": "M8B",
     # Carried M7 -> M8 (owner decision 2026-10-17): the server side is proved; the remaining
     # clause, the raw key shown once in the UI, is the console's.
     "FR-06-07": "M8",
@@ -307,7 +315,9 @@ ROW_MILESTONE_OVERRIDES = {
     "NFR-REL-05": "M10",
     # Moved M6 -> M7 (owner decision 2026-10-17): Google OAuth fallback is staff authentication.
     "NFR-REL-06": "M7",
-    "NFR-SEC-03": "M7",  # ADR 0021: vault and tokenisation M6, analyst inspector test M7
+    # ADR 0021: vault and tokenisation M6. Carried M7 -> M8B (owner decision 2026-10-18): the
+    # inspector test over every analyst endpoint needs the analyst API, which M8B builds (PB-114).
+    "NFR-SEC-03": "M8B",
     # Carried M5 -> M10 (owner decision 2026-10-17, ADR 0035): ML-GATE-12 needs the dedicated
     # machine; ML-GATE-13's gate logic is built and needs a deployment running the shadow
     # comparator for 24 hours and at least 50,000 scores.

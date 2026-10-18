@@ -1035,7 +1035,7 @@ requirements:
   title: 'Full audit log: every system action with user first name + last name, role, timestamp, action
     type, entity, before/after values; searchable; immutable'
   priority: M
-  milestone: M7
+  milestone: M8B
   srs_text: 'Acceptance criterion: 12 action types logged; all write operations audited; no DELETE or
     UPDATE on audit_events; searchable by user, date range, action type'
   defects:
@@ -1056,7 +1056,9 @@ requirements:
     (no UPDATE or DELETE on audit_events)
   deviations: []
   notes: 'M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md): proved in part. Not proved:
-    most types are written synthetically; ''all write operations audited'' (PB-109).'
+    most types are written synthetically; ''all write operations audited'' (PB-109). Carried M7 -> M8B
+    (owner decision 2026-10-18): the remaining audit types are asserted through the analyst API and the
+    assembled application (PB-109; docs/parallel/M8B_updates.md).'
 - id: FR-06-07
   section: 3.6 FR-06 Admin panel
   title: 'API key management: create, rotate, revoke keys for core banking integrations; each key scoped
@@ -1477,7 +1479,7 @@ requirements:
   section: 4.2 Security
   title: PII tokenisation
   priority: M
-  milestone: M7
+  milestone: M8B
   srs_text: 'Implementation: Account holder name and phone stored as opaque tokens; actual PII in separate
     encrypted PII store; no raw PII in analyst-facing API responses; Verification: API response audit:
     account_name field in all analyst endpoints shows masked token only; confirmed by inspector test'
@@ -1495,7 +1497,8 @@ requirements:
     at ingestion (M6), analyst-endpoint inspector test (M7). M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md):
     the analyst-endpoint inspector test cannot be written: no milestone builds the analyst API (owner
     decision; PB-114). M7 (2026-10-17): the analyst API is scoped and recorded as unowned work, PB-121
-    (48 operations).'
+    (48 operations). Carried M7 -> M8B (owner decision 2026-10-18): the inspector test needs the analyst
+    API, which M8B builds (PB-114).'
 - id: NFR-SEC-04
   section: 4.2 Security
   title: No secrets in version control
@@ -4966,7 +4969,7 @@ requirements:
   section: Build prompt Part B defect register
   title: External services must work locally and in CI without real credentials.
   priority: M
-  milestone: M7
+  milestone: M9
   srs_text: See docs/srs/defect_register.md
   defects: []
   affects:
@@ -4990,4 +4993,6 @@ requirements:
     SMS provider behind a gateway port (WireMock stub in the stack), the key service behind KmsClient
     with an in-memory double, the vault with configured keys under dev/demo/test. Google OAuth (M7) is
     not M6''s. M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md): M7''s share proved in
-    part. Not built: a Google fake in the local stack; a sandbox contract suite reported as skipped (PB-113).'
+    part. Not built: a Google fake in the local stack; a sandbox contract suite reported as skipped (PB-113).
+    Carried M7 -> M9 (owner decision 2026-10-18): WireMock Google stubs in the compose stack and the skipped-without-credentials
+    sandbox suite (PB-113).'
