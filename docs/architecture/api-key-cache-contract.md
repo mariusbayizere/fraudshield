@@ -59,7 +59,9 @@ longer holds.
 - **(b) A bulkhead covers uncached keys** (R9).
 
 **R1. Serving from the cache.** A request whose key has a current entry C is answered from C, with
-no read, if and only if `now < C.e` and `now − C.r ≤ S`. Otherwise it reads (R2, R3, R7). The
+no read, if and only if `now < C.e` and `now − C.r ≤ max(T, S)`. With S ≥ T, as in production,
+that is `now − C.r ≤ S`. With S below T (stale use disabled or short), an entry is still served
+within its TTL, since `e = r + T` at install and only stale use renews it. Otherwise it reads (R2, R3, R7). The
 order is fixed: look up C, then take s and n, then send the query.
 
 **R2. A successful read**, with start s and snapshot n:
@@ -330,6 +332,9 @@ query) give ADR 0071 §6. A missed announcement costs at most T.
 ## 5. Properties a test must demonstrate
 
 Each property below has a test that fails if the cited rule, or its guard, is deleted or weakened.
+One requirement has no deterministic test, and rests on review: R2(b) compares the announcement
+count *inside* the key's `compute`. A check moved before the `compute` differs only when an
+announcement lands between the two, which no test can schedule without a seam in that gap.
 
 | # | Property | Rule |
 |---|---|---|
@@ -349,7 +354,7 @@ Each property below has a test that fails if the cited rule, or its guard, is de
 | P14 | "No such key" does not remove an entry with r ≥ its s | R2(d) |
 | P15 | While an entry is present, an older read cannot replace a newer one | R2(b) |
 | P16 | When full, expired entries are dropped before live ones; a dropped entry gets 503 in an outage | R6, R3(a) |
-| P17 | `keyChanged` and `onMessage` both evict and both stop installs, including an announcement released (by latch) between a read's completion and its install step | R4, R2(b) |
+| P17 | `keyChanged` and `onMessage` both evict and both stop the install of a read they overlap | R4, R2(c) |
 | P18 | While reads succeed, an unannounced revocation is honoured within T | R1, R2(b) |
 | P19 | Each R8(a) type and each listed R8(b) SQLSTATE, bare and wrapped in a `DataAccessException`, is a failure; 42601, 25006, 40001, 57P04, XX001, XX002 and a non-SQL exception are not | R8 |
 | P20 | Hikari's `SQLTransientConnectionException` wrapping 28P01 is a failure | R8 |

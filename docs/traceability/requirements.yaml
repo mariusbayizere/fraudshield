@@ -4264,6 +4264,10 @@ requirements:
   - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/apikey/ApiKeyLifecycleTest.java
     (a verified key admitted through an outage for 10 minutes, then refused; an announced change never
     served stale)
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/apikey/ApiKeyCacheContractTest.java
+    (the cache contract's properties P1-P35)
+  - backend/auth/src/test/java/io/github/mariusbayizere/fraudshield/auth/apikey/KeyStoreUnavailabilityTest.java
+    (503 only for database unavailability)
   deviations:
   - docs/adr/0064-durable-spool-and-hold-reconciliation.md
   notes: 'M6 (2026-09-24): the durable spool; the forked-JVM kill test D-15 asks for is not built (the
@@ -4272,7 +4276,8 @@ requirements:
     2 s cache expires. Owner decision 2026-10-17 (option B): a key''s last verified record keeps being
     used for up to 10 minutes while the database cannot answer, so D-15 holds for outages up to 10 minutes;
     a key not verified by the instance is refused with 503 and Retry-After. Residual risk in threat model
-    R-13.'
+    R-13. M7 (2026-10-18): the cache''s rules are docs/architecture/api-key-cache-contract.md (option 1,
+    written and reviewed before the code); ApiKeyCacheContractTest proves them property by property.'
 - id: D-16
   section: Build prompt Part B defect register
   title: Python in the hot path at 10k TPS.

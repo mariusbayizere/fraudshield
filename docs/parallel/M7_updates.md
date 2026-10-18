@@ -237,15 +237,19 @@ proposals are decided when the contracts are next opened.
 ## Items for the owner or other milestones
 
 - **Owner decisions (2026-10-17, after round 2).**
-  - **D-15 against the key cache: option B, capped at 10 minutes.** A key's last verified record
-    keeps being used for up to 10 minutes after its last successful read while PostgreSQL cannot
-    answer; a key the instance has not verified gets 503 with `Retry-After`, never 401. M6's
-    `ResilienceApiTest` and NFR-REL-02's evidence now expect this (ADR 0073). Residual risk: the
-    owner accepted "a revocation committed in the 2 s before the outage whose announcement was also
-    lost". The delta re-checks showed the window is wider: any unannounced revocation committed
-    after the instance's last successful read of the key, which may be up to 10 minutes before the
-    outage, and also during an outage local to that instance. R-13 states it, **awaiting the
-    owner's decision**.
+  - **D-15 against the key cache: option B, capped at 10 minutes; rules in
+    `docs/architecture/api-key-cache-contract.md`.**
+    - **Behaviour:** a key's cached record keeps being used for up to 10 minutes after the read
+      that produced it, while the database is unavailable. A key with no cached record gets 503
+      with `Retry-After`, never 401.
+    - **Option 2 was tried and abandoned.** On 2026-10-18 the owner asked to narrow the window to
+      keys read shortly before the outage, contract first. Its contract was found unsound in three
+      drafts, so under the owner's rule it was abandoned for option 1, the 10-minute window.
+    - **Residual risk (R-13), now accepted:** an unannounced revocation committed after the cached
+      read is missed for up to 10 minutes. That applies in an outage on every instance, and in one
+      local to this instance.
+    - **Also in the contract:** 503 only for unavailability (500 for bugs), the failure limiter
+      before any read, and a 4-permit bulkhead for uncached keys.
   - **The analyst API: scoped, unowned, not yet assigned.** The owner decides between M7's
     successor round and a milestone of its own on the scope below ("Unowned work"); PB-121.
   - **`DemoUserEntity` stays**, by decision, and should not be re-raised. ADR 0068 point 4 asked for
@@ -459,7 +463,7 @@ those attempts is reported as a finding, not retried away. The probe adds one gi
 **Open items that do not block the merge:**
 - The contract-gap proposals (above), which need a contract change.
 - The residual risks in ADR 0070 and threat model R-5 to R-8.
-- The owner decisions listed under "Items" (R-13, the analyst API, `DemoUserEntity`).
+- The owner decisions listed under "Items" (the analyst API, `DemoUserEntity`); R-13 is decided.
 - The backlog rows PB-102 to PB-120, under the rows that stay IN_PROGRESS.
 - σ, the inter-instance clock skew in the session bound, assumes NTP-synchronised hosts. That
   belongs in the deployment runbook (M9).

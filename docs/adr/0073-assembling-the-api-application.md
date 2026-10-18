@@ -85,38 +85,43 @@ assembled application, first with **401** (the database exception
 escaped M7's filter, the error dispatch went through the contract chain, and the client was told
 its key was bad), then, once the filter answered the outage itself, with 503.
 
-The owner chose option B: **a key's last verified record keeps being used while the database cannot
-answer, for at most 10 minutes after that record was last read** (`fraudshield.auth.api-keys.stale-if-error`,
-default 10 minutes, `AuthProperties`).
+The owner chose option B: **a key's cached record keeps being used while the database is
+unavailable, for at most 10 minutes after the read that produced it**
+(`fraudshield.auth.api-keys.stale-if-error`, default 10 minutes, `AuthProperties`).
 
-- A key verified by this instance within the last 10 minutes is admitted through an outage. Its
-  record is retried once per cache TTL counted from the end of the failed read, not once per
-  request, however long the read blocked (up to the pool's 2 s connection timeout for a new
-  connection, or the 10 s socket timeout on a pooled one). Requests blocked on the same read are
-  all served the renewed record.
-- A key this instance has not verified, or verified longer ago, is refused with **503 and
-  `Retry-After: 1`**, never 401. M7's filter and M6's filter both answer it so
-  (`ApiKeyAuthenticationFilterTest`, `ApiKeyFilterTest`).
-- An announced revocation or rotation evicts the record at once, so it is never served stale, even
-  when the announcement arrives while a read of that record is blocked or in flight: the stale
-  renewal replaces only the entry its read started from, and a read that overlapped an
-  announcement answers its own request but is not cached (`ApiKeyLifecycleTest`:
-  `announcementDuringBlockedReadIsNotUndoneByTheStaleRenewal`,
-  `recordReadWhileAnAnnouncementArrivedIsNotKeptForAnOutage`). The overlap is counted across all
-  keys, not per key: an announcement stops caching for every read in flight at that moment, so a
-  burst of announcements (a mass revocation) costs extra database reads and, if an outage starts
-  then, earlier 503s for keys left uncached. That availability cost is accepted for simplicity; a
-  per-key counter would remove it.
-- **Residual risk (threat model R-13), stated per instance:** a revocation this instance is not
-  told about is missed until it reads the database again or 10 minutes have passed since its last
-  successful read of the key. That covers any revocation committed after that read, which may be up
-  to 10 minutes **before** the outage began (an idle key's record is still served), not only the
-  2 s before it, and also any committed **during** the outage when the outage is local to this
-  instance (pool exhausted, a partition, a connection limit), since the others still commit and the
-  announcement, which Redis pub/sub drops while the subscriber reconnects, is the only protection.
-  The owner accepted the 2-second description on 2026-10-17; the review of the delta fixes showed
-  the window is this wider one, and it awaits the owner's decision.
-- D-15 therefore holds for outages up to 10 minutes. `ResilienceApiTest` asserts both halves:
+**The rules are in [the API-key cache contract](../architecture/api-key-cache-contract.md)**
+(2026-10-18). The code implements that document, which was written and independently reviewed
+before the code. It was written because four code re-checks in a row had each found a MAJOR in
+this cache.
+
+On 2026-10-18 the owner tried to narrow the window to keys read shortly before the outage (option
+2, a derived bound of 26 s). Its contract was found unsound in three drafts. Under the owner's
+rule, option 2 was then abandoned for option 1, the 10-minute window below.
+
+In short:
+
+- **A key with a cached record is admitted through an outage** until 10 minutes after the read
+  that produced the record.
+  - It is read again once per TTL, counted from the end of the failed read.
+  - Requests blocked in the same outage share one outcome.
+  - A failed read that began before a fresher successful read is answered from the fresher record.
+- **A key with no cached record is refused with 503 and `Retry-After: 1`, never 401.** That covers
+  a key never read by this instance, one whose entry an announcement removed, and one past its 10
+  minutes. Both filters answer it so.
+- **Only database unavailability gives 503** (contract R8): connection failures, timeouts,
+  shutdown, recovery and exhausted resources. Bad SQL and other errors give 500
+  `urn:fraudshield:problem:internal`.
+- **Announcements.** A received announcement is never undone. A read that overlapped any
+  announcement answers its own request but is not installed. A successful read that sees the key
+  revoked, or past its overlap, removes the entry.
+- **Unauthenticated floods.** The failure limiter is checked before any read. Reads of uncached
+  keys go through a bulkhead of 4 permits, which must be below the connection pool's size. So a
+  flood of unknown key IDs can neither exhaust the pool nor push an instance into a local outage.
+- **Residual risk (threat model R-13), per instance:** a revocation committed after the cached
+  record's read, whose announcement this instance did not receive, is missed for up to 10 minutes
+  after that read. That holds in any outage: one on every instance, or one local to this instance,
+  where the others still commit. The contract lists the accepted costs.
+- **D-15 therefore holds for outages up to 10 minutes.** `ResilienceApiTest` asserts both halves:
   decisions continue for the warmed key, and a key never verified gets 503 with `Retry-After`.
 
 ## Consequences
