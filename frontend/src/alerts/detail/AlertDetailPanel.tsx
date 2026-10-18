@@ -26,11 +26,10 @@ const detailRoute = getRouteApi('/shell/alerts/$alertId');
 
 /** A link's path, decoded; a malformed escape in some other link must not break the lookup. */
 function pathOf(link: HTMLAnchorElement): string {
-  const path = new URL(link.href).pathname;
   try {
-    return decodeURIComponent(path);
+    return decodeURIComponent(new URL(link.href).pathname);
   } catch {
-    return path;
+    return '';
   }
 }
 

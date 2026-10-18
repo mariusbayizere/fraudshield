@@ -340,19 +340,39 @@ describe('the investigation drawer (UX-DASH-04, UX-ROLE-AN-02, FR-04-05)', () =>
     });
   });
 
+  // axe over a drawer and a 44-row table takes longer than the default 5 s on a CI runner.
+  const AXE_MS = 15_000;
+
   it.each([
     ['wide', true],
     ['phone', false],
-  ])('[FR-04-12] has no axe violations on a %s screen', async (_name, wide) => {
-    screenWidth(wide);
-    serve();
-    await openAlert();
-    await screen.findByText('93%');
-    expect(await axeViolations(document.body)).toEqual([]);
-    await userEvent.click(screen.getByRole('tab', { name: 'SHAP explanation' }));
-    await screen.findByRole('table', { name: "Each feature's effect on the score" });
-    expect(await axeViolations(document.body)).toEqual([]);
-  });
+  ])(
+    '[FR-04-12] has no axe violations in the summary on a %s screen',
+    async (_name, wide) => {
+      screenWidth(wide);
+      serve();
+      await openAlert();
+      await screen.findByText('93%');
+      expect(await axeViolations(document.body)).toEqual([]);
+    },
+    AXE_MS,
+  );
+
+  it.each([
+    ['wide', true],
+    ['phone', false],
+  ])(
+    '[FR-04-12] has no axe violations in the SHAP explanation on a %s screen',
+    async (_name, wide) => {
+      screenWidth(wide);
+      serve();
+      await openAlert();
+      await userEvent.click(await screen.findByRole('tab', { name: 'SHAP explanation' }));
+      await screen.findByRole('table', { name: "Each feature's effect on the score" });
+      expect(await axeViolations(document.body)).toEqual([]);
+    },
+    AXE_MS,
+  );
 });
 
 describe('the SHAP explanation (FR-04-05, UX-DASH-05, D-45)', () => {
