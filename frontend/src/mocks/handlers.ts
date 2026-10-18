@@ -1,5 +1,12 @@
 import { http, HttpResponse } from 'msw';
-import type { StaffUser, SystemHealth, TokenResponse } from '../api/generated/types.gen';
+import type {
+  AlertPage,
+  DashboardStats,
+  StaffUser,
+  SystemHealth,
+  TokenResponse,
+} from '../api/generated/types.gen';
+import examples from './generated/examples.json';
 
 /**
  * Searched for by productionBundle.test.ts: if this string is ever in a production build, the
@@ -40,7 +47,25 @@ const session: TokenResponse = {
 };
 
 /** Contract-typed responses for services not merged yet (M5–M7), for development and tests. */
+/**
+ * The analyst API's operations (M8B), answered with the contract's own examples, which the
+ * contract tests validate against their schemas. They ignore the filters: a mock that filtered
+ * would be guessing at the server's behaviour. The example page's cursor leads to an empty last
+ * page, so "Load more" can be exercised.
+ */
+const alertPage = examples.AlertPage[0] as AlertPage;
+const lastAlertPage: AlertPage = { items: [], next_cursor: null };
+const dashboardStats = examples.DashboardStats[0] as DashboardStats;
+
 export const handlers = [
+  http.get('/api/v1/alerts', ({ request }) =>
+    HttpResponse.json(new URL(request.url).searchParams.has('cursor') ? lastAlertPage : alertPage, {
+      headers: { 'x-mock': MOCK_MARKER },
+    }),
+  ),
+  http.get('/api/v1/dashboard/stats', () =>
+    HttpResponse.json(dashboardStats, { headers: { 'x-mock': MOCK_MARKER } }),
+  ),
   http.post('/api/v1/auth/login', () =>
     HttpResponse.json(session, { headers: { 'x-mock': MOCK_MARKER } }),
   ),

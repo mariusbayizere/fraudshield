@@ -21,6 +21,7 @@
     "region": "node scripts/generate-region-packs.ts",
     "i18n:status": "node scripts/translation-status.ts",
     "api": "node scripts/generate-api.ts",
+    "mock-examples": "node scripts/generate-mock-examples.ts",
     "dev": "VITE_FS_COUNTRY=${VITE_FS_COUNTRY:-RW} vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
