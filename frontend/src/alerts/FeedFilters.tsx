@@ -110,6 +110,12 @@ export function FeedFilters({
   const set = (patch: Partial<AlertSearch>) => {
     onChange({ ...search, ...patch });
   };
+  // A control that removes itself (a link's chip, "Clear filters") leaves focus in the filters,
+  // not on the page body.
+  const removeAndKeepFocus = (patch: Partial<AlertSearch>) => {
+    set(patch);
+    region.current?.focus();
+  };
   const offered: readonly string[] = tiers;
   const otherTiers = (search.tier ?? []).filter((tier) => !offered.includes(tier));
   const linkOnly = LINK_ONLY.filter((key) => search[key] !== undefined);
@@ -181,7 +187,7 @@ export function FeedFilters({
               <RemovableChip
                 label={`${t('filters.tier')}: ${t(`tier.${tier}`)}`}
                 onRemove={() => {
-                  set({ tier: toggled(search.tier, tier) });
+                  removeAndKeepFocus({ tier: toggled(search.tier, tier) });
                 }}
               />
             </li>
@@ -191,7 +197,7 @@ export function FeedFilters({
               <RemovableChip
                 label={`${t(`filters.param.${key}`)}: ${shown(key, String(search[key]))}`}
                 onRemove={() => {
-                  set({ [key]: undefined });
+                  removeAndKeepFocus({ [key]: undefined });
                 }}
               />
             </li>

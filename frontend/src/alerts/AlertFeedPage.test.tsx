@@ -349,6 +349,8 @@ describe('the alert feed (FR-04-02, FR-04-03, FR-04-09)', () => {
     ).toBeVisible();
 
     await userEvent.click(amount);
+    // The chip is gone; focus stays in the filters rather than falling to the page body.
+    expect(document.activeElement).toBe(screen.getByRole('region', { name: 'Filters' }));
     await waitFor(() => {
       expect(router.state.location.search).toEqual({
         tier: ['HIGH', 'ANOMALY'],
@@ -363,6 +365,31 @@ describe('the alert feed (FR-04-02, FR-04-03, FR-04-09)', () => {
       expect(router.state.location.search).toEqual({ tier: ['HIGH'] });
     });
     expect(screen.queryByRole('list', { name: 'Filters from the link' })).toBeNull();
+  });
+
+  it("never shows a previous filter's alerts while the new filter loads", async () => {
+    let calls = 0;
+    vi.stubGlobal('fetch', (request: Request) => {
+      const url = new URL(request.url);
+      const body = url.pathname.endsWith('/dashboard/stats')
+        ? stats
+        : { items: [high], next_cursor: null };
+      // The first feed request answers; the one the new filter makes never does.
+      if (url.pathname.endsWith('/alerts') && (calls += 1) > 1) {
+        return new Promise<Response>(() => undefined);
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } }),
+      );
+    });
+    await renderFeed();
+    await screen.findByRole('article', { name: 'Alert for A*** K***' });
+    const filters = screen.getByRole('region', { name: 'Filters' });
+    await userEvent.click(within(filters).getByRole('button', { name: 'USSD' }));
+    expect(
+      await screen.findByText('Loading alerts…', { selector: '[role="status"]' }),
+    ).toBeVisible();
+    expect(screen.queryByRole('article', { name: 'Alert for A*** K***' })).toBeNull();
   });
 
   it('counts down only while an alert waits for a decision', async () => {

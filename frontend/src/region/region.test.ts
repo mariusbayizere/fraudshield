@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { renderPacks, OUTPUT } from '../../scripts/generate-region-packs';
 import { COUNTRY_Z } from '../test/fixtures';
 import { minorUnitsByCurrency, PACKS, regionFor } from './packs';
-import { formatClock, formatMoney, offsetLabel } from './region';
+import { formatClock, formatDateTime, formatMoney, offsetLabel } from './region';
 
 describe('region data from the country packs (ADR 0023)', () => {
   it('is what the packs produce, so it cannot drift by hand', () => {
@@ -68,5 +68,15 @@ describe('formatting without a float or a named country', () => {
     const at = new Date('2026-09-22T12:02:00Z');
     expect(formatClock(at, 7, 'en')).toBe('19:02 UTC+7');
     expect(formatClock(at, -3.5, 'en')).toBe('08:32 UTC-3:30');
+    // A date and time, in the region's zone and the UI language, always with the zone (D-43).
+    expect(formatDateTime(new Date('2026-10-01T22:30:00Z'), 5.75, 'en')).toBe(
+      'Oct 2, 2026, 04:15 UTC+5:45',
+    );
+    expect(formatDateTime(new Date('2026-10-01T22:30:00Z'), 5.75, 'fr')).toBe(
+      '2 oct. 2026, 04:15 UTC+5:45',
+    );
+    expect(formatDateTime(new Date('2026-10-01T01:00:00Z'), -3.5, 'en')).toBe(
+      'Sep 30, 2026, 21:30 UTC-3:30',
+    );
   });
 });
