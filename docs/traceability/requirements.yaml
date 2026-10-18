@@ -704,15 +704,25 @@ requirements:
   defects:
   - D-10
   - D-35
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation: &id001
+  - frontend/src/alerts/AlertFeedPage.tsx
+  - frontend/src/alerts/AlertCard.tsx
+  - frontend/src/alerts/StatsHeader.tsx
+  - frontend/src/alerts/FeedFilters.tsx
+  - frontend/src/alerts/queries.ts
+  - frontend/src/app/alertSearch.ts
   evidence: []
   deviations: []
   notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
     on main implements yet (M8B). Operations: listAlerts. The console is built against mocks generated
     from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until the M8B operation
-    exists on main and the screen is exercised against it.'
+    exists on main and the screen is exercised against it. M8 screen 1 (2026-10-18, the alert feed at
+    /alerts, against contract-example mocks): the standard queue in the server''s priority order, a page
+    at a time, and a MEDIUM alert''s countdown. Not built: the WebSocket push, which the contract does
+    not define, so the feed re-reads every 60 s (E.9''s degraded cadence); the DataGrid virtualisation
+    (see UX-DASH-02).'
 - id: FR-04-03
   section: 3.4 FR-04 Analyst dashboard
   title: 'Alert card shows: risk badge (HIGH/MEDIUM), fraud probability MUI CircularProgress gauge, amount
@@ -722,15 +732,18 @@ requirements:
   srs_text: 'Acceptance criterion: All 8 elements present on every alert card; SHAP pills show feature
     name + direction arrow + contribution value'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation: *id001
   evidence: []
   deviations: []
   notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
     on main implements yet (M8B). Operations: listAlerts, getAlert. The console is built against mocks
     generated from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until
-    the M8B operation exists on main and the screen is exercised against it.'
+    the M8B operation exists on main and the screen is exercised against it. M8 screen 1 (2026-10-18,
+    the alert feed at /alerts, against contract-example mocks): the card shows all eight elements (risk
+    badge, gauge, amount and currency, channel, masked name, merchant, time, top-3 SHAP pills with feature,
+    arrow and value); tested.'
 - id: FR-04-04
   section: 3.4 FR-04 Analyst dashboard
   title: One-click CONFIRM FRAUD or MARK LEGITIMATE with mandatory comment field (min 10 characters);
@@ -832,15 +845,18 @@ requirements:
   srs_text: 'Acceptance criterion: Composable filters; results within 500ms; URL updates so filtered view
     is bookmark-shareable'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation: *id001
   evidence: []
   deviations: []
   notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
     on main implements yet (M8B). Operations: listAlerts. The console is built against mocks generated
     from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until the M8B operation
-    exists on main and the screen is exercised against it.'
+    exists on main and the screen is exercised against it. M8 screen 1 (2026-10-18, the alert feed at
+    /alerts, against contract-example mocks): tier, channel and status filters and the order on the feed,
+    all listAlerts parameters carried in the URL; dates, amounts and identifiers are for the /search screen.
+    Not measured: results within 500 ms.'
 - id: FR-04-10
   section: 3.4 FR-04 Analyst dashboard
   title: 'Priority escalation: ANALYST escalates to SENIOR_ANALYST or RISK_OFFICER with mandatory escalation
@@ -1972,15 +1988,18 @@ requirements:
     click any badge to filter; fraud amount animates on update; currency formatted with RWF prefix'
   defects:
   - D-33
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation: *id001
   evidence: []
   deviations: []
   notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
     on main implements yet (M8B). Operations: getDashboardStats. The console is built against mocks generated
     from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until the M8B operation
-    exists on main and the screen is exercised against it.'
+    exists on main and the screen is exercised against it. M8 screen 1 (2026-10-18, the alert feed at
+    /alerts, against contract-example mocks): today''s seven figures above the feed; the HIGH and MEDIUM
+    counts toggle the tier filter. Not built: sticky placement, real-time updates (no channel in the contract),
+    the animated amount.'
 - id: UX-DASH-02
   section: 5.4 Analyst dashboard components
   title: Alert Feed (MUI DataGrid virtualised)
@@ -2001,7 +2020,10 @@ requirements:
   notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
     on main implements yet (M8B). Operations: listAlerts. The console is built against mocks generated
     from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until the M8B operation
-    exists on main and the screen is exercised against it.'
+    exists on main and the screen is exercised against it. M8 screen 1 (2026-10-18, the alert feed at
+    /alerts, against contract-example mocks): the feed is a card list on every width; the free MUI X DataGrid
+    this row names is not a dependency yet (the owner''s to approve under ADR 0080/0009), so the row is
+    not started.'
 - id: UX-DASH-03
   section: 5.4 Analyst dashboard components
   title: Risk Score Gauge
@@ -2088,15 +2110,17 @@ requirements:
     < 5s if notifications enabled; Interaction Behaviour: setInterval every second; audio via Web Audio
     API only if user has explicitly enabled browser notifications'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation: *id001
   evidence: []
   deviations: []
   notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
     on main implements yet (M8B). Operations: listAlerts, getAlert. The console is built against mocks
     generated from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until
-    the M8B operation exists on main and the screen is exercised against it.'
+    the M8B operation exists on main and the screen is exercised against it. M8 screen 1 (2026-10-18,
+    the alert feed at /alerts, against contract-example mocks): the MEDIUM card counts down to review_deadline_at
+    and turns red under 10 s (the design-system CountdownChip). Not built: the opt-in chime under 5 s.'
 - id: UX-DASH-08
   section: 5.4 Analyst dashboard components
   title: Account History Timeline
@@ -2976,7 +3000,7 @@ requirements:
   - D-07
   status: DONE
   verification: test
-  implementation: &id001
+  implementation: &id002
   - ml/src/fraudshield_ml/training/gate.py
   - ml/src/fraudshield_ml/training/gate_run.py
   - ml/src/fraudshield_ml/training/gate_report.py
@@ -3037,7 +3061,7 @@ requirements:
   - D-53
   status: DONE
   verification: test
-  implementation: *id001
+  implementation: *id002
   evidence:
   - docs/benchmarks/m4_gate_d8083dbc_v3.txt (recall at the 1% FPR budget 0.871 [0.847, 0.891] at a realised
     FPR of 0.96%; +0.273 over the best single feature; precision there 0.471 against D-01's ceiling of
@@ -3076,7 +3100,7 @@ requirements:
   - D-02
   status: DONE_WITH_DEVIATION
   verification: test
-  implementation: *id001
+  implementation: *id002
   evidence:
   - 'docs/benchmarks/m4_gate_d8083dbc_v3.txt (recall at 0.60 0.736 [0.707, 0.765], five seeds 0.744 +/-
     0.041: FAILS the 0.880 threshold)'
@@ -3121,7 +3145,7 @@ requirements:
   - D-02
   status: DONE
   verification: test
-  implementation: *id001
+  implementation: *id002
   evidence:
   - docs/benchmarks/m4_gate_d8083dbc_v3.txt (F1 at 0.60 0.821 [0.800, 0.840], five seeds 0.820 +/- 0.020)
   - docs/benchmarks/m4_gate_d8083dbc_v3/metrics.json
@@ -3158,7 +3182,7 @@ requirements:
   - D-02
   status: DONE
   verification: test
-  implementation: *id001
+  implementation: *id002
   evidence:
   - docs/benchmarks/m4_gate_d8083dbc_v3.txt (FPR at 0.85 0.0003 [0.000, 0.000])
   - docs/benchmarks/m4_gate_d8083dbc_v3/metrics.json
@@ -3177,7 +3201,7 @@ requirements:
   - D-02
   status: DONE_WITH_DEVIATION
   verification: test
-  implementation: *id001
+  implementation: *id002
   evidence:
   - 'docs/benchmarks/m4_gate_d8083dbc_v3.txt (FNR at 0.60 0.264 [0.235, 0.293]: FAILS the 12.0% threshold)'
   - docs/benchmarks/m4_gate_d8083dbc_v3/metrics.json
@@ -3203,7 +3227,7 @@ requirements:
   defects: []
   status: DONE
   verification: test
-  implementation: *id001
+  implementation: *id002
   evidence:
   - docs/benchmarks/m4_gate_d8083dbc_v3.txt (MOBILE_MONEY AUC 0.953 [0.934, 0.969]; +0.070 over the best
     single feature on the channel's rows (0.882))
@@ -3238,7 +3262,7 @@ requirements:
   defects: []
   status: DONE
   verification: test
-  implementation: *id001
+  implementation: *id002
   evidence:
   - docs/benchmarks/m4_gate_d8083dbc_v3.txt (USSD AUC 0.953 [0.931, 0.972]; +0.049 over the best single
     feature on the channel's rows (0.904), the narrowest margin)
@@ -3273,7 +3297,7 @@ requirements:
   defects: []
   status: DONE
   verification: test
-  implementation: *id001
+  implementation: *id002
   evidence:
   - docs/benchmarks/m4_gate_d8083dbc_v3.txt (AGENT_BANKING AUC 0.979 [0.960, 0.993]; +0.136 over the best
     single feature on the channel's rows (0.843))
@@ -3308,7 +3332,7 @@ requirements:
   defects: []
   status: DONE
   verification: test
-  implementation: *id001
+  implementation: *id002
   evidence:
   - 'docs/benchmarks/m4_gate_d8083dbc_v3.txt (SHAP coverage for HIGH and MEDIUM 1.000: every flagged row''s
     explanation complete and additive within 0.001)'
@@ -3329,7 +3353,7 @@ requirements:
   - D-05
   status: DONE
   verification: test
-  implementation: *id001
+  implementation: *id002
   evidence:
   - docs/benchmarks/m4_gate_d8083dbc_v3.txt (ECE on 15 equal-mass bins 0.001 [0.001, 0.001]; equal-width
     ECE 0.0014, Brier 0.0027)
@@ -4040,15 +4064,17 @@ requirements:
     Do: Cannot see alerts assigned to other analysts; cannot see unassigned pool; Key MUI Components:
     MUI DataGrid (virtualised); MUI Chip (risk tier); MUI CircularProgress (score)'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation: *id001
   evidence: []
   deviations: []
   notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
     on main implements yet (M8B). Operations: listAlerts. The console is built against mocks generated
     from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until the M8B operation
-    exists on main and the screen is exercised against it.'
+    exists on main and the screen is exercised against it. M8 screen 1 (2026-10-18, the alert feed at
+    /alerts, against contract-example mocks): filter by risk tier and status; date is on /search. Not
+    built: "own assigned alerts" only, which is the server''s to enforce in listAlerts (M8B).'
 - id: UX-ROLE-AN-02
   section: 'v5 12.1 Per-role frontend: ANALYST'
   title: Alert Detail

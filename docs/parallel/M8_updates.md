@@ -222,3 +222,45 @@ Claimed 2026-10-18, after reading every branch: the highest backlog id in use an
 | ADR | `0080`–`0089` | `0080` (console architecture), `0081` (the `/system/status` proposal, on `m8/system-status-proposal`), `0082` (SRS v5.0 adoption) |
 | Backlog | `PB-131`–`PB-140` | `PB-131` (only `validate.ts` imports the generated Zod) |
 
+## 9. The analyst screens (from 2026-10-18)
+
+Built against mocks generated from the contract: `frontend/scripts/generate-mock-examples.ts`
+copies `contracts/openapi/schema-examples.yaml`, which the contract tests validate, into
+`frontend/src/mocks/generated/examples.json` (`examplesDrift.test.ts` pins it). Test fixtures start
+from the same examples, and every response a screen reads is parsed by the generated Zod in tests.
+None of this is evidence that the API works (section 7; `M8B_updates.md`).
+
+**Order.** Each screen reuses the one before it.
+
+| # | Screen | Route | Contract operations (M8B) | State |
+|---|---|---|---|---|
+| 1 | Alert feed | `/alerts` | listAlerts, getDashboardStats | built, under review |
+| 2 | Alert detail and SHAP | `/alerts/$alertId` | getAlert, getAlertExplanation, getScoringResult | not started |
+| 3 | Decision panel | in the detail | decideAlert, undoAlertDecision, escalateAlert | not started |
+| 4 | Account context | in the detail | listAccountTransactions, getBehaviourProfile, getAccountNetwork | not started |
+| 5 | Anomalies | `/anomalies` | listAlerts (queue=anomaly) | not started |
+| 6 | Escalations | `/escalations` | listAlerts (queue=escalated) | not started |
+| 7 | Search | `/search` | listAlerts (identifiers, amounts, dates) | not started |
+| 8 | My performance | `/me/performance` | getMyPerformance | not started |
+
+**Screen 1, the alert feed.** Today's figures (the HIGH and MEDIUM counts filter the feed), the
+tier, channel and status filters and the order, all in the URL as listAlerts parameters, and the
+standard queue as cards with FR-04-03's eight elements, a page at a time.
+
+- **No real-time channel in the contract.** FR-04-02's WebSocket is not defined anywhere in
+  `contracts/`, so the feed and its figures re-read every 60 s, E.9's degraded cadence. FR-04-02
+  and UX-DASH-01 cannot be DONE until the contract has the channel and M8B serves it.
+- **Cards, not the DataGrid.** UX-DASH-02 names the free MUI X DataGrid, which is not a
+  dependency (ADR 0080 names it as an expected heavy route dependency; adding it is a licence and
+  version decision, ADR 0009 and ADR 0003). The feed is a card list on every width until then.
+- **The initial-bundle budget is nearly spent.** Before this screen the entry was 172,195 bytes
+  gzipped against 174,080 (170 KB). The new lazy chunk made the bundler move react-i18next's
+  `useTranslation` into the entry, through `RegionContext.tsx`, and pushed it to 174,996.
+  `useFormatLocale` moved to `region/formatLocale.ts`, so the entry no longer needs it: 172,999,
+  with 1,081 bytes left. The feed's own chunk is 19.4 KB. Later screens can push it over again;
+  raising the budget is the owner's (ADR 0080 §10).
+- **Deletion checks** (code broken, then the screen's tests run): the 60 s refresh, the queue,
+  the anomaly frame, the several-statuses option, the correlation ID and the countdown each fail a
+  test when removed. Dropping an emptied list in `toggled` fails no page test, because the
+  route's validation drops it too; `FeedFilters.test.ts` tests it as a unit.
+
