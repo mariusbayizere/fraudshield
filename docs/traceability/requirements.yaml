@@ -778,15 +778,27 @@ requirements:
     MUI Tooltip per bar showing plain-English description specific to East African context'
   defects:
   - D-45
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation: &id002
+  - frontend/src/alerts/detail/AlertDetailPanel.tsx
+  - frontend/src/alerts/detail/SummaryTab.tsx
+  - frontend/src/alerts/detail/ShapChart.tsx
+  - frontend/src/alerts/detail/queries.ts
   evidence: []
   deviations: []
   notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
     on main implements yet (M8B). Operations: getAlertExplanation. The console is built against mocks
     generated from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until
-    the M8B operation exists on main and the screen is exercised against it.'
+    the M8B operation exists on main and the screen is exercised against it. M8 screen 2 (2026-10-18,
+    the investigation drawer at /alerts/$alertId, against contract-example mocks): all 44 contributions
+    ranked by |SHAP|, increases and decreases drawn in the high- and low-risk colours with an arrow and
+    sign, base value, final margin and calibrated probability stated. Drawn as an accessible table with
+    bars, not Recharts (no new dependency; a deviation for the owner to decide, as for the DataGrid).
+    Not built: the plain-language description per feature (D-45''s templates do not exist; PB-132). Not
+    measured: within 500 ms. Depends on the analyst API (M8B): getAlert, getScoringResult and getAlertExplanation.
+    Built against mocks generated from the contract, which are not evidence: this row stays at most IN_PROGRESS
+    until those operations exist on main and the screen is exercised against them.'
 - id: FR-04-06
   section: 3.4 FR-04 Analyst dashboard
   title: 'Account history timeline: last 30 transactions with amount, channel icon, timestamp, risk score
@@ -2069,15 +2081,22 @@ requirements:
     | Network Graph; Interaction Behaviour: Opens within 200ms; drawer stays open while alert feed remains
     interactive behind it'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation: *id002
   evidence: []
   deviations: []
   notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
     on main implements yet (M8B). Operations: getAlert, getScoringResult. The console is built against
     mocks generated from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS
-    until the M8B operation exists on main and the screen is exercised against it.'
+    until the M8B operation exists on main and the screen is exercised against it. M8 screen 2 (2026-10-18,
+    the investigation drawer at /alerts/$alertId, against contract-example mocks): a 560 px drawer on
+    the right on large screens, not modal, over a feed that stays usable; focus moves to it; Escape and
+    the close button return to the feed with its filters. Tabs built: Summary and SHAP explanation; Account
+    History, Behavioural Fingerprint and Network Graph are screen 4. Not measured: opens within 200 ms.
+    Depends on the analyst API (M8B): getAlert, getScoringResult and getAlertExplanation. Built against
+    mocks generated from the contract, which are not evidence: this row stays at most IN_PROGRESS until
+    those operations exist on main and the screen is exercised against them.'
 - id: UX-DASH-05
   section: 5.4 Analyst dashboard components
   title: SHAP Waterfall Chart
@@ -2089,15 +2108,21 @@ requirements:
     in the last 60 seconds — 8.3x its usual rate.'')'
   defects:
   - D-45
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation: *id002
   evidence: []
   deviations: []
   notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
     on main implements yet (M8B). Operations: getAlertExplanation. The console is built against mocks
     generated from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until
-    the M8B operation exists on main and the screen is exercised against it.'
+    the M8B operation exists on main and the screen is exercised against it. M8 screen 2 (2026-10-18,
+    the investigation drawer at /alerts/$alertId, against contract-example mocks): sorted by |SHAP| descending,
+    increases red and decreases green, base value and final score stated as text. A table with bars rather
+    than Recharts (see FR-04-05). Not built: the per-bar plain-language tooltip (PB-132). Depends on the
+    analyst API (M8B): getAlert, getScoringResult and getAlertExplanation. Built against mocks generated
+    from the contract, which are not evidence: this row stays at most IN_PROGRESS until those operations
+    exist on main and the screen is exercised against them.'
 - id: UX-DASH-06
   section: 5.4 Analyst dashboard components
   title: Action Panel (bottom of drawer)
@@ -2622,11 +2647,17 @@ requirements:
     Drawer on lg+; Dialog on xs-md; same content, different shell'
   defects:
   - D-36
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation: *id002
   evidence: []
   deviations: []
+  notes: 'M8 screen 2 (2026-10-18, the investigation drawer at /alerts/$alertId, against contract-example
+    mocks): the same content as a drawer on lg and wider and a full-screen dialog below. Not built: swipe
+    down to dismiss, and the browser''s back button closing the dialog. Depends on the analyst API (M8B):
+    getAlert, getScoringResult and getAlertExplanation. Built against mocks generated from the contract,
+    which are not evidence: this row stays at most IN_PROGRESS until those operations exist on main and
+    the screen is exercised against them.'
 - id: MOB-COMP-03
   section: 05B A.7 Mobile component behaviour
   title: Stats Header
@@ -2708,11 +2739,17 @@ requirements:
     mobile renders top-5 config; expand opens MUI SwipeableDrawer with full chart'
   defects:
   - D-45
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation: *id002
   evidence: []
   deviations: []
+  notes: 'M8 screen 2 (2026-10-18, the investigation drawer at /alerts/$alertId, against contract-example
+    mocks): phones show the top 5 with "Show all" expanding in place. Not built: vertical orientation
+    and the bottom sheet (SwipeableDrawer); the expansion is inline. Depends on the analyst API (M8B):
+    getAlert, getScoringResult and getAlertExplanation. Built against mocks generated from the contract,
+    which are not evidence: this row stays at most IN_PROGRESS until those operations exist on main and
+    the screen is exercised against them.'
 - id: MOB-COMP-09
   section: 05B A.7 Mobile component behaviour
   title: Password Strength Meter
@@ -3017,7 +3054,7 @@ requirements:
   - D-07
   status: DONE
   verification: test
-  implementation: &id002
+  implementation: &id003
   - ml/src/fraudshield_ml/training/gate.py
   - ml/src/fraudshield_ml/training/gate_run.py
   - ml/src/fraudshield_ml/training/gate_report.py
@@ -3078,7 +3115,7 @@ requirements:
   - D-53
   status: DONE
   verification: test
-  implementation: *id002
+  implementation: *id003
   evidence:
   - docs/benchmarks/m4_gate_d8083dbc_v3.txt (recall at the 1% FPR budget 0.871 [0.847, 0.891] at a realised
     FPR of 0.96%; +0.273 over the best single feature; precision there 0.471 against D-01's ceiling of
@@ -3117,7 +3154,7 @@ requirements:
   - D-02
   status: DONE_WITH_DEVIATION
   verification: test
-  implementation: *id002
+  implementation: *id003
   evidence:
   - 'docs/benchmarks/m4_gate_d8083dbc_v3.txt (recall at 0.60 0.736 [0.707, 0.765], five seeds 0.744 +/-
     0.041: FAILS the 0.880 threshold)'
@@ -3162,7 +3199,7 @@ requirements:
   - D-02
   status: DONE
   verification: test
-  implementation: *id002
+  implementation: *id003
   evidence:
   - docs/benchmarks/m4_gate_d8083dbc_v3.txt (F1 at 0.60 0.821 [0.800, 0.840], five seeds 0.820 +/- 0.020)
   - docs/benchmarks/m4_gate_d8083dbc_v3/metrics.json
@@ -3199,7 +3236,7 @@ requirements:
   - D-02
   status: DONE
   verification: test
-  implementation: *id002
+  implementation: *id003
   evidence:
   - docs/benchmarks/m4_gate_d8083dbc_v3.txt (FPR at 0.85 0.0003 [0.000, 0.000])
   - docs/benchmarks/m4_gate_d8083dbc_v3/metrics.json
@@ -3218,7 +3255,7 @@ requirements:
   - D-02
   status: DONE_WITH_DEVIATION
   verification: test
-  implementation: *id002
+  implementation: *id003
   evidence:
   - 'docs/benchmarks/m4_gate_d8083dbc_v3.txt (FNR at 0.60 0.264 [0.235, 0.293]: FAILS the 12.0% threshold)'
   - docs/benchmarks/m4_gate_d8083dbc_v3/metrics.json
@@ -3244,7 +3281,7 @@ requirements:
   defects: []
   status: DONE
   verification: test
-  implementation: *id002
+  implementation: *id003
   evidence:
   - docs/benchmarks/m4_gate_d8083dbc_v3.txt (MOBILE_MONEY AUC 0.953 [0.934, 0.969]; +0.070 over the best
     single feature on the channel's rows (0.882))
@@ -3279,7 +3316,7 @@ requirements:
   defects: []
   status: DONE
   verification: test
-  implementation: *id002
+  implementation: *id003
   evidence:
   - docs/benchmarks/m4_gate_d8083dbc_v3.txt (USSD AUC 0.953 [0.931, 0.972]; +0.049 over the best single
     feature on the channel's rows (0.904), the narrowest margin)
@@ -3314,7 +3351,7 @@ requirements:
   defects: []
   status: DONE
   verification: test
-  implementation: *id002
+  implementation: *id003
   evidence:
   - docs/benchmarks/m4_gate_d8083dbc_v3.txt (AGENT_BANKING AUC 0.979 [0.960, 0.993]; +0.136 over the best
     single feature on the channel's rows (0.843))
@@ -3349,7 +3386,7 @@ requirements:
   defects: []
   status: DONE
   verification: test
-  implementation: *id002
+  implementation: *id003
   evidence:
   - 'docs/benchmarks/m4_gate_d8083dbc_v3.txt (SHAP coverage for HIGH and MEDIUM 1.000: every flagged row''s
     explanation complete and additive within 0.001)'
@@ -3370,7 +3407,7 @@ requirements:
   - D-05
   status: DONE
   verification: test
-  implementation: *id002
+  implementation: *id003
   evidence:
   - docs/benchmarks/m4_gate_d8083dbc_v3.txt (ECE on 15 equal-mass bins 0.001 [0.001, 0.001]; equal-width
     ECE 0.0014, Brier 0.0027)
@@ -4102,15 +4139,21 @@ requirements:
     detail; Cannot Do: Cannot view raw PII — only masked account token; Key MUI Components: MUI Drawer
     (right 560px); Recharts HorizontalBarChart; MUI Timeline'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation: *id002
   evidence: []
   deviations: []
   notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
     on main implements yet (M8B). Operations: getAlert, getAlertExplanation, getScoringResult. The console
     is built against mocks generated from the contract, and a mock is not evidence: this row stays at
-    most IN_PROGRESS until the M8B operation exists on main and the screen is exercised against it.'
+    most IN_PROGRESS until the M8B operation exists on main and the screen is exercised against it. M8
+    screen 2 (2026-10-18, the investigation drawer at /alerts/$alertId, against contract-example mocks):
+    the SHAP explanation and the transaction detail with the model''s scores and the decision history;
+    masked account name only, no raw PII. Account history and behavioural fingerprint are screen 4. Depends
+    on the analyst API (M8B): getAlert, getScoringResult and getAlertExplanation. Built against mocks
+    generated from the contract, which are not evidence: this row stays at most IN_PROGRESS until those
+    operations exist on main and the screen is exercised against them.'
 - id: UX-ROLE-AN-03
   section: 'v5 12.1 Per-role frontend: ANALYST'
   title: Decision Panel
@@ -5666,11 +5709,17 @@ requirements:
   - FR-04-05
   - UX-DASH-05
   - MOB-COMP-08
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation: *id002
   evidence: []
   deviations: []
+  notes: 'M8 screen 2 (2026-10-18, the investigation drawer at /alerts/$alertId, against contract-example
+    mocks): the first view shows the top 10 (5 on a phone) and one row netting the rest, with all 44 one
+    press away. Not built: the deterministic, localised plain-language templates per feature (PB-132).
+    Depends on the analyst API (M8B): getAlert, getScoringResult and getAlertExplanation. Built against
+    mocks generated from the contract, which are not evidence: this row stays at most IN_PROGRESS until
+    those operations exist on main and the screen is exercised against them.'
 - id: D-46
   section: Build prompt Part B defect register
   title: Leaflet base-map tiles from public servers break the CSP, data residency and 2G usability; per-point

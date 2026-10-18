@@ -220,7 +220,7 @@ Claimed 2026-10-18, after reading every branch: the highest backlog id in use an
 | Kind | Reserved for M8 | Used |
 |---|---|---|
 | ADR | `0080`–`0089` | `0080` (console architecture), `0081` (the `/system/status` proposal, on `m8/system-status-proposal`), `0082` (SRS v5.0 adoption), `0083` (the feed is a card list) |
-| Backlog | `PB-131`–`PB-140` | `PB-131` (only `validate.ts` imports the generated Zod) |
+| Backlog | `PB-131`–`PB-140` | `PB-131` (only `validate.ts` imports the generated Zod), `PB-132` (D-45's plain-language templates) |
 
 ## 9. The analyst screens (from 2026-10-18)
 
@@ -239,7 +239,7 @@ no copy is in it, and `examplesDrift.test.ts` fails if one returns.
 | # | Screen | Route | Contract operations (M8B) | State |
 |---|---|---|---|---|
 | 1 | Alert feed | `/alerts` | listAlerts, getDashboardStats | built, under review |
-| 2 | Alert detail and SHAP | `/alerts/$alertId` | getAlert, getAlertExplanation, getScoringResult | not started |
+| 2 | Alert detail and SHAP | `/alerts/$alertId` | getAlert, getAlertExplanation, getScoringResult | built, under review |
 | 3 | Decision panel | in the detail | decideAlert, undoAlertDecision, escalateAlert | not started |
 | 4 | Account context | in the detail | listAccountTransactions, getBehaviourProfile, getAccountNetwork | not started |
 | 5 | Anomalies | `/anomalies` | listAlerts (queue=anomaly) | not started |
@@ -306,3 +306,31 @@ standard queue as cards with FR-04-03's eight elements, a page at a time.
 - **What `[FR-04-12]` covers here:** axe in jsdom, on a wide and a phone width, finds no
   violations. It does not measure contrast (`tokens.test.ts` checks every colour pair the theme
   draws, D-33) or target size (no layout in jsdom; the 48 px is set in code, not measured).
+
+**Screen 2, the investigation drawer** (`/alerts/$alertId`, a child of the feed's route, so the feed
+stays on screen with its filters). On large screens a 560 px drawer that is not modal; below the
+lg breakpoint a full-screen dialog. Two tabs: the summary (the transaction, the model's scores from
+getScoringResult, the decision history) and the SHAP explanation (getAlertExplanation, read only
+when its tab is opened).
+
+- **The generated schemas for four closed compositions were unusable.** The contract closes
+  `AlertDetail`, `Rule`, `IpAllowlistEntry` and `ApiKeyCreated` by listing every member's
+  property names beside `additionalProperties: false`. The generator turned that into an index
+  signature of `never`: the TypeScript type made every property `never`, so code typed with it
+  compiled unchecked, and the Zod schema rejected the contract's own example, so the development
+  and test check would have failed on every real alert. `scripts/generate-api.ts` now removes the
+  two unsatisfiable fragments, and `src/api/contractExamples.test.ts` parses every contract example
+  with its generated schema (68 examples); restoring the fragment fails it.
+- **SHAP is a table, not Recharts.** FR-04-05 and UX-DASH-05 name Recharts' HorizontalBarChart.
+  The explanation is an accessible table with bars to scale, ranked by effect, with D-45's top 10
+  (5 on a phone) and one netted row for the rest. No dependency is added; like the DataGrid, it is
+  a deviation for the owner to decide.
+- **No plain-language descriptions yet.** D-45 requires deterministic, localised templates per
+  feature, keyed `feature.<name>.increases_risk|decreases_risk` by the scorer: 88 keys in four
+  languages, and wording analysts act on. They do not exist; the drawer shows the feature's name
+  and raw value instead. Filed as PB-132.
+- **Bundle:** the entry is 173,324 bytes of 174,080 (756 left); the drawer is its own 11.5 KB
+  chunk.
+- **Deletion checks:** reading the explanation before its tab opens, dropping the sort, the top-10
+  cut, the 404 no-retry rule (tested with a client that retries), the focus move, Escape, the
+  non-modal drawer, the fallback warning and the direction arrow each fail a test when removed.
