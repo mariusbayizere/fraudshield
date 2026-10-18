@@ -248,7 +248,7 @@ paths:
     get:
       tags: [health]
       operationId: getSystemStatus
-      summary: Degraded modes in force, for the console's system banners (FR-04-12, E.9)
+      summary: Degraded modes in force, for the console's system banners (E.9)
       description: >-
         The list of degraded modes currently in force, and nothing else: no component names,
         versions, hostnames, metrics or queue depths. Any authenticated staff role may read it,

@@ -538,7 +538,7 @@ def test_person_name_schema_defers_to_the_shared_unicode_rule() -> None:
     assert any(not unicodedata.is_normalized("NFC", v["input"]) for v in vectors["accept"])
 
 
-@pytest.mark.req("FR-04-12", "FR-06-05")
+@pytest.mark.req("FR-06-05")
 def test_degraded_modes_are_the_same_list_for_staff_and_for_admins() -> None:
     """The console's banners (E.9) read /system/status; the detail stays on /admin/health."""
     status = SCHEMAS["SystemStatus"]
@@ -550,6 +550,8 @@ def test_degraded_modes_are_the_same_list_for_staff_and_for_admins() -> None:
     assert banners == health, "the two lists must stay identical"
 
     operation = DOC["paths"]["/system/status"]["get"]
+    ok = operation["responses"]["200"]["content"]["application/json"]["schema"]
+    assert ok == {"$ref": "#/components/schemas/SystemStatus"}, "never the admins' SystemHealth"
     assert operation["x-required-roles"] == list(SCHEMAS["Role"]["enum"]), (
         "every staff role sees the banners"
     )

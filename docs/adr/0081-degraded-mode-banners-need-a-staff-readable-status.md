@@ -4,7 +4,7 @@
   an owner decision; on 2026-10-18 the owner directed that, the contract being frozen, it be
   treated as any other contract change: reviewed on its own before it enters the contract.
 - **Date:** 2026-09-22
-- **Requirements affected:** FR-04-12, FR-06-05, E.9 (screen state contract), C.4 (degraded modes)
+- **Requirements affected:** FR-06-05, E.9 (screen state contract), C.4 (degraded modes)
 - **Defects referenced:** D-18, D-29
 
 ## Context
