@@ -10,7 +10,12 @@ import Typography from '@mui/material/Typography';
 import { createLink } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AlertSummary, AlertTier, ShapContribution } from '../api/generated/types.gen';
+import type {
+  AlertStatus,
+  AlertSummary,
+  AlertTier,
+  ShapContribution,
+} from '../api/generated/types.gen';
 import type { AlertSearch } from '../app/alertSearch';
 import { ChannelChip } from '../design-system/components/ChannelChip/ChannelChip';
 import { CountdownChip } from '../design-system/components/CountdownChip/CountdownChip';
@@ -23,6 +28,8 @@ import { useRegion } from '../region/RegionContext';
 import { useFormatLocale } from '../region/formatLocale';
 
 const RouterLink = createLink(Link);
+
+const OPEN: ReadonlySet<AlertStatus> = new Set(['PENDING', 'IN_REVIEW']);
 
 /**
  * The feed's tiers drawn in the risk colours: HIGH and MEDIUM are the risk tiers' high and
@@ -59,11 +66,12 @@ function ReasonPill({ reason }: { reason: ShapContribution }) {
   const { t } = useTranslation('alerts');
   const locale = useFormatLocale();
   const increases = reason.direction === 'INCREASES_RISK';
-  const value = new Intl.NumberFormat(locale, {
-    signDisplay: 'always',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(reason.shap);
+  const digits = { minimumFractionDigits: 2, maximumFractionDigits: 2 };
+  const value = new Intl.NumberFormat(locale, { signDisplay: 'always', ...digits }).format(
+    reason.shap,
+  );
+  // The sentence carries the direction, so it states the size without a sign.
+  const size = new Intl.NumberFormat(locale, digits).format(Math.abs(reason.shap));
   return (
     <Chip
       component="li"
@@ -82,7 +90,7 @@ function ReasonPill({ reason }: { reason: ShapContribution }) {
       }
       aria-label={t(increases ? 'reason.increases' : 'reason.decreases', {
         feature: reason.feature,
-        value,
+        value: size,
       })}
     />
   );
@@ -97,8 +105,9 @@ export function AlertCard({ alert, search }: { alert: AlertSummary; search: Aler
   const { t } = useTranslation('alerts');
   const { region } = useRegion();
   const locale = useFormatLocale();
+  // Only an alert still waiting for a decision counts down; a decided one keeps its deadline.
   const deadline =
-    alert.tier === 'MEDIUM' && alert.review_deadline_at !== null
+    alert.tier === 'MEDIUM' && OPEN.has(alert.status) && alert.review_deadline_at !== null
       ? Date.parse(alert.review_deadline_at)
       : null;
   return (

@@ -46,7 +46,6 @@ const session: TokenResponse = {
   user: analyst,
 };
 
-/** Contract-typed responses for services not merged yet (M5–M7), for development and tests. */
 /**
  * The analyst API's operations (M8B), answered with the contract's own examples, which the
  * contract tests validate against their schemas. They ignore the filters: a mock that filtered
@@ -57,6 +56,7 @@ const alertPage = examples.AlertPage[0] as AlertPage;
 const lastAlertPage: AlertPage = { items: [], next_cursor: null };
 const dashboardStats = examples.DashboardStats[0] as DashboardStats;
 
+/** Development-only responses, typed by the contract, for operations the console reads. */
 export const handlers = [
   http.get('/api/v1/alerts', ({ request }) =>
     HttpResponse.json(new URL(request.url).searchParams.has('cursor') ? lastAlertPage : alertPage, {

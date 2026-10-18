@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { getDashboardStats, listAlerts } from '../api/generated/sdk.gen';
 import type { AlertPage, DashboardStats, ListAlertsData } from '../api/generated/types.gen';
 import { checked } from '../api/validate';
@@ -41,6 +41,25 @@ function parameters(search: AlertSearch): NonNullable<ListAlertsData['query']> {
   return Object.fromEntries(Object.entries(search).filter(([, value]) => value !== undefined));
 }
 
+/**
+ * A 2xx with no usable body (an empty 200, a proxy's page) reaches here as `{}` from the
+ * generated client, and production does not run the schema check (ADR 0080 §3). These are the
+ * fields the screens cannot do without; anything else is the contract tests' to hold.
+ */
+function isAlertPage(body: unknown): body is AlertPage {
+  return typeof body === 'object' && body !== null && Array.isArray((body as AlertPage).items);
+}
+
+function isDashboardStats(body: unknown): body is DashboardStats {
+  const stats = body as DashboardStats | null;
+  return (
+    typeof stats === 'object' &&
+    stats !== null &&
+    typeof stats.high_open === 'number' &&
+    typeof stats.fraud_prevented_today === 'object'
+  );
+}
+
 export async function fetchAlertPage(
   queue: AlertQueue,
   search: AlertSearch,
@@ -51,14 +70,21 @@ export async function fetchAlertPage(
       query: { ...parameters(search), queue, ...(cursor === undefined ? {} : { cursor }) },
     }),
   );
+  if (!isAlertPage(page)) throw new ApiError(undefined);
   return checked('zAlertPage', page);
 }
 
 export async function fetchDashboardStats(): Promise<DashboardStats> {
-  return checked('zDashboardStats', bodyOrThrow(await getDashboardStats()));
+  const stats = bodyOrThrow(await getDashboardStats());
+  if (!isDashboardStats(stats)) throw new ApiError(undefined);
+  return checked('zDashboardStats', stats);
 }
 
-/** One queue's alerts under the URL's filters, a page at a time (cursor paging). */
+/**
+ * One queue's alerts under the URL's filters, a page at a time (cursor paging). The previous
+ * filter's alerts stay on screen, marked busy, while a new filter loads. The 60 s refresh re-reads
+ * every loaded page in turn, so an alert can move between pages: the feed shows it once.
+ */
 export function useAlertFeed(queue: AlertQueue, search: AlertSearch) {
   return useInfiniteQuery({
     queryKey: ['alerts', queue, search],
@@ -66,7 +92,20 @@ export function useAlertFeed(queue: AlertQueue, search: AlertSearch) {
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.next_cursor ?? undefined,
     refetchInterval: FEED_REFRESH_MS,
+    placeholderData: keepPreviousData,
   });
+}
+
+/** The loaded pages' alerts in order, each alert once (the first time it appears). */
+export function distinctAlerts(pages: readonly AlertPage[]): AlertPage['items'] {
+  const seen = new Set<string>();
+  return pages
+    .flatMap((page) => page.items)
+    .filter((alert) => {
+      if (seen.has(alert.alert_id)) return false;
+      seen.add(alert.alert_id);
+      return true;
+    });
 }
 
 export function useDashboardStats() {

@@ -213,7 +213,15 @@
       "feed.noMatchDescription": "machine_draft",
       "feed.shown_one": "machine_draft",
       "feed.shown_other": "machine_draft",
-      "feed.loadMore": "machine_draft"
+      "feed.loadMore": "machine_draft",
+      "filters.fromLink": "machine_draft",
+      "filters.param.transaction_id": "machine_draft",
+      "filters.param.account_id": "machine_draft",
+      "filters.param.amount_min": "machine_draft",
+      "filters.param.amount_max": "machine_draft",
+      "filters.param.from": "machine_draft",
+      "filters.param.to": "machine_draft",
+      "filters.param.analyst_id": "machine_draft"
     }
   },
   "fr": {
@@ -433,7 +441,15 @@
       "feed.shown_one": "machine_draft",
       "feed.shown_many": "machine_draft",
       "feed.shown_other": "machine_draft",
-      "feed.loadMore": "machine_draft"
+      "feed.loadMore": "machine_draft",
+      "filters.fromLink": "machine_draft",
+      "filters.param.transaction_id": "machine_draft",
+      "filters.param.account_id": "machine_draft",
+      "filters.param.amount_min": "machine_draft",
+      "filters.param.amount_max": "machine_draft",
+      "filters.param.from": "machine_draft",
+      "filters.param.to": "machine_draft",
+      "filters.param.analyst_id": "machine_draft"
     }
   },
   "sw": {
@@ -650,7 +666,15 @@
       "feed.noMatchDescription": "machine_draft",
       "feed.shown_one": "machine_draft",
       "feed.shown_other": "machine_draft",
-      "feed.loadMore": "machine_draft"
+      "feed.loadMore": "machine_draft",
+      "filters.fromLink": "machine_draft",
+      "filters.param.transaction_id": "machine_draft",
+      "filters.param.account_id": "machine_draft",
+      "filters.param.amount_min": "machine_draft",
+      "filters.param.amount_max": "machine_draft",
+      "filters.param.from": "machine_draft",
+      "filters.param.to": "machine_draft",
+      "filters.param.analyst_id": "machine_draft"
     }
   }
 }

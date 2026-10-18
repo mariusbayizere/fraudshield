@@ -3,7 +3,7 @@
     "label": "Aujourd'hui en bref",
     "high": "HIGH ouvertes",
     "medium": "MEDIUM ouvertes",
-    "filterTier": "Afficher seulement les alertes {{tier}} ({{count}} ouvertes)",
+    "filterTier": "Alertes {{tier}} ouvertes : {{count}}. Filtrer le fil sur {{tier}}",
     "autoBlocked": "Bloquées automatiquement aujourd'hui",
     "reviewed": "Examinées aujourd'hui",
     "fraudPrevented": "Fraude évitée aujourd'hui",
@@ -22,7 +22,17 @@
     "severalStatuses_many": "{{count}} statuts",
     "severalStatuses_other": "{{count}} statuts",
     "sort": "Ordre",
-    "clear": "Effacer les filtres"
+    "clear": "Effacer les filtres",
+    "fromLink": "Filtres venant du lien",
+    "param": {
+      "transaction_id": "Transaction",
+      "account_id": "Compte",
+      "amount_min": "Montant à partir de",
+      "amount_max": "Montant jusqu'à",
+      "from": "Du",
+      "to": "Jusqu'au",
+      "analyst_id": "Analyste"
+    }
   },
   "sort": {
     "priority": "Priorité : HIGH d'abord",

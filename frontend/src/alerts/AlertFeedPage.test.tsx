@@ -33,19 +33,37 @@ const high = alert({
   masked_account_name: 'A*** K***',
   merchant: 'Kiosk 12',
   channel: 'CARD',
+  // Not the region's currency (Country Z's is ZZZ), and not the example's: the card must show
+  // the currency the alert carries.
+  amount: { amount: '15000', currency: 'KES' },
   review_deadline_at: null,
+  top_reasons: [
+    ...example.top_reasons.slice(0, 1),
+    {
+      feature: 'account_age_days',
+      value: 400,
+      shap: -0.3,
+      direction: 'DECREASES_RISK',
+      template_key: 'feature.account_age_days.low',
+    },
+  ],
 });
 const medium = alert({ review_deadline_at: new Date(Date.now() + 25_000).toISOString() });
 
 interface Served {
   pages?: AlertPage[];
   status?: number;
+  /** A body to answer listAlerts with instead of the pages, as a broken proxy might. */
+  listBody?: unknown;
+  statsBody?: unknown;
 }
 
 /** Answers listAlerts and getDashboardStats; records every listAlerts query string. */
 function serve({
   pages = [{ items: [high, medium], next_cursor: null }],
   status = 200,
+  listBody,
+  statsBody = { ...stats, fraud_prevented_today: { amount: '8450000', currency: 'UGX' } },
 }: Served = {}) {
   const asked: URLSearchParams[] = [];
   vi.stubGlobal('fetch', (request: Request) => {
@@ -57,7 +75,7 @@ function serve({
           headers: { 'Content-Type': 'application/json' },
         }),
       );
-    if (url.pathname.endsWith('/dashboard/stats')) return json(stats);
+    if (url.pathname.endsWith('/dashboard/stats')) return json(statsBody);
     if (url.pathname.endsWith('/alerts')) {
       asked.push(url.searchParams);
       if (status !== 200) {
@@ -71,6 +89,7 @@ function serve({
           status,
         );
       }
+      if (listBody !== undefined) return json(listBody);
       const page = url.searchParams.has('cursor') ? pages[1] : pages[0];
       return json(page);
     }
@@ -117,7 +136,7 @@ describe('the alert feed (FR-04-02, FR-04-03, FR-04-09)', () => {
     const card = await screen.findByRole('article', { name: 'Alert for A*** K***' });
     expect(within(card).getByText('HIGH RISK')).toBeInTheDocument();
     expect(within(card).getByRole('meter')).toBeInTheDocument();
-    expect(within(card).getByText(/15,000/)).toBeInTheDocument();
+    expect(within(card).getByText(/KES\s?15,000/)).toBeInTheDocument();
     expect(within(card).getByText('Card')).toBeInTheDocument();
     expect(within(card).getByRole('link', { name: 'A*** K***' })).toHaveAttribute(
       'href',
@@ -126,10 +145,13 @@ describe('the alert feed (FR-04-02, FR-04-03, FR-04-09)', () => {
     expect(within(card).getByText('Kiosk 12')).toBeInTheDocument();
     expect(within(card).getByText(/UTC\+7/)).toBeInTheDocument();
     const reasons = within(card).getByRole('list', { name: 'Top reasons' });
-    expect(within(reasons).getAllByRole('listitem')).toHaveLength(3);
-    expect(
-      within(reasons).getByLabelText('tx_count_60s increases the risk by +0.90'),
-    ).toBeInTheDocument();
+    expect(within(reasons).getAllByRole('listitem')).toHaveLength(2);
+    const up = within(reasons).getByLabelText('tx_count_60s increases the risk by 0.90');
+    expect(up).toHaveTextContent('+0.90');
+    expect(within(up).getByTestId('ArrowUpwardRoundedIcon')).toBeInTheDocument();
+    const down = within(reasons).getByLabelText('account_age_days lowers the risk by 0.30');
+    expect(down).toHaveTextContent('-0.30');
+    expect(within(down).getByTestId('ArrowDownwardRoundedIcon')).toBeInTheDocument();
 
     const second = screen.getByRole('article', { name: 'Alert for J*** M***' });
     expect(within(second).getByText('REVIEW')).toBeInTheDocument();
@@ -146,11 +168,11 @@ describe('the alert feed (FR-04-02, FR-04-03, FR-04-09)', () => {
     const router = await renderFeed();
     const figures = await screen.findByRole('region', { name: 'Today at a glance' });
     await within(figures).findByText('42');
-    expect(within(figures).getByText(/8,450,000/)).toBeInTheDocument();
+    expect(within(figures).getByText(/UGX\s?8,450,000/)).toBeInTheDocument();
     expect(within(figures).getByText('19.5 s')).toBeInTheDocument();
 
     await userEvent.click(
-      within(figures).getByRole('button', { name: 'Show only HIGH alerts (3 open)' }),
+      within(figures).getByRole('button', { name: 'Open HIGH alerts: 3. Filter the feed by HIGH' }),
     );
     await waitFor(() => {
       expect(router.state.location.search).toEqual({ tier: ['HIGH'] });
@@ -159,7 +181,7 @@ describe('the alert feed (FR-04-02, FR-04-03, FR-04-09)', () => {
       expect(asked.at(-1)?.get('tier')).toBe('HIGH');
     });
     expect(
-      within(figures).getByRole('button', { name: 'Show only HIGH alerts (3 open)' }),
+      within(figures).getByRole('button', { name: 'Open HIGH alerts: 3. Filter the feed by HIGH' }),
     ).toHaveAttribute('aria-pressed', 'true');
   });
 
@@ -181,6 +203,15 @@ describe('the alert feed (FR-04-02, FR-04-03, FR-04-09)', () => {
     const filters = screen.getByRole('region', { name: 'Filters' });
 
     await userEvent.click(within(filters).getByRole('button', { name: 'Mobile money' }));
+    const mobileMoney = within(filters).getByRole('button', { name: 'Mobile money' });
+    expect(mobileMoney).toHaveAttribute('aria-pressed', 'true');
+    // Pressed is shown by a check mark too, not by colour alone (WCAG 1.4.1).
+    expect(within(mobileMoney).getByTestId('DoneRoundedIcon')).toBeInTheDocument();
+    expect(
+      within(within(filters).getByRole('button', { name: 'Card' })).queryByTestId(
+        'DoneRoundedIcon',
+      ),
+    ).toBeNull();
     await userEvent.click(within(filters).getByRole('button', { name: 'USSD' }));
     await userEvent.selectOptions(within(filters).getByLabelText('Status'), 'ESCALATED');
     await waitFor(() => {
@@ -210,6 +241,8 @@ describe('the alert feed (FR-04-02, FR-04-03, FR-04-09)', () => {
     await waitFor(() => {
       expect(router.state.location.search).toEqual({ sort: 'expected_loss' });
     });
+    // The button is gone with the filters; focus stays in the filters, not on the page body.
+    expect(document.activeElement).toBe(filters);
   });
 
   it('says when nothing is open, and when the filters match nothing', async () => {
@@ -227,8 +260,9 @@ describe('the alert feed (FR-04-02, FR-04-03, FR-04-09)', () => {
   it('says plainly when the alerts cannot be read, with the reference, and retries', async () => {
     const asked = serve({ status: 503 });
     await renderFeed();
-    expect(await screen.findByText('The alerts could not be loaded.')).toBeInTheDocument();
-    expect(screen.getByText('9f2c4b1e-7d3a-4c5b-8e6f-0a1b2c3d4e5f')).toBeInTheDocument();
+    const error = await screen.findByRole('alert');
+    expect(error).toHaveTextContent('The alerts could not be loaded.');
+    expect(within(error).getByText('9f2c4b1e-7d3a-4c5b-8e6f-0a1b2c3d4e5f')).toBeInTheDocument();
     const before = asked.length;
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await waitFor(() => {
@@ -290,6 +324,58 @@ describe('the alert feed (FR-04-02, FR-04-03, FR-04-09)', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('[FR-04-09] shows the filters a link carries that this screen has no control for', async () => {
+    const asked = serve();
+    const router = await renderFeed({ tier: ['HIGH', 'ANOMALY'], amount_min: '1000' });
+    await screen.findByRole('article', { name: 'Alert for A*** K***' });
+    expect(asked[0]?.get('amount_min')).toBe('1000');
+    const fromLink = screen.getByRole('list', { name: 'Filters from the link' });
+    const amount = within(fromLink).getByRole('button', { name: 'Amount from: 1000' });
+    expect(within(fromLink).getByRole('button', { name: 'Risk tier: Anomaly' })).toBeVisible();
+
+    await userEvent.click(within(amount).getByTestId('CancelIcon'));
+    await waitFor(() => {
+      expect(router.state.location.search).toEqual({ tier: ['HIGH', 'ANOMALY'] });
+    });
+    await userEvent.click(
+      within(screen.getByRole('list', { name: 'Filters from the link' })).getByTestId('CancelIcon'),
+    );
+    await waitFor(() => {
+      expect(router.state.location.search).toEqual({ tier: ['HIGH'] });
+    });
+    expect(screen.queryByRole('list', { name: 'Filters from the link' })).toBeNull();
+  });
+
+  it('counts down only while an alert waits for a decision', async () => {
+    serve({ pages: [{ items: [{ ...medium, status: 'CONFIRMED_FRAUD' }], next_cursor: null }] });
+    await renderFeed();
+    const card = await screen.findByRole('article', { name: 'Alert for J*** M***' });
+    expect(within(card).getByText('Confirmed fraud')).toBeInTheDocument();
+    expect(within(card).queryByRole('timer')).toBeNull();
+  });
+
+  it('shows an alert once when a refresh moves it to a later page', async () => {
+    serve({
+      pages: [
+        { items: [high], next_cursor: 'eyJvZmZzZXQiOjUwfQ' },
+        { items: [high, medium], next_cursor: null },
+      ],
+    });
+    await renderFeed();
+    await screen.findByRole('article', { name: 'Alert for A*** K***' });
+    await userEvent.click(screen.getByRole('button', { name: 'Load more' }));
+    await screen.findByRole('article', { name: 'Alert for J*** M***' });
+    expect(screen.getAllByRole('article', { name: 'Alert for A*** K***' })).toHaveLength(1);
+    expect(screen.getByText('2 alerts shown')).toBeInTheDocument();
+  });
+
+  it('treats a success with no usable body as a failure, on the feed and the figures', async () => {
+    serve({ listBody: {}, statsBody: {} });
+    await renderFeed();
+    expect(await screen.findByRole('alert')).toHaveTextContent('The alerts could not be loaded.');
+    expect(await screen.findByText("Today's figures could not be loaded.")).toBeInTheDocument();
   });
 
   it.each([

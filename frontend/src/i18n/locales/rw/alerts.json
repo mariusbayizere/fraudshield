@@ -3,7 +3,7 @@
     "label": "Uko bihagaze uyu munsi",
     "high": "HIGH zifunguye",
     "medium": "MEDIUM zifunguye",
-    "filterTier": "Erekana gusa imenyesha rya {{tier}} ({{count}} zifunguye)",
+    "filterTier": "Imenyesha rya {{tier}} rifunguye: {{count}}. Yungurura urutonde kuri {{tier}}",
     "autoBlocked": "Zahagaritswe mu buryo bwikora uyu munsi",
     "reviewed": "Zasuzumwe uyu munsi",
     "fraudPrevented": "Uburiganya bwakumiriwe uyu munsi",
@@ -21,7 +21,17 @@
     "severalStatuses_one": "Imiterere {{count}}",
     "severalStatuses_other": "Imiterere {{count}}",
     "sort": "Uko bikurikirana",
-    "clear": "Siba muyunguruzi"
+    "clear": "Siba muyunguruzi",
+    "fromLink": "Muyunguruzi ziturutse ku murongo",
+    "param": {
+      "transaction_id": "Igikorwa",
+      "account_id": "Konti",
+      "amount_min": "Amafaranga guhera kuri",
+      "amount_max": "Amafaranga kugeza kuri",
+      "from": "Guhera",
+      "to": "Kugeza",
+      "analyst_id": "Umusesenguzi"
+    }
   },
   "sort": {
     "priority": "Iby'ibanze: HIGH mbere",

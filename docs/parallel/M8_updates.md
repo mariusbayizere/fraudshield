@@ -263,4 +263,19 @@ standard queue as cards with FR-04-03's eight elements, a page at a time.
   the anomaly frame, the several-statuses option, the correlation ID and the countdown each fail a
   test when removed. Dropping an emptied list in `toggled` fails no page test, because the
   route's validation drops it too; `FeedFilters.test.ts` tests it as a unit.
+- **Independent review (2026-10-18): CHANGES_REQUIRED, 2 MAJOR, 8 MINOR, 6 NIT; fixed in the
+  next commit.** MAJOR: the filter chips were 32 px with pressed shown by colour alone (now 48 px,
+  outlined or filled with a check mark, and the selects full height); the FR-04-03 row said
+  "tested" while deleting the SHAP arrows or hard-coding the currency failed no test (now asserted,
+  with a fixture whose currency is neither the region's nor the example's). MINOR, all fixed: an
+  empty 2xx body crashed the feed and the figures; a refresh could show an alert twice; a decided
+  MEDIUM alert kept counting down; focus fell to the page after "Clear filters", and the count was
+  not announced reliably (one live region now, previous results kept while a filter loads);
+  filters a link carried with no control here were invisible (now removable chips); two register
+  notes overstated; `aria-pressed` was untested; every catalogue loaded at start (now `common` and
+  `designSystem` only, the rest on the route that asks). Not changed: one timer per countdown chip,
+  and filter changes replace the history entry rather than adding one.
+- **What `[FR-04-12]` covers here:** axe in jsdom, on a wide and a phone width, finds no
+  violations. It does not measure contrast (`tokens.test.ts` checks every colour pair the theme
+  draws, D-33) or target size (no layout in jsdom; the 48 px is set in code, not measured).
 

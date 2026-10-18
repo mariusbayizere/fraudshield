@@ -11,9 +11,18 @@ export const ENDONYM: Record<Language, string> = {
   sw: 'Kiswahili',
 };
 
-/** Namespaces load lazily, per route (D-39). `common` and `designSystem` load at start. */
+/** Every catalogue namespace. Each loads as its own chunk (D-39). */
 export const NAMESPACES = ['common', 'designSystem', 'auth', 'alerts'] as const;
 export type Namespace = (typeof NAMESPACES)[number];
+
+/**
+ * The namespaces loaded at start, which the shell and the screen states need. The others load
+ * when a route's first useTranslation(namespace) asks for them, under the app's Suspense.
+ */
+export const STARTUP_NAMESPACES = [
+  'common',
+  'designSystem',
+] as const satisfies readonly Namespace[];
 
 export function isLanguage(value: unknown): value is Language {
   return typeof value === 'string' && (LANGUAGES as readonly string[]).includes(value);

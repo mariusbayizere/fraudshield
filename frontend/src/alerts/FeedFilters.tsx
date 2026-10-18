@@ -1,8 +1,10 @@
+import DoneRounded from '@mui/icons-material/DoneRounded';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import { useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AlertStatus } from '../api/generated/types.gen';
 import { ALERT_SORTS, ALERT_STATUSES, type AlertSearch } from '../app/alertSearch';
@@ -31,9 +33,48 @@ export function isFiltered(search: AlertSearch): boolean {
   return Object.entries(search).some(([key, value]) => key !== 'sort' && value !== undefined);
 }
 
+/** The filters a link can carry that this screen has no control for (they belong to /search). */
+export const LINK_ONLY = [
+  'transaction_id',
+  'account_id',
+  'amount_min',
+  'amount_max',
+  'from',
+  'to',
+  'analyst_id',
+] as const;
+
+/**
+ * A filter that is on or off. Pressed is shown by shape and a check mark as well as colour
+ * (WCAG 1.4.1), and the chip is a 48 px target (05B A.7).
+ */
+function ToggleChip({
+  label,
+  pressed,
+  onToggle,
+}: {
+  label: string;
+  pressed: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <Chip
+      label={label}
+      aria-pressed={pressed}
+      variant={pressed ? 'filled' : 'outlined'}
+      color={pressed ? 'primary' : 'default'}
+      {...(pressed ? { icon: <DoneRounded aria-hidden /> } : {})}
+      onClick={onToggle}
+      sx={{ minHeight: 48, borderRadius: 6 }}
+    />
+  );
+}
+
 /**
  * The feed's filters (FR-04-09, UX-ROLE-AN-01: tier, channel, status), each one a listAlerts
- * parameter carried in the URL. Dates, amounts and identifiers are the search screen's.
+ * parameter carried in the URL. Filters a shared link carries that have no control here (a date,
+ * an amount, an identifier, or a tier this queue does not offer) are shown, each removable, so
+ * nothing narrows the feed unseen.
  */
 export function FeedFilters({
   search,
@@ -47,24 +88,34 @@ export function FeedFilters({
 }) {
   const { t } = useTranslation('alerts');
   const { t: tDesign } = useTranslation('designSystem');
+  const region = useRef<HTMLElement>(null);
   // A filter set to undefined is dropped by the route's validation, so it leaves the URL.
   const set = (patch: Partial<AlertSearch>) => {
     onChange({ ...search, ...patch });
   };
+  const offered: readonly string[] = tiers;
+  const otherTiers = (search.tier ?? []).filter((tier) => !offered.includes(tier));
+  const linkOnly = LINK_ONLY.filter((key) => search[key] !== undefined);
 
   return (
-    <Stack component="section" aria-label={t('filters.label')} spacing={1.5} sx={{ mb: 2 }}>
+    <Stack
+      ref={region}
+      component="section"
+      tabIndex={-1}
+      aria-label={t('filters.label')}
+      spacing={1.5}
+      sx={{ mb: 2, '&:focus': { outline: 'none' } }}
+    >
       <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
         <Typography component="span" variant="body2" color="text.secondary">
           {t('filters.tier')}
         </Typography>
         {tiers.map((tier) => (
-          <Chip
+          <ToggleChip
             key={tier}
             label={t(`tier.${tier}`)}
-            aria-pressed={search.tier?.includes(tier) ?? false}
-            color={search.tier?.includes(tier) === true ? 'primary' : 'default'}
-            onClick={() => {
+            pressed={search.tier?.includes(tier) ?? false}
+            onToggle={() => {
               set({ tier: toggled(search.tier, tier) });
             }}
           />
@@ -75,21 +126,52 @@ export function FeedFilters({
           {t('filters.channel')}
         </Typography>
         {CHANNELS.map((channel) => (
-          <Chip
+          <ToggleChip
             key={channel}
             label={tDesign(`channel.${channel}`)}
-            aria-pressed={search.channel?.includes(channel) ?? false}
-            color={search.channel?.includes(channel) === true ? 'primary' : 'default'}
-            onClick={() => {
+            pressed={search.channel?.includes(channel) ?? false}
+            onToggle={() => {
               set({ channel: toggled(search.channel, channel) });
             }}
           />
         ))}
       </Stack>
+      {otherTiers.length + linkOnly.length === 0 ? null : (
+        <Stack
+          component="ul"
+          direction="row"
+          spacing={1}
+          useFlexGap
+          aria-label={t('filters.fromLink')}
+          sx={{ flexWrap: 'wrap', p: 0, m: 0, listStyle: 'none' }}
+        >
+          {otherTiers.map((tier) => (
+            <li key={`tier-${tier}`}>
+              <Chip
+                label={`${t('filters.tier')}: ${t(`tier.${tier}`)}`}
+                onDelete={() => {
+                  set({ tier: toggled(search.tier, tier) });
+                }}
+                sx={{ minHeight: 48, borderRadius: 6 }}
+              />
+            </li>
+          ))}
+          {linkOnly.map((key) => (
+            <li key={key}>
+              <Chip
+                label={`${t(`filters.param.${key}`)}: ${String(search[key])}`}
+                onDelete={() => {
+                  set({ [key]: undefined });
+                }}
+                sx={{ minHeight: 48, borderRadius: 6 }}
+              />
+            </li>
+          ))}
+        </Stack>
+      )}
       <Stack direction="row" spacing={2} useFlexGap sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
         <TextField
           select
-          size="small"
           label={t('filters.status')}
           value={statusValue(search.outcome)}
           onChange={(event) => {
@@ -113,7 +195,6 @@ export function FeedFilters({
         </TextField>
         <TextField
           select
-          size="small"
           label={t('filters.sort')}
           value={search.sort ?? 'priority'}
           onChange={(event) => {
@@ -133,6 +214,8 @@ export function FeedFilters({
           <Button
             onClick={() => {
               onChange(search.sort === undefined ? {} : { sort: search.sort });
+              // The button disappears with the filters; focus stays in the filters, not on <body>.
+              region.current?.focus();
             }}
             sx={{ minHeight: 48 }}
           >

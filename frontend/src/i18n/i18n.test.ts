@@ -10,6 +10,16 @@ describe('createI18n', () => {
     expect(i18n.dir()).toBe('ltr');
   });
 
+  it("loads only the shell's namespaces at start; a screen's load when asked (D-39)", async () => {
+    const i18n = await createI18n('en');
+    expect(i18n.hasLoadedNamespace('common')).toBe(true);
+    expect(i18n.hasLoadedNamespace('designSystem')).toBe(true);
+    expect(i18n.hasLoadedNamespace('auth')).toBe(false);
+    expect(i18n.hasLoadedNamespace('alerts')).toBe(false);
+    await i18n.loadNamespaces('alerts');
+    expect(i18n.t('feed.loadMore', { ns: 'alerts' })).toBe('Load more');
+  });
+
   it('falls back to English for a string a language lacks', async () => {
     const i18n = await createI18n('sw');
     expect(i18n.t('app.name')).toBe('FraudShield');

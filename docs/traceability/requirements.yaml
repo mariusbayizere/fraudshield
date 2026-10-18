@@ -743,7 +743,8 @@ requirements:
     the M8B operation exists on main and the screen is exercised against it. M8 screen 1 (2026-10-18,
     the alert feed at /alerts, against contract-example mocks): the card shows all eight elements (risk
     badge, gauge, amount and currency, channel, masked name, merchant, time, top-3 SHAP pills with feature,
-    arrow and value); tested.'
+    arrow and value); a test asserts each, including the arrow per direction and the currency the alert
+    carries (a fixture whose currency is neither the region''s nor the example''s).'
 - id: FR-04-04
   section: 3.4 FR-04 Analyst dashboard
   title: One-click CONFIRM FRAUD or MARK LEGITIMATE with mandatory comment field (min 10 characters);
@@ -1999,7 +2000,9 @@ requirements:
     exists on main and the screen is exercised against it. M8 screen 1 (2026-10-18, the alert feed at
     /alerts, against contract-example mocks): today''s seven figures above the feed; the HIGH and MEDIUM
     counts toggle the tier filter. Not built: sticky placement, real-time updates (no channel in the contract),
-    the animated amount.'
+    the animated amount. Deviation: the row''s "currency formatted with RWF prefix" is not followed; the
+    amount carries its own currency code (ADR 0023, no currency named in source), so it reads RWF only
+    where the data is in RWF.'
 - id: UX-DASH-02
   section: 5.4 Analyst dashboard components
   title: Alert Feed (MUI DataGrid virtualised)
@@ -4073,8 +4076,9 @@ requirements:
     on main implements yet (M8B). Operations: listAlerts. The console is built against mocks generated
     from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until the M8B operation
     exists on main and the screen is exercised against it. M8 screen 1 (2026-10-18, the alert feed at
-    /alerts, against contract-example mocks): filter by risk tier and status; date is on /search. Not
-    built: "own assigned alerts" only, which is the server''s to enforce in listAlerts (M8B).'
+    /alerts, against contract-example mocks): filter by risk tier and status. Not built: the date filter
+    (the /search screen, not started); "own assigned alerts" only, which is the server''s to enforce in
+    listAlerts (M8B).'
 - id: UX-ROLE-AN-02
   section: 'v5 12.1 Per-role frontend: ANALYST'
   title: Alert Detail

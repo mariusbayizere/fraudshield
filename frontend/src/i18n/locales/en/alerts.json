@@ -3,7 +3,7 @@
     "label": "Today at a glance",
     "high": "HIGH open",
     "medium": "MEDIUM open",
-    "filterTier": "Show only {{tier}} alerts ({{count}} open)",
+    "filterTier": "Open {{tier}} alerts: {{count}}. Filter the feed by {{tier}}",
     "autoBlocked": "Auto-blocked today",
     "reviewed": "Reviewed today",
     "fraudPrevented": "Fraud prevented today",
@@ -21,7 +21,17 @@
     "severalStatuses_one": "{{count}} status",
     "severalStatuses_other": "{{count}} statuses",
     "sort": "Order",
-    "clear": "Clear filters"
+    "clear": "Clear filters",
+    "fromLink": "Filters from the link",
+    "param": {
+      "transaction_id": "Transaction",
+      "account_id": "Account",
+      "amount_min": "Amount from",
+      "amount_max": "Amount up to",
+      "from": "From",
+      "to": "Until",
+      "analyst_id": "Analyst"
+    }
   },
   "sort": {
     "priority": "Priority: HIGH first",

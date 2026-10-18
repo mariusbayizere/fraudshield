@@ -3,7 +3,7 @@
     "label": "Hali ya leo kwa ufupi",
     "high": "HIGH zilizo wazi",
     "medium": "MEDIUM zilizo wazi",
-    "filterTier": "Onyesha arifa za {{tier}} pekee ({{count}} zilizo wazi)",
+    "filterTier": "Arifa za {{tier}} zilizo wazi: {{count}}. Chuja orodha kwa {{tier}}",
     "autoBlocked": "Zimezuiwa kiotomatiki leo",
     "reviewed": "Zimekaguliwa leo",
     "fraudPrevented": "Ulaghai uliozuiwa leo",
@@ -21,7 +21,17 @@
     "severalStatuses_one": "Hali {{count}}",
     "severalStatuses_other": "Hali {{count}}",
     "sort": "Mpangilio",
-    "clear": "Futa vichujio"
+    "clear": "Futa vichujio",
+    "fromLink": "Vichujio kutoka kwenye kiungo",
+    "param": {
+      "transaction_id": "Muamala",
+      "account_id": "Akaunti",
+      "amount_min": "Kiasi kuanzia",
+      "amount_max": "Kiasi hadi",
+      "from": "Kuanzia",
+      "to": "Hadi",
+      "analyst_id": "Mchambuzi"
+    }
   },
   "sort": {
     "priority": "Kipaumbele: HIGH kwanza",

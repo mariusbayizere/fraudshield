@@ -1,6 +1,6 @@
 import i18next, { type BackendModule, type i18n as I18n } from 'i18next';
 import { initReactI18next } from 'react-i18next';
-import { DEFAULT_LANGUAGE, LANGUAGES, NAMESPACES, type Language } from './languages';
+import { DEFAULT_LANGUAGE, LANGUAGES, STARTUP_NAMESPACES, type Language } from './languages';
 
 type Catalogue = Record<string, unknown>;
 const catalogues = import.meta.glob<Catalogue>('./locales/*/*.json', { import: 'default' });
@@ -35,7 +35,7 @@ export async function createI18n(language: Language): Promise<I18n> {
       lng: language,
       fallbackLng: DEFAULT_LANGUAGE,
       supportedLngs: LANGUAGES,
-      ns: NAMESPACES,
+      ns: [...STARTUP_NAMESPACES],
       defaultNS: 'common',
       // React escapes what it renders.
       interpolation: { escapeValue: false },

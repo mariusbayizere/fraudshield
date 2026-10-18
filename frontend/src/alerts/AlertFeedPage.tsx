@@ -8,7 +8,7 @@ import type { AlertSearch } from '../app/alertSearch';
 import { EmptyState, ErrorState } from '../design-system/components/ScreenStates/ScreenStates';
 import { AlertCard } from './AlertCard';
 import { FeedFilters, isFiltered, toggled } from './FeedFilters';
-import { ApiError, useAlertFeed } from './queries';
+import { ApiError, distinctAlerts, useAlertFeed } from './queries';
 import { StatsHeader } from './StatsHeader';
 
 const route = getRouteApi('/shell/alerts');
@@ -33,14 +33,20 @@ export default function AlertFeedPage() {
   const change = (next: AlertSearch) => {
     void navigate({ to: '/alerts', search: next, replace: true });
   };
-  const alerts = feed.data?.pages.flatMap((page) => page.items) ?? [];
+  const alerts = distinctAlerts(feed.data?.pages ?? []);
+  // One live region, always mounted, so a screen reader hears each new count or state.
+  const announcement = feed.isPending
+    ? t('feed.loading')
+    : feed.isError
+      ? t('feed.error')
+      : t('feed.shown', { count: alerts.length });
 
   let body;
   if (feed.isPending) {
     body = (
-      <Stack role="status" direction="row" spacing={2} sx={{ alignItems: 'center', py: 4 }}>
+      <Stack direction="row" spacing={2} sx={{ alignItems: 'center', py: 4 }}>
         <CircularProgress size={24} aria-hidden />
-        <Typography>{t('feed.loading')}</Typography>
+        <Typography aria-hidden>{t('feed.loading')}</Typography>
       </Stack>
     );
   } else if (feed.isError) {
@@ -64,9 +70,6 @@ export default function AlertFeedPage() {
   } else {
     body = (
       <>
-        <Typography role="status" variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          {t('feed.shown', { count: alerts.length })}
-        </Typography>
         <Stack component="ol" spacing={1.5} sx={{ p: 0, m: 0, listStyle: 'none' }}>
           {alerts.map((alert) => (
             <li key={alert.alert_id}>
@@ -103,6 +106,9 @@ export default function AlertFeedPage() {
       />
       <FeedFilters search={search} tiers={['HIGH', 'MEDIUM']} onChange={change} />
       <section aria-label={t('feed.list')} aria-busy={feed.isFetching}>
+        <Typography role="status" variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+          {announcement}
+        </Typography>
         {body}
       </section>
     </>
