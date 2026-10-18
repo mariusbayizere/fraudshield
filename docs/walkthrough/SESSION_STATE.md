@@ -33,8 +33,9 @@ M11 waits until M8, M9, M10 and the measurements are done, so it folds in the fi
 |---|---|---|
 | 1 | **The M4 tail** | Rebase `m4/generalisation`'s 12 commits onto `main`, get ci green at job level, merge. Small, no Docker |
 | 2 | **`m6/featurestore-fallback`** | Merge `main` into it, fix its red java job, green at job level, merge. PB-69 must land before M10 measures NFR-REL-03 |
-| 3 | **M8** | Rebase on `main`, then build the analyst screens. The analyst API question below comes first |
+| 3 | **M8** | Rebase on `main`, then build the analyst screens, against mocks generated from the contract |
 | 4 | **M9** | Infrastructure, with the owner's decisions already recorded in `docs/parallel/M9_updates.md` |
+| 4b | **M8B** | The analyst API, alongside M9; on `main` before M10 starts (`docs/parallel/M8B_updates.md`) |
 | 5 | **M10** | The verification campaign, once M6 to M9 are all on `main` |
 | 6 | **M11** | The paper, with final numbers |
 | 7 | **M12** | The final audit and v1.0.0 |

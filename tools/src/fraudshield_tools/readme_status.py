@@ -17,7 +17,7 @@ import sys
 
 import yaml
 
-from fraudshield_tools import REPO_ROOT
+from fraudshield_tools import REPO_ROOT, traceability
 
 README = REPO_ROOT / "README.md"
 MILESTONES = REPO_ROOT / "docs" / "traceability" / "milestones.yaml"
@@ -28,7 +28,7 @@ STATUS = re.compile(r"^>\s*\*\*Project status:\s*(M\d+B?)\b", re.MULTILINE)
 def current_milestone() -> str:
     register = yaml.safe_load(MILESTONES.read_text(encoding="utf-8"))
     current = register.get("current")
-    if not isinstance(current, str) or not re.fullmatch(r"M\d+B?", current):
+    if not isinstance(current, str) or current not in traceability.MILESTONES:
         raise ValueError(
             f"{MILESTONES.name}: 'current' must be a milestone like M2, got {current!r}"
         )

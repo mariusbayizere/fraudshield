@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from fraudshield_tools import readme_status
@@ -41,3 +43,18 @@ def test_a_status_line_naming_m8b_is_read_whole(monkeypatch: pytest.MonkeyPatch)
     found = readme_status.STATUS.search("> **Project status: M8B — the analyst API.**")
     assert found is not None
     assert found.group(1) == "M8B"
+
+
+@pytest.mark.parametrize(("current", "accepted"), [("M8B", True), ("M7", True), ("M9B", False)])
+def test_current_must_be_a_known_milestone(
+    current: str, accepted: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The register's "current" is checked against the milestone list, M8B included."""
+    register = tmp_path / "milestones.yaml"
+    register.write_text(f"current: {current}\ncompleted: []\n", encoding="utf-8")
+    monkeypatch.setattr(readme_status, "MILESTONES", register)
+    if accepted:
+        assert readme_status.current_milestone() == current
+    else:
+        with pytest.raises(ValueError, match="must be a milestone"):
+            readme_status.current_milestone()

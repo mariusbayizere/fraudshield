@@ -23,7 +23,8 @@ services. Suggested order:
 
 M8 builds the console against mocks generated from the frozen contract. **A mock generated from
 the contract is not evidence that the API works.** M8's console passing against mocks says nothing
-about the real endpoints. Therefore:
+about the real endpoints, and M8's rows must say so rather than read DONE. What follows is derived
+from that clause, not quoted:
 - **M8's own rows:** any row whose criterion depends on the analyst API must say so in its notes
   rather than read DONE. Its status stays IN_PROGRESS until the M8B endpoint behind it exists and
   the console is exercised against it.
@@ -35,7 +36,7 @@ about the real endpoints. Therefore:
 | Row | What remains | Backlog |
 |---|---|---|
 | NFR-SEC-03 | The inspector test that every analyst endpoint shows only masked tokens | PB-114 |
-| FR-06-06 | Each audit type asserted from a real action. Six types (ANALYST_DECISION, SENIOR_OVERRIDE, THRESHOLD_CHANGE, RULE_CHANGE, MODEL_LIFECYCLE, REGULATORY_REPORT) are emitted end to end only by these endpoints. Also a test that every write endpoint is audited | PB-109 |
+| FR-06-06 | Each audit type asserted from a real action. Six types (ANALYST_DECISION, SENIOR_OVERRIDE, THRESHOLD_CHANGE, RULE_CHANGE, MODEL_LIFECYCLE, REGULATORY_REPORT) are emitted end to end only by these endpoints. Two more, AUTO_BLOCK and CUSTOMER_VERIFICATION, are emitted by M6 code with no end-to-end assertion; they go with the row, so M8B asserts them through the assembled application. Also a test that every write endpoint is audited | PB-109 |
 
 ## Acceptance carried from PB-121
 
