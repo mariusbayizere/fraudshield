@@ -1,4 +1,4 @@
-# M8 updates (branch `m8/frontend`)
+# M8 updates (branch `m8/frontend`, rebased onto `main` as `m8/frontend-rebase`)
 
 Written by the M8 agent for the owner and the M5, M6, M7 and M9 agents. M8 owns `frontend/` and
 the root `design-tokens/` (the repository layout assigns it to M8). Shared files
@@ -7,7 +7,7 @@ the root `design-tokens/` (the repository layout assigns it to M8). Shared files
 proposed below. M8's ADRs are new files numbered from 0080, following M7's 0070 and M9's 0090
 blocks.
 
-**Status: not reviewed, not merged.** No requirement moves to `DONE` before Principal Review
+**Status: not reviewed, not merged.** Rebased onto `main` at `a7f0528` on 2026-10-18 (section 7). No requirement moves to `DONE` before Principal Review
 (Part I) and merge. The M8 gate is **not** met.
 
 ## 1. What exists
@@ -21,7 +21,7 @@ blocks.
 | Region, i18n, RTL | 66c7df5, a3c871f | Fixes d8e269f's breach of ADR 0023 (a country's currency, locale and zone named in TypeScript) and its float money. Region data comes from the country packs; en/rw/fr/sw catalogues (all non-English `machine_draft`); RTL Emotion cache; lint rejects physical left/right properties. |
 | API client | a9a0a2c | Generated from `contracts/openapi` by `@hey-api/openapi-ts`; `apiDrift.test.ts` regenerates and fails on any difference (R2). |
 | App shell, routing, PWA | 6f1db49, 914e4b8 | Every E.9 route; drawer / bottom bar (05B A.7); PWA precaches the shell only; Tailwind without Preflight; self-hosted Inter. `productionBundle.build.test.ts` checks R1, R3, R4, R8 and D-39 on two production builds. |
-| Degraded-mode banners | 46893d7, f537c0f | ADR 0081's `GET /system/status`, polled every 60 s; contract test pins the payload to the list; the shell shows one banner per mode. |
+| Degraded-mode banners | 46893d7, f537c0f | **Withdrawn 2026-10-18** (section 4): the contract change is a separate proposal under review, and the shell no longer polls an operation the contract does not have. The `SystemBanner` component and its tests stay. |
 | Bundle architecture | cf4cb8f | The shell is a lazy route; initial JS 158.3 KB against a 170 KB budget, no lazy chunk over 120 KB, both enforced on a real build (ADR 0080 §10). |
 | Auth: session and sign-in | cb5b02b, d160b3b | Token in memory only, CSRF double-submit, every contract failure answered, guard with a safe "next". |
 | Auth: registration | 2d374f2, dd0cb84 | SRS 5.3 fields, D-24 split, FR-07-07 password rule from the shared vectors (all 25 are tests), E.164 phone, availability checks. |
@@ -89,33 +89,29 @@ yours; a one-paragraph amendment pointing at ADR 0082 and D-54 would close the l
 3. **Helm is rejected** (`v5_decisions.md` row 8): kustomize stays, because it is built, validated
    by kubeconform and covered by 24 policy tests. The deviation is recorded there.
 
-## 4. For the M6 agent: implement GET /system/status
+## 4. GET /system/status: withdrawn from this branch, proposed on its own
 
-The owner approved a contract change (ADR 0081, commit 46893d7). **M6 owns the server side**,
-because the decision engine owns degraded state (C.4).
+**What happened.** On 2026-09-22 this branch added `GET /system/status` to the contract (46893d7,
+with ADR 0081, which records it as an owner decision) and the console polled it (f537c0f). The
+request to M6 to implement it was never acted on: **`main` has no such endpoint**, and nothing on
+`main` exposes the degraded modes to staff (the `DegradedMode` in `backend/decision` is internal
+state, and `GET /admin/health` is not implemented either).
 
-**Requirement.** `GET /api/v1/system/status`, staff bearer token, any of ANALYST,
-SENIOR_ANALYST, RISK_OFFICER, ADMIN. Response 200:
+**The owner's direction (2026-10-18).** The contract is frozen, so the addition is treated as any
+other contract change: a reviewed proposal, not something a rebase brings back. Accordingly:
 
-```json
-{ "degraded_modes": ["ML_UNAVAILABLE", "DEGRADED_MODE", "KAFKA_SPOOLING", "REALTIME_PAUSED"] }
-```
+- the rebase dropped 46893d7, so the contract, its authorisation-matrix row and its test are
+  unchanged from `main`;
+- the console no longer reads the endpoint: `systemStatus.ts` and its test are removed, the shell
+  renders no banners, the generated client matches `main`'s contract again, and the development
+  mock is gone (one commit at the top of the branch);
+- the proposal is on its own branch, `m8/system-status-proposal`, cut from `main`: the contract
+  change, ADR 0081 marked **Proposed**, and its contract test, for an independent review.
 
-- The body carries **only** that list: no component names, versions, hostnames, metrics or queue
-  depths. `additionalProperties: false`, `degraded_modes` required, empty array when healthy.
-- The values are the ones the platform already tracks for `GET /admin/health`: the ML circuit
-  breaker open (`ML_UNAVAILABLE`, C.4's Resilience4j path), the Redis-down database fallback
-  (`DEGRADED_MODE`), the Kafka spool in use (`KAFKA_SPOOLING`) and real-time delivery paused
-  (`REALTIME_PAUSED`).
-- Every console polls it every 60 seconds, so it must be cheap: read a cached in-memory flag set,
-  do not fan out health checks per request.
-- 401 and 403 as every staff endpoint; RFC 9457 problem details by default.
-- The contract, its authorisation-matrix row and the test
-  (`test_degraded_modes_are_the_same_list_for_staff_and_for_admins`) are already on
-  `m8/frontend`. `/admin/health` is unchanged.
-
-Until it exists, the console's development mocks serve it (`VITE_FS_DEGRADED` exercises the
-banners) and the banner area stays empty against a real backend.
+**Consequence.** The degraded-mode banners E.9 puts above every screen have nothing to read. No
+register row owns them by name, so none is marked; any row or gate criterion that cites the
+banners is not DONE until the proposal is accepted, an implementation exists on `main` and the
+console reads it.
 
 ### Also for M6, during the merge: name the CSRF cookie in the contract
 
@@ -185,3 +181,31 @@ contract change was made only on the owner's explicit instruction.
   change too.
 - The risk bands are D-02's (flag 0.60, block 0.85, both inclusive), in
   `frontend/src/design-system/risk.ts`.
+
+## 7. Rebase onto main (2026-10-18)
+
+`m8/frontend` (40f5bdc, 37 commits on `72e7790`) was rebased onto `main` at `a7f0528`
+(`m7-complete`, the M4 tail, M7's carries and PB-69). The original is kept as
+`m8/frontend-pre-rebase-40f5bdc`.
+
+- **Dropped:** 46893d7, the `/system/status` contract change (section 4).
+- **Conflict, 495a2dc (SRS v5.0 decisions):** `traceability.py`'s milestone list now has both
+  `main`'s M8B (after M9, before M10) and this branch's M13 (last, as this branch had it). Build
+  prompt D.3 lists M13 between M11 and M12; the register sorts it after M12. That order is the
+  owner's to settle. The register was taken from `main` and re-seeded: 305 rows, every progress
+  field on `main` unchanged, this branch's 47 new rows and 22 defect links reproduced exactly.
+- **Alert filters follow the contract** (owner, 2026-10-18: the contract wins). The URL filters
+  were a free-text `q` that `listAlerts` has no parameter for, one tier from the risk tiers
+  (`high`/`medium`/`low`, where the feed's tiers are `HIGH`/`MEDIUM`/`ANOMALY`) and one channel.
+  They are now exactly `listAlerts`' filters with the contract's names and types: tier, channel
+  and outcome as lists without repeats, transaction and account, amount range, date range,
+  analyst and sort. A test fails if the filters and the generated `listAlerts` query type differ,
+  or if the value lists differ from the contract's enums. **No free text is needed:** FR-04-09
+  names exactly the filters `listAlerts` takes, so `/search` is those filters, and no contract
+  change is proposed.
+- **Rows that depend on the analyst API say so in their notes** (owner, 2026-10-18): FR-04-02 to
+  FR-04-11, UX-DASH-01 to 09, UX-ROLE-AN-01 to 04, UX-ROLE-SN-01 to 04 and TEST-06, each naming the
+  contract operations it needs. Two have **no contract operation at all**: UX-ROLE-SN-02 (alert
+  reassignment) and UX-ROLE-SN-04 (team performance); each needs a reviewed contract change for
+  M8B first.
+
