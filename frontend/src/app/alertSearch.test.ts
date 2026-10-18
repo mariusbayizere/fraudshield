@@ -68,6 +68,17 @@ describe('alert feed filters in the URL (FR-04-09)', () => {
     });
   });
 
+  it('drops a typed amount too large to keep its digits, rather than changing it', () => {
+    expect(
+      alertSearch.parse(
+        defaultParseSearch('?amount_min=12345678901234.5678&amount_max=99999999999'),
+      ),
+    ).toEqual({ amount_max: '99999999999' });
+    expect(alertSearch.parse({ amount_min: '12345678901234.5678' })).toEqual({
+      amount_min: '12345678901234.5678',
+    });
+  });
+
   it('has no free-text search: listAlerts has no such parameter', () => {
     expect(alertSearch.parse({ q: '4821' })).toEqual({});
   });
