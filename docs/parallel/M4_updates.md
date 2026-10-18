@@ -82,3 +82,10 @@ volume.**
 
 `docs/research/paper/contributions.md` (M4's file) carries the updated finding, and ADR 0031's
 2026-09-24 amendment carries the decision.
+
+## Follow-up from the merge review (2026-10-18)
+
+- `Loaded.matrix` is typed `list[list[float]]`, but `gate_run.load_cache` stores a NumPy array
+  behind `# type: ignore[arg-type]`. A caller that takes the type at its word (`if not
+  data.matrix`, list concatenation) would break on the gate path only. Retype it and drop the
+  ignore when `gate_run` is next touched.

@@ -381,17 +381,9 @@ def test_the_column_wise_loader_decodes_exactly_what_the_row_wise_path_did(
     """The declared gate run used the row-wise decoding; PB-67's curve uses this one. They must
     be the same matrix, NaN for NaN, or the curve's 30K point is not the gate's model.
     """
+    # gate_run.load is the row-wise decoding M5's bundle build uses (models.build).
     vectors, extras = smoke.cache_read_any(gate_cache)  # type: ignore[misc]
-    labels = [v == "True" for v in extras[smoke.CACHE_LABEL]]
-    train = [i for i, s in enumerate(extras[smoke.CACHE_SEGMENT]) if s == "train"]
-    encoded = smoke.encode_categoricals(vectors, labels, extras[smoke.CACHE_ACCOUNT], train)
-    names = smoke.trainable_features()
-    row_wise = np.array(
-        [
-            [encoded[n][i] if n in encoded else float(vectors[i][n]) for n in names]
-            for i in range(len(vectors))
-        ]
-    )
+    row_wise = np.asarray(gate_run.load(vectors, extras).matrix)
     column_wise = gate_run.load_cache(gate_cache).matrix
     assert np.array_equal(row_wise, np.asarray(column_wise), equal_nan=True)
 

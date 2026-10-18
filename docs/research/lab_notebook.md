@@ -2867,6 +2867,10 @@ not depend on its result.
 
 **The rule.** *A check guards a step only if the step cannot run when the check fails. Join them with
 `&&` or `set -e`, never `;` or a pipe, and confirm that a deliberately failing input stops the chain.*
+
+*The entries below were written on `m4/generalisation` in September and merged on 2026-10-18;
+the notebook is append-only, so they follow later dates.*
+
 ### 2026-09-22 · Pre-registration: the PB-67 learning curve, before any size is run
 
 Committed before the cache is built and before any model is fitted at a new size. M4 closed with

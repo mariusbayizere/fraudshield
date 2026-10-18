@@ -1473,6 +1473,7 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 - **Source:** review of M7 round 2, finding 7, 2026-10-17 · **Priority:** medium · **Due:** M8
 - **Problem:** NFR-REL-06 says the Google button shows "Temporarily unavailable" while Google is down; the server answers 503 with `Retry-After` (proved), but the console clause had no owner while the row stays with M7 (PB-112).
 - **Acceptance:** the console shows the state on a 503 from `/auth/google`, with a component test.
+
 ### PB-76 · Training rows near the corpus's start see truncated history; test rows do not
 - **Source:** PB-67's laptop cache, 2026-09-22 · **Priority:** high · **Due:** before the paper's
   results, and before PB-67 is concluded
