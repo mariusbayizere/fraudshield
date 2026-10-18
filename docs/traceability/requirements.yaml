@@ -709,6 +709,10 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
+    on main implements yet (M8B). Operations: listAlerts. The console is built against mocks generated
+    from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until the M8B operation
+    exists on main and the screen is exercised against it.'
 - id: FR-04-03
   section: 3.4 FR-04 Analyst dashboard
   title: 'Alert card shows: risk badge (HIGH/MEDIUM), fraud probability MUI CircularProgress gauge, amount
@@ -723,6 +727,10 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
+    on main implements yet (M8B). Operations: listAlerts, getAlert. The console is built against mocks
+    generated from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until
+    the M8B operation exists on main and the screen is exercised against it.'
 - id: FR-04-04
   section: 3.4 FR-04 Analyst dashboard
   title: One-click CONFIRM FRAUD or MARK LEGITIMATE with mandatory comment field (min 10 characters);
@@ -738,6 +746,10 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
+    on main implements yet (M8B). Operations: decideAlert. The console is built against mocks generated
+    from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until the M8B operation
+    exists on main and the screen is exercised against it.'
 - id: FR-04-05
   section: 3.4 FR-04 Analyst dashboard
   title: 'SHAP waterfall chart in investigation panel: all 44 features ranked by absolute SHAP value;
@@ -753,6 +765,10 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
+    on main implements yet (M8B). Operations: getAlertExplanation. The console is built against mocks
+    generated from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until
+    the M8B operation exists on main and the screen is exercised against it.'
 - id: FR-04-06
   section: 3.4 FR-04 Analyst dashboard
   title: 'Account history timeline: last 30 transactions with amount, channel icon, timestamp, risk score
@@ -767,6 +783,10 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
+    on main implements yet (M8B). Operations: listAccountTransactions. The console is built against mocks
+    generated from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until
+    the M8B operation exists on main and the screen is exercised against it.'
 - id: FR-04-07
   section: 3.4 FR-04 Analyst dashboard
   title: 'Behavioural fingerprint: 4-panel view: hourly transaction pattern heatmap, amount distribution
@@ -781,6 +801,10 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
+    on main implements yet (M8B). Operations: getBehaviourProfile. The console is built against mocks
+    generated from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until
+    the M8B operation exists on main and the screen is exercised against it.'
 - id: FR-04-08
   section: 3.4 FR-04 Analyst dashboard
   title: 'Transaction network graph: flagged account + counterparty + 2nd-degree connections; known fraud
@@ -795,6 +819,10 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
+    on main implements yet (M8B). Operations: getAccountNetwork. The console is built against mocks generated
+    from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until the M8B operation
+    exists on main and the screen is exercised against it.'
 - id: FR-04-09
   section: 3.4 FR-04 Analyst dashboard
   title: 'Alert filter and search: by transaction_id, account_id, amount range, channel, date range, risk
@@ -809,6 +837,10 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
+    on main implements yet (M8B). Operations: listAlerts. The console is built against mocks generated
+    from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until the M8B operation
+    exists on main and the screen is exercised against it.'
 - id: FR-04-10
   section: 3.4 FR-04 Analyst dashboard
   title: 'Priority escalation: ANALYST escalates to SENIOR_ANALYST or RISK_OFFICER with mandatory escalation
@@ -823,6 +855,10 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
+    on main implements yet (M8B). Operations: escalateAlert, listAlerts (queue=escalated). The console
+    is built against mocks generated from the contract, and a mock is not evidence: this row stays at
+    most IN_PROGRESS until the M8B operation exists on main and the screen is exercised against it.'
 - id: FR-04-11
   section: 3.4 FR-04 Analyst dashboard
   title: 'Analyst performance dashboard: alerts reviewed today, average review time (seconds), accuracy
@@ -837,6 +873,10 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
+    on main implements yet (M8B). Operations: getMyPerformance. The console is built against mocks generated
+    from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until the M8B operation
+    exists on main and the screen is exercised against it.'
 - id: FR-04-12
   section: 3.4 FR-04 Analyst dashboard
   title: 'WCAG 2.1 AA: risk tier conveyed by text label not colour alone; all controls keyboard-navigable;
@@ -1937,6 +1977,10 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
+    on main implements yet (M8B). Operations: getDashboardStats. The console is built against mocks generated
+    from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until the M8B operation
+    exists on main and the screen is exercised against it.'
 - id: UX-DASH-02
   section: 5.4 Analyst dashboard components
   title: Alert Feed (MUI DataGrid virtualised)
@@ -1954,6 +1998,10 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
+    on main implements yet (M8B). Operations: listAlerts. The console is built against mocks generated
+    from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until the M8B operation
+    exists on main and the screen is exercised against it.'
 - id: UX-DASH-03
   section: 5.4 Analyst dashboard components
   title: Risk Score Gauge
@@ -1969,6 +2017,10 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
+    on main implements yet (M8B). Operations: getAlert. The console is built against mocks generated from
+    the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until the M8B operation
+    exists on main and the screen is exercised against it.'
 - id: UX-DASH-04
   section: 5.4 Analyst dashboard components
   title: Investigation Drawer (MUI Drawer anchor='right' width=560px)
@@ -1983,6 +2035,10 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
+    on main implements yet (M8B). Operations: getAlert, getScoringResult. The console is built against
+    mocks generated from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS
+    until the M8B operation exists on main and the screen is exercised against it.'
 - id: UX-DASH-05
   section: 5.4 Analyst dashboard components
   title: SHAP Waterfall Chart
@@ -1999,6 +2055,10 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
+    on main implements yet (M8B). Operations: getAlertExplanation. The console is built against mocks
+    generated from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until
+    the M8B operation exists on main and the screen is exercised against it.'
 - id: UX-DASH-06
   section: 5.4 Analyst dashboard components
   title: Action Panel (bottom of drawer)
@@ -2015,6 +2075,10 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
+    on main implements yet (M8B). Operations: decideAlert, undoAlertDecision, escalateAlert. The console
+    is built against mocks generated from the contract, and a mock is not evidence: this row stays at
+    most IN_PROGRESS until the M8B operation exists on main and the screen is exercised against it.'
 - id: UX-DASH-07
   section: 5.4 Analyst dashboard components
   title: MEDIUM Timer Badge
@@ -2029,6 +2093,10 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
+    on main implements yet (M8B). Operations: listAlerts, getAlert. The console is built against mocks
+    generated from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until
+    the M8B operation exists on main and the screen is exercised against it.'
 - id: UX-DASH-08
   section: 5.4 Analyst dashboard components
   title: Account History Timeline
@@ -2043,6 +2111,10 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
+    on main implements yet (M8B). Operations: listAccountTransactions. The console is built against mocks
+    generated from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until
+    the M8B operation exists on main and the screen is exercised against it.'
 - id: UX-DASH-09
   section: 5.4 Analyst dashboard components
   title: Behavioural Fingerprint (4 panels)
@@ -2058,6 +2130,10 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
+    on main implements yet (M8B). Operations: getBehaviourProfile. The console is built against mocks
+    generated from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until
+    the M8B operation exists on main and the screen is exercised against it.'
 - id: MOB-PWA-01
   section: 05B A.3 PWA
   title: Web App Manifest
@@ -3674,6 +3750,10 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
+    on main implements yet (M8B). Operations: decideAlert, escalateAlert, undoAlertDecision. The console
+    is built against mocks generated from the contract, and a mock is not evidence: this row stays at
+    most IN_PROGRESS until the M8B operation exists on main and the screen is exercised against it.'
 - id: TEST-07
   section: 9 Testing requirements
   title: 'Integration: OAuth Flow'
@@ -3965,6 +4045,10 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
+    on main implements yet (M8B). Operations: listAlerts. The console is built against mocks generated
+    from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until the M8B operation
+    exists on main and the screen is exercised against it.'
 - id: UX-ROLE-AN-02
   section: 'v5 12.1 Per-role frontend: ANALYST'
   title: Alert Detail
@@ -3979,6 +4063,10 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
+    on main implements yet (M8B). Operations: getAlert, getAlertExplanation, getScoringResult. The console
+    is built against mocks generated from the contract, and a mock is not evidence: this row stays at
+    most IN_PROGRESS until the M8B operation exists on main and the screen is exercised against it.'
 - id: UX-ROLE-AN-03
   section: 'v5 12.1 Per-role frontend: ANALYST'
   title: Decision Panel
@@ -3993,6 +4081,10 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
+    on main implements yet (M8B). Operations: decideAlert, undoAlertDecision, escalateAlert. The console
+    is built against mocks generated from the contract, and a mock is not evidence: this row stays at
+    most IN_PROGRESS until the M8B operation exists on main and the screen is exercised against it.'
 - id: UX-ROLE-AN-04
   section: 'v5 12.1 Per-role frontend: ANALYST'
   title: Performance Panel
@@ -4007,6 +4099,10 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
+    on main implements yet (M8B). Operations: getMyPerformance. The console is built against mocks generated
+    from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until the M8B operation
+    exists on main and the screen is exercised against it.'
 - id: UX-ROLE-AN-05
   section: 'v5 12.1 Per-role frontend: ANALYST'
   title: Profile
@@ -4035,6 +4131,10 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
+    on main implements yet (M8B). Operations: listAlerts (analyst_id). The console is built against mocks
+    generated from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until
+    the M8B operation exists on main and the screen is exercised against it.'
 - id: UX-ROLE-SN-02
   section: 'v5 12.2 Per-role frontend: SENIOR_ANALYST'
   title: Alert Reassignment
@@ -4049,6 +4149,11 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
+    on main implements yet (M8B). Gap: the contract has no operation to reassign an alert; a contract
+    change for M8B is needed first. The console is built against mocks generated from the contract, and
+    a mock is not evidence: this row stays at most IN_PROGRESS until the M8B operation exists on main
+    and the screen is exercised against it.'
 - id: UX-ROLE-SN-03
   section: 'v5 12.2 Per-role frontend: SENIOR_ANALYST'
   title: Senior Override
@@ -4063,6 +4168,10 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
+    on main implements yet (M8B). Operations: overrideAlertDecision. The console is built against mocks
+    generated from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until
+    the M8B operation exists on main and the screen is exercised against it.'
 - id: UX-ROLE-SN-04
   section: 'v5 12.2 Per-role frontend: SENIOR_ANALYST'
   title: Team Performance
@@ -4077,6 +4186,11 @@ requirements:
   implementation: []
   evidence: []
   deviations: []
+  notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
+    on main implements yet (M8B). Gap: the contract has no team-performance operation (only getMyPerformance);
+    a contract change for M8B is needed first. The console is built against mocks generated from the contract,
+    and a mock is not evidence: this row stays at most IN_PROGRESS until the M8B operation exists on main
+    and the screen is exercised against it.'
 - id: UX-ROLE-SN-05
   section: 'v5 12.2 Per-role frontend: SENIOR_ANALYST'
   title: Fraud Campaigns
