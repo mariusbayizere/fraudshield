@@ -94,9 +94,33 @@ unavailable, for at most 10 minutes after the read that produced it**
 before the code. It was written because four code re-checks in a row had each found a MAJOR in
 this cache.
 
-On 2026-10-18 the owner tried to narrow the window to keys read shortly before the outage (option
-2, a derived bound of 26 s). Its contract was found unsound in three drafts. Under the owner's
-rule, option 2 was then abandoned for option 1, the 10-minute window below.
+**Why the code implements option 1 (10 minutes) although the owner approved option 2 (30 s).**
+This was the owner's stop rule firing, not drift.
+
+On 2026-10-18 the owner approved option 2: stale use only for keys read shortly before the outage,
+with a bound derived from the rules and accepted up to 30 s. The derivation gave T + 2B = 26 s. The
+owner also set a rule in advance: if draft 3 of option 2's contract was found unsound, the design
+was wrong, and option 1 would be adopted instead of a fourth draft.
+
+| Draft | Verdict | MAJORs |
+|---|---|---|
+| 1 | UNSOUND | 5 |
+| 2 | UNSOUND | 4 |
+| 3 | UNSOUND | 2 |
+
+Draft 3's two MAJORs (review record `docs/reviews/M7/m7-cache-contract-2026-10-18.md`):
+- **The cause:** the availability derivations §4.1 (W = T + B) and §4.2 (G = 2T) reasoned about the
+  order in which reads *start*, but the rules group failures into runs by the order in which they
+  are *observed*.
+- **The effect:** a later-started read that failed faster could start a new run and refuse a busy
+  key through a full outage.
+- **Severity:** both MAJORs failed safe, refusing requests that should have been admitted. The
+  reviewer found the safety bound of 26 s, the announcement guarantees and the atomic steps sound,
+  and called its verdict a strict reading of the MAJOR definition.
+- **Why the rule still applied:** the rule as agreed made no exception for availability MAJORs, and
+  each available patch either pushed the bound past 30 s (to 38 s) or added more mechanism.
+
+Option 1 was therefore adopted, and the safety bound is 10 minutes from the cached read.
 
 In short:
 
