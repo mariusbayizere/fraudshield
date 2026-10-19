@@ -32,8 +32,8 @@ held in its KYC records; \texttt{agent\_float\_utilisation\_ratio} needs the age
 limit, and \texttt{agent\_distance\_from\_registered\_km} the agent's registered premises, both held by
 the agent network. The models learn nothing from them, and with one feature that is constant on this
 benchmark they are why the models train on \nTrainableFeatures{} features (Appendix~\ref{app:features}).
-\textbf{No model in this paper learned from these features, and every figure from the gate, the
-diagnostic battery and the learning curve is that of a \nTrainableFeatures{}-feature model}; the
+\textbf{No model in this paper learned from these features}: the full models of the gate, the
+diagnostic battery and the learning curve train on \nTrainableFeatures{}; the
 specification's requirement that the features be computable for nearly every record is recorded as
 not met (ADR 0055). One more feature is a different limitation. \texttt{round\_sum\_flag} produces a
 value for every record, but only because each country's configuration supplies the currency's round

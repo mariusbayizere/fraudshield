@@ -144,7 +144,8 @@ miss could have been a matter of training volume. A learning curve tested that (
 its prediction and the rule for reading it were recorded in the lab notebook before any size was
 run: the same model, thresholds, seeds and resamples as the gate, the whole test period at every
 size, and validation and calibration splits of the gate's size. The design changed before any model
-was fitted, because the development machine could not build the planned single feature cache: the
+was fitted, because the development machine could not build the planned shared feature
+cache: the
 three smaller sizes come from one cache and the largest from its own \nLcCorpusLarge{}-row corpus.
 The change recorded before any result named a somewhat larger corpus for the shared cache than the
 \nLcCorpusSmall{} rows it was built from; that trim was also made before any fit, but was written
@@ -178,17 +179,19 @@ that interval's upper bound stays below \nTargetRecall{}. Both hold: the step is
 below the target. No interval at any size reaches the target; the highest upper bound is
 \nLcMaxUpper{}. Because that last step also changes the corpus, the cleaner evidence is the
 \nLcVolumeFactorAC{}-fold step within one cache, from \nLcTrainA{} to \nLcTrainC{} rows: recall moves
-\nLcStepAC{} at seed 1 and \nLcSeedGainAC{} on the five-seed means, inside every interval. Across the
-whole \nLcVolumeFactor{}-fold range the five-seed mean rises at every step, by \nLcSeedGain{} in all,
-which is within a standard deviation of each point and leaves every interval below the target.
+\nLcStepAC{} at seed 1 and \nLcSeedGainAC{} on the five-seed means, less than the
+half-width of any of the four seed-1 intervals. Across the
+whole \nLcVolumeFactor{}-fold range the five-seed mean rises at every step, each step smaller than
+one standard deviation; in all it rises by \nLcSeedGain{}, which is more than the standard deviation
+at three of the four sizes, while every interval stays below the target.
 \textbf{Over \nLcTrainA{} to \nLcTrainD{} training rows of this draw, and for this model, the recall
 shortfall is not closed by training volume.} Whether a different model, or features that do not
 degrade with corpus depth, would reach the target is not tested.
 
 The prediction was partly wrong, and is reported with the others in Table~\ref{tab:predictions}.
 It said recall at the flag threshold would rise to between \nLcPredLow{} and \nLcPredHigh{} at the
-largest size; it landed in that range, without rising at seed 1 and rising within the seed spread on
-the means. It said recall at the \nFPRBudget{} budget would rise to between \nLcPredBudgetLow{} and
+largest size; it landed in that range, without rising at seed 1 and rising on
+the means, each step within a standard deviation. It said recall at the \nFPRBudget{} budget would rise to between \nLcPredBudgetLow{} and
 \nLcPredBudgetHigh{}; at seed 1 it read \nLcBudgetRecallD{} \nLcBudgetRecallciD{}, below the range
 (at \nLcTrainC{} rows it had read \nLcBudgetRecallC{}), and over \nSeeds{} seeds $\nLcSeedBudgetD$,
 inside it. The budget figures compare weakly across sizes: the false-positive rate realised at the

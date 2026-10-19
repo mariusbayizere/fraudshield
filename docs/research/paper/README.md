@@ -22,7 +22,8 @@ replacing a "not yet measured" marker, are in `REVIEW.md`.
   such as the learning curve, name the commit they are read at in `numbers.tex`).
   `\prov{}`: a result from a milestone not yet tagged, printed with a dagger. **None is in use**:
   every M4 value was re-verified at `m4-complete` and moved to `\meas{}` on 2026-09-22.
-- `python3 audit_numbers.py` checks every macro against its evidence file at the tag and writes
+- `python3 audit_numbers.py` checks every macro against its evidence file at the tag, or at the
+  later ref its source names, and writes
   `number_audit.md`; it must report zero problems before a commit.
 - `\notyet{Mx}`: a result a later milestone produces, printed in italics as "not yet measured (Mx)".
 - No reference is invented. Every entry in `references.bib` was checked against the source itself
