@@ -1,0 +1,20 @@
+# evidence-commit: 72e7790f02a3c67367ec2936698aae33e607926e
+# evidence-tree-state: clean
+# command: fs-dataset generate --output <scratch>/bench1m --rows 1000000 --seed 20260917
+# exit: 0
+
+REGENERATION OF THE EVALUATION DRAW AT m4-complete
+  Run on 2026-10-19 in a detached worktree at the tag m4-complete (72e7790), clean, with the
+  dataset package synced from uv.lock, under tools/bin/mem-gate and nice -n 15, timed by
+  /usr/bin/time -v. The dataset was not on this machine any more; it was regenerated rather than
+  copied, which is the reproducibility claim the paper makes.
+  rows: 1006317
+  wall clock: 6:34.45
+  peak RSS (time -v): 194332 kB; peak RSS (generator's run.json): 198995968 bytes
+  machine (run.json): Linux-7.0.0-38-generic-x86_64-with-glibc2.39, 4 cpus, python 3.12.14,
+    numpy 2.5.3, pyarrow 25.0.1, chunk size 8
+  dataset fingerprint: d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32
+    recomputed by the generator's own function at m4-complete, in
+    reversal_labels_d8083dbc.txt and reversal_novelty_d8083dbc.txt (evidence commits 0b04197
+    and 94bfd69), equal to the fingerprint of the evaluated draw in dataset/realism_report.md
+    at m4-complete.
