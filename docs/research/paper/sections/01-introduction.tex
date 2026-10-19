@@ -48,12 +48,18 @@ repository and disagree with:
         and a novel variant held out in time both fail to test generalisation on this benchmark. A test
         checks that no fraud parameter is keyed by country, and we infer that the country null
         follows from that and the variant null from the variant's multi-row shape; no experiment
-        isolates either cause.
+        isolates either cause. The verification milestone (M10) would repeat both at the
+        specification's \nSpecRows{}-row scale; it changes no fraud parameter, so it could show
+        whether the nulls hold at scale but could not make leave-one-country-out informative.
   \item \textbf{The latency--explainability frontier} (Section~\ref{sec:evaluation}): how the
         median cost of an exact TreeSHAP explanation changes across tree complexity on one
         development laptop, reported at the median only, because the measured \nPctlTail{}th
         percentile was not credible: in \nFrontNegative{} configurations it showed a negative
-        explanation cost.
+        explanation cost. It is a measurement of one model on one machine. M10 would add the
+        frontier the specification defines: the single-request \nPctlTail{}th percentile of the
+        ensemble with exact TreeSHAP, in the multi-process scoring service, on dedicated hardware,
+        and whether the \nLatencyPNineNineShap{}~ms constraint binds; it would not test our
+        inference that the cost does not depend on the data, which needs another benchmark.
 \end{enumerate}
 The redundancy finding of the first contribution is stated separately in Section~\ref{sec:evaluation} because it is
 a result about how this generator encodes signal, not a detail of one table.

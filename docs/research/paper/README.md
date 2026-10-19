@@ -5,9 +5,10 @@ Benchmark Can and Cannot Show* (specification Part E.13). Entry point: `main.tex
 sections in `sections/`; every number in `numbers.tex`.
 
 **Status: DRAFT, not reviewed.** Builds with Tectonic 0.17.0 (checksum-verified release binary, run
-outside the repository; it runs BibTeX itself): `tectonic -X compile main.tex`. The last build
-(2026-09-22) had no undefined references and no overfull lines; the draft has not been compiled since
-2026-10-19's changes, because no TeX engine is installed on the machine that made them. The history of the paper, and the procedure for
+outside the repository; it runs BibTeX itself): `tectonic -X compile main.tex`. The build has no
+undefined references and no overfull lines; continuous integration (`.github/workflows/paper.yml`)
+compiles it on every push, fails on either, and uploads the PDF. Locally, Tectonic 0.17.0 is
+installed in the worktree as `.tools/tectonic/` (checksum-verified, git-ignored). The history of the paper, and the procedure for
 replacing a "not yet measured" marker, are in `REVIEW.md`.
 
 ## Rules every number and claim obeys
@@ -51,7 +52,10 @@ checked. After changing `numbers.tex`, run it again; `--check` fails if a figure
 
 ## Checks before a commit
 
-    python3 docs/research/paper/audit_numbers.py        # 0 problems
+All of these also run in CI on every push (`paper.yml`, not path-filtered), so a stale audit,
+appendix or figure, or a number typed into the text, fails the build.
+
+    python3 docs/research/paper/audit_numbers.py        # 0 problems (--check: outputs current)
     python3 docs/research/paper/check_numbers.py        # 0 direct numbers
     python3 docs/research/paper/figures/make_figures.py --check
     python3 docs/research/paper/appendix_features.py --check

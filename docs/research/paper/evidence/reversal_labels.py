@@ -7,7 +7,10 @@ recomputes the draw's fingerprint with the generator's own function at the miles
 counts are tied to the draw the paper evaluates, and writes an evidence file whose header records
 the commit and whether the working tree was clean.
 
-Read-only: it opens the dataset's Parquet files and changes nothing.
+Read-only on the dataset: it opens the Parquet files and changes nothing. It reads test-period
+labels, so it records the read in the test-set access log through the project's own `record`
+function, loaded from the tree (the run that produced the committed evidence predates this and is
+back-filled in the log).
 
 Usage (from the repository root, with a clean tree):
     uv run --no-project --with 'pyarrow==25.0.1' python \
@@ -31,6 +34,7 @@ import pyarrow.dataset as ds
 ROOT = Path(__file__).resolve().parents[4]
 TAG = "m4-complete"
 FINGERPRINT = "dataset/src/fraudshield_dataset/fingerprint.py"
+ACCESS = ROOT / "ml/src/fraudshield_ml/training/access.py"
 VARIANTS = ("reversal_scam_social_engineering", "novel_esim_delayed_drain")
 
 
@@ -59,13 +63,14 @@ def fingerprint(dataset: Path) -> str:
 
 def main(argv: list[str]) -> int:
     dataset = Path(argv[1])
+    # Read before the access log is appended below, which is the one write this run makes.
+    state = "clean" if not git("status", "--porcelain").strip() else "DIRTY"
     manifest = json.loads((dataset / "manifest.json").read_text())
     micros = manifest["split"]["boundaries_micros"]["test_start"]
     test_start = dt.datetime.fromtimestamp(micros / 1e6, dt.UTC)
     labels = ds.dataset(dataset / "labels", format="parquet", partitioning="hive").to_table()
     transactions = ds.dataset(dataset / "transactions", format="parquet", partitioning="hive")
 
-    state = "clean" if not git("status", "--porcelain").strip() else "DIRTY"
     print(f"# evidence-commit: {git('rev-parse', 'HEAD').strip()}")
     print(f"# evidence-tree-state: {state}")
     print(f"# command: python docs/research/paper/evidence/reversal_labels.py {dataset}")
@@ -75,6 +80,7 @@ def main(argv: list[str]) -> int:
     print("scores as fraud (it reads is_fraud_observed, the label a model would be given).")
     print(f"  dataset fingerprint: {fingerprint(dataset)} (function at {TAG})")
     print(f"  rows: {manifest['rows']}   test period from {test_start.isoformat()}")
+    read_in_test = 0
     for variant in VARIANTS:
         rows = labels.filter(pc.equal(labels["scenario_variant"], variant)).to_pylist()
         ids = [r["transaction_id"] for r in rows]
@@ -97,6 +103,18 @@ def main(argv: list[str]) -> int:
         print(f"    fraud by true label: {sum(r['is_fraud_true'] for r in in_test)}")
         print(f"    fraud by observed label: {sum(r['is_fraud_observed'] for r in in_test)}")
         print(f"    true fraud labelled legitimate (missed-fraud noise): {len(missed)}")
+        read_in_test += len(in_test)
+    spec = importlib.util.spec_from_file_location("tree_access", ACCESS)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load {ACCESS}")
+    access = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(access)
+    access.record(
+        "reversal_labels.py",
+        dataset,
+        read_in_test,
+        purpose="paper evidence: held-out sub-variant label counts (test-period variant labels)",
+    )
     return 0
 
 

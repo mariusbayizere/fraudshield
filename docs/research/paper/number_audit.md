@@ -2,7 +2,7 @@
 
 Every macro in `numbers.tex` checked against its evidence file at `m4-complete` (`72e7790`), or at the ref its row names, read with `git show`, by `audit_numbers.py`. Values are compared as printed: rounding, sign and interval bounds included. Regenerate with `python3 docs/research/paper/audit_numbers.py`; do not edit by hand.
 
-**453 macros, 453 MATCH, 0 not matching.**
+**470 macros, 470 MATCH, 0 not matching.**
 
 | Macro | Value in paper | Value in evidence | File | Note | Result |
 |---|---|---|---|---|---|
@@ -459,3 +459,20 @@ Every macro in `numbers.tex` checked against its evidence file at `m4-complete` 
 | `\nSeedSdDiffXGB` | `-0.6\%` | `-0.6%` | `docs/benchmarks/m4_seed_variance_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
 | `\nSeedSdDiffLGB` | `12.5\%` | `12.5%` | `docs/benchmarks/m4_seed_variance_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
 | `\nPctlFeature` | `95` | `95` | `docs/prompts/FraudShield_Master_Build_Prompt.md` |  | MATCH |
+| `\nSkewConstantFeatures` | `three` | `Three` | `docs/adr/0034-serving-feeds-three-trained-features-from-state-nothing-writes.md` at `151e796` |  | MATCH |
+| `\nSkewAucTrained` | `0.9700` | `0.9700` | `docs/adr/0034-serving-feeds-three-trained-features-from-state-nothing-writes.md` at `151e796` |  | MATCH |
+| `\nSkewFlagTrained` | `725` | `725` | `docs/adr/0034-serving-feeds-three-trained-features-from-state-nothing-writes.md` at `151e796` |  | MATCH |
+| `\nSkewAucOutcomes` | `0.9619` | `0.9619` | `docs/adr/0034-serving-feeds-three-trained-features-from-state-nothing-writes.md` at `151e796` |  | MATCH |
+| `\nSkewFlagOutcomes` | `585` | `585` | `docs/adr/0034-serving-feeds-three-trained-features-from-state-nothing-writes.md` at `151e796` |  | MATCH |
+| `\nSkewAucSim` | `0.9699` | `0.9699` | `docs/adr/0034-serving-feeds-three-trained-features-from-state-nothing-writes.md` at `151e796` |  | MATCH |
+| `\nSkewFlagSim` | `712` | `712` | `docs/adr/0034-serving-feeds-three-trained-features-from-state-nothing-writes.md` at `151e796` |  | MATCH |
+| `\nSkewAucBoth` | `0.9611` | `0.9611` | `docs/adr/0034-serving-feeds-three-trained-features-from-state-nothing-writes.md` at `151e796` |  | MATCH |
+| `\nSkewFlagBoth` | `563` | `563` | `docs/adr/0034-serving-feeds-three-trained-features-from-state-nothing-writes.md` at `151e796` |  | MATCH |
+| `\nSkewTierBoth` | `254` | `254` | `docs/adr/0034-serving-feeds-three-trained-features-from-state-nothing-writes.md` at `151e796` |  | MATCH |
+| `\nSkewHalfWidth` | `0.0075` | `0.0075` | `docs/adr/0034-serving-feeds-three-trained-features-from-state-nothing-writes.md` at `151e796` |  | MATCH |
+| `\nSkewAucDrop` | `0.0089` | `0.0089` | derived | AUC as trained minus AUC as served | MATCH |
+| `\nSkewLost` | `162` | `162` | derived | frauds reaching the flag threshold as trained minus as served | MATCH |
+| `\nSkewLostPct` | `22\%` | `22%` | derived | that loss as a share of the frauds flagged as trained, to a whole per cent | MATCH |
+| `\nFakeReviews` | `four` | `four` | `docs/research/lab_notebook.md` at `488c5b4` |  | MATCH |
+| `\nFakeDefects` | `eleven` | `eleven` | `docs/research/lab_notebook.md` at `488c5b4` |  | MATCH |
+| `\nFakeTests` | `537` | `537` | `docs/research/lab_notebook.md` at `488c5b4` |  | MATCH |

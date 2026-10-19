@@ -17,6 +17,11 @@
 
 \input{numbers}
 
+% Identifiers in \texttt (file paths, feature names) may break after an underscore, and lines may
+% stretch a little before they overflow: the paper names many long identifiers in running text.
+\renewcommand{\_}{\textunderscore\allowbreak}
+\setlength{\emergencystretch}{2em}
+
 
 \newcommand{\papertitle}{FraudShield-EAC: What a Synthetic East African Mobile-Money Fraud Benchmark
 Can and Cannot Show}

@@ -59,7 +59,8 @@ It is what the mechanism is grounded in.
    of what any particular detector relies on. No source describes how SIM-swap or mule-account
    fraud differs between these five countries. The reversal-scam mechanism's defining properties
    — one transaction, victim-initiated, a known counterparty — come from the typology, not from a
-   list of "whatever would make this model's existing tests non-trivial".
+   list of "whatever would make this model's existing tests non-trivial". *(Corrected 2026-10-19,
+   see the amendment below: "a known counterparty" does not come from the typology.)*
 
 2. **The overlap with this benchmark's blind spot is not coincidental, and that is worth stating
    rather than hiding.** Burst-structure and counterparty-novelty are the two axes PB-60 and
@@ -127,3 +128,22 @@ different and unregistered experiment wearing the pre-registered one's name.
   constitute a test that could fail. A benchmark whose every generalisation experiment is designed
   by the same hand that wrote the detectors needs at least one test grounded outside that
   benchmark's own construction to be worth calling a generalisation claim at all.
+
+## Amendment 2026-10-19 — "a known counterparty" is a modelling choice, not the typology
+
+Decision point 1 above, and the justification committed at pre-registration, say the variant's
+defining properties come from the typology, "a known counterparty" among them. The sources since
+read in full do not support that property. Doğan et al. (2025) survey the scams Kenyan M-PESA users
+face and say nothing about whether the victim knows the recipient; the press account of the "sent by mistake" scam (The Star, 2025) describes the victim sending the money back, and says
+neither to which number nor whether the victim had paid it before; the paper reads the scammer's
+number as a **new** counterparty, and says that this is a reading
+(`docs/research/paper/reference_audit.md`). One transaction and victim initiation are supported;
+the known counterparty is not.
+
+So the recipient is **the project's modelling choice**, and the variant departs from the documented
+scam in that respect. This does not reopen the pre-registration: the variant, its prediction and
+its result stand as committed. It changes what may be claimed from them. The result is a measurement on a
+variant built to remove both burst structure and counterparty novelty; it says nothing about
+the documented form, and the paper states the choice as the project's in the sentence that
+introduces it (owner, 2026-10-19). Whether `counterparty_is_new_for_account` is actually false on
+the variant's rows is measured separately (`docs/research/paper/evidence/reversal_novelty_d8083dbc.txt`).

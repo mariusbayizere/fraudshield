@@ -95,11 +95,11 @@ back, not to which number. Neither source says whether the victim has paid that
 number before; since it is the scammer's own number, we read the documented form as a transfer to a
 new counterparty.
 
-The benchmark's variant keeps the single, victim-initiated transfer and departs from that form in its
-recipient: a counterparty already on the victim's own payee list. ADR 0028, and the justification
-committed at pre-registration, state that this property comes from the typology; neither source we
-read supports that, so it is a modelling choice, and the variant departs from the documented scam in
-that respect. The variant also has its own amount rule: amounts are drawn around \nRevAmountMultiplier{} times
+The benchmark's variant keeps the single, victim-initiated transfer and sends it to a counterparty
+already on the victim's own payee list. \textbf{That recipient is our modelling choice, not a property
+of the documented scam: ADR 0028, and the justification committed at pre-registration, cite the scam
+typology for it, and the sources cited do not support it.} The variant therefore departs from the
+documented form in its recipient, and ADR 0028 has been corrected to say so. The variant also has its own amount rule: amounts are drawn around \nRevAmountMultiplier{} times
 the channel's median legitimate amount, and pass through the same below-threshold adaptation as other
 fraud. A test checks that each row is a single transaction in the test period to
 a counterparty on the payee list. Whether \texttt{counterparty\_is\_new\_for\_account} is in fact false

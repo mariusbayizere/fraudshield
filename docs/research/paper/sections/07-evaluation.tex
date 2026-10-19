@@ -318,7 +318,7 @@ single-request \nPctlTail{}th-percentile latency, model plus exact TreeSHAP, exc
 
 \begin{table}[htbp]
 \centering
-\caption{Accuracy and median single-request latency across tree complexity (one XGBoost booster,
+\caption{Accuracy and median single-request latency, in milliseconds, across tree complexity (one XGBoost booster,
 draw \texttt{6abde44e}, \nFrHeldOutRows{} held-out rows holding \nFrHeldOutFraud{} fraud. The SHAP
 cost is the median with an explanation minus the median without, a difference of medians;
 \nFrRequests{} timed requests per configuration, evidence commit \texttt{95b722c}, source
@@ -327,7 +327,7 @@ are from the development laptop and are not gate figures (ADR 0010).}
 \label{tab:frontier}
 \begin{tabular}{rrrrrr}
 \toprule
-Trees & Depth & AUC & Predict, median (ms) & With SHAP, median (ms) & SHAP cost (ms) \\
+Trees & Depth & AUC & Predict & With SHAP & SHAP cost \\
 \midrule
 \nFrTreesA & \nFrDepthA & \nFrAucA & \nFrPredA & \nFrShapA & \nFrCostA \\
 \nFrTreesB & \nFrDepthB & \nFrAucB & \nFrPredB & \nFrShapB & \nFrCostB \\

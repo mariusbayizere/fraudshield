@@ -1,0 +1,85 @@
+# The paper's evidence gates (M11). Every number in docs/research/paper is a macro audited against
+# its evidence file at a named git reference; these jobs make that a gate rather than something run
+# when remembered (owner, 2026-10-19). Not path-filtered on purpose: an evidence file changed
+# anywhere in the repository can falsify a number in the paper, and a filtered job reports success
+# when it is skipped.
+name: paper
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: paper-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_VERSION: "0.12.15"
+  PYTHON_VERSION: "3.12.14"
+  RUFF_VERSION: "0.16.8"
+  TECTONIC_VERSION: "0.17.0"
+  # tectonic-0.17.0-x86_64-unknown-linux-musl.tar.gz, digest from the GitHub release.
+  TECTONIC_SHA256: "8533d07f9ccbd7a65824b9e0459041bca34af1eb33daba48f59215593753a3b7"
+
+jobs:
+  checks:
+    name: numbers audited, appendices generated, figures current
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The audit reads evidence with `git show <ref>:<path>` at tags and commits.
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Lint the paper's scripts
+        run: |
+          uvx "ruff@${RUFF_VERSION}" check docs/research/paper
+          uvx "ruff@${RUFF_VERSION}" format --check docs/research/paper
+      - name: No number typed into the paper
+        run: python3 docs/research/paper/check_numbers.py
+      - name: Every macro matches its evidence, and the audit outputs are current
+        run: python3 docs/research/paper/audit_numbers.py --check
+      - name: Appendix B matches the feature registry
+        run: python3 docs/research/paper/appendix_features.py --check
+      - name: Figures match numbers.tex
+        run: python3 docs/research/paper/figures/make_figures.py --check
+
+  compile:
+    name: the paper compiles with no undefined references or overfull lines
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Tectonic (checksum-verified release binary)
+        run: |
+          url="https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%40${TECTONIC_VERSION}/tectonic-${TECTONIC_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+          curl -sSfL -o "$RUNNER_TEMP/tectonic.tar.gz" "$url"
+          echo "${TECTONIC_SHA256}  $RUNNER_TEMP/tectonic.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/tectonic.tar.gz" -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/tectonic" --version
+      - name: Compile
+        working-directory: docs/research/paper
+        run: |
+          "$RUNNER_TEMP/tectonic" -X compile --keep-logs main.tex
+          if grep -E "undefined (references|citations)|Citation .* undefined|Reference .* undefined" main.log; then
+            echo "undefined references or citations" >&2
+            exit 1
+          fi
+          if grep -E "Overfull \\\\hbox" main.log; then
+            echo "overfull lines (README: the build has none)" >&2
+            exit 1
+          fi
+      - name: Upload the PDF
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: paper-pdf
+          path: docs/research/paper/main.pdf

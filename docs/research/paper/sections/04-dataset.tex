@@ -211,8 +211,9 @@ rows, \nValRows{} validation rows (whose chronologically last \nCalRows{} form t
 split), a \nEmbargoDays{}-day embargo of \nEmbargoRows{} rows excluded to model label delay, and a
 test period of \nTestRows{} rows spanning \nTestSpanDays{} days. Scoring runs on the test set are
 logged (\texttt{docs/benchmarks/test\_set\_access.jsonl}); runs made before the log existed were
-back-filled from committed evidence, and not every read is logged: the label count this paper
-produced for Section~\ref{sec:generalisation} read the test period without an entry.
+back-filled from committed evidence. The first label count this paper produced for
+Section~\ref{sec:generalisation} read the test period without an entry; it is now back-filled like
+the others, and the paper's evidence scripts record every later read themselves.
 
 A dataset is identified by a \textbf{fingerprint over its output}, not only by a digest of its
 parameters, because a draw can change with every parameter value identical. The fingerprint is a

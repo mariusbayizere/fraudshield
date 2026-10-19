@@ -73,8 +73,8 @@ diagnostic of the benchmark, not the production model, and its figures are label
         the best trivial rule (one threshold on one feature) on the same rows, as a margin
         (Section~\ref{sec:floor}).
   \item \textbf{Test discipline}: nothing is tuned on the test period; scoring runs on the test
-        set are logged, with earlier runs back-filled from committed evidence and one read made for
-        this paper not logged (Section~\ref{sec:dataset}); tests fail if the production calibrator
+        set are logged, with earlier runs, and one earlier read made for this paper, back-filled
+        from committed evidence (Section~\ref{sec:dataset}); tests fail if the production calibrator
         learns from rows other than the calibration rows, or if the diagnostic battery's calibrator
         is fitted on test rows.
   \item \textbf{Scale}: every figure states the rows and fraud count it rests on, because

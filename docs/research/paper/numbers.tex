@@ -539,3 +539,21 @@
 \newcommand{\nSeedSdDiffXGB}{\meas{-0.6\%}}     % seed-variance file: ensemble SD vs XGBoost
 \newcommand{\nSeedSdDiffLGB}{\meas{12.5\%}}     % seed-variance file: ensemble SD vs LightGBM
 \newcommand{\nPctlFeature}{\srcd{95}}  % build prompt M3 gate: features latency percentile
+
+% ---------------------------------------------------------------------------------------------
+% Training-serving skew (ADR 0034, read at 151e796; reproduced by docs/reviews/M5/
+% principal-re-review.md). No stamped raw output exists; the paper says so where it uses them.
+% ---------------------------------------------------------------------------------------------
+\newcommand{\nSkewConstantFeatures}{\meas{three}}
+\newcommand{\nSkewAucTrained}{\meas{0.9700}}\newcommand{\nSkewFlagTrained}{\meas{725}}
+\newcommand{\nSkewAucOutcomes}{\meas{0.9619}}\newcommand{\nSkewFlagOutcomes}{\meas{585}}
+\newcommand{\nSkewAucSim}{\meas{0.9699}}\newcommand{\nSkewFlagSim}{\meas{712}}
+\newcommand{\nSkewAucBoth}{\meas{0.9611}}\newcommand{\nSkewFlagBoth}{\meas{563}}
+\newcommand{\nSkewTierBoth}{\meas{254}}
+\newcommand{\nSkewHalfWidth}{\meas{0.0075}}
+\newcommand{\nSkewAucDrop}{\meas{0.0089}}     % derived
+\newcommand{\nSkewLost}{\meas{162}}           % derived
+\newcommand{\nSkewLostPct}{\meas{22\%}}       % derived
+% The fake-MLflow case (lab notebook 2026-09-23, read at 488c5b4).
+\newcommand{\nFakeReviews}{\meas{four}}\newcommand{\nFakeDefects}{\meas{eleven}}
+\newcommand{\nFakeTests}{\meas{537}}
