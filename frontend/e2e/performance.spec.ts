@@ -38,6 +38,8 @@ interface Run {
   tti: number;
   tbt: number;
   cls: number;
+  /** What was fetched and when, to find what first paint waits for. */
+  waterfall: string[];
 }
 
 declare global {
@@ -87,7 +89,9 @@ async function measure(page: Page): Promise<Run> {
         ?.domContentLoadedEventEnd ?? 0,
   }));
   // Without a paint there is nothing to wait from; report it rather than wait for the timeout.
-  if (Number.isNaN(fcp)) return { fcp, lcp: Number.NaN, tti: Number.NaN, tbt: Number.NaN, cls: 0 };
+  if (Number.isNaN(fcp)) {
+    return { fcp, lcp: Number.NaN, tti: Number.NaN, tbt: Number.NaN, cls: 0, waterfall: [] };
+  }
   let quiet = false;
   for (;;) {
     const { now, lastEnd } = await page.evaluate(() => ({
@@ -115,8 +119,22 @@ async function measure(page: Page): Promise<Run> {
     // With no quiet window, every long task after first paint counts.
     .filter((t) => !quiet || t.start < tti)
     .reduce((sum, t) => sum + Math.max(0, t.end - Math.max(t.start, fcp) - 50), 0);
+  const waterfall = await page.evaluate(() => {
+    const at = (ms: number) => String(Math.round(ms)).padStart(5);
+    const navigation = performance.getEntriesByType('navigation')[0] as
+      PerformanceNavigationTiming | undefined;
+    const lines = [
+      `${at(0)} ${at(navigation?.responseEnd ?? 0)} document ${String(navigation?.transferSize ?? 0)} B`,
+    ];
+    for (const entry of performance.getEntriesByType('resource') as PerformanceResourceTiming[]) {
+      lines.push(
+        `${at(entry.startTime)} ${at(entry.responseEnd)} ${entry.name.replace(location.origin, '')} ${String(entry.transferSize)} B`,
+      );
+    }
+    return lines;
+  });
   await cdp.detach();
-  return { fcp, lcp: perf.lcp, tti, tbt, cls: perf.cls };
+  return { fcp, lcp: perf.lcp, tti, tbt, cls: perf.cls, waterfall };
 }
 
 function median(values: number[]): number {
@@ -146,7 +164,11 @@ test.describe('first visit on 3G with a slowed CPU (MOB-PERF-01 to 05)', () => {
     };
     // The numbers are the evidence; they go to the log whether or not they pass.
     console.log(`MOB-PERF 3G medians of ${String(RUNS)}: ${JSON.stringify(result)}`);
-    console.log(`MOB-PERF 3G runs: ${JSON.stringify(runs)}`);
+    console.log(
+      `MOB-PERF 3G runs: ${JSON.stringify(runs.map((run) => ({ fcp: run.fcp, lcp: run.lcp, tti: run.tti, tbt: run.tbt, cls: run.cls })))}`,
+    );
+    // The first run's requests, start and end in ms from navigation, to see what paint waits for.
+    console.log(`MOB-PERF 3G waterfall (first run):\n${(runs[0]?.waterfall ?? []).join('\n')}`);
     expect.soft(result.fcp, 'MOB-PERF-01 first contentful paint (ms)').toBeLessThan(TARGETS.fcp);
     expect.soft(result.lcp, 'MOB-PERF-02 largest contentful paint (ms)').toBeLessThan(TARGETS.lcp);
     expect.soft(result.tti, 'MOB-PERF-03 time to interactive (ms)').toBeLessThan(TARGETS.tti);
