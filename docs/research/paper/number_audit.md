@@ -2,7 +2,7 @@
 
 Every macro in `numbers.tex` checked against its evidence file at `m4-complete` (`72e7790`), or at the ref its row names, read with `git show`, by `audit_numbers.py`. Values are compared as printed: rounding, sign and interval bounds included. Regenerate with `python3 docs/research/paper/audit_numbers.py`; do not edit by hand.
 
-**477 macros, 477 MATCH, 0 not matching.**
+**503 macros, 503 MATCH, 0 not matching.**
 
 | Macro | Value in paper | Value in evidence | File | Note | Result |
 |---|---|---|---|---|---|
@@ -483,3 +483,29 @@ Every macro in `numbers.tex` checked against its evidence file at `m4-complete` 
 | `\nSeedSdRelXGB` | `+0.62\%` | `+0.62%` | derived | ensemble SD over XGBoost's minus one, per-seed AUCs | MATCH |
 | `\nSeedSdRelLGB` | `-12.49\%` | `-12.49%` | derived | ensemble SD over LightGBM's minus one, per-seed AUCs | MATCH |
 | `\nFrontAUCDeltaRounded` | `0.005` | `0.005` | derived | rounded AUC of the smallest configuration minus the largest's | MATCH |
+| `\nCluTestAccounts` | `5{,}878` | `5878` | `docs/research/paper/evidence/clustered_intervals_d8083dbc.txt` at `33596a2` (evidence commit `c85a82c`) |  | MATCH |
+| `\nCluFraudAccounts` | `307` | `307` | `docs/research/paper/evidence/clustered_intervals_d8083dbc.txt` at `33596a2` (evidence commit `c85a82c`) |  | MATCH |
+| `\nCluAUCci` | `[0.962, 0.978]` | `[0.962, 0.978]` | `docs/research/paper/evidence/clustered_intervals_d8083dbc.txt` at `33596a2` (evidence commit `c85a82c`) |  | MATCH |
+| `\nCluRecallFPRci` | `[0.846, 0.893]` | `[0.846, 0.893]` | `docs/research/paper/evidence/clustered_intervals_d8083dbc.txt` at `33596a2` (evidence commit `c85a82c`) |  | MATCH |
+| `\nCluRecallSixci` | `[0.705, 0.767]` | `[0.705, 0.767]` | `docs/research/paper/evidence/clustered_intervals_d8083dbc.txt` at `33596a2` (evidence commit `c85a82c`) |  | MATCH |
+| `\nCluFoneci` | `[0.798, 0.843]` | `[0.798, 0.843]` | `docs/research/paper/evidence/clustered_intervals_d8083dbc.txt` at `33596a2` (evidence commit `c85a82c`) |  | MATCH |
+| `\nRowUSSDci` | `[0.931, 0.972]` | `[0.931, 0.972]` | `docs/research/paper/evidence/clustered_intervals_d8083dbc.txt` at `33596a2` (evidence commit `c85a82c`) |  | MATCH |
+| `\nCluUSSDci` | `[0.922, 0.974]` | `[0.922, 0.974]` | `docs/research/paper/evidence/clustered_intervals_d8083dbc.txt` at `33596a2` (evidence commit `c85a82c`) |  | MATCH |
+| `\nCluCounterpartyLow` | `0.910` | `0.910` | `docs/research/paper/evidence/clustered_intervals_d8083dbc.txt` at `33596a2` (evidence commit `c85a82c`) |  | MATCH |
+| `\nCluVelocityLow` | `0.839` | `0.839` | `docs/research/paper/evidence/clustered_intervals_d8083dbc.txt` at `33596a2` (evidence commit `c85a82c`) |  | MATCH |
+| `\nCluTemporalLow` | `0.837` | `0.837` | `docs/research/paper/evidence/clustered_intervals_d8083dbc.txt` at `33596a2` (evidence commit `c85a82c`) |  | MATCH |
+| `\nCluGeographicLow` | `0.811` | `0.811` | `docs/research/paper/evidence/clustered_intervals_d8083dbc.txt` at `33596a2` (evidence commit `c85a82c`) |  | MATCH |
+| `\nCluDeviceci` | `[0.677, 0.763]` | `[0.677, 0.763]` | `docs/research/paper/evidence/clustered_intervals_d8083dbc.txt` at `33596a2` (evidence commit `c85a82c`) |  | MATCH |
+| `\nGroupsAboveCeilingClu` | `four` | `four` | derived | groups whose account-clustered lower bound exceeds the single-feature ceiling | MATCH |
+| `\nNovelAccounts` | `16` | `16` | `docs/research/paper/evidence/clustered_intervals_d8083dbc.txt` at `33596a2` (evidence commit `c85a82c`) |  | MATCH |
+| `\nRevAccounts` | `66` | `66` | `docs/research/paper/evidence/clustered_intervals_d8083dbc.txt` at `33596a2` (evidence commit `c85a82c`) |  | MATCH |
+| `\nCluNovelci` | `[0.955, 1.000]` | `[0.955, 1.000]` | `docs/research/paper/evidence/clustered_intervals_d8083dbc.txt` at `33596a2` (evidence commit `c85a82c`) |  | MATCH |
+| `\nCluRevci` | `[0.029, 0.161]` | `[0.029, 0.161]` | `docs/research/paper/evidence/clustered_intervals_d8083dbc.txt` at `33596a2` (evidence commit `c85a82c`) |  | MATCH |
+| `\nBaseAccounts` | `222` | `222` | `docs/research/paper/evidence/clustered_intervals_d8083dbc.txt` at `33596a2` (evidence commit `c85a82c`) |  | MATCH |
+| `\nCluBaseci` | `[0.930, 0.958]` | `[0.930, 0.958]` | `docs/research/paper/evidence/clustered_intervals_d8083dbc.txt` at `33596a2` (evidence commit `c85a82c`) |  | MATCH |
+| `\nVelRatioAlone` | `0.879` | `0.879` | `docs/research/paper/evidence/clustered_intervals_d8083dbc.txt` at `33596a2` (evidence commit `c85a82c`) |  | MATCH |
+| `\nVelPeak` | `0.875` | `0.875` | `docs/research/paper/evidence/clustered_intervals_d8083dbc.txt` at `33596a2` (evidence commit `c85a82c`) |  | MATCH |
+| `\nVelPeakRound` | `25` | `25` | `docs/research/paper/evidence/clustered_intervals_d8083dbc.txt` at `33596a2` (evidence commit `c85a82c`) |  | MATCH |
+| `\nVelRounds` | `200` | `200` | `docs/research/paper/evidence/clustered_intervals_d8083dbc.txt` at `33596a2` (evidence commit `c85a82c`) |  | MATCH |
+| `\nVelAtRounds` | `0.860` | `0.860` | `docs/research/paper/evidence/clustered_intervals_d8083dbc.txt` at `33596a2` (evidence commit `c85a82c`) |  | MATCH |
+| `\nVelWeightedAtRounds` | `0.844` | `0.844` | `docs/research/paper/evidence/clustered_intervals_d8083dbc.txt` at `33596a2` (evidence commit `c85a82c`) |  | MATCH |

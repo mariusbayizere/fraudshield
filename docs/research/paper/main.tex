@@ -62,7 +62,11 @@ repository and is checked against its evidence file at a named git reference, th
 \texttt{m4-complete} (commit \texttt{72e7790}) unless Appendix~\ref{app:evidence} names another; the source of each is listed in \texttt{numbers.tex} and the check in
 \texttt{number\_audit.md}. Gate ranking metrics are reported as margins over the best single
 feature on the same rows, not over chance. A statement that rests on inference rather than
-measurement says so in the sentence. Intervals are \nIntervalLevel{} unless stated otherwise. Results a
+measurement says so in the sentence. Intervals are \nIntervalLevel{} unless stated otherwise. \textbf{Fraud on this benchmark arrives as
+multi-row incidents on one account, so test rows are not independent}: intervals marked
+account-clustered resample whole accounts; every other interval treats rows as independent and is
+narrower than it should be by an amount not measured (Sections~\ref{sec:method}
+and~\ref{sec:limitations}). Results a
 later milestone will produce are marked \emph{not yet measured}, with the milestone; no value is
 estimated in their place.}}
 \vfill

@@ -76,6 +76,8 @@ REF_AUDIT = "docs/research/paper/reference_audit.md"
 DEFECTS = "docs/srs/defect_register.md"
 BACKLOG = "docs/backlog/product.md"
 ADR34 = "docs/adr/0034-serving-feeds-three-trained-features-from-state-nothing-writes.md"
+CLU = "docs/research/paper/evidence/clustered_intervals_d8083dbc.txt"
+CLU_REF = "33596a2"
 ADR34_REF = "151e796"
 #: The rows of ADR 0034's skew table, up to the first value.
 TRAINED = r"\| as trained \| "
@@ -149,6 +151,10 @@ def _sd_rel(table: str, column: int) -> str:
     single = statistics.stdev(float(r[column]) for r in rows)
     ensemble = statistics.stdev(float(r[2]) for r in rows)
     return f"{(ensemble - single) / single * 100:+.2f}%"
+
+
+def _clu(pattern: str) -> Src:
+    return Src(CLU, pattern, ref=CLU_REF)
 
 
 def _adr34(pattern: str) -> Src:
@@ -964,6 +970,44 @@ SOURCES: dict[str, Src | Derived] = {
         lambda a, e: f"{Decimal(a) - Decimal(e):.3f}",
         "rounded AUC of the smallest configuration minus the largest's",
     ),
+    "nCluTestAccounts": _clu(r"fraud 985, accounts (\d+), accounts with fraud"),
+    "nCluFraudAccounts": _clu(r"accounts with fraud (\d+)"),
+    "nCluAUCci": _clu(r"ML-GATE-01 AUC-ROC\s+[\d.]+\s+\[[\d., ]+\]\s+(\[[\d., ]+\])"),
+    "nCluRecallFPRci": _clu(
+        r"ML-GATE-02 recall at 1% FPR\s+[\d.]+\s+\[[\d., ]+\]\s+(\[[\d., ]+\])"
+    ),
+    "nCluRecallSixci": _clu(r"ML-GATE-03 recall at 0\.60\s+[\d.]+\s+\[[\d., ]+\]\s+(\[[\d., ]+\])"),
+    "nCluFoneci": _clu(r"ML-GATE-04 F1 at 0\.60\s+[\d.]+\s+\[[\d., ]+\]\s+(\[[\d., ]+\])"),
+    "nRowUSSDci": _clu(r"ML-GATE-08 USSD AUC\s+[\d.]+\s+(\[[\d., ]+\])"),
+    "nCluUSSDci": _clu(r"ML-GATE-08 USSD AUC\s+[\d.]+\s+\[[\d., ]+\]\s+(\[[\d., ]+\])"),
+    "nCluCounterpartyLow": _clu(r"^\s+counterparty\s+[\d.]+\s+±[\d.]+\s+\[([\d.]+),"),
+    "nCluVelocityLow": _clu(r"^\s+velocity\s+[\d.]+\s+±[\d.]+\s+\[([\d.]+),"),
+    "nCluTemporalLow": _clu(r"^\s+temporal\s+[\d.]+\s+±[\d.]+\s+\[([\d.]+),"),
+    "nCluGeographicLow": _clu(r"^\s+geographic\s+[\d.]+\s+±[\d.]+\s+\[([\d.]+),"),
+    "nCluDeviceci": _clu(r"^\s+device_and_channel\s+[\d.]+\s+±[\d.]+\s+(\[[\d., ]+\])"),
+    "nGroupsAboveCeilingClu": Derived(
+        (
+            "nCeiling",
+            "nCluCounterpartyLow",
+            "nCluVelocityLow",
+            "nCluTemporalLow",
+            "nCluGeographicLow",
+        ),
+        _above,
+        "groups whose account-clustered lower bound exceeds the single-feature ceiling",
+    ),
+    "nNovelAccounts": _clu(r"novel_esim_delayed_drain\s+\d+/\d+ on (\d+) accounts"),
+    "nRevAccounts": _clu(r"reversal_scam_social_engineering\s+\d+/\d+ on (\d+) accounts"),
+    "nBaseAccounts": _clu(r"^\s+base\s+\d+/\d+ on (\d+) accounts"),
+    "nCluNovelci": _clu(r"novel_esim_delayed_drain .*?clustered (\[[\d., ]+\])"),
+    "nCluRevci": _clu(r"reversal_scam_social_engineering .*?clustered (\[[\d., ]+\])"),
+    "nCluBaseci": _clu(r"^\s+base .*?clustered (\[[\d., ]+\])"),
+    "nVelRatioAlone": _clu(r"velocity_ratio_1h_vs_30d alone, raw ranking: ([\d.]+)"),
+    "nVelPeak": _clu(r"^\s+25\s+([\d.]+)\s+[\d.]+$"),
+    "nVelPeakRound": _clu(r"^\s+(25)\s+0\.875"),
+    "nVelRounds": _clu(r"the battery stops at round (\d+)"),
+    "nVelAtRounds": _clu(r"^\s+200\s+([\d.]+)\s+[\d.]+$"),
+    "nVelWeightedAtRounds": _clu(r"^\s+200\s+[\d.]+\s+([\d.]+)$"),
     "nPctlFlag": Src(PROMPT, r"budget targets p(\d+) ≤ \d+ ms for flagged"),
     "nPctlTail": Src(PROMPT, r"single-request p(\d+) \(ensemble"),
     "_GroupCounts": Src(TEST_REGISTRY, r"(EXPECTED_GROUP_COUNTS = \{.*?\n\})"),

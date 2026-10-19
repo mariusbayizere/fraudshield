@@ -55,7 +55,10 @@ test's desired answer (ADR 0028).
 against the same legitimate rows at one threshold, the \nFPRBudget{} false-positive budget over all
 legitimate rows. The unseen variant is caught at \nNovelRecall{} \nNovelCI{} (\nNovelCaught{} of
 \nNovelRows{}), against \nBaseVarRecall{} \nBaseVarCI{} for the base scenarios the model trained
-on: at least as often as the familiar shape. In the earlier battery the figures were
+on: at least as often as the familiar shape. Those \nNovelRows{} rows sit on only \nNovelAccounts{}
+accounts, so they are far from independent; an account-clustered bootstrap gives \nCluNovelci{},
+and at a recall this close to one neither it nor the Wilson interval describes the uncertainty well.
+In the earlier battery the figures were
 \nEarlyNovelRecall{} against \nEarlyBaseRecall{}. The variant differs from the base SIM-swap
 scenario in its enabling event (recorded as a device change rather than a SIM swap), in its delay
 (the drain follows that event by days; the base scenario's lead is drawn from a long-tailed
@@ -121,7 +124,10 @@ say burst structure and counterparty novelty carry nearly all of the benchmark's
 
 \textbf{Result.} \texttt{reversal\_scam\_social\_engineering} is caught at \nRevRecall{}
 (\nRevCaught{} of \nRevFraud{}, Wilson \nRevCI{}), against \nBaseVarRecall{} \nBaseVarCI{} for the
-base scenarios on \nBaseVarFraud{} rows; its AUC is \nRevAUC{}, so the variant is partly ranked even
+base scenarios on \nBaseVarFraud{} rows; its AUC is \nRevAUC{}. The variant's \nRevFraud{} rows are on
+\nRevAccounts{} different accounts, so row-level dependence does not affect its interval (an
+account-clustered bootstrap gives \nCluRevci{}); the base scenarios' rows sit on \nBaseAccounts{}
+accounts, and clustering gives \nCluBaseci{}. Its AUC of \nRevAUC{} means the variant is partly ranked even
 though it is rarely flagged. The recall intervals do not overlap. The denominator is \nRevFraud{}
 rather than the \nRevRows{} rows the generator wrote because the evaluation reads the observed
 label, as a deployed model would: all \nRevTrueFraud{} rows are in the test period and are fraud by

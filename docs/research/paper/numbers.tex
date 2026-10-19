@@ -565,3 +565,25 @@
 \newcommand{\nSeedSdRelXGB}{\meas{+0.62\%}}   % derived from the seed-variance file's per-seed AUCs
 \newcommand{\nSeedSdRelLGB}{\meas{-12.49\%}}
 \newcommand{\nFrontAUCDeltaRounded}{\meas{0.005}}  % derived: rounded AUC of config A minus E
+
+% ---------------------------------------------------------------------------------------------
+% Account-clustered intervals and the velocity diagnostic (evidence/clustered_intervals_d8083dbc.txt,
+% read at 33596a2; GitHub Actions run 39273972313 reproduced the gate and the battery first).
+% ---------------------------------------------------------------------------------------------
+\newcommand{\nCluTestAccounts}{\meas{5{,}878}}\newcommand{\nCluFraudAccounts}{\meas{307}}
+\newcommand{\nCluAUCci}{\meas{[0.962, 0.978]}}
+\newcommand{\nCluRecallFPRci}{\meas{[0.846, 0.893]}}
+\newcommand{\nCluRecallSixci}{\meas{[0.705, 0.767]}}
+\newcommand{\nCluFoneci}{\meas{[0.798, 0.843]}}
+\newcommand{\nRowUSSDci}{\meas{[0.931, 0.972]}}\newcommand{\nCluUSSDci}{\meas{[0.922, 0.974]}}
+\newcommand{\nCluCounterpartyLow}{\meas{0.910}}\newcommand{\nCluVelocityLow}{\meas{0.839}}
+\newcommand{\nCluTemporalLow}{\meas{0.837}}\newcommand{\nCluGeographicLow}{\meas{0.811}}
+\newcommand{\nCluDeviceci}{\meas{[0.677, 0.763]}}
+\newcommand{\nGroupsAboveCeilingClu}{\meas{four}}  % derived: clustered lower bounds above the ceiling
+\newcommand{\nNovelAccounts}{\meas{16}}\newcommand{\nRevAccounts}{\meas{66}}
+\newcommand{\nCluNovelci}{\meas{[0.955, 1.000]}}\newcommand{\nCluRevci}{\meas{[0.029, 0.161]}}
+\newcommand{\nBaseAccounts}{\meas{222}}\newcommand{\nCluBaseci}{\meas{[0.930, 0.958]}}
+\newcommand{\nVelRatioAlone}{\meas{0.879}}
+\newcommand{\nVelPeak}{\meas{0.875}}\newcommand{\nVelPeakRound}{\meas{25}}
+\newcommand{\nVelRounds}{\meas{200}}\newcommand{\nVelAtRounds}{\meas{0.860}}
+\newcommand{\nVelWeightedAtRounds}{\meas{0.844}}

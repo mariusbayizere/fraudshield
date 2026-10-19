@@ -32,7 +32,10 @@ measured" markers. This file records every change to what the paper states, with
 
 | 2026-10-19 | Owner's answers applied. CI gates the paper (`paper.yml`: checks and a Tectonic compile on every push). The paper compiles with no undefined references or overfull lines. M5's skew table and fake-MLflow case are in the limitations, sourced to their review records. ADR 0028 is amended and the paper states the known-counterparty choice as ours where it is introduced. Contributions 3 and 4 say what M10 would add. The evaluation draw was regenerated at `m4-complete` (fingerprint `d8083dbc` matched); the label count was re-run on it and the reversal novelty counted: 19 of the 66 scored rows still carry counterparty novelty. The earlier unlogged read is back-filled; both evidence scripts log their reads | `evidence/regeneration_d8083dbc.txt`, `evidence/reversal_novelty_d8083dbc.txt`, `number_audit.md` (474 macros) |
 
+| 2026-10-19 | External review, group 1 (correctness). The gate model and the diagnostic battery were reproduced on GitHub Actions from a regenerated draw (run 39273972313; every headline matched) and account-clustered intervals added beside the row ones (Table `tab:clustered`, Sections 6, 7, 8, 11, cover note). The velocity group's 0.860 below its own member's 0.879 is measured: the untuned diagnostic model overfits (peak 0.875 near round 25, 0.860 at round 200), so group figures are lower bounds and no group ranking is claimed. Small numeric fixes: seed spread from per-seed AUCs (+0.62%), sign wording, rounded vs unrounded deltas and margins, 259 vs 260 | `evidence/clustered_intervals_d8083dbc.txt`, `number_audit.md` (503 macros) |
+
 ## Open review points
+
 
 
 
