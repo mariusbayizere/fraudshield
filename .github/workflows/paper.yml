@@ -73,7 +73,12 @@ jobs:
           "$RUNNER_TEMP/tectonic" --version
       - name: Locate the Tectonic cache
         id: tectonic-cache
-        run: echo "dir=$("$RUNNER_TEMP/tectonic" -X show user-cache-dir)" >> "$GITHUB_OUTPUT"
+        run: |
+          # `show user-cache-dir` prints .../tectonic/bundles; cache its parent, which also holds the
+          # compiled format, so a cached build neither fetches nor rebuilds it.
+          bundles=$("$RUNNER_TEMP/tectonic" -X show user-cache-dir)
+          test -n "$bundles"
+          echo "dir=$(dirname "$bundles")" >> "$GITHUB_OUTPUT"
       - name: Restore the cached TeX bundle files
         id: restore
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -93,7 +98,7 @@ jobs:
           if "$RUNNER_TEMP/tectonic" -X compile --keep-logs --only-cached --bundle "$TECTONIC_BUNDLE" main.tex; then
             echo "fetched=false" >> "$GITHUB_OUTPUT"
           else
-            echo "the cache lacks files this build needs; fetching from the pinned bundle"
+            echo "offline compile failed (files missing from the cache, or a LaTeX error); retrying online from the pinned bundle"
             "$RUNNER_TEMP/tectonic" -X compile --keep-logs --bundle "$TECTONIC_BUNDLE" main.tex
             echo "fetched=true" >> "$GITHUB_OUTPUT"
           fi
@@ -109,11 +114,21 @@ jobs:
             echo "overfull lines (README: the build has none)" >&2
             exit 1
           fi
+          # An offline build treats a file missing from a partial cache as absent. Where LaTeX then
+          # substitutes rather than stops, it warns in the log; fail on the warning. (A "LaTeX Font
+          # Info" substitution, such as bold typewriter set as bold, is the font's design and
+          # happens online too, so it is not matched.)
+          # A missing file that only changes an \IfFileExists branch leaves no trace and is a known,
+          # accepted gap: the paper uses no such optional input.
+          if grep -E "LaTeX Font Warning|not found in (the )?bundle" main.log; then
+            echo "a TeX resource was missing or substituted" >&2
+            exit 1
+          fi
       - name: The bundle is the pinned one
         env:
           CACHE_DIR: ${{ steps.tectonic-cache.outputs.dir }}
         run: |
-          found=$(cat "$CACHE_DIR"/bundles/hashes/*default_bundle_v33.tar)
+          found=$(cat "$CACHE_DIR"/bundles/hashes/*default_bundle_v33.tar)  # fails if absent
           if [ "$found" != "$TECTONIC_BUNDLE_DIGEST" ]; then
             echo "bundle digest $found, pinned $TECTONIC_BUNDLE_DIGEST" >&2
             exit 1
