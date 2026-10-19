@@ -46,7 +46,9 @@ initiated social-engineering transfers are a documented mobile-money fraud patte
 this benchmark — the "sent by mistake, please return" reversal scam, where the victim, not an
 attacker, initiates a single transfer, often to a counterparty with whom they already have
 established contact, because the scam depends on that transfer looking exactly like an ordinary
-payment.
+payment. *(The "established contact" property is not supported by the sources since read, and the
+variant as generated draws a listed payee who need not have been paid before; see the amendment of
+2026-10-19 and PB-141.)*
 
 ### Why this is not the circularity declined for Decision 1
 

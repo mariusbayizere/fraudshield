@@ -346,9 +346,11 @@ The generator has deliberately **not** been changed to make any of these experim
 Engineering a difference so that a test can fail is tuning the benchmark to produce a result.
 
 **One non-burst variant was added, and it is what a real out-of-distribution test looks like
-here.** `reversal_scam_social_engineering` (victim-initiated, single transaction, established
-counterparty — a real "sent by mistake, please return" typology, not engineered to defeat the
-model; pre-registered before generation, ADR 0028) is caught at **9.1%** (6 of 66 fraud rows,
+here.** `reversal_scam_social_engineering` (victim-initiated, single transaction, to a payee on the
+victim's own list — modelled on the "sent by mistake, please return" typology, though the listed
+payee is the project's modelling choice rather than the typology's (ADR 0028, amendment of
+2026-10-19), and 19 of the 66 rows scored as fraud go to a listed payee the account had never paid
+(PB-141); pre-registered before generation, ADR 0028) is caught at **9.1%** (6 of 66 fraud rows,
 Wilson 95% interval [4.2%, 18.4%]) against 94.4% [92.7%, 95.8%] for the base scenarios — first measured at 6.1% [2.4%, 14.6%] with a target encoding E1 forbids, and restated after the correction; the interval now reaches past the pre-registered range's 0.15 lower edge. This is a
 genuine, measured detection gap on one typology — not evidence that this dataset supports general
 non-burst generalisation claims, which it does not (PB-61).

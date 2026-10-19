@@ -900,18 +900,24 @@ def test_no_fraud_parameter_is_keyed_by_country() -> None:
 
 
 @pytest.mark.req("ML-DATA-02", "D-08")
-def test_the_reversal_scam_variant_is_one_transaction_to_a_known_payee_in_the_test_period() -> None:
+def test_the_reversal_scam_variant_is_one_transaction_to_a_listed_payee_in_test_period() -> None:
     """PB-61's pre-registered generalisation test (ADR 0028), checked against its own definition.
 
     Three properties make this a genuinely different mechanism from NOVEL_VARIANT, and all three
     are asserted directly rather than inferred from a row count: **one row per incident**, not a
     burst — checked by counting produced rows per (customer, month) call, never more than one;
-    **a counterparty already on the account's own payee list**, not a fresh or mule one — checked
-    against `customer.counterparties` itself, not against rows the corpus happens to have written
-    yet (an earlier manual check against realised legitimate rows in a small draw gave a false
-    negative for exactly this reason: the customer's other established counterparties simply had
-    not transacted yet in that draw); and **test period only** — every row's timestamp at or after
-    `config.split.test_start`, and zero rows produced for any earlier month.
+    **a counterparty on the account's own payee list**, not a fresh or mule one — checked against
+    `customer.counterparties` itself, not against rows the corpus happens to have written yet; and
+    **test period only** — every row's timestamp at or after `config.split.test_start`, and zero
+    rows produced for any earlier month.
+
+    WHAT THIS TEST DOES NOT SHOW (PB-141, a known inaccuracy kept by the owner, 2026-10-19): list
+    membership is not an earlier payment. A listed payee may never have been paid by the account,
+    and then `counterparty_is_new_for_account` is true for the row. On the evaluated draw d8083dbc
+    that holds for 19 of the 66 rows scored as fraud
+    (docs/research/paper/evidence/reversal_novelty_d8083dbc.txt), so the variant does not remove
+    counterparty novelty from every row, and this test would pass if it removed it from none. It was
+    once named "to a known payee"; it checks a listed one.
     """
     config = build_config(load_parameters(), seed=20260917, total_rows=200_000)
     population = Population(config)
@@ -961,6 +967,7 @@ def test_the_reversal_scam_variant_is_one_transaction_to_a_known_payee_in_the_te
     assert accounts, "precondition: rows were actually written"
     for account, counterparty in zip(accounts, counterparties, strict=True):
         assert counterparty in established[account], (
-            f"{counterparty} is not on {account}'s own established payee list — the mechanism "
-            "must draw from customer.counterparties, not a fresh or mule token"
+            f"{counterparty} is not on {account}'s own payee list — the mechanism must draw from "
+            "customer.counterparties, not a fresh or mule token (listed, not necessarily paid "
+            "before: PB-141)"
         )

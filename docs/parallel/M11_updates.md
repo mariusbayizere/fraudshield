@@ -359,7 +359,7 @@ brackets):
 
 1. ADR 0028 says the reversal variant's "known counterparty" property comes from the typology; the
    sources read (`reference_audit.md`, dogan2025grift and star2025mpesa) do not say so. [owner]
-2. `test_the_reversal_scam_variant_is_one_transaction_to_a_known_payee_in_the_test_period` checks
+2. `test_the_reversal_scam_variant_is_one_transaction_to_a_listed_payee_in_test_period` (formerly `..._to_a_known_payee_...`) checks
    payee-list membership, not `counterparty_is_new_for_account`; the feature's value on the 66 rows
    is unmeasured. A read-only count would settle it. [M4]
 3. `ml/src/fraudshield_ml/features/batch.py` docstring of the synthetic-identity score still says
@@ -392,7 +392,7 @@ failing lint before it was noticed and amended. Gating chains here now use `&&`.
 5. **Reversal novelty measured** on a regenerated draw (`d8083dbc` reproduced at `m4-complete`,
    `evidence/regeneration_d8083dbc.txt`): `counterparty_is_new_for_account` is true on **19 of the
    66** rows scored as fraud. The variant removes counterparty novelty from 47 rows only. Upstream:
-   `test_the_reversal_scam_variant_is_one_transaction_to_a_known_payee_in_the_test_period` asserts
+   `test_the_reversal_scam_variant_is_one_transaction_to_a_listed_payee_in_test_period` asserts
    payee-list membership, which does not imply the feature; whether the generator should be changed
    is an owner decision and is not done here. [M2 / owner]
 6. **Pre-rebase commits preserved**: `origin/m11/paper-pre-rebase-af54957` keeps the commits whose
@@ -406,3 +406,14 @@ PB-140 (`m8/frontend-rebase`, M8's block `PB-131`–`PB-140`).
 | Kind | Reserved for M11 | Used |
 |---|---|---|
 | Backlog | `PB-141`–`PB-150` | `PB-141` (the reversal-scam test checks payee-list membership, not novelty), `PB-142` (evaluations keep per-row scores) |
+
+## 12. PB-141 decided, 2026-10-19
+
+Owner: keep the reversal-scam variant as generated and describe it accurately everywhere; do not
+change the generator (it would re-draw `d8083dbc` and move every figure, with 474 macros to
+re-audit). Done here, with no change to the draw: the generator's comment and docstring, the
+scenario's test (renamed `..._to_a_listed_payee_in_test_period`, its docstring and assertion
+message saying what it does not show), the datasheet, the model card and ADR 0028 now say "a
+transfer to a listed payee", with the 19-of-66 result. PB-141 stays open as a known inaccuracy, with
+the reason in its row. The lab notebook's 2026-09-22 pre-registration keeps its original wording
+(append-only); its 2026-10-19 entry records the finding.

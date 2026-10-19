@@ -1500,7 +1500,18 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 ### PB-141 · The reversal-scam scenario does not do what its name implies: its test checks payee-list membership, not novelty
 - **Source:** M11, read-only count on the regenerated draw `d8083dbc`, 2026-10-19
   (`docs/research/paper/evidence/reversal_novelty_d8083dbc.txt`, commit `ab03392`) · **Priority:**
-  high · **Due:** M2 (the generator), with the owner's decision on whether the variant is changed
+  high · **Due:** M2 (the generator) · **Status: open, a known inaccuracy kept by owner decision
+  (2026-10-19)**
+- **Owner decision, 2026-10-19: keep the variant and describe it accurately everywhere; do not
+  change the generator.** Changing it re-draws the dataset and moves every figure from `d8083dbc`:
+  the evaluation battery, the learning curve, the ablations and the generalisation tests would all
+  be re-run and 474 paper macros re-audited, days of work to make a scenario match its name when the
+  description can say what it does. Done the same day: the generator's comment and docstring
+  (`REVERSAL_SCAM_VARIANT`, `_maybe_reversal_scam`), the test (renamed to `..._to_a_listed_payee_...`,
+  with what it does not show in its docstring and assertion message), the datasheet, the model card,
+  ADR 0028 and the paper all describe "a transfer to a listed payee, never paid before on 19 of the
+  66 scored rows". The row stays open so the inaccuracy is not forgotten; it closes only if a later
+  draw is made for another reason and the generator is changed then.
 - **Measured:** the pre-registered variant `reversal_scam_social_engineering` is meant to be a
   transfer to a counterparty the victim already knows, removing counterparty novelty. On the 66 rows
   scored as fraud, `counterparty_is_new_for_account` (complete history) is **true on 19**: the
@@ -1508,7 +1519,7 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
   only. **The scenario does not do what its name, ADR 0028 and the paper's pre-registration
   imply.**
 - **Why the test missed it:**
-  `test_the_reversal_scam_variant_is_one_transaction_to_a_known_payee_in_the_test_period` asserts
+  `test_the_reversal_scam_variant_is_one_transaction_to_a_listed_payee_in_test_period` (formerly `..._to_a_known_payee_...`) asserts
   membership of `customer.counterparties`, which does not imply an earlier payment; its own docstring
   notes that listed counterparties may not have transacted yet. A generator that pays a listed
   payee never paid before passes it, which is what the 19 rows are.

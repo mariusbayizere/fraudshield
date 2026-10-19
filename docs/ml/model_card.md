@@ -70,7 +70,9 @@ to produce a result.
 
 **One held-out shape does fail, and it is the one the two null results predicted would.** A
 pre-registered, typology-grounded non-burst variant — `reversal_scam_social_engineering`, a single
-victim-initiated transfer to an established counterparty, added 2026-09-22 (ADR 0028) specifically
+victim-initiated transfer to a payee on the victim's own list (19 of the 66 rows scored as fraud go
+to a listed payee the account had never paid, PB-141; the listed payee is a modelling choice, ADR
+0028 amendment of 2026-10-19), added 2026-09-22 (ADR 0028) specifically
 because the country and lead-time axes above never removed the two mechanisms the model actually
 relies on — is caught at **9.1%** (6 of 66 fraud rows, Wilson 95% interval [4.2%, 18.4%]), against
 94.4% [92.7%, 95.8%] for the base scenarios at the same threshold. The intervals do not overlap

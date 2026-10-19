@@ -49,8 +49,18 @@ NOVEL_VARIANT = "novel_esim_delayed_drain"
 #: (docs/research/lab_notebook.md, same date, committed before this variant was first generated)
 #: and ADR 0028: unlike NOVEL_VARIANT, which differs from its parent scenario only in *when* the
 #: drain happens and is still a burst, this variant changes the *mechanism* -- one transaction,
-#: not a burst; the victim's own act, not an attacker's; a counterparty already on the account's
-#: own payee list, not a fresh one.
+#: not a burst; the victim's own act, not an attacker's; a counterparty drawn from the account's
+#: own payee list (`customer.counterparties`), not a fresh or mule one.
+#:
+#: WHAT IT DOES NOT DO (PB-141, kept as a known inaccuracy by the owner, 2026-10-19): a listed payee
+#: is not necessarily one the account has paid before. On the evaluated draw d8083dbc, 19 of the 66
+#: rows scored as fraud go to a listed payee the account had never paid, so
+#: `counterparty_is_new_for_account` is true for them; the variant removes counterparty novelty
+#: from 47 rows only (docs/research/paper/evidence/reversal_novelty_d8083dbc.txt). Describe it as "a
+#: transfer to a listed payee", never as "a known" or "established" counterparty. "Known
+#: counterparty" is also not supported by the typology's sources (ADR 0028, amendment of
+#: 2026-10-19). The behaviour is deliberately unchanged: changing it re-draws the dataset and
+#: moves every figure measured on d8083dbc.
 #:
 #: Drawn independently per (customer, test-period month), not from any existing scenario's
 #: incident budget: `mule_account`'s own test-period incident count tops out at ~15 even at 100%
@@ -510,8 +520,10 @@ class FraudModel:
 
     def _maybe_reversal_scam(self, customer: Customer, month: int, rows: Rows) -> None:
         """PB-61's pre-registered generalisation test (ADR 0028), independent of every scenario's
-        own incident budget: a single, victim-initiated transfer to an account already on the
-        customer's own payee list, planted only in the test period.
+        own incident budget: a single, victim-initiated transfer to an account drawn from the
+        customer's own payee list, planted only in the test period. The payee is listed, not
+        necessarily paid before: on draw d8083dbc 19 of the 66 rows scored as fraud go to a payee
+        the account had never paid (PB-141; see REVERSAL_SCAM_VARIANT).
 
         Drawn once per (customer, test-period month) rather than through `plan()`, because the
         population this test needs to be measurable -- every customer active in a test-period
