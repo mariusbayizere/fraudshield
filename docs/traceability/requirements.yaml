@@ -2566,11 +2566,21 @@ requirements:
   srs_text: 'Target on 3G (Moto G4): < 2.5 seconds; Target on 4G / WiFi: < 1.2 seconds; How Measured:
     Lighthouse; Playwright CI with CPU 4x throttle + 3G network throttle'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation:
+  - frontend/e2e/performance.spec.ts
+  - frontend/vite.config.ts
   evidence: []
   deviations: []
+  notes: 'M8 (2026-10-19): NOT MET at 1 Mbps: first contentful paint 2.88 s against 2.5 s (runs 2.86,
+    2.90, 2.88 s); met at 1.6 Mbps: 2.15 s. Measured 2026-10-19 in CI (frontend-e2e, job ''performance''):
+    a first visit to /login, production build, Chromium with Playwright''s Moto G4 profile, CPU slowed
+    4x, 200 ms round trip, cache and service worker out of play, median of 3; at 1 Mbps (the slow end
+    of MOB-NET-02''s 3G) and at 1.6 Mbps. Before the first-visit preloads (a6fa344, a5ee7df) it was 3.3
+    to 3.6 s at 1 Mbps. What remains at 1 Mbps is bandwidth: about 205 KB of JavaScript at about 107 KB/s;
+    reaching 2.5 s needs about 50 KB less, which is the shared React and MUI floor (PB-133, due M9 or
+    M10). Whether 1 Mbps is the condition the target meant is the SRS''s to say; it names 1 to 5 Mbps.'
 - id: MOB-PERF-02
   section: 05B A.6 Mobile performance
   title: Largest Contentful Paint (LCP)
@@ -2579,11 +2589,19 @@ requirements:
   srs_text: 'Target on 3G (Moto G4): < 4.0 seconds; Target on 4G / WiFi: < 2.0 seconds; How Measured:
     Lighthouse; must be image or text block — not spinner'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation:
+  - frontend/e2e/performance.spec.ts
+  - frontend/vite.config.ts
   evidence: []
   deviations: []
+  notes: 'M8 (2026-10-19): Largest contentful paint 2.88 s at 1 Mbps and 2.15 s at 1.6 Mbps, under 4.0
+    s. Measured 2026-10-19 in CI (frontend-e2e, job ''performance''): a first visit to /login, production
+    build, Chromium with Playwright''s Moto G4 profile, CPU slowed 4x, 200 ms round trip, cache and service
+    worker out of play, median of 3; at 1 Mbps (the slow end of MOB-NET-02''s 3G) and at 1.6 Mbps. Not
+    asserted: that the largest paint is an image or text block rather than a spinner. Other pages are
+    not measured.'
 - id: MOB-PERF-03
   section: 05B A.6 Mobile performance
   title: Time to Interactive (TTI)
@@ -2592,11 +2610,18 @@ requirements:
   srs_text: 'Target on 3G (Moto G4): < 5.0 seconds; Target on 4G / WiFi: < 2.5 seconds; How Measured:
     Lighthouse; main thread unblocked for user input'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation:
+  - frontend/e2e/performance.spec.ts
+  - frontend/vite.config.ts
   evidence: []
   deviations: []
+  notes: 'M8 (2026-10-19): Time to interactive 2.88 s at 1 Mbps and 2.15 s at 1.6 Mbps, under 5.0 s (Lighthouse''s
+    quiet-window rule on long tasks only; its network condition is not checked). Measured 2026-10-19 in
+    CI (frontend-e2e, job ''performance''): a first visit to /login, production build, Chromium with Playwright''s
+    Moto G4 profile, CPU slowed 4x, 200 ms round trip, cache and service worker out of play, median of
+    3; at 1 Mbps (the slow end of MOB-NET-02''s 3G) and at 1.6 Mbps.'
 - id: MOB-PERF-04
   section: 05B A.6 Mobile performance
   title: Total Blocking Time (TBT)
@@ -2605,11 +2630,18 @@ requirements:
   srs_text: 'Target on 3G (Moto G4): < 300ms; Target on 4G / WiFi: < 100ms; How Measured: Lighthouse;
     no long JS tasks (> 50ms) during page load'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation:
+  - frontend/e2e/performance.spec.ts
+  - frontend/vite.config.ts
   evidence: []
   deviations: []
+  notes: 'M8 (2026-10-19): Total blocking time 0 ms at both speeds, under 300 ms (no long task after first
+    paint). Measured 2026-10-19 in CI (frontend-e2e, job ''performance''): a first visit to /login, production
+    build, Chromium with Playwright''s Moto G4 profile, CPU slowed 4x, 200 ms round trip, cache and service
+    worker out of play, median of 3; at 1 Mbps (the slow end of MOB-NET-02''s 3G) and at 1.6 Mbps. Not
+    asserted as MOB-PERF-04 words it: no long task over 50 ms during load, task by task.'
 - id: MOB-PERF-05
   section: 05B A.6 Mobile performance
   title: Cumulative Layout Shift (CLS)
@@ -2618,11 +2650,19 @@ requirements:
   srs_text: 'Target on 3G (Moto G4): < 0.1; Target on 4G / WiFi: < 0.05; How Measured: Lighthouse; skeleton
     loaders prevent layout shift on data load'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation:
+  - frontend/e2e/performance.spec.ts
+  - frontend/vite.config.ts
   evidence: []
   deviations: []
+  notes: 'M8 (2026-10-19): Cumulative layout shift 0.0003 at both speeds, under 0.1 (the sum of every
+    shift, which reads high). Measured 2026-10-19 in CI (frontend-e2e, job ''performance''): a first visit
+    to /login, production build, Chromium with Playwright''s Moto G4 profile, CPU slowed 4x, 200 ms round
+    trip, cache and service worker out of play, median of 3; at 1 Mbps (the slow end of MOB-NET-02''s
+    3G) and at 1.6 Mbps. The sign-in page has no data to load, so the row''s skeleton loaders are not
+    exercised.'
 - id: MOB-PERF-06
   section: 05B A.6 Mobile performance
   title: JS bundle (initial, gzipped)
@@ -2632,11 +2672,20 @@ requirements:
     analyser in CI; build fails if initial bundle > 200KB gzipped; MUI tree-shaking required'
   defects:
   - D-39
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation:
+  - frontend/src/release/productionBundle.build.test.ts
+  - frontend/vite.config.ts
   evidence: []
   deviations: []
+  notes: 'M8 (2026-10-19): NOT MET: a first visit downloads 204.8 KB of JavaScript, gzipped, against 200
+    KB (productionBundle.build.test.ts, the entry plus every preload, sign-in route included). Until 2026-10-19
+    the gate measured the entry and Vite''s own preloads only, about 169 KB, and read green: the route
+    a first visit lands on loaded lazily and was never counted, so the gate measured a figure that excluded
+    the landing route while the requirement failed. Counting it (the first-visit preloads put it in the
+    initial set) shows the true figure; the remaining 5 KB over, and the 50 KB that 2.5 s on 1 Mbps would
+    need, are the shared React and MUI floor (PB-133).'
 - id: MOB-PERF-07
   section: 05B A.6 Mobile performance
   title: Offline app shell load

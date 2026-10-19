@@ -3046,3 +3046,34 @@ start, and the machine stayed responsive. The scripts are
 the 240K point look like it needed a 16 GB Codespace, which it did not. The constraint was never
 total memory; it was that a long run and another agent's test suite were competing for the last
 gigabyte with no policy about who should lose.
+
+## M8 — the staff console
+
+### 2026-10-19 · A size gate that measured a figure the requirement does not mean
+
+This belongs with "A guard with two doors" (2026-09-18): a guard watching one artefact while the
+claim lives in another. Here the guard watched a figure.
+
+**The gate.** MOB-PERF-06 caps a first visit's JavaScript at 200 KB, gzipped. The bundle test summed
+the entry script and every file `index.html` preloads, and the console held itself to 185 KB of
+that. It read green, at about 169 KB.
+
+**What it left out.** A first visit has no session, so it lands on sign-in, and the sign-in route
+loads lazily, after the entry. It was never in `index.html`, so the gate never counted it. What a
+first visit actually downloads was 225 KB; the gate measured a figure that excluded the landing
+route while the requirement failed.
+
+**How it was found.** Not by the gate. The first timing measurement (2026-10-19, CI, 1 Mbps, CPU
+slowed 4x) read first paint at 3.3 to 3.6 s against 2.5 s, with no long tasks, and its request
+waterfall showed a chain of round trips after the entry. Preloading the route to remove the chain
+moved its bytes into the set the gate counts, and the gate turned red. Fixing the timing exposed the
+size.
+
+**Where it stands.** With the preloads and a lighter sign-in form, first paint is 2.88 s at 1 Mbps
+and 2.15 s at 1.6 Mbps (the SRS's 3G is 1 to 5 Mbps); the first visit is 204.8 KB. MOB-PERF-01 and
+MOB-PERF-06 are recorded as not met, each with its measurement and condition. The remaining ~50 KB
+is the shared React and MUI floor, filed as PB-133 for M9 or M10.
+
+**The testable habit.** For a size gate, ask what a user's first request actually fetches before
+the event the requirement times, and check the gate sums that, not what the build happens to list.
+A size limit standing in for a timing target is a proxy; measure the timing too.

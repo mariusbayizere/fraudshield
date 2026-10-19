@@ -92,15 +92,13 @@ describe('the production build (ADR 0080)', () => {
   it('[MOB-PERF-01] preloads the first visit: the sign-in route and English catalogues', () => {
     // Without these, first paint waits on a chain of round trips after the entry has run.
     const initial = initialScripts();
-    for (const chunk of [
-      /^assets\/LoginPage-/,
-      /^assets\/common-/,
-      /^assets\/designSystem-/,
-      /^assets\/auth-/,
-    ]) {
+    expect(initial.some((name) => name.startsWith('assets/LoginPage-'))).toBe(true);
+    // Every language's catalogue builds to the same file name; their words tell them apart. One
+    // phrase from each English catalogue: auth, common and designSystem.
+    for (const phrase of ['Work email', 'Main navigation', 'Try again']) {
       expect(
-        initial.some((name) => chunk.test(name)),
-        String(chunk),
+        initial.some((name) => (files.get(name) ?? '').includes(phrase)),
+        phrase,
       ).toBe(true);
     }
   });

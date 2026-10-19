@@ -217,3 +217,14 @@ alone for now.
    per-task rule (it measures the total blocking time); MOB-PERF-05's skeleton loaders, which the
    sign-in page does not have; Lighthouse's network-quiet condition for time to interactive; and a
    real Moto G4 (a four-times-slower runner CPU is not calibrated to one).
+
+**Addendum, 2026-10-19: the margin had excluded the landing route.** The first timing measurement
+found first paint at 3.3 to 3.6 s, waiting on round trips after the entry. The console now preloads
+the sign-in route and English's start-up and sign-in catalogues with the entry (`vite.config.ts`,
+`firstVisitPreload`, which fails the build if a target stops matching). That put the landing
+route into the set the bundle test counts, and the true first visit is 204.8 KB: over the 185 KB
+margin and over the SRS's 200 KB (MOB-PERF-06). The margin was set above on a figure that left the
+route out, so its basis no longer holds; the test now checks the SRS gate and the margin
+separately, and both fail. First paint is 2.88 s at 1 Mbps (not met) and 2.15 s at 1.6 Mbps. The
+remaining weight is the shared floor, an architecture question filed as PB-133 for M9 or M10,
+not something a screen's bytes should be shaved to hide.

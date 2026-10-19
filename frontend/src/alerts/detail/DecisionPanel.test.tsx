@@ -1,5 +1,5 @@
 import { createMemoryHistory, createRouter, RouterProvider } from '@tanstack/react-router';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import type {
   AlertDecisionAccepted,
@@ -437,6 +437,40 @@ describe(
       });
     });
 
+    it('[D-44] does not repeat an undo for a held Ctrl+Z', async () => {
+      const sent = serve({ answers: [ok202, () => json(null, 204)] });
+      const { panel } = await open();
+      await userEvent.type(within(panel).getByRole('textbox', { name: 'Comment' }), COMMENT);
+      await userEvent.click(within(panel).getByRole('button', { name: 'Confirm fraud' }));
+      await screen.findByRole('button', { name: 'Undo' });
+      // An auto-repeated key event, as a held key sends after the first.
+      fireEvent.keyDown(window, { key: 'z', ctrlKey: true, repeat: true });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(sent).toHaveLength(1);
+    });
+
+    it('[D-44] says the outcome is unknown when an undo gets no answer before the window ends', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      serve({
+        answers: [
+          ok202,
+          () =>
+            new Promise<Response>((_resolve, reject) => {
+              setTimeout(() => {
+                reject(new TypeError('network down'));
+              }, 6_000);
+            }),
+        ],
+      });
+      const { panel } = await open();
+      await userEvent.type(within(panel).getByRole('textbox', { name: 'Comment' }), COMMENT);
+      await userEvent.click(within(panel).getByRole('button', { name: 'Confirm fraud' }));
+      await userEvent.click(await screen.findByRole('button', { name: 'Undo' }));
+      await vi.advanceTimersByTimeAsync(6_500);
+      expect(await screen.findByText(/The undo got no answer in time/)).toBeVisible();
+      expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull();
+    });
+
     it('[D-44] shows the decision but offers no Undo once the server says the grace is over', async () => {
       // A client clock ahead of the server's: undo_until is already past here.
       serve({
@@ -479,6 +513,7 @@ describe(
       ['decide', 401, 'Your session has ended.'],
       ['escalate', 422, 'That role cannot take this escalation'],
       ['escalate', 409, 'This alert changed while you were reading it.'],
+      ['escalate', 400, 'check the reason and try again'],
     ] as const)('words a %s refusal (%d) for what was asked', async (operation, status, text) => {
       serve({
         answers: [

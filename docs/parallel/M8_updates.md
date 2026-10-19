@@ -220,7 +220,7 @@ Claimed 2026-10-18, after reading every branch: the highest backlog id in use an
 | Kind | Reserved for M8 | Used |
 |---|---|---|
 | ADR | `0080`–`0089` | `0080` (console architecture), `0081` (the `/system/status` proposal, on `m8/system-status-proposal`), `0082` (SRS v5.0 adoption), `0083` (the feed is a card list), `0084` (the SHAP explanation is a table) |
-| Backlog | `PB-131`–`PB-140` | `PB-131` (only `validate.ts` imports the generated Zod), `PB-132` (D-45's plain-language templates) |
+| Backlog | `PB-131`–`PB-140` | `PB-131` (only `validate.ts` imports the generated Zod), `PB-132` (D-45's plain-language templates), `PB-133` (the shared React and MUI floor) |
 
 ## 9. The analyst screens (from 2026-10-18)
 
@@ -428,3 +428,20 @@ they outlive the drawer a decision closes.
   (tested; M8B question 5 covers both); a held Ctrl+Z does not repeat; an Undo with no answer after
   the window says the outcome is unknown instead of inviting a retry; escalation's 400 names the
   reason, not the comment.
+
+**First paint, fixed as far as M8 can (owner, 2026-10-19).** The sign-in route and English's
+catalogues are preloaded with the entry, and the sign-in form uses `TextInput` instead of
+`TextField` (18 KB lighter). The session restore was never on the critical path: `/login` renders
+without it, and in the waterfall it starts after the first render. Results, CI, median of 3:
+
+| Condition (200 ms, CPU 4x, sign-in first visit) | First contentful paint | MOB-PERF-01 (< 2.5 s) |
+|---|---|---|
+| 1 Mbps, before the preloads | 3.3 to 3.6 s | not met |
+| 1 Mbps, with them | 2.88 s | **not met** |
+| 1.6 Mbps, with them | 2.15 s | met |
+
+Largest paint, time to interactive, blocking time and layout shift meet their targets at both. The
+first visit's JavaScript is 204.8 KB against MOB-PERF-06's 200 KB: **not met**, and the bundle
+test's two checks (the SRS gate and the 185 KB margin) are red, as the timing job is at 1 Mbps.
+The gate had measured a figure that excluded the landing route (lab notebook, 2026-10-19). The
+remaining ~50 KB is the shared React and MUI floor: PB-133, due M9 or M10, not M8.

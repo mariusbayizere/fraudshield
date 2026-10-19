@@ -23,7 +23,7 @@ taken twice. Claims made on branches not yet merged, as of 2026-10-17:
 | PB-76 | M4 | `M4_updates.md` on `m4/generalisation` | training rows near the corpus's start see truncated history (was a second `PB-69`) |
 | PB-77 to PB-101 | M6 | `M6_updates.md`, "Numbering reserved by this branch" | amendment 1's known gaps and the 22 section-8 rows proved only in part |
 | PB-102 to PB-130 | M7 | `M7_updates.md`, "Numbering reserved by this branch" | the merge round's unowned items and M7's rows proved only in part (PB-102 to PB-124 used) |
-| PB-131 to PB-140 | M8 | `M8_updates.md`, "Numbering reserved by this branch" | the console's own follow-ups (PB-131 and PB-132 used) |
+| PB-131 to PB-140 | M8 | `M8_updates.md`, "Numbering reserved by this branch" | the console's own follow-ups (PB-131 to PB-133 used) |
 
 ---
 
@@ -1483,6 +1483,11 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 - **Source:** M8 screen 2, the investigation drawer, 2026-10-18 · **Priority:** high · **Due:** M8
 - **Problem:** D-45 resolves FR-04-05's "plain-English description" with deterministic, localised, unit-tested templates per feature, never an LLM. The scorer sends `template_key` as `feature.<name>.increases_risk` or `.decreases_risk` (`ml/src/fraudshield_ml/serving/scorer.py`), and alerts carry a `summary_template_key` (`summary.*`). No catalogue exists, so the drawer shows each feature's name and raw value instead. The wording is what an analyst acts on, so it needs domain review, not only translation.
 - **Acceptance:** a catalogue with every key the scorer can emit (44 features, both directions) and every summary key, in en, fr, rw and sw; a test that fails when the scorer can emit a key the catalogue lacks; the drawer's SHAP rows and summary use it.
+
+### PB-133 · The console's shared React and MUI floor is too heavy for 3G at 1 Mbps
+- **Source:** M8, the first 3G timing measurements, 2026-10-19 (owner decision) · **Priority:** high · **Due:** M9 or M10, as a measured performance item; not M8
+- **Problem:** a first visit to sign-in downloads 204.8 KB of JavaScript, gzipped, over MOB-PERF-06's 200 KB, and paints first at 2.88 s at 1 Mbps (200 ms, CPU slowed 4x) against MOB-PERF-01's 2.5 s; at 1.6 Mbps it paints at 2.15 s. With the first-visit preloads there is no chain of round trips left: the transfer runs at about 107 KB/s, 86% of the link, so the time is bandwidth. About 50 KB less would bring 1 Mbps under 2.5 s. Most of what remains is the entry (120 KB: React, MUI's styling engine and core, the router, TanStack Query, i18next) and MUI's shared chunk (29 KB); the sign-in route itself is about 37 KB. Shaving a screen's bytes to hide a floor problem is the wrong move (owner).
+- **Acceptance:** an architecture decision (an ADR) on the floor, with each option's measured saving on a production build; the timing job's 1 Mbps first paint under 2.5 s and the first-visit JavaScript under 200 KB, or the requirement's condition settled by its owner; the 0.7 KB of unused server-sent-events support in the generated client is considered with it.
 
 ### PB-76 · Training rows near the corpus's start see truncated history; test rows do not
 - **Source:** PB-67's laptop cache, 2026-09-22 · **Priority:** high · **Due:** before the paper's

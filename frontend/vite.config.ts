@@ -44,14 +44,21 @@ export const FIRST_VISIT = [
 ];
 
 function firstVisitPreload(): Plugin {
+  let base = '/';
   return {
     name: 'fraudshield:first-visit-preload',
-    apply: 'build',
+    // The console's own build only: Storybook builds with this config too, and its iframe page
+    // has neither the sign-in route nor catalogue chunks to preload.
+    apply: (_config, { command }) => command === 'build' && process.env['STORYBOOK'] !== 'true',
+    configResolved(config) {
+      base = config.base;
+    },
     transformIndexHtml: {
       order: 'post',
       handler(html, context) {
         const bundle: Rollup.OutputBundle | undefined = context.bundle;
-        if (bundle === undefined) return html;
+        // The console's page only, never another HTML entry.
+        if (bundle === undefined || context.path !== '/index.html') return html;
         const chunks = Object.values(bundle).filter(
           (item): item is Rollup.OutputChunk => item.type === 'chunk',
         );
@@ -72,9 +79,9 @@ function firstVisitPreload(): Plugin {
           for (const chunk of found) visit(chunk.fileName);
         }
         const links = [...wanted]
-          .filter((fileName) => !html.includes(`/${fileName}"`))
+          .filter((fileName) => !html.includes(`${base}${fileName}"`))
           .sort()
-          .map((fileName) => `    <link rel="modulepreload" crossorigin href="/${fileName}">`)
+          .map((fileName) => `    <link rel="modulepreload" crossorigin href="${base}${fileName}">`)
           .join('\n');
         return links === '' ? html : html.replace('</head>', `${links}\n  </head>`);
       },
