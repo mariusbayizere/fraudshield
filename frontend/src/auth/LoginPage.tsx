@@ -9,7 +9,6 @@ import InputAdornment from '@mui/material/InputAdornment';
 import Link from '@mui/material/Link';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
-import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useMutation } from '@tanstack/react-query';
 import { Link as RouterLink, useNavigate, useRouterState } from '@tanstack/react-router';
@@ -17,6 +16,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { bodyOf } from '../api/body';
 import { login } from '../api/generated/sdk.gen';
+import { TextInput } from '../design-system/components/TextInput/TextInput';
 import { tokens } from '../design-system/tokens';
 import { loginSearch } from './loginSearch';
 import { useSession } from './session';
@@ -93,7 +93,7 @@ export default function LoginPage() {
             {signInMutation.error === null ? null : (
               <Alert severity="error">{t(`login.error.${signInMutation.error.failure}`)}</Alert>
             )}
-            <TextField
+            <TextInput
               label={t('login.email')}
               type="email"
               value={email}
@@ -102,9 +102,8 @@ export default function LoginPage() {
               }}
               autoComplete="username"
               required
-              fullWidth
             />
-            <TextField
+            <TextInput
               label={t('login.password')}
               type={visible ? 'text' : 'password'}
               value={password}
@@ -113,26 +112,21 @@ export default function LoginPage() {
               }}
               autoComplete="current-password"
               required
-              fullWidth
-              slotProps={{
-                input: {
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton
-                        onClick={() => {
-                          setVisible((shown) => !shown);
-                        }}
-                        aria-label={t(visible ? 'login.hidePassword' : 'login.showPassword')}
-                        aria-pressed={visible}
-                        edge="end"
-                        sx={{ minWidth: tokens.touchTargetPx, minHeight: tokens.touchTargetPx }}
-                      >
-                        {visible ? <VisibilityOff aria-hidden /> : <Visibility aria-hidden />}
-                      </IconButton>
-                    </InputAdornment>
-                  ),
-                },
-              }}
+              endAdornment={
+                <InputAdornment position="end">
+                  <IconButton
+                    onClick={() => {
+                      setVisible((shown) => !shown);
+                    }}
+                    aria-label={t(visible ? 'login.hidePassword' : 'login.showPassword')}
+                    aria-pressed={visible}
+                    edge="end"
+                    sx={{ minWidth: tokens.touchTargetPx, minHeight: tokens.touchTargetPx }}
+                  >
+                    {visible ? <VisibilityOff aria-hidden /> : <Visibility aria-hidden />}
+                  </IconButton>
+                </InputAdornment>
+              }
             />
             <Button
               type="submit"
