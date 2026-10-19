@@ -400,3 +400,20 @@ they outlive the drawer a decision closes.
   grace clamp, the deadline message, the role filter, the decided-alert panel, the version sent
   and closing on success each fail a test when removed. A guard that a risk officer cannot
   escalate was redundant with the role filter and is gone.
+- **Independent review: CHANGES_REQUIRED, 2 MAJOR, 7 MINOR, 4 NIT; fixed in the next commit.**
+  MAJOR: Confirm fraud and Mark legitimate shared one Idempotency-Key, so after a Confirm with no
+  answer, Mark legitimate would have been replayed by the server as the fraud decision while the
+  console said "marked legitimate" (each action's key now follows its content); Undo was out of a
+  keyboard user's reach within 5 s (Ctrl+Z or ⌘Z now undoes, and the notice says so). MINOR, all
+  fixed: the Undo window ran from the response and could be stretched by hovering (it now runs from
+  the send, on its own timer, and a clock ahead of the server's still shows the notice); the
+  immediate feed re-read could put a decided alert straight back (the feed is no longer re-read on
+  success; whether listAlerts lists a pending decision is put to M8B); escalation's 422, 404 and
+  401 were worded as comment errors or "try again"; an older refusal could mask a newer one; an
+  Undo by someone else or with no answer was "could not be undone" (now named, and the no-answer
+  case keeps Undo); untested branches now tested; the counter is pluralised. NIT: the unused
+  `ApiError.current` is gone, the undo mock is marked, the reason field is full width.
+- **Deletion checks of that round:** one key for all actions, the shortcut, the server's deadline,
+  re-reading the feed on success, the escalation and 404 wording, keeping an old refusal while
+  sending, keeping Undo after no answer, the not-the-author message and forgetting a refused
+  escalation's key each fail a test when removed.

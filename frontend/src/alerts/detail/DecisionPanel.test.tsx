@@ -51,6 +51,9 @@ const json = (body: unknown, status = 200) =>
 const problem = (type: string, status: number) =>
   json({ type, title: 'Refused', status, correlation_id: CORRELATION }, status);
 
+/** How many times the feed was read since serve() was called. */
+let feedReads = 0;
+
 /** The feed and drawer reads, and the panel's POSTs, which are recorded. */
 function serve({
   answers = [
@@ -61,6 +64,7 @@ function serve({
 }: Script = {}) {
   const sent: Sent[] = [];
   let decided = false;
+  feedReads = 0;
   vi.stubGlobal('fetch', async (request: Request) => {
     const path = new URL(request.url).pathname;
     if (request.method === 'POST') {
@@ -80,6 +84,7 @@ function serve({
     if (path.endsWith('/scoring-result')) return json(scoring);
     if (/\/alerts\/[^/]+$/.test(path)) return json(alertBody);
     if (path.endsWith('/alerts')) {
+      feedReads += 1;
       if (!decided) return json(page);
       return pageAfter === 'never' ? new Promise<Response>(() => undefined) : json(pageAfter);
     }
@@ -118,6 +123,9 @@ async function open(role: Role = 'ANALYST') {
 }
 
 const COMMENT = 'Velocity spike after a SIM swap';
+const ok202 = () =>
+  json({ ...accepted, undo_until: new Date(Date.now() + 5_000).toISOString() }, 202);
+const noAnswer = () => Promise.reject(new TypeError('network down'));
 
 // Typing a real comment key by key, after the shell's first lazy load, outruns the default 5 s.
 describe(
@@ -154,6 +162,7 @@ describe(
         within(panel).getByRole('textbox', { name: 'Comment' }),
         `  ${COMMENT} `,
       );
+      const readsBeforeDecision = feedReads;
       await userEvent.click(within(panel).getByRole('button', { name: 'Confirm fraud' }));
 
       await waitFor(() => {
@@ -167,6 +176,10 @@ describe(
       const notice = await screen.findByRole('alert');
       expect(notice).toHaveTextContent('Fraud confirmed for J*** M***.');
       expect(screen.queryByRole('article', { name: 'Alert for J*** M***' })).toBeNull();
+      // The feed is not re-read on success, so a server that still lists a pending decision
+      // cannot put the alert straight back (an M8B question).
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(feedReads).toBe(readsBeforeDecision);
 
       await userEvent.click(within(notice).getByRole('button', { name: 'Undo' }));
       await waitFor(() => {
@@ -301,8 +314,12 @@ describe(
       }
     });
 
-    it('offers no decision on an alert already decided', async () => {
-      serve({ alertBody: { ...alert, status: 'CONFIRMED_FRAUD' } });
+    it.each([
+      ['CONFIRMED_FRAUD', 'Confirmed fraud'],
+      ['AUTO_RELEASED', 'Auto-released'],
+      ['OVERRIDDEN', 'Overridden'],
+    ] as const)('offers no decision on an alert that is %s', async (status, label) => {
+      serve({ alertBody: { ...alert, status } });
       const router = createRouter({
         routeTree,
         history: createMemoryHistory({ initialEntries: [`/alerts/${alert.alert_id}`] }),
@@ -314,12 +331,210 @@ describe(
       );
       expect(
         await screen.findByText(
-          'This alert is Confirmed fraud; it can no longer be decided here.',
+          `This alert is ${label}; it can no longer be decided here.`,
           {},
           { timeout: 10_000 },
         ),
       ).toBeVisible();
       expect(screen.queryByRole('button', { name: 'Confirm fraud' })).toBeNull();
+    });
+
+    it('counts one character as one', async () => {
+      serve();
+      const { panel } = await open();
+      await userEvent.type(within(panel).getByRole('textbox', { name: 'Comment' }), '😀');
+      expect(within(panel).getByText('1 character, 10 to 2000')).toBeInTheDocument();
+    });
+
+    it('[D-29] never sends the other decision under the key of one that got no answer', async () => {
+      const sent = serve({ answers: [noAnswer, ok202] });
+      const { panel } = await open();
+      await userEvent.type(within(panel).getByRole('textbox', { name: 'Comment' }), COMMENT);
+      await userEvent.click(within(panel).getByRole('button', { name: 'Confirm fraud' }));
+      await within(panel).findByText('The action could not be sent. Try again.');
+      await userEvent.click(within(panel).getByRole('button', { name: 'Mark legitimate' }));
+      await waitFor(() => {
+        expect(sent).toHaveLength(2);
+      });
+      // A different action: replaying the first key would replay the fraud decision.
+      expect(sent[1]?.key).not.toBe(sent[0]?.key);
+    });
+
+    it('[D-29] makes an edited comment a new action', async () => {
+      const sent = serve({ answers: [noAnswer, ok202] });
+      const { panel } = await open();
+      const comment = within(panel).getByRole('textbox', { name: 'Comment' });
+      await userEvent.type(comment, COMMENT);
+      await userEvent.click(within(panel).getByRole('button', { name: 'Confirm fraud' }));
+      await within(panel).findByText('The action could not be sent. Try again.');
+      await userEvent.type(comment, ' and a new device');
+      await userEvent.click(within(panel).getByRole('button', { name: 'Confirm fraud' }));
+      await waitFor(() => {
+        expect(sent).toHaveLength(2);
+      });
+      expect(sent[1]?.key).not.toBe(sent[0]?.key);
+    });
+
+    it('[D-44] undoes from the keyboard with Ctrl+Z, and says so', async () => {
+      const sent = serve({ answers: [ok202, () => json(null, 204)] });
+      const { panel } = await open();
+      await userEvent.type(within(panel).getByRole('textbox', { name: 'Comment' }), COMMENT);
+      await userEvent.click(within(panel).getByRole('button', { name: 'Confirm fraud' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent('Ctrl+Z or ⌘Z undoes it.');
+      await userEvent.keyboard('{Control>}z{/Control}');
+      await waitFor(() => {
+        expect(sent[1]?.path).toBe(
+          `/api/v1/alerts/${alert.alert_id}/decisions/${accepted.decision_id}/undo`,
+        );
+      });
+    });
+
+    it('[D-44] shows the decision but offers no Undo once the server says the grace is over', async () => {
+      // A client clock ahead of the server's: undo_until is already past here.
+      serve({
+        answers: [
+          () => json({ ...accepted, undo_until: new Date(Date.now() - 1_000).toISOString() }, 202),
+        ],
+      });
+      const { panel } = await open();
+      await userEvent.type(within(panel).getByRole('textbox', { name: 'Comment' }), COMMENT);
+      await userEvent.click(within(panel).getByRole('button', { name: 'Confirm fraud' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent('Fraud confirmed for J*** M***.');
+      expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull();
+    });
+
+    it.each([
+      [
+        'urn:fraudshield:problem:not-decision-author',
+        403,
+        'Only the analyst who made the decision can undo it.',
+        false,
+      ],
+      [null, 0, 'The undo could not be sent. Try again while it is still offered.', true],
+    ] as const)(
+      'explains an undo that fails (%s), keeping Undo only if it may not have arrived',
+      async (type, status, text, kept) => {
+        serve({
+          answers: [ok202, () => (type === null ? noAnswer() : problem(type, status))],
+        });
+        const { panel } = await open();
+        await userEvent.type(within(panel).getByRole('textbox', { name: 'Comment' }), COMMENT);
+        await userEvent.click(within(panel).getByRole('button', { name: 'Confirm fraud' }));
+        await userEvent.click(await screen.findByRole('button', { name: 'Undo' }));
+        expect(await screen.findByText(new RegExp(text.replace(/[.]/g, '\\.')))).toBeVisible();
+        expect(screen.queryByRole('button', { name: 'Undo' }) !== null).toBe(kept);
+      },
+    );
+
+    it.each([
+      ['decide', 404, 'This alert is no longer available.'],
+      ['decide', 401, 'Your session has ended.'],
+      ['escalate', 422, 'That role cannot take this escalation'],
+      ['escalate', 409, 'This alert changed while you were reading it.'],
+    ] as const)('words a %s refusal (%d) for what was asked', async (operation, status, text) => {
+      serve({
+        answers: [
+          () =>
+            status === 409
+              ? problem('urn:fraudshield:problem:stale-alert', 409)
+              : problem(
+                  status === 422 ? 'urn:fraudshield:problem:validation' : 'about:blank',
+                  status,
+                ),
+        ],
+      });
+      const { panel } = await open();
+      if (operation === 'decide') {
+        await userEvent.type(within(panel).getByRole('textbox', { name: 'Comment' }), COMMENT);
+        await userEvent.click(within(panel).getByRole('button', { name: 'Confirm fraud' }));
+      } else {
+        await userEvent.selectOptions(
+          within(panel).getByRole('combobox', { name: 'Escalate to' }),
+          'SENIOR_ANALYST',
+        );
+        await userEvent.type(
+          within(panel).getByRole('textbox', { name: 'Reason for escalating' }),
+          'Linked to an active device campaign',
+        );
+        await userEvent.click(within(panel).getByRole('button', { name: 'Escalate' }));
+      }
+      expect(await within(panel).findByText(new RegExp(text))).toBeVisible();
+    });
+
+    it('clears an old refusal as soon as another action is sent', async () => {
+      serve({
+        answers: [
+          () => problem('urn:fraudshield:problem:review-deadline-passed', 409),
+          () => new Promise<Response>(() => undefined),
+        ],
+      });
+      const { panel } = await open();
+      await userEvent.type(within(panel).getByRole('textbox', { name: 'Comment' }), COMMENT);
+      await userEvent.click(within(panel).getByRole('button', { name: 'Confirm fraud' }));
+      await within(panel).findByText(/review deadline passed/);
+      await userEvent.selectOptions(
+        within(panel).getByRole('combobox', { name: 'Escalate to' }),
+        'SENIOR_ANALYST',
+      );
+      await userEvent.type(
+        within(panel).getByRole('textbox', { name: 'Reason for escalating' }),
+        'Linked to an active device campaign',
+      );
+      await userEvent.click(within(panel).getByRole('button', { name: 'Escalate' }));
+      await within(panel).findByText('Sending…');
+      expect(within(panel).queryByText(/review deadline passed/)).toBeNull();
+    });
+
+    it('shows the latest refusal, not an older one from the other action', async () => {
+      serve({
+        answers: [
+          () => problem('urn:fraudshield:problem:review-deadline-passed', 409),
+          () => problem('urn:fraudshield:problem:validation', 422),
+        ],
+      });
+      const { panel } = await open();
+      await userEvent.type(within(panel).getByRole('textbox', { name: 'Comment' }), COMMENT);
+      await userEvent.click(within(panel).getByRole('button', { name: 'Confirm fraud' }));
+      await within(panel).findByText(/review deadline passed/);
+      await userEvent.selectOptions(
+        within(panel).getByRole('combobox', { name: 'Escalate to' }),
+        'SENIOR_ANALYST',
+      );
+      await userEvent.type(
+        within(panel).getByRole('textbox', { name: 'Reason for escalating' }),
+        'Linked to an active device campaign',
+      );
+      await userEvent.click(within(panel).getByRole('button', { name: 'Escalate' }));
+      expect(await within(panel).findByText(/That role cannot take this escalation/)).toBeVisible();
+      expect(within(panel).queryByText(/review deadline passed/)).toBeNull();
+    });
+
+    it('[D-29, FR-04-10] escalates again under a new key after a refusal, and drops the alert on success', async () => {
+      const sent = serve({
+        answers: [
+          () => problem('urn:fraudshield:problem:stale-alert', 409),
+          () => json({ ...summary, status: 'ESCALATED' }, 201),
+        ],
+        pageAfter: 'never',
+      });
+      const { router, panel } = await open();
+      await userEvent.selectOptions(
+        within(panel).getByRole('combobox', { name: 'Escalate to' }),
+        'RISK_OFFICER',
+      );
+      await userEvent.type(
+        within(panel).getByRole('textbox', { name: 'Reason for escalating' }),
+        'Linked to an active device campaign',
+      );
+      const escalate = within(panel).getByRole('button', { name: 'Escalate' });
+      await userEvent.click(escalate);
+      await within(panel).findByText(/This alert changed/);
+      await userEvent.click(escalate);
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe('/alerts');
+      });
+      expect(sent[1]?.key).not.toBe(sent[0]?.key);
+      expect(screen.queryByRole('article', { name: 'Alert for J*** M***' })).toBeNull();
     });
 
     it('[FR-04-12] has no axe violations', async () => {

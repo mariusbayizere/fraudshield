@@ -5,12 +5,12 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AlertDetail, AlertStatus, Role } from '../../api/generated/types.gen';
 import { useSession } from '../../auth/session';
 import { ApiError } from '../queries';
-import { useNotify } from '../undo';
+import { UNDO_GRACE_MS, useNotify } from '../undo';
 import { codePoints, isLongEnough, TEXT_MAX, TEXT_MIN, useDecide, useEscalate } from './actions';
 
 /** The statuses an alert can still be decided or escalated in (the server is the judge). */
@@ -28,10 +28,21 @@ export function escalationTargets(role: Role | undefined): Target[] {
   return TARGETS.filter((target) => (RANK[target] ?? 0) > mine);
 }
 
-/** What an analyst reads when the server refuses an action, chosen by the Problem's type. */
+type Operation = 'decide' | 'escalate';
+
+/** What an analyst reads when the server refuses an action, by the Problem's type and status. */
 export function refusal(
   error: ApiError,
-): 'act.stale' | 'act.deadlinePassed' | 'act.levelRequired' | 'act.invalid' | 'act.failed' {
+  operation: Operation,
+):
+  | 'act.stale'
+  | 'act.deadlinePassed'
+  | 'act.levelRequired'
+  | 'act.invalid'
+  | 'act.badTarget'
+  | 'act.gone'
+  | 'act.signedOut'
+  | 'act.failed' {
   switch (error.type) {
     case 'urn:fraudshield:problem:stale-alert':
       return 'act.stale';
@@ -40,8 +51,41 @@ export function refusal(
     case 'urn:fraudshield:problem:escalation-level-required':
       return 'act.levelRequired';
     default:
-      return error.status === 400 || error.status === 422 ? 'act.invalid' : 'act.failed';
+      break;
   }
+  if (error.status === 404) return 'act.gone';
+  if (error.status === 401) return 'act.signedOut';
+  if (error.status === 400 || error.status === 422) {
+    // escalateAlert's 422 is the target role (escalation_target_not_higher), not the text.
+    return operation === 'escalate' && error.status === 422 ? 'act.badTarget' : 'act.invalid';
+  }
+  return 'act.failed';
+}
+
+/**
+ * D-29's Idempotency-Key, one per logical action. An action is its content: the same decision
+ * with the same comment on the same version is the same action, and a retry of it reuses its key
+ * so the server replays rather than repeats it; anything different (the other button, another
+ * word, a newer version) is another action with its own key. A definite refusal (4xx) ends the
+ * action, so pressing again starts a new one; a failure with no answer does not, since the first
+ * attempt may have landed.
+ */
+function useActionKeys() {
+  const keys = useRef(new Map<string, string>());
+  return {
+    keyFor(action: unknown): string {
+      const id = JSON.stringify(action);
+      let key = keys.current.get(id);
+      if (key === undefined) {
+        key = crypto.randomUUID();
+        keys.current.set(id, key);
+      }
+      return key;
+    },
+    forget(action: unknown): void {
+      keys.current.delete(JSON.stringify(action));
+    },
+  };
 }
 
 /**
@@ -64,10 +108,9 @@ export function DecisionPanel({ alert, onDone }: { alert: AlertDetail; onDone: (
   const [reason, setReason] = useState('');
   const targets = escalationTargets(user?.role);
   const [target, setTarget] = useState<Target | ''>('');
-  // One key per logical action; a retry of the same action reuses it (D-29). A new comment or
-  // reason makes it a new action.
-  const [decisionKey, setDecisionKey] = useState(() => crypto.randomUUID());
-  const [escalationKey, setEscalationKey] = useState(() => crypto.randomUUID());
+  const keys = useActionKeys();
+  // The latest refusal, whichever action it came from.
+  const [failure, setFailure] = useState<{ error: ApiError; operation: Operation } | null>(null);
 
   if (!DECIDABLE.has(alert.status)) {
     return (
@@ -78,20 +121,17 @@ export function DecisionPanel({ alert, onDone }: { alert: AlertDetail; onDone: (
   }
 
   const busy = decide.isPending || escalate.isPending;
-  // After a definite refusal (4xx) the next press is a new action and needs a new key: the
-  // server would replay the refusal for the old one. A failure with no answer keeps the key,
-  // since the first attempt may have landed.
   const refused = (error: ApiError) =>
     error.status !== undefined && error.status >= 400 && error.status < 500;
   const commentOk = isLongEnough(comment);
-  const error = decide.error ?? escalate.error;
 
   const send = (decision: 'CONFIRM_FRAUD' | 'MARK_LEGITIMATE') => {
+    const body = { decision, comment: comment.trim(), alert_version: alert.version };
+    // D-44's grace runs from when the decision was sent, whatever the server's clock says.
+    const sentAt = Date.now();
+    setFailure(null);
     decide.mutate(
-      {
-        body: { decision, comment: comment.trim(), alert_version: alert.version },
-        idempotencyKey: decisionKey,
-      },
+      { body, idempotencyKey: keys.keyFor(body) },
       {
         onSuccess: (accepted) => {
           notify({
@@ -101,13 +141,14 @@ export function DecisionPanel({ alert, onDone }: { alert: AlertDetail; onDone: (
             undo: {
               alertId: alert.alert_id,
               decisionId: accepted.decision_id,
-              until: Date.parse(accepted.undo_until),
+              deadline: Math.min(Date.parse(accepted.undo_until), sentAt + UNDO_GRACE_MS),
             },
           });
           onDone();
         },
-        onError: (failure) => {
-          if (refused(failure)) setDecisionKey(crypto.randomUUID());
+        onError: (error) => {
+          setFailure({ error, operation: 'decide' });
+          if (refused(error)) keys.forget(body);
         },
       },
     );
@@ -115,11 +156,10 @@ export function DecisionPanel({ alert, onDone }: { alert: AlertDetail; onDone: (
 
   const sendEscalation = () => {
     if (target === '') return;
+    const body = { target_role: target, reason: reason.trim(), alert_version: alert.version };
+    setFailure(null);
     escalate.mutate(
-      {
-        body: { target_role: target, reason: reason.trim(), alert_version: alert.version },
-        idempotencyKey: escalationKey,
-      },
+      { body, idempotencyKey: keys.keyFor(body) },
       {
         onSuccess: () => {
           notify({
@@ -130,8 +170,9 @@ export function DecisionPanel({ alert, onDone }: { alert: AlertDetail; onDone: (
           });
           onDone();
         },
-        onError: (failure) => {
-          if (refused(failure)) setEscalationKey(crypto.randomUUID());
+        onError: (error) => {
+          setFailure({ error, operation: 'escalate' });
+          if (refused(error)) keys.forget(body);
         },
       },
     );
@@ -146,9 +187,9 @@ export function DecisionPanel({ alert, onDone }: { alert: AlertDetail; onDone: (
       <Typography id="fs-act-heading" variant="subtitle1" component="h3" sx={{ mb: 1 }}>
         {t('act.heading')}
       </Typography>
-      {error === null ? null : (
+      {failure === null ? null : (
         <Alert severity="error" sx={{ mb: 2 }}>
-          {t(refusal(error))}
+          {t(refusal(failure.error, failure.operation))}
         </Alert>
       )}
       <TextField
@@ -156,13 +197,13 @@ export function DecisionPanel({ alert, onDone }: { alert: AlertDetail; onDone: (
         value={comment}
         onChange={(event) => {
           setComment(event.target.value);
-          setDecisionKey(crypto.randomUUID());
         }}
         multiline
         minRows={2}
         fullWidth
         required
-        helperText={t('act.count', { length: codePoints(comment), min: TEXT_MIN, max: TEXT_MAX })}
+        helperText={t('act.count', { count: codePoints(comment), min: TEXT_MIN, max: TEXT_MAX })}
+        // A code point is at most two UTF-16 units, so this never cuts a comment the contract allows.
         slotProps={{ htmlInput: { maxLength: TEXT_MAX * 2 } }}
       />
       <Stack direction="row" spacing={1} useFlexGap sx={{ mt: 1.5, flexWrap: 'wrap' }}>
@@ -208,7 +249,6 @@ export function DecisionPanel({ alert, onDone }: { alert: AlertDetail; onDone: (
               value={target}
               onChange={(event) => {
                 setTarget(event.target.value as Target | '');
-                setEscalationKey(crypto.randomUUID());
               }}
               slotProps={{ select: { native: true }, inputLabel: { shrink: true } }}
             >
@@ -224,13 +264,13 @@ export function DecisionPanel({ alert, onDone }: { alert: AlertDetail; onDone: (
               value={reason}
               onChange={(event) => {
                 setReason(event.target.value);
-                setEscalationKey(crypto.randomUUID());
               }}
               multiline
               minRows={2}
+              fullWidth
               required
               helperText={t('act.count', {
-                length: codePoints(reason),
+                count: codePoints(reason),
                 min: TEXT_MIN,
                 max: TEXT_MAX,
               })}

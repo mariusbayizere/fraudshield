@@ -136,7 +136,6 @@
   "act": {
     "heading": "Decide",
     "comment": "Comment",
-    "count": "{{length}} characters, {{min}} to {{max}}",
     "confirm": "Confirm fraud",
     "markLegitimate": "Mark legitimate",
     "sending": "Sending…",
@@ -161,6 +160,14 @@
     "deadlinePassed": "The review deadline passed, so this alert can no longer be decided here.",
     "levelRequired": "This escalated alert needs a higher role to decide.",
     "invalid": "The server did not accept this; check the comment and try again.",
-    "failed": "The action could not be sent. Try again."
+    "failed": "The action could not be sent. Try again.",
+    "count_one": "{{count}} character, {{min}} to {{max}}",
+    "count_other": "{{count}} characters, {{min}} to {{max}}",
+    "badTarget": "That role cannot take this escalation; choose a higher one.",
+    "gone": "This alert is no longer available.",
+    "signedOut": "Your session has ended. Sign in again to continue.",
+    "undoHint": "Ctrl+Z or ⌘Z undoes it.",
+    "undoRetry": "The undo could not be sent. Try again while it is still offered.",
+    "undoNotAuthor": "Only the analyst who made the decision can undo it."
   }
 }

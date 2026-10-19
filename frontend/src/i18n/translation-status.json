@@ -276,7 +276,6 @@
       "shap.error": "machine_draft",
       "act.heading": "machine_draft",
       "act.comment": "machine_draft",
-      "act.count": "machine_draft",
       "act.confirm": "machine_draft",
       "act.markLegitimate": "machine_draft",
       "act.sending": "machine_draft",
@@ -299,7 +298,15 @@
       "act.deadlinePassed": "machine_draft",
       "act.levelRequired": "machine_draft",
       "act.invalid": "machine_draft",
-      "act.failed": "machine_draft"
+      "act.failed": "machine_draft",
+      "act.count_one": "machine_draft",
+      "act.count_other": "machine_draft",
+      "act.badTarget": "machine_draft",
+      "act.gone": "machine_draft",
+      "act.signedOut": "machine_draft",
+      "act.undoHint": "machine_draft",
+      "act.undoRetry": "machine_draft",
+      "act.undoNotAuthor": "machine_draft"
     }
   },
   "fr": {
@@ -585,7 +592,6 @@
       "shap.error": "machine_draft",
       "act.heading": "machine_draft",
       "act.comment": "machine_draft",
-      "act.count": "machine_draft",
       "act.confirm": "machine_draft",
       "act.markLegitimate": "machine_draft",
       "act.sending": "machine_draft",
@@ -608,7 +614,16 @@
       "act.deadlinePassed": "machine_draft",
       "act.levelRequired": "machine_draft",
       "act.invalid": "machine_draft",
-      "act.failed": "machine_draft"
+      "act.failed": "machine_draft",
+      "act.count_one": "machine_draft",
+      "act.count_many": "machine_draft",
+      "act.count_other": "machine_draft",
+      "act.badTarget": "machine_draft",
+      "act.gone": "machine_draft",
+      "act.signedOut": "machine_draft",
+      "act.undoHint": "machine_draft",
+      "act.undoRetry": "machine_draft",
+      "act.undoNotAuthor": "machine_draft"
     }
   },
   "sw": {
@@ -888,7 +903,6 @@
       "shap.error": "machine_draft",
       "act.heading": "machine_draft",
       "act.comment": "machine_draft",
-      "act.count": "machine_draft",
       "act.confirm": "machine_draft",
       "act.markLegitimate": "machine_draft",
       "act.sending": "machine_draft",
@@ -911,7 +925,15 @@
       "act.deadlinePassed": "machine_draft",
       "act.levelRequired": "machine_draft",
       "act.invalid": "machine_draft",
-      "act.failed": "machine_draft"
+      "act.failed": "machine_draft",
+      "act.count_one": "machine_draft",
+      "act.count_other": "machine_draft",
+      "act.badTarget": "machine_draft",
+      "act.gone": "machine_draft",
+      "act.signedOut": "machine_draft",
+      "act.undoHint": "machine_draft",
+      "act.undoRetry": "machine_draft",
+      "act.undoNotAuthor": "machine_draft"
     }
   }
 }

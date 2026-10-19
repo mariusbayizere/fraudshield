@@ -774,9 +774,10 @@ requirements:
     in the drawer, against contract-example mocks): both decisions stay disabled until the comment has
     10 to 2000 code points (as the contract counts); sending shows progress; success closes the drawer,
     removes the alert from the feed at once and offers Undo for D-44''s grace. Not measured: the 200 ms
-    feedback. Depends on the analyst API (M8B): decideAlert, undoAlertDecision and escalateAlert. Built
-    against mocks generated from the contract, which are not evidence: this row stays at most IN_PROGRESS
-    until those operations exist on main and the screen is exercised against them.'
+    feedback, or actions completing within 2 seconds. Depends on the analyst API (M8B): decideAlert, undoAlertDecision
+    and escalateAlert. Built against mocks generated from the contract, which are not evidence: this row
+    stays at most IN_PROGRESS until those operations exist on main and the screen is exercised against
+    them.'
 - id: FR-04-05
   section: 3.4 FR-04 Analyst dashboard
   title: 'SHAP waterfall chart in investigation panel: all 44 features ranked by absolute SHAP value;
@@ -2179,9 +2180,10 @@ requirements:
     screen 3 (2026-10-19, the decision panel in the drawer, against contract-example mocks): Confirm fraud
     (red, outlined) and Mark legitimate (green), the comment field, and the escalation''s role as a native
     select (ADR 0080); progress while sending; success closes the drawer and removes the alert; an Undo
-    Snackbar for the grace. Depends on the analyst API (M8B): decideAlert, undoAlertDecision and escalateAlert.
-    Built against mocks generated from the contract, which are not evidence: this row stays at most IN_PROGRESS
-    until those operations exist on main and the screen is exercised against them.'
+    Snackbar for the grace, with Ctrl+Z or ⌘Z named in it for keyboard users. Depends on the analyst API
+    (M8B): decideAlert, undoAlertDecision and escalateAlert. Built against mocks generated from the contract,
+    which are not evidence: this row stays at most IN_PROGRESS until those operations exist on main and
+    the screen is exercised against them.'
 - id: UX-DASH-07
   section: 5.4 Analyst dashboard components
   title: MEDIUM Timer Badge
@@ -5485,13 +5487,15 @@ requirements:
   evidence: []
   deviations: []
   notes: 'M8 screen 3 (2026-10-19, the decision panel in the drawer, against contract-example mocks):
-    every decision and escalation carries the alert''s version and an Idempotency-Key; a refused action
-    is sent again under a new key, an unanswered one under the same; stale-alert and passed-deadline refusals
-    are explained. Not built: the offline queue, Background Sync and its replay, the conflict card naming
-    what changed, and the encrypted offline cache. Depends on the analyst API (M8B): decideAlert, undoAlertDecision
-    and escalateAlert. Built against mocks generated from the contract, which are not evidence: this row
-    stays at most IN_PROGRESS until those operations exist on main and the screen is exercised against
-    them.'
+    every decision and escalation carries the alert''s version and an Idempotency-Key; each action''s
+    key follows its content (the decision or target, the text, the version), so the other button or an
+    edited comment is a new action with a new key and a repeat of the same one reuses its key; a refused
+    action is sent again under a new key, an unanswered one under the same; stale-alert and passed-deadline
+    refusals are explained. Not built: the offline queue, Background Sync and its replay, the conflict
+    card naming what changed, and the encrypted offline cache. Depends on the analyst API (M8B): decideAlert,
+    undoAlertDecision and escalateAlert. Built against mocks generated from the contract, which are not
+    evidence: this row stays at most IN_PROGRESS until those operations exist on main and the screen is
+    exercised against them.'
 - id: D-30
   section: Build prompt Part B defect register
   title: auto_block_events is declared immutable but contains mutable columns
@@ -5766,12 +5770,15 @@ requirements:
   evidence: []
   deviations: []
   notes: 'M8 screen 3 (2026-10-19, the decision panel in the drawer, against contract-example mocks):
-    the console offers Undo from the server''s undo_until, never longer than the 5 s grace, so a clock
-    behind the server''s cannot offer an Undo the server refuses; Undo calls undoAlertDecision and the
-    alert returns; a late Undo says the decision stands. Depends on the analyst API (M8B): decideAlert,
-    undoAlertDecision and escalateAlert. Built against mocks generated from the contract, which are not
-    evidence: this row stays at most IN_PROGRESS until those operations exist on main and the screen is
-    exercised against them.'
+    Undo is offered until the earlier of the server''s undo_until and 5 s after the console sent the decision,
+    on its own timer (hovering cannot stretch it); a client clock ahead of the server''s offers none,
+    and the decision''s notice still shows. Ctrl+Z or ⌘Z undoes while it is offered. Undo calls undoAlertDecision
+    and the alert returns; a late Undo says the decision stands, an Undo by someone else says only the
+    author can, and one with no answer is offered again while the window lasts. The 5 s is the server''s
+    grace, an essential time limit under WCAG 2.2.1, not the console''s to extend. Depends on the analyst
+    API (M8B): decideAlert, undoAlertDecision and escalateAlert. Built against mocks generated from the
+    contract, which are not evidence: this row stays at most IN_PROGRESS until those operations exist
+    on main and the screen is exercised against them.'
 - id: D-45
   section: Build prompt Part B defect register
   title: SHAP chart "all 44 features ranked" overwhelms under time pressure.

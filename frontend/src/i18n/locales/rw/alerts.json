@@ -136,7 +136,6 @@
   "act": {
     "heading": "Gufata icyemezo",
     "comment": "Igitekerezo",
-    "count": "Inyuguti {{length}}, kuva kuri {{min}} kugeza kuri {{max}}",
     "confirm": "Emeza uburiganya",
     "markLegitimate": "Emeza ko ari byo",
     "sending": "Biroherezwa…",
@@ -161,6 +160,14 @@
     "deadlinePassed": "Igihe cyo gusuzuma cyarenze; iri menyesha ntirigishobora gufatirwa icyemezo hano.",
     "levelRequired": "Iri menyesha ryoherejwe hejuru rikeneye uruhare rwisumbuye kugira ngo rifatirwe icyemezo.",
     "invalid": "Seriveri ntiyabyemeye; suzuma igitekerezo wongere ugerageze.",
-    "failed": "Igikorwa ntikyashoboye koherezwa. Ongera ugerageze."
+    "failed": "Igikorwa ntikyashoboye koherezwa. Ongera ugerageze.",
+    "count_one": "Inyuguti {{count}}, kuva kuri {{min}} kugeza kuri {{max}}",
+    "count_other": "Inyuguti {{count}}, kuva kuri {{min}} kugeza kuri {{max}}",
+    "badTarget": "Urwo ruhare ntirushobora kwakira iri yoherezwa; hitamo urwisumbuye.",
+    "gone": "Iri menyesha ntirikiboneka.",
+    "signedOut": "Igihe cyawe cyarangiye. Ongera winjire kugira ngo ukomeze.",
+    "undoHint": "Ctrl+Z cyangwa ⌘Z birabihindura.",
+    "undoRetry": "Guhindura ntibyashoboye koherezwa. Ongera ugerageze bigihari.",
+    "undoNotAuthor": "Umusesenguzi wafashe icyemezo ni we wenyine ushobora kugihindura."
   }
 }

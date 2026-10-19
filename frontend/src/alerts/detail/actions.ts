@@ -80,13 +80,17 @@ export function useDecide(alertId: string) {
       if (!isAccepted(accepted)) throw new ApiError(undefined);
       return checked('zAlertDecisionAccepted', accepted);
     },
+    // The decided alert leaves the feed at once. The feed is not re-read now: whether listAlerts
+    // still lists a PENDING_COMMIT alert is not in the contract (an M8B question), and a re-read
+    // that did would put it straight back. The 60 s refresh, or an Undo, re-reads it.
     onSuccess: () => {
       dropFromFeeds(client, alertId);
-    },
-    onSettled: () => {
-      void client.invalidateQueries({ queryKey: ['alerts'] });
       void client.invalidateQueries({ queryKey: ['alert', alertId] });
       void client.invalidateQueries({ queryKey: ['dashboard-stats'] });
+    },
+    onError: () => {
+      void client.invalidateQueries({ queryKey: ['alerts'] });
+      void client.invalidateQueries({ queryKey: ['alert', alertId] });
     },
   });
 }

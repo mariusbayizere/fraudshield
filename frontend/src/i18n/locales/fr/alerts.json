@@ -141,7 +141,6 @@
   "act": {
     "heading": "Décider",
     "comment": "Commentaire",
-    "count": "{{length}} caractères, de {{min}} à {{max}}",
     "confirm": "Confirmer la fraude",
     "markLegitimate": "Juger légitime",
     "sending": "Envoi…",
@@ -166,6 +165,15 @@
     "deadlinePassed": "Le délai d'examen est dépassé ; cette alerte ne peut plus être décidée ici.",
     "levelRequired": "Cette alerte transmise demande un rôle plus élevé pour être décidée.",
     "invalid": "Le serveur n'a pas accepté cette action ; vérifiez le commentaire et réessayez.",
-    "failed": "L'action n'a pas pu être envoyée. Réessayez."
+    "failed": "L'action n'a pas pu être envoyée. Réessayez.",
+    "count_one": "{{count}} caractère, de {{min}} à {{max}}",
+    "count_many": "{{count}} caractères, de {{min}} à {{max}}",
+    "count_other": "{{count}} caractères, de {{min}} à {{max}}",
+    "badTarget": "Ce rôle ne peut pas recevoir cette transmission ; choisissez un rôle plus élevé.",
+    "gone": "Cette alerte n'est plus disponible.",
+    "signedOut": "Votre session est terminée. Reconnectez-vous pour continuer.",
+    "undoHint": "Ctrl+Z ou ⌘Z l'annule.",
+    "undoRetry": "L'annulation n'a pas pu être envoyée. Réessayez tant qu'elle est proposée.",
+    "undoNotAuthor": "Seul l'analyste qui a pris la décision peut l'annuler."
   }
 }

@@ -136,7 +136,6 @@
   "act": {
     "heading": "Amua",
     "comment": "Maoni",
-    "count": "Herufi {{length}}, kuanzia {{min}} hadi {{max}}",
     "confirm": "Thibitisha ulaghai",
     "markLegitimate": "Thibitisha halali",
     "sending": "Inatuma…",
@@ -161,6 +160,14 @@
     "deadlinePassed": "Muda wa ukaguzi umepita; arifa hii haiwezi tena kuamuliwa hapa.",
     "levelRequired": "Arifa hii iliyopelekwa juu inahitaji jukumu la juu zaidi ili kuamuliwa.",
     "invalid": "Seva haikukubali hili; kagua maoni na ujaribu tena.",
-    "failed": "Kitendo hakikuweza kutumwa. Jaribu tena."
+    "failed": "Kitendo hakikuweza kutumwa. Jaribu tena.",
+    "count_one": "Herufi {{count}}, kuanzia {{min}} hadi {{max}}",
+    "count_other": "Herufi {{count}}, kuanzia {{min}} hadi {{max}}",
+    "badTarget": "Jukumu hilo haliwezi kupokea upelekaji huu; chagua la juu zaidi.",
+    "gone": "Arifa hii haipatikani tena.",
+    "signedOut": "Kipindi chako kimeisha. Ingia tena ili kuendelea.",
+    "undoHint": "Ctrl+Z au ⌘Z inatendua.",
+    "undoRetry": "Utenduzi haukuweza kutumwa. Jaribu tena ukiwa bado unatolewa.",
+    "undoNotAuthor": "Ni mchambuzi aliyefanya uamuzi pekee anayeweza kuutendua."
   }
 }

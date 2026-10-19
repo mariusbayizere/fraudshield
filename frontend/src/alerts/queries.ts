@@ -20,8 +20,6 @@ export class ApiError extends Error {
   readonly status: number | undefined;
   /** The Problem's type URN, which says which rule refused the action (409, 403, 422). */
   readonly type: string | undefined;
-  /** A stale-alert Problem's `current` alert (StaleAlertProblem), as the server now has it. */
-  readonly current: unknown;
 
   constructor(error: unknown) {
     super('the API call failed');
@@ -33,7 +31,6 @@ export class ApiError extends Error {
     this.correlationId = typeof id === 'string' ? id : undefined;
     this.status = typeof status === 'number' ? status : undefined;
     this.type = typeof type === 'string' ? type : undefined;
-    this.current = 'current' in problem ? problem.current : undefined;
   }
 }
 

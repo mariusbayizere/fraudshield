@@ -92,7 +92,7 @@ export const handlers = [
   ),
   http.post(
     '/api/v1/alerts/:alertId/decisions/:decisionId/undo',
-    () => new HttpResponse(null, { status: 204 }),
+    () => new HttpResponse(null, { status: 204, headers: { 'x-mock': MOCK_MARKER } }),
   ),
   http.post('/api/v1/alerts/:alertId/escalations', () =>
     HttpResponse.json(
