@@ -1,6 +1,6 @@
 # 0085 — The account's behaviour and network are drawn without a chart or graph library
 
-- **Status:** Proposed (M8 screen 4, 2026-10-19), for the owner to decide, as for ADR 0083 and 0084
+- **Status:** Accepted (owner decision, 2026-10-19, on the same terms as ADR 0084)
 - **Date:** 2026-10-19
 - **Requirements affected:** FR-04-07, FR-04-08 (deviations); FR-04-06 (none)
 - **Related:** ADR 0003 (versions), ADR 0009 (licences), ADR 0080 (console architecture), ADR 0083
@@ -20,7 +20,7 @@ None of Recharts, D3 or vis-network is a dependency of the console. ADR 0084 kep
 the SHAP explanation. The owner gave the reason: a library is not added to match a component a row
 names when the row's content can be met without it.
 
-## Decision (proposed)
+## Decision
 
 **FR-04-07** is drawn with MUI tables, shading and bars:
 
@@ -89,9 +89,9 @@ charts**. M11 and M12 should describe them that way. Against the rows as written
 
 ## Consequences
 
+- **No new library** (owner, 2026-10-19). The record says the tables and drawing are sufficient
+  for the requirements' content, not equivalent to the named charts; M11 and M12 should say the
+  same, and list the gaps above where they describe the console.
 - FR-04-07 and FR-04-08 record this ADR as their deviation. As ADR 0084 says, **a deviation never
   promotes a row past the mock rule**: each stays IN_PROGRESS until M8B serves the operation and
   the screen is exercised against it.
-- If the owner rejects this proposal, the next step is a dependency decision: D3 (ISC) or
-  vis-network (Apache-2.0 or MIT). That needs ADR 0009's licence review and ADR 0003's pinning,
-  and it adds a lazy chunk to the drawer.

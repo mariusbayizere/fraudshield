@@ -3077,3 +3077,37 @@ is the shared React and MUI floor, filed as PB-133 for M9 or M10.
 **The testable habit.** For a size gate, ask what a user's first request actually fetches before
 the event the requirement times, and check the gate sums that, not what the build happens to list.
 A size limit standing in for a timing target is a proxy; measure the timing too.
+
+### 2026-10-19 · Two tests that could not fail, and which check found each
+
+M8 screen 4 (the account's context in the investigation drawer) went through both of M8's checks:
+an independent review, and a deletion check that breaks each claimed behaviour and expects a test
+to fail (37 mutations). Each check found one test that could not fail. Neither found both.
+
+**A test that passed through its own fallback.** The hour panel shades each hour in proportion to
+the busiest. The test read each swatch's alpha from its computed colour with a pattern for `rgba(...)`
+and fell back to 1 when the pattern did not match. A fully opaque swatch computes as `rgb(...)`, so
+the busiest hour always reached the fallback: "the busiest hour is fully shaded" passed whatever
+the colour was. The deletion check did not catch it. Its mutation (every hour at full shade) was
+killed by another assertion in the same test, at half shade, so the test counted as working. The
+review caught it by reading the test, not by running it. With the fallback gone, the unchanged code
+failed the test, because the pattern had never matched an opaque colour.
+
+**A test written to answer a review, too loose to catch the defect.** The review found that
+second-degree accounts were not drawn beside their counterparty, though the code's comment and the
+ADR said they were. The layout was rewritten, and the new test checked that each account lay within
+its counterparty's sector. Spreading the accounts evenly round the whole circle still passed that
+test. With one counterparty holding ten-elevenths of the circle, "within the sector" is nearly
+anywhere. The deletion check caught it: that mutation survived. The test now checks that the
+accounts' offsets from their counterparty balance either side and lean its way. An even spread
+round the circle sums to zero.
+
+**What it says about the checks.** A review reads intent and can see a test that cannot fail
+whatever the code does. A mutation run sees only whether some assertion fails, so a test with one
+good assertion hides a vacuous one beside it. A mutation checks what the code does and can catch a
+test that is too weak for the defect it was written for, which a reader judging that test against
+the review's words can accept. The two are complements; neither replaces the other.
+
+**The testable habit.** A helper that reads a value from the page for a test should fail when it
+cannot read it, not supply a value. A test written in answer to a finding should be mutated with
+the finding's own defect before the finding is closed.

@@ -89,7 +89,8 @@ implementation; M8's console does not build against any of them until both exist
    up to 64 characters (`local_hour` in the example). Without the list, the console cannot give
    them plain-language names in four languages, so it shows the raw key, as the SHAP table shows
    feature names. An enum, or a catalogue beside the 44 features, would let the names be written
-   and reviewed with D-45's templates (PB-132).
+   and reviewed with D-45's templates (PB-132). The names belong to PB-132's owner (owner,
+   2026-10-19); M8B's part is the list.
 8. **Are the account context's lists unique?** Nothing in the contract says a network's node
    tokens, its (source, target) pairs, the profile's comparison attributes or channels, or a
    history's transaction ids are distinct (no `uniqueItems`, no stated key). The console keeps every

@@ -1483,6 +1483,7 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 - **Source:** M8 screen 2, the investigation drawer, 2026-10-18 · **Priority:** high · **Due:** M8
 - **Problem:** D-45 resolves FR-04-05's "plain-English description" with deterministic, localised, unit-tested templates per feature, never an LLM. The scorer sends `template_key` as `feature.<name>.increases_risk` or `.decreases_risk` (`ml/src/fraudshield_ml/serving/scorer.py`), and alerts carry a `summary_template_key` (`summary.*`). No catalogue exists, so the drawer shows each feature's name and raw value instead. The wording is what an analyst acts on, so it needs domain review, not only translation.
 - **Acceptance:** a catalogue with every key the scorer can emit (44 features, both directions) and every summary key, in en, fr, rw and sw; a test that fails when the scorer can emit a key the catalogue lacks; the drawer's SHAP rows and summary use it.
+- **Also covers (owner, 2026-10-19):** the plain-language names of `BehaviourProfile.comparison`'s attributes (M8 screen 4, FR-04-07), which the drawer shows as raw keys such as `local_hour`. The same gap, so the same owner: whoever writes the feature templates names these too, once M8B has said which attributes the server can send (`M8B_updates.md`, item 7).
 
 ### PB-133 · The console's shared React and MUI floor is too heavy for 3G at 1 Mbps
 - **Source:** M8, the first 3G timing measurements, 2026-10-19 (owner decision) · **Priority:** high · **Due:** M9 or M10, as a measured performance item; not M8

@@ -456,7 +456,7 @@ amount and by channel. Network (getAccountNetwork): the account, its counterpart
 degree in a fixed SVG layout, confirmed fraud red with a glow, zoom by buttons, pan by dragging or
 the arrow keys, and every account and link in two tables.
 
-- **No chart or graph library (ADR 0085, Proposed, for the owner).** As ADR 0084 for the SHAP
+- **No chart or graph library (ADR 0085, accepted by the owner, 2026-10-19).** As ADR 0084 for the SHAP
   table: tables with shading and bars instead of the heatmap, histogram and pie; an SVG instead of
   vis-network or D3. The ADR lists what they do not give (no pie, no force layout, button zoom
   only, labels by a token's last four characters). FR-04-07 and FR-04-08 record it; the rows stay

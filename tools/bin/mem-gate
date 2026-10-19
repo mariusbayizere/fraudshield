@@ -1,0 +1,75 @@
+#!/usr/bin/env sh
+# Run a heavy local step only when there is memory for it (owner, 2026-10-17 and 2026-10-19).
+#
+#   tools/bin/mem-gate [--floor MB] [--wait SECONDS] -- <command> [args...]
+#
+# Reads MemAvailable from /proc/meminfo. At or above the floor (default 1536 MB) -> runs the command
+# in its place, so its exit status is the gate's. Below it -> waits up to --wait seconds (default 0)
+# for memory to free, then refuses with exit 75 and never runs the command.
+#
+# A wrapper, not a check: a `free` reading in front of a command once reported too little memory and
+# the command ran anyway (M8 screen 4, 2026-10-19). Through this script it is not started when the
+# reading is below the floor. (Memory can still fall after the reading; that is the watchdog's job.)
+#
+# MEM_GATE_MEMINFO and MEM_GATE_POLL (seconds between readings, default 10) exist for the tests.
+# Numbers are whole and at most 9 digits, so the shell's comparisons cannot overflow.
+set -eu
+
+floor=1536
+wait=0
+while [ "$#" -gt 0 ]; do
+  case $1 in
+    --floor) floor=${2:?--floor needs a value}; shift 2 ;;
+    --wait) wait=${2:?--wait needs a value}; shift 2 ;;
+    --) shift; break ;;
+    *) echo "usage: tools/bin/mem-gate [--floor MB] [--wait SECONDS] -- <command> [args...]" >&2; exit 2 ;;
+  esac
+done
+if [ "$#" -eq 0 ]; then
+  echo "usage: tools/bin/mem-gate [--floor MB] [--wait SECONDS] -- <command> [args...]" >&2
+  exit 2
+fi
+meminfo=${MEM_GATE_MEMINFO:-/proc/meminfo}
+poll=${MEM_GATE_POLL:-10}
+for n in "$floor" "$wait" "$poll"; do
+  case $n in
+    '' | *[!0-9]* | ??????????*) echo "mem-gate: --floor, --wait and MEM_GATE_POLL take whole numbers of at most 9 digits" >&2; exit 2 ;;
+  esac
+done
+# Base 10 even with a leading zero: shell arithmetic would read 08 as a bad octal number.
+decimal() {
+  n=$1
+  while [ "${#n}" -gt 1 ] && [ "${n#0}" != "$n" ]; do n=${n#0}; done
+  echo "$n"
+}
+floor=$(decimal "$floor")
+wait=$(decimal "$wait")
+poll=$(decimal "$poll")
+if [ "$poll" -lt 1 ]; then
+  echo "mem-gate: MEM_GATE_POLL must be at least 1" >&2
+  exit 2
+fi
+
+available_mb() {
+  # MemAvailable is in kB; an unreadable or missing figure reads as 0, which refuses.
+  # The first MemAvailable line only, so a repeated line cannot be read as one long number.
+  awk '/^MemAvailable:/ { printf "%d", $2 / 1024; found = 1; exit } END { if (!found) print 0 }' \
+    "$meminfo" 2>/dev/null || echo 0
+}
+
+waited=0
+while :; do
+  now=$(available_mb)
+  if [ "$now" -ge "$floor" ]; then
+    echo "mem-gate: ${now} MB available, floor ${floor} MB: running $1" >&2
+    exec "$@"
+  fi
+  if [ "$waited" -ge "$wait" ]; then
+    echo "mem-gate: REFUSED: ${now} MB available, below the ${floor} MB floor; $1 was not run" >&2
+    exit 75
+  fi
+  # Never past --wait: the last sleep is only what is left of it.
+  step=$((wait - waited < poll ? wait - waited : poll))
+  sleep "$step"
+  waited=$((waited + step))
+done

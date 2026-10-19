@@ -867,10 +867,12 @@ requirements:
     the drawer''s Behaviour tab, against contract-example mocks): the four panels as tables with shading
     and bars (hours, amounts, channels with their shares in place of a pie, and this transaction against
     the account''s normal with unusual rows in amber, an icon and the word Unusual). No chart library:
-    ADR 0085, Proposed, lists what the panels do not give that the named charts would. The contract does
-    not say the time zone of hourly_counts or name the comparison attributes (raw keys shown): M8B_updates.md
-    items 6 and 7. Not measured: within 1 second. Not testable here: accurate against TimescaleDB (M8B).
-    A deviation does not lift the mock rule.'
+    ADR 0085 (accepted, owner 2026-10-19: sufficient, not equivalent) lists what the panels do not give
+    that the named charts would. The contract does not say the time zone of hourly_counts or name the
+    comparison attributes (raw keys shown): M8B_updates.md items 6 and 7. The attribute names are the
+    same gap as PB-132 and have the same owner (owner, 2026-10-19); PB-132 records it too. Not measured:
+    within 1 second. Not testable here: accurate against TimescaleDB (M8B). A deviation does not lift
+    the mock rule.'
 - id: FR-04-08
   section: 3.4 FR-04 Analyst dashboard
   title: 'Transaction network graph: flagged account + counterparty + 2nd-degree connections; known fraud
@@ -897,9 +899,9 @@ requirements:
     on a ring, the second degree outside in its counterparty''s sector, the rings grown so no nodes overlap),
     confirmed fraud drawn red with a glow, a thicker ring and a mark, zoom by buttons (x0.5 to x4) and
     pan by dragging or the arrow keys; two tables carry every account and link. Not vis-network or D3:
-    ADR 0085, Proposed, lists what the drawing does not give (no force layout, button zoom only, labels
-    by the token''s last four characters and small at 50 nodes). Not measured: 50 nodes within 2 seconds.
-    A deviation does not lift the mock rule.'
+    ADR 0085 (accepted, owner 2026-10-19: sufficient, not equivalent) lists what the drawing does not
+    give (no force layout, button zoom only, labels by the token''s last four characters and small at
+    50 nodes). Not measured: 50 nodes within 2 seconds. A deviation does not lift the mock rule.'
 - id: FR-04-09
   section: 3.4 FR-04 Analyst dashboard
   title: 'Alert filter and search: by transaction_id, account_id, amount range, channel, date range, risk

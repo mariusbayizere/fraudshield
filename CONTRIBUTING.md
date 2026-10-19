@@ -34,6 +34,14 @@ Without Docker they print `SKIPPED: … requires Docker, verified in CI`; with `
 (CI, Codespaces) a missing daemon fails the run (ADR 0010). Performance numbers used for gates come
 only from a machine recorded in `docs/benchmarks/hardware.md`, never from CI runners.
 
+## Heavy local runs
+
+On a laptop with little memory, start a heavy step (a full test run, a build, a mutation run)
+through `tools/bin/mem-gate [--floor MB] [--wait SECONDS] -- <command>`. Below the floor (1536 MB
+of `MemAvailable` by default) it refuses with exit 75 and never starts the command; at or above it, the
+command's own exit status is the gate's. A `free` reading in front of a command reports without
+stopping anything, so it is not a gate.
+
 ## Commits
 
 Conventional Commits, imperative subject ≤ 72 characters, body explaining why, with
