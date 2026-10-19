@@ -79,6 +79,37 @@
     "emptyTitle": "No anomalies to review",
     "emptyDescription": "Transactions the anomaly detector flags appear here."
   },
+  "escalations": {
+    "intro": "Alerts escalated to your role, or to a role below it, and the ones you escalated.",
+    "emptyTitle": "No escalations",
+    "emptyDescription": "Alerts escalated to your role appear here."
+  },
+  "search": {
+    "label": "Search alerts",
+    "submit": "Search",
+    "clear": "Clear search",
+    "intro": "Search the standard queue by transaction, account, amount, date or analyst, with the filters below.",
+    "emptyTitle": "Search alerts",
+    "emptyDescription": "Enter at least one criterion, or choose a filter, then search.",
+    "field": {
+      "transaction_id": "Transaction ID",
+      "account_id": "Account token",
+      "analyst_id": "Analyst ID",
+      "amount_min": "Amount from",
+      "amount_max": "Amount up to",
+      "from": "From",
+      "to": "To"
+    },
+    "invalid": {
+      "transaction_id": "A transaction ID looks like 3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11.",
+      "analyst_id": "An analyst ID looks like 3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11.",
+      "account_id": "An account token starts with tok_ and has 24 to 64 letters or digits after it.",
+      "amount_min": "An amount, such as 15000 or 15000.50.",
+      "amount_max": "An amount, at least the amount from.",
+      "from": "A date and time.",
+      "to": "A date and time after the start."
+    }
+  },
   "detail": {
     "title": "Alert",
     "label": "Investigation of {{name}}",
@@ -241,5 +272,18 @@
     "undoNotAuthor": "Only the analyst who made the decision can undo it.",
     "invalidReason": "The server did not accept this; check the reason and try again.",
     "undoUnknown": "The undo got no answer in time; check the alert's decisions to see which stands."
+  },
+  "performance": {
+    "intro": "Your own figures for today. They refresh every minute.",
+    "reviewedToday": "Alerts reviewed today",
+    "averageReview": "Average review time",
+    "backlog": "Alerts waiting for you",
+    "accuracy": "Accuracy",
+    "notYet": "Not yet",
+    "accuracyPending": "Shown once customers have verified some of your decisions.",
+    "loading": "Loading your figures…",
+    "error": "Your figures could not be loaded.",
+    "verified_one": "From {{count}} verified decision",
+    "verified_other": "From {{count}} verified decisions"
   }
 }

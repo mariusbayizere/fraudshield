@@ -242,10 +242,10 @@ no copy is in it, and `examplesDrift.test.ts` fails if one returns.
 | 2 | Alert detail and SHAP | `/alerts/$alertId` | getAlert, getAlertExplanation, getScoringResult | built, under review |
 | 3 | Decision panel | in the detail | decideAlert, undoAlertDecision, escalateAlert | built, under review |
 | 4 | Account context | in the detail | listAccountTransactions, getBehaviourProfile, getAccountNetwork | built, reviewed |
-| 5 | Anomalies | `/anomalies` | listAlerts (queue=anomaly) | built, under review |
-| 6 | Escalations | `/escalations` | listAlerts (queue=escalated) | not started |
-| 7 | Search | `/search` | listAlerts (identifiers, amounts, dates) | not started |
-| 8 | My performance | `/me/performance` | getMyPerformance | not started |
+| 5 | Anomalies | `/anomalies` | listAlerts (queue=anomaly) | built, reviewed |
+| 6 | Escalations | `/escalations` | listAlerts (queue=escalated) | built, under review |
+| 7 | Search | `/search` | listAlerts (identifiers, amounts, dates) | built, under review |
+| 8 | My performance | `/me/performance` | getMyPerformance | built, under review |
 
 **Owner decisions on screen 1 (2026-10-18).**
 
@@ -517,3 +517,22 @@ their queue from one place (`queueView.ts`) instead of assuming `/alerts`.
   at 0.71 whose drawer opened as MEDIUM with a countdown (now below 0.60, and ANOMALY in the
   drawer too); no test decided from the anomaly drawer, closed it on Escape or tried Back (now
   three); a Swahili agreement.
+
+**Screens 6 to 8 (owner, 2026-10-19: keep the pace, one review round each, findings filed as
+backlog rows rather than fixed, one report at the end).**
+
+- **Screen 6, escalations** (`/escalations`, FR-04-10): the escalated queue with the feed's cards,
+  tier, channel and status filters and drawer, and a line saying what it holds. What the caller
+  may see is the server's rule (the contract's `x-authorisation-rules`); the console shows what it
+  is sent. No figures.
+- **Screen 7, search** (`/search`, FR-04-09): a form for transaction ID, account token, amount
+  range, date range (in the region's zone) and analyst ID above the feed's filters; each criterion
+  is a listAlerts parameter in the URL, a value the contract would reject is marked and not sent,
+  and nothing is asked until a criterion is set. It searches the standard queue only (M8B item 10).
+- **Screen 8, my performance** (`/me/performance`, FR-04-11, UX-ROLE-AN-04): reviews today,
+  average review time, backlog, and accuracy with the verified decisions it rests on, shown as not
+  yet available while the server sends none. Re-read every 60 s. No daily trend: the contract has
+  no series (M8B item 11).
+- **Not run locally:** the laptop stayed below the memory floor for over 20 minutes with the
+  owner's VM and browsers open, so these screens' typecheck and tests ran in CI first (ADR 0010's
+  preference).

@@ -91,8 +91,9 @@ export async function fetchDashboardStats(): Promise<DashboardStats> {
  * starts from its own first page, so stale results are never shown under it. The 60 s refresh
  * re-reads every loaded page in turn, so an alert can move between pages: the feed shows it once.
  */
-export function useAlertFeed(queue: AlertQueue, search: AlertSearch) {
+export function useAlertFeed(queue: AlertQueue, search: AlertSearch, enabled = true) {
   return useInfiniteQuery({
+    enabled,
     queryKey: ['alerts', queue, search],
     queryFn: ({ pageParam }) => fetchAlertPage(queue, search, pageParam),
     initialPageParam: undefined as string | undefined,

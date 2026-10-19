@@ -81,6 +81,37 @@
     "emptyTitle": "Aucune anomalie à examiner",
     "emptyDescription": "Les transactions que le détecteur d'anomalies signale apparaissent ici."
   },
+  "escalations": {
+    "intro": "Les alertes escaladées vers votre rôle ou un rôle inférieur, et celles que vous avez escaladées.",
+    "emptyTitle": "Aucune escalade",
+    "emptyDescription": "Les alertes escaladées vers votre rôle apparaissent ici."
+  },
+  "search": {
+    "label": "Rechercher des alertes",
+    "submit": "Rechercher",
+    "clear": "Effacer la recherche",
+    "intro": "Recherchez dans la file standard par transaction, compte, montant, date ou analyste, avec les filtres ci-dessous.",
+    "emptyTitle": "Rechercher des alertes",
+    "emptyDescription": "Saisissez au moins un critère, ou choisissez un filtre, puis lancez la recherche.",
+    "field": {
+      "transaction_id": "ID de transaction",
+      "account_id": "Jeton du compte",
+      "analyst_id": "ID de l'analyste",
+      "amount_min": "Montant à partir de",
+      "amount_max": "Montant jusqu'à",
+      "from": "Du",
+      "to": "Au"
+    },
+    "invalid": {
+      "transaction_id": "Un ID de transaction a la forme 3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11.",
+      "analyst_id": "Un ID d'analyste a la forme 3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11.",
+      "account_id": "Un jeton de compte commence par tok_ suivi de 24 à 64 lettres ou chiffres.",
+      "amount_min": "Un montant, par exemple 15000 ou 15000.50.",
+      "amount_max": "Un montant, au moins égal au montant de départ.",
+      "from": "Une date et une heure.",
+      "to": "Une date et une heure après le début."
+    }
+  },
   "detail": {
     "title": "Alerte",
     "label": "Enquête sur {{name}}",
@@ -249,5 +280,19 @@
     "undoNotAuthor": "Seul l'analyste qui a pris la décision peut l'annuler.",
     "invalidReason": "Le serveur n'a pas accepté cette action ; vérifiez le motif et réessayez.",
     "undoUnknown": "L'annulation n'a pas reçu de réponse à temps ; consultez les décisions de l'alerte pour savoir laquelle tient."
+  },
+  "performance": {
+    "intro": "Vos propres chiffres du jour. Ils se mettent à jour chaque minute.",
+    "reviewedToday": "Alertes examinées aujourd'hui",
+    "averageReview": "Durée moyenne d'examen",
+    "backlog": "Alertes en attente",
+    "accuracy": "Exactitude",
+    "notYet": "Pas encore",
+    "accuracyPending": "Affichée une fois que des clients auront vérifié certaines de vos décisions.",
+    "loading": "Chargement de vos chiffres…",
+    "error": "Vos chiffres n'ont pas pu être chargés.",
+    "verified_one": "Sur {{count}} décision vérifiée",
+    "verified_many": "Sur {{count}} décisions vérifiées",
+    "verified_other": "Sur {{count}} décisions vérifiées"
   }
 }

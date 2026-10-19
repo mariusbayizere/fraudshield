@@ -12,7 +12,14 @@ import { AlertCard } from './AlertCard';
 import { FeedFilters, isFiltered, toggled } from './FeedFilters';
 import { DRAWER_WIDTH } from './layout';
 import { ApiError, distinctAlerts, useAlertFeed } from './queries';
-import { ANOMALY_VIEW, STANDARD_VIEW, type QueueView } from './queueView';
+import {
+  ANOMALY_VIEW,
+  ESCALATED_VIEW,
+  SEARCH_VIEW,
+  STANDARD_VIEW,
+  type QueueView,
+} from './queueView';
+import { SearchForm } from './SearchForm';
 import { StatsHeader } from './StatsHeader';
 import { NoticeProvider } from './undo';
 
@@ -31,7 +38,9 @@ function QueuePage({ view }: { view: QueueView }) {
   // routes leave the registered type open, so the validated type is named here.
   const search: AlertSearch = useSearch({ strict: false });
   const navigate = useNavigate();
-  const feed = useAlertFeed(view.queue, search);
+  // A search with no criteria asks nothing of the server.
+  const idle = view.criteria && !isFiltered(search);
+  const feed = useAlertFeed(view.queue, search, !idle);
   // While the investigation drawer is docked beside the feed (lg and wider), the feed keeps its
   // width clear, so no card, filter or button sits under the panel (UX-DASH-04).
   const drawerOpen = useChildMatches().length > 0;
@@ -43,14 +52,23 @@ function QueuePage({ view }: { view: QueueView }) {
   const alerts = distinctAlerts(feed.data?.pages ?? []);
   // One live region, always mounted, so a screen reader hears each new count or state.
   // The error is announced by ErrorState's alert; this region says nothing then.
-  const announcement = feed.isPending
-    ? t('feed.loading')
-    : feed.isError
-      ? ''
-      : t('feed.shown', { count: alerts.length });
+  const announcement = idle
+    ? ''
+    : feed.isPending
+      ? t('feed.loading')
+      : feed.isError
+        ? ''
+        : t('feed.shown', { count: alerts.length });
 
   let body;
-  if (feed.isPending) {
+  if (idle && view.copy !== null) {
+    body = (
+      <EmptyState
+        title={t(`${view.copy}.emptyTitle`)}
+        description={t(`${view.copy}.emptyDescription`)}
+      />
+    );
+  } else if (feed.isPending) {
     body = (
       <Stack direction="row" spacing={2} sx={{ alignItems: 'center', py: 4 }}>
         <CircularProgress size={24} aria-hidden />
@@ -72,8 +90,11 @@ function QueuePage({ view }: { view: QueueView }) {
   } else if (alerts.length === 0) {
     body = isFiltered(search) ? (
       <EmptyState title={t('feed.noMatchTitle')} description={t('feed.noMatchDescription')} />
-    ) : view.queue === 'anomaly' ? (
-      <EmptyState title={t('anomalies.emptyTitle')} description={t('anomalies.emptyDescription')} />
+    ) : view.copy !== null ? (
+      <EmptyState
+        title={t(`${view.copy}.emptyTitle`)}
+        description={t(`${view.copy}.emptyDescription`)}
+      />
     ) : (
       <EmptyState title={t('feed.emptyTitle')} description={t('feed.emptyDescription')} />
     );
@@ -112,9 +133,9 @@ function QueuePage({ view }: { view: QueueView }) {
         <Typography variant="h5" component="h1" sx={{ mb: 2 }}>
           {tCommon(view.title)}
         </Typography>
-        {view.queue === 'anomaly' ? (
+        {view.copy !== null ? (
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            {t('anomalies.intro')}
+            {t(`${view.copy}.intro`)}
           </Typography>
         ) : null}
         {view.stats ? (
@@ -125,7 +146,16 @@ function QueuePage({ view }: { view: QueueView }) {
             }}
           />
         ) : null}
-        <FeedFilters search={search} tiers={view.tiers} onChange={change} />
+        {view.criteria ? (
+          // Keyed by the URL's criteria, so Back or a shared link refills the form.
+          <SearchForm key={JSON.stringify(search)} search={search} onSearch={change} />
+        ) : null}
+        <FeedFilters
+          search={search}
+          tiers={view.tiers}
+          onChange={change}
+          showLinkOnly={!view.criteria}
+        />
         <section aria-label={t('feed.list')} aria-busy={feed.isFetching}>
           <Typography role="status" variant="body2" color="text.secondary" sx={{ mb: 1 }}>
             {announcement}
@@ -154,4 +184,18 @@ export default function AlertFeedPage() {
  */
 export function AnomalyQueuePage() {
   return <QueuePage view={ANOMALY_VIEW} />;
+}
+
+/**
+ * The escalations queue at /escalations (FR-04-10): alerts escalated to the caller's role
+ * or below it, and those the caller escalated, as listAlerts(queue=escalated) defines it. The
+ * server decides what the caller may see; the console shows what it is sent.
+ */
+export function EscalationsQueuePage() {
+  return <QueuePage view={ESCALATED_VIEW} />;
+}
+
+/** FR-04-09's search at /search: criteria, then matching alerts as cards, with the drawer. */
+export function SearchPage() {
+  return <QueuePage view={SEARCH_VIEW} />;
 }

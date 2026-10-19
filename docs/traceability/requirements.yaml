@@ -922,7 +922,12 @@ requirements:
     exists on main and the screen is exercised against it. M8 screen 1 (2026-10-18, the alert feed at
     /alerts, against contract-example mocks): tier, channel and status filters and the order on the feed,
     all listAlerts parameters carried in the URL; dates, amounts and identifiers are for the /search screen.
-    Not measured: results within 500 ms.'
+    Not measured: results within 500 ms. M8 screen 7 (2026-10-19, /search, against contract-example mocks):
+    a form for transaction ID, account token, amount range, date range (entered in the region''s zone)
+    and analyst ID, with the feed''s tier, channel, status and order filters; every criterion is a listAlerts
+    parameter in the URL, a value the contract would reject is marked and not sent, and nothing is asked
+    until a criterion is set. It searches the standard queue: listAlerts takes one queue a call (M8B item
+    10). The analyst is a UUID field, not a name: no staff lookup operation is open to an analyst.'
 - id: FR-04-10
   section: 3.4 FR-04 Analyst dashboard
   title: 'Priority escalation: ANALYST escalates to SENIOR_ANALYST or RISK_OFFICER with mandatory escalation
@@ -950,7 +955,10 @@ requirements:
     a WebSocket, which the contract does not define (M8B_updates.md). Depends on the analyst API (M8B):
     decideAlert, undoAlertDecision and escalateAlert. Built against mocks generated from the contract,
     which are not evidence: this row stays at most IN_PROGRESS until those operations exist on main and
-    the screen is exercised against them.'
+    the screen is exercised against them. M8 screen 6 (2026-10-19, /escalations, against contract-example
+    mocks): the escalated queue (listAlerts queue=escalated) with the feed''s cards, tier, channel and
+    status filters and drawer; what the caller may see is the server''s rule, and the console shows what
+    it is sent.'
 - id: FR-04-11
   section: 3.4 FR-04 Analyst dashboard
   title: 'Analyst performance dashboard: alerts reviewed today, average review time (seconds), accuracy
@@ -960,15 +968,22 @@ requirements:
   srs_text: 'Acceptance criterion: Metrics update in real time; false positive rate correctly calculated
     from customer_verifications table'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation:
+  - frontend/src/performance/MyPerformancePage.tsx
   evidence: []
   deviations: []
   notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
     on main implements yet (M8B). Operations: getMyPerformance. The console is built against mocks generated
     from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until the M8B operation
-    exists on main and the screen is exercised against it.'
+    exists on main and the screen is exercised against it. M8 screen 8 (2026-10-19, /me/performance, against
+    a contract-example mock): reviews today, average review time, backlog, and accuracy with the number
+    of verified decisions it rests on; accuracy is shown as not yet available, never 0%, while the server
+    sends null. Re-read every 60 s: no real-time channel exists (M8B item 2), so ''update in real time''
+    is not met. Not testable here: the false-positive rate against customer_verifications (M8B). Built
+    against a mock of getMyPerformance (M8B), which is not evidence: the row stays at most IN_PROGRESS
+    until the operation exists on main and the screen is exercised against it.'
 - id: FR-04-12
   section: 3.4 FR-04 Analyst dashboard
   title: 'WCAG 2.1 AA: risk tier conveyed by text label not colour alone; all controls keyboard-navigable;
@@ -4321,15 +4336,20 @@ requirements:
     Cannot Do: Cannot view team performance; Key MUI Components: MUI Card (stats); Recharts LineChart
     (daily trend)'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation:
+  - frontend/src/performance/MyPerformancePage.tsx
   evidence: []
   deviations: []
   notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
     on main implements yet (M8B). Operations: getMyPerformance. The console is built against mocks generated
     from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until the M8B operation
-    exists on main and the screen is exercised against it.'
+    exists on main and the screen is exercised against it. M8 screen 8 (2026-10-19): the caller''s own
+    figures as MUI cards; no team figures (getMyPerformance has none). Not built: the Recharts daily trend,
+    which needs a daily series the contract does not have (M8B item 11); no chart library is added for
+    it (ADR 0084, 0085). Built against a mock of getMyPerformance (M8B), which is not evidence: the row
+    stays at most IN_PROGRESS until the operation exists on main and the screen is exercised against it.'
 - id: UX-ROLE-AN-05
   section: 'v5 12.1 Per-role frontend: ANALYST'
   title: Profile

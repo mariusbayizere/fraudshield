@@ -79,6 +79,37 @@
     "emptyTitle": "Nta bidasanzwe byo gusuzuma",
     "emptyDescription": "Ibikorwa igikoresho gitahura ibidasanzwe kigaragaje biza hano."
   },
+  "escalations": {
+    "intro": "Arite zazamuwe ku nshingano zawe cyangwa izo munsi yazo, n'izo wazamuye.",
+    "emptyTitle": "Nta arite zazamuwe",
+    "emptyDescription": "Arite zazamuwe ku nshingano zawe ziza hano."
+  },
+  "search": {
+    "label": "Shakisha arite",
+    "submit": "Shakisha",
+    "clear": "Siba ishakisha",
+    "intro": "Shakisha mu murongo usanzwe ukoresheje igikorwa, konti, amafaranga, itariki cyangwa umusesenguzi, n'ibiyungurura biri hepfo.",
+    "emptyTitle": "Shakisha arite",
+    "emptyDescription": "Andika nibura igipimo kimwe, cyangwa uhitemo akayunguruzo, hanyuma ushakishe.",
+    "field": {
+      "transaction_id": "Indangamuntu y'igikorwa",
+      "account_id": "Ikimenyetso cya konti",
+      "analyst_id": "Indangamuntu y'umusesenguzi",
+      "amount_min": "Amafaranga guhera kuri",
+      "amount_max": "Amafaranga kugeza kuri",
+      "from": "Guhera",
+      "to": "Kugeza"
+    },
+    "invalid": {
+      "transaction_id": "Indangamuntu y'igikorwa imeze nka 3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11.",
+      "analyst_id": "Indangamuntu y'umusesenguzi imeze nka 3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11.",
+      "account_id": "Ikimenyetso cya konti gitangirwa na tok_ gikurikirwa n'inyuguti cyangwa imibare 24 kugeza 64.",
+      "amount_min": "Amafaranga, nka 15000 cyangwa 15000.50.",
+      "amount_max": "Amafaranga, angana nibura n'ayo guhera.",
+      "from": "Itariki n'isaha.",
+      "to": "Itariki n'isaha nyuma y'intangiriro."
+    }
+  },
   "detail": {
     "title": "Imenyesha",
     "label": "Igenzura rya {{name}}",
@@ -241,5 +272,18 @@
     "undoNotAuthor": "Umusesenguzi wafashe icyemezo ni we wenyine ushobora kugihindura.",
     "invalidReason": "Seriveri ntiyabyemeye; suzuma impamvu wongere ugerageze.",
     "undoUnknown": "Guhindura ntibyabonye igisubizo ku gihe; reba ibyemezo by'imenyesha umenye igihamye."
+  },
+  "performance": {
+    "intro": "Imibare yawe y'uyu munsi. Ivugururwa buri munota.",
+    "reviewedToday": "Arite zasuzumwe uyu munsi",
+    "averageReview": "Igihe cyo gusuzuma kigereranyije",
+    "backlog": "Arite zigutegereje",
+    "accuracy": "Ukuri",
+    "notYet": "Ntibiraboneka",
+    "accuracyPending": "Bizagaragara abakiriya bamaze kwemeza bimwe mu byemezo byawe.",
+    "loading": "Imibare yawe iri gufunguka…",
+    "error": "Imibare yawe ntiyashoboye kuboneka.",
+    "verified_one": "Bivuye ku cyemezo {{count}} cyemejwe",
+    "verified_other": "Bivuye ku byemezo {{count}} byemejwe"
   }
 }

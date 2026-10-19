@@ -97,11 +97,14 @@ export function FeedFilters({
   search,
   tiers,
   onChange,
+  showLinkOnly = true,
 }: {
   search: AlertSearch;
   /** The tiers this queue can hold, in the order they are offered. */
   tiers: readonly ('HIGH' | 'MEDIUM')[];
   onChange: (next: AlertSearch) => void;
+  /** Whether to list a link's criteria this screen has no control for; /search has the form. */
+  showLinkOnly?: boolean;
 }) {
   const { t } = useTranslation('alerts');
   const { t: tDesign } = useTranslation('designSystem');
@@ -118,7 +121,7 @@ export function FeedFilters({
   };
   const offered: readonly string[] = tiers;
   const otherTiers = (search.tier ?? []).filter((tier) => !offered.includes(tier));
-  const linkOnly = LINK_ONLY.filter((key) => search[key] !== undefined);
+  const linkOnly = showLinkOnly ? LINK_ONLY.filter((key) => search[key] !== undefined) : [];
   const { region: where } = useRegion();
   const locale = useFormatLocale();
   const shown = (key: (typeof LINK_ONLY)[number], value: string): string => {

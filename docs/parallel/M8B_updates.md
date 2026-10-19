@@ -106,6 +106,13 @@ implementation; M8's console does not build against any of them until both exist
    then the console shows the server's order and the card as it is (screen 5). Related: the
    contract does not say whether `DashboardStats.reviewed_today` (and the average review time)
    counts reviews of anomaly alerts; the anomaly queue shows no figures meanwhile.
+10. **Can a search span the queues?** `listAlerts` takes one `queue` a call, standard by default,
+    so FR-04-09's search (screen 7) finds only standard-queue alerts: an anomaly or an escalation
+    with the searched transaction ID is not found. A `queue=all` (or an omitted queue meaning all)
+    would let one search cover them.
+11. **A daily series for "My performance"?** UX-ROLE-AN-04 asks for a daily trend; `AnalystPerformance`
+    has today's figures only. Without a series (e.g. the last 30 days' reviews and average time)
+    the trend cannot be drawn (screen 8).
 
 ## Before starting
 

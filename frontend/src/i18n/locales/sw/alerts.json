@@ -79,6 +79,37 @@
     "emptyTitle": "Hakuna hali zisizo za kawaida za kukagua",
     "emptyDescription": "Miamala ambayo kigunduzi cha hali isiyo ya kawaida kinairipoti huonekana hapa."
   },
+  "escalations": {
+    "intro": "Arifa zilizopandishwa kwa jukumu lako au jukumu lililo chini yake, na zile ulizopandisha.",
+    "emptyTitle": "Hakuna arifa zilizopandishwa",
+    "emptyDescription": "Arifa zilizopandishwa kwa jukumu lako huonekana hapa."
+  },
+  "search": {
+    "label": "Tafuta arifa",
+    "submit": "Tafuta",
+    "clear": "Futa utafutaji",
+    "intro": "Tafuta katika foleni ya kawaida kwa muamala, akaunti, kiasi, tarehe au mchambuzi, pamoja na vichujio vilivyo hapa chini.",
+    "emptyTitle": "Tafuta arifa",
+    "emptyDescription": "Weka angalau kigezo kimoja, au chagua kichujio, kisha utafute.",
+    "field": {
+      "transaction_id": "Kitambulisho cha muamala",
+      "account_id": "Tokeni ya akaunti",
+      "analyst_id": "Kitambulisho cha mchambuzi",
+      "amount_min": "Kiasi kuanzia",
+      "amount_max": "Kiasi hadi",
+      "from": "Kuanzia",
+      "to": "Hadi"
+    },
+    "invalid": {
+      "transaction_id": "Kitambulisho cha muamala kinafanana na 3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11.",
+      "analyst_id": "Kitambulisho cha mchambuzi kinafanana na 3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11.",
+      "account_id": "Tokeni ya akaunti huanza na tok_ ikifuatiwa na herufi au tarakimu 24 hadi 64.",
+      "amount_min": "Kiasi, kama 15000 au 15000.50.",
+      "amount_max": "Kiasi, angalau sawa na kiasi cha kuanzia.",
+      "from": "Tarehe na saa.",
+      "to": "Tarehe na saa baada ya mwanzo."
+    }
+  },
   "detail": {
     "title": "Arifa",
     "label": "Uchunguzi wa {{name}}",
@@ -241,5 +272,18 @@
     "undoNotAuthor": "Ni mchambuzi aliyefanya uamuzi pekee anayeweza kuutendua.",
     "invalidReason": "Seva haikukubali hili; kagua sababu na ujaribu tena.",
     "undoUnknown": "Utenduzi haukupata jibu kwa wakati; angalia maamuzi ya arifa kujua lipi linabaki."
+  },
+  "performance": {
+    "intro": "Takwimu zako za leo. Husasishwa kila dakika.",
+    "reviewedToday": "Arifa zilizokaguliwa leo",
+    "averageReview": "Muda wa wastani wa ukaguzi",
+    "backlog": "Arifa zinazokusubiri",
+    "accuracy": "Usahihi",
+    "notYet": "Bado",
+    "accuracyPending": "Itaonyeshwa baada ya wateja kuthibitisha baadhi ya maamuzi yako.",
+    "loading": "Inapakia takwimu zako…",
+    "error": "Takwimu zako hazikuweza kupakiwa.",
+    "verified_one": "Kutoka uamuzi {{count}} uliothibitishwa",
+    "verified_other": "Kutoka maamuzi {{count}} yaliyothibitishwa"
   }
 }

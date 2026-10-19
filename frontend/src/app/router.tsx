@@ -21,6 +21,20 @@ const AnomalyQueuePage = lazyRouteComponent(
   () => import('../alerts/AlertFeedPage'),
   'AnomalyQueuePage',
 );
+const EscalationsQueuePage = lazyRouteComponent(
+  () => import('../alerts/AlertFeedPage'),
+  'EscalationsQueuePage',
+);
+const SearchPage = lazyRouteComponent(() => import('../alerts/AlertFeedPage'), 'SearchPage');
+const MyPerformancePage = lazyRouteComponent(() => import('../performance/MyPerformancePage'));
+const SearchDetailPanel = lazyRouteComponent(
+  () => import('../alerts/detail/AlertDetailPanel'),
+  'SearchDetailPanel',
+);
+const EscalationDetailPanel = lazyRouteComponent(
+  () => import('../alerts/detail/AlertDetailPanel'),
+  'EscalationDetailPanel',
+);
 const AnomalyDetailPanel = lazyRouteComponent(
   () => import('../alerts/detail/AlertDetailPanel'),
   'AnomalyDetailPanel',
@@ -65,7 +79,43 @@ const anomalies = createRoute({
   validateSearch: alertSearch,
   component: AnomalyQueuePage,
 });
-const builtSections = new Set(['/alerts', '/anomalies']);
+// FR-04-10's escalations: the same page and drawer over queue=escalated.
+const escalations = createRoute({
+  getParentRoute: () => shell,
+  path: '/escalations',
+  validateSearch: alertSearch,
+  component: EscalationsQueuePage,
+});
+const escalationDetail = createRoute({
+  getParentRoute: () => escalations,
+  path: '$alertId',
+  component: EscalationDetailPanel,
+});
+// FR-04-09's search: the same page and drawer, under a criteria form.
+const searchRoute = createRoute({
+  getParentRoute: () => shell,
+  path: '/search',
+  validateSearch: alertSearch,
+  component: SearchPage,
+});
+const searchDetail = createRoute({
+  getParentRoute: () => searchRoute,
+  path: '$alertId',
+  component: SearchDetailPanel,
+});
+// FR-04-11's own figures.
+const myPerformance = createRoute({
+  getParentRoute: () => shell,
+  path: '/me/performance',
+  component: MyPerformancePage,
+});
+const builtSections = new Set([
+  '/alerts',
+  '/anomalies',
+  '/escalations',
+  '/search',
+  '/me/performance',
+]);
 
 const sections: AnyRoute[] = SECTIONS.filter((section) => !builtSections.has(section.path)).map(
   (section) =>
@@ -122,6 +172,9 @@ export const routeTree = rootRoute.addChildren([
     index,
     alerts.addChildren([alertDetail]),
     anomalies.addChildren([anomalyDetail]),
+    escalations.addChildren([escalationDetail]),
+    searchRoute.addChildren([searchDetail]),
+    myPerformance,
     ...sections,
   ]),
   login,

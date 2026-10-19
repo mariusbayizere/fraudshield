@@ -304,3 +304,13 @@ export default function AlertDetailPanel() {
 export function AnomalyDetailPanel() {
   return <InvestigationDrawer base="/anomalies" />;
 }
+
+/** The same drawer beside the search results, at /search/$alertId (FR-04-09). */
+export function SearchDetailPanel() {
+  return <InvestigationDrawer base="/search" />;
+}
+
+/** The same drawer beside the escalations queue, at /escalations/$alertId (FR-04-10). */
+export function EscalationDetailPanel() {
+  return <InvestigationDrawer base="/escalations" />;
+}

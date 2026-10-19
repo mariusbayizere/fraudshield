@@ -73,6 +73,17 @@ const asAnomaly = <T extends AlertSummary>(alert: T): T => ({
 });
 const anomalyPage: AlertPage = { ...alertPage, items: alertPage.items.map(asAnomaly) };
 const anomalyIds = new Set(anomalyPage.items.map((item) => item.alert_id));
+// queue=escalated lists escalation entries (FR-04-10): each a new alert linked to the one it
+// came from, as escalateAlert's mock answers.
+const escalatedPage: AlertPage = {
+  ...alertPage,
+  items: alertPage.items.map((item) => ({
+    ...item,
+    alert_id: `e${item.alert_id.slice(1)}`,
+    status: 'ESCALATED',
+    escalated_from_alert_id: item.alert_id,
+  })),
+};
 const lastAlertPage: AlertPage = { items: [], next_cursor: null };
 const dashboardStats = examples.DashboardStats[0] as DashboardStats;
 const alertDetail = examples.AlertDetail[0] as AlertDetail;
@@ -93,7 +104,9 @@ export const handlers = [
     if (query.has('cursor')) {
       return HttpResponse.json(lastAlertPage, { headers: { 'x-mock': MOCK_MARKER } });
     }
-    const page = query.get('queue') === 'anomaly' ? anomalyPage : alertPage;
+    const queue = query.get('queue');
+    const page =
+      queue === 'anomaly' ? anomalyPage : queue === 'escalated' ? escalatedPage : alertPage;
     return HttpResponse.json(page, { headers: { 'x-mock': MOCK_MARKER } });
   }),
   // Any alert id opens the example alert; the drawer's data comes from the same examples.
@@ -137,6 +150,9 @@ export const handlers = [
   ),
   http.get('/api/v1/accounts/:accountToken/network', () =>
     HttpResponse.json(network, { headers: { 'x-mock': MOCK_MARKER } }),
+  ),
+  http.get('/api/v1/me/performance', () =>
+    HttpResponse.json(examples.AnalystPerformance[0], { headers: { 'x-mock': MOCK_MARKER } }),
   ),
   http.get('/api/v1/dashboard/stats', () =>
     HttpResponse.json(dashboardStats, { headers: { 'x-mock': MOCK_MARKER } }),
