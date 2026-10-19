@@ -111,8 +111,6 @@ jobs:
           name: devcontainer-stack-diagnostics
           path: build/stack-diagnostics
           if-no-files-found: ignore
-      # Output inside the container is not parsed for annotations; the post-create log is written
-      # to the mounted workspace, so report its tail from the runner (readable without log access).
       # Last, so that a gate red by decision (MOB-PERF-06 until PB-133, ADR 0080) is reported
       # without hiding anything: post-create recorded its result and carried on to the smoke test.
       - name: Bundle gate (production build, first-visit size)
@@ -128,8 +126,11 @@ jobs:
             exit 1
           fi
           echo "bundle gate passed"
+      # Output inside the container is not parsed for annotations; the post-create log is written
+      # to the mounted workspace, so report its tail from the runner (readable without log access).
+      # Only when post-create itself failed: a red bundle gate alone leaves post-create complete.
       - name: Report post-create log on failure
-        if: failure()
+        if: failure() && hashFiles('.devcontainer/.post-create-ok') == ''
         run: |
           log=.devcontainer/post-create.log
           if [ ! -f "$log" ]; then

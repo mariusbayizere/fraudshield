@@ -100,6 +100,7 @@ test-frontend: ## Front-end unit and component tests with coverage thresholds
 # The production build's checks, kept out of `test` and `ci`: two of them (MOB-PERF-06's 200 KB and
 # the 185 KB margin) are red by decision until PB-133 (ADR 0080), and a gate expected to fail must
 # not stop, or hide, checks that are expected to pass. Run it on its own, after `ci`.
+.PHONY: bundle-gate
 bundle-gate: ## Production-build checks: what a first visit downloads, mocks kept out (red until PB-133)
 	$(PNPM) test:bundle
 

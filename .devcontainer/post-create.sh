@@ -21,7 +21,7 @@ echo "post-create started $(date -u +%FT%TZ) as $(id -un) in $repo_root"
 # which git rejects as "dubious ownership"; pre-commit, gitleaks and the traceability checks all
 # call git. This writes the container user's git config only, never the host's.
 git config --global --add safe.directory "$repo_root"
-rm -f .devcontainer/.post-create-ok
+rm -f .devcontainer/.post-create-ok .devcontainer/bundle-gate.status
 
 UV_VERSION="0.12.15"
 UV_SHA256="f97935763c04be3e692460a7aaeaaab8fc3b78fcf8b389da820b38ae7423a638"

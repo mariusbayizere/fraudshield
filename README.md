@@ -125,7 +125,8 @@ Docker CLI is used only to validate `docker-compose.yml`; no daemon is needed.
 
 ```bash
 make bootstrap     # locked Python, Node and Maven dependencies; pre-commit hooks
-make ci            # all checks; Docker suites print "SKIPPED: … requires Docker, verified in CI"
+make ci            # all checks but the bundle gate; Docker suites print "SKIPPED: … requires Docker, verified in CI"
+make bundle-gate   # the production build's checks, run apart: red by decision until PB-133 (ADR 0080)
 ```
 
 Docker-dependent suites never skip silently: CI runs them on every push with `REQUIRE_DOCKER=1`,

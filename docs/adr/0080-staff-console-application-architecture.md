@@ -135,7 +135,8 @@ that the architecture carry it.
    map (D-46), the graph library, Framer Motion, and each language's namespaces beyond the one in
    use. A screen that needs one of these owns its chunk.
 3. **Budgets, gzipped, enforced by `productionBundle.build.test.ts`** on a real production build,
-   in `pnpm test` and therefore in CI:
+   in `pnpm test` and therefore in CI (since 2026-10-19 as `pnpm test:bundle`, its own CI step, and
+   `make bundle-gate`, outside `make ci`, so that a gate red by decision hides no other check):
 
    | What | Budget | Measured at this amendment |
    |---|---|---|

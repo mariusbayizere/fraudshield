@@ -90,6 +90,10 @@ def checks_for(files: list[str], worktree: Path) -> list[tuple[str, list[str], s
             ("frontend lint", ["pnpm", "lint"], "frontend"),
             ("frontend format", ["pnpm", "format:check"], "frontend"),
             ("frontend tests", ["pnpm", "test:coverage"], "frontend"),
+            # Its own check, reported apart: two of its tests are red by decision until PB-133
+            # (ADR 0080), and the rest (mocks never ship, fonts, Preflight, the service worker,
+            # chunk sizes) must still be seen to pass.
+            ("frontend bundle gate (red until PB-133)", ["pnpm", "test:bundle"], "frontend"),
         ]
     if any(f in (".gitleaks.toml", "tools/bin/gitleaks-selftest") for f in files):
         if (worktree / "tools/bin/gitleaks-selftest").exists():

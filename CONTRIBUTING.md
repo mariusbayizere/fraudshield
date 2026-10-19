@@ -6,7 +6,8 @@
 2. For each requirement: restate the acceptance criterion and any `D-xx` resolution, write
    the tagged test first, implement, run the checks, record evidence in
    `docs/traceability/requirements.yaml`.
-3. Run `make ci` before pushing. Never use `--no-verify`.
+3. Run `make ci` before pushing, and `make bundle-gate` if you touched `frontend/` (its size checks
+   are red by decision until PB-133, ADR 0080; its other checks must pass). Never use `--no-verify`.
 4. A branch reaches `main` only after a Principal Review recorded in `docs/reviews/` with
    verdict `APPROVED` or `APPROVED_WITH_MINORS` (see `docs/adr/0002`).
 

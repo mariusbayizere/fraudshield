@@ -9,4 +9,5 @@ Staff console PWA: React 19, TypeScript 6 (strict), Vite 8, MUI 9, Tailwind 4 (A
 | `src/design-system/color`                      | WCAG contrast measurement used by the token contrast test (D-33) | M0        |
 | design tokens, components, app shell, features | planned                                                          | M8        |
 
-**Test.** `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `pnpm test:coverage`.
+**Test.** `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `pnpm test:coverage`, and
+`pnpm test:bundle` for the production build's checks (two are red by decision until PB-133).
