@@ -36,6 +36,8 @@ measured" markers. This file records every change to what the paper states, with
 
 | 2026-10-19 | External review, group 2 (claims). "Pre-registered" replaced by "pre-specified in repository history": git orders 4 of the 7 recorded predictions before their evidence and not the other 3 (one first committed with its refutation, two after the code holding their outcome); Table `tab:predictions` shows both groups and `audit_numbers.py` checks every commit pair and author date in both directions, the table's group counts and malformed uses. Disclosure section added (Section `sec:disclosure`, cover note): sole author using AI coding agents for implementation, review and drafting; reviews are agent reviews by the author's account, with what the records themselves say. Related work: BankSim, BAF, Altman et al. and Platt added, each with what was verified. C-8 refuted by a recorded dataset search: Xente (Zindi, Uganda) and MoMTSim (Makerere) predate this benchmark; no narrower novelty is claimed. One fresh review applied | `docs/research/c8_dataset_search.md`, `reference_audit.md` §5, `number_audit.md` (505 macros) |
 
+| 2026-10-19 | The owner states that the external review behind groups 1 and 2 was carried out by an AI model, not a person. The disclosure section and cover note now say so, and that the work has had no independent human review | Owner, 2026-10-19 (`docs/parallel/M11_updates.md` §14) |
+
 ## Open review points
 
 
@@ -43,7 +45,8 @@ measured" markers. This file records every change to what the paper states, with
 
 - The documented form's recipient being a new counterparty is the paper's reading of the two
   sources, not a statement in either; a source that says it would strengthen Section 8.
-- The novelty claim (C-8) is not made and needs a documented dataset search.
+- C-8 is refuted by a recorded search (Xente, MoMTSim); the search was closed at about 27 minutes by
+  the owner, with its gaps recorded (`docs/research/c8_dataset_search_pass2.md` §8).
 - Razaq et al.'s "96 interviews" is confirmed from the paper's abstract as the publisher deposited
   it; the body is closed access (`reference_audit.md`).
 - The ROC crossing of the recall target is read from the gate run's plotted ROC figure, which is
@@ -51,8 +54,9 @@ measured" markers. This file records every change to what the paper states, with
   figure needs the scores, which means a rerun.
 - Not yet measured: the 99th-percentile frontier, serving and end-to-end latency, five-million-row
   scale, and the M4 follow-ups listed in Section 7. ADR 0035 and ADR 0059 moved the M5 and M6
-  latency rows (and the shadow-mode AUC delta) to M10; the paper's markers still name M5 and M6.
+  latency rows (and the shadow-mode AUC delta) to M10, and the paper's markers name M10.
 - How much the headline figures vary across selections of training rows (PB-76): two selections
   exist, so the variation is unmeasured.
-- Which of the 66 reversal-scam rows the battery caught is not recoverable: per-row scores were not
-  kept, so the part counterparty novelty plays in the miss is not isolated.
+- Which of the 66 reversal-scam rows the battery caught was not recoverable from the published run.
+  The reproduction workflow (run 39273972313) now regenerates the battery's per-row scores, so the
+  part counterparty novelty plays in the miss can be measured; not yet done.

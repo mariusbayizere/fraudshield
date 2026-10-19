@@ -20,11 +20,12 @@ not claim that any particular part was written without an agent.
 
 \paragraph{What the reviews were.} By the author's account, every review this paper calls
 independent, and every review on record in the repository (\texttt{docs/reviews/}), was carried out by
-an AI agent, not by a person; the external review of a draft, described below, is the exception whose
-reviewer is not recorded. Some records say so themselves (the M4 and M5 milestone reviews, the M7
+an AI agent, not by a person. Some records say so themselves (the M4 and M5 milestone reviews, the M7
 staff-authentication review); the others say only that the reviewer was independent or wrote none of
 the work, so for them the attribution rests on the author's word. The author did raise individual
-findings inside some reviews (for example finding CR-19 of the M1 contracts review). The build
+findings inside some reviews (for example finding CR-19 of the M1 contracts review). By the same
+account, the external review of a draft that prompted this paper's latest revision was carried out by
+an AI model. The build
 instructions define a ``Principal Reviewer'' role, separate from the engineering roles, that assumes
 the work is wrong, re-runs every check rather than re-reading it, breaks the implementation on
 purpose to show the tests fail (mutation spot checks), and can block a merge. The agent took that
@@ -36,7 +37,7 @@ role in either of the following ways:
   \item \textbf{A fresh agent instance}, by the author's account with no access to the authoring
   session's context, reading the
   diff, the requirement and the tests, and re-running the checks itself. The M5 principal review and
-  the M7 merge review state that their reviewer wrote none of the reviewed work. Apart from the external review described below, the reviews of this
+  the M7 merge review state that their reviewer wrote none of the reviewed work. The reviews of this
   paper recorded in \texttt{REVIEW.md} and \texttt{docs/parallel/M11\_updates.md} were run by
   agents; the records do not say, for each, whether the agent shared the authoring session's
   context, and not every change to the paper has a recorded review.
@@ -47,13 +48,13 @@ from the same instructions, and it can share the authoring agent's blind spots. 
 real defects, among them training--serving skew in the served model, found by the M5 principal
 review (\texttt{docs/reviews/M5/principal-review.md}); its findings and their fixes are in the
 repository. The reviews are evidence that a check was run, not that a qualified person agreed with
-the result. A further, external review of a draft of this paper prompted its latest revision; the
-repository records that review and its findings (\texttt{REVIEW.md}) but not who carried it out, and
-it records no other review by a person other than the author.
+the result. A further, external review of a draft prompted the latest revision (its findings and
+the changes they caused are in \texttt{REVIEW.md}); by the author's account it too was carried out by
+an AI model, not a person. \textbf{This work has had no independent human review.}
 
 \paragraph{What follows for the reader.} Every number in this paper is checked mechanically against
 its evidence file (Appendix~\ref{app:evidence}), and that check does not depend on who wrote the
 number. The judgements are a different matter: what was measured, how it was interpreted, and which
 limitations were named. They were made by the author with agent assistance and reviewed by agents,
-with findings occasionally raised by the author, and by the external review of a draft whose reviewer
-the repository does not record. A reader should weigh them on that basis.
+with findings occasionally raised by the author, and by an external AI model review of a draft. No
+person other than the author has reviewed any of it. A reader should weigh them on that basis.

@@ -441,3 +441,18 @@ the reason in its row. The lab notebook's 2026-09-22 pre-registration keeps its 
 5. **Fairness:** country and channel only; the paper says KYC tier and urban/rural are not in the
    released data, so the report cannot cover the specification's full set.
 6. Latency percentiles stay unmeasured: a shared runner cannot give them.
+
+## 14. Owner decisions after group 2, 2026-10-19
+
+1. **The external review** behind groups 1 and 2 was carried out by an AI model, not a person. The
+   disclosure section and cover note say so, and that the work has had no independent human review.
+2. **Search agents:** no personal identifiers in outbound query parameters, ever, even where an API
+   documents them as polite (after the OpenAlex `mailto` leak, recorded in
+   `docs/research/c8_dataset_search_pass2.md` §8).
+3. **PB-66 overlap:** M11 uses PB-66's workflow (`origin/ml/full-volume`) and does not duplicate it.
+   Drummond–Holte stays its main cost-curve presentation; **the paper also reports the raw axes**
+   (fraud amount caught against legitimate amount blocked and reviews required), because a normalised
+   curve hides the absolute amounts. **Asked of PB-66:** add a memory curve and swap use to the cache
+   job; peak RSS alone cannot say why a run died. [PB-66 owner]
+4. **C-8 search closed** at two passes (about 27 minutes); its open gaps are recorded in the pass-2
+   record, §8. No further searching: the claim is already refuted.

@@ -201,3 +201,27 @@ Non-East-African neighbours seen in pass 2 (not qualifying): yahayaidrisu coordi
 - Pass 2: start 2026-10-19T16:23:08Z, end 2026-10-19T16:38:37Z (both measured with `date -u`), 15 min 29 s. About 6 min of this was spent spacing out the Semantic Scholar retries in the background while other queries ran.
 - Pass 1: 2026-10-19T16:07:47Z to 16:19:48Z, 12 min 01 s.
 - Combined search time: 27 min 30 s. Elapsed span from the start of pass 1 to the end of pass 2: 30 min 50 s, which includes the 3 min 20 s between the passes.
+
+## 8. Status: closed (owner, 2026-10-19)
+
+The two passes took about 27 minutes of agent searching, not the day of structured search the owner
+asked for. The owner closed the search rather than extending it: C-8 is already refuted (Xente and
+MoMTSim predate FraudShield-EAC), so more searching could only change how complete this record is,
+not the paper's claim. The main gaps left open are below; the full lists are §6 of this record and
+§7 of `c8_dataset_search.md`.
+
+- **Semantic Scholar:** five of six queries were refused (HTTP 429) after spaced retries; only
+  "fraud detection Tanzania dataset" ran.
+- **The AFRICOMM 2023 MoMTSim paper** (doi 10.1007/978-3-031-81573-7_16): neither abstract nor full
+  text could be read, so whether it releases data beyond the Mendeley set is undetermined.
+- **Partial result lists:** Kaggle (page 1, page 2 only for "mobile money fraud"), OpenAlex and
+  GitHub (first page), Hugging Face country searches (cut at 100), Zenodo (the first pass's
+  all-types list to its first 14 records) and Google Dataset Search (20 of each list) were read only
+  in part.
+- Also: the "MobileTransfer" paper (IEEE IRI 2026) and dissertations seen only by title; non-English
+  queries translated by the agent, unchecked by native speakers, through an English-leaning engine.
+
+**Conduct, and the rule it produced.** Six OpenAlex requests (OA1–OA6) carried the user's e-mail
+address in a `mailto=` parameter. The owner's ruling: nothing to undo, keep this record, and a
+standing rule for search agents — no personal identifiers in outbound query parameters, ever, even
+where an API documents them as polite.
