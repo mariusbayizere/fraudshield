@@ -27,14 +27,20 @@ function mockWorkerInDevelopment(): Plugin {
 /**
  * What a first visit needs, fetched with the entry instead of after it (MOB-PERF-01, ADR 0080
  * §10, amendment 2026-10-19). A first visit has no session, so it lands on sign-in: its route chunk
- * and everything that chunk imports are preloaded, with the start-up and sign-in catalogues of
- * every language (the language is chosen in the browser, after the HTML). Without this, each was a
- * further round trip after the entry had run: 3.3 to 3.6 s to first paint on 3G against 2.5 s.
+ * and everything that chunk imports are preloaded, with English's start-up and sign-in catalogues.
+ * English is the fallback language, so every visit needs them; another language's catalogues are
+ * fetched once the browser has chosen it, one round trip later. Without this, each was a further
+ * round trip after the entry had run: 3.3 to 3.6 s to first paint on 3G against 2.5 s, 2.9 s with.
  * The bundle test counts every preload as initial JavaScript, so these bytes are in its budget.
+ *
+ * Every target must match a chunk, or the build fails: a preload that silently stops matching
+ * would bring back the chain of round trips it removed.
  */
 export const FIRST_VISIT = [
   /\/src\/auth\/LoginPage\.tsx$/,
-  /\/src\/i18n\/locales\/[a-z]+\/(common|designSystem|auth)\.json$/,
+  /\/src\/i18n\/locales\/en\/common\.json$/,
+  /\/src\/i18n\/locales\/en\/designSystem\.json$/,
+  /\/src\/i18n\/locales\/en\/auth\.json$/,
 ];
 
 function firstVisitPreload(): Plugin {
@@ -56,9 +62,14 @@ function firstVisitPreload(): Plugin {
           wanted.add(fileName);
           for (const imported of byName.get(fileName)?.imports ?? []) visit(imported);
         };
-        for (const chunk of chunks) {
-          const id = chunk.facadeModuleId ?? '';
-          if (FIRST_VISIT.some((pattern) => pattern.test(id))) visit(chunk.fileName);
+        for (const target of FIRST_VISIT) {
+          const found = chunks.filter((chunk) => target.test(chunk.facadeModuleId ?? ''));
+          if (found.length === 0) {
+            throw new Error(
+              `first-visit preload: no chunk for ${String(target)}; see vite.config.ts`,
+            );
+          }
+          for (const chunk of found) visit(chunk.fileName);
         }
         const links = [...wanted]
           .filter((fileName) => !html.includes(`/${fileName}"`))

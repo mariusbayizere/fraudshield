@@ -5,8 +5,11 @@ import { devices, expect, test, type Page } from '@playwright/test';
  * size (ADR 0080 §10, amendment 2026-10-19). A first visit to the sign-in page, the page every
  * analyst loads first, from a production build with the cache and the service worker out of play.
  *
- * Conditions: MOB-NET-02 puts 3G at 1-5 Mbps and 100-200 ms; the slow end is used (1 Mbps down,
- * 200 ms round trip). The CPU is slowed four times, as MOB-PERF-01 specifies for the Moto G4.
+ * Conditions: MOB-NET-02 puts 3G at 1-5 Mbps and 100-200 ms without naming a point in that range,
+ * so two are measured and both reported (owner, 2026-10-19): the slow end, 1 Mbps, and 1.6 Mbps,
+ * the downlink of Lighthouse's usual 3G profile. Both keep the slow end's 200 ms round trip, so
+ * only the bandwidth differs. The CPU is slowed four times, as MOB-PERF-01 specifies for the
+ * Moto G4. Each condition is gated on the same 3G targets.
  *
  * Time to interactive follows Lighthouse's rule on the main thread only: the end of the last long
  * task (over 50 ms) before the first 5 s window after first contentful paint with none, and never
@@ -17,12 +20,26 @@ import { devices, expect, test, type Page } from '@playwright/test';
  * its pixel ratio); the runner's CPU slowed four times is not calibrated to a real Moto G4.
  */
 
-const NETWORK = {
-  offline: false,
-  latency: 200,
-  downloadThroughput: (1 * 1024 * 1024) / 8,
-  uploadThroughput: (512 * 1024) / 8,
-};
+interface Network {
+  offline: boolean;
+  latency: number;
+  downloadThroughput: number;
+  uploadThroughput: number;
+}
+
+function threeG(megabits: number): Network {
+  return {
+    offline: false,
+    latency: 200,
+    downloadThroughput: (megabits * 1024 * 1024) / 8,
+    uploadThroughput: (512 * 1024) / 8,
+  };
+}
+
+const CONDITIONS = [
+  { name: '1 Mbps', network: threeG(1) },
+  { name: '1.6 Mbps', network: threeG(1.6) },
+] as const;
 const CPU_SLOWDOWN = 4;
 const QUIET_MS = 5_000;
 /** How long to watch for a quiet window before reporting that there was none. */
@@ -48,7 +65,7 @@ declare global {
   }
 }
 
-async function measure(page: Page): Promise<Run> {
+async function measure(page: Page, network: Network): Promise<Run> {
   await page.addInitScript(() => {
     window.__fsPerf = { longTasks: [], lcp: 0, cls: 0 };
     new PerformanceObserver((list) => {
@@ -73,7 +90,7 @@ async function measure(page: Page): Promise<Run> {
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Network.enable');
   await cdp.send('Network.setCacheDisabled', { cacheDisabled: true });
-  await cdp.send('Network.emulateNetworkConditions', NETWORK);
+  await cdp.send('Network.emulateNetworkConditions', network);
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: CPU_SLOWDOWN });
 
   await page.goto('/login');
@@ -155,34 +172,43 @@ function median(values: number[]): number {
 test.describe('first visit on 3G with a slowed CPU (MOB-PERF-01 to 05)', () => {
   test.setTimeout(180_000);
 
-  test('[MOB-PERF-01, MOB-PERF-02, MOB-PERF-03, MOB-PERF-04, MOB-PERF-05] meets the 3G targets', async ({
-    browser,
-  }) => {
-    const runs: Run[] = [];
-    for (let i = 0; i < RUNS; i += 1) {
-      // A first visit on a phone: a fresh profile, no service worker, the Moto G4's profile.
-      const context = await browser.newContext({ ...devices['Moto G4'], serviceWorkers: 'block' });
-      runs.push(await measure(await context.newPage()));
-      await context.close();
-    }
-    const result = {
-      fcp: median(runs.map((r) => r.fcp)),
-      lcp: median(runs.map((r) => r.lcp)),
-      tti: median(runs.map((r) => r.tti)),
-      tbt: median(runs.map((r) => r.tbt)),
-      cls: median(runs.map((r) => r.cls)),
-    };
-    // The numbers are the evidence; they go to the log whether or not they pass.
-    console.log(`MOB-PERF 3G medians of ${String(RUNS)}: ${JSON.stringify(result)}`);
-    console.log(
-      `MOB-PERF 3G runs: ${JSON.stringify(runs.map((run) => ({ fcp: run.fcp, lcp: run.lcp, tti: run.tti, tbt: run.tbt, cls: run.cls })))}`,
-    );
-    // The first run's requests, start and end in ms from navigation, to see what paint waits for.
-    console.log(`MOB-PERF 3G waterfall (first run):\n${(runs[0]?.waterfall ?? []).join('\n')}`);
-    expect.soft(result.fcp, 'MOB-PERF-01 first contentful paint (ms)').toBeLessThan(TARGETS.fcp);
-    expect.soft(result.lcp, 'MOB-PERF-02 largest contentful paint (ms)').toBeLessThan(TARGETS.lcp);
-    expect.soft(result.tti, 'MOB-PERF-03 time to interactive (ms)').toBeLessThan(TARGETS.tti);
-    expect.soft(result.tbt, 'MOB-PERF-04 total blocking time (ms)').toBeLessThan(TARGETS.tbt);
-    expect.soft(result.cls, 'MOB-PERF-05 cumulative layout shift').toBeLessThan(TARGETS.cls);
-  });
+  for (const { name, network } of CONDITIONS) {
+    test(`[MOB-PERF-01, MOB-PERF-02, MOB-PERF-03, MOB-PERF-04, MOB-PERF-05] meets the 3G targets at ${name}`, async ({
+      browser,
+    }) => {
+      const runs: Run[] = [];
+      for (let i = 0; i < RUNS; i += 1) {
+        // A first visit on a phone: a fresh profile, no service worker, the Moto G4's profile.
+        const context = await browser.newContext({
+          ...devices['Moto G4'],
+          serviceWorkers: 'block',
+        });
+        runs.push(await measure(await context.newPage(), network));
+        await context.close();
+      }
+      const result = {
+        fcp: median(runs.map((r) => r.fcp)),
+        lcp: median(runs.map((r) => r.lcp)),
+        tti: median(runs.map((r) => r.tti)),
+        tbt: median(runs.map((r) => r.tbt)),
+        cls: median(runs.map((r) => r.cls)),
+      };
+      // The numbers are the evidence; they go to the log whether or not they pass.
+      console.log(`MOB-PERF 3G ${name} medians of ${String(RUNS)}: ${JSON.stringify(result)}`);
+      console.log(
+        `MOB-PERF 3G ${name} runs: ${JSON.stringify(runs.map((run) => ({ fcp: run.fcp, lcp: run.lcp, tti: run.tti, tbt: run.tbt, cls: run.cls })))}`,
+      );
+      // The first run's requests, start and end in ms from navigation, to see what paint waits for.
+      console.log(
+        `MOB-PERF 3G ${name} waterfall (first run):\n${(runs[0]?.waterfall ?? []).join('\n')}`,
+      );
+      expect.soft(result.fcp, 'MOB-PERF-01 first contentful paint (ms)').toBeLessThan(TARGETS.fcp);
+      expect
+        .soft(result.lcp, 'MOB-PERF-02 largest contentful paint (ms)')
+        .toBeLessThan(TARGETS.lcp);
+      expect.soft(result.tti, 'MOB-PERF-03 time to interactive (ms)').toBeLessThan(TARGETS.tti);
+      expect.soft(result.tbt, 'MOB-PERF-04 total blocking time (ms)').toBeLessThan(TARGETS.tbt);
+      expect.soft(result.cls, 'MOB-PERF-05 cumulative layout shift').toBeLessThan(TARGETS.cls);
+    });
+  }
 });

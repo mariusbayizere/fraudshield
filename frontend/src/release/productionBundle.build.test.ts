@@ -13,6 +13,8 @@ const ROOT = join(import.meta.dirname, '../..');
  * spend the rest (ADR 0080 §10, amendment 2026-10-19).
  */
 const INITIAL_JS_BUDGET = 185 * 1024;
+/** The SRS's own gate (MOB-PERF-06): initial JavaScript under 200 KB, gzipped. */
+const SRS_INITIAL_JS_LIMIT = 200 * 1024;
 /** No single lazily loaded chunk may exceed this, gzipped (ADR 0080 §10). */
 const CHUNK_BUDGET = 120 * 1024;
 
@@ -87,6 +89,22 @@ describe('the production build (ADR 0080)', () => {
     }
   });
 
+  it('[MOB-PERF-01] preloads the first visit: the sign-in route and English catalogues', () => {
+    // Without these, first paint waits on a chain of round trips after the entry has run.
+    const initial = initialScripts();
+    for (const chunk of [
+      /^assets\/LoginPage-/,
+      /^assets\/common-/,
+      /^assets\/designSystem-/,
+      /^assets\/auth-/,
+    ]) {
+      expect(
+        initial.some((name) => chunk.test(name)),
+        String(chunk),
+      ).toBe(true);
+    }
+  });
+
   it('H.4: leaves the generated response schemas out', () => {
     // The canary is a pattern only a response carries: ShapContribution's template_key, inside
     // Explanation. The Token pattern was the canary until the alert filters validated
@@ -133,10 +151,18 @@ describe('the production build (ADR 0080)', () => {
     expect(oversized).toEqual([]);
   });
 
-  it('D-39: keeps the initial JavaScript inside the budget, gzipped', () => {
-    const initial = initialScripts();
-    expect(initial.length).toBeGreaterThan(0);
-    const gzipped = initial.reduce((sum, f) => sum + gzipSync(files.get(f) ?? '').length, 0);
-    expect(gzipped).toBeLessThanOrEqual(INITIAL_JS_BUDGET);
+  // What a first visit downloads before its first paint: the entry and every preload, the
+  // sign-in route included (ADR 0080 §10, amendment 2026-10-19). Until the preloads, the route was
+  // lazy and these checks left it out, so they read green while the first visit was over.
+  const firstVisitBytes = () =>
+    initialScripts().reduce((sum, f) => sum + gzipSync(files.get(f) ?? '').length, 0);
+
+  it('[MOB-PERF-06] keeps the first visit under the SRS gate of 200 KB, gzipped', () => {
+    expect(initialScripts().length).toBeGreaterThan(0);
+    expect(firstVisitBytes()).toBeLessThanOrEqual(SRS_INITIAL_JS_LIMIT);
+  });
+
+  it('D-39: keeps the first visit inside the 185 KB margin, gzipped', () => {
+    expect(firstVisitBytes()).toBeLessThanOrEqual(INITIAL_JS_BUDGET);
   });
 });
