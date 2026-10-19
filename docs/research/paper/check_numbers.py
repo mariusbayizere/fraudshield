@@ -42,7 +42,7 @@ SECTIONS = [
 
 STRIP = [
     re.compile(r"(?<!\\)%.*$", re.M),  # comments
-    re.compile(r"\\(?:texttt|url|href|cite|ref|label|input)(?:\[[^\]]*\])?\{(?:\\[{}]|[^{}])*\}"),
+    re.compile(r"\\(?:texttt|url|href|cite|ref|label|input)(?:\[[^\]]*\])?\{(?:\\.|[^{}\\])*\}"),
     re.compile(r"\\notyet\{M\d{1,2}\}"),  # a milestone, the only thing \notyet takes
     re.compile(r"\\n[A-Z][A-Za-z]*"),  # number macros from numbers.tex
     re.compile(r"\b[A-Z]{1,4}(?:-[A-Z]{1,6})*-\d+[a-z]?\b"),  # D-15, ML-GATE-01, PB-61, C-6
@@ -56,7 +56,7 @@ STRIP = [
     ),  # dates
     re.compile(r"\b(?:2022 census|2024--2025 calendar|Rwanda 2024)\b"),  # the cited sources' years
     re.compile(r"\b(?:Tables?|Annex)\s+[A-Z]\d+(?:\s*(?:,|and)\s*[A-Z]\d+)*"),  # H1, G2
-    re.compile(r"\b[GH]\d\b"),  # the cited payment report's annex tables (G2, H1 ... H8)
+    re.compile(r"\bH\d(?=\s*\((?:printed\s+)?page)"),  # an annex table before its page
     re.compile(r"\b(?:Table|Figure)\s+\d+(?=\s*\((?:printed\s+)?page)"),  # a source's own
     re.compile(r"\(?(?:printed\s+)?pages?\s+\d+(?:\s+of the PDF)?\)?"),  # a source's pages
     re.compile(r"(?<=[{\[])\d+(?:\.\d+)?\s*(?:cm|pt|mm|em|ex)(?=[}\]])"),  # layout dimensions
@@ -82,7 +82,8 @@ NUMBER_WORDS = (
     r"third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|thirteenth|"
     r"fourteenth|fifteenth|sixteenth|seventeenth|eighteenth|nineteenth|twentieth|thirtieth|"
     r"fortieth|fiftieth|sixtieth|seventieth|eightieth|ninetieth|hundredths?|thousandths?|"
-    r"millionths?|trillions?|quintuple|"
+    r"millionths?|billionths?|trillionths?|trillions?|twelfths?|"
+    r"(?:doubl|tripl|quadrupl|quintupl|sextupl)(?:e|es|ed|ing)|halved|halving|"
     r"(?:third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)s|"
     r"\w+fold"
 )
