@@ -2,7 +2,7 @@
 
 Every macro in `numbers.tex` checked against its evidence file at `m4-complete` (`72e7790`), or at the ref its row names, read with `git show`, by `audit_numbers.py`. Values are compared as printed: rounding, sign and interval bounds included. Regenerate with `python3 docs/research/paper/audit_numbers.py`; do not edit by hand.
 
-**474 macros, 474 MATCH, 0 not matching.**
+**477 macros, 477 MATCH, 0 not matching.**
 
 | Macro | Value in paper | Value in evidence | File | Note | Result |
 |---|---|---|---|---|---|
@@ -480,3 +480,6 @@ Every macro in `numbers.tex` checked against its evidence file at `m4-complete` 
 | `\nRevNotNovelScored` | `47` | `47` | `docs/research/paper/evidence/reversal_novelty_d8083dbc.txt` at `ab03392` (evidence commit `94bfd69`) |  | MATCH |
 | `\nRevPriorThreePlus` | `27` | `27` | `docs/research/paper/evidence/reversal_novelty_d8083dbc.txt` at `ab03392` (evidence commit `94bfd69`) |  | MATCH |
 | `\nRevPriorThreshold` | `3` | `3` | `docs/research/paper/evidence/reversal_novelty_d8083dbc.txt` at `ab03392` (evidence commit `94bfd69`) |  | MATCH |
+| `\nSeedSdRelXGB` | `+0.62\%` | `+0.62%` | derived | ensemble SD over XGBoost's minus one, per-seed AUCs | MATCH |
+| `\nSeedSdRelLGB` | `-12.49\%` | `-12.49%` | derived | ensemble SD over LightGBM's minus one, per-seed AUCs | MATCH |
+| `\nFrontAUCDeltaRounded` | `0.005` | `0.005` | derived | rounded AUC of the smallest configuration minus the largest's | MATCH |

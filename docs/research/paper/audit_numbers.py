@@ -141,6 +141,16 @@ def _front_cell(col: int, row: int, table: str) -> str:
     return re.findall(r"^\s+(\d+)\s+(\d+)\s+0\.", table, re.M)[row][col]
 
 
+def _sd_rel(table: str, column: int) -> str:
+    """The ensemble's seed SD relative to a single model's (column 0 XGBoost, 1 LightGBM)."""
+    import statistics  # noqa: PLC0415 - only this derivation needs it
+
+    rows = [line.split()[1:] for line in table.strip().splitlines()[1:]]
+    single = statistics.stdev(float(r[column]) for r in rows)
+    ensemble = statistics.stdev(float(r[2]) for r in rows)
+    return f"{(ensemble - single) / single * 100:+.2f}%"
+
+
 def _adr34(pattern: str) -> Src:
     return Src(ADR34, pattern, ref=ADR34_REF)
 
@@ -935,6 +945,25 @@ SOURCES: dict[str, Src | Derived] = {
     ),
     "nRevPriorThreePlus": Src(REV_NOVELTY, r"^\s+3: (\d+)$", ref=REV_NOVELTY_REF),
     "nRevPriorThreshold": Src(REV_NOVELTY, r"\((\d+) means \d+ or more\)", ref=REV_NOVELTY_REF),
+    "_SeedTable": Src(
+        SEEDS,
+        r"(^\s+seed\s+xgboost\s+lightgbm\s+ensemble\n(?:\s+\d+\s+[\d.]+\s+[\d.]+\s+[\d.]+\n)+)",
+    ),
+    "nSeedSdRelXGB": Derived(
+        ("_SeedTable",),
+        lambda t: _sd_rel(t, 0),
+        "ensemble SD over XGBoost's minus one, per-seed AUCs",
+    ),
+    "nSeedSdRelLGB": Derived(
+        ("_SeedTable",),
+        lambda t: _sd_rel(t, 1),
+        "ensemble SD over LightGBM's minus one, per-seed AUCs",
+    ),
+    "nFrontAUCDeltaRounded": Derived(
+        ("nFrAucA", "nFrAucE"),
+        lambda a, e: f"{Decimal(a) - Decimal(e):.3f}",
+        "rounded AUC of the smallest configuration minus the largest's",
+    ),
     "nPctlFlag": Src(PROMPT, r"budget targets p(\d+) ≤ \d+ ms for flagged"),
     "nPctlTail": Src(PROMPT, r"single-request p(\d+) \(ensemble"),
     "_GroupCounts": Src(TEST_REGISTRY, r"(EXPECTED_GROUP_COUNTS = \{.*?\n\})"),
