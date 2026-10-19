@@ -76,7 +76,7 @@ def git(*args: str) -> str:
 
 
 def cluster_draws(accounts: list[str], labels: list[bool], rng: Any) -> list[Any]:
-    """Row index arrays for `RESAMPLES` resamples of whole accounts, drawn with replacement.
+    """Row index arrays for `RESAMPLES` stratified resamples of whole accounts, with replacement.
 
     Stratified like the row bootstrap it is compared with (gate.bootstrap draws fraud and
     legitimate rows separately): accounts with any fraud row and accounts with none are resampled
@@ -132,7 +132,7 @@ def gate_section(cache: Path, out: Path, lines: list[str]) -> int:
             )
     frauds = [a for a, y in zip(accounts, labels, strict=True) if y]
     lines += [
-        "GATE MODEL (D-05 ensemble, seed 1), refitted from the gate cache",
+        f"GATE MODEL (D-05 ensemble, seed {SEED}), refitted from the gate cache",
         f"  test rows {len(labels)}, fraud {sum(labels)}, accounts {len(set(accounts))}, "
         f"accounts with fraud {len(set(frauds))}",
         "  reproduction against m4_gate_d8083dbc_v3.txt (three places):",
@@ -196,7 +196,7 @@ def battery_section(cache: Path, out: Path, lines: list[str]) -> int:
         MISMATCHES.append("battery full model")
     lines += [
         "",
-        "DIAGNOSTIC BATTERY (one untuned XGBoost, seed 1), refitted from the battery cache",
+        f"DIAGNOSTIC BATTERY (one untuned XGBoost, seed {BATTERY_SEED}), refitted from its cache",
         f"  full model: published {PUBLISHED_BATTERY_AUC:.3f}, reproduced {headline:.3f}  {state}",
         "  group alone          AUC     row interval (Hanley-McNeil)   account-clustered",
     ]
@@ -349,7 +349,9 @@ def main(argv: list[str]) -> int:
     print(f"# exit: {1 if MISMATCHES else 0}")
     print(f"# models and features: fraudshield-ml at m4-complete; draw {args.fingerprint}")
     print(
-        f"# resamples: {RESAMPLES} of whole accounts, seed {SEED}; per-row scores in "
+        f"# resamples: {RESAMPLES} of whole accounts, stratified by whether an account has fraud, "
+        f"resampling seed {SEED} (model seeds: gate {SEED}, battery {BATTERY_SEED}); "
+        "per-row scores in "
         f"{args.scores_out}"
     )
     print()
