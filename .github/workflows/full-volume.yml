@@ -58,7 +58,8 @@ jobs:
       - name: Regenerate the draw
         run: |
           mkdir -p "$RUNNER_TEMP/out"
-          /usr/bin/time -f "PEAK_RSS_KB %M ELAPSED %e" uv run fs-dataset generate \
+          .github/scripts/with-memory-curve.sh generate "$RUNNER_TEMP/out/memory_curve.txt" -- \
+            /usr/bin/time -f "PEAK_RSS_KB %M ELAPSED %e" uv run fs-dataset generate \
             --output "$RUNNER_TEMP/bench1m" --rows 1000000 --seed "$SEED" 2> "$RUNNER_TEMP/out/generate.time"
           cat "$RUNNER_TEMP/out/generate.time" >> "$GITHUB_STEP_SUMMARY"
           uv run fs-dataset packs --output "$RUNNER_TEMP/packs.json"
@@ -104,7 +105,8 @@ jobs:
           # Job 1 must not score a test row; if anything tried, the line would land here.
           FS_TEST_ACCESS_LOG: ${{ runner.temp }}/out/features_access.jsonl
         run: |
-          uv run fs-evidence --output "$RUNNER_TEMP/out/full_volume_cache_d8083dbc.txt" -- \
+          .github/scripts/with-memory-curve.sh cache "$RUNNER_TEMP/out/memory_curve.txt" -- \
+            uv run fs-evidence --output "$RUNNER_TEMP/out/full_volume_cache_d8083dbc.txt" -- \
             /usr/bin/time -f "PEAK_RSS_KB %M ELAPSED %e" .venv/bin/python -u -m fraudshield_ml.cli evaluate \
             "$RUNNER_TEMP/bench1m" --packs "$RUNNER_TEMP/packs.json" --split "$RUNNER_TEMP/split.json" \
             --corpus-rows 1006317 --train-rows 792162 --validation-rows 60632 \
@@ -166,14 +168,16 @@ jobs:
       - name: The declared gate at full volume (five seeds, 1,000 resamples)
         run: |
           cache=$(find "$RUNNER_TEMP/cache" -name features_full_volume.parquet)
-          uv run fs-evidence --output "$OUT/full_volume_gate_d8083dbc.txt" -- \
+          .github/scripts/with-memory-curve.sh gate "$OUT/memory_curve.txt" -- \
+            uv run fs-evidence --output "$OUT/full_volume_gate_d8083dbc.txt" -- \
             /usr/bin/time -f "PEAK_RSS_KB %M ELAPSED %e" .venv/bin/python -u -m fraudshield_ml.cli gate \
             "$cache" --out "$OUT/full_volume_gate_d8083dbc" \
             --seeds 1 2 3 4 5 --resamples 1000 --purpose "$PURPOSE: gate"
       - name: PB-66's evaluations on the seed-1 model
         run: |
           cache=$(find "$RUNNER_TEMP/cache" -name features_full_volume.parquet)
-          uv run fs-evidence --output "$OUT/pb66_d8083dbc.txt" -- \
+          .github/scripts/with-memory-curve.sh pb66 "$OUT/memory_curve.txt" -- \
+            uv run fs-evidence --output "$OUT/pb66_d8083dbc.txt" -- \
             /usr/bin/time -f "PEAK_RSS_KB %M ELAPSED %e" .venv/bin/python -u -m fraudshield_ml.cli pb66 \
             "$cache" --out "$OUT/pb66_d8083dbc" --seed 1 --resamples 1000 \
             --scores-out "$OUT/pb66_d8083dbc/test_scores_seed1.csv" \

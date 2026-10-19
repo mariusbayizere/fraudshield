@@ -243,6 +243,8 @@ def test_wilson_matches_its_textbook_values() -> None:
     low, high = pb66.wilson(10, 100)
     assert (low, high) == pytest.approx((0.0552, 0.1744), abs=1e-4)
     assert all(math.isnan(v) for v in pb66.wilson(0, 0))
+    assert pb66.wilson(0, 50)[0] == 0.0
+    assert pb66.wilson(50, 50)[1] == 1.0
 
 
 def test_a_group_with_only_fraud_has_no_false_positive_rate() -> None:

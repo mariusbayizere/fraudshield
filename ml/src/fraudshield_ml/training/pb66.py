@@ -383,7 +383,10 @@ def wilson(successes: int, trials: int, z: float = 1.959963984540054) -> tuple[f
     denominator = 1 + z * z / trials
     centre = (p + z * z / (2 * trials)) / denominator
     half = z * math.sqrt(p * (1 - p) / trials + z * z / (4 * trials * trials)) / denominator
-    return (max(0.0, centre - half), min(1.0, centre + half))
+    # Exact at the edges: computed, 0 of n gives a lower bound of about 1e-19 rather than 0.
+    low = 0.0 if successes == 0 else max(0.0, centre - half)
+    high = 1.0 if successes == trials else min(1.0, centre + half)
+    return (low, high)
 
 
 def fairness(  # noqa: PLR0913 - the rows' four facts and the bootstrap's two settings

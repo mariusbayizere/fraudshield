@@ -266,3 +266,14 @@ amounts, after the paragraph above. It does not attribute it to the model.
   - **Job 1 asserts every pool's size** before building the cache. `evaluate` would otherwise
     subsample a pool larger than requested without saying so.
   - **Only the pre-registered month difference** (December minus November) is computed.
+- **2026-10-19, owner's decisions relayed through M11 (`M11_updates.md` §§ 13 and 14), before
+  approval and before any run.**
+  - **A memory curve and swap use.** Every heavy step in both jobs runs under
+    `.github/scripts/with-memory-curve.sh`. It prints `swapon --show`, then the memory and swap
+    used every 30 s, to the job log (which survives a runner lost to memory) and to
+    `memory_curve.txt`, which is uploaded.
+  - **Per-row scores are not committed** (G.5): they stay in the artifact. The committed evidence
+    gives their SHA-256 and the workflow that regenerates them. They carry each test row's score,
+    label, timestamp, amount, country and channel, and no account token. M11 computes the paper's
+    raw-axes cost view from them: fraud amount caught against legitimate amount blocked and reviews
+    required. Drummond–Holte stays this report's cost curve.
