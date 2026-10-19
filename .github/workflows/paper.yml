@@ -95,10 +95,13 @@ jobs:
         run: |
           # Offline first, from the cache only. Fetch from the pinned bundle only for files the cache
           # lacks (a cache miss, or a package the paper newly uses), and then verify the bundle.
-          if "$RUNNER_TEMP/tectonic" -X compile --keep-logs --only-cached --bundle "$TECTONIC_BUNDLE" main.tex; then
+          # A file missing from a partial cache either stops LaTeX or makes it substitute a font with a
+          # "LaTeX Font Warning"; both send the build online, so the cache is topped up and saved.
+          if "$RUNNER_TEMP/tectonic" -X compile --keep-logs --only-cached --bundle "$TECTONIC_BUNDLE" main.tex \
+            && ! grep -q "LaTeX Font Warning" main.log; then
             echo "fetched=false" >> "$GITHUB_OUTPUT"
           else
-            echo "offline compile failed (files missing from the cache, or a LaTeX error); retrying online from the pinned bundle"
+            echo "offline compile failed or substituted a font; retrying online from the pinned bundle"
             "$RUNNER_TEMP/tectonic" -X compile --keep-logs --bundle "$TECTONIC_BUNDLE" main.tex
             echo "fetched=true" >> "$GITHUB_OUTPUT"
           fi
@@ -114,14 +117,13 @@ jobs:
             echo "overfull lines (README: the build has none)" >&2
             exit 1
           fi
-          # An offline build treats a file missing from a partial cache as absent. Where LaTeX then
-          # substitutes rather than stops, it warns in the log; fail on the warning. (A "LaTeX Font
-          # Info" substitution, such as bold typewriter set as bold, is the font's design and
-          # happens online too, so it is not matched.)
+          # After the online retry a font warning is a genuine failure. (A "LaTeX Font Info"
+          # substitution, such as bold typewriter set as bold, is the font's design and is not
+          # matched.)
           # A missing file that only changes an \IfFileExists branch leaves no trace and is a known,
           # accepted gap: the paper uses no such optional input.
-          if grep -E "LaTeX Font Warning|not found in (the )?bundle" main.log; then
-            echo "a TeX resource was missing or substituted" >&2
+          if grep "LaTeX Font Warning" main.log; then
+            echo "a font was substituted" >&2
             exit 1
           fi
       - name: The bundle is the pinned one
