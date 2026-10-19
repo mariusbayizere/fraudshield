@@ -109,7 +109,8 @@ def render(registry: dict[str, object], ref: str, sha: str) -> str:
             definition = tex(first_sentence(spec.definition))
             suffix = rf" \emph{{({mark})}}" if mark else ""
             lines.append(rf"\texttt{{{tex(spec.name)}}} & {definition}{suffix} \\")
-        lines.append(r"\addlinespace")
+        if by_group:  # space between groups, not before the closing rule
+            lines.append(r"\addlinespace")
     if by_group:
         raise SystemExit(f"groups with no title: {sorted(by_group)}")
     lines += [r"\bottomrule", r"\end{longtable}"]

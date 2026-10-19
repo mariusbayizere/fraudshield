@@ -70,6 +70,9 @@ jobs:
         working-directory: docs/research/paper
         run: |
           "$RUNNER_TEMP/tectonic" -X compile --keep-logs main.tex
+          # grep on a missing file exits 2, which `if` reads as no match: require the log first.
+          test -s main.log
+
           if grep -E "undefined (references|citations)|Citation .* undefined|Reference .* undefined" main.log; then
             echo "undefined references or citations" >&2
             exit 1

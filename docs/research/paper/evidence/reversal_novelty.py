@@ -96,15 +96,8 @@ def main(argv: list[str]) -> int:
         filter=pc.field("account_id").isin(accounts),
     ).to_pylist()
 
-    def is_new(row: dict[str, object]) -> bool:
-        return not any(
-            h["account_id"] == row["account_id"]
-            and h["transaction_timestamp"] < row["transaction_timestamp"]
-            and h["counterparty_id"] == row["counterparty_id"]
-            for h in history
-        )
-
     def earlier_payments(row: dict[str, object]) -> int:
+        """Earlier rows, same account and counterparty; none means the feature is true."""
         return sum(
             h["account_id"] == row["account_id"]
             and h["transaction_timestamp"] < row["transaction_timestamp"]
@@ -113,9 +106,9 @@ def main(argv: list[str]) -> int:
         )
 
     in_test = [r for r in scored if r["transaction_timestamp"] >= test_start]
-    new_all = [r for r in in_test if is_new(r)]
+    new_all = [r for r in in_test if earlier_payments(r) == 0]
     scored_fraud = [r for r in in_test if observed[r["transaction_id"]]]
-    new_scored = [r for r in scored_fraud if is_new(r)]
+    new_scored = [r for r in scored_fraud if earlier_payments(r) == 0]
     prior = Counter(min(earlier_payments(r), 3) for r in scored_fraud)
     test_rows_read = sum(h["transaction_timestamp"] >= test_start for h in history)
 

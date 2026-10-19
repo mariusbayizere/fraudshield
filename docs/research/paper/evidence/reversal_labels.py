@@ -9,8 +9,8 @@ the commit and whether the working tree was clean.
 
 Read-only on the dataset: it opens the Parquet files and changes nothing. It reads test-period
 labels, so it records the read in the test-set access log through the project's own `record`
-function, loaded from the tree (the run that produced the committed evidence predates this and is
-back-filled in the log).
+function, loaded from the tree. An earlier run, before it logged, is back-filled in the log. It
+refuses to report on any draw but the evaluated one.
 
 Usage (from the repository root, with a clean tree):
     uv run --no-project --with 'pyarrow==25.0.1' python \
@@ -35,6 +35,7 @@ ROOT = Path(__file__).resolve().parents[4]
 TAG = "m4-complete"
 FINGERPRINT = "dataset/src/fraudshield_dataset/fingerprint.py"
 ACCESS = ROOT / "ml/src/fraudshield_ml/training/access.py"
+EXPECTED = "d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32"
 VARIANTS = ("reversal_scam_social_engineering", "novel_esim_delayed_drain")
 
 
@@ -65,6 +66,10 @@ def main(argv: list[str]) -> int:
     dataset = Path(argv[1])
     # Read before the access log is appended below, which is the one write this run makes.
     state = "clean" if not git("status", "--porcelain").strip() else "DIRTY"
+    found = fingerprint(dataset)
+    if found != EXPECTED:
+        print(f"refused: draw {found[:8]} is not the evaluated {EXPECTED[:8]}", file=sys.stderr)
+        return 1
     manifest = json.loads((dataset / "manifest.json").read_text())
     micros = manifest["split"]["boundaries_micros"]["test_start"]
     test_start = dt.datetime.fromtimestamp(micros / 1e6, dt.UTC)
@@ -78,7 +83,7 @@ def main(argv: list[str]) -> int:
     print()
     print("HELD-OUT SUB-VARIANTS BY LABEL — rows the generator wrote, and rows the evaluation")
     print("scores as fraud (it reads is_fraud_observed, the label a model would be given).")
-    print(f"  dataset fingerprint: {fingerprint(dataset)} (function at {TAG})")
+    print(f"  dataset fingerprint: {found} (function at {TAG})")
     print(f"  rows: {manifest['rows']}   test period from {test_start.isoformat()}")
     read_in_test = 0
     for variant in VARIANTS:

@@ -1,3 +1,4 @@
 # Build outputs of tectonic -X compile; CI uploads the PDF as an artefact.
 main.pdf
 main.log
+main.blg
