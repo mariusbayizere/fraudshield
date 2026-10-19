@@ -3072,3 +3072,33 @@ Found while writing the paper's learning-curve section: every one of the four do
 the seed-1 comparison, and none of them had been read against the SEEDS lines. The rule it
 illustrates is the one already written for the paper: the evidence file wins, including over the
 entry that first reported it.
+
+### 2026-10-19 · An aggregate that discards its rows cannot answer the next question asked of it
+
+The reversal-scam variant was pre-registered as a transfer to a counterparty the victim already
+knows, and its result was reported as a model failing "when burst structure and counterparty
+novelty are both absent". The owner asked whether that mechanism could be stated at all. A
+read-only count on the regenerated draw `d8083dbc` answered half of it:
+`counterparty_is_new_for_account` is true on 19 of the 66 rows scored as fraud
+(`docs/research/paper/evidence/reversal_novelty_d8083dbc.txt`). The payee is on the victim's list,
+which is all the generator's test checks, but the account had never paid it (PB-141).
+
+The other half cannot be answered. The battery caught 6 of the 66. Were they among the 19 with a new
+payee, which would say novelty does the work, or among the 47 without, which would say something
+else does? The battery wrote recall, its interval and the AUC, and threw away the scores those were
+computed from. There is no artefact to split. Re-running would mean regenerating the draw, rebuilding
+the features and refitting the model, and the scores that came out would belong to that run, not to
+the one whose 9.1% the paper reports.
+
+**This is a different failure from the ones above, and a quieter one.** Nothing was wrong: every
+figure the battery reported is correct, and the evidence file says exactly what was measured. What
+was lost is the ability to ask a question nobody had thought of when the run was made. An aggregate
+answers the question it was computed for; the rows answer the next one. Discarding them decides, at the
+moment of measurement, that no later question will matter. On this project later questions have
+mattered: the seed-1 gap that vanished on the means was found because the per-seed results were kept,
+and which reversal rows were caught cannot be found because they were not.
+
+**The rule** (owner, 2026-10-19): *every evaluation that produces a cited figure keeps its per-row
+scores beside its evidence file, under the same stamp, and is logged as a test-set read like any
+other.* A result that cannot be interrogated afterwards has to be taken on trust, which is the thing
+the evidence files exist to avoid. PB-142 carries it to the next evaluation (M10).

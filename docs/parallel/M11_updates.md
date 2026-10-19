@@ -397,3 +397,12 @@ failing lint before it was noticed and amended. Gating chains here now use `&&`.
    is an owner decision and is not done here. [M2 / owner]
 6. **Pre-rebase commits preserved**: `origin/m11/paper-pre-rebase-af54957` keeps the commits whose
    hashes earlier evidence stamps name (`6fe4bf0`, `3559f8c`).
+
+## 11. Numbering reserved by this branch
+
+Claimed 2026-10-19, after reading every branch: the highest backlog id in use or reserved anywhere is
+PB-140 (`m8/frontend-rebase`, M8's block `PB-131`–`PB-140`).
+
+| Kind | Reserved for M11 | Used |
+|---|---|---|
+| Backlog | `PB-141`–`PB-150` | `PB-141` (the reversal-scam test checks payee-list membership, not novelty), `PB-142` (evaluations keep per-row scores) |

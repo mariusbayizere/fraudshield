@@ -25,6 +25,11 @@ env:
   TECTONIC_VERSION: "0.17.0"
   # tectonic-0.17.0-x86_64-unknown-linux-musl.tar.gz, digest from the GitHub release.
   TECTONIC_SHA256: "8533d07f9ccbd7a65824b9e0459041bca34af1eb33daba48f59215593753a3b7"
+  # The TeX bundle is pinned by URL and by the SHA-256 digest Tectonic records for it, and cached,
+  # so an ordinary build reads no outside service (owner, 2026-10-19). The digest is the one in
+  # the bundle's hashes file after a fetch; a bundle that changed under the same URL fails the job.
+  TECTONIC_BUNDLE: "https://relay.fullyjustified.net/default_bundle_v33.tar"
+  TECTONIC_BUNDLE_DIGEST: "6ffe055852f8faf66c0acbe1a7fb27f87b869a90bad1204f3bf4d9683f597c7c"
 
 jobs:
   checks:
@@ -66,10 +71,33 @@ jobs:
           echo "${TECTONIC_SHA256}  $RUNNER_TEMP/tectonic.tar.gz" | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/tectonic.tar.gz" -C "$RUNNER_TEMP"
           "$RUNNER_TEMP/tectonic" --version
+      - name: Locate the Tectonic cache
+        id: tectonic-cache
+        run: echo "dir=$("$RUNNER_TEMP/tectonic" -X show user-cache-dir)" >> "$GITHUB_OUTPUT"
+      - name: Restore the cached TeX bundle files
+        id: restore
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.tectonic-cache.outputs.dir }}
+          # The files a build needs follow from the paper's sources, so they are part of the key;
+          # an older entry for the same bundle is restored as a start and topped up.
+          key: tectonic-${{ env.TECTONIC_VERSION }}-${{ env.TECTONIC_BUNDLE_DIGEST }}-${{ hashFiles('docs/research/paper/**/*.tex', 'docs/research/paper/*.bib') }}
+          restore-keys: |
+            tectonic-${{ env.TECTONIC_VERSION }}-${{ env.TECTONIC_BUNDLE_DIGEST }}-
       - name: Compile
+        id: compile
         working-directory: docs/research/paper
         run: |
-          "$RUNNER_TEMP/tectonic" -X compile --keep-logs main.tex
+          # Offline first, from the cache only. Fetch from the pinned bundle only for files the cache
+          # lacks (a cache miss, or a package the paper newly uses), and then verify the bundle.
+          if "$RUNNER_TEMP/tectonic" -X compile --keep-logs --only-cached --bundle "$TECTONIC_BUNDLE" main.tex; then
+            echo "fetched=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "the cache lacks files this build needs; fetching from the pinned bundle"
+            "$RUNNER_TEMP/tectonic" -X compile --keep-logs --bundle "$TECTONIC_BUNDLE" main.tex
+            echo "fetched=true" >> "$GITHUB_OUTPUT"
+          fi
+
           # grep on a missing file exits 2, which `if` reads as no match: require the log first.
           test -s main.log
 
@@ -81,6 +109,22 @@ jobs:
             echo "overfull lines (README: the build has none)" >&2
             exit 1
           fi
+      - name: The bundle is the pinned one
+        env:
+          CACHE_DIR: ${{ steps.tectonic-cache.outputs.dir }}
+        run: |
+          found=$(cat "$CACHE_DIR"/bundles/hashes/*default_bundle_v33.tar)
+          if [ "$found" != "$TECTONIC_BUNDLE_DIGEST" ]; then
+            echo "bundle digest $found, pinned $TECTONIC_BUNDLE_DIGEST" >&2
+            exit 1
+          fi
+          echo "bundle digest $found matches the pin"
+      - name: Save the TeX bundle files for later builds
+        if: steps.restore.outputs.cache-hit != 'true' && steps.compile.outputs.fetched == 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.tectonic-cache.outputs.dir }}
+          key: ${{ steps.restore.outputs.cache-primary-key }}
       - name: Upload the PDF
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

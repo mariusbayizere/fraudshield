@@ -23,6 +23,8 @@ taken twice. Claims made on branches not yet merged, as of 2026-10-17:
 | PB-76 | M4 | `M4_updates.md` on `m4/generalisation` | training rows near the corpus's start see truncated history (was a second `PB-69`) |
 | PB-77 to PB-101 | M6 | `M6_updates.md`, "Numbering reserved by this branch" | amendment 1's known gaps and the 22 section-8 rows proved only in part |
 | PB-102 to PB-130 | M7 | `M7_updates.md`, "Numbering reserved by this branch" | the merge round's unowned items and M7's rows proved only in part (PB-102 to PB-124 used) |
+| PB-131 to PB-140 | M8 | `M8_updates.md` §8 on `m8/frontend-rebase` | the console's items |
+| PB-141 to PB-150 | M11 | `M11_updates.md` §11 on `m11/paper` | the paper's evidence findings (PB-141 and PB-142 used) |
 
 ---
 
@@ -1494,3 +1496,40 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 - **Acceptance:** measure the share of training rows whose windows reach before the corpus start,
   and either build training features from a corpus that reaches at least 90 days before the
   earliest training row, or report every model figure with that share stated. The owner decides.
+
+### PB-141 · The reversal-scam scenario does not do what its name implies: its test checks payee-list membership, not novelty
+- **Source:** M11, read-only count on the regenerated draw `d8083dbc`, 2026-10-19
+  (`docs/research/paper/evidence/reversal_novelty_d8083dbc.txt`, commit `ab03392`) · **Priority:**
+  high · **Due:** M2 (the generator), with the owner's decision on whether the variant is changed
+- **Measured:** the pre-registered variant `reversal_scam_social_engineering` is meant to be a
+  transfer to a counterparty the victim already knows, removing counterparty novelty. On the 66 rows
+  scored as fraud, `counterparty_is_new_for_account` (complete history) is **true on 19**: the
+  payee is on the victim's list but the account had never paid it. Novelty is removed from 47 rows
+  only. **The scenario does not do what its name, ADR 0028 and the paper's pre-registration
+  imply.**
+- **Why the test missed it:**
+  `test_the_reversal_scam_variant_is_one_transaction_to_a_known_payee_in_the_test_period` asserts
+  membership of `customer.counterparties`, which does not imply an earlier payment; its own docstring
+  notes that listed counterparties may not have transacted yet. A generator that pays a listed
+  payee never paid before passes it, which is what the 19 rows are.
+- **Acceptance:** either the generator draws the reversal payee from counterparties the account has
+  already paid before the scored transaction, and a test asserts
+  `counterparty_is_new_for_account` is false on every variant row of a generated draw (and fails if
+  the payee is merely listed); or the owner records that the variant stays as it is, and ADR 0028,
+  the datasheet and the paper describe it as "a listed payee, paid before on some rows". Changing the
+  generator re-draws the dataset, so every figure from `d8083dbc` moves with it (E2).
+
+### PB-142 · Evaluations discard per-row scores, so a result cannot be interrogated afterwards
+- **Source:** M11, 2026-10-19: the reversal-scam result could not be split by counterparty novelty
+  because the battery kept no per-row scores (PB-141) · **Priority:** high · **Due:** M10 (the next
+  evaluation run), and every later evaluation; M4's battery and gate code are where the change lands
+- **Problem:** the diagnostic battery and the gate write aggregates (AUC, recall, intervals) and
+  discard the scores they were computed from. When a later question needs a split the aggregate did
+  not anticipate (which 6 of the 66 reversal rows were caught, and were they the 19 with a new
+  payee), there is nothing to split, and the only answer is a re-run on a regenerated draw with a
+  rebuilt model, which is not the run that produced the published figure.
+- **Acceptance:** every evaluation that produces a figure the paper or a gate cites also writes its
+  per-row scores (transaction id, observed and true label, raw and calibrated score, model and seed)
+  next to its evidence file, under the same evidence stamp and fingerprint, and the evidence file
+  names that artefact. A test fails if an evaluation command completes without writing it. Test-period
+  scores are subject to the test-set access log like any other read.
