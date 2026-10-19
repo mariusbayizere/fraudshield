@@ -3061,3 +3061,14 @@ Proposed for the owner's approval, before anything is built or run:
 
 The run is two jobs on a GitHub-hosted runner, with the evidence committed locally. That file is
 not edited after a run starts.
+
+**Update, same day.** The owner approved it as amended. The approval added a fourth budget, 10 a
+day, below the draw's roughly 15 frauds a day, with its own prediction. It declined an
+amount-weighted cost curve and deferred leave-one-fraud-type-out and the per-channel reliability
+diagrams. Two independent review rounds changed the methods before any run:
+
+- tied scores at the budget cut share the remaining alerts;
+- per-group false-positive rates carry Wilson intervals;
+- the run checks its own model, pools and history share.
+
+Each change is a dated amendment in the file.

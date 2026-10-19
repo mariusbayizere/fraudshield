@@ -180,9 +180,11 @@ jobs:
             uv run fs-evidence --output "$OUT/pb66_d8083dbc.txt" -- \
             /usr/bin/time -f "PEAK_RSS_KB %M ELAPSED %e" .venv/bin/python -u -m fraudshield_ml.cli pb66 \
             "$cache" --out "$OUT/pb66_d8083dbc" --seed 1 --resamples 1000 \
-            --scores-out "$OUT/pb66_d8083dbc/test_scores_seed1.csv" \
+            --scores-out "$OUT/scores/test_scores_seed1.csv" \
             --purpose "$PURPOSE: pb66"
           cat "$OUT/pb66_d8083dbc.txt" >> "$GITHUB_STEP_SUMMARY"
+          # The scores stay in the artifact (G.5); their hash is what the committed evidence cites.
+          (cd "$OUT/scores" && sha256sum test_scores_seed1.csv) | tee "$OUT/test_scores_seed1.sha256"
       - name: PB-66 scored the gate's own seed-1 model
         run: |
           uv run python - "$OUT/full_volume_gate_d8083dbc/metrics.json" "$OUT/pb66_d8083dbc/metrics.json" <<'PY'

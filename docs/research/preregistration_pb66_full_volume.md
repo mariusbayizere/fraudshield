@@ -295,3 +295,14 @@ amounts, after the paragraph above. It does not attribute it to the model.
   3. **Leave-one-fraud-type-out and per-channel reliability diagrams wait** for a later run. Adding
      them would widen this pre-registration after its review.
   4. **A second review round** of the review's fixes and of this budget change, before the run.
+- **2026-10-19, after the second review round (APPROVED_WITH_MINORS), before any run.**
+  - **The ceiling's definition, made exact.** § 3.2 says "that day's frauds ÷ k". As computed, each
+    day's frauds are capped at k, and the ceiling is pooled over days:
+    Σ min(frauds, k) ÷ Σ alerts. At k = 10 an uncapped ratio would exceed 1 on most days. The
+    cap is what "close to 1" in the previous amendment assumed.
+  - **The per-row scores** are written outside the evidence folder (`scores/`), so they cannot be
+    committed by accident with it. The job records their SHA-256, which the committed evidence
+    cites.
+  - **The memory-curve wrapper** can no longer turn a successful step into a failed one. A failed
+    reading is skipped, and stopping the sampler cannot change the command's exit status. A
+    spurious failure after scoring would have forced a re-run, which § 4 counts as a new access.

@@ -119,6 +119,47 @@ def test_budget_intervals_resample_whole_days() -> None:
     assert report["intervals"]["precision"] == pytest.approx((0.0, 2 / 3))  # type: ignore[index]
 
 
+def _day(
+    fraud: list[bool], scores: list[float], day: int
+) -> tuple[list[float], list[bool], list[int]]:
+    base = _micros("2025-11-01T00:00:00") + day * DAY
+    return scores, fraud, [base + i for i in range(len(scores))]
+
+
+def _days(*days: tuple[list[float], list[bool], list[int]]) -> pb66.Days:
+    """Full days between a partial first and last day (one row each), as `full_days` keeps them."""
+    first = ([0.0], [False], [_micros("2025-10-31T23:00:00")])
+    last = ([0.0], [False], [_micros("2025-11-30T01:00:00")])
+    scores, labels, stamps = [], [], []
+    for s, y, t in (first, *days, last):
+        scores += s
+        labels += y
+        stamps += t
+    return pb66.daily_budget(scores, labels, stamps, budgets=(3,))
+
+
+def test_the_ceiling_is_capped_at_k_on_a_day_with_more_frauds_than_alerts() -> None:
+    # Day one: five frauds, budget three, so at most three alerts can be right. Day two: one fraud.
+    days = _days(
+        _day([True] * 5 + [False] * 5, [0.9 - i * 0.01 for i in range(10)], 1),
+        _day([True] + [False] * 9, [0.9 - i * 0.01 for i in range(10)], 2),
+    )
+    report = pb66.budget_report(days, resamples=20, seed=1)[3]
+    # min(5, 3) + min(1, 3) right at most, of six alerts; uncapped it would be (5 + 1) / 6 = 1.
+    assert report["ceiling"] == pytest.approx(4 / 6)
+    assert report["precision"] == pytest.approx(4 / 6)
+    assert report["share_of_ceiling"] == pytest.approx(1.0)
+
+
+def test_fractional_hits_from_a_tie_reach_the_budget_report() -> None:
+    # One fraud among four rows tied at the top; budget three: three quarters of a fraud expected.
+    days = _days(_day([True, False, False, False, False], [0.5, 0.5, 0.5, 0.5, 0.1], 1))
+    report = pb66.budget_report(days, resamples=20, seed=1)[3]
+    assert report["precision"] == pytest.approx(0.75 / 3)
+    assert report["recall"] == pytest.approx(0.75)
+    assert report["tie_decided_alerts"] == 3
+
+
 def test_a_budget_larger_than_a_day_alerts_on_every_row() -> None:
     days = pb66.daily_budget(*_three_days(), budgets=(50,))
     assert days.caught[50][0].tolist() == [10, 10]

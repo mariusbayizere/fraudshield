@@ -6,9 +6,9 @@ Each analysis is a function of arrays, so each can be tested on rows small enoug
 
 * PR-AUC beside ROC (§ 3.1): average precision, as scikit-learn defines it, and the curve.
 * Precision at a fixed alert budget (§ 3.2): each full UTC day's top k scores are that day's alerts.
-  The budgets are **assumed**, not required (the SRS states none), and the precision ceiling — that
-  day's frauds over k — is reported beside every precision, since a budget above the day's fraud
-  count caps precision whatever the model does.
+  The budgets are **assumed**, not required (the SRS states none), and the precision ceiling —
+  the day's frauds, capped at k, over k, pooled over days — is reported beside every precision,
+  since a budget above the day's fraud count caps precision whatever the model does.
 * Performance by month of the test period (§ 3.3, C-5): three buckets, as thin as they are.
 * The Drummond-Holte cost curve (§ 3.4): normalised expected cost, minimised over thresholds, at
   each probability-cost value, beside the trivial classifier's min(PC, 1 - PC). Parameter-free:

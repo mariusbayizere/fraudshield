@@ -114,6 +114,9 @@ def test_pb66_reports_every_preregistered_section_and_logs_the_access(
     assert len(metrics["budgets"]["days_excluded"]) == 2
     assert metrics["budgets"]["first_day"] == "2025-10-29"
     assert metrics["training_history"]["training_rows"] == SEGMENTS["train"]
+    # Train rows sit 30 to 529 days before the test start, a day apart: those within 90 days of
+    # the earliest are the 90 oldest.
+    assert metrics["training_history"]["within_90_days_of_the_first"] == 90
     assert "NaN" not in (out / "metrics.json").read_text(), "metrics.json must be strict JSON"
     assert sorted(metrics["fairness"]["country"]) == ["KE", "RW", "UG"]
     assert [m["month"] for m in metrics["months"]["model"]] == ["2025-10", "2025-11", "2025-12"]

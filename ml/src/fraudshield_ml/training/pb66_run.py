@@ -81,8 +81,8 @@ def score(cache: Path, seed: int) -> TestRows:
     import numpy as np  # noqa: PLC0415 - heavy, and only this path needs it
 
     data = gate_run.load_cache(cache)
-    # Everything that can refuse runs before the fit, so no test row is scored and then dropped
-    # without an access line.
+    # The checks that can refuse (missing columns, missing feature) run before the fit, so no test
+    # row is scored and then dropped without an access line.
     columns = _columns(cache)
     feature = data.names.index(BASELINE_FEATURE)
     stamps = [int(str(v)) for v in columns[smoke.CACHE_TIMESTAMP]]
@@ -405,7 +405,8 @@ def write(result: dict[str, Any], rows: TestRows, out: Path, scores_out: Path | 
     b_precision, b_recall = pb66.pr_curve(rows.baseline, rows.labels)
     cost = result["cost_curve"]
     written = {
-        out / "metrics.json": json.dumps(_strict(result), indent=2, sort_keys=True) + "\n",
+        out / "metrics.json": json.dumps(_strict(result), indent=2, sort_keys=True, allow_nan=False)
+        + "\n",
         figures / "pr.svg": _svg(
             "Precision-recall, calibrated ensemble",
             ("recall", "precision"),
@@ -469,13 +470,16 @@ def write(result: dict[str, Any], rows: TestRows, out: Path, scores_out: Path | 
 
 
 def _strict(value: object) -> object:
-    """The result as strict JSON: NaN becomes null, tuples lists, numpy scalars Python ones."""
+    """The result as strict JSON.
+
+    NaN and infinities become null, tuples become lists and numpy scalars Python ones.
+    """
     if isinstance(value, dict):
         return {str(k): _strict(v) for k, v in value.items()}
     if isinstance(value, list | tuple):
         return [_strict(v) for v in value]
     if hasattr(value, "item"):
         value = value.item()
-    if isinstance(value, float) and math.isnan(value):
+    if isinstance(value, float) and not math.isfinite(value):
         return None
     return value
