@@ -8,6 +8,8 @@ const PORT = 5391;
  */
 export default defineConfig({
   testDir: 'e2e',
+  // Timings run on a production build with their own server (playwright.perf.config.ts).
+  testIgnore: 'performance.spec.ts',
   fullyParallel: false,
   forbidOnly: !!process.env['CI'],
   retries: process.env['CI'] ? 1 : 0,

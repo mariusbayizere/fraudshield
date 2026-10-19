@@ -50,3 +50,38 @@ jobs:
           name: playwright-report-${{ matrix.browser }}
           path: frontend/playwright-report
           retention-days: 7
+
+  # MOB-PERF-01 to 05: first-visit timings on a production build under 3G and a 4x slower CPU
+  # (ADR 0080 section 10, amendment 2026-10-19). Chromium only: throttling uses the DevTools
+  # protocol. The medians are printed in the log as the evidence, pass or fail.
+  performance:
+    name: performance (3G, 4x CPU, production build)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: frontend/package.json
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      # A country from the packs, as the bundle test chooses one, not one named here (ADR 0023).
+      - run: |
+          set -euo pipefail
+          country="$(node -e "console.log(Object.keys(require('./src/region/generated/packs.json'))[0])")"
+          VITE_FS_COUNTRY="$country" pnpm exec vite build
+      - run: pnpm exec playwright test -c playwright.perf.config.ts
+      - if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-report-performance
+          path: frontend/playwright-report
+          retention-days: 7
