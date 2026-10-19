@@ -509,6 +509,16 @@ def test_cache_only_writes_all_four_periods_and_fits_nothing(
     assert "model AUC" not in printed
     segments = pq.read_table(cache).column(smoke.CACHE_SEGMENT).to_pylist()
     assert sorted(set(segments)) == ["calibration", "test", "train", "validation"]
+    # PB-66's columns: when each row happened and what it was worth. The test period follows the
+    # train period, so a timestamp written for the wrong row would break the order below.
+    table = pq.read_table(cache)
+    stamps = [int(v) for v in table.column(smoke.CACHE_TIMESTAMP).to_pylist()]
+    amounts = [float(v) for v in table.column(smoke.CACHE_AMOUNT).to_pylist()]
+    assert len(stamps) == len(amounts) == len(segments)
+    train = [t for t, s in zip(stamps, segments, strict=True) if s == "train"]
+    test = [t for t, s in zip(stamps, segments, strict=True) if s == "test"]
+    assert max(train) < min(test)
+    assert all(a > 0 for a in amounts)
     after = private_access_log.read_text() if private_access_log.exists() else ""
     assert after == before, "a cache-only build scored no test row and must not log one"
 

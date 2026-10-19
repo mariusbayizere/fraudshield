@@ -328,7 +328,12 @@ CACHE_EXTRAS = (
 #: The merchant category code, for E.5's rule-engine baseline. Optional so that a cache written
 #: before it was carried still reads; a reader that needs it says what it did without it.
 CACHE_MCC = "_mcc"
-CACHE_OPTIONAL = (CACHE_MCC,)
+#: When the row happened (microseconds since the epoch, UTC) and what it was worth in RWF: PB-66
+#: groups test rows by month and by day, and sums blocked amounts. Optional for the same reason as
+#: the MCC: caches written before them still read, and a reader that needs them says so.
+CACHE_TIMESTAMP = "_timestamp_us"
+CACHE_AMOUNT = "_amount_rwf"
+CACHE_OPTIONAL = (CACHE_MCC, CACHE_TIMESTAMP, CACHE_AMOUNT)
 
 
 def cache_key(dataset: str, corpus_rows: int, sample_rows: int) -> dict[str, str]:

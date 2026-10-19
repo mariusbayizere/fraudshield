@@ -1,0 +1,200 @@
+# PB-66 and PB-67's follow-up: full-volume training and PB-66's evaluations on a hosted runner.
+#
+# The design, predictions and decision rules are fixed in
+# docs/research/preregistration_pb66_full_volume.md, committed before this runs. Two jobs, so the
+# analyses can be re-run from the cache without paying for the feature pass again:
+#   features   regenerate d8083dbc, assert it, build the full-volume cache. Scores no test row.
+#   evaluate   the declared gate at full volume, then `fs-features pb66`. Both log the test-set
+#              access (I.2); the log travels in the artifact even when a step fails.
+# The evidence is committed locally from the artifact, through tools/bin/safe-push: this workflow
+# holds no write token. Accuracy only; no latency figure is produced (ADR 0010).
+#
+# Triggered by a push to evaluate/**, not by hand: a workflow_dispatch workflow must sit on the
+# default branch, which is m0/bootstrap.
+name: full-volume
+
+on:
+  push:
+    branches: ["evaluate/**"]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    # Explicit bash runs steps with -eo pipefail; the default does not set pipefail.
+    shell: bash
+
+concurrency:
+  group: full-volume-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  UV_VERSION: "0.12.15"
+  PYTHON_VERSION: "3.12.14"
+  SEED: "20260917"
+  FINGERPRINT: "d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32"
+
+jobs:
+  features:
+    name: regenerate d8083dbc and build the full-volume feature cache
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: uv sync --package fraudshield-dataset --package fraudshield-ml --package fraudshield-tools --locked
+      - name: Record the machine
+        run: |
+          {
+            echo "### Runner"
+            echo "- CPU: $(nproc) cores, $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | xargs)"
+            echo "- Memory: $(free -h | awk '/^Mem:/ {print $2}')"
+            echo "- Commit: $GITHUB_SHA"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Regenerate the draw
+        run: |
+          mkdir -p "$RUNNER_TEMP/out"
+          /usr/bin/time -f "PEAK_RSS_KB %M ELAPSED %e" uv run fs-dataset generate \
+            --output "$RUNNER_TEMP/bench1m" --rows 1000000 --seed "$SEED" 2> "$RUNNER_TEMP/out/generate.time"
+          cat "$RUNNER_TEMP/out/generate.time" >> "$GITHUB_STEP_SUMMARY"
+          uv run fs-dataset packs --output "$RUNNER_TEMP/packs.json"
+          uv run fs-dataset split "$RUNNER_TEMP/bench1m" --output "$RUNNER_TEMP/split.json"
+      - name: The draw is d8083dbc, with D-07's boundaries
+        run: |
+          uv run python - "$RUNNER_TEMP/bench1m" "$RUNNER_TEMP/split.json" <<'PY'
+          import json, os, sys
+          from pathlib import Path
+          from fraudshield_dataset.fingerprint import dataset_fingerprint
+          got = dataset_fingerprint(Path(sys.argv[1]))
+          assert got == os.environ["FINGERPRINT"], f"fingerprint {got}: this is not the benchmark"
+          b = json.load(open(sys.argv[2]))["boundaries_micros"]
+          assert b["test_start"] == 1761688920337485, b
+          assert b["validation_start"] == 1756099490732196, b
+          print("fingerprint and split boundaries match")
+          PY
+      - name: Every pool holds exactly the rows the run asks for
+        # evaluate refuses a pool smaller than asked but would silently subsample a larger one,
+        # so "every row" is checked here with the split module's own definitions.
+        run: |
+          uv run python - "$RUNNER_TEMP/bench1m" "$RUNNER_TEMP/split.json" <<'PY'
+          import sys
+          from collections import Counter
+          from pathlib import Path
+          import pyarrow.parquet as pq
+          from fraudshield_ml.training import split
+          b = split.load(Path(sys.argv[2]))
+          counts = Counter()
+          for part in sorted(Path(sys.argv[1], "transactions").glob("month=*/part-*.parquet")):
+              for t in pq.read_table(part, columns=["transaction_timestamp"]).column(0).to_pylist():
+                  segment = b.segment_of(t).value
+                  if segment == "validation" and b.in_calibration(t):
+                      segment = "calibration"
+                  counts[segment] += 1
+          want = {"train": 792162, "validation": 60632, "calibration": 40700,
+                  "embargo": 10914, "test": 101909}
+          print(dict(counts))
+          assert dict(counts) == want, f"pools {dict(counts)} are not {want}"
+          PY
+      - name: Build the cache (every row of every period; no model, no test row scored)
+        env:
+          # Job 1 must not score a test row; if anything tried, the line would land here.
+          FS_TEST_ACCESS_LOG: ${{ runner.temp }}/out/features_access.jsonl
+        run: |
+          uv run fs-evidence --output "$RUNNER_TEMP/out/full_volume_cache_d8083dbc.txt" -- \
+            /usr/bin/time -f "PEAK_RSS_KB %M ELAPSED %e" .venv/bin/python -u -m fraudshield_ml.cli evaluate \
+            "$RUNNER_TEMP/bench1m" --packs "$RUNNER_TEMP/packs.json" --split "$RUNNER_TEMP/split.json" \
+            --corpus-rows 1006317 --train-rows 792162 --validation-rows 60632 \
+            --calibration-rows 40700 --test-rows 101909 \
+            --cache "$RUNNER_TEMP/features_full_volume.parquet" --cache-only
+          test ! -s "$RUNNER_TEMP/out/features_access.jsonl"
+          cd "$RUNNER_TEMP" && sha256sum features_full_volume.parquet | tee out/cache.sha256
+      - name: Upload the cache
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: full-volume-cache
+          path: |
+            ${{ runner.temp }}/features_full_volume.parquet
+            ${{ runner.temp }}/out/cache.sha256
+          retention-days: 30
+          if-no-files-found: error
+      - name: Upload the job's evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: full-volume-features-evidence
+          path: ${{ runner.temp }}/out/
+          if-no-files-found: ignore
+
+  evaluate:
+    name: the gate at full volume, then PB-66's evaluations
+    needs: features
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    env:
+      PURPOSE: "PB-66 full-volume evaluation (run ${{ github.run_id }}, attempt ${{ github.run_attempt }})"
+    steps:
+      - name: Outputs live outside the checkout, where upload-artifact can reach them
+        # Outside, so fs-evidence's clean-tree check passes; under RUNNER_TEMP, because
+        # upload-artifact refuses a path with "..". runner.temp is not available in job env.
+        run: |
+          mkdir -p "$RUNNER_TEMP/out"
+          echo "OUT=$RUNNER_TEMP/out" >> "$GITHUB_ENV"
+          echo "FS_TEST_ACCESS_LOG=$RUNNER_TEMP/out/test_set_access.jsonl" >> "$GITHUB_ENV"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: uv sync --package fraudshield-ml --package fraudshield-tools --locked
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: full-volume-cache
+          path: ${{ runner.temp }}/cache
+      - name: The cache is the one job 1 built
+        working-directory: ${{ runner.temp }}/cache
+        run: sha256sum -c out/cache.sha256
+      - name: Record the attempt before any test row is scored
+        # The gate logs its access when it finishes; a run that dies part-way would otherwise
+        # leave no line. This one says a scoring run started, whatever happens next (I.2).
+        run: |
+          uv run python -c "import sys; from pathlib import Path; from fraudshield_ml.training import access; access.record('full-volume-attempt', Path(sys.argv[1]), 101909, purpose=sys.argv[2])" \
+            "$RUNNER_TEMP/cache/features_full_volume.parquet" "$PURPOSE: attempt started"
+      - name: The declared gate at full volume (five seeds, 1,000 resamples)
+        run: |
+          cache=$(find "$RUNNER_TEMP/cache" -name features_full_volume.parquet)
+          uv run fs-evidence --output "$OUT/full_volume_gate_d8083dbc.txt" -- \
+            /usr/bin/time -f "PEAK_RSS_KB %M ELAPSED %e" .venv/bin/python -u -m fraudshield_ml.cli gate \
+            "$cache" --out "$OUT/full_volume_gate_d8083dbc" \
+            --seeds 1 2 3 4 5 --resamples 1000 --purpose "$PURPOSE: gate"
+      - name: PB-66's evaluations on the seed-1 model
+        run: |
+          cache=$(find "$RUNNER_TEMP/cache" -name features_full_volume.parquet)
+          uv run fs-evidence --output "$OUT/pb66_d8083dbc.txt" -- \
+            /usr/bin/time -f "PEAK_RSS_KB %M ELAPSED %e" .venv/bin/python -u -m fraudshield_ml.cli pb66 \
+            "$cache" --out "$OUT/pb66_d8083dbc" --seed 1 --resamples 1000 \
+            --scores-out "$OUT/pb66_d8083dbc/test_scores_seed1.csv" \
+            --purpose "$PURPOSE: pb66"
+          cat "$OUT/pb66_d8083dbc.txt" >> "$GITHUB_STEP_SUMMARY"
+      - name: PB-66 scored the gate's own seed-1 model
+        run: |
+          uv run python - "$OUT/full_volume_gate_d8083dbc/metrics.json" "$OUT/pb66_d8083dbc/metrics.json" <<'PY'
+          import json, sys
+          gate = {g["id"]: g["value"] for g in json.load(open(sys.argv[1]))["gate"]}
+          pb66 = json.load(open(sys.argv[2]))["model_identity"]
+          print("gate", gate["ML-GATE-01"], gate["ML-GATE-03"], "pb66", pb66["auc"], pb66["recall_at_flag"])
+          assert abs(gate["ML-GATE-01"] - pb66["auc"]) < 1e-12
+          assert abs(gate["ML-GATE-03"] - pb66["recall_at_flag"]) < 1e-12
+          PY
+      - name: The checkout is untouched
+        run: test -z "$(git status --porcelain)"
+      - name: Upload the evidence and the access log
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: full-volume-evidence
+          path: ${{ runner.temp }}/out/
+          if-no-files-found: warn

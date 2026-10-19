@@ -16,7 +16,7 @@ import sys
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -51,6 +51,8 @@ from fraudshield_ml.training import (
     smoke,
 )
 from fraudshield_ml.training import split as split_module
+
+EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
 #: Columns the vector needs from each table. Named rather than read wholesale so that a schema
 #: change removing one fails here, with the column named, instead of somewhere inside a feature.
@@ -576,6 +578,8 @@ def _feature_matrix(
         smoke.CACHE_CHANNEL: [rows[i].channel or "?" for i in sample],
         smoke.CACHE_VARIANT: [variants.get(rows[i].transaction_id, "") for i in sample],
         smoke.CACHE_MCC: [rows[i].merchant_category_code or "" for i in sample],
+        smoke.CACHE_TIMESTAMP: [str(_micros(rows[i].timestamp)) for i in sample],
+        smoke.CACHE_AMOUNT: [repr(rows[i].amount_rwf) for i in sample],
     }
     if run.cache and run.cache_only:
         smoke.cache_write_columns(run.cache, key, columns, extras)
@@ -584,6 +588,11 @@ def _feature_matrix(
         smoke.cache_write(run.cache, key, vectors, extras)
         print(f"wrote the feature matrix to {run.cache}")
     return vectors, extras
+
+
+def _micros(moment: datetime) -> int:
+    """Microseconds since the epoch, exactly: a float timestamp would round some of them."""
+    return (moment - EPOCH) // timedelta(microseconds=1)
 
 
 def _fit(
@@ -935,6 +944,7 @@ def run_gate(  # noqa: PLR0913, PLR0917 - every argument is a declared setting o
     resamples: int,
     flags: str,
     train_rows: int | None = None,
+    purpose: str | None = None,
 ) -> int:
     """The declared M4 gate evaluation (E.5): D-05's model against ML-GATE-01 to ML-GATE-11.
 
@@ -960,7 +970,7 @@ def run_gate(  # noqa: PLR0913, PLR0917 - every argument is a declared setting o
     print("\n".join(gate_report.summary(result)))
     for path in gate_report.write(result, out):
         print(f"  wrote {path}")
-    purpose = (
+    purpose = purpose or (
         f"PB-67 learning curve at {len(data.split.train)} training rows"
         if train_rows is not None or "metrics-only" in flags
         else "declared M4 gate evaluation"
@@ -968,6 +978,27 @@ def run_gate(  # noqa: PLR0913, PLR0917 - every argument is a declared setting o
     access.record("gate", cache, len(data.test), purpose=purpose)
     failed = [g for g in result.gates if not g.passed]
     return 1 if failed and "enforce" in flags else 0
+
+
+def run_pb66(  # noqa: PLR0913, PLR0917 - every argument is a declared setting of the run
+    cache: Path, out: Path, seed: int, resamples: int, scores_out: Path | None, purpose: str
+) -> int:
+    """PB-66's evaluations (docs/research/preregistration_pb66_full_volume.md, section 3)."""
+    from fraudshield_ml.training import pb66_run  # noqa: PLC0415 - heavy, and only this path
+
+    if not cache.exists():
+        raise DatasetGapError(f"{cache} holds no usable feature matrix")
+    try:
+        rows = pb66_run.score(cache, seed)
+    except ValueError as gap:
+        raise DatasetGapError(str(gap)) from gap
+    # Recorded once the test rows are scored, before anything can fail on the way to the report.
+    access.record("pb66", cache, len(rows.labels), purpose=purpose)
+    result = pb66_run.analyse(rows, resamples=resamples, seed=seed)
+    print("\n".join(pb66_run.summary(result, seed=seed, resamples=resamples)))
+    for path in pb66_run.write(result, rows, out, scores_out):
+        print(f"  wrote {path}")
+    return 0
 
 
 def _sample(
@@ -1271,6 +1302,20 @@ def _add_gate_command(commands: Any) -> None:
     gate_command.add_argument(
         "--enforce", action="store_true", help="exit 1 if any gate metric misses its threshold"
     )
+    gate_command.add_argument(
+        "--purpose", default=None, help="what the test-set access log records this run as (I.2)"
+    )
+    pb66_command = commands.add_parser(
+        "pb66",
+        help="PB-66's evaluations on the gate's seed-1 model: PR-AUC, assumed alert budgets, "
+        "months (C-5), the cost curve and the fairness report",
+    )
+    pb66_command.add_argument("cache", type=Path)
+    pb66_command.add_argument("--out", type=Path, required=True)
+    pb66_command.add_argument("--seed", type=int, default=ensemble.SEEDS[0])
+    pb66_command.add_argument("--resamples", type=int, default=1000)
+    pb66_command.add_argument("--scores-out", type=Path, default=None)
+    pb66_command.add_argument("--purpose", default="PB-66 full-volume evaluation")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -1409,7 +1454,9 @@ COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
             if on
         ),
         a.train_rows,
+        a.purpose,
     ),
+    "pb66": lambda a: run_pb66(a.cache, a.out, a.seed, a.resamples, a.scores_out, a.purpose),
     "frontier": lambda a: run_frontier(a.cache, a.seed, a.requests, a.repeats),
     "seed-variance": lambda a: run_seed_variance(a.cache, tuple(a.seeds)),
     "battery": lambda a: run_battery(a.cache, a.seed, a.top),
