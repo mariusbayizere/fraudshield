@@ -546,3 +546,32 @@ backlog rows rather than fixed, one report at the end).**
   test: the escalated queue sent and its drawer's path; the search staying idle without criteria,
   the region's zone, the validation and the hidden link-only chips; accuracy never 0%, the minutes
   in a duration, and the shape guard. They do not cover what PB-134 to PB-139 record as untested.
+
+### PB-140 and PB-136 fixed (2026-10-19, owner's instruction)
+
+- **PB-140 (data exposure):**
+  - Sign-out cancels the queries in flight and clears the query and mutation caches, whether or not the server answers.
+  - Someone else signing in over a session that never signed out drops its queries.
+  - `/login` is opened without `next` when a session ends, so the next analyst is not sent to the last one's page.
+- **PB-136 (silent widening):**
+  - The search form judges each criterion by the route's own path (URL round trip, then `alertSearch`) and marks what the route would drop or change; it no longer has its own patterns.
+  - An unreadable date is marked.
+  - A shared link's date is re-sent as it came.
+- **Review, one round:** CHANGES_REQUIRED.
+  - **Fixed:** the MAJOR (`next` carried the last page across sign-out) and two MINORs (sign-in over another user's session; the date cut to the minute). These three are within the two rows' own scope. They had deletion checks, not a second review.
+  - **Filed:** the rest, in PB-136, PB-138 and PB-140:
+    - whether `z.uuid()` is the right bar;
+    - a one-directional table test;
+    - a late decision's `onSuccess`;
+    - the `Number()` amount comparison, already PB-137 (3).
+- **Deletion checks:** 5 mutations, each failing a test:
+  - the cache clear removed;
+  - the removal at sign-in removed;
+  - `next` kept;
+  - the form's old UUID pattern back;
+  - the carried date cut.
+- **Not yet reachable:** no sign-out control exists in the console, and a 401 does not end the session. Both are in PB-140's open part.
+- **Local runs:**
+  - The changed files pass when run alone (33 of 33).
+  - The wider set (274 tests) failed 7 under load, all at the 5 s timeout, including in files this change does not touch.
+  - CI is the record.

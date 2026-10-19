@@ -3111,3 +3111,32 @@ the review's words can accept. The two are complements; neither replaces the oth
 **The testable habit.** A helper that reads a value from the page for a test should fail when it
 cannot read it, not supply a value. A test written in answer to a finding should be mutated with
 the finding's own defect before the finding is closed.
+
+### 2026-10-19 · Two validators for one value, and the stricter one decided in silence
+
+The search form (M8 screen 7) and the route behind it each validated the same transaction and
+analyst IDs. The form used its own pattern, any 8-4-4-4-12 hex string; the route used zod's
+`z.uuid()`, which also requires an RFC 9562 version and variant, inside a `catch` that turns a
+failing value into no criterion. An ID that passed the first and failed the second was dropped
+from the URL, and the search ran on whatever criteria were left. The analyst saw results and had
+no reason to think they were broader than asked. If the ID was the only criterion, Search did
+nothing at all.
+
+**The same family as a guard with two doors.** Each validator was right by its own rules, and
+each had a test. The defect was in the disagreement, which no single check could see: the form's
+tests asked whether the form marked bad values, and the route's whether it dropped them. One
+value was judged to two standards, and the stricter acted without saying so. That is the shape of
+the memory check that reported and did not gate, and of the `&&` slips: a check that ran, and a
+step after it that did not depend on its answer.
+
+**The fix removes a door rather than aligning two.** Copying the route's pattern into the form
+would have matched them until one changed. The form now asks the route: it sends the search it
+would submit through the route's own path (into the URL, back out, then `alertSearch`) and marks
+any field the route would drop or change. A value is sent exactly or refused visibly. The same
+check then caught an unreadable date that had also been dropped quietly, and the review of the fix
+found a third quiet change: a date from a shared link was cut to the minute when re-sent.
+
+**The testable habit.** Where a value crosses a boundary that can silently drop it (a `catch`, a
+default, an optional parse), the side that accepts the value should consult the side that may drop
+it, not restate its rule. The test is one that feeds values from either side of the stricter rule
+and asserts each is either refused or arrives unchanged.

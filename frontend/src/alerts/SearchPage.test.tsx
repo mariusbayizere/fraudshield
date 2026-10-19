@@ -1,6 +1,7 @@
 import {
   createMemoryHistory,
   createRouter,
+  defaultParseSearch,
   defaultStringifySearch,
   RouterProvider,
 } from '@tanstack/react-router';
@@ -17,7 +18,8 @@ import { routeTree } from '../app/router';
 import examples from '../mocks/generated/examples.json';
 import { axeViolations } from '../test/axe';
 import { Providers } from '../test/Providers';
-import { toInstant, toLocal } from './SearchForm';
+import { alertSearch } from '../app/alertSearch';
+import { judge, toInstant, toLocal } from './SearchForm';
 
 // Fixtures start from the contract's examples, and every response is parsed by the generated
 // schema in tests (H.4), so a fixture the contract would reject fails here.
@@ -110,6 +112,7 @@ async function renderQueue(search: Record<string, unknown> = {}) {
 
 const TRANSACTION = '3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11';
 const ACCOUNT = 'tok_exampleAccount0000000001';
+const ANALYST = '4a1f0f3e-5c27-4a1e-9a56-0e0f0a1b2c3d';
 
 describe('the search (/search, FR-04-09)', () => {
   it('[FR-04-09] asks nothing until there is a criterion', async () => {
@@ -173,6 +176,45 @@ describe('the search (/search, FR-04-09)', () => {
     expect(asked.lists).toHaveLength(0);
   });
 
+  it('[PB-136] marks an ID the route would drop, rather than searching wider without it', async () => {
+    const asked = serve();
+    const { router } = await renderQueue({ channel: ['CARD'] });
+    await screen.findByRole('article', { name: 'Alert for U*** N***' });
+    const sent = asked.lists.length;
+    const form = screen.getByRole('search', { name: 'Search alerts' });
+    // Hex in the UUID's shape, but not a UUID (variant 1; version 0 in the second): the route's
+    // validator drops both. The form once took them, and the search ran on the channel alone.
+    await userEvent.type(
+      within(form).getByLabelText('Transaction ID'),
+      '12345678-1234-1234-1234-123456789abc',
+    );
+    await userEvent.type(
+      within(form).getByLabelText('Analyst ID'),
+      '4a1f0f3e-5c27-0a1e-9a56-0e0f0a1b2c3d',
+    );
+    await userEvent.click(within(form).getByRole('button', { name: 'Search' }));
+    expect(within(form).getByLabelText('Transaction ID')).toHaveAttribute('aria-invalid', 'true');
+    expect(within(form).getByLabelText('Analyst ID')).toHaveAttribute('aria-invalid', 'true');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(asked.lists).toHaveLength(sent);
+    expect(router.state.location.search).toEqual({ channel: ['CARD'] });
+  });
+
+  it('[PB-136] sends an analyst ID as typed, in any case, and the route keeps it', async () => {
+    const asked = serve();
+    const { router } = await renderQueue();
+    const form = screen.getByRole('search', { name: 'Search alerts' });
+    await userEvent.type(within(form).getByLabelText('Analyst ID'), ANALYST.toUpperCase());
+    await userEvent.click(within(form).getByRole('button', { name: 'Search' }));
+    await screen.findByRole('article', { name: 'Alert for U*** N***' });
+    // The form is drawn afresh from the URL it wrote: the ID is there, lowered, and not marked.
+    const refilled = screen.getByRole('search', { name: 'Search alerts' });
+    expect(within(refilled).getByLabelText('Analyst ID')).toHaveValue(ANALYST);
+    expect(within(refilled).getByLabelText('Analyst ID')).toHaveAttribute('aria-invalid', 'false');
+    expect(asked.lists[0]?.get('analyst_id')).toBe(ANALYST);
+    expect(router.state.location.search).toEqual({ analyst_id: ANALYST });
+  });
+
   it('refills the form from a shared link, searches at once, and clears back to nothing', async () => {
     const asked = serve();
     const { router } = await renderQueue({ account_id: ACCOUNT, from: '2026-10-19T01:00:00.000Z' });
@@ -213,5 +255,60 @@ describe("dates in the region's zone", () => {
     expect(toInstant('2026-10-19T08:00', 5.5)).toBe('2026-10-19T02:30:00.000Z');
     expect(toLocal(toInstant('2026-01-01T00:15', -3) ?? '', -3)).toBe('2026-01-01T00:15');
     expect(toInstant('19/10/2026 08:00', 7)).toBeUndefined();
+  });
+});
+
+describe('[PB-136] the form and the route judge a criterion alike', () => {
+  const empty = {
+    transaction_id: '',
+    account_id: '',
+    amount_min: '',
+    amount_max: '',
+    from: '',
+    to: '',
+    analyst_id: '',
+  };
+  // Each is a value the form's own patterns once took or a near miss either side of the route's.
+  const drafts = [
+    { transaction_id: '3F8E0C5A-6B1D-4F5E-9A2B-7C4D1E8F0A11' },
+    { transaction_id: '12345678-1234-1234-1234-123456789abc' },
+    { transaction_id: ' 3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11 ' },
+    { analyst_id: '00000000-0000-0000-0000-000000000000' },
+    { analyst_id: 'ffffffff-ffff-ffff-ffff-ffffffffffff' },
+    { account_id: 'tok_ABCDEFGHIJKLMNOPQRSTUVWX' },
+    { account_id: 'tok_ABCDEFGHIJKLMNOPQRSTUVW' },
+    { amount_min: '1000', amount_max: '1000.50' },
+    { amount_min: '00012' },
+    { amount_max: '99999999999999.9999' },
+    { amount_max: '1e3' },
+    { from: '2026-10-19T08:00', to: '2026-10-19T08:00' },
+    { from: '19/10/2026 08:00' },
+  ];
+  it.each(drafts)('%o: either marked, or kept by the route exactly as sent', (fields) => {
+    const { next, bad } = judge({ ...empty, ...fields }, {}, 7);
+    const kept = alertSearch.parse(defaultParseSearch(defaultStringifySearch(next)));
+    for (const field of Object.keys(fields) as (keyof typeof empty)[]) {
+      if (bad[field] === true) continue;
+      expect(kept[field]).toBe(next[field]);
+      expect(next[field]).toBeDefined();
+    }
+  });
+  it('sends a bound a link carried to the second as it came, unless it was edited', () => {
+    const carried = '2026-10-19T01:00:30.250Z';
+    const draft = { ...empty, from: toLocal(carried, 7) };
+    expect(judge(draft, { from: carried }, 7).next.from).toBe(carried);
+    expect(judge({ ...draft, from: '2026-10-19T09:00' }, { from: carried }, 7).next.from).toBe(
+      '2026-10-19T02:00:00.000Z',
+    );
+  });
+  it('marks the values the route would drop', () => {
+    expect(
+      judge({ ...empty, transaction_id: '12345678-1234-1234-1234-123456789abc' }, {}, 7).bad,
+    ).toEqual({ transaction_id: true });
+    expect(judge({ ...empty, account_id: 'tok_ABCDEFGHIJKLMNOPQRSTUVW' }, {}, 7).bad).toEqual({
+      account_id: true,
+    });
+    expect(judge({ ...empty, amount_max: '1e3' }, {}, 7).bad).toEqual({ amount_max: true });
+    expect(judge({ ...empty, from: '19/10/2026 08:00' }, {}, 7).bad).toEqual({ from: true });
   });
 });

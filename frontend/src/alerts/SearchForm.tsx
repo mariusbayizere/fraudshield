@@ -1,12 +1,11 @@
 import Button from '@mui/material/Button';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
+import { defaultParseSearch, defaultStringifySearch } from '@tanstack/react-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { DECIMAL_AMOUNT, TOKEN, type AlertSearch } from '../app/alertSearch';
+import { alertSearch, type AlertSearch } from '../app/alertSearch';
 import { useRegion } from '../region/RegionContext';
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** The criteria this form edits: the listAlerts parameters the feed's filters have no control for. */
 type Field =
@@ -28,32 +27,74 @@ export function toLocal(instant: string | undefined, utcOffsetHours: number): st
   return shifted.slice(0, 16);
 }
 
-/** Whether each field's text is what the contract accepts for it; an empty field is no criterion. */
-function problems(draft: Draft): Partial<Record<Field, true>> {
+const FIELDS: readonly Field[] = [
+  'transaction_id',
+  'account_id',
+  'amount_min',
+  'amount_max',
+  'from',
+  'to',
+  'analyst_id',
+];
+
+/**
+ * The search the form would send, and the fields it cannot send as typed.
+ *
+ * A field is judged by the route's own validator after the URL's round trip, the path the search
+ * actually takes, not by a second set of patterns: the form once accepted IDs the route then
+ * dropped, so a search silently widened (PB-136). A field the route would drop or change is
+ * marked instead. An empty field is no criterion. The ranges are the form's own checks on top.
+ */
+export function judge(
+  draft: Draft,
+  search: AlertSearch,
+  utcOffsetHours: number,
+): { next: AlertSearch; bad: Partial<Record<Field, true>> } {
   const bad: Partial<Record<Field, true>> = {};
-  const check = (field: Field, ok: (value: string) => boolean) => {
+  const text = (field: Field) => {
     const value = draft[field].trim();
-    if (value !== '' && !ok(value)) bad[field] = true;
+    return value === '' ? undefined : value;
   };
-  check('transaction_id', (v) => UUID.test(v));
-  check('analyst_id', (v) => UUID.test(v));
-  check('account_id', (v) => TOKEN.test(v));
-  check('amount_min', (v) => DECIMAL_AMOUNT.test(v));
-  check('amount_max', (v) => DECIMAL_AMOUNT.test(v));
-  const min = draft.amount_min.trim();
-  const max = draft.amount_max.trim();
-  if (bad.amount_min === undefined && bad.amount_max === undefined && min !== '' && max !== '') {
-    if (Number(min) > Number(max)) bad.amount_max = true;
+  const instant = (field: 'from' | 'to') => {
+    if (draft[field] === '') return undefined;
+    // The field shows minutes only; a bound a link carried to the second is sent as it came
+    // unless it was edited, rather than cut to the minute.
+    const carried = search[field];
+    if (carried !== undefined && draft[field] === toLocal(carried, utcOffsetHours)) return carried;
+    const value = toInstant(draft[field], utcOffsetHours);
+    if (value === undefined) bad[field] = true;
+    return value;
+  };
+  const next: AlertSearch = {
+    ...search,
+    transaction_id: text('transaction_id')?.toLowerCase(),
+    account_id: text('account_id'),
+    amount_min: text('amount_min'),
+    amount_max: text('amount_max'),
+    from: instant('from'),
+    to: instant('to'),
+    analyst_id: text('analyst_id')?.toLowerCase(),
+  };
+  const kept = alertSearch.parse(defaultParseSearch(defaultStringifySearch(next)));
+  for (const field of FIELDS) {
+    if (next[field] !== undefined && kept[field] !== next[field]) bad[field] = true;
   }
-  if (draft.from !== '' && draft.to !== '' && draft.from > draft.to) bad.to = true;
-  return bad;
+  const { amount_min: min, amount_max: max, from, to } = next;
+  if (bad.amount_min === undefined && bad.amount_max === undefined && min !== undefined) {
+    if (max !== undefined && Number(min) > Number(max)) bad.amount_max = true;
+  }
+  if (bad.from === undefined && bad.to === undefined && from !== undefined && to !== undefined) {
+    if (Date.parse(from) > Date.parse(to)) bad.to = true;
+  }
+  return { next, bad };
 }
 
 /**
  * FR-04-09's search criteria: a transaction ID, an account token, an amount range, a date range
  * and an analyst, each a listAlerts parameter under the contract's name and format. Dates are
  * entered in the region's time zone, as the console shows them. The form writes the URL on Search,
- * so a search can be shared; a field the contract would reject is marked and not sent.
+ * so a search can be shared. A field the route would drop is marked, and nothing is sent until it
+ * is put right: a search never runs wider than the analyst asked.
  */
 export function SearchForm({
   search,
@@ -76,25 +117,13 @@ export function SearchForm({
   });
   const [draft, setDraft] = useState<Draft>(initial);
   const [tried, setTried] = useState(false);
-  const bad = tried ? problems(draft) : {};
+  const judged = judge(draft, search, offset);
+  const bad = tried ? judged.bad : {};
 
   const submit = () => {
     setTried(true);
-    if (Object.keys(problems(draft)).length > 0) return;
-    const text = (field: Field) => {
-      const value = draft[field].trim();
-      return value === '' ? undefined : value;
-    };
-    onSearch({
-      ...search,
-      transaction_id: text('transaction_id')?.toLowerCase(),
-      account_id: text('account_id'),
-      amount_min: text('amount_min'),
-      amount_max: text('amount_max'),
-      from: draft.from === '' ? undefined : toInstant(draft.from, offset),
-      to: draft.to === '' ? undefined : toInstant(draft.to, offset),
-      analyst_id: text('analyst_id')?.toLowerCase(),
-    });
+    if (Object.keys(judged.bad).length > 0) return;
+    onSearch(judged.next);
   };
 
   const field = (name: Field, type: 'text' | 'datetime-local' = 'text') => (

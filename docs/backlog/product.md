@@ -1501,9 +1501,11 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 - **Acceptance:** a link to the original alert on the card or in the drawer, in all four languages, with a test; ANOMALY offered in this queue's tiers or M8B's confirmation recorded that escalations are never ANOMALY, with a test either way; an empty-state text that matches the intro and the contract, pinned by a test.
 
 ### PB-136 · Search: the form accepts IDs the URL then drops, widening the search silently
-- **Source:** M8 screen 7 review, 2026-10-19 (CHANGES_REQUIRED, MAJOR; filed, not fixed) · **Priority:** high · **Due:** M8, before FR-04-09 leaves IN_PROGRESS
-- **Problem:** `SearchForm.tsx` accepts any 8-4-4-4-12 hex string as a transaction or analyst ID; the route's `alertSearch` uses zod's `z.uuid()` (RFC 9562: version 1 to 8, variant 8, 9, a or b) and turns anything else into no criterion. An ID such as `…-0000-4000-…` passes the form, is dropped from the URL, and the server is asked for the other criteria only: a broader result with no warning. If the ID is the only criterion, Search does nothing.
-- **Acceptance:** the form and the route share one UUID predicate exported from `alertSearch.ts`; a test shows a version-0 ID is marked invalid and not sent.
+- **Source:** M8 screen 7 review, 2026-10-19 (CHANGES_REQUIRED, MAJOR) · **Priority:** high · **Status:** fixed, 2026-10-19 (owner: "a search that silently widens is worse than one that refuses")
+- **Problem:** `SearchForm.tsx` accepted any 8-4-4-4-12 hex string as a transaction or analyst ID; the route's `alertSearch` uses zod's `z.uuid()` (RFC 9562: version 1 to 8, variant 8, 9, a or b) and turns anything else into no criterion. Such an ID passed the form, was dropped from the URL, and the server was asked for the other criteria only: a broader result with no warning.
+- **Fix:** the form has no patterns of its own. `judge()` sends the search it would submit through the route's own path (`defaultStringifySearch`, `defaultParseSearch`, `alertSearch`) and marks every field the route would drop or change, so a value is either sent exactly or refused visibly. An unreadable date is now marked too (it was dropped; part of PB-137 (2)). A date a shared link carried to the second is sent as it came unless edited, rather than cut to the minute (review of the fix, finding 3).
+- **Tests:** an ID the route rejects is marked and nothing is sent; an analyst ID typed in capitals is sent lowered and kept; thirteen drafts are each either marked or kept exactly; the carried date. Deletion checks: the old pattern back fails three tests; cutting the carried date fails one.
+- **Left open:** whether `z.uuid()` is the right bar. OpenAPI `format: uuid` does not require a version or variant, so if the server ever issues such IDs an analyst cannot search by them; the refusal is visible now, not silent (an M8B question; review of the fix, finding 4).
 
 ### PB-137 · Search: drafts, dates, amounts, errors and Clear
 - **Source:** M8 screen 7 review, 2026-10-19 · **Priority:** medium · **Due:** M8 or M9
@@ -1513,6 +1515,7 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 ### PB-138 · Search: stronger tests, and an analyst picker
 - **Source:** M8 screen 7 review, 2026-10-19 · **Priority:** low · **Due:** M9
 - **Problem:** "asks nothing until a criterion" waits a fixed 50 ms, which proves nothing if fetching is slower; the analyst field (label, lowercasing, invalid value), "to before from", `toLocal` at a fractional offset and Clear with filters set are untested. The analyst is entered as a raw UUID; there is no staff lookup an analyst can use (FR-04-09 names "analyst"; UX-ROLE-SN-01 an autocomplete).
+- **Also (review of the PB-136 fix):** the table test of `judge()` checks only that what is accepted is kept; that what is marked would really be dropped is checked for four values only. The min > max check of PB-137 (3) is the same `Number()` comparison.
 - **Acceptance:** each negative assertion follows a positive sync point; each listed behaviour has a test that fails when removed; an analyst picker once the contract has a lookup open to the role (an M8B question), or the UUID field recorded as the deviation.
 
 ### PB-139 · My performance: refresh, stale figures, durations and counts
@@ -1521,9 +1524,16 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 - **Acceptance:** a fake-timer test that a second body appears after 60 s; figures kept visible after a failed poll, tested; durations without "0 sec", tested at 59.6 and 120 and in one other language; the count formatted and tested at 1,000 or more; non-tie values in the tests; the duplicate sentence removed.
 
 ### PB-140 · Console: cached data outlives the user who loaded it; shared API helpers
-- **Source:** M8 screen 8 review, 2026-10-19 · **Priority:** high · **Due:** M8, before the console is exercised against M8B
-- **Problem:** nothing clears the query cache when a user signs out, and no query key names the user, so the next user on the same tab can briefly see the previous user's cached alerts, account context or own figures until the refetch lands. This applies to every query, not only screen 8's. Separately, `ApiError`, `bodyOrThrow` and the refresh interval live in the feed's `alerts/queries.ts`, so every screen depends on the feed's module, and the average review time is written as "x min y sec" on screen 8 and as seconds on the feed's header.
-- **Acceptance:** sign-out (and a session change) clears the query cache, with a test that a second user sees none of the first user's data; the API helpers moved to an `api/` module both features import; one duration formatter used by both screens.
+- **Source:** M8 screen 8 review, 2026-10-19 · **Priority:** high · **Status:** the data exposure fixed, 2026-10-19 (owner: "not a backlog item"); the helpers below open
+- **Problem (fixed):** nothing cleared the query cache when a user signed out, and no query key names the user, so the next user on the same tab could see the previous user's cached alerts, account context or own figures until the refetch landed, on every screen. The review of the fix found a second path: after sign-out, `/login?next=` carried the last page, search criteria or open alert included, and the next user to sign in was sent to it.
+- **Fix:** `signOut` cancels the queries in flight and clears the query and mutation caches, whether or not the server answers. Someone else signing in over a session that never signed out removes its queries. `RequireSession` opens `/login` without `next` when a session ends, keeping it only for a visitor who arrived signed out. Screen state (notices, drafts) sits behind `RequireSession` and unmounts with the session.
+- **Tests:** the caches are empty after sign-out; a second analyst signing in sees none of the first one's alerts; a sign-in over another user's session empties the cache; sign-out from a search opens `/login` with no criteria in the URL. Deletion checks: without the clearing, without the removal at sign-in and with `next` kept, each fails its tests.
+- **Still open:**
+  - **No sign-out control exists.** Nothing in the console calls `signOut` yet, so the fix is reachable only once one is built (the shell's user menu).
+  - **An expired session is not ended.** Nothing turns a 401 into "session ended": the cache stays on screen, the 60 s refetches fail and keep the old data, and the decision panel asks the user to sign in again.
+  - **A decision in flight at sign-out still runs its `onSuccess`.** It can drop that alert from the next user's feed until the next refresh. Unlikely, and not an exposure.
+  - **The API helpers.** `ApiError`, `bodyOrThrow` and the refresh interval live in the feed's `alerts/queries.ts`, so every screen depends on the feed's module. Average review time is written as "x min y sec" on screen 8 and as seconds on the feed's header.
+- **Acceptance (open part):** a sign-out control that calls `signOut`, with a test; a 401 on a data request ends the session (cache cleared, `/login` without `next`), with a test; the API helpers moved to an `api/` module both features import; one duration formatter used by both screens.
 
 ### PB-76 · Training rows near the corpus's start see truncated history; test rows do not
 - **Source:** PB-67's laptop cache, 2026-09-22 · **Priority:** high · **Due:** before the paper's
