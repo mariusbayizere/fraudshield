@@ -85,7 +85,8 @@
 % ---------------------------------------------------------------------------------------------
 % Features (M3), main
 % ---------------------------------------------------------------------------------------------
-% docs/benchmarks/single_feature_baseline.md, commit 2c80ef6, draw 6abde44e, 20,000 scored rows
+% docs/benchmarks/single_feature_baseline.md, commit 2c80ef6 (2026-09-20), an earlier 1,006,249-row
+% draw at the same seed whose fingerprint the evidence does not record (not 6abde44e), 20,000 scored rows
 % with 166 fraud, raw output docs/benchmarks/m3_single_feature_auc_2c80ef6.txt.
 \newcommand{\nFeatures}{\meas{44}}
 \newcommand{\nScoredRows}{\meas{20{,}000}}
@@ -402,7 +403,8 @@
 % Interval level used throughout (m4_gate_d8083dbc_v3.txt: "95% CI" column; Wilson intervals in
 % m4_battery_d8083dbc_e1.txt are "[95% CI]" too).
 \newcommand{\nIntervalLevel}{\meas{95\%}}
-% Features the models are trained on: the 44 of the catalogue less the six that carry no source data
+% Features the models are trained on: the 44 of the catalogue less the five with no source data and
+% the one that is constant (registry: 5 NO_SOURCE_DATA, 1 CONSTANT)
 % on this benchmark (m4_battery_d8083dbc_e1.txt: "full model, 38 features").
 \newcommand{\nTrainableFeatures}{\meas{38}}
 
@@ -527,3 +529,7 @@
 \newcommand{\nFurtherFeatures}{\meas{three}}   % notebook: three more instances of the flaw
 \newcommand{\nDetectorT}{\meas{+2.89}}         % notebook: t from the analytic null
 \newcommand{\nMarginRows}{\meas{660}}\newcommand{\nMarginFraud}{\meas{two}}
+\newcommand{\nSelfServiceSimDays}{\srcd{7}}      % resolution D-25
+\newcommand{\nSelfServiceDeviceHours}{\srcd{24}}  % resolution D-25
+\newcommand{\nSelfServiceScore}{\srcd{0.95}}      % resolution D-25
+\newcommand{\nComputableTarget}{\srcd{98\%}}      % build prompt Part E.3 targets (SRS 7.1)

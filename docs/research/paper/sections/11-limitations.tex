@@ -3,9 +3,11 @@
 
 We state these as findings about what the evidence supports, not as disclaimers.
 
-\paragraph{The benchmark is synthetic, and the fraud in it is invented.} It supports comparisons
-between methods under identical conditions. It does not support statements about real fraud rates,
-real detection performance or any institution's customers. Every figure here is a property of this
+\paragraph{The benchmark is synthetic, and the fraud in it is invented.} It does not support statements about
+real fraud rates, real detection performance or any institution's customers. Whether it supports
+comparisons between methods is not established either: Section~\ref{sec:rowselection} shows a
+choice of training rows moving a headline metric at seed 1, and no comparison of methods here
+repeats over selections. Every figure here is a property of this
 generator.
 
 \paragraph{No fraud parameter is sourced.} Of \nProvFraudTotal{} fraud parameters,
@@ -15,11 +17,13 @@ result that depends on the level or mix of fraud, rather than on the relative or
 inherits this assumption. The sourced parameters (\nProvSourced{} of \nProvTotal{}) fix
 population and volume structure, partly from a neighbouring market's statistics.
 
-\paragraph{The benchmark is burst-separable.} Its fraud is injected as bursts, so a single velocity
-feature reaches \nFloorM{}, four feature groups each nearly solve it alone, leave-one-country-out
-and the novel variant are both null, and the one pre-registered non-burst variant is almost
-invisible to the model. Detection of burst-structured fraud is what the benchmark measures; nothing
-here speaks to fraud with other structure, except as the failure in
+\paragraph{The benchmark is separable by its incident structure.} Several of its scenarios stage
+fraud as multi-row incidents. A single velocity feature reaches \nGateFloor{} on the test rows,
+\nGroupsAboveCeiling{} feature groups each exceed the single-feature ceiling alone,
+leave-one-country-out and the novel variant are both null, and the one pre-registered variant
+without that structure is caught at \nRevRecall{}. We infer that these follow from the incident
+structure; no experiment varies it. Detection of this benchmark's own scenarios is what it measures;
+nothing here speaks to fraud with other structure, except as the failure in
 Section~\ref{sec:generalisation}. The specification's distribution targets (overall and test-period
 fraud rate, channel and country mix) are requirements met by construction, not observations.
 
@@ -33,13 +37,12 @@ limit, and \texttt{agent\_distance\_from\_registered\_km} the agent's registered
 the agent network. The models learn nothing from them, and with one feature that is constant on this
 benchmark they are why the models train on \nTrainableFeatures{} features (Appendix~\ref{app:features}).
 \textbf{No model in this paper learned from these features}: the full models of the gate, the
-diagnostic battery and the learning curve train on \nTrainableFeatures{}; the
-specification's requirement that the features be computable for nearly every record is recorded as
-not met (ADR 0055). One more feature is a different limitation. \texttt{round\_sum\_flag} produces a
+diagnostic battery and the learning curve train on \nTrainableFeatures{}; the specification's requirement that the features be computable for at least
+\nComputableTarget{} of records is recorded as not met (ADR 0055). One more feature is a different limitation. \texttt{round\_sum\_flag} produces a
 value for every record, but only because each country's configuration supplies the currency's round
 denominations, and those values are \textbf{assumed}: plausible note and typing steps, not a banknote
 series read from any central-bank source. The feature's input is something this project wrote, not
-something it observed. The gap is the benchmark's rather than the design's: the five features are
+something it observed. The gap is the benchmark's rather than the design's: the \nNoSourceFeatures{} features are
 implemented and tested on both computation paths, and an institution's account master, KYC records
 and agent ledger would supply their inputs, but no figure here shows what they would add.
 
@@ -50,39 +53,48 @@ decision region; leave-one-country-out on real, country-labelled fraud; and dete
 documented non-burst typologies such as the reversal scam. It would require data access agreements,
 a data protection impact assessment, and hosting in a permitted location (Section~\ref{sec:ethics}).
 
-\paragraph{What the benchmark cannot exercise.} Two of the four corridor classes never occur, so
-the models have never scored a cross-bloc or intercontinental transfer (Section~\ref{sec:setting}).
-The pre-registered reversal-scam variant sends the victim's transfer to a known counterparty, a
-modelling choice that differs from the documented form of the scam, in which the victim pays the
-scammer's own number, which we read as a new counterparty (Section~\ref{sec:generalisation}); the result bounds the harder case and says nothing about the
-documented one. And because a single XGBoost model ranks as well as the specified ensemble here, the
-benchmark cannot show what the ensemble adds.
+\paragraph{What the benchmark cannot exercise.} Cross-bloc and intercontinental transfers cannot occur
+by the benchmark's configuration, so the models have never scored one (Section~\ref{sec:setting}).
+The pre-registered reversal-scam variant sends the victim's transfer to a counterparty on the
+victim's payee list, a modelling choice that differs from the documented form of the scam, in which
+the victim pays the scammer's own number, which we read as a new counterparty; it also differs from
+the base scenarios in its amount rule, and its counterparty novelty was removed by construction, not
+verified on the feature (Section~\ref{sec:generalisation}). The result says nothing about the
+documented form, and does not isolate why the variant is missed. And because no accuracy advantage
+of the specified ensemble over a single XGBoost model was detected here, the benchmark cannot show
+what the ensemble adds.
 
-\paragraph{Scale and volume.} Results are at about one million rows, not the five million the
-specification requires, a scale that is \notyet{M10}; and the models were trained on \nTrainUsed{} rows rather than
-the full training period. Single-feature AUC moves with dataset size by more than seed noise, and the
-cause is unexplained; every figure is therefore stated at its scale. The two failing gate metrics
+\paragraph{Scale and volume.} Results are at \nRowsDrawB{} rows or fewer, not the \nSpecRows{} the
+specification requires, a scale that is \notyet{M10}; and the models were trained on \nTrainUsed{}
+rows rather than the full training period. The strongest dataset column's AUC moves with dataset size
+by more than seed noise, and the cause is unexplained; every figure is therefore stated at its scale.
+The \nGateFailed{} failing gate metrics
 (recall and false-negative rate at the flag threshold) do not close with more training data from
 \nLcTrainA{} to \nLcTrainD{} rows (Section~\ref{sec:volume}); beyond that volume they are untested.
 
 \paragraph{One selection of training rows.} At \nTrainUsed{} rows, a different selection of training
 rows from a corpus of different depth read recall \nSelGapSeedOne{} higher at seed 1, more than an
-\nLcVolumeFactor{}-fold change in volume moved it; on the five-seed means the difference is \nSelGapMeans{}, within
-the seed spread (Section~\ref{sec:rowselection}). Only two selections exist, so how much a headline
+\nLcVolumeFactor{}-fold change in volume moved it; on the means over seeds the difference is \nSelGapMeans{}, within
+the seed spread (Section~\ref{sec:rowselection}). Only the gate's selection and the curve's exist, so
+how much a headline
 figure varies with the choice of training rows is unmeasured, and every such figure here is a
 measurement of one selection.
 
-\paragraph{Latency.} No latency figure here is a gate figure. The frontier is a median on a shared
-development laptop, where the 99th percentile is not measurable; serving, end-to-end and load
-latencies belong to later milestones.
+\paragraph{Latency.} No latency figure here is a gate figure. The frontier is a difference of
+medians on a shared development laptop, where the 99th percentile is not measurable; serving and
+end-to-end latencies have been measured only on shared development hardware (ADR 0035, ADR 0059),
+and the gate measurement is \notyet{M10}.
 
-\paragraph{Small counts.} Variant, country and channel results rest on tens to hundreds of fraud
-rows; intervals are reported for each, and the Democratic Republic of the Congo's rest on fewer than
-30 and give direction only.
+\paragraph{Small counts.} Variant, country and channel results rest on between \nAdaptFraud{} and
+\nBaseVarFraud{} fraud rows; intervals are reported for each, and the evidence file marks the
+Democratic Republic of the Congo's, which rest on fewer than \nSmallCountThreshold{}, as direction
+only.
 
-\paragraph{Figures that depend on the draw.} Two contribution figures moved between data draws
-(the redundancy threshold and the leave-one-country-out loss); the findings did not. Each figure is
-stated with the draw it was measured on.
+\paragraph{Figures that depend on the run.} Figures moved between the earlier battery and the
+evaluated one, which differ in draw, encoding and held-out rows, among them the redundancy threshold,
+the leave-one-country-out loss and the variant recalls; the findings reported here did not change.
+Each figure is stated with the run it comes from. The single-feature floor of
+Section~\ref{sec:floor} comes from a draw whose fingerprint was not recorded.
 
 \paragraph{Claims not made.} The specification's figures on regional fraud growth, payment volume,
 analyst dismissal rates, the accuracy of models built elsewhere on East African data, annual model

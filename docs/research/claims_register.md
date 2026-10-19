@@ -5,10 +5,14 @@ A claim may be stated as fact only when its status is `VERIFIED` (primary source
 read by the author) or `MEASURED` (produced by FraudShield with a reproducible command).
 Until then it must not appear in public-facing text.
 
-**Every `MEASURED` figure below comes from the dataset whose fingerprint is
+**Every `MEASURED` figure below except C-14's comes from the dataset whose fingerprint is
 `6abde44e5e952f4f5c6b86aac0fb934cd4de023b53ec1f2cfe9dc01cf0a3e420`** — 1,006,249 rows, seed
 20260917, regenerated 2026-09-21 and described by `dataset/realism_report.md`, which now carries
-that fingerprint (PB-41). The dataset itself is kept at `dataset/output/bench1m`. A figure inherits
+that fingerprint (PB-41). The dataset itself is kept at `dataset/output/bench1m`. *(Corrected
+2026-10-19 by M11: C-14 was measured at commit `2c80ef6` on 2026-09-20, before the draw `6abde44e`
+first appears in `dataset/realism_report.md` (commit `1db73b1`, 2026-09-22) and before PB-56
+changed the takeover lead time; its evidence file records 1,006,249 rows at the same seed and no
+fingerprint, so it is not attributable to `6abde44e`.)* A figure inherits
 the run it was produced by; any later edit that moves a figure must move the fingerprint with it,
 and a figure quoted without one is not admissible (E2).
 

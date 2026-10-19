@@ -2,7 +2,7 @@
 
 Every macro in `numbers.tex` checked against its evidence file at `m4-complete` (`72e7790`), or at the ref its row names, read with `git show`, by `audit_numbers.py`. Values are compared as printed: rounding, sign and interval bounds included. Regenerate with `python3 docs/research/paper/audit_numbers.py`; do not edit by hand.
 
-**443 macros, 443 MATCH, 0 not matching.**
+**447 macros, 447 MATCH, 0 not matching.**
 
 | Macro | Value in paper | Value in evidence | File | Note | Result |
 |---|---|---|---|---|---|
@@ -449,3 +449,7 @@ Every macro in `numbers.tex` checked against its evidence file at `m4-complete` 
 | `\nDetectorT` | `+2.89` | `+2.89` | `docs/research/lab_notebook.md` |  | MATCH |
 | `\nMarginRows` | `660` | `660` | `docs/research/lab_notebook.md` |  | MATCH |
 | `\nMarginFraud` | `two` | `two` | `docs/research/lab_notebook.md` |  | MATCH |
+| `\nSelfServiceSimDays` | `7` | `7` | `docs/srs/defect_register.md` |  | MATCH |
+| `\nSelfServiceDeviceHours` | `24` | `24` | `docs/srs/defect_register.md` |  | MATCH |
+| `\nSelfServiceScore` | `0.95` | `0.95` | `docs/srs/defect_register.md` |  | MATCH |
+| `\nComputableTarget` | `98\%` | `98%` | `docs/prompts/FraudShield_Master_Build_Prompt.md` |  | MATCH |

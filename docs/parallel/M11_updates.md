@@ -333,3 +333,47 @@ table and the fake-API limitation), which the owner asked for on 2026-09-22; M10
    to M10; ADR 0059 did the same for M6's end-to-end latency. Sections 3, 7 and 13 still print
    "not yet measured (M5 …)" and "(M6 and M10)". Left as they were; proposed: name M10 and cite
    the two ADRs. [M11, awaiting the owner]
+
+## 9. Fifth pass, 2026-10-19: the owner's evidence rule applied to the whole paper
+
+Owner's rule: every number and claim traceable to evidence; evidence beats documents; inferences
+marked in the sentence; unsupported claims removed or stated as not established. Two independent
+read-only sweeps checked every sentence; the paper was then corrected section by section. What the
+paper now says is in `docs/research/paper/REVIEW.md`.
+
+**Corrected upstream from this branch, because the evidence contradicts the document** (each with
+a dated note in place):
+
+1. `docs/ml/training_serving_parity.md` Decision 1 said the relative tolerance is stricter than
+   1e-9 "at every magnitude in the table"; it is stricter only below 999 and looser at the table's
+   last three rows (arithmetic on the table's own magnitudes).
+2. `docs/research/claims_register.md` header said every MEASURED figure is from `6abde44e`; C-14
+   (the single-feature floor, commit `2c80ef6`, 2026-09-20) predates that draw and records no
+   fingerprint.
+3. (Earlier today, commit `378fc55`) ADR 0031, `M4_updates.md`, `contributions.md`, the lab
+   notebook (correction entry), the README and §M6 above: 532 frauds, realised FPRs, the seed-1
+   scope of the row-selection effect, 38 trained features.
+
+**Flagged, not corrected here** (each is a document that overstates its evidence; owners in
+brackets):
+
+1. ADR 0028 says the reversal variant's "known counterparty" property comes from the typology; the
+   sources read (`reference_audit.md`, dogan2025grift and star2025mpesa) do not say so. [owner]
+2. `test_the_reversal_scam_variant_is_one_transaction_to_a_known_payee_in_the_test_period` checks
+   payee-list membership, not `counterparty_is_new_for_account`; the feature's value on the 66 rows
+   is unmeasured. A read-only count would settle it. [M4]
+3. `ml/src/fraudshield_ml/features/batch.py` docstring of the synthetic-identity score still says
+   the device-sharing term is constant (PB-40), which PB-40's closure (2026-09-21) superseded. [M4]
+4. Claims register C-12 says "every AUC reported before this correction is inflated by about that
+   much"; it was measured on three raw columns only. C-11 says "the rest is the scenario"; the new
+   lead distribution is itself assumed. [M2 / M4]
+5. `test_no_fraud_parameter_is_keyed_by_country`'s docstring calls fraud "country-invariant by
+   construction"; CD's test-period fraud rate is 0.28% against 0.93–1.07% elsewhere. [M2]
+6. The notebook's own header and history show backfilled and amended entries; the paper no longer
+   calls it never-edited. [owner, for the notebook's rule]
+7. `docs/benchmarks/test_set_access.jsonl` has no entry for the read made by
+   `docs/research/paper/evidence/reversal_labels.py`. [M11: log it, or leave the paper's statement]
+
+**Harness finding.** In Claude Code's Bash tool, `set -euo pipefail` does not stop a command chain
+(`set -euo pipefail; false; echo X` prints X); a checkpoint commit on this branch was made past a
+failing lint before it was noticed and amended. Gating chains here now use `&&`.

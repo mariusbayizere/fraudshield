@@ -2,21 +2,31 @@
 \label{sec:repro}
 
 \paragraph{Data.} The benchmark is generated, not distributed as a fixed file: seed \nSeed{} and
-the generator code at a stated commit reproduce a draw byte for byte, independently of how the work
-is batched. Each draw is identified by a SHA-256 fingerprint over its output rows (\texttt{6abde44e}
-and \texttt{d8083dbc} in this paper), and its realism report records the parameter hash, the check
+the generator code at a stated commit are meant to reproduce a draw byte for byte, independently of
+how the work is batched. A test checks byte-identity across batch sizes on small runs, and one
+full-size draw was regenerated with an identical fingerprint (claims register); no regeneration of
+the evaluation draw at \texttt{m4-complete} is recorded, so its reproducibility at full size is
+inferred from those checks. Each draw is identified by a SHA-256 fingerprint over a fixed sample of
+its rows and its row counts (\texttt{6abde44e} and \texttt{d8083dbc} in this paper), and its realism report records the parameter hash, the check
 set hash and the fingerprint. The dataset release is licensed CC BY 4.0
 (\texttt{dataset/release/}); the code is Apache-2.0.
 
-\paragraph{Evidence.} Every figure in this paper comes from a raw output file (Appendix~\ref{app:evidence}) under
+\paragraph{Evidence.} Every number in this paper is mapped by \texttt{numbers.tex} to its source
+(Appendix~\ref{app:evidence}) and checked against it at a named commit by
+\texttt{audit\_numbers.py}. Most model results come from raw output files under
 \texttt{docs/benchmarks/} whose header records the command, its exit status, the commit and whether
-the working tree was clean; \texttt{numbers.tex} maps each figure in the text to its file. Every
-read of the test period is logged in \texttt{docs/benchmarks/test\_set\_access.jsonl}. Experiment
+the working tree was clean. The exceptions are the single-feature measurement, whose file carries no
+such stamp; the dataset figures, which come from the realism report, the parameter provenance and the
+claims register; the figures quoted from the lab notebook and from ADRs; and one count produced for
+this paper under \texttt{docs/research/paper/evidence/}. Scoring runs on the test period are logged
+in \texttt{docs/benchmarks/test\_set\_access.jsonl}, with earlier runs back-filled; the read that
+produced that count is not logged. Experiment
 tracking in MLflow was not used for the evidence in this paper (ADR 0030); the evidence files carry the
 provenance instead.
 
-\paragraph{Hardware.} All measurements were made on one development laptop (\nHwCPU{},
-\nHwMem{}), recorded in \texttt{docs/benchmarks/hardware.md}. Latency figures from it are reported
+\paragraph{Hardware.} The evidence files that record a machine name the development laptop (\nHwCPU{},
+\nHwMem{}, recorded in \texttt{docs/benchmarks/hardware.md}); earlier files record none, and that
+they were made on the same laptop is inferred. Latency figures from it are reported
 as shapes, not as gate numbers (ADR 0010).
 
 \paragraph{One command.} A single target that regenerates the dataset, trains, evaluates and

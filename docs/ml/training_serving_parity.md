@@ -47,9 +47,12 @@ and binding where it should not.
    categoricals (`channel`, `corridor_class`). A count that differs by any amount is a bug, never a
    rounding artefact, and admitting a tolerance here hides exactly the errors worth catching.
 2. **Relative tolerance with an absolute floor for real-valued features:**
-   `|batch − online| ≤ 1e-12 + 1e-12 × |batch|`. At every magnitude in the table above this is
-   **stricter than the specification's 1e-9** — by three orders of magnitude at typical values — and
-   it remains satisfiable at the top of the range, which 1e-9 does not.
+   `|batch − online| ≤ 1e-12 + 1e-12 × |batch|`. This is **stricter than the specification's 1e-9
+   for magnitudes below 999** — by up to three orders of magnitude — and **looser above 999**: at
+   the `amount_sum_24h` row it allows about 3e-8, and at the heavy-user `amount_sum_7d` row about
+   1e-5. It remains satisfiable at the top of the range, which 1e-9 does not. *(Corrected
+   2026-10-19 by M11: this sentence said "at every magnitude in the table above this is stricter",
+   which the arithmetic contradicts for the table's last three rows.)*
 3. **NaN positions must match exactly.** Structural NaN is part of the contract (D-04): exactly four
    device features are NaN for a null fingerprint, four agent features are NaN outside
    `AGENT_BANKING`. A NaN on one path and a number on the other is a contract violation, not a
