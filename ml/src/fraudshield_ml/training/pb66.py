@@ -176,7 +176,9 @@ def daily_budget(
         days=kept,
         rows=np.asarray(rows),
         frauds=np.asarray(frauds),
-        caught={k: tuple(np.asarray(v) for v in c) for k, c in caught.items()},  # type: ignore[misc]
+        caught={
+            k: (np.asarray(a), np.asarray(h), np.asarray(t)) for k, (a, h, t) in caught.items()
+        },
         excluded=excluded,
         excluded_rows=int(np.isin(day, excluded).sum()),
     )

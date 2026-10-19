@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -259,8 +260,8 @@ def _f(value: object, digits: int = 3) -> str:
     )
 
 
-def _ci(interval: object, digits: int = 3) -> str:
-    low, high = interval  # type: ignore[misc]
+def _ci(interval: Sequence[object], digits: int = 3) -> str:
+    low, high = interval
     return f"[{_f(low, digits)}, {_f(high, digits)}]"
 
 
