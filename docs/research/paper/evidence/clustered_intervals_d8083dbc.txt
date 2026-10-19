@@ -1,0 +1,57 @@
+# evidence-commit: c85a82c5cb95f7b6f51912c3d856dea0052aadd2
+# evidence-tree-state: clean
+# command: python docs/research/paper/evidence/clustered_intervals.py --gate-cache /home/runner/work/_temp/features_gate.parquet --battery-cache /home/runner/work/_temp/features_full.parquet
+# exit: 0
+# models and features: fraudshield-ml at m4-complete; draw d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32
+# resamples: 1000 of whole accounts, stratified by whether an account has fraud, resampling seed 1 (model seeds: gate 1, battery 20260917); per-row scores in /home/runner/work/_temp/out
+
+GATE MODEL (D-05 ensemble, seed 1), refitted from the gate cache
+  test rows 101909, fraud 985, accounts 5878, accounts with fraud 307
+  reproduction against m4_gate_d8083dbc_v3.txt (three places):
+    ML-GATE-01: published 0.970, reproduced 0.970  MATCH
+    ML-GATE-02: published 0.871, reproduced 0.871  MATCH
+    ML-GATE-03: published 0.736, reproduced 0.736  MATCH
+
+  metric                    value    row bootstrap      account-clustered
+  ML-GATE-01 AUC-ROC              0.970  [0.962, 0.977]   [0.962, 0.978]
+  ML-GATE-02 recall at 1% FPR     0.871  [0.847, 0.891]   [0.846, 0.893]
+  ML-GATE-03 recall at 0.60       0.736  [0.707, 0.765]   [0.705, 0.767]
+  ML-GATE-04 F1 at 0.60           0.821  [0.800, 0.840]   [0.798, 0.843]
+  ML-GATE-06 FNR at 0.60          0.264  [0.235, 0.293]   [0.233, 0.295]
+  ML-GATE-07 MOBILE_MONEY AUC     0.953  [0.934, 0.969]   [0.931, 0.971]
+  ML-GATE-08 USSD AUC             0.953  [0.931, 0.972]   [0.922, 0.974]
+  ML-GATE-09 AGENT_BANKING AUC    0.979  [0.960, 0.993]   [0.961, 0.994]
+
+DIAGNOSTIC BATTERY (one untuned XGBoost, seed 20260917), refitted from its cache
+  full model: published 0.972, reproduced 0.972  MATCH
+  group alone          AUC     row interval (Hanley-McNeil)   account-clustered
+  account_profile    0.548   ±0.019                     [0.525, 0.572]
+  agent              0.556   ±0.019                     [0.548, 0.564]
+  amount_behaviour   0.655   ±0.019                     [0.630, 0.679]
+  corridor           0.507   ±0.018                     [0.502, 0.511]
+  counterparty       0.925   ±0.011                     [0.910, 0.940]  MATCH
+  device_and_channel 0.720   ±0.018                     [0.677, 0.763]
+  geographic         0.829   ±0.016                     [0.811, 0.845]
+  synthetic_identity 0.706   ±0.018                     [0.677, 0.732]
+  temporal           0.856   ±0.015                     [0.837, 0.871]  MATCH
+  velocity           0.860   ±0.015                     [0.839, 0.879]  MATCH
+
+  variants at the 1% FPR threshold 0.0100 (Wilson vs account-clustered)
+    novel_esim_delayed_drain           72/73 on 16 accounts  Wilson [0.926, 0.998]  clustered [0.955, 1.000]
+    adapted_below_threshold            10/11 on 11 accounts  Wilson [0.623, 0.984]  clustered [0.692, 1.000]
+    base                               781/827 on 222 accounts  Wilson [0.927, 0.958]  clustered [0.930, 0.958]
+    reversal_scam_social_engineering   6/66 on 66 accounts  Wilson [0.042, 0.184]  clustered [0.029, 0.161]
+
+VELOCITY GROUP ALONE AGAINST ITS STRONGEST MEMBER (same test rows)
+  velocity_ratio_1h_vs_30d alone, raw ranking: 0.879
+  training rows 30000, fraud 260
+  booster test AUC by boosting round (the battery stops at round 200):
+    rounds   as the battery fits it   with scale_pos_weight
+  consistency: this booster at round 200 gives 0.8598, the battery's velocity-alone model 0.8598  MATCH
+         1   0.865                    0.849
+         5   0.871                    0.851
+        10   0.873                    0.857
+        25   0.875                    0.857
+        50   0.873                    0.853
+       100   0.867                    0.848
+       200   0.860                    0.844

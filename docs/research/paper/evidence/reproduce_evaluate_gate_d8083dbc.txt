@@ -1,0 +1,112 @@
+computing 38 features for 171909 rows...
+  2000/171909 rows  6215/s  ~0.5 min left
+  4000/171909 rows  5849/s  ~0.5 min left
+  6000/171909 rows  5461/s  ~0.5 min left
+  8000/171909 rows  5160/s  ~0.5 min left
+  10000/171909 rows  4861/s  ~0.6 min left
+  12000/171909 rows  4576/s  ~0.6 min left
+  14000/171909 rows  4317/s  ~0.6 min left
+  16000/171909 rows  4035/s  ~0.6 min left
+  18000/171909 rows  3794/s  ~0.7 min left
+  20000/171909 rows  3570/s  ~0.7 min left
+  22000/171909 rows  3389/s  ~0.7 min left
+  24000/171909 rows  3241/s  ~0.8 min left
+  26000/171909 rows  3097/s  ~0.8 min left
+  28000/171909 rows  2991/s  ~0.8 min left
+  30000/171909 rows  2890/s  ~0.8 min left
+  32000/171909 rows  2734/s  ~0.9 min left
+  34000/171909 rows  2605/s  ~0.9 min left
+  36000/171909 rows  2504/s  ~0.9 min left
+  38000/171909 rows  2419/s  ~0.9 min left
+  40000/171909 rows  2346/s  ~0.9 min left
+  42000/171909 rows  2275/s  ~1.0 min left
+  44000/171909 rows  2218/s  ~1.0 min left
+  46000/171909 rows  2163/s  ~1.0 min left
+  48000/171909 rows  2109/s  ~1.0 min left
+  50000/171909 rows  2065/s  ~1.0 min left
+  52000/171909 rows  2025/s  ~1.0 min left
+  54000/171909 rows  1994/s  ~1.0 min left
+  56000/171909 rows  1968/s  ~1.0 min left
+  58000/171909 rows  1944/s  ~1.0 min left
+  60000/171909 rows  1918/s  ~1.0 min left
+  62000/171909 rows  1897/s  ~1.0 min left
+  64000/171909 rows  1878/s  ~1.0 min left
+  66000/171909 rows  1859/s  ~0.9 min left
+  68000/171909 rows  1845/s  ~0.9 min left
+  70000/171909 rows  1826/s  ~0.9 min left
+  72000/171909 rows  1809/s  ~0.9 min left
+  74000/171909 rows  1793/s  ~0.9 min left
+  76000/171909 rows  1774/s  ~0.9 min left
+  78000/171909 rows  1757/s  ~0.9 min left
+  80000/171909 rows  1741/s  ~0.9 min left
+  82000/171909 rows  1726/s  ~0.9 min left
+  84000/171909 rows  1714/s  ~0.9 min left
+  86000/171909 rows  1700/s  ~0.8 min left
+  88000/171909 rows  1687/s  ~0.8 min left
+  90000/171909 rows  1676/s  ~0.8 min left
+  92000/171909 rows  1665/s  ~0.8 min left
+  94000/171909 rows  1658/s  ~0.8 min left
+  96000/171909 rows  1651/s  ~0.8 min left
+  98000/171909 rows  1643/s  ~0.7 min left
+  100000/171909 rows  1635/s  ~0.7 min left
+  102000/171909 rows  1628/s  ~0.7 min left
+  104000/171909 rows  1621/s  ~0.7 min left
+  106000/171909 rows  1613/s  ~0.7 min left
+  108000/171909 rows  1605/s  ~0.7 min left
+  110000/171909 rows  1598/s  ~0.6 min left
+  112000/171909 rows  1591/s  ~0.6 min left
+  114000/171909 rows  1585/s  ~0.6 min left
+  116000/171909 rows  1581/s  ~0.6 min left
+  118000/171909 rows  1575/s  ~0.6 min left
+  120000/171909 rows  1567/s  ~0.6 min left
+  122000/171909 rows  1561/s  ~0.5 min left
+  124000/171909 rows  1554/s  ~0.5 min left
+  126000/171909 rows  1547/s  ~0.5 min left
+  128000/171909 rows  1540/s  ~0.5 min left
+  130000/171909 rows  1534/s  ~0.5 min left
+  132000/171909 rows  1527/s  ~0.4 min left
+  134000/171909 rows  1527/s  ~0.4 min left
+  136000/171909 rows  1526/s  ~0.4 min left
+  138000/171909 rows  1526/s  ~0.4 min left
+  140000/171909 rows  1527/s  ~0.3 min left
+  142000/171909 rows  1528/s  ~0.3 min left
+  144000/171909 rows  1527/s  ~0.3 min left
+  146000/171909 rows  1527/s  ~0.3 min left
+  148000/171909 rows  1527/s  ~0.3 min left
+  150000/171909 rows  1527/s  ~0.2 min left
+  152000/171909 rows  1526/s  ~0.2 min left
+  154000/171909 rows  1530/s  ~0.2 min left
+  156000/171909 rows  1533/s  ~0.2 min left
+  158000/171909 rows  1536/s  ~0.2 min left
+  160000/171909 rows  1539/s  ~0.1 min left
+  162000/171909 rows  1542/s  ~0.1 min left
+  164000/171909 rows  1543/s  ~0.1 min left
+  166000/171909 rows  1545/s  ~0.1 min left
+  168000/171909 rows  1547/s  ~0.0 min left
+  170000/171909 rows  1548/s  ~0.0 min left
+  171909/171909 rows  1549/s  ~0.0 min left
+wrote the feature matrix to /home/runner/work/_temp/features_gate.parquet
+MODEL ON D-07's PUBLISHED SPLIT — fitted on the train period, scored on the test
+period, embargo excluded. Not tuned and not calibrated: the validation and calibration
+periods are identified and deliberately unused.
+
+  split                        train < 2025-08-25 05:24 <= validation (calibration from 2025-09-26 13:13) < 2025-10-21 22:02 <= embargo < 2025-10-28 22:02 <= test
+  features trained on          38 (the computable ones, never 44)
+  corpus rows scanned          400000
+  train rows / fraud           30000 / 260 (0.867%)
+  test rows / fraud            101909 / 985 (0.967%)
+
+  best single feature          0.879  (velocity_ratio_1h_vs_30d, defined on every row)
+  best trivial rule            0.669  (amount_to_max_90d_ratio)
+  model AUC                    0.972 +/-0.007
+  MARGIN OVER THE FEATURE      +0.093
+  MARGIN OVER THE TRIVIAL RULE +0.303
+  recall at 1% FPR             0.882
+
+  strongest feature of any     0.879  (velocity_ratio_1h_vs_30d)
+  ...defined on                100.0% of held-out rows (101909 rows, 985 fraud)
+
+
+  TRAINED ON THE LAST 128 DAYS of the train period, not all
+  of it: the corpus is bounded and the feature pass is its cost. A figure from here is
+  comparable with the gates in its split and not in its training volume.

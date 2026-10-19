@@ -1,0 +1,9 @@
+# Per-row scores of the run that wrote clustered_intervals_d8083dbc.txt, kept as a CI artefact, not
+# committed (G.5 forbids committing datasets; whether per-row scores count is the owner's call).
+# Run: https://github.com/mariusbayizere/fraudshield/actions/runs/39273972313 (paper-reproduce,
+# commit c85a82c). The workflow regenerates them in about eight minutes; the hashes below check a copy.
+fa672e7a3db8aa8c531a5ca8068153f66d3c577c283a7fec7d0963d3a331ef58  battery_scores_d8083dbc.csv.gz
+c633fd5ecd36b29717c5ab9cc268074e6be0df2f8599ffb678c4bf520993448c  gate_scores_d8083dbc.csv.gz
+# Feature caches the run built (not uploaded):
+fe93712151b22396ce8b4b37accf45140adbe877e5a761146cda8fc9cbd887ce  features_full.parquet
+9d9ff1eaf5c0cc5ee33cb7b054545e060d1446ad398070d021a99576f1f7cb29  features_gate.parquet
