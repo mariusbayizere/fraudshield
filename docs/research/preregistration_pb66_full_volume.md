@@ -404,3 +404,11 @@ amounts, after the paragraph above. It does not attribute it to the model.
   - **Transactions missing from `labels` are refused**, not filed as legitimate.
   - **The report also gives the production model's recall over all test frauds** at the 1 % FPR
     budget, so it can be reconciled with job 2's seed-1 model.
+- **2026-10-19, the owner's confirmation, before any run.** The leave-one-fraud-type-out ranges and
+  decision rules are confirmed exactly as stated in the amendment of `eeccd60`, including account
+  takeover (≥ 0.80) and synthetic identity (0.70 to 0.92). The owner directed that two statements
+  go into the paper's text, not only into this file:
+  - LOFTO measures what never *fitting on* a scenario costs, not what never *having seen* it costs;
+  - the run is pre-specified, not blind: the test set was scored 23 times before, 11 at full size.
+
+  The run starts from the commit that records this confirmation.
