@@ -160,7 +160,7 @@ The controls, and why each exists:
   \item \textbf{Construction checks}: account events, identifier characters, file order and
         per-channel null signatures must not reveal the label. The account-event check exists
         because of a leak found in that secondary table rather than in the feature matrix: in its
-        first version, \nEventLeakShare{} of events with a non-zero sub-second part sat on a fraud
+        first version, \nEventLeakShare{} of events whose timestamp carried a fractional second sat on a fraud
         account, against a base rate of \nEventLeakBase{} (Section~\ref{sec:discussion}).
   \item \textbf{Label noise} in both directions, measured at \nLabelNoiseMissed{} missed and
         \nLabelNoiseFalse{} false labels as a share of true fraud on the evaluation draw.

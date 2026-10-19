@@ -1,24 +1,25 @@
-"""Fail if a paper section states a result without going through numbers.tex.
+"""Fail if the paper states a number without going through numbers.tex.
 
-Every number the paper states must pass the claims register gate (MEASURED with a commit and
-run, or SOURCED with a checkable citation). numbers.tex is where each number is recorded with its
-provenance; sections refer to it through macros. This check finds numbers typed directly into a
-section, which would bypass that record:
+The owner's rule is that every number in the paper is an audited macro or is not there.
+numbers.tex records each number with its provenance and audit_numbers.py checks it; sections refer
+to it through macros. This check finds numbers typed directly into the text, which would bypass
+that record: decimals (``0.970``), percentages (``9.1\\%``), grouped and bare integers
+(``170{,}000``, ``51``), integers glued to letters (``99th``, ``40ms``, ``5x``), and numbers
+written as words (``eight``, ``thirteenth``, ``fivefold``, ``double``).
 
-* decimals (``0.970``), percentages (``9.1\\%``) and comma-grouped integers (``170{,}000``);
-* bare integers (``51``, ``15``, ``40~ms``), and numbers written as words (``eight``,
-  ``thirteenth``, ``fivefold``), because the owner's rule is that every number in the paper is an
-  audited macro or is not there. ``one``, ``first`` and ``second`` are exempt: they are used as
-  articles and ordinals of sequence far more often than as counts, and a count of one is written
-  through a macro where it is a result.
+``one``, ``first``, ``second``, ``once``, ``single`` and ``pair`` are exempt: in this paper they
+are articles, ordinals of sequence or adjectives (``a single feature``) far more often than counts,
+and a count that is a result is written through a macro. Anything else that merely looks numeric is
+stripped before the search, each by a narrow pattern: requirement, defect and backlog identifiers
+(``D-15``, ``ML-GATE-01``, ``PB-61``), ADR numbers, exit criteria (``E1``), milestones (``M4``),
+``\\texttt{}`` (commit hashes, file names), citations and their locators, cross-references,
+calendar dates and years from 2000 to 2039, the report pages and tables a source cites, layout
+dimensions inside braces, standard and library names (``ISO 4217``, ``SHA-256``, ``H3``,
+``float64``), the bound ``O(TLD^2)``, the label of a run (``seed 1``), the unit interval and the
+name of one lab-notebook entry. ``main.tex`` is checked from ``\\begin{document}``.
 
-Identifiers that merely look numeric are allowed: requirement and defect IDs (``D-15``,
-``ML-GATE-01``, ``PB-61``), ADR numbers, SRS and build-prompt section references (``SRS 8.2``,
-``Part E.13``), milestone names (``M4``), and anything inside ``\\texttt{}`` (commit hashes, file
-names) or a citation's locator (``\\cite[Section~5.1]{key}``). Integers written as words
-Calendar dates, citation page and figure locators, layout dimensions, standard and library names
-(``ISO 4217``, ``SHA-256``, ``H3``, ``float64``) and the asymptotic bound ``O(TLD^2)`` are not
-numbers the paper claims and are stripped first. ``main.tex`` is checked from ``\\begin{document}``.
+The two files named in GENERATED are skipped because their generators check them: Appendix B's
+table (``appendix_features.py --check``) and Appendix D's index (``audit_numbers.py --check``).
 
 Usage: ``python3 docs/research/paper/check_numbers.py`` (exit 1 on any finding).
 """
@@ -30,50 +31,57 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-#: Generated files are checked by their generator's --check instead: their numbers are quotations.
+#: Written by a generator whose --check compares them with their source, so skipped by name only.
+GENERATED = ("generated-feature-table.tex", "generated-evidence-index.tex")
 SECTIONS = [
     HERE / "main.tex",
-    *sorted(p for p in (HERE / "sections").glob("*.tex") if not p.name.startswith("generated-")),
+    *sorted(p for p in (HERE / "sections").glob("*.tex") if p.name not in GENERATED),
 ]
 
 STRIP = [
     re.compile(r"(?<!\\)%.*$", re.M),  # comments
-    re.compile(r"\\(?:texttt|url|href|cite|ref|label|input|notyet)(?:\[[^\]]*\])?\{[^}]*\}"),
+    re.compile(r"\\(?:texttt|url|href|cite|ref|label|input)(?:\[[^\]]*\])?\{[^}]*\}"),
+    re.compile(r"\\notyet\{M\d{1,2}\}"),  # a milestone, the only thing \notyet takes
     re.compile(r"\\n[A-Z][A-Za-z]*"),  # number macros from numbers.tex
-    re.compile(r"\b(?:SRS|Part|section|Section|Sections|E|B|C|D|A|H|I)\s?[A-J]?\.?\d+(?:\.\d+)*"),
     re.compile(r"\b[A-Z]{1,4}(?:-[A-Z]{1,6})*-\d+[a-z]?\b"),  # D-15, ML-GATE-01, PB-61, C-6
     re.compile(r"\bADR[\s~]+\d{4}\b"),
+    re.compile(r"\bE\d{1,2}\b"),  # exit criteria
+    re.compile(r"\bM\d{1,2}\b"),  # milestones
     re.compile(r"\b\d{4}-\d{2}-\d{2}\b"),  # ISO dates, before years are stripped
-    re.compile(r"\bM\d{1,2}\b"),
-    re.compile(r"\d+(?:\.\d+)?\\(?:linewidth|textwidth|columnwidth)"),  # layout, not results
-    re.compile(r"\b(?:CC BY|Apache-)\s?\d\.\d\b"),  # licence versions
-    re.compile(r"\d+(?:\.\d+)?\s*(?:cm|pt|mm|em|ex)\b"),  # layout dimensions
-    re.compile(r"\\(?:begin|end)\{[^}]*\}(?:\{[^}]*\})?"),  # environments and column specs
     re.compile(
         r"\b\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|"
         r"October|November|December)\s+\d{4}\b"
     ),  # dates
-    re.compile(r"\b(?:19|20)\d{2}(?:--(?:19|20)?\d{2,4})?\b"),  # years and year ranges
-    re.compile(r"\b(?:pages?|Figure|Table|Tables|Annex)\s+[A-Z]?\d+(?:\s*(?:,|and)\s*[A-Z]?\d+)*"),
-    re.compile(r"\b(?:ISO\s+4217|SHA-256|H3|float64)\b"),  # standard and library names
-    re.compile(r"O\([^)]*\)"),  # asymptotic bound
-    re.compile(r"-?\d+\\fbox\w+|\\\\\[\d+pt\]|\\addlinespace\[[^\]]*\]"),  # box and row spacing
-    re.compile(r"\bseed[ -~]+\d+\b|\bseed-\d+\b", re.I),  # a run's label, not a count
-    re.compile(r"\$?\[0,\s*1\]\$?"),  # the unit interval, as notation
+    re.compile(r"\b20[0-3]\d(?:--20[0-3]\d)?\b"),  # years and year ranges
+    re.compile(r"\b(?:Tables?|Annex)\s+[A-Z]\d+(?:\s*(?:,|and)\s*[A-Z]\d+)*"),  # H1, G2
+    re.compile(r"\b(?:Table|Figure)\s+\d+\b"),  # a cited source's own table or figure
+    re.compile(r"\(?(?:printed\s+)?pages?\s+\d+(?:\s+of the PDF)?\)?"),  # a source's pages
+    re.compile(r"(?<=[{\[])\d+(?:\.\d+)?\s*(?:cm|pt|mm|em|ex)(?=[}\]])"),  # layout dimensions
+    re.compile(r"\d+(?:\.\d+)?\\(?:linewidth|textwidth|columnwidth)"),  # layout widths
+    re.compile(r"-?\d+\\fbox\w+|\\addlinespace\[[^\]]*\]"),  # box and row spacing
+    re.compile(r"\\(?:begin|end)\{[^}]*\}"),  # environment names
+    re.compile(r"\\begin\{(?:tabular|longtable)\}\{[^}]*(?:\{[^}]*\}[^}]*)*\}"),  # column specs
     re.compile(r"\\multicolumn\{\d+\}"),
+    re.compile(r"\b(?:CC BY|Apache-)\s?\d\.\d\b"),  # licence versions
+    re.compile(r"\b(?:ISO\s+4217|SHA-256|H3|float64)\b"),  # standard and library names
+    re.compile(r"\$O\(TLD\^2\)\$"),  # the TreeSHAP cost bound, as notation
+    re.compile(r"\bseed[ ~-]\d\b"),  # a run's label, not a count
+    re.compile(r"\$?\[0,\s*1\]\$?"),  # the unit interval, as notation
     re.compile(r"1\s*-\s*\\mathrm\{AUC\}"),  # notation in max(AUC, 1 - AUC)
     re.compile(r"\bhalf-width\b"),  # the name of an interval statistic
     re.compile(r"``a guard with two doors''"),  # the title of a lab-notebook entry
 ]
 NUMBER_WORDS = (
-    r"two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|"
+    r"zero|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|"
     r"sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|"
-    r"hundreds?|thousands?|millions?|billions?|dozens?|twice|half|halves|quarter|"
+    r"hundreds?|thousands?|millions?|billions?|dozens?|twice|thrice|half|halves|quarters?|"
+    r"double|triple|quadruple|tens|"
     r"third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|thirteenth|"
-    r"(?:two|three|four|five|six|seven|eight|nine|ten)fold|tens"
+    r"fourteenth|fifteenth|sixteenth|seventeenth|eighteenth|nineteenth|twentieth|thirtieth|"
+    r"\w+fold"
 )
 FORBIDDEN = re.compile(
-    r"\d+\.\d+|\d+\s*\\%|\d{1,3}\{,\}\d{3}|\d{1,3},\d{3}|(?<![\w\\])\d+(?!\w)"
+    r"\d+\.\d+|\d+\s*\\%|\d{1,3}\{,\}\d{3}|\d{1,3},\d{3}|(?<![\w\\])\d+"
     rf"|\b(?:{NUMBER_WORDS})\b",
     re.I,
 )

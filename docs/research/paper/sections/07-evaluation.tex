@@ -46,7 +46,7 @@ recall is \nGateRecallSix{} \nGateRecallSixci{} against a target of \nTargetReca
 legitimate test rows are blocked, a false-positive rate of \nGateFPRBlockPct{} (the gate file rounds it to \nGateFPRBlock{}); SHAP coverage of flagged transactions is \nGateShapCov{}; and
 the expected calibration error over \nEceBins{} equal-mass bins is \nGateECE{}. In all, \nGatePassed{} of the
 \nGateMeasured{} gate metrics measurable at this stage pass. The specification's gate has
-\nGateTotal{}: the other \nGateUnmeasured{}, inference latency at the 99th percentile and the
+\nGateTotal{}: the other \nGateUnmeasured{}, inference latency at the \nPctlTail{}th percentile and the
 shadow-mode AUC delta, need the scoring service. Its latency has been measured only on shared
 development hardware, which cannot give a gate figure, and no shadow comparison has produced an AUC
 delta (ADR 0035); both are \notyet{M10}.
@@ -308,7 +308,7 @@ contributions, which must sum to the model's margin, is \nBatAdditivity{}.
 \label{sec:frontier}
 
 Tree complexity is a latency-constrained hyperparameter here: the specification rejects a configuration whose
-single-request 99th-percentile latency, model plus exact TreeSHAP, exceeds \nLatencyPNineNineShap{}~ms
+single-request \nPctlTail{}th-percentile latency, model plus exact TreeSHAP, exceeds \nLatencyPNineNineShap{}~ms
 (resolution D-16). Table~\ref{tab:frontier} is the trade-off, measured one request at a time,
 \nFrRequests{} timed requests per configuration after a warm-up, on the development laptop.
 
@@ -363,11 +363,11 @@ would give a different ratio; the growth with trees and depth is the finding, no
 it is one machine's median. If the growth holds on serving hardware, then on data like this the explanation
 budget, not the accuracy target, would choose the tree configuration; that is not yet shown.
 
-\textbf{We report the median only.} In \nFrontNegative{} configurations the measured 99th
+\textbf{We report the median only.} In \nFrontNegative{} configurations the measured \nPctlTail{}th
 percentile shows a \emph{negative} explanation cost, which is impossible: explaining cannot be
 faster than not explaining. We attribute the tail on this shared machine to scheduler jitter rather than
 model complexity; the jitter itself was not measured. The \nLatencyPNineNineShap{}~ms constraint
-therefore cannot be applied from this run; the 99th-percentile frontier on a dedicated machine is
+therefore cannot be applied from this run; the \nPctlTail{}th-percentile frontier on a dedicated machine is
 \notyet{M10}. The run is also limited to one model family (not the ensemble) and one process (not
 the specified multi-process service), and it pays the SHAP cost on every row, whereas in serving it
 is paid only on flagged transactions.

@@ -18,8 +18,8 @@ transaction.
 
 The composite is the unweighted mean of \nSynthTerms{} terms: low KYC tier, a new account, device
 sharing and a volume ramp. This benchmark has no KYC tier and no account opening date
-(Section~\ref{sec:limitations}), so the KYC and new-account terms are always zero and only the
-device-sharing and volume-ramp terms can be non-zero; whether the device-sharing term varies on the
+(Section~\ref{sec:limitations}), so the KYC and new-account terms always contribute nothing and only the
+device-sharing and volume-ramp terms can contribute; whether the device-sharing term varies on the
 evaluated draw has not been measured. On this benchmark \nNoSourceFeatures{} of the features have no
 source data and one is constant, so the models train on \nTrainableFeatures{}.
 
@@ -42,7 +42,7 @@ not exist in production, and the gap is invisible in both. The parity design
   \item \textbf{What the paths are fed.} Prefix replay: the online path receives an account's
         transactions one at a time, and the batch path is computed on the prefix ending at each
         one. A batch window that reaches forward in time fails immediately.
-  \item \textbf{Which cases are covered}: zero history, both sides of every window boundary, all
+  \item \textbf{Which cases are covered}: an empty history, both sides of every window boundary, all
         \nChannels{} channels (so the NaN contract is exercised), label-derived features against
         their availability time, per-account replay, a cold cache flushed mid-replay, and a history
         that spans a configuration change, asserted to contain one before agreement is asserted,

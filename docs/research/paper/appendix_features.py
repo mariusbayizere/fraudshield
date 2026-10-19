@@ -69,8 +69,8 @@ def first_sentence(text: str) -> str:
 
 def tex(text: str) -> str:
     """Escape for LaTeX and let identifiers break at underscores."""
+    text = text.replace("\\", "\0")  # placeholder, so the brace rules cannot rewrite it
     pairs = (
-        ("\\", r"\textbackslash{}"),
         ("{", r"\{"),
         ("}", r"\}"),
         ("&", r"\&"),
@@ -85,7 +85,7 @@ def tex(text: str) -> str:
     )
     for char, escaped in pairs:
         text = text.replace(char, escaped)
-    return text
+    return text.replace("\0", r"\textbackslash{}")
 
 
 def render(registry: dict[str, object], ref: str, sha: str) -> str:
@@ -115,7 +115,7 @@ def main() -> int:
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     sha = subprocess.run(  # noqa: S603 - fixed git command
-        ["git", "rev-parse", "--short", f"{args.ref}^{{commit}}"],  # noqa: S607
+        ["git", "rev-parse", "--short=7", f"{args.ref}^{{commit}}"],  # noqa: S607
         cwd=ROOT, capture_output=True, text=True, check=True,
     ).stdout.strip()  # fmt: skip
     text = render(load_registry(args.ref), args.ref, sha)
