@@ -239,6 +239,26 @@ def read_variants(root: Path, keep: set[str]) -> dict[str, str]:
     return variants
 
 
+def read_scenarios(root: Path, keep: set[str]) -> dict[str, tuple[str, bool]]:
+    """Each kept transaction's fraud type (empty when legitimate) and its true label.
+
+    Like `read_variants`, read from published label columns that no model sees as a feature: PB-66
+    holds a fraud type out of training, and reconciles the test frauds against the true label.
+    """
+    found: dict[str, tuple[str, bool]] = {}
+    for part in sorted((root / "labels").glob("month=*/part-*.parquet")):
+        table = pq.read_table(part, columns=["transaction_id", "fraud_type", "is_fraud_true"])
+        for transaction_id, kind, true in zip(
+            table.column("transaction_id").to_pylist(),
+            table.column("fraud_type").to_pylist(),
+            table.column("is_fraud_true").to_pylist(),
+            strict=True,
+        ):
+            if transaction_id in keep:
+                found[str(transaction_id)] = ("" if kind is None else str(kind), bool(true))
+    return found
+
+
 def read_outcomes(root: Path, keep: set[str]) -> dict[str, Outcome]:
     outcomes: dict[str, Outcome] = {}
     for part in sorted((root / "labels").glob("month=*/part-*.parquet")):
@@ -544,6 +564,7 @@ def _feature_matrix(
 
     country_of = country_by_currency(run.packs)
     variants = read_variants(run.dataset, {rows[i].transaction_id for i in sample})
+    scenarios = read_scenarios(run.dataset, {rows[i].transaction_id for i in sample})
 
     corpus_index = CorpusIndex.build(rows)
     print(f"computing {len(smoke.trainable_features())} features for {len(sample)} rows...")
@@ -580,6 +601,12 @@ def _feature_matrix(
         smoke.CACHE_MCC: [rows[i].merchant_category_code or "" for i in sample],
         smoke.CACHE_TIMESTAMP: [str(_micros(rows[i].timestamp)) for i in sample],
         smoke.CACHE_AMOUNT: [repr(rows[i].amount_rwf) for i in sample],
+        smoke.CACHE_FRAUD_TYPE: [
+            scenarios.get(rows[i].transaction_id, ("", False))[0] for i in sample
+        ],
+        smoke.CACHE_TRUE_LABEL: [
+            str(scenarios.get(rows[i].transaction_id, ("", False))[1]) for i in sample
+        ],
     }
     if run.cache and run.cache_only:
         smoke.cache_write_columns(run.cache, key, columns, extras)
@@ -1001,6 +1028,43 @@ def run_pb66(  # noqa: PLR0913, PLR0917 - every argument is a declared setting o
     return 0
 
 
+def run_lofto(cache: Path, out: Path, seed: int, budget_minutes: float, purpose: str) -> int:
+    """Leave-one-fraud-type-out (preregistration_pb66_full_volume.md, amendment of 2026-10-19)."""
+    from fraudshield_ml.training import lofto, pb66_run  # noqa: PLC0415 - heavy, only this path
+
+    if not cache.exists():
+        raise DatasetGapError(f"{cache} holds no usable feature matrix")
+
+    def scoring_begins(volume: str, test_rows: int) -> None:
+        # Logged when the volume is fixed and before any test row is scored, so a run that dies
+        # part-way still leaves its line (I.2).
+        print(f"volume: {volume}", flush=True)
+        access.record("lofto", cache, test_rows, purpose=f"{purpose}: {volume}")
+
+    try:
+        result = lofto.run(
+            cache, seed=seed, budget_minutes=budget_minutes, on_volume=scoring_begins
+        )
+    except ValueError as gap:
+        raise DatasetGapError(str(gap)) from gap
+    print("\n".join(lofto.summary(result)))
+    out.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "volume": result.volume,
+        "train_rows_used": result.train_rows_used,
+        "seconds_per_fit": result.seconds_per_fit,
+        "rows_removed": result.dropped,
+        "scenarios": lofto.as_rows(result),
+    }
+    # A scenario with no test fraud has no recall: null, not a crash after the scoring is done.
+    strict = pb66_run.strict(payload)
+    (out / "lofto.json").write_text(
+        json.dumps(strict, indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8"
+    )
+    print(f"  wrote {out / 'lofto.json'}")
+    return 0
+
+
 def _sample(
     run: EvaluationRun, rows: list[Transaction], boundaries: split_module.Boundaries
 ) -> tuple[list[int], list[str], list[int], list[int]]:
@@ -1316,6 +1380,20 @@ def _add_gate_command(commands: Any) -> None:
     pb66_command.add_argument("--resamples", type=int, default=1000)
     pb66_command.add_argument("--scores-out", type=Path, default=None)
     pb66_command.add_argument("--purpose", default="PB-66 full-volume evaluation")
+    lofto_command = commands.add_parser(
+        "lofto",
+        help="PB-66's leave-one-fraud-type-out: refit without each scenario, read its test frauds",
+    )
+    lofto_command.add_argument("cache", type=Path)
+    lofto_command.add_argument("--out", type=Path, required=True)
+    lofto_command.add_argument("--seed", type=int, default=ensemble.SEEDS[0])
+    lofto_command.add_argument(
+        "--budget-minutes",
+        type=float,
+        default=270.0,
+        help="nine fits must fit in this, judged from the first fit; else 30,000 training rows",
+    )
+    lofto_command.add_argument("--purpose", default="PB-66 leave-one-fraud-type-out")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -1457,6 +1535,7 @@ COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
         a.purpose,
     ),
     "pb66": lambda a: run_pb66(a.cache, a.out, a.seed, a.resamples, a.scores_out, a.purpose),
+    "lofto": lambda a: run_lofto(a.cache, a.out, a.seed, a.budget_minutes, a.purpose),
     "frontier": lambda a: run_frontier(a.cache, a.seed, a.requests, a.repeats),
     "seed-variance": lambda a: run_seed_variance(a.cache, tuple(a.seeds)),
     "battery": lambda a: run_battery(a.cache, a.seed, a.top),

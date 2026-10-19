@@ -1,11 +1,12 @@
 # PB-66 and PB-67's follow-up: full-volume training and PB-66's evaluations on a hosted runner.
 #
-# The design, predictions and decision rules are fixed in
-# docs/research/preregistration_pb66_full_volume.md, committed before this runs. Two jobs, so the
+# The design, predictions and decision rules are pre-specified in
+# docs/research/preregistration_pb66_full_volume.md, committed before this runs. Three jobs, so the
 # analyses can be re-run from the cache without paying for the feature pass again:
 #   features   regenerate d8083dbc, assert it, build the full-volume cache. Scores no test row.
 #   evaluate   the declared gate at full volume, then `fs-features pb66`. Both log the test-set
 #              access (I.2); the log travels in the artifact even when a step fails.
+#   lofto      leave-one-fraud-type-out, in parallel with evaluate, on its own runner and time limit.
 # The evidence is committed locally from the artifact, through tools/bin/safe-push: this workflow
 # holds no write token. Accuracy only; no latency figure is produced (ADR 0010).
 #
@@ -202,5 +203,51 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: full-volume-evidence
+          path: ${{ runner.temp }}/out/
+          if-no-files-found: warn
+
+  lofto:
+    name: leave-one-fraud-type-out (nine fits; 30,000 rows if full volume would not fit)
+    needs: features
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    env:
+      PURPOSE: "PB-66 leave-one-fraud-type-out (run ${{ github.run_id }}, attempt ${{ github.run_attempt }})"
+    steps:
+      - name: Outputs live outside the checkout, where upload-artifact can reach them
+        run: |
+          mkdir -p "$RUNNER_TEMP/out"
+          echo "OUT=$RUNNER_TEMP/out" >> "$GITHUB_ENV"
+          echo "FS_TEST_ACCESS_LOG=$RUNNER_TEMP/out/test_set_access.jsonl" >> "$GITHUB_ENV"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: uv sync --package fraudshield-ml --package fraudshield-tools --locked
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: full-volume-cache
+          path: ${{ runner.temp }}/cache
+      - name: The cache is the one job 1 built
+        working-directory: ${{ runner.temp }}/cache
+        run: sha256sum -c out/cache.sha256
+      - name: Leave one fraud type out
+        # The volume (full, or 30,000 rows) is decided from the first fit, which scores nothing,
+        # and logged to the access log before any test row is scored.
+        run: |
+          .github/scripts/with-memory-curve.sh lofto "$OUT/memory_curve.txt" -- \
+            uv run fs-evidence --output "$OUT/lofto_d8083dbc.txt" -- \
+            /usr/bin/time -f "PEAK_RSS_KB %M ELAPSED %e" .venv/bin/python -u -m fraudshield_ml.cli lofto \
+            "$RUNNER_TEMP/cache/features_full_volume.parquet" --out "$OUT/lofto_d8083dbc" \
+            --seed 1 --budget-minutes 270 --purpose "$PURPOSE"
+          cat "$OUT/lofto_d8083dbc.txt" >> "$GITHUB_STEP_SUMMARY"
+      - name: The checkout is untouched
+        run: test -z "$(git status --porcelain)"
+      - name: Upload the evidence and the access log
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: full-volume-lofto-evidence
           path: ${{ runner.temp }}/out/
           if-no-files-found: warn

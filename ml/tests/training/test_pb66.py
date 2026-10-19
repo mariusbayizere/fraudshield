@@ -160,6 +160,33 @@ def test_fractional_hits_from_a_tie_reach_the_budget_report() -> None:
     assert report["tie_decided_alerts"] == 3
 
 
+def test_amounts_at_a_budget_are_shared_at_a_tie_as_frauds_are() -> None:
+    # Above the cut: one fraud worth 100. A block of four tied rows for two slots: one fraud worth
+    # 40 and three legitimate rows worth 10 each, so half of each is counted.
+    scores = np.array([0.9, 0.5, 0.5, 0.5, 0.5])
+    labels = np.array([True, True, False, False, False])
+    amounts = np.array([100.0, 40.0, 10.0, 10.0, 10.0])
+    fraud, legit = pb66._top_k_amounts(scores, labels, amounts, 3)
+    assert fraud == pytest.approx(100 + 40 / 2)
+    assert legit == pytest.approx(30 / 2)
+    assert pb66._top_k_amounts(scores, labels, amounts, 9) == (140.0, 30.0)
+
+
+def test_budget_outcomes_in_rwf_and_per_thousand_reach_the_report() -> None:
+    scores, labels, stamps = _three_days()
+    amounts = [1.0] * len(scores)
+    days = pb66.daily_budget(scores, labels, stamps, budgets=(3,), amounts=amounts)
+    report = pb66.budget_report(days, resamples=20, seed=1)[3]
+    assert report["fraud_rwf_caught"] == pytest.approx(2.0)
+    assert report["legit_rwf_alerted"] == pytest.approx(4.0)
+    assert report["alerts_per_1000"] == pytest.approx(1000 * 6 / 20)
+    # Without amounts the RWF figures are zero rather than missing.
+    bare = pb66.budget_report(
+        pb66.daily_budget(scores, labels, stamps, budgets=(3,)), seed=1, resamples=5
+    )
+    assert bare[3]["fraud_rwf_caught"] == 0.0
+
+
 def test_a_budget_larger_than_a_day_alerts_on_every_row() -> None:
     days = pb66.daily_budget(*_three_days(), budgets=(50,))
     assert days.caught[50][0].tolist() == [10, 10]

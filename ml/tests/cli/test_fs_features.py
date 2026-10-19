@@ -519,6 +519,11 @@ def test_cache_only_writes_all_four_periods_and_fits_nothing(
     test = [t for t, s in zip(stamps, segments, strict=True) if s == "test"]
     assert max(train) < min(test)
     assert all(a > 0 for a in amounts)
+    # PB-66's label columns: a fraud type only where the true label is fraud, never a feature.
+    kinds = [str(v) for v in table.column(smoke.CACHE_FRAUD_TYPE).to_pylist()]
+    truth = [str(v) for v in table.column(smoke.CACHE_TRUE_LABEL).to_pylist()]
+    assert set(truth) <= {"True", "False"}
+    assert all((k != "") == (t == "True") for k, t in zip(kinds, truth, strict=True))
     after = private_access_log.read_text() if private_access_log.exists() else ""
     assert after == before, "a cache-only build scored no test row and must not log one"
 

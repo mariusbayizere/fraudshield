@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import math
 import statistics
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -169,7 +169,7 @@ def load(vectors: Sequence[dict[str, FeatureValue]], extras: dict[str, list[str]
     )
 
 
-def load_cache(path: Path, *, train_rows: int | None = None) -> Loaded:
+def load_cache(path: Path, *, train_rows: int | None = None, drop: Collection[int] = ()) -> Loaded:
     """Decode a cache column-wise into one float matrix. Refuses one without D-07's four sets.
 
     Column-wise because a release-scale cache is hundreds of thousands of rows: a dict per row, as
@@ -211,6 +211,12 @@ def load_cache(path: Path, *, train_rows: int | None = None) -> Loaded:
                 f"{train_rows} training rows were asked for and the cache holds {len(train)}"
             )
         train = tuple(spread(list(train), train_rows))
+    # PB-66's leave-one-fraud-type-out: the dropped rows leave every fitted set, and the target
+    # encoding below, as if they had never been generated. Test rows are never dropped.
+    dropped = frozenset(drop)
+    train = tuple(i for i in train if i not in dropped)
+    validation = tuple(i for i in by["validation"] if i not in dropped)
+    calibration = tuple(i for i in by["calibration"] if i not in dropped)
 
     categorical = [n for n in names if REGISTRY[n].dtype is Dtype.CATEGORICAL]
     category_rows = [
@@ -235,7 +241,7 @@ def load_cache(path: Path, *, train_rows: int | None = None) -> Loaded:
         labels=labels,
         channels=extras[smoke.CACHE_CHANNEL],
         mcc=extras.get(smoke.CACHE_MCC),
-        split=model.RowSplit(train, by["validation"], by["calibration"]),
+        split=model.RowSplit(train, validation, calibration),
         test=by["test"],
     )
 

@@ -114,6 +114,9 @@ class Days:
     excluded: tuple[int, ...]
     #: rows on the excluded days, so the report can say what the full-day rule set aside
     excluded_rows: int
+    #: budget -> per-day (fraud RWF caught, legitimate RWF alerted), shared at a tie as frauds are;
+    #: zeros when no amounts were given. Outcomes in RWF, not costs: no cost is assumed.
+    amounts: dict[int, tuple[Any, Any]] = field(default_factory=dict)
 
 
 def full_days(timestamps_us: Any) -> tuple[Any, tuple[int, ...]]:
@@ -152,13 +155,35 @@ def _top_k(scores: Any, labels: Any, k: int) -> tuple[int, float, int]:
     return k, caught, slots if share < 1 else 0
 
 
+def _top_k_amounts(scores: Any, labels: Any, amounts: Any, k: int) -> tuple[float, float]:
+    """Fraud RWF caught and legitimate RWF alerted by a day's top k.
+
+    Shared at a tie exactly as `_top_k` shares frauds.
+    """
+    np = _np()
+    if k >= len(scores):
+        return float(amounts[labels].sum()), float(amounts[~labels].sum())
+    kth = np.sort(scores)[::-1][k - 1]
+    above, block = scores > kth, scores == kth
+    share = (k - int(above.sum())) / int(block.sum())
+    fraud = float(amounts[above & labels].sum()) + share * float(amounts[block & labels].sum())
+    legit = float(amounts[above & ~labels].sum()) + share * float(amounts[block & ~labels].sum())
+    return fraud, legit
+
+
 def daily_budget(
-    scores: Any, labels: Any, timestamps_us: Any, budgets: Sequence[int] = BUDGETS
+    scores: Any,
+    labels: Any,
+    timestamps_us: Any,
+    budgets: Sequence[int] = BUDGETS,
+    amounts: Any = None,
 ) -> Days:
     """Each full day's top-k scores are its alerts; ties at the cut share the remaining slots."""
     np = _np()
     scores = np.asarray(scores, dtype=float)
     labels = np.asarray(labels, dtype=bool)
+    values = np.zeros(len(scores)) if amounts is None else np.asarray(amounts, dtype=float)
+    money: dict[int, tuple[list[float], list[float]]] = {k: ([], []) for k in budgets}
     day, kept = full_days(timestamps_us)
     present = sorted({int(d) for d in np.unique(day)})
     rows, frauds = [], []
@@ -172,6 +197,9 @@ def daily_budget(
             caught[k][0].append(alerts)
             caught[k][1].append(hits)
             caught[k][2].append(tied)
+            fraud_rwf, legit_rwf = _top_k_amounts(scores[index], labels[index], values[index], k)
+            money[k][0].append(fraud_rwf)
+            money[k][1].append(legit_rwf)
     excluded = tuple(d for d in present if d not in kept)
     return Days(
         days=kept,
@@ -182,6 +210,7 @@ def daily_budget(
         },
         excluded=excluded,
         excluded_rows=int(np.isin(day, excluded).sum()),
+        amounts={k: (np.asarray(f), np.asarray(g)) for k, (f, g) in money.items()},
     )
 
 
@@ -192,7 +221,11 @@ def _budget_point(days: Days, k: int, pick: Any) -> dict[str, float]:
     alerts, hits = alerts[pick], hits[pick]
     frauds, rows = days.frauds[pick], days.rows[pick]
     total_alerts = int(alerts.sum())
+    fraud_rwf, legit_rwf = days.amounts.get(k, (np.zeros(len(days.days)), np.zeros(len(days.days))))
     return {
+        "alerts_per_1000": float(1000 * total_alerts / rows.sum()) if rows.sum() else math.nan,
+        "fraud_rwf_caught": float(fraud_rwf[pick].sum()),
+        "legit_rwf_alerted": float(legit_rwf[pick].sum()),
         "precision": float(hits.sum() / total_alerts) if total_alerts else math.nan,
         "recall": float(hits.sum() / frauds.sum()) if frauds.sum() else math.nan,
         "ceiling": float(np.minimum(frauds, k).sum() / total_alerts) if total_alerts else math.nan,

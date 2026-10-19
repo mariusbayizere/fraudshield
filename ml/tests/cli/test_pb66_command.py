@@ -17,7 +17,7 @@ import pytest
 
 from fraudshield_ml import cli
 from fraudshield_ml.features.registry import REGISTRY, Dtype
-from fraudshield_ml.training import pb66_run, smoke
+from fraudshield_ml.training import gate_run, lofto, pb66_run, smoke
 
 SEGMENTS = {"train": 500, "validation": 250, "calibration": 250, "test": 600}
 TEST_START = int(datetime(2025, 10, 28, 22, 2, tzinfo=UTC).timestamp()) * 1_000_000
@@ -47,6 +47,8 @@ def _write(path: Path, *, timestamps: bool = True) -> None:
     if timestamps:
         extras[smoke.CACHE_TIMESTAMP] = []
         extras[smoke.CACHE_AMOUNT] = []
+        extras[smoke.CACHE_FRAUD_TYPE] = []
+        extras[smoke.CACHE_TRUE_LABEL] = []
     for segment, count in SEGMENTS.items():
         for i in range(count):
             fraud = i % 5 == 0
@@ -63,6 +65,9 @@ def _write(path: Path, *, timestamps: bool = True) -> None:
                 )
                 extras[smoke.CACHE_TIMESTAMP].append(str(TEST_START + offset))
                 extras[smoke.CACHE_AMOUNT].append(repr(float(rng.lognormal(9, 1))))
+                kind = lofto.SCENARIOS[(i // 5) % len(lofto.SCENARIOS)] if fraud else ""
+                extras[smoke.CACHE_FRAUD_TYPE].append(kind)
+                extras[smoke.CACHE_TRUE_LABEL].append(str(fraud))
     smoke.cache_write(path, {"dataset": "fixture"}, rows, extras)  # type: ignore[arg-type]
 
 
@@ -126,7 +131,18 @@ def test_pb66_reports_every_preregistered_section_and_logs_the_access(
     assert max(costs) <= 1.0
     for figure in ("pr.svg", "cost_curve.svg"):
         assert (out / "figures" / figure).read_text().startswith("<svg")
-    assert len(scores.read_text().splitlines()) == SEGMENTS["test"] + 1
+    lines = scores.read_text().splitlines()
+    assert len(lines) == SEGMENTS["test"] + 1
+    assert lines[0].split(",") == list(pb66_run.SCORE_COLUMNS)
+    first = dict(zip(pb66_run.SCORE_COLUMNS, lines[1].split(","), strict=True))
+    assert first["account_id"].startswith("acct-")
+    assert first["fraud_type"] in {*lofto.SCENARIOS, ""}
+    assert first["counterparty_is_new_for_account"] in {"0.0", "1.0"}
+    assert sorted(metrics["reliability_by_channel"]) == ["CARD", "MOBILE_MONEY", "USSD"]
+    ten = metrics["budgets"]["model"]["10"]
+    assert ten["alerts_per_1000"] > 0
+    assert ten["fraud_rwf_caught"] > 0
+    assert (out / "figures" / "reliability_by_channel.svg").exists()
 
     after = private_access_log.read_text()
     added = [json.loads(line) for line in after[len(before) :].splitlines()]
@@ -188,3 +204,73 @@ def test_pb66_scores_the_gates_own_seed_1_model(
         json.loads(line) for line in private_access_log.read_text()[len(before) :].splitlines()
     ]
     assert [a["purpose"] for a in added] == ["PB-66 fixture gate", "PB-66 full-volume evaluation"]
+
+
+def test_a_dropped_row_leaves_every_fitted_set_but_never_the_test(cache: Path) -> None:
+    whole = gate_run.load_cache(cache)
+    drop = [
+        whole.split.train[0],
+        whole.split.validation[0],
+        whole.split.calibration[0],
+        whole.test[0],
+    ]
+    held = gate_run.load_cache(cache, drop=drop)
+    assert len(held.split.train) == len(whole.split.train) - 1
+    assert len(held.split.validation) == len(whole.split.validation) - 1
+    assert len(held.split.calibration) == len(whole.split.calibration) - 1
+    assert held.test == whole.test
+
+
+def test_lofto_refits_without_each_scenario_and_logs_before_scoring(
+    cache: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str], private_access_log: Path
+) -> None:
+    before = private_access_log.read_text() if private_access_log.exists() else ""
+    out = tmp_path / "lofto"
+    code = cli.main(["lofto", str(cache), "--out", str(out), "--budget-minutes", "100000"])
+    assert code == 0
+    printed = capsys.readouterr().out
+    assert "volume: full volume (500 training rows)" in printed
+    payload = json.loads((out / "lofto.json").read_text())
+    names = [r["scenario"] for r in payload["scenarios"]]
+    assert names == [*lofto.SCENARIOS, "mule_account without reversal"]
+    for row in payload["scenarios"][: len(lofto.SCENARIOS)]:
+        assert row["test_frauds"] > 0
+        low, high = row["held_out_budget_wilson"]
+        assert 0.0 <= low <= row["held_out_recall_at_budget"] <= high <= 1.0
+    # Every scenario's non-test rows were removed for its refit: frauds of that type only.
+    assert all(n > 0 for n in payload["rows_removed"].values())
+    added = [
+        json.loads(line) for line in private_access_log.read_text()[len(before) :].splitlines()
+    ]
+    assert [a["command"] for a in added] == ["lofto"]
+    assert added[0]["test_rows"] == SEGMENTS["test"]
+    assert "full volume" in added[0]["purpose"]
+
+
+def test_lofto_falls_back_when_nine_fits_would_not_fit(
+    cache: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(lofto, "FALLBACK_TRAIN_ROWS", 200)
+    ticks = iter([0.0, 3600.0])  # the first fit "takes" an hour
+    told: list[tuple[str, int]] = []
+    result = lofto.run(
+        cache,
+        seed=1,
+        budget_minutes=60,
+        clock=lambda: next(ticks),
+        on_volume=lambda volume, rows: told.append((volume, rows)),
+    )
+    assert result.train_rows_used == 200
+    assert told[0][0].startswith("200 training rows: one full-volume fit took 60.0 min")
+    assert told[0][1] == SEGMENTS["test"]
+    assert set(result.held_out) == set(lofto.SCENARIOS)
+
+
+def test_lofto_refuses_a_cache_without_fraud_types(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    old = tmp_path / "old.parquet"
+    _write(old, timestamps=False)
+    assert cli.main(["lofto", str(old), "--out", str(tmp_path / "out")]) == 2
+    assert "_fraud_type" in capsys.readouterr().err
+    assert cli.main(["lofto", str(tmp_path / "none.parquet"), "--out", str(tmp_path / "o")]) == 2

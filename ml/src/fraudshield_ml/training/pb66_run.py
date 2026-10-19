@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +20,10 @@ from fraudshield_ml.training import gate, gate_run, model, pb66, smoke
 
 #: The strongest single feature on the declared gate's rows (`m4_evaluate_gate_d8083dbc.txt`).
 BASELINE_FEATURE = "velocity_ratio_1h_vs_30d"
+
+#: Carried in the artifact so M11 can split the reversal variant by it without reading the test set
+#: again (owner, 2026-10-19).
+NEW_COUNTERPARTY_FEATURE = "counterparty_is_new_for_account"
 
 #: § 2: windowed features look back up to 90 days, so a training row nearer the draw's start has
 #: truncated history (PB-76).
@@ -58,6 +62,13 @@ class TestRows:
     #: § 2: training rows within 90 days of the first, whose windowed history is truncated
     truncated_training_rows: int
     training_rows: int
+    #: Artifact-only facts for M11's own analyses (owner, 2026-10-19: account IDs in the
+    #: uncommitted artifact only). None of them is used by anything this module reports.
+    accounts: list[str] = field(default_factory=list)
+    variants: list[str] = field(default_factory=list)
+    fraud_types: list[str] = field(default_factory=list)
+    true_labels: list[str] = field(default_factory=list)
+    new_counterparty: list[float] = field(default_factory=list)
 
 
 def _columns(cache: Path) -> dict[str, list[object]]:
@@ -72,8 +83,18 @@ def _columns(cache: Path) -> dict[str, list[object]]:
             f"{cache} has no {missing}: PB-66 needs a cache written with the timestamp and amount "
             "columns (fs-features evaluate on this commit or later)"
         )
-    table = pq.read_table(cache, columns=list(wanted))
-    return {k: table.column(k).to_pylist() for k in wanted}
+    carried = [
+        k
+        for k in (
+            smoke.CACHE_ACCOUNT,
+            smoke.CACHE_VARIANT,
+            smoke.CACHE_FRAUD_TYPE,
+            smoke.CACHE_TRUE_LABEL,
+        )
+        if k in present
+    ]
+    table = pq.read_table(cache, columns=[*wanted, *carried])
+    return {k: table.column(k).to_pylist() for k in (*wanted, *carried)}
 
 
 def score(cache: Path, seed: int) -> TestRows:
@@ -85,6 +106,7 @@ def score(cache: Path, seed: int) -> TestRows:
     # row is scored and then dropped without an access line.
     columns = _columns(cache)
     feature = data.names.index(BASELINE_FEATURE)
+    novelty = data.names.index(NEW_COUNTERPARTY_FEATURE)
     stamps = [int(str(v)) for v in columns[smoke.CACHE_TIMESTAMP]]
     train_stamps = [stamps[i] for i in data.split.train]
     horizon = min(train_stamps) + TRUNCATION_DAYS * pb66.MICROS_PER_DAY
@@ -112,7 +134,18 @@ def score(cache: Path, seed: int) -> TestRows:
         baseline_missing=missing,
         truncated_training_rows=sum(1 for t in train_stamps if t < horizon),
         training_rows=len(train_stamps),
+        accounts=_strings(columns, smoke.CACHE_ACCOUNT, test),
+        variants=_strings(columns, smoke.CACHE_VARIANT, test),
+        fraud_types=_strings(columns, smoke.CACHE_FRAUD_TYPE, test),
+        true_labels=_strings(columns, smoke.CACHE_TRUE_LABEL, test),
+        new_counterparty=[data.matrix[i][novelty] for i in test],
     )
+
+
+def _strings(columns: dict[str, list[object]], key: str, rows: Sequence[int]) -> list[str]:
+    """One carried column for `rows`, or empty strings when the cache predates it."""
+    values = columns.get(key)
+    return [str(values[i]) if values is not None else "" for i in rows]
 
 
 def _ranked(rows: TestRows, scores: Any, *, resamples: int, seed: int) -> dict[str, object]:
@@ -139,14 +172,18 @@ def analyse(rows: TestRows, *, resamples: int, seed: int) -> dict[str, object]:
     months = pb66.month_of(rows.timestamps_us)
     buckets = pb66.by_month(rows.scores, rows.labels, months, resamples=resamples, seed=seed)
     by_name = {b.month: b for b in buckets}
-    # Only the pre-registered difference: December minus November, the two full months.
+    # Only the pre-specified difference: December minus November, the two full months.
     differences = (
         {"2025-12-minus-2025-11": pb66.difference(by_name["2025-12"], by_name["2025-11"])}
         if {"2025-11", "2025-12"} <= set(by_name)
         else {}
     )
-    model_days = pb66.daily_budget(rows.scores, rows.labels, rows.timestamps_us)
-    baseline_days = pb66.daily_budget(rows.baseline, rows.labels, rows.timestamps_us)
+    model_days = pb66.daily_budget(
+        rows.scores, rows.labels, rows.timestamps_us, amounts=rows.amounts
+    )
+    baseline_days = pb66.daily_budget(
+        rows.baseline, rows.labels, rows.timestamps_us, amounts=rows.amounts
+    )
     model_cost = pb66.cost_curve(rows.scores, rows.labels)
     baseline_cost = pb66.cost_curve(rows.baseline, rows.labels)
     baseline_months = pb66.by_month(
@@ -201,6 +238,7 @@ def analyse(rows: TestRows, *, resamples: int, seed: int) -> dict[str, object]:
             "model": _cost(model_cost),
             "baseline": _cost(baseline_cost),
         },
+        "reliability_by_channel": reliability_by_channel(rows),
         "fairness": {
             "preamble": FAIRNESS_PREAMBLE,
             "unavailable": list(UNAVAILABLE),
@@ -230,6 +268,29 @@ def analyse(rows: TestRows, *, resamples: int, seed: int) -> dict[str, object]:
             )["all"],
         },
     }
+
+
+def reliability_by_channel(rows: TestRows) -> dict[str, list[dict[str, float]]]:
+    """Predicted against observed per channel, ten equal-width bins (E.5 item 6). Descriptive."""
+    from fraudshield_ml.training.battery import reliability  # noqa: PLC0415
+
+    out: dict[str, list[dict[str, float]]] = {}
+    for channel in sorted(set(rows.channels)):
+        index = [i for i, c in enumerate(rows.channels) if c == channel]
+        bins = reliability(
+            [float(rows.scores[i]) for i in index], [bool(rows.labels[i]) for i in index]
+        )
+        out[channel] = [
+            {
+                "lower": b.lower,
+                "upper": b.upper,
+                "rows": b.rows,
+                "predicted": b.predicted,
+                "observed": b.observed,
+            }
+            for b in bins
+        ]
+    return out
 
 
 def _bucket(b: pb66.Bucket) -> dict[str, object]:
@@ -266,7 +327,7 @@ def _ci(interval: Sequence[object], digits: int = 3) -> str:
 
 
 def summary(result: dict[str, Any], *, seed: int, resamples: int) -> list[str]:
-    """The plain-text report, in the pre-registration's order, fairness preamble first."""
+    """The plain-text report, in the pre-specification's order, fairness preamble first."""
     pr, budgets, months = result["pr_auc"], result["budgets"], result["months"]
     lines = [
         "PB-66 — seed-1 calibrated ensemble on D-07's test period "
@@ -299,7 +360,7 @@ def summary(result: dict[str, Any], *, seed: int, resamples: int) -> list[str]:
         f"({budgets['rows_excluded']} rows)",
         "  alerts at a tie are shared across the tied block (see pb66._top_k)",
         "  budget  who       precision [95% CI, by day]   ceiling  share   recall [95% CI]  "
-        " alert rate  tie-decided alerts",
+        " per 1,000 tx  tie-decided   fraud RWF caught   legitimate RWF alerted",
     ]
     for k in budgets["assumed"]:
         for who in ("model", "baseline"):
@@ -307,8 +368,9 @@ def summary(result: dict[str, Any], *, seed: int, resamples: int) -> list[str]:
             lines.append(
                 f"  {k:>6}  {who:8}  {_f(b['precision'])} {_ci(b['intervals']['precision'])}  "
                 f"{_f(b['ceiling'])}   {_f(b['share_of_ceiling'], 2)}   {_f(b['recall'])} "
-                f"{_ci(b['intervals']['recall'])}  {_f(b['alert_rate'], 4)}      "
-                f"{b['tie_decided_alerts']}"
+                f"{_ci(b['intervals']['recall'])}  {_f(b['alerts_per_1000'], 2):>12}  "
+                f"{b['tie_decided_alerts']:>11}   {_f(b['fraud_rwf_caught'], 0):>16}   "
+                f"{_f(b['legit_rwf_alerted'], 0):>22}"
             )
     lines += [
         "",
@@ -343,6 +405,13 @@ def summary(result: dict[str, Any], *, seed: int, resamples: int) -> list[str]:
         "  PC in [0.01, 0.99] where the model is not below the trivial classifier: "
         f"{cost['model']['not_below_trivial_between_0_01_and_0_99'] or 'none'}",
         "",
+        "Reliability by channel (descriptive; ten equal-width bins: predicted -> observed, rows)",
+        *(
+            f"  {channel:14} "
+            + "  ".join(f"{b['predicted']:.2f}->{b['observed']:.2f} ({b['rows']})" for b in bins)
+            for channel, bins in result["reliability_by_channel"].items()
+        ),
+        "",
         "3.5 Fairness",
         f"  {FAIRNESS_PREAMBLE}",
         *(f"  {u}" for u in UNAVAILABLE),
@@ -371,7 +440,7 @@ def _svg(
     """Line chart on [0, 1] x [0, 1] with one polyline per series and a legend; no diagonal."""
     from fraudshield_ml.training.gate_report import PAD, SIZE, _point  # noqa: PLC0415
 
-    colours = ("#1f5fa8", "#c0392b", "#999")
+    colours = ("#1f5fa8", "#c0392b", "#999", "#2e8b57", "#8e44ad", "#d35400")
     span = SIZE - 2 * PAD
     parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{SIZE}" height="{SIZE}" '
@@ -405,7 +474,7 @@ def write(result: dict[str, Any], rows: TestRows, out: Path, scores_out: Path | 
     b_precision, b_recall = pb66.pr_curve(rows.baseline, rows.labels)
     cost = result["cost_curve"]
     written = {
-        out / "metrics.json": json.dumps(_strict(result), indent=2, sort_keys=True, allow_nan=False)
+        out / "metrics.json": json.dumps(strict(result), indent=2, sort_keys=True, allow_nan=False)
         + "\n",
         figures / "pr.svg": _svg(
             "Precision-recall, calibrated ensemble",
@@ -416,6 +485,14 @@ def write(result: dict[str, Any], rows: TestRows, out: Path, scores_out: Path | 
                     BASELINE_FEATURE,
                     _thin(list(zip(b_recall.tolist(), b_precision.tolist(), strict=True))),
                 ),
+            ],
+        ),
+        figures / "reliability_by_channel.svg": _svg(
+            "Reliability by channel, ten equal-width bins",
+            ("mean predicted probability", "observed fraud rate"),
+            [
+                (channel, [(b["predicted"], b["observed"]) for b in bins])
+                for channel, bins in result["reliability_by_channel"].items()
             ],
         ),
         figures / "cost_curve.svg": _svg(
@@ -448,36 +525,72 @@ def write(result: dict[str, Any], rows: TestRows, out: Path, scores_out: Path | 
     }
     if scores_out is not None:
         scores_out.parent.mkdir(parents=True, exist_ok=True)
-        lines = ["cache_row,score,baseline,label,timestamp_us,amount_rwf,country,channel"]
-        lines += [
-            f"{r},{s!r},{b!r},{int(y)},{t},{a!r},{c},{ch}"
-            for r, s, b, y, t, a, c, ch in zip(
-                rows.transaction_rows,
-                rows.scores.tolist(),
-                rows.baseline.tolist(),
-                rows.labels.tolist(),
-                rows.timestamps_us.tolist(),
-                rows.amounts.tolist(),
-                rows.countries,
-                rows.channels,
-                strict=True,
-            )
-        ]
-        written[scores_out] = "\n".join(lines) + "\n"
+        written[scores_out] = _scores_csv(rows)
     for path, text in written.items():
         path.write_text(text, encoding="utf-8")
     return list(written)
 
 
-def _strict(value: object) -> object:
+SCORE_COLUMNS = (
+    "cache_row",
+    "score",
+    "baseline",
+    "label_observed",
+    "label_true",
+    "timestamp_us",
+    "amount_rwf",
+    "country",
+    "channel",
+    "account_id",
+    "fraud_type",
+    "variant",
+    "counterparty_is_new_for_account",
+)
+
+
+def _scores_csv(rows: TestRows) -> str:
+    """The per-row artifact: never committed (G.5), cited by its SHA-256."""
+    import csv  # noqa: PLC0415 - only this path needs it
+    import io  # noqa: PLC0415
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, lineterminator="\n")
+    writer.writerow(SCORE_COLUMNS)
+    count = len(rows.labels)
+
+    def carried(values: Sequence[object]) -> Sequence[object]:
+        return values if len(values) == count else [""] * count
+
+    writer.writerows(
+        zip(
+            rows.transaction_rows,
+            map(repr, rows.scores.tolist()),
+            map(repr, rows.baseline.tolist()),
+            (int(y) for y in rows.labels.tolist()),
+            carried(rows.true_labels),
+            rows.timestamps_us.tolist(),
+            map(repr, rows.amounts.tolist()),
+            rows.countries,
+            rows.channels,
+            carried(rows.accounts),
+            carried(rows.fraud_types),
+            carried(rows.variants),
+            carried(rows.new_counterparty),
+            strict=True,
+        )
+    )
+    return buffer.getvalue()
+
+
+def strict(value: object) -> object:
     """The result as strict JSON.
 
     NaN and infinities become null, tuples become lists and numpy scalars Python ones.
     """
     if isinstance(value, dict):
-        return {str(k): _strict(v) for k, v in value.items()}
+        return {str(k): strict(v) for k, v in value.items()}
     if isinstance(value, list | tuple):
-        return [_strict(v) for v in value]
+        return [strict(v) for v in value]
     if hasattr(value, "item"):
         value = value.item()
     if isinstance(value, float) and not math.isfinite(value):

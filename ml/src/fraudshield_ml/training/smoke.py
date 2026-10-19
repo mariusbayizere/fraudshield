@@ -333,7 +333,19 @@ CACHE_MCC = "_mcc"
 #: the MCC: caches written before them still read, and a reader that needs them says so.
 CACHE_TIMESTAMP = "_timestamp_us"
 CACHE_AMOUNT = "_amount_rwf"
-CACHE_OPTIONAL = (CACHE_MCC, CACHE_TIMESTAMP, CACHE_AMOUNT)
+#: The scenario a fraud row belongs to (`labels.fraud_type`, empty for a legitimate row) and its
+#: true label (`labels.is_fraud_true`; the model's label is the observed one). PB-66's
+#: leave-one-fraud-type-out holds out a scenario, and its fraud reconciliation separates label
+#: noise from misses. Neither is a feature.
+CACHE_FRAUD_TYPE = "_fraud_type"
+CACHE_TRUE_LABEL = "_is_fraud_true"
+CACHE_OPTIONAL = (
+    CACHE_MCC,
+    CACHE_TIMESTAMP,
+    CACHE_AMOUNT,
+    CACHE_FRAUD_TYPE,
+    CACHE_TRUE_LABEL,
+)
 
 
 def cache_key(dataset: str, corpus_rows: int, sample_rows: int) -> dict[str, str]:
