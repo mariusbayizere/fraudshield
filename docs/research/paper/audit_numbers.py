@@ -114,6 +114,7 @@ WORDS: dict[str, str] = {
     "eight": "8",
     "nine": "9",
     "ten": "10",
+    "fourteen": "14",
 }
 
 
@@ -126,6 +127,16 @@ def _word(ratio: float) -> str:
 def _front_cell(col: int, row: int, table: str) -> str:
     """Trees (col 0) or depth (col 1) of the frontier table's `row`-th configuration."""
     return re.findall(r"^\s+(\d+)\s+(\d+)\s+0\.", table, re.M)[row][col]
+
+
+def _pct(part: str, whole: str) -> str:
+    """`part` over `whole` as a percentage to two places."""
+    ratio = Decimal(part.replace(",", "")) / Decimal(whole.replace(",", "")) * 100
+    return f"{ratio:.2f}%"
+
+
+def _pct_key(value: str) -> Decimal:
+    return Decimal(value.rstrip("%"))
 
 
 def _rows(block: str, pattern: str) -> str:
@@ -171,6 +182,17 @@ def _crossing(points: str, target: str) -> tuple[str, str, str, str]:
         f"{high_recall:.3f}",
     )
 
+
+OTHER_COUNTRIES = (
+    "nLocoKEf",
+    "nCoRowsKE",
+    "nLocoRWf",
+    "nCoRowsRW",
+    "nLocoTZf",
+    "nCoRowsTZ",
+    "nLocoUGf",
+    "nCoRowsUG",
+)
 
 GROUPS_ABOVE = (
     "nCeiling",
@@ -941,6 +963,36 @@ SOURCES: dict[str, Src | Derived] = {
         for kind, col in (("Trees", 0), ("Depth", 1))
         for i, point in enumerate("ABCDE")
     },
+    "nCoFraudRateCD": Derived(
+        ("nLocoCDf", "nCoRowsCD"),
+        _pct,
+        "CD's test-period fraud rows over its test rows",
+    ),
+    "nCoFraudRateMin": Derived(
+        OTHER_COUNTRIES,
+        lambda *v: min((_pct(f, r) for f, r in zip(v[::2], v[1::2], strict=True)), key=_pct_key),
+        "lowest test-period fraud rate among KE, RW, TZ and UG",
+    ),
+    "nCoFraudRateMax": Derived(
+        OTHER_COUNTRIES,
+        lambda *v: max((_pct(f, r) for f, r in zip(v[::2], v[1::2], strict=True)), key=_pct_key),
+        "highest test-period fraud rate among KE, RW, TZ and UG",
+    ),
+    "nLeadMedianMinutes": Src(FRAUD_YAML, r"takeover_lead_median_minutes:\s*\n\s*value: (\d+)"),
+    "nRevAmountMultiplier": Src(
+        FRAUD_YAML, r"reversal_scam_amount_multiplier:\s*\n\s*value: ([\d.]+)"
+    ),
+    "nBandWider": Src(NOTEBOOK, r"the floor is\s+\*\*([\d.]+)× wider\*\*"),
+    "nBandBlindLow": Src(NOTEBOOK, r"landing between roughly\s+([\d.]+) and [\d.]+\."),
+    "nBandBlindHigh": Src(NOTEBOOK, r"landing between roughly\s+[\d.]+ and ([\d.]+)\."),
+    "nSiblingLeakChannel": Src(CLAIMS, r"`channel` by ([\d.]+) and"),
+    "nSiblingLeakCurrency": Src(CLAIMS, r"`currency` by ([\d.]+) at"),
+    "nFingerprintColsRead": Src(NOTEBOOK, r"The fingerprint read (three) columns of fourteen"),
+    "nFingerprintColsTotal": Src(NOTEBOOK, r"The fingerprint read three columns of (fourteen)"),
+    "nFurtherFeatures": Src(NOTEBOOK, r"found (three) more instances the review had missed"),
+    "nDetectorT": Src(NOTEBOOK, r"gave \*\*t = (\+[\d.]+)\*\*"),
+    "nMarginRows": Src(NOTEBOOK, r"over \*\*(\d+) rows holding two confirmed fraud\*\*"),
+    "nMarginFraud": Src(NOTEBOOK, r"over \*\*\d+ rows holding (two) confirmed fraud\*\*"),
     # ---- ADR 0055 (accepted 2026-10-17) ----
     "nNoSourceFeatures": Src(
         ADR55, r"not merely in form\.\*\* (Five) of 44 features, 11 %", ref=ADR55_REF

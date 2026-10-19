@@ -63,6 +63,7 @@ STRIP = [
     re.compile(r"\\multicolumn\{\d+\}"),
     re.compile(r"1\s*-\s*\\mathrm\{AUC\}"),  # notation in max(AUC, 1 - AUC)
     re.compile(r"\bhalf-width\b"),  # the name of an interval statistic
+    re.compile(r"``a guard with two doors''"),  # the title of a lab-notebook entry
 ]
 NUMBER_WORDS = (
     r"two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|"

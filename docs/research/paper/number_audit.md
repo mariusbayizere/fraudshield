@@ -2,7 +2,7 @@
 
 Every macro in `numbers.tex` checked against its evidence file at `m4-complete` (`72e7790`), or at the ref its row names, read with `git show`, by `audit_numbers.py`. Values are compared as printed: rounding, sign and interval bounds included. Regenerate with `python3 docs/research/paper/audit_numbers.py`; do not edit by hand.
 
-**427 macros, 427 MATCH, 0 not matching.**
+**443 macros, 443 MATCH, 0 not matching.**
 
 | Macro | Value in paper | Value in evidence | File | Note | Result |
 |---|---|---|---|---|---|
@@ -433,3 +433,19 @@ Every macro in `numbers.tex` checked against its evidence file at `m4-complete` 
 | `\nFrDepthD` | `6` | `6` | derived | depth of frontier row 4 | MATCH |
 | `\nFrTreesE` | `800` | `800` | derived | trees of frontier row 5 | MATCH |
 | `\nFrDepthE` | `8` | `8` | derived | depth of frontier row 5 | MATCH |
+| `\nCoFraudRateCD` | `0.28\%` | `0.28%` | derived | CD's test-period fraud rows over its test rows | MATCH |
+| `\nCoFraudRateMin` | `0.93\%` | `0.93%` | derived | lowest test-period fraud rate among KE, RW, TZ and UG | MATCH |
+| `\nCoFraudRateMax` | `1.07\%` | `1.07%` | derived | highest test-period fraud rate among KE, RW, TZ and UG | MATCH |
+| `\nLeadMedianMinutes` | `45` | `45` | `dataset/generator/params/fraud.yaml` |  | MATCH |
+| `\nRevAmountMultiplier` | `3.5` | `3.5` | `dataset/generator/params/fraud.yaml` |  | MATCH |
+| `\nBandWider` | `2.8` | `2.8` | `docs/research/lab_notebook.md` |  | MATCH |
+| `\nBandBlindLow` | `0.509` | `0.509` | `docs/research/lab_notebook.md` |  | MATCH |
+| `\nBandBlindHigh` | `0.530` | `0.530` | `docs/research/lab_notebook.md` |  | MATCH |
+| `\nSiblingLeakChannel` | `0.006` | `0.006` | `docs/research/claims_register.md` |  | MATCH |
+| `\nSiblingLeakCurrency` | `0.001` | `0.001` | `docs/research/claims_register.md` |  | MATCH |
+| `\nFingerprintColsRead` | `three` | `three` | `docs/research/lab_notebook.md` |  | MATCH |
+| `\nFingerprintColsTotal` | `fourteen` | `fourteen` | `docs/research/lab_notebook.md` |  | MATCH |
+| `\nFurtherFeatures` | `three` | `three` | `docs/research/lab_notebook.md` |  | MATCH |
+| `\nDetectorT` | `+2.89` | `+2.89` | `docs/research/lab_notebook.md` |  | MATCH |
+| `\nMarginRows` | `660` | `660` | `docs/research/lab_notebook.md` |  | MATCH |
+| `\nMarginFraud` | `two` | `two` | `docs/research/lab_notebook.md` |  | MATCH |
