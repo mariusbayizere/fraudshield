@@ -3,8 +3,8 @@
 
 Digital payments in East Africa include mobile money: person-to-person transfers, agent cash-in and
 cash-out, merchant payments and USSD sessions on basic handsets, alongside cards and bank transfers.
-Practitioner accounts of fraud detection are often drawn from card transactions, as Dal Pozzolo et
-al.'s is \cite{dalpozzolo2014lessons}; the fraud documented on mobile channels includes SIM-swap
+Dal Pozzolo et al.'s practitioner account of fraud detection is drawn from card transactions
+\cite{dalpozzolo2014lessons}; the fraud documented on mobile channels includes SIM-swap
 takeover \cite{lee2020simswap} (studied there on US carriers), attacks through add-on SIM hardware
 \cite{phipps2018thinsim} and scams carried out by SMS and phone call
 \cite{razaq2021scams,dogan2025grift}, and USSD carries no device fingerprint (resolution D-04). We do
@@ -35,8 +35,9 @@ repository and disagree with:
   \item \textbf{A record of benchmark audits and their measured failure modes}
         (Sections~\ref{sec:dataset}, \ref{sec:evaluation} and \ref{sec:discussion}). The strongest
         single engineered feature reaches \nGateFloor{} on the evaluation test rows, so a model AUC
-        quoted against chance overstates the quantity that matters; \nGroupsAboveCeiling{} disjoint
-        feature groups each exceed the \nCeiling{} single-feature ceiling alone; and the controls
+        quoted against chance overstates the quantity that matters; on a diagnostic
+        model, \nGroupsAboveCeiling{} disjoint feature groups each exceed the \nCeiling{}
+        single-feature ceiling alone; and the controls
         that failed, how each failure was found, and which of the resulting rules a check now
         enforces and which remain written rules.
   \item \textbf{A detection failure on a pre-registered non-burst variant}
@@ -44,18 +45,20 @@ repository and disagree with:
         \nBaseVarRecall{} \nBaseVarCI{}, measured on a held-out shape. Its cause is inferred, not
         isolated: the variant differs from the base scenarios in more than one respect.
   \item \textbf{Generalisation nulls} (Section~\ref{sec:generalisation}): leave-one-country-out
-        and a novel variant held out in time both fail to test generalisation on this benchmark. We
-        infer that both follow from its burst-structured fraud, and a test checks that no fraud
-        parameter is keyed by country; no experiment isolates the cause.
+        and a novel variant held out in time both fail to test generalisation on this benchmark. A test
+        checks that no fraud parameter is keyed by country, and we infer that the country null
+        follows from that and the variant null from the variant's multi-row shape; no experiment
+        isolates either cause.
   \item \textbf{The latency--explainability frontier} (Section~\ref{sec:evaluation}): how the
         median cost of an exact TreeSHAP explanation changes across tree complexity on one
-        development laptop, reported at the median only, because that machine cannot produce a
-        repeatable \nPctlTail{}th percentile.
+        development laptop, reported at the median only, because the measured \nPctlTail{}th
+        percentile was not credible: in \nFrontNegative{} configurations it showed a negative
+        explanation cost.
 \end{enumerate}
 The redundancy finding of the first contribution is stated separately in Section~\ref{sec:evaluation} because it is
 a result about how this generator encodes signal, not a detail of one table.
 
-The system itself, \nFeatures{} features computed on independent batch and online paths with a parity suite and
+The system itself, \nFeatures{} features computed on batch and online paths that do not import each other, with a parity suite and
 a published temporal split, is the setting of these results and is not claimed as a research
 contribution. Its deviations from the specification are recorded as architecture decision records
 (ADRs), which we cite where they matter.

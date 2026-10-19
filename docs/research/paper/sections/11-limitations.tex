@@ -13,16 +13,16 @@ generator.
 \paragraph{No fraud parameter is sourced.} Of \nProvFraudTotal{} fraud parameters,
 \nProvFraudAssumed{} are modelling choices and \nProvFraudCalibrated{} are calibrated to
 specification targets. No publication read gives fraud incidence by type for these markets. Any
-result that depends on the level or mix of fraud, rather than on the relative ordering of methods,
-inherits this assumption. The sourced parameters (\nProvSourced{} of \nProvTotal{}) fix
+result that depends on the level or mix of fraud inherits this assumption. The sourced parameters (\nProvSourced{} of \nProvTotal{}) fix
 population and volume structure, partly from a neighbouring market's statistics.
 
-\paragraph{The benchmark is separable by its incident structure.} Several of its scenarios stage
+\paragraph{The benchmark is easily separable, we infer by its incident structure.} Several of its scenarios stage
 fraud as multi-row incidents. A single velocity feature reaches \nGateFloor{} on the test rows,
 \nGroupsAboveCeiling{} feature groups each exceed the single-feature ceiling alone,
 leave-one-country-out and the novel variant are both null, and the one pre-registered variant
-without that structure is caught at \nRevRecall{}. We infer that these follow from the incident
-structure; no experiment varies it. Detection of this benchmark's own scenarios is what it measures;
+without that structure is caught at \nRevRecall{}. We infer that the separability and the novel-variant null follow from
+the incident structure, and the country null from fraud parameters that are not keyed by country; no
+experiment varies either. Detection of this benchmark's own scenarios is what it measures;
 nothing here speaks to fraud with other structure, except as the failure in
 Section~\ref{sec:generalisation}. The specification's distribution targets (overall and test-period
 fraud rate, channel and country mix) are requirements met by construction, not observations.
@@ -43,8 +43,9 @@ value for every record, but only because each country's configuration supplies t
 denominations, and those values are \textbf{assumed}: plausible note and typing steps, not a banknote
 series read from any central-bank source. The feature's input is something this project wrote, not
 something it observed. The gap is the benchmark's rather than the design's: the \nNoSourceFeatures{} features are
-implemented and tested on both computation paths, and an institution's account master, KYC records
-and agent ledger would supply their inputs, but no figure here shows what they would add.
+implemented and tested on both computation paths, and they are designed to take their inputs from an institution's
+account master, KYC records and agent ledger; that such data would supply them, and what they would
+add, is not shown here.
 
 \paragraph{No real-data validation.} None has been done. A validation on real data would need to
 show, at minimum: the single-feature floor on real engineered features (whether real fraud is as
@@ -81,12 +82,13 @@ figure varies with the choice of training rows is unmeasured, and every such fig
 measurement of one selection.
 
 \paragraph{Latency.} No latency figure here is a gate figure. The frontier is a difference of
-medians on a shared development laptop, where the \nPctlTail{}th percentile is not measurable; serving and
+medians on a shared development laptop, whose measured \nPctlTail{}th percentile was not credible; serving and
 end-to-end latencies have been measured only on shared development hardware (ADR 0035, ADR 0059),
 and the gate measurement is \notyet{M10}.
 
 \paragraph{Small counts.} Variant, country and channel results rest on between \nAdaptFraud{} and
-\nBaseVarFraud{} fraud rows; intervals are reported for each, and the evidence file marks the
+\nBaseVarFraud{} fraud rows; intervals are reported for the variant recalls and in the evidence files for the channel and
+country AUCs, and the evidence file marks the
 Democratic Republic of the Congo's, which rest on fewer than \nSmallCountThreshold{}, as direction
 only.
 
@@ -97,6 +99,7 @@ Each figure is stated with the run it comes from. The single-feature floor of
 Section~\ref{sec:floor} comes from a draw whose fingerprint was not recorded.
 
 \paragraph{Claims not made.} The specification's figures on regional fraud growth, payment volume,
-analyst dismissal rates, the accuracy of models built elsewhere on East African data, annual model
-degradation and ensemble variance reduction are unverified, replaced or refuted in the project's
-claims register, and none is stated here as fact.
+analyst dismissal rates, the accuracy of models built elsewhere on East African data, and annual model
+degradation are unverified or replaced in the project's claims register, the claimed ensemble
+variance reduction is not supported by the measurement of Section~\ref{sec:evaluation}, and none is
+stated here as fact.

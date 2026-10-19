@@ -33,9 +33,10 @@ object it ranges over and read the sentence it is supposed to justify; if the no
 not justify the sentence.
 
 \paragraph{An asserted protection is worse than a missing one.} A note on the map-cell feature
-claimed a cross-account control that did not in fact control anything; the notebook records that it
-would have survived review and was caught by a mechanical check instead. A code comment explaining
-why a truncated corpus could not bias a feature was the dataset milestone review's own finding. The
+claimed a cross-account control that did not in fact control anything; the notebook records that the
+author found it while defining the contract's \texttt{history\_key} field, and the registry check
+described below was added in response. A code comment explaining why a truncated corpus could not
+bias a feature was a finding of the feature milestone's (M3) review. The
 comment's argument turned out to be right for the feature it named, and was only established once it
 was measured (Section~\ref{sec:floor}); the search it prompted found \nFurtherFeatures{} further
 features with the flaw the comment had ruled out for its own. The registry now refuses a
@@ -89,10 +90,10 @@ mixed: of the rules above, the partial-coverage refusal, the cross-account contr
 truncation test, the generated status table and the evidence stamp are enforced by code, and the
 rest are written rules.
 
-\paragraph{A hedge is often an unmeasured claim.} Some caveats (``the delay channel might be
-mostly an artefact'', ``burstiness is not country-specific'') turned out to be measurable, and
-measuring them replaced a hedge with a result: about \nEventDelayShare{} of the delay channel's
-separation above chance was artefact, and leave-one-country-out is null. The test for keeping a
+\paragraph{A hedge is often an unmeasured claim.} The caveat ``the delay channel might be mostly an
+artefact'' turned out to be measurable, and measuring it replaced a hedge with a result: about
+\nEventDelayShare{} of the delay channel's separation above chance is attributed to the old schedule
+(Section~\ref{sec:dataset}). The test for keeping a
 caveat is to ask what measurement would remove it.
 
 \subsection{Which rows, not only how many}
@@ -243,4 +244,5 @@ cross-account control that controlled nothing \\
 \end{tabular}
 \end{table}
 
-On FraudShield-EAC each of these changed what could be claimed.
+On FraudShield-EAC each row's finding is the reason the corresponding claim in this paper is worded
+as it is.

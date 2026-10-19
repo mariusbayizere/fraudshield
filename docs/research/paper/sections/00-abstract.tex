@@ -3,11 +3,11 @@ What can a synthetic fraud benchmark show, and what can it not? We answer the qu
 FraudShield-EAC, a seeded synthetic benchmark of East African digital payments (mobile money,
 USSD, agent banking, card, online and bank transfer, across \nCountries{} countries) built to develop
 and evaluate a fraud detection system. Its clearest negative result is a pre-registered variant built
-on a scam documented among Kenyan mobile-money users and modelled as a single victim-initiated
-transfer to a counterparty on the victim's own contact list: a diagnostic XGBoost model catches it at
-\nRevRecall{} \nRevCI{}, against \nBaseVarRecall{} \nBaseVarCI{} for the base scenarios. That the
-documented scam pays a known counterparty is our modelling assumption, not something the sources
-state, and why the model misses the variant is inferred, not measured.
+on a scam documented among Kenyan mobile-money users: a single victim-initiated transfer, which we
+read the sources as sending to a new counterparty and which our variant, by our own choice, sends to
+a counterparty on the victim's payee list. A diagnostic XGBoost model catches it at \nRevRecall{}
+\nRevCI{}, against \nBaseVarRecall{} \nBaseVarCI{} for the base scenarios; why it misses the
+variant is not isolated.
 
 The benchmark is easy in a specific way. On the evaluation test rows the strongest single engineered
 feature, a short-to-long-window velocity ratio, separates the classes at \nGateFloor{} on its own, so
@@ -18,8 +18,9 @@ target, and \nLcVolumeFactor{} times the training data does not close the gap fo
 draw. \nGroupsAboveCeilingCap{} disjoint feature groups each separate the classes beyond the
 \nCeiling{} single-feature ceiling alone, so ablations here measure redundancy rather than
 importance, and both generalisation experiments we planned (leave-one-country-out and a novel fraud
-variant held out in time) are null. We infer, without an experiment that isolates it, that both
-nulls follow from the generator's burst-structured fraud. On a development laptop, the difference
+variant held out in time) are null. We infer, without an experiment that isolates either cause, that
+the country null follows from fraud parameters that are not keyed by country, and the variant null
+from the variant's multi-row shape. For one XGBoost booster on a development laptop, the difference
 between the median latency with and without an exact TreeSHAP explanation grows about
 \nFrontRatio-fold across the tree configurations tested, while accuracy stays within its interval.
 

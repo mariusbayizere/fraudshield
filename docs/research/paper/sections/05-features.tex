@@ -7,7 +7,8 @@ Every transaction yields a vector of \nFeatures{} features in \nFeatureGroups{} 
 (counts and sums over trailing windows, and the ratio of a short window's count to a long window's
 mean), amount behaviour, temporal (local hour and day from the country pack's UTC offset, night,
 month-end salary windows, time since the last transaction), geographic (distance and implied speed
-from the last transaction, distance from a home centroid, first appearance in a country, and a
+from the last transaction, distance from a home centroid, first transfer to a
+counterparty country, and a
 lagged, smoothed confirmed-fraud rate per map cell), counterparty (novelty, age, distinct senders as
 a mule signal, lagged confirmed fraud), device and channel, account profile (including days since a
 SIM swap), agent-specific, corridor, and a label-free synthetic-identity composite. Appendix~\ref{app:features}
@@ -78,8 +79,8 @@ confirmed fraud, with categorical encodings folded by whole account, \nFeaturesA
 beyond their intervals. The strongest, \texttt{velocity\_ratio\_1h\_vs\_30d}, reaches \nFloorM{}
 $\pm$ \nFloorMci{}. This measurement was taken on an earlier draw, of \nFloorDrawRows{} rows at the
 same seed, whose evidence file records no fingerprint (Section~\ref{sec:dataset}). On the evaluation
-draw's test rows the same feature reaches \nGateFloor{} (Section~\ref{sec:evaluation}), and that is
-the floor every model margin in this paper is measured against.
+draw's test rows the same feature reaches \nGateFloor{} (Section~\ref{sec:evaluation}); each gate
+ranking metric's margin is measured against this feature on that metric's own rows.
 
 \begin{table}[htbp]
 \centering

@@ -2,12 +2,14 @@
 \label{sec:evaluation}
 
 Unless a figure says otherwise, it is on the evaluation draw's test period (\nTestRows{} rows
-holding \nTestFraud{} confirmed fraud), for models trained on \nTrainUsed{} rows holding
-\nGateTrainFraud{} confirmed fraud. The exceptions are the learning curve of
+holding \nTestFraud{} confirmed fraud), for models trained on \nTrainUsed{} rows. The gate run's
+training rows hold \nGateTrainFraud{} confirmed fraud; the diagnostic battery's evidence file does
+not record its training fraud count. The exceptions are the learning curve of
 Section~\ref{sec:volume}, which varies the training volume; the earlier-draw comparison in
 Section~\ref{sec:redundancy}; and the frontier of Section~\ref{sec:frontier}, which uses the earlier
-draw \texttt{6abde44e} and \nFrHeldOutRows{} held-out rows. The seed-variance figures are for the
-uncalibrated combination of XGBoost and LightGBM, not for the calibrated ensemble.
+draw \texttt{6abde44e} and \nFrHeldOutRows{} held-out rows. The seed-variance comparison of the
+C-6 paragraph is for the uncalibrated combination of XGBoost and LightGBM; the gate's own seed
+figures are refits of the calibrated ensemble.
 
 \subsection{Gate metrics as margins over the floor}
 
@@ -139,12 +141,14 @@ Isolation Forest alone & \nBaseIF & \nBaseIFR & $\nBaseIFp$ \\
 \end{table}
 
 \paragraph{Seed variance.} The specification claims that the ensemble reduces variance by
-\nSpecVarianceClaim{} against a single model; that claim has no source (claims register, C-6).
+\nSpecVarianceClaim{} against a single model; the seed-variance evidence file records that the
+claim carries no citation (claims register, C-6).
 The measurement is of the \emph{uncalibrated} weighted combination on the diagnostic battery's rows,
 over \nSeeds{} seeds: its seed-to-seed AUC standard deviation is \nSeedSdEnsemble{}, against
-\nSeedSdXGB{} for XGBoost alone and \nSeedSdLGB{} for LightGBM alone. That many seeds cannot
-distinguish standard deviations this close, so the measurement neither supports nor refutes the
-claim. It is a different quantity from the calibrated ensemble's seed spread on the gate rows,
+\nSeedSdXGB{} for XGBoost alone and \nSeedSdLGB{} for LightGBM alone: \nSeedSdDiffXGB{}
+against XGBoost, no reduction, and \nSeedSdDiffLGB{} lower than LightGBM's. We infer, without
+having computed an interval for the ratio, that \nSeeds{} seeds cannot distinguish standard
+deviations this close, so neither comparison supports the claim as a property of the ensemble. It is a different quantity from the calibrated ensemble's seed spread on the gate rows,
 \nGateSeedAUC{}, reported above.
 
 \subsection{Training volume}

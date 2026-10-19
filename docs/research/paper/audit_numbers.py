@@ -72,6 +72,7 @@ TEST_REGISTRY = "ml/tests/features/test_registry.py"
 FLOOR_RAW = "docs/benchmarks/m3_single_feature_auc_2c80ef6.txt"
 REF_AUDIT = "docs/research/paper/reference_audit.md"
 DEFECTS = "docs/srs/defect_register.md"
+BACKLOG = "docs/backlog/product.md"
 #: The commit on this branch that last changed the reference audit.
 REF_AUDIT_REF = "ee97bbd"
 #: The gate line for recall at the 1% FPR budget, up to its value.
@@ -875,6 +876,9 @@ SOURCES: dict[str, Src | Derived] = {
     "nLatencyTargetFlagged": Src(PROMPT, r"budget targets p95 ≤ (\d+) ms for flagged"),
     "nSpecRows": Src(PROMPT, r"Targets \(SRS 7\.1\): ≥ ([\d,]+) rows"),
     "nRazaqInterviews": Src(REF_AUDIT, r"We interviewed (\d+) participants", ref=REF_AUDIT_REF),
+    "nFeaturePassRate": Src(BACKLOG, r"the feature pass costs about (\d+) rows a second"),
+    "nSeedSdDiffXGB": Src(SEEDS, r"ensemble stdev vs xgboost alone: (-[\d.]+%)"),
+    "nSeedSdDiffLGB": Src(SEEDS, r"ensemble stdev vs lightgbm alone: \+([\d.]+%)"),
     "nPctlFlag": Src(PROMPT, r"budget targets p(\d+) ≤ \d+ ms for flagged"),
     "nPctlTail": Src(PROMPT, r"single-request p(\d+) \(ensemble"),
     "_GroupCounts": Src(TEST_REGISTRY, r"(EXPECTED_GROUP_COUNTS = \{.*?\n\})"),

@@ -9,7 +9,8 @@ built into the feature contract rather than handled as missing data after the fa
 \paragraph{USSD.} USSD sessions run on basic handsets and carry no device fingerprint. Every
 transaction still yields a feature vector with the same slots; the \nDeviceNaNFeatures{} features
 derived from a device fingerprint are structurally missing (NaN) for USSD and handled by the models'
-native missing-value logic, so the remaining features are computed from data (resolution D-04). The
+native missing-value logic, and resolution D-04 specifies that the remaining features are computed
+from data; on this benchmark some of them have no source data (Section~\ref{sec:limitations}). The
 parity suite requires the NaN positions to match exactly on both computation paths
 (Section~\ref{sec:features}), because a NaN on one path and a number on the other is a contract
 violation rather than a numerical difference.

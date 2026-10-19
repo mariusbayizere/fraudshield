@@ -23,8 +23,10 @@ separate review queue that does not hold the payment; that routing belongs to th
 engine (M6) and is not evaluated here.
 
 \paragraph{Training volume.} The evaluated models were trained on \nTrainUsed{} rows holding
-\nGateTrainFraud{} confirmed fraud, a subset of the \nTrainRows{} rows in the training period;
-no document records why that volume was chosen. Every figure in
+\nGateTrainFraud{} confirmed fraud, a subset of the \nTrainRows{} rows in the training period.
+The backlog records the reason as the cost of the feature pass, about \nFeaturePassRate{} rows a
+second on the development machine (PB-67); no document records why \nTrainUsed{} rather than another
+size. Every figure in
 Section~\ref{sec:evaluation} is at that training volume except the learning curve of
 Section~\ref{sec:volume}, which reaches \nLcTrainD{} rows; full-volume training is
 \notyet{M10}.

@@ -56,7 +56,9 @@ each re-read for this paper:
   \item the months in which school terms begin: one Rwandan school's 2024--2025 calendar
         \cite{ngaCalendar2425};
   \item regional-bloc membership: the East African Community \cite{eacOverview} and COMESA
-        \cite{comesaMembers} membership pages. These pages are not among the \nSourceDocs{}
+        \cite{comesaMembers} membership pages, and for Tanzania's and the Democratic Republic of the
+        Congo's memberships also the SADC member-states page, which could not be opened when the
+        paper's references were checked and is not in the bibliography. These pages are not among the \nSourceDocs{}
         documents of the sourcing pass: they were read on 2026-09-19 as the sources of the
         countries' bloc memberships, and are cited in \texttt{dataset/params\_provenance.md}.
 \end{itemize}
@@ -146,7 +148,8 @@ Total & \nScenTotal \\
 
 \subsection{Realism and anti-leakage controls}
 
-Every generated dataset is checked by a report that fails the build when a gated control fails.
+A realism report, run as a separate command and in continuous integration on a generated
+dataset, exits with an error when a gated control fails; both evaluated draws pass it.
 The controls, and why each exists:
 \begin{itemize}
   \item \textbf{Single-column separation.} No dataset column may separate the classes beyond an
@@ -179,8 +182,9 @@ One reported (not gated) channel deserves its own sentence: the delay between an
 takeover lead time was changed from a narrow uniform window to a
 long-tailed distribution, the channel fell from \nEventDelayBefore{} to \nEventDelayAfter{},
 inside a band of \nEventDelayBandLow{}--\nEventDelayBandHigh{} predicted before the regenerated
-draw existed. About \nEventDelayShare{} of the channel's separation above chance was therefore an
-artefact of the uniform schedule. That the remainder reflects the scenario rather than the new,
+draw existed. We infer that about \nEventDelayShare{} of the channel's separation above chance was an artefact of
+the uniform schedule; that attributes the whole fall to the old schedule, and the new distribution
+could add separation of its own. That the remainder reflects the scenario rather than the new,
 equally assumed lead distribution is not established: no published takeover-to-drain delays for
 these markets were found, so that distribution is a modelling choice too.
 

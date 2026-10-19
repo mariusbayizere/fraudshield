@@ -1,8 +1,9 @@
 \section{Generalisation: nulls and one failure}
 \label{sec:generalisation}
 
-Once a single engineered feature separated the classes at \nGateFloor{} on the test rows, the
-headline AUC could no longer show that a model had learned anything a one-line rule could not.
+Once a single engineered feature separated the classes at \nFloorM{} on an earlier draw
+(Section~\ref{sec:floor}), the headline AUC could no longer show that a model had learned anything a
+one-line rule could not.
 Leave-one-country-out and a fraud sub-variant that appears only in the test period were meant to
 carry that weight instead. Both are null. This section reports them as null results rather than
 dropping them, gives our inference about why this benchmark could not make them informative, and
@@ -65,14 +66,16 @@ run on these rows. This is not an out-of-distribution test.
 
 \subsection{What the nulls have in common}
 
-We infer one explanation for both nulls and for the redundancy of Section~\ref{sec:redundancy}:
-several of the generator's scenarios stage fraud as multi-row incidents, and the countries, the novel
-variant and the \nGroupsAboveCeiling{} strongest feature groups are each views of that structure.
+We infer a different explanation for each null. The country null is the one the test above
+supports: no fraud parameter is keyed by country. The novel-variant null and the redundancy of
+Section~\ref{sec:redundancy} we infer follow from incident structure: several of the generator's
+scenarios stage fraud as multi-row incidents, and the novel variant and the
+\nGroupsAboveCeiling{} strongest feature groups are views of that structure.
 Not every scenario is multi-row (agent, card-not-present and merchant incidents can be a single row,
 Appendix~\ref{app:scenarios}), and the agent and corridor groups alone barely separate the classes
 (Table~\ref{tab:groups}). No experiment varies the incident structure, so this explanation is an
-inference. What the benchmark supports is detection on its own scenarios, and the cost of computing
-and explaining that detection. It supports no claim about generalisation, geographic or temporal.
+inference. What the benchmark supports is detection on its own scenarios, and, for one booster on one
+laptop, the median cost of explaining that detection. It supports no claim about generalisation, geographic or temporal.
 
 \subsection{A pre-registered non-burst variant: the one failure found}
 
@@ -86,8 +89,9 @@ and one respondent reported asking the sender to reverse an apparently mistaken 
 receives a fake M-PESA message that shows ``LOCKED'' where the balance should be, the scammer claims
 to have sent the money by mistake, often with an emotional story, and the victim sends it back, only
 to find that no money was ever deposited; Safaricom's advice, quoted there, is not to refund the
-money \cite{star2025mpesa}. The victim's loss is therefore a single transfer that the victim
-initiates, to the number of the claimed sender. Neither source says whether the victim has paid that
+money \cite{star2025mpesa}. We read the victim's loss as a single transfer that the victim
+initiates, to the number of the claimed sender; the press account says the victim sends the money
+back, not to which number. Neither source says whether the victim has paid that
 number before; since it is the scammer's own number, we read the documented form as a transfer to a
 new counterparty.
 
@@ -95,8 +99,9 @@ The benchmark's variant keeps the single, victim-initiated transfer and departs 
 recipient: a counterparty already on the victim's own payee list. ADR 0028, and the justification
 committed at pre-registration, state that this property comes from the typology; neither source we
 read supports that, so it is a modelling choice, and the variant departs from the documented scam in
-that respect. The variant also has its own amount rule: \nRevAmountMultiplier{} times the channel's
-median legitimate amount. A test checks that each row is a single transaction in the test period to
+that respect. The variant also has its own amount rule: amounts are drawn around \nRevAmountMultiplier{} times
+the channel's median legitimate amount, and pass through the same below-threshold adaptation as other
+fraud. A test checks that each row is a single transaction in the test period to
 a counterparty on the payee list. Whether \texttt{counterparty\_is\_new\_for\_account} is in fact false
 on these rows was not measured: a listed counterparty may not have been paid before. So the variant
 removes burst structure by construction and counterparty novelty by construction of the payee list,
@@ -142,8 +147,8 @@ point estimate does, so the conclusion narrowed.
 \textbf{What this does and does not show.} On a held-out shape, a variant with no burst structure,
 paid to a listed counterparty and with its own amount rule, is rarely caught by a model trained on
 this benchmark's scenarios. Because the variant differs from them in several respects at once, the
-result cannot say which of them causes the miss; we infer that the absence of burst structure and of
-counterparty novelty is the main cause, without a measurement that isolates it. A variant with a new
+result cannot say which of them causes the miss; we infer that the absence of burst structure is a likely contributor; whether counterparty novelty
+was in fact absent on these rows is not measured. A variant with a new
 recipient, as in the documented form, would separate those causes and has not been measured; whether it
 would be easier or harder to catch is not established. The result concerns this one variant, not
 non-burst fraud in general: other typologies are untested, and whether data this benchmark does not
