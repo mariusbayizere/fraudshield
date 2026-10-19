@@ -168,6 +168,8 @@
     "signedOut": "Your session has ended. Sign in again to continue.",
     "undoHint": "Ctrl+Z or ⌘Z undoes it.",
     "undoRetry": "The undo could not be sent. Try again while it is still offered.",
-    "undoNotAuthor": "Only the analyst who made the decision can undo it."
+    "undoNotAuthor": "Only the analyst who made the decision can undo it.",
+    "invalidReason": "The server did not accept this; check the reason and try again.",
+    "undoUnknown": "The undo got no answer in time; check the alert's decisions to see which stands."
   }
 }

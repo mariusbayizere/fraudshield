@@ -132,10 +132,13 @@ export function useEscalate(alertId: string) {
       if (!isSummary(created)) throw new ApiError(undefined);
       return checked('zAlertSummary', created);
     },
+    // As for a decision: whether listAlerts still lists an escalated alert in the standard queue
+    // is not in the contract (an M8B question), so the feed is not re-read on success.
     onSuccess: () => {
       dropFromFeeds(client, alertId);
+      void client.invalidateQueries({ queryKey: ['alert', alertId] });
     },
-    onSettled: () => {
+    onError: () => {
       void client.invalidateQueries({ queryKey: ['alerts'] });
       void client.invalidateQueries({ queryKey: ['alert', alertId] });
     },

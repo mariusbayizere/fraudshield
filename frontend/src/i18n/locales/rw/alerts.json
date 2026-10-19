@@ -168,6 +168,8 @@
     "signedOut": "Igihe cyawe cyarangiye. Ongera winjire kugira ngo ukomeze.",
     "undoHint": "Ctrl+Z cyangwa ⌘Z birabihindura.",
     "undoRetry": "Guhindura ntibyashoboye koherezwa. Ongera ugerageze bigihari.",
-    "undoNotAuthor": "Umusesenguzi wafashe icyemezo ni we wenyine ushobora kugihindura."
+    "undoNotAuthor": "Umusesenguzi wafashe icyemezo ni we wenyine ushobora kugihindura.",
+    "invalidReason": "Seriveri ntiyabyemeye; suzuma impamvu wongere ugerageze.",
+    "undoUnknown": "Guhindura ntibyabonye igisubizo ku gihe; reba ibyemezo by'imenyesha umenye igihamye."
   }
 }

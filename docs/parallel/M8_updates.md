@@ -417,3 +417,14 @@ they outlive the drawer a decision closes.
   re-reading the feed on success, the escalation and 404 wording, keeping an old refusal while
   sending, keeping Undo after no answer, the not-the-author message and forgetting a refused
   escalation's key each fail a test when removed.
+- **Re-review of that round: CHANGES_REQUIRED on one point**, both MAJORs confirmed fixed. The test
+  for the Undo window passed whether or not the window was enforced: the notice's own 6 s
+  auto-hide removed the Undo first, so "each fix fails a test when removed" was not true for the
+  5 s clamp or its timer. The test now checks at 5.2 s after the send, with the pointer on the
+  notice, that the Undo is gone and the notice is not. Also fixed: Ctrl+Z inside a form control is
+  left to the control (tested); a failed Undo for any other reason is named (tested); the panel is
+  keyed by alert, so another alert, even one already loaded, starts with an empty comment and its
+  own keys (tested); an escalation, like a decision, no longer re-reads the feed on success
+  (tested; M8B question 5 covers both); a held Ctrl+Z does not repeat; an Undo with no answer after
+  the window says the outcome is unknown instead of inviting a retry; escalation's 400 names the
+  reason, not the comment.

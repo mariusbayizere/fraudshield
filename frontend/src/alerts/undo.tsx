@@ -79,8 +79,13 @@ export function NoticeProvider({ children }: { children: ReactNode }) {
         },
         onError: (error) => {
           if (error.status === undefined) {
-            // No answer: the Undo may not have reached the server; offer it again while it lasts.
-            notify({ message: t('act.undoRetry'), undo: pending });
+            // No answer: the Undo may not have reached the server. Offer it again while the window
+            // lasts; after that, say the outcome is unknown rather than invite a retry.
+            notify(
+              pending.deadline > Date.now()
+                ? { message: t('act.undoRetry'), undo: pending }
+                : { message: t('act.undoUnknown') },
+            );
           } else if (error.type === 'urn:fraudshield:problem:undo-window-expired') {
             notify({ message: t('act.undoTooLate') });
           } else if (error.type === 'urn:fraudshield:problem:not-decision-author') {
@@ -104,6 +109,7 @@ export function NoticeProvider({ children }: { children: ReactNode }) {
       ) {
         return;
       }
+      if (event.repeat) return;
       if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === 'z') {
         event.preventDefault();
         undoNow();

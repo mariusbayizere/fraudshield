@@ -75,8 +75,8 @@ implementation; M8's console does not build against any of them until both exist
    API.
 4. **Team performance** (UX-ROLE-SN-04: every analyst's reviews per hour, accuracy, average review
    time, CSV export). Only `getMyPerformance` exists. Unowned work, filed here.
-5. **Does `listAlerts` list an alert whose decision is still PENDING_COMMIT?** The contract does
-   not say. The console takes a decided alert out of the feed at once (FR-04-04) and, so that a
+5. **Does `listAlerts` list an alert whose decision is still PENDING_COMMIT, or one just
+   escalated?** The contract does not say. The console takes a decided alert out of the feed at once (FR-04-04) and, so that a
    re-read cannot put it straight back, does not re-read the feed until the 60 s refresh or an
    Undo. If listAlerts lists it, the decided alert reappears in the analyst's feed at the next
    refresh. The contract should state which statuses the standard queue holds.

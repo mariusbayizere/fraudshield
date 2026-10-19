@@ -37,7 +37,6 @@ interface Script {
   answers?: (() => Promise<Response>)[];
   alertBody?: AlertDetail;
   /** The feed after a decision; by default the decided alert is gone. */
-  /** The feed after a decision; by default the decided alert is gone. 'never' never answers. */
   pageAfter?: AlertPage | 'never';
 }
 
@@ -82,7 +81,9 @@ function serve({
     }
     if (path.endsWith('/dashboard/stats')) return json(stats);
     if (path.endsWith('/scoring-result')) return json(scoring);
-    if (/\/alerts\/[^/]+$/.test(path)) return json(alertBody);
+    // The alert asked for, under its own id, as the server would answer.
+    if (/\/alerts\/[^/]+$/.test(path))
+      return json({ ...alertBody, alert_id: path.split('/').at(-1) });
     if (path.endsWith('/alerts')) {
       feedReads += 1;
       if (!decided) return json(page);
@@ -217,11 +218,58 @@ describe(
       });
       const { panel } = await open();
       await userEvent.type(within(panel).getByRole('textbox', { name: 'Comment' }), COMMENT);
+      const sentAt = Date.now();
       await userEvent.click(within(panel).getByRole('button', { name: 'Confirm fraud' }));
-      expect(await screen.findByRole('button', { name: 'Undo' })).toBeVisible();
-      await vi.advanceTimersByTimeAsync(5_500);
+      const notice = await screen.findByRole('alert');
+      expect(within(notice).getByRole('button', { name: 'Undo' })).toBeVisible();
+      // Hovering pauses the notice's own auto-hide; it must not stretch the Undo.
+      await userEvent.hover(notice);
+      // 5.2 s after the send: past D-44's grace (the server allowed 60 s), short of the notice's
+      // 6 s, so only the grace can have taken the Undo away.
+      await vi.advanceTimersByTimeAsync(Math.max(0, sentAt + 5_200 - Date.now()));
       await waitFor(() => {
         expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull();
+      });
+      expect(screen.getByRole('alert')).toHaveTextContent('Fraud confirmed for J*** M***.');
+    });
+
+    it('leaves Ctrl+Z to a form control that has focus', async () => {
+      const sent = serve();
+      const { panel } = await open();
+      await userEvent.type(within(panel).getByRole('textbox', { name: 'Comment' }), COMMENT);
+      await userEvent.click(within(panel).getByRole('button', { name: 'Confirm fraud' }));
+      await screen.findByRole('button', { name: 'Undo' });
+      screen.getByRole('combobox', { name: 'Status' }).focus();
+      await userEvent.keyboard('{Control>}z{/Control}');
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(sent).toHaveLength(1);
+    });
+
+    it('says plainly when an undo fails for another reason', async () => {
+      serve({ answers: [ok202, () => problem('about:blank', 500)] });
+      const { panel } = await open();
+      await userEvent.type(within(panel).getByRole('textbox', { name: 'Comment' }), COMMENT);
+      await userEvent.click(within(panel).getByRole('button', { name: 'Confirm fraud' }));
+      await userEvent.click(await screen.findByRole('button', { name: 'Undo' }));
+      expect(await screen.findByText('The decision could not be undone.')).toBeVisible();
+    });
+
+    it('starts another alert with an empty comment, even one already loaded', async () => {
+      serve();
+      const other = {
+        to: '/alerts/$alertId',
+        params: { alertId: '7d1e2f3a-4b5c-4d6e-8f70-8192a3b4c5d6' },
+      };
+      const { router } = await open();
+      // Load the other alert once, so the drawer can switch to it without a loading state.
+      await router.navigate(other);
+      await screen.findByRole('region', { name: 'Decide' });
+      await router.navigate({ to: '/alerts/$alertId', params: { alertId: alert.alert_id } });
+      const panel = await screen.findByRole('region', { name: 'Decide' });
+      await userEvent.type(within(panel).getByRole('textbox', { name: 'Comment' }), COMMENT);
+      await router.navigate(other);
+      await waitFor(() => {
+        expect(screen.getByRole('textbox', { name: 'Comment' })).toHaveValue('');
       });
     });
 
@@ -529,12 +577,16 @@ describe(
       const escalate = within(panel).getByRole('button', { name: 'Escalate' });
       await userEvent.click(escalate);
       await within(panel).findByText(/This alert changed/);
+      const readsBeforeEscalation = feedReads;
       await userEvent.click(escalate);
       await waitFor(() => {
         expect(router.state.location.pathname).toBe('/alerts');
       });
       expect(sent[1]?.key).not.toBe(sent[0]?.key);
       expect(screen.queryByRole('article', { name: 'Alert for J*** M***' })).toBeNull();
+      // As for a decision, the feed is not re-read on success (an M8B question).
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(feedReads).toBe(readsBeforeEscalation);
     });
 
     it('[FR-04-12] has no axe violations', async () => {

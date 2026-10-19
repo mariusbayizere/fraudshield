@@ -39,6 +39,7 @@ export function refusal(
   | 'act.deadlinePassed'
   | 'act.levelRequired'
   | 'act.invalid'
+  | 'act.invalidReason'
   | 'act.badTarget'
   | 'act.gone'
   | 'act.signedOut'
@@ -57,7 +58,8 @@ export function refusal(
   if (error.status === 401) return 'act.signedOut';
   if (error.status === 400 || error.status === 422) {
     // escalateAlert's 422 is the target role (escalation_target_not_higher), not the text.
-    return operation === 'escalate' && error.status === 422 ? 'act.badTarget' : 'act.invalid';
+    if (operation === 'decide') return 'act.invalid';
+    return error.status === 422 ? 'act.badTarget' : 'act.invalidReason';
   }
   return 'act.failed';
 }

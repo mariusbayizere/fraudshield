@@ -208,7 +208,8 @@ export default function AlertDetailPanel() {
             <ShapChart explanation={explanation.data} phone={phone} />
           )}
         </Box>
-        <DecisionPanel alert={alert.data} onDone={close} />
+        {/* Keyed by alert: another alert starts with an empty comment and its own keys. */}
+        <DecisionPanel key={alert.data.alert_id} alert={alert.data} onDone={close} />
       </>
     );
   }

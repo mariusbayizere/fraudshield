@@ -306,7 +306,9 @@
       "act.signedOut": "machine_draft",
       "act.undoHint": "machine_draft",
       "act.undoRetry": "machine_draft",
-      "act.undoNotAuthor": "machine_draft"
+      "act.undoNotAuthor": "machine_draft",
+      "act.invalidReason": "machine_draft",
+      "act.undoUnknown": "machine_draft"
     }
   },
   "fr": {
@@ -623,7 +625,9 @@
       "act.signedOut": "machine_draft",
       "act.undoHint": "machine_draft",
       "act.undoRetry": "machine_draft",
-      "act.undoNotAuthor": "machine_draft"
+      "act.undoNotAuthor": "machine_draft",
+      "act.invalidReason": "machine_draft",
+      "act.undoUnknown": "machine_draft"
     }
   },
   "sw": {
@@ -933,7 +937,9 @@
       "act.signedOut": "machine_draft",
       "act.undoHint": "machine_draft",
       "act.undoRetry": "machine_draft",
-      "act.undoNotAuthor": "machine_draft"
+      "act.undoNotAuthor": "machine_draft",
+      "act.invalidReason": "machine_draft",
+      "act.undoUnknown": "machine_draft"
     }
   }
 }

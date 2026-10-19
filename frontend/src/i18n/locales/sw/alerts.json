@@ -168,6 +168,8 @@
     "signedOut": "Kipindi chako kimeisha. Ingia tena ili kuendelea.",
     "undoHint": "Ctrl+Z au ⌘Z inatendua.",
     "undoRetry": "Utenduzi haukuweza kutumwa. Jaribu tena ukiwa bado unatolewa.",
-    "undoNotAuthor": "Ni mchambuzi aliyefanya uamuzi pekee anayeweza kuutendua."
+    "undoNotAuthor": "Ni mchambuzi aliyefanya uamuzi pekee anayeweza kuutendua.",
+    "invalidReason": "Seva haikukubali hili; kagua sababu na ujaribu tena.",
+    "undoUnknown": "Utenduzi haukupata jibu kwa wakati; angalia maamuzi ya arifa kujua lipi linabaki."
   }
 }
