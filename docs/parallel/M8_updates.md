@@ -542,3 +542,7 @@ backlog rows rather than fixed, one report at the end).**
   widening a search silently; PB-137, PB-138); screen 8 APPROVED_WITH_MINORS (PB-139; PB-140, high:
   nothing clears the query cache at sign-out, for every screen). CI's lint found two errors in
   the search form, fixed, since a red lint step skips the tests.
+- **Deletion checks (run once memory allowed, through `mem-gate`):** 9 mutations, each failing a
+  test: the escalated queue sent and its drawer's path; the search staying idle without criteria,
+  the region's zone, the validation and the hidden link-only chips; accuracy never 0%, the minutes
+  in a duration, and the shape guard. They do not cover what PB-134 to PB-139 record as untested.
