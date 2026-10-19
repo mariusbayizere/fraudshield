@@ -23,6 +23,7 @@ import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import Decimal
+from functools import partial
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -120,6 +121,11 @@ def _word(ratio: float) -> str:
     """A whole number as the word the paper prints."""
     names = {v: k for k, v in WORDS.items()}
     return names.get(str(int(ratio)), "?") if ratio == int(ratio) else f"not whole: {ratio}"
+
+
+def _front_cell(col: int, row: int, table: str) -> str:
+    """Trees (col 0) or depth (col 1) of the frontier table's `row`-th configuration."""
+    return re.findall(r"^\s+(\d+)\s+(\d+)\s+0\.", table, re.M)[row][col]
 
 
 def _rows(block: str, pattern: str) -> str:
@@ -883,6 +889,58 @@ SOURCES: dict[str, Src | Derived] = {
         "features whose separation minus its interval half-width exceeds the ceiling",
     ),
     "nUnboundedFixed": Src(FLOOR_RAW, r"fix: (five) unbounded features were then deriving"),
+    "nGateFailed": Derived(
+        ("nGateMeasured", "nGatePassed"),
+        lambda measured, passed: _word(int(measured) - int(passed)),
+        "gate metrics measured minus gate metrics passing",
+    ),
+    "nGateUnmeasured": Derived(
+        ("nGateTotal", "nGateMeasured"),
+        lambda total, measured: _word(int(total) - int(measured)),
+        "gate metrics specified minus gate metrics measured",
+    ),
+    "nEceBins": Src(GATE, r"ML-GATE-11  ECE, (\d+) equal-mass bins"),
+    "nGateRealisedFPR": Src(GATE, r"budget's threshold the realised FPR is ([\d.]+)"),
+    "nGatePrecCeilingRealised": Src(GATE, r"against D-01's ceiling of ([\d.]+) at that rate"),
+    "nSmallCountThreshold": Src(BAT, r"CD rest on fewer than (\d+) fraud rows"),
+    "nBaseLRGap": Derived(
+        ("nGateAUC", "nBaseLR"),
+        lambda ensemble, lr: f"{Decimal(ensemble) - Decimal(lr):.3f}",
+        "ensemble AUC minus logistic regression's",
+    ),
+    "nLcCorpusPlanned": Src(
+        NOTEBOOK,
+        r"built from a \*\*([\d,]+)-row corpus\*\* \(a train-period",
+        ref=NOTEBOOK_MAIN_REF,
+    ),
+    **{
+        f"nLcRealFpr{point}": Src(LC.format(size), r"realised FPR is ([\d.]+)", ref=LC_REF)
+        for point, size in (("A", "30k"), ("B", "60k"), ("C", "120k"), ("D", "240k"))
+    },
+    **{
+        f"nAbl{name}p": Src(GATE, rf"{re.escape(label)}\s+\d+ feat .*?, p ([\d.e-]+)\)")
+        for name, label in (
+            ("Agent", "without agent features"),
+            ("Corridor", "without the corridor feature"),
+            ("Round", "without round-sum awareness"),
+            ("Month", "without month-end awareness"),
+            ("USSD", "without USSD-aware device handling"),
+        )
+    },
+    "nBatLowBinRows": Src(BAT, r"\[0\.0, 0\.1\)\s+(\d+)"),
+    "nBatLowBinTop": Src(BAT, r"\[0\.0, (0\.1)\)"),
+    "nEarlyHeldOutRows": Src(BAT_EARLY, r"\*\*([\d,]+) held-out rows holding"),
+    "nLatencyPNineNineShap": Src(PROMPT, r"exceeds (\d+) ms on the reference hardware"),
+    "_FrontRows": Src(FRONT, r"(^\s+trees depth.*?)\n\n"),
+    **{
+        f"nFr{kind}{point}": Derived(
+            ("_FrontRows",),
+            partial(_front_cell, col, i),
+            f"{kind.lower()} of frontier row {i + 1}",
+        )
+        for kind, col in (("Trees", 0), ("Depth", 1))
+        for i, point in enumerate("ABCDE")
+    },
     # ---- ADR 0055 (accepted 2026-10-17) ----
     "nNoSourceFeatures": Src(
         ADR55, r"not merely in form\.\*\* (Five) of 44 features, 11 %", ref=ADR55_REF

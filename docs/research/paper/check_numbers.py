@@ -62,6 +62,7 @@ STRIP = [
     re.compile(r"\$?\[0,\s*1\]\$?"),  # the unit interval, as notation
     re.compile(r"\\multicolumn\{\d+\}"),
     re.compile(r"1\s*-\s*\\mathrm\{AUC\}"),  # notation in max(AUC, 1 - AUC)
+    re.compile(r"\bhalf-width\b"),  # the name of an interval statistic
 ]
 NUMBER_WORDS = (
     r"two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|"

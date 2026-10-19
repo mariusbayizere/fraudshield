@@ -2,7 +2,7 @@
 
 Every macro in `numbers.tex` checked against its evidence file at `m4-complete` (`72e7790`), or at the ref its row names, read with `git show`, by `audit_numbers.py`. Values are compared as printed: rounding, sign and interval bounds included. Regenerate with `python3 docs/research/paper/audit_numbers.py`; do not edit by hand.
 
-**396 macros, 396 MATCH, 0 not matching.**
+**427 macros, 427 MATCH, 0 not matching.**
 
 | Macro | Value in paper | Value in evidence | File | Note | Result |
 |---|---|---|---|---|---|
@@ -402,3 +402,34 @@ Every macro in `numbers.tex` checked against its evidence file at `m4-complete` 
 | `\nSecondsSinceMci` | `0.040` | `0.040` | `docs/benchmarks/single_feature_baseline.md` |  | MATCH |
 | `\nFeaturesAboveCeilingCI` | `two` | `two` | derived | features whose separation minus its interval half-width exceeds the ceiling | MATCH |
 | `\nUnboundedFixed` | `five` | `five` | `docs/benchmarks/m3_single_feature_auc_2c80ef6.txt` |  | MATCH |
+| `\nGateFailed` | `two` | `two` | derived | gate metrics measured minus gate metrics passing | MATCH |
+| `\nGateUnmeasured` | `two` | `two` | derived | gate metrics specified minus gate metrics measured | MATCH |
+| `\nEceBins` | `15` | `15` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nGateRealisedFPR` | `0.0096` | `0.0096` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nGatePrecCeilingRealised` | `0.505` | `0.505` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nSmallCountThreshold` | `30` | `30` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nBaseLRGap` | `0.005` | `0.005` | derived | ensemble AUC minus logistic regression's | MATCH |
+| `\nLcCorpusPlanned` | `360{,}000` | `360,000` | `docs/research/lab_notebook.md` at `488c5b4` |  | MATCH |
+| `\nLcRealFprA` | `0.0068` | `0.0068` | `docs/benchmarks/m4_learning_curve_30k_d8083dbc.txt` at `3dacca6` (evidence commit `c59da11`) |  | MATCH |
+| `\nLcRealFprB` | `0.0030` | `0.0030` | `docs/benchmarks/m4_learning_curve_60k_d8083dbc.txt` at `3dacca6` (evidence commit `c59da11`) |  | MATCH |
+| `\nLcRealFprC` | `0.0082` | `0.0082` | `docs/benchmarks/m4_learning_curve_120k_d8083dbc.txt` at `3dacca6` (evidence commit `c59da11`) |  | MATCH |
+| `\nLcRealFprD` | `0.0026` | `0.0026` | `docs/benchmarks/m4_learning_curve_240k_d8083dbc.txt` at `3dacca6` (evidence commit `6b36fc5`) |  | MATCH |
+| `\nAblAgentp` | `0.01` | `0.01` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nAblCorridorp` | `0.015` | `0.015` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nAblRoundp` | `0.073` | `0.073` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nAblMonthp` | `0.51` | `0.51` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nAblUSSDp` | `0.7` | `0.7` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nBatLowBinRows` | `100{,}798` | `100798` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nBatLowBinTop` | `0.1` | `0.1` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nEarlyHeldOutRows` | `60{,}000` | `60,000` | `docs/benchmarks/m4_battery.md` |  | MATCH |
+| `\nLatencyPNineNineShap` | `40` | `40` | `docs/prompts/FraudShield_Master_Build_Prompt.md` |  | MATCH |
+| `\nFrTreesA` | `50` | `50` | derived | trees of frontier row 1 | MATCH |
+| `\nFrDepthA` | `3` | `3` | derived | depth of frontier row 1 | MATCH |
+| `\nFrTreesB` | `100` | `100` | derived | trees of frontier row 2 | MATCH |
+| `\nFrDepthB` | `4` | `4` | derived | depth of frontier row 2 | MATCH |
+| `\nFrTreesC` | `200` | `200` | derived | trees of frontier row 3 | MATCH |
+| `\nFrDepthC` | `5` | `5` | derived | depth of frontier row 3 | MATCH |
+| `\nFrTreesD` | `400` | `400` | derived | trees of frontier row 4 | MATCH |
+| `\nFrDepthD` | `6` | `6` | derived | depth of frontier row 4 | MATCH |
+| `\nFrTreesE` | `800` | `800` | derived | trees of frontier row 5 | MATCH |
+| `\nFrDepthE` | `8` | `8` | derived | depth of frontier row 5 | MATCH |

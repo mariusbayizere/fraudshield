@@ -493,3 +493,25 @@
 \newcommand{\nSecondsSinceMci}{\meas{0.040}}
 \newcommand{\nFeaturesAboveCeilingCI}{\meas{two}}  % derived: point estimate minus interval > ceiling
 \newcommand{\nUnboundedFixed}{\meas{five}}      % m3_single_feature_auc_2c80ef6.txt header
+\newcommand{\nGateFailed}{\meas{two}}          % derived: gate metrics measured minus passed
+\newcommand{\nGateUnmeasured}{\meas{two}}      % derived: gate metrics specified minus measured
+\newcommand{\nEceBins}{\meas{15}}              % gate file ML-GATE-11
+\newcommand{\nGateRealisedFPR}{\meas{0.0096}}  % gate file: FPR realised at the 1% budget threshold
+\newcommand{\nGatePrecCeilingRealised}{\meas{0.505}}
+\newcommand{\nSmallCountThreshold}{\meas{30}}  % battery file's own "fewer than 30 fraud rows"
+\newcommand{\nBaseLRGap}{\meas{0.005}}         % derived: ensemble AUC minus logistic regression
+\newcommand{\nLcCorpusPlanned}{\meas{360{,}000}}  % notebook, PB-67 design change
+\newcommand{\nLcRealFprA}{\meas{0.0068}}\newcommand{\nLcRealFprB}{\meas{0.0030}}
+\newcommand{\nLcRealFprC}{\meas{0.0082}}\newcommand{\nLcRealFprD}{\meas{0.0026}}
+\newcommand{\nAblAgentp}{\meas{0.01}}\newcommand{\nAblCorridorp}{\meas{0.015}}
+\newcommand{\nAblRoundp}{\meas{0.073}}\newcommand{\nAblMonthp}{\meas{0.51}}
+\newcommand{\nAblUSSDp}{\meas{0.7}}
+\newcommand{\nBatLowBinRows}{\meas{100{,}798}}  % battery: rows scoring in [0.0, 0.1)
+\newcommand{\nBatLowBinTop}{\meas{0.1}}
+\newcommand{\nEarlyHeldOutRows}{\meas{60{,}000}}  % earlier battery, m4_battery.md
+\newcommand{\nLatencyPNineNineShap}{\srcd{40}}  % build prompt D-16: single-request p99, ms
+\newcommand{\nFrTreesA}{\meas{50}}\newcommand{\nFrDepthA}{\meas{3}}
+\newcommand{\nFrTreesB}{\meas{100}}\newcommand{\nFrDepthB}{\meas{4}}
+\newcommand{\nFrTreesC}{\meas{200}}\newcommand{\nFrDepthC}{\meas{5}}
+\newcommand{\nFrTreesD}{\meas{400}}\newcommand{\nFrDepthD}{\meas{6}}
+\newcommand{\nFrTreesE}{\meas{800}}\newcommand{\nFrDepthE}{\meas{8}}
