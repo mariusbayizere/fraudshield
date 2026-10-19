@@ -42,6 +42,13 @@ of `MemAvailable` by default) it refuses with exit 75 and never starts the comma
 command's own exit status is the gate's. A `free` reading in front of a command reports without
 stopping anything, so it is not a gate.
 
+## Pushing
+
+Push a branch with `tools/bin/safe-push`, not `git push`. It pins HEAD, checks the message of every
+commit the remote lacks and runs eight of CI's governance checks, and pushes that commit only if
+all pass (to rewrite a pushed branch: `--force-with-lease=<branch>:<sha>`). Its header lists what
+it leaves to CI, so read CI at job level after it.
+
 ## Commits
 
 Conventional Commits, imperative subject ≤ 72 characters, body explaining why, with
