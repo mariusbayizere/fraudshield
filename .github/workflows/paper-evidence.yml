@@ -1,0 +1,168 @@
+# Round-two evidence for the paper (M11), as fixed in docs/research/paper/evidence/round2_plan.md
+# before it first ran. Three jobs on separate runners, each regenerating draw d8083dbc and refusing
+# any other: `gate` with the code at m4-complete (the published models), `curve` and `selection`
+# with the code at 088cfd2 (the learning curve's, which can build a cache without scoring and fit at
+# a given training size). Every test-period read goes to a copy of the access log, uploaded beside
+# the evidence; per-row scores stay in the artefact and are never committed (owner, G.5).
+name: paper-evidence
+
+# A dispatched workflow must exist on the default branch, so a push to an evidence/* branch starts
+# it as well; an ordinary push never does.
+on:
+  workflow_dispatch:
+  push:
+    branches: ["evidence/**"]
+
+permissions:
+  contents: read
+
+# One run per branch at a time: a second push must not start a parallel re-read of the test set.
+concurrency:
+  group: paper-evidence-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  UV_VERSION: "0.12.15"
+  PYTHON_VERSION: "3.12.14"
+  SEED: "20260917"
+  DRAW: "d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32"
+  FS_TEST_ACCESS_LOG: ${{ github.workspace }}/../test_set_access.jsonl
+  SCRIPT: ${{ github.workspace }}/docs/research/paper/evidence/round2.py
+
+jobs:
+  evidence:
+    name: ${{ matrix.job }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - job: gate
+            code: m4-complete
+          - job: curve
+            code: 088cfd2ca1df68500a5a886fbc5f6ca33b44111d
+          - job: selection
+            code: 088cfd2ca1df68500a5a886fbc5f6ca33b44111d
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: The code that produced the published figures
+        run: |
+          cp docs/benchmarks/test_set_access.jsonl "$FS_TEST_ACCESS_LOG"
+          git worktree add "$RUNNER_TEMP/code" "${{ matrix.code }}"
+          cd "$RUNNER_TEMP/code"
+          uv sync --all-packages --locked
+          mkdir -p "$RUNNER_TEMP/out"
+          {
+            echo "${{ matrix.job }} at $(git rev-parse HEAD)"
+            echo "runner: $(nproc) cores, $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | xargs), $(free -h | awk '/^Mem:/ {print $2}')"
+          } | tee "$RUNNER_TEMP/out/machine.txt" >> "$GITHUB_STEP_SUMMARY"
+      - name: Regenerate draw d8083dbc and refuse any other
+        working-directory: ${{ runner.temp }}/code
+        run: |
+          uv run --frozen fs-dataset generate --output "$RUNNER_TEMP/bench1m" --rows 1000000 --seed "$SEED"
+          uv run --frozen fs-dataset packs --output "$RUNNER_TEMP/packs.json"
+          uv run --frozen fs-dataset split "$RUNNER_TEMP/bench1m" --output "$RUNNER_TEMP/split.json"
+          fp=$(uv run --frozen python -c "import sys; from fraudshield_dataset.fingerprint import dataset_fingerprint as f; from pathlib import Path; print(f(Path(sys.argv[1])))" "$RUNNER_TEMP/bench1m")
+          echo "fingerprint $fp"
+          test "$fp" = "$DRAW"
+          # The script is given the fingerprint computed here, not the constant it is checked against.
+          echo "FINGERPRINT=$fp" >> "$GITHUB_ENV"
+      - name: "gate: caches, the gate job, and the two recorded commands re-run"
+        if: matrix.job == 'gate'
+        working-directory: ${{ runner.temp }}/code
+        run: |
+          common=(--packs "$RUNNER_TEMP/packs.json" --split "$RUNNER_TEMP/split.json" --corpus-rows 400000 --train-rows 30000 --test-rows 101909 --calibration-rows 20000)
+          # At m4-complete, evaluate also fits and scores the test rows (and logs that read); its
+          # output is kept, as paper-reproduce keeps it.
+          uv run --frozen fs-features evaluate "$RUNNER_TEMP/bench1m" "${common[@]}" --validation-rows 20000 --cache "$RUNNER_TEMP/features_gate.parquet" > "$RUNNER_TEMP/out/evaluate_gate.txt"
+          uv run --frozen fs-features evaluate "$RUNNER_TEMP/bench1m" "${common[@]}" --cache "$RUNNER_TEMP/features_full.parquet" > "$RUNNER_TEMP/out/evaluate_full.txt"
+          sha256sum "$RUNNER_TEMP"/features_*.parquet | tee "$RUNNER_TEMP/out/caches.sha256"
+          set +e
+          uv run --frozen --package fraudshield-ml python "$SCRIPT" --fingerprint "$FINGERPRINT" gate \
+            --gate-cache "$RUNNER_TEMP/features_gate.parquet" --battery-cache "$RUNNER_TEMP/features_full.parquet" \
+            --dataset "$RUNNER_TEMP/bench1m" --split "$RUNNER_TEMP/split.json" --out "$RUNNER_TEMP/out" \
+            > "$RUNNER_TEMP/out/round2_gate_d8083dbc.txt"
+          status=$?
+          # The two recorded commands, exactly as their evidence files record them, on this draw.
+          uv run --frozen fs-evidence --output "$RUNNER_TEMP/out/single_feature_auc_d8083dbc.txt" -- \
+            uv run --frozen fs-features auc "$RUNNER_TEMP/bench1m" --packs "$RUNNER_TEMP/packs.json" \
+            --corpus-rows 200000 --sample-rows 20000
+          auc=$?
+          # fs-features auc scores the last 20,000 corpus rows, all in the test period, and does not
+          # log the read itself; it is logged here, through the tree's own access.record.
+          uv run --frozen --package fraudshield-ml python -c "import importlib.util, sys; spec = importlib.util.spec_from_file_location('a', sys.argv[1]); m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m); m.record('fs-features auc (round two, d8083dbc)', sys.argv[2], 20000, purpose='paper evidence, round two: single-feature measurement re-run')" "$GITHUB_WORKSPACE/ml/src/fraudshield_ml/training/access.py" "$RUNNER_TEMP/bench1m" || exit 1
+          uv run --frozen fs-evidence --output "$RUNNER_TEMP/out/frontier_d8083dbc.txt" -- \
+            .venv/bin/python -u -m fraudshield_ml.cli frontier "$RUNNER_TEMP/features_full.parquet" --requests 300 --repeats 3
+          frontier=$?
+          set -e
+          cat "$RUNNER_TEMP/out/round2_gate_d8083dbc.txt" >> "$GITHUB_STEP_SUMMARY"
+          echo "exits: gate $status, auc $auc, frontier $frontier"
+          test "$status" -eq 0 && test "$auc" -eq 0 && test "$frontier" -eq 0
+      - name: "curve: the learning curve's two caches, rebuilt as recorded"
+        if: matrix.job == 'curve'
+        working-directory: ${{ runner.temp }}/code
+        run: |
+          common=(--packs "$RUNNER_TEMP/packs.json" --split "$RUNNER_TEMP/split.json" --validation-rows 20000 --calibration-rows 20000 --test-rows 101909 --cache-only)
+          uv run --frozen fs-features evaluate "$RUNNER_TEMP/bench1m" "${common[@]}" --corpus-rows 340000 --train-rows 120000 --cache "$RUNNER_TEMP/lc120k.parquet" > /dev/null
+          uv run --frozen fs-features evaluate "$RUNNER_TEMP/bench1m" "${common[@]}" --corpus-rows 520000 --train-rows 240000 --cache "$RUNNER_TEMP/lc240k.parquet" > /dev/null
+          sha256sum "$RUNNER_TEMP"/lc*.parquet | tee "$RUNNER_TEMP/out/caches.sha256"
+          uv run --frozen --package fraudshield-ml python "$SCRIPT" --fingerprint "$FINGERPRINT" curve \
+            --small "$RUNNER_TEMP/lc120k.parquet" --large "$RUNNER_TEMP/lc240k.parquet" \
+            > "$RUNNER_TEMP/out/round2_curve_d8083dbc.txt"
+          cat "$RUNNER_TEMP/out/round2_curve_d8083dbc.txt" >> "$GITHUB_STEP_SUMMARY"
+      - name: "selection: 30,000 training rows at each corpus depth"
+        if: matrix.job == 'selection'
+        working-directory: ${{ runner.temp }}/code
+        run: |
+          common=(--packs "$RUNNER_TEMP/packs.json" --split "$RUNNER_TEMP/split.json" --train-rows 30000 --validation-rows 20000 --calibration-rows 20000 --test-rows 101909 --cache-only)
+          pairs=()
+          unexpected=0
+          # The whole draw is read when the limit exceeds its row count (2,000,000 > 1,006,317).
+          for depth in 300000 360000 400000 520000 700000 2000000; do
+            set +e
+            # The interpreter directly, not through uv, so a memory kill reaches the shell as 137.
+            .venv/bin/python -u -m fraudshield_ml.cli evaluate "$RUNNER_TEMP/bench1m" "${common[@]}" --corpus-rows "$depth" --cache "$RUNNER_TEMP/sel_$depth.parquet" > "$RUNNER_TEMP/out/sel_$depth.log" 2>&1
+            code=$?
+            set -e
+            if [ "$code" -eq 0 ]; then
+              pairs+=("$depth=$RUNNER_TEMP/sel_$depth.parquet")
+              continue
+            fi
+            # Only "does not fit the runner" (killed for memory, exit 137) or a recorded data gap
+            # may be reported as not run (plan, section 3); anything else fails the job below.
+            if [ "$code" -eq 137 ]; then
+              why="the cache build was killed for memory (exit 137) on this runner"
+            elif [ "$code" -eq 2 ] && grep -q "^ERROR .*corpus holds" "$RUNNER_TEMP/out/sel_$depth.log"; then
+              # cli.main prints a DatasetGapError as "ERROR <message>" and exits 2.
+              why="the cache build stopped on a data gap: $(grep -m1 '^ERROR ' "$RUNNER_TEMP/out/sel_$depth.log")"
+            else
+              why="the cache build failed with exit $code (not a memory kill or a data gap; see sel_$depth.log)"
+              unexpected=1
+            fi
+            echo "$why" > "$RUNNER_TEMP/sel_$depth.missing.reason"
+            pairs+=("$depth=$RUNNER_TEMP/sel_$depth.missing")
+          done
+          sha256sum "$RUNNER_TEMP"/sel_*.parquet | tee "$RUNNER_TEMP/out/caches.sha256" || true
+          uv run --frozen --package fraudshield-ml python "$SCRIPT" --fingerprint "$FINGERPRINT" selection \
+            --dataset "$RUNNER_TEMP/bench1m" --packs "$RUNNER_TEMP/packs.json" --split "$RUNNER_TEMP/split.json" \
+            "${pairs[@]}" > "$RUNNER_TEMP/out/round2_selection_d8083dbc.txt"
+          cat "$RUNNER_TEMP/out/round2_selection_d8083dbc.txt" >> "$GITHUB_STEP_SUMMARY"
+          test "$unexpected" -eq 0
+      - name: The checkout is unchanged, and the access log is kept
+        if: always()
+        run: |
+          cp "$FS_TEST_ACCESS_LOG" "$RUNNER_TEMP/out/test_set_access.jsonl" || true
+          test -z "$(git status --porcelain)"
+      - name: Upload the evidence, per-row scores and access log
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: paper-evidence-${{ matrix.job }}
+          path: ${{ runner.temp }}/out/

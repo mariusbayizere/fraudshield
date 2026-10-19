@@ -478,3 +478,18 @@ The owner's work order (Phases 0–4) and the decisions taken on it the same eve
   independent human review.
 - **Repository visibility:** already public since 2026-09-17, so "do not make it public" cannot be
   applied; the pre-publication scan was run anyway (findings in the owner report).
+
+## 16. Second work order, 2026-10-19: what the paper must say once PB-66's run is in
+
+PB-66's full-volume run started 2026-10-19 18:24 UTC (workflow run 39302165997, commit `fcec52c`,
+branch `evaluate/pb66-full-volume`), after the owner confirmed the LOFTO ranges recorded there.
+The owner directed, through PB-66's session, that two statements go into the paper's text (owner's
+words):
+
+1. "LOFTO measures what never fitting on a type costs, not what never seeing it costs, because the
+   remaining rows' features were computed over a history that includes it."
+2. "The test set has been scored 23 times before, 11 at full size. The paper must say the run is
+   pre-specified, not blind."
+
+M11's own round-two evidence is fixed in `docs/research/paper/evidence/round2_plan.md` before its
+first run (`.github/workflows/paper-evidence.yml`); its analyses are pre-specified, not blind either.
