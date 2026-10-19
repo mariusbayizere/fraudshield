@@ -89,7 +89,10 @@ jobs:
       - run: pnpm test:coverage
       # Every story is already rendered and axe-checked by vitest; this proves Storybook itself
       # still builds them.
-      - run: pnpm build-storybook
+      # A red test step (the bundle gates are red by decision, ADR 0080) must not hide whether
+      # Storybook still builds.
+      - if: ${{ !cancelled() }}
+        run: pnpm build-storybook
 
   governance:
     name: traceability-check, defect register, scope guard, commit messages

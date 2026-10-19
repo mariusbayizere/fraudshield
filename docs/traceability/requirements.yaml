@@ -2569,7 +2569,6 @@ requirements:
   status: IN_PROGRESS
   verification: test
   implementation:
-  - frontend/e2e/performance.spec.ts
   - frontend/vite.config.ts
   evidence: []
   deviations: []
@@ -2580,7 +2579,8 @@ requirements:
     of MOB-NET-02''s 3G) and at 1.6 Mbps. Before the first-visit preloads (a6fa344, a5ee7df) it was 3.3
     to 3.6 s at 1 Mbps. What remains at 1 Mbps is bandwidth: about 205 KB of JavaScript at about 107 KB/s;
     reaching 2.5 s needs about 50 KB less, which is the shared React and MUI floor (PB-133, due M9 or
-    M10). Whether 1 Mbps is the condition the target meant is the SRS''s to say; it names 1 to 5 Mbps.'
+    M10). Whether 1 Mbps is the condition the target meant is the SRS''s to say; it names 1 to 5 Mbps.
+    The 4G/WiFi targets are not measured.'
 - id: MOB-PERF-02
   section: 05B A.6 Mobile performance
   title: Largest Contentful Paint (LCP)
@@ -2592,7 +2592,6 @@ requirements:
   status: IN_PROGRESS
   verification: test
   implementation:
-  - frontend/e2e/performance.spec.ts
   - frontend/vite.config.ts
   evidence: []
   deviations: []
@@ -2601,7 +2600,7 @@ requirements:
     build, Chromium with Playwright''s Moto G4 profile, CPU slowed 4x, 200 ms round trip, cache and service
     worker out of play, median of 3; at 1 Mbps (the slow end of MOB-NET-02''s 3G) and at 1.6 Mbps. Not
     asserted: that the largest paint is an image or text block rather than a spinner. Other pages are
-    not measured.'
+    not measured. The 4G/WiFi targets are not measured.'
 - id: MOB-PERF-03
   section: 05B A.6 Mobile performance
   title: Time to Interactive (TTI)
@@ -2613,7 +2612,6 @@ requirements:
   status: IN_PROGRESS
   verification: test
   implementation:
-  - frontend/e2e/performance.spec.ts
   - frontend/vite.config.ts
   evidence: []
   deviations: []
@@ -2621,7 +2619,7 @@ requirements:
     quiet-window rule on long tasks only; its network condition is not checked). Measured 2026-10-19 in
     CI (frontend-e2e, job ''performance''): a first visit to /login, production build, Chromium with Playwright''s
     Moto G4 profile, CPU slowed 4x, 200 ms round trip, cache and service worker out of play, median of
-    3; at 1 Mbps (the slow end of MOB-NET-02''s 3G) and at 1.6 Mbps.'
+    3; at 1 Mbps (the slow end of MOB-NET-02''s 3G) and at 1.6 Mbps. The 4G/WiFi targets are not measured.'
 - id: MOB-PERF-04
   section: 05B A.6 Mobile performance
   title: Total Blocking Time (TBT)
@@ -2633,7 +2631,6 @@ requirements:
   status: IN_PROGRESS
   verification: test
   implementation:
-  - frontend/e2e/performance.spec.ts
   - frontend/vite.config.ts
   evidence: []
   deviations: []
@@ -2641,7 +2638,8 @@ requirements:
     paint). Measured 2026-10-19 in CI (frontend-e2e, job ''performance''): a first visit to /login, production
     build, Chromium with Playwright''s Moto G4 profile, CPU slowed 4x, 200 ms round trip, cache and service
     worker out of play, median of 3; at 1 Mbps (the slow end of MOB-NET-02''s 3G) and at 1.6 Mbps. Not
-    asserted as MOB-PERF-04 words it: no long task over 50 ms during load, task by task.'
+    asserted as MOB-PERF-04 words it: no long task over 50 ms during load, task by task. The 4G/WiFi targets
+    are not measured.'
 - id: MOB-PERF-05
   section: 05B A.6 Mobile performance
   title: Cumulative Layout Shift (CLS)
@@ -2653,7 +2651,6 @@ requirements:
   status: IN_PROGRESS
   verification: test
   implementation:
-  - frontend/e2e/performance.spec.ts
   - frontend/vite.config.ts
   evidence: []
   deviations: []
@@ -2662,7 +2659,7 @@ requirements:
     to /login, production build, Chromium with Playwright''s Moto G4 profile, CPU slowed 4x, 200 ms round
     trip, cache and service worker out of play, median of 3; at 1 Mbps (the slow end of MOB-NET-02''s
     3G) and at 1.6 Mbps. The sign-in page has no data to load, so the row''s skeleton loaders are not
-    exercised.'
+    exercised. The 4G/WiFi targets are not measured.'
 - id: MOB-PERF-06
   section: 05B A.6 Mobile performance
   title: JS bundle (initial, gzipped)

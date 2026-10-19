@@ -134,11 +134,11 @@ Rows: 305. Status counts: BLOCKED 2, DONE 55, DONE_WITH_DEVIATION 19, IN_PROGRES
 | MOB-NET-03 | M | M8 | NOT_STARTED | 2G EDGE (rural agent location) | — | — | — | — |
 | MOB-NET-04 | M | M8 | NOT_STARTED | Intermittent / offline | — | — | — | D-29<br>D-53 |
 | MOB-NET-05 | M | M8 | NOT_STARTED | SMS only (no data, feature phone) | — | — | — | D-42<br>D-53 |
-| MOB-PERF-01 | M | M8 | IN_PROGRESS | First Contentful Paint (FCP) | frontend/e2e/performance.spec.ts<br>frontend/vite.config.ts | frontend/e2e/performance.spec.ts:176<br>frontend/src/release/productionBundle.build.test.ts:92 | — | — |
-| MOB-PERF-02 | M | M8 | IN_PROGRESS | Largest Contentful Paint (LCP) | frontend/e2e/performance.spec.ts<br>frontend/vite.config.ts | frontend/e2e/performance.spec.ts:176 | — | — |
-| MOB-PERF-03 | M | M8 | IN_PROGRESS | Time to Interactive (TTI) | frontend/e2e/performance.spec.ts<br>frontend/vite.config.ts | frontend/e2e/performance.spec.ts:176 | — | — |
-| MOB-PERF-04 | M | M8 | IN_PROGRESS | Total Blocking Time (TBT) | frontend/e2e/performance.spec.ts<br>frontend/vite.config.ts | frontend/e2e/performance.spec.ts:176 | — | — |
-| MOB-PERF-05 | M | M8 | IN_PROGRESS | Cumulative Layout Shift (CLS) | frontend/e2e/performance.spec.ts<br>frontend/vite.config.ts | frontend/e2e/performance.spec.ts:176 | — | — |
+| MOB-PERF-01 | M | M8 | IN_PROGRESS | First Contentful Paint (FCP) | frontend/vite.config.ts | frontend/e2e/performance.spec.ts:176<br>frontend/src/release/productionBundle.build.test.ts:92 | — | — |
+| MOB-PERF-02 | M | M8 | IN_PROGRESS | Largest Contentful Paint (LCP) | frontend/vite.config.ts | frontend/e2e/performance.spec.ts:176 | — | — |
+| MOB-PERF-03 | M | M8 | IN_PROGRESS | Time to Interactive (TTI) | frontend/vite.config.ts | frontend/e2e/performance.spec.ts:176 | — | — |
+| MOB-PERF-04 | M | M8 | IN_PROGRESS | Total Blocking Time (TBT) | frontend/vite.config.ts | frontend/e2e/performance.spec.ts:176 | — | — |
+| MOB-PERF-05 | M | M8 | IN_PROGRESS | Cumulative Layout Shift (CLS) | frontend/vite.config.ts | frontend/e2e/performance.spec.ts:176 | — | — |
 | MOB-PERF-06 | M | M8 | IN_PROGRESS | JS bundle (initial, gzipped) | frontend/src/release/productionBundle.build.test.ts<br>frontend/vite.config.ts | frontend/src/release/productionBundle.build.test.ts:158 | — | D-39 |
 | MOB-PERF-07 | M | M8 | NOT_STARTED | Offline app shell load | — | — | — | — |
 | MOB-PERF-08 | M | M8 | NOT_STARTED | Memory on entry-level device | — | — | — | — |

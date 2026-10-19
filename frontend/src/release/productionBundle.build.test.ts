@@ -95,7 +95,7 @@ describe('the production build (ADR 0080)', () => {
     expect(initial.some((name) => name.startsWith('assets/LoginPage-'))).toBe(true);
     // Every language's catalogue builds to the same file name; their words tell them apart. One
     // phrase from each English catalogue: auth, common and designSystem.
-    for (const phrase of ['Work email', 'Main navigation', 'Try again']) {
+    for (const phrase of ['Work email', 'Main navigation', 'Agent banking']) {
       expect(
         initial.some((name) => (files.get(name) ?? '').includes(phrase)),
         phrase,
