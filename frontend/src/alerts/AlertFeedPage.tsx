@@ -13,6 +13,7 @@ import { FeedFilters, isFiltered, toggled } from './FeedFilters';
 import { DRAWER_WIDTH } from './layout';
 import { ApiError, distinctAlerts, useAlertFeed } from './queries';
 import { StatsHeader } from './StatsHeader';
+import { NoticeProvider } from './undo';
 
 const route = getRouteApi('/shell/alerts');
 
@@ -102,28 +103,30 @@ export default function AlertFeedPage() {
   }
 
   return (
-    <Box
-      data-testid="alert-feed"
-      style={drawerOpen && wide ? { marginInlineEnd: DRAWER_WIDTH } : undefined}
-    >
-      <Typography variant="h5" component="h1" sx={{ mb: 2 }}>
-        {tCommon('nav.alerts')}
-      </Typography>
-      <StatsHeader
-        tiers={search.tier}
-        onToggleTier={(tier) => {
-          change({ ...search, tier: toggled(search.tier, tier) });
-        }}
-      />
-      <FeedFilters search={search} tiers={['HIGH', 'MEDIUM']} onChange={change} />
-      <section aria-label={t('feed.list')} aria-busy={feed.isFetching}>
-        <Typography role="status" variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          {announcement}
+    <NoticeProvider>
+      <Box
+        data-testid="alert-feed"
+        style={drawerOpen && wide ? { marginInlineEnd: DRAWER_WIDTH } : undefined}
+      >
+        <Typography variant="h5" component="h1" sx={{ mb: 2 }}>
+          {tCommon('nav.alerts')}
         </Typography>
-        {body}
-      </section>
-      {/* The investigation drawer, when the URL names an alert (/alerts/$alertId). */}
-      <Outlet />
-    </Box>
+        <StatsHeader
+          tiers={search.tier}
+          onToggleTier={(tier) => {
+            change({ ...search, tier: toggled(search.tier, tier) });
+          }}
+        />
+        <FeedFilters search={search} tiers={['HIGH', 'MEDIUM']} onChange={change} />
+        <section aria-label={t('feed.list')} aria-busy={feed.isFetching}>
+          <Typography role="status" variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            {announcement}
+          </Typography>
+          {body}
+        </section>
+        {/* The investigation drawer, when the URL names an alert (/alerts/$alertId). */}
+        <Outlet />
+      </Box>
+    </NoticeProvider>
   );
 }

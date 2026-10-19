@@ -18,6 +18,7 @@ import { EmptyState, ErrorState } from '../../design-system/components/ScreenSta
 import { DRAWER_WIDTH } from '../layout';
 import { ApiError } from '../queries';
 import { useAlertDetail, useExplanation, useScoringResult } from './queries';
+import { DecisionPanel } from './DecisionPanel';
 import { ShapChart } from './ShapChart';
 import { SummaryTab } from './SummaryTab';
 
@@ -207,6 +208,7 @@ export default function AlertDetailPanel() {
             <ShapChart explanation={explanation.data} phone={phone} />
           )}
         </Box>
+        <DecisionPanel alert={alert.data} onDone={close} />
       </>
     );
   }

@@ -132,5 +132,35 @@
     "showFirst_other": "Erekana {{count}} bya mbere gusa",
     "loading": "Ibisobanuro biri gufunguka…",
     "error": "Ibisobanuro ntibyashoboye kuboneka."
+  },
+  "act": {
+    "heading": "Gufata icyemezo",
+    "comment": "Igitekerezo",
+    "count": "Inyuguti {{length}}, kuva kuri {{min}} kugeza kuri {{max}}",
+    "confirm": "Emeza uburiganya",
+    "markLegitimate": "Emeza ko ari byo",
+    "sending": "Biroherezwa…",
+    "escalateHeading": "Cyangwa ohereza hejuru",
+    "target": "Ohereza kuri",
+    "chooseTarget": "Hitamo uruhare",
+    "reason": "Impamvu yo kohereza hejuru",
+    "escalate": "Ohereza hejuru",
+    "role": {
+      "SENIOR_ANALYST": "Umusesenguzi mukuru",
+      "RISK_OFFICER": "Ushinzwe ibyago"
+    },
+    "confirmed": "Uburiganya bwemejwe kuri {{name}}.",
+    "legitimate": "{{name}} byemejwe ko ari byo.",
+    "escalated": "{{name}} byoherejwe kuri {{role}}.",
+    "undo": "Hindura",
+    "undone": "Icyemezo cyahinduwe; imenyesha ryagarutse ku rutonde.",
+    "undoTooLate": "Igihe cyo guhindura cyarenze: icyemezo kirahamye.",
+    "undoFailed": "Icyemezo ntikyashoboye guhindurwa.",
+    "closed": "Iri menyesha ni {{status}}; ntirigishobora gufatirwa icyemezo hano.",
+    "stale": "Iri menyesha ryahindutse urisoma. Ongera urisuzume mbere yo gufata icyemezo.",
+    "deadlinePassed": "Igihe cyo gusuzuma cyarenze; iri menyesha ntirigishobora gufatirwa icyemezo hano.",
+    "levelRequired": "Iri menyesha ryoherejwe hejuru rikeneye uruhare rwisumbuye kugira ngo rifatirwe icyemezo.",
+    "invalid": "Seriveri ntiyabyemeye; suzuma igitekerezo wongere ugerageze.",
+    "failed": "Igikorwa ntikyashoboye koherezwa. Ongera ugerageze."
   }
 }

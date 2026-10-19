@@ -132,5 +132,35 @@
     "showFirst_other": "Show the top {{count}} only",
     "loading": "Loading the explanation…",
     "error": "The explanation could not be loaded."
+  },
+  "act": {
+    "heading": "Decide",
+    "comment": "Comment",
+    "count": "{{length}} characters, {{min}} to {{max}}",
+    "confirm": "Confirm fraud",
+    "markLegitimate": "Mark legitimate",
+    "sending": "Sending…",
+    "escalateHeading": "Or escalate",
+    "target": "Escalate to",
+    "chooseTarget": "Choose a role",
+    "reason": "Reason for escalating",
+    "escalate": "Escalate",
+    "role": {
+      "SENIOR_ANALYST": "Senior analyst",
+      "RISK_OFFICER": "Risk officer"
+    },
+    "confirmed": "Fraud confirmed for {{name}}.",
+    "legitimate": "{{name}} marked legitimate.",
+    "escalated": "{{name}} escalated to {{role}}.",
+    "undo": "Undo",
+    "undone": "Decision undone; the alert is back in the feed.",
+    "undoTooLate": "Too late to undo: the decision stands.",
+    "undoFailed": "The decision could not be undone.",
+    "closed": "This alert is {{status}}; it can no longer be decided here.",
+    "stale": "This alert changed while you were reading it. Check it again before deciding.",
+    "deadlinePassed": "The review deadline passed, so this alert can no longer be decided here.",
+    "levelRequired": "This escalated alert needs a higher role to decide.",
+    "invalid": "The server did not accept this; check the comment and try again.",
+    "failed": "The action could not be sent. Try again."
   }
 }

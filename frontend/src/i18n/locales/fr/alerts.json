@@ -137,5 +137,35 @@
     "showFirst_other": "N'afficher que les {{count}} premières",
     "loading": "Chargement de l'explication…",
     "error": "L'explication n'a pas pu être chargée."
+  },
+  "act": {
+    "heading": "Décider",
+    "comment": "Commentaire",
+    "count": "{{length}} caractères, de {{min}} à {{max}}",
+    "confirm": "Confirmer la fraude",
+    "markLegitimate": "Juger légitime",
+    "sending": "Envoi…",
+    "escalateHeading": "Ou transmettre",
+    "target": "Transmettre à",
+    "chooseTarget": "Choisir un rôle",
+    "reason": "Motif de la transmission",
+    "escalate": "Transmettre",
+    "role": {
+      "SENIOR_ANALYST": "Analyste principal",
+      "RISK_OFFICER": "Responsable des risques"
+    },
+    "confirmed": "Fraude confirmée pour {{name}}.",
+    "legitimate": "{{name}} jugé légitime.",
+    "escalated": "{{name}} transmis à : {{role}}.",
+    "undo": "Annuler",
+    "undone": "Décision annulée ; l'alerte est de retour dans le fil.",
+    "undoTooLate": "Trop tard pour annuler : la décision est maintenue.",
+    "undoFailed": "La décision n'a pas pu être annulée.",
+    "closed": "Cette alerte est : {{status}} ; elle ne peut plus être décidée ici.",
+    "stale": "Cette alerte a changé pendant votre lecture. Vérifiez-la avant de décider.",
+    "deadlinePassed": "Le délai d'examen est dépassé ; cette alerte ne peut plus être décidée ici.",
+    "levelRequired": "Cette alerte transmise demande un rôle plus élevé pour être décidée.",
+    "invalid": "Le serveur n'a pas accepté cette action ; vérifiez le commentaire et réessayez.",
+    "failed": "L'action n'a pas pu être envoyée. Réessayez."
   }
 }

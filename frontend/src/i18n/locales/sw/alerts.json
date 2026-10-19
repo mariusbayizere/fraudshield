@@ -132,5 +132,35 @@
     "showFirst_other": "Onyesha {{count}} vya kwanza tu",
     "loading": "Inapakia maelezo…",
     "error": "Maelezo hayakuweza kupakiwa."
+  },
+  "act": {
+    "heading": "Amua",
+    "comment": "Maoni",
+    "count": "Herufi {{length}}, kuanzia {{min}} hadi {{max}}",
+    "confirm": "Thibitisha ulaghai",
+    "markLegitimate": "Thibitisha halali",
+    "sending": "Inatuma…",
+    "escalateHeading": "Au peleka juu",
+    "target": "Peleka kwa",
+    "chooseTarget": "Chagua jukumu",
+    "reason": "Sababu ya kupeleka juu",
+    "escalate": "Peleka juu",
+    "role": {
+      "SENIOR_ANALYST": "Mchambuzi mkuu",
+      "RISK_OFFICER": "Afisa wa hatari"
+    },
+    "confirmed": "Ulaghai umethibitishwa kwa {{name}}.",
+    "legitimate": "{{name}} imethibitishwa halali.",
+    "escalated": "{{name}} imepelekwa kwa {{role}}.",
+    "undo": "Tendua",
+    "undone": "Uamuzi umetenduliwa; arifa imerudi kwenye orodha.",
+    "undoTooLate": "Ni kuchelewa mno kutendua: uamuzi unabaki.",
+    "undoFailed": "Uamuzi haukuweza kutenduliwa.",
+    "closed": "Arifa hii iko {{status}}; haiwezi tena kuamuliwa hapa.",
+    "stale": "Arifa hii imebadilika ulipokuwa ukiisoma. Ikague tena kabla ya kuamua.",
+    "deadlinePassed": "Muda wa ukaguzi umepita; arifa hii haiwezi tena kuamuliwa hapa.",
+    "levelRequired": "Arifa hii iliyopelekwa juu inahitaji jukumu la juu zaidi ili kuamuliwa.",
+    "invalid": "Seva haikukubali hili; kagua maoni na ujaribu tena.",
+    "failed": "Kitendo hakikuweza kutumwa. Jaribu tena."
   }
 }

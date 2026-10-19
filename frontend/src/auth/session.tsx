@@ -27,12 +27,15 @@ const SessionContext = createContext<Session | null>(null);
 export function SessionProvider({
   children,
   initial = 'restoring',
+  initialUser = null,
 }: {
   children: ReactNode;
   initial?: SessionStatus;
+  /** The signed-in staff member when `initial` is 'authenticated' (tests and stories). */
+  initialUser?: StaffUser | null;
 }) {
   const [status, setStatus] = useState<SessionStatus>(initial);
-  const [user, setUser] = useState<StaffUser | null>(null);
+  const [user, setUser] = useState<StaffUser | null>(initialUser);
 
   const signIn = useCallback((token: TokenResponse) => {
     setAccessToken(token.access_token);

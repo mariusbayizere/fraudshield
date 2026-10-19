@@ -240,7 +240,7 @@ no copy is in it, and `examplesDrift.test.ts` fails if one returns.
 |---|---|---|---|---|
 | 1 | Alert feed | `/alerts` | listAlerts, getDashboardStats | built, under review |
 | 2 | Alert detail and SHAP | `/alerts/$alertId` | getAlert, getAlertExplanation, getScoringResult | built, under review |
-| 3 | Decision panel | in the detail | decideAlert, undoAlertDecision, escalateAlert | not started |
+| 3 | Decision panel | in the detail | decideAlert, undoAlertDecision, escalateAlert | built, under review |
 | 4 | Account context | in the detail | listAccountTransactions, getBehaviourProfile, getAccountNetwork | not started |
 | 5 | Anomalies | `/anomalies` | listAlerts (queue=anomaly) | not started |
 | 6 | Escalations | `/escalations` | listAlerts (queue=escalated) | not started |
@@ -372,3 +372,31 @@ when its tab is opened).
 - **Last check of that round: APPROVED_WITH_MINORS**, fixed after it: a malformed escape in any
   link can no longer throw from the lookup, and returning focus does not scroll the feed. Neither
   has a test of its own.
+
+**The 3G timings, first measured (2026-10-19).** A first visit to the sign-in page, production
+build, Chromium with the Moto G4 profile, 1 Mbps and 200 ms, CPU slowed four times, median of
+three: **first contentful paint 3.6 s against MOB-PERF-01's 2.5 s (fails)**; largest contentful
+paint 3.6 s (target 4.0 s), time to interactive 3.6 s (5.0 s), total blocking time 0 ms (300 ms),
+layout shift 0.0003 (0.1) pass. There are no long tasks: the page waits on the network, not the
+CPU, so the bundle passes its size gate while first paint misses its target. The job logs the
+request waterfall to find what first paint waits for; the next run's waterfall is the evidence
+for any fix. The `performance` job in `frontend-e2e` is red until then.
+
+**Screen 3, the decision panel** (in the drawer, under the tabs). A comment of 10 to 2000 code
+points enables Confirm fraud and Mark legitimate (decideAlert); success closes the drawer, takes
+the alert out of every loaded feed page at once, and offers Undo (undoAlertDecision) from the
+server's `undo_until`, never longer than D-44's 5 s grace. An analyst can escalate to a senior
+analyst or a risk officer, a senior analyst to a risk officer (escalateAlert); a risk officer is
+not offered escalation. Every action carries the alert's version and an Idempotency-Key: a refused
+action goes again under a new key, an unanswered one under the same (D-29). Stale-alert,
+passed-deadline and escalation-level refusals are said in words. The notices live in the feed, so
+they outlive the drawer a decision closes.
+
+- **Not built:** the offline queue and replay (D-29), notifying the target role of an escalation
+  (no real-time channel in the contract), the risk officer's override (FR-05-01, a risk officer's
+  screen).
+- **Deletion checks:** the 10-code-point threshold (at 9), code-point counting, the key rotation
+  on refusal and its reuse on no answer, the feed drop (with a refetch that never answers), the
+  grace clamp, the deadline message, the role filter, the decided-alert panel, the version sent
+  and closing on success each fail a test when removed. A guard that a risk officer cannot
+  escalate was redundant with the role filter and is gone.

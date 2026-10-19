@@ -18,6 +18,10 @@ export class ApiError extends Error {
   readonly correlationId: string | undefined;
   /** The Problem's HTTP status, when the server sent one (404: not in the caller's institution). */
   readonly status: number | undefined;
+  /** The Problem's type URN, which says which rule refused the action (409, 403, 422). */
+  readonly type: string | undefined;
+  /** A stale-alert Problem's `current` alert (StaleAlertProblem), as the server now has it. */
+  readonly current: unknown;
 
   constructor(error: unknown) {
     super('the API call failed');
@@ -25,8 +29,11 @@ export class ApiError extends Error {
     const problem = typeof error === 'object' && error !== null ? error : {};
     const id: unknown = 'correlation_id' in problem ? problem.correlation_id : undefined;
     const status: unknown = 'status' in problem ? problem.status : undefined;
+    const type: unknown = 'type' in problem ? problem.type : undefined;
     this.correlationId = typeof id === 'string' ? id : undefined;
     this.status = typeof status === 'number' ? status : undefined;
+    this.type = typeof type === 'string' ? type : undefined;
+    this.current = 'current' in problem ? problem.current : undefined;
   }
 }
 

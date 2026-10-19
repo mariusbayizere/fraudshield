@@ -1,7 +1,9 @@
 import { http, HttpResponse } from 'msw';
 import type {
+  AlertDecisionAccepted,
   AlertDetail,
   AlertPage,
+  AlertSummary,
   DashboardStats,
   Explanation,
   ScoringResult,
@@ -63,6 +65,8 @@ const alertDetail = examples.AlertDetail[0] as AlertDetail;
 // example's shape is checked against the generated schema by contractExamples.test.ts.
 const explanation = examples.Explanation[0] as unknown as Explanation;
 const scoringResult = examples.ScoringResult[0] as ScoringResult;
+const accepted = examples.AlertDecisionAccepted[0] as AlertDecisionAccepted;
+const escalated = examples.AlertSummary[0] as AlertSummary;
 
 /** Development-only responses, typed by the contract, for operations the console reads. */
 export const handlers = [
@@ -76,6 +80,24 @@ export const handlers = [
     HttpResponse.json(
       { ...alertDetail, alert_id: String(params['alertId']) },
       { headers: { 'x-mock': MOCK_MARKER } },
+    ),
+  ),
+  // The example's undo_until is a fixed past instant; the mock gives D-44's 5 s from now, so the
+  // Undo can be tried in development.
+  http.post('/api/v1/alerts/:alertId/decisions', () =>
+    HttpResponse.json(
+      { ...accepted, undo_until: new Date(Date.now() + 5_000).toISOString() },
+      { status: 202, headers: { 'x-mock': MOCK_MARKER } },
+    ),
+  ),
+  http.post(
+    '/api/v1/alerts/:alertId/decisions/:decisionId/undo',
+    () => new HttpResponse(null, { status: 204 }),
+  ),
+  http.post('/api/v1/alerts/:alertId/escalations', () =>
+    HttpResponse.json(
+      { ...escalated, alert_id: crypto.randomUUID(), status: 'ESCALATED' },
+      { status: 201, headers: { 'x-mock': MOCK_MARKER } },
     ),
   ),
   http.get('/api/v1/alerts/:alertId/explanation', () =>
