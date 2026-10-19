@@ -927,7 +927,9 @@ requirements:
     and analyst ID, with the feed''s tier, channel, status and order filters; every criterion is a listAlerts
     parameter in the URL, a value the contract would reject is marked and not sent, and nothing is asked
     until a criterion is set. It searches the standard queue: listAlerts takes one queue a call (M8B item
-    10). The analyst is a UUID field, not a name: no staff lookup operation is open to an analyst.'
+    10). The analyst is a UUID field, not a name: no staff lookup operation is open to an analyst. Review
+    (2026-10-19, one round): CHANGES_REQUIRED; findings filed as PB-136 (high: the form accepts IDs the
+    URL drops), PB-137 and PB-138, not fixed (owner).'
 - id: FR-04-10
   section: 3.4 FR-04 Analyst dashboard
   title: 'Priority escalation: ANALYST escalates to SENIOR_ANALYST or RISK_OFFICER with mandatory escalation
@@ -958,7 +960,8 @@ requirements:
     the screen is exercised against them. M8 screen 6 (2026-10-19, /escalations, against contract-example
     mocks): the escalated queue (listAlerts queue=escalated) with the feed''s cards, tier, channel and
     status filters and drawer; what the caller may see is the server''s rule, and the console shows what
-    it is sent.'
+    it is sent. Review of screen 6 (2026-10-19, one round): CHANGES_REQUIRED; findings filed as PB-134
+    (high: deciding from the escalations drawer is untested) and PB-135, not fixed (owner).'
 - id: FR-04-11
   section: 3.4 FR-04 Analyst dashboard
   title: 'Analyst performance dashboard: alerts reviewed today, average review time (seconds), accuracy
@@ -983,7 +986,9 @@ requirements:
     sends null. Re-read every 60 s: no real-time channel exists (M8B item 2), so ''update in real time''
     is not met. Not testable here: the false-positive rate against customer_verifications (M8B). Built
     against a mock of getMyPerformance (M8B), which is not evidence: the row stays at most IN_PROGRESS
-    until the operation exists on main and the screen is exercised against it.'
+    until the operation exists on main and the screen is exercised against it. Review (2026-10-19, one
+    round): APPROVED_WITH_MINORS; findings filed as PB-139 and PB-140 (high: cached data outlives the
+    user who loaded it), not fixed (owner).'
 - id: FR-04-12
   section: 3.4 FR-04 Analyst dashboard
   title: 'WCAG 2.1 AA: risk tier conveyed by text label not colour alone; all controls keyboard-navigable;

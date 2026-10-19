@@ -536,3 +536,9 @@ backlog rows rather than fixed, one report at the end).**
 - **Not run locally:** the laptop stayed below the memory floor for over 20 minutes with the
   owner's VM and browsers open, so these screens' typecheck and tests ran in CI first (ADR 0010's
   preference).
+- **Reviews, one round each (findings filed, not fixed, by the owner's instruction):** screen 6
+  CHANGES_REQUIRED (PB-134, high: no test decides from the escalations drawer; PB-135); screen 7
+  CHANGES_REQUIRED (PB-136, high: the form accepts transaction and analyst IDs the URL then drops,
+  widening a search silently; PB-137, PB-138); screen 8 APPROVED_WITH_MINORS (PB-139; PB-140, high:
+  nothing clears the query cache at sign-out, for every screen). CI's lint found two errors in
+  the search form, fixed, since a red lint step skips the tests.

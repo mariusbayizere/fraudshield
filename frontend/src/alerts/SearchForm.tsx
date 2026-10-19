@@ -1,7 +1,7 @@
 import Button from '@mui/material/Button';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DECIMAL_AMOUNT, TOKEN, type AlertSearch } from '../app/alertSearch';
 import { useRegion } from '../region/RegionContext';
@@ -9,16 +9,8 @@ import { useRegion } from '../region/RegionContext';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** The criteria this form edits: the listAlerts parameters the feed's filters have no control for. */
-const FIELDS = [
-  'transaction_id',
-  'account_id',
-  'amount_min',
-  'amount_max',
-  'from',
-  'to',
-  'analyst_id',
-] as const;
-type Field = (typeof FIELDS)[number];
+type Field =
+  'transaction_id' | 'account_id' | 'amount_min' | 'amount_max' | 'from' | 'to' | 'analyst_id';
 type Draft = Record<Field, string>;
 
 /** A datetime-local value ("2026-10-19T08:00") read in the region's zone, as an ISO instant. */
@@ -86,8 +78,7 @@ export function SearchForm({
   const [tried, setTried] = useState(false);
   const bad = tried ? problems(draft) : {};
 
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
+  const submit = () => {
     setTried(true);
     if (Object.keys(problems(draft)).length > 0) return;
     const text = (field: Field) => {
@@ -128,7 +119,10 @@ export function SearchForm({
       role="search"
       aria-label={t('search.label')}
       noValidate
-      onSubmit={submit}
+      onSubmit={(event) => {
+        event.preventDefault();
+        submit();
+      }}
       spacing={1.5}
       sx={{ mb: 2 }}
     >
