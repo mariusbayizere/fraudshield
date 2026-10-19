@@ -39,6 +39,20 @@ contain the condition under test passed vacuously: a fold test whose categories 
 test whose fixture had no drifting rows. Tests now assert their precondition before their
 conclusion, and fixtures are specified by the property they must have before their size.
 
+The same defect appeared one level up, in a fix rather than a test. A concurrency fix in the
+staff-identity service (a refresh after a row-locking query, so that a stale copy of an account could
+not be written back) passed its test and was recorded as fixed, with a mutation killed. The test
+created the conflict in a way that never made the copy stale, so it exercised only the branch where
+the fix was not needed; in the case the fix was written for, the locking query itself raised an error
+before the refresh ran. A second defence made every assertion hold, and the killed mutation removed
+both defences at once. A mutation removing only the refresh survived, and was first filed as
+``defence in depth''; the case was found when that explanation was required to be shown with a test
+that fails without the fix, and the test failed with the fix in place. Silent vacuous tests are bad; a
+record that reads ``fixed, tested, mutation killed'' for a fix that did nothing in its own scenario is
+worse. Counting killed mutations measures the tests; only investigating the survivors measures the
+claims, and an ``equivalent'' or ``defence in depth'' label on a survivor needs the same evidence as
+any other claim.
+
 \paragraph{The wrong denominator.} The central methodological error of the dataset milestone was
 standardising a detector's offset against a theoretical null rather than the observed seed-to-seed
 spread; a
@@ -65,6 +79,41 @@ mostly an artefact'', ``burstiness is not country-specific'') turned out to be m
 measuring them replaced a hedge with a result: about \nEventDelayShare{} of the delay channel was
 artefact, and leave-one-country-out is null. The test for keeping a caveat is to ask what
 measurement would remove it.
+
+\subsection{Which rows, not only how many}
+\label{sec:rowselection}
+
+The learning curve of Section~\ref{sec:volume} found something it was not designed to find. Its
+smallest point and the declared gate run both train on \nTrainUsed{} rows and are scored on the same
+test rows, by the same model at the same thresholds; they differ in which rows are used. The gate's
+come from a \nGateCorpus{}-row corpus, the curve's from a \nLcCorpusSmall{}-row one, so each training
+row's features are computed over a different amount of that account's past. At seed 1, recall at the
+flag threshold is \nLcRecallA{} \nLcRecallciA{} for the curve's rows and \nGateRecallSix{}
+\nGateRecallSixci{} for the gate's, a difference of \nSelGapSeedOne{}, while the four curve points,
+spanning an eightfold change in volume, cover a range of \nLcSpanSeedOne{}. At seed 1, which rows were
+used moved recall several times more than how many.
+
+\textbf{The comparison does not hold on the five-seed means}, and we report it at seed 1 only. Over
+\nSeeds{} seeds the curve's smallest point reads $\nLcSeedRecallA$ and the gate $\nGateSeedRecallSix$:
+a difference of \nSelGapMeans{}, smaller than either standard deviation and smaller than the
+\nLcSeedGain{} the five-seed mean gains across the curve. The seed-1 difference may be in part a
+property of seed 1.
+
+\textbf{The mechanism is proposed, not measured.} The two selections reach different depths of the
+corpus, and features that summarise an account's history (velocity, recency, the account profile)
+are computed over less of it where the corpus is shallower, so the same account's features are
+systematically flatter (PB-76). How much history each training row actually had has not been measured
+for either selection, so the difference is attributed to that mechanism by inference only.
+
+\textbf{Two selections are not a distribution.} The gate's figure could be an unlucky selection, the
+curve's a lucky one, or the difference could be systematic; nothing measured separates these. A
+like-for-like test would hold the test rows, the model, the seeds and the \nTrainUsed{} training rows
+fixed and vary only the selection, over several corpus depths and several windows at each, reporting
+how much history each training row has beside each result. It has not been run.
+
+What follows for this paper is a qualification, not a correction: every single-number result here
+measured at one sampling of training rows, the gate figures of Table~\ref{tab:gate} included, is a
+measurement of one selection at one corpus depth, and the variation across selections is unmeasured.
 
 \subsection{Pre-registered predictions}
 
@@ -95,6 +144,11 @@ Confirmed: \nEventDelayAfter{}, at the top of the band \\
 The reversal scam is caught at \nRevPredLow{}--\nRevPredHigh{} recall &
 Refuted: \nRevRecall{} \nRevCI{}; below the range for the point estimate, not for the whole
 interval \\
+Recall at the flag threshold stays below \nTargetRecall{}, rising to \nLcPredLow{}--\nLcPredHigh{} at
+\nLcTrainD{} training rows; recall at the \nFPRBudget{} budget rises to
+\nLcPredBudgetLow{}--\nLcPredBudgetHigh{} &
+Partly confirmed: below the target at every size and inside the range, but not rising; recall at the
+budget \nLcBudgetRecallD{} at seed 1, below its range (Section~\ref{sec:volume}) \\
 \bottomrule
 \end{tabular}
 \end{table}

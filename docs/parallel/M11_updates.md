@@ -289,3 +289,45 @@ nulls, not in a footnote**. State the count (five of 44, about 11 %), what each 
 reported metrics are therefore those of a 39-feature model on this benchmark. The README's M3 line ("36
 of them computable") is an earlier count and differs from ADR 0055's; quote ADR 0055's, which the
 registry's computability check backs, and reconcile the README line before the paper is final.
+
+## 8. Fourth pass, 2026-10-19: rebased onto `main`, PB-67, row selection, ADR 0055, M7, M8
+
+`m11/paper` rebased onto `main` (`a7f0528`). The only conflict was this file, which `main` already
+carried with M5's and M6's sections appended; `main`'s copy was kept. What the paper now states, and
+where, is in `docs/research/paper/REVIEW.md` (row of 2026-10-19).
+
+**Folded in:** PB-67's conclusion; the row-selection finding; ADR 0055; M7's notebook entry "A fix
+whose test never reached it"; M8's note on the console's explanations (from `m8/frontend-rebase`,
+not yet on `main`: ADR 0084 and PB-132 are cited as defined on that branch); ADR 0058's assumed
+ingest budget, which the paper states without its number.
+
+**Not folded in (not in this pass's work order):** M5's two sections above (the AUC-versus-decisions
+table and the fake-API limitation), which the owner asked for on 2026-09-22; M10's ADR 0100 note
+(on `m10/verification`, not on `main`).
+
+**Discrepancies found upstream in this pass** (not fixed from this branch; owners in brackets):
+
+1. **The row-selection comparison holds at seed 1 and not on the five-seed means.**
+   `M4_updates.md`, ADR 0031's amendment, `contributions.md` and the notebook compare the curve's
+   30K (0.795) with the gate's (0.736): a gap of 0.059 against a curve range of 0.016, "several
+   times more". All are seed-1 values. On five-seed means the gap is 0.7669 − 0.7440 = 0.023
+   (`m4_learning_curve_30k_d8083dbc.txt`, `m4_gate_d8083dbc_v3.txt`, SEEDS sections), smaller than
+   either SD (0.0245, 0.0410) and smaller than the five-seed gain across the curve (0.028). The
+   paper states the comparison at seed 1 only, and says this. Suggested: qualify the sentence in
+   each of the four documents. [M4]
+2. **60K fraud count.** ADR 0031's amendment, `M4_updates.md` and the notebook's concluding table
+   give 533; `m4_learning_curve_60k_d8083dbc.txt` and the notebook's interim table give 532. [M4]
+3. **Realised FPR at the 1% budget.** The notebook's concluding table gives 0.30% (30K) and 0.55%
+   (60K); the evidence files give 0.0068 and 0.0030, as the interim table did. The paper does not
+   print these. [M4]
+4. **Trained feature count.** The M6 section above says the metrics are "those of a 39-feature
+   model". The evidence says 38: `m4_evaluate_gate_d8083dbc.txt` "computing 38 features", the
+   battery's "full model, 38 features", and the gate's "without agent features 36 feat". The 39
+   leaves out `just_below_limit_flag`, which the registry marks CONSTANT (PB-47). The paper says
+   38. [M6 / owner]
+5. **README's "36 of them computable"** (M3 line) still differs from ADR 0055, as the M6 section
+   noted. Not in the paper. [owner]
+6. **Stale "not yet measured" owners.** ADR 0035 carried M5's latency rows and shadow-mode AUC delta
+   to M10; ADR 0059 did the same for M6's end-to-end latency. Sections 3, 7 and 13 still print
+   "not yet measured (M5 …)" and "(M6 and M10)". Left as they were; proposed: name M10 and cite
+   the two ADRs. [M11, awaiting the owner]

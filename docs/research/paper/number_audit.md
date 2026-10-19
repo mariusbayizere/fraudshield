@@ -2,7 +2,7 @@
 
 Every macro in `numbers.tex` checked against its evidence file at `m4-complete` (`72e7790`), read with `git show`, by `audit_numbers.py`. Values are compared as printed: rounding, sign and interval bounds included. Regenerate with `python3 docs/research/paper/audit_numbers.py`; do not edit by hand.
 
-**323 macros, 323 MATCH, 0 not matching.**
+**362 macros, 362 MATCH, 0 not matching.**
 
 | Macro | Value in paper | Value in evidence | File | Note | Result |
 |---|---|---|---|---|---|
@@ -145,7 +145,7 @@ Every macro in `numbers.tex` checked against its evidence file at `m4-complete` 
 | `\nFrontNegative` | `2 of 5` | `2 of 5` | `docs/benchmarks/m4_frontier_6abde44e.txt` (evidence commit `95b722c`) |  | MATCH |
 | `\nPredEarly` | `four` | `four` | `docs/research/lab_notebook.md` |  | MATCH |
 | `\nPredEarlyRight` | `one` | `One` | `docs/research/lab_notebook.md` |  | MATCH |
-| `\nPredTotal` | `six` | `six` | derived | the register's four plus the two later pre-registrations (PB-56 lead tail; ADR 0028 reversal scam), each located in the notebook | MATCH |
+| `\nPredTotal` | `seven` | `seven` | derived | the register's four plus the three later pre-registrations (PB-56 lead tail; ADR 0028 reversal scam; PB-67 learning curve), each located in the notebook | MATCH |
 | `\nRevPredLow` | `0.15` | `0.15` | `docs/research/lab_notebook.md` |  | MATCH |
 | `\nRevPredHigh` | `0.55` | `0.55` | `docs/research/lab_notebook.md` |  | MATCH |
 | `\nRevPredFloor` | `0.10` | `0.10` | `docs/research/lab_notebook.md` |  | MATCH |
@@ -329,3 +329,42 @@ Every macro in `numbers.tex` checked against its evidence file at `m4-complete` 
 | `\nEventDelayAUCB` | `0.726` | `0.726` | `dataset/realism_report.md` |  | MATCH |
 | `\nIntervalLevel` | `95\%` | `95%` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
 | `\nTrainableFeatures` | `38` | `38` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nLcTrainA` | `30{,}000` | `30,000` | `docs/benchmarks/m4_learning_curve_30k_d8083dbc.txt` at `3dacca6` (evidence commit `c59da11`) |  | MATCH |
+| `\nLcFraudA` | `259` | `259` | `docs/benchmarks/m4_learning_curve_30k_d8083dbc.txt` at `3dacca6` (evidence commit `c59da11`) |  | MATCH |
+| `\nLcTrainB` | `60{,}000` | `60,000` | `docs/benchmarks/m4_learning_curve_60k_d8083dbc.txt` at `3dacca6` (evidence commit `c59da11`) |  | MATCH |
+| `\nLcFraudB` | `532` | `532` | `docs/benchmarks/m4_learning_curve_60k_d8083dbc.txt` at `3dacca6` (evidence commit `c59da11`) |  | MATCH |
+| `\nLcTrainC` | `120{,}000` | `120,000` | `docs/benchmarks/m4_learning_curve_120k_d8083dbc.txt` at `3dacca6` (evidence commit `c59da11`) |  | MATCH |
+| `\nLcFraudC` | `1{,}066` | `1,066` | `docs/benchmarks/m4_learning_curve_120k_d8083dbc.txt` at `3dacca6` (evidence commit `c59da11`) |  | MATCH |
+| `\nLcTrainD` | `240{,}000` | `240,000` | `docs/benchmarks/m4_learning_curve_240k_d8083dbc.txt` at `3dacca6` (evidence commit `6b36fc5`) |  | MATCH |
+| `\nLcFraudD` | `2{,}132` | `2,132` | `docs/benchmarks/m4_learning_curve_240k_d8083dbc.txt` at `3dacca6` (evidence commit `6b36fc5`) |  | MATCH |
+| `\nLcRecallA` | `0.795` | `0.795` | `docs/benchmarks/m4_learning_curve_30k_d8083dbc.txt` at `3dacca6` (evidence commit `c59da11`) |  | MATCH |
+| `\nLcRecallciA` | `[0.766, 0.818]` | `[0.766, 0.818]` | `docs/benchmarks/m4_learning_curve_30k_d8083dbc.txt` at `3dacca6` (evidence commit `c59da11`) |  | MATCH |
+| `\nLcRecallB` | `0.799` | `0.799` | `docs/benchmarks/m4_learning_curve_60k_d8083dbc.txt` at `3dacca6` (evidence commit `c59da11`) |  | MATCH |
+| `\nLcRecallciB` | `[0.773, 0.823]` | `[0.773, 0.823]` | `docs/benchmarks/m4_learning_curve_60k_d8083dbc.txt` at `3dacca6` (evidence commit `c59da11`) |  | MATCH |
+| `\nLcRecallC` | `0.798` | `0.798` | `docs/benchmarks/m4_learning_curve_120k_d8083dbc.txt` at `3dacca6` (evidence commit `c59da11`) |  | MATCH |
+| `\nLcRecallciC` | `[0.772, 0.821]` | `[0.772, 0.821]` | `docs/benchmarks/m4_learning_curve_120k_d8083dbc.txt` at `3dacca6` (evidence commit `c59da11`) |  | MATCH |
+| `\nLcRecallD` | `0.783` | `0.783` | `docs/benchmarks/m4_learning_curve_240k_d8083dbc.txt` at `3dacca6` (evidence commit `6b36fc5`) |  | MATCH |
+| `\nLcRecallciD` | `[0.755, 0.808]` | `[0.755, 0.808]` | `docs/benchmarks/m4_learning_curve_240k_d8083dbc.txt` at `3dacca6` (evidence commit `6b36fc5`) |  | MATCH |
+| `\nLcSeedRecallA` | `\ensuremath{0.7669 \pm 0.0245}` | `0.7669 +/- 0.0245` | `docs/benchmarks/m4_learning_curve_30k_d8083dbc.txt` at `3dacca6` (evidence commit `c59da11`) |  | MATCH |
+| `\nLcSeedRecallB` | `\ensuremath{0.7722 \pm 0.0376}` | `0.7722 +/- 0.0376` | `docs/benchmarks/m4_learning_curve_60k_d8083dbc.txt` at `3dacca6` (evidence commit `c59da11`) |  | MATCH |
+| `\nLcSeedRecallC` | `\ensuremath{0.7787 \pm 0.0230}` | `0.7787 +/- 0.0230` | `docs/benchmarks/m4_learning_curve_120k_d8083dbc.txt` at `3dacca6` (evidence commit `c59da11`) |  | MATCH |
+| `\nLcSeedRecallD` | `\ensuremath{0.7945 \pm 0.0243}` | `0.7945 +/- 0.0243` | `docs/benchmarks/m4_learning_curve_240k_d8083dbc.txt` at `3dacca6` (evidence commit `6b36fc5`) |  | MATCH |
+| `\nLcBudgetRecallD` | `0.860` | `0.860` | `docs/benchmarks/m4_learning_curve_240k_d8083dbc.txt` at `3dacca6` (evidence commit `6b36fc5`) |  | MATCH |
+| `\nLcBudgetRecallciD` | `[0.838, 0.881]` | `[0.838, 0.881]` | `docs/benchmarks/m4_learning_curve_240k_d8083dbc.txt` at `3dacca6` (evidence commit `6b36fc5`) |  | MATCH |
+| `\nLcSeedBudgetD` | `\ensuremath{0.8763 \pm 0.0128}` | `0.8763 +/- 0.0128` | `docs/benchmarks/m4_learning_curve_240k_d8083dbc.txt` at `3dacca6` (evidence commit `6b36fc5`) |  | MATCH |
+| `\nLcBudgetRecallC` | `0.878` | `0.878` | `docs/benchmarks/m4_learning_curve_120k_d8083dbc.txt` at `3dacca6` (evidence commit `c59da11`) |  | MATCH |
+| `\nLcCorpusSmall` | `340{,}000` | `340000` | `docs/benchmarks/m4_learning_curve_cache_120k_d8083dbc.txt` at `3dacca6` (evidence commit `c59da11`) |  | MATCH |
+| `\nLcCorpusLarge` | `520{,}000` | `520000` | `docs/benchmarks/m4_learning_curve_cache_240k_d8083dbc.txt` at `3dacca6` (evidence commit `2a876d8`) |  | MATCH |
+| `\nGateCorpus` | `400{,}000` | `400000` | `docs/benchmarks/m4_evaluate_gate_d8083dbc.txt` (evidence commit `bcaea94`) |  | MATCH |
+| `\nLcStepCD` | `-0.015` | `-0.015` | derived | seed-1 recall at 0.60, 240K minus 120K | MATCH |
+| `\nLcMaxUpper` | `0.823` | `0.823` | derived | largest upper bound of the four seed-1 intervals | MATCH |
+| `\nLcSeedGain` | `0.028` | `0.028` | derived | five-seed mean recall at 0.60, 240K minus 30K, to three places | MATCH |
+| `\nLcSpanSeedOne` | `0.016` | `0.016` | derived | largest minus smallest of the four seed-1 values | MATCH |
+| `\nSelGapSeedOne` | `0.059` | `0.059` | derived | seed 1 at 30,000 rows: the curve's corpus minus the gate's | MATCH |
+| `\nSelGapMeans` | `0.023` | `0.023` | derived | five-seed means at 30,000 rows: the curve's corpus minus the gate's, to three places | MATCH |
+| `\nLcPredLow` | `0.76` | `0.76` | `docs/research/lab_notebook.md` at `488c5b4` |  | MATCH |
+| `\nLcPredHigh` | `0.84` | `0.84` | `docs/research/lab_notebook.md` at `488c5b4` |  | MATCH |
+| `\nLcPredBudgetLow` | `0.87` | `0.87` | `docs/research/lab_notebook.md` at `488c5b4` |  | MATCH |
+| `\nLcPredBudgetHigh` | `0.91` | `0.91` | `docs/research/lab_notebook.md` at `488c5b4` |  | MATCH |
+| `\nNoSourceFeatures` | `five` | `Five` | `docs/adr/0055-five-features-have-no-source-data-on-this-benchmark.md` at `m6-complete` |  | MATCH |
+| `\nNoSourceShare` | `11\%` | `11%` | derived | the no-source count over the catalogue's 44, to a whole per cent | MATCH |

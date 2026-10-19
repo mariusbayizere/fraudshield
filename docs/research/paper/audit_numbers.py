@@ -53,6 +53,18 @@ REQUIREMENTS = "docs/traceability/requirements.yaml"
 #: Evidence produced for the paper itself, after the tag; read at the commit it was added in.
 REV_LABELS = "docs/research/paper/evidence/reversal_labels_d8083dbc.txt"
 REV_LABELS_REF = "3559f8c"
+#: PB-67's learning curve, merged to main after m4-complete; read at the commit that last
+#: touched it.
+LC = "docs/benchmarks/m4_learning_curve_{}_d8083dbc.txt"
+LC_CACHE = "docs/benchmarks/m4_learning_curve_cache_{}_d8083dbc.txt"
+LC_REF = "3dacca6"
+GATE_CACHE = "docs/benchmarks/m4_evaluate_gate_d8083dbc.txt"
+#: The notebook on main, which carries PB-67's pre-registration (no tag carries it yet).
+NOTEBOOK_MAIN_REF = "488c5b4"
+ADR55 = "docs/adr/0055-five-features-have-no-source-data-on-this-benchmark.md"
+ADR55_REF = "m6-complete"
+#: The gate line for recall at the 1% FPR budget, up to its value.
+BUDGET = r"ML-GATE-02  Recall at 1% FPR \(D-01\)\s+"
 
 
 @dataclass(frozen=True)
@@ -424,12 +436,17 @@ SOURCES: dict[str, Src | Derived] = {
     "nPredEarly": Src(NOTEBOOK, r"\*\*One partially right out of (four)\.\*\*"),
     "nPredEarlyRight": Src(NOTEBOOK, r"\*\*(One) partially right out of four\.\*\*"),
     "nPredTotal": Derived(
-        ("nPredEarly", "_P5", "_P6"),
-        lambda early, p5, p6: (
-            "six" if WORDS.get(early.lower(), early) == "4" and p5 and p6 else "?"
+        ("nPredEarly", "_P5", "_P6", "_P7"),
+        lambda early, p5, p6, p7: (
+            "seven" if WORDS.get(early.lower(), early) == "4" and p5 and p6 and p7 else "?"
         ),
-        "the register's four plus the two later pre-registrations (PB-56 lead tail; ADR 0028 "
-        "reversal scam), each located in the notebook",
+        "the register's four plus the three later pre-registrations (PB-56 lead tail; ADR 0028 "
+        "reversal scam; PB-67 learning curve), each located in the notebook",
+    ),
+    "_P7": Src(
+        NOTEBOOK,
+        r"(Pre-registration: the PB-67 learning curve, before any size is run)",
+        ref=NOTEBOOK_MAIN_REF,
     ),
     "_P5": Src(NOTEBOOK, r"(Prediction, recorded before the draw exists)"),
     "_P6": Src(
@@ -642,6 +659,86 @@ SOURCES: dict[str, Src | Derived] = {
         ("_RocPoints", "nTargetRecall"),
         lambda points, target: _crossing(points, target)[3],
         "recall of that vertex",
+    ),
+    # ---- PB-67 learning curve (read at LC_REF) and row selection ----
+    **{
+        f"nLc{kind}{point}": Src(LC.format(size), pattern, ref=LC_REF)
+        for point, size in (("A", "30k"), ("B", "60k"), ("C", "120k"), ("D", "240k"))
+        for kind, pattern in (
+            ("Train", r"train ([\d,]+)/[\d,]+"),
+            ("Fraud", r"train [\d,]+/([\d,]+)"),
+            ("Recall", r"ML-GATE-03  Recall at 0\.60\s+([\d.]+)"),
+            ("Recallci", r"ML-GATE-03  Recall at 0\.60\s+[\d.]+\s+(\[[\d., ]+\])"),
+            ("SeedRecall", r"SEEDS.*?ML-GATE-03  ([\d.]+ \+/- [\d.]+)"),
+        )
+    },
+    "nLcBudgetRecallD": Src(LC.format("240k"), BUDGET + r"([\d.]+)", ref=LC_REF),
+    "nLcBudgetRecallciD": Src(
+        LC.format("240k"),
+        BUDGET + r"[\d.]+\s+(\[[\d., ]+\])",
+        ref=LC_REF,
+    ),
+    "nLcSeedBudgetD": Src(
+        LC.format("240k"), r"SEEDS.*?ML-GATE-02  ([\d.]+ \+/- [\d.]+)", ref=LC_REF
+    ),
+    "nLcBudgetRecallC": Src(LC.format("120k"), BUDGET + r"([\d.]+)", ref=LC_REF),
+    "nLcCorpusSmall": Src(LC_CACHE.format("120k"), r"--corpus-rows (\d+)", ref=LC_REF),
+    "nLcCorpusLarge": Src(LC_CACHE.format("240k"), r"--corpus-rows (\d+)", ref=LC_REF),
+    "nGateCorpus": Src(GATE_CACHE, r"--corpus-rows (\d+)"),
+    "nLcStepCD": Derived(
+        ("nLcRecallC", "nLcRecallD"),
+        lambda c, d: f"{Decimal(d) - Decimal(c):.3f}",
+        "seed-1 recall at 0.60, 240K minus 120K",
+    ),
+    "nLcMaxUpper": Derived(
+        ("nLcRecallciA", "nLcRecallciB", "nLcRecallciC", "nLcRecallciD"),
+        lambda *cis: str(max(Decimal(ci.strip("[]").split(",")[1]) for ci in cis)),
+        "largest upper bound of the four seed-1 intervals",
+    ),
+    "nLcSeedGain": Derived(
+        ("nLcSeedRecallA", "nLcSeedRecallD"),
+        lambda a, d: f"{Decimal(d.split()[0]) - Decimal(a.split()[0]):.3f}",
+        "five-seed mean recall at 0.60, 240K minus 30K, to three places",
+    ),
+    "nLcSpanSeedOne": Derived(
+        ("nLcRecallA", "nLcRecallB", "nLcRecallC", "nLcRecallD"),
+        lambda *r: f"{max(map(Decimal, r)) - min(map(Decimal, r)):.3f}",
+        "largest minus smallest of the four seed-1 values",
+    ),
+    "nSelGapSeedOne": Derived(
+        ("nLcRecallA", "nGateRecallSix"),
+        lambda curve, gate: f"{Decimal(curve) - Decimal(gate):.3f}",
+        "seed 1 at 30,000 rows: the curve's corpus minus the gate's",
+    ),
+    "nSelGapMeans": Derived(
+        ("nLcSeedRecallA", "nGateSeedRecallSix"),
+        lambda curve, gate: f"{Decimal(curve.split()[0]) - Decimal(gate.split()[0]):.3f}",
+        "five-seed means at 30,000 rows: the curve's corpus minus the gate's, to three places",
+    ),
+    "nLcPredLow": Src(
+        NOTEBOOK, r"rising to \*\*between ([\d.]+) and\s+[\d.]+ at 240K", ref=NOTEBOOK_MAIN_REF
+    ),
+    "nLcPredHigh": Src(
+        NOTEBOOK, r"rising to \*\*between [\d.]+ and\s+([\d.]+) at 240K", ref=NOTEBOOK_MAIN_REF
+    ),
+    "nLcPredBudgetLow": Src(
+        NOTEBOOK,
+        r"1% FPR budget rises to \*\*between ([\d.]+) and [\d.]+\*\* at 240K",
+        ref=NOTEBOOK_MAIN_REF,
+    ),
+    "nLcPredBudgetHigh": Src(
+        NOTEBOOK,
+        r"1% FPR budget rises to \*\*between [\d.]+ and ([\d.]+)\*\* at 240K",
+        ref=NOTEBOOK_MAIN_REF,
+    ),
+    # ---- ADR 0055 (accepted 2026-10-17) ----
+    "nNoSourceFeatures": Src(
+        ADR55, r"not merely in form\.\*\* (Five) of 44 features, 11 %", ref=ADR55_REF
+    ),
+    "nNoSourceShare": Derived(
+        ("nNoSourceFeatures", "nFeatures"),
+        lambda n, total: f"{Decimal(WORDS[n.lower()]) * 100 / Decimal(total):.0f}%",
+        "the no-source count over the catalogue's 44, to a whole per cent",
     ),
 }
 

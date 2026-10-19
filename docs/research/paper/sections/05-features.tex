@@ -17,7 +17,9 @@ opening date, so two of its terms are always zero and it reads device sharing an
 only (Appendix~\ref{app:features}). Every label-derived feature uses only labels whose
 availability time precedes the transaction. The catalogue in the repository is generated from the
 code's feature registry, so documentation cannot drift from implementation; Appendix~\ref{app:features}
-lists every feature by group.
+lists every feature by group. On this benchmark \nNoSourceFeatures{} of the features have no source
+data and one is constant, so the models train on \nTrainableFeatures{}
+(Section~\ref{sec:limitations}).
 
 \subsection{Two paths, and a test that can fail}
 

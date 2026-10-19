@@ -217,7 +217,7 @@
 \newcommand{\nPredEarlyRight}{\meas{one}}
 % m4-complete: two more. PB-56 event-delay band (commit 0138099, measured on
 % 6abde44e; confirmed, see \nEventDelayBandLow) and the ADR 0028 reversal-scam range below.
-\newcommand{\nPredTotal}{\meas{six}}
+\newcommand{\nPredTotal}{\meas{seven}}
 \newcommand{\nRevPredLow}{\meas{0.15}}
 \newcommand{\nRevPredHigh}{\meas{0.55}}
 \newcommand{\nRevPredFloor}{\meas{0.10}}
@@ -405,3 +405,52 @@
 % Features the models are trained on: the 44 of the catalogue less the six that carry no source data
 % on this benchmark (m4_battery_d8083dbc_e1.txt: "full model, 38 features").
 \newcommand{\nTrainableFeatures}{\meas{38}}
+
+% ---------------------------------------------------------------------------------------------
+% PB-67 learning curve (M4, merged to main 2026-10-18). Not at m4-complete: every file below is
+% read at 3dacca6, the commit on main that last touched it. Draw d8083dbc, the same 101,909 test
+% rows / 985 fraud and the same validation and calibration rows as the gate, five seeds, 1,000
+% resamples. Gate files: docs/benchmarks/m4_learning_curve_{30k,60k,120k,240k}_d8083dbc.txt
+% (evidence commits c59da11 for 30K-120K, 6b36fc5 for 240K, trees clean, i5-6200U).
+% ---------------------------------------------------------------------------------------------
+\newcommand{\nLcTrainA}{\meas{30{,}000}}\newcommand{\nLcFraudA}{\meas{259}}
+\newcommand{\nLcTrainB}{\meas{60{,}000}}\newcommand{\nLcFraudB}{\meas{532}}
+\newcommand{\nLcTrainC}{\meas{120{,}000}}\newcommand{\nLcFraudC}{\meas{1{,}066}}
+\newcommand{\nLcTrainD}{\meas{240{,}000}}\newcommand{\nLcFraudD}{\meas{2{,}132}}
+% Recall at the flag threshold, seed 1 with its bootstrap interval, and the five-seed mean +/- SD.
+\newcommand{\nLcRecallA}{\meas{0.795}}\newcommand{\nLcRecallciA}{\meas{[0.766, 0.818]}}
+\newcommand{\nLcRecallB}{\meas{0.799}}\newcommand{\nLcRecallciB}{\meas{[0.773, 0.823]}}
+\newcommand{\nLcRecallC}{\meas{0.798}}\newcommand{\nLcRecallciC}{\meas{[0.772, 0.821]}}
+\newcommand{\nLcRecallD}{\meas{0.783}}\newcommand{\nLcRecallciD}{\meas{[0.755, 0.808]}}
+\newcommand{\nLcSeedRecallA}{\meas{\ensuremath{0.7669 \pm 0.0245}}}
+\newcommand{\nLcSeedRecallB}{\meas{\ensuremath{0.7722 \pm 0.0376}}}
+\newcommand{\nLcSeedRecallC}{\meas{\ensuremath{0.7787 \pm 0.0230}}}
+\newcommand{\nLcSeedRecallD}{\meas{\ensuremath{0.7945 \pm 0.0243}}}
+% Recall at the 1% FPR budget at 240K: seed 1 with interval, and the five-seed mean.
+\newcommand{\nLcBudgetRecallD}{\meas{0.860}}\newcommand{\nLcBudgetRecallciD}{\meas{[0.838, 0.881]}}
+\newcommand{\nLcSeedBudgetD}{\meas{\ensuremath{0.8763 \pm 0.0128}}}
+\newcommand{\nLcBudgetRecallC}{\meas{0.878}}
+% Corpus depth: --corpus-rows in each cache command (learning-curve caches at 3dacca6; the gate's
+% docs/benchmarks/m4_evaluate_gate_d8083dbc.txt at m4-complete).
+\newcommand{\nLcCorpusSmall}{\meas{340{,}000}}
+\newcommand{\nLcCorpusLarge}{\meas{520{,}000}}
+\newcommand{\nGateCorpus}{\meas{400{,}000}}
+% Derived from the values above (audit_numbers.py states the arithmetic).
+\newcommand{\nLcStepCD}{\meas{-0.015}}       % seed 1, 120K -> 240K
+\newcommand{\nLcMaxUpper}{\meas{0.823}}      % largest upper bound of the four seed-1 intervals
+\newcommand{\nLcSeedGain}{\meas{0.028}}      % five-seed mean, 30K -> 240K
+\newcommand{\nLcSpanSeedOne}{\meas{0.016}}   % range of the four seed-1 values
+\newcommand{\nSelGapSeedOne}{\meas{0.059}}   % curve 30K minus gate 30K, seed 1
+\newcommand{\nSelGapMeans}{\meas{0.023}}     % curve 30K minus gate 30K, five-seed means
+% Pre-registration (lab_notebook.md "Pre-registration: the PB-67 learning curve", read at 488c5b4,
+% the notebook on main; the commit that first recorded it is on m4/generalisation's history).
+\newcommand{\nLcPredLow}{\meas{0.76}}
+\newcommand{\nLcPredHigh}{\meas{0.84}}
+\newcommand{\nLcPredBudgetLow}{\meas{0.87}}
+\newcommand{\nLcPredBudgetHigh}{\meas{0.91}}
+
+% ---------------------------------------------------------------------------------------------
+% Features with no source data (ADR 0055, accepted 2026-10-17, read at m6-complete).
+% ---------------------------------------------------------------------------------------------
+\newcommand{\nNoSourceFeatures}{\meas{five}}
+\newcommand{\nNoSourceShare}{\meas{11\%}}    % derived: five of the 44

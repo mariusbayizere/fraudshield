@@ -23,6 +23,25 @@ here speaks to fraud with other structure, except as the failure in
 Section~\ref{sec:generalisation}. The specification's distribution targets (overall and test-period
 fraud rate, channel and country mix) are requirements met by construction, not observations.
 
+\paragraph{Five features have no source data, and one rests on assumed values.} \nNoSourceFeatures{}
+of the \nFeatures{} features, about \nNoSourceShare{}, read data this benchmark does not contain and
+are missing for every record: \texttt{account\_age\_days} and
+\texttt{counterparty\_account\_age\_days} need account opening dates, held in an institution's account
+master; \texttt{kyc\_tier} needs the account's KYC tier assignments with the time each took effect,
+held in its KYC records; \texttt{agent\_float\_utilisation\_ratio} needs the agent's float balance and
+limit, and \texttt{agent\_distance\_from\_registered\_km} the agent's registered premises, both held by
+the agent network. The models learn nothing from them, and with one feature that is constant on this
+benchmark they are why the models train on \nTrainableFeatures{} features (Appendix~\ref{app:features}).
+\textbf{Every model figure in this paper is that of a \nTrainableFeatures{}-feature model}; the
+specification's requirement that the features be computable for nearly every record is recorded as
+not met (ADR 0055). A sixth feature is a different limitation. \texttt{round\_sum\_flag} produces a
+value for every record, but only because each country's configuration supplies the currency's round
+denominations, and those values are \textbf{assumed}: plausible note and typing steps, not a banknote
+series read from any central-bank source. The feature's input is something this project wrote, not
+something it observed. The gap is the benchmark's rather than the design's: the five features are
+implemented and tested on both computation paths, and an institution's account master, KYC records
+and agent ledger would supply their inputs, but no figure here shows what they would add.
+
 \paragraph{No real-data validation.} None has been done. A validation on real data would need to
 show, at minimum: the single-feature floor on real engineered features (whether real fraud is as
 burst-separable as this benchmark's); the ensemble's margin over that floor; calibration in the
@@ -42,8 +61,15 @@ benchmark cannot show what the ensemble adds.
 specification requires, a scale that is \notyet{M10}; and the models were trained on \nTrainUsed{} rows rather than
 the full training period. Single-feature AUC moves with dataset size by more than seed noise, and the
 cause is unexplained; every figure is therefore stated at its scale. The two failing gate metrics
-(recall and false-negative rate at the flag threshold) are recorded at \nTrainUsed{} training rows
-only; whether they depend on training volume is untested until the learning curve is measured.
+(recall and false-negative rate at the flag threshold) do not close with more training data from
+\nLcTrainA{} to \nLcTrainD{} rows (Section~\ref{sec:volume}); beyond that volume they are untested.
+
+\paragraph{One selection of training rows.} At \nTrainUsed{} rows, a different selection of training
+rows from a corpus of different depth read recall \nSelGapSeedOne{} higher at seed 1, more than an
+eightfold change in volume moved it; on the five-seed means the difference is \nSelGapMeans{}, within
+the seed spread (Section~\ref{sec:rowselection}). Only two selections exist, so how much a headline
+figure varies with the choice of training rows is unmeasured, and every such figure here is a
+measurement of one selection.
 
 \paragraph{Latency.} No latency figure here is a gate figure. The frontier is a median on a shared
 development laptop, where the 99th percentile is not measurable; serving, end-to-end and load

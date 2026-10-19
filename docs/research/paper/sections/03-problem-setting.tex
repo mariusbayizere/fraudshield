@@ -39,7 +39,9 @@ never binary floating point.
 \paragraph{Decision path.} The system returns a decision (approve, decline, or hold for review)
 synchronously to core banking, with a server-side latency target of 40~ms at the 95th percentile
 for flagged transactions (the specification's latency budget). A decision that holds a transaction for an
-analyst is resolved by webhook, not by an open request. Scores are calibrated probabilities from
+analyst is resolved by webhook, not by an open request. The specification quantifies no ingestion
+budget per client; the one the system applies is an assumed configuration value derived from the
+specified system throughput, not a requirement or an observation (ADR 0058). Scores are calibrated probabilities from
 a weighted XGBoost and LightGBM ensemble, and every flagged decision carries an exact TreeSHAP
 explanation. The scoring service and the decision engine belong to later milestones, and their measured latency
 is \notyet{M5, M6 and M10}.

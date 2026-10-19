@@ -3,8 +3,9 @@
 
 The \nFeatures{} features of the registry at \texttt{m4-complete}, by group, with the first sentence
 of each definition (shortened where it carries parameters; the registry, \texttt{ml/src/\allowbreak fraudshield\_ml/\allowbreak features/\allowbreak registry.py},
-holds the full definitions). The models train on \nTrainableFeatures{}: the six marked below are
-either constant on this benchmark or have no source column in the generated data.
+holds the full definitions). The models train on \nTrainableFeatures{}: of the six marked below, \nNoSourceFeatures{} have no
+source data on this benchmark (ADR 0055) and one is constant. \texttt{round\_sum\_flag} is trained, but
+its denominations are assumed (Section~\ref{sec:limitations}).
 
 \begin{small}
 \begin{longtable}{p{0.36\linewidth}p{0.56\linewidth}}
@@ -41,7 +42,7 @@ Feature & Definition \\
 \texttt{amount\_\allowbreak log1p} & log1p of the scored transaction's amount in RWF, converted at the FX rate for its own transaction date. \\
 \texttt{amount\_\allowbreak zscore\_\allowbreak 90d} & Robust z-score of the amount against the account's prior ninety days, using the median and the scaled median absolute deviation. \\
 \texttt{amount\_\allowbreak to\_\allowbreak max\_\allowbreak 90d\_\allowbreak ratio} & Scored amount divided by the largest amount on this account in the prior ninety days, both in RWF at their own transaction dates. \\
-\texttt{round\_\allowbreak sum\_\allowbreak flag} & True when the amount is an exact multiple of one of the transaction currency's common denominations, read from the country pack rather than hard-coded (ADR 0023). \\
+\texttt{round\_\allowbreak sum\_\allowbreak flag} & True when the amount is an exact multiple of one of the transaction currency's common denominations, read from the country pack rather than hard-coded (ADR 0023). \emph{(trained; the denominations are assumed, ADR 0055)} \\
 \texttt{just\_\allowbreak below\_\allowbreak limit\_\allowbreak flag} & True when the amount falls just below a channel or KYC-tier limit in force at the transaction's timestamp (ADR 0026): the structuring signal. \emph{(not trained: constant)} \\
 \addlinespace
 \multicolumn{2}{l}{\textbf{Counterparty}} \\*

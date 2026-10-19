@@ -3,7 +3,7 @@
 
 All figures in this section are on the evaluation draw's test period (\nTestRows{} rows holding
 \nTestFraud{} confirmed fraud), for models trained on \nTrainUsed{} rows holding
-\nGateTrainFraud{} confirmed fraud.
+\nGateTrainFraud{} confirmed fraud, except the learning curve of Section~\ref{sec:volume}.
 
 \subsection{Gate metrics as margins over the floor}
 
@@ -56,9 +56,8 @@ threshold with a false-positive rate at or below \nFPRBudget{} reaches the targe
 threshold does. On the run's ROC curve, plotted through \nRocPoints{} vertices, recall is
 \nRocLowRecall{} at a false-positive rate of \nRocLowFPR{} and \nRocHighRecall{} at \nRocHighFPR{},
 so it first reaches \nTargetRecall{} somewhere between those two rates, at more than the budget
-the specification's own recall-at-budget metric allows. Whether the miss depends on training on
-\nTrainUsed{} of the \nTrainRows{} available rows is untested until the learning curve over
-training volume is measured, which is \notyet{PB-67}.
+the specification's own recall-at-budget metric allows. The miss does not close with more training
+data over the volumes measured (Section~\ref{sec:volume}).
 
 Precision at the \nFPRBudget{} budget is \nGatePrecFPR{}, reported against its ceiling at this
 test period's base rate, \nGatePrecCeiling{}: even a perfect ranking could not exceed it, which is
@@ -137,6 +136,60 @@ Measured over \nSeeds{} seeds, the ensemble's seed-to-seed AUC standard deviatio
 does not hold against XGBoost; its apparent agreement against LightGBM is a coincidence of this
 draw.
 
+\subsection{Training volume}
+\label{sec:volume}
+
+The evaluated models train on \nTrainUsed{} of the \nTrainRows{} training-period rows, so the recall
+miss could have been a matter of training volume. A learning curve tested that (PB-67). Its design,
+its prediction and the rule for reading it were recorded in the lab notebook before any size was
+run: the same model, thresholds, seeds and resamples as the gate, and the gate's validation,
+calibration and test rows at every size. One change to the design was made, and recorded, before the
+first result: the development machine could not build the planned single feature cache, so the three
+smaller sizes come from one cache built over a \nLcCorpusSmall{}-row corpus and the largest from its
+own \nLcCorpusLarge{}-row corpus. The last step therefore changes the depth of the corpus as well as
+the volume.
+
+\begin{table}[htbp]
+\centering
+\caption{Recall at the flag threshold against training volume (draw \texttt{d8083dbc}, the gate's
+\nTestRows{} test rows holding \nTestFraud{} fraud, \nResamples{} resamples, \nSeeds{} seeds;
+seed 1 with its interval, then the mean and standard deviation over the seeds). Sources:
+\texttt{docs/\allowbreak benchmarks/\allowbreak m4\_\allowbreak learning\_\allowbreak curve\_\allowbreak \{30k,60k,120k,240k\}\_\allowbreak d8083dbc.txt} (evidence commits
+\texttt{c59da11} and \texttt{6b36fc5}).}
+\label{tab:volume}
+\begin{tabular}{lrr}
+\toprule
+Training rows (fraud) & Recall at \nFlagThreshold{}, seed 1 & Over \nSeeds{} seeds \\
+\midrule
+\nLcTrainA{} (\nLcFraudA) & \nLcRecallA{} \nLcRecallciA & $\nLcSeedRecallA$ \\
+\nLcTrainB{} (\nLcFraudB) & \nLcRecallB{} \nLcRecallciB & $\nLcSeedRecallB$ \\
+\nLcTrainC{} (\nLcFraudC) & \nLcRecallC{} \nLcRecallciC & $\nLcSeedRecallC$ \\
+\nLcTrainD{} (\nLcFraudD) & \nLcRecallD{} \nLcRecallciD & $\nLcSeedRecallD$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The pre-registered rule was that the miss is a property of the benchmark and model if the step from
+\nLcTrainC{} to \nLcTrainD{} rows gains less than half the width of the largest size's interval and
+that interval's upper bound stays below \nTargetRecall{}. Both hold: the step is \nLcStepCD{}, a loss,
+and the largest size's interval, \nLcRecallciD{}, ends below the target. No interval at any size reaches the target; the highest upper
+bound is \nLcMaxUpper{}. Across the eightfold range the five-seed mean rises by \nLcSeedGain{}.
+\textbf{Over \nLcTrainA{} to \nLcTrainD{} training rows of this draw, and for this model, the recall
+shortfall is not a matter of training volume.} Whether a different model, or features that do not
+degrade with corpus depth, would reach the target is not tested.
+
+The prediction was partly wrong, and is reported with the others in Table~\ref{tab:predictions}.
+It said recall at the flag threshold would rise to between \nLcPredLow{} and \nLcPredHigh{} at the
+largest size; it landed in that range without rising. It said recall at the \nFPRBudget{} budget
+would rise to between \nLcPredBudgetLow{} and \nLcPredBudgetHigh{}; at seed 1 it read
+\nLcBudgetRecallD{} \nLcBudgetRecallciD{}, below the range, and over \nSeeds{} seeds
+$\nLcSeedBudgetD$, inside it, and it did not rise either: at \nLcTrainC{} rows it already read
+\nLcBudgetRecallC{} at seed 1.
+
+The curve's smallest point also differs from the gate run at the same \nTrainUsed{} rows, by more
+than the curve's own range at seed 1. That comparison concerns which rows are used rather than how
+many, and Section~\ref{sec:rowselection} reports it with its limits.
+
 \subsection{Redundancy: ablation measures redundancy, not importance}
 \label{sec:redundancy}
 
@@ -205,7 +258,7 @@ and tested on one synthetic population does not test a change of population at a
 larger drop would say only that the generator puts more of its fraud into counterparty structure.
 The specification's other ablations of the production ensemble are small (without agent features
 \nAblAgentD{}, without the corridor feature \nAblCorridorD{}, without round-sum awareness
-\nAblRoundD{}, without month-end awareness \nAblMonthD{}, without USSD-aware device handling
+\nAblRoundD{}, a feature computed from assumed denominations (Section~\ref{sec:limitations}), without month-end awareness \nAblMonthD{}, without USSD-aware device handling
 \nAblUSSDD{}) and are reported for completeness, not as evidence of what matters in production.
 
 \subsection{Calibration and explanation}
@@ -265,9 +318,10 @@ TreeSHAP costs $O(TLD^2)$ for $T$ trees with at most $L$ leaves and depth $D$
 \cite{lundberg2020trees}, which is why an easy benchmark cannot weaken it.
 
 Three cautions keep this result in proportion. First, every configuration explains a decision in a
-few milliseconds at the median, far inside the specification's 40~ms per-request budget, so on this
-evidence explanation cost binds at throughput (the work each core does per explained request)
-rather than at the latency of a single request. Second, the \nFrontRatio-fold ratio depends on the
+few milliseconds at the median on the development laptop. That is the cost of one booster's
+explanation in one process, not a measurement of the serving path against the specification's
+latency budget, which is \notyet{M10}; whether explanation cost binds at throughput or at the latency
+of a single request is therefore not established here. Second, the \nFrontRatio-fold ratio depends on the
 grid: it is measured from the cheapest configuration tried, and a different smallest configuration
 would give a different ratio; the growth with trees and depth is the finding, not the number.
 Third, it is one machine's median. On data like this, the explanation budget, not the accuracy

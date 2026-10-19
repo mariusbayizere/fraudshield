@@ -24,7 +24,8 @@ engine (M6) and is not evaluated here.
 \paragraph{Training volume.} The evaluated models were trained on \nTrainUsed{} rows holding
 \nGateTrainFraud{} confirmed fraud, a subset of the \nTrainRows{} rows in the training period,
 because of the development machine (Section~\ref{sec:repro}). Every figure in
-Section~\ref{sec:evaluation} is at that training volume; full-volume training is
+Section~\ref{sec:evaluation} is at that training volume except the learning curve of
+Section~\ref{sec:volume}, which reaches \nLcTrainD{} rows; full-volume training is
 \notyet{M10}.
 
 \subsection{Explanations}
@@ -34,8 +35,14 @@ the analyst-facing contribution is the weighted combination $\nWeightXGB\,\phi_{
 \nWeightLGB\,\phi_{\mathrm{lgb}}$ in margin space, annotated with its base value and final
 margin. We never claim that SHAP values sum to the calibrated probability: isotonic calibration is
 monotone but not additive. The specification requires plain-language explanations to come from
-deterministic, localised templates per feature and never from a language model; the templates
-belong to the serving and console milestones (M5, M8).
+deterministic, localised templates per feature and never from a language model. \textbf{No such
+template exists.} The scorer emits a template key per feature, but no catalogue of wording has been
+written (PB-132): wording that analysts act on is a domain question, and wrong wording produces wrong
+decisions, so it is not written by the engineer. What the analyst console shows instead is a feature
+table: for each alert, every feature's contribution ranked by effect, with the feature's name, its raw
+value and its signed effect (ADR 0084). That table has run only against responses generated from the
+interface contract, because the analyst API that serves it does not yet exist, and whether an analyst
+can act on it is untested: no analyst has used it (claims register, C-3).
 
 \subsection{The diagnostic battery}
 

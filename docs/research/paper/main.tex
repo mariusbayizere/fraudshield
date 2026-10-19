@@ -54,7 +54,8 @@ gradient boosting; calibration; explainability; leakage; pre-registration; negat
 \textbf{How to read the numbers.} Every figure is measured on the FraudShield-EAC synthetic
 benchmark; none describes a real institution, customer or regulator. Every figure comes from the
 repository at milestone tag \texttt{m4-complete} (commit \texttt{72e7790}) and was checked against its
-evidence file at that tag; the source of each is listed in \texttt{numbers.tex} and the check in
+evidence file at that tag, except the learning curve and the features without source data, which
+were produced later and are checked at the commits named in \texttt{numbers.tex}; the source of each is listed in \texttt{numbers.tex} and the check in
 \texttt{number\_audit.md}. Model metrics are reported as margins over the best single feature on
 the same rows, not over chance. Intervals are \nIntervalLevel{} unless stated otherwise. Results a
 later milestone will produce are marked \emph{not yet measured}, with the milestone; no value is
