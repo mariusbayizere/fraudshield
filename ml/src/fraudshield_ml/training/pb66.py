@@ -32,8 +32,9 @@ from typing import Any
 
 from fraudshield_ml.training import gate
 
-#: § 3.2's three assumed budgets: alerts a day for the draw, which has no institution column.
-BUDGETS = (50, 100, 200)
+#: § 3.2's assumed budgets, alerts a day for the draw (it has no institution column). 10 is below
+#: the draw's ~15 frauds a day, so it is the one that binds (owner, 2026-10-19).
+BUDGETS = (10, 50, 100, 200)
 #: § 3.4's probability-cost grid.
 COST_GRID = 101
 RESAMPLES = gate.RESAMPLES

@@ -1,6 +1,7 @@
 # Pre-registration: full-volume training and PB-66's evaluations, on a GitHub-hosted runner
 
-- **Status:** PROPOSED, 2026-10-19. Awaiting the owner's approval. **Nothing below has been run.**
+- **Status:** APPROVED as amended (owner, 2026-10-19), with § 5 answered in the last amendment.
+  **Nothing below has been run** at the time of approval.
   No figure in this file was computed from the test period. The anchors are figures already
   committed on `main`.
 - **Rows:** PB-66 (E.5 items 5, 7 and 8), PB-67's follow-up (full volume), C-5.
@@ -277,3 +278,20 @@ amounts, after the paragraph above. It does not attribute it to the model.
     label, timestamp, amount, country and channel, and no account token. M11 computes the paper's
     raw-axes cost view from them: fraud amount caught against legitimate amount blocked and reviews
     required. Drummond–Holte stays this report's cost curve.
+- **2026-10-19, the owner's approval and answers to § 5, before any run.**
+  1. **A fourth budget, 10 alerts a day, is added**, which is below the draw's roughly 15.4 frauds a
+     day. The three larger budgets measure a regime where the budget barely binds; this one shows
+     what a binding review limit costs. Its alert rate is about 0.63 %, and its precision ceiling is close to 1:
+     a day with fewer than 10 frauds is rare at a mean of 15.4.
+     - **Prediction, fixed now:** precision at 10 is **at least 0.90**, and recall is
+       **between 0.55 and 0.65**.
+     - **Why:** at 240K the 0.60 threshold flagged about 13 rows a day at 0.928 precision, so a
+       day's top 10 sit above it, and 10 × 0.93 ÷ 15.4 ≈ 0.60.
+     - **Decision:** descriptive, like the others. It is the budget the paper leads with, because
+       it is the only one that binds.
+  2. **No amount-weighted cost curve.** Drummond–Holte here, plus M11's raw axes from the per-row
+     scores. Three assumed false-positive costs would give the most quotable number in the paper
+     and the least supported.
+  3. **Leave-one-fraud-type-out and per-channel reliability diagrams wait** for a later run. Adding
+     them would widen this pre-registration after its review.
+  4. **A second review round** of the review's fixes and of this budget change, before the run.

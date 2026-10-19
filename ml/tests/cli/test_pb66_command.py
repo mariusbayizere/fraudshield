@@ -110,7 +110,7 @@ def test_pb66_reports_every_preregistered_section_and_logs_the_access(
         assert month in printed
 
     metrics = json.loads((out / "metrics.json").read_text())
-    assert metrics["budgets"]["assumed"] == [50, 100, 200]
+    assert metrics["budgets"]["assumed"] == [10, 50, 100, 200]
     assert len(metrics["budgets"]["days_excluded"]) == 2
     assert metrics["budgets"]["first_day"] == "2025-10-29"
     assert metrics["training_history"]["training_rows"] == SEGMENTS["train"]
