@@ -102,7 +102,10 @@
     "milliseconds": "{{value}} ms",
     "decisions": "Ibyemezo",
     "noDecisions": "Nta cyemezo kirafatwa.",
-    "system": "Sisitemu"
+    "system": "Sisitemu",
+    "history": "Amateka ya konti",
+    "behaviour": "Imyitwarire",
+    "network": "Urusobe"
   },
   "decision": {
     "CONFIRM_FRAUD": "Uburiganya bwemejwe",
@@ -132,6 +135,68 @@
     "showFirst_other": "Erekana {{count}} bya mbere gusa",
     "loading": "Ibisobanuro biri gufunguka…",
     "error": "Ibisobanuro ntibyashoboye kuboneka."
+  },
+  "history": {
+    "label": "Ibikorwa bya vuba bya konti, ibya vuba mbere",
+    "empty": "Nta bikorwa kuri iyi konti.",
+    "thisAlert": "Iyi arite",
+    "score": "Amanota y'ibyago {{value}}",
+    "outcome": {
+      "APPROVED": "Byemejwe",
+      "BLOCKED": "Byahagaritswe",
+      "PENDING": "Bitegereje"
+    },
+    "loading": "Amateka ya konti ari gufunguka…",
+    "error": "Amateka ya konti ntiyashoboye kuboneka."
+  },
+  "behaviour": {
+    "window": "Ugereranyije n'iminsi {{days}} ya nyuma ya konti.",
+    "compare": "Iki gikorwa ugereranyije n'ibisanzwe bya konti",
+    "noComparison": "Nta igereranya rihari.",
+    "attribute": "Ikiranga",
+    "thisTransaction": "Iki gikorwa",
+    "normal": "Ibisanzwe",
+    "unusual": "Bidasanzwe",
+    "none": "ntacyo",
+    "hours": "Ibikorwa ku isaha y'umunsi",
+    "hourCell_one": "Saa {{hour}}:00, igikorwa {{count}}",
+    "hourCell_other": "Saa {{hour}}:00, ibikorwa {{count}}",
+    "amounts": "Ibikorwa ku ngano y'amafaranga",
+    "range": "Amafaranga",
+    "count": "Ibikorwa",
+    "channels": "Ibikorwa ku muyoboro",
+    "channel": "Umuyoboro",
+    "share": "Igice",
+    "loading": "Imyitwarire ya konti iri gufunguka…",
+    "error": "Imyitwarire ya konti ntiyashoboye kuboneka.",
+    "empty": "Nta bikorwa muri iki gihe."
+  },
+  "network": {
+    "summary_one": "Konti {{count}}. Izemejwe ko ari uburiganya: {{fraud}}.",
+    "summary_other": "Konti {{count}}. Izemejwe ko ari uburiganya: {{fraud}}.",
+    "drawing": "Igishushanyo cy'urusobe rwa konti",
+    "zoomIn": "Kuza hafi",
+    "zoomOut": "Kujya kure",
+    "reset": "Garura uko byari biri",
+    "thisAccount": "Iyi konti",
+    "help": "Kurura igishushanyo, cyangwa ugihitemo ukoreshe utumenyetso tw'icyerekezo, kugira ngo ugende muri cyo.",
+    "accounts": "Konti ziri mu rusobe",
+    "account": "Konti",
+    "degreeHeading": "Isano",
+    "degree": {
+      "0": "Iyi konti",
+      "1": "Uwo bakorana mu buryo butaziguye",
+      "2": "Icyiciro cya kabiri"
+    },
+    "fraudHeading": "Uburiganya bwemejwe",
+    "confirmedFraud": "Uburiganya bwemejwe",
+    "notFraud": "Oya",
+    "links": "Aho konti zihurira",
+    "from": "Kuva",
+    "to": "Kuri",
+    "transactions": "Ibikorwa",
+    "loading": "Urusobe rwa konti ruri gufunguka…",
+    "error": "Urusobe rwa konti ntirwashoboye kuboneka."
   },
   "act": {
     "heading": "Gufata icyemezo",

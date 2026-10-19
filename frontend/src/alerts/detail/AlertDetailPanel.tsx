@@ -17,6 +17,10 @@ import type { AlertSearch } from '../../app/alertSearch';
 import { EmptyState, ErrorState } from '../../design-system/components/ScreenStates/ScreenStates';
 import { DRAWER_WIDTH } from '../layout';
 import { ApiError } from '../queries';
+import { useBehaviour, useHistory, useNetwork } from './accountQueries';
+import { BehaviourTab } from './BehaviourTab';
+import { HistoryTab } from './HistoryTab';
+import { NetworkTab } from './NetworkTab';
 import { useAlertDetail, useExplanation, useScoringResult } from './queries';
 import { DecisionPanel } from './DecisionPanel';
 import { ShapChart } from './ShapChart';
@@ -49,7 +53,49 @@ function returnFocus(alertId: string) {
   // Without scrolling: when the drawer switches alerts, the next heading takes focus at once.
   (opener ?? document.getElementById('main'))?.focus({ preventScroll: true });
 }
-type TabName = 'summary' | 'shap';
+const TABS = ['summary', 'shap', 'history', 'behaviour', 'network'] as const;
+type TabName = (typeof TABS)[number];
+
+/** A tab's content once its request has answered: a status while it loads, an error with Retry. */
+function Loaded<T>({
+  query,
+  loading,
+  error,
+  children,
+}: {
+  query: {
+    isPending: boolean;
+    isError: boolean;
+    data: T | undefined;
+    error: unknown;
+    refetch: () => unknown;
+  };
+  loading: string;
+  error: string;
+  children: (data: T) => ReactNode;
+}) {
+  if (query.isPending) {
+    return (
+      <Typography role="status" color="text.secondary">
+        {loading}
+      </Typography>
+    );
+  }
+  if (query.isError || query.data === undefined) {
+    return (
+      <ErrorState
+        message={error}
+        {...(query.error instanceof ApiError && query.error.correlationId !== undefined
+          ? { correlationId: query.error.correlationId }
+          : {})}
+        onRetry={() => {
+          void query.refetch();
+        }}
+      />
+    );
+  }
+  return children(query.data);
+}
 
 /**
  * The large-screen drawer is not modal: the feed behind it stays usable (UX-DASH-04). Below the
@@ -96,9 +142,11 @@ function Shell({
 }
 
 /**
- * The investigation drawer at /alerts/$alertId (UX-DASH-04, UX-ROLE-AN-02, FR-04-05): the alert's
- * summary and its SHAP explanation, over the feed, which keeps its filters. Built against mocks
- * of getAlert, getScoringResult and getAlertExplanation, which only M8B implements.
+ * The investigation drawer at /alerts/$alertId (UX-DASH-04, UX-ROLE-AN-02, FR-04-05 to 08): the
+ * alert's summary, its SHAP explanation and its account's history, behaviour and network, over
+ * the feed, which keeps its filters. Each tab but the summary asks for its data when opened. Built
+ * against mocks of getAlert, getScoringResult, getAlertExplanation, listAccountTransactions,
+ * getBehaviourProfile and getAccountNetwork, which only M8B implements.
  */
 export default function AlertDetailPanel() {
   const { t } = useTranslation('alerts');
@@ -120,6 +168,13 @@ export default function AlertDetailPanel() {
   const alert = useAlertDetail(alertId);
   const scoring = useScoringResult(alert.data?.transaction_id);
   const explanation = useExplanation(alertId, tab === 'shap');
+  // The account tabs need the alert's account and transaction, so wait for the alert.
+  const accountToken = alert.data?.account_token ?? '';
+  const transactionId = alert.data?.transaction_id ?? '';
+  const loaded = alert.data !== undefined;
+  const history = useHistory(accountToken, loaded && tab === 'history');
+  const behaviour = useBehaviour(accountToken, transactionId, loaded && tab === 'behaviour');
+  const network = useNetwork(accountToken, loaded && tab === 'network');
 
   // Closing replaces the drawer's history entry, so Back does not reopen it.
   const close = () => {
@@ -172,18 +227,15 @@ export default function AlertDetailPanel() {
           aria-label={t('detail.tabs')}
           variant="scrollable"
         >
-          <Tab
-            value="summary"
-            label={t('detail.summary')}
-            id="fs-tab-summary"
-            {...(tab === 'summary' ? { 'aria-controls': 'fs-panel-summary' } : {})}
-          />
-          <Tab
-            value="shap"
-            label={t('detail.shap')}
-            id="fs-tab-shap"
-            {...(tab === 'shap' ? { 'aria-controls': 'fs-panel-shap' } : {})}
-          />
+          {TABS.map((name) => (
+            <Tab
+              key={name}
+              value={name}
+              label={t(`detail.${name}`)}
+              id={`fs-tab-${name}`}
+              {...(tab === name ? { 'aria-controls': `fs-panel-${name}` } : {})}
+            />
+          ))}
         </Tabs>
         <Box
           role="tabpanel"
@@ -193,19 +245,24 @@ export default function AlertDetailPanel() {
         >
           {tab === 'summary' ? (
             <SummaryTab alert={alert.data} scoring={scoring.isError ? null : scoring.data} />
-          ) : explanation.isPending ? (
-            <Typography role="status" color="text.secondary">
-              {t('shap.loading')}
-            </Typography>
-          ) : explanation.isError ? (
-            <ErrorState
-              message={t('shap.error')}
-              onRetry={() => {
-                void explanation.refetch();
-              }}
-            />
+          ) : tab === 'shap' ? (
+            <Loaded query={explanation} loading={t('shap.loading')} error={t('shap.error')}>
+              {(data) => <ShapChart explanation={data} phone={phone} />}
+            </Loaded>
+          ) : tab === 'history' ? (
+            <Loaded query={history} loading={t('history.loading')} error={t('history.error')}>
+              {(data) => (
+                <HistoryTab items={data.items} transactionId={alert.data.transaction_id} />
+              )}
+            </Loaded>
+          ) : tab === 'behaviour' ? (
+            <Loaded query={behaviour} loading={t('behaviour.loading')} error={t('behaviour.error')}>
+              {(data) => <BehaviourTab profile={data} />}
+            </Loaded>
           ) : (
-            <ShapChart explanation={explanation.data} phone={phone} />
+            <Loaded query={network} loading={t('network.loading')} error={t('network.error')}>
+              {(data) => <NetworkTab network={data} />}
+            </Loaded>
           )}
         </Box>
         {/* Keyed by alert: another alert starts with an empty comment and its own keys. */}

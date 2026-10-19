@@ -102,7 +102,10 @@
     "milliseconds": "{{value}} ms",
     "decisions": "Decisions",
     "noDecisions": "No decision yet.",
-    "system": "System"
+    "system": "System",
+    "history": "Account history",
+    "behaviour": "Behaviour",
+    "network": "Network"
   },
   "decision": {
     "CONFIRM_FRAUD": "Confirmed fraud",
@@ -132,6 +135,68 @@
     "showFirst_other": "Show the top {{count}} only",
     "loading": "Loading the explanation…",
     "error": "The explanation could not be loaded."
+  },
+  "history": {
+    "label": "The account's most recent transactions, newest first",
+    "empty": "No transactions on this account.",
+    "thisAlert": "This alert",
+    "score": "Risk score {{value}}",
+    "outcome": {
+      "APPROVED": "Approved",
+      "BLOCKED": "Blocked",
+      "PENDING": "Pending"
+    },
+    "loading": "Loading the account's history…",
+    "error": "The account's history could not be loaded."
+  },
+  "behaviour": {
+    "window": "Compared with the account's last {{days}} days.",
+    "compare": "This transaction against the account's normal",
+    "noComparison": "No comparison is available.",
+    "attribute": "Attribute",
+    "thisTransaction": "This transaction",
+    "normal": "Normal",
+    "unusual": "Unusual",
+    "none": "none",
+    "hours": "Transactions by hour of day",
+    "hourCell_one": "{{hour}}:00, {{count}} transaction",
+    "hourCell_other": "{{hour}}:00, {{count}} transactions",
+    "amounts": "Transactions by amount",
+    "range": "Amount",
+    "count": "Transactions",
+    "channels": "Transactions by channel",
+    "channel": "Channel",
+    "share": "Share",
+    "loading": "Loading the account's behaviour…",
+    "error": "The account's behaviour could not be loaded.",
+    "empty": "No transactions in this window."
+  },
+  "network": {
+    "summary_one": "{{count}} account. Confirmed as fraud: {{fraud}}.",
+    "summary_other": "{{count}} accounts. Confirmed as fraud: {{fraud}}.",
+    "drawing": "Drawing of the account's network",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "reset": "Reset the view",
+    "thisAccount": "This account",
+    "help": "Drag the drawing, or focus it and use the arrow keys, to move around it.",
+    "accounts": "Accounts in the network",
+    "account": "Account",
+    "degreeHeading": "Link",
+    "degree": {
+      "0": "This account",
+      "1": "Direct counterparty",
+      "2": "Second degree"
+    },
+    "fraudHeading": "Confirmed fraud",
+    "confirmedFraud": "Confirmed fraud",
+    "notFraud": "No",
+    "links": "Links between accounts",
+    "from": "From",
+    "to": "To",
+    "transactions": "Transactions",
+    "loading": "Loading the account's network…",
+    "error": "The account's network could not be loaded."
   },
   "act": {
     "heading": "Decide",

@@ -104,7 +104,10 @@
     "milliseconds": "{{value}} ms",
     "decisions": "Décisions",
     "noDecisions": "Aucune décision pour l'instant.",
-    "system": "Système"
+    "system": "Système",
+    "history": "Historique du compte",
+    "behaviour": "Comportement",
+    "network": "Réseau"
   },
   "decision": {
     "CONFIRM_FRAUD": "Fraude confirmée",
@@ -137,6 +140,70 @@
     "showFirst_other": "N'afficher que les {{count}} premières",
     "loading": "Chargement de l'explication…",
     "error": "L'explication n'a pas pu être chargée."
+  },
+  "history": {
+    "label": "Les transactions récentes du compte, les plus récentes en premier",
+    "empty": "Aucune transaction sur ce compte.",
+    "thisAlert": "Cette alerte",
+    "score": "Score de risque {{value}}",
+    "outcome": {
+      "APPROVED": "Approuvée",
+      "BLOCKED": "Bloquée",
+      "PENDING": "En attente"
+    },
+    "loading": "Chargement de l'historique du compte…",
+    "error": "L'historique du compte n'a pas pu être chargé."
+  },
+  "behaviour": {
+    "window": "Comparé aux {{days}} derniers jours du compte.",
+    "compare": "Cette transaction face aux habitudes du compte",
+    "noComparison": "Aucune comparaison n'est disponible.",
+    "attribute": "Attribut",
+    "thisTransaction": "Cette transaction",
+    "normal": "Habituel",
+    "unusual": "Inhabituel",
+    "none": "aucune",
+    "hours": "Transactions par heure de la journée",
+    "hourCell_one": "{{hour}} h, {{count}} transaction",
+    "hourCell_many": "{{hour}} h, {{count}} transactions",
+    "hourCell_other": "{{hour}} h, {{count}} transactions",
+    "amounts": "Transactions par montant",
+    "range": "Montant",
+    "count": "Transactions",
+    "channels": "Transactions par canal",
+    "channel": "Canal",
+    "share": "Part",
+    "loading": "Chargement du comportement du compte…",
+    "error": "Le comportement du compte n'a pas pu être chargé.",
+    "empty": "Aucune transaction sur cette période."
+  },
+  "network": {
+    "summary_one": "{{count}} compte. Confirmés comme fraude : {{fraud}}.",
+    "summary_many": "{{count}} comptes. Confirmés comme fraude : {{fraud}}.",
+    "summary_other": "{{count}} comptes. Confirmés comme fraude : {{fraud}}.",
+    "drawing": "Dessin du réseau du compte",
+    "zoomIn": "Agrandir",
+    "zoomOut": "Réduire",
+    "reset": "Réinitialiser la vue",
+    "thisAccount": "Ce compte",
+    "help": "Faites glisser le dessin, ou placez-y le focus et utilisez les flèches, pour vous y déplacer.",
+    "accounts": "Comptes du réseau",
+    "account": "Compte",
+    "degreeHeading": "Lien",
+    "degree": {
+      "0": "Ce compte",
+      "1": "Contrepartie directe",
+      "2": "Second degré"
+    },
+    "fraudHeading": "Fraude confirmée",
+    "confirmedFraud": "Fraude confirmée",
+    "notFraud": "Non",
+    "links": "Liens entre comptes",
+    "from": "De",
+    "to": "Vers",
+    "transactions": "Transactions",
+    "loading": "Chargement du réseau du compte…",
+    "error": "Le réseau du compte n'a pas pu être chargé."
   },
   "act": {
     "heading": "Décider",

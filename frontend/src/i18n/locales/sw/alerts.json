@@ -102,7 +102,10 @@
     "milliseconds": "{{value}} ms",
     "decisions": "Maamuzi",
     "noDecisions": "Bado hakuna uamuzi.",
-    "system": "Mfumo"
+    "system": "Mfumo",
+    "history": "Historia ya akaunti",
+    "behaviour": "Tabia",
+    "network": "Mtandao"
   },
   "decision": {
     "CONFIRM_FRAUD": "Ulaghai umethibitishwa",
@@ -132,6 +135,68 @@
     "showFirst_other": "Onyesha {{count}} vya kwanza tu",
     "loading": "Inapakia maelezo…",
     "error": "Maelezo hayakuweza kupakiwa."
+  },
+  "history": {
+    "label": "Miamala ya karibuni ya akaunti, ya karibuni kwanza",
+    "empty": "Hakuna miamala kwenye akaunti hii.",
+    "thisAlert": "Arifa hii",
+    "score": "Alama ya hatari {{value}}",
+    "outcome": {
+      "APPROVED": "Imeidhinishwa",
+      "BLOCKED": "Imezuiwa",
+      "PENDING": "Inasubiri"
+    },
+    "loading": "Inapakia historia ya akaunti…",
+    "error": "Historia ya akaunti haikuweza kupakiwa."
+  },
+  "behaviour": {
+    "window": "Ikilinganishwa na siku {{days}} za mwisho za akaunti.",
+    "compare": "Muamala huu ukilinganishwa na kawaida ya akaunti",
+    "noComparison": "Hakuna ulinganisho unaopatikana.",
+    "attribute": "Sifa",
+    "thisTransaction": "Muamala huu",
+    "normal": "Kawaida",
+    "unusual": "Si kawaida",
+    "none": "hakuna",
+    "hours": "Miamala kwa saa ya siku",
+    "hourCell_one": "{{hour}}:00, muamala {{count}}",
+    "hourCell_other": "{{hour}}:00, miamala {{count}}",
+    "amounts": "Miamala kwa kiasi",
+    "range": "Kiasi",
+    "count": "Miamala",
+    "channels": "Miamala kwa njia",
+    "channel": "Njia",
+    "share": "Sehemu",
+    "loading": "Inapakia tabia ya akaunti…",
+    "error": "Tabia ya akaunti haikuweza kupakiwa.",
+    "empty": "Hakuna miamala katika kipindi hiki."
+  },
+  "network": {
+    "summary_one": "Akaunti {{count}}. Zilizothibitishwa kuwa udanganyifu: {{fraud}}.",
+    "summary_other": "Akaunti {{count}}. Zilizothibitishwa kuwa udanganyifu: {{fraud}}.",
+    "drawing": "Mchoro wa mtandao wa akaunti",
+    "zoomIn": "Kuza",
+    "zoomOut": "Punguza",
+    "reset": "Rudisha mwonekano",
+    "thisAccount": "Akaunti hii",
+    "help": "Buruta mchoro, au uuchague na utumie vitufe vya mishale, ili kuzunguka ndani yake.",
+    "accounts": "Akaunti katika mtandao",
+    "account": "Akaunti",
+    "degreeHeading": "Kiungo",
+    "degree": {
+      "0": "Akaunti hii",
+      "1": "Mhusika wa moja kwa moja",
+      "2": "Daraja la pili"
+    },
+    "fraudHeading": "Udanganyifu uliothibitishwa",
+    "confirmedFraud": "Udanganyifu uliothibitishwa",
+    "notFraud": "Hapana",
+    "links": "Viungo kati ya akaunti",
+    "from": "Kutoka",
+    "to": "Kwenda",
+    "transactions": "Miamala",
+    "loading": "Inapakia mtandao wa akaunti…",
+    "error": "Mtandao wa akaunti haukuweza kupakiwa."
   },
   "act": {
     "heading": "Amua",

@@ -1,9 +1,12 @@
 import { http, HttpResponse } from 'msw';
 import type {
+  AccountNetwork,
+  AccountTransactionPage,
   AlertDecisionAccepted,
   AlertDetail,
   AlertPage,
   AlertSummary,
+  BehaviourProfile,
   DashboardStats,
   Explanation,
   ScoringResult,
@@ -67,6 +70,9 @@ const explanation = examples.Explanation[0] as unknown as Explanation;
 const scoringResult = examples.ScoringResult[0] as ScoringResult;
 const accepted = examples.AlertDecisionAccepted[0] as AlertDecisionAccepted;
 const escalated = examples.AlertSummary[0] as AlertSummary;
+const history = examples.AccountTransactionPage[0] as AccountTransactionPage;
+const behaviour = examples.BehaviourProfile[0] as BehaviourProfile;
+const network = examples.AccountNetwork[0] as AccountNetwork;
 
 /** Development-only responses, typed by the contract, for operations the console reads. */
 export const handlers = [
@@ -105,6 +111,16 @@ export const handlers = [
   ),
   http.get('/api/v1/transactions/:transactionId/scoring-result', () =>
     HttpResponse.json(scoringResult, { headers: { 'x-mock': MOCK_MARKER } }),
+  ),
+  // Any account gets the example's history, profile and network.
+  http.get('/api/v1/accounts/:accountToken/transactions', () =>
+    HttpResponse.json(history, { headers: { 'x-mock': MOCK_MARKER } }),
+  ),
+  http.get('/api/v1/accounts/:accountToken/behaviour-profile', () =>
+    HttpResponse.json(behaviour, { headers: { 'x-mock': MOCK_MARKER } }),
+  ),
+  http.get('/api/v1/accounts/:accountToken/network', () =>
+    HttpResponse.json(network, { headers: { 'x-mock': MOCK_MARKER } }),
   ),
   http.get('/api/v1/dashboard/stats', () =>
     HttpResponse.json(dashboardStats, { headers: { 'x-mock': MOCK_MARKER } }),

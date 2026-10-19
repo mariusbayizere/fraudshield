@@ -824,15 +824,24 @@ requirements:
   srs_text: 'Acceptance criterion: Timeline renders within 500ms; accurate against TimescaleDB; scrollable;
     sorted most recent first'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation:
+  - frontend/src/alerts/detail/AlertDetailPanel.tsx
+  - frontend/src/alerts/detail/HistoryTab.tsx
+  - frontend/src/alerts/detail/accountQueries.ts
   evidence: []
   deviations: []
   notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
     on main implements yet (M8B). Operations: listAccountTransactions. The console is built against mocks
     generated from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until
-    the M8B operation exists on main and the screen is exercised against it.'
+    the M8B operation exists on main and the screen is exercised against it. M8 screen 4 (2026-10-19,
+    the drawer''s Account history tab, against contract-example mocks): the account''s last 30 transactions
+    (limit=30, one page), each with its amount, channel (named, not an icon), time, risk score and tier,
+    and an outcome badge with its own icon per outcome; the alert''s own transaction is marked. In the
+    server''s order, which the contract promises is most recent first: the console does not re-sort, so
+    a server that broke the order would show it. Read only when the tab is opened. Not measured: within
+    500 ms. Not testable here: accurate against TimescaleDB (M8B).'
 - id: FR-04-07
   section: 3.4 FR-04 Analyst dashboard
   title: 'Behavioural fingerprint: 4-panel view: hourly transaction pattern heatmap, amount distribution
@@ -842,15 +851,26 @@ requirements:
   srs_text: 'Acceptance criterion: All 4 panels render within 1 second; comparison table highlights anomalous
     fields in amber; accurate against TimescaleDB history'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation:
+  - frontend/src/alerts/detail/AlertDetailPanel.tsx
+  - frontend/src/alerts/detail/BehaviourTab.tsx
+  - frontend/src/alerts/detail/accountQueries.ts
   evidence: []
-  deviations: []
+  deviations:
+  - docs/adr/0085-account-context-is-drawn-without-a-chart-library.md
   notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
     on main implements yet (M8B). Operations: getBehaviourProfile. The console is built against mocks
     generated from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until
-    the M8B operation exists on main and the screen is exercised against it.'
+    the M8B operation exists on main and the screen is exercised against it. M8 screen 4 (2026-10-19,
+    the drawer''s Behaviour tab, against contract-example mocks): the four panels as tables with shading
+    and bars (hours, amounts, channels with their shares in place of a pie, and this transaction against
+    the account''s normal with unusual rows in amber, an icon and the word Unusual). No chart library:
+    ADR 0085, Proposed, lists what the panels do not give that the named charts would. The contract does
+    not say the time zone of hourly_counts or name the comparison attributes (raw keys shown): M8B_updates.md
+    items 6 and 7. Not measured: within 1 second. Not testable here: accurate against TimescaleDB (M8B).
+    A deviation does not lift the mock rule.'
 - id: FR-04-08
   section: 3.4 FR-04 Analyst dashboard
   title: 'Transaction network graph: flagged account + counterparty + 2nd-degree connections; known fraud
@@ -860,15 +880,26 @@ requirements:
   srs_text: 'Acceptance criterion: Graph renders up to 50 nodes within 2 seconds using vis-network or
     D3; fraud nodes correctly coloured; zoom and pan supported'
   defects: []
-  status: NOT_STARTED
+  status: IN_PROGRESS
   verification: test
-  implementation: []
+  implementation:
+  - frontend/src/alerts/detail/AlertDetailPanel.tsx
+  - frontend/src/alerts/detail/NetworkTab.tsx
+  - frontend/src/alerts/detail/accountQueries.ts
   evidence: []
-  deviations: []
+  deviations:
+  - docs/adr/0085-account-context-is-drawn-without-a-chart-library.md
   notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
     on main implements yet (M8B). Operations: getAccountNetwork. The console is built against mocks generated
     from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until the M8B operation
-    exists on main and the screen is exercised against it.'
+    exists on main and the screen is exercised against it. M8 screen 4 (2026-10-19, the drawer''s Network
+    tab, against contract-example mocks): an SVG in a fixed layout (the account at the centre, counterparties
+    on a ring, the second degree outside in its counterparty''s sector, the rings grown so no nodes overlap),
+    confirmed fraud drawn red with a glow, a thicker ring and a mark, zoom by buttons (x0.5 to x4) and
+    pan by dragging or the arrow keys; two tables carry every account and link. Not vis-network or D3:
+    ADR 0085, Proposed, lists what the drawing does not give (no force layout, button zoom only, labels
+    by the token''s last four characters and small at 50 nodes). Not measured: 50 nodes within 2 seconds.
+    A deviation does not lift the mock rule.'
 - id: FR-04-09
   section: 3.4 FR-04 Analyst dashboard
   title: 'Alert filter and search: by transaction_id, account_id, amount range, channel, date range, risk

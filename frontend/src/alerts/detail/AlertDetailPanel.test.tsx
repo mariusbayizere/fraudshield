@@ -44,6 +44,7 @@ interface Served {
   scoringStatus?: number;
   scoringBody?: ScoringResult;
   explanationStatus?: number;
+  accountStatus?: number;
 }
 
 /** Answers the feed and the drawer's three operations; counts the drawer's requests. */
@@ -53,10 +54,19 @@ function serve({
   scoringStatus = 200,
   scoringBody = scoring,
   explanationStatus = 200,
+  accountStatus = 200,
 }: Served = {}) {
-  const asked = { alert: 0, explanation: 0, scoring: 0 };
+  const asked = {
+    alert: 0,
+    explanation: 0,
+    scoring: 0,
+    history: [] as URL[],
+    behaviour: [] as URL[],
+    network: [] as URL[],
+  };
   vi.stubGlobal('fetch', (request: Request) => {
-    const path = new URL(request.url).pathname;
+    const url = new URL(request.url);
+    const path = url.pathname;
     const json = (body: unknown, status = 200) =>
       Promise.resolve(
         new Response(JSON.stringify(status === 200 ? body : { ...PROBLEM, status }), {
@@ -65,6 +75,18 @@ function serve({
         }),
       );
     if (path.endsWith('/dashboard/stats')) return json(stats);
+    if (path.endsWith('/transactions')) {
+      asked.history.push(url);
+      return json(examples.AccountTransactionPage[0], accountStatus);
+    }
+    if (path.endsWith('/behaviour-profile')) {
+      asked.behaviour.push(url);
+      return json(examples.BehaviourProfile[0], accountStatus);
+    }
+    if (path.endsWith('/network')) {
+      asked.network.push(url);
+      return json(examples.AccountNetwork[0], accountStatus);
+    }
     if (path.endsWith('/explanation')) {
       asked.explanation += 1;
       return json(explanation, explanationStatus);
@@ -463,4 +485,49 @@ describe('the SHAP explanation (FR-04-05, UX-DASH-05, D-45)', () => {
     expect(rows).toHaveLength(6);
     expect(rows[5]).toHaveTextContent('39 other features, net');
   });
+});
+
+describe("the account's context (FR-04-06, FR-04-07, FR-04-08)", () => {
+  const TABS = [
+    { name: 'Account history', asked: 'history', shows: 'list' },
+    { name: 'Behaviour', asked: 'behaviour', shows: 'table' },
+    { name: 'Network', asked: 'network', shows: 'group' },
+  ] as const;
+
+  it("reads each tab only when it is opened, for the alert's account", async () => {
+    const asked = serve();
+    await openAlert();
+    // The tabs appear once the alert has loaded, which is when the account is known.
+    await screen.findByRole('tab', { name: 'Account history' }, { timeout: 10_000 });
+    for (const tab of TABS) {
+      expect(asked[tab.asked]).toHaveLength(0);
+    }
+    for (const tab of TABS) {
+      await userEvent.click(screen.getByRole('tab', { name: tab.name }));
+      const panel = screen.getByRole('tabpanel', { name: tab.name });
+      expect((await within(panel).findAllByRole(tab.shows)).length).toBeGreaterThan(0);
+      expect(asked[tab.asked]).toHaveLength(1);
+      expect(asked[tab.asked][0]?.pathname).toContain(`/accounts/${alert.account_token}/`);
+    }
+    // FR-04-06's 30, and the profile compares this alert's transaction.
+    expect(asked.history[0]?.searchParams.get('limit')).toBe('30');
+    expect(asked.behaviour[0]?.searchParams.get('transaction_id')).toBe(alert.transaction_id);
+    // Three tabs opened in turn: more than the default 5 s on a loaded runner.
+  }, 15_000);
+
+  it.each(TABS)(
+    'says when the $name tab cannot be read, with the reference, and retries',
+    async (tab) => {
+      const asked = serve({ accountStatus: 503 });
+      await openAlert();
+      await userEvent.click(await screen.findByRole('tab', { name: tab.name }));
+      const error = await screen.findByRole('alert');
+      expect(error).toHaveTextContent(/could not be loaded/);
+      expect(error).toHaveTextContent(PROBLEM.correlation_id);
+      await userEvent.click(within(error).getByRole('button', { name: 'Try again' }));
+      await waitFor(() => {
+        expect(asked[tab.asked]).toHaveLength(2);
+      });
+    },
+  );
 });

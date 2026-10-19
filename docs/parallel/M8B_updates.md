@@ -80,6 +80,20 @@ implementation; M8's console does not build against any of them until both exist
    re-read cannot put it straight back, does not re-read the feed until the 60 s refresh or an
    Undo. If listAlerts lists it, the decided alert reappears in the analyst's feed at the next
    refresh. The contract should state which statuses the standard queue holds.
+6. **What time zone is `BehaviourProfile.hourly_counts` in?** Its 24 numbers are counts by hour of
+   day, and the contract does not say whose day: UTC, the institution's zone or the account's. The
+   console labels the hours 00 to 23 without a zone (screen 4). An analyst who reads "busiest at
+   08:00" needs to know which 08:00. The comparison's `local_hour` suggests local time; the
+   contract should say so on `hourly_counts` too.
+7. **Which `comparison.attribute` names can the server send?** The contract gives a free string of
+   up to 64 characters (`local_hour` in the example). Without the list, the console cannot give
+   them plain-language names in four languages, so it shows the raw key, as the SHAP table shows
+   feature names. An enum, or a catalogue beside the 44 features, would let the names be written
+   and reviewed with D-45's templates (PB-132).
+8. **Are the account context's lists unique?** Nothing in the contract says a network's node
+   tokens, its (source, target) pairs, the profile's comparison attributes or channels, or a
+   history's transaction ids are distinct (no `uniqueItems`, no stated key). The console keeps every
+   row it is sent and draws a repeated network token once, where it first appears. The contract should state the keys.
 
 ## Before starting
 

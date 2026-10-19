@@ -241,7 +241,7 @@ no copy is in it, and `examplesDrift.test.ts` fails if one returns.
 | 1 | Alert feed | `/alerts` | listAlerts, getDashboardStats | built, under review |
 | 2 | Alert detail and SHAP | `/alerts/$alertId` | getAlert, getAlertExplanation, getScoringResult | built, under review |
 | 3 | Decision panel | in the detail | decideAlert, undoAlertDecision, escalateAlert | built, under review |
-| 4 | Account context | in the detail | listAccountTransactions, getBehaviourProfile, getAccountNetwork | not started |
+| 4 | Account context | in the detail | listAccountTransactions, getBehaviourProfile, getAccountNetwork | built, under review |
 | 5 | Anomalies | `/anomalies` | listAlerts (queue=anomaly) | not started |
 | 6 | Escalations | `/escalations` | listAlerts (queue=escalated) | not started |
 | 7 | Search | `/search` | listAlerts (identifiers, amounts, dates) | not started |
@@ -445,3 +445,42 @@ first visit's JavaScript is 204.8 KB against MOB-PERF-06's 200 KB: **not met**, 
 test's two checks (the SRS gate and the 185 KB margin) are red, as the timing job is at 1 Mbps.
 The gate had measured a figure that excluded the landing route (lab notebook, 2026-10-19). The
 remaining ~50 KB is the shared React and MUI floor: PB-133, due M9 or M10, not M8.
+
+**Screen 4, the account's context** (three more tabs in the drawer, each read only when opened).
+Account history: the last 30 transactions (listAccountTransactions, `limit=30`), with amount,
+channel, time, risk score and tier, and outcome, and the alert's own transaction marked; in the
+server's order, which the contract promises is most recent first, so a server that broke it would
+show. Behaviour (getBehaviourProfile, for the alert's transaction): the comparison with the
+account's 90-day normal, unusual rows in amber with an icon and a word; transactions by hour, by
+amount and by channel. Network (getAccountNetwork): the account, its counterparties and the second
+degree in a fixed SVG layout, confirmed fraud red with a glow, zoom by buttons, pan by dragging or
+the arrow keys, and every account and link in two tables.
+
+- **No chart or graph library (ADR 0085, Proposed, for the owner).** As ADR 0084 for the SHAP
+  table: tables with shading and bars instead of the heatmap, histogram and pie; an SVG instead of
+  vis-network or D3. The ADR lists what they do not give (no pie, no force layout, button zoom
+  only, labels by a token's last four characters). FR-04-07 and FR-04-08 record it; the rows stay
+  IN_PROGRESS under the mock rule.
+- **Three contract questions to M8B** (items 6 to 8): the time zone of `hourly_counts`; the list
+  of comparison attributes, which the console shows as raw keys until they can be named with
+  D-45's templates (PB-132); and which of the account context's lists are unique.
+- **Not measured:** FR-04-06's 500 ms, FR-04-07's 1 s, FR-04-08's 2 s at 50 nodes. Not testable
+  here: accuracy against TimescaleDB (M8B).
+- **Deletion checks:** 37 mutations, each failing a test: the marked transaction, the outcome
+  icons, a client-side re-sort, the score, the amber row, its word and icon, the missing value,
+  the hour shades and their text, the bars and shares, the accent in dark mode, the empty panels,
+  repeated keys, the sector placement and its compaction, the rings' and the drawing's growth, a
+  repeated token drawn once and listed twice, the glow and the fraud column, zoom limits, drag
+  direction, release and main button, arrow keys, the focus ring, the drawing's description,
+  reading each tab only when opened, `limit=30`, the error's reference, and the shape guards.
+- **Independent review: CHANGES_REQUIRED, 1 MAJOR, 7 MINOR, 5 NIT; all fixed.** MAJOR: the
+  drawing's focus ring was brand navy, invisible on dark paper (now the theme's focus ring,
+  tested in dark mode). MINOR: bars, shades and the marked row were also navy, which D-33 never
+  measured (now the accent, which it does); second-degree accounts were not placed by their
+  counterparty, though the ADR said so; the inner ring overlapped from about 27 counterparties
+  (the rings now grow); empty amount and channel panels drew empty tables; keys the contract does
+  not make unique (now index-suffixed, and M8B item 8); the shading test passed through a
+  fallback; nothing was tested in dark mode. **Delta review: APPROVED_WITH_MINORS**: a repeated
+  token was said to be drawn once but was drawn twice (now drawn once and tested); accounts in a
+  wide sector were spread far from their counterparty (now a node's room apart, centred on it);
+  the French label repeated itself.
