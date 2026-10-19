@@ -315,7 +315,7 @@ standard queue as cards with FR-04-03's eight elements, a page at a time.
   the rows say so, and M11 is told the console has a feature table, not explanations analysts
   have been shown to act on (`M11_updates.md`, "From M8").
 - **Bundle:** 200 KB stays the SRS gate; the margin moves to 185 KB only after the entry's
-  unexplained growth from 158.3 KB to 172.2 KB is explained, with ADR 0080 amended on the measured
+  unexplained growth (reported as 158.3 KB to 172.2 KB; measured, 158.0 to 167.9 KB) is explained, with ADR 0080 amended on the measured
   basis; and the 3G timings (MOB-PERF-01, 03) are measured in CI.
 
 **Screen 2, the investigation drawer** (`/alerts/$alertId`, a child of the feed's route, so the feed
@@ -342,7 +342,7 @@ when its tab is opened).
   feature, keyed `feature.<name>.increases_risk|decreases_risk` by the scorer: 88 keys in four
   languages, and wording analysts act on. They do not exist; the drawer shows the feature's name
   and raw value instead. Filed as PB-132.
-- **Bundle:** the entry is 173,324 bytes of 174,080 (756 left); the drawer is its own 11.5 KB
+- **Bundle:** the entry is 173,324 bytes of the then 174,080 (170 KB) budget, 756 left; the drawer is its own 11.5 KB
   chunk.
 - **Deletion checks:** reading the explanation before its tab opens, dropping the sort, the top-10
   cut, the 404 no-retry rule (tested with a client that retries), the focus move, Escape, the

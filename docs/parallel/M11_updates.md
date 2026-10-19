@@ -278,11 +278,14 @@ localised templates per feature, the scorer emits their keys (`feature.<name>.in
 no catalogue exists (PB-132). The owner stopped it being written by the engineer: wording analysts
 act on is a domain question, and wrong wording produces wrong decisions.
 
-So the paper should not say analysts are given actionable explanations. It can say the system
-computes per-decision SHAP attributions within the latency budget and shows them as a ranked
-feature table; whether that table is something an analyst can act on is untested here (claim C-3
-is already UNVERIFIED for the same reason: no real analysts). ADR 0084 lists what the table does
-not provide that the chart the SRS names would.
+So the paper should not say analysts are given actionable explanations. It can say the scorer
+computes per-decision SHAP attributions and the console shows them as a ranked feature table. It
+should not say this happens within the latency budget: the claims register has no latency gate
+figure from a development machine (see `docs/research/claims_register.md`, ADR 0010). And the
+console's table has only ever run against mocks generated from the contract, since the analyst API
+that serves it (M8B) does not exist yet. Whether the table is something an analyst can act on is
+untested here (claim C-3 is already UNVERIFIED for the same reason: no real analysts). ADR 0084
+lists what the table does not provide that the chart the SRS names would.
 
 ## From M6 — five features unusable on this benchmark (owner decision, 2026-10-17)
 

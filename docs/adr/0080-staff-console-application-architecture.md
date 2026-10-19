@@ -139,7 +139,7 @@ that the architecture carry it.
 
    | What | Budget | Measured at this amendment |
    |---|---|---|
-   | Initial JavaScript (entry plus everything `index.html` preloads) | **170 KB** (30 KB under D-39's 200 KB) | 158.3 KB |
+   | Initial JavaScript (entry plus everything `index.html` preloads) | **170 KB** (30 KB under D-39's 200 KB); **185 KB** since the amendment of 2026-10-19 | 158.3 KB |
    | Any single lazily loaded chunk | **120 KB** | 39.1 KB (the shell) |
 
    The initial budget is deliberately below D-39's limit so that the next screen cannot spend the
@@ -163,10 +163,17 @@ MOB-PERF-01 (first contentful paint under 2.5 s) and MOB-PERF-03 (time to intera
 It stays. 170 KB was this ADR's own margin, chosen as 30 KB under 200 so that one screen could not
 spend the rest; it was a round number, not derived from a measurement.
 
-**Why the entry grew with no screen attached.** Between the first amendment (158.3 KB, `cf4cb8f`)
-and the first analyst screen (167.9 KB) the entry grew by 9.9 KB. Measured commit by commit with
-the test's own method (production build, the first country pack, gzip level 6, the entry plus
-everything `index.html` preloads), and attributed by the modules in each build's source maps:
+**Why the entry grew with no screen attached.** Between the first amendment and the commit before
+the first analyst screen (`9824c96`) the entry grew by 9.9 KB: 158.0 to 167.9 KB as measured here
+(the test itself reported 158.3 KB at the first amendment). Each commit was measured on the same
+files and settings as the test (a production build, the first country pack, the entry plus
+everything `index.html` preloads, gzip level 6), but built with source maps (the
+`sourceMappingURL` comment stripped before measuring) and compressed with Python's zlib rather than
+Node's; against the test's own figures that reads 0.3 KB low at the first commit and 0.1 KB high at
+the last, which changes no conclusion. Each step is attributed by the modules in its build's source
+maps. The first four commits were made before the rebase onto `main` and are cited by their ids on
+`m8/frontend-pre-rebase-40f5bdc`; their rebased equivalents are `bbca867`, `5b1b8eb`, `d4fb3a8` and
+`3999aaa`.
 
 | Commit | What it did | Entry | Change | Modules that entered |
 |---|---|---|---|---|
@@ -192,13 +199,21 @@ alone for now.
 **Decision.**
 
 1. **200 KB stays the gate** the SRS sets. It is a requirement, not this ADR's to move.
-2. **The margin is 185 KB** (`productionBundle.build.test.ts`). The basis: the screens built so
-   far cost the entry 0.4 to 1.0 KB each, and the largest single change measured was 2.1 KB (the
-   filters' validation). Six analyst screens remain, and the risk officer's and administrator's
-   after them; at 169.3 KB, 185 KB leaves 15.7 KB, room for that work at the measured rate while
-   staying 15 KB under the SRS gate. It is still a margin, so a screen that needs more than its
-   share must come back with a measurement, not an edit to the constant.
+2. **The margin is 185 KB** (`productionBundle.build.test.ts`). The measured basis: the largest
+   single step was the session restore at sign-in (+6.0 KB), a cost paid once; the two screens
+   built so far cost the entry 0.4 and 1.0 KB; the filters' validation added 2.1 KB over two
+   commits. At 169.3 KB, 185 KB leaves 15.7 KB, 15 KB under the SRS gate. **185 is a judgement on
+   that basis, not a computed figure**: 23 more screens are planned (six analyst, screens 3 to 8 of
+   `M8_updates.md` section 9; seven risk officer; nine administrator; settings), and at the rate
+   measured so far (0.4 to 1.0 KB each) they would need 9 to 23 KB, so the margin covers the
+   analyst screens with room and may not cover all of the rest. It is still a margin: each screen's cost is measured as it is
+   built, and a screen that needs more than the rest of the margin comes back with a measurement,
+   not an edit to the constant.
 3. **The timings are measured, not inferred from size.** A size gate stands in for timing targets
    only as a proxy, and MOB-PERF-01 and MOB-PERF-03 had never been measured. The Playwright suite
-   measures them on a production build under throttled 3G and a slowed CPU, in CI
-   (`e2e/performance.spec.ts`).
+   measures a first visit to the sign-in page on a production build under throttled 3G and a slowed
+   CPU, in CI (`e2e/performance.spec.ts`). What it does not cover: other pages; MOB-PERF-02's "not a
+   spinner" (which element is the largest paint); MOB-PERF-04's "no long task over 50 ms" as a
+   per-task rule (it measures the total blocking time); MOB-PERF-05's skeleton loaders, which the
+   sign-in page does not have; Lighthouse's network-quiet condition for time to interactive; and a
+   real Moto G4 (a four-times-slower runner CPU is not calibrated to one).

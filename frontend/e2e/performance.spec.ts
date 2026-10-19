@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { devices, expect, test, type Page } from '@playwright/test';
 
 /**
  * MOB-PERF-01 to 05 on the SRS's 3G (Moto G4) targets, measured rather than inferred from bundle
@@ -9,9 +9,12 @@ import { expect, test, type Page } from '@playwright/test';
  * 200 ms round trip). The CPU is slowed four times, as MOB-PERF-01 specifies for the Moto G4.
  *
  * Time to interactive follows Lighthouse's rule on the main thread only: the end of the last long
- * task (over 50 ms) before the first 5 s window after first contentful paint with none. Lighthouse
- * also requires that window to have at most two requests in flight; this measurement does not
- * check the network, so it can read earlier than Lighthouse would.
+ * task (over 50 ms) before the first 5 s window after first contentful paint with none, and never
+ * before DOMContentLoaded. Lighthouse also requires that window to have at most two requests in
+ * flight; this measurement does not check the network, so it can read earlier than Lighthouse
+ * would. Layout shift is the sum of every shift, not Lighthouse's largest session window, which
+ * reads high, the safe side. The device is Playwright's Moto G4 profile (a phone viewport, touch,
+ * its pixel ratio); the runner's CPU slowed four times is not calibrated to a real Moto G4.
  */
 
 const NETWORK = {
@@ -22,6 +25,8 @@ const NETWORK = {
 };
 const CPU_SLOWDOWN = 4;
 const QUIET_MS = 5_000;
+/** How long to watch for a quiet window before reporting that there was none. */
+const WATCH_MS = 30_000;
 const RUNS = 3;
 
 /** MOB-PERF-01 to 05, 3G column. */
@@ -75,23 +80,40 @@ async function measure(page: Page): Promise<Run> {
   });
 
   // Wait until a whole quiet window has passed after the last long task.
-  const fcp = await page.evaluate(
-    () => performance.getEntriesByName('first-contentful-paint')[0]?.startTime ?? Number.NaN,
-  );
+  const { fcp, dcl } = await page.evaluate(() => ({
+    fcp: performance.getEntriesByName('first-contentful-paint')[0]?.startTime ?? Number.NaN,
+    dcl:
+      (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)
+        ?.domContentLoadedEventEnd ?? 0,
+  }));
+  // Without a paint there is nothing to wait from; report it rather than wait for the timeout.
+  if (Number.isNaN(fcp)) return { fcp, lcp: Number.NaN, tti: Number.NaN, tbt: Number.NaN, cls: 0 };
+  let quiet = false;
   for (;;) {
     const { now, lastEnd } = await page.evaluate(() => ({
       now: performance.now(),
       lastEnd: Math.max(0, ...window.__fsPerf.longTasks.map((t) => t.end)),
     }));
-    if (now - Math.max(fcp, lastEnd) >= QUIET_MS) break;
+    if (now - Math.max(fcp, lastEnd) >= QUIET_MS) {
+      quiet = true;
+      break;
+    }
+    if (now - fcp > WATCH_MS) break;
     await page.waitForTimeout(500);
   }
 
   const perf = await page.evaluate(() => window.__fsPerf);
+  if (!quiet) {
+    // No 5 s window without a long task within 30 s: time to interactive is not reached.
+    console.log(
+      `MOB-PERF no quiet window: fcp ${String(fcp)} ms, ${String(perf.longTasks.length)} long tasks, last ending ${String(Math.max(0, ...perf.longTasks.map((t) => t.end)))} ms`,
+    );
+  }
   const after = perf.longTasks.filter((t) => t.end > fcp);
-  const tti = Math.max(fcp, ...after.map((t) => t.end));
+  const tti = quiet ? Math.max(fcp, dcl, ...after.map((t) => t.end)) : Number.NaN;
   const tbt = after
-    .filter((t) => t.start < tti)
+    // With no quiet window, every long task after first paint counts.
+    .filter((t) => !quiet || t.start < tti)
     .reduce((sum, t) => sum + Math.max(0, t.end - Math.max(t.start, fcp) - 50), 0);
   await cdp.detach();
   return { fcp, lcp: perf.lcp, tti, tbt, cls: perf.cls };
@@ -110,11 +132,8 @@ test.describe('first visit on 3G with a slowed CPU (MOB-PERF-01 to 05)', () => {
   }) => {
     const runs: Run[] = [];
     for (let i = 0; i < RUNS; i += 1) {
-      // A first visit on a phone: a fresh profile, no service worker, a small screen.
-      const context = await browser.newContext({
-        serviceWorkers: 'block',
-        viewport: { width: 360, height: 640 },
-      });
+      // A first visit on a phone: a fresh profile, no service worker, the Moto G4's profile.
+      const context = await browser.newContext({ ...devices['Moto G4'], serviceWorkers: 'block' });
       runs.push(await measure(await context.newPage()));
       await context.close();
     }
