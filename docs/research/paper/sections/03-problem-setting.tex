@@ -1,50 +1,56 @@
 \section{Problem setting}
 \label{sec:setting}
 
-\paragraph{Channels.} The specification covers six channels: \texttt{MOBILE\_MONEY},
+\paragraph{Channels.} The specification covers \nChannels{} channels: \texttt{MOBILE\_MONEY},
 \texttt{USSD}, \texttt{AGENT\_BANKING}, \texttt{CARD}, \texttt{ONLINE} and
 \texttt{BANK\_TRANSFER}. They differ in what a fraud system can observe, and those differences are
 built into the feature contract rather than handled as missing data after the fact.
 
 \paragraph{USSD.} USSD sessions run on basic handsets and carry no device fingerprint. Every
-transaction still yields a feature vector with the same slots; the four features derived from a
-device fingerprint are structurally missing (NaN) for USSD and handled by the models' native
-missing-value logic, so the remaining features are computed from data (resolution D-04). The
+transaction still yields a feature vector with the same slots; the \nDeviceNaNFeatures{} features
+derived from a device fingerprint are structurally missing (NaN) for USSD and handled by the models'
+native missing-value logic, so the remaining features are computed from data (resolution D-04). The
 parity suite requires the NaN positions to match exactly on both computation paths
 (Section~\ref{sec:features}), because a NaN on one path and a number on the other is a contract
 violation rather than a numerical difference.
 
-\paragraph{Agents.} Agent banking, where a registered agent handles cash-in and cash-out on a
-customer's behalf, has its own fraud (float manipulation, fake cash-outs) and its own signals: the
-agent's float utilisation, cash-out counts, distinct customers and distance from the registered
-location. Those features are defined only for \texttt{AGENT\_BANKING} and are NaN on every other
-channel, again by contract.
+\paragraph{Agents.} The specification gives agent banking, where a registered agent handles cash-in
+and cash-out on a customer's behalf, its own features: the agent's float utilisation, its cash-out
+count, its distinct customers and its distance from its registered premises. They are defined only
+for \texttt{AGENT\_BANKING} and are NaN on every other channel, by contract. \textbf{On this
+benchmark the float-utilisation and distance features have no source data} (the generator models
+neither agent float nor registered premises, ADR 0055), so only the cash-out count and the distinct
+customers are computed.
 
-\paragraph{Corridors.} Transfers within a country, within a regional bloc such as the East African
-Community (EAC), and beyond it are different populations: regional remittances, including
-cross-border salary and family transfers, are routine and must not be treated like arbitrary
-foreign transfers. The categorical \texttt{corridor\_class} feature has four classes, derived from
-the two countries' bloc memberships rather than from a list of EAC countries (ADR 0023):
-\texttt{DOMESTIC}, \texttt{INTRA\_BLOC}, \texttt{CROSS\_BLOC\_AFRICA} and
-\texttt{INTERCONTINENTAL}. \textbf{Only the first two occur on this benchmark}: every simulated
-counterparty is in one of the five countries, all of them EAC members, so the models never saw a
-cross-bloc or intercontinental transfer and nothing here says how they would score one (the
-feature registry records the two classes as unreachable, PB-43).
+\paragraph{Corridors.} The specification treats transfers within a country, within a regional bloc
+such as the East African Community (EAC), and beyond it as different populations. The categorical
+\texttt{corridor\_class} feature takes the classes \texttt{DOMESTIC}, \texttt{INTRA\_BLOC},
+\texttt{CROSS\_BLOC\_AFRICA} and \texttt{INTERCONTINENTAL}, derived from both countries' bloc
+memberships rather than from a list of EAC countries (ADR 0023). \textbf{Only \texttt{DOMESTIC} and
+\texttt{INTRA\_BLOC} can occur on this benchmark}, by its configuration: every simulated counterparty
+is in one of the \nCountries{} countries, all of them EAC members (the feature registry records the
+other classes as unreachable, PB-43). We have not counted the classes on the evaluated draw. The
+models therefore never saw a cross-bloc or intercontinental transfer, and nothing here says how they
+would score one.
 
-\paragraph{Currencies, time and money.} Five currencies with different minor units, amounts
-normalised to Rwandan francs by a dated exchange-rate table, local time derived from coordinates
-(the Democratic Republic of the Congo spans two time zones), and amounts carried as decimals,
-never binary floating point.
+\paragraph{Currencies, time and money.} Each country's currency is carried with its own minor units,
+and amounts are normalised to Rwandan francs by a dated exchange-rate table. Local time is derived
+from the transaction's timestamp and the country pack's fixed UTC offset (resolution D-43), so a
+country that spans several time zones is given the one offset its simulated customers are placed in
+(\texttt{dataset/params\_provenance.md}). The released tables carry amounts as decimals; the feature
+computation works in binary floating point.
 
 \paragraph{Decision path.} The system returns a decision (approve, decline, or hold for review)
-synchronously to core banking, with a server-side latency target of 40~ms at the 95th percentile
-for flagged transactions (the specification's latency budget). A decision that holds a transaction for an
-analyst is resolved by webhook, not by an open request. The ingestion budget per API key is an
-assumed configuration value, derived from the specified system throughput, not a requirement or an
-observation (ADR 0058). Scores are calibrated probabilities from
-a weighted XGBoost and LightGBM ensemble, and every flagged decision carries an exact TreeSHAP
-explanation. The scoring service and the decision engine belong to later milestones, and their measured latency
-is \notyet{M5, M6 and M10}.
+synchronously to core banking, with a server-side latency target of \nLatencyTargetFlagged{}~ms at
+the 95th percentile for flagged transactions (the specification's latency budget). A decision that
+holds a transaction for an analyst is resolved by webhook, not by an open request. The ingestion
+budget per API key is an assumed configuration value, derived from the specified system throughput,
+not a requirement or an observation (ADR~0058). Scores are calibrated probabilities from a weighted
+XGBoost and LightGBM ensemble, and every flagged decision carries an exact TreeSHAP explanation. The
+scoring service's and the decision engine's latencies have been measured only on shared development
+hardware, which cannot give gate figures (ADR 0010; ADR 0035 and ADR 0059 record those measurements
+and carry the gate to a later milestone); the gate measurement is \notyet{M10}, and no latency
+figure from those runs is stated here.
 
 \paragraph{What is not in scope.} Graph-based features (the specification's later phases),
 real customer data of any kind, and any claim about a real institution, regulator or deployment.

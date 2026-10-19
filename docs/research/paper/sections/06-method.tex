@@ -10,8 +10,9 @@ Their raw probabilities are combined as $\nWeightXGB\,p_{\mathrm{xgb}} +
 score using the calibration split (resolution D-05), which is chronologically later than the
 validation data and
 never used for fitting or scoring otherwise. The calibrated ensemble score is the quantity the
-decision thresholds and the calibration error are measured on; calibrating the two models
-separately and averaging them does not yield a calibrated ensemble. In the evaluated run the
+decision thresholds and the calibration error are measured on. The specification's reason for one
+calibration of the combined score (resolution D-05) is that calibrating each model separately and
+averaging them does not yield a calibrated ensemble; we did not measure that alternative. In the evaluated run the
 early-stopped models used \nGateXGBRounds{} (XGBoost) and \nGateLGBRounds{} (LightGBM) rounds,
 with a positive-class weight of \nGateSPW{}.
 
@@ -22,8 +23,8 @@ separate review queue that does not hold the payment; that routing belongs to th
 engine (M6) and is not evaluated here.
 
 \paragraph{Training volume.} The evaluated models were trained on \nTrainUsed{} rows holding
-\nGateTrainFraud{} confirmed fraud, a subset of the \nTrainRows{} rows in the training period,
-because of the development machine (Section~\ref{sec:repro}). Every figure in
+\nGateTrainFraud{} confirmed fraud, a subset of the \nTrainRows{} rows in the training period;
+no document records why that volume was chosen. Every figure in
 Section~\ref{sec:evaluation} is at that training volume except the learning curve of
 Section~\ref{sec:volume}, which reaches \nLcTrainD{} rows; full-volume training is
 \notyet{M10}.
@@ -37,18 +38,19 @@ margin. We never claim that SHAP values sum to the calibrated probability: isoto
 monotone but not additive. The specification requires plain-language explanations to come from
 deterministic, localised templates per feature and never from a language model. \textbf{No such
 template exists.} The scorer emits a template key per feature, but no catalogue of wording has been
-written (PB-132): wording that analysts act on is a domain question, and wrong wording produces wrong
-decisions, so it is not written by the engineer. What the analyst console shows instead is a feature
-table: for each alert, every feature's contribution ranked by effect, with the feature's name, its raw
-value and its signed effect (ADR 0084). That table has run only against responses generated from the
-interface contract, because the analyst API that serves it does not yet exist, and whether an analyst
-can act on it is untested: no analyst has used it.
+written (PB-132): the owner decided that wording analysts act on is a domain question, and that it is
+not to be written by the engineer. What the analyst console shows instead is a feature table: for each
+alert, every feature's contribution ranked by effect, with the feature's name, its raw value and its
+signed effect (ADR 0084). That table has run only against responses generated from the interface
+contract, because the analyst API that serves it does not yet exist, and whether an analyst can act on
+it is untested: no analyst has used it. PB-132 and ADR 0084 are defined on the analyst console's
+branch, which is not yet merged (commit \texttt{b1d76e7}).
 
 \subsection{The diagnostic battery}
 
 The analyses of feature groups, slices, variants and countries (Sections~\ref{sec:evaluation}
 and~\ref{sec:generalisation}) use a separate, deliberately simple model: one untuned XGBoost
-booster on \nTrainUsed{} training rows, calibrated with two-parameter Platt scaling \cite{niculescumizil2005calibration}. It is a
+booster on \nTrainUsed{} training rows, calibrated with Platt scaling (a sigmoid fitted with a slope and an offset) \cite{niculescumizil2005calibration}. It is a
 diagnostic of the benchmark, not the production model, and its figures are labelled as such
 (ADR 0029). Ablations of the production ensemble are reported with the gate.
 
@@ -65,14 +67,17 @@ diagnostic of the benchmark, not the production model, and its figures are label
         for AUCs of single features and baselines, Wilson intervals \cite{wilson1927interval} for
         recall on small variant counts, DeLong's test \cite{delong1988auc} for AUC differences, and the mean and
         standard deviation over \nSeeds{} refits.
-  \item \textbf{The floor}: every ranking metric is reported beside the best single feature and
+  \item \textbf{The floor}: every gate ranking metric is reported beside the best single feature and
         the best trivial rule (one threshold on one feature) on the same rows, as a margin
         (Section~\ref{sec:floor}).
-  \item \textbf{Test discipline}: nothing is tuned on the test period; every read of the test set
-        is logged with a counter; the calibrator is guarded by a test that fails if it sees a
-        test-period row.
+  \item \textbf{Test discipline}: nothing is tuned on the test period; scoring runs on the test
+        set are logged, with earlier runs back-filled from committed evidence and one read made for
+        this paper not logged (Section~\ref{sec:dataset}); tests fail if the production calibrator
+        learns from rows other than the calibration rows, or if the diagnostic battery's calibrator
+        is fitted on test rows.
   \item \textbf{Scale}: every figure states the rows and fraud count it rests on, because
-        single-feature AUC on this benchmark moves with dataset size by more than seed noise
+        the single-column AUC of the strongest dataset column moves with dataset size by more than
+        seed noise
         (spread \nSizeSeriesSpan{} across sizes against a seed-to-seed standard deviation of
         \nSeedSdSizeSeries{}), for a reason that remains unexplained.
 \end{itemize}

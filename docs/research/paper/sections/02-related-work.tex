@@ -7,20 +7,19 @@ across credit cards, telecommunications and money laundering, surveyed by Bolton
 paper meets in synthetic form: extreme class imbalance, drift in fraud behaviour over time, and
 metrics that must reflect a limited budget of analyst alerts \cite{dalpozzolo2014lessons}.
 Learning under imbalance has its own methods and pitfalls \cite{he2009imbalanced}, and at a base
-rate below one per cent the receiver-operating curve can look reassuring while precision stays low
+rate such as this benchmark's \nFraudRateAll{} the receiver-operating curve can look reassuring while precision stays low
 \cite{saito2015prc}; we therefore report recall at a fixed false-positive rate and precision beside
 its ceiling rather than AUC alone. Our models are standard: gradient-boosted trees in their
 XGBoost \cite{chen2016xgboost} and LightGBM \cite{ke2017lightgbm} implementations, and an
 Isolation Forest \cite{liu2008iforest} for anomaly scores. We claim no novelty in them.
 
-\paragraph{Mobile money and its fraud.} Mobile money is now a primary financial service in parts
-of East Africa; in Kenya, access to M-PESA has been estimated to have lifted about two per cent of
-households out of poverty \cite{suri2016mpesa}. Its fraud differs from card fraud. Phipps et al.\
+\paragraph{Mobile money and its fraud.} In Kenya, access to M-PESA has been estimated to have
+lifted households out of poverty \cite{suri2016mpesa}. Phipps et al.\
 analyse attacks on mobile money systems through ThinSIM add-on cards \cite{phipps2018thinsim}. Lee
-et al.\ found that the authentication five prepaid US carriers applied to SIM-swap requests could
-be subverted easily, and that the swap alone was enough to compromise accounts on a number of
-websites \cite{lee2020simswap}; SIM-swap takeover is one of the benchmark's eight scenarios. Razaq
-et al.\ describe SMS- and call-based social-engineering fraud from 96 interviews in Pakistan,
+et al.\ found that the authentication the prepaid US carriers they studied applied to SIM-swap
+requests could be subverted easily, and that the swap alone was enough to compromise accounts on a number of
+websites \cite{lee2020simswap}; SIM-swap takeover is one of the benchmark's \nScenarios{} scenarios. Razaq
+et al.\ describe SMS- and call-based social-engineering fraud from \nRazaqInterviews{} interviews in Pakistan,
 mostly with victims \cite{razaq2021scams}, and Do{\u{g}}an et al.\ survey the scams Kenyan
 M-PESA users face and how they detect and respond to them, finding forged M-PESA messages the most
 common \cite{dogan2025grift}. With a press account of the ``sent by mistake'' reversal scam
@@ -30,11 +29,10 @@ Section~\ref{sec:generalisation} is modelled on.
 \paragraph{Synthetic transaction data.} Real transaction data is rarely shareable, which is why
 synthetic generators exist. The closest to ours is PaySim, an agent-based simulator of mobile
 money transactions calibrated to aggregates of a real service \cite{lopezrojas2016paysim}. Its
-transaction log records who made which of five transaction types (cash-in, cash-out, debit,
-payment, transfer), to whom, the amount and the change in balances, at an hourly step; it has no
-channel, device, geographic or cross-border corridor field. FraudShield-EAC differs in what it
-simulates (six channels including USSD and agent banking, devices, coordinates, five countries and
-their corridors) and in what it is used for: this paper is less about the generator than about
+log records the client, the action, the recipient, the sum and the change in balances, at an hourly
+step; it has no channel, device, geographic or cross-border corridor field. FraudShield-EAC differs in what it
+simulates (\nChannels{} channels including USSD and agent banking, devices, coordinates, \nCountries{}
+countries and their corridors) and in what it is used for: this paper is less about the generator than about
 what its benchmark can and cannot support. We make no claim that it is the first East African
 fraud benchmark: that would require a documented search of datasets we have not done (claims
 register, C-8). We document the dataset with a datasheet \cite{gebru2021datasheets} and the model

@@ -2,7 +2,7 @@
 
 Every macro in `numbers.tex` checked against its evidence file at `m4-complete` (`72e7790`), or at the ref its row names, read with `git show`, by `audit_numbers.py`. Values are compared as printed: rounding, sign and interval bounds included. Regenerate with `python3 docs/research/paper/audit_numbers.py`; do not edit by hand.
 
-**367 macros, 367 MATCH, 0 not matching.**
+**396 macros, 396 MATCH, 0 not matching.**
 
 | Macro | Value in paper | Value in evidence | File | Note | Result |
 |---|---|---|---|---|---|
@@ -373,3 +373,32 @@ Every macro in `numbers.tex` checked against its evidence file at `m4-complete` 
 | `\nLcPredBudgetHigh` | `0.91` | `0.91` | `docs/research/lab_notebook.md` at `488c5b4` |  | MATCH |
 | `\nNoSourceFeatures` | `five` | `Five` | `docs/adr/0055-five-features-have-no-source-data-on-this-benchmark.md` at `m6-complete` |  | MATCH |
 | `\nNoSourceShare` | `11\%` | `11%` | derived | the no-source count over the catalogue's 44, to a whole per cent | MATCH |
+| `\nCountries` | `five` | `five` | derived | rows of the realism report's country-mix table | MATCH |
+| `\nChannels` | `six` | `six` | derived | rows of the realism report's channel-mix table | MATCH |
+| `\nScenarios` | `eight` | `8` | `dataset/realism_report.md` |  | MATCH |
+| `\nScenariosCap` | `Eight` | `8` | `dataset/realism_report.md` |  | MATCH |
+| `\nGroupsAboveCeiling` | `four` | `four` | derived | diagnostic-model groups alone whose AUC exceeds the single-feature ceiling | MATCH |
+| `\nGroupsAboveCeilingCap` | `Four` | `four` | derived | the same count, capitalised at a sentence start | MATCH |
+| `\nDeviceNaNFeatures` | `four` | `Four` | `ml/src/fraudshield_ml/features/registry.py` |  | MATCH |
+| `\nAdaptMonthIndex` | `12` | `12` | `dataset/generator/params/fraud.yaml` |  | MATCH |
+| `\nAdaptMonthOrdinal` | `thirteenth` | `thirteenth` | `dataset/generator/params/fraud.yaml` |  | MATCH |
+| `\nEventLeakShare` | `99.84\%` | `99.84%` | `docs/research/lab_notebook.md` |  | MATCH |
+| `\nEventLeakBase` | `41.96\%` | `41.96%` | `docs/research/lab_notebook.md` |  | MATCH |
+| `\nMinSigmas` | `3` | `3` | `dataset/src/fraudshield_dataset/generator/fraud.py` |  | MATCH |
+| `\nFingerprintSampleRows` | `1{,}024` | `1024` | `dataset/src/fraudshield_dataset/fingerprint.py` |  | MATCH |
+| `\nResolutions` | `51` | `51` | `docs/prompts/FraudShield_Master_Build_Prompt.md` |  | MATCH |
+| `\nLatencyTargetFlagged` | `40` | `40` | `docs/prompts/FraudShield_Master_Build_Prompt.md` |  | MATCH |
+| `\nSpecRows` | `5{,}000{,}000` | `5,000,000` | `docs/prompts/FraudShield_Master_Build_Prompt.md` |  | MATCH |
+| `\nRazaqInterviews` | `96` | `96` | `docs/research/paper/reference_audit.md` at `ee97bbd` |  | MATCH |
+| `\nFeatureGroups` | `ten` | `ten` | derived | entries of the registry test's EXPECTED_GROUP_COUNTS | MATCH |
+| `\nSynthTerms` | `four` | `four` | `ml/src/fraudshield_ml/features/registry.py` |  | MATCH |
+| `\nSpecTolerance` | `\ensuremath{10^{-9}}` | `1e-9` | `docs/prompts/FraudShield_Master_Build_Prompt.md` |  | MATCH |
+| `\nSlackUlps` | `4.5 million` | `4.5 million` | `docs/ml/training_serving_parity.md` |  | MATCH |
+| `\nParityCrossover` | `999` | `999` | derived | |b| at which 1e-12 + 1e-12|b| equals the specification's absolute 1e-9 | MATCH |
+| `\nFeatureLatencyTarget` | `10` | `10` | `docs/prompts/FraudShield_Master_Build_Prompt.md` |  | MATCH |
+| `\nCounterpartyNewMci` | `0.037` | `0.037` | `docs/benchmarks/single_feature_baseline.md` |  | MATCH |
+| `\nTxCountHourMci` | `0.039` | `0.039` | `docs/benchmarks/single_feature_baseline.md` |  | MATCH |
+| `\nImpliedSpeedMci` | `0.040` | `0.040` | `docs/benchmarks/single_feature_baseline.md` |  | MATCH |
+| `\nSecondsSinceMci` | `0.040` | `0.040` | `docs/benchmarks/single_feature_baseline.md` |  | MATCH |
+| `\nFeaturesAboveCeilingCI` | `two` | `two` | derived | features whose separation minus its interval half-width exceeds the ceiling | MATCH |
+| `\nUnboundedFixed` | `five` | `five` | `docs/benchmarks/m3_single_feature_auc_2c80ef6.txt` |  | MATCH |

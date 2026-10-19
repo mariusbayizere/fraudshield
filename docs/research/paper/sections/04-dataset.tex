@@ -3,26 +3,30 @@
 
 \subsection{Generator}
 
-FraudShield-EAC is produced by an agent-based, seeded simulator. Its entities are customers
-(with a KYC tier and a home location drawn from district population weights in Rwanda, Kenya,
-Tanzania, Uganda and the Democratic Republic of the Congo), accounts, devices (absent for
-USSD-only users), SIM events, agents with float and a registered location, merchants, and
-counterparties. Legitimate behaviour includes salary cycles, market days, school-fee periods,
-family remittances along EAC corridors, round-sum transfers, and agent cash-in and cash-out
-peaks; volume grows over 24 simulated months. Eight fraud scenarios are injected, each with
-randomised parameters and temporal evolution: SIM-swap takeover, account takeover through a
-credential or device change, agent fraud, velocity fraud, card-not-present fraud, mule accounts
-(fan-in and fan-out), merchant fraud and synthetic identity. Adversarial adaptation moves amounts
-just below published rule thresholds from the thirteenth simulated month (index 12). Two
-sub-variants appear only in the test period: a delayed SIM-swap drain, and, in the evaluation draw,
-the pre-registered reversal scam of Section~\ref{sec:generalisation}.
+FraudShield-EAC is produced by an agent-based, seeded simulator. Its entities are customers,
+accounts, devices (absent for USSD-only users), SIM events, agents, merchants, and counterparties.
+Each customer's home location is drawn from a single cluster around one centre per country (an
+assumed spread; district population weights are not used), and the customer's KYC tier is internal
+to the generator and is not in any released table. Agents have no float and no registered premises
+in the generated data (ADR 0055). Legitimate behaviour includes salary cycles, market days,
+school-fee periods, family remittances along EAC corridors, round-sum transfers, and agent cash-in
+and cash-out peaks; volume grows over \nMonths{} simulated months. \nScenariosCap{} fraud scenarios
+are injected, each with randomised parameters and temporal evolution: SIM-swap takeover, account
+takeover through a credential or device change, agent fraud, velocity fraud, card-not-present
+fraud, mule accounts (fan-in and fan-out), merchant fraud and synthetic identity. Adversarial
+adaptation moves amounts just below one simulated, assumed rule threshold from the
+\nAdaptMonthOrdinal{} simulated month (index \nAdaptMonthIndex{}). The test period alone also carries a delayed SIM-swap drain and, in
+the evaluation draw, the pre-registered reversal scam of Section~\ref{sec:generalisation}.
 
-Unless stated otherwise, results use seed \nSeed{} at about one million rows: the draw with
-fingerprint \texttt{6abde44e} (\nRowsDrawA{} rows) for the single-feature measurements, and the
-draw \texttt{d8083dbc} (\nRowsDrawB{} rows), which adds the pre-registered variant of
-Section~\ref{sec:generalisation}, for the model evaluation. The specification asks for at least
-five million rows; that scale is \notyet{M10} (it waits for a dedicated run, and the one-million
-row results are reported at their stated scale).
+Results use seed \nSeed{}, on the draws named where each is used. The model evaluation
+uses draw \texttt{d8083dbc} (\nRowsDrawB{} rows), which carries the pre-registered variant of
+Section~\ref{sec:generalisation}. The dataset-column measurements and the earlier battery use draw
+\texttt{6abde44e} (\nRowsDrawA{} rows). The engineered single-feature measurements of
+Section~\ref{sec:floor} were taken on an earlier draw of \nFloorDrawRows{} rows, at the same seed,
+whose evidence file records no fingerprint; it predates \texttt{6abde44e} and the change to the
+takeover lead time described below, so it is not the same data. The specification asks for at least
+\nSpecRows{} rows; that scale is \notyet{M10}, and every result here is reported at its stated
+scale.
 
 \subsection{What the parameters rest on}
 
@@ -30,8 +34,9 @@ A sourcing pass on 2026-09-18 read \nSourceDocs{} documents in full and raised t
 sourced generator parameters from none to \nParamsSourced{} of the \nParamsTotal{} that existed
 then. The generator at the evaluated draw has \nProvTotal{} parameters: \nProvSourced{} sourced,
 \nProvAssumed{} modelling choices, and \nProvCalibrated{} calibrated to targets in the
-specification (\texttt{dataset/params\_provenance.md}); the count grew because currency, time-zone
-and exchange-rate parameters became per-country. The sourced parameters rest on these documents,
+specification (\texttt{dataset/params\_provenance.md}); the count grew when country facts moved into
+per-country packs (currency and its minor units, time zone, exchange rate, bloc memberships,
+continent, home-location centre and round denominations). The sourced parameters rest on these documents,
 each re-read for this paper:
 \begin{itemize}
   \item transactions per active customer, mobile money volume growth, per-channel mean amounts and
@@ -51,17 +56,17 @@ each re-read for this paper:
   \item the months in which school terms begin: one Rwandan school's 2024--2025 calendar
         \cite{ngaCalendar2425};
   \item regional-bloc membership: the East African Community \cite{eacOverview} and COMESA
-        \cite{comesaMembers} membership pages. These two are not among the \nSourceDocs{}
+        \cite{comesaMembers} membership pages. These pages are not among the \nSourceDocs{}
         documents of the sourcing pass: they were read on 2026-09-19 as the sources of the
         countries' bloc memberships, and are cited in \texttt{dataset/params\_provenance.md}.
 \end{itemize}
-Because Tanzania publishes value and volume by transaction category and Rwanda does not,
-per-transaction levels come from Tanzanian aggregates while the country mix is Rwanda-weighted;
+Because the Tanzanian report gives value and volume by transaction category and no Rwandan
+breakdown was found in the documents read, per-transaction levels come from Tanzanian aggregates while the country mix is Rwanda-weighted;
 they are order-of-magnitude anchors, not claims about one market.
 
 \textbf{No fraud parameter is sourced.} Of the \nProvFraudTotal{} fraud parameters,
 \nProvFraudAssumed{} are modelling choices (scenario prevalence and mix, incident length, burst
-timing, adaptation, mule structure, the two held-out variants) and \nProvFraudCalibrated{} are
+timing, adaptation, mule structure, the held-out variants) and \nProvFraudCalibrated{} are
 calibrated to specification targets. No central bank publication read gives fraud incidence by
 type for these markets; sourcing those figures from vendor reports or global aggregates presented
 as regional would make the paper look better and be less honest. Every result that depends on the
@@ -72,9 +77,9 @@ as regional would make the paper look better and be less honest. Every result th
 Table~\ref{tab:glance} describes the draw evaluated in Sections~\ref{sec:evaluation}
 and~\ref{sec:generalisation}; Table~\ref{tab:scenarios} gives its fraud by scenario
 (signals and variants in Appendix~\ref{app:scenarios}). The draw
-\texttt{6abde44e}, used for the single-feature measurements of Section~\ref{sec:features}, is the
-same data without the \nRevRows{} test-period rows of the pre-registered reversal-scam variant;
-its train, validation, calibration and embargo splits are identical.
+\texttt{6abde44e} differs from it by the \nRevRows{} test-period rows of the pre-registered
+reversal-scam variant; the datasheet reports that the train, validation, calibration and embargo
+splits have identical counts and rates in both.
 
 \begin{table}[htbp]
 \centering
@@ -96,7 +101,7 @@ Channel mix & mobile money \nMixMM{} (\nMixTargetMM), USSD \nMixUSSD{} (\nMixTar
  & agent banking \nMixAgent{} (\nMixTargetAgent), card \nMixCard{} (\nMixTargetCard), \\
  & online \nMixOnline{} (\nMixTargetOnline), bank transfer \nMixBank{} (\nMixTargetBank) \\
 Fraud rate & \nFraudRateAll{} overall; \nFraudRateTest{} in the test period \\
-Fraud rows (true label) & \nScenTotal{} in eight scenarios (Table~\ref{tab:scenarios}) \\
+Fraud rows (true label) & \nScenTotal{} in \nScenarios{} scenarios (Table~\ref{tab:scenarios}) \\
 Label noise & fraud labelled legitimate: \nLabelNoiseMissed{} of true fraud; \\
  & legitimate labelled fraud: \nLabelNoiseFalse{} of true fraud \\
 Train & \nTrainRows{} rows, \nTrainDays{} days \\
@@ -105,7 +110,7 @@ Calibration (tail of validation) & \nCalRows{} rows, \nCalDays{} days \\
 Embargo (excluded) & \nEmbargoRows{} rows, \nEmbargoDays{} days \\
 Test & \nTestRows{} rows, \nTestSpanDays{} days, from \nTestStart{} \\
 \midrule
-\multicolumn{2}{l}{Fingerprint of this draw (SHA-256 over its rows):} \\
+\multicolumn{2}{l}{Fingerprint of this draw (SHA-256 over a fixed row sample per table and the row counts):} \\
 \multicolumn{2}{l}{\quad\texttt{\footnotesize\nFingerprintB}} \\
 \multicolumn{2}{l}{Fingerprint of draw \texttt{6abde44e} (\nRowsDrawA{} rows):} \\
 \multicolumn{2}{l}{\quad\texttt{\footnotesize\nFingerprintA}} \\
@@ -116,7 +121,7 @@ Test & \nTestRows{} rows, \nTestSpanDays{} days, from \nTestStart{} \\
 \begin{table}[htbp]
 \centering
 \caption{Fraud rows by scenario over the whole draw (true label; realism report's scenario table,
-summed over its \nMonths{} months). The two held-out variants are sub-variants of a scenario:
+summed over its \nMonths{} months). Both held-out variants are sub-variants of a scenario:
 the novel eSIM delayed drain (\nNovelRows{} rows, test period only) is a SIM-swap sub-variant,
 and the pre-registered reversal scam (\nRevRows{} rows, test period only) is generated as a
 \texttt{mule\_account} row (\texttt{dataset/src/fraudshield\_dataset/generator/fraud.py}).}
@@ -146,16 +151,17 @@ The controls, and why each exists:
 \begin{itemize}
   \item \textbf{Single-column separation.} No dataset column may separate the classes beyond an
         AUC of \nCeiling{} (resolution D-08). The strongest column is the merchant category, at
-        \nColumnMaxAUCB{} on the evaluation draw (\nColumnMaxAUC{} on draw \texttt{6abde44e}). Section~\ref{sec:features} shows why this control, true of the columns,
-        is false of the engineered features.
+        \nColumnMaxAUCB{} on the evaluation draw (\nColumnMaxAUC{} on draw \texttt{6abde44e}).
+        Section~\ref{sec:features} shows that the ceiling, true of the columns, is not true of the
+        engineered features.
   \item \textbf{A shortcut detector} trained on non-behavioural columns (identifiers, file order,
         construction artefacts) must stay within its own null band around chance; on the
         evaluation draw it reads \nShortcutAUC{}.
   \item \textbf{Construction checks}: account events, identifier characters, file order and
-        per-channel null signatures must not reveal the label. These exist because the first
-        version of the account-events table put nearly every event on a fraud account, a leak
-        found in a secondary table rather than in the feature matrix
-        (Section~\ref{sec:discussion}).
+        per-channel null signatures must not reveal the label. The account-event check exists
+        because of a leak found in that secondary table rather than in the feature matrix: in its
+        first version, \nEventLeakShare{} of events with a non-zero sub-second part sat on a fraud
+        account, against a base rate of \nEventLeakBase{} (Section~\ref{sec:discussion}).
   \item \textbf{Label noise} in both directions, measured at \nLabelNoiseMissed{} missed and
         \nLabelNoiseFalse{} false labels as a share of true fraud on the evaluation draw.
   \item \textbf{Temporal placement}: the novel sub-variant occurs only in the test period
@@ -173,20 +179,23 @@ One reported (not gated) channel deserves its own sentence: the delay between an
 takeover lead time was changed from a narrow uniform window to a
 long-tailed distribution, the channel fell from \nEventDelayBefore{} to \nEventDelayAfter{},
 inside a band of \nEventDelayBandLow{}--\nEventDelayBandHigh{} predicted before the regenerated
-draw existed. About \nEventDelayShare{} of the separation above chance was therefore an artefact
-of the assumed schedule and the rest is the scenario.
+draw existed. About \nEventDelayShare{} of the channel's separation above chance was therefore an
+artefact of the uniform schedule. That the remainder reflects the scenario rather than the new,
+equally assumed lead distribution is not established: no published takeover-to-drain delays for
+these markets were found, so that distribution is a modelling choice too.
 
 \subsection{The minimum viable scale}
 
-Below about \nMinRows{} rows the generator cannot stage all eight scenarios: the mule role pool
+Below about \nMinRows{} rows the generator cannot stage all \nScenarios{} scenarios: the mule role pool
 is usually empty, and a scenario that cannot be staged has its share reallocated to those that
 can, so the fraud \emph{rate} is still met exactly while the scenario \emph{mix} is wrong. Until
-this was found, runs below that size silently lacked \texttt{mule\_account}. The minimum is not
-obtainable by reasoning alone: two plausible closed-form derivations were wrong, and both failed
-the same sanity check by returning a minimum below a size that had already failed. The derivation
-used solves $E[\text{holders}](n) \ge \text{needed}(n) + 3\sqrt{\text{needed}(n)}$ numerically;
-a test requires the same answer from four scales (\nMinRowsA{}, \nMinRowsB{}, \nMinRowsC{} and
-\nMinRowsD{}). A separate minimum, about \nDetectorMinRows{} rows, is where the shortcut detector
+this was found, runs below that size silently lacked \texttt{mule\_account}. The earlier derivations
+of the minimum were wrong, and each failed the same sanity check by returning a minimum below a size
+that had already failed. The derivation used solves $E[\text{holders}](n) \ge \text{needed}(n) +
+\nMinSigmas\sqrt{\text{needed}(n)}$ numerically. The lab notebook reports it giving \nMinRowsA{},
+\nMinRowsB{}, \nMinRowsC{} and \nMinRowsD{} rows from runs at different scales; the test that
+guards it generates its own smaller runs and requires the minimum they imply to agree within a fixed
+tolerance. A separate minimum, about \nDetectorMinRows{} rows, is where the shortcut detector
 has full power against a planted leak; completeness binds first. The generator now refuses a run
 too small to stage every scenario, and a waived development run records the missing scenarios in
 its manifest.
@@ -196,11 +205,16 @@ its manifest.
 The split is strictly temporal (resolution D-07): on the evaluation draw, \nTrainRows{} training
 rows, \nValRows{} validation rows (whose chronologically last \nCalRows{} form the calibration
 split), a \nEmbargoDays{}-day embargo of \nEmbargoRows{} rows excluded to model label delay, and a
-test period of \nTestRows{} rows spanning \nTestSpanDays{} days. Every access to the test set is
-logged.
+test period of \nTestRows{} rows spanning \nTestSpanDays{} days. Scoring runs on the test set are
+logged (\texttt{docs/benchmarks/test\_set\_access.jsonl}); runs made before the log existed were
+back-filled from committed evidence, and not every read is logged: the label count this paper
+produced for Section~\ref{sec:generalisation} read the test period without an entry.
 
-A dataset is identified by a \textbf{fingerprint over its output rows}, not only by a digest of
-its parameters, because a draw can change with every parameter value identical. Every evidence
-file records the commit \textbf{and the working-tree state} it was produced from, because a hash
-written by hand records an intention: one earlier report, attributed to a commit, turned out to
+A dataset is identified by a \textbf{fingerprint over its output}, not only by a digest of its
+parameters, because a draw can change with every parameter value identical. The fingerprint is a
+SHA-256 over every column of a fixed sample of \nFingerprintSampleRows{} rows per table, the rows
+that sort first, plus each table's row count; it is not a hash of every row. Evidence files produced
+since 2026-09-21 record the commit \textbf{and the working-tree state} they were produced from;
+earlier files, including the single-feature measurement of Section~\ref{sec:floor}, carry no such
+stamp. The stamp exists because a hash written by hand records an intention: one earlier report, attributed to a commit, turned out to
 have been produced from a dirty working tree (Section~\ref{sec:discussion}).

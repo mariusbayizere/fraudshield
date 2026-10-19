@@ -63,6 +63,15 @@ GATE_CACHE = "docs/benchmarks/m4_evaluate_gate_d8083dbc.txt"
 NOTEBOOK_MAIN_REF = "488c5b4"
 ADR55 = "docs/adr/0055-five-features-have-no-source-data-on-this-benchmark.md"
 ADR55_REF = "m6-complete"
+REGISTRY = "ml/src/fraudshield_ml/features/registry.py"
+FRAUD_YAML = "dataset/generator/params/fraud.yaml"
+FRAUD_PY = "dataset/src/fraudshield_dataset/generator/fraud.py"
+FINGERPRINT = "dataset/src/fraudshield_dataset/fingerprint.py"
+TEST_REGISTRY = "ml/tests/features/test_registry.py"
+FLOOR_RAW = "docs/benchmarks/m3_single_feature_auc_2c80ef6.txt"
+REF_AUDIT = "docs/research/paper/reference_audit.md"
+#: The commit on this branch that last changed the reference audit.
+REF_AUDIT_REF = "ee97bbd"
 #: The gate line for recall at the 1% FPR budget, up to its value.
 BUDGET = r"ML-GATE-02  Recall at 1% FPR \(D-01\)\s+"
 
@@ -102,13 +111,25 @@ WORDS: dict[str, str] = {
     "six": "6",
     "seven": "7",
     "eight": "8",
+    "nine": "9",
+    "ten": "10",
 }
 
 
 def _word(ratio: float) -> str:
-    """A whole ratio as the word the paper prints."""
+    """A whole number as the word the paper prints."""
     names = {v: k for k, v in WORDS.items()}
     return names.get(str(int(ratio)), "?") if ratio == int(ratio) else f"not whole: {ratio}"
+
+
+def _rows(block: str, pattern: str) -> str:
+    """The number of table rows in `block` matching `pattern`, as the word the paper prints."""
+    return _word(len(re.findall(pattern, block, re.M)))
+
+
+def _above(threshold: str, *values: str) -> str:
+    """How many `values` exceed `threshold`, as a word."""
+    return _word(sum(Decimal(v) > Decimal(threshold) for v in values))
 
 
 def _count(rate: str, rows: str, fraud: str) -> str:
@@ -144,6 +165,20 @@ def _crossing(points: str, target: str) -> tuple[str, str, str, str]:
         f"{high_recall:.3f}",
     )
 
+
+GROUPS_ABOVE = (
+    "nCeiling",
+    "nGroupCounterparty",
+    "nGroupVelocity",
+    "nGroupTemporal",
+    "nGroupGeographic",
+    "nGroupDevice",
+    "nGroupSynth",
+    "nGroupAmount",
+    "nGroupAgent",
+    "nGroupProfile",
+    "nGroupCorridor",
+)
 
 SOURCES: dict[str, Src | Derived] = {
     # ---- dataset (claims register header, realism report at the tag = draw d8083dbc) ----
@@ -771,6 +806,83 @@ SOURCES: dict[str, Src | Derived] = {
         r"1% FPR budget rises to \*\*between [\d.]+ and ([\d.]+)\*\* at 240K",
         ref=NOTEBOOK_MAIN_REF,
     ),
+    # ---- counts and specification values typed into the text before 2026-10-19 ----
+    "_CountryTable": Src(REAL, r"(^\| RW \| .*?^\| CD \| [^\n]*)"),
+    "_ChannelTable": Src(REAL, r"(^\| MOBILE_MONEY \| .*?^\| BANK_TRANSFER \| [^\n]*)"),
+    "nCountries": Derived(
+        ("_CountryTable",),
+        lambda t: _rows(t, r"^\| [A-Z]{2} \|"),
+        "rows of the realism report's country-mix table",
+    ),
+    "nChannels": Derived(
+        ("_ChannelTable",),
+        lambda t: _rows(t, r"^\| [A-Z_]+ \|"),
+        "rows of the realism report's channel-mix table",
+    ),
+    "nScenarios": Src(REAL, r"fraud scenarios \| pass \| no \| (\d+) types"),
+    "nScenariosCap": Src(REAL, r"fraud scenarios \| pass \| no \| (\d+) types"),
+    "nGroupsAboveCeiling": Derived(
+        GROUPS_ABOVE,
+        _above,
+        "diagnostic-model groups alone whose AUC exceeds the single-feature ceiling",
+    ),
+    "nGroupsAboveCeilingCap": Derived(
+        GROUPS_ABOVE,
+        _above,
+        "the same count, capitalised at a sentence start",
+    ),
+    "nDeviceNaNFeatures": Src(REGISTRY, r"\((?:\d+)\)\. (Four) are NaN for a null fingerprint"),
+    "nAdaptMonthIndex": Src(FRAUD_YAML, r"adaptation_start_month:\s*\n\s*value: (\d+)"),
+    "nAdaptMonthOrdinal": Src(FRAUD_YAML, r"as index 12, the (thirteenth) month"),
+    "nEventLeakShare": Src(NOTEBOOK, r"\*\*([\d.]+%)\*\* of them sat on a"),
+    "nEventLeakBase": Src(NOTEBOOK, r"fraud account against a ([\d.]+%) base rate"),
+    "nMinSigmas": Src(FRAUD_PY, r"b\*n \+ (\d+)\*sqrt\(b\*n\)"),
+    "nFingerprintSampleRows": Src(FINGERPRINT, r"^SAMPLE_ROWS = (\d+)"),
+    "nResolutions": Src(PROMPT, r"All (\d+) defect resolutions"),
+    "nLatencyTargetFlagged": Src(PROMPT, r"budget targets p95 ≤ (\d+) ms for flagged"),
+    "nSpecRows": Src(PROMPT, r"Targets \(SRS 7\.1\): ≥ ([\d,]+) rows"),
+    "nRazaqInterviews": Src(REF_AUDIT, r"We interviewed (\d+) participants", ref=REF_AUDIT_REF),
+    "_GroupCounts": Src(TEST_REGISTRY, r"(EXPECTED_GROUP_COUNTS = \{.*?\n\})"),
+    "nFeatureGroups": Derived(
+        ("_GroupCounts",),
+        lambda t: _rows(t, r"^\s+Group\.\w+: \d+,"),
+        "entries of the registry test's EXPECTED_GROUP_COUNTS",
+    ),
+    "nSynthTerms": Src(REGISTRY, r"the unweighted mean of (four) \"\s+\"terms each in"),
+    "nSpecTolerance": Src(PROMPT, r"yields identical vectors to (1e-9)\)"),
+    "nSlackUlps": Src(PARITY, r"\| `round_sum_flag` \| 1 \| [\d.e-]+ \| ([\d.]+ million) ulps"),
+    "nParityCrossover": Derived(
+        ("nSpecTolerance", "nParityRel"),
+        lambda spec, rel: str(int((Decimal(spec) - Decimal(rel)) / Decimal(rel))),
+        "|b| at which 1e-12 + 1e-12|b| equals the specification's absolute 1e-9",
+    ),
+    "nFeatureLatencyTarget": Src(PROMPT, r"`benchmark\.py features` p95 < (\d+) ms"),
+    "nCounterpartyNewMci": Src(
+        FLOOR, r"\| `counterparty_is_new_for_account` \| [\d.]+ \| ±([\d.]+) \|"
+    ),
+    "nTxCountHourMci": Src(FLOOR, r"\| `tx_count_1h` \| [\d.]+ \| ±([\d.]+) \|"),
+    "nImpliedSpeedMci": Src(FLOOR, r"\| `implied_speed_kmh` \| [\d.]+ \| ±([\d.]+) \|"),
+    "nSecondsSinceMci": Src(FLOOR, r"\| `seconds_since_last_tx` \| [\d.]+ \| ±([\d.]+) \|"),
+    "nFeaturesAboveCeilingCI": Derived(
+        (
+            "nCeiling",
+            "nFloorM",
+            "nFloorMci",
+            "nCounterpartyNewM",
+            "nCounterpartyNewMci",
+            "nTxCountHourM",
+            "nTxCountHourMci",
+            "nImpliedSpeedM",
+            "nImpliedSpeedMci",
+            "nSecondsSinceM",
+            "nSecondsSinceMci",
+        ),
+        lambda c, *v: _word(
+            sum(Decimal(a) - Decimal(b) > Decimal(c) for a, b in zip(v[::2], v[1::2], strict=True))
+        ),
+        "features whose separation minus its interval half-width exceeds the ceiling",
+    ),
+    "nUnboundedFixed": Src(FLOOR_RAW, r"fix: (five) unbounded features were then deriving"),
     # ---- ADR 0055 (accepted 2026-10-17) ----
     "nNoSourceFeatures": Src(
         ADR55, r"not merely in form\.\*\* (Five) of 44 features, 11 %", ref=ADR55_REF

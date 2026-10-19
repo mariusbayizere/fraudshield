@@ -459,3 +459,37 @@
 % ---------------------------------------------------------------------------------------------
 \newcommand{\nNoSourceFeatures}{\meas{five}}
 \newcommand{\nNoSourceShare}{\meas{11\%}}    % derived: five of the 44
+
+% ---------------------------------------------------------------------------------------------
+% Counts and specification values that were typed into the text before 2026-10-19 (owner's rule:
+% every number is an audited macro). Sources in audit_numbers.py.
+% ---------------------------------------------------------------------------------------------
+\newcommand{\nCountries}{\meas{five}}           % realism report country-mix table rows
+\newcommand{\nChannels}{\meas{six}}             % realism report channel-mix table rows
+\newcommand{\nScenarios}{\meas{eight}}          % realism report "fraud scenarios ... 8 types"
+\newcommand{\nScenariosCap}{\meas{Eight}}
+\newcommand{\nGroupsAboveCeiling}{\meas{four}}  % groups alone above \nCeiling, battery
+\newcommand{\nGroupsAboveCeilingCap}{\meas{Four}}
+\newcommand{\nDeviceNaNFeatures}{\meas{four}}   % registry: NaN for a null fingerprint
+\newcommand{\nAdaptMonthIndex}{\meas{12}}       % fraud.yaml adaptation_start_month
+\newcommand{\nAdaptMonthOrdinal}{\meas{thirteenth}}
+\newcommand{\nEventLeakShare}{\meas{99.84\%}}   % lab notebook, the account-events leak
+\newcommand{\nEventLeakBase}{\meas{41.96\%}}
+\newcommand{\nMinSigmas}{\meas{3}}              % generator fraud.py, the minimum-scale margin
+\newcommand{\nFingerprintSampleRows}{\meas{1{,}024}}  % fingerprint.py SAMPLE_ROWS
+\newcommand{\nResolutions}{\srcd{51}}           % build prompt: "All 51 defect resolutions"
+\newcommand{\nLatencyTargetFlagged}{\srcd{40}}  % build prompt D-13: p95 for flagged, ms
+\newcommand{\nSpecRows}{\srcd{5{,}000{,}000}}   % build prompt Part E.3 targets (SRS 7.1)
+\newcommand{\nRazaqInterviews}{\srcd{96}}       % reference_audit.md, razaq2021scams abstract
+\newcommand{\nFeatureGroups}{\meas{ten}}        % feature registry groups (test_registry.py)
+\newcommand{\nSynthTerms}{\meas{four}}          % registry: synthetic_identity_score definition
+\newcommand{\nSpecTolerance}{\srcd{\ensuremath{10^{-9}}}}  % build prompt Part E.2 parity tolerance
+\newcommand{\nSlackUlps}{\meas{4.5 million}}    % parity doc Decision 1, round_sum_flag row
+\newcommand{\nParityCrossover}{\meas{999}}      % derived: where 1e-12 + 1e-12|b| equals 1e-9
+\newcommand{\nFeatureLatencyTarget}{\srcd{10}}  % build prompt M3 gate: features p95, ms
+\newcommand{\nCounterpartyNewMci}{\meas{0.037}}
+\newcommand{\nTxCountHourMci}{\meas{0.039}}
+\newcommand{\nImpliedSpeedMci}{\meas{0.040}}
+\newcommand{\nSecondsSinceMci}{\meas{0.040}}
+\newcommand{\nFeaturesAboveCeilingCI}{\meas{two}}  % derived: point estimate minus interval > ceiling
+\newcommand{\nUnboundedFixed}{\meas{five}}      % m3_single_feature_auc_2c80ef6.txt header
