@@ -42,12 +42,17 @@ ROOT = Path(__file__).resolve().parents[4]
 ACCESS = ROOT / "ml/src/fraudshield_ml/training/access.py"
 EXPECTED_DRAW = "d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32"
 RESAMPLES = 1000
+#: The gate's seed: `fs-features gate --seeds 1 2 3 4 5` fits and bootstraps at the first.
 SEED = 1
+#: The battery's seed: `fs-features battery` was run without --seed, so its default (cli.py).
+BATTERY_SEED = 20260917
 #: What m4-complete's evidence files print, to three places, so a reproduction is checked rather
 #: than assumed (docs/benchmarks/m4_gate_d8083dbc_v3.txt, m4_battery_d8083dbc_e1.txt).
 PUBLISHED_GATE = {"ML-GATE-01": 0.970, "ML-GATE-02": 0.871, "ML-GATE-03": 0.736}
 PUBLISHED_BATTERY_AUC = 0.972
 PUBLISHED_GROUP_ALONE = {"velocity": 0.860, "counterparty": 0.925, "temporal": 0.856}
+#: Headline figures that did not reproduce; any makes the run exit 1 after writing its evidence.
+MISMATCHES: list[str] = []
 GATE_KEYS = (
     ("ML-GATE-01", "AUC-ROC"),
     ("ML-GATE-02", "recall at 1% FPR"),
@@ -70,16 +75,23 @@ def git(*args: str) -> str:
     ).stdout
 
 
-def cluster_draws(accounts: list[str], rng: Any) -> list[Any]:
-    """Row index arrays for `RESAMPLES` resamples of whole accounts, drawn with replacement."""
+def cluster_draws(accounts: list[str], labels: list[bool], rng: Any) -> list[Any]:
+    """Row index arrays for `RESAMPLES` resamples of whole accounts, drawn with replacement.
+
+    Stratified like the row bootstrap it is compared with (gate.bootstrap draws fraud and
+    legitimate rows separately): accounts with any fraud row and accounts with none are resampled
+    separately, so the difference between the two intervals is the clustering and nothing else.
+    """
     by_account: dict[str, list[int]] = {}
     for i, account in enumerate(accounts):
         by_account.setdefault(account, []).append(i)
-    groups = [np.asarray(rows) for rows in by_account.values()]
+    fraud = [np.asarray(r) for r in by_account.values() if any(labels[i] for i in r)]
+    clean = [np.asarray(r) for r in by_account.values() if not any(labels[i] for i in r)]
     draws = []
     for _ in range(RESAMPLES):
-        chosen = rng.integers(0, len(groups), len(groups))
-        draws.append(np.concatenate([groups[c] for c in chosen]))
+        picked = [fraud[c] for c in rng.integers(0, len(fraud), len(fraud))]
+        picked += [clean[c] for c in rng.integers(0, len(clean), len(clean))]
+        draws.append(np.concatenate(picked))
     return draws
 
 
@@ -105,11 +117,14 @@ def gate_section(cache: Path, out: Path, lines: list[str]) -> int:
     point = gate.metrics(rows)
     by_rows = gate.bootstrap(rows, resamples=RESAMPLES, seed=SEED)
     draws: dict[str, list[float]] = {}
-    for index in cluster_draws(accounts, np.random.default_rng(SEED)):
+    for index in cluster_draws(accounts, labels, np.random.default_rng(SEED)):
         for key, value in gate.metrics(rows.take(index)).items():
             draws.setdefault(key, []).append(value)
     with gzip.open(out / "gate_scores_d8083dbc.csv.gz", "wt") as file:
-        file.write("test_row,account_id,label,channel,ensemble,xgboost,lightgbm\n")
+        file.write(
+            "test_row,account_id,label,channel,ensemble_calibrated,"
+            "xgboost_calibrated,lightgbm_calibrated\n"
+        )
         for k, i in enumerate(data.test):
             file.write(
                 f"{i},{accounts[k]},{int(labels[k])},{channels[k]},{scored.ensemble[k]!r},"
@@ -124,6 +139,8 @@ def gate_section(cache: Path, out: Path, lines: list[str]) -> int:
     ]
     for key, published in PUBLISHED_GATE.items():
         state = "MATCH" if round(point[key], 3) == published else "DIFFERS"
+        if state == "DIFFERS":
+            MISMATCHES.append(f"gate {key}")
         lines.append(f"    {key}: published {published:.3f}, reproduced {point[key]:.3f}  {state}")
     lines += ["", "  metric                    value    row bootstrap      account-clustered"]
     for key, name in GATE_KEYS:
@@ -156,7 +173,7 @@ def bench_from(cache: Path) -> tuple[Battery, list[str]]:
         train=by["train"],
         test=by["test"],
         calibration=by["calibration"],
-        seed=SEED,
+        seed=BATTERY_SEED,
     )
     return bench, extras[smoke.CACHE_ACCOUNT]
 
@@ -165,7 +182,7 @@ def battery_section(cache: Path, out: Path, lines: list[str]) -> int:
     bench, all_accounts = bench_from(cache)
     held = bench.labels_of(bench.test)
     accounts = [all_accounts[i] for i in bench.test]
-    draws = cluster_draws(accounts, np.random.default_rng(SEED))
+    draws = cluster_draws(accounts, held, np.random.default_rng(SEED))
     held_arr = np.asarray(held, dtype=bool)
 
     def clustered_auc(scores: list[float]) -> tuple[float, float]:
@@ -175,6 +192,8 @@ def battery_section(cache: Path, out: Path, lines: list[str]) -> int:
     full = bench.fit(bench.train, bench.test)
     headline = auc_of(full, held)
     state = "MATCH" if round(headline, 3) == PUBLISHED_BATTERY_AUC else "DIFFERS"
+    if state == "DIFFERS":
+        MISMATCHES.append("battery full model")
     lines += [
         "",
         "DIAGNOSTIC BATTERY (one untuned XGBoost, seed 1), refitted from the battery cache",
@@ -187,13 +206,17 @@ def battery_section(cache: Path, out: Path, lines: list[str]) -> int:
     alone_scores: dict[str, list[float]] = {}
     for group, members in sorted(groups.items()):
         reduced = [[row[i] for i in members] for row in bench.matrix]
-        scores = smoke.fit_and_score(reduced, bench.labels, bench.train, bench.test, seed=SEED)
+        scores = smoke.fit_and_score(
+            reduced, bench.labels, bench.train, bench.test, seed=BATTERY_SEED
+        )
         alone_scores[group] = scores
         result = battery.score(group, scores, held)
         c_low, c_high = clustered_auc(scores)
         mark = ""
         if group in PUBLISHED_GROUP_ALONE:
             same = round(result.auc, 3) == PUBLISHED_GROUP_ALONE[group]
+            if not same:
+                MISMATCHES.append(f"battery {group} alone")
             mark = "  MATCH" if same else f"  DIFFERS (published {PUBLISHED_GROUP_ALONE[group]})"
         lines.append(
             f"  {group:<18} {result.auc:.3f}   ±{result.interval:.3f}"
@@ -235,12 +258,16 @@ def battery_section(cache: Path, out: Path, lines: list[str]) -> int:
                 f"{i},{accounts[k]},{int(held[k])},{variants[k]},{bench.country[i]},"
                 f"{bench.channel[i]},{full[k]!r},{alone}\n"
             )
-    velocity_section(bench, groups["velocity"], held, lines)
+    velocity_section(bench, groups["velocity"], held, alone_scores["velocity"], lines)
     return len(held)
 
 
 def velocity_section(
-    bench: Battery, members: list[int], held: list[bool], lines: list[str]
+    bench: Battery,
+    members: list[int],
+    held: list[bool],
+    battery_scores: list[float],
+    lines: list[str],
 ) -> None:
     """Why the velocity group alone can score below one of its members alone."""
     ratio = bench.names.index("velocity_ratio_1h_vs_30d")
@@ -265,11 +292,22 @@ def velocity_section(
         f"{smoke.BOOSTING_ROUNDS}):",
         "    rounds   as the battery fits it   with scale_pos_weight",
     ]
-    plain = xgb.train({**smoke.MODEL_PARAMETERS, "seed": SEED}, train, smoke.BOOSTING_ROUNDS)
+    plain = xgb.train(
+        {**smoke.MODEL_PARAMETERS, "seed": BATTERY_SEED}, train, smoke.BOOSTING_ROUNDS
+    )
     weighted = xgb.train(
-        {**smoke.MODEL_PARAMETERS, "seed": SEED, "scale_pos_weight": weight},
+        {**smoke.MODEL_PARAMETERS, "seed": BATTERY_SEED, "scale_pos_weight": weight},
         train,
         smoke.BOOSTING_ROUNDS,
+    )
+    final = auc_of(plain.predict(test), held)
+    reference = auc_of(battery_scores, held)
+    same = abs(final - reference) < 1e-12
+    if not same:
+        MISMATCHES.append("velocity booster against the battery's velocity-alone model")
+    lines.append(
+        f"  consistency: this booster at round {smoke.BOOSTING_ROUNDS} gives {final:.4f}, the "
+        f"battery's velocity-alone model {reference:.4f}  {'MATCH' if same else 'DIFFERS'}"
     )
     for rounds in (1, 5, 10, 25, 50, 100, smoke.BOOSTING_ROUNDS):
         a = auc_of(plain.predict(test, iteration_range=(0, rounds)), held)
@@ -308,7 +346,7 @@ def main(argv: list[str]) -> int:
         "# command: python docs/research/paper/evidence/clustered_intervals.py "
         f"--gate-cache {args.gate_cache} --battery-cache {args.battery_cache}"
     )
-    print("# exit: 0")
+    print(f"# exit: {1 if MISMATCHES else 0}")
     print(f"# models and features: fraudshield-ml at m4-complete; draw {args.fingerprint}")
     print(
         f"# resamples: {RESAMPLES} of whole accounts, seed {SEED}; per-row scores in "
@@ -316,6 +354,10 @@ def main(argv: list[str]) -> int:
     )
     print()
     print("\n".join(lines))
+    if MISMATCHES:
+        print(f"\nDID NOT REPRODUCE: {', '.join(MISMATCHES)}")
+        print(f"refused: did not reproduce {MISMATCHES}", file=sys.stderr)
+        return 1
     return 0
 
 

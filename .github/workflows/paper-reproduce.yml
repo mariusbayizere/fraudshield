@@ -56,13 +56,13 @@ jobs:
       - name: Regenerate the evaluation draw
         working-directory: ${{ runner.temp }}/m4
         run: |
-          uv run fs-dataset generate --output "$RUNNER_TEMP/bench1m" --rows 1000000 --seed "$SEED"
-          uv run fs-dataset packs --output "$RUNNER_TEMP/packs.json"
-          uv run fs-dataset split "$RUNNER_TEMP/bench1m" --output "$RUNNER_TEMP/split.json"
+          uv run --frozen fs-dataset generate --output "$RUNNER_TEMP/bench1m" --rows 1000000 --seed "$SEED"
+          uv run --frozen fs-dataset packs --output "$RUNNER_TEMP/packs.json"
+          uv run --frozen fs-dataset split "$RUNNER_TEMP/bench1m" --output "$RUNNER_TEMP/split.json"
       - name: The draw is d8083dbc
         working-directory: ${{ runner.temp }}/m4
         run: |
-          fp=$(uv run python -c "import sys; from fraudshield_dataset.fingerprint import dataset_fingerprint as f; from pathlib import Path; print(f(Path(sys.argv[1])))" "$RUNNER_TEMP/bench1m")
+          fp=$(uv run --frozen python -c "import sys; from fraudshield_dataset.fingerprint import dataset_fingerprint as f; from pathlib import Path; print(f(Path(sys.argv[1])))" "$RUNNER_TEMP/bench1m")
           echo "fingerprint $fp"
           test "$fp" = "d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32"
           echo "FINGERPRINT=$fp" >> "$GITHUB_ENV"
@@ -70,22 +70,27 @@ jobs:
         working-directory: ${{ runner.temp }}/m4
         run: |
           common=(--packs "$RUNNER_TEMP/packs.json" --split "$RUNNER_TEMP/split.json" --corpus-rows 400000 --train-rows 30000 --test-rows 101909 --calibration-rows 20000)
-          uv run fs-features evaluate "$RUNNER_TEMP/bench1m" "${common[@]}" --validation-rows 20000 --cache "$RUNNER_TEMP/features_gate.parquet" > "$RUNNER_TEMP/evaluate_gate.txt"
-          uv run fs-features evaluate "$RUNNER_TEMP/bench1m" "${common[@]}" --cache "$RUNNER_TEMP/features_full.parquet" > "$RUNNER_TEMP/evaluate_full.txt"
+          uv run --frozen fs-features evaluate "$RUNNER_TEMP/bench1m" "${common[@]}" --validation-rows 20000 --cache "$RUNNER_TEMP/features_gate.parquet" > "$RUNNER_TEMP/evaluate_gate.txt"
+          uv run --frozen fs-features evaluate "$RUNNER_TEMP/bench1m" "${common[@]}" --cache "$RUNNER_TEMP/features_full.parquet" > "$RUNNER_TEMP/evaluate_full.txt"
           sha256sum "$RUNNER_TEMP"/features_*.parquet | tee "$RUNNER_TEMP/caches.sha256"
       - name: Refit, reproduce, and cluster the intervals
         working-directory: ${{ runner.temp }}/m4
         run: |
           mkdir -p "$RUNNER_TEMP/out"
-          uv run --package fraudshield-ml python "$GITHUB_WORKSPACE/docs/research/paper/evidence/clustered_intervals.py" \
+          # A figure that does not reproduce makes the script exit 1; keep its evidence anyway.
+          set +e
+          uv run --frozen --package fraudshield-ml python "$GITHUB_WORKSPACE/docs/research/paper/evidence/clustered_intervals.py" \
             --gate-cache "$RUNNER_TEMP/features_gate.parquet" \
             --battery-cache "$RUNNER_TEMP/features_full.parquet" \
             --fingerprint "$FINGERPRINT" \
             --scores-out "$RUNNER_TEMP/out" > "$RUNNER_TEMP/out/clustered_intervals_d8083dbc.txt"
+          status=$?
+          set -e
           cat "$RUNNER_TEMP/out/clustered_intervals_d8083dbc.txt" >> "$GITHUB_STEP_SUMMARY"
           cp "$RUNNER_TEMP"/evaluate_*.txt "$RUNNER_TEMP/caches.sha256" "$RUNNER_TEMP/out/"
           cp "$FS_TEST_ACCESS_LOG" "$RUNNER_TEMP/out/test_set_access.jsonl"
           test -z "$(git -C "$GITHUB_WORKSPACE" status --porcelain)"
+          exit "$status"
       - name: Upload the evidence, the per-row scores and the access log
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
