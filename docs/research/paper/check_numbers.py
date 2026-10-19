@@ -49,6 +49,9 @@ STRIP = [
     re.compile(r"\bADR[\s~]+\d{4}\b"),
     re.compile(r"\bE\d{1,2}\b"),  # exit criteria
     re.compile(r"\bM\d{1,2}\b"),  # milestones
+    # a pre-specification: two commits and their dates, checked by audit_numbers.py
+    re.compile(r"\\prespec(?:\{[0-9a-f]{7}\}\{\d{4}-\d{2}-\d{2}\}){2}"),
+    re.compile(r"\\notprespec(?:\{[0-9a-f]{7}\}){2}"),
     re.compile(r"\b\d{4}-\d{2}-\d{2}\b"),  # ISO dates, before years are stripped
     re.compile(
         r"\b\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|"

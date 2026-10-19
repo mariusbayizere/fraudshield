@@ -2,7 +2,7 @@
 
 Every macro in `numbers.tex` checked against its evidence file at `m4-complete` (`72e7790`), or at the ref its row names, read with `git show`, by `audit_numbers.py`. Values are compared as printed: rounding, sign and interval bounds included. Regenerate with `python3 docs/research/paper/audit_numbers.py`; do not edit by hand.
 
-**503 macros, 503 MATCH, 0 not matching.**
+**505 macros, 505 MATCH, 0 not matching.**
 
 | Macro | Value in paper | Value in evidence | File | Note | Result |
 |---|---|---|---|---|---|
@@ -145,7 +145,9 @@ Every macro in `numbers.tex` checked against its evidence file at `m4-complete` 
 | `\nFrontNegative` | `2 of 5` | `2 of 5` | `docs/benchmarks/m4_frontier_6abde44e.txt` (evidence commit `95b722c`) |  | MATCH |
 | `\nPredEarly` | `four` | `four` | `docs/research/lab_notebook.md` |  | MATCH |
 | `\nPredEarlyRight` | `one` | `One` | `docs/research/lab_notebook.md` |  | MATCH |
-| `\nPredTotal` | `seven` | `seven` | derived | the register's four plus the three later pre-registrations (PB-56 lead tail; ADR 0028 reversal scam; PB-67 learning curve), each located in the notebook | MATCH |
+| `\nPredTotal` | `seven` | `seven` | derived | the register's four plus the three later notebook predictions (PB-56 lead tail; ADR 0028 reversal scam; PB-67 learning curve), each located in the notebook | MATCH |
+| `\nPrespecShown` | `four` | `four` | derived | rows of Table tab:predictions whose commits the audit orders (check_prespecified) | MATCH |
+| `\nPrespecNotShown` | `three` | `three` | derived | rows of Table tab:predictions first committed with or after their evidence | MATCH |
 | `\nRevPredLow` | `0.15` | `0.15` | `docs/research/lab_notebook.md` |  | MATCH |
 | `\nRevPredHigh` | `0.55` | `0.55` | `docs/research/lab_notebook.md` |  | MATCH |
 | `\nRevPredFloor` | `0.10` | `0.10` | `docs/research/lab_notebook.md` |  | MATCH |

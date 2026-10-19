@@ -32,7 +32,8 @@ ADR 0010 & Container stack verified in CI, not on the author's laptop; latency p
 ADR 0023 & Africa-wide portability: corridor classes derived from bloc memberships. \\
 ADR 0025 & The parity tolerance that replaces the specification's absolute one. \\
 ADR 0026 & Operational thresholds are read as of the transaction. \\
-ADR 0028 & One pre-registered non-burst fraud variant. \\
+ADR 0028 & One non-burst fraud variant, pre-specified in repository history (the ADR's title says
+``pre-registered''). \\
 ADR 0029 & Platt scaling stays in the diagnostic battery; the production model is calibrated as D-05 says. \\
 ADR 0030 & The M4 evidence is recorded without MLflow tracking. \\
 ADR 0031 & How M4's requirements close, including the gate metrics that miss; amended when the learning curve concluded. \\
@@ -44,7 +45,8 @@ ADR 0084 & The console shows the SHAP explanation as an accessible table of feat
 C-4 & Claim that models built elsewhere reach far lower AUC on East African mobile-money data: unverified. \\
 C-5 & Claim that model accuracy degrades by a fixed share per year without retraining: unverified. \\
 C-6 & Claim that the ensemble reduces variance against a single model: measured on the uncalibrated combination, no reduction against XGBoost alone; not supported as a property of the ensemble (Section~\ref{sec:evaluation}). \\
-C-8 & Claim that the dataset is the first public East African fraud benchmark: unverified, not made. \\
+C-8 & Claim that the dataset is the first public East African fraud benchmark: refuted by a recorded
+search, which found earlier public East African fraud datasets (Section~\ref{sec:related}). \\
 E1 & Every fold, split, sample and target encoding groups by the feature's unit of history (by account for most features); out-of-fold encodings use only earlier rows. \\
 PB-43 & The cross-bloc and intercontinental corridor classes are unreachable on this dataset. \\
 PB-67 & The gate model trains on a subset of the training period; the learning curve over training volume (concluded). \\

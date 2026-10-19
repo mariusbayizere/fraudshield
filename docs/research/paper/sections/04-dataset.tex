@@ -16,10 +16,10 @@ takeover through a credential or device change, agent fraud, velocity fraud, car
 fraud, mule accounts (fan-in and fan-out), merchant fraud and synthetic identity. Adversarial
 adaptation moves amounts just below one simulated, assumed rule threshold from the
 \nAdaptMonthOrdinal{} simulated month (index \nAdaptMonthIndex{}). The test period alone also carries a delayed SIM-swap drain and, in
-the evaluation draw, the pre-registered reversal scam of Section~\ref{sec:generalisation}.
+the evaluation draw, the pre-specified reversal scam of Section~\ref{sec:generalisation}.
 
 Results use seed \nSeed{}, on the draws named where each is used. The model evaluation
-uses draw \texttt{d8083dbc} (\nRowsDrawB{} rows), which carries the pre-registered variant of
+uses draw \texttt{d8083dbc} (\nRowsDrawB{} rows), which carries the pre-specified variant of
 Section~\ref{sec:generalisation}. The dataset-column measurements and the earlier battery use draw
 \texttt{6abde44e} (\nRowsDrawA{} rows). The engineered single-feature measurements of
 Section~\ref{sec:floor} were taken on an earlier draw of \nFloorDrawRows{} rows, at the same seed,
@@ -79,7 +79,7 @@ as regional would make the paper look better and be less honest. Every result th
 Table~\ref{tab:glance} describes the draw evaluated in Sections~\ref{sec:evaluation}
 and~\ref{sec:generalisation}; Table~\ref{tab:scenarios} gives its fraud by scenario
 (signals and variants in Appendix~\ref{app:scenarios}). The draw
-\texttt{6abde44e} differs from it by the \nRevRows{} test-period rows of the pre-registered
+\texttt{6abde44e} differs from it by the \nRevRows{} test-period rows of the pre-specified
 reversal-scam variant; the datasheet reports that the train, validation, calibration and embargo
 splits have identical counts and rates in both.
 
@@ -125,7 +125,7 @@ Test & \nTestRows{} rows, \nTestSpanDays{} days, from \nTestStart{} \\
 \caption{Fraud rows by scenario over the whole draw (true label; realism report's scenario table,
 summed over its \nMonths{} months). Both held-out variants are sub-variants of a scenario:
 the novel eSIM delayed drain (\nNovelRows{} rows, test period only) is a SIM-swap sub-variant,
-and the pre-registered reversal scam (\nRevRows{} rows, test period only) is generated as a
+and the pre-specified reversal scam (\nRevRows{} rows, test period only) is generated as a
 \texttt{mule\_account} row (\texttt{dataset/src/fraudshield\_dataset/generator/fraud.py}).}
 \label{tab:scenarios}
 \begin{tabular}{lr}

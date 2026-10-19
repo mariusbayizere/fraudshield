@@ -136,60 +136,89 @@ What follows for this paper is a qualification, not a correction: every single-n
 measured at one sampling of training rows, the gate figures of Table~\ref{tab:gate} included, is a
 measurement of one selection at one corpus depth, and the variation across selections is unmeasured.
 
-\subsection{Pre-registered predictions}
+\subsection{Predictions pre-specified in repository history}
 
-The notebook recorded falsifiable predictions before the evidence existed. Table~\ref{tab:predictions}
-lists the \nPredTotal{} whose outcome the notebook records, each where the prediction was made;
-the entry that registered the takeover-lead prediction also registered others whose outcomes are not
-reported there, and they are not counted.
+The lab notebook records falsifiable predictions that it says were written before the evidence.
+The notebook is the author's own file: some entries were back-filled and some amended in place, so
+its word is not evidence of when a prediction was made, and nothing here is pre-registration in the
+usual sense, an analysis plan posted to an independent registry before the research outcomes are
+observed \cite{nosek2018preregistration}.
+What the repository can show is narrower. If the commit that first contains a prediction is an
+ancestor of the commit that first contains its evidence, the prediction was committed before the
+evidence was. That is all it shows: it cannot show that the evidence had not already been seen when
+the prediction was written, and commits are ordered on the author's machine, so a history rewritten
+before it was pushed would look the same. Table~\ref{tab:predictions} lists the \nPredTotal{}
+predictions whose outcome the notebook records. For \nPrespecShown{} of them git orders the
+prediction before its evidence; for the other \nPrespecNotShown{} it does not, and they are not
+counted as pre-specified. Every commit pair and author date in the table (UTC) is checked by
+\texttt{audit\_numbers.py} on every build: an ordered pair must be a strict ancestor relation, and an
+unordered one must not be. The entry that recorded the takeover-lead prediction also recorded others
+whose outcomes are not reported there; they are not counted.
 
 \begin{table}[htbp]
 \centering
 \small
-\caption{Pre-registered predictions and outcomes, from the lab notebook.}
+\caption{Predictions recorded in the lab notebook, the commits that order them against their
+evidence, and their outcomes. Dates are UTC author dates.}
 \label{tab:predictions}
-\begin{tabular}{p{0.52\linewidth}p{0.38\linewidth}}
+\begin{tabular}{p{0.34\linewidth}p{0.29\linewidth}p{0.29\linewidth}}
 \toprule
-Prediction & Outcome \\
+Prediction & First commit of prediction, and of evidence & Outcome \\
 \midrule
+\multicolumn{3}{l}{\emph{Pre-specified: git orders the prediction before its evidence}} \\
 Shortcut-detector power dips when the last scenario to be staged appears above the minimum scale &
+\prespec{be2d7b0}{2026-09-18}{984351d}{2026-09-19}; neither has a CI run of its own &
 Refuted: power rose monotonically, no dip \\
-The detector's small positive offset is real and constant with scale &
-Refuted: pooled over seeds, the interval straddles chance \\
-A counterparty-keyed feature will force a new field into the feature contract &
-Confirmed on mechanism, wrong on sequence \\
-\texttt{accounts\_per\_device\_7d} cannot be made fold-safe without an owner decision &
-Refuted by argument, not on data: grouping accounts that share a device resolves it, but no device
-was then shared by more than one account \\
 A long-tailed takeover lead lowers the event-delay channel to
 \nEventDelayBandLow{}--\nEventDelayBandHigh{} &
+\prespec{0138099}{2026-09-21}{1db73b1}{2026-09-21} &
 Confirmed: \nEventDelayAfter{}, at the top of the band \\
 The reversal scam is caught at \nRevPredLow{}--\nRevPredHigh{} recall &
+\prespec{656d24e}{2026-09-22}{6bc842d}{2026-09-22} &
 Refuted: \nRevRecall{} \nRevCI{}; below the range for the point estimate, not for the whole
 interval \\
 Recall at the flag threshold stays below \nTargetRecall{}, rising to \nLcPredLow{}--\nLcPredHigh{} at
 \nLcTrainD{} training rows; recall at the \nFPRBudget{} budget rises to
 \nLcPredBudgetLow{}--\nLcPredBudgetHigh{} &
+\prespec{ecbca23}{2026-09-22}{63bbed5}{2026-09-22}; both rebased on 2026-10-18, author dates kept &
 Partly confirmed: below the target at every size and inside the range; not rising at seed 1, rising
 on the means; recall at the budget \nLcBudgetRecallD{} at seed 1, below its range, and inside it on
 the means (Section~\ref{sec:volume}) \\
+\midrule
+\multicolumn{3}{l}{\emph{Not established: first committed with its outcome, or after its evidence}} \\
+The detector's small positive offset is real and constant with scale &
+\notprespec{984351d}{984351d}: the same commit as its refutation &
+Refuted: pooled over seeds, the interval straddles chance \\
+A counterparty-keyed feature will force a new field into the feature contract &
+\notprespec{d85385f}{5f0a8a1}, whose code already has the field &
+Confirmed on mechanism, wrong on sequence \\
+\texttt{accounts\_per\_device\_7d} cannot be made fold-safe without an owner decision &
+\notprespec{d85385f}{5f0a8a1}, whose code already states the resolution &
+Refuted by argument, not on data: grouping accounts that share a device resolves it, but no device
+was then shared by more than one account \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Of the first \nPredEarly{}, \nPredEarlyRight{} was partly right. The claim this supports is not that
-the author predicted well. It is that falsifiable predictions were recorded before the evidence and
-that most of them were refuted. For the first \nPredEarly{}, the notebook credits the refutations with
-a standing rule, the feature contract's \texttt{history\_key} field and E1's density threshold for
-component folding; the density threshold was itself found, the same day, to rule component folding
-out for most history keys, and the control adopted is the temporal one described above.
+Of the \nPrespecShown{} pre-specified predictions, the history supports this much: falsifiable
+predictions were committed before their evidence, and their outcomes, refuted, confirmed and partly
+confirmed, are those in the table. It does not support a claim that the author predicted well, nor
+that the other \nPrespecNotShown{} preceded their evidence; the notebook says they did, and the commits cannot confirm it. The notebook's own
+register of the first \nPredEarly{} (of which \nPredEarlyRight{} was partly right) says all
+\nPredEarly{} were written before the evidence; for every unordered row of the table, all of which
+are among them, git does not show it, and that
+register is corrected by a later notebook entry, not in place. For the first \nPredEarly{}, the
+notebook credits the refutations with a standing rule, the feature contract's \texttt{history\_key}
+field and E1's density threshold for component folding; the density threshold was itself found, the
+same day, to rule component folding out for most history keys, and the control adopted is the
+temporal one described above.
 
 \subsection{A benchmark audit protocol}
 
 The checks below are what we would run before trusting any synthetic benchmark, whoever built it.
 Each one exists because its absence hid something here: Table~\ref{tab:protocol} states what each
 check detects and what it found on FraudShield-EAC. Most are measurements on data that already
-exists; the pre-registered variant needed new generator code and a regenerated draw.
+exists; the pre-specified variant needed new generator code and a regenerated draw.
 
 \begin{table}[htbp]
 \centering
@@ -218,9 +247,9 @@ No fraud parameter is keyed by country, and leave-one-country-out costs at most 
 the variant held out in time is still a multi-row incident and is caught at \nNovelRecall{}
 (Section~\ref{sec:generalisation}) \\
 \addlinespace
-A pre-registered variant drawn from a documented typology &
+A pre-specified variant drawn from a documented typology &
 Whether detection survives without the benchmark's dominant structure &
-Recall \nRevRecall{} \nRevCI{} against \nBaseVarRecall{} \nBaseVarCI{}, below the registered
+Recall \nRevRecall{} \nRevCI{} against \nBaseVarRecall{} \nBaseVarCI{}, below the pre-specified
 prediction; the variant departs from the documented typology in its recipient
 (Section~\ref{sec:generalisation}) \\
 \addlinespace

@@ -19,7 +19,7 @@ population and volume structure, partly from a neighbouring market's statistics.
 \paragraph{The benchmark is easily separable, we infer by its incident structure.} Several of its scenarios stage
 fraud as multi-row incidents. A single velocity feature reaches \nGateFloor{} on the test rows,
 \nGroupsAboveCeiling{} feature groups each exceed the single-feature ceiling alone,
-leave-one-country-out and the novel variant are both null, and the one pre-registered variant
+leave-one-country-out and the novel variant are both null, and the one pre-specified variant
 without that structure is caught at \nRevRecall{}. We infer that the separability and the novel-variant null follow from
 the incident structure, and the country null from fraud parameters that are not keyed by country; no
 experiment varies either. Detection of this benchmark's own scenarios is what it measures;
@@ -56,7 +56,7 @@ a data protection impact assessment, and hosting in a permitted location (Sectio
 
 \paragraph{What the benchmark cannot exercise.} Cross-bloc and intercontinental transfers cannot occur
 by the benchmark's configuration, so the models have never scored one (Section~\ref{sec:setting}).
-The pre-registered reversal-scam variant sends the victim's transfer to a counterparty on the
+The pre-specified reversal-scam variant sends the victim's transfer to a counterparty on the
 victim's payee list, a modelling choice that differs from the documented form of the scam, in which
 the victim pays the scammer's own number, which we read as a new counterparty; it also differs from
 the base scenarios in its amount rule, and it carries counterparty novelty on \nRevNovelScored{} of its \nRevFraud{} scored rows, so
@@ -93,7 +93,8 @@ threshold fall from \nSkewFlagTrained{} to \nSkewFlagBoth{}, \nSkewLost{} fewer 
 and \nSkewTierBoth{} risk-tier assignments change. The missing outcomes account for most of it (AUC
 \nSkewAucOutcomes{}, \nSkewFlagOutcomes{} frauds flagged), the missing SIM swaps for less
 (\nSkewAucSim{}, \nSkewFlagSim{}). These figures come from ADR 0034 and the scoring milestone's
-independent re-review, which reproduced every row; no raw output file with a provenance stamp was
+re-review by an agent that had written neither the code nor the earlier review
+(Section~\ref{sec:disclosure}), which reproduced every row; no raw output file with a provenance stamp was
 committed for them, so their source is a review record rather than an evidence file. They describe
 what the served feature set does to the evaluated model on the test period, one model at one
 threshold. No deployment has run, so they are not a measured loss of detection in operation, and they
@@ -103,7 +104,7 @@ none (PB-72).
 
 \paragraph{The verification effort was blind in one direction.} The scoring client was reviewed
 \nFakeReviews{} times (a principal review, a re-review of its fixes, a verification pass and an
-adversarial pass over the promotion path), and the reviewers found \nFakeDefects{} defects in the
+adversarial pass over the promotion path, each by an agent), and the reviewers found \nFakeDefects{} defects in the
 model-promotion path between them, while \nFakeTests{} tests passed. None found that the client
 misread how the model registry reports an unset alias, because every one of those tests ran against an
 in-process fake that encoded the same misreading; a test that starts a real registry container

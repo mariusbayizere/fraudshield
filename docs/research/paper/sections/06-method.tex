@@ -52,7 +52,7 @@ branch, which is not yet merged (commit \texttt{b1d76e7}).
 
 The analyses of feature groups, slices, variants and countries (Sections~\ref{sec:evaluation}
 and~\ref{sec:generalisation}) use a separate, deliberately simple model: one untuned XGBoost
-booster on \nTrainUsed{} training rows, calibrated with Platt scaling (a sigmoid fitted with a slope and an offset) \cite{niculescumizil2005calibration}. It is a
+booster on \nTrainUsed{} training rows, calibrated with Platt scaling (a sigmoid fitted with a slope and an offset) \cite{platt2000probabilistic}. It is a
 diagnostic of the benchmark, not the production model, and its figures are labelled as such
 (ADR 0029). Ablations of the production ensemble are reported with the gate.
 

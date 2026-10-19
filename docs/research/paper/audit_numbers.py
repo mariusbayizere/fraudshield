@@ -17,6 +17,7 @@ Usage (from the repository root): python3 docs/research/paper/audit_numbers.py [
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 import sys
@@ -130,6 +131,7 @@ WORDS: dict[str, str] = {
     "eleven": "11",
     "fourteen": "14",
 }
+NUMBER_WORDS: dict[int, str] = {int(v): k for k, v in WORDS.items()}
 
 
 def _word(ratio: float) -> str:
@@ -550,8 +552,18 @@ SOURCES: dict[str, Src | Derived] = {
         lambda early, p5, p6, p7: (
             "seven" if WORDS.get(early.lower(), early) == "4" and p5 and p6 and p7 else "?"
         ),
-        "the register's four plus the three later pre-registrations (PB-56 lead tail; ADR 0028 "
+        "the register's four plus the three later notebook predictions (PB-56 lead tail; ADR 0028 "
         "reversal scam; PB-67 learning curve), each located in the notebook",
+    ),
+    "nPrespecShown": Derived(
+        (),
+        lambda: NUMBER_WORDS[len(prespecified(_predictions_table()))],
+        "rows of Table tab:predictions whose commits the audit orders (check_prespecified)",
+    ),
+    "nPrespecNotShown": Derived(
+        (),
+        lambda: NUMBER_WORDS[len(not_prespecified(_predictions_table()))],
+        "rows of Table tab:predictions first committed with or after their evidence",
     ),
     "_P7": Src(
         NOTEBOOK,
@@ -1213,6 +1225,96 @@ def _tex_path(path: str) -> str:
     )
 
 
+PRESPEC = re.compile(
+    r"\\prespec\{([0-9a-f]{7})\}\{(\d{4}-\d{2}-\d{2})\}\{([0-9a-f]{7})\}\{(\d{4}-\d{2}-\d{2})\}"
+)
+
+
+def _git(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(  # noqa: S603 - fixed git commands, commits from the paper's text
+        ["git", *args],  # noqa: S607
+        cwd=ROOT, capture_output=True, text=True, check=False, env={**os.environ, "TZ": "UTC"},
+    )  # fmt: skip
+
+
+NOT_PRESPEC = re.compile(r"\\notprespec\{([0-9a-f]{7})\}\{([0-9a-f]{7})\}")
+
+
+#: Every file whose text is typeset: a `\\prespec` anywhere in them is checked.
+TYPESET = ("sections/*.tex", "main.tex")
+
+
+def _typeset() -> list[Path]:
+    return sorted(path for pattern in TYPESET for path in HERE.glob(pattern))
+
+
+def _predictions_table() -> str:
+    """The text of Table tab:predictions, the only place the pre-specification counts come from."""
+    text = (HERE / "sections" / "09-discussion.tex").read_text()
+    start = text.index(r"\label{tab:predictions}")
+    return text[start : text.index(r"\end{table}", start)]
+
+
+def not_prespecified(text: str | None = None) -> list[tuple[str, str]]:
+    """Every `\\notprespec{prediction}{evidence}` in `text`, or in every typeset file."""
+    texts = [text] if text is not None else [path.read_text() for path in _typeset()]
+    return [found for t in texts for found in NOT_PRESPEC.findall(t)]
+
+
+def prespecified(text: str | None = None) -> list[tuple[str, str, str, str]]:
+    """Every `\\prespec{prediction}{date}{evidence}{date}` in `text`, or in every typeset file."""
+    texts = [text] if text is not None else [path.read_text() for path in _typeset()]
+    return [found for t in texts for found in PRESPEC.findall(t)]
+
+
+def check_prespecified(defined: dict[str, tuple[str, str]]) -> int:
+    """Git must order each prediction strictly before its evidence, at the dates printed.
+
+    The prediction's commit must be an ancestor of, and not the same as, the evidence's commit, and
+    each printed date must be that commit's author date in UTC. Ancestry shows the prediction was
+    committed before the evidence was; it cannot show the evidence was not seen earlier.
+    """
+    problems = 0
+    # A use the patterns do not match (a long or upper-case hash, a line break between arguments)
+    # would otherwise never be checked.
+    for path in _typeset():
+        text = path.read_text()
+        used = len(re.findall(r"\\(?:not)?prespec\b", text))
+        if used != len(prespecified(text)) + len(not_prespecified(text)):
+            print(
+                f"  PRESPEC: a malformed \\prespec or \\notprespec in {path.name}", file=sys.stderr
+            )
+            problems += 1
+    # Every prediction in the table is in one group or the other.
+    table = _predictions_table()
+    total = WORDS.get(defined["nPredTotal"][1].lower(), "") if "nPredTotal" in defined else ""
+    if str(len(prespecified(table)) + len(not_prespecified(table))) != total:
+        print("  PRESPEC: the table's two groups do not add up to \\nPredTotal", file=sys.stderr)
+        problems += 1
+    for pred, pred_date, evidence, evidence_date in prespecified():
+        for commit, date in ((pred, pred_date), (evidence, evidence_date)):
+            shown = _git("show", "-s", "--date=format-local:%Y-%m-%d", "--format=%ad", commit)
+            got = shown.stdout.strip() if shown.returncode == 0 else "unresolvable"
+            if got != date:
+                print(f"  PRESPEC: {commit} author date {got}, paper {date}", file=sys.stderr)
+                problems += 1
+        ordered = _git("merge-base", "--is-ancestor", pred, evidence).returncode == 0
+        if pred == evidence or not ordered:
+            print(f"  PRESPEC: {pred} is not strictly before {evidence}", file=sys.stderr)
+            problems += 1
+    # The reverse claim is checked too: a prediction the paper says git does not order first must
+    # share its evidence's commit or come after it.
+    for pred, evidence in not_prespecified():
+        later = _git("merge-base", "--is-ancestor", evidence, pred).returncode == 0
+        if not later:
+            print(
+                f"  PRESPEC: {evidence} is not at or before {pred}, as the paper says",
+                file=sys.stderr,
+            )
+            problems += 1
+    return problems
+
+
 def check_derived(
     defined: dict[str, tuple[str, str]],
     found_values: dict[str, str],
@@ -1370,6 +1472,7 @@ def main() -> int:
         problems += not ok
         rows.append((name, value, got, where, source.note, "MATCH" if ok else "MISMATCH"))
     problems += check_derived(defined, found_values, rows)
+    problems += check_prespecified(defined)
     rows.sort(key=lambda r: list(defined).index(r[0]))
     count_helpers(used, cache, args.ref)
     current = write_report(rows, args.ref, ref_sha, check=args.check)

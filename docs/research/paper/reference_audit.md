@@ -78,10 +78,31 @@ the method they define. "Result" says what the citing sentence was checked again
 | Source | Why |
 |---|---|
 | SADC "Member States" page (https://www.sadc.int/member-states), cited by `dataset/params_provenance.md` for Tanzania's and the DRC's bloc memberships | Could not be opened on 2026-09-22 (connection refused, then timed out). Under the rule "verify or remove", it is not cited; the paper cites only the EAC and COMESA pages for bloc membership |
-| Platt (1999), "Probabilistic outputs for support vector machines and comparisons to regularized likelihood methods", in *Advances in Large Margin Classifiers* | No DOI; not in Crossref; the publisher's page (MIT Press) refused automated access on 2026-09-22. Not confirmed, so not added. Platt scaling is cited through Niculescu-Mizil and Caruana (2005), which describes and evaluates it |
+| Platt (1999), "Probabilistic outputs for support vector machines and comparisons to regularized likelihood methods", in *Advances in Large Margin Classifiers* | No DOI; not in Crossref; the publisher's page (MIT Press) refused automated access on 2026-09-22. Not confirmed, so not added. Platt scaling is cited through Niculescu-Mizil and Caruana (2005), which describes and evaluates it. **Superseded 2026-10-19:** added as `platt2000probabilistic` (Section 5) |
 
 ## 4. Added after the third pass
 
 `star2025mpesa` was added on 2026-09-22 once the article had been read (Section 2). Safaricom's
 fraud-awareness page, the named fallback, was not needed and is not cited. `dogan2025grift` moved
 from metadata-only to verified once its full text was read.
+
+## 5. Added after the external review (2026-10-19)
+
+| Key | What was read | Status | What the paper cites it for |
+|---|---|---|---|
+| `lopezrojas2014banksim` | The paper's PDF from msc-les.org: title, authors, pages 144–152, ISBN and editors printed on its pages; abstract and introduction | VERIFIED-SOURCE | A bank-payments simulator calibrated with aggregated transaction data "provided by a bank in Spain" |
+| `jesus2022baf` | The NeurIPS 2022 proceedings page (title, authors, Datasets and Benchmarks track, abstract); the arXiv abstract (2211.13358) | VERIFIED-METADATA | Tabular data generated from an anonymised real bank-account-opening fraud dataset, each variant with a deliberate bias. No variant or row count is cited: neither page gives one |
+| `altman2023aml` | The NeurIPS 2023 proceedings page (title, authors, track, DOI 10.52202/075280-1300, abstract) | VERIFIED-METADATA | An agent-based AML transaction generator calibrated to real transactions; generated labels are complete where real ones miss undetected laundering |
+| `platt2000probabilistic` | The book's publisher record (MIT Press, 2000; editors Smola, Bartlett, Schölkopf, Schuurmans) and Lin, Lin and Weng's note (Machine Learning, 2007), which cites the chapter as Platt (2000) and states the method | VERIFIED-METADATA; the chapter's own text was **not** read | Platt scaling: a two-parameter sigmoid fitted to a classifier's scores |
+| `zindi2019xente` | The competition page (zindi.world): Xente "an e-payments, e-commerce, and financial services company in Uganda"; label `FraudResult`; dates; data terms | VERIFIED-SOURCE | A real, labelled East African fraud dataset released before this benchmark (C-8) |
+| `azamuke2025momtsim` | The Data in Brief article (PMC12036017) and the Mendeley Data page (v2) | VERIFIED-SOURCE | A synthetic, multi-agent mobile money fraud dataset from Makerere University, data source "Kampala/Eastern Africa region" (C-8) |
+| `lopezrojas2016paysim` (re-read) | The EMSS 2016 PDF text | VERIFIED-SOURCE | The source service is in "an African country", not named |
+
+`niculescumizil2005calibration` was cited for Platt scaling because Platt's chapter could not be
+confirmed (Section 2); it is now cited for its comparison of Platt scaling with isotonic regression,
+and Platt is cited directly. The owner asked for "Platt 1999": the chapter is often dated 1999, the
+year of its manuscript, but the book appeared in 2000 and the citing note dates it 2000, so the entry
+uses 2000. The page range 61–74 appears only in secondary citations and is not given.
+`nosek2018preregistration` was re-read (PMC copy of the PNAS article) for its definition, which the
+paper now quotes in substance: an analysis plan posted to an independent registry before the research
+outcomes are observed.

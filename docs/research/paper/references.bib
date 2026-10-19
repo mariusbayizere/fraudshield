@@ -164,7 +164,9 @@
 
 % STATUS VERIFIED-SOURCE: the paper's PDF (msc-les.org) read: title, authors, pages 249-255 and ISBN
 % 978-88-97999-76-8 printed on its pages; the log record is described in Section 4 of the paper.
-% The place (Larnaca) is not printed in the paper and is not given.
+% The place (Larnaca) is not printed in the paper and is not given. Re-read 2026-10-19 (pdftotext):
+% "a sample of real transactions extracted from the logs of a mobile money service implemented in an
+% African country"; the country is not named.
 @inproceedings{lopezrojas2016paysim,
   author    = {Lopez-Rojas, Edgar Alonso and Elmir, Ahmad and Axelsson, Stefan},
   title     = {{PaySim}: A Financial Mobile Money Simulator for Fraud Detection},
@@ -176,6 +178,99 @@
   isbn      = {978-88-97999-76-8},
   url       = {https://www.msc-les.org/proceedings/emss/2016/EMSS2016_249.pdf},
   note      = {Accessed 2026-09-22}
+}
+
+% STATUS VERIFIED-SOURCE: the competition page (zindi.world, redirected from zindi.africa) read,
+% 2026-10-19: "Xente is an e-payments, e-commerce, and financial services company in Uganda"; label
+% FraudResult; competition 20 May to 22 September 2019; data "the sole property of Zindi and the
+% competition host", redistribution prohibited.
+@misc{zindi2019xente,
+  author       = {{Zindi} and {Xente}},
+  title        = {Xente Fraud Detection Challenge},
+  year         = {2019},
+  howpublished = {Zindi competition},
+  url          = {https://zindi.world/competitions/xente-fraud-detection-challenge},
+  note         = {Accessed 2026-10-19}
+}
+
+% STATUS VERIFIED-SOURCE: the article (PMC copy) read, 2026-10-19: Data in Brief 60, 111534; data
+% source location "Kampala/Eastern Africa region", country Uganda; label isFraud; account takeover
+% (SIM swap, lost credentials), refund fraud and fake credentials; CC BY. The dataset itself is
+% Mendeley Data doi 10.17632/zhj366m53p.2 (version 2, 29 October 2024), CC BY 4.0, page read: "produced
+% using the MoMTSim platform, a multi-agent-based simulation"; the article's institution is the
+% Department of Computer Science, Makerere University.
+@article{azamuke2025momtsim,
+  author  = {Azamuke, Denish and Katarahweire, Marriette and Bainomugisha, Engineer},
+  title   = {A Labeled Synthetic Mobile Money Transaction Dataset},
+  journal = {Data in Brief},
+  volume  = {60},
+  pages   = {111534},
+  year    = {2025},
+  doi     = {10.1016/j.dib.2025.111534}
+}
+
+% STATUS VERIFIED-SOURCE: the paper's PDF (msc-les.org) read, 2026-10-19: title, authors, pages
+% 144-152, ISBN 978-88-97999-38-6 and the editors printed on its pages; the abstract says the model
+% is based on aggregated transactional data "provided by a bank in Spain", and was developed and
+% calibrated with social network analysis of "relations between merchants and customers".
+@inproceedings{lopezrojas2014banksim,
+  author    = {Lopez-Rojas, Edgar Alonso and Axelsson, Stefan},
+  title     = {{BankSim}: A Bank Payments Simulator for Fraud Detection Research},
+  booktitle = {Proceedings of the European Modeling and Simulation Symposium (EMSS 2014)},
+  editor    = {Affenzeller, Michael and Bruzzone, Agostino G. and Jim{\'e}nez, Emilio and Longo,
+               Francesco and Merkuryev, Yuri and Zhang, Lin},
+  year      = {2014},
+  pages     = {144--152},
+  isbn      = {978-88-97999-38-6},
+  url       = {https://www.msc-les.org/proceedings/emss/2014/EMSS2014_144.pdf},
+  note      = {Accessed 2026-10-19}
+}
+
+% STATUS VERIFIED-METADATA: the NeurIPS proceedings page read, 2026-10-19 (title, authors, track,
+% abstract): BAF is generated from an anonymised real bank-account-opening fraud dataset, and each
+% variant carries a specific type of bias, so that practitioners can "stress test both performance
+% and fairness of ML methods". The proceedings page gives no page range or DOI.
+@inproceedings{jesus2022baf,
+  author    = {Jesus, S{\'e}rgio and Pombal, Jos{\'e} and Alves, Duarte and Cruz, Andr{\'e} and
+               Saleiro, Pedro and Ribeiro, Rita and Gama, Jo{\~a}o and Bizarro, Pedro},
+  title     = {Turning the Tables: Biased, Imbalanced, Dynamic Tabular Datasets for {ML} Evaluation},
+  booktitle = {Advances in Neural Information Processing Systems 35 (NeurIPS 2022), Datasets and
+               Benchmarks Track},
+  year      = {2022},
+  url       = {https://proceedings.neurips.cc/paper_files/paper/2022/hash/d9696563856bd350e4e7ac5e5812f23c-Abstract-Datasets_and_Benchmarks.html},
+  note      = {Accessed 2026-10-19}
+}
+
+% STATUS VERIFIED-METADATA: the NeurIPS proceedings page read, 2026-10-19 (title, authors, track,
+% DOI, abstract): an agent-based generator of synthetic transactions for anti-money laundering,
+% calibrated to real transactions, whose labels are complete because they are generated, where
+% real data misses laundering that was never detected.
+@inproceedings{altman2023aml,
+  author    = {Altman, Erik and Blanu{\v{s}}a, Jovan and von Niederh{\"a}usern, Luc and Egressy, Beni and
+               Anghel, Andreea and Atasu, Kubilay},
+  title     = {Realistic Synthetic Financial Transactions for Anti-Money Laundering Models},
+  booktitle = {Advances in Neural Information Processing Systems 36 (NeurIPS 2023), Datasets and
+               Benchmarks Track},
+  year      = {2023},
+  doi       = {10.52202/075280-1300}
+}
+
+% STATUS VERIFIED-METADATA, 2026-10-19: the book's publisher record (MIT Press, 2000, editors as
+% below) and Lin, Lin and Weng's note on the method (Machine Learning, 2007), which cites this
+% chapter as Platt (2000) and states the method: a sigmoid with two parameters fitted to the SVM's
+% decision values by regularised maximum likelihood. The chapter's own text was not read (no
+% readable copy was reached), so no page range is given. Often cited as 1999, the date of the
+% manuscript; the book appeared in 2000.
+@incollection{platt2000probabilistic,
+  author    = {Platt, John C.},
+  title     = {Probabilistic Outputs for Support Vector Machines and Comparisons to Regularized
+               Likelihood Methods},
+  booktitle = {Advances in Large Margin Classifiers},
+  editor    = {Smola, Alexander J. and Bartlett, Peter and Sch{\"o}lkopf, Bernhard and Schuurmans,
+               Dale},
+  publisher = {MIT Press},
+  address   = {Cambridge, MA},
+  year      = {2000}
 }
 
 % STATUS VERIFIED-METADATA: Crossref 10.1145/3209811.3209817; abstract read.
@@ -341,7 +436,7 @@
 }
 
 % STATUS VERIFIED-METADATA: Crossref 10.1145/1102351.1102430. Compares Platt scaling and isotonic
-% regression; cited for Platt scaling because Platt's own chapter could not be confirmed.
+% regression; cited beside Platt's chapter (platt2000probabilistic) for that comparison.
 @inproceedings{niculescumizil2005calibration,
   author    = {Niculescu-Mizil, Alexandru and Caruana, Rich},
   title     = {Predicting Good Probabilities with Supervised Learning},
@@ -568,7 +663,9 @@
   doi       = {10.1145/3287560.3287596}
 }
 
-% STATUS VERIFIED-METADATA: Crossref 10.1073/pnas.1708274114.
+% STATUS VERIFIED-SOURCE (definition): Crossref 10.1073/pnas.1708274114; the PMC copy (PMC5856500)
+% read 2026-10-19: preregistration defines "the research questions and analysis plan before
+% observing the research outcomes", posted "to an independent registry".
 @article{nosek2018preregistration,
   author  = {Nosek, Brian A. and Ebersole, Charles R. and DeHaven, Alexander C. and Mellor, David T.},
   title   = {The Preregistration Revolution},

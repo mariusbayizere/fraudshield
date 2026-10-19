@@ -417,3 +417,27 @@ message saying what it does not show), the datasheet, the model card and ADR 002
 transfer to a listed payee", with the 19-of-66 result. PB-141 stays open as a known inaccuracy, with
 the reason in its row. The lab notebook's 2026-09-22 pre-registration keeps its original wording
 (append-only); its 2026-10-19 entry records the finding.
+
+## 13. Owner decisions on the GitHub Actions scope, 2026-10-19
+
+1. **Alert budget:** precision is reported across a range of daily alert budgets, stated as assumed
+   and why: no budget is defined, and D-10's capacity model (`docs/ml/capacity_model.md`) does not
+   exist, so a single number would be invented.
+2. **Cost curve:** raw axes only (fraud amount caught against legitimate amount blocked and reviews
+   required). No currency figure: the costs have no source.
+3. **Full volume:** a cache-only job measures memory and time first. **Not built on this branch:**
+   `origin/ml/full-volume` (PB-66, `cef3839`, pushed 2026-10-19) already holds a two-job workflow
+   with its own pre-registration document whose first job is exactly this cache build, plus PR-AUC, precision at assumed
+   budgets, by-month figures, a cost curve and a country/channel fairness report, awaiting the owner's
+   approval. A second job here would duplicate it. M11 reads its evidence when it lands. A drafted
+   cache-only workflow (`088cfd2`, peak RSS, swap and a streamed memory curve; reviewed clean) is kept
+   out of the repository; PB-66's job 1 records the cache build's peak RSS and elapsed time but no
+   memory curve or swap use, which the owner may want added before it runs.
+   Difference to resolve: PB-66's primary cost curve is Drummond-Holte normalised cost, the owner's
+   decision for the paper is raw axes (fraud amount caught against legitimate amount blocked and
+   reviews required).
+4. **Per-row scores:** not committed (G.5: scores tied to account tokens are close to dataset
+   content). Their hashes and the regenerating workflow are the provenance.
+5. **Fairness:** country and channel only; the paper says KYC tier and urban/rural are not in the
+   released data, so the report cannot cover the specification's full set.
+6. Latency percentiles stay unmeasured: a shared runner cannot give them.

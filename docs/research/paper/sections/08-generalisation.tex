@@ -80,7 +80,7 @@ Appendix~\ref{app:scenarios}), and the agent and corridor groups alone barely se
 inference. What the benchmark supports is detection on its own scenarios, and, for one booster on one
 laptop, the median cost of explaining that detection. It supports no claim about generalisation, geographic or temporal.
 
-\subsection{A pre-registered non-burst variant: the one failure found}
+\subsection{A pre-specified non-burst variant: the one failure found}
 
 A generalisation test needs a mechanism that actually differs, and the ``sent by mistake'' reversal
 scam is one. Its ingredients are documented among Kenyan M-PESA users. In a survey of them,
@@ -100,7 +100,8 @@ new counterparty.
 
 The benchmark's variant keeps the single, victim-initiated transfer and sends it to a counterparty
 already on the victim's own payee list. \textbf{That recipient is our modelling choice, not a property
-of the documented scam: ADR 0028, and the justification committed at pre-registration, cite the scam
+of the documented scam: ADR 0028, and the justification committed with the variant and its predicted recall
+(\prespec{656d24e}{2026-09-22}{6bc842d}{2026-09-22}, Section~\ref{sec:discussion}), cite the scam
 typology for it, and the sources cited do not support it.} The variant therefore departs from the
 documented form in its recipient, and ADR 0028 has been corrected to say so. The variant also has its own amount rule: amounts are drawn around \nRevAmountMultiplier{} times
 the channel's median legitimate amount, and pass through the same below-threshold adaptation as other
@@ -134,7 +135,7 @@ label, as a deployed model would: all \nRevTrueFraud{} rows are in the test peri
 their true label, and \nRevScoredUnlabelled{} of them carry the benchmark's missed-fraud label noise
 (Section~\ref{sec:dataset}), so they are scored as legitimate rows
 (\texttt{evidence/\allowbreak reversal\_\allowbreak labels\_\allowbreak d8083dbc.txt},
-Appendix~\ref{app:evidence}). The point estimate is below the pre-registered range; the interval
+Appendix~\ref{app:evidence}). The point estimate is below the pre-specified range; the interval
 reaches past the range's lower edge, so ``below the predicted range'' holds for the point estimate
 and not for the whole interval.
 

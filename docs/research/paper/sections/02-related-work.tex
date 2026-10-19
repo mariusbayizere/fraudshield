@@ -23,19 +23,43 @@ et al.\ describe SMS- and call-based social-engineering fraud from \nRazaqInterv
 mostly with victims \cite{razaq2021scams}, and Do{\u{g}}an et al.\ survey the scams Kenyan
 M-PESA users face and how they detect and respond to them, finding forged M-PESA messages the most
 common \cite{dogan2025grift}. With a press account of the ``sent by mistake'' reversal scam
-\cite{star2025mpesa}, that work documents the scam the pre-registered variant of
+\cite{star2025mpesa}, that work documents the scam the pre-specified variant of
 Section~\ref{sec:generalisation} is modelled on.
 
 \paragraph{Synthetic transaction data.} Real transaction data is rarely shareable, which is why
 synthetic generators exist. The closest to ours is PaySim, an agent-based simulator of mobile
-money transactions calibrated to aggregates of a real service \cite{lopezrojas2016paysim}. Its
+money transactions calibrated to a sample of a real service's logs, which its paper places in ``an
+African country'' without naming it \cite{lopezrojas2016paysim}. Its
 log records the client, the action, the recipient, the sum and the change in balances, at an hourly
-step; it has no channel, device, geographic or cross-border corridor field. FraudShield-EAC differs in what it
+step; it has no channel, device, geographic or cross-border corridor field. The same authors'
+BankSim simulates bank payments between customers and merchants, calibrated with aggregated
+transaction data from a bank in Spain \cite{lopezrojas2014banksim}. More recent public benchmarks
+take other routes. The Bank Account Fraud suite generates tabular data from an anonymised real
+dataset of bank-account-opening fraud, and gives each variant a specific, deliberate bias so that a
+method's fairness can be stress-tested beside its performance \cite{jesus2022baf}. Altman et al.\
+build an agent-based generator of financial transactions for anti-money laundering, calibrated to
+real transactions, and argue that a generator's labels are complete in a way real labels, which miss
+undetected laundering, are not \cite{altman2023aml}. BAF's generation from real data is the clearest
+contrast with ours, whose fraud behaviour is assumed rather than learned from any real record
+(Section~\ref{sec:dataset}). FraudShield-EAC differs in what it
 simulates (\nChannels{} channels including USSD and agent banking, devices, coordinates, \nCountries{}
 countries and their corridors) and in what it is used for: this paper is less about the generator than about
-what its benchmark can and cannot support. We make no claim that it is the first East African
-fraud benchmark: that would require a documented search of datasets we have not done (claims
-register, C-8). We document the dataset with a datasheet \cite{gebru2021datasheets} and the model
+what its benchmark can and cannot support. \textbf{FraudShield-EAC is not the first public East African fraud dataset.} A structured search of
+dataset repositories and the literature, recorded with every query, source and gap
+(\texttt{docs/research/c8\_dataset\_search.md} and its second pass,
+\texttt{c8\_dataset\_search\_pass2.md}), found earlier ones, among them those below. The Xente Fraud Detection
+Challenge on Zindi released real transactions from ``an e-payments, e-commerce, and financial
+services company in Uganda'', its training transactions labelled as fraud or not, as a competition
+benchmark whose terms
+forbid redistribution \cite{zindi2019xente}. MoMTSim's synthetic mobile money transactions, from
+Makerere University, are labelled for account takeover (including SIM swaps), refund fraud and fake
+credentials, and give Kampala and the Eastern Africa region as the data source location
+\cite{azamuke2025momtsim}; produced by a multi-agent simulation of mobile money, it is the closest
+neighbour to ours the search found. The search found no public dataset that combines several EAC countries with all
+the channels above, but it was bounded: it was run by an AI agent (Section~\ref{sec:disclosure}), and
+its records list the sources it could not query and the results it read only in part. That is the
+absence of a hit in a bounded search, not evidence that no such dataset exists, and we claim no
+novelty on it. We document the dataset with a datasheet \cite{gebru2021datasheets} and the model
 with a model card \cite{mitchell2019modelcards}.
 
 \paragraph{Leakage and shortcuts.} Leakage, information about the target that would not be
@@ -47,8 +71,9 @@ cross-validation that respects it \cite{roberts2017cv,bergmeir2012cv}. Several o
 modes in Section~\ref{sec:discussion} are instances of these: rows of one fraud incident leaking
 into each other's encoding, and a benchmark whose strongest signal is a single burst feature.
 
-\paragraph{Calibration and explanation.} Scores become probabilities through Platt scaling or
-isotonic regression \cite{zadrozny2002calibration,niculescumizil2005calibration}. Calibration error
+\paragraph{Calibration and explanation.} Scores become probabilities through Platt scaling, a sigmoid fitted to
+the classifier's scores \cite{platt2000probabilistic}, or isotonic regression
+\cite{zadrozny2002calibration}; Niculescu-Mizil and Caruana compare them \cite{niculescumizil2005calibration}. Calibration error
 is usually summarised by binned estimates such as the expected calibration error
 \cite{naeini2015bbq,guo2017calibration}, which depend on the binning and can underestimate the
 error \cite{kumar2019calibration}; we report the decision-region figure beside the overall one for
@@ -63,5 +88,7 @@ for the gate metrics.
 \paragraph{Engineering and research practice.} Machine-learning systems accumulate hidden costs at
 their boundaries \cite{sculley2015debt}, and production readiness can be scored by the tests a
 system has \cite{breck2017testscore}; the parity suite and evidence stamps of
-Sections~\ref{sec:features} and~\ref{sec:repro} are in that spirit. Recording predictions before
-the evidence, as Section~\ref{sec:discussion} does, is pre-registration \cite{nosek2018preregistration}.
+Sections~\ref{sec:features} and~\ref{sec:repro} are in that spirit. Pre-registration posts the analysis plan to an independent registry before the
+research outcomes are observed \cite{nosek2018preregistration}. This work did not do that: its predictions were committed
+to its own repository, and Section~\ref{sec:discussion} reports which of them git orders before their
+evidence and which it does not.

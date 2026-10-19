@@ -3102,3 +3102,33 @@ and which reversal rows were caught cannot be found because they were not.
 scores beside its evidence file, under the same stamp, and is logged as a test-set read like any
 other.* A result that cannot be interrogated afterwards has to be taken on trust, which is the thing
 the evidence files exist to avoid. PB-142 carries it to the next evaluation (M10).
+
+### 2026-10-19 · Correction: what the history shows about the recorded predictions
+
+An external review of the paper called "pre-registered" an overclaim, because this notebook was
+sometimes back-filled and sometimes amended in place. It is right, and checking the commits shows
+the problem is larger than the word. The test applied: is the commit that first contains a prediction
+a strict ancestor of the commit that first contains its evidence?
+
+- **Ordered (4):** the shortcut-detector power dip (`be2d7b0` before `984351d`), the takeover-lead
+  band (`0138099` before `1db73b1`), the reversal-scam recall range (`656d24e` before `6bc842d`) and
+  the PB-67 learning curve (`ecbca23` before `63bbed5`, both rebased on 2026-10-18 with their author
+  dates kept; GitHub's run records show the pre-rebase original `d071147` on the server at
+  2026-09-22T09:04:23Z, before the first learning-curve evidence was committed).
+- **Not ordered (3):** the detector offset entry (headed 2026-09-18 19:5x, local time) first appears in `984351d`, the
+  same commit as its refutation. The counterparty-field and `accounts_per_device_7d` predictions first
+  appear in `d85385f`, the child of `5f0a8a1`, whose code already has the `history_key` field and
+  already states that component folding resolves the device feature.
+
+So the register entry of 2026-09-19 ("four recorded, one partially right"), which says all four were
+written before the evidence, is not supported by the history for three of them; nor is the earlier
+2026-09-19 entry's closing claim that "the predictions are in the commit history with timestamps
+preceding the runs that settled them". They may well have
+been written first; the commits cannot show it, and the notebook's own say-so is not evidence. Both
+entries are left as written (append-only) and corrected here.
+
+Even the ordered four show only that the prediction was **committed** before the evidence was. They
+do not show the evidence was unseen, and commit order is made on this machine, so a history rewritten
+before it was pushed would look the same. The paper now says "pre-specified in repository history",
+lists the ordered and unordered predictions separately, and `audit_numbers.py` checks every commit
+pair and date it prints, in both directions, on every build.
