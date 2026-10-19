@@ -154,3 +154,51 @@ that the architecture carry it.
 **How the 194.8 KB came down.** `zod` became `zod/mini` (−16 KB), the MUI `Select` became a native
 one (−10 KB), and the shell became a lazy route (−36 KB). React, MUI's styling engine, the router,
 TanStack Query and i18next are what remain, and they are the floor for any screen.
+
+## Amendment 2026-10-19 — §10, the margin, on a measured basis (owner decision)
+
+**What the two numbers protect.** 200 KB is the SRS's own gate (MOB-PERF-06: initial JavaScript
+"< 200 KB" gzipped on 3G and 4G, and the build fails above it), set beside the 3G timing targets
+MOB-PERF-01 (first contentful paint under 2.5 s) and MOB-PERF-03 (time to interactive under 5 s).
+It stays. 170 KB was this ADR's own margin, chosen as 30 KB under 200 so that one screen could not
+spend the rest; it was a round number, not derived from a measurement.
+
+**Why the entry grew with no screen attached.** Between the first amendment (158.3 KB, `cf4cb8f`)
+and the first analyst screen (167.9 KB) the entry grew by 9.9 KB. Measured commit by commit with
+the test's own method (production build, the first country pack, gzip level 6, the entry plus
+everything `index.html` preloads), and attributed by the modules in each build's source maps:
+
+| Commit | What it did | Entry | Change | Modules that entered |
+|---|---|---|---|---|
+| `cf4cb8f` | this ADR's first amendment | 158.0 KB | | |
+| `cb5b02b` | session and sign-in | 164.0 KB | +6.0 | the generated API client (fetch client, serializers, server-sent-events support), `session.tsx`, `tokens.ts`, `csrf.ts`, `loginSearch.ts`, design-token JSON |
+| `2d374f2` | registration | 164.2 KB | +0.2 | none; `router.tsx` grew |
+| `754b7e5` | recovery, unlock, pending approval | 165.4 KB | +1.2 | none; four more route definitions in `router.tsx` |
+| rebase onto `main` | | 165.4 KB | 0 | |
+| `02555dd` | `/system/status` withdrawn | 165.8 KB | +0.3 | none; the chunks split differently |
+| `74b4117` | the alert filters follow the contract | 167.1 KB | +1.3 | `zod/v4/mini/iso`; `alertSearch.ts` grew (lists, UUIDs, dates, patterns) |
+| to `9824c96` | the filters' review fixes | 167.9 KB | +0.8 | `alertSearch.ts` grew (amounts read from numbers) |
+| screen 1 | the alert feed | 168.9 KB | +1.0 | none; the lazy chunk changed how shared code splits |
+| screen 2 | the investigation drawer | 169.3 KB | +0.4 | none; one more lazy route |
+
+**So nothing grew by accident.** Six of the 9.9 KB are the cost of restoring a session at start-up:
+every visit asks the refresh cookie for a session before it renders, so the API client and the
+session code are needed before any screen. Two more are the URL validation of the feed's filters,
+which must sit with the route definitions in the entry. The rest is route definitions. One part is
+dead weight: the generated client's server-sent-events support, which the console never uses,
+costs 0.7 KB (measured by stubbing it out); removing it means patching generated code and is left
+alone for now.
+
+**Decision.**
+
+1. **200 KB stays the gate** the SRS sets. It is a requirement, not this ADR's to move.
+2. **The margin is 185 KB** (`productionBundle.build.test.ts`). The basis: the screens built so
+   far cost the entry 0.4 to 1.0 KB each, and the largest single change measured was 2.1 KB (the
+   filters' validation). Six analyst screens remain, and the risk officer's and administrator's
+   after them; at 169.3 KB, 185 KB leaves 15.7 KB, room for that work at the measured rate while
+   staying 15 KB under the SRS gate. It is still a margin, so a screen that needs more than its
+   share must come back with a measurement, not an edit to the constant.
+3. **The timings are measured, not inferred from size.** A size gate stands in for timing targets
+   only as a proxy, and MOB-PERF-01 and MOB-PERF-03 had never been measured. The Playwright suite
+   measures them on a production build under throttled 3G and a slowed CPU, in CI
+   (`e2e/performance.spec.ts`).

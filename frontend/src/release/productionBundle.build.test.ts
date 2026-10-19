@@ -8,10 +8,11 @@ import { PACKS } from '../region/packs';
 
 const ROOT = join(import.meta.dirname, '../..');
 /**
- * D-39 allows 200 KB of initial JavaScript, gzipped. The console holds itself to 170 KB, so a
- * screen cannot spend the last of the budget and leave nothing for the next one (ADR 0080 §10).
+ * D-39 and MOB-PERF-06 allow 200 KB of initial JavaScript, gzipped. The console holds itself to
+ * 185 KB, a margin sized from what screens have measurably cost the entry, so one screen cannot
+ * spend the rest (ADR 0080 §10, amendment 2026-10-19).
  */
-const INITIAL_JS_BUDGET = 170 * 1024;
+const INITIAL_JS_BUDGET = 185 * 1024;
 /** No single lazily loaded chunk may exceed this, gzipped (ADR 0080 §10). */
 const CHUNK_BUDGET = 120 * 1024;
 
