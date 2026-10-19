@@ -55,6 +55,11 @@ CURVE_REF = "3dacca6"
 #: The gate cache's corpus depth (paper-reproduce.yml), a fixed point of the selection test.
 GATE_CORPUS = 400_000
 MISMATCHES: list[str] = []
+#: Printed beside every clustered recall (plan, section 1, item 1).
+CLUSTER_NOTE = (
+    "  clustered recall holds each threshold at its full-sample value, so it leaves out the",
+    "  threshold's own uncertainty; a resample holding none of a subgroup's rows is dropped",
+)
 
 
 def wilson(k: int, n: int) -> tuple[float, float]:
@@ -185,8 +190,7 @@ def reversal_section(g: Gate) -> tuple[list[str], Any, Any]:
         "",
         "REVERSAL VARIANT, production ensemble (1% FPR threshold "
         f"{thresholds['1% FPR budget']:.4f}: rows strictly above it; flag: at or above 0.60)",
-        "  clustered recall holds each threshold at its full-sample value, so it leaves out the",
-        "  threshold's own uncertainty; a resample holding none of a subgroup's rows is dropped",
+        *CLUSTER_NOTE,
         *recall_block(g, "all reversal rows", reversal, thresholds),
         *recall_block(g, f"{NOVELTY} = 1", reversal & (novelty == 1), thresholds),
         *recall_block(g, f"{NOVELTY} = 0", reversal & (novelty == 0), thresholds),
@@ -611,6 +615,177 @@ def selection_command(args: argparse.Namespace) -> int:
     return finish("selection")
 
 
+def committed_number(path: str, pattern: str) -> int:
+    """An integer read from a committed evidence file in this checkout, not typed here."""
+    found = re.search(pattern, (HERE / path).read_text())
+    if found is None:
+        raise ValueError(f"{path} has no match for {pattern!r}")
+    return int(found.group(1))
+
+
+def gate_reconciliation() -> Counter[tuple[str, str, bool, bool]]:
+    """The gate job's reconciliation table, read from its committed evidence file."""
+    text = (HERE / "round2_gate_d8083dbc.txt").read_text()
+    block = text.split("RECONCILIATION of the test period's frauds", 1)[1]
+    counts: Counter[tuple[str, str, bool, bool]] = Counter()
+    for line in block.splitlines():
+        found = re.match(r"^  (\S+)\s+(\S+)\s+(True|False)\s+(True|False)\s+(\d+)$", line)
+        if found:
+            variant, kind, observed, true, n = found.groups()
+            counts[(variant, kind, observed == "True", true == "True")] = int(n)
+    if not counts:
+        raise ValueError("round2_gate_d8083dbc.txt holds no reconciliation rows")
+    return counts
+
+
+# ---- full volume (PB-66's per-row scores) -------------------------------------------------------
+
+
+def pb66_auc(metrics: Path) -> float:
+    """The seed-1 model's AUC as PB-66 published it."""
+    import json  # noqa: PLC0415
+
+    return float(json.loads(metrics.read_text())["model_identity"]["auc"])
+
+
+def cross_checks(  # noqa: PLR0913, PLR0917 - the quantities the plan's cross-checks compare
+    args: argparse.Namespace,
+    rows: list[dict[str, str]],
+    labels: Any,
+    truth: list[bool],
+    reversal: Any,
+    scores: Any,
+    counts: Counter[tuple[str, str, bool, bool]],
+) -> list[str]:
+    """Plan section 4's cross-checks, each able to fail the run; references read, not typed."""
+    intervals, labelled = "clustered_intervals_d8083dbc.txt", "reversal_labels_d8083dbc.txt"
+    gate_counts = gate_reconciliation()
+    # Label noise marks some legitimate rows as fraud; they keep a legitimate row's empty type,
+    # so the check is on rows that are truly fraud, which must all carry one.
+    untyped = sum(1 for r, t in zip(rows, truth, strict=True) if t and not r["fraud_type"])
+    differing = sum(1 for k in set(counts) | set(gate_counts) if counts[k] != gate_counts[k])
+    fraud = committed_number(intervals, r"test rows \d+, fraud (\d+)")
+    checks = [
+        ("test rows", len(rows), committed_number(intervals, r"test rows (\d+), fraud")),
+        ("observed fraud", int(labels.sum()), fraud),
+        ("reversal rows, observed fraud", int((reversal & labels).sum()),
+         committed_number(labelled, r"fraud by observed label: (\d+)")),
+        ("reversal rows, true fraud", int((reversal & np.asarray(truth)).sum()),
+         committed_number(labelled, r"fraud by true label: (\d+)")),
+        ("true-fraud rows without a fraud type", untyped, 0),
+        ("cells differing from the gate job's reconciliation", differing, 0),
+        ("AUC differing from PB-66's metrics.json by more than 1e-9",
+         int(abs(gate.auc(scores, labels) - pb66_auc(args.metrics)) > 1e-9), 0),
+    ]  # fmt: skip
+    lines = ["", "CROSS-CHECKS (plan section 4)"]
+    for name, got, want in checks:
+        state = "MATCH" if got == want else "DIFFERS"
+        if state == "DIFFERS":
+            MISMATCHES.append(f"full volume: {name} {got}, expected {want}")
+        lines.append(f"  {name}: {got}, expected {want}  {state}")
+    return lines
+
+
+def full_volume_command(args: argparse.Namespace) -> int:
+    """Plan section 4: items 1, 2 and 6 on PB-66's full-volume seed-1 scores, read, not refitted."""
+    import csv  # noqa: PLC0415
+    import hashlib  # noqa: PLC0415
+
+    digest = hashlib.sha256(args.scores.read_bytes()).hexdigest()
+    expected = args.sha256.read_text().split()[0]
+    if digest != expected:
+        MISMATCHES.append(f"full volume: scores digest {digest}, PB-66 recorded {expected}")
+        return finish("full-volume")
+    with args.scores.open(newline="", encoding="utf-8") as file:
+        rows = list(csv.DictReader(file))
+    reads = [
+        (
+            "round2.py full-volume",
+            args.scores,
+            len(rows),
+            "paper evidence, round two (PB-66 scores)",
+        )
+    ]
+    try:
+        labels = np.asarray([r["label_observed"] == "1" for r in rows], dtype=bool)
+        scores = np.asarray([float(r["score"]) for r in rows], dtype=float)
+        accounts = [r["account_id"] for r in rows]
+        if not all(accounts):
+            MISMATCHES.append(
+                "full volume: the scores carry no account_id, so nothing can be clustered"
+            )
+            return finish("full-volume")
+        fraud_rows = [r for r, y in zip(rows, labels, strict=True) if y]
+        if not all(r["label_true"] for r in rows):
+            MISMATCHES.append("full volume: label_true is blank on some rows (an older cache)")
+        for column in ("variant", "fraud_type"):
+            if not any(r[column] for r in fraud_rows):
+                MISMATCHES.append(
+                    f"full volume: {column} is blank on every fraud row (an older cache)"
+                )
+        if MISMATCHES:
+            return finish("full-volume")
+        g = Gate(
+            data=None,
+            extras={},
+            test=list(range(len(rows))),
+            labels=labels,
+            accounts=accounts,
+            channels=[r["channel"] for r in rows],
+            draws=ci.cluster_draws(accounts, list(labels), np.random.default_rng(SEED)),
+            scored=None,
+            ensemble=scores,
+        )
+        novelty = np.asarray(
+            [
+                float(r[NOVELTY]) if r[NOVELTY] not in {"", "nan", "None"} else math.nan
+                for r in rows
+            ],
+            dtype=float,
+        )
+        variants = np.asarray([r["variant"] for r in rows], dtype=object)
+        thresholds = {"1% FPR budget": fpr_threshold(scores, labels), "flag 0.60": gate.FLAG}
+        reversal = variants == REVERSAL
+        emit([
+            f"FULL-VOLUME MODEL (PB-66's seed-1 scores, sha256 {digest})",
+            "  the draw's identity rests on PB-66's run, which regenerated and fingerprinted it;",
+            "  this job reads that run's scores and has no dataset of its own to fingerprint",
+            f"  test rows {len(rows)}, confirmed fraud {int(labels.sum())}, accounts "
+            f"{len(set(accounts))}; AUC {gate.auc(scores, labels):.3f}",
+            "",
+            "REVERSAL VARIANT, full-volume model (1% FPR threshold "
+            f"{thresholds['1% FPR budget']:.4f}: rows strictly above it; flag: at or above 0.60)",
+            *CLUSTER_NOTE,
+            *recall_block(g, "all reversal rows", reversal, thresholds),
+            *recall_block(g, f"{NOVELTY} = 1", reversal & (novelty == 1), thresholds),
+            *recall_block(g, f"{NOVELTY} = 0", reversal & (novelty == 0), thresholds),
+            f"  reversal fraud rows with {NOVELTY} undefined: "
+            f"{int((reversal & labels & np.isnan(novelty)).sum())}",
+        ])  # fmt: skip
+        emit(calibration_section(g))
+        truth = [r["label_true"] in {"1", "True", "true"} for r in rows]
+        counts: Counter[tuple[str, str, bool, bool]] = Counter(
+            (r["variant"] or "base", r["fraud_type"] or "none", bool(y), t)
+            for r, y, t in zip(rows, labels, truth, strict=True)
+            if y or t
+        )
+        table = [
+            f"  {v:<34} {k:<24}  {o!s:<8}  {t!s:<5}  {n}"
+            for (v, k, o, t), n in sorted(counts.items())
+        ]
+        emit(
+            [
+                "",
+                "RECONCILIATION from PB-66's columns (variant, fraud type, observed, true)",
+                *table,
+            ]
+        )
+        emit(cross_checks(args, rows, labels, truth, reversal, scores, counts))
+    finally:
+        log_reads(reads)
+    return finish("full-volume")
+
+
 # ---- output ------------------------------------------------------------------------------------
 
 
@@ -685,6 +860,10 @@ def main(argv: list[str]) -> int:
     c = commands.add_parser("curve")
     c.add_argument("--small", type=Path, required=True, help="the 340,000-row-corpus cache")
     c.add_argument("--large", type=Path, required=True, help="the 520,000-row-corpus cache")
+    f = commands.add_parser("full-volume")
+    f.add_argument("--scores", type=Path, required=True, help="PB-66's test_scores_seed1.csv")
+    f.add_argument("--sha256", type=Path, required=True, help="PB-66's test_scores_seed1.sha256")
+    f.add_argument("--metrics", type=Path, required=True, help="PB-66's pb66 metrics.json")
     s = commands.add_parser("selection")
     s.add_argument("--dataset", type=Path, required=True)
     s.add_argument("--packs", type=Path, required=True)
@@ -702,6 +881,8 @@ def main(argv: list[str]) -> int:
         return gate_command(args)
     if args.command == "curve":
         return curve_command(args)
+    if args.command == "full-volume":
+        return full_volume_command(args)
     return selection_command(args)
 
 

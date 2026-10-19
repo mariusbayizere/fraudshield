@@ -1,0 +1,77 @@
+# Round-two evidence, plan section 4 (M11): the reversal split, calibration and fraud reconciliation
+# of PB-66's full-volume seed-1 model, read from PB-66's per-row scores rather than refitted. The
+# scores are downloaded from PB-66's run, checked against the SHA-256 PB-66 recorded, and read with
+# the definitions at m4-complete; the read is logged like any other. Nothing here is committed by
+# the workflow, and the scores never leave the artefact store.
+name: paper-evidence-pb66
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["evidence-pb66/**"]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: paper-evidence-pb66-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  UV_VERSION: "0.12.15"
+  PYTHON_VERSION: "3.12.14"
+  # PB-66's full-volume run (started 2026-10-19 18:24 UTC from fcec52c).
+  PB66_RUN: "39302165997"
+  DRAW: "d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32"
+  FS_TEST_ACCESS_LOG: ${{ github.workspace }}/../test_set_access.jsonl
+
+jobs:
+  full-volume:
+    name: PB-66's scores, read with the paper's definitions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: PB-66's evidence artefact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: full-volume-evidence
+          run-id: ${{ env.PB66_RUN }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/pb66
+      - name: The definitions at m4-complete
+        run: |
+          cp docs/benchmarks/test_set_access.jsonl "$FS_TEST_ACCESS_LOG"
+          git worktree add "$RUNNER_TEMP/code" m4-complete
+          cd "$RUNNER_TEMP/code"
+          uv sync --package fraudshield-ml --locked
+          mkdir -p "$RUNNER_TEMP/out"
+      - name: Read the scores
+        working-directory: ${{ runner.temp }}/code
+        run: |
+          scores=$(find "$RUNNER_TEMP/pb66" -name test_scores_seed1.csv)
+          digest=$(find "$RUNNER_TEMP/pb66" -name test_scores_seed1.sha256)
+          metrics=$(find "$RUNNER_TEMP/pb66" -path "*pb66_d8083dbc/metrics.json")
+          test -n "$scores" && test -n "$digest" && test -n "$metrics"
+          uv run --frozen --package fraudshield-ml python "$GITHUB_WORKSPACE/docs/research/paper/evidence/round2.py" \
+            --fingerprint "$DRAW" full-volume --scores "$scores" --sha256 "$digest" --metrics "$metrics" \
+            > "$RUNNER_TEMP/out/round2_full_volume_d8083dbc.txt"
+          cat "$RUNNER_TEMP/out/round2_full_volume_d8083dbc.txt" >> "$GITHUB_STEP_SUMMARY"
+      - name: The checkout is unchanged, and the access log is kept
+        if: always()
+        run: |
+          cp "$FS_TEST_ACCESS_LOG" "$RUNNER_TEMP/out/test_set_access.jsonl" || true
+          test -z "$(git status --porcelain)"
+      - name: Upload the evidence and the access log
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: paper-evidence-full-volume
+          path: ${{ runner.temp }}/out/
