@@ -1,5 +1,11 @@
 # Pre-registration: full-volume training and PB-66's evaluations, on a GitHub-hosted runner
 
+> **Wording (owner, 2026-10-19).** This document is **pre-specified in repository history:** it was
+> first committed as `da3a492` (2026-10-19), and every change is a dated amendment in a later
+> commit on `ml/full-volume`, made before any run. The paper does not use the word
+> "pre-registered". The title and file name keep the word only because the approved text and its
+> path are cited.
+
 - **Status:** APPROVED as amended (owner, 2026-10-19), with § 5 answered in the last amendment.
   **Nothing below has been run** at the time of approval.
   No figure in this file was computed from the test period. The anchors are figures already
@@ -306,3 +312,77 @@ amounts, after the paragraph above. It does not attribute it to the model.
   - **The memory-curve wrapper** can no longer turn a successful step into a failed one. A failed
     reading is skipped, and stopping the sampler cannot change the command's exit status. A
     spurious failure after scoring would have forced a re-run, which § 4 counts as a new access.
+- **2026-10-19, the owner's work order (through M11) and conditions, before any run.** This
+  amendment widens the run: it is written, committed and pushed before anything runs, and **the
+  owner confirms the leave-one-fraud-type-out ranges below before any run.**
+  - **Not blind (0e).** The test period of `d8083dbc` has already been scored: the access log holds
+    23 earlier entries, 11 of them over at least 100,000 test rows, and 9 back-filled without a
+    row count. These analyses are pre-specified, not blind to the test set.
+  - **The "volume helps" rule is out of the prediction's reach (0d).** It needs a five-seed mean
+    above 0.7945 + 0.049 = 0.8435. The predicted range for that mean (§ 2) tops out at 0.83, so the
+    rule can be met only if the prediction is wrong. That is stated now, and the rule is not
+    loosened after the run.
+  - **The budgets in other units (0a).** Each budget is also reported as alerts per 1,000 test
+    transactions. All four budgets (10, 50, 100, 200 a day) remain assumed.
+  - **Outcomes in RWF at each budget (0b).** For each budget: the fraud amount caught and the
+    legitimate amount alerted, in RWF, shared at a tie as frauds are. These are outcomes, not
+    costs: no false-positive cost is assumed, and Drummond–Holte stays the cost curve.
+  - **Per-channel reliability diagrams (E.5 item 6).** Job 2 adds them: ten equal-width bins per
+    channel, predicted against observed, as a table and a figure. They are descriptive, with no
+    prediction (owner).
+  - **The per-row artifact** also carries each row's account ID, fraud type, variant, true label and
+    `counterparty_is_new_for_account` (owner: account IDs in the uncommitted artifact only). M11
+    computes from it:
+    - the reversal variant's recall split by new counterparty;
+    - calibration in the decision regions;
+    - a reconciliation of the 985 test frauds by variant and label-noise status.
+
+    None of these is computed here. The artifact is never committed, and its SHA-256 is.
+
+  - **Leave-one-fraud-type-out (E.5 item 5), job 3, on its own runner in parallel with job 2.**
+    - **Design.** For each of the eight scenarios, every non-test row of that scenario is removed
+      from training, validation and calibration, and from the target encoding. That includes
+      frauds the observed label missed. The model is refitted with the same seed and scores the
+      whole test period.
+    - **What is read.** The held-out scenario's test frauds (observed label), at the 1 % FPR
+      budget's threshold (the gate's rule, on that model's legitimate test rows) and at 0.60. Each
+      recall carries a Wilson interval, beside the production model's recall on the same frauds.
+      `mule_account` is also reported without the reversal variant (66 rows, caught 9 % even in
+      production; ADR 0028).
+    - **Volume.** The production model is fitted first and timed. That fit scores nothing. If nine
+      fits at that pace would exceed 270 minutes, all nine fits use 30,000 training rows, spread
+      in time, so the comparison stays like for like. The report and the access log say which
+      volume ran and why. The decision is made before any test row is scored.
+    - **Hypothesis (owner's):** scenarios sharing burst or counterparty-novelty structure keep high
+      recall when held out; single-row scenarios drop clearly. The generator's own rows per
+      incident are: velocity 6–15, mule 4–12, SIM swap 2–6, account takeover 2–8, synthetic
+      identity 3–8, card-not-present 1–5, agent 1–3, merchant 1–3.
+    - **Predictions, at the 1 % FPR budget**, held-out recall and drop (production minus held out):
+
+      | Scenario | Held-out recall | Drop | Reason |
+      |---|---|---|---|
+      | velocity | ≥ 0.85 | ≤ 0.10 | burst (owner's hypothesis) |
+      | SIM swap | ≥ 0.85 | ≤ 0.10 | burst (owner's hypothesis) |
+      | mule, without reversal | ≥ 0.80 | ≤ 0.10 | burst (owner's hypothesis) |
+      | agent | ≤ 0.70 | ≥ 0.20 | single-row (owner's hypothesis) |
+      | card-not-present | ≤ 0.70 | ≥ 0.20 | single-row (owner's hypothesis) |
+      | merchant | ≤ 0.70 | ≥ 0.20 | single-row (owner's hypothesis) |
+      | account takeover | ≥ 0.80 | ≤ 0.10 | mine, see below |
+      | synthetic identity | 0.70 to 0.92 | 0.00 to 0.20 | mine, see below |
+
+      - **Account takeover:** a 2–8-row drain from a new device 70 % of the time is the shape SIM
+        swap and velocity teach, so never seeing takeover itself should cost little.
+      - **Synthetic identity:** its bust-out is a 3–8-row burst at three times the median amount,
+        also a taught shape. Its one distinctive signal, a handset shared across a ring, is weak by
+        the generator's design (rings are small), so losing it costs some recall but not most.
+      - Recall at 0.60 is reported without prediction.
+    - **Decisions, fixed now.**
+      - A scenario **keeps** its recall if its held-out point estimate meets its row above.
+      - A scenario **drops clearly** if the drop is at least 0.20 *and* the held-out Wilson
+        interval's upper bound is below the production point estimate.
+      - The hypothesis is **supported** if velocity, SIM swap and mule (without reversal) keep and
+        agent, card-not-present and merchant drop clearly. It is **refuted** if any of the first
+        three drops clearly or any of the last three keeps (held-out recall ≥ 0.85). It is
+        otherwise **partly supported**, and the paper names which scenarios held.
+      - Account takeover and synthetic identity are reported against my ranges, separately from
+        the owner's hypothesis.
