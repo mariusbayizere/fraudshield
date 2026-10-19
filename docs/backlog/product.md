@@ -23,7 +23,7 @@ taken twice. Claims made on branches not yet merged, as of 2026-10-17:
 | PB-76 | M4 | `M4_updates.md` on `m4/generalisation` | training rows near the corpus's start see truncated history (was a second `PB-69`) |
 | PB-77 to PB-101 | M6 | `M6_updates.md`, "Numbering reserved by this branch" | amendment 1's known gaps and the 22 section-8 rows proved only in part |
 | PB-102 to PB-130 | M7 | `M7_updates.md`, "Numbering reserved by this branch" | the merge round's unowned items and M7's rows proved only in part (PB-102 to PB-124 used) |
-| PB-131 to PB-140 | M8 | `M8_updates.md`, "Numbering reserved by this branch" | the console's own follow-ups (PB-131 to PB-133 used) |
+| PB-131 to PB-140 | M8 | `M8_updates.md`, "Numbering reserved by this branch" | the console's own follow-ups (all ten used) |
 
 ---
 
@@ -1510,6 +1510,7 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 ### PB-137 · Search: drafts, dates, amounts, errors and Clear
 - **Source:** M8 screen 7 review, 2026-10-19 · **Priority:** medium · **Due:** M8 or M9
 - **Problem:** (1) The form is keyed by the URL's search, so toggling a filter chip or the order wipes unsubmitted typing and its error marks. (2) Dates are not validated: a partly filled or unparseable date, or a year past 9999, is dropped silently though `search.invalid.from` and `.to` exist. (3) The amount range is compared with `Number()`, which cannot tell 18-digit decimals apart, so min > max can go unmarked. (4) A failed submit neither moves focus to the first invalid field nor announces anything. (5) "Clear search" keeps the tier, channel, status and order filters, so a set filter still runs a broad query; the label does not say so.
+- **Also (second review of the PB-136 fix, 2026-10-19):** (6) a bound a link carried to the second (`from=…T01:00:30Z`, shown as 08:00) and a `to` typed as the same minute are marked "to before from" though both fields show 08:00: compare at minute precision. (7) A carried bound whose local form is malformed (year past 9999 after the offset) is sent while the browser shows the field empty: take the carried value only when the field's text is a well-formed local time.
 - **Acceptance:** a filter change keeps the draft while Back and Forward still refill the form; an unusable date is marked and blocks the submit; the amounts are compared as decimals, tested at 14+4 digits; focus moves to the first invalid field or an error summary is announced; Clear's scope is decided, labelled and tested. Each with a test that fails when the behaviour is removed.
 
 ### PB-138 · Search: stronger tests, and an analyst picker
@@ -1528,9 +1529,14 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 - **Problem (fixed):** nothing cleared the query cache when a user signed out, and no query key names the user, so the next user on the same tab could see the previous user's cached alerts, account context or own figures until the refetch landed, on every screen. The review of the fix found a second path: after sign-out, `/login?next=` carried the last page, search criteria or open alert included, and the next user to sign in was sent to it.
 - **Fix:** `signOut` cancels the queries in flight and clears the query and mutation caches, whether or not the server answers. Someone else signing in over a session that never signed out removes its queries. `RequireSession` opens `/login` without `next` when a session ends, keeping it only for a visitor who arrived signed out. Screen state (notices, drafts) sits behind `RequireSession` and unmounts with the session.
 - **Tests:** the caches are empty after sign-out; a second analyst signing in sees none of the first one's alerts; a sign-in over another user's session empties the cache; sign-out from a search opens `/login` with no criteria in the URL. Deletion checks: without the clearing, without the removal at sign-in and with `next` kept, each fails its tests.
-- **Still open:**
-  - **No sign-out control exists.** Nothing in the console calls `signOut` yet, so the fix is reachable only once one is built (the shell's user menu).
-  - **An expired session is not ended.** Nothing turns a 401 into "session ended": the cache stays on screen, the 60 s refetches fail and keep the old data, and the decision panel asks the user to sign in again.
+- **Still open — both must close before any sign-out claim is made** (owner, 2026-10-19; also in D-27's notes and `SESSION_STATE.md`):
+  - **No sign-out control exists.** Nothing in the console calls `signOut` yet, so the clearing takes effect only once M8 builds one (the shell's user menu). Until then "sign-out clears the user's data" is true of the function, not of the console.
+  - **An expired session is never ended.** Nothing turns a 401 into "session ended": the cache stays on screen, the 60 s refetches fail and keep the old data, and the decision panel asks the user to sign in again.
+  - **Second review of the post-review fixes (2026-10-19, APPROVED_WITH_MINORS), filed not fixed:**
+    - **Back after sign-out brings `next` back.** Sign-out replaces only the current history entry; Back from `/login` remounts the shell with a fresh `RequireSession`, whose "signed in" ref is false, so it navigates to `/login?next=<the previous analyst's page>`. The cache stays cleared, so what leaks is the criteria or alert id, which the history already holds. Fix: keep "a session ended in this tab" in `SessionProvider`, where a remount cannot reset it; test with two history entries and Back.
+    - **A failed restore keeping `next` is untested**: a ref condition that marked a restoring visitor as signed in would drop `next` from every cold deep link and pass every test.
+    - **Sign-in as someone else leaves the mutation cache** (the earlier user's comments), unlike sign-out; and the same-user sign-in (cache kept) is untested.
+    - **A refresh still in flight when someone signs in on `/login`** can resolve afterwards and replace the new session with the cookie holder's. Older than this change; ignore the restore's result once status has left `restoring`.
   - **A decision in flight at sign-out still runs its `onSuccess`.** It can drop that alert from the next user's feed until the next refresh. Unlikely, and not an exposure.
   - **The API helpers.** `ApiError`, `bodyOrThrow` and the refresh interval live in the feed's `alerts/queries.ts`, so every screen depends on the feed's module. Average review time is written as "x min y sec" on screen 8 and as seconds on the feed's header.
 - **Acceptance (open part):** a sign-out control that calls `signOut`, with a test; a 401 on a data request ends the session (cache cleared, `/login` without `next`), with a test; the API helpers moved to an `api/` module both features import; one duration formatter used by both screens.

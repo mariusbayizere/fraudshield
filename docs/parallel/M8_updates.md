@@ -219,8 +219,8 @@ Claimed 2026-10-18, after reading every branch: the highest backlog id in use an
 
 | Kind | Reserved for M8 | Used |
 |---|---|---|
-| ADR | `0080`–`0089` | `0080` (console architecture), `0081` (the `/system/status` proposal, on `m8/system-status-proposal`), `0082` (SRS v5.0 adoption), `0083` (the feed is a card list), `0084` (the SHAP explanation is a table) |
-| Backlog | `PB-131`–`PB-140` | `PB-131` (only `validate.ts` imports the generated Zod), `PB-132` (D-45's plain-language templates), `PB-133` (the shared React and MUI floor) |
+| ADR | `0080`–`0089` | `0080` (console architecture), `0081` (the `/system/status` proposal, on `m8/system-status-proposal`), `0082` (SRS v5.0 adoption), `0083` (the feed is a card list), `0084` (the SHAP explanation is a table), `0085` (the account's context drawn without a chart library) |
+| Backlog | `PB-131`–`PB-140` | all ten: `PB-131` (only `validate.ts` imports the generated Zod), `PB-132` (D-45's plain-language templates), `PB-133` (the shared React and MUI floor), `PB-134` to `PB-140` (the screen 6 to 8 reviews; PB-136 fixed, PB-140 partly). A further row needs a new claim. |
 
 ## 9. The analyst screens (from 2026-10-18)
 
@@ -575,3 +575,127 @@ backlog rows rather than fixed, one report at the end).**
   - The changed files pass when run alone (33 of 33).
   - The wider set (274 tests) failed 7 under load, all at the 5 s timeout, including in files this change does not touch.
   - CI is the record.
+
+## 10. Handover (2026-10-19; the owner's "then stop")
+
+M8 stops here, on `m8/frontend-rebase`, not merged. Main is `a7f0528` and the branch contains it.
+
+### What exists
+
+- **Eight analyst screens**, each through one review round and a deletion check (section 9):
+  1. **The alert feed** (`/alerts`): the figures, the cards, the filters in the URL, and paging.
+  2. **The investigation drawer** (`/alerts/$alertId`, and the same drawer under each queue).
+  3. **The decision panel**, with undo, escalation, and the offline queue.
+  4. **The account's context**: history, behaviour and network (ADR 0085).
+  5. **The anomaly queue** (`/anomalies`).
+  6. **Escalations** (`/escalations`).
+  7. **Search** (`/search`).
+  8. **My performance** (`/me/performance`).
+- **The public auth pages** from before. Every other shell section is a placeholder that says it
+  is not built.
+- **ADRs:**
+  - 0080: console architecture.
+  - 0081: `/system/status`, Proposed, on `m8/system-status-proposal`.
+  - 0082: SRS v5.0 adoption.
+  - 0083: the feed is a card list.
+  - 0084: the SHAP explanation is a table.
+  - 0085: the account's context without a chart library.
+  - 0084 and 0085 are accepted as **sufficient, not equivalent**.
+- **Shared tools:**
+  - `tools/bin/mem-gate` runs a heavy step only above a memory floor.
+  - `tools/bin/safe-push` pushes only after the commit messages and eight of CI's governance
+    checks pass on the pinned commit. Its header lists what it leaves to CI. From now on it is the
+    only way M8 pushes. Its review (CHANGES_REQUIRED) found that a stale tracking ref could hide
+    commits from the message check, and that HEAD could move between the checks and the push.
+    Both are fixed, with tests.
+
+### What is mocked: everything the screens read
+
+No analyst operation exists on `main`. The screens run against MSW handlers built from the
+contract's examples (`frontend/src/mocks/handlers.ts`), and Vitest parses every response with the
+generated schema. **A mock is not evidence.**
+
+| Operation (M8B builds) | Rows waiting on it |
+|---|---|
+| `listAlerts` (standard, anomaly, escalated queues; the search parameters) | FR-04-02, FR-04-03, FR-04-09, FR-04-10, UX-DASH-02, UX-DASH-07, UX-ROLE-AN-01, D-10's queue |
+| `getDashboardStats` | UX-DASH-01 |
+| `getAlert`, `getScoringResult` | FR-04-03, UX-DASH-04, UX-DASH-07, UX-ROLE-AN-02 |
+| `getAlertExplanation` | FR-04-05, UX-DASH-05, UX-ROLE-AN-02 |
+| `decideAlert`, `undoAlertDecision`, `escalateAlert` | FR-04-04, FR-04-10, UX-DASH-06, UX-ROLE-AN-03, D-29, D-44 |
+| `listAccountTransactions`, `getBehaviourProfile`, `getAccountNetwork` | FR-04-06, FR-04-07, FR-04-08 |
+| `getMyPerformance` | FR-04-11, UX-ROLE-AN-04 |
+
+### Every open row
+
+- **Requirement rows with milestone M8:** 36 IN_PROGRESS, 2 BLOCKED (FR-04-02 and UX-DASH-01; both
+  need what the contract lacks: the real-time channel and sticky, live figures), 101 NOT_STARTED,
+  none DONE.
+- **No row leaves IN_PROGRESS until M8B serves its operations on `main` and the screen is exercised
+  against them**, whatever else closes. That is the mock rule (owner, 2026-10-18).
+- **Rows waiting on something besides M8B** (each row's notes say what):
+  - MOB-PERF-01 to 06: PB-133, the 3G budget.
+  - D-45: PB-132, the plain-language templates.
+  - D-27: PB-140's open part.
+  - D-33: contrast, measured on paper.
+- **Backlog rows M8 filed (PB-131 to PB-140, all used):**
+
+| Row | Priority | State |
+|---|---|---|
+| PB-131: only `validate.ts` imports the generated Zod | — | open |
+| PB-132: D-45's templates, and the comparison attribute names | — | open; same owner for both |
+| PB-133: React and MUI too heavy for 3G at 1 Mbps | high | open; due M9 or M10 |
+| PB-134: no test decides from the escalations drawer | high | open |
+| PB-135: escalations: original alert, ANOMALY tier, empty-state text | medium | open |
+| PB-136: search widened silently | high | **fixed** |
+| PB-137: search drafts, dates, amounts, errors, Clear (plus two date findings from the second review) | medium | open |
+| PB-138: search tests and an analyst picker | low | open |
+| PB-139: my performance refresh, stale figures, formatting | medium | open |
+| PB-140: cached data across sign-out | high | **data clearing fixed; open part below** |
+
+### PB-140: no sign-out claim can be made yet
+
+`signOut` clears the access token, the query and mutation caches and the return address, and
+tests show it. **Two gaps must close before anyone claims sign-out protects the next user.**
+Both are M8's to build, and both are recorded in PB-140, D-27's notes and `SESSION_STATE.md`:
+
+1. **No sign-out control exists.** Nothing in the console calls `signOut`, so the clearing takes
+   effect only once the shell has a sign-out button.
+2. **An expired session is never ended.** A 401 does not end the session, so stale data stays on
+   screen and failed refreshes keep it.
+
+The second review round found more, filed in PB-140 and not fixed:
+
+- Back after sign-out brings the return address back.
+- A failed restore keeping it is untested.
+- A sign-in as someone else leaves the mutation cache.
+- A late restore can replace a fresh sign-in.
+
+### What M8B must build before any row leaves IN_PROGRESS
+
+1. **The operations in the table above**, to the contract, with NFR-SEC-03's inspector test over
+   every analyst endpoint (masked tokens only). `decideAlert` calls `analystDecidesHold`.
+2. **Answers to items 5 to 11 of `M8B_updates.md`**, which the screens assume:
+   - what `listAlerts` lists during PENDING_COMMIT;
+   - the time zone of `hourly_counts`;
+   - the comparison attribute names (same owner as PB-132);
+   - whether the account context's lists are unique;
+   - the anomaly queue's order and `anomaly_score`;
+   - whether a search can span the queues;
+   - a daily performance series.
+3. **The contract additions it owns:**
+   - `/system/status` (ADR 0081);
+   - the real-time alert channel (FR-04-02, UX-DASH-01);
+   - reassignment (UX-ROLE-SN-02);
+   - team performance (UX-ROLE-SN-04).
+4. **Then M8 re-runs each screen against the real operations.** A row moves past IN_PROGRESS only
+   on that evidence, at job level in CI.
+
+### CI at handover
+
+On `1ec7ef1` every job passes, at job level, except the two the owner keeps red:
+
+- the bundle gate (first visit 209,715 B against 200 KB);
+- the 3G first paint at 1 Mbps (2.76 s against 2.5 s; 1.98 s at 1.6 Mbps passes).
+
+One component test timed out on the first run and passed on the re-run. Locally, under load, the
+component tests time out at 5 s, so CI is the record.

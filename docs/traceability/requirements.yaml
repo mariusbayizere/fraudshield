@@ -5567,7 +5567,11 @@ requirements:
     (pub/sub with ten-minute caches; the analytic bound)
   deviations: []
   notes: 'M7 (2026-10-17, deletion standard; docs/parallel/M7_updates.md): server side proved; carried
-    to M8, whose remaining clause is the browser holding access tokens in memory only.'
+    to M8, whose remaining clause is the browser holding access tokens in memory only. M8 (2026-10-19,
+    PB-140): signOut clears the access token, the query and mutation caches and the return address, tested.
+    No sign-out claim can be made until PB-140''s two open gaps close: no sign-out control exists in the
+    console, so nothing calls signOut and the clearing is unreachable; and an expired session is never
+    ended (a 401 does not end it), so stale data stays on screen.'
 - id: D-28
   section: Build prompt Part B defect register
   title: A third-party penetration test cannot be performed by the build agent.
