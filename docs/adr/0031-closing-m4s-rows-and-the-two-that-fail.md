@@ -120,7 +120,7 @@ watchdog. Evidence: `docs/benchmarks/m4_learning_curve_{30k,60k,120k,240k}_d8083
 | Training rows (frauds) | Recall at 0.60 [95% CI] | Five seeds |
 |---|---|---|
 | 30,000 (259) | 0.795 [0.766, 0.818] | 0.767 ± 0.025 |
-| 60,000 (533) | 0.799 [0.773, 0.823] | 0.772 ± 0.038 |
+| 60,000 (532) | 0.799 [0.773, 0.823] | 0.772 ± 0.038 |
 | 120,000 (1,066) | 0.798 [0.772, 0.821] | 0.779 ± 0.023 |
 | 240,000 (2,132) | 0.783 [0.755, 0.808] | 0.795 ± 0.024 |
 
@@ -136,7 +136,14 @@ The deviation is restated as a property of this benchmark and model **at the vol
 (30,000–240,000 rows of draw `d8083dbc`), which is what the paper may claim.
 
 Two things this amendment does not change: D-02's thresholds, and the fact that nothing was tuned
-on the test period. One thing it adds, from the curve itself: **which** training rows are used moves
-recall several times more than **how many** — this curve's 30K reads 0.795 against the declared
-gate's 0.736 at the same row count but a different corpus depth. That confound is PB-76's, and it
-is the larger effect.
+on the test period. One thing it adds, from the curve itself: **at seed 1**, **which** training rows
+are used moves recall several times more than **how many** — this curve's 30K reads 0.795 against
+the declared gate's 0.736 at the same row count but a different corpus depth. That confound is
+PB-76's. On the five-seed means it is not the larger effect: 0.7669 against 0.7440, a difference of
+0.023, smaller than either standard deviation (0.0245, 0.0410) and smaller than the five-seed gain
+across the curve (0.028).
+
+*Corrected 2026-10-19 against the evidence files:* the 60K point trained on 532 frauds
+(`m4_learning_curve_60k_d8083dbc.txt`), not 533; and the row-selection comparison above holds at
+seed 1 only (the SEEDS sections of `m4_learning_curve_30k_d8083dbc.txt` and
+`m4_gate_d8083dbc_v3.txt`).

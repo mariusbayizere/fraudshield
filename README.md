@@ -6,7 +6,7 @@ Rwanda, Kenya, Tanzania, Uganda and the DRC.
 
 > **Project status: M7 — staff identity, authorisation, admin and audit.** M0 (bootstrap and governance), M1 (contracts and database),
 > M2 (the synthetic dataset generator, verified at 1,006,249 rows) and M3 (44 features on two
-> independent paths, 36 of them computable on this benchmark) are complete, and so is M4 (the
+> independent paths; on this benchmark five have no source data and one is constant, so the models train on 38, ADR 0055) are complete, and so is M4 (the
 > calibrated XGBoost + LightGBM ensemble, evaluated on the benchmark's held-out test period). M4
 > passes 9 of its 11 gate metrics — AUC 0.970, +0.091 over the strongest single feature — and
 > misses two: recall at the 0.60 flag threshold is 0.736 at 30,000 training rows, against 0.88,

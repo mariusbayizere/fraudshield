@@ -23,7 +23,7 @@ volume.**
 | Training rows (frauds) | Recall at 0.60 [95% CI] | Five seeds | Recall at 1% FPR budget |
 |---|---|---|---|
 | 30,000 (259) | 0.795 [0.766, 0.818] | 0.767 ± 0.025 | 0.869 |
-| 60,000 (533) | 0.799 [0.773, 0.823] | 0.772 ± 0.038 | 0.854 |
+| 60,000 (532) | 0.799 [0.773, 0.823] | 0.772 ± 0.038 | 0.854 |
 | 120,000 (1,066) | 0.798 [0.772, 0.821] | 0.779 ± 0.023 | 0.878 |
 | 240,000 (2,132) | 0.783 [0.755, 0.808] | 0.795 ± 0.024 | 0.860 |
 
@@ -43,7 +43,11 @@ volume.**
    At the **same 30,000 training rows**, this curve reads **0.795** and the declared gate reads
    **0.736**: a gap of 0.059, with intervals that only just fail to overlap ([0.766, 0.818] against
    [0.707, 0.765]). The four curve points, spanning an 8× change in row count, span only 0.016.
-   **Which rows are used moves recall several times more than how many.**
+   **At seed 1, which rows are used moves recall several times more than how many.** On the
+   five-seed means it does not: 0.7669 against 0.7440, a difference of 0.023, inside either
+   standard deviation and smaller than the 0.028 the means gain across the curve (corrected
+   2026-10-19 against the SEEDS sections of the two evidence files; the 60K fraud count above
+   corrected from 533 to 532 against `m4_learning_curve_60k_d8083dbc.txt`).
 
    *Mechanism, as far as the evidence reaches.* The two 30K samples differ in the corpus they are
    drawn from: the gate's 30,000 rows come from a 400,000-row corpus covering the last ~128 days of

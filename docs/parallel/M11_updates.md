@@ -286,7 +286,9 @@ denominations", not as "six missing" and not by leaving the sixth out.
 
 The owner's instruction: this belongs **in the limitations section beside the two generalisation
 nulls, not in a footnote**. State the count (five of 44, about 11 %), what each needs, and that the
-reported metrics are therefore those of a 39-feature model on this benchmark. The README's M3 line ("36
+reported metrics are therefore those of a 38-feature model on this benchmark *(corrected by M11 on
+2026-10-19 from "39": the registry at HEAD declares 38 COMPUTABLE, 5 NO_SOURCE_DATA and 1 CONSTANT,
+`just_below_limit_flag`, and the gate's feature cache log reads "computing 38 features")*. The README's M3 line ("36
 of them computable") is an earlier count and differs from ADR 0055's; quote ADR 0055's, which the
 registry's computability check backs, and reconcile the README line before the paper is final.
 

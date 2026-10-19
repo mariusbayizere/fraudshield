@@ -3046,3 +3046,29 @@ start, and the machine stayed responsive. The scripts are
 the 240K point look like it needed a 16 GB Codespace, which it did not. The constraint was never
 total memory; it was that a long run and another agent's test suite were competing for the last
 gigabyte with no policy about who should lose.
+
+### 2026-10-19 · Correction: the PB-67 conclusion table, and the seed-1 scope of the row-selection effect
+
+The entry "PB-67 concluded" (2026-09-24) carries two figures its evidence files do not, and states
+one comparison more broadly than the evidence supports. The notebook is append-only, so they are
+corrected here rather than there.
+
+- **The 60K point trained on 532 frauds**, not 533 (`m4_learning_curve_60k_d8083dbc.txt`,
+  `rows/fraud train 60,000/532`), as the interim entry already said.
+- **The realised FPR at the 1% budget's threshold** was 0.68% at 30K and 0.30% at 60K
+  (`realised FPR is 0.0068` and `0.0030` in the two files), not 0.30% and 0.55%. The 120K (0.82%)
+  and 240K (0.26%) values were right, so the range across the four points is 0.26% to 0.82%, as
+  stated.
+- **"Which rows are used moves recall several times more than how many" holds at seed 1 only.**
+  At seed 1 the curve's 30K reads 0.795 against the gate's 0.736, a difference of 0.059 against a
+  curve range of 0.016. On the five-seed means the same comparison is 0.7669 ± 0.0245 against
+  0.7440 ± 0.0410 (the SEEDS sections of `m4_learning_curve_30k_d8083dbc.txt` and
+  `m4_gate_d8083dbc_v3.txt`): a difference of 0.023, smaller than either standard deviation and
+  smaller than the 0.028 the five-seed mean gains from 30K to 240K. On the means, volume and
+  selection effects are of the same size and neither is distinguishable from seed noise. ADR 0031's
+  amendment, `M4_updates.md` and `contributions.md` are corrected to match.
+
+Found while writing the paper's learning-curve section: every one of the four documents quoted
+the seed-1 comparison, and none of them had been read against the SEEDS lines. The rule it
+illustrates is the one already written for the paper: the evidence file wins, including over the
+entry that first reported it.
