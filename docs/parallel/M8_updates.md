@@ -219,7 +219,7 @@ Claimed 2026-10-18, after reading every branch: the highest backlog id in use an
 
 | Kind | Reserved for M8 | Used |
 |---|---|---|
-| ADR | `0080`–`0089` | `0080` (console architecture), `0081` (the `/system/status` proposal, on `m8/system-status-proposal`), `0082` (SRS v5.0 adoption), `0083` (the feed is a card list) |
+| ADR | `0080`–`0089` | `0080` (console architecture), `0081` (the `/system/status` proposal, on `m8/system-status-proposal`), `0082` (SRS v5.0 adoption), `0083` (the feed is a card list), `0084` (the SHAP explanation is a table) |
 | Backlog | `PB-131`–`PB-140` | `PB-131` (only `validate.ts` imports the generated Zod), `PB-132` (D-45's plain-language templates) |
 
 ## 9. The analyst screens (from 2026-10-18)
@@ -253,8 +253,8 @@ no copy is in it, and `examplesDrift.test.ts` fails if one returns.
 - **No real-time channel is invented.** FR-04-02 and UX-DASH-01 are BLOCKED on a contract addition
   M8B must serve; the screen polls every 60 s and the rows say so.
 - **Cards, not the DataGrid** (ADR 0083). UX-DASH-02 records the deviation. The owner directed
-  DONE_WITH_DEVIATION; the row stays IN_PROGRESS because the owner's earlier rule keeps rows fed by
-  the analyst API below DONE until it exists, and that conflict is put back to the owner.
+  DONE_WITH_DEVIATION, then ruled (2026-10-19) that the mock rule wins: **a deviation never
+  promotes a row past it**, so UX-DASH-02 stays IN_PROGRESS.
 - **UX-ROLE-SN-02 and UX-ROLE-SN-04** are unowned work for M8B; no screen is built for them.
 - **The bundle limit** is not moved; what it protects is reported to the owner first.
 
@@ -306,6 +306,17 @@ standard queue as cards with FR-04-03's eight elements, a page at a time.
 - **What `[FR-04-12]` covers here:** axe in jsdom, on a wide and a phone width, finds no
   violations. It does not measure contrast (`tokens.test.ts` checks every colour pair the theme
   draws, D-33) or target size (no layout in jsdom; the 48 px is set in code, not measured).
+
+**Owner decisions on screen 2 (2026-10-19).**
+
+- **No Recharts** (ADR 0084). The ADR lists what the table does not give that the named chart
+  would, so M11 and M12 call it sufficient, not equivalent.
+- **No plain-language templates written by the engineer.** PB-132 stays open for a domain owner;
+  the rows say so, and M11 is told the console has a feature table, not explanations analysts
+  have been shown to act on (`M11_updates.md`, "From M8").
+- **Bundle:** 200 KB stays the SRS gate; the margin moves to 185 KB only after the entry's
+  unexplained growth from 158.3 KB to 172.2 KB is explained, with ADR 0080 amended on the measured
+  basis; and the 3G timings (MOB-PERF-01, 03) are measured in CI.
 
 **Screen 2, the investigation drawer** (`/alerts/$alertId`, a child of the feed's route, so the feed
 stays on screen with its filters). On large screens a 560 px drawer that is not modal; below the

@@ -268,6 +268,22 @@ outside that world. **What may not be claimed:** that the verification effort re
 establishes correctness against the services the system integrates with, beyond the three
 `requires_docker` tests that touch real Redis and real MLflow.
 
+## From M8 — what the console's explanations are, and are not (owner, 2026-10-19)
+
+The latency-explainability contribution describes explanations analysts can act on. **What the
+console has is a feature table**: for each alert, the 44 SHAP contributions ranked by effect, each
+with the feature's name (e.g. `tx_count_60s`), its raw value and its signed effect, the top 10
+shown first (D-45). It has **no plain-language explanation**: D-45 requires deterministic,
+localised templates per feature, the scorer emits their keys (`feature.<name>.increases_risk`), and
+no catalogue exists (PB-132). The owner stopped it being written by the engineer: wording analysts
+act on is a domain question, and wrong wording produces wrong decisions.
+
+So the paper should not say analysts are given actionable explanations. It can say the system
+computes per-decision SHAP attributions within the latency budget and shows them as a ranked
+feature table; whether that table is something an analyst can act on is untested here (claim C-3
+is already UNVERIFIED for the same reason: no real analysts). ADR 0084 lists what the table does
+not provide that the chart the SRS names would.
+
 ## From M6 — five features unusable on this benchmark (owner decision, 2026-10-17)
 
 ADR 0055 closes ML-DATA-07 as a deviation: **five of the 44 features have no source data on this

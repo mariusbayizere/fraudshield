@@ -30,6 +30,9 @@ from that clause, not quoted:
   the console is exercised against it.
 - **M8B's acceptance:** each operation is implemented to the contract and tested against the real
   application. A console test against a mock never counts as M8B's evidence.
+- **A deviation never promotes a row past this rule** (owner, 2026-10-19). A recorded deviation
+  (ADR 0083's cards, ADR 0084's table) is about how a requirement is met; a row whose data comes
+  from an endpoint nobody has built stays IN_PROGRESS whatever its deviations say.
 
 ## Rows carried to M8B (owner decision 2026-10-18; `traceability_seed.py` records each)
 

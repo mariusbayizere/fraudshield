@@ -786,7 +786,8 @@ requirements:
   - frontend/src/alerts/detail/ShapChart.tsx
   - frontend/src/alerts/detail/queries.ts
   evidence: []
-  deviations: []
+  deviations:
+  - docs/adr/0084-the-shap-explanation-is-an-accessible-table.md
   notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
     on main implements yet (M8B). Operations: getAlertExplanation. The console is built against mocks
     generated from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until
@@ -798,7 +799,12 @@ requirements:
     Not built: the plain-language description per feature (D-45''s templates do not exist; PB-132). Not
     measured: within 500 ms. Depends on the analyst API (M8B): getAlert, getScoringResult and getAlertExplanation.
     Built against mocks generated from the contract, which are not evidence: this row stays at most IN_PROGRESS
-    until those operations exist on main and the screen is exercised against them.'
+    until those operations exist on main and the screen is exercised against them. M8 (2026-10-19, owner
+    decision): no Recharts (ADR 0084), which lists what the table does not give that the named chart would:
+    it is sufficient for the content, not equivalent. The deviation does not lift the mock rule; the row
+    stays IN_PROGRESS. M8 (2026-10-19, owner decision): no plain-language templates are written by the
+    engineer (wording analysts act on is a domain question); feature names and raw values stand in, and
+    the gap is flagged to M11 (M11_updates.md, ''From M8'').'
 - id: FR-04-06
   section: 3.4 FR-04 Analyst dashboard
   title: 'Account history timeline: last 30 transactions with amount, channel icon, timestamp, risk score
@@ -2050,9 +2056,9 @@ requirements:
     /alerts, against contract-example mocks): the feed is a card list on every width; the free MUI X DataGrid
     this row names is not a dependency yet (the owner''s to approve under ADR 0080/0009), so the row is
     not started. M8 (2026-10-18, owner decision): cards, not the DataGrid (ADR 0083): the requirement''s
-    intent is a scannable list, which the cards give, each with every column''s content. The owner directed
-    DONE_WITH_DEVIATION; it stays IN_PROGRESS here only because the same owner''s rule keeps every row
-    fed by the analyst API below DONE until listAlerts exists (M8B), and that conflict is put to the owner.'
+    intent is a scannable list, which the cards give, each with every column''s content. It stays IN_PROGRESS:
+    the mock rule wins (owner, 2026-10-19), and a deviation never promotes a row past it, so DONE_WITH_DEVIATION
+    waits for listAlerts on main (M8B).'
 - id: UX-DASH-03
   section: 5.4 Analyst dashboard components
   title: Risk Score Gauge
@@ -2114,7 +2120,8 @@ requirements:
   verification: test
   implementation: *id002
   evidence: []
-  deviations: []
+  deviations:
+  - docs/adr/0084-the-shap-explanation-is-an-accessible-table.md
   notes: 'M8 (2026-10-18, owner; docs/parallel/M8B_updates.md): depends on the analyst API, which nothing
     on main implements yet (M8B). Operations: getAlertExplanation. The console is built against mocks
     generated from the contract, and a mock is not evidence: this row stays at most IN_PROGRESS until
@@ -2124,7 +2131,9 @@ requirements:
     than Recharts (see FR-04-05). Not built: the per-bar plain-language tooltip (PB-132). Depends on the
     analyst API (M8B): getAlert, getScoringResult and getAlertExplanation. Built against mocks generated
     from the contract, which are not evidence: this row stays at most IN_PROGRESS until those operations
-    exist on main and the screen is exercised against them.'
+    exist on main and the screen is exercised against them. M8 (2026-10-19, owner decision): no Recharts
+    (ADR 0084), which lists what the table does not give that the named chart would: it is sufficient
+    for the content, not equivalent. The deviation does not lift the mock rule; the row stays IN_PROGRESS.'
 - id: UX-DASH-06
   section: 5.4 Analyst dashboard components
   title: Action Panel (bottom of drawer)
@@ -2746,13 +2755,17 @@ requirements:
   verification: test
   implementation: *id002
   evidence: []
-  deviations: []
+  deviations:
+  - docs/adr/0084-the-shap-explanation-is-an-accessible-table.md
   notes: 'M8 screen 2 (2026-10-18, the investigation drawer at /alerts/$alertId, against contract-example
     mocks): below 600 px (xs) the top 5 show, with "Show all" expanding in place; tests can reach only
     phone and wide, not the widths between. Not built: vertical orientation and the bottom sheet (SwipeableDrawer);
     the expansion is inline. Depends on the analyst API (M8B): getAlert, getScoringResult and getAlertExplanation.
     Built against mocks generated from the contract, which are not evidence: this row stays at most IN_PROGRESS
-    until those operations exist on main and the screen is exercised against them.'
+    until those operations exist on main and the screen is exercised against them. M8 (2026-10-19, owner
+    decision): no Recharts (ADR 0084), which lists what the table does not give that the named chart would:
+    it is sufficient for the content, not equivalent. The deviation does not lift the mock rule; the row
+    stays IN_PROGRESS.'
 - id: MOB-COMP-09
   section: 05B A.7 Mobile component behaviour
   title: Password Strength Meter
@@ -5723,7 +5736,9 @@ requirements:
     press away. Not built: the deterministic, localised plain-language templates per feature (PB-132).
     Depends on the analyst API (M8B): getAlert, getScoringResult and getAlertExplanation. Built against
     mocks generated from the contract, which are not evidence: this row stays at most IN_PROGRESS until
-    those operations exist on main and the screen is exercised against them.'
+    those operations exist on main and the screen is exercised against them. M8 (2026-10-19, owner decision):
+    no plain-language templates are written by the engineer (wording analysts act on is a domain question);
+    feature names and raw values stand in, and the gap is flagged to M11 (M11_updates.md, ''From M8'').'
 - id: D-46
   section: Build prompt Part B defect register
   title: Leaflet base-map tiles from public servers break the CSP, data residency and 2G usability; per-point

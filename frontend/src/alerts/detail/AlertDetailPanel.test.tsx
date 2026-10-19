@@ -340,7 +340,7 @@ describe('the investigation drawer (UX-DASH-04, UX-ROLE-AN-02, FR-04-05)', () =>
     });
   });
 
-  // axe over a drawer and a 44-row table takes longer than the default 5 s on a CI runner.
+  // axe over the drawer and its table takes longer than the default 5 s on a CI runner.
   const AXE_MS = 15_000;
 
   it.each([
