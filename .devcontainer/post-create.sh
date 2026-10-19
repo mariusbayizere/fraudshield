@@ -60,5 +60,13 @@ for _ in $(seq 1 30); do
 done
 
 REQUIRE_DOCKER=1 make ci
+# The bundle gate is red by decision until PB-133 (ADR 0080). It runs after everything else and its
+# result is recorded, not allowed to stop the setup, so the smoke test still runs; the CI workflow
+# fails the job on a recorded failure, as its last step.
+if make bundle-gate; then
+  echo pass >.devcontainer/bundle-gate.status
+else
+  echo fail >.devcontainer/bundle-gate.status
+fi
 touch .devcontainer/.post-create-ok
-echo "post-create complete: toolchains installed, make ci passed (including the Docker stack)"
+echo "post-create complete: toolchains installed, make ci passed (including the Docker stack); bundle gate: $(cat .devcontainer/bundle-gate.status)"

@@ -94,8 +94,14 @@ test-java: ## Java build, unit tests, SpotBugs and coverage gate (requires-docke
 	fi
 
 .PHONY: test-frontend
-test-frontend: ## Front-end unit tests with coverage thresholds
+test-frontend: ## Front-end unit and component tests with coverage thresholds
 	$(PNPM) test:coverage
+
+# The production build's checks, kept out of `test` and `ci`: two of them (MOB-PERF-06's 200 KB and
+# the 185 KB margin) are red by decision until PB-133 (ADR 0080), and a gate expected to fail must
+# not stop, or hide, checks that are expected to pass. Run it on its own, after `ci`.
+bundle-gate: ## Production-build checks: what a first visit downloads, mocks kept out (red until PB-133)
+	$(PNPM) test:bundle
 
 .PHONY: stack-test
 stack-test: ## Start the core stack and run the functional smoke test (Docker)
@@ -136,7 +142,7 @@ licences: ## Dependency licence inventory and policy check (ADR 0009)
 	uv run fs-licences --output build/licence-inventory.json
 
 .PHONY: ci
-ci: lint typecheck test governance compose-config secrets-scan licences stack-test ## Everything CI runs; Docker suites skip visibly without Docker
+ci: lint typecheck test governance compose-config secrets-scan licences stack-test ## Everything CI runs but the bundle gate (run `make bundle-gate`); Docker suites skip visibly
 
 # --- Later milestones --------------------------------------------------------------------
 # These targets are part of the documented interface (build prompt C.5) and are implemented

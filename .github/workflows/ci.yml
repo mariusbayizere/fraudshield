@@ -87,6 +87,12 @@ jobs:
       - run: pnpm lint
       - run: pnpm format:check
       - run: pnpm test:coverage
+      # The production build's checks, their own step: two are red by decision until PB-133
+      # (ADR 0080). Vitest skips its coverage report when any test fails, so in one step with the
+      # unit tests they would also hide the coverage thresholds.
+      - name: Bundle gate (production build, first-visit size)
+        if: ${{ !cancelled() }}
+        run: pnpm test:bundle
       # Every story is already rendered and axe-checked by vitest; this proves Storybook itself
       # still builds them.
       # A red test step (the bundle gates are red by decision, ADR 0080) must not hide whether
