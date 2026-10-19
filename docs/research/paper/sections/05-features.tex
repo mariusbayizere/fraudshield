@@ -65,7 +65,7 @@ the online path could not make that mistake, because its state is keyed by accou
 parity and unit fixture was a single-account history, so nothing exposed the defect. An
 index-equivalence test that fed the batch path a mixed corpus found it. Feature computation is
 deterministic, byte-identical across batch sizes of \nBatchSizes{}. The online path's latency
-(the M3 target is a p95 below \nFeatureLatencyTarget{}~ms including the cache fetch) is
+(the M3 target is a \nPctlFeature{}th-percentile latency below \nFeatureLatencyTarget{}~ms including the cache fetch) is
 \notyet{M10}, because latency percentiles are admissible only from a dedicated machine (ADR 0010).
 
 \subsection{The single-feature floor}

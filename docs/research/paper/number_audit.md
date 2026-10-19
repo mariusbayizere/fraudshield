@@ -2,7 +2,7 @@
 
 Every macro in `numbers.tex` checked against its evidence file at `m4-complete` (`72e7790`), or at the ref its row names, read with `git show`, by `audit_numbers.py`. Values are compared as printed: rounding, sign and interval bounds included. Regenerate with `python3 docs/research/paper/audit_numbers.py`; do not edit by hand.
 
-**452 macros, 452 MATCH, 0 not matching.**
+**453 macros, 453 MATCH, 0 not matching.**
 
 | Macro | Value in paper | Value in evidence | File | Note | Result |
 |---|---|---|---|---|---|
@@ -458,3 +458,4 @@ Every macro in `numbers.tex` checked against its evidence file at `m4-complete` 
 | `\nFeaturePassRate` | `270` | `270` | `docs/backlog/product.md` |  | MATCH |
 | `\nSeedSdDiffXGB` | `-0.6\%` | `-0.6%` | `docs/benchmarks/m4_seed_variance_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
 | `\nSeedSdDiffLGB` | `12.5\%` | `12.5%` | `docs/benchmarks/m4_seed_variance_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nPctlFeature` | `95` | `95` | `docs/prompts/FraudShield_Master_Build_Prompt.md` |  | MATCH |

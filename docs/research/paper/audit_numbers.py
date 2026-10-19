@@ -879,6 +879,7 @@ SOURCES: dict[str, Src | Derived] = {
     "nFeaturePassRate": Src(BACKLOG, r"the feature pass costs about (\d+) rows a second"),
     "nSeedSdDiffXGB": Src(SEEDS, r"ensemble stdev vs xgboost alone: (-[\d.]+%)"),
     "nSeedSdDiffLGB": Src(SEEDS, r"ensemble stdev vs lightgbm alone: \+([\d.]+%)"),
+    "nPctlFeature": Src(PROMPT, r"`benchmark\.py features` p(\d+) <"),
     "nPctlFlag": Src(PROMPT, r"budget targets p(\d+) ≤ \d+ ms for flagged"),
     "nPctlTail": Src(PROMPT, r"single-request p(\d+) \(ensemble"),
     "_GroupCounts": Src(TEST_REGISTRY, r"(EXPECTED_GROUP_COUNTS = \{.*?\n\})"),
@@ -1180,7 +1181,8 @@ def helper_values(ref: str, cache: dict[str, str]) -> dict[str, str]:
         at = spec.ref or ref
         text = cache.setdefault(f"{at}:{spec.path}", git_show(at, spec.path))
         hit = re.search(spec.pattern, text, re.S | re.M)
-        found[name] = hit.group(1) if hit else ""
+        if hit:  # a miss leaves the name out, so a derived value that needs it reports NO INPUT
+            found[name] = hit.group(1)
     return found
 
 
