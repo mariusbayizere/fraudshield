@@ -1,0 +1,126 @@
+#!/usr/bin/env sh
+# Push the current branch only after the governance checks have passed on the commit pushed
+# (owner, 2026-10-19).
+#
+#   tools/bin/safe-push [--force-with-lease=<branch>:<expected-sha>]
+#
+# From the repository root, on the commit HEAD names when it starts (pinned; the push sends that
+# commit, and is refused if HEAD, the branch or the tree moves while the checks run):
+#   - fs-commit-msg over every commit the push adds: those after the remote branch's real tip,
+#     read with ls-remote rather than from a tracking ref that may be stale, or after origin/main
+#     for a new branch or a forced push;
+#   - fs-traceability check, fs-traceability-seed --check, fs-defect-register --check,
+#     fs-scope-guard, fs-readme-status, fs-compose-budget, and fs-contract-baselines and
+#     fs-migration-guard against origin/main.
+# Any failure -> exit 1 and nothing is pushed. All pass -> `git push` runs in this script's place,
+# with a lease on the remote tip the range was computed from, so its exit status is the push's.
+#
+# Not CI's whole governance job: `fs-dataset provenance --check` (imports the generator) and
+# `docker compose config` (needs Docker) are left to CI, and fs-traceability only warns, where CI
+# fails, on a run URL it cannot verify without GITHUB_TOKEN. A pass here is necessary, not
+# sufficient; CI at job level is still the record.
+#
+# A wrapper, not a rule: a push once followed a check that had not run (a usage error, joined with
+# `;`), and the message it should have caught failed CI (M8, 2026-10-19). That was the fourth
+# variant of a check that ran, reported, and did not gate what followed. Through this script the
+# push is not started unless every check exits 0.
+#
+# Refused before any check: uncommitted or untracked changes, a detached HEAD, the branch main,
+# and any force other than a lease naming this branch and the sha it expects to replace.
+set -eu
+
+remote=origin
+base=origin/main
+
+usage() {
+  echo "usage: tools/bin/safe-push [--force-with-lease=<branch>:<expected-sha>]" >&2
+  exit 2
+}
+refuse() {
+  echo "safe-push: REFUSED: $*; nothing was pushed" >&2
+  exit 1
+}
+clean() {
+  dirty=$(git status --porcelain) || refuse "git status failed"
+  [ -z "$dirty" ]
+}
+
+lease_branch=
+lease_sha=
+for arg in "$@"; do
+  [ -z "$lease_branch" ] || usage
+  case $arg in
+    --force-with-lease=*:*)
+      leased=${arg#--force-with-lease=}
+      lease_branch=${leased%%:*}
+      lease_branch=${lease_branch#refs/heads/}
+      lease_sha=${leased#*:}
+      case $lease_sha in
+        '' | *[!0-9a-f]*) usage ;;
+      esac
+      [ "${#lease_sha}" -ge 7 ] && [ "${#lease_sha}" -le 40 ] || usage
+      [ -n "$lease_branch" ] || usage
+      ;;
+    *) usage ;;
+  esac
+done
+
+root=$(git rev-parse --show-toplevel) || refuse "not inside a git repository"
+cd "$root"
+branch=$(git symbolic-ref --quiet --short HEAD) || refuse "HEAD is detached"
+[ "$branch" != main ] || refuse "this pushes branches; main is merged by the owner"
+if [ -n "$lease_branch" ] && [ "$lease_branch" != "$branch" ]; then
+  refuse "the lease names $lease_branch, not the current branch $branch"
+fi
+clean || refuse "the working tree has uncommitted or untracked changes"
+head=$(git rev-parse --verify "HEAD^{commit}") || refuse "HEAD names no commit"
+
+git fetch --quiet --prune "$remote" || refuse "could not fetch $remote"
+git rev-parse --quiet --verify "$base^{commit}" >/dev/null || refuse "$base names no commit"
+# The remote branch's tip now, from the remote itself.
+listed=$(git ls-remote "$remote" "refs/heads/$branch") || refuse "could not read $remote's $branch"
+remote_sha=${listed%%[[:space:]]*}
+
+if [ -n "$lease_branch" ]; then
+  [ -n "$remote_sha" ] || refuse "$remote has no $branch to replace; push without a lease"
+  git rev-parse --quiet --verify "$lease_sha^{commit}" >/dev/null ||
+    refuse "the lease's sha $lease_sha names no local commit"
+  full=$(git rev-parse --verify "$lease_sha^{commit}")
+  [ "$full" = "$remote_sha" ] || refuse "$remote's $branch is $remote_sha, not the leased $lease_sha"
+  range="$base..$head"
+elif [ -n "$remote_sha" ]; then
+  git cat-file -e "$remote_sha^{commit}" 2>/dev/null || refuse "$remote's $branch ($remote_sha) is not fetched"
+  git merge-base --is-ancestor "$remote_sha" "$head" ||
+    refuse "$remote's $branch is not an ancestor of HEAD (a force needs --force-with-lease=$branch:<sha>)"
+  range="$remote_sha..$head"
+else
+  range="$base..$head"
+fi
+
+failed=
+check() {
+  echo "safe-push: $*" >&2
+  if ! uv run --no-sync --quiet "$@"; then
+    echo "safe-push: FAILED: $*" >&2
+    failed=yes
+  fi
+}
+check fs-commit-msg --rev-range "$range"
+check fs-traceability check
+check fs-traceability-seed --check
+check fs-defect-register --check
+check fs-scope-guard
+check fs-readme-status
+check fs-compose-budget
+check fs-contract-baselines --against "$base"
+check fs-migration-guard --against "$base"
+[ -z "$failed" ] || refuse "a check failed"
+
+# The checks read this commit's tree; it must still be the one pushed.
+clean || refuse "the working tree changed while the checks ran"
+[ "$(git rev-parse --verify HEAD)" = "$head" ] || refuse "HEAD moved while the checks ran"
+[ "$(git symbolic-ref --quiet --short HEAD)" = "$branch" ] || refuse "the branch changed while the checks ran"
+
+echo "safe-push: all checks passed; pushing $head to $branch ($range)" >&2
+# The remote must still be what the range was computed against: an empty lease means "absent".
+exec git push --force-with-lease="refs/heads/$branch:$remote_sha" "$remote" "$head:refs/heads/$branch"
