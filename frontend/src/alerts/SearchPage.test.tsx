@@ -176,7 +176,8 @@ describe('the search (/search, FR-04-09)', () => {
     expect(asked.lists).toHaveLength(0);
   });
 
-  it('[PB-136] marks an ID the route would drop, rather than searching wider without it', async () => {
+  // PB-136.
+  it('marks an ID the route would drop, rather than searching wider without it', async () => {
     const asked = serve();
     const { router } = await renderQueue({ channel: ['CARD'] });
     await screen.findByRole('article', { name: 'Alert for U*** N***' });
@@ -200,7 +201,8 @@ describe('the search (/search, FR-04-09)', () => {
     expect(router.state.location.search).toEqual({ channel: ['CARD'] });
   });
 
-  it('[PB-136] sends an analyst ID as typed, in any case, and the route keeps it', async () => {
+  // PB-136.
+  it('sends an analyst ID as typed, in any case, and the route keeps it', async () => {
     const asked = serve();
     const { router } = await renderQueue();
     const form = screen.getByRole('search', { name: 'Search alerts' });
@@ -258,7 +260,8 @@ describe("dates in the region's zone", () => {
   });
 });
 
-describe('[PB-136] the form and the route judge a criterion alike', () => {
+// PB-136.
+describe('the form and the route judge a criterion alike', () => {
   const empty = {
     transaction_id: '',
     account_id: '',

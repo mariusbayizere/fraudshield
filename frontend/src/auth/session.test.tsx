@@ -123,7 +123,8 @@ describe('the session (D-27, ADR 0014)', () => {
     expect(getAccessToken()).toBeNull();
   });
 
-  it('[PB-140] forgets every query and mutation on sign-out, even when the server call fails', async () => {
+  // PB-140.
+  it('forgets every query and mutation on sign-out, even when the server call fails', async () => {
     answerRefresh(200);
     const client = new QueryClient();
     render(
@@ -145,7 +146,8 @@ describe('the session (D-27, ADR 0014)', () => {
     expect(client.getMutationCache().getAll()).toEqual([]);
   });
 
-  it('[PB-140] forgets the queries when someone else signs in over a session never signed out', async () => {
+  // PB-140.
+  it('forgets the queries when someone else signs in over a session never signed out', async () => {
     answerRefresh(200);
     const client = new QueryClient();
     const nextAnalyst: TokenResponse = {
@@ -168,7 +170,8 @@ describe('the session (D-27, ADR 0014)', () => {
 });
 
 describe('the shell behind the session', () => {
-  it('[PB-140] does not show the next analyst on the tab what the last one loaded', async () => {
+  // PB-140.
+  it('does not show the next analyst on the tab what the last one loaded', async () => {
     const [first] = (examples.AlertPage[0] as AlertPage).items;
     if (first === undefined) throw new Error('the contract has no AlertPage example with an alert');
     const alert: AlertSummary = { ...first, masked_account_name: 'U*** N***' };
@@ -252,7 +255,8 @@ describe('the shell behind the session', () => {
     expect(router.state.location.pathname).toBe('/alerts');
   });
 
-  it('[PB-140] opens sign-in without the page a signed-out analyst was on, criteria and all', async () => {
+  // PB-140.
+  it('opens sign-in without the page a signed-out analyst was on, criteria and all', async () => {
     answerRefresh(200);
     const router = createRouter({
       routeTree,
