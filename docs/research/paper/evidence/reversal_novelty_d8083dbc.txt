@@ -1,0 +1,21 @@
+# evidence-commit: 94bfd692136f081ae63415befddd0598a92db30a
+# evidence-tree-state: clean
+# command: python docs/research/paper/evidence/reversal_novelty.py /tmp/claude-1000/-home-marius-fraudshield/3f3a8552-0a53-484a-b430-d22d611d24d7/scratchpad/bench1m
+# exit: 0
+
+REVERSAL-SCAM ROWS: counterparty_is_new_for_account with complete history
+  (true when no earlier transaction on the same account went to the same counterparty)
+  dataset fingerprint: d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32 (function at m4-complete)
+  rows: 1006317   test period from 2025-10-28T22:02:00.337485+00:00
+  accounts read in full: 68   test-period rows read: 1258
+  variant rows in the test period: 68
+    counterparty_is_new_for_account true: 19
+    counterparty_is_new_for_account false: 49
+  of which scored as fraud (observed label): 66
+    counterparty_is_new_for_account true: 19
+    counterparty_is_new_for_account false: 47
+  earlier payments to the same counterparty, scored rows (3 means 3 or more):
+    0: 19
+    1: 9
+    2: 11
+    3: 27
