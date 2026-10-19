@@ -80,6 +80,16 @@ async function measure(page: Page): Promise<Run> {
   await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible({
     timeout: 30_000,
   });
+  // A visible heading can precede the browser's paint record of it; wait for the record itself.
+  await page
+    .waitForFunction(
+      () => performance.getEntriesByName('first-contentful-paint').length > 0,
+      null,
+      {
+        timeout: 30_000,
+      },
+    )
+    .catch(() => undefined);
 
   // Wait until a whole quiet window has passed after the last long task.
   const { fcp, dcl } = await page.evaluate(() => ({
