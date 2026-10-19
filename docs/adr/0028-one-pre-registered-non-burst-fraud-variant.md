@@ -39,6 +39,9 @@ untouched.
 
 ## Decision 2: one pre-registered, typology-grounded, non-burst variant is added
 
+*(Amended 2026-10-19: the variant's listed payee is a modelling choice, not grounded in the
+typology; see the amendment at the end and PB-141.)*
+
 A generalisation test needs a genuinely different mechanism to have a chance of being informative,
 and `novel_esim_delayed_drain` was not one — novel in *when*, still a burst. Unlike the country
 case, a second mechanism is available here that does not require inventing anything: victim-

@@ -69,7 +69,8 @@ experiment informative: engineering a difference so that a test can fail is tuni
 to produce a result.
 
 **One held-out shape does fail, and it is the one the two null results predicted would.** A
-pre-registered, typology-grounded non-burst variant — `reversal_scam_social_engineering`, a single
+pre-registered non-burst variant modelled on a documented scam (its listed payee is the project's
+choice, not the typology's) — `reversal_scam_social_engineering`, a single
 victim-initiated transfer to a payee on the victim's own list (19 of the 66 rows scored as fraud go
 to a listed payee the account had never paid, PB-141; the listed payee is a modelling choice, ADR
 0028 amendment of 2026-10-19), added 2026-09-22 (ADR 0028) specifically

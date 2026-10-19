@@ -56,8 +56,8 @@ NOVEL_VARIANT = "novel_esim_delayed_drain"
 #: is not necessarily one the account has paid before. On the evaluated draw d8083dbc, 19 of the 66
 #: rows scored as fraud go to a listed payee the account had never paid, so
 #: `counterparty_is_new_for_account` is true for them; the variant removes counterparty novelty
-#: from 47 rows only (docs/research/paper/evidence/reversal_novelty_d8083dbc.txt). Describe it as "a
-#: transfer to a listed payee", never as "a known" or "established" counterparty. "Known
+#: from 47 of the 66 only (docs/research/paper/evidence/reversal_novelty_d8083dbc.txt). Describe
+#: it as "a transfer to a listed payee", never as "a known" or "established" counterparty. "Known
 #: counterparty" is also not supported by the typology's sources (ADR 0028, amendment of
 #: 2026-10-19). The behaviour is deliberately unchanged: changing it re-draws the dataset and
 #: moves every figure measured on d8083dbc.

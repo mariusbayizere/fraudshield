@@ -1102,7 +1102,9 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 - **Updated 2026-09-22 — the real variant was added and measured (ADR 0028).** One
   pre-registered, typology-grounded, non-burst variant (`reversal_scam_social_engineering`:
   victim-initiated, single transaction, established counterparty — see the lab notebook's
-  2026-09-22 entries for the pre-registration and the result). Measured recall **9.1%** (6 of 66
+  2026-09-22 entries for the pre-registration and the result). *(Corrected 2026-10-19: the payee
+  is listed, not necessarily established; 19 of the 66 rows scored as fraud go to a listed payee
+  never paid before, and "established counterparty" is not the typology's. See PB-141.)* Measured recall **9.1%** (6 of 66
   fraud rows), Wilson 95% interval [4.2%, 18.4%], against base's 94.4% [92.7%, 95.8%] — intervals
   do not overlap (first measured at 6.1% [2.4%, 14.6%] with a target encoding E1 forbids, and restated after the correction; the interval now reaches past the pre-registered range's 0.15 lower edge). The point estimate is below the pre-registered prediction range
   (0.15–0.55), though the interval no longer excludes it entirely: the model's dependence on
@@ -1520,15 +1522,16 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
   imply.**
 - **Why the test missed it:**
   `test_the_reversal_scam_variant_is_one_transaction_to_a_listed_payee_in_test_period` (formerly `..._to_a_known_payee_...`) asserts
-  membership of `customer.counterparties`, which does not imply an earlier payment; its own docstring
-  notes that listed counterparties may not have transacted yet. A generator that pays a listed
+  membership of `customer.counterparties`, which does not imply an earlier payment; its docstring's "what this test does not show"
+  paragraph says so. A generator that pays a listed
   payee never paid before passes it, which is what the 19 rows are.
-- **Acceptance:** either the generator draws the reversal payee from counterparties the account has
-  already paid before the scored transaction, and a test asserts
+- **Acceptance (closes the row):** the generator draws the reversal payee from counterparties the
+  account has already paid before the scored transaction, and a test asserts
   `counterparty_is_new_for_account` is false on every variant row of a generated draw (and fails if
-  the payee is merely listed); or the owner records that the variant stays as it is, and ADR 0028,
-  the datasheet and the paper describe it as "a listed payee, paid before on some rows". Changing the
-  generator re-draws the dataset, so every figure from `d8083dbc` moves with it (E2).
+  the payee is merely listed). Changing the generator re-draws the dataset, so every figure from
+  `d8083dbc` moves with it (E2); by the owner's decision above that waits for a draw made for
+  another reason. Until then the accurate descriptions, done 2026-10-19, keep the row honest but do
+  not close it.
 
 ### PB-142 · Evaluations discard per-row scores, so a result cannot be interrogated afterwards
 - **Source:** M11, 2026-10-19: the reversal-scam result could not be split by counterparty novelty
