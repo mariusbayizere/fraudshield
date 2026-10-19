@@ -1,0 +1,244 @@
+# Pre-registration: full-volume training and PB-66's evaluations, on a GitHub-hosted runner
+
+- **Status:** PROPOSED, 2026-10-19. Awaiting the owner's approval. **Nothing below has been run.**
+  No figure in this file was computed from the test period. The anchors are figures already
+  committed on `main`.
+- **Rows:** PB-66 (E.5 items 5, 7 and 8), PB-67's follow-up (full volume), C-5.
+- **Rule:** this file is not edited after the first run starts. A change made after approval but
+  before any run is recorded as a dated amendment at the end. Nothing is changed after a run.
+
+## 1. What runs, where
+
+- **Draw.** `d8083dbc` (seed 20260917, 1,006,317 rows). The runner regenerates it with `main`'s
+  generator; `dataset/src` and the feature code are unchanged since `m4-complete` (checked with
+  `git diff m4-complete origin/main`). Before any feature is computed, the job asserts:
+  - the fingerprint `d8083dbc742c…e6be32`;
+  - the split boundaries `test_start = 1761688920337485` and
+    `validation_start = 1756099490732196`.
+- **Machine.** `ubuntu-24.04`, a GitHub-hosted standard runner. Every evidence file names it in
+  `# evidence-machine:`. Accuracy is admissible from any machine (ADR 0010). **No latency figure is
+  produced or quoted.**
+- **Two jobs, one workflow** (`.github/workflows/full-volume.yml`). It is triggered by a push to
+  `evaluate/**`, because a hand-started workflow must sit on the default branch.
+  - **Job 1, features.** Generate, assert, then build one feature cache with
+    `fs-features evaluate --cache-only`.
+    - Volume: the whole corpus (1,006,317 rows), **every train-period row (792,162)**, every
+      validation row outside the calibration tail (60,632), every calibration row (40,700) and
+      every test row (101,909). The 10,914 embargo rows are history only and are never featurised.
+    - It uploads the cache and its SHA-256. No model is fitted and no test row is scored.
+  - **Job 2, evaluation.** Download the cache, verify its SHA-256, then run:
+    - `fs-features gate --seeds 1 2 3 4 5 --resamples 1000`: the declared gate at full volume;
+    - the new `fs-features pb66` report (section 3) on the same model's seed-1 test scores.
+
+    Both commands write to the test-set access log (I.2). The log, the evidence files and the
+    per-row seed-1 scores are uploaded as an artifact, `if: always()`, so a failed run's access is
+    recorded too.
+- **Evidence path.** The artifact is downloaded and committed locally through
+  `tools/bin/safe-push`. **No write token in CI** (`permissions: contents: read`).
+- **Expected cost.** About 80–130 runner minutes for job 1 and 30–75 for job 2. Public-repository
+  standard runners are not billed. A job past 330 minutes is cancelled by its timeout; that run
+  reports nothing and is recorded as failed.
+
+## 2. Full-volume gate (PB-67's follow-up)
+
+**What changes from the 240K point** (`m4_learning_curve_240k_d8083dbc.txt`):
+
+- **Training rows:** 240,000 (2,132 frauds) become 792,162 (about 6,830).
+- **Corpus depth:** the corpus now reaches back to the draw's first day. Training rows in the first
+  90 days have truncated windowed history; that comes from where the data starts, not from a corpus
+  choice (PB-76). The report prints their share.
+- **Validation (early stopping):** 20,000 rows become 60,632.
+- **Calibration:** 20,000 rows become 40,700.
+
+Volume, depth and evaluation rows therefore all change at once, and the result is reported as
+"full volume", not as "volume alone".
+
+**Prediction.**
+
+| Measure | Predicted |
+|---|---|
+| AUC-ROC, seed 1 | 0.960 to 0.980 |
+| Recall at 0.60, seed 1 | 0.75 to 0.83 |
+| Recall at 0.60, five-seed mean | 0.77 to 0.83 |
+| Recall at 0.60, interval's upper bound | below 0.88 (ML-GATE-03 still fails) |
+| Recall at the 1 % FPR budget, seed 1 | 0.84 to 0.90 |
+
+The reason: eight times the data (30K to 240K) moved the five-seed mean by only +0.028 (lab
+notebook, 2026-09-24). Which rows are used moved recall more than how many.
+
+**Decisions, fixed now.**
+
+- **"Volume moves recall past the 240K point"** is claimed only if both hold:
+  - the full-volume seed-1 interval for recall at 0.60 lies entirely above 0.783;
+  - the five-seed mean exceeds 0.7945 by more than 0.049 (twice the 240K five-seed SD).
+- **"The gate is met at full volume"** is claimed only if the seed-1 point estimate reaches 0.88.
+  The paper then states the volume.
+- **Otherwise the plateau extends to the full train period.** The paper says the recall shortfall
+  is not training volume, up to all 792,162 rows of this draw.
+
+## 3. PB-66's evaluations: what each measures, predictions, decisions
+
+**Scores.** All analyses use seed 1's calibrated test scores, from the same fit the gate reports.
+Intervals are 1,000-resample bootstraps: stratified for row-level metrics, as the gate does, and
+clustered by UTC day where the metric is per day.
+
+**Baselines (PB-66 and PB-46).** Where a metric ranks rather than reads a probability, the best
+single feature on main's evidence, `velocity_ratio_1h_vs_30d`, is reported beside the model. That
+covers PR-AUC, precision at a budget, monthly AUC and PR-AUC, and the cost curve. Metrics read at
+0.60 or 0.85 have no single-feature counterpart, because a lone feature has no calibrated
+probability. They are reported without one, as the gate does.
+
+### 3.1 PR-AUC beside ROC
+
+- **Measures:** average precision with its interval, next to ROC-AUC, and a precision-recall
+  figure beside the ROC figure.
+- **Prediction:** average precision of **0.80 to 0.93** (seed 1). It will be clearly below
+  ROC-AUC, because the test base rate is 0.97 %.
+- **Decision:** descriptive. The paper reports both curves wherever it reports ROC.
+
+### 3.2 Precision at a fixed alert budget
+
+- **Source of the budget.** The SRS states none:
+  - its only volume control is the target "precision at 1 % FPR, 0.720";
+  - D-10 asks for `docs/ml/capacity_model.md` with an alerts-per-hour calculation, and that file
+    does not exist.
+
+  So **three budgets are assumed, not required (owner, 2026-10-19): 50, 100 and 200 alerts per day
+  per institution.** The draw has no institution column, so the whole draw counts as one
+  institution.
+- **Measures:** for each full UTC day inside the test period (29 October to 30 December 2025;
+  partial first and last days are excluded and counted), the day's top-k scores are alerts.
+  Reported per budget:
+  - precision and recall, with day-clustered intervals;
+  - the alert rate;
+  - **the precision ceiling** (that day's frauds ÷ k).
+- **Context, stated in advance.** The draw is a small institution: about 1,593 test transactions
+  and about 15.4 frauds a day. Every budget is therefore **larger than the daily fraud count**:
+
+  | Budget | Share of traffic | Precision ceiling |
+  |---|---|---|
+  | 50 | about 3.1 % | about 0.31 |
+  | 100 | about 6.3 % | about 0.15 |
+  | 200 | about 12.6 % | about 0.08 |
+
+  At these budgets precision is limited by the draw's volume, not by the model. Recall within the
+  budget is the informative figure.
+- **Prediction:**
+
+  | Budget | Recall within budget | Precision, as a share of its ceiling |
+  |---|---|---|
+  | 50 | at least 0.88 | at least 85 % |
+  | 100 | at least 0.92 | (no prediction) |
+  | 200 | at least 0.92 | (no prediction) |
+
+- **Decision:** descriptive. The paper states the budgets as assumed and gives the ceiling beside
+  each precision.
+
+### 3.3 Performance by month of the test period (C-5)
+
+- **Buckets, fixed now:**
+
+  | Bucket | Span | Expected frauds |
+  |---|---|---|
+  | 2025-10 | 28 Oct 22:02 to 31 Oct, about 3.1 days | about 47 |
+  | 2025-11 | the whole month | about 462 |
+  | 2025-12 | to the end of the test period | about 476 |
+
+  The fraud counts are expectations from the overall test rate, not counts. The run prints the real
+  ones.
+- **Measures:** per bucket, row and fraud counts, ROC-AUC, PR-AUC, recall, precision and FPR at
+  0.60, each with its interval. Also the November-to-December difference in recall at 0.60, with a
+  bootstrap interval.
+- **What it can and cannot show, stated in advance:**
+  - **Scale.** C-5 claims 8–15 % degradation a year, about 1 % a month. That would move recall at
+    0.60 by about 0.01 between November and December. The difference's interval will be about
+    ±0.05 to ±0.08 wide, so **this run cannot confirm or refute C-5's rate**. It can only rule out
+    large drift inside the test period.
+  - **The generator.** It has no deliberate monthly drift, apart from the novel SIM-swap
+    sub-variant. That variant first appears on 7 November (73 rows).
+  - **The October bucket** is reported but too small to read.
+- **Prediction:** the November-to-December difference in recall at 0.60 has an interval that
+  includes 0, and its point estimate is within ±0.05.
+- **Decision:**
+  - **If the interval includes 0:** the paper says no change between months is detectable at this
+    size, and that C-5 remains unverified by this benchmark.
+  - **If it excludes 0:** the paper reports the direction and size, and the sub-variant's share of
+    each month beside it.
+
+### 3.4 Cost curve
+
+- **Primary, parameter-free:** the Drummond–Holte cost curve. The normalised expected cost,
+  minimised over thresholds, against the probability-cost value from 0 to 1, with the trivial
+  classifier min(PC, 1 − PC) drawn beside it.
+- **The check that failed before:** every plotted cost is ≥ 0 and ≤ 1, asserted by a test before the
+  run. (The latency frontier once produced a negative cost.)
+- **Prediction:** the model's curve lies below the trivial classifier's for every PC from 0.01 to
+  0.99, and its normalised cost at PC = 0.5 is below 0.06.
+- **Decision:** any PC range where it does not is reported as such.
+- **Optional, for the owner's decision (see § 5):** an amount-weighted curve. Missed fraud costs its
+  `amount_rwf`; a false positive costs an assumed amount at three stated values. It is not built
+  unless approved.
+
+### 3.5 Fairness report
+
+**The paper's text before the table, fixed now** (owner's wording, 2026-10-19):
+
+> Fraud mechanisms in this benchmark are country-invariant by construction: no fraud parameter is
+> keyed by country (`test_no_fraud_parameter_is_keyed_by_country`). What this report measures is
+> therefore the generator's base rates and amount mixes per group, passed through one model, not
+> differential treatment of groups by the model.
+
+**Groups.**
+
+- **Country:** the account's home country, read from `currency`. The generator sets currency from
+  `customer.country` for legitimate and fraud rows alike, and the five packs have five distinct
+  currencies. The run asserts the mapping is one-to-one before using it. This is not
+  `counterparty_country`.
+- **Channel:** from the cache.
+- **Urban/rural: not available.** The exported tables carry no urban/rural or customer-segment
+  column; the segment exists only inside the generator. No proxy is joined. The paper says so.
+- **KYC tier (also in PB-66): not available,** for the same reason.
+
+**Measures, per group.**
+
+- Rows, legitimate rows and frauds.
+- False-positive rate at 0.60 (analyst review) and at 0.85 (auto-block), with intervals.
+- **Blocked amount:** the `amount_rwf` of legitimate rows at or above 0.85, as a sum and as a share
+  of that group's legitimate amount. The `amount_rwf` of all rows at or above 0.85 is reported
+  beside it.
+
+**Counts, stated in advance.** At 240K the FPR was 0.0006 at 0.60 and 0.0002 at 0.85, about 60 and
+20 false positives in about 101,000 legitimate rows. Per group, most counts will be single digits,
+and many 0.
+
+**Prediction.** Every group's FPR at 0.60 is below 0.5 %, and every group's FPR at 0.85 is below
+0.2 %. No pair of countries has non-overlapping intervals.
+
+**Decision.** A group is called "different" only if its interval excludes the overall point
+estimate. Even then the paper attributes the difference to the generator's per-group base rates and
+amounts, after the paragraph above. It does not attribute it to the model.
+
+## 4. Test-set access
+
+- Job 2 is the only job that scores test rows. Each of its two commands appends one line to the
+  access log, with the purpose `PB-66 full-volume evaluation` and the run's ID.
+- Job 1 asserts that it writes none.
+- **A re-run is a new access.** It is made only to repair a failure that stopped a run from
+  completing, and the reason is logged.
+- **No threshold, budget, bucket or feature is changed after test scores are seen.** A code fix
+  after a look is reported beside the results it changes.
+
+## 5. For the owner's approval before anything runs
+
+1. **The three budgets (50, 100 and 200 a day) all exceed the draw's roughly 15 frauds a day.**
+   Precision at each is therefore capped by volume, as § 3.2 says. Keep them as the three, or add
+   one budget below the daily fraud count (for example 10) so that one point measures ranking
+   rather than volume?
+2. **The amount-weighted cost curve** (§ 3.4). Leave it out, or approve three assumed false-positive
+   costs?
+3. **Scope.** PB-66 also lists leave-one-fraud-type-out and per-channel reliability diagrams. They
+   are not in this run. Add them to job 2 (a few minutes each), or leave them for later?
+
+## Amendments
+
+(none)

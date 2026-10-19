@@ -3046,3 +3046,18 @@ start, and the machine stayed responsive. The scripts are
 the 240K point look like it needed a 16 GB Codespace, which it did not. The constraint was never
 total memory; it was that a long run and another agent's test suite were competing for the last
 gigabyte with no policy about who should lose.
+
+### 2026-10-19 · Pre-registration proposed: full-volume training and PB-66's evaluations
+
+Proposed for the owner's approval, before anything is built or run:
+`docs/research/preregistration_pb66_full_volume.md`. It fixes in advance:
+
+- the volume (all 792,162 training rows);
+- the alert budgets (50, 100 and 200 a day, assumed because the SRS states none);
+- the month buckets for C-5;
+- the cost curve (parameter-free);
+- the fairness groups (country and channel; urban/rural and KYC tier are not in the exports);
+- every prediction, and the decision rules.
+
+The run is two jobs on a GitHub-hosted runner, with the evidence committed locally. That file is
+not edited after a run starts.
