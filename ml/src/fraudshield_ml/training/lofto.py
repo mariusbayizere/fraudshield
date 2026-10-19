@@ -5,12 +5,15 @@ label missed included, is removed from every fitted set (training, validation an
 the target encoding with them), and the model is refitted on what is left. That model scores the
 whole test period, and the held-out scenario's test frauds are read at 0.60 and at the 1% FPR
 budget's threshold (the gate's rule), beside the production model, fitted with every scenario, read
-the same way. The difference is what never having seen the scenario costs.
+the same way. The difference is what never fitting on the scenario costs. Not what never having
+seen it costs: the remaining rows' features were computed over a history that still contains the
+scenario's rows.
 
 **Volume is decided before any test row is scored.** The production model is fitted first and
-timed (fitting scores nothing). If nine fits at that pace would not fit `budget_minutes`, every fit
-— production included, so the comparison stays like for like — uses 30,000 training rows spread in
-time, as PB-67's learning curve did. The report states which volume ran and why
+timed, cache load included (fitting scores nothing). If nine at that pace would not fit
+`budget_minutes`, every fit — production included, so the comparison stays like for like — uses
+30,000 training rows spread in time (a refit: 30,000 less its scenario's rows), as PB-67's learning
+curve did. The report states which volume ran and why
 (`docs/research/preregistration_pb66_full_volume.md`, amendment of 2026-10-19).
 """
 
@@ -19,7 +22,7 @@ from __future__ import annotations
 import math
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -98,45 +101,63 @@ def _facts(cache: Path) -> tuple[list[str], list[str]]:
 
 @dataclass
 class Result:
-    train_rows_used: int
+    """Everything read so far. `complete` is False while refits remain, so a partial copy can be
+    written after each one: a run cut short keeps what it measured (its access is already logged).
+    """
+
     volume: str
     seconds_per_fit: float
     production: dict[str, Read]
-    held_out: dict[str, Read]
+    #: every test fraud, read off the production model: comparable with job 2's seed-1 model
+    production_overall: Read
     #: mule_account without the reversal variant, which no model here catches (ADR 0028)
     production_mule_base: Read
-    held_out_mule_base: Read
-    dropped: dict[str, int]
+    held_out: dict[str, Read] = field(default_factory=dict)
+    held_out_mule_base: Read | None = None
+    #: non-test rows removed for each scenario's refit, and each fit's training rows: at the
+    #: 30,000-row fallback a refit has 30,000 less the scenario's rows (spread, then dropped, so
+    #: its legitimate rows are production's)
+    dropped: dict[str, int] = field(default_factory=dict)
+    training_rows: dict[str, int] = field(default_factory=dict)
+    complete: bool = False
 
 
-def run(
+def run(  # noqa: PLR0913 - every argument is a setting of the run or one of its two reporters
     cache: Path,
     *,
     seed: int,
     budget_minutes: float,
     clock: Callable[[], float] = time.monotonic,
     on_volume: Callable[[str, int], None] = lambda _volume, _rows: None,
+    on_progress: Callable[[Result], None] = lambda _result: None,
 ) -> Result:
-    """Every fit and read. `on_volume` gets the volume and test row count before any is scored."""
+    """Every fit and read.
+
+    `on_volume` gets the volume and the test row count before any test row is scored;
+    `on_progress` gets the result after the production fit and after each refit.
+    """
     np = _np()
     kinds, variants = _facts(cache)
 
     started = clock()
     data = gate_run.load_cache(cache)
     fitted = model.fit_ensemble(data.matrix, data.labels, data.split, seed=seed)
+    # Load and fit together: every refit reloads the cache, so this is what nine of them cost.
     seconds = clock() - started
     train_rows: int | None = None
     if FITS * seconds > budget_minutes * 60:
         train_rows = FALLBACK_TRAIN_ROWS
         volume = (
-            f"{FALLBACK_TRAIN_ROWS} training rows: one full-volume fit took "
-            f"{seconds / 60:.1f} min, so {FITS} would exceed the {budget_minutes:.0f}-minute budget"
+            f"{FALLBACK_TRAIN_ROWS} training rows (each refit: {FALLBACK_TRAIN_ROWS} less its "
+            f"scenario's rows): one full-volume load-and-fit took {seconds / 60:.1f} min, so "
+            f"{FITS} would exceed the {budget_minutes:.0f}-minute budget"
         )
+        del data, fitted
         data = gate_run.load_cache(cache, train_rows=train_rows)
         fitted = model.fit_ensemble(data.matrix, data.labels, data.split, seed=seed)
     else:
         volume = (
-            f"full volume ({len(data.split.train)} training rows): one fit took "
+            f"full volume ({len(data.split.train)} training rows): one load-and-fit took "
             f"{seconds / 60:.1f} min, {FITS} fit the {budget_minutes:.0f}-minute budget"
         )
     on_volume(volume, len(data.test))
@@ -152,41 +173,51 @@ def run(
         return np.asarray(fit.score([rows.matrix[i] for i in test]).ensemble, dtype=float)
 
     production_scores = scored(fitted, data)
-    production = {k: read(production_scores, labels, test_kinds == k) for k in SCENARIOS}
-    production_mule_base = read(production_scores, labels, base_mule)
+    result = Result(
+        volume=volume,
+        seconds_per_fit=seconds,
+        production={k: read(production_scores, labels, test_kinds == k) for k in SCENARIOS},
+        production_overall=read(production_scores, labels, np.ones(len(test), dtype=bool)),
+        production_mule_base=read(production_scores, labels, base_mule),
+        training_rows={"production": len(data.split.train)},
+    )
+    # Only the production reads are needed from here: the matrix goes before the refits load
+    # theirs, so two never sit in memory at once.
+    del data, fitted, production_scores
+    on_progress(result)
 
-    held_out: dict[str, Read] = {}
-    dropped: dict[str, int] = {}
-    held_out_mule_base = production_mule_base
     in_test = set(test)
     for kind in SCENARIOS:
         # Every row of the scenario, including frauds the observed label missed (label noise):
         # left in, they would teach the model the scenario as legitimate.
         drop = [i for i, k in enumerate(kinds) if k == kind and i not in in_test]
-        dropped[kind] = len(drop)
         rows = gate_run.load_cache(cache, train_rows=train_rows, drop=drop)
         fit = model.fit_ensemble(rows.matrix, rows.labels, rows.split, seed=seed)
         scores = scored(fit, rows)
-        held_out[kind] = read(scores, labels, test_kinds == kind)
+        result.dropped[kind] = len(drop)
+        result.training_rows[kind] = len(rows.split.train)
+        result.held_out[kind] = read(scores, labels, test_kinds == kind)
         if kind == "mule_account":
-            held_out_mule_base = read(scores, labels, base_mule)
-    return Result(
-        train_rows_used=len(data.split.train),
-        volume=volume,
-        seconds_per_fit=seconds,
-        production=production,
-        held_out=held_out,
-        production_mule_base=production_mule_base,
-        held_out_mule_base=held_out_mule_base,
-        dropped=dropped,
-    )
+            result.held_out_mule_base = read(scores, labels, base_mule)
+        del rows, fit, scores
+        result.complete = kind == SCENARIOS[-1]
+        on_progress(result)
+    return result
 
 
 def _pairs(result: Result) -> list[tuple[str, Read, Read]]:
-    pairs = [(k, result.production[k], result.held_out[k]) for k in SCENARIOS]
-    pairs.append(
-        ("mule_account without reversal", result.production_mule_base, result.held_out_mule_base)
-    )
+    """Each scenario refitted so far, with its production read; partial while refits remain."""
+    pairs = [
+        (k, result.production[k], result.held_out[k]) for k in SCENARIOS if k in result.held_out
+    ]
+    if result.held_out_mule_base is not None:
+        pairs.append(
+            (
+                "mule_account without reversal",
+                result.production_mule_base,
+                result.held_out_mule_base,
+            )
+        )
     return pairs
 
 
@@ -208,6 +239,21 @@ def as_rows(result: Result) -> list[dict[str, object]]:
     return rows
 
 
+def as_payload(result: Result) -> dict[str, object]:
+    """What `lofto.json` holds, complete or not."""
+    overall, (low, high) = result.production_overall.recall(result.production_overall.at_budget)
+    return {
+        "complete": result.complete,
+        "volume": result.volume,
+        "seconds_per_load_and_fit": result.seconds_per_fit,
+        "production_recall_at_budget_all_frauds": overall,
+        "production_recall_at_budget_all_frauds_wilson": [low, high],
+        "rows_removed": result.dropped,
+        "training_rows": result.training_rows,
+        "scenarios": as_rows(result),
+    }
+
+
 def _f(v: float) -> str:
     return "n/a" if math.isnan(v) else f"{v:.3f}"
 
@@ -217,6 +263,8 @@ def summary(result: Result) -> list[str]:
     lines = [
         "LEAVE-ONE-FRAUD-TYPE-OUT — each scenario's rows removed from every fitted set",
         f"  volume: {result.volume}",
+        "  production recall at the 1% FPR budget, all test frauds: "
+        f"{_f(result.production_overall.recall(result.production_overall.at_budget)[0])}",
         "  recall of the held-out scenario's test frauds, Wilson 95% intervals:",
         "  scenario                        frauds  at 1% FPR: production -> held out (drop)"
         "      at 0.60: production -> held out (drop)",
@@ -236,4 +284,9 @@ def summary(result: Result) -> list[str]:
         "  rows removed from the fitted sets: "
         + ", ".join(f"{k} {n}" for k, n in result.dropped.items())
     )
+    lines.append(
+        "  training rows per fit: " + ", ".join(f"{k} {n}" for k, n in result.training_rows.items())
+    )
+    if not result.complete:
+        lines.append("  INCOMPLETE: not every scenario was refitted")
     return lines

@@ -211,8 +211,9 @@ def load_cache(path: Path, *, train_rows: int | None = None, drop: Collection[in
                 f"{train_rows} training rows were asked for and the cache holds {len(train)}"
             )
         train = tuple(spread(list(train), train_rows))
-    # PB-66's leave-one-fraud-type-out: the dropped rows leave every fitted set, and the target
-    # encoding below, as if they had never been generated. Test rows are never dropped.
+    # PB-66's leave-one-fraud-type-out: the dropped rows leave every fitted set and the target
+    # encoding below. Not as if never generated: the other rows' features were computed over a
+    # history that includes them. Test rows are never dropped.
     dropped = frozenset(drop)
     train = tuple(i for i in train if i not in dropped)
     validation = tuple(i for i in by["validation"] if i not in dropped)

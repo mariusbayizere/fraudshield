@@ -565,6 +565,11 @@ def _feature_matrix(
     country_of = country_by_currency(run.packs)
     variants = read_variants(run.dataset, {rows[i].transaction_id for i in sample})
     scenarios = read_scenarios(run.dataset, {rows[i].transaction_id for i in sample})
+    unlabelled = sum(1 for i in sample if rows[i].transaction_id not in scenarios)
+    if unlabelled:
+        # A silent default would file an unlabelled fraud as legitimate, and leave-one-fraud-
+        # type-out would then keep it in training: refuse instead.
+        raise DatasetGapError(f"{unlabelled} sampled transactions have no row in labels")
 
     corpus_index = CorpusIndex.build(rows)
     print(f"computing {len(smoke.trainable_features())} features for {len(sample)} rows...")
@@ -1041,26 +1046,29 @@ def run_lofto(cache: Path, out: Path, seed: int, budget_minutes: float, purpose:
         print(f"volume: {volume}", flush=True)
         access.record("lofto", cache, test_rows, purpose=f"{purpose}: {volume}")
 
+    out.mkdir(parents=True, exist_ok=True)
+
+    def progress(result: lofto.Result) -> None:
+        # Written after every fit: a run cut short by the runner's limit keeps what it measured.
+        # A scenario with no test fraud has no recall: null, not a crash after the scoring.
+        payload = pb66_run.strict(lofto.as_payload(result))
+        (out / "lofto.json").write_text(
+            json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8"
+        )
+        done = [k for k in lofto.SCENARIOS if k in result.held_out]
+        print(f"  refitted {len(done)} of {len(lofto.SCENARIOS)}: {', '.join(done)}", flush=True)
+
     try:
         result = lofto.run(
-            cache, seed=seed, budget_minutes=budget_minutes, on_volume=scoring_begins
+            cache,
+            seed=seed,
+            budget_minutes=budget_minutes,
+            on_volume=scoring_begins,
+            on_progress=progress,
         )
     except ValueError as gap:
         raise DatasetGapError(str(gap)) from gap
     print("\n".join(lofto.summary(result)))
-    out.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "volume": result.volume,
-        "train_rows_used": result.train_rows_used,
-        "seconds_per_fit": result.seconds_per_fit,
-        "rows_removed": result.dropped,
-        "scenarios": lofto.as_rows(result),
-    }
-    # A scenario with no test fraud has no recall: null, not a crash after the scoring is done.
-    strict = pb66_run.strict(payload)
-    (out / "lofto.json").write_text(
-        json.dumps(strict, indent=2, sort_keys=True, allow_nan=False) + "\n", encoding="utf-8"
-    )
     print(f"  wrote {out / 'lofto.json'}")
     return 0
 

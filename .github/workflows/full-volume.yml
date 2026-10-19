@@ -233,6 +233,9 @@ jobs:
         working-directory: ${{ runner.temp }}/cache
         run: sha256sum -c out/cache.sha256
       - name: Leave one fraud type out
+        # Below the job's limit, so this step is what times out and the upload below still runs;
+        # lofto.json is rewritten after every fit, so a cut-short run keeps what it measured.
+        timeout-minutes: 315
         # The volume (full, or 30,000 rows) is decided from the first fit, which scores nothing,
         # and logged to the access log before any test row is scored.
         run: |

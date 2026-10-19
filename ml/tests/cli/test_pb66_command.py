@@ -58,16 +58,27 @@ def _write(path: Path, *, timestamps: bool = True) -> None:
             extras[smoke.CACHE_SEGMENT].append(segment)
             extras[smoke.CACHE_COUNTRY].append(("RW", "KE", "UG")[i % 3])
             extras[smoke.CACHE_CHANNEL].append(("MOBILE_MONEY", "USSD", "CARD")[(i // 3) % 3])
-            extras[smoke.CACHE_VARIANT].append("base" if fraud else "")
+            # Frauds cycle through the eight scenarios. Some legitimate-looking rows are frauds the
+            # observed label missed (label noise): they carry a scenario and a true label but are
+            # observed legitimate. Some test mule frauds are the reversal variant.
+            noisy = not fraud and i % 25 == 7
+            kind = (
+                lofto.SCENARIOS[(i // 5) % len(lofto.SCENARIOS)]
+                if fraud
+                else (lofto.SCENARIOS[i % len(lofto.SCENARIOS)] if noisy else "")
+            )
+            reversal = segment == "test" and kind == "mule_account" and fraud and (i // 40) % 2 == 0
+            extras[smoke.CACHE_VARIANT].append(
+                lofto.REVERSAL_VARIANT if reversal else ("base" if fraud else "")
+            )
             if timestamps:
                 offset = (
                     TEST_SPAN_US * i // count if segment == "test" else -86_400_000_000 * (i + 30)
                 )
                 extras[smoke.CACHE_TIMESTAMP].append(str(TEST_START + offset))
                 extras[smoke.CACHE_AMOUNT].append(repr(float(rng.lognormal(9, 1))))
-                kind = lofto.SCENARIOS[(i // 5) % len(lofto.SCENARIOS)] if fraud else ""
                 extras[smoke.CACHE_FRAUD_TYPE].append(kind)
-                extras[smoke.CACHE_TRUE_LABEL].append(str(fraud))
+                extras[smoke.CACHE_TRUE_LABEL].append(str(fraud or noisy))
     smoke.cache_write(path, {"dataset": "fixture"}, rows, extras)  # type: ignore[arg-type]
 
 
@@ -238,7 +249,27 @@ def test_lofto_refits_without_each_scenario_and_logs_before_scoring(
         low, high = row["held_out_budget_wilson"]
         assert 0.0 <= low <= row["held_out_recall_at_budget"] <= high <= 1.0
     # Every scenario's non-test rows were removed for its refit: frauds of that type only.
-    assert all(n > 0 for n in payload["rows_removed"].values())
+    # Every non-test row of the scenario was removed, the ones its observed label missed included.
+    import pyarrow.parquet as pq  # noqa: PLC0415 - only this test reads the cache directly
+
+    table = pq.read_table(
+        cache, columns=[smoke.CACHE_FRAUD_TYPE, smoke.CACHE_SEGMENT, smoke.CACHE_LABEL]
+    )
+    facts = list(zip(*(table.column(k).to_pylist() for k in range(3)), strict=True))
+    for kind in lofto.SCENARIOS:
+        expected = sum(1 for k, segment, _ in facts if k == kind and segment != "test")
+        observed = sum(
+            1 for k, segment, y in facts if k == kind and segment != "test" and y == "True"
+        )
+        assert payload["rows_removed"][kind] == expected
+        # More than the observed frauds: the ones the label missed went too.
+        assert expected > observed
+    assert payload["complete"] is True
+    rows = {r["scenario"]: r for r in payload["scenarios"]}
+    assert (
+        rows["mule_account without reversal"]["test_frauds"] < rows["mule_account"]["test_frauds"]
+    )
+    assert payload["training_rows"]["production"] == SEGMENTS["train"]
     added = [
         json.loads(line) for line in private_access_log.read_text()[len(before) :].splitlines()
     ]
@@ -260,8 +291,9 @@ def test_lofto_falls_back_when_nine_fits_would_not_fit(
         clock=lambda: next(ticks),
         on_volume=lambda volume, rows: told.append((volume, rows)),
     )
-    assert result.train_rows_used == 200
-    assert told[0][0].startswith("200 training rows: one full-volume fit took 60.0 min")
+    assert result.training_rows["production"] == 200
+    assert told[0][0].startswith("200 training rows (each refit: 200 less its scenario's rows)")
+    assert "load-and-fit took 60.0 min" in told[0][0]
     assert told[0][1] == SEGMENTS["test"]
     assert set(result.held_out) == set(lofto.SCENARIOS)
 
@@ -274,3 +306,40 @@ def test_lofto_refuses_a_cache_without_fraud_types(
     assert cli.main(["lofto", str(old), "--out", str(tmp_path / "out")]) == 2
     assert "_fraud_type" in capsys.readouterr().err
     assert cli.main(["lofto", str(tmp_path / "none.parquet"), "--out", str(tmp_path / "o")]) == 2
+
+
+def test_lofto_at_fallback_fits_every_model_at_the_smaller_volume_and_logs_first(
+    cache: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fraudshield_ml.training import model  # noqa: PLC0415
+
+    monkeypatch.setattr(lofto, "FALLBACK_TRAIN_ROWS", 200)
+    fitted_on: list[int] = []
+    told: list[str] = []
+    real_fit = model.fit_ensemble
+    real_score = model.Ensemble.score
+
+    def recording_fit(matrix, labels, split, *, seed):  # type: ignore[no-untyped-def]
+        fitted_on.append(len(split.train))
+        return real_fit(matrix, labels, split, seed=seed)
+
+    def guarded_score(self, rows):  # type: ignore[no-untyped-def]
+        assert told, "a test row was scored before the access line was written"
+        return real_score(self, rows)
+
+    monkeypatch.setattr(model, "fit_ensemble", recording_fit)
+    monkeypatch.setattr(model.Ensemble, "score", guarded_score)
+    ticks = iter([0.0, 3600.0])
+    result = lofto.run(
+        cache,
+        seed=1,
+        budget_minutes=60,
+        clock=lambda: next(ticks),
+        on_volume=lambda volume, _rows: told.append(volume),
+    )
+    # One full-volume fit to time it, then production and eight refits, all at the smaller volume.
+    assert fitted_on[0] == SEGMENTS["train"]
+    assert len(fitted_on) == 1 + lofto.FITS
+    assert all(n <= 200 for n in fitted_on[1:])
+    assert result.training_rows["production"] == 200
+    assert result.complete

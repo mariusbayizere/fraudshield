@@ -386,3 +386,21 @@ amounts, after the paragraph above. It does not attribute it to the model.
         otherwise **partly supported**, and the paper names which scenarios held.
       - Account takeover and synthetic identity are reported against my ranges, separately from
         the owner's hypothesis.
+- **2026-10-19, after the independent review of the leave-one-fraud-type-out build
+  (APPROVED_WITH_MINORS), before any run and before the owner confirms the ranges.** The ranges
+  above are unchanged.
+  - **What LOFTO measures, stated precisely.** A held-out scenario is removed from every fitted set
+    and from the target encoding. The other rows' features were still computed over a history that
+    contains its rows: velocity, counterparty novelty, device sharing. So the result is what never
+    *fitting on* the scenario costs, not what never *having seen* it costs. The paper says so
+    beside the table.
+  - **At the 30,000-row fallback,** the rows are spread and then the scenario dropped, so each
+    refit trains on 30,000 less that scenario's rows (about 1 %), and its legitimate rows are
+    exactly production's. The report gives every fit's training count.
+  - **Nothing measured is lost to a time-out.** `lofto.json` is rewritten after every fit and
+    marked complete or not. The LOFTO step times out at 315 minutes, before the job's 330, so the
+    upload still runs. A run cut short reports the scenarios it finished, and is not re-run unless
+    the owner decides.
+  - **Transactions missing from `labels` are refused**, not filed as legitimate.
+  - **The report also gives the production model's recall over all test frauds** at the 1 % FPR
+    budget, so it can be reconciled with job 2's seed-1 model.
