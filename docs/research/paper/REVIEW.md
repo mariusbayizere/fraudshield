@@ -38,6 +38,10 @@ measured" markers. This file records every change to what the paper states, with
 
 | 2026-10-19 | The owner states that the external review behind groups 1 and 2 was carried out by an AI model, not a person. The disclosure section and cover note now say so, and that the work has had no independent human review | Owner, 2026-10-19 (`docs/parallel/M11_updates.md` §14) |
 
+| 2026-10-19 | Owner: the disclosure sentence removed from the cover note. The disclosure is unchanged in Section `sec:disclosure`, including that the work has had no independent human review | Owner, 2026-10-19 |
+
+| 2026-10-19 | Paper-readiness work order, first pass (no number changed). The learning-curve prediction moved to "not established": its commits were rebased after the outcome (`\rebasedprespec`, audited); three predictions remain pre-specified. Introduction: run-on opening split; the dataset-search contradiction with Section 2 fixed, with the true order (built first, searched later). The analyst console stated as not part of this release and not evaluated (Sections 6, 10, Appendix A); ADR 0084 and PB-132 copied onto this branch with provenance notes. "Gate" defined on first use; "undertrained" renamed "untuned and overfit"; latency and scale markers point to one list of deferred measurements (Appendix `app:deferred`). The audit now fails when a cited path does not exist at the paper's commit, and indexes every cited evidence file, which added `regeneration_d8083dbc.txt` and the test-set access log to Appendix D | `number_audit.md` (505 macros), `docs/parallel/M11_updates.md` §15 |
+
 ## Open review points
 
 

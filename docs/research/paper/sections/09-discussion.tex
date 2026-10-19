@@ -149,10 +149,14 @@ evidence was. That is all it shows: it cannot show that the evidence had not alr
 the prediction was written, and commits are ordered on the author's machine, so a history rewritten
 before it was pushed would look the same. Table~\ref{tab:predictions} lists the \nPredTotal{}
 predictions whose outcome the notebook records. For \nPrespecShown{} of them git orders the
-prediction before its evidence; for the other \nPrespecNotShown{} it does not, and they are not
-counted as pre-specified. Every commit pair and author date in the table (UTC) is checked by
-\texttt{audit\_numbers.py} on every build: an ordered pair must be a strict ancestor relation, and an
-unordered one must not be. The entry that recorded the takeover-lead prediction also recorded others
+prediction before its evidence; for the other \nPrespecNotShown{} it does not establish the order,
+and they are not counted as pre-specified. One of those, the learning-curve prediction, does sit
+before its evidence in the history, but both commits were rebased on 2026-10-18, after the outcome was known, so that
+order was written after the fact and shows nothing; GitHub's record of the pre-rebase commit's CI run
+is dated before the evidence, but that record is outside this repository and is not used here. Every
+commit pair and date in the table (UTC) is checked by \texttt{audit\_numbers.py} on every build: an
+ordered pair must be a strict ancestor relation, an unordered one must not be, and a rebased pair must
+have been rewritten after its evidence's author date. The entry that recorded the takeover-lead prediction also recorded others
 whose outcomes are not reported there; they are not counted.
 
 \begin{table}[htbp]
@@ -177,15 +181,8 @@ The reversal scam is caught at \nRevPredLow{}--\nRevPredHigh{} recall &
 \prespec{656d24e}{2026-09-22}{6bc842d}{2026-09-22} &
 Refuted: \nRevRecall{} \nRevCI{}; below the range for the point estimate, not for the whole
 interval \\
-Recall at the flag threshold stays below \nTargetRecall{}, rising to \nLcPredLow{}--\nLcPredHigh{} at
-\nLcTrainD{} training rows; recall at the \nFPRBudget{} budget rises to
-\nLcPredBudgetLow{}--\nLcPredBudgetHigh{} &
-\prespec{ecbca23}{2026-09-22}{63bbed5}{2026-09-22}; both rebased on 2026-10-18, author dates kept &
-Partly confirmed: below the target at every size and inside the range; not rising at seed 1, rising
-on the means; recall at the budget \nLcBudgetRecallD{} at seed 1, below its range, and inside it on
-the means (Section~\ref{sec:volume}) \\
 \midrule
-\multicolumn{3}{l}{\emph{Not established: first committed with its outcome, or after its evidence}} \\
+\multicolumn{3}{l}{\emph{Not established: committed with or after the evidence, or rebased after it}} \\
 The detector's small positive offset is real and constant with scale &
 \notprespec{984351d}{984351d}: the same commit as its refutation &
 Refuted: pooled over seeds, the interval straddles chance \\
@@ -196,17 +193,24 @@ Confirmed on mechanism, wrong on sequence \\
 \notprespec{d85385f}{5f0a8a1}, whose code already states the resolution &
 Refuted by argument, not on data: grouping accounts that share a device resolves it, but no device
 was then shared by more than one account \\
+Recall at the flag threshold stays below \nTargetRecall{}, rising to \nLcPredLow{}--\nLcPredHigh{} at
+\nLcTrainD{} training rows; recall at the \nFPRBudget{} budget rises to
+\nLcPredBudgetLow{}--\nLcPredBudgetHigh{} &
+\rebasedprespec{ecbca23}{63bbed5}{2026-10-18}: both commits were rewritten after the outcome, so their
+order in this history shows nothing &
+Partly confirmed: below the target at every size and inside the range; not rising at seed 1, rising
+on the means; recall at the budget \nLcBudgetRecallD{} at seed 1, below its range, and inside it on
+the means (Section~\ref{sec:volume}) \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 Of the \nPrespecShown{} pre-specified predictions, the history supports this much: falsifiable
-predictions were committed before their evidence, and their outcomes, refuted, confirmed and partly
-confirmed, are those in the table. It does not support a claim that the author predicted well, nor
+predictions were committed before their evidence, and their outcomes are those in the table. It does not support a claim that the author predicted well, nor
 that the other \nPrespecNotShown{} preceded their evidence; the notebook says they did, and the commits cannot confirm it. The notebook's own
 register of the first \nPredEarly{} (of which \nPredEarlyRight{} was partly right) says all
-\nPredEarly{} were written before the evidence; for every unordered row of the table, all of which
-are among them, git does not show it, and that
+\nPredEarly{} were written before the evidence; for the unordered rows among them git does not show
+it, and that
 register is corrected by a later notebook entry, not in place. For the first \nPredEarly{}, the
 notebook credits the refutations with a standing rule, the feature contract's \texttt{history\_key}
 field and E1's density threshold for component folding; the density threshold was itself found, the

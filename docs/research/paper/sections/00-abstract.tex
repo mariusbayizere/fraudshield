@@ -2,7 +2,8 @@
 What can a synthetic fraud benchmark show, and what can it not? We answer the question for
 FraudShield-EAC, a seeded synthetic benchmark of East African digital payments (mobile money,
 USSD, agent banking, card, online and bank transfer, across \nCountries{} countries) built to develop
-and evaluate a fraud detection system. Its clearest negative result is a variant, pre-specified in repository history, built
+and evaluate a fraud detection system. Its clearest negative result is a variant, pre-specified in repository history
+(\prespec{656d24e}{2026-09-22}{6bc842d}{2026-09-22}), built
 on a scam documented among Kenyan mobile-money users: a single victim-initiated transfer, which we
 read the sources as sending to a new counterparty and which our variant, by our own choice, sends to
 a counterparty on the victim's payee list; \nRevNovelScored{} of its \nRevFraud{} scored rows still go
@@ -12,7 +13,8 @@ variant is not isolated.
 
 The benchmark is easy in a specific way. On the evaluation test rows the strongest single engineered
 feature, a short-to-long-window velocity ratio, separates the classes at \nGateFloor{} on its own, so
-every gate ranking metric is reported as a margin over that floor rather than over chance: trained on
+every ranking metric among the specification's acceptance thresholds (its gates) is
+reported as a margin over that floor rather than over chance: trained on
 \nTrainUsed{} rows, the calibrated XGBoost and LightGBM ensemble reaches an AUC of \nGateAUC{}
 \nGateAUCci{}, a margin of \nGateMargin{}. Its recall at the specified flag threshold misses the
 target, and \nLcVolumeFactor{} times the training data does not close the gap for this model on this

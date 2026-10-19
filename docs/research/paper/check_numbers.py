@@ -44,6 +44,7 @@ STRIP = [
     re.compile(r"(?<!\\)%.*$", re.M),  # comments
     re.compile(r"\\(?:texttt|url|href|cite|ref|label|input)(?:\[[^\]]*\])?\{(?:\\.|[^{}\\])*\}"),
     re.compile(r"\\notyet\{M\d{1,2}\}"),  # a milestone, the only thing \notyet takes
+    re.compile(r"\\deferred\{M\d{1,2}\}"),  # likewise for \deferred
     re.compile(r"\\n[A-Z][A-Za-z]*"),  # number macros from numbers.tex
     re.compile(r"\b[A-Z]{1,4}(?:-[A-Z]{1,6})*-\d+[a-z]?\b"),  # D-15, ML-GATE-01, PB-61, C-6
     re.compile(r"\bADR[\s~]+\d{4}\b"),
@@ -52,6 +53,7 @@ STRIP = [
     # a pre-specification: two commits and their dates, checked by audit_numbers.py
     re.compile(r"\\prespec(?:\{[0-9a-f]{7}\}\{\d{4}-\d{2}-\d{2}\}){2}"),
     re.compile(r"\\notprespec(?:\{[0-9a-f]{7}\}){2}"),
+    re.compile(r"\\rebasedprespec(?:\{[0-9a-f]{7}\}){2}\{\d{4}-\d{2}-\d{2}\}"),
     re.compile(r"\b\d{4}-\d{2}-\d{2}\b"),  # ISO dates, before years are stripped
     re.compile(
         r"\b\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|"

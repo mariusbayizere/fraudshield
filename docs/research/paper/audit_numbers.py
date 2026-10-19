@@ -562,8 +562,10 @@ SOURCES: dict[str, Src | Derived] = {
     ),
     "nPrespecNotShown": Derived(
         (),
-        lambda: NUMBER_WORDS[len(not_prespecified(_predictions_table()))],
-        "rows of Table tab:predictions first committed with or after their evidence",
+        lambda: NUMBER_WORDS[
+            len(not_prespecified(_predictions_table())) + len(rebased(_predictions_table()))
+        ],
+        "rows of Table tab:predictions committed with or after their evidence, or rebased after it",
     ),
     "_P7": Src(
         NOTEBOOK,
@@ -1255,6 +1257,15 @@ def _predictions_table() -> str:
     return text[start : text.index(r"\end{table}", start)]
 
 
+REBASED = re.compile(r"\\rebasedprespec\{([0-9a-f]{7})\}\{([0-9a-f]{7})\}\{(\d{4}-\d{2}-\d{2})\}")
+
+
+def rebased(text: str | None = None) -> list[tuple[str, str, str]]:
+    """Every `\\rebasedprespec{prediction}{evidence}{date}` in `text`, or in every typeset file."""
+    texts = [text] if text is not None else [path.read_text() for path in _typeset()]
+    return [found for t in texts for found in REBASED.findall(t)]
+
+
 def not_prespecified(text: str | None = None) -> list[tuple[str, str]]:
     """Every `\\notprespec{prediction}{evidence}` in `text`, or in every typeset file."""
     texts = [text] if text is not None else [path.read_text() for path in _typeset()]
@@ -1279,8 +1290,8 @@ def check_prespecified(defined: dict[str, tuple[str, str]]) -> int:
     # would otherwise never be checked.
     for path in _typeset():
         text = path.read_text()
-        used = len(re.findall(r"\\(?:not)?prespec\b", text))
-        if used != len(prespecified(text)) + len(not_prespecified(text)):
+        used = len(re.findall(r"\\(?:not|rebased)?prespec\b", text))
+        if used != len(prespecified(text)) + len(not_prespecified(text)) + len(rebased(text)):
             print(
                 f"  PRESPEC: a malformed \\prespec or \\notprespec in {path.name}", file=sys.stderr
             )
@@ -1288,7 +1299,8 @@ def check_prespecified(defined: dict[str, tuple[str, str]]) -> int:
     # Every prediction in the table is in one group or the other.
     table = _predictions_table()
     total = WORDS.get(defined["nPredTotal"][1].lower(), "") if "nPredTotal" in defined else ""
-    if str(len(prespecified(table)) + len(not_prespecified(table))) != total:
+    groups = len(prespecified(table)) + len(not_prespecified(table)) + len(rebased(table))
+    if str(groups) != total:
         print("  PRESPEC: the table's two groups do not add up to \\nPredTotal", file=sys.stderr)
         problems += 1
     for pred, pred_date, evidence, evidence_date in prespecified():
@@ -1309,6 +1321,19 @@ def check_prespecified(defined: dict[str, tuple[str, str]]) -> int:
         if not later:
             print(
                 f"  PRESPEC: {evidence} is not at or before {pred}, as the paper says",
+                file=sys.stderr,
+            )
+            problems += 1
+    # A rebased pair: ordered, but only in a history rewritten after the evidence existed.
+    for pred, evidence, date in rebased():
+        ordered = _git("merge-base", "--is-ancestor", pred, evidence).returncode == 0
+        committed = _git("show", "-s", "--format=%ct", pred).stdout.strip()
+        rewritten = _git("show", "-s", "--date=format-local:%Y-%m-%d", "--format=%cd", pred)
+        evidence_at = _git("show", "-s", "--format=%at", evidence).stdout.strip()
+        late = committed.isdigit() and evidence_at.isdigit() and int(committed) > int(evidence_at)
+        if pred == evidence or not (ordered and late and rewritten.stdout.strip() == date):
+            print(
+                f"  PRESPEC: {pred} is not a pair rebased on {date} after {evidence}",
                 file=sys.stderr,
             )
             problems += 1
@@ -1352,6 +1377,115 @@ def comparable(name: str, path: str, got: str) -> str:
     return got
 
 
+#: A path the paper cites in \\texttt, as typeset (with \\allowbreak and \\_).
+CITED = re.compile(r"\\texttt\{((?:evidence|docs|dataset|ml|tools|\.github)/[^{}]*)\}")
+#: Cited paths that are evidence: each must be in Appendix D whether or not a macro reads it.
+EVIDENCE_DIRS = ("docs/benchmarks/", "docs/research/paper/evidence/")
+
+
+def cited_paths() -> set[str]:
+    """Every repository path cited in the typeset text, normalised to a path from the root."""
+    found: set[str] = set()
+    for path in _typeset():
+        for raw in CITED.findall(path.read_text()):
+            cited = re.sub(r"\\allowbreak\s*", "", raw).replace("\\_", "_")
+            if "{" in cited or "\\" in cited:
+                continue  # a brace pattern standing for several files, checked by its members
+            if cited.startswith("evidence/"):
+                cited = "docs/research/paper/" + cited
+            found.add(cited)
+    return found
+
+
+#: A path or file name cited in \\texttt (after \\allowbreak is removed): one with a directory
+#: separator, or a bare name with a file extension.
+LOOKS_LIKE_PATH = re.compile(
+    r"^[\w.-]+(?:/[\w.-]*)+$|^[\w.-]+\.(?:md|py|tex|txt|json|jsonl|yml|yaml|bib|cff|csv|svg)$"
+)
+TEXTTT = re.compile(r"\\texttt\{((?:\\.|[^{}\\])*)\}")
+#: Where a reader would resolve a relative citation: the paper's folder, docs/research/, the root.
+PATH_HOMES = (HERE, ROOT / "docs" / "research", ROOT)
+
+
+def check_paths() -> int:
+    """Every path or file name the text cites exists in one of the places a reader would look."""
+    problems = 0
+    for path in _typeset():
+        text = re.sub(r"\\allowbreak\s*", "", path.read_text())
+        for raw in TEXTTT.findall(text):
+            name = raw.replace("\\_", "_").strip()
+            if not LOOKS_LIKE_PATH.match(name):
+                continue
+            if not any((home / name.rstrip("/")).exists() for home in PATH_HOMES):
+                print(
+                    f"  CITED: {name} ({path.name}) is not in the paper, docs/research or the root",
+                    file=sys.stderr,
+                )
+                problems += 1
+    return problems
+
+
+def check_cited(used: dict[tuple[str, str, str], int], ref: str) -> int:
+    """Every cited path exists in the checkout; every cited evidence file (last changed at `ref`) is
+    indexed in Appendix D.
+
+    A cited evidence file no macro reads is added to the index with no values, at the last commit
+    that changed it, so a reader can resolve every file the text names.
+    """
+    problems = 0
+    indexed = {path for path, _, _ in used}
+    for path in sorted(cited_paths()):
+        kind = "tree" if path.endswith("/") else "blob"
+        exists = (ROOT / path.rstrip("/")).exists()
+        if not exists:
+            print(f"  CITED: {path} ({kind}) does not exist at {ref}", file=sys.stderr)
+            problems += 1
+            continue
+        if kind == "blob" and path.startswith(EVIDENCE_DIRS) and path not in indexed:
+            last = _git("log", "-1", "--format=%h", ref, "--", path).stdout.strip()
+            used[(path, last, "")] = 0
+    return problems
+
+
+#: Identifier kinds the paper cites, and where each is defined in the repository.
+IDENTIFIERS = (
+    (re.compile(r"\bADR[\s~]+(\d{4})\b"), "docs/adr/", r"^{}-"),
+    # a list after "ADRs": "ADRs 0035 and 0059", "ADRs 0010, 0035 and 0059"
+    (
+        re.compile(r"\bADRs[\s~]+((?:\d{4}(?:,\s*|\s+and\s+))*\d{4})\b"),
+        "docs/adr/",
+        r"^{}-",
+    ),
+    (
+        re.compile(r"\bPB-(\d+)\b"),
+        "docs/backlog/product.md",
+        r"^(?:### |\| )(?:PB-\d+, )*PB-{}\b",
+    ),  # a heading, or a row of the index table
+    (re.compile(r"\bD-(\d{2})\b"), "docs/srs/defect_register.md", r"^\*\*D-{} "),
+    (re.compile(r"\bC-(\d+)\b"), "docs/research/claims_register.md", r"^\| C-{} \|"),
+)
+
+
+def check_identifiers(ref: str) -> int:
+    """Every ADR, backlog item, resolution and claim the paper cites is defined at `ref`."""
+    text = "\n".join(path.read_text() for path in _typeset())
+    text = re.sub(r"(?<!\\)%.*$", "", text, flags=re.M)  # comments are not cited
+    problems = 0
+    for pattern, where, defined in IDENTIFIERS:
+        target = ROOT / where
+        if where.endswith("/"):
+            source = "\n".join(sorted(child.name for child in target.iterdir()))
+        else:
+            source = target.read_text() if target.exists() else ""
+        found = {n for match in pattern.findall(text) for n in re.findall(r"\d+", match)}
+        for number in sorted(found):
+            if not re.search(defined.format(re.escape(number)), source, re.M):
+                print(f"  IDENTIFIER: {pattern.pattern} {number} not defined in {where} at {ref}",
+                      file=sys.stderr)  # fmt: skip
+                problems += 1
+    return problems
+
+
 def count_helpers(used: dict[tuple[str, str, str], int], cache: dict[str, str], ref: str) -> None:
     """Add the `_`-prefixed sources, read only as inputs to derived values, to the index."""
     for name, spec in SOURCES.items():
@@ -1384,7 +1518,8 @@ def write_index(used: dict[tuple[str, str, str], int], *, check: bool) -> bool:
     ]
     for (path, ref, commit), count in sorted(used.items()):
         at = rf"\texttt{{{ref}}}" + (rf", stamp \texttt{{{commit}}}" if commit else "")
-        lines.append(rf"\texttt{{{_tex_path(path)}}} & {at} & {count} \\")
+        values = str(count) if count else "none"
+        lines.append(rf"\texttt{{{_tex_path(path)}}} & {at} & {values} \\")
     lines += [r"\bottomrule", r"\end{longtable}"]
     path = HERE / "sections" / "generated-evidence-index.tex"
     return emit(path, "\n".join(lines) + "\n", check=check)
@@ -1475,6 +1610,10 @@ def main() -> int:
     problems += check_prespecified(defined)
     rows.sort(key=lambda r: list(defined).index(r[0]))
     count_helpers(used, cache, args.ref)
+    # Checked in the checkout: CI runs on the commit (or the release tag) being audited.
+    problems += check_cited(used, "HEAD")
+    problems += check_identifiers("the checkout")
+    problems += check_paths()
     current = write_report(rows, args.ref, ref_sha, check=args.check)
     current = write_index(used, check=args.check) and current
     problems += not current

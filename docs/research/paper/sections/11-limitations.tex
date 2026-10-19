@@ -66,7 +66,7 @@ of the specified ensemble over a single XGBoost model was detected here, the ben
 what the ensemble adds.
 
 \paragraph{Scale and volume.} Results are at \nRowsDrawB{} rows or fewer, not the \nSpecRows{} the
-specification requires, a scale that is \notyet{M10}; and the models were trained on \nTrainUsed{}
+specification requires, a scale that is \deferred{M10}; and the models were trained on \nTrainUsed{}
 rows rather than the full training period. The strongest dataset column's AUC moves with dataset size
 by more than seed noise, and the cause is unexplained; every figure is therefore stated at its scale.
 The \nGateFailed{} failing gate metrics
@@ -119,7 +119,7 @@ machine visible to it.
 \paragraph{Latency.} No latency figure here is a gate figure. The frontier is a difference of
 medians on a shared development laptop, whose measured \nPctlTail{}th percentile was not credible; serving and
 end-to-end latencies have been measured only on shared development hardware (ADR 0035, ADR 0059),
-and the gate measurement is \notyet{M10}.
+and the gate measurement is \deferred{M10}.
 
 \paragraph{Intervals assume independence the data do not have.} Fraud on this benchmark is staged as
 multi-row incidents on one account, and an account's rows share its history, so test rows are not
@@ -132,7 +132,8 @@ frontier and the earlier-draw battery) treats rows as independent and was not re
 narrower than it should be by an amount not measured, and comparisons that rest on those intervals
 not overlapping are weaker than they read.
 
-\paragraph{The diagnostic model is undertrained.} It overfits: on the velocity group its test AUC
+\paragraph{The diagnostic model is untuned, and overfit where it was measured.} Its overfitting was measured on the velocity
+group alone and is inferred, not measured, for the others: on the velocity group its test AUC
 peaks early and declines, ending below the group's own strongest feature
 (Section~\ref{sec:redundancy}). Every group-alone and leave-one-group-out figure comes from it, so
 the group figures are lower bounds and no ranking of groups by importance is supported.

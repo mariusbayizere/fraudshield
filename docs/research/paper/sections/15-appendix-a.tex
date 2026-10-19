@@ -4,8 +4,9 @@
 
 Every identifier below is defined in the repository at \texttt{m4-complete}, except ADR~0035,
 ADR~0055, ADR~0058, ADR~0059 and PB-76, which are defined on the main branch after it (as are ADR 0031's amendment and
-PB-67's conclusion), and ADR 0084 and PB-132, which are
-defined on the analyst console's branch and not yet merged (commit \texttt{b1d76e7}). Resolutions D-xx are the
+PB-67's conclusion), and ADR 0084 and PB-132, which were written for the analyst console and are
+copied into this release from the console's separate, unmerged branch. The console itself is not part
+of this paper's release and is not evaluated. Resolutions D-xx are the
 binding corrections to the specification (\texttt{docs/srs/defect\_register.md}); ADRs are architecture
 decision records (\texttt{docs/adr/}); C-n are claims in \texttt{docs/research/claims\_register.md}; PB-n
 are backlog items (\texttt{docs/backlog/product.md}).
@@ -41,7 +42,8 @@ ADR 0035 & What the scoring milestone's serving proves and what it cannot, inclu
 ADR 0055 & Features with no source data on this benchmark, and the computability requirement closed as a deviation; one more feature is computed from assumed denominations. \\
 ADR 0058 & The ingestion budget per API key counts transactions, at an assumed rate. \\
 ADR 0059 & The decision engine's latency criterion recorded as not met on the hardware available, and carried to a dedicated machine. \\
-ADR 0084 & The console shows the SHAP explanation as an accessible table of feature contributions. \\
+ADR 0084 & The console is to show the SHAP explanation as an accessible table of feature
+contributions; the console is not part of this release and is not evaluated. \\
 C-4 & Claim that models built elsewhere reach far lower AUC on East African mobile-money data: unverified. \\
 C-5 & Claim that model accuracy degrades by a fixed share per year without retraining: unverified. \\
 C-6 & Claim that the ensemble reduces variance against a single model: measured on the uncalibrated combination, no reduction against XGBoost alone; not supported as a property of the ensemble (Section~\ref{sec:evaluation}). \\
@@ -53,7 +55,8 @@ PB-67 & The gate model trains on a subset of the training period; the learning c
 PB-76 & Training rows near the corpus's start see truncated history; test rows do not. \\
 PB-132 & The plain-language explanation templates the specification requires; not written. \\
 M2, M3, M4 & Milestones: the dataset generator; the features and feature store; the models, calibration and evaluation. \\
-M5, M6, M8 & Milestones: the scoring service; ingestion and the decision engine; the analyst console. \\
+M5, M6, M8 & Milestones: the scoring service; ingestion and the decision engine; the analyst console
+(not part of this release). \\
 M10, M11 & Milestones: the verification campaign on dedicated hardware; the research artefacts including this paper. \\
 \bottomrule
 \end{longtable}

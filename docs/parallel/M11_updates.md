@@ -456,3 +456,25 @@ the reason in its row. The lab notebook's 2026-09-22 pre-registration keeps its 
    job; peak RSS alone cannot say why a run died. [PB-66 owner]
 4. **C-8 search closed** at two passes (about 27 minutes); its open gaps are recorded in the pass-2
    record, §8. No further searching: the claim is already refuted.
+
+## 15. Paper-readiness work order, 2026-10-19
+
+The owner's work order (Phases 0–4) and the decisions taken on it the same evening:
+
+- **PB-66 (Phases 0 and 2):** done by PB-66's owner session on `ml/full-volume`, which M11 does not
+  write to. Owner: add leave-one-fraud-type-out (numeric predictions, pushed, confirmed by the owner
+  before any run; at 30,000 rows if eight full-volume refits do not fit) and per-channel reliability
+  diagrams (descriptive); `account_id` and the variant may go into the uncommitted per-row artifact.
+- **M8 is not merged** (owner). ADR 0084 and PB-132 are copied onto this branch with provenance
+  notes; the paper states the console is not part of this release and is not evaluated.
+- **Phase 3 fixes that change no number are done now** (owner): the introduction's opening and its
+  C-8 contradiction, "gate" defined, "untuned and overfit", one list of deferred measurements
+  (Appendix E), and Table 12's rebased learning-curve prediction moved to "not established".
+- **Audit:** fails on a cited path missing from the checkout, on an ADR, PB, D or C identifier not
+  defined in the repository, and on a rebased pair whose rewrite date is wrong; every cited evidence
+  file is indexed in Appendix D.
+- **Cover note** (owner, 2026-10-19): the disclosure sentence is removed from "How to read the
+  numbers"; the disclosure stays whole in Section 11, including that the work has had no
+  independent human review.
+- **Repository visibility:** already public since 2026-09-17, so "do not make it public" cannot be
+  applied; the pre-publication scan was run anyway (findings in the owner report).

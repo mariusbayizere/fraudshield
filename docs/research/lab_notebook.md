@@ -3132,3 +3132,14 @@ do not show the evidence was unseen, and commit order is made on this machine, s
 before it was pushed would look the same. The paper now says "pre-specified in repository history",
 lists the ordered and unordered predictions separately, and `audit_numbers.py` checks every commit
 pair and date it prints, in both directions, on every build.
+
+### 2026-10-19 · Correction: the learning-curve prediction's order is not established either
+
+The entry above counted the PB-67 learning-curve prediction as ordered (`ecbca23` before `63bbed5`).
+Both commits were rebased on 2026-10-18, after the 240K outcome was known, so their order in the
+current history was written after the fact and shows nothing. GitHub's record of the pre-rebase
+commit `d071147` (a CI run created 2026-09-22T09:04:23Z, before the first learning-curve evidence)
+is the only trace of the original order, and it is outside this repository. The paper now lists the
+prediction as not established, with the reason; three predictions remain pre-specified in repository
+history. The audit checks the rebase as well: the pair must be ordered, and the prediction's commit
+must have been rewritten, on the date printed, after the evidence's author date.

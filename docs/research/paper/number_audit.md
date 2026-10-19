@@ -146,8 +146,8 @@ Every macro in `numbers.tex` checked against its evidence file at `m4-complete` 
 | `\nPredEarly` | `four` | `four` | `docs/research/lab_notebook.md` |  | MATCH |
 | `\nPredEarlyRight` | `one` | `One` | `docs/research/lab_notebook.md` |  | MATCH |
 | `\nPredTotal` | `seven` | `seven` | derived | the register's four plus the three later notebook predictions (PB-56 lead tail; ADR 0028 reversal scam; PB-67 learning curve), each located in the notebook | MATCH |
-| `\nPrespecShown` | `four` | `four` | derived | rows of Table tab:predictions whose commits the audit orders (check_prespecified) | MATCH |
-| `\nPrespecNotShown` | `three` | `three` | derived | rows of Table tab:predictions first committed with or after their evidence | MATCH |
+| `\nPrespecShown` | `three` | `three` | derived | rows of Table tab:predictions whose commits the audit orders (check_prespecified) | MATCH |
+| `\nPrespecNotShown` | `four` | `four` | derived | rows of Table tab:predictions committed with or after their evidence, or rebased after it | MATCH |
 | `\nRevPredLow` | `0.15` | `0.15` | `docs/research/lab_notebook.md` |  | MATCH |
 | `\nRevPredHigh` | `0.55` | `0.55` | `docs/research/lab_notebook.md` |  | MATCH |
 | `\nRevPredFloor` | `0.10` | `0.10` | `docs/research/lab_notebook.md` |  | MATCH |

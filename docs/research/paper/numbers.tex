@@ -25,11 +25,16 @@
 \newcommand{\srcd}[1]{#1}
 \newcommand{\prov}[1]{#1\textsuperscript{\dag}}
 \newcommand{\notyet}[1]{\emph{not yet measured (#1)}}
+% \deferred{Mx}: owned by a later milestone and listed, with the reason, in Appendix E.
+\newcommand{\deferred}[1]{\emph{deferred to #1} (Appendix~\ref{app:deferred})}
 % \prespec{prediction}{date}{evidence}{date}: a prediction's first commit, an ancestor of its
 % evidence's first commit, with UTC author dates; audit_numbers.py checks the order and the dates.
 % \notprespec{prediction}{evidence}: the prediction's first commit is the evidence's or a later one.
 \newcommand{\prespec}[4]{\texttt{#1} (#2), before \texttt{#3} (#4)}
 \newcommand{\notprespec}[2]{\texttt{#1}, not before \texttt{#2}}
+% \rebasedprespec{prediction}{evidence}{date}: the prediction's commit precedes the evidence's only
+% in a history rewritten (committer date, UTC) after the evidence's author date.
+\newcommand{\rebasedprespec}[3]{\texttt{#1} before \texttt{#2}, rebased #3}
 
 % ---------------------------------------------------------------------------------------------
 % Dataset (M2), main
@@ -224,8 +229,8 @@
 % m4-complete: two more. PB-56 event-delay band (commit 0138099, measured on
 % 6abde44e; confirmed, see \nEventDelayBandLow) and the ADR 0028 reversal-scam range below.
 \newcommand{\nPredTotal}{\meas{seven}}
-\newcommand{\nPrespecShown}{\meas{four}}
-\newcommand{\nPrespecNotShown}{\meas{three}}
+\newcommand{\nPrespecShown}{\meas{three}}
+\newcommand{\nPrespecNotShown}{\meas{four}}
 \newcommand{\nRevPredLow}{\meas{0.15}}
 \newcommand{\nRevPredHigh}{\meas{0.55}}
 \newcommand{\nRevPredFloor}{\meas{0.10}}

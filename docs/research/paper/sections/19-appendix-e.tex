@@ -1,0 +1,35 @@
+\section{Measurements deferred to later milestones}
+\label{app:deferred}
+
+The measurements below are owned by later milestones (M10 and M11), each with the reason it is not
+measured here; the text marks each place one would appear with \emph{deferred}. The M4 follow-up
+measurements, which the full-volume run (PB-66) is to produce, and that full-volume training itself,
+are marked \emph{not yet measured} where they would appear and are listed in
+Section~\ref{sec:evaluation}. No value is estimated in place of any of them.
+
+\begin{small}
+\begin{longtable}{p{0.4\linewidth}p{0.07\linewidth}p{0.4\linewidth}}
+\toprule
+Measurement & Owner & Why it is not here \\
+\midrule
+\endhead
+Every result at the specification's \nSpecRows{}-row scale & M10 & The benchmark draws used here are
+smaller; every result is reported at its stated scale (Section~\ref{sec:dataset}). \\
+Latency of the online feature path at its \nPctlFeature{}th percentile, against the
+\nFeatureLatencyTarget{}~ms target & M10 & Latency percentiles are admissible only from a dedicated
+machine (ADR 0010); none was available. \\
+Gate-admissible latency of the scoring service, and the shadow-mode AUC difference & M10 & Measured
+only on shared development hardware, which cannot give a gate figure; no shadow comparison has run
+(ADR 0035). \\
+End-to-end decision latency and throughput at the specified load & M10 & Measured only on shared
+development hardware and recorded as not met there (ADR 0059). \\
+The latency--explainability frontier at the \nPctlTail{}th percentile, for the ensemble in the
+multi-process service, against the \nLatencyPNineNineShap{}~ms constraint & M10 & The frontier here is
+one booster in one process on a shared laptop, reported at the median only
+(Section~\ref{sec:evaluation}). \\
+One command that regenerates the dataset, trains, evaluates and builds every table and figure from a
+clean machine & M11 & Not built; each figure is reproduced by the command recorded in its evidence
+file (Section~\ref{sec:repro}). \\
+\bottomrule
+\end{longtable}
+\end{small}

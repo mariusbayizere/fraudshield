@@ -1,14 +1,14 @@
 \section{Introduction}
 \label{sec:introduction}
 
-Digital payments in East Africa include mobile money: person-to-person transfers, agent cash-in and
-cash-out, merchant payments and USSD sessions on basic handsets, alongside cards and bank transfers.
-Dal Pozzolo et al.'s practitioner account of fraud detection is drawn from card transactions
-\cite{dalpozzolo2014lessons}; the fraud documented on mobile channels includes SIM-swap
-takeover \cite{lee2020simswap} (studied there on US carriers), attacks through add-on SIM hardware
-\cite{phipps2018thinsim} and scams carried out by SMS and phone call
-\cite{razaq2021scams,dogan2025grift}, and USSD carries no device fingerprint (resolution D-04). We do
-not repeat the frequently quoted figures about the growth of mobile money fraud in the region: the
+Digital payments in East Africa include mobile money: person-to-person transfers, cash-in and
+cash-out through agents, merchant payments, and USSD sessions on basic handsets. Cards and bank
+transfers run alongside them. Dal Pozzolo et al.'s practitioner account of fraud detection is drawn
+from card transactions \cite{dalpozzolo2014lessons}. The fraud documented on mobile channels includes
+SIM-swap takeover \cite{lee2020simswap} (studied on US carriers), attacks through add-on SIM hardware
+\cite{phipps2018thinsim}, and scams carried out by SMS and phone call
+\cite{razaq2021scams,dogan2025grift}. USSD, moreover, carries no device fingerprint (resolution D-04).
+We do not repeat the frequently quoted figures about the growth of mobile money fraud in the region: the
 claims register of this project lists each of them as unverified or replaced, and this paper states
 none of them as fact (Section~\ref{sec:limitations}).
 
@@ -16,10 +16,13 @@ FraudShield is a fraud detection system built to a written specification (a soft
 specification, SRS, corrected by a register of \nResolutions{} binding resolutions; the identifiers
 this paper uses are listed in Appendix~\ref{app:identifiers}): a synchronous decision path that
 returns a decision to core banking with a server-side latency target, an explainable scoring model,
-and an analyst console. Building it required data on which the model could be trained and evaluated.
-We did not find a public, labelled East African transaction dataset, and we did not carry out a
-documented search for one (claims register, C-8), so this is not a claim that none exists. We built
-one: FraudShield-EAC, an agent-based, seeded simulator of customers, agents, merchants and
+and an analyst console (the console is not part of this paper's release). Building it required data on
+which the model could be trained and evaluated. The build specification required an agent-based,
+seeded simulator for it, and we built one without first searching for existing
+datasets. A search recorded afterwards found that public, labelled East African fraud
+datasets already existed: a real one from a payments company in Uganda and a synthetic mobile-money
+one from Makerere University (Section~\ref{sec:related}; claims register, C-8). Ours is not the first.
+It is FraudShield-EAC, an agent-based, seeded simulator of customers, agents, merchants and
 \nScenarios{} fraud scenarios across Rwanda, Kenya, Tanzania, Uganda and the Democratic Republic of
 the Congo.
 
@@ -40,8 +43,8 @@ repository and disagree with:
         single-feature ceiling alone; and the controls
         that failed, how each failure was found, and which of the resulting rules a check now
         enforces and which remain written rules.
-  \item \textbf{A detection failure on a pre-specified non-burst variant}
-        (Section~\ref{sec:generalisation}): recall \nRevRecall{} \nRevCI{} against
+  \item \textbf{A detection failure on a non-burst variant pre-specified in repository history}
+        (\prespec{656d24e}{2026-09-22}{6bc842d}{2026-09-22}; Section~\ref{sec:generalisation}): recall \nRevRecall{} \nRevCI{} against
         \nBaseVarRecall{} \nBaseVarCI{}, measured on a held-out shape. Its cause is inferred, not
         isolated: the variant differs from the base scenarios in more than one respect.
   \item \textbf{Generalisation nulls} (Section~\ref{sec:generalisation}): leave-one-country-out

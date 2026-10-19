@@ -60,18 +60,16 @@ gradient boosting; calibration; explainability; leakage; pre-specification; nega
 benchmark; none describes a real institution, customer or regulator. Every number comes from the
 repository and is checked against its evidence file at a named git reference, the tag
 \texttt{m4-complete} (commit \texttt{72e7790}) unless Appendix~\ref{app:evidence} names another; the source of each is listed in \texttt{numbers.tex} and the check in
-\texttt{number\_audit.md}. Gate ranking metrics are reported as margins over the best single
-feature on the same rows, not over chance. A statement that rests on inference rather than
+\texttt{number\_audit.md}. The specification's acceptance thresholds, for the model and for the
+service, are called \emph{gates}; gate ranking metrics are reported as margins over the best single feature on the same
+rows, not over chance. A statement that rests on inference rather than
 measurement says so in the sentence. Intervals are \nIntervalLevel{} unless stated otherwise. \textbf{Fraud on this benchmark arrives as
 multi-row incidents on one account, so test rows are not independent}: intervals marked
 account-clustered resample whole accounts; every other interval treats rows as independent and is
 narrower than it should be by an amount not measured (Sections~\ref{sec:method}
 and~\ref{sec:limitations}). Results a
 later milestone will produce are marked \emph{not yet measured}, with the milestone; no value is
-estimated in their place. \textbf{This work was produced by its sole author using AI coding agents for
-implementation, review and drafting; by the author's account every review it cites, including an external
-review of a draft, was carried out by an AI model, not a person; it has had no independent human
-review (Section~\ref{sec:disclosure}).}}}
+estimated in their place.}}
 \vfill
 \end{titlepage}
 
@@ -104,5 +102,6 @@ review (Section~\ref{sec:disclosure}).}}}
 \input{sections/16-appendix-b}
 \input{sections/17-appendix-c}
 \input{sections/18-appendix-d}
+\input{sections/19-appendix-e}
 
 \end{document}

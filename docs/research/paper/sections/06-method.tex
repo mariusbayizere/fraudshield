@@ -29,7 +29,7 @@ second on the development machine (PB-67); no document records why \nTrainUsed{}
 size. Every figure in
 Section~\ref{sec:evaluation} is at that training volume except the learning curve of
 Section~\ref{sec:volume}, which reaches \nLcTrainD{} rows; full-volume training is
-\notyet{M10}.
+\notyet{M4 follow-up}.
 
 \subsection{Explanations}
 
@@ -41,12 +41,10 @@ monotone but not additive. The specification requires plain-language explanation
 deterministic, localised templates per feature and never from a language model. \textbf{No such
 template exists.} The scorer emits a template key per feature, but no catalogue of wording has been
 written (PB-132): the owner decided that wording analysts act on is a domain question, and that it is
-not to be written by the engineer. What the analyst console shows instead is a feature table: for each
-alert, every feature's contribution ranked by effect, with the feature's name, its raw value and its
-signed effect (ADR 0084). That table has run only against responses generated from the interface
-contract, because the analyst API that serves it does not yet exist, and whether an analyst can act on
-it is untested: no analyst has used it. PB-132 and ADR 0084 are defined on the analyst console's
-branch, which is not yet merged (commit \texttt{b1d76e7}).
+not to be written by the engineer. The analyst console, which would present explanations, \textbf{is
+not part of this paper's release and is not evaluated}: its implementation is on a separate branch that
+is not merged. ADR 0084 records its design decision to show a ranked table of feature contributions in
+place of templated text; nothing in this paper depends on that table, and no analyst has used it.
 
 \subsection{The diagnostic battery}
 

@@ -53,7 +53,7 @@ the expected calibration error over \nEceBins{} equal-mass bins is \nGateECE{}. 
 \nGateTotal{}: the other \nGateUnmeasured{}, inference latency at the \nPctlTail{}th percentile and the
 shadow-mode AUC delta, need the scoring service. Its latency has been measured only on shared
 development hardware, which cannot give a gate figure, and no shadow comparison has produced an AUC
-delta (ADR 0035); both are \notyet{M10}.
+delta (ADR 0035); both are \deferred{M10}.
 
 The recall miss is recorded as a finding at this training volume, with the threshold unchanged and
 nothing tuned on the test period (ADR 0031). It holds for the flag threshold and for every
@@ -217,7 +217,8 @@ Training rows (fraud) & Recall at \nFlagThreshold{}, seed 1 & Over \nSeeds{} see
 \end{tabular}
 \end{table}
 
-The rule pre-specified in repository history (Table~\ref{tab:predictions}) was that the miss is a property of the benchmark and model if the step from
+The rule the notebook records as written before the runs (its commit was rebased after the outcome,
+so the history cannot confirm that order; Table~\ref{tab:predictions}) was that the miss is a property of the benchmark and model if the step from
 \nLcTrainC{} to \nLcTrainD{} rows gains less than the half-width of the largest size's interval and
 that interval's upper bound stays below \nTargetRecall{}. Both hold: the step is \nLcStepCD{} at seed 1
 (\nLcSeedStepCD{} on the means over seeds), and the largest size's interval, \nLcRecallciD{}, ends
@@ -292,8 +293,8 @@ its own). \nGroupsAboveCeilingCap{} groups reach at least \nGroupGeographic{} al
 \label{fig:groups}
 \end{figure}
 
-\textbf{The diagnostic model is undertrained for this purpose, and that bounds every ablation
-claim.} The velocity group alone scores \nGroupVelocity{}, below one of its own members,
+\textbf{The diagnostic model is untuned, and overfit where it was measured; that bounds every
+ablation claim.} The velocity group alone scores \nGroupVelocity{}, below one of its own members,
 \texttt{velocity\_ratio\_1h\_vs\_30d}, which ranks the same test rows at \nVelRatioAlone{} on its
 own. Refitting the velocity-only booster and reading it at each boosting round shows why: its test
 AUC peaks at \nVelPeak{} near round \nVelPeakRound{} of those read and falls to \nVelAtRounds{} by
@@ -409,7 +410,7 @@ the data, and only this benchmark was measured, so that inference is not tested.
 The result needs to be kept in proportion. Every configuration explains a decision in a few
 milliseconds at the median on the development laptop. That is the cost of one booster's
 explanation in one process; the serving path's latency against the specification's budget is
-\notyet{M10}, so whether explanation cost binds at throughput or at the latency of a single request
+\deferred{M10}, so whether explanation cost binds at throughput or at the latency of a single request
 is not established here. The \nFrontRatio-fold ratio depends on the grid: it is measured from the cheapest configuration tried, and a different smallest configuration
 would give a different ratio; the growth with trees and depth is the finding, not the number. And
 it is one machine's median. If the growth holds on serving hardware, then on data like this the explanation
@@ -420,7 +421,7 @@ percentile shows a \emph{negative} explanation cost, which is impossible: explai
 faster than not explaining. We attribute the tail on this shared machine to scheduler jitter rather than
 model complexity; the jitter itself was not measured. The \nLatencyPNineNineShap{}~ms constraint
 therefore cannot be applied from this run; the \nPctlTail{}th-percentile frontier on a dedicated machine is
-\notyet{M10}. The run is also limited to one model family (not the ensemble) and one process (not
+\deferred{M10}. The run is also limited to one model family (not the ensemble) and one process (not
 the specified multi-process service), and it pays the SHAP cost on every row, whereas in serving it
 is paid only on flagged transactions.
 
@@ -433,8 +434,12 @@ is paid only on flagged transactions.
         reviews required: \notyet{M4 follow-up}.
   \item Leave-one-fraud-type-out and the value of Isolation Forest routing for novelty:
         \notyet{M4 follow-up}.
+  \item Training on the full training period rather than a sample of it (Section~\ref{sec:method}):
+        \notyet{M4 follow-up}.
+  \item The fairness report the specification requires (Section~\ref{sec:ethics}):
+        \notyet{M4 follow-up}.
     \item Shadow-mode AUC delta and gate-admissible scoring latency of the serving path: measured only
-        on shared development hardware or not at all (ADR 0035), \notyet{M10}.
+        on shared development hardware or not at all (ADR 0035), \deferred{M10}.
   \item End-to-end decision latency and throughput at the specified load: measured only on shared
-        development hardware, recorded as not met there (ADR 0059), \notyet{M10}.
+        development hardware, recorded as not met there (ADR 0059), \deferred{M10}.
 \end{itemize}

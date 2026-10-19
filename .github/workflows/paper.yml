@@ -57,6 +57,9 @@ jobs:
         run: python3 docs/research/paper/appendix_features.py --check
       - name: Figures match numbers.tex
         run: python3 docs/research/paper/figures/make_figures.py --check
+      - name: The per-table reproduction map matches the paper's tables and sources
+        working-directory: docs/research/paper
+        run: python3 table_sources.py --check
 
   compile:
     name: the paper compiles with no undefined references or overfull lines
