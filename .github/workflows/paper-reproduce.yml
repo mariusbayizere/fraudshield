@@ -1,0 +1,94 @@
+# Reproduce the paper's model results from scratch and keep their per-row scores (M11, PB-142).
+#
+# Manual only: it regenerates the evaluation draw d8083dbc with the generator at m4-complete,
+# rebuilds the gate's and the battery's feature caches with the m4-complete pipeline, refits the
+# declared gate model and the diagnostic battery from them, checks the reproduced headline figures
+# against the published evidence, and writes account-clustered intervals and every per-row score.
+# A laptop shared with other milestones cannot hold the two cache builds; a runner can. Every read
+# of the test period goes to this checkout's test-set access log, which is uploaded with the rest.
+name: paper-reproduce
+
+# A dispatched workflow must exist on the default branch, so a push to a reproduce/* branch starts
+# it as well; an ordinary push never does (a multi-hour run, CI minutes).
+on:
+  workflow_dispatch:
+  push:
+    branches: ["reproduce/**"]
+
+
+permissions:
+  contents: read
+
+env:
+  UV_VERSION: "0.12.15"
+  PYTHON_VERSION: "3.12.14"
+  SEED: "20260917"
+  # Every test-period read of this run goes to a copy of the repository's access log, so the
+  # checkout stays clean (the evidence stamp records its state) and the copy is uploaded to be
+  # committed with the evidence.
+  FS_TEST_ACCESS_LOG: ${{ github.workspace }}/../test_set_access.jsonl
+
+jobs:
+  reproduce:
+    name: regenerate d8083dbc, refit the gate and battery, cluster the intervals
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Generator, features and models as they stood at m4-complete
+        run: |
+          cp docs/benchmarks/test_set_access.jsonl "$FS_TEST_ACCESS_LOG"
+          git worktree add "$RUNNER_TEMP/m4" m4-complete
+          cd "$RUNNER_TEMP/m4"
+          uv sync --package fraudshield-dataset --package fraudshield-ml --locked
+          {
+            echo "### Runner"
+            echo "- CPU: $(nproc) cores, $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | xargs)"
+            echo "- Memory: $(free -h | awk '/^Mem:/ {print $2}')"
+            echo "- m4-complete: $(git rev-parse HEAD)"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Regenerate the evaluation draw
+        working-directory: ${{ runner.temp }}/m4
+        run: |
+          uv run fs-dataset generate --output "$RUNNER_TEMP/bench1m" --rows 1000000 --seed "$SEED"
+          uv run fs-dataset packs --output "$RUNNER_TEMP/packs.json"
+          uv run fs-dataset split "$RUNNER_TEMP/bench1m" --output "$RUNNER_TEMP/split.json"
+      - name: The draw is d8083dbc
+        working-directory: ${{ runner.temp }}/m4
+        run: |
+          fp=$(uv run python -c "import sys; from fraudshield_dataset.fingerprint import dataset_fingerprint as f; from pathlib import Path; print(f(Path(sys.argv[1])))" "$RUNNER_TEMP/bench1m")
+          echo "fingerprint $fp"
+          test "$fp" = "d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32"
+          echo "FINGERPRINT=$fp" >> "$GITHUB_ENV"
+      - name: Build the gate's and the battery's feature caches (m4-complete commands)
+        working-directory: ${{ runner.temp }}/m4
+        run: |
+          common=(--packs "$RUNNER_TEMP/packs.json" --split "$RUNNER_TEMP/split.json" --corpus-rows 400000 --train-rows 30000 --test-rows 101909 --calibration-rows 20000)
+          uv run fs-features evaluate "$RUNNER_TEMP/bench1m" "${common[@]}" --validation-rows 20000 --cache "$RUNNER_TEMP/features_gate.parquet" > "$RUNNER_TEMP/evaluate_gate.txt"
+          uv run fs-features evaluate "$RUNNER_TEMP/bench1m" "${common[@]}" --cache "$RUNNER_TEMP/features_full.parquet" > "$RUNNER_TEMP/evaluate_full.txt"
+          sha256sum "$RUNNER_TEMP"/features_*.parquet | tee "$RUNNER_TEMP/caches.sha256"
+      - name: Refit, reproduce, and cluster the intervals
+        working-directory: ${{ runner.temp }}/m4
+        run: |
+          mkdir -p "$RUNNER_TEMP/out"
+          uv run --package fraudshield-ml python "$GITHUB_WORKSPACE/docs/research/paper/evidence/clustered_intervals.py" \
+            --gate-cache "$RUNNER_TEMP/features_gate.parquet" \
+            --battery-cache "$RUNNER_TEMP/features_full.parquet" \
+            --fingerprint "$FINGERPRINT" \
+            --scores-out "$RUNNER_TEMP/out" > "$RUNNER_TEMP/out/clustered_intervals_d8083dbc.txt"
+          cat "$RUNNER_TEMP/out/clustered_intervals_d8083dbc.txt" >> "$GITHUB_STEP_SUMMARY"
+          cp "$RUNNER_TEMP"/evaluate_*.txt "$RUNNER_TEMP/caches.sha256" "$RUNNER_TEMP/out/"
+          cp "$FS_TEST_ACCESS_LOG" "$RUNNER_TEMP/out/test_set_access.jsonl"
+          test -z "$(git -C "$GITHUB_WORKSPACE" status --porcelain)"
+      - name: Upload the evidence, the per-row scores and the access log
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: paper-reproduce
+          path: ${{ runner.temp }}/out/
