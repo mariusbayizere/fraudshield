@@ -76,6 +76,11 @@
     "shown_other": "{{count}} alertes affichées",
     "loadMore": "Afficher plus"
   },
+  "anomalies": {
+    "intro": "Transactions inhabituelles que les modèles de fraude n'ont pas signalées, relevées par le seul détecteur d'anomalies. Elles ne sont pas retenues et n'ont pas de délai d'examen.",
+    "emptyTitle": "Aucune anomalie à examiner",
+    "emptyDescription": "Les transactions que le détecteur d'anomalies signale apparaissent ici."
+  },
   "detail": {
     "title": "Alerte",
     "label": "Enquête sur {{name}}",

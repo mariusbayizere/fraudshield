@@ -241,8 +241,8 @@ no copy is in it, and `examplesDrift.test.ts` fails if one returns.
 | 1 | Alert feed | `/alerts` | listAlerts, getDashboardStats | built, under review |
 | 2 | Alert detail and SHAP | `/alerts/$alertId` | getAlert, getAlertExplanation, getScoringResult | built, under review |
 | 3 | Decision panel | in the detail | decideAlert, undoAlertDecision, escalateAlert | built, under review |
-| 4 | Account context | in the detail | listAccountTransactions, getBehaviourProfile, getAccountNetwork | built, under review |
-| 5 | Anomalies | `/anomalies` | listAlerts (queue=anomaly) | not started |
+| 4 | Account context | in the detail | listAccountTransactions, getBehaviourProfile, getAccountNetwork | built, reviewed |
+| 5 | Anomalies | `/anomalies` | listAlerts (queue=anomaly) | built, under review |
 | 6 | Escalations | `/escalations` | listAlerts (queue=escalated) | not started |
 | 7 | Search | `/search` | listAlerts (identifiers, amounts, dates) | not started |
 | 8 | My performance | `/me/performance` | getMyPerformance | not started |
@@ -484,3 +484,36 @@ the arrow keys, and every account and link in two tables.
   token was said to be drawn once but was drawn twice (now drawn once and tested); accounts in a
   wide sector were spread far from their counterparty (now a node's room apart, centred on it);
   the French label repeated itself.
+
+**Owner decisions on screen 4 (2026-10-19).** ADR 0085 accepted on ADR 0084's terms: sufficient
+for the content, not equivalent to the named charts; no new library. The comparison attribute
+names are PB-132's gap and its owner's, recorded in both rows. The memory floor is now a gate a
+heavy step runs through (`tools/bin/mem-gate`), not a reading beside it.
+
+**Screen 5, the anomaly queue** (`/anomalies`, D-10's point 3). Isolation-Forest-only alerts, which
+hold nothing and have no timer: the feed's page, cards, filters and drawer over
+`listAlerts(queue=anomaly)`, with a line saying what the queue holds. No countdown, even if the
+server sends a deadline (only a MEDIUM alert counts down). No tier filter, since every alert here is
+ANOMALY; a tier a link carried still shows as a removable filter. No figures: they are the
+standard queue's header, and their HIGH and MEDIUM counts toggle a tier filter this queue does not have (whether `reviewed_today` counts
+anomaly reviews is put to M8B, item 9). The drawer opens at `/anomalies/$alertId` beside
+the queue and closes back to it, filters kept, focus on the card. The feed and the drawer now take
+their queue from one place (`queueView.ts`) instead of assuming `/alerts`.
+
+- **D-10's row** stays as M6 left it (DONE on backend evidence). The screen adds a note, not
+  evidence: it runs against mocks. The development mock now answers `queue=anomaly` with the
+  example alerts as ANOMALY with no deadline, as the contract defines the queue.
+- **Put to M8B (item 9):** what `sort=priority` means in this queue, and `anomaly_score` on
+  `AlertSummary`. Until then the queue is in the server's order, and each card's gauge shows a low
+  fraud probability, not why the alert is there.
+- **Deletion checks:** 11 mutations, each failing a test: the queue sent, the intro, the absent
+  figures and tier filter (and the standard feed keeping both), the card's link, the drawer closing
+  to its own queue and replacing its history entry, focus returning to the card, the empty state,
+  and a decision closing the drawer. The feed, drawer, decision, shell and sign-in tests pass
+  unchanged.
+- **Independent review: APPROVED_WITH_MINORS; all fixed.** The reason given for leaving out the
+  figures was untrue (they are not all the standard queue's; now stated as the header's tier
+  counts, and `reviewed_today`'s scope is put to M8B); the development mock showed an ANOMALY card
+  at 0.71 whose drawer opened as MEDIUM with a countdown (now below 0.60, and ANOMALY in the
+  drawer too); no test decided from the anomaly drawer, closed it on Escape or tried Back (now
+  three); a Swahili agreement.

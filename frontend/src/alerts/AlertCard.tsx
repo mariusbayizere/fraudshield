@@ -26,6 +26,7 @@ import type { RiskTier } from '../design-system/tokens';
 import { formatClock } from '../region/region';
 import { useRegion } from '../region/RegionContext';
 import { useFormatLocale } from '../region/formatLocale';
+import type { FeedPath } from './queueView';
 
 const RouterLink = createLink(Link);
 
@@ -102,7 +103,16 @@ function ReasonPill({ reason }: { reason: ShapContribution }) {
  * amount and currency, channel, masked account name, merchant, time, and the top three SHAP
  * pills. A MEDIUM alert with a review deadline also counts down to it (FR-04-02).
  */
-export function AlertCard({ alert, search }: { alert: AlertSummary; search: AlertSearch }) {
+export function AlertCard({
+  alert,
+  search,
+  base,
+}: {
+  alert: AlertSummary;
+  search: AlertSearch;
+  /** The queue the card is listed in; its drawer opens there, beside the same list. */
+  base: FeedPath;
+}) {
   const { t } = useTranslation('alerts');
   const { region } = useRegion();
   const locale = useFormatLocale();
@@ -118,7 +128,7 @@ export function AlertCard({ alert, search }: { alert: AlertSummary; search: Aler
         <Box sx={{ minWidth: 0, flexGrow: 1 }}>
           <Typography variant="h6" component="h2">
             <RouterLink
-              to="/alerts/$alertId"
+              to={`${base}/$alertId`}
               params={{ alertId: alert.alert_id }}
               search={search}
               underline="hover"

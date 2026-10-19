@@ -74,6 +74,11 @@
     "shown_other": "Imenyesha {{count}} rigaragara",
     "loadMore": "Erekana andi"
   },
+  "anomalies": {
+    "intro": "Ibikorwa bidasanzwe imiterere y'uburiganya itagaragaje, byagaragajwe n'igikoresho gitahura ibidasanzwe cyonyine. Ntibihagarikwa kandi nta gihe ntarengwa cyo kubisuzuma gifite.",
+    "emptyTitle": "Nta bidasanzwe byo gusuzuma",
+    "emptyDescription": "Ibikorwa igikoresho gitahura ibidasanzwe kigaragaje biza hano."
+  },
   "detail": {
     "title": "Imenyesha",
     "label": "Igenzura rya {{name}}",

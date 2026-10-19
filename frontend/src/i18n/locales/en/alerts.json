@@ -74,6 +74,11 @@
     "shown_other": "{{count}} alerts shown",
     "loadMore": "Load more"
   },
+  "anomalies": {
+    "intro": "Unusual transactions the fraud models did not flag, raised by the anomaly detector alone. They are not held and have no review timer.",
+    "emptyTitle": "No anomalies to review",
+    "emptyDescription": "Transactions the anomaly detector flags appear here."
+  },
   "detail": {
     "title": "Alert",
     "label": "Investigation of {{name}}",

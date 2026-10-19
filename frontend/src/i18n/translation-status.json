@@ -363,7 +363,10 @@
       "network.transactions": "machine_draft",
       "network.loading": "machine_draft",
       "network.error": "machine_draft",
-      "behaviour.empty": "machine_draft"
+      "behaviour.empty": "machine_draft",
+      "anomalies.intro": "machine_draft",
+      "anomalies.emptyTitle": "machine_draft",
+      "anomalies.emptyDescription": "machine_draft"
     }
   },
   "fr": {
@@ -739,7 +742,10 @@
       "network.transactions": "machine_draft",
       "network.loading": "machine_draft",
       "network.error": "machine_draft",
-      "behaviour.empty": "machine_draft"
+      "behaviour.empty": "machine_draft",
+      "anomalies.intro": "machine_draft",
+      "anomalies.emptyTitle": "machine_draft",
+      "anomalies.emptyDescription": "machine_draft"
     }
   },
   "sw": {
@@ -1106,7 +1112,10 @@
       "network.transactions": "machine_draft",
       "network.loading": "machine_draft",
       "network.error": "machine_draft",
-      "behaviour.empty": "machine_draft"
+      "behaviour.empty": "machine_draft",
+      "anomalies.intro": "machine_draft",
+      "anomalies.emptyTitle": "machine_draft",
+      "anomalies.emptyDescription": "machine_draft"
     }
   }
 }

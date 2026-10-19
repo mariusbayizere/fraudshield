@@ -61,6 +61,18 @@ const session: TokenResponse = {
  * page, so "Load more" can be exercised.
  */
 const alertPage = examples.AlertPage[0] as AlertPage;
+// The contract defines queue=anomaly as Isolation-Forest-only alerts (D-10): ANOMALY, the ensemble
+// below 0.60, no timer. The examples are MEDIUM, so the anomaly queue lists them recast as that,
+// under ids of their own, and the drawer answers those ids with the same recast alert.
+const asAnomaly = <T extends AlertSummary>(alert: T): T => ({
+  ...alert,
+  alert_id: `a${alert.alert_id.slice(1)}`,
+  tier: 'ANOMALY',
+  fraud_probability: 0.22,
+  review_deadline_at: null,
+});
+const anomalyPage: AlertPage = { ...alertPage, items: alertPage.items.map(asAnomaly) };
+const anomalyIds = new Set(anomalyPage.items.map((item) => item.alert_id));
 const lastAlertPage: AlertPage = { items: [], next_cursor: null };
 const dashboardStats = examples.DashboardStats[0] as DashboardStats;
 const alertDetail = examples.AlertDetail[0] as AlertDetail;
@@ -76,18 +88,22 @@ const network = examples.AccountNetwork[0] as AccountNetwork;
 
 /** Development-only responses, typed by the contract, for operations the console reads. */
 export const handlers = [
-  http.get('/api/v1/alerts', ({ request }) =>
-    HttpResponse.json(new URL(request.url).searchParams.has('cursor') ? lastAlertPage : alertPage, {
-      headers: { 'x-mock': MOCK_MARKER },
-    }),
-  ),
+  http.get('/api/v1/alerts', ({ request }) => {
+    const query = new URL(request.url).searchParams;
+    if (query.has('cursor')) {
+      return HttpResponse.json(lastAlertPage, { headers: { 'x-mock': MOCK_MARKER } });
+    }
+    const page = query.get('queue') === 'anomaly' ? anomalyPage : alertPage;
+    return HttpResponse.json(page, { headers: { 'x-mock': MOCK_MARKER } });
+  }),
   // Any alert id opens the example alert; the drawer's data comes from the same examples.
-  http.get('/api/v1/alerts/:alertId', ({ params }) =>
-    HttpResponse.json(
-      { ...alertDetail, alert_id: String(params['alertId']) },
-      { headers: { 'x-mock': MOCK_MARKER } },
-    ),
-  ),
+  http.get('/api/v1/alerts/:alertId', ({ params }) => {
+    const id = String(params['alertId']);
+    const detail = { ...alertDetail, alert_id: id };
+    return HttpResponse.json(anomalyIds.has(id) ? { ...asAnomaly(detail), alert_id: id } : detail, {
+      headers: { 'x-mock': MOCK_MARKER },
+    });
+  }),
   // The example's undo_until is a fixed past instant; the mock gives D-44's 5 s from now, so the
   // Undo can be tried in development.
   http.post('/api/v1/alerts/:alertId/decisions', () =>

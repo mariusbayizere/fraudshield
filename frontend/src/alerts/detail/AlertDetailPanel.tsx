@@ -10,12 +10,13 @@ import Tabs from '@mui/material/Tabs';
 import Toolbar from '@mui/material/Toolbar';
 import Typography from '@mui/material/Typography';
 import useMediaQuery from '@mui/material/useMediaQuery';
-import { getRouteApi } from '@tanstack/react-router';
+import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AlertSearch } from '../../app/alertSearch';
 import { EmptyState, ErrorState } from '../../design-system/components/ScreenStates/ScreenStates';
 import { DRAWER_WIDTH } from '../layout';
+import type { FeedPath } from '../queueView';
 import { ApiError } from '../queries';
 import { useBehaviour, useHistory, useNetwork } from './accountQueries';
 import { BehaviourTab } from './BehaviourTab';
@@ -25,9 +26,6 @@ import { useAlertDetail, useExplanation, useScoringResult } from './queries';
 import { DecisionPanel } from './DecisionPanel';
 import { ShapChart } from './ShapChart';
 import { SummaryTab } from './SummaryTab';
-
-const feedRoute = getRouteApi('/shell/alerts');
-const detailRoute = getRouteApi('/shell/alerts/$alertId');
 
 /** A link's path, decoded; a malformed escape in some other link must not break the lookup. */
 function pathOf(link: HTMLAnchorElement): string {
@@ -43,12 +41,12 @@ function pathOf(link: HTMLAnchorElement): string {
  * alert, or the page's main region when no card shows it (a shared link). Only when focus was
  * lost with the drawer, never taken from somewhere the user moved it to.
  */
-function returnFocus(alertId: string) {
+function returnFocus(base: FeedPath, alertId: string) {
   const active = document.activeElement;
   if (active !== null && active !== document.body && active.isConnected) return;
   // Compared as paths, so a link carrying filters matches.
   const opener = [...document.querySelectorAll<HTMLAnchorElement>('main a[href]')].find(
-    (link) => pathOf(link) === `/alerts/${alertId}`,
+    (link) => pathOf(link) === `${base}/${alertId}`,
   );
   // Without scrolling: when the drawer switches alerts, the next heading takes focus at once.
   (opener ?? document.getElementById('main'))?.focus({ preventScroll: true });
@@ -142,18 +140,19 @@ function Shell({
 }
 
 /**
- * The investigation drawer at /alerts/$alertId (UX-DASH-04, UX-ROLE-AN-02, FR-04-05 to 08): the
+ * The investigation drawer at `${base}/$alertId` (UX-DASH-04, UX-ROLE-AN-02, FR-04-05 to 08): the
  * alert's summary, its SHAP explanation and its account's history, behaviour and network, over
- * the feed, which keeps its filters. Each tab but the summary asks for its data when opened. Built
+ * the queue it was opened from, which keeps its filters. Each tab but the summary asks for its data when opened. Built
  * against mocks of getAlert, getScoringResult, getAlertExplanation, listAccountTransactions,
  * getBehaviourProfile and getAccountNetwork, which only M8B implements.
  */
-export default function AlertDetailPanel() {
+function InvestigationDrawer({ base }: { base: FeedPath }) {
   const { t } = useTranslation('alerts');
-  // As for the feed's search, the route tree's generic sections leave these types open.
-  const { alertId }: { alertId: string } = detailRoute.useParams();
-  const search: AlertSearch = feedRoute.useSearch();
-  const navigate = feedRoute.useNavigate();
+  // As for the queue's search, the route tree's generic sections leave these types open; both
+  // drawer routes are `${base}/$alertId` under a route that validates alertSearch.
+  const { alertId }: { alertId: string } = useParams({ strict: false });
+  const search: AlertSearch = useSearch({ strict: false });
+  const navigate = useNavigate();
   const wide = useMediaQuery((theme) => theme.breakpoints.up('lg'), { noSsr: true });
   // MOB-COMP-08's phone view is below 600 px (xs), not everything below the drawer's breakpoint.
   const phone = useMediaQuery((theme) => theme.breakpoints.down('sm'), { noSsr: true });
@@ -178,7 +177,7 @@ export default function AlertDetailPanel() {
 
   // Closing replaces the drawer's history entry, so Back does not reopen it.
   const close = () => {
-    void navigate({ to: '/alerts', search, replace: true });
+    void navigate({ to: base, search, replace: true });
   };
 
   // Focus moves to the alert's heading when it opens, so a keyboard or screen-reader user lands
@@ -187,9 +186,9 @@ export default function AlertDetailPanel() {
   useEffect(() => {
     heading.current?.focus();
     return () => {
-      returnFocus(alertId);
+      returnFocus(base, alertId);
     };
-  }, [alertId]);
+  }, [base, alertId]);
 
   const title = alert.data?.masked_account_name ?? t('detail.title');
 
@@ -294,4 +293,14 @@ export default function AlertDetailPanel() {
       {body}
     </Shell>
   );
+}
+
+/** The drawer beside the standard feed, at /alerts/$alertId. */
+export default function AlertDetailPanel() {
+  return <InvestigationDrawer base="/alerts" />;
+}
+
+/** The same drawer beside the anomaly queue, at /anomalies/$alertId (D-10). */
+export function AnomalyDetailPanel() {
+  return <InvestigationDrawer base="/anomalies" />;
 }

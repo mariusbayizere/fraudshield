@@ -17,6 +17,14 @@ const rootRoute = createRootRoute();
 const SectionPage = lazyRouteComponent(() => import('./pages/SectionPage'));
 const AlertFeedPage = lazyRouteComponent(() => import('../alerts/AlertFeedPage'));
 const AlertDetailPanel = lazyRouteComponent(() => import('../alerts/detail/AlertDetailPanel'));
+const AnomalyQueuePage = lazyRouteComponent(
+  () => import('../alerts/AlertFeedPage'),
+  'AnomalyQueuePage',
+);
+const AnomalyDetailPanel = lazyRouteComponent(
+  () => import('../alerts/detail/AlertDetailPanel'),
+  'AnomalyDetailPanel',
+);
 const AppShell = lazyRouteComponent(() => import('./AppShell'), 'AppShell');
 const LoginPage = lazyRouteComponent(() => import('../auth/LoginPage'));
 const RegisterPage = lazyRouteComponent(() => import('../auth/registration/RegisterPage'));
@@ -50,7 +58,14 @@ const alerts = createRoute({
   validateSearch: alertSearch,
   component: AlertFeedPage,
 });
-const builtSections = new Set(['/alerts']);
+// D-10's anomaly queue: the same page, cards and drawer as the feed, over queue=anomaly.
+const anomalies = createRoute({
+  getParentRoute: () => shell,
+  path: '/anomalies',
+  validateSearch: alertSearch,
+  component: AnomalyQueuePage,
+});
+const builtSections = new Set(['/alerts', '/anomalies']);
 
 const sections: AnyRoute[] = SECTIONS.filter((section) => !builtSections.has(section.path)).map(
   (section) =>
@@ -67,6 +82,12 @@ const alertDetail = createRoute({
   getParentRoute: () => alerts,
   path: '$alertId',
   component: AlertDetailPanel,
+});
+
+const anomalyDetail = createRoute({
+  getParentRoute: () => anomalies,
+  path: '$alertId',
+  component: AnomalyDetailPanel,
 });
 
 const login = createRoute({
@@ -97,7 +118,12 @@ const publicPages: AnyRoute[] = PUBLIC_PAGES.filter((page) => !built.has(page.pa
 );
 
 export const routeTree = rootRoute.addChildren([
-  shell.addChildren([index, alerts.addChildren([alertDetail]), ...sections]),
+  shell.addChildren([
+    index,
+    alerts.addChildren([alertDetail]),
+    anomalies.addChildren([anomalyDetail]),
+    ...sections,
+  ]),
   login,
   registerRoute,
   ...authPages,

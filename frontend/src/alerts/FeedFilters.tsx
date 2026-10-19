@@ -143,21 +143,29 @@ export function FeedFilters({
       spacing={1.5}
       sx={{ mb: 2 }}
     >
-      <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
-        <Typography component="span" variant="body2" color="text.secondary">
-          {t('filters.tier')}
-        </Typography>
-        {tiers.map((tier) => (
-          <ToggleChip
-            key={tier}
-            label={t(`tier.${tier}`)}
-            pressed={search.tier?.includes(tier) ?? false}
-            onToggle={() => {
-              set({ tier: toggled(search.tier, tier) });
-            }}
-          />
-        ))}
-      </Stack>
+      {/* A queue whose alerts all have one tier offers no tier filter. */}
+      {tiers.length === 0 ? null : (
+        <Stack
+          direction="row"
+          spacing={1}
+          useFlexGap
+          sx={{ flexWrap: 'wrap', alignItems: 'center' }}
+        >
+          <Typography component="span" variant="body2" color="text.secondary">
+            {t('filters.tier')}
+          </Typography>
+          {tiers.map((tier) => (
+            <ToggleChip
+              key={tier}
+              label={t(`tier.${tier}`)}
+              pressed={search.tier?.includes(tier) ?? false}
+              onToggle={() => {
+                set({ tier: toggled(search.tier, tier) });
+              }}
+            />
+          ))}
+        </Stack>
+      )}
       <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
         <Typography component="span" variant="body2" color="text.secondary">
           {t('filters.channel')}

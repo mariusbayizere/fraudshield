@@ -95,6 +95,17 @@ implementation; M8's console does not build against any of them until both exist
    tokens, its (source, target) pairs, the profile's comparison attributes or channels, or a
    history's transaction ids are distinct (no `uniqueItems`, no stated key). The console keeps every
    row it is sent and draws a repeated network token once, where it first appears. The contract should state the keys.
+9. **How is the anomaly queue ordered, and why is each alert in it?** `queue=anomaly` lists
+   Isolation-Forest-only alerts (D-10), so every one is ANOMALY and has an ensemble score below
+   0.60. `sort=priority` is defined as HIGH first, then fraud probability descending: in this
+   queue that orders by the supervised score, which is low for all of them by construction, and
+   not by how anomalous each is. And `AlertSummary` has no `anomaly_score` (only `AlertDetail`
+   does), so a card cannot show why it is in the queue, and its gauge shows the low fraud
+   probability. The contract should say what `priority` means for this queue (the anomaly score,
+   descending, would be the natural reading) and carry `anomaly_score` on `AlertSummary`. Until
+   then the console shows the server's order and the card as it is (screen 5). Related: the
+   contract does not say whether `DashboardStats.reviewed_today` (and the average review time)
+   counts reviews of anomaly alerts; the anomaly queue shows no figures meanwhile.
 
 ## Before starting
 

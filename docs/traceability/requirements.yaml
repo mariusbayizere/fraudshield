@@ -5134,7 +5134,11 @@ requirements:
   deviations:
   - docs/adr/0061-decision-engine-semantics.md
   notes: 'M6 (2026-09-24): anomaly routing without a hold, and a per-channel timeout policy for MEDIUM
-    holds.'
+    holds. M8 screen 5 (2026-10-19): the console''s side of point 3, the anomaly queue at /anomalies (listAlerts
+    queue=anomaly), with the feed''s cards, filters and drawer, no countdown, no tier filter and no figures.
+    Built against mocks of listAlerts (M8B), which are not evidence; this row''s status rests on M6''s
+    backend evidence, not on the screen. The queue''s order and the cards'' missing anomaly score are
+    put to M8B (M8B_updates.md, item 9).'
 - id: D-11
   section: Build prompt Part B defect register
   title: Shadow "within 1%" is ambiguous and labels are delayed.

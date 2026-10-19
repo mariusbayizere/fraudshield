@@ -74,6 +74,11 @@
     "shown_other": "Arifa {{count}} zimeonyeshwa",
     "loadMore": "Pakia zaidi"
   },
+  "anomalies": {
+    "intro": "Miamala isiyo ya kawaida ambayo miundo ya udanganyifu haikuiripoti, iliyoibuliwa na kigunduzi cha hali isiyo ya kawaida pekee. Haizuiwi na haina muda wa ukaguzi.",
+    "emptyTitle": "Hakuna hali zisizo za kawaida za kukagua",
+    "emptyDescription": "Miamala ambayo kigunduzi cha hali isiyo ya kawaida kinairipoti huonekana hapa."
+  },
   "detail": {
     "title": "Arifa",
     "label": "Uchunguzi wa {{name}}",
