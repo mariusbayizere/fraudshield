@@ -143,7 +143,12 @@ the known counterparty is not.
 So the recipient is **the project's modelling choice**, and the variant departs from the documented
 scam in that respect. This does not reopen the pre-registration: the variant, its prediction and
 its result stand as committed. It changes what may be claimed from them. The result is a measurement on a
-variant built to remove both burst structure and counterparty novelty; it says nothing about
+variant built to remove burst structure and, through the payee list, counterparty novelty; it says nothing about
 the documented form, and the paper states the choice as the project's in the sentence that
-introduces it (owner, 2026-10-19). Whether `counterparty_is_new_for_account` is actually false on
-the variant's rows is measured separately (`docs/research/paper/evidence/reversal_novelty_d8083dbc.txt`).
+introduces it (owner, 2026-10-19). It is not false on all of them. Measured on the regenerated draw with complete
+history (`docs/research/paper/evidence/reversal_novelty_d8083dbc.txt`),
+`counterparty_is_new_for_account` is true on 19 of the 66 rows scored as fraud: their payee was on
+the list but had never been paid. The variant removes burst structure from every row and
+counterparty novelty from 47 of the 66, so "a known counterparty" does not hold even as a property
+of the variant for those 19 rows. The test that checks the variant asserts payee-list membership,
+which is weaker than the feature.

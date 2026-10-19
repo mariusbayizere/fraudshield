@@ -5,7 +5,8 @@ USSD, agent banking, card, online and bank transfer, across \nCountries{} countr
 and evaluate a fraud detection system. Its clearest negative result is a pre-registered variant built
 on a scam documented among Kenyan mobile-money users: a single victim-initiated transfer, which we
 read the sources as sending to a new counterparty and which our variant, by our own choice, sends to
-a counterparty on the victim's payee list. A diagnostic XGBoost model catches it at \nRevRecall{}
+a counterparty on the victim's payee list; \nRevNovelScored{} of its \nRevFraud{} scored rows still go
+to a payee the account had never paid. A diagnostic XGBoost model catches it at \nRevRecall{}
 \nRevCI{}, against \nBaseVarRecall{} \nBaseVarCI{} for the base scenarios; why it misses the
 variant is not isolated.
 

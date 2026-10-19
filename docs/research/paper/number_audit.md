@@ -2,7 +2,7 @@
 
 Every macro in `numbers.tex` checked against its evidence file at `m4-complete` (`72e7790`), or at the ref its row names, read with `git show`, by `audit_numbers.py`. Values are compared as printed: rounding, sign and interval bounds included. Regenerate with `python3 docs/research/paper/audit_numbers.py`; do not edit by hand.
 
-**470 macros, 470 MATCH, 0 not matching.**
+**474 macros, 474 MATCH, 0 not matching.**
 
 | Macro | Value in paper | Value in evidence | File | Note | Result |
 |---|---|---|---|---|---|
@@ -194,8 +194,8 @@ Every macro in `numbers.tex` checked against its evidence file at `m4-complete` 
 | `\nRocLowRecall` | `0.871` | `0.871` | derived | recall of that vertex | MATCH |
 | `\nRocHighFPR` | `1.7\%` | `1.7%` | derived | FPR of the first plotted ROC vertex at or above the recall target | MATCH |
 | `\nRocHighRecall` | `0.882` | `0.882` | derived | recall of that vertex | MATCH |
-| `\nRevTrueFraud` | `68` | `68` | `docs/research/paper/evidence/reversal_labels_d8083dbc.txt` at `3559f8c` (evidence commit `6fe4bf0`) |  | MATCH |
-| `\nRevScoredUnlabelled` | `2` | `2` | `docs/research/paper/evidence/reversal_labels_d8083dbc.txt` at `3559f8c` (evidence commit `6fe4bf0`) |  | MATCH |
+| `\nRevTrueFraud` | `68` | `68` | `docs/research/paper/evidence/reversal_labels_d8083dbc.txt` at `94bfd69` (evidence commit `0b04197`) |  | MATCH |
+| `\nRevScoredUnlabelled` | `2` | `2` | `docs/research/paper/evidence/reversal_labels_d8083dbc.txt` at `94bfd69` (evidence commit `0b04197`) |  | MATCH |
 | `\nAblUSSDD` | `-0.0004` | `-0.0004` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
 | `\nGroupDevice` | `0.720` | `0.720` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
 | `\nGroupSynth` | `0.706` | `0.706` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
@@ -476,3 +476,7 @@ Every macro in `numbers.tex` checked against its evidence file at `m4-complete` 
 | `\nFakeReviews` | `four` | `four` | `docs/research/lab_notebook.md` at `488c5b4` |  | MATCH |
 | `\nFakeDefects` | `eleven` | `eleven` | `docs/research/lab_notebook.md` at `488c5b4` |  | MATCH |
 | `\nFakeTests` | `537` | `537` | `docs/research/lab_notebook.md` at `488c5b4` |  | MATCH |
+| `\nRevNovelScored` | `19` | `19` | `docs/research/paper/evidence/reversal_novelty_d8083dbc.txt` at `ab03392` (evidence commit `94bfd69`) |  | MATCH |
+| `\nRevNotNovelScored` | `47` | `47` | `docs/research/paper/evidence/reversal_novelty_d8083dbc.txt` at `ab03392` (evidence commit `94bfd69`) |  | MATCH |
+| `\nRevPriorThreePlus` | `27` | `27` | `docs/research/paper/evidence/reversal_novelty_d8083dbc.txt` at `ab03392` (evidence commit `94bfd69`) |  | MATCH |
+| `\nRevPriorThreshold` | `3` | `3` | `docs/research/paper/evidence/reversal_novelty_d8083dbc.txt` at `ab03392` (evidence commit `94bfd69`) |  | MATCH |

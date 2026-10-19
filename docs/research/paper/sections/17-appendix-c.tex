@@ -41,7 +41,8 @@ legitimate rows, and incidents follow the victim's daily activity profile, with 
   \item \texttt{reversal\_scam\_social\_engineering}: the pre-registered non-burst variant
   (ADR 0028); \nRevRows{} rows, test period only, generated as \texttt{mule\_account} rows,
   paid to a counterparty on the victim's payee list (our modelling choice; ADR 0028's citation of
-  the scam typology for it is not supported by the cited sources), with its own amount rule. The battery scores \nRevFraud{} of them as fraud: the
+  the scam typology for it is not supported by the cited sources), with its own amount rule; \nRevNovelScored{} of the \nRevFraud{} scored rows go to a payee the
+  account had never paid (Section~\ref{sec:generalisation}). The battery scores \nRevFraud{} of them as fraud: the
   other \nRevScoredUnlabelled{} are fraud whose observed label says legitimate, the benchmark's
   missed-fraud noise (Section~\ref{sec:generalisation}).
 \end{itemize}

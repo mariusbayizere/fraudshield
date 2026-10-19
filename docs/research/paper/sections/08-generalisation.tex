@@ -102,10 +102,15 @@ typology for it, and the sources cited do not support it.} The variant therefore
 documented form in its recipient, and ADR 0028 has been corrected to say so. The variant also has its own amount rule: amounts are drawn around \nRevAmountMultiplier{} times
 the channel's median legitimate amount, and pass through the same below-threshold adaptation as other
 fraud. A test checks that each row is a single transaction in the test period to
-a counterparty on the payee list. Whether \texttt{counterparty\_is\_new\_for\_account} is in fact false
-on these rows was not measured: a listed counterparty may not have been paid before. So the variant
-removes burst structure by construction and counterparty novelty by construction of the payee list,
-not as verified on the feature. The generator stages each such row as a \texttt{mule\_account} row
+a counterparty on the payee list, but a listed counterparty need not have been paid before.
+Measured on the regenerated draw with complete history,
+\texttt{counterparty\_is\_new\_for\_account} is \textbf{true on \nRevNovelScored{} of the
+\nRevFraud{} rows scored as fraud}: their payee was on the list but had never been paid by that
+account. It is false on the other \nRevNotNovelScored{}, \nRevPriorThreePlus{} of which had paid
+the same counterparty at least \nRevPriorThreshold{} times before
+(\texttt{evidence/\allowbreak reversal\_\allowbreak novelty\_\allowbreak d8083dbc.txt}). The
+variant removes burst structure from every row, but counterparty novelty only from
+\nRevNotNovelScored{} of the \nRevFraud{}. The generator stages each such row as a \texttt{mule\_account} row
 with its own sub-variant label (Table~\ref{tab:scenarios}).
 
 The variant's definition, its justification and the predicted result were committed before the
@@ -147,8 +152,11 @@ point estimate does, so the conclusion narrowed.
 \textbf{What this does and does not show.} On a held-out shape, a variant with no burst structure,
 paid to a listed counterparty and with its own amount rule, is rarely caught by a model trained on
 this benchmark's scenarios. Because the variant differs from them in several respects at once, the
-result cannot say which of them causes the miss; we infer that the absence of burst structure is a likely contributor; whether counterparty novelty
-was in fact absent on these rows is not measured. A variant with a new
+result cannot say which of them causes the miss. Counterparty novelty is present on
+\nRevNovelScored{} of the rows, and recall over all of them is \nRevRecall{}; the battery's
+per-row scores were not kept, so whether the rows caught are among those \nRevNovelScored{} cannot
+be read from the evidence, and the part novelty plays is not isolated. We infer that the absence of
+burst structure is a likely contributor. A variant with a new
 recipient, as in the documented form, would separate those causes and has not been measured; whether it
 would be easier or harder to catch is not established. The result concerns this one variant, not
 non-burst fraud in general: other typologies are untested, and whether data this benchmark does not

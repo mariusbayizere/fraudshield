@@ -53,7 +53,9 @@ ROC = "docs/benchmarks/m4_gate_d8083dbc_v3/figures/roc.svg"
 REQUIREMENTS = "docs/traceability/requirements.yaml"
 #: Evidence produced for the paper itself, after the tag; read at the commit it was added in.
 REV_LABELS = "docs/research/paper/evidence/reversal_labels_d8083dbc.txt"
-REV_LABELS_REF = "3559f8c"
+REV_LABELS_REF = "94bfd69"
+REV_NOVELTY = "docs/research/paper/evidence/reversal_novelty_d8083dbc.txt"
+REV_NOVELTY_REF = "ab03392"
 #: PB-67's learning curve, merged to main after m4-complete; read at the commit that last
 #: touched it.
 LC = "docs/benchmarks/m4_learning_curve_{}_d8083dbc.txt"
@@ -921,6 +923,18 @@ SOURCES: dict[str, Src | Derived] = {
     "nFakeReviews": Src(NOTEBOOK, r"had been reviewed (four) times", ref=NOTEBOOK_MAIN_REF),
     "nFakeDefects": Src(NOTEBOOK, r"found (eleven) real defects", ref=NOTEBOOK_MAIN_REF),
     "nFakeTests": Src(NOTEBOOK, r"(\d+) tests passed\.\s+Four\s+reviewers", ref=NOTEBOOK_MAIN_REF),
+    "nRevNovelScored": Src(
+        REV_NOVELTY,
+        r"scored as fraud.*?\n\s+counterparty_is_new_for_account true: (\d+)",
+        ref=REV_NOVELTY_REF,
+    ),
+    "nRevNotNovelScored": Src(
+        REV_NOVELTY,
+        r"scored as fraud.*?\n.*?\n\s+counterparty_is_new_for_account false: (\d+)",
+        ref=REV_NOVELTY_REF,
+    ),
+    "nRevPriorThreePlus": Src(REV_NOVELTY, r"^\s+3: (\d+)$", ref=REV_NOVELTY_REF),
+    "nRevPriorThreshold": Src(REV_NOVELTY, r"\((\d+) means \d+ or more\)", ref=REV_NOVELTY_REF),
     "nPctlFlag": Src(PROMPT, r"budget targets p(\d+) ≤ \d+ ms for flagged"),
     "nPctlTail": Src(PROMPT, r"single-request p(\d+) \(ensemble"),
     "_GroupCounts": Src(TEST_REGISTRY, r"(EXPECTED_GROUP_COUNTS = \{.*?\n\})"),

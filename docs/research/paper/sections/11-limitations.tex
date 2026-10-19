@@ -59,8 +59,8 @@ by the benchmark's configuration, so the models have never scored one (Section~\
 The pre-registered reversal-scam variant sends the victim's transfer to a counterparty on the
 victim's payee list, a modelling choice that differs from the documented form of the scam, in which
 the victim pays the scammer's own number, which we read as a new counterparty; it also differs from
-the base scenarios in its amount rule, and its counterparty novelty was removed by construction, not
-verified on the feature (Section~\ref{sec:generalisation}). The result says nothing about the
+the base scenarios in its amount rule, and it carries counterparty novelty on \nRevNovelScored{} of its \nRevFraud{} scored rows, so
+it removes that signal from only some of them (Section~\ref{sec:generalisation}). The result says nothing about the
 documented form, and does not isolate why the variant is missed. And because no accuracy advantage
 of the specified ensemble over a single XGBoost model was detected here, the benchmark cannot show
 what the ensemble adds.

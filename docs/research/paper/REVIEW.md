@@ -30,7 +30,10 @@ measured" markers. This file records every change to what the paper states, with
 
 | 2026-10-19 | The owner's evidence rule applied to the whole paper after two independent read-only sweeps (one per half). `check_numbers.py` now fails on bare integers and number words; every number left is an audited macro (447) or a generated quotation (Appendix B from the registry, Appendix D from the audit). Claims the evidence contradicted were corrected: the floor's draw (an unfingerprinted earlier draw, not `6abde44e`; margins now use the gate floor), home locations, agent float, local time, decimals, the parity tolerance and independence test, the velocity-ratio defect, the novel variant's differences, the reversal variant's payee property, amount rule and unverified novelty, the seed-variance quantity, DeLong as no detected difference, the precision ceiling, ablation p-values, the fingerprint being a row sample, the PB-29 re-draw claim, the test-set log, evidence stamps, enforcement of the discussion's rules. Inferences are marked in their sentences. Upstream: the parity document's tolerance claim and the claims register's C-14 draw corrected | `number_audit.md`, `docs/parallel/M11_updates.md` §9 |
 
+| 2026-10-19 | Owner's answers applied. CI gates the paper (`paper.yml`: checks and a Tectonic compile on every push). The paper compiles with no undefined references or overfull lines. M5's skew table and fake-MLflow case are in the limitations, sourced to their review records. ADR 0028 is amended and the paper states the known-counterparty choice as ours where it is introduced. Contributions 3 and 4 say what M10 would add. The evaluation draw was regenerated at `m4-complete` (fingerprint `d8083dbc` matched); the label count was re-run on it and the reversal novelty counted: 19 of the 66 scored rows still carry counterparty novelty. The earlier unlogged read is back-filled; both evidence scripts log their reads | `evidence/regeneration_d8083dbc.txt`, `evidence/reversal_novelty_d8083dbc.txt`, `number_audit.md` (474 macros) |
+
 ## Open review points
+
 
 
 - The documented form's recipient being a new counterparty is the paper's reading of the two
@@ -46,4 +49,5 @@ measured" markers. This file records every change to what the paper states, with
   latency rows (and the shadow-mode AUC delta) to M10; the paper's markers still name M5 and M6.
 - How much the headline figures vary across selections of training rows (PB-76): two selections
   exist, so the variation is unmeasured.
-- Not compiled after the 2026-10-19 changes: no TeX engine on this machine.
+- Which of the 66 reversal-scam rows the battery caught is not recoverable: per-row scores were not
+  kept, so the part counterparty novelty plays in the miss is not isolated.

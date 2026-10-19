@@ -3,10 +3,12 @@
 
 \paragraph{Data.} The benchmark is generated, not distributed as a fixed file: seed \nSeed{} and
 the generator code at a stated commit are meant to reproduce a draw byte for byte, independently of
-how the work is batched. A test checks byte-identity across batch sizes on small runs, and one
-full-size draw was regenerated with an identical fingerprint (claims register); no regeneration of
-the evaluation draw at \texttt{m4-complete} is recorded, so its reproducibility at full size is
-inferred from those checks. Each draw is identified by a SHA-256 fingerprint over a fixed sample of
+how the work is batched. A test checks byte-identity across batch sizes on small runs. The evaluation
+draw itself was regenerated from the generator at \texttt{m4-complete} on 2026-10-19, on the
+development laptop, and its fingerprint matched \texttt{d8083dbc}
+(\texttt{evidence/\allowbreak regeneration\_\allowbreak d8083dbc.txt}); because the fingerprint
+covers a fixed sample of each table's rows and the row counts, that is evidence of reproduction, not
+a comparison of every row. Each draw is identified by a SHA-256 fingerprint over a fixed sample of
 its rows and its row counts (\texttt{6abde44e} and \texttt{d8083dbc} in this paper), and its realism report records the parameter hash, the check
 set hash and the fingerprint. The dataset release is licensed CC BY 4.0
 (\texttt{dataset/release/}); the code is Apache-2.0.

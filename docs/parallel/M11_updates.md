@@ -377,3 +377,23 @@ brackets):
 **Harness finding.** In Claude Code's Bash tool, `set -euo pipefail` does not stop a command chain
 (`set -euo pipefail; false; echo X` prints X); a checkpoint commit on this branch was made past a
 failing lint before it was noticed and amended. Gating chains here now use `&&`.
+
+## 10. Sixth pass, 2026-10-19: owner's answers
+
+1. **CI** — `.github/workflows/paper.yml`: the paper checks and a checksum-verified Tectonic 0.17.0
+   compile on every push, not path-filtered; it fails on a typed number, a stale audit, appendix or
+   figure, an undefined reference or an overfull line, and uploads the PDF.
+2. **M5 items folded in** (Section 11), each sourced to its record (ADR 0034 at `151e796`, the
+   notebook at `488c5b4`) and saying in the sentence that no stamped raw output exists for it.
+3. **ADR 0028 amended**: "a known counterparty" is the project's modelling choice; the cited sources
+   do not support it. The paper says so where the choice is introduced.
+4. **Unlogged read back-filled** in `docs/benchmarks/test_set_access.jsonl`; both paper evidence
+   scripts now log their reads through `access.record`.
+5. **Reversal novelty measured** on a regenerated draw (`d8083dbc` reproduced at `m4-complete`,
+   `evidence/regeneration_d8083dbc.txt`): `counterparty_is_new_for_account` is true on **19 of the
+   66** rows scored as fraud. The variant removes counterparty novelty from 47 rows only. Upstream:
+   `test_the_reversal_scam_variant_is_one_transaction_to_a_known_payee_in_the_test_period` asserts
+   payee-list membership, which does not imply the feature; whether the generator should be changed
+   is an owner decision and is not done here. [M2 / owner]
+6. **Pre-rebase commits preserved**: `origin/m11/paper-pre-rebase-af54957` keeps the commits whose
+   hashes earlier evidence stamps name (`6fe4bf0`, `3559f8c`).
