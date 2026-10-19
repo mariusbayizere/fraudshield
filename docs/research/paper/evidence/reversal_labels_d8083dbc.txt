@@ -1,6 +1,6 @@
-# evidence-commit: 6fe4bf06b681284bfc1850e7ab17115ddd434c23
+# evidence-commit: 0b0419799c2ecff7a2191765ea812d805381dd06
 # evidence-tree-state: clean
-# command: python docs/research/paper/evidence/reversal_labels.py /home/marius/fraudshield/dataset/output/bench1m
+# command: python docs/research/paper/evidence/reversal_labels.py /tmp/claude-1000/-home-marius-fraudshield/3f3a8552-0a53-484a-b430-d22d611d24d7/scratchpad/bench1m
 # exit: 0
 
 HELD-OUT SUB-VARIANTS BY LABEL — rows the generator wrote, and rows the evaluation
