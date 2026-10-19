@@ -1,8 +1,8 @@
 # Number audit
 
-Every macro in `numbers.tex` checked against its evidence file at `m4-complete` (`72e7790`), read with `git show`, by `audit_numbers.py`. Values are compared as printed: rounding, sign and interval bounds included. Regenerate with `python3 docs/research/paper/audit_numbers.py`; do not edit by hand.
+Every macro in `numbers.tex` checked against its evidence file at `m4-complete` (`72e7790`), or at the ref its row names, read with `git show`, by `audit_numbers.py`. Values are compared as printed: rounding, sign and interval bounds included. Regenerate with `python3 docs/research/paper/audit_numbers.py`; do not edit by hand.
 
-**362 macros, 362 MATCH, 0 not matching.**
+**367 macros, 367 MATCH, 0 not matching.**
 
 | Macro | Value in paper | Value in evidence | File | Note | Result |
 |---|---|---|---|---|---|
@@ -362,6 +362,11 @@ Every macro in `numbers.tex` checked against its evidence file at `m4-complete` 
 | `\nLcSpanSeedOne` | `0.016` | `0.016` | derived | largest minus smallest of the four seed-1 values | MATCH |
 | `\nSelGapSeedOne` | `0.059` | `0.059` | derived | seed 1 at 30,000 rows: the curve's corpus minus the gate's | MATCH |
 | `\nSelGapMeans` | `0.023` | `0.023` | derived | five-seed means at 30,000 rows: the curve's corpus minus the gate's, to three places | MATCH |
+| `\nLcStepAC` | `0.003` | `0.003` | derived | seed-1 recall at 0.60, 120K minus 30K (both from one cache) | MATCH |
+| `\nLcSeedGainAC` | `0.012` | `0.012` | derived | five-seed mean recall at 0.60, 120K minus 30K, to three places | MATCH |
+| `\nLcSeedStepCD` | `0.016` | `0.016` | derived | five-seed mean recall at 0.60, 240K minus 120K, to three places | MATCH |
+| `\nLcVolumeFactor` | `eight` | `eight` | derived | largest training size over the smallest, as a word | MATCH |
+| `\nLcVolumeFactorAC` | `four` | `four` | derived | 120K over 30K, as a word | MATCH |
 | `\nLcPredLow` | `0.76` | `0.76` | `docs/research/lab_notebook.md` at `488c5b4` |  | MATCH |
 | `\nLcPredHigh` | `0.84` | `0.84` | `docs/research/lab_notebook.md` at `488c5b4` |  | MATCH |
 | `\nLcPredBudgetLow` | `0.87` | `0.87` | `docs/research/lab_notebook.md` at `488c5b4` |  | MATCH |

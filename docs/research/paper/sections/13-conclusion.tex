@@ -5,7 +5,8 @@ FraudShield-EAC was built to develop and evaluate a fraud detection system for E
 payments without real customer data. Measured against it, the specified ensemble ranks fraud well,
 but the benchmark sets a high floor: one velocity feature alone separates the classes at
 \nFloorM{}, and the ensemble's margin over the floor on the same rows is \nGateMargin{}. Its recall at the flag
-threshold misses the specified target, and eight times the training data does not close the gap. Most of what
+threshold misses the specified target, and \nLcVolumeFactor{} times the training data does not close
+the gap for this model on this draw. Most of what
 a reader would like to learn from the benchmark it cannot teach. Feature ablations measure redundancy,
 because four disjoint groups each nearly solve the task; leave-one-country-out and a novel variant
 held out in time are null, because every country and variant is a view of one burst structure; and
@@ -19,7 +20,7 @@ permitted location, measuring the same floor, margins and calibration. Second, a
 a new recipient, as we read the documented form of the reversal scam, which would separate the contributions
 of burst structure and counterparty novelty that this paper's variant removes together. Third, the
 variation of the headline figures across selections of training rows, which the learning curve
-exposed and did not measure: several corpus depths and windows at a fixed volume, with the history
+exposed at seed 1 and did not measure: several corpus depths and windows at a fixed volume, with the history
 each training row has reported beside each result (PB-76). Fourth, the serving and load
 measurements on dedicated hardware: the frontier at the 99th percentile, end-to-end decision latency,
 and scale to five million rows: \notyet{M5, M6 and M10}.

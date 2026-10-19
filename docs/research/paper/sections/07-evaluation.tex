@@ -142,11 +142,13 @@ draw.
 The evaluated models train on \nTrainUsed{} of the \nTrainRows{} training-period rows, so the recall
 miss could have been a matter of training volume. A learning curve tested that (PB-67). Its design,
 its prediction and the rule for reading it were recorded in the lab notebook before any size was
-run: the same model, thresholds, seeds and resamples as the gate, and the gate's validation,
-calibration and test rows at every size. One change to the design was made, and recorded, before the
-first result: the development machine could not build the planned single feature cache, so the three
-smaller sizes come from one cache built over a \nLcCorpusSmall{}-row corpus and the largest from its
-own \nLcCorpusLarge{}-row corpus. The last step therefore changes the depth of the corpus as well as
+run: the same model, thresholds, seeds and resamples as the gate, the whole test period at every
+size, and validation and calibration splits of the gate's size. The design changed before any model
+was fitted, because the development machine could not build the planned single feature cache: the
+three smaller sizes come from one cache and the largest from its own \nLcCorpusLarge{}-row corpus.
+The change recorded before any result named a somewhat larger corpus for the shared cache than the
+\nLcCorpusSmall{} rows it was built from; that trim was also made before any fit, but was written
+down only with the first results. The last step therefore changes the depth of the corpus as well as
 the volume.
 
 \begin{table}[htbp]
@@ -171,23 +173,30 @@ Training rows (fraud) & Recall at \nFlagThreshold{}, seed 1 & Over \nSeeds{} see
 
 The pre-registered rule was that the miss is a property of the benchmark and model if the step from
 \nLcTrainC{} to \nLcTrainD{} rows gains less than half the width of the largest size's interval and
-that interval's upper bound stays below \nTargetRecall{}. Both hold: the step is \nLcStepCD{}, a loss,
-and the largest size's interval, \nLcRecallciD{}, ends below the target. No interval at any size reaches the target; the highest upper
-bound is \nLcMaxUpper{}. Across the eightfold range the five-seed mean rises by \nLcSeedGain{}.
+that interval's upper bound stays below \nTargetRecall{}. Both hold: the step is \nLcStepCD{} at seed 1
+(\nLcSeedStepCD{} on the five-seed means), and the largest size's interval, \nLcRecallciD{}, ends
+below the target. No interval at any size reaches the target; the highest upper bound is
+\nLcMaxUpper{}. Because that last step also changes the corpus, the cleaner evidence is the
+\nLcVolumeFactorAC{}-fold step within one cache, from \nLcTrainA{} to \nLcTrainC{} rows: recall moves
+\nLcStepAC{} at seed 1 and \nLcSeedGainAC{} on the five-seed means, inside every interval. Across the
+whole \nLcVolumeFactor{}-fold range the five-seed mean rises at every step, by \nLcSeedGain{} in all,
+which is within a standard deviation of each point and leaves every interval below the target.
 \textbf{Over \nLcTrainA{} to \nLcTrainD{} training rows of this draw, and for this model, the recall
-shortfall is not a matter of training volume.} Whether a different model, or features that do not
+shortfall is not closed by training volume.} Whether a different model, or features that do not
 degrade with corpus depth, would reach the target is not tested.
 
 The prediction was partly wrong, and is reported with the others in Table~\ref{tab:predictions}.
 It said recall at the flag threshold would rise to between \nLcPredLow{} and \nLcPredHigh{} at the
-largest size; it landed in that range without rising. It said recall at the \nFPRBudget{} budget
-would rise to between \nLcPredBudgetLow{} and \nLcPredBudgetHigh{}; at seed 1 it read
-\nLcBudgetRecallD{} \nLcBudgetRecallciD{}, below the range, and over \nSeeds{} seeds
-$\nLcSeedBudgetD$, inside it, and it did not rise either: at \nLcTrainC{} rows it already read
-\nLcBudgetRecallC{} at seed 1.
+largest size; it landed in that range, without rising at seed 1 and rising within the seed spread on
+the means. It said recall at the \nFPRBudget{} budget would rise to between \nLcPredBudgetLow{} and
+\nLcPredBudgetHigh{}; at seed 1 it read \nLcBudgetRecallD{} \nLcBudgetRecallciD{}, below the range
+(at \nLcTrainC{} rows it had read \nLcBudgetRecallC{}), and over \nSeeds{} seeds $\nLcSeedBudgetD$,
+inside it. The budget figures compare weakly across sizes: the false-positive rate realised at the
+budget's threshold differs from size to size because of ties in the isotonic calibration, so each
+size is read at a somewhat different operating point.
 
-The curve's smallest point also differs from the gate run at the same \nTrainUsed{} rows, by more
-than the curve's own range at seed 1. That comparison concerns which rows are used rather than how
+At seed 1, the curve's smallest point also differs from the gate run at the same \nTrainUsed{}
+rows, by more than the curve's own range. That comparison concerns which rows are used rather than how
 many, and Section~\ref{sec:rowselection} reports it with its limits.
 
 \subsection{Redundancy: ablation measures redundancy, not importance}
@@ -319,13 +328,13 @@ TreeSHAP costs $O(TLD^2)$ for $T$ trees with at most $L$ leaves and depth $D$
 
 Three cautions keep this result in proportion. First, every configuration explains a decision in a
 few milliseconds at the median on the development laptop. That is the cost of one booster's
-explanation in one process, not a measurement of the serving path against the specification's
-latency budget, which is \notyet{M10}; whether explanation cost binds at throughput or at the latency
-of a single request is therefore not established here. Second, the \nFrontRatio-fold ratio depends on the
+explanation in one process; the serving path's latency against the specification's budget is
+\notyet{M10}, so whether explanation cost binds at throughput or at the latency of a single request
+is not established here. Second, the \nFrontRatio-fold ratio depends on the
 grid: it is measured from the cheapest configuration tried, and a different smallest configuration
 would give a different ratio; the growth with trees and depth is the finding, not the number.
-Third, it is one machine's median. On data like this, the explanation budget, not the accuracy
-target, should choose the tree configuration.
+Third, it is one machine's median. If the growth holds on serving hardware, then on data like this the explanation
+budget, not the accuracy target, would choose the tree configuration; that is not yet shown.
 
 \textbf{We report the median only.} In \nFrontNegative{} configurations the measured 99th
 percentile shows a \emph{negative} explanation cost, which is impossible: explaining cannot be

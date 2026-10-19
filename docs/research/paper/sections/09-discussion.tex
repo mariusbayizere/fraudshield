@@ -42,8 +42,8 @@ conclusion, and fixtures are specified by the property they must have before the
 The same defect appeared one level up, in a fix rather than a test. A concurrency fix in the
 staff-identity service (a refresh after a row-locking query, so that a stale copy of an account could
 not be written back) passed its test and was recorded as fixed, with a mutation killed. The test
-created the conflict in a way that never made the copy stale, so it exercised only the branch where
-the fix was not needed; in the case the fix was written for, the locking query itself raised an error
+created the conflict in a way that never advanced the row's version, so it exercised only the branch
+where the fix was not needed; in the case the fix was written for, the locking query itself raised an error
 before the refresh ran. A second defence made every assertion hold, and the killed mutation removed
 both defences at once. A mutation removing only the refresh survived, and was first filed as
 ``defence in depth''; the case was found when that explanation was required to be shown with a test
@@ -85,12 +85,14 @@ measurement would remove it.
 
 The learning curve of Section~\ref{sec:volume} found something it was not designed to find. Its
 smallest point and the declared gate run both train on \nTrainUsed{} rows and are scored on the same
-test rows, by the same model at the same thresholds; they differ in which rows are used. The gate's
-come from a \nGateCorpus{}-row corpus, the curve's from a \nLcCorpusSmall{}-row one, so each training
-row's features are computed over a different amount of that account's past. At seed 1, recall at the
+test rows, by the same model at the same thresholds; they differ in the corpus their features are
+computed from. The gate's come from a \nGateCorpus{}-row corpus, the curve's from a
+\nLcCorpusSmall{}-row one, so the training rows differ, each training row's features are computed over
+a different amount of that account's past, and even the shared validation rows, which drive early
+stopping, carry different values in some features (PB-76). At seed 1, recall at the
 flag threshold is \nLcRecallA{} \nLcRecallciA{} for the curve's rows and \nGateRecallSix{}
 \nGateRecallSixci{} for the gate's, a difference of \nSelGapSeedOne{}, while the four curve points,
-spanning an eightfold change in volume, cover a range of \nLcSpanSeedOne{}. At seed 1, which rows were
+spanning an \nLcVolumeFactor{}-fold change in volume, cover a range of \nLcSpanSeedOne{}. At seed 1, which rows were
 used moved recall several times more than how many.
 
 \textbf{The comparison does not hold on the five-seed means}, and we report it at seed 1 only. Over
@@ -147,8 +149,9 @@ interval \\
 Recall at the flag threshold stays below \nTargetRecall{}, rising to \nLcPredLow{}--\nLcPredHigh{} at
 \nLcTrainD{} training rows; recall at the \nFPRBudget{} budget rises to
 \nLcPredBudgetLow{}--\nLcPredBudgetHigh{} &
-Partly confirmed: below the target at every size and inside the range, but not rising; recall at the
-budget \nLcBudgetRecallD{} at seed 1, below its range (Section~\ref{sec:volume}) \\
+Partly confirmed: below the target at every size and inside the range; not rising at seed 1, rising
+within the seed spread on the means; recall at the budget \nLcBudgetRecallD{} at seed 1, below its
+range, and inside it on the means (Section~\ref{sec:volume}) \\
 \bottomrule
 \end{tabular}
 \end{table}

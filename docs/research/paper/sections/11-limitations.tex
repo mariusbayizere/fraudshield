@@ -23,8 +23,8 @@ here speaks to fraud with other structure, except as the failure in
 Section~\ref{sec:generalisation}. The specification's distribution targets (overall and test-period
 fraud rate, channel and country mix) are requirements met by construction, not observations.
 
-\paragraph{Five features have no source data, and one rests on assumed values.} \nNoSourceFeatures{}
-of the \nFeatures{} features, about \nNoSourceShare{}, read data this benchmark does not contain and
+\paragraph{Features with no source data, and one resting on assumed values.} Of the \nFeatures{}
+features, \nNoSourceFeatures{}, about \nNoSourceShare{}, read data this benchmark does not contain and
 are missing for every record: \texttt{account\_age\_days} and
 \texttt{counterparty\_account\_age\_days} need account opening dates, held in an institution's account
 master; \texttt{kyc\_tier} needs the account's KYC tier assignments with the time each took effect,
@@ -32,9 +32,10 @@ held in its KYC records; \texttt{agent\_float\_utilisation\_ratio} needs the age
 limit, and \texttt{agent\_distance\_from\_registered\_km} the agent's registered premises, both held by
 the agent network. The models learn nothing from them, and with one feature that is constant on this
 benchmark they are why the models train on \nTrainableFeatures{} features (Appendix~\ref{app:features}).
-\textbf{Every model figure in this paper is that of a \nTrainableFeatures{}-feature model}; the
+\textbf{No model in this paper learned from these features, and every figure from the gate, the
+diagnostic battery and the learning curve is that of a \nTrainableFeatures{}-feature model}; the
 specification's requirement that the features be computable for nearly every record is recorded as
-not met (ADR 0055). A sixth feature is a different limitation. \texttt{round\_sum\_flag} produces a
+not met (ADR 0055). One more feature is a different limitation. \texttt{round\_sum\_flag} produces a
 value for every record, but only because each country's configuration supplies the currency's round
 denominations, and those values are \textbf{assumed}: plausible note and typing steps, not a banknote
 series read from any central-bank source. The feature's input is something this project wrote, not
@@ -66,7 +67,7 @@ cause is unexplained; every figure is therefore stated at its scale. The two fai
 
 \paragraph{One selection of training rows.} At \nTrainUsed{} rows, a different selection of training
 rows from a corpus of different depth read recall \nSelGapSeedOne{} higher at seed 1, more than an
-eightfold change in volume moved it; on the five-seed means the difference is \nSelGapMeans{}, within
+\nLcVolumeFactor{}-fold change in volume moved it; on the five-seed means the difference is \nSelGapMeans{}, within
 the seed spread (Section~\ref{sec:rowselection}). Only two selections exist, so how much a headline
 figure varies with the choice of training rows is unmeasured, and every such figure here is a
 measurement of one selection.

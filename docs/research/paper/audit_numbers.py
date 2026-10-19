@@ -93,7 +93,22 @@ def row(label: str, col: int) -> str:
     return re.escape(label) + r"\s+" + skip + r"(\S+)"
 
 
-WORDS: dict[str, str] = {"one": "1", "two": "2", "three": "3", "four": "4", "five": "5", "six": "6"}
+WORDS: dict[str, str] = {
+    "one": "1",
+    "two": "2",
+    "three": "3",
+    "four": "4",
+    "five": "5",
+    "six": "6",
+    "seven": "7",
+    "eight": "8",
+}
+
+
+def _word(ratio: float) -> str:
+    """A whole ratio as the word the paper prints."""
+    names = {v: k for k, v in WORDS.items()}
+    return names.get(str(int(ratio)), "?") if ratio == int(ratio) else f"not whole: {ratio}"
 
 
 def _count(rate: str, rows: str, fraud: str) -> str:
@@ -715,6 +730,31 @@ SOURCES: dict[str, Src | Derived] = {
         lambda curve, gate: f"{Decimal(curve.split()[0]) - Decimal(gate.split()[0]):.3f}",
         "five-seed means at 30,000 rows: the curve's corpus minus the gate's, to three places",
     ),
+    "nLcStepAC": Derived(
+        ("nLcRecallA", "nLcRecallC"),
+        lambda a, c: f"{Decimal(c) - Decimal(a):.3f}",
+        "seed-1 recall at 0.60, 120K minus 30K (both from one cache)",
+    ),
+    "nLcSeedGainAC": Derived(
+        ("nLcSeedRecallA", "nLcSeedRecallC"),
+        lambda a, c: f"{Decimal(c.split()[0]) - Decimal(a.split()[0]):.3f}",
+        "five-seed mean recall at 0.60, 120K minus 30K, to three places",
+    ),
+    "nLcSeedStepCD": Derived(
+        ("nLcSeedRecallC", "nLcSeedRecallD"),
+        lambda c, d: f"{Decimal(d.split()[0]) - Decimal(c.split()[0]):.3f}",
+        "five-seed mean recall at 0.60, 240K minus 120K, to three places",
+    ),
+    "nLcVolumeFactor": Derived(
+        ("nLcTrainA", "nLcTrainD"),
+        lambda a, d: _word(int(d.replace(",", "")) / int(a.replace(",", ""))),
+        "largest training size over the smallest, as a word",
+    ),
+    "nLcVolumeFactorAC": Derived(
+        ("nLcTrainA", "nLcTrainC"),
+        lambda a, c: _word(int(c.replace(",", "")) / int(a.replace(",", ""))),
+        "120K over 30K, as a word",
+    ),
     "nLcPredLow": Src(
         NOTEBOOK, r"rising to \*\*between ([\d.]+) and\s+[\d.]+ at 240K", ref=NOTEBOOK_MAIN_REF
     ),
@@ -804,7 +844,8 @@ def write_report(rows: list[tuple[str, str, str, str, str, str]], ref: str, ref_
         "# Number audit",
         "",
         f"Every macro in `numbers.tex` checked against its evidence file at `{ref}` "
-        f"(`{ref_sha}`), read with `git show`, by `audit_numbers.py`. Values are compared as "
+        f"(`{ref_sha}`), or at the ref its row names, read with `git show`, by "
+        "`audit_numbers.py`. Values are compared as "
         "printed: rounding, sign and interval bounds included. Regenerate with "
         "`python3 docs/research/paper/audit_numbers.py`; do not edit by hand.",
         "",

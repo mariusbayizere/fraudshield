@@ -5,8 +5,9 @@ Benchmark Can and Cannot Show* (specification Part E.13). Entry point: `main.tex
 sections in `sections/`; every number in `numbers.tex`.
 
 **Status: DRAFT, not reviewed.** Builds with Tectonic 0.17.0 (checksum-verified release binary, run
-outside the repository; it runs BibTeX itself): `tectonic -X compile main.tex`. The build has no
-undefined references and no overfull lines. The history of the paper, and the procedure for
+outside the repository; it runs BibTeX itself): `tectonic -X compile main.tex`. The last build
+(2026-09-22) had no undefined references and no overfull lines; the draft has not been compiled since
+2026-10-19's changes, because no TeX engine is installed on the machine that made them. The history of the paper, and the procedure for
 replacing a "not yet measured" marker, are in `REVIEW.md`.
 
 ## Rules every number obeys
@@ -17,7 +18,8 @@ replacing a "not yet measured" marker, are in `REVIEW.md`.
 - Sections never type a result. Each number is a macro in `numbers.tex`, whose comment names the
   file, commit and draw it comes from. `python3 check_numbers.py` fails on a decimal, percentage
   or grouped integer typed into a section.
-- `\meas{}`: measured results (M2 to M4, tag `m4-complete`, `72e7790`).
+- `\meas{}`: measured results (M2 to M4, tag `m4-complete`, `72e7790`; results that postdate the tag,
+  such as the learning curve, name the commit they are read at in `numbers.tex`).
   `\prov{}`: a result from a milestone not yet tagged, printed with a dagger. **None is in use**:
   every M4 value was re-verified at `m4-complete` and moved to `\meas{}` on 2026-09-22.
 - `python3 audit_numbers.py` checks every macro against its evidence file at the tag and writes
