@@ -241,4 +241,28 @@ amounts, after the paragraph above. It does not attribute it to the model.
 
 ## Amendments
 
-(none)
+- **2026-10-19, while building, before approval and before any run.** Two details the build fixed,
+  both stricter than the text above:
+  - **An attempt line.** Job 2 appends an access line *before* any test row is scored
+    (`full-volume-attempt`). The gate logs its own access only when it finishes, so a run that died
+    part-way would otherwise leave no record.
+  - **The gate runs in full.** It includes its baselines and ONNX parity, not `--metrics-only` as
+    the PB-67 points did. The gate metrics are computed identically either way.
+- **2026-10-19, after the build's independent review, before approval and before any run.** The
+  review found two flaws in the methods above, and four places where a promise was not enforced:
+  - **Ties at the budget cut (§ 3.2).** Calibrated scores tie heavily. Choosing which tied rows to
+    alert by row order would choose by time of day, because the cache is in time order. Instead,
+    every row above a tied block straddling the k-th place is alerted, and the block's remaining
+    slots are shared evenly: its frauds count in proportion. The report gives the number of alerts
+    a tie decided.
+  - **Per-group FPR intervals (§ 3.5) are Wilson score intervals, not bootstrap.** With a handful of
+    false positives per group, often none, a bootstrap gives [0, 0], and the rule "different if its
+    interval excludes the overall estimate" would then flag every group with no false positive.
+    Blocked amounts keep bootstrap intervals.
+  - **The truncated-history share (§ 2)** is printed by the `pb66` report, from the cache's
+    timestamps.
+  - **The model is checked, not assumed.** Job 2 fails unless pb66's seed-1 AUC and recall at 0.60
+    equal the gate's seed-1 values.
+  - **Job 1 asserts every pool's size** before building the cache. `evaluate` would otherwise
+    subsample a pool larger than requested without saying so.
+  - **Only the pre-registered month difference** (December minus November) is computed.
