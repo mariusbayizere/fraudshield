@@ -1489,10 +1489,11 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 - **Problem:** `DecisionEngine` tests `>=`, the scorer's `thresholds.py` tests `>`; a score equal to the threshold is an anomaly to one and not the other. The threshold is also a per-process setting not recorded on decisions.
 - **Acceptance:** one comparison, tested on both sides, and the setting owned by model lifecycle.
 
-### PB-154 · The feature-store fallback uses a different local time from the scorer
+### PB-154 · The feature-store fallback uses a different local time from the scorer (FIXED)
 - **Source:** M8B, review 1 of P1's contract changes (finding 5), 2026-10-20 · **Priority:** medium · **Due:** owner
 - **Problem:** the scorer derives an account's country from the transaction's currency (`serving/features.py:115`); V67's fallback uses the institution's country. A KES transaction at a Rwandan institution gets `local_hour` at +3 h online and +2 h from the fallback: training/serving skew in the temporal features when the feature store is degraded.
 - **Acceptance:** one rule for the account's country on both paths, with a test that compares them.
+- **Fixed** (owner, 2026-10-20: "fix it … not a backlog item"): `PostgresFallback` derives each row's country from its currency, as serving does, and ignores V67's column; `test_postgres_fallback.py` pins it. **Correction:** no feature reads a history row's country today (the temporal and corridor features read the scored transaction's, which serving always derives from the currency), so the wrong value was latent, not a live skew in scores.
 
 ### PB-155 · The rule-based fallback stores a made-up anomaly score
 - **Source:** M8B, review 1 of P1's contract changes (finding 4), 2026-10-20 · **Priority:** medium · **Due:** M8B P1 (alerts), owner (`ScoringResult`)
