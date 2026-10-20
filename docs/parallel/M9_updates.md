@@ -40,7 +40,7 @@ week-long alert tests). It needs `uv` and network access for the first download 
 | Trivy dependency scan | CI `security` | failed on 8d94d9c and e408828: Maven Central 429 while Trivy resolved parent POMs (reproduced locally). Fixed in 9056cc9 by resolving into `~/.m2` first |
 | All workflows on 9056cc9 | CI runs: security 35692117624, supply-chain 35692117608, infrastructure 35692117611, ci 35692117637, stack 35692117616, devcontainer 35692117629 | all success. Executed and passed: Trivy DB download, Maven resolve, dependency scan, HIGH/CRITICAL gate, configuration scan, source SBOM sign + verify. Skipped (shown as skipped, not green): ZAP baseline, image jobs |
 
-## 3. Owner decisions (1–4 decided 2026-09-22; 5 open)
+## 3. Owner decisions (1–4 decided 2026-09-22; 5 decided 2026-10-20, see 3b)
 
 1. **D-15 spool versus the Argo Rollouts canary. Decided 2026-09-22: ADR 0090.** Per-pod
    directories on a shared ReadWriteMany volume plus a replayer that recovers the spools of dead
@@ -63,6 +63,69 @@ week-long alert tests). It needs `uv` and network access for the first download 
    - minimum supported Kubernetes version 1.34;
    - Trivy covers dependency CVEs; OWASP Dependency-Check (SRS 8.1) needs an NVD API key to run
      in reasonable time and is not configured: adopt with a key, or record the substitution.
+
+   Superseded by 3b: the owner decided all five on 2026-10-20, three of them differently from
+   what is proposed here.
+
+## 3b. Owner decisions, 2026-10-20
+
+Given verbally by the owner (Marius Bayizere) and never committed; recorded here on 2026-10-20 at
+the owner's instruction, as the owner's decisions. Each entry quotes the owner's words exactly, then
+gives **M9's reading**: what M9 takes the decision to require. The readings are the M9 agent's, not
+the owner's, and nothing in them is done yet unless it says so. Questions back to the owner are
+marked **Open**.
+
+1. Owner: "lokitool in CI only: yes."
+   - M9's reading: lokitool (AGPL-3.0) is never shipped in an image or a deployment, and an ADR
+     records it.
+   - **Open:** `infrastructure/checks/validate.sh` also runs lokitool locally (the one-command
+     check of section 1). If "CI only" means it must not run outside CI either, `validate.sh` has
+     to skip it there. Not changed until the owner says which.
+2. Owner: "Canary by replica count requiring 10 API pods: no. Specify a canary that works at the
+   replica counts this system will actually run at, and record the constraint."
+   - M9's reading: state the replica counts the system will run at, with their source; design a
+     canary whose steps work at those counts; record its constraint in an ADR. The current
+     `infrastructure/argo-rollouts/` design (10% by replica count, hence at least 10 API pods;
+     `infrastructure/k8s/README.md`) is withdrawn and must change.
+3. Owner: "PagerDuty for all alerts: no. Specify a webhook alert sink with PagerDuty as one
+   adapter, so no vendor is baked in."
+   - M9's reading: Alertmanager routes to a generic webhook receiver contract, with PagerDuty one
+     adapter behind it. The current `alertmanager.yml` (PagerDuty receivers per team, keys from
+     the Secret `fraudshield-alertmanager-pagerduty`) and the Argo Rollouts `pagerdutyv2`
+     notification in `infrastructure/k8s/README.md` must change.
+4. Owner: "Minimum Kubernetes 1.34: too aggressive. Set the floor at the oldest version whose
+   features you actually use, state which features set it, and record the substitution."
+   - M9's reading: inventory the Kubernetes API versions and fields the manifests use and the
+     version each became stable; the floor follows from that, and kubeconform's pinned schema
+     version moves to it. The floor is not known yet; nothing here asserts one.
+5. Owner: "OWASP Dependency-Check with an NVD key: use the recorded substitution (Trivy or OSV),
+   not a key I would have to register for."
+   - M9's reading and choice: Trivy, which already runs in `security.yml` (section 2);
+     OSV-Scanner stays available if Trivy's coverage proves short. An ADR records the
+     substitution against the tool SRS 8.1 names.
+6. Owner: "Cloud and KMS vendor: deferred. Specify the interface and ship a reference
+   implementation; no vendor name in the code path."
+   - M9's reading: the vault's `KmsClient` port (section 8.2) gets a reference implementation
+     that names no vendor and passes `KmsClientContract`.
+   - **Open:** section 8.2's acceptance 1 and 2 ask for a binding to a named service (AWS KMS,
+     Google Cloud KMS or Vault Transit) tested against the real service. M9's reading is that
+     they stay open until a vendor is chosen, not that the deferral closes them; that reading may
+     sit against "no vendor name in the code path", so it is the owner's to confirm.
+7. Owner: "PB-70/71 to M6 and PB-72 to M10: confirmed." (As already recorded in the claims table of
+   `docs/backlog/product.md`, owner confirmation 2026-10-17.)
+8. Owner: "Storage-class fsync fallback: raise as an ADR with options and a recommendation, do not
+   implement."
+   - M9's reading: ADR 0092 (claimed below), Proposed, with options and a recommendation, on what
+     happens when a storage class does not meet ADR 0090's condition (spool append p95 on the
+     shared volume within the 2 ms step-10 budget). No code.
+
+### Identifiers claimed by this branch
+
+| Id | Subject | State |
+|---|---|---|
+| ADR 0090 | API spool on a shared volume with orphan replay | written on this branch |
+| ADR 0091 | live AUC and label-coverage metrics | written on this branch |
+| ADR 0092 | the storage-class fsync fallback for ADR 0090 (decision 8) | claimed, not written |
 
 ## 4. Deviations to record in the traceability rows
 
@@ -179,7 +242,7 @@ spool on SIGTERM within 120 s.
 | Grafana dashboards provisioned as code | done on branch (5 dashboards) |
 | Alert rules for every SRS 8.2 threshold | all, including the AUC drop (ADR 0091); the AUC and coverage gauges are not emitted yet |
 | k8s manifests: namespace, NetworkPolicies, PSA restricted, HPA, PDBs | done on branch for application and observability workloads; data stores not included |
-| Argo Rollouts canary with automated analysis | done on branch; never applied to a cluster |
+| Argo Rollouts canary with automated analysis | built on branch, never applied to a cluster; the design is withdrawn by the owner (3b, decision 2) and must be redone |
 | ZAP 0 critical | not run: no API service in compose yet |
 | Gitleaks 0 | existing `ci.yml` job, green on this branch |
 | Trivy 0 high/critical unfixed | dependencies and configuration: 0, CI run 35692117624; images: none built yet |
@@ -190,7 +253,8 @@ TimescaleDB and the PII vault, Kafka, Redis, MLflow, object store) with their Ne
 and encryption at rest (D-20, D-49); Loki, a log collector and the OpenTelemetry Collector; the
 edge image (nginx: TLS 1.3, HSTS, CSP, rate limits); staging and production deploy workflows
 with the GitHub environment approval; an alerting dead-man's switch and HA (R-15); admission-time
-signature verification (R-16); OWASP Dependency-Check or its recorded substitution; SonarQube
+signature verification (R-16); the ADR recording Trivy as the substitution for OWASP
+Dependency-Check (3b, decision 5); SonarQube
 (skipped without a token, per E.11).
 
 **Scheduled and manual triggers.** The new workflows have nightly `schedule` and
