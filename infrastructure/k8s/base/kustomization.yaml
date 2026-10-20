@@ -10,7 +10,8 @@ resources:
   - api.yaml
   - ml.yaml
   # ml-worker.yaml is not deployed until the worker exists (PB-172): no code serves its metrics
-  # or the /health/live and /health/ready its probes read, and no image is built.
+  # or the /health/live and /health/ready its probes read, and no image is built. Until then it
+  # is not schema- or policy-checked either; its NetworkPolicy and scrape job stay, matching no pod.
   - frontend.yaml
   - ../../prometheus
   - ../../alertmanager

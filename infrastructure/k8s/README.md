@@ -26,7 +26,7 @@ NetworkPolicy, PodDisruptionBudget and, for serving components, an HPA for every
 - **Argo Rollouts** controller in namespace `argo-rollouts` (production), with the notification
   service `pagerdutyv2` configured so an aborted canary pages (SRS 8.1).
 - Secrets created per environment, never committed: `fraudshield-api-secrets`,
-  `fraudshield-ml-secrets`, `fraudshield-ml-worker-secrets`, `fraudshield-edge-tls`
+  `fraudshield-ml-secrets`, `fraudshield-ml-worker-secrets` (once the worker is deployed, PB-172), `fraudshield-edge-tls`
   (`kubernetes.io/tls`), `fraudshield-alertmanager-pagerduty` (keys `sre`, `risk`, `ml`),
   `fraudshield-grafana-admin` (key `password`).
 - Data stores are not in these manifests yet: PostgreSQL + TimescaleDB (CloudNativePG, D-49), the
@@ -43,7 +43,7 @@ these through `docs/parallel/M9_updates.md`.
 
 | Workload | Image | Ports | Probes | Other |
 |---|---|---|---|---|
-| `fraudshield-api` | `ghcr.io/mariusbayizere/fraudshield-api` | `http` 8080, `management` 8081 (health and `/actuator/prometheus`) | startup and liveness `GET :8081/actuator/health`; readiness `GET :8080/api/v1/health` (ADR 0014) | UID 10001, read-only root; writable `/tmp`; spool on the shared volume at `$FRAUDSHIELD_SPOOL_DIR/$FRAUDSHIELD_SPOOL_INSTANCE` (pod name) with replay of dead pods' directories (ADR 0090, contract in `docs/parallel/M9_updates.md`); `SPRING_PROFILES_ACTIVE` from the overlay |
+| `fraudshield-api` | `ghcr.io/mariusbayizere/fraudshield-api` | `http` 8080, `management` 8081 (health and `/actuator/prometheus`) | startup and liveness `GET :8081/actuator/health`; readiness `GET :8080/api/v1/health` (ADR 0014) | UID 10001, read-only root; writable `/tmp`; spool in its own directory on the shared volume, `/var/lib/fraudshield/spool/<pod name>` (`FRAUDSHIELD_SPOOL_DIR` includes the pod name); **a dead pod's directory is not replayed** (stop-gap of 2026-10-20; the StatefulSet fix is PB-171); `SPRING_PROFILES_ACTIVE` from the overlay |
 | `fraudshield-ml` | `ghcr.io/mariusbayizere/fraudshield-ml` | `grpc` 50051 (mTLS), `admin` 8081 (`/metrics`; the scorer's `--admin-port` default) | `GET :8081/health/live`, `GET :8081/health/ready` (kubelet gRPC probes cannot present a client certificate) | UID 10001, read-only root, writable `/tmp` |
 | `fraudshield-ml-worker` (**not deployed**: no worker code or image exists, PB-172) | `ghcr.io/mariusbayizere/fraudshield-ml-worker` | `metrics` 8000 (`/metrics`) | `GET :8000/health/live`, `GET :8000/health/ready` | UID 10001, read-only root, writable `/tmp` |
 | `fraudshield-frontend` | `ghcr.io/mariusbayizere/fraudshield-frontend` | `http` 8080 | `GET :8080/` | UID 10001, read-only root, writable `/tmp` |

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Validate everything under infrastructure/ with the pinned, checksum-verified tools only. No
 # Docker, no cluster, no running services: the same command runs on a laptop and in CI
-# (.github/workflows/infrastructure.yml).
+# (.github/workflows/infrastructure.yml), except the Loki rule lint, which runs in CI only.
 #
 # Usage: infrastructure/checks/validate.sh [--quick]
 #   --quick skips the multi-day promtool tests (about 4 minutes on one core).

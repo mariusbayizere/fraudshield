@@ -25,8 +25,8 @@ spec:
     spec:
       serviceAccountName: fraudshield-api
       automountServiceAccountToken: false
-      # Graceful shutdown tries to drain this pod's spool to Kafka; whatever remains is recovered
-      # from the shared volume by another API pod (ADR 0090).
+      # Whatever remains in this pod's spool at shutdown stays in its own directory on the shared
+      # volume; nothing replays it (stop-gap, see the env comment below; PB-171).
       terminationGracePeriodSeconds: 120
       securityContext:
         runAsNonRoot: true

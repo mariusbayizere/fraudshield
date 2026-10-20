@@ -229,8 +229,11 @@ All `IN_PROGRESS` until review and merge; evidence paths are on `m9/infra`.
 - `fs_spool_depth`: per API pod, number of decisions not yet acknowledged by Kafka.
 - No account, device or counterparty tokens as label values (threat model 3.9).
 
-**M6: spool layout and replayer contract (ADR 0090).** Binding on the M6 spool module unless
-changed by a new ADR. The manifests provide the volume and two variables; everything else is M6's.
+**M6: spool layout and replayer contract (ADR 0090). Superseded, 2026-10-20 (section 3c, item 1):
+not binding.** M6 built a per-instance spool with two consumers (ADR 0064), not this; the owner
+ruled that this contract's option is not to be started and filed the StatefulSet with a volume
+per pod as the fix (PB-171). Until then each pod has its own directory and **nothing replays a
+dead pod's spool**. Kept below as the record of what ADR 0090 proposed.
 
 - **Where.** `$FRAUDSHIELD_SPOOL_DIR` (`/var/lib/fraudshield/spool`) is a ReadWriteMany volume
   shared by all API pods. Each pod owns `$FRAUDSHIELD_SPOOL_DIR/$FRAUDSHIELD_SPOOL_INSTANCE/`
@@ -307,7 +310,7 @@ being confirmed).
 | Alert `FraudShieldTransactionRateDrop`; panels fs-decision-path "Transactions per second" and "Ingest responses by status"; **the canary's `error-rate` analysis, which fails every rollout** | `fs_ingest_requests_total` | PB-174 |
 | Alert `FraudShieldKafkaConsumerLagHigh`; panel fs-kafka-spool "Consumer lag by topic and group" | `fs_kafka_consumer_lag` | PB-174 |
 | Alert `FraudShieldSpoolBacklog`; panel fs-kafka-spool "Spool depth by pod" | `fs_spool_depth`, exported under another name if the scrape confirms `fs_spool_depth_bytes` | PB-174, ADR 0093 |
-| Panel fs-decision-path "Redis hit ratio and DB pool in use" | `fs_redis_hit_ratio`, `fs_db_pool_in_use` | PB-174, ADR 0093 |
+| Panel fs-decision-path "Redis hit ratio and DB pool in use" | `fs_redis_hit_ratio`, `fs_db_pool_in_use` | PB-174 (DB pool), PB-178 and ADR 0093 (both) |
 | Panels fs-decision-path "Scoring latency p95 by stage", "Feature fetch latency p95 by source"; fs-model-health "Model versions by alias" | `fs_scoring_latency_seconds`, `fs_feature_latency_seconds`, `fs_model_version_info` | PB-175 |
 | Alerts `FraudShieldFalsePositiveRateHigh`, `FraudShieldFeatureDrift`, `FraudShieldModelAucDrop`; panels fs-risk-overview "False positive rate (labelled)", fs-model-health "Live AUC-ROC (production) and alert level", "Label coverage by alias", "Top 10 features by PSI" | `fs_false_positive_rate`, `fs_feature_psi`, `fs_model_auc_roc`, `fs_model_label_coverage` | PB-176 (after PB-172) |
 | Panels fs-analyst-operations "Alert queue depth by tier", "Review duration p50 / p90", "Review duration distribution" | `fs_alert_queue_depth`, `fs_review_duration_seconds` | PB-177 |
