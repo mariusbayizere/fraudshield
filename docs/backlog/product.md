@@ -23,7 +23,7 @@ taken twice. Claims made on branches not yet merged, as of 2026-10-17:
 | PB-76 | M4 | `M4_updates.md` on `m4/generalisation` | training rows near the corpus's start see truncated history (was a second `PB-69`) |
 | PB-77 to PB-101 | M6 | `M6_updates.md`, "Numbering reserved by this branch" | amendment 1's known gaps and the 22 section-8 rows proved only in part |
 | PB-102 to PB-130 | M7 | `M7_updates.md`, "Numbering reserved by this branch" | the merge round's unowned items and M7's rows proved only in part (PB-102 to PB-124 used) |
-| PB-151 to PB-170 | M8B | `M8B_updates.md`, "Numbering reserved by this branch" | the analyst API's follow-ups (PB-151 to PB-155 used); M8B also holds ADR 0110–0119 and Flyway V80–V89 |
+| PB-151 to PB-170 | M8B | `M8B_updates.md`, "Numbering reserved by this branch" | the analyst API's follow-ups (PB-151 to PB-156 used); M8B also holds ADR 0110–0119 and Flyway V80–V89 |
 
 ---
 
@@ -1498,6 +1498,11 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 - **Source:** M8B, review 1 of P1's contract changes (finding 4), 2026-10-20 · **Priority:** medium · **Due:** M8B P1 (alerts), owner (`ScoringResult`)
 - **Problem:** when the scorer is unavailable, `DecisionService.fallbackRecord` and `PostgresSink` store `anomaly_score` 0 in `fraud_scores` (NOT NULL) although no model ran; the decision event carries null. `ScoringResult.anomaly_score` is required and non-null in the contract, so a fallback scoring result reports 0 too.
 - **Acceptance:** P1's alerts serve null (ADR 0110); `ScoringResult` and the column made nullable, or the fallback marked, by a contract change.
+
+### PB-156 · `UnblockReconciler` re-selects refused unblocks for ever, and a full batch starves the rest
+- **Source:** M8B, review 2 of the decision-commit contract (finding 10), 2026-10-20 · **Priority:** medium · **Due:** M8B P2
+- **Problem:** an unblock whose transition is refused stays selected on every tick, and with 100 such rows (the batch size) no newer unblock is ever reached.
+- **Acceptance:** a refused unblock is recorded as refused and leaves the selection; a test with more than one batch of refused rows.
 
 ### PB-76 · Training rows near the corpus's start see truncated history; test rows do not
 - **Source:** PB-67's laptop cache, 2026-09-22 · **Priority:** high · **Due:** before the paper's
