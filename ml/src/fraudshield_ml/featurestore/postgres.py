@@ -68,7 +68,7 @@ class PostgresFallback:
     reused under a lock, and replaced after any failure.
     """
 
-    def __init__(  # noqa: PLR0913 - two reference tables and three bounds, each a setting
+    def __init__(  # noqa: PLR0913 - the connector, two reference tables, two bounds and a clock
         self,
         connect: Callable[[], Connection],
         minor_units: dict[str, int],
@@ -82,7 +82,9 @@ class PostgresFallback:
         self._minor_units = dict(minor_units)
         #: The sender's country is derived from the currency, as serving and training derive it
         #: (`Reference.account_country`), not taken from V67's column, which holds the institution's
-        #: country: the two disagree for a foreign-currency transaction (PB-154).
+        #: country: the two disagree for a foreign-currency transaction (PB-154). No feature reads a
+        #: history row's country today, so this keeps the rows true rather than fixing a score. An
+        #: undeclared currency gives None here, where serving raises: history is past data.
         self._country_of_currency = dict(country_of_currency)
         self._timeout_ms = int(statement_timeout_ms)
         self._cool_down_s = float(cool_down_s)

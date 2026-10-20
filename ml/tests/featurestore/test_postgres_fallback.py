@@ -410,3 +410,10 @@ def test_a_session_that_cannot_roll_back_is_lost_on_both_paths() -> None:
     assert failing.closed
     with pytest.raises(FallbackUnavailableError, match="failed recently"):
         reader.device_first_seen("tok_D", AT)
+
+
+def test_a_currency_no_pack_declares_leaves_the_history_rows_country_unknown() -> None:
+    reader = PostgresFallback(lambda: _Connection(SEEN), {}, country_of_currency={"RWF": "RW"})
+    durable = reader.account(ACCOUNT, AT)
+    assert durable is not None
+    assert all(t.account_country is None for t in durable.transactions), "KES is not declared"

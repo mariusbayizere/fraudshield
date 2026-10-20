@@ -508,7 +508,12 @@ def test_an_account_the_database_has_never_seen_is_new_not_unknown() -> None:
 def test_the_database_session_is_bounded_and_read_only() -> None:
     """The reader's SETs must outlive the transaction the driver opened for them."""
     db = _postgres().db
-    reader = PostgresFallback(db.scorer, dict(REFERENCE.minor_units), statement_timeout_ms=200)
+    reader = PostgresFallback(
+        db.scorer,
+        dict(REFERENCE.minor_units),
+        country_of_currency=REFERENCE.country_of_currency,
+        statement_timeout_ms=200,
+    )
     assert reader.account("tok_" + "N" * 24, START) is None
     connection = reader._connection
     assert connection is not None
@@ -529,7 +534,9 @@ def test_at_the_production_bounds_a_timed_out_statement_does_not_refuse_the_next
     """The deployment's defaults (100 ms statements, 200 ms socket) against a real server: a
     statement PostgreSQL cancels fails its own read, and the next read is served."""
     db = _postgres().db
-    reader = PostgresFallback(db.scorer, dict(REFERENCE.minor_units))
+    reader = PostgresFallback(
+        db.scorer, dict(REFERENCE.minor_units), country_of_currency=REFERENCE.country_of_currency
+    )
     assert reader.account("tok_" + "Q" * 24, START) is None
     kept = reader._connection
     with pytest.raises(FallbackUnavailableError):
