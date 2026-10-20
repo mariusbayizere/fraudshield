@@ -1,0 +1,43 @@
+# evidence-commit: 74ea29ab177540e0b35d127d8e538805f6098057
+# evidence-tree-state: clean
+# evidence-machine: AMD EPYC 9V45 96-Core Processor; 4 logical cores; 15.6 GiB
+# command: python docs/research/paper/evidence/round2.py --fingerprint d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32 selection --dataset /home/runner/work/_temp/bench1m --packs /home/runner/work/_temp/packs.json --split /home/runner/work/_temp/split.json 300000=/home/runner/work/_temp/sel_300000.parquet 360000=/home/runner/work/_temp/sel_360000.parquet 400000=/home/runner/work/_temp/sel_400000.parquet 520000=/home/runner/work/_temp/sel_520000.parquet 700000=/home/runner/work/_temp/sel_700000.parquet 2000000=/home/runner/work/_temp/sel_2000000.parquet
+# models and features: the code at 088cfd2ca1df68500a5a886fbc5f6ca33b44111d
+# draw: d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32; plan: docs/research/paper/evidence/round2_plan.md
+# resamples: 1000 of whole accounts, stratified by fraud, resampling seed 1
+# exit: see RESULT at the end; a file without one is from a run that did not finish
+
+TRAINING-ROW SELECTION: 30,000 training rows at each corpus depth; the same test rows,
+model and seeds; history = days from the corpus's first transaction to the training row
+  corpus 300000: history days min 0.0, quartiles 14.3 / 30.2 / 44.2, max 60.0; under 30 days 0.495, under 90 days 1.000
+  training rows 30000, test rows 101909, fraud 985
+    recall at 0.60   seed 1 0.683  rows [0.653, 0.711]  clustered [0.646, 0.719]  five seeds 0.7060 +/- 0.0191
+    recall at 1% FPR seed 1 0.865  rows [0.843, 0.886]  clustered [0.843, 0.887]  five seeds 0.8443 +/- 0.0206
+    AUC              seed 1 0.969  rows [0.961, 0.976]  clustered [0.961, 0.977]  five seeds 0.9583 +/- 0.0120
+  corpus 360000: history days min 0.0, quartiles 25.5 / 51.0 / 77.0, max 102.9; under 30 days 0.290, under 90 days 0.878
+  training rows 30000, test rows 101909, fraud 985
+    recall at 0.60   seed 1 0.629  rows [0.596, 0.661]  clustered [0.592, 0.664]  five seeds 0.6569 +/- 0.0211
+    recall at 1% FPR seed 1 0.870  rows [0.848, 0.890]  clustered [0.849, 0.891]  five seeds 0.8526 +/- 0.0155
+    AUC              seed 1 0.965  rows [0.957, 0.972]  clustered [0.957, 0.973]  five seeds 0.9632 +/- 0.0054
+  corpus 400000: history days min 0.0, quartiles 30.0 / 63.0 / 95.6, max 128.1; under 30 days 0.250, under 90 days 0.707
+  training rows 30000, test rows 101909, fraud 985
+    recall at 0.60   seed 1 0.736  rows [0.707, 0.765]  clustered [0.705, 0.767]  five seeds 0.7440 +/- 0.0410
+    recall at 1% FPR seed 1 0.871  rows [0.847, 0.891]  clustered [0.846, 0.893]  five seeds 0.8408 +/- 0.0252
+    AUC              seed 1 0.970  rows [0.962, 0.977]  clustered [0.962, 0.978]  five seeds 0.9667 +/- 0.0040
+  corpus 520000: history days min 0.0, quartiles 54.9 / 100.9 / 154.9, max 209.6; under 30 days 0.145, under 90 days 0.444
+  training rows 30000, test rows 101909, fraud 985
+    recall at 0.60   seed 1 0.782  rows [0.755, 0.807]  clustered [0.751, 0.811]  five seeds 0.7641 +/- 0.0130
+    recall at 1% FPR seed 1 0.876  rows [0.855, 0.896]  clustered [0.855, 0.898]  five seeds 0.8603 +/- 0.0274
+    AUC              seed 1 0.964  rows [0.956, 0.972]  clustered [0.955, 0.973]  five seeds 0.9639 +/- 0.0030
+  corpus 700000: history days min 0.0, quartiles 94.5 / 177.4 / 257.2, max 343.0; under 30 days 0.086, under 90 days 0.238
+  training rows 30000, test rows 101909, fraud 985
+    recall at 0.60   seed 1 0.759  rows [0.731, 0.785]  clustered [0.729, 0.791]  five seeds 0.7346 +/- 0.0384
+    recall at 1% FPR seed 1 0.853  rows [0.828, 0.874]  clustered [0.829, 0.875]  five seeds 0.8593 +/- 0.0169
+    AUC              seed 1 0.965  rows [0.956, 0.972]  clustered [0.956, 0.973]  five seeds 0.9614 +/- 0.0039
+  corpus 2000000: history days min 0.0, quartiles 168.8 / 328.6 / 467.2, max 602.3; under 30 days 0.049, under 90 days 0.129
+  training rows 30000, test rows 101909, fraud 985
+    recall at 0.60   seed 1 0.788  rows [0.760, 0.812]  clustered [0.760, 0.816]  five seeds 0.7565 +/- 0.0384
+    recall at 1% FPR seed 1 0.867  rows [0.844, 0.887]  clustered [0.844, 0.889]  five seeds 0.8471 +/- 0.0169
+    AUC              seed 1 0.967  rows [0.958, 0.974]  clustered [0.958, 0.975]  five seeds 0.9638 +/- 0.0067
+
+RESULT: exit 0

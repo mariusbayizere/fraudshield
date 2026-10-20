@@ -1,0 +1,32 @@
+# evidence-commit: 74ea29ab177540e0b35d127d8e538805f6098057
+# evidence-tree-state: clean
+# evidence-machine: AMD EPYC 7763 64-Core Processor; 4 logical cores; 15.6 GiB
+# command: python docs/research/paper/evidence/round2.py --fingerprint d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32 curve --small /home/runner/work/_temp/lc120k.parquet --large /home/runner/work/_temp/lc240k.parquet
+# models and features: the code at 088cfd2ca1df68500a5a886fbc5f6ca33b44111d
+# draw: d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32; plan: docs/research/paper/evidence/round2_plan.md
+# resamples: 1000 of whole accounts, stratified by fraud, resampling seed 1
+# exit: see RESULT at the end; a file without one is from a run that did not finish
+
+LEARNING CURVE, rebuilt as recorded, with account-clustered intervals at seed 1
+  30000 training rows, cache lc120k.parquet
+  training rows 30000, test rows 101909, fraud 985
+    recall at 0.60   seed 1 0.795  rows [0.766, 0.818]  clustered [0.765, 0.825]  five seeds 0.7669 +/- 0.0245
+    recall at 1% FPR seed 1 0.869  rows [0.847, 0.891]  clustered [0.848, 0.893]  five seeds 0.8514 +/- 0.0315
+    AUC              seed 1 0.967  rows [0.959, 0.975]  clustered [0.959, 0.976]  five seeds 0.9562 +/- 0.0129
+  60000 training rows, cache lc120k.parquet
+  training rows 60000, test rows 101909, fraud 985
+    recall at 0.60   seed 1 0.799  rows [0.773, 0.823]  clustered [0.771, 0.826]  five seeds 0.7722 +/- 0.0376
+    recall at 1% FPR seed 1 0.854  rows [0.830, 0.876]  clustered [0.832, 0.882]  five seeds 0.8625 +/- 0.0119
+    AUC              seed 1 0.970  rows [0.963, 0.976]  clustered [0.963, 0.977]  five seeds 0.9702 +/- 0.0005
+  120000 training rows, cache lc120k.parquet
+  training rows 120000, test rows 101909, fraud 985
+    recall at 0.60   seed 1 0.798  rows [0.772, 0.821]  clustered [0.772, 0.825]  five seeds 0.7787 +/- 0.0230
+    recall at 1% FPR seed 1 0.878  rows [0.857, 0.898]  clustered [0.857, 0.900]  five seeds 0.8688 +/- 0.0186
+    AUC              seed 1 0.973  rows [0.966, 0.979]  clustered [0.965, 0.980]  five seeds 0.9714 +/- 0.0025
+  240000 training rows, cache lc240k.parquet
+  training rows 240000, test rows 101909, fraud 985
+    recall at 0.60   seed 1 0.783  rows [0.755, 0.808]  clustered [0.752, 0.814]  five seeds 0.7945 +/- 0.0243
+    recall at 1% FPR seed 1 0.860  rows [0.838, 0.881]  clustered [0.838, 0.882]  five seeds 0.8763 +/- 0.0128
+    AUC              seed 1 0.968  rows [0.960, 0.976]  clustered [0.960, 0.977]  five seeds 0.9698 +/- 0.0019
+
+RESULT: exit 0

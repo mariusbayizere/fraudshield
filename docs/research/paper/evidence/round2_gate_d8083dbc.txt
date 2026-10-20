@@ -1,0 +1,118 @@
+# evidence-commit: 74ea29ab177540e0b35d127d8e538805f6098057
+# evidence-tree-state: clean
+# evidence-machine: AMD EPYC 9V45 96-Core Processor; 4 logical cores; 15.6 GiB
+# command: python docs/research/paper/evidence/round2.py --fingerprint d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32 gate --gate-cache /home/runner/work/_temp/features_gate.parquet --battery-cache /home/runner/work/_temp/features_full.parquet --dataset /home/runner/work/_temp/bench1m --split /home/runner/work/_temp/split.json --out /home/runner/work/_temp/out
+# models and features: the code at 72e7790f02a3c67367ec2936698aae33e607926e
+# draw: d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32; plan: docs/research/paper/evidence/round2_plan.md
+# resamples: 1000 of whole accounts, stratified by fraud, resampling seed 1
+# exit: see RESULT at the end; a file without one is from a run that did not finish
+
+GATE MODEL (D-05 ensemble, 30000 training rows, seed 1)
+  test rows 101909, confirmed fraud 985, accounts 5878; AUC 0.970, recall at 1% FPR 0.871, recall at 0.60 0.736
+
+REVERSAL VARIANT, production ensemble (1% FPR threshold 0.0177: rows strictly above it; flag: at or above 0.60)
+  clustered recall holds each threshold at its full-sample value, so it leaves out the
+  threshold's own uncertainty; a resample holding none of a subgroup's rows is dropped
+  all reversal rows: 66 confirmed-fraud rows on 66 accounts
+    1% FPR budget  caught 6/66  recall 0.091  Wilson [0.042, 0.184]  clustered [0.029, 0.161] (0 of 1000 resamples held none of these rows and were dropped)
+    flag 0.60      caught 0/66  recall 0.000  Wilson [0.000, 0.055]  clustered [0.000, 0.000] (0 of 1000 resamples held none of these rows and were dropped)
+  counterparty_is_new_for_account = 1: 19 confirmed-fraud rows on 19 accounts
+    1% FPR budget  caught 6/19  recall 0.316  Wilson [0.154, 0.540]  clustered [0.105, 0.522] (0 of 1000 resamples held none of these rows and were dropped)
+    flag 0.60      caught 0/19  recall 0.000  Wilson [0.000, 0.168]  clustered [0.000, 0.000] (0 of 1000 resamples held none of these rows and were dropped)
+  counterparty_is_new_for_account = 0: 47 confirmed-fraud rows on 47 accounts
+    1% FPR budget  caught 0/47  recall 0.000  Wilson [0.000, 0.076]  clustered [0.000, 0.000] (0 of 1000 resamples held none of these rows and were dropped)
+    flag 0.60      caught 0/47  recall 0.000  Wilson [0.000, 0.076]  clustered [0.000, 0.000] (0 of 1000 resamples held none of these rows and were dropped)
+  reversal fraud rows with counterparty_is_new_for_account undefined: 0
+
+CALIBRATION of the production ensemble (battery.reliability, battery.decision_region:
+the definitions behind the diagnostic model's published decision-region figure)
+  all test rows: 101909, expected calibration error 0.0014
+  decision region (score >= 0.60): rows 782, fraud 725, expected calibration error 0.0284, Brier 0.06211
+    predicted       rows   predicted   observed
+    [0.7, 0.8)        88    0.707      0.716
+    [0.8, 0.9)         1    0.858      1.000
+    [0.9, 1.0)       693    0.985      0.954
+
+BASELINES: AUC, and the baseline's AUC minus the ensemble's with a paired
+account-clustered interval (in place of DeLong p-values, which assume independent rows)
+  status-quo rule engine     AUC 0.707  difference -0.2633  clustered [-0.288, -0.240]
+  logistic regression        AUC 0.965  difference -0.0050  clustered [-0.009, -0.002]
+  random forest              AUC 0.967  difference -0.0027  clustered [-0.007, 0.001]
+  XGBoost alone              AUC 0.970  difference +0.0000  clustered [-0.000, 0.000]
+  LightGBM alone             AUC 0.952  difference -0.0184  clustered [-0.026, -0.011]
+  Isolation Forest alone     AUC 0.943  difference -0.0275  clustered [-0.034, -0.021]
+
+ABLATIONS: refitted on the same split; AUC minus the full model's, paired interval
+  without agent features               36 feat  AUC 0.966  difference -0.0038  clustered [-0.007, -0.001]
+  without the corridor feature         37 feat  AUC 0.966  difference -0.0041  clustered [-0.007, -0.001]
+  without round-sum awareness          37 feat  AUC 0.968  difference -0.0025  clustered [-0.005, -0.000]
+  without month-end awareness          37 feat  AUC 0.969  difference -0.0008  clustered [-0.003, 0.001]
+  card-style features only             30 feat  AUC 0.928  difference -0.0420  clustered [-0.051, -0.033]
+  without USSD-aware device handling   38 feat  AUC 0.970  difference -0.0004  clustered [-0.002, 0.002]
+
+SINGLE-FEATURE FLOOR on the gate's test rows: max(AUC, 1-AUC), orientation fixed by
+the point estimate, Hanley-McNeil and account-clustered 95% intervals
+  velocity_ratio_1h_vs_30d               0.879  +/-0.014  clustered [0.862, 0.894]
+  counterparty_is_new_for_account        0.819  +/-0.016  clustered [0.796, 0.843]
+  tx_count_1h                            0.814  +/-0.016  clustered [0.797, 0.831]
+  amount_sum_24h                         0.752  +/-0.018  clustered [0.733, 0.770]
+  tx_count_24h                           0.748  +/-0.018  clustered [0.729, 0.769]
+  unique_counterparties_24h              0.745  +/-0.018  clustered [0.725, 0.766]
+  tx_count_to_counterparty_30d           0.734  +/-0.018  clustered [0.714, 0.751]
+  counterparty_confirmed_fraud_90d       0.712  +/-0.018  clustered [0.681, 0.743]
+  synthetic_identity_score               0.707  +/-0.018  clustered [0.677, 0.736]
+  amount_log1p                           0.659  +/-0.019  clustered [0.626, 0.689]
+  counterparty_unique_senders_24h        0.634  +/-0.019  clustered [0.610, 0.658]
+  amount_sum_7d                          0.606  +/-0.019  clustered [0.577, 0.637]
+  is_local_night                         0.605  +/-0.019  clustered [0.575, 0.635]
+  channel                                0.594  +/-0.019  clustered [0.567, 0.621]
+  round_sum_flag                         0.588  +/-0.019  clustered [0.565, 0.611]
+  local_hour_cos                         0.574  +/-0.019  clustered [0.528, 0.624]
+  tx_count_7d                            0.546  +/-0.019  clustered [0.519, 0.574]
+  tx_count_60s                           0.538  +/-0.018  clustered [0.528, 0.548]
+  local_hour_sin                         0.537  +/-0.018  clustered [0.501, 0.570]
+  geo_cell_fraud_rate_30d                0.523  +/-0.018  clustered [0.495, 0.551]
+  local_day_of_week                      0.515  +/-0.018  clustered [0.477, 0.553]
+  is_month_end_window                    0.509  +/-0.018  clustered [0.481, 0.537]
+  corridor_class                         0.507  +/-0.018  clustered [0.502, 0.511]
+  is_new_country_for_account             0.501  +/-0.018  clustered [0.500, 0.502]
+  dormancy_reactivation_flag             0.500  +/-0.018  clustered [0.500, 0.502]
+  not defined on every test row, so not ranked (as gate_run._best): accounts_per_device_7d, agent_cashout_count_1h, agent_unique_customers_1h, amount_to_max_90d_ratio, amount_zscore_90d, days_since_sim_swap, device_age_days, device_changes_24h, device_is_new_for_account, distance_from_home_centroid_km, distance_from_last_tx_km, implied_speed_kmh, seconds_since_last_tx
+
+LEAVE-ONE-COUNTRY-OUT (diagnostic battery): AUC in-sample and with the country unseen in
+training, each with an account-clustered interval over that country's test rows
+  CD  rows 5065, fraud 14, accounts 294: in-sample 0.989 [0.955, 1.000], unseen 0.988 [0.944, 1.000]
+  KE  rows 28516, fraud 264, accounts 1646: in-sample 0.980 [0.964, 0.991], unseen 0.977 [0.958, 0.989]
+  RW  rows 42810, fraud 445, accounts 2469: in-sample 0.969 [0.954, 0.980], unseen 0.964 [0.950, 0.977]
+  TZ  rows 15274, fraud 152, accounts 882: in-sample 0.967 [0.939, 0.984], unseen 0.964 [0.935, 0.983]
+  UG  rows 10244, fraud 110, accounts 587: in-sample 0.967 [0.930, 0.987], unseen 0.961 [0.922, 0.985]
+
+RECONCILIATION of the test period's frauds (dataset labels, test segment by split.json)
+  test rows 101909; observed (confirmed) fraud 985; the gate cache's test rows hold 985
+  variant                            fraud type                observed  true   rows
+  adapted_below_threshold            account_takeover          True      True   1
+  adapted_below_threshold            card_not_present          True      True   5
+  adapted_below_threshold            merchant_fraud            True      True   5
+  base                               account_takeover          False     True   2
+  base                               account_takeover          True      True   144
+  base                               agent_fraud               False     True   2
+  base                               agent_fraud               True      True   106
+  base                               card_not_present          False     True   2
+  base                               card_not_present          True      True   121
+  base                               merchant_fraud            True      True   73
+  base                               mule_account              False     True   2
+  base                               mule_account              True      True   115
+  base                               none                      True      False  8
+  base                               sim_swap                  False     True   1
+  base                               sim_swap                  True      True   79
+  base                               synthetic_identity        False     True   1
+  base                               synthetic_identity        True      True   86
+  base                               velocity                  False     True   1
+  base                               velocity                  True      True   103
+  novel_esim_delayed_drain           sim_swap                  True      True   73
+  reversal_scam_social_engineering   mule_account              False     True   2
+  reversal_scam_social_engineering   mule_account              True      True   66
+  observed fraud by variant: adapted_below_threshold 11, base 835, novel_esim_delayed_drain 73, reversal_scam_social_engineering 66
+  the gate cache's variant column on its fraud rows: (empty) 8, adapted_below_threshold 11, base 827, novel_esim_delayed_drain 73, reversal_scam_social_engineering 66
+
+RESULT: exit 0

@@ -1,0 +1,49 @@
+# Round-two evidence run: record (M11, written from the run's artefacts)
+
+Workflow run: https://github.com/mariusbayizere/fraudshield/actions/runs/39303322723
+Plan and code: commit 74ea29a (pushed before the run started), branch evidence/round2.
+
+## gate
+
+gate at 72e7790f02a3c67367ec2936698aae33e607926e
+runner: 4 cores, AMD EPYC 9V45 96-Core Processor, 15Gi
+
+Feature caches (built on the runner, not committed):
+fe93712151b22396ce8b4b37accf45140adbe877e5a761146cda8fc9cbd887ce  features_full.parquet
+9d9ff1eaf5c0cc5ee33cb7b054545e060d1446ad398070d021a99576f1f7cb29  features_gate.parquet
+
+## curve
+
+curve at 088cfd2ca1df68500a5a886fbc5f6ca33b44111d
+runner: 4 cores, AMD EPYC 7763 64-Core Processor, 15Gi
+
+Feature caches (built on the runner, not committed):
+71ee139d72ee68decf38695c2a1686d6bfd191204253725c0246b6014f893b2a  lc120k.parquet
+31d66888c41f2b7d77655dd3f6dd8f2fbd3a2a5b1341ced618535f808612b297  lc240k.parquet
+
+## selection
+
+selection at 088cfd2ca1df68500a5a886fbc5f6ca33b44111d
+runner: 4 cores, AMD EPYC 9V45 96-Core Processor, 15Gi
+
+Feature caches (built on the runner, not committed):
+093ccc44f9b14725766223a988ce70ca6d1e5050881eea7b9013548d64786df7  sel_2000000.parquet
+f445c6f3301680566c30a9a3a1a4e001d20ba15607d17b9a37fba3745ea34f82  sel_300000.parquet
+a1327275ec994883e9ab8118df2e58a81795ae0480752585830e9df4526e2613  sel_360000.parquet
+9d9ff1eaf5c0cc5ee33cb7b054545e060d1446ad398070d021a99576f1f7cb29  sel_400000.parquet
+9ac1e3817799c0a35d3ab917e43b31a21b695f1f1da2b9d364c3bdddbf954f7c  sel_520000.parquet
+39ee45fdee3e68ee8ac766499615f939acb3a3996bb42daaae194f195b677ab4  sel_700000.parquet
+
+Per-row gate scores (artefact only, never committed, G.5):
+fc9f5a72d2b00a21ca4214e37fe85e0f700ba725db1bd54bba44d5887e108db5  round2_gate_scores_d8083dbc.csv.gz
+
+## The gate job's failed status
+
+The gate job is marked failed because the workflow required exit 0 from `fs-features auc`,
+and that command exits 1 by design whenever a feature exceeds the D-08 ceiling (the M3
+evidence it re-runs records the same: "Result: FAILED"). Every output was written:
+round2_gate_d8083dbc.txt ends RESULT: exit 0, the auc and frontier outputs are complete and
+stamped, and every test-period read was logged. Nothing was re-run.
+
+Both gate-job caches are byte-identical to the first reproduction's (reproduce_d8083dbc.sha256,
+run 39273972313): same SHA-256 for features_gate.parquet and features_full.parquet.

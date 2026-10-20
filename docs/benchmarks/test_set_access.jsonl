@@ -28,3 +28,20 @@
 {"command": "evaluate", "purpose": "first evaluation and cache build", "source": "/home/runner/work/_temp/bench1m", "test_rows": 101909, "utc": "2026-10-19T15:05:50Z"}
 {"command": "clustered_intervals.py (gate)", "purpose": "paper evidence: account-clustered intervals", "source": "/home/runner/work/_temp/features_gate.parquet", "test_rows": 101909, "utc": "2026-10-19T15:07:49Z"}
 {"command": "clustered_intervals.py (battery)", "purpose": "paper evidence: account-clustered intervals", "source": "/home/runner/work/_temp/features_full.parquet", "test_rows": 101909, "utc": "2026-10-19T15:07:49Z"}
+{"command": "evaluate", "purpose": "first evaluation and cache build", "source": "/home/runner/work/_temp/bench1m", "test_rows": 101909, "utc": "2026-10-19T18:35:50Z"}
+{"command": "evaluate", "purpose": "first evaluation and cache build", "source": "/home/runner/work/_temp/bench1m", "test_rows": 101909, "utc": "2026-10-19T18:37:42Z"}
+{"command": "round2.py gate", "purpose": "paper evidence, round two", "source": "/home/runner/work/_temp/features_gate.parquet", "test_rows": 101909, "utc": "2026-10-19T18:41:31Z"}
+{"command": "round2.py gate (battery)", "purpose": "paper evidence, round two", "source": "/home/runner/work/_temp/features_full.parquet", "test_rows": 101909, "utc": "2026-10-19T18:41:31Z"}
+{"command": "round2.py reconcile", "purpose": "paper evidence, round two", "source": "/home/runner/work/_temp/bench1m", "test_rows": 101909, "utc": "2026-10-19T18:41:31Z"}
+{"command": "fs-features auc (round two, d8083dbc)", "purpose": "paper evidence, round two: single-feature measurement re-run", "source": "/home/runner/work/_temp/bench1m", "test_rows": 20000, "utc": "2026-10-19T18:41:49Z"}
+{"command": "frontier", "purpose": "latency-accuracy frontier (D-16)", "source": "/home/runner/work/_temp/features_full.parquet", "test_rows": 101909, "utc": "2026-10-19T18:42:01Z"}
+{"command": "round2.py curve", "purpose": "paper evidence, learning curve at 30000", "source": "/home/runner/work/_temp/lc120k.parquet", "test_rows": 101909, "utc": "2026-10-19T18:53:08Z"}
+{"command": "round2.py curve", "purpose": "paper evidence, learning curve at 60000", "source": "/home/runner/work/_temp/lc120k.parquet", "test_rows": 101909, "utc": "2026-10-19T18:53:08Z"}
+{"command": "round2.py curve", "purpose": "paper evidence, learning curve at 120000", "source": "/home/runner/work/_temp/lc120k.parquet", "test_rows": 101909, "utc": "2026-10-19T18:53:08Z"}
+{"command": "round2.py curve", "purpose": "paper evidence, learning curve at 240000", "source": "/home/runner/work/_temp/lc240k.parquet", "test_rows": 101909, "utc": "2026-10-19T18:53:08Z"}
+{"command": "round2.py selection", "purpose": "paper evidence, selection at corpus 300000", "source": "/home/runner/work/_temp/sel_300000.parquet", "test_rows": 101909, "utc": "2026-10-19T18:54:13Z"}
+{"command": "round2.py selection", "purpose": "paper evidence, selection at corpus 360000", "source": "/home/runner/work/_temp/sel_360000.parquet", "test_rows": 101909, "utc": "2026-10-19T18:54:13Z"}
+{"command": "round2.py selection", "purpose": "paper evidence, selection at corpus 400000", "source": "/home/runner/work/_temp/sel_400000.parquet", "test_rows": 101909, "utc": "2026-10-19T18:54:13Z"}
+{"command": "round2.py selection", "purpose": "paper evidence, selection at corpus 520000", "source": "/home/runner/work/_temp/sel_520000.parquet", "test_rows": 101909, "utc": "2026-10-19T18:54:13Z"}
+{"command": "round2.py selection", "purpose": "paper evidence, selection at corpus 700000", "source": "/home/runner/work/_temp/sel_700000.parquet", "test_rows": 101909, "utc": "2026-10-19T18:54:13Z"}
+{"command": "round2.py selection", "purpose": "paper evidence, selection at corpus 2000000", "source": "/home/runner/work/_temp/sel_2000000.parquet", "test_rows": 101909, "utc": "2026-10-19T18:54:13Z"}

@@ -1,0 +1,29 @@
+# evidence-commit: 72e7790f02a3c67367ec2936698aae33e607926e
+# evidence-tree-state: clean
+# command: .venv/bin/python -u -m fraudshield_ml.cli frontier /home/runner/work/_temp/features_full.parquet --requests 300 --repeats 3
+# exit: 0
+
+  50 trees, depth 3: done
+  100 trees, depth 4: done
+  200 trees, depth 5: done
+  400 trees, depth 6: done
+  800 trees, depth 8: done
+
+ACCURACY vs SINGLE-REQUEST LATENCY (D-16) — one row per request, never a batch: the
+scoring service handles one transaction per call, and a batch would amortise exactly the
+overhead a single request pays. 50 calls are discarded per configuration as warm-up.
+
+  NOT GATE NUMBERS. ADR 0010 permits latency percentiles as gate evidence only from the
+  dedicated machine in docs/benchmarks/hardware.md. What is measurable here is the shape
+  of the trade-off, over 900 timed requests per configuration.
+
+  trees depth  AUC            predict p50  +SHAP p50  SHAP cost  predict p99  +SHAP p99
+     50     3  0.971 +/-0.007        0.14       0.18      0.03ms        0.24       0.28
+    100     4  0.974 +/-0.007        0.15       0.27      0.13ms        0.26       0.38
+    200     5  0.972 +/-0.007        0.15       0.51      0.36ms        0.27       0.63
+    400     6  0.969 +/-0.008        0.16       0.74      0.57ms        0.29       0.91
+    800     8  0.968 +/-0.008        0.17       1.01      0.84ms        0.29       1.19
+
+  From 50 trees at depth 3 to 800 at depth 8: AUC -0.003
+  (inside every interval), while the explanation cost at p50 goes 0.03 -> 0.84 ms.
+  Complexity buys no accuracy on this benchmark and costs explanation latency.
