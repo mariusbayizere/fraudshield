@@ -187,7 +187,7 @@ Rows: 258. Status counts: DONE 55, DONE_WITH_DEVIATION 19, IN_PROGRESS 38, NOT_S
 | OPS-CI-06 | M | M9 | NOT_STARTED | Docker Build | — | — | — | — |
 | OPS-CI-07 | M | M9 | NOT_STARTED | Staging Deploy | — | — | — | docs/adr/0014-staff-authorisation-model.md |
 | OPS-CI-08 | M | M9 | NOT_STARTED | Production Deploy | — | — | — | — |
-| OPS-OBS-01 | M | M9 | NOT_STARTED | Application Metrics | — | — | — | — |
+| OPS-OBS-01 | M | M9 | NOT_STARTED | Application Metrics | — | backend/ingest/src/test/java/io/github/mariusbayizere/fraudshield/ingest/api/AssembledApplicationTest.java:355 | — | — |
 | OPS-OBS-02 | M | M9 | NOT_STARTED | Structured Logs | — | — | — | — |
 | OPS-OBS-03 | M | M9 | NOT_STARTED | ML Drift Monitoring | — | — | — | — |
 | OPS-OBS-04 | M | M9 | NOT_STARTED | Regulatory Audit Trail | — | — | — | D-32 |
