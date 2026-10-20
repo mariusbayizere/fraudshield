@@ -1,6 +1,7 @@
 # Analyst decisions: the commit and undo contract
 
-Status: **draft 6, for independent review.** Draft 6 is the owner's option (a) of 2026-10-20, and
+Status: **draft 6, reviewed SOUND_WITH_CHANGES with no MAJOR from its own change (review 6); its
+findings applied below, for a delta review.** Draft 6 is the owner's option (a) of 2026-10-20, and
 nothing else: `transaction_transitions` becomes **the only record** of every decision state after
 the model's first (T6).
 - **Why.** Review 5 (`docs/reviews/M8B/decision-commit-contract-review-5.md`) found a MAJOR from
@@ -155,7 +156,9 @@ in that order.
    - **no foreign key to `transaction_ids`, deliberately.** A writer reserves a later state without
      waiting for the sink, and a foreign key would bring back review 4's MAJOR 1 (review 5, m3).
    - **V81 backfills it** from every `decision_states` row with sequence > 1, with the event id it
-     already has. From then on, `decision_states` receives sequence 1 only (T6).
+     already has. A backfilled row's `event_body` holds only the `DecisionState`: the channel, the
+     actor and the label were never stored, and a backfilled reservation already has its recording
+     row, so it is never re-recorded. From then on, `decision_states` receives sequence 1 only (T6).
    - **A companion append-only table, `transaction_transition_recordings`** (`event_id` primary key,
      `recorded_at`), marks a reservation whose spool record has been written.
 7. **`v_alert_decision_state`:**
@@ -308,12 +311,20 @@ includes unblocks handled before V81, which the backfill moved (review 3, MAJOR 
 **T4. Recording.**
 - After the reservation commits, the writer records **the reservation's stored `event_body`**
   through the spool. A re-record is therefore byte-identical, whoever performs it.
-- It then inserts the reservation's recording row (`ON CONFLICT DO NOTHING`).
 - It then sets the Redis state cache with a "set if this sequence is higher" script.
-- Receivers ignore repeated event ids, so recording twice is recording once.
+- **Only after both succeed** does it insert the reservation's recording row (`ON CONFLICT DO
+  NOTHING`). A failed Redis write therefore leaves the reservation unrecorded, and T5 repeats both
+  steps.
+  - **Why the order matters.** `GET /decisions/{id}` reads Redis first (D-14). Draft 6 and every
+    draft before it wrote the recording row first, so a Redis failure between the two steps was never
+    retried. The bank then read a superseded state from the cache until its key expired, up to
+    8 days. That defect is M6's own, and review 6 (finding 1) found it.
+- Receivers ignore repeated event ids, and the set-if-higher script ignores a state it already
+  holds, so recording twice is recording once.
 
 **T5. No reservation is stranded.** Every instance runs the recorder every P. It lists
-reservations older than 30 s that have no recording row, and records each from its stored body.
+reservations older than 30 s that have no recording row, and performs T4 for each: the spool record
+from the stored body, the Redis set, then the recording row.
 Recording is idempotent, so the recorder needs no lock. A writer that crashed after reserving is
 therefore always completed. **T4's "re-decide" happens only before a reservation exists:**
 - a writer that finds the latest is not what it expected re-reads and re-decides;
@@ -327,14 +338,27 @@ therefore always completed. **T4's "re-decide" happens only before a reservation
 - **The sink writes no later state.**
   - A `DecisionChanged` with sequence > 1 that reaches the sink through the spool is not inserted
     into `decision_states`. Its reservation already is the record.
-  - The sink still writes everything else that record carries: labels, and the notification and
-    unblock rows of its kind.
+  - The sink still writes the label that a later state's record carries. A later state's record
+    carries no notification or unblock row (review 6, finding 6).
   - A `DecisionChanged` with sequence > 1 that has no reservation can only come from a writer that
-    does not reserve. A3's cutover excludes that, and the sink counts and logs any it meets.
+    does not reserve, or from a dead letter that M6 wrote before V81 and that is replayed after it.
+    The cutover drains spools, not dead letters, so the second can happen. The sink counts and logs
+    each such record and drops it, and the outcome is benign: the overdue sweep times the
+    transaction out again under a new event id, the webhook suppresses the repeat, and H5 closes
+    any entry left open (review 6, finding 5).
+  - **V81 also adds `CHECK (decision_sequence = 1) NOT VALID`** to `decision_states`. Any stray write
+    of a later state then fails loudly, while the existing rows (backfilled) are not re-checked.
 - **One view, `v_decision_states`, is what every reader reads.** It is `decision_states` with
   sequence 1, joined with `transaction_transitions` in the same columns, one row per
-  `(institution, transaction, sequence)`. It is tenant-isolated, and granted where
-  `decision_states` is. The readers that move to it:
+  `(institution, transaction, sequence)`.
+  - **Tenant isolation.** It is a `security_invoker` view over the two row-level-secured tables, so it
+    isolates exactly as they do (review 6, finding 2). It does not use the usual `v_` security-barrier
+    pattern, which filters by `current_institution()` and would return nothing to the
+    cross-institution SECURITY DEFINER listers.
+  - **Grants.** It is granted to `fs_app`, `fs_app_readonly` and `fs_compliance_ro`, as
+    `decision_states` is. `transaction_transitions` gets SELECT for the two read-only roles.
+  - **The V62 and V64 listers** read the two base tables directly, as their owner.
+  - **The readers that move to it:**
   - `JdbcDecisionStates`, the fallback of the bank-facing `GET /decisions/{id}` (D-14);
   - `JdbcOverdueHolds` and V62's lister (H3);
   - `UnblockReconciler` and V64's lister (T3);
@@ -525,6 +549,9 @@ to it.
 | P15 | A queue without `outcome` never lists a decided or timed-out entry, and lists an undone one again | §6 |
 | P16 | An override of a timed-out alert runs its effects without waiting. An override of an ESCALATE gets 409 | D4(b), D5(b) |
 | P17 | An override lifting an auto-block writes `unblock_events` with cause SENIOR_OVERRIDE | D4(c) |
+| P18 | A timeout that commits before the ingesting instance's sequence-1 row exists appears in `GET /decisions/{id}`'s database read at once, and the sink's later sequence-1 row joins it without error | T6 |
+| P19 | The sink writes no `decision_states` row with sequence > 1; a stray one is refused by the CHECK | T6 |
+| P20 | A Redis failure between the spool record and the cache set leaves the reservation unrecorded, and T5 sets the cache; `GET /decisions/{id}` then shows the new state | T4, T5 |
 
 ## 8. Changes to M6's code that this contract requires
 
@@ -561,14 +588,23 @@ to it.
   - **Replaying history from the spool.** Replaying a spool's later states into PostgreSQL, for
     instance after restoring the database from an older backup, no longer restores them. Their
     record is the reservation table, which a restore brings back with everything else (A2).
-- **What ADR 0068 assumed** (hybrid persistence, amended).
+- **What ADR 0064 and D-13 assumed** (review 6, finding 4: the assumption is theirs, not ADR 0068's).
   - **Its assumption.** Every decision fact reaches PostgreSQL through the spool, asynchronously,
     so PostgreSQL is never on the decision's critical path.
   - **What now holds:** the model's decision on ingest, which is the hot path, still does. Every
     later state does not: it is written to PostgreSQL synchronously, by a path that already needs
     PostgreSQL to arbitrate (an analyst's request, a timeout's claim, a customer's answer, an
     override). The ingest hot path is unchanged.
-  - **Where it is recorded:** in ADR 0111's consequences, and in a note on ADR 0068 when P2 lands.
+  - **Where it is recorded:** in ADR 0111's consequences, and in a note on ADR 0064 when P2 lands.
+  - **Order of arrival.** PostgreSQL now holds a later state before Kafka and the webhook do: the
+    reservation commits first, then the spool publishes. A consumer that compares PostgreSQL with
+    Kafka can see PostgreSQL ahead, for the spool's lag.
+  - **`decision-fact-ordering.md` needs amending.** Its `resolved` classification (line 209) reads
+    later states from `decision_states`, and `SmsOrderingTest` pins it (line 486). Both move to
+    `v_decision_states`, and the amendment is made with P2's code.
+  - **Read-only roles.** Support and compliance queries that read `decision_states` for later states
+    (as `fs_app_readonly` or `fs_compliance_ro`) must read `v_decision_states` instead. The view is
+    granted to both.
 - **What D-44 assumed.** Its resolution publishes a decision's side effects "through the outbox"
   after the grace.
   - **What replaces it.** The reservation plus its recorder (T4, T5) does that job: the state is
@@ -678,3 +714,15 @@ retried decide then reads TIMEOUT and answers 409.
 | 1 MAJOR: the sink's later-state write can lose a transition for good | T6: the sink writes no later state; the reservation is the only record; one view for every reader |
 | 3 MINOR: option A needs no foreign key on the arbiters | §3.6 states it for `transaction_transitions` (and `hold_owners` has none) |
 | 2, 4 to 9 MINOR | Carried unchanged under the owner's limit on draft 6. They are: the H5 rule's status guard and `ON CONFLICT` (2); the sink's lock timeout (4); `DueHold`'s new fields from old Redis members and reschedules (5); non-database claim failures dropping a batch (6); ADR 0111's D-18 row and the matrix (7); a dead letter plus a lost `DueHold` holding forever, as in M6 (8, a limitation); and the cutover's writer list and wording (9) |
+
+## 15. Review 6's findings and their answers
+
+| Finding | Answer |
+|---|---|
+| 1 MAJOR (M6's, not draft 6's): a Redis failure between recording and caching is never retried | T4: the recording row comes after the Redis set; T5 redoes both; P20 |
+| 2 the view's tenant isolation and the listers | T6: `security_invoker` view; listers read the base tables; grants |
+| 3 missing properties | P18, P19 |
+| 4 the costs section | §9: ADR 0064 and D-13, the ordering document and its test, the read-only roles, PostgreSQL ahead of Kafka |
+| 5 old dead letters | T6: the case stated, benign, counted |
+| 6 wording | T6 (labels only); §3.6 (backfilled bodies) |
+| 7 hardening | T6: `CHECK (decision_sequence = 1) NOT VALID` |
