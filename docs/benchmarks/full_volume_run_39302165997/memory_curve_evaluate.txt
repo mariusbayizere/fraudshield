@@ -1,0 +1,37 @@
+[gate] swap devices:
+NAME      TYPE SIZE USED PRIO
+/swapfile file   3G   0B   -2
+[gate] 18:54:31 mem used 1746 MB, available 14242 MB; swap used 0 of 3071 MB
+[gate] 18:55:01 mem used 2584 MB, available 13405 MB; swap used 0 of 3071 MB
+[gate] 18:55:31 mem used 2495 MB, available 13494 MB; swap used 0 of 3071 MB
+[gate] 18:56:01 mem used 2499 MB, available 13490 MB; swap used 0 of 3071 MB
+[gate] 18:56:31 mem used 3452 MB, available 12537 MB; swap used 0 of 3071 MB
+[gate] 18:57:01 mem used 3984 MB, available 12005 MB; swap used 0 of 3071 MB
+[gate] 18:57:31 mem used 3966 MB, available 12023 MB; swap used 0 of 3071 MB
+[gate] 18:58:01 mem used 3970 MB, available 12018 MB; swap used 0 of 3071 MB
+[gate] 18:58:31 mem used 3970 MB, available 12019 MB; swap used 0 of 3071 MB
+[gate] 18:59:01 mem used 3967 MB, available 12021 MB; swap used 0 of 3071 MB
+[gate] 18:59:31 mem used 3972 MB, available 12017 MB; swap used 0 of 3071 MB
+[gate] 19:00:01 mem used 3970 MB, available 12019 MB; swap used 0 of 3071 MB
+[gate] 19:00:31 mem used 3974 MB, available 12014 MB; swap used 0 of 3071 MB
+[gate] 19:01:01 mem used 3972 MB, available 12016 MB; swap used 0 of 3071 MB
+[gate] 19:01:31 mem used 3972 MB, available 12016 MB; swap used 0 of 3071 MB
+[gate] 19:02:01 mem used 3973 MB, available 12016 MB; swap used 0 of 3071 MB
+[gate] 19:02:31 mem used 3973 MB, available 12016 MB; swap used 0 of 3071 MB
+[gate] 19:03:01 mem used 3973 MB, available 12016 MB; swap used 0 of 3071 MB
+[gate] 19:03:31 mem used 3973 MB, available 12016 MB; swap used 0 of 3071 MB
+[gate] 19:04:01 mem used 3977 MB, available 12012 MB; swap used 0 of 3071 MB
+[gate] 19:04:31 mem used 3981 MB, available 12008 MB; swap used 0 of 3071 MB
+[gate] 19:05:01 mem used 3995 MB, available 11994 MB; swap used 0 of 3071 MB
+[gate] 19:05:31 mem used 3996 MB, available 11993 MB; swap used 0 of 3071 MB
+[gate] 19:06:01 mem used 4000 MB, available 11989 MB; swap used 0 of 3071 MB
+[gate] 19:06:31 mem used 3174 MB, available 12814 MB; swap used 0 of 3071 MB
+[gate] 19:07:01 mem used 2640 MB, available 13349 MB; swap used 0 of 3071 MB
+[gate] 19:07:31 mem used 2626 MB, available 13363 MB; swap used 0 of 3071 MB
+[gate] 19:08:01 mem used 2708 MB, available 13281 MB; swap used 0 of 3071 MB
+[pb66] swap devices:
+NAME      TYPE SIZE USED PRIO
+/swapfile file   3G   0B   -2
+[pb66] 19:08:25 mem used 1009 MB, available 14980 MB; swap used 0 of 3071 MB
+[pb66] 19:08:55 mem used 2112 MB, available 13877 MB; swap used 0 of 3071 MB
+[pb66] 19:09:25 mem used 2140 MB, available 13849 MB; swap used 0 of 3071 MB

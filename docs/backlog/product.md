@@ -1182,6 +1182,15 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
   hyperparameter search (D-16) was not run either: the gate model's configuration is fixed.
 - **Acceptance:** each item reported with the single-feature baselines PB-46 requires, or
   withdrawn from the paper's claims with a reason. The search waits for M5's latency measurement.
+- **2026-10-20, run 39302165997 (`fcec52c`; lab notebook, same date):** items 5, 6, 7 and 8 measured
+  at full volume, against a pre-specification (`docs/research/preregistration_pb66_full_volume.md`):
+  - item 5: leave-one-fraud-type-out, and performance by test month (C-5);
+  - item 6: per-channel reliability;
+  - item 7: fairness by country and channel; KYC tier and urban/rural are not in the exports;
+  - item 8: the cost curve and the alert budgets.
+
+  Two predictions missed (budget 10; synthetic identity and account takeover in LOFTO) and are
+  reported as missed. Still open: the D-16 search, which waits for M5.
 
 ### PB-67 · The gate model trains on 30,000 of the train period's 792,162 rows
 - **Source:** M4 gate run, 2026-09-22 · **Priority:** high · **Due:** before the paper's results
@@ -1191,6 +1200,10 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
   shortfall may be partly its cost.
 - **Acceptance:** a gate run on a larger training sample, reported beside the current one — not as
   a replacement chosen because it passes.
+- **2026-10-20, full volume** (run 39302165997, `fcec52c`): all 792,162 training rows.
+  - Seed 1: recall at 0.60 0.764 [0.736, 0.790]. Five seeds: 0.788 ± 0.017.
+  - As pre-specified, the plateau extends to the whole train period, and ML-GATE-03 still fails.
+    Reported beside the 30K–240K curve, not as a replacement.
 
 ### PB-68 · The frontier and the battery write-up still describe the 6abde44e draw
 - **Source:** M4 milestone review, 2026-09-22 · **Priority:** low · **Due:** before M11

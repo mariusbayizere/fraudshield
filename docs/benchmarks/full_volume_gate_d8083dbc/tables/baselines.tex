@@ -1,0 +1,12 @@
+\begin{tabular}{lrrr}
+\toprule
+Model & AUC & Recall at 1\% FPR & DeLong $p$ \\
+\midrule
+status-quo rule engine & 0.705 $\pm$ 0.018 & 0.017 & 6.8e-253 \\
+logistic regression & 0.966 $\pm$ 0.008 & 0.849 & 2.4e-06 \\
+random forest & 0.967 $\pm$ 0.008 & 0.895 & 0.00012 \\
+XGBoost alone & 0.975 $\pm$ 0.007 & 0.888 & 0.98 \\
+LightGBM alone & 0.946 $\pm$ 0.010 & 0.829 & 6.2e-11 \\
+Isolation Forest alone & 0.935 $\pm$ 0.011 & 0.610 & 2.3e-32 \\
+\bottomrule
+\end{tabular}

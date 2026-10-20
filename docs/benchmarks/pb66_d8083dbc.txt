@@ -1,0 +1,83 @@
+# evidence-commit: fcec52cc9384c7b52f304cd9bd736634e2342981
+# evidence-tree-state: clean
+# evidence-machine: AMD EPYC 9V74 80-Core Processor; 4 logical cores; 15.6 GiB; Linux-6.17.0-1022-azure-x86_64-with-glibc2.39
+# command: /usr/bin/time -f PEAK_RSS_KB %M ELAPSED %e .venv/bin/python -u -m fraudshield_ml.cli pb66 /home/runner/work/_temp/cache/features_full_volume.parquet --out /home/runner/work/_temp/out/pb66_d8083dbc --seed 1 --resamples 1000 --scores-out /home/runner/work/_temp/out/scores/test_scores_seed1.csv --purpose PB-66 full-volume evaluation (run 39302165997, attempt 1): pb66
+# exit: 0
+
+PB-66 — seed-1 calibrated ensemble on D-07's test period (1000 bootstrap resamples, seed 1)
+  baseline beside ranking metrics: velocity_ratio_1h_vs_30d (PB-46), orientation +1, 0 test rows missing it
+
+2. The model (the gate's seed 1; the workflow compares these with the gate's own)
+  AUC-ROC 0.975382   recall at 0.60 0.764467
+  training rows within 90 days of the first (truncated history, PB-76): 102522 of 792162 (0.1294)
+
+3.1 PR-AUC beside ROC
+  model     AUC-ROC 0.975 [0.969, 0.981]   PR-AUC 0.844 [0.820, 0.866]
+  baseline  AUC-ROC 0.879 [0.864, 0.892]   PR-AUC 0.527 [0.495, 0.557]
+
+3.2 Precision at an ASSUMED alert budget (the SRS states none; owner, 2026-10-19)
+  63 full UTC days, 2025-10-29 to 2025-12-30; excluded as partial: 2025-10-28, 2025-12-31 (1922 rows)
+  alerts at a tie are shared across the tied block (see pb66._top_k)
+  budget  who       precision [95% CI, by day]   ceiling  share   recall [95% CI]   per 1,000 tx  tie-decided   fraud RWF caught   legitimate RWF alerted
+      10  model     0.770 [0.692, 0.841]  0.849   0.91   0.499 [0.461, 0.547]          6.30          266           34627844                  9945998
+      10  baseline  0.577 [0.482, 0.668]  0.849   0.68   0.374 [0.347, 0.403]          6.30           23           23742516                  6487840
+      50  model     0.275 [0.232, 0.316]  0.309   0.89   0.892 [0.871, 0.910]         31.50          605           59306772                127526710
+      50  baseline  0.196 [0.160, 0.230]  0.309   0.64   0.635 [0.601, 0.666]         31.50           61           38567244                 77693044
+     100  model     0.142 [0.121, 0.163]  0.154   0.92   0.922 [0.903, 0.939]         63.01         1035           60148079                235317045
+     100  baseline  0.103 [0.085, 0.121]  0.154   0.67   0.667 [0.631, 0.699]         63.01          912           40213385                180859423
+     200  model     0.073 [0.062, 0.084]  0.077   0.95   0.947 [0.931, 0.962]        126.02         2144           60690533                477012050
+     200  baseline  0.056 [0.046, 0.065]  0.077   0.72   0.720 [0.686, 0.752]        126.02         2091           44140648                368745177
+
+3.3 By month of the test period (C-5) — reported as thin as it is
+  month    rows    frauds  AUC [95% CI]          PR-AUC   recall@0.60 [95% CI]  precision@0.60  FPR@0.60
+  2025-10    5599      54  0.955 [0.909, 0.988]  0.850    0.796 [0.685, 0.907]  0.896           0.0009
+           intervals: PR-AUC [0.749, 0.933]  precision@0.60 [0.808, 0.977]  FPR@0.60 [0.0002, 0.0018]
+  2025-11   47692     466  0.977 [0.969, 0.985]  0.851    0.781 [0.742, 0.820]  0.955           0.0004
+           intervals: PR-AUC [0.817, 0.882]  precision@0.60 [0.935, 0.974]  FPR@0.60 [0.0002, 0.0006]
+  2025-12   48618     465  0.976 [0.967, 0.983]  0.837    0.744 [0.705, 0.783]  0.958           0.0003
+           intervals: PR-AUC [0.804, 0.864]  precision@0.60 [0.936, 0.977]  FPR@0.60 [0.0002, 0.0005]
+  2025-10  baseline AUC 0.798  PR-AUC 0.318
+  2025-11  baseline AUC 0.896  PR-AUC 0.543
+  2025-12  baseline AUC 0.871  PR-AUC 0.535
+  recall@0.60 2025-12-minus-2025-11: -0.037 [-0.091, 0.015]
+
+3.4 Drummond-Holte cost curve (normalised expected cost; no assumed costs)
+  model at PC=0.5: 0.0588; baseline: 0.1909
+  PC in [0.01, 0.99] where the model is not below the trivial classifier: none
+
+Reliability by channel (descriptive; ten equal-width bins: predicted -> observed, rows)
+  AGENT_BANKING  0.00->0.00 (13904)  0.10->0.27 (11)  0.45->0.31 (13)  0.53->0.53 (17)  0.67->0.33 (3)  0.75->1.00 (2)  0.87->0.81 (21)  0.99->0.94 (104)
+  BANK_TRANSFER  0.00->0.00 (6182)  0.10->0.00 (4)  0.46->0.00 (7)  0.53->0.20 (5)  0.87->0.62 (13)  0.99->0.99 (104)
+  CARD           0.00->0.00 (12088)  0.10->0.17 (6)  0.45->0.23 (13)  0.53->0.78 (9)  0.67->1.00 (1)  0.74->1.00 (1)  0.88->0.89 (18)  0.99->0.99 (92)
+  MOBILE_MONEY   0.00->0.00 (41218)  0.10->0.14 (7)  0.45->0.07 (15)  0.53->0.36 (14)  0.68->1.00 (3)  0.88->0.67 (6)  0.99->0.98 (176)
+  ONLINE         0.00->0.00 (9396)  0.10->0.00 (6)  0.45->0.29 (7)  0.53->0.33 (6)  0.66->0.67 (3)  0.74->1.00 (1)  0.86->0.40 (5)  0.99->0.97 (103)
+  USSD           0.00->0.00 (18170)  0.10->0.20 (5)  0.46->0.25 (4)  0.53->0.75 (12)  0.67->1.00 (1)  0.88->1.00 (8)  0.99->0.97 (125)
+
+3.5 Fairness
+  Fraud mechanisms in this benchmark are country-invariant by construction: no fraud parameter is keyed by country (test_no_fraud_parameter_is_keyed_by_country). What this report measures is therefore the generator's base rates and amount mixes per group, passed through one model, not differential treatment of groups by the model.
+  urban/rural: not available (the exported tables carry no urban/rural or customer-segment column, and no proxy is joined)
+  KYC tier: not available (not in the exported tables)
+
+  by country
+  group          rows   legit  frauds  FPR@0.60 [95% Wilson]      FPR@0.85 [95% Wilson]      legit blocked RWF (share)   all blocked RWF
+  CD             5065    5051     14  0.0004 [0.0001, 0.0014]  0.0004 [0.0001, 0.0014]  54178 (0.00035)   135953
+  KE            28516   28252    264  0.0004 [0.0002, 0.0007]  0.0003 [0.0002, 0.0006]  383980 (0.00045)   16106831
+  RW            42810   42365    445  0.0003 [0.0002, 0.0006]  0.0003 [0.0002, 0.0006]  1068383 (0.00083)   24326902
+  TZ            15274   15122    152  0.0003 [0.0001, 0.0008]  0.0003 [0.0001, 0.0008]  348664 (0.00075)   9267417
+  UG            10244   10134    110  0.0005 [0.0002, 0.0012]  0.0004 [0.0002, 0.0010]  190765 (0.00063)   3777581
+  all          101909  100924    985  0.0004 [0.0003, 0.0005]  0.0003 [0.0002, 0.0005]  2045969 (0.00067)   53614683
+
+  by channel
+  group          rows   legit  frauds  FPR@0.60 [95% Wilson]      FPR@0.85 [95% Wilson]      legit blocked RWF (share)   all blocked RWF
+  AGENT_BANKING  14075   13924    151  0.0009 [0.0005, 0.0015]  0.0007 [0.0004, 0.0013]  346675 (0.00148)   4658214
+  BANK_TRANSFER   6315    6197    118  0.0010 [0.0004, 0.0021]  0.0010 [0.0004, 0.0021]  880572 (0.00203)   19414887
+  CARD          12228   12080    148  0.0002 [0.0001, 0.0007]  0.0002 [0.0001, 0.0007]  351438 (0.00027)   13872913
+  MOBILE_MONEY  41439   41189    250  0.0001 [0.0001, 0.0003]  0.0001 [0.0001, 0.0003]  90032 (0.00014)   6276282
+  ONLINE         9527    9402    125  0.0007 [0.0004, 0.0015]  0.0006 [0.0003, 0.0014]  294086 (0.00105)   7451030
+  USSD          18325   18132    193  0.0002 [0.0001, 0.0006]  0.0002 [0.0001, 0.0006]  83168 (0.00056)   1941357
+  all          101909  100924    985  0.0004 [0.0003, 0.0005]  0.0003 [0.0002, 0.0005]  2045969 (0.00067)   53614683
+  wrote /home/runner/work/_temp/out/pb66_d8083dbc/metrics.json
+  wrote /home/runner/work/_temp/out/pb66_d8083dbc/figures/pr.svg
+  wrote /home/runner/work/_temp/out/pb66_d8083dbc/figures/reliability_by_channel.svg
+  wrote /home/runner/work/_temp/out/pb66_d8083dbc/figures/cost_curve.svg
+  wrote /home/runner/work/_temp/out/scores/test_scores_seed1.csv

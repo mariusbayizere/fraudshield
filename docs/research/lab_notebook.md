@@ -3072,3 +3072,85 @@ diagrams. Two independent review rounds changed the methods before any run:
 - the run checks its own model, pools and history share.
 
 Each change is a dated amendment in the file.
+
+### 2026-10-20 · PB-66 run: full volume, PB-66's evaluations and leave-one-fraud-type-out
+
+**Provenance.**
+- **Run:** workflow `full-volume`, run 39302165997, on commit `fcec52c`. That commit records the
+  owner's confirmation; the design was pre-specified in repository history from `da3a492`.
+- **Machines:** GitHub-hosted, 4 cores, 15.6 GiB (AMD EPYC 7763 and 9V74, named in each file).
+- **Evidence:** `docs/benchmarks/{full_volume_cache,full_volume_gate,pb66,lofto}_d8083dbc*`, plus
+  memory curves and hashes in `full_volume_run_39302165997/`. Every file is stamped clean at
+  `fcec52c`, exit 0.
+- **Per-row scores** stay in the artifact (G.5). SHA-256 `a0cce92f…eb3`.
+- **Test-set access:** four lines (attempt, gate, pb66, lofto). The test period had been scored 23
+  times before (11 at full size), so the run is pre-specified, not blind.
+- **Cost:**
+  - Job 1 took 30 minutes. The draw took 3 minutes; the cache build took 26.5 minutes for 995,403
+    rows at about 641 rows/s, twice the laptop's rate.
+  - Memory peaked at 4.3 GB of 15.6.
+  - Job 2 took 16 minutes and job 3 took 5. One load-and-fit at full volume took 0.5 minutes, so
+    LOFTO ran at full volume; the fallback was not needed.
+
+**Full volume (§ 2): every prediction held.**
+- **Seed 1:** AUC 0.975; recall at 0.60 **0.764 [0.736, 0.790]**; recall at the 1 % FPR budget
+  0.852.
+- **Five seeds:** mean recall at 0.60 0.788 ± 0.017.
+- **Training:** 792,162 rows and 6,846 frauds.
+- **Decision:** the interval does not clear 0.783, so the plateau extends to the whole train period.
+  The recall shortfall is not training volume, up to all 792,162 rows of this draw. ML-GATE-03 and
+  06 still fail.
+- **Not explained, and not tuned after the look:** LightGBM early-stopped at 13 rounds (167 at
+  240K), and XGBoost at 108. Recorded as an open question.
+
+**PB-66 (§ 3).**
+
+| § | Prediction | Measured | |
+|---|---|---|---|
+| 3.1 | PR-AUC 0.80–0.93 | **0.844** [0.820, 0.866] (single feature 0.527) | held |
+| 3.2 | budget 10: precision ≥ 0.90, recall 0.55–0.65 | precision **0.770** [0.692, 0.841], recall **0.499** [0.461, 0.547] | **missed** |
+| 3.2 | budget 50: recall ≥ 0.88, ≥ 85 % of ceiling | 0.892, 89 % | held |
+| 3.2 | budgets 100, 200: recall ≥ 0.92 | 0.922, 0.947 | held |
+| 3.3 | Dec − Nov interval includes 0, \|point\| ≤ 0.05 | **−0.037 [−0.091, 0.015]** | held |
+| 3.4 | below trivial at every PC; < 0.06 at PC = 0.5 | none above; **0.0588** | held |
+| 3.5 | every group FPR < 0.5 % at 0.60 and < 0.2 % at 0.85; no country pair separable | max 0.10 % and 0.10 %; no country different | held |
+
+- **§ 3.2, budget 10 — why I was wrong.** The amendment said this budget's ceiling would be close to
+  1, because "a day with fewer than 10 frauds is rare". It is 0.849: frauds arrive in bursts, so
+  many days hold fewer than 10. And 266 of its 630 alerts were decided by ties at the cut, because
+  calibrated scores bunch together at the top. The model still reaches 91 % of the ceiling; the
+  single feature reaches 68 %.
+- **§ 3.3, C-5.** No change between months is detectable at this size. C-5 remains unverified by
+  this benchmark.
+- **§ 3.5, channels.** By the rule, three channels are "different": agent banking and bank transfer
+  higher, mobile money lower. All are below 0.11 % against the SRS's 1.5 %. Following the
+  preamble, this is attributed to the generator's per-channel base rates and amounts, not to the
+  model.
+
+**Leave-one-fraud-type-out, at full volume** (held-out recall at the 1 % FPR budget; drop from
+production):
+
+| Type | Held out | Drop | Verdict |
+|---|---|---|---|
+| velocity | 0.864 | 0.039 | keeps |
+| SIM swap | 0.980 | −0.039 | keeps |
+| mule, without reversal | 0.870 | −0.009 | keeps |
+| agent | 0.434 | 0.528 | drops clearly |
+| card-not-present | 0.841 | 0.071 | does not drop clearly |
+| merchant | 0.679 | 0.103 | does not drop clearly (under 0.20) |
+| account takeover | 0.834 | 0.159 | my range missed on the drop |
+| synthetic identity | 0.547 | 0.349 | my range missed on both |
+
+- **The owner's hypothesis is partly supported.** The burst types keep their recall. Of the
+  single-row types only agent drops clearly. Card-not-present stays close to its production recall,
+  and merchant's drop is real but smaller than 0.20.
+- **Where my reasoning failed.**
+  - I argued synthetic identity's shared-handset signal was weak by design. Without that scenario
+    in training, its recall falls by about a third, so the signal carried much of it.
+  - Account takeover kept its recall but lost more than I allowed.
+- **At 0.60 every scenario loses more than at the budget.** Agent drops 0.66 and merchant 0.51.
+  Calibration that never saw a scenario puts it below the flag threshold, even where the ranking
+  still separates it.
+- **Caveat (owner: it goes in the paper's text).** LOFTO measures what never *fitting on* a scenario
+  costs, not what never *seeing* it costs, because the remaining rows' features were computed over a
+  history that includes it.
