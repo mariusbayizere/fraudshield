@@ -1,14 +1,17 @@
 # Session state: M7 tagged; the plan now completes every milestone before the paper
 
-Rewritten 2026-10-18 on `main`. Facts only; anything unverified, assumed or open says so.
+Rewritten 2026-10-18 on `main`; branch facts corrected 2026-10-20. Facts only; anything
+unverified, assumed or open says so.
 
 ## Read this first
 
-- **`main` is at `71b0ec9`, tagged `m7-complete`.** It was fast-forwarded from `b77008e`
-  (`m6-complete`), with no merge commit.
-  - The evidence on that commit, read at job level, was all green: ci 39106652850 (all 7 jobs),
-    stack 39106653690 and devcontainer 39106656199.
-  - The tag message lists what is met and what is not.
+- **`main` is at `a7f0528` (2026-10-18), with no tag.** It moved on from `71b0ec9`
+  (`m7-complete`) by fast-forward, with no merge commit: plan steps 1 and 2 below, the M4 tail and
+  PB-69, M7's carries (`m7/carries`: M7's open rows filed, M8B added), and traceability
+  re-renders.
+  - The evidence on `a7f0528`, read at job level, is all green: ci 39119443227 (all 7 jobs),
+    stack 39119443214 and devcontainer 39119443243, each with its real job executed.
+  - `m7-complete` stays on `71b0ec9`; its tag message lists what is met and what is not.
 - **`milestones.yaml` still says `current: M7`, and M7 is not in `completed`.** On the owner's
   decision of 2026-10-18, M7's open Must rows were re-filed where a later milestone closes them:
   NFR-SEC-03 and FR-06-06 to M8B, D-51 to M9.
@@ -31,10 +34,10 @@ M11 waits until M8, M9, M10 and the measurements are done, so it folds in the fi
 
 | # | Step | Notes |
 |---|---|---|
-| 1 | **The M4 tail** | Rebase `m4/generalisation`'s 12 commits onto `main`, get ci green at job level, merge. Small, no Docker |
-| 2 | **`m6/featurestore-fallback`** | Merge `main` into it, fix its red java job, green at job level, merge. PB-69 must land before M10 measures NFR-REL-03 |
-| 3 | **M8** | Rebase on `main`, then build the analyst screens, against mocks generated from the contract |
-| 4 | **M9** | Infrastructure, with the owner's decisions already recorded in `docs/parallel/M9_updates.md` |
+| 1 | **The M4 tail** | **Done**: on `main` |
+| 2 | **PB-69** | **Done**: on `main` through `m6/pb69-on-main`; `m6/featurestore-fallback` itself was not merged |
+| 3 | **M8** | Rebased, and eight analyst screens built against contract mocks; stopped at the owner's handover on 2026-10-19, not merged (`M8_updates.md` section 10, on `m8/frontend-rebase`) |
+| 4 | **M9** | Infrastructure. The owner's decisions were not in `docs/parallel/M9_updates.md` until 2026-10-20 (sections 3b and 3c, on `m9/infra`, not yet on `main`) |
 | 4b | **M8B** | The analyst API, alongside M9; on `main` before M10 starts (`docs/parallel/M8B_updates.md`) |
 | 5 | **M10** | The verification campaign, once M6 to M9 are all on `main` |
 | 6 | **M11** | The paper, with final numbers |
@@ -49,11 +52,14 @@ M11 waits until M8, M9, M10 and the measurements are done, so it folds in the fi
 
 | Branch | State |
 |---|---|
-| `main` | `71b0ec9`, `m7-complete` |
-| `m7/staff-auth` | the same commit as `main` (merged) |
-| `m4/generalisation` | the M4 tail, 12 commits including PB-76 (`bb1d17a`); not merged; plan step 1 |
-| `m6/featurestore-fallback` | PB-69; not merged; its java job was red when last read; plan step 2 |
-| `m8/frontend`, `m9/infra`, `m10/verification`, `m11/paper` | in progress on their own branches |
+| `main` | `a7f0528`, untagged; `m7-complete` is `71b0ec9` |
+| `m7/staff-auth`, `m7/carries`, `m4/generalisation`, `m6/pb69-on-main` | merged into `main` |
+| `m6/featurestore-fallback` | not merged; PB-69 reached `main` through `m6/pb69-on-main` instead |
+| `m8/frontend-rebase` | M8, stopped at the owner's handover (2026-10-19); not merged; `M8_updates.md` section 10 |
+| `m8b/analyst-api` | M8B, in progress; not merged |
+| `m9/infra` | M9, rebased onto `a7f0528` and pushed on 2026-10-20 (`e4b589b`); not merged |
+| `m8/frontend` | superseded by `m8/frontend-rebase`; not merged |
+| `m10/verification`, `m11/paper` | in progress on their own branches |
 
 `m7/round2-wip` was deleted on 2026-10-18. The default branch is still `m0/bootstrap`, a repository
 setting only the owner can change (GOV-9).
