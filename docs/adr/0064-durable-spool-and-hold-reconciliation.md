@@ -1,6 +1,7 @@
 # 0064 — The durable spool, and reconciling lost holds
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by ADR 0111 (2026-10-20): when M8B's P2 ships, no hold is timed
+  out without a claim in PostgreSQL, so held payments stay held through a PostgreSQL outage
 - **Date:** 2026-09-22
 - **Requirements affected:** FR-01-01, FR-03-02, NFR-REL-02
 - **Defects referenced:** D-13, D-14, D-15

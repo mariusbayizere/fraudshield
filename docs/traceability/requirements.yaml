@@ -533,8 +533,12 @@ requirements:
     released at 30 s +-500 ms and delivered by signed webhook)
   deviations:
   - docs/adr/0064-durable-spool-and-hold-reconciliation.md
+  - docs/adr/0111-held-payments-wait-for-the-arbiter.md
   notes: 'M6 (2026-09-24): MEDIUM holds with a 30 s deadline, leader-run poller, reconciliation of overdue
-    holds (V62) and holds drained back to Redis after an outage (D-18 tolerance).'
+    holds (V62) and holds drained back to Redis after an outage (D-18 tolerance). M8B (2026-10-20, owner,
+    ADR 0111): once P2 ships, an escalated payment is held up to W (an assumed 15 min, not a requirement)
+    and any held payment stays held through a PostgreSQL outage; the 30-second countdown is not met in
+    those two cases. Until P2 ships, M6''s behaviour stands.'
 - id: FR-03-03
   section: 3.3 FR-03 Risk decision and auto-block engine
   title: 'LOW risk (< 0.60): approved and processed within total pipeline latency budget; no analyst involvement'
@@ -4369,7 +4373,10 @@ requirements:
   deviations:
   - docs/adr/0061-decision-engine-semantics.md
   - docs/adr/0064-durable-spool-and-hold-reconciliation.md
-  notes: 'M6 (2026-09-24): tolerances and minimum volume as ADR 0061 point 4 and ADR 0064 state.'
+  - docs/adr/0111-held-payments-wait-for-the-arbiter.md
+  notes: 'M6 (2026-09-24): tolerances and minimum volume as ADR 0061 point 4 and ADR 0064 state. M8B (2026-10-20,
+    owner, ADR 0111): once P2 ships, the 30 s +-500 ms release is not met during a PostgreSQL outage; held payments
+    stay held for the outage''s duration, which nothing measures. Until P2 ships, M6''s behaviour stands.'
 - id: D-19
   section: Build prompt Part B defect register
   title: API keys "stored as bcrypt hash" cannot be verified at 10,000 TPS

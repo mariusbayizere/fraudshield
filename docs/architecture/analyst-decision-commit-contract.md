@@ -1,13 +1,21 @@
 # Analyst decisions: the commit and undo contract
 
-Status: **draft 4, for independent review.** Draft 4 changes only two things:
-- **Review 3's three MAJORs** (`docs/reviews/M8B/decision-commit-contract-review-3.md`, SOUND_WITH_CHANGES);
-- **the owner's answers to Q1–Q3** of 2026-10-20.
+Status: **draft 5, for independent review.** Draft 5 is limited to three things, all from the
+owner on 2026-10-20:
+- **Option A.** The timeout no longer depends on the sink's progress, and one mechanism closes an
+  entry that arrives after its transaction timed out: the sink, under the hold-owner lock (H2, H5,
+  T2).
+  - **Why.** Review 4 (`docs/reviews/M8B/decision-commit-contract-review-4.md`) found draft 4's own fix
+    (making the timeout wait for the sink) left a dead-lettered hold waiting for ever.
+  - **The owner's reasoning.** Option A "removes a dependency instead of adding one".
+- **The cutover's runbook line** (review 4, finding 2).
+- **W recorded as an assumption, with its reasoning.**
 
-Review 3's MINORs are carried, unchanged, to §12.
+Draft 4's other review findings and review 3's MINORs are carried unchanged (§12, §13). ADR 0064's
+amendment and D-18's deviation are recorded in ADR 0111 and in the register.
 
-**The owner's rule.** If draft 4 produces another MAJOR from its own fixes, the author stops and
-reports rather than writing draft 5. The answer then is to simplify the design, not to patch it.
+**The owner's rule.** If draft 5 still produces a MAJOR, the author stops again. The answer then is
+to reduce what the contract promises, not to keep drafting.
 
 **Reviews so far:**
 - Review 1 found draft 1 UNSOUND (6 MAJOR, 11 MINOR).
@@ -83,7 +91,10 @@ It also sets the decision lifecycle (D1 to D7) and lists the changes to M6 (§8)
 - **A2.** No committed transaction is lost (as in the configuration contract).
 - **A3. The release that brings V80 is deployed by a stop-and-drain cutover, never rolled.** This
   is a runbook requirement for M9 (review 3, MAJOR 2). The cutover runs in this order:
-  1. stop every instance's ingest;
+  1. stop every spool writer on every instance. That means ingest, the hold poller and overdue
+     sweep, the unblock reconciler, the verification endpoint, the analyst API and the committer
+     and effects workers: everything that appends to the spool, not only ingest (review 4,
+     finding 2). M9's dead-letter replay stays stopped too;
   2. wait until every instance's spool has drained to PostgreSQL and Kafka, which the spool's lag
      gauges show as zero;
   3. stop the instances;
@@ -127,7 +138,8 @@ in that order.
    `alert_decisions`, under the entry advisory lock, refuses a second live analyst decision.
 5. **`hold_owners`** (mutable):
    - columns: `institution_id`, `transaction_id`, `owner` (FREE, ANALYST, ESCALATED or TIMEOUT),
-     `decision_id`, `deadline`, `updated_at`;
+     `decision_id`, `deadline`, `timeout_outcome` (AUTO_RELEASED or AUTO_DECLINED, set with
+     TIMEOUT), `updated_at`;
    - `deadline` is the time the hold runs to: the review deadline, or an escalation's longer one
      (D6). It is written on insert from the transaction's `review_deadline_at`, and changed only by
      D6 and D2.
@@ -183,14 +195,15 @@ the local fallback and the overdue sweep.
   `hold_owners.deadline`, or `DueHold.deadline` if there is no row. A JVM clock that runs fast
   therefore cannot time a hold out early, and a hold whose escalation extended it is not timed out
   at its first deadline. A refused claim reschedules the hold at that deadline.
-- **The claim requires the transaction's sequence-1 row in `decision_states` to be visible**
-  (review 3, MAJOR 1).
-  - **Why this guarantees the entries exist.** `PostgresSink` writes the alert entry in the same
-    transaction as that row, so a timeout can never commit before its entries exist.
-  - **When the row is not visible:** the claim rolls back, the path reschedules the hold 1 s later,
-    and the case is counted.
-  - **The cost.** The sink lagging after a PostgreSQL outage therefore delays timeouts, by the same
-    rule as Q3.
+- **The claim does not wait for the sink** (option A; draft 4's wait is withdrawn).
+  - **No dependency on the sink.** The timeout's sequence-1 state comes from the hold it claimed
+    (T2), so the claim needs nothing the sink writes.
+  - **Late entries.** An alert entry the sink writes after the claim is closed by the sink itself
+    (H5's backstop, now the only mechanism for that case).
+  - **A dead-lettered ingest record** no longer blocks its timeout: the payment times out at its
+    deadline, as under M6.
+- **The claim records the outcome:** `hold_owners.timeout_outcome` (AUTO_RELEASED or
+  AUTO_DECLINED, from the hold's policy), for the sink's use.
 - **What the claim's transaction does when it succeeds** (H5):
   - closes the transaction's open entries;
   - writes the AUTO_* decision row;
@@ -199,10 +212,10 @@ the local fallback and the overdue sweep.
 - **If the claim finds ANALYST,** the hold is dropped and nothing is recorded.
 - **If PostgreSQL is unavailable,** the poller and the local fallback reschedule the hold 1 s later
   and count it, and the sweep retries on its next run.
-  - **This amends ADR 0064, and breaches D-18 for the outage (owner, Q3).** No hold is timed out
-    without a claim, so every MEDIUM payment stays held until the database returns and the sink has
-    written its sequence-1 row.
-    - The breach of D-18's ±500 ms is bounded by the outage's duration plus the sink's catch-up.
+  - **This amends ADR 0064, and breaches D-18 for the outage (owner, Q3; recorded in ADR 0111).** No
+    hold is timed out without a claim, so every MEDIUM payment stays held until the database
+    returns.
+    - The breach of D-18's ±500 ms is bounded by the outage's duration.
     - **No measurement of that duration exists** (§9, limitations).
     - The owner's reason: "a delayed payment is recoverable; a timeout that contradicts an analyst's
       committed decision is not." 
@@ -233,10 +246,23 @@ and drops it. An undo frees the claim and, after its commit, reschedules the hol
 old record a no-op. Entries are therefore closed synchronously under both policies, including an
 escalated entry.
 
-**The sink's backstop** (review 3, MAJOR 1). H2 already guarantees the entry exists before a timeout
-commits. As a backstop, `PostgresSink` inserts an alert entry already closed (AUTO_RELEASED or
-AUTO_DECLINED) when `hold_owners` shows TIMEOUT for its transaction, and counts the case. It should
-never occur.
+**The sink closes an entry that arrives after its timeout** (option A; review 3, MAJOR 1). This is
+the only mechanism for that case, so it is specified as a rule, not a backstop.
+- **The rule.** In the transaction that writes a MEDIUM `AlertRaised`, `PostgresSink`:
+  1. inserts the entry (open);
+  2. inserts the `hold_owners` row as FREE, with `deadline` = the entry's `review_deadline_at`, `ON
+     CONFLICT DO NOTHING`;
+  3. takes that row `FOR UPDATE`;
+  4. if the owner is TIMEOUT, sets the new entry to `timeout_outcome` with `version + 1`, writes
+     the AUTO_* decision row with H5's idempotency key, and counts the case.
+- **Why no entry is left open.** The claim's own transaction (H5) upserts the same row, and only
+  then closes the open entries with an UPDATE. Either:
+  - the sink holds the row first, so the claim's upsert waits for the sink's commit, and the
+    claim's later UPDATE sees the new entry and closes it; or
+  - the claim holds it first, so the sink's `FOR UPDATE` waits, then reads TIMEOUT and closes the
+    entry itself.
+
+  Each of the two writes the AUTO_* row with the same key, so there is exactly one.
 
 **T1. Every transition after sequence 1 is reserved before it is recorded.** The writers are:
 - the analyst's E1;
@@ -253,14 +279,18 @@ never occur.
 4. computes `next` by `DecisionState`'s rules;
 5. inserts the reservation with its full `event_body` and `decided_at` = DB time.
 
-The **sequence-1 state** comes from `decision_states`, for every writer, the timeout included.
-Draft 3's exception, which let a timeout read it from Redis, is withdrawn (review 3, MAJOR 1). Why
-it is always there when needed:
-- the analyst's and the override's alerts arrive in the same sink transaction as that row;
-- an unblock can exist only after its auto-block row, which arrives with it too (V5's foreign key);
-- a timeout's claim requires it (H2).
+**The sequence-1 state:**
+- **For the timeout,** it is carried by the hold itself. `DueHold` gains the HOLD state's event id,
+  `decided_at`, deadline and reason codes, written by `DecisionService` when it schedules the hold.
+  The poller and the local fallback therefore reserve from the hold they claimed, and never read
+  `decision_states` or the Redis state cache for it (option A).
+- **For the overdue sweep,** it comes from `decision_states`, the table the sweep selects from.
+- **For every other writer,** it comes from `decision_states`. It is always there when needed:
+  - the analyst's and the override's alerts arrive in the same sink transaction as that row;
+  - an unblock can exist only after its auto-block row, which arrives with it too (V5's foreign
+    key).
 
-If it is not visible, the writer retries later. It never guesses.
+  If it is not visible, that writer retries later. It never guesses.
 
 **T3. Deterministic ids.** Every event id and label id is the name-based UUID of a stable source:
 
@@ -399,8 +429,17 @@ are safe by T3 to T5 and E2.
   - if it is FREE: claim ESCALATED, and set `deadline` to DB time + W, the escalation review window;
   - if it is already ESCALATED (a senior escalating on to a risk officer): keep the existing
     deadline. One escalation window covers the whole chain.
-  - **W** is 15 minutes by default. It is configurable and ASSUMED, because the SRS states no
-    figure.
+  - **W, the escalation review window, is an ASSUMED value, not a requirement.** The default is 15
+    minutes, and it is configurable. The SRS states no figure, and no capacity model exists to
+    derive one. The reasoning for the default:
+    - **Long enough for a senior to see it.** The console re-reads the escalated queue every 60 s,
+      so a senior on shift sees an escalation within a minute or two. 15 minutes leaves room to open
+      it, read the context and decide.
+    - **Short enough for the customer.** A payment held longer than about a quarter of an hour
+      turns into a support call, and the channel's own timeout policy then decides the payment, as
+      it would without escalation.
+
+    Neither half is measured. D-10's capacity model, when it exists, replaces the assumption.
   - The lock serialises the escalation with a timeout claim. A claim that wins first closes the
     original entry, and the escalation is refused.
 - **(d) The new entry.** Insert it, copying the transaction, score, tier, probability and expected
@@ -504,8 +543,9 @@ to it.
   for the outage's duration (H2).
 
 **Limitations:**
-- **No measurement of PostgreSQL outage duration, or of the sink's catch-up, exists.** The length
-  of a Q3 hold, and therefore the size of D-18's breach, cannot be stated from evidence.
+- **No measurement of PostgreSQL outage duration exists.** The length of a Q3 hold, and therefore
+  the size of D-18's breach, cannot be stated from evidence. Under option A the sink's catch-up no
+  longer delays a timeout; only the database's own availability does.
 - **W (15 min) is ASSUMED.** Escalated MEDIUM payments are held up to W. D-10 calls for a capacity
   model of analysts and alerts (`docs/ml/capacity_model.md`). It does not exist yet, so nothing
   measures whether seniors can answer within W.
@@ -557,3 +597,16 @@ brackets: 6 → N1, N9; 8 → N8; 9 → N5; 11 → N2; 14 → N7; 15 → N1; 16 
   open.
 - **m12.** The 40P01 retry is not in §8. D1(b) cites (g) where it means (f). V80 drops V4's
   triggers. The V62 and V64 listers. Six missing properties.
+
+## 13. Review 4's findings: what draft 5 answers and what it carries
+
+| Finding | In draft 5 |
+|---|---|
+| 1 MAJOR (draft 4's own): a dead-lettered hold waits for ever | Option A: the wait is withdrawn; the timeout's sequence-1 state is carried by `DueHold`; the sink closes late entries under the hold-owner lock (H2, H5, T2) |
+| 2 MAJOR (residual): the cutover stopped only ingest | A3 step 1: stop every spool writer, then wait for zero lag |
+| 3 to 9 MINOR | Carried unchanged under the owner's limit on draft 5. They are: escalation's missing deadline check and the unreachable ANALYST owner (3); the lateness metric after an escalation (4); FAILED missing from the effects table's outcomes (5); a FAILED analyst transition strands its hold (6); P17 and `v_auto_block_status` after a re-decline (7); the order of the claim's statements (8, now specified by H5's rule); and the ADR and register records (9, now ADR 0111 and the register) |
+
+**One exception to §2's lock order,** stated rather than hidden (review 3's m4, still carried). The
+timeout claim takes the `hold_owners` row before the entries it closes. A decide holding an entry
+can therefore deadlock with a claim. PostgreSQL detects it, the runner retries the loser, and a
+retried decide then reads TIMEOUT and answers 409.
