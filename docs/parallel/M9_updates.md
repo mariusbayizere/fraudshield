@@ -78,9 +78,11 @@ marked **Open**.
 1. Owner: "lokitool in CI only: yes."
    - M9's reading: lokitool (AGPL-3.0) is never shipped in an image or a deployment, and an ADR
      records it.
-   - **Open:** `infrastructure/checks/validate.sh` also runs lokitool locally (the one-command
-     check of section 1). If "CI only" means it must not run outside CI either, `validate.sh` has
-     to skip it there. Not changed until the owner says which.
+   - Asked, because `infrastructure/checks/validate.sh` also ran lokitool locally. Owner,
+     2026-10-20: "CI only means CI only. Remove it from validate.sh, or make validate.sh skip it
+     locally and say why in a comment." Done: `validate.sh` runs the Loki step only where `CI` is
+     `true` (GitHub Actions), with the reason in a comment, and prints that it skipped it
+     elsewhere.
 2. Owner: "Canary by replica count requiring 10 API pods: no. Specify a canary that works at the
    replica counts this system will actually run at, and record the constraint."
    - M9's reading: state the replica counts the system will run at, with their source; design a
@@ -107,10 +109,11 @@ marked **Open**.
    implementation; no vendor name in the code path."
    - M9's reading: the vault's `KmsClient` port (section 8.2) gets a reference implementation
      that names no vendor and passes `KmsClientContract`.
-   - **Open:** section 8.2's acceptance 1 and 2 ask for a binding to a named service (AWS KMS,
-     Google Cloud KMS or Vault Transit) tested against the real service. M9's reading is that
-     they stay open until a vendor is chosen, not that the deferral closes them; that reading may
-     sit against "no vendor name in the code path", so it is the owner's to confirm.
+   - Section 8.2's acceptance 1 and 2 ask for a binding to a named service (AWS KMS, Google Cloud
+     KMS or Vault Transit) tested against the real service. Owner, 2026-10-20: "your reading is
+     right. The deferral leaves §8.2 open until I pick a vendor. Record it as open with that
+     reason rather than closed." **Section 8.2 acceptance 1 and 2: open, because no vendor has
+     been chosen.**
 7. Owner: "PB-70/71 to M6 and PB-72 to M10: confirmed." (As already recorded in the claims table of
    `docs/backlog/product.md`, owner confirmation 2026-10-17.)
 8. Owner: "Storage-class fsync fallback: raise as an ADR with options and a recommendation, do not
@@ -119,6 +122,49 @@ marked **Open**.
      happens when a storage class does not meet ADR 0090's condition (spool append p95 on the
      shared volume within the 2 ms step-10 budget). No code.
 
+## 3c. Owner decisions on the staleness findings, 2026-10-20
+
+The owner's words, then what was done on this branch. Sizes were reported to the owner first.
+
+1. **Spool.** "take the stop-gap now (per-pod directories, 2 manifest lines) and record that dead
+   pods' spools are then stranded rather than replayed. File (b) — the StatefulSet with a volume
+   per pod — as the real fix, owned jointly by M9 and M6, with its canary consequence stated: a
+   canary by pod is 33% at 3 replicas, which is the constraint I rejected, so a 10% step needs
+   weighted traffic at the edge. Do not start (a)."
+   - Done: `infrastructure/k8s/base/api.yaml` sets `FRAUDSHIELD_SPOOL_DIR` to
+     `/var/lib/fraudshield/spool/$(FRAUDSHIELD_SPOOL_INSTANCE)`. Until then every API pod opened
+     the same directory, because the API reads only `FRAUDSHIELD_SPOOL_DIR`. The spool's
+     dead-letter directory sits inside it, so it is per pod too.
+   - **A dead pod's spool is stranded, not replayed.** Its records stay on the shared volume
+     until an operator drains them. Section 6's replayer contract is not implemented by M6 and
+     will not be; it is superseded by PB-171.
+   - Filed: PB-171 (M9 and M6), with the canary consequence in the owner's words.
+2. **Scorer admin port.** "fix it now, it is a few lines." Done: the scorer listens on 8081
+   (`--admin-port` default in `ml/src/fraudshield_ml/serving/cli.py`). `ml.yaml`, its
+   NetworkPolicy and the README now use 8081; they said 8000. Still open: `ml.yaml` passes no
+   arguments and mounts no certificates, so the scorer cannot start from it yet (PB-179).
+3. **ML worker and `/actuator/health/ml`.** "file both, owned by M5 and M6. An alert that fires
+   permanently is worse than no alert, so disable or remove those probes until the endpoints
+   exist."
+   - Filed: PB-172 (the worker, M5) and PB-173 (`/actuator/health/ml`, M6).
+   - The `blackbox-ml-health` scrape job is removed from `prometheus.yml`, with a comment saying
+     why. With no `probe_success` series, `FraudShieldMlHealthProbeFailing` cannot fire. The
+     alert, its unit test and its runbook stay, ready for PB-173.
+   - `ml-worker.yaml` is out of the deployed base, and out of the staging patch, until PB-172:
+     no code serves its probes or metrics and no image exists.
+4. **Metrics.** "file the whole table as scoped work per owner. Write the ADR for the ~35
+   emitted names E.10 does not list and bring it to me. Until the metrics exist, mark every
+   alert and dashboard panel that reads nothing as not functional in M9's rows — not done."
+   - Filed: PB-174 (M6), PB-175 (M5), PB-176 (M5, after PB-172), PB-177 (M6 and M8B) and PB-178
+     (M9, on ADR 0093).
+   - ADR 0093 is written as Proposed, for the owner.
+   - The rows are marked in `docs/traceability/requirements.yaml`; the list is in section 7.
+5. **`fs_spool_depth` export.** "Confirm the fs_spool_depth_bytes export with one scrape." Java
+   is built and tested in CI only, so the scrape is a test:
+   `AssembledApplicationTest.theSpoolDepthGaugeIsExportedUnderTheNameM9sAlertAndDashboardRead`
+   scrapes the assembled API's `/actuator/prometheus` and expects `fs_spool_depth_bytes`. Its CI
+   result is the confirmation.
+
 ### Identifiers claimed by this branch
 
 | Id | Subject | State |
@@ -126,6 +172,8 @@ marked **Open**.
 | ADR 0090 | API spool on a shared volume with orphan replay | written on this branch |
 | ADR 0091 | live AUC and label-coverage metrics | written on this branch |
 | ADR 0092 | the storage-class fsync fallback for ADR 0090 (decision 8) | claimed, not written |
+| ADR 0093 | the metrics the code emits that Part E.10 does not list | written, Proposed |
+| PB-171 to PB-190 | infrastructure follow-ups | PB-171 to PB-179 used |
 
 ## 4. Deviations to record in the traceability rows
 
@@ -225,7 +273,7 @@ changed by a new ADR. The manifests provide the volume and two variables; everyt
 
 **M5, M6, M8: deployment interface.** Ports, probe paths, UID 10001, read-only root filesystem,
 writable paths and the spool directory are in the table in `infrastructure/k8s/README.md`. In
-particular: the scorer needs HTTP `/health/live` and `/health/ready` on its admin port 8000,
+particular: the scorer needs HTTP `/health/live` and `/health/ready` on its admin port 8081 (corrected 2026-10-20 to the scorer's `--admin-port` default; it said 8000),
 because kubelet gRPC probes cannot present an mTLS client certificate; the API must drain its
 spool on SIGTERM within 120 s.
 
@@ -239,14 +287,34 @@ spool on SIGTERM within 120 s.
 | Gate item | Status |
 |---|---|
 | All 8 CI stages of SRS 8.1 | partial: security (Trivy, ZAP job) and image/SBOM/sign stages added; no integration stage, ML gate, staging or production deploy workflow |
-| Grafana dashboards provisioned as code | done on branch (5 dashboards) |
-| Alert rules for every SRS 8.2 threshold | all, including the AUC drop (ADR 0091); the AUC and coverage gauges are not emitted yet |
+| Grafana dashboards provisioned as code | written on branch (5 dashboards); **15 panels are not functional**: they read metrics nothing emits (list below) |
+| Alert rules for every SRS 8.2 threshold | written for all, including the AUC drop (ADR 0091); **7 are not functional** (list below) |
 | k8s manifests: namespace, NetworkPolicies, PSA restricted, HPA, PDBs | done on branch for application and observability workloads; data stores not included |
 | Argo Rollouts canary with automated analysis | built on branch, never applied to a cluster; the design is withdrawn by the owner (3b, decision 2) and must be redone |
 | ZAP 0 critical | not run: no API service in compose yet |
 | Gitleaks 0 | existing `ci.yml` job, green on this branch |
 | Trivy 0 high/critical unfixed | dependencies and configuration: 0, CI run 35692117624; images: none built yet |
 | SBOM and cosign signatures | source SBOM signed and verified in CI; image signatures pending Dockerfiles |
+
+**Not functional until the metric exists (owner, 2026-10-20: "not done").** Checked on
+2026-10-20 by resolving every alert, recording rule, dashboard query and canary query on this branch
+to the `fs_` metrics it reads, against what `main` emits (`fs_decisions_total`,
+`fs_decision_latency_seconds`, `fs_alert_timeout_release_total`, `fs_spool_depth` under a name
+being confirmed).
+
+| Reads | Missing metric | Backlog |
+|---|---|---|
+| Alert `FraudShieldTransactionRateDrop`; panels fs-decision-path "Transactions per second" and "Ingest responses by status"; **the canary's `error-rate` analysis, which fails every rollout** | `fs_ingest_requests_total` | PB-174 |
+| Alert `FraudShieldKafkaConsumerLagHigh`; panel fs-kafka-spool "Consumer lag by topic and group" | `fs_kafka_consumer_lag` | PB-174 |
+| Alert `FraudShieldSpoolBacklog`; panel fs-kafka-spool "Spool depth by pod" | `fs_spool_depth`, exported under another name if the scrape confirms `fs_spool_depth_bytes` | PB-174, ADR 0093 |
+| Panel fs-decision-path "Redis hit ratio and DB pool in use" | `fs_redis_hit_ratio`, `fs_db_pool_in_use` | PB-174, ADR 0093 |
+| Panels fs-decision-path "Scoring latency p95 by stage", "Feature fetch latency p95 by source"; fs-model-health "Model versions by alias" | `fs_scoring_latency_seconds`, `fs_feature_latency_seconds`, `fs_model_version_info` | PB-175 |
+| Alerts `FraudShieldFalsePositiveRateHigh`, `FraudShieldFeatureDrift`, `FraudShieldModelAucDrop`; panels fs-risk-overview "False positive rate (labelled)", fs-model-health "Live AUC-ROC (production) and alert level", "Label coverage by alias", "Top 10 features by PSI" | `fs_false_positive_rate`, `fs_feature_psi`, `fs_model_auc_roc`, `fs_model_label_coverage` | PB-176 (after PB-172) |
+| Panels fs-analyst-operations "Alert queue depth by tier", "Review duration p50 / p90", "Review duration distribution" | `fs_alert_queue_depth`, `fs_review_duration_seconds` | PB-177 |
+| Alert `FraudShieldMlHealthProbeFailing` | its probe is disabled: the API serves no `/actuator/health/ml` | PB-173 |
+
+The p99 latency alert and the canary's latency check read an emitted metric, but interpolate:
+`fs_decision_latency_seconds` has no 0.08 bucket bound (PB-174).
 
 Remaining M9 work not started here: data store manifests (CloudNativePG for PostgreSQL +
 TimescaleDB and the PII vault, Kafka, Redis, MLflow, object store) with their NetworkPolicies
