@@ -3143,3 +3143,35 @@ is the only trace of the original order, and it is outside this repository. The 
 prediction as not established, with the reason; three predictions remain pre-specified in repository
 history. The audit checks the rebase as well: the pair must be ordered, and the prediction's commit
 must have been rewritten, on the date printed, after the evidence's author date.
+
+### 2026-10-20 · Derived text is checked against the source text, not only its numbers
+
+The paper's one-page summary went through five independent reviews against the paper before it was
+clean. **Every number matched its audited macro from the first draft, and the first draft still
+overclaimed.** The numbers had been checked mechanically (they were filled from `numbers.tex` by a
+script); the sentences around them had not.
+
+What the rounds found, none of which a number check can see:
+
+- **Dropped qualifiers.** The reversal variant was "modelled on a documented scam" without the
+  recipient being our modelling choice that the sources do not support; leave-one-country-out and the
+  held-out variant were "null" where the paper says they fail to test generalisation and that their
+  explanation is inferred; the selection range lost its unmeasured seed-noise widening; the
+  disclosure lost that agents wrote the code and first drafts.
+- **Wrong attribution.** One "full volume" header covered results from three models; a caveat about
+  late-written code was attached to a result from a different evidence file (introduced by a fix in
+  round three, caught in round four).
+- **Scope widened by grammar.** "Accuracy does not" (present tense, no machine or benchmark) for a
+  latency measurement the paper confines to one booster on one shared runner.
+- **Understatement too** (caught while drafting the fix, not by a review): the first rewrite of the
+  disclosure line dropped that the author directed the work and is responsible for every claim.
+
+Round five raised one paper-side defect as well: the paper called the test period's 985 frauds
+"confirmed" while its own reconciliation table defines confirmed as observed **and** true. Fixed the
+same day ("observed fraud", in every count that reads the observed label).
+
+Why it happens: a summary is where qualifiers are dropped, because dropping them is how it fits on a
+page, and each dropped clause leaves the numbers intact. **Rule: derived text (summary, abstract,
+slides, cover letter, README status) is reviewed sentence by sentence against the source text it
+derives from: model, seed, threshold or budget, caveat and degree of certainty, each attached to the
+right result. Matching numbers is necessary, not sufficient.**

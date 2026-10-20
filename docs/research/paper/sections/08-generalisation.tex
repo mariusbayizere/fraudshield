@@ -73,7 +73,7 @@ model that detects such incidents catches it without having seen it; no attribut
 run on these rows. This is not an out-of-distribution test.
 
 \paragraph{Every fraud of the test period accounted for.} The variant counts in this section sum to
-fewer than the test period's \nTestFraud{} confirmed frauds. Table~\ref{tab:reconcile} accounts for
+fewer than the test period's \nTestFraud{} observed frauds. Table~\ref{tab:reconcile} accounts for
 all of them from the dataset's own labels: the difference is label noise, legitimate rows that the
 observed label marks as fraud, which carry no scenario and so no variant. The table also counts the
 opposite noise, frauds the observed label misses, which the evaluation scores as legitimate.

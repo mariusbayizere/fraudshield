@@ -23,7 +23,7 @@ separate review queue that does not hold the payment; that routing belongs to th
 engine (M6) and is not evaluated here.
 
 \paragraph{Training volume.} The declared gate model was trained on \nTrainUsed{} rows holding
-\nGateTrainFraud{} confirmed fraud, a subset of the \nTrainRows{} rows in the training period.
+\nGateTrainFraud{} observed fraud, a subset of the \nTrainRows{} rows in the training period.
 The backlog records the reason as the cost of the feature pass, about \nFeaturePassRate{} rows a
 second on the development machine (PB-67); no document records why \nTrainUsed{} rather than another
 size. The same design was later trained on every one of the \nFvTrainRows{} training rows, on a

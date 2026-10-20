@@ -2,8 +2,8 @@
 \label{sec:evaluation}
 
 Unless a figure says otherwise, it is on the evaluation draw's test period (\nTestRows{} rows
-holding \nTestFraud{} confirmed fraud). One design is reported at the gate's volume and at full volume. The declared
-gate model trains on \nTrainUsed{} rows, holding \nGateTrainFraud{} confirmed fraud; it is the model
+holding \nTestFraud{} observed fraud: rows the observed label marks as fraud, Table~\ref{tab:reconcile}). One design is reported at the gate's volume and at full volume. The declared
+gate model trains on \nTrainUsed{} rows, holding \nGateTrainFraud{} observed fraud; it is the model
 of every table built before the full-volume run. The full-volume model
 trains on all \nFvTrainRows{} rows of the training period, holding \nFvTrainFraud{} confirmed
 fraud, about \nFullVolumeFactor{} times as many, with validation and calibration splits enlarged
@@ -135,7 +135,7 @@ Table~\ref{tab:gate} are the ensemble's; the others are the diagnostic model's
 
 \begin{table}[htbp]
 \centering
-\caption{Test period by channel and by country: rows, confirmed fraud, and AUC. Ensemble AUCs from
+\caption{Test period by channel and by country: rows, observed fraud, and AUC. Ensemble AUCs from
 \texttt{docs/benchmarks/m4\_gate\_d8083dbc\_v3.txt}; diagnostic-model AUCs, rows and fraud from
 \texttt{docs/benchmarks/m4\_battery\_d8083dbc\_e1.txt} (draw \texttt{d8083dbc}, evidence commit
 \texttt{d40fca2}). A dash means the ensemble was not sliced that way. The evidence file marks slices
