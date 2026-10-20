@@ -1,0 +1,61 @@
+\section{Engineering findings}
+\label{app:engineering}
+
+These findings concern the system built around the benchmark rather than the benchmark itself. They
+are moved here from the main text so that it stays the benchmark audit; none is removed, and only the
+opening sentence of each is adapted to its new place.
+
+\subsection*{A fix that did nothing in its own scenario}
+
+The defect of Section~\ref{sec:discussion}'s ``a test that cannot fail'' appeared in a fix rather
+than a test. A concurrency fix in the
+staff-identity service (a refresh after a row-locking query, so that a stale copy of an account could
+not be written back) passed its test and was recorded as fixed, with a mutation killed. The test
+created the conflict in a way that never advanced the row's version, so it exercised only the branch
+where the fix was not needed; in the case the fix was written for, the locking query itself raised an
+error before the refresh ran. A second defence made every assertion hold, and the killed mutation
+removed both defences at once. A mutation removing only the refresh survived, and was first filed as
+``defence in depth''; the case was found when that explanation was required to be shown with a test
+that fails without the fix, and the test failed with the fix in place. Silent vacuous tests are bad; a
+record that reads ``fixed, tested, mutation killed'' for a fix that did nothing in its own scenario is
+worse. Counting killed mutations measures the tests; only investigating the survivors measures the
+claims, and an ``equivalent'' or ``defence in depth'' label on a survivor needs the same evidence as
+any other claim. That last rule is written, not enforced.
+
+\subsection*{A ranking metric can hide a change in decisions}
+ The scoring service as built (milestone
+M5) serves \nSkewConstantFeatures{} of the trained features as constants, because nothing deployed yet
+writes the state they read: the counterparty's confirmed-fraud count, the map cell's lagged fraud
+rate and the days since a SIM swap; the synthetic-identity score is computed from fewer of its terms
+(ADR 0034). With the gate model rebuilt at seed 1 and scored over the whole test period on the
+features as served, AUC falls from \nSkewAucTrained{} to \nSkewAucBoth{}, by \nSkewAucDrop{}: more
+than the half-width of the gate's interval (\nSkewHalfWidth{}) and less than its full width, a change
+no AUC-expressed gate here would refuse. The decisions change more: the frauds reaching the flag
+threshold fall from \nSkewFlagTrained{} to \nSkewFlagBoth{}, \nSkewLost{} fewer (\nSkewLostPct{}),
+and \nSkewTierBoth{} risk-tier assignments change. The missing outcomes account for most of it (AUC
+\nSkewAucOutcomes{}, \nSkewFlagOutcomes{} frauds flagged), the missing SIM swaps for less
+(\nSkewAucSim{}, \nSkewFlagSim{}). These figures come from ADR 0034 and the scoring milestone's
+re-review by an agent that had written neither the code nor the earlier review
+(Section~\ref{sec:disclosure}), which reproduced every row; no raw output file with a provenance stamp was
+committed for them, so their source is a review record rather than an evidence file. They describe
+what the served feature set does to the evaluated model on the test period, one model at one
+threshold. No deployment has run, so they are not a measured loss of detection in operation, and they
+are not a general property of AUC. Our own gate would have passed this deployment, which is why the
+serving path carries its own acceptance test, and why M10 is required to re-measure the skew and find
+none (PB-72).
+
+\subsection*{The verification effort was blind in one direction}
+ The scoring client was reviewed
+\nFakeReviews{} times (a principal review, a re-review of its fixes, a verification pass and an
+adversarial pass over the promotion path, each by an agent), and the reviewers found \nFakeDefects{} defects in the
+model-promotion path between them, while \nFakeTests{} tests passed. None found that the client
+misread how the model registry reports an unset alias, because every one of those tests ran against an
+in-process fake that encoded the same misreading; a test that starts a real registry container
+caught it in continuous integration. The figures and the failure are recorded in the lab notebook
+(2026-09-23); no raw output was committed beyond that record. Review, mutation testing and
+adversarial probing all operate inside the world the test fixtures define; contact with the real
+dependency is the only check outside it. The verification reported for this system therefore does
+not establish correctness against the external services it integrates with, beyond the tests that
+start real ones, and the scoring milestone's re-review records that some of those had not run on any
+machine visible to it.
+

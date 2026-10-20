@@ -1,32 +1,36 @@
 \begin{abstract}
 What can a synthetic fraud benchmark show, and what can it not? We answer the question for
-FraudShield-EAC, a seeded synthetic benchmark of East African digital payments (mobile money,
-USSD, agent banking, card, online and bank transfer, across \nCountries{} countries) built to develop
-and evaluate a fraud detection system. Its clearest negative result is a variant, pre-specified in repository history
-(\prespec{656d24e}{2026-09-22}{6bc842d}{2026-09-22}), built
-on a scam documented among Kenyan mobile-money users: a single victim-initiated transfer, which we
-read the sources as sending to a new counterparty and which our variant, by our own choice, sends to
-a counterparty on the victim's payee list; \nRevNovelScored{} of its \nRevFraud{} scored rows still go
-to a payee the account had never paid. A diagnostic XGBoost model catches it at \nRevRecall{}
-\nRevCI{}, against \nBaseVarRecall{} \nBaseVarCI{} for the base scenarios; why it misses the
-variant is not isolated.
+FraudShield-EAC, a seeded synthetic benchmark of East African digital payments (mobile money, USSD,
+agent banking, card, online and bank transfer, across \nCountries{} countries) built to develop and
+evaluate a fraud detection system. The benchmark is easy in a specific way: on the test period a single
+engineered feature, a short-to-long-window velocity ratio, separates fraud from legitimate payments at
+an AUC of \nGateFloor{} on its own, so we report every ranking metric as a margin over that feature
+rather than over chance.
 
-The benchmark is easy in a specific way. On the evaluation test rows the strongest single engineered
-feature, a short-to-long-window velocity ratio, separates the classes at \nGateFloor{} on its own, so
-every ranking metric among the specification's acceptance thresholds (its gates) is
-reported as a margin over that floor rather than over chance: trained on
-\nTrainUsed{} rows, the calibrated XGBoost and LightGBM ensemble reaches an AUC of \nGateAUC{}
-\nGateAUCci{}, a margin of \nGateMargin{}. Its recall at the specified flag threshold misses the
-target, and \nLcVolumeFactor{} times the training data does not close the gap for this model on this
-draw. \nGroupsAboveCeilingCap{} disjoint feature groups each separate the classes beyond the
-\nCeiling{} single-feature ceiling alone, so ablations here measure redundancy rather than
-importance, and both generalisation experiments we planned (leave-one-country-out and a novel fraud
-variant held out in time) are null. We infer, without an experiment that isolates either cause, that
-the country null follows from fraud parameters that are not keyed by country, and the variant null
-from the variant's multi-row shape. For one XGBoost booster on a development laptop, the difference
-between the median latency with and without an exact TreeSHAP explanation grows about
-\nFrontRatio-fold across the tree configurations tested, while accuracy stays within its interval.
+Trained on all \nFvTrainRows{} rows of the training period, a calibrated XGBoost and LightGBM ensemble
+reaches an AUC of \nFvAUC{}, a margin of \nFvMargin{} over the single feature. Its recall at the
+specified flag threshold, \nFvRecallSix{}, misses the specified target of \nTargetRecall{}, and
+training volume did not close that gap in any run we measured, from \nTrainUsed{} rows to the whole
+training period. At a fixed \nTrainUsed{} rows, changing only the corpus they were drawn from moved
+mean recall over seeds across a range of \nSelMeanRange{}, while on one fixed corpus going from
+\nTrainUsed{} rows to the whole period, with larger validation and calibration splits, gained \nFvSeedGainFixed{}. No interval
+was computed for these differences, so that which rows are used mattered more than how many is an
+inference.
+\nGroupsAboveCeilingCap{} disjoint feature groups each separate the classes beyond a
+\nCeiling{} single-feature ceiling alone, so ablations measure redundancy rather than importance. Leave-one-country-out and a fraud variant
+held out in time are null; we infer, without isolating either cause, that this follows from fraud
+parameters not keyed by country and from the variant's multi-row shape. Refitting without one fraud
+type at a time costs little recall at a \nFPRBudget{} false-positive budget for velocity, SIM-swap and mule fraud and much more
+for agent fraud (\nLoAgentProd{} to \nLoAgentHeld{}) and synthetic identity.
 
-All results are on a synthetic benchmark whose fraud parameters are modelling choices, not
-observations; we state what a validation on real data would need to show.
+The one failure of the production model on a pre-specified variant is a variant with no burst
+structure, modelled on a scam documented among Kenyan mobile-money users and committed, with the diagnostic model's
+predicted recall, alongside the generator code that produces it, before its evidence. It is
+rarely caught and never at the flag threshold. At a \nFPRBudget{} false-positive budget the ensemble
+trained on \nTrainUsed{} rows catches \nGateRevNewBudgetCaught{} of its \nGateRevNewBudgetRows{} rows whose recipient the account
+had never paid (\nFvRevNewBudgetCaught{} at full volume) and none of the \nGateRevKnownBudgetRows{}
+sent to a payee it had paid before; the
+counts are small and the split is observational, so the cause is not isolated. All results are on a synthetic benchmark whose fraud
+parameters are modelling choices, not observations; we state what a validation on real data would
+need to show.
 \end{abstract}

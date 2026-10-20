@@ -15,7 +15,7 @@
 % Data draws (seed 20260917 throughout):
 %   6abde44e  1,006,249 rows (claims register header; M3 and the first M4 battery)
 %   d8083dbc  1,006,317 rows (dataset/realism_report.md at m4-complete; the PB-61 draw with the
-%             pre-registered non-burst variant; the M4 gate and the E1-corrected battery)
+%             non-burst variant pre-specified in repository history; the M4 gate and the E1-corrected battery)
 % Evidence files are read at the m4-complete tag (72e7790), which is on main; each file begins
 % with its own evidence-commit and evidence-tree-state stamp.
 
@@ -154,7 +154,7 @@
 \newcommand{\nGatePrecCeiling}{\meas{0.494}}
 \newcommand{\nGateOnnx}{\meas{\ensuremath{4.06 \times 10^{-7}}}}
 \newcommand{\nGateSeedAUC}{\meas{\ensuremath{0.9667 \pm 0.0040}}}
-% Baselines (same file): AUC and DeLong p against the ensemble.
+% Baselines (same file): AUC against the ensemble.
 \newcommand{\nBaseRules}{\meas{0.707}}
 \newcommand{\nBaseLR}{\meas{0.965}}
 \newcommand{\nBaseRF}{\meas{0.967}}
@@ -175,7 +175,7 @@
 \newcommand{\nGroupGeographic}{\meas{0.829}}
 \newcommand{\nGroupMaxDrop}{\meas{0.034}}
 \newcommand{\nGroupsAtMostSmall}{\meas{0.007}}
-% Novel and pre-registered variants, same file (Wilson 95% intervals).
+% Novel and pre-specified variants, same file (Wilson 95% intervals).
 \newcommand{\nRevRecall}{\meas{9.1\%}}
 \newcommand{\nRevCI}{\meas{[4.2\%, 18.4\%]}}
 \newcommand{\nRevCaught}{\meas{6}}
@@ -205,9 +205,8 @@
 \newcommand{\nSeedSdXGB}{\meas{0.000609}}
 \newcommand{\nSeedSdLGB}{\meas{0.000700}}
 
-% Frontier: docs/benchmarks/m4_frontier_6abde44e.txt (evidence commit 95b722c), draw 6abde44e,
-% dev-laptop-01 (docs/benchmarks/hardware.md), 900 timed single requests per configuration.
-% p50 only; the p99 columns are not measurement on this machine (ADR 0010).
+% Frontier: the runner re-run, evidence/round2_frontier_d8083dbc.txt (round two, R2_REF); medians
+% only, no p99 (ADR 0010).
 \newcommand{\nFrontShapSmall}{\meas{0.03}}
 \newcommand{\nFrontShapLarge}{\meas{0.84}}
 \newcommand{\nFrontAUCDelta}{\meas{-0.003}}
@@ -225,7 +224,7 @@
 % m4-complete: two more. PB-56 event-delay band (commit 0138099, measured on
 % 6abde44e; confirmed, see \nEventDelayBandLow) and the ADR 0028 reversal-scam range below.
 \newcommand{\nPredTotal}{\meas{seven}}
-\newcommand{\nPrespecShown}{\meas{three}}
+\newcommand{\nPrespecShown}{\meas{six}}
 \newcommand{\nPrespecNotShown}{\meas{four}}
 \newcommand{\nRevPredLow}{\meas{0.15}}
 \newcommand{\nRevPredHigh}{\meas{0.55}}
@@ -295,7 +294,7 @@
 \newcommand{\nGroupProfile}{\meas{0.548}}
 \newcommand{\nGroupCorridor}{\meas{0.507}}
 \newcommand{\nGroupWithoutCounterparty}{\meas{0.938}}
-% Frontier rows (m4_frontier_6abde44e.txt): AUC, predict p50 (ms), +SHAP p50 (ms), SHAP cost.
+% Frontier rows (round2_frontier_d8083dbc.txt, runner re-run): AUC, predict p50 (ms), +SHAP p50 (ms), SHAP cost.
 \newcommand{\nFrAucA}{\meas{0.971}}\newcommand{\nFrPredA}{\meas{0.14}}\newcommand{\nFrShapA}{\meas{0.18}}\newcommand{\nFrCostA}{\meas{0.03}}
 \newcommand{\nFrAucB}{\meas{0.974}}\newcommand{\nFrPredB}{\meas{0.15}}\newcommand{\nFrShapB}{\meas{0.27}}\newcommand{\nFrCostB}{\meas{0.13}}
 \newcommand{\nFrAucC}{\meas{0.972}}\newcommand{\nFrPredC}{\meas{0.15}}\newcommand{\nFrShapC}{\meas{0.51}}\newcommand{\nFrCostC}{\meas{0.36}}
@@ -444,6 +443,10 @@
 \newcommand{\nLcStepCD}{\meas{-0.015}}       % seed 1, 120K -> 240K
 \newcommand{\nLcMaxUpper}{\meas{0.823}}      % largest upper bound of the four seed-1 intervals
 \newcommand{\nLcSeedGain}{\meas{0.028}}      % five-seed mean, 30K -> 240K
+\newcommand{\nSelDepthCount}{\meas{six}}  % derived: corpus depths in the selection test
+\newcommand{\nSelMaxSd}{\meas{0.0410}}  % derived: largest seed SD across depths
+\newcommand{\nFvSeedGainFixed}{\meas{0.032}}  % derived: whole-draw corpus, full volume minus 30K
+\newcommand{\nLoFraudSum}{\meas{977}}  % derived: LOFTO scenarios' test frauds
 \newcommand{\nLcSpanSeedOne}{\meas{0.016}}   % range of the four seed-1 values
 \newcommand{\nSelGapSeedOne}{\meas{0.059}}   % curve 30K minus gate 30K, seed 1
 \newcommand{\nSelGapMeans}{\meas{0.023}}     % curve 30K minus gate 30K, five-seed means
@@ -502,6 +505,7 @@
 \newcommand{\nGateUnmeasured}{\meas{two}}      % derived: gate metrics specified minus measured
 \newcommand{\nEceBins}{\meas{15}}              % gate file ML-GATE-11
 \newcommand{\nGateRealisedFPR}{\meas{0.0096}}  % gate file: FPR realised at the 1% budget threshold
+\newcommand{\nFvRealisedFPR}{\meas{0.0049}}  % full-volume gate file: FPR realised at the 1% budget threshold
 \newcommand{\nGatePrecCeilingRealised}{\meas{0.505}}
 \newcommand{\nSmallCountThreshold}{\meas{30}}  % battery file's own "fewer than 30 fraud rows"
 \newcommand{\nBaseLRGap}{\meas{0.005}}         % derived: ensemble AUC minus logistic regression
@@ -564,7 +568,6 @@
 \newcommand{\nRevPriorThreshold}{\meas{3}}
 \newcommand{\nSeedSdRelXGB}{\meas{+0.62\%}}   % derived from the seed-variance file's per-seed AUCs
 \newcommand{\nSeedSdRelLGB}{\meas{-12.49\%}}
-\newcommand{\nFrontAUCDeltaRounded}{\meas{0.003}}  % derived: rounded AUC of config A minus E
 
 % ---------------------------------------------------------------------------------------------
 % Account-clustered intervals and the velocity diagnostic (evidence/clustered_intervals_d8083dbc.txt,
@@ -1042,3 +1045,62 @@
 \newcommand{\nRecTrue}{\meas{990}}  % derived
 \newcommand{\nRecMissed}{\meas{13}}  % derived
 \newcommand{\nPriorReads}{\srcd{23}}\newcommand{\nPriorReadsFull}{\srcd{11}}  % PB-66 pre-specification, amendment 0e
+% Training-selection test (round2_selection at f29793c)
+\newcommand{\nSelAMedian}{\meas{30.2}}
+\newcommand{\nSelAUnder}{\meas{0.495}}
+\newcommand{\nSelAUnderLong}{\meas{1.000}}
+\newcommand{\nSelARecall}{\meas{0.683}}
+\newcommand{\nSelARecallci}{\meas{[0.646, 0.719]}}
+\newcommand{\nSelAMean}{\meas{\ensuremath{0.7060 \pm 0.0191}}}
+\newcommand{\nSelBMedian}{\meas{51.0}}
+\newcommand{\nSelBUnder}{\meas{0.290}}
+\newcommand{\nSelBUnderLong}{\meas{0.878}}
+\newcommand{\nSelBRecall}{\meas{0.629}}
+\newcommand{\nSelBRecallci}{\meas{[0.592, 0.664]}}
+\newcommand{\nSelBMean}{\meas{\ensuremath{0.6569 \pm 0.0211}}}
+\newcommand{\nSelCMedian}{\meas{63.0}}
+\newcommand{\nSelCUnder}{\meas{0.250}}
+\newcommand{\nSelCUnderLong}{\meas{0.707}}
+\newcommand{\nSelCRecall}{\meas{0.736}}
+\newcommand{\nSelCRecallci}{\meas{[0.705, 0.767]}}
+\newcommand{\nSelCMean}{\meas{\ensuremath{0.7440 \pm 0.0410}}}
+\newcommand{\nSelDMedian}{\meas{100.9}}
+\newcommand{\nSelDUnder}{\meas{0.145}}
+\newcommand{\nSelDUnderLong}{\meas{0.444}}
+\newcommand{\nSelDRecall}{\meas{0.782}}
+\newcommand{\nSelDRecallci}{\meas{[0.751, 0.811]}}
+\newcommand{\nSelDMean}{\meas{\ensuremath{0.7641 \pm 0.0130}}}
+\newcommand{\nSelEMedian}{\meas{177.4}}
+\newcommand{\nSelEUnder}{\meas{0.086}}
+\newcommand{\nSelEUnderLong}{\meas{0.238}}
+\newcommand{\nSelERecall}{\meas{0.759}}
+\newcommand{\nSelERecallci}{\meas{[0.729, 0.791]}}
+\newcommand{\nSelEMean}{\meas{\ensuremath{0.7346 \pm 0.0384}}}
+\newcommand{\nSelFMedian}{\meas{328.6}}
+\newcommand{\nSelFUnder}{\meas{0.049}}
+\newcommand{\nSelFUnderLong}{\meas{0.129}}
+\newcommand{\nSelFRecall}{\meas{0.788}}
+\newcommand{\nSelFRecallci}{\meas{[0.760, 0.816]}}
+\newcommand{\nSelFMean}{\meas{\ensuremath{0.7565 \pm 0.0384}}}
+\newcommand{\nSelShortDays}{\meas{30}}
+\newcommand{\nSelLongDays}{\meas{90}}
+\newcommand{\nSelMeanRange}{\meas{0.107}}  % derived
+% Selection corpus depths
+\newcommand{\nSelACorpus}{\meas{300{,}000}}
+\newcommand{\nSelBCorpus}{\meas{360{,}000}}
+\newcommand{\nSelCCorpus}{\meas{400{,}000}}
+\newcommand{\nSelDCorpus}{\meas{520{,}000}}
+\newcommand{\nSelECorpus}{\meas{700{,}000}}
+% PB-66 follow-up: budget-10 prediction, ties and LightGBM rounds
+\newcommand{\nBudPredPrec}{\srcd{0.90}}
+\newcommand{\nBudPredRecallLow}{\srcd{0.55}}
+\newcommand{\nBudPredRecallHigh}{\srcd{0.65}}
+\newcommand{\nBaseBudATies}{\meas{23}}
+\newcommand{\nLcLgbRoundsA}{\meas{592}}
+\newcommand{\nLcLgbRoundsB}{\meas{837}}
+\newcommand{\nLcLgbRoundsC}{\meas{924}}
+\newcommand{\nLcLgbRoundsD}{\meas{167}}
+\newcommand{\nBudAAlerts}{\meas{630}}  % derived
+\newcommand{\nBudATiesPct}{\meas{42\%}}  % derived
+\newcommand{\nBudTiesPctLow}{\meas{16\%}}\newcommand{\nBudTiesPctHigh}{\meas{19\%}}  % derived
+\newcommand{\nPredPb}{\meas{three}}  % derived: PB-66 rows of tab:predictions

@@ -32,6 +32,10 @@ project's effort went into interrogating the benchmark until it gave up its stru
 publishing each interrogation whether or not it flattered the dataset. That record, not the
 benchmark, is the first contribution.
 
+One convention runs through the paper. A statement that rests on inference rather than measurement
+says so in its own sentence (``we infer''), and a cause we name without an experiment that isolates
+it is called inferred, not shown; we do not repeat the caveat in every paragraph that relies on it.
+
 \paragraph{Contributions.} We claim the following, each of which a reader can check against the
 repository and disagree with:
 \begin{enumerate}
@@ -44,9 +48,19 @@ repository and disagree with:
         that failed, how each failure was found, and which of the resulting rules a check now
         enforces and which remain written rules.
   \item \textbf{A detection failure on a non-burst variant pre-specified in repository history}
-        (\prespec{656d24e}{2026-09-22}{6bc842d}{2026-09-22}; Section~\ref{sec:generalisation}): recall \nRevRecall{} \nRevCI{} against
-        \nBaseVarRecall{} \nBaseVarCI{}, measured on a held-out shape. Its cause is inferred, not
-        isolated: the variant differs from the base scenarios in more than one respect.
+        (Section~\ref{sec:generalisation}, which gives the commits): the diagnostic model catches it
+        at \nRevRecall{} \nRevCI{} against \nBaseVarRecall{} \nBaseVarCI{}, and the production
+        ensemble never at the flag threshold. At the budget the ensemble catches
+        \nGateRevNewBudgetCaught{} of the \nGateRevNewBudgetRows{} rows whose recipient the
+        account had never paid and none of the \nGateRevKnownBudgetRows{} sent to a known payee.
+        The counts are small and the split is observational, so the cause is not isolated.
+  \item \textbf{Training volume against the choice of training rows}
+        (Sections~\ref{sec:volume} and~\ref{sec:rowselection}): the recall shortfall did not close
+        in any run measured, up to all \nFvTrainRows{} training rows, while changing only the corpus
+        \nTrainUsed{} training rows were drawn from moved mean recall over seeds across a range of
+        \nSelMeanRange{}, while on one fixed corpus going from \nTrainUsed{} rows to all of them,
+        with larger validation and calibration splits, gained \nFvSeedGainFixed{}; no interval was computed for these
+        differences.
   \item \textbf{Generalisation nulls} (Section~\ref{sec:generalisation}): leave-one-country-out
         and a novel variant held out in time both fail to test generalisation on this benchmark. A test
         checks that no fraud parameter is keyed by country, and we infer that the country null
@@ -55,10 +69,10 @@ repository and disagree with:
         specification's \nSpecRows{}-row scale; it changes no fraud parameter, so it could show
         whether the nulls hold at scale but could not make leave-one-country-out informative.
   \item \textbf{The latency--explainability frontier} (Section~\ref{sec:evaluation}): how the
-        median cost of an exact TreeSHAP explanation changes across tree complexity on one
-        development laptop, reported at the median only, because the measured \nPctlTail{}th
-        percentile was not credible: in \nFrontNegative{} configurations it showed a negative
-        explanation cost. It is a measurement of one model on one machine. M10 would add the
+        median cost of an exact TreeSHAP explanation changes across tree complexity, reported at the
+        median only, because an earlier run's \nPctlTail{}th percentile was not credible: in
+        \nFrontNegative{} configurations it showed a negative explanation cost. It is a measurement
+        of one model on one shared machine. M10 would add the
         frontier the specification defines: the single-request \nPctlTail{}th percentile of the
         ensemble with exact TreeSHAP, in the multi-process scoring service, on dedicated hardware,
         and whether the \nLatencyPNineNineShap{}~ms constraint binds; it would not test our

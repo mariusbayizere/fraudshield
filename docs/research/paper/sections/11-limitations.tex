@@ -5,9 +5,10 @@ We state these as findings about what the evidence supports, not as disclaimers.
 
 \paragraph{The benchmark is synthetic, and the fraud in it is invented.} It does not support statements about
 real fraud rates, real detection performance or any institution's customers. Whether it supports
-comparisons between methods is not established either: Section~\ref{sec:rowselection} shows a
-choice of training rows moving a headline metric at seed 1, and no comparison of methods here
-repeats over selections. Every figure here is a property of this
+comparisons between methods is not established either: Section~\ref{sec:rowselection} finds the
+choice of training rows moving recall at the flag threshold across a wider range than training volume
+does where the corpus is held fixed (an inference, since no interval was computed), and
+no comparison of methods here repeats over selections. Every figure here is a property of this
 generator.
 
 \paragraph{No fraud parameter is sourced.} Of \nProvFraudTotal{} fraud parameters,
@@ -61,63 +62,42 @@ victim's payee list, a modelling choice that differs from the documented form of
 the victim pays the scammer's own number, which we read as a new counterparty; it also differs from
 the base scenarios in its amount rule, and it carries counterparty novelty on \nRevNovelScored{} of its \nRevFraud{} scored rows, so
 it removes that signal from only some of them (Section~\ref{sec:generalisation}). The result says nothing about the
-documented form, and does not isolate why the variant is missed. And because no accuracy advantage
+documented form. Within the variant, every row the production ensemble catches has a never-paid
+recipient, but the counts are small and the split is observational, so it does not isolate why the
+variant is missed. And because no accuracy advantage
 of the specified ensemble over a single XGBoost model was detected here, the benchmark cannot show
 what the ensemble adds.
 
 \paragraph{Scale and volume.} Results are at \nRowsDrawB{} rows or fewer, not the \nSpecRows{} the
-specification requires, a scale that is \deferred{M10}; and the models were trained on \nTrainUsed{}
-rows rather than the full training period. The strongest dataset column's AUC moves with dataset size
-by more than seed noise, and the cause is unexplained; every figure is therefore stated at its scale.
-The \nGateFailed{} failing gate metrics
-(recall and false-negative rate at the flag threshold) do not close with more training data from
-\nLcTrainA{} to \nLcTrainD{} rows (Section~\ref{sec:volume}); beyond that volume they are untested.
+specification requires, a scale that is \deferred{M10}. The strongest dataset column's AUC moves with
+dataset size by more than seed noise, and the cause is unexplained; every figure is therefore stated
+at its scale. The failing gate metrics (recall and false-negative rate at the flag threshold) did not
+close in any run measured, from \nLcTrainA{} training rows up to all \nFvTrainRows{} rows of the
+training period (Section~\ref{sec:volume}). The training period ends there, so more data of this
+draw cannot be tried; whether another model, or another draw, would close the gap is not tested.
 
-\paragraph{One selection of training rows.} At \nTrainUsed{} rows, a different selection of training
-rows from a corpus of different depth read recall \nSelGapSeedOne{} higher at seed 1, more than an
-\nLcVolumeFactor{}-fold change in volume moved it; on the means over seeds the difference is \nSelGapMeans{}, within
-the seed spread (Section~\ref{sec:rowselection}). Only the gate's selection and the curve's exist, so
-how much a headline
-figure varies with the choice of training rows is unmeasured, and every such figure here is a
-measurement of one selection.
+\paragraph{Training-row selection against volume rests on differences without intervals.} At a
+fixed \nTrainUsed{} training rows, varying only the corpus depth the rows are drawn from moved the
+mean recall at the flag threshold over a range of \nSelMeanRange{}, against \nLcSeedGainAC{} across
+the \nLcVolumeFactorAC{}-fold step of the learning curve within one cache and \nFvSeedGainFixed{}
+from \nTrainUsed{} rows to full volume on one corpus, with larger validation and calibration splits (Section~\ref{sec:rowselection}).
+No interval was computed for these differences, so that selection mattered more is inferred. The test does not separate the history each row carries from the
+months it comes from, and every single-number result here is a measurement of one selection.
 
-\paragraph{A ranking metric can hide a change in decisions.} The scoring service as built (milestone
-M5) serves \nSkewConstantFeatures{} of the trained features as constants, because nothing deployed yet
-writes the state they read: the counterparty's confirmed-fraud count, the map cell's lagged fraud
-rate and the days since a SIM swap; the synthetic-identity score is computed from fewer of its terms
-(ADR 0034). With the gate model rebuilt at seed 1 and scored over the whole test period on the
-features as served, AUC falls from \nSkewAucTrained{} to \nSkewAucBoth{}, by \nSkewAucDrop{}: more
-than the half-width of the gate's interval (\nSkewHalfWidth{}) and less than its full width, a change
-no AUC-expressed gate here would refuse. The decisions change more: the frauds reaching the flag
-threshold fall from \nSkewFlagTrained{} to \nSkewFlagBoth{}, \nSkewLost{} fewer (\nSkewLostPct{}),
-and \nSkewTierBoth{} risk-tier assignments change. The missing outcomes account for most of it (AUC
-\nSkewAucOutcomes{}, \nSkewFlagOutcomes{} frauds flagged), the missing SIM swaps for less
-(\nSkewAucSim{}, \nSkewFlagSim{}). These figures come from ADR 0034 and the scoring milestone's
-re-review by an agent that had written neither the code nor the earlier review
-(Section~\ref{sec:disclosure}), which reproduced every row; no raw output file with a provenance stamp was
-committed for them, so their source is a review record rather than an evidence file. They describe
-what the served feature set does to the evaluated model on the test period, one model at one
-threshold. No deployment has run, so they are not a measured loss of detection in operation, and they
-are not a general property of AUC. Our own gate would have passed this deployment, which is why the
-serving path carries its own acceptance test, and why M10 is required to re-measure the skew and find
-none (PB-72).
+\paragraph{Calibration where decisions are made.} The production ensemble's calibration error in the
+decision region is \nGateCalRegionECE{} at the gate's training volume and \nFvCalRegionECE{} at full
+volume, against \nBatECEDecision{} for the diagnostic model; over all rows the errors are
+\nGateCalECEAll{} and \nFvCalECEAll{}. No interval was computed for the decision-region figures,
+which rest on few rows per bin. A row-weighted figure, including the specification's own gate metric, hides this.
 
-\paragraph{The verification effort was blind in one direction.} The scoring client was reviewed
-\nFakeReviews{} times (a principal review, a re-review of its fixes, a verification pass and an
-adversarial pass over the promotion path, each by an agent), and the reviewers found \nFakeDefects{} defects in the
-model-promotion path between them, while \nFakeTests{} tests passed. None found that the client
-misread how the model registry reports an unset alias, because every one of those tests ran against an
-in-process fake that encoded the same misreading; a test that starts a real registry container
-caught it in continuous integration. The figures and the failure are recorded in the lab notebook
-(2026-09-23); no raw output was committed beyond that record. Review, mutation testing and
-adversarial probing all operate inside the world the test fixtures define; contact with the real
-dependency is the only check outside it. The verification reported for this system therefore does
-not establish correctness against the external services it integrates with, beyond the tests that
-start real ones, and the scoring milestone's re-review records that some of those had not run on any
-machine visible to it.
+\paragraph{Engineering findings.} Findings about the system rather than the benchmark, a
+measured gap between the features the model was trained on and those the scoring service serves, and
+a verification effort that missed a defect its fixtures shared, are reported in
+Appendix~\ref{app:engineering}.
 
 \paragraph{Latency.} No latency figure here is a gate figure. The frontier is a difference of
-medians on a shared development laptop, whose measured \nPctlTail{}th percentile was not credible; serving and
+medians on a GitHub-hosted runner, a virtual machine on shared hardware; an earlier laptop run's
+\nPctlTail{}th percentile was not credible, and neither machine's tail is used. Serving and
 end-to-end latencies have been measured only on shared development hardware (ADR 0035, ADR 0059),
 and the gate measurement is \deferred{M10}.
 
@@ -127,9 +107,12 @@ independent. For the gate metrics, the diagnostic model's group AUCs, the varian
 learning curve, leave-one-country-out, the single-feature floor and the differences between models,
 an account-clustered bootstrap from reproductions of the models is reported beside the row intervals;
 it widens them little except for USSD's AUC (Table~\ref{tab:clustered}), and the novel variant's
-\nNovelRows{} rows rest on \nNovelAccounts{} accounts. The intervals of the earlier-draw battery and
-of the full-volume model's evidence file treat rows as independent and were not re-computed, so each
-is narrower than it should be by an amount not measured; the frontier reports medians without
+\nNovelRows{} rows rest on \nNovelAccounts{} accounts. The other intervals treat rows as
+independent, so each is narrower than it should be by an amount not measured: those of the
+earlier-draw battery and its variant recalls, the floor re-run's Hanley--McNeil column, the
+full-volume model's evidence file, PB-66's monthly and precision--recall rows, the fairness table
+and leave-one-fraud-type-out (Section~\ref{sec:method}). The alert budgets' precision intervals
+resample whole days, and their recall intervals' resampling unit is not recorded; the frontier reports medians without
 intervals.
 
 \paragraph{The diagnostic model is untuned, and overfit where it was measured.} Its overfitting was measured on the velocity
@@ -148,10 +131,12 @@ only.
 evaluated one, which differ in draw, encoding and held-out rows, among them the redundancy threshold,
 the leave-one-country-out loss and the variant recalls; the findings reported here did not change.
 Each figure is stated with the run it comes from. The single-feature floor of
-Section~\ref{sec:floor} comes from a draw whose fingerprint was not recorded.
+Section~\ref{sec:floor} was first measured on a draw whose fingerprint was not recorded; re-run on
+the evaluation draw, fewer features exceed the ceiling (\nReAboveCeiling{} rather than
+\nFeaturesAboveCeiling{}).
 
 \paragraph{Claims not made.} The specification's figures on regional fraud growth, payment volume,
 analyst dismissal rates, the accuracy of models built elsewhere on East African data, and annual model
-degradation are unverified or replaced in the project's claims register, the claimed ensemble
+degradation (which a test period this short cannot test, Section~\ref{sec:operational}) are unverified or replaced in the project's claims register, the claimed ensemble
 variance reduction is not supported by the measurement of Section~\ref{sec:evaluation}, and none is
 stated here as fact.

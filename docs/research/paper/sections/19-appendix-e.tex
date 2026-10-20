@@ -2,10 +2,11 @@
 \label{app:deferred}
 
 The measurements below are owned by later milestones (M10 and M11), each with the reason it is not
-measured here; the text marks each place one would appear with \emph{deferred}. The M4 follow-up
-measurements, which the full-volume run (PB-66) is to produce, and that full-volume training itself,
-are marked \emph{not yet measured} where they would appear and are listed in
-Section~\ref{sec:evaluation}. No value is estimated in place of any of them.
+measured here; the text marks each place one would appear with \emph{deferred}. The measurements
+the specification asks of the model evaluation itself, including full-volume training, alert
+budgets, results by month, a cost curve and a partial fairness report, are reported in
+Sections~\ref{sec:evaluation} and~\ref{sec:ethics}; the one not measured, the value of Isolation
+Forest routing for novelty, is listed there. No value is estimated in place of any of them.
 
 \begin{small}
 \begin{longtable}{p{0.4\linewidth}p{0.07\linewidth}p{0.4\linewidth}}
@@ -25,7 +26,7 @@ End-to-end decision latency and throughput at the specified load & M10 & Measure
 development hardware and recorded as not met there (ADR 0059). \\
 The latency--explainability frontier at the \nPctlTail{}th percentile, for the ensemble in the
 multi-process service, against the \nLatencyPNineNineShap{}~ms constraint & M10 & The frontier here is
-one booster in one process on a shared laptop, reported at the median only
+one booster in one process on a shared GitHub-hosted runner, reported at the median only
 (Section~\ref{sec:evaluation}). \\
 One command that regenerates the dataset, trains, evaluates and builds every table and figure from a
 clean machine & M11 & Not built; each figure is reproduced by the command recorded in its evidence

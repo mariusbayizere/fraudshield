@@ -1,4 +1,4 @@
-\section{Generalisation: nulls and one failure}
+\section{Generalisation: nulls, held-out fraud types and one failure}
 \label{sec:generalisation}
 
 Once a single engineered feature separated the classes at \nGateFloor{} on the evaluation draw's
@@ -23,11 +23,13 @@ draw \texttt{d8083dbc}, \nBatTestRows{} test rows, evidence commit \texttt{d40fc
 \texttt{docs/benchmarks/m4\_battery\_d8083dbc\_e1.txt}), each with an account-clustered interval over
 that country's test rows from a reproduction of the same fits
 (\texttt{evidence/\allowbreak round2\_\allowbreak gate\_\allowbreak d8083dbc.txt}). The evidence file marks CD, which rests on
-fewer than \nSmallCountThreshold{} fraud rows, as direction rather than measurement.}
+fewer than \nSmallCountThreshold{} fraud rows, as direction rather than measurement. Test accounts:
+all of the country's accounts in the test period, the unit the clustered bootstrap resamples.}
 \label{tab:loco}
+\resizebox{\linewidth}{!}{%
 \begin{tabular}{lrrrrr}
 \toprule
-Country & In-sample & Clustered & Unseen in training & Clustered & Fraud rows (accounts) \\
+Country & In-sample & Clustered & Unseen in training & Clustered & Fraud rows (test accounts) \\
 \midrule
 KE & \nLocoKEin & \nLocoCluKEinci & \nLocoKEout & \nLocoCluKEoutci & \nLocoKEf{} (\nLocoCluKEAccounts) \\
 RW & \nLocoRWin & \nLocoCluRWinci & \nLocoRWout & \nLocoCluRWoutci & \nLocoRWf{} (\nLocoCluRWAccounts) \\
@@ -35,7 +37,8 @@ TZ & \nLocoTZin & \nLocoCluTZinci & \nLocoTZout & \nLocoCluTZoutci & \nLocoTZf{}
 UG & \nLocoUGin & \nLocoCluUGinci & \nLocoUGout & \nLocoCluUGoutci & \nLocoUGf{} (\nLocoCluUGAccounts) \\
 CD & \nLocoCDin & \nLocoCluCDinci & \nLocoCDout & \nLocoCluCDoutci & \nLocoCDf{} (\nLocoCluCDAccounts) \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \end{table}
 
 A test checks that no fraud parameter in the generator's \texttt{fraud} configuration is keyed by
@@ -97,6 +100,64 @@ True fraud (confirmed and missed) & \multicolumn{3}{r}{\nRecTrue} \\
 \end{tabular}
 \end{table}
 
+\subsection{Leave-one-fraud-type-out}
+\label{sec:lofto}
+
+Each of the generator's \nScenarios{} fraud scenarios was removed in turn from every fitted set of
+the full-volume model (training, validation, calibration and the target encoding), and the refitted
+model was scored on the whole test period (PB-66; \texttt{docs/benchmarks/lofto\_d8083dbc.txt}).
+\textbf{This measures what never fitting on a scenario costs, not what never having seen it costs}:
+the other rows' features were computed over a history that still contains the held-out scenario's
+rows, through velocity, counterparty novelty and device sharing. Like the rest of PB-66's run it was
+pre-specified in repository history and is not blind: the test period had been scored
+\nPriorReads{} times before, \nPriorReadsFull{} of them in full.
+
+The owner's hypothesis, with numeric ranges confirmed before the run, was that scenarios sharing
+burst or counterparty-novelty structure (velocity, SIM swap and mule) keep their recall when held out,
+and that single-row scenarios (agent, card-not-present and merchant) drop clearly: a drop of at least
+\nLoRangeSingleDrop{} with the held-out interval's upper bound below the production recall.
+Table~\ref{tab:lofto} reports each against its range. \textbf{The hypothesis is partly supported}, in the pre-specified rule's term.
+The burst scenarios keep their recall. Of the single-row scenarios only agent fraud drops
+clearly. Card-not-present does not; merchant fraud's held-out recall is within its bound of
+\nLoRangeSingle{}, but its drop is smaller than \nLoRangeSingleDrop{}, so it does not drop clearly
+either; both are refuted as stated. PB-66's own ranges for the other scenarios fare no better.
+Account takeover keeps its recall above \nLoRangeAto{}, as predicted, but loses more than the range
+allowed, so that prediction is partly confirmed. Synthetic identity's recall falls by
+\nLoSynDrop{}, refuting its range on both counts. At the flag threshold every row except account
+takeover and synthetic identity loses more than at the budget; we infer that a calibration fitted
+without a scenario puts much of it below the threshold even where the ranking still separates it.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Recall of each scenario's test frauds at the \nFPRBudget{} budget, by the full-volume model
+(production) and by the same model refitted without that scenario (held out, Wilson interval), with
+the drop and the prediction confirmed before the run; the last column is held-out recall at the
+flag threshold.
+Recall over all test frauds in production: \nLoProduction. The scenarios' frauds sum to
+\nLoFraudSum{}; the other \nRecBaseNoise{} observed frauds are label noise and carry no scenario
+(Table~\ref{tab:reconcile}). The mule row includes the reversal variant;
+its prediction applies to the row without it.}
+\label{tab:lofto}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{lrrrrlr}
+\toprule
+Scenario & Frauds & Production & Held out & Drop & Prediction: verdict & At \nFlagThreshold \\
+\midrule
+velocity & \nLoVelFrauds & \nLoVelProd & \nLoVelHeld{} \nLoVelHeldci & \nLoVelDrop & $\geq$\nLoRangeBurst, drop $\leq$\nLoRangeBurstDrop: confirmed & \nLoVelHeldSix \\
+SIM swap & \nLoSimFrauds & \nLoSimProd & \nLoSimHeld{} \nLoSimHeldci & \nLoSimDrop & $\geq$\nLoRangeBurst, drop $\leq$\nLoRangeBurstDrop: confirmed & \nLoSimHeldSix \\
+mule, without reversal & \nLoMuleNrFrauds & \nLoMuleNrProd & \nLoMuleNrHeld{} \nLoMuleNrHeldci & \nLoMuleNrDrop & $\geq$\nLoRangeMule, drop $\leq$\nLoRangeBurstDrop: confirmed & \nLoMuleNrHeldSix \\
+mule & \nLoMuleFrauds & \nLoMuleProd & \nLoMuleHeld{} \nLoMuleHeldci & \nLoMuleDrop & -- & \nLoMuleHeldSix \\
+agent & \nLoAgentFrauds & \nLoAgentProd & \nLoAgentHeld{} \nLoAgentHeldci & \nLoAgentDrop & $\leq$\nLoRangeSingle{}, drops clearly: confirmed & \nLoAgentHeldSix \\
+card-not-present & \nLoCnpFrauds & \nLoCnpProd & \nLoCnpHeld{} \nLoCnpHeldci & \nLoCnpDrop & $\leq$\nLoRangeSingle{}, drops clearly: refuted & \nLoCnpHeldSix \\
+merchant & \nLoMerchFrauds & \nLoMerchProd & \nLoMerchHeld{} \nLoMerchHeldci & \nLoMerchDrop & $\leq$\nLoRangeSingle{} held; drops clearly: refuted & \nLoMerchHeldSix \\
+account takeover & \nLoAtoFrauds & \nLoAtoProd & \nLoAtoHeld{} \nLoAtoHeldci & \nLoAtoDrop & $\geq$\nLoRangeAto, drop $\leq$\nLoRangeAtoDrop: partly confirmed & \nLoAtoHeldSix \\
+synthetic identity & \nLoSynFrauds & \nLoSynProd & \nLoSynHeld{} \nLoSynHeldci & \nLoSynDrop & \nLoRangeSynLow--\nLoRangeSynHigh, drop $\leq$\nLoRangeSynDropHigh: refuted & \nLoSynHeldSix \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
 \subsection{What the nulls have in common}
 
 We infer a different explanation for each null. The country null is the one the test above
@@ -108,9 +169,9 @@ Not every scenario is multi-row (agent, card-not-present and merchant incidents 
 Appendix~\ref{app:scenarios}), and the agent and corridor groups alone barely separate the classes
 (Table~\ref{tab:groups}). No experiment varies the incident structure, so this explanation is an
 inference. What the benchmark supports is detection on its own scenarios, and, for one booster on one
-laptop, the median cost of explaining that detection. It supports no claim about generalisation, geographic or temporal.
+shared GitHub-hosted runner, the median cost of explaining that detection. It supports no claim about generalisation, geographic or temporal.
 
-\subsection{A pre-specified non-burst variant: the one failure found}
+\subsection{A pre-specified non-burst variant: the production model's one failure on a variant}
 
 A generalisation test needs a mechanism that actually differs, and the ``sent by mistake'' reversal
 scam is one. Its ingredients are documented among Kenyan M-PESA users. In a survey of them,
@@ -198,7 +259,7 @@ never paid: \nGateRevNewBudgetCaught{} of the \nGateRevNewBudgetRows{} such rows
 \nGateRevKnownBudgetRows{} rows whose recipient it had paid before (Wilson
 \nGateRevKnownBudgetWilson{}). The full-volume model gives the same pattern:
 \nFvRevNewBudgetCaught{} of \nFvRevNewBudgetRows{} never-paid rows (Wilson \nFvRevNewBudgetWilson{})
-and \nFvRevKnownBudgetCaught{} of \nFvRevKnownBudgetRows{} listed-payee rows. At the flag threshold
+and \nFvRevKnownBudgetCaught{} of \nFvRevKnownBudgetRows{} previously paid rows. At the flag threshold
 neither model catches any reversal row (\nGateRevAllFlagCaught{} of \nGateRevAllFlagRows{} and
 \nFvRevAllFlagCaught{} of \nFvRevAllFlagRows{}). Each reversal row is on its own account, so the
 clustered and Wilson intervals describe the same uncertainty in different ways; the clustered ones hold

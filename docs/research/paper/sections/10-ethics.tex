@@ -2,14 +2,50 @@
 \label{sec:ethics}
 
 \paragraph{Who bears the errors.} A false positive in this system declines or holds a legitimate
-payment. Which customers bear those errors is not established here: the specification requires a
-fairness report
-(in its evaluation protocol): false-positive rate and blocked legitimate amount by country, channel,
-KYC tier and urban or rural location. That report is \notyet{M4 follow-up}. The per-country and
-per-channel AUCs in Sections~\ref{sec:evaluation} and~\ref{sec:generalisation} are not a fairness
-analysis: they measure ranking, not who is wrongly blocked. On a synthetic benchmark whose
-population structure is partly sourced and whose fraud is assumed, even the fairness report will
-describe the generator's disparities, not a real population's.
+payment. The specification requires a fairness report (in its evaluation protocol): false-positive
+rate and blocked legitimate amount by country, channel, KYC tier and urban or rural location. It is
+measured here \textbf{only in part}. KYC tier and urban or rural location are not in the released
+data: the exported tables carry no such column and no proxy is joined, so the report cannot cover
+the specification's full set. By country and by channel, PB-66 measured the full-volume model's
+false-positive rate at the flag threshold and the legitimate amount it would block
+(Table~\ref{tab:fairness}; \texttt{docs/benchmarks/pb66\_d8083dbc.txt}). Every country's interval
+overlaps every other's. Among channels, the intervals for agent banking, bank transfer and online
+payments lie wholly above mobile money's; every rate is at most \nFairBankFPR{}. Because no fraud
+parameter in the generator is keyed by country, what this measures is the generator's base rates and
+amount mixes per group passed through one model, not the model treating groups differently. On a
+synthetic benchmark whose population structure is partly sourced and whose fraud is assumed, it
+describes the generator's disparities, not a real population's. The per-country and per-channel AUCs
+of Sections~\ref{sec:evaluation} and~\ref{sec:generalisation} are not a fairness analysis either: they
+measure ranking, not who is wrongly blocked.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{False-positive rate at the flag threshold (Wilson interval) and legitimate amount blocked
+at the block threshold of \nBlockThreshold{}, by country and by channel, for the full-volume model on the test period. RWF: Rwandan francs.
+Source \texttt{docs/benchmarks/pb66\_d8083dbc.txt}.}
+\label{tab:fairness}
+\begin{tabular}{lrrrr}
+\toprule
+Group & Legitimate rows & Frauds & FPR at \nFlagThreshold & Legitimate RWF blocked \\
+\midrule
+CD & \nFairCDLegit & \nFairCDFrauds & \nFairCDFPR{} \nFairCDFPRci & \nFairCDLegitRwf \\
+KE & \nFairKELegit & \nFairKEFrauds & \nFairKEFPR{} \nFairKEFPRci & \nFairKELegitRwf \\
+RW & \nFairRWLegit & \nFairRWFrauds & \nFairRWFPR{} \nFairRWFPRci & \nFairRWLegitRwf \\
+TZ & \nFairTZLegit & \nFairTZFrauds & \nFairTZFPR{} \nFairTZFPRci & \nFairTZLegitRwf \\
+UG & \nFairUGLegit & \nFairUGFrauds & \nFairUGFPR{} \nFairUGFPRci & \nFairUGLegitRwf \\
+\midrule
+\texttt{AGENT\_BANKING} & \nFairAgentLegit & \nFairAgentFrauds & \nFairAgentFPR{} \nFairAgentFPRci & \nFairAgentLegitRwf \\
+\texttt{BANK\_TRANSFER} & \nFairBankLegit & \nFairBankFrauds & \nFairBankFPR{} \nFairBankFPRci & \nFairBankLegitRwf \\
+\texttt{CARD} & \nFairCardLegit & \nFairCardFrauds & \nFairCardFPR{} \nFairCardFPRci & \nFairCardLegitRwf \\
+\texttt{MOBILE\_MONEY} & \nFairMMLegit & \nFairMMFrauds & \nFairMMFPR{} \nFairMMFPRci & \nFairMMLegitRwf \\
+\texttt{ONLINE} & \nFairOnlineLegit & \nFairOnlineFrauds & \nFairOnlineFPR{} \nFairOnlineFPRci & \nFairOnlineLegitRwf \\
+\texttt{USSD} & \nFairUSSDLegit & \nFairUSSDFrauds & \nFairUSSDFPR{} \nFairUSSDFPRci & \nFairUSSDLegitRwf \\
+\midrule
+All & \nFairAllLegit & \nFairAllFrauds & \nFairAllFPR{} \nFairAllFPRci & \nFairAllLegitRwf \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \paragraph{Customer verification.} The specification's self-service unblocking by SMS link would
 be defeated by the fraud it targets: in a SIM-swap takeover the attacker holds the victim's SIM and

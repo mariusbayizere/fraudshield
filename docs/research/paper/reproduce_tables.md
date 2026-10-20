@@ -24,18 +24,24 @@ In `sections/04-dataset.tex`.
 - `dataset/realism_report.md` at `m4-complete`
 - `docs/ml/datasheet.md` at `m4-complete`
 
-## `tab:floor`: Single features above the separation ceiling ([value]), $({AUC}, 1-{AUC})$, with Hanley--McNeil intervals
+## `tab:floor`: The features above the separation ceiling ([value]) on the earlier draw, $({AUC}, 1-{AUC})$, measured again on the evaluation draw d8083dbc
 
 In `sections/05-features.tex`.
 
-- `docs/benchmarks/single_feature_baseline.md` at `m4-complete`
+- `dataset/realism_report.md` at `m4-complete`
 - `docs/research/claims_register.md` at `m4-complete`
+- `docs/research/paper/evidence/round2_gate_d8083dbc.txt` at `f29793c`, evidence commit `74ea29a`
+  - command: `python docs/research/paper/evidence/round2.py --fingerprint d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32 gate --gate-cache /home/runner/work/_temp/features_gate.parquet --battery-cache /home/runner/work/_temp/features_full.parquet --dataset /home/runner/work/_temp/bench1m --split /home/runner/work/_temp/split.json --out /home/runner/work/_temp/out`
+- `docs/research/paper/evidence/round2_single_feature_auc_d8083dbc.txt` at `f29793c`, evidence commit `72e7790`
+  - command: `uv run --frozen fs-features auc /home/runner/work/_temp/bench1m --packs /home/runner/work/_temp/packs.json --corpus-rows 200000 --sample-rows 20000`
 
-## `tab:gate`: Ranking metrics of the calibrated ensemble, with the best single feature (velocity_ratio_1h_vs_30d) on the same rows and the margin over it, as the gate file computes it from unrounded values, so a margin can differ in its last digit from the difference of the rounded values shown
+## `tab:gate`: Ranking metrics of the calibrated ensemble at the gate's training volume and at full volume, with the best single feature (velocity_ratio_1h_vs_30d) on the same rows and the margin over it, as each gate file computes it from unrounded values, so a margin can differ in its last digit from the difference of the rounded values shown
 
 In `sections/07-evaluation.tex`.
 
 - `dataset/realism_report.md` at `m4-complete`
+- `docs/benchmarks/full_volume_gate_d8083dbc.txt` at `850192b`, evidence commit `fcec52c`
+  - command: `/usr/bin/time -f PEAK_RSS_KB %M ELAPSED %e .venv/bin/python -u -m fraudshield_ml.cli gate /home/runner/work/_temp/cache/features_full_volume.parquet --out /home/runner/work/_temp/out/full_volume_gate_d8083dbc --seeds 1 2 3 4 5 --resamples 1000 --purpose PB-66 full-volume evaluation (run 39302165997, attempt 1): gate`
 - `docs/benchmarks/m4_gate_d8083dbc_v3.txt` at `m4-complete`, evidence commit `d40fca2`
   - command: `/tmp/claude-1000/-home-marius-fraudshield/d9f158ee-49ce-49e8-afa6-780adaf6043a/scratchpad/wt-evidence/.venv/bin/python -u -m fraudshield_ml.cli gate /home/marius/fraudshield/dataset/output/features_gate_d8083dbc.parquet --out docs/benchmarks/m4_gate_d8083dbc_v3 --seeds 1 2 3 4 5 --resamples 1000 --ablate`
 - `docs/prompts/FraudShield_Master_Build_Prompt.md` at `m4-complete`
@@ -59,20 +65,26 @@ In `sections/07-evaluation.tex`.
 - `docs/benchmarks/m4_gate_d8083dbc_v3.txt` at `m4-complete`, evidence commit `d40fca2`
   - command: `/tmp/claude-1000/-home-marius-fraudshield/d9f158ee-49ce-49e8-afa6-780adaf6043a/scratchpad/wt-evidence/.venv/bin/python -u -m fraudshield_ml.cli gate /home/marius/fraudshield/dataset/output/features_gate_d8083dbc.parquet --out docs/benchmarks/m4_gate_d8083dbc_v3 --seeds 1 2 3 4 5 --resamples 1000 --ablate`
 
-## `tab:baselines`: Baselines on the same test rows (draw d8083dbc, [value] rows holding [value] fraud, evidence commit d40fca2, source docs/benchmarks/m4_gate_d8083dbc_v3.txt): AUC, recall at [value] FPR, and DeLong $p$ against the ensemble
+## `tab:baselines`: Baselines on the same test rows (draw d8083dbc, [value] rows holding [value] fraud): AUC and recall at [value] FPR at the gate's training volume (docs/benchmarks/m4_gate_d8083dbc_v3.txt), the AUC minus the ensemble's with a paired account-clustered [value] interval (evidence/round2_gate_d8083dbc.txt), and the AUC of the same baseline at full volume (docs/benchmarks/full_volume_gate_d8083dbc.txt)
 
 In `sections/07-evaluation.tex`.
 
 - `dataset/realism_report.md` at `m4-complete`
+- `docs/benchmarks/full_volume_gate_d8083dbc.txt` at `850192b`, evidence commit `fcec52c`
+  - command: `/usr/bin/time -f PEAK_RSS_KB %M ELAPSED %e .venv/bin/python -u -m fraudshield_ml.cli gate /home/runner/work/_temp/cache/features_full_volume.parquet --out /home/runner/work/_temp/out/full_volume_gate_d8083dbc --seeds 1 2 3 4 5 --resamples 1000 --purpose PB-66 full-volume evaluation (run 39302165997, attempt 1): gate`
 - `docs/benchmarks/m4_gate_d8083dbc_v3.txt` at `m4-complete`, evidence commit `d40fca2`
   - command: `/tmp/claude-1000/-home-marius-fraudshield/d9f158ee-49ce-49e8-afa6-780adaf6043a/scratchpad/wt-evidence/.venv/bin/python -u -m fraudshield_ml.cli gate /home/marius/fraudshield/dataset/output/features_gate_d8083dbc.parquet --out docs/benchmarks/m4_gate_d8083dbc_v3 --seeds 1 2 3 4 5 --resamples 1000 --ablate`
 - `docs/prompts/FraudShield_Master_Build_Prompt.md` at `m4-complete`
+- `docs/research/paper/evidence/round2_gate_d8083dbc.txt` at `f29793c`, evidence commit `74ea29a`
+  - command: `python docs/research/paper/evidence/round2.py --fingerprint d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32 gate --gate-cache /home/runner/work/_temp/features_gate.parquet --battery-cache /home/runner/work/_temp/features_full.parquet --dataset /home/runner/work/_temp/bench1m --split /home/runner/work/_temp/split.json --out /home/runner/work/_temp/out`
 
-## `tab:volume`: Recall at the flag threshold against training volume (draw d8083dbc, the gate's [value] test rows holding [value] fraud, [value] resamples, [value] seeds; seed 1 with its interval, then the mean and standard deviation over the seeds)
+## `tab:volume`: Recall at the flag threshold against training volume (draw d8083dbc, the gate's [value] test rows holding [value] fraud, [value] resamples, [value] seeds; seed 1 with its row-bootstrap and account-clustered intervals, then the mean and standard deviation over the seeds)
 
 In `sections/07-evaluation.tex`.
 
 - `dataset/realism_report.md` at `m4-complete`
+- `docs/benchmarks/full_volume_gate_d8083dbc.txt` at `850192b`, evidence commit `fcec52c`
+  - command: `/usr/bin/time -f PEAK_RSS_KB %M ELAPSED %e .venv/bin/python -u -m fraudshield_ml.cli gate /home/runner/work/_temp/cache/features_full_volume.parquet --out /home/runner/work/_temp/out/full_volume_gate_d8083dbc --seeds 1 2 3 4 5 --resamples 1000 --purpose PB-66 full-volume evaluation (run 39302165997, attempt 1): gate`
 - `docs/benchmarks/m4_gate_d8083dbc_v3.txt` at `m4-complete`, evidence commit `d40fca2`
   - command: `/tmp/claude-1000/-home-marius-fraudshield/d9f158ee-49ce-49e8-afa6-780adaf6043a/scratchpad/wt-evidence/.venv/bin/python -u -m fraudshield_ml.cli gate /home/marius/fraudshield/dataset/output/features_gate_d8083dbc.parquet --out docs/benchmarks/m4_gate_d8083dbc_v3 --seeds 1 2 3 4 5 --resamples 1000 --ablate`
 - `docs/benchmarks/m4_learning_curve_120k_d8083dbc.txt` at `3dacca6`, evidence commit `c59da11`
@@ -84,6 +96,8 @@ In `sections/07-evaluation.tex`.
 - `docs/benchmarks/m4_learning_curve_60k_d8083dbc.txt` at `3dacca6`, evidence commit `c59da11`
   - command: `/tmp/claude-1000/-home-marius-fraudshield/d9f158ee-49ce-49e8-afa6-780adaf6043a/scratchpad/wt-evidence/.venv/bin/python -u -m fraudshield_ml.cli gate /tmp/claude-1000/-home-marius-fraudshield/d9f158ee-49ce-49e8-afa6-780adaf6043a/scratchpad/cache/features_lc120k.parquet --out docs/benchmarks/m4_learning_curve_60k_d8083dbc --train-rows 60000 --seeds 1 2 3 4 5 --resamples 1000 --metrics-only`
 - `docs/prompts/FraudShield_Master_Build_Prompt.md` at `m4-complete`
+- `docs/research/paper/evidence/round2_curve_d8083dbc.txt` at `f29793c`, evidence commit `74ea29a`
+  - command: `python docs/research/paper/evidence/round2.py --fingerprint d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32 curve --small /home/runner/work/_temp/lc120k.parquet --large /home/runner/work/_temp/lc240k.parquet`
 
 ## `tab:groups`: Diagnostic model with one feature group only (draw d8083dbc, [value] test rows holding [value] fraud, evidence commit d40fca2, source docs/benchmarks/m4_battery_d8083dbc_e1.txt)
 
@@ -92,33 +106,77 @@ In `sections/07-evaluation.tex`.
 - `docs/benchmarks/m4_battery_d8083dbc_e1.txt` at `m4-complete`, evidence commit `d40fca2`
   - command: `/tmp/claude-1000/-home-marius-fraudshield/d9f158ee-49ce-49e8-afa6-780adaf6043a/scratchpad/wt-evidence/.venv/bin/python -u -m fraudshield_ml.cli battery /home/marius/fraudshield/dataset/output/features_full.parquet`
 
-## `tab:frontier`: Accuracy and median single-request latency, in milliseconds, across tree complexity (one XGBoost booster, draw 6abde44e, [value] held-out rows holding [value] fraud
+## `tab:frontier`: Accuracy and median single-request latency, in milliseconds, across tree complexity (one XGBoost booster on the diagnostic battery's cache of draw d8083dbc, scored on its test rows)
 
 In `sections/07-evaluation.tex`.
 
-- `docs/benchmarks/m4_frontier.md` at `m4-complete`
-- `docs/benchmarks/m4_frontier_6abde44e.txt` at `m4-complete`, evidence commit `95b722c`
-  - command: `.venv/bin/python -u -m fraudshield_ml.cli frontier dataset/output/features_full.parquet --requests 300 --repeats 3`
+- `docs/research/paper/evidence/round2_frontier_d8083dbc.txt` at `f29793c`, evidence commit `72e7790`
+  - command: `.venv/bin/python -u -m fraudshield_ml.cli frontier /home/runner/work/_temp/features_full.parquet --requests 300 --repeats 3`
+- `docs/research/paper/evidence/round2_run_d8083dbc.txt` at `f29793c`
 
-## `tab:loco`: AUC per country, in-sample and with the country unseen in training (diagnostic model, draw d8083dbc, [value] test rows, evidence commit d40fca2, source docs/benchmarks/m4_battery_d8083dbc_e1.txt)
+## `tab:budgets`: The full-volume model at assumed alert budgets ([value] whole test days; precision intervals resampled by day)
+
+In `sections/07-evaluation.tex`.
+
+- `docs/benchmarks/pb66_d8083dbc.txt` at `850192b`, evidence commit `fcec52c`
+  - command: `/usr/bin/time -f PEAK_RSS_KB %M ELAPSED %e .venv/bin/python -u -m fraudshield_ml.cli pb66 /home/runner/work/_temp/cache/features_full_volume.parquet --out /home/runner/work/_temp/out/pb66_d8083dbc --seed 1 --resamples 1000 --scores-out /home/runner/work/_temp/out/scores/test_scores_seed1.csv --purpose PB-66 full-volume evaluation (run 39302165997, attempt 1): pb66`
+
+## `tab:loco`: AUC per country, in-sample and with the country unseen in training (diagnostic model, draw d8083dbc, [value] test rows, evidence commit d40fca2, source docs/benchmarks/m4_battery_d8083dbc_e1.txt), each with an account-clustered interval over that country's test rows from a reproduction of the same fits (evidence/round2_gate_d8083dbc.txt)
 
 In `sections/08-generalisation.tex`.
 
 - `docs/benchmarks/m4_battery_d8083dbc_e1.txt` at `m4-complete`, evidence commit `d40fca2`
   - command: `/tmp/claude-1000/-home-marius-fraudshield/d9f158ee-49ce-49e8-afa6-780adaf6043a/scratchpad/wt-evidence/.venv/bin/python -u -m fraudshield_ml.cli battery /home/marius/fraudshield/dataset/output/features_full.parquet`
+- `docs/research/paper/evidence/round2_gate_d8083dbc.txt` at `f29793c`, evidence commit `74ea29a`
+  - command: `python docs/research/paper/evidence/round2.py --fingerprint d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32 gate --gate-cache /home/runner/work/_temp/features_gate.parquet --battery-cache /home/runner/work/_temp/features_full.parquet --dataset /home/runner/work/_temp/bench1m --split /home/runner/work/_temp/split.json --out /home/runner/work/_temp/out`
 
-## `tab:predictions`: Predictions recorded in the lab notebook, the commits that order them against their evidence, and their outcomes
+## `tab:reconcile`: The test period's frauds by variant and label ([value] rows; dataset labels, test segment by the published split; evidence/round2_gate_d8083dbc.txt)
+
+In `sections/08-generalisation.tex`.
+
+- `dataset/realism_report.md` at `m4-complete`
+- `docs/research/paper/evidence/round2_gate_d8083dbc.txt` at `f29793c`, evidence commit `74ea29a`
+  - command: `python docs/research/paper/evidence/round2.py --fingerprint d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32 gate --gate-cache /home/runner/work/_temp/features_gate.parquet --battery-cache /home/runner/work/_temp/features_full.parquet --dataset /home/runner/work/_temp/bench1m --split /home/runner/work/_temp/split.json --out /home/runner/work/_temp/out`
+
+## `tab:lofto`: Recall of each scenario's test frauds at the [value] budget, by the full-volume model (production) and by the same model refitted without that scenario (held out, Wilson interval), with the drop and the prediction confirmed before the run; the last column is held-out recall at the flag threshold
+
+In `sections/08-generalisation.tex`.
+
+- `docs/benchmarks/lofto_d8083dbc.txt` at `850192b`, evidence commit `fcec52c`
+  - command: `/usr/bin/time -f PEAK_RSS_KB %M ELAPSED %e .venv/bin/python -u -m fraudshield_ml.cli lofto /home/runner/work/_temp/cache/features_full_volume.parquet --out /home/runner/work/_temp/out/lofto_d8083dbc --seed 1 --budget-minutes 270 --purpose PB-66 leave-one-fraud-type-out (run 39302165997, attempt 1)`
+- `docs/prompts/FraudShield_Master_Build_Prompt.md` at `m4-complete`
+- `docs/research/paper/evidence/round2_gate_d8083dbc.txt` at `f29793c`, evidence commit `74ea29a`
+  - command: `python docs/research/paper/evidence/round2.py --fingerprint d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32 gate --gate-cache /home/runner/work/_temp/features_gate.parquet --battery-cache /home/runner/work/_temp/features_full.parquet --dataset /home/runner/work/_temp/bench1m --split /home/runner/work/_temp/split.json --out /home/runner/work/_temp/out`
+- `docs/research/preregistration_pb66_full_volume.md` at `c61d512`
+
+## `tab:selection`: Recall at the flag threshold with [value] training rows at several corpus depths, on the same [value] test rows (seed 1 with its account-clustered interval; mean and standard deviation over [value] seeds), and the history the training rows carry: the median number of days from the corpus's first transaction to the row, and the share under [value] and [value] days
 
 In `sections/09-discussion.tex`.
 
+- `dataset/realism_report.md` at `m4-complete`
+- `docs/benchmarks/m4_gate_d8083dbc_v3.txt` at `m4-complete`, evidence commit `d40fca2`
+  - command: `/tmp/claude-1000/-home-marius-fraudshield/d9f158ee-49ce-49e8-afa6-780adaf6043a/scratchpad/wt-evidence/.venv/bin/python -u -m fraudshield_ml.cli gate /home/marius/fraudshield/dataset/output/features_gate_d8083dbc.parquet --out docs/benchmarks/m4_gate_d8083dbc_v3 --seeds 1 2 3 4 5 --resamples 1000 --ablate`
+- `docs/prompts/FraudShield_Master_Build_Prompt.md` at `m4-complete`
+- `docs/research/paper/evidence/round2_selection_d8083dbc.txt` at `f29793c`, evidence commit `74ea29a`
+  - command: `python docs/research/paper/evidence/round2.py --fingerprint d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32 selection --dataset /home/runner/work/_temp/bench1m --packs /home/runner/work/_temp/packs.json --split /home/runner/work/_temp/split.json 300000=/home/runner/work/_temp/sel_300000.parquet 360000=/home/runner/work/_temp/sel_360000.parquet 400000=/home/runner/work/_temp/sel_400000.parquet 520000=/home/runner/work/_temp/sel_520000.parquet 700000=/home/runner/work/_temp/sel_700000.parquet 2000000=/home/runner/work/_temp/sel_2000000.parquet`
+
+## `tab:predictions`: Predictions recorded in the lab notebook, and PB-66's own ranges that its run did not confirm in full, the commits that order them against their evidence, and their outcomes
+
+In `sections/09-discussion.tex`.
+
+- `docs/benchmarks/lofto_d8083dbc.txt` at `850192b`, evidence commit `fcec52c`
+  - command: `/usr/bin/time -f PEAK_RSS_KB %M ELAPSED %e .venv/bin/python -u -m fraudshield_ml.cli lofto /home/runner/work/_temp/cache/features_full_volume.parquet --out /home/runner/work/_temp/out/lofto_d8083dbc --seed 1 --budget-minutes 270 --purpose PB-66 leave-one-fraud-type-out (run 39302165997, attempt 1)`
 - `docs/benchmarks/m4_battery_d8083dbc_e1.txt` at `m4-complete`, evidence commit `d40fca2`
   - command: `/tmp/claude-1000/-home-marius-fraudshield/d9f158ee-49ce-49e8-afa6-780adaf6043a/scratchpad/wt-evidence/.venv/bin/python -u -m fraudshield_ml.cli battery /home/marius/fraudshield/dataset/output/features_full.parquet`
 - `docs/benchmarks/m4_learning_curve_240k_d8083dbc.txt` at `3dacca6`, evidence commit `6b36fc5`
   - command: `/usr/bin/time -f PEAK_RSS_KB %M ELAPSED %e /tmp/claude-1000/-home-marius-fraudshield/d9f158ee-49ce-49e8-afa6-780adaf6043a/scratchpad/wt-m4/.venv/bin/python -u -m fraudshield_ml.cli gate /tmp/claude-1000/-home-marius-fraudshield/d9f158ee-49ce-49e8-afa6-780adaf6043a/scratchpad/cache/features_lc240k.parquet --out docs/benchmarks/m4_learning_curve_240k_d8083dbc --train-rows 240000 --seeds 1 2 3 4 5 --resamples 1000 --metrics-only`
+- `docs/benchmarks/pb66_d8083dbc.txt` at `850192b`, evidence commit `fcec52c`
+  - command: `/usr/bin/time -f PEAK_RSS_KB %M ELAPSED %e .venv/bin/python -u -m fraudshield_ml.cli pb66 /home/runner/work/_temp/cache/features_full_volume.parquet --out /home/runner/work/_temp/out/pb66_d8083dbc --seed 1 --resamples 1000 --scores-out /home/runner/work/_temp/out/scores/test_scores_seed1.csv --purpose PB-66 full-volume evaluation (run 39302165997, attempt 1): pb66`
 - `docs/prompts/FraudShield_Master_Build_Prompt.md` at `m4-complete`
 - `docs/research/claims_register.md` at `m4-complete`
 - `docs/research/lab_notebook.md` at `488c5b4`
 - `docs/research/lab_notebook.md` at `m4-complete`
+- `docs/research/preregistration_pb66_full_volume.md` at `c61d512`
 
 ## `tab:protocol`: A benchmark audit protocol: the checks, what each detects, and what each found on FraudShield-EAC
 
@@ -130,6 +188,14 @@ In `sections/09-discussion.tex`.
 - `docs/benchmarks/m4_gate_d8083dbc_v3.txt` at `m4-complete`, evidence commit `d40fca2`
   - command: `/tmp/claude-1000/-home-marius-fraudshield/d9f158ee-49ce-49e8-afa6-780adaf6043a/scratchpad/wt-evidence/.venv/bin/python -u -m fraudshield_ml.cli gate /home/marius/fraudshield/dataset/output/features_gate_d8083dbc.parquet --out docs/benchmarks/m4_gate_d8083dbc_v3 --seeds 1 2 3 4 5 --resamples 1000 --ablate`
 - `docs/research/claims_register.md` at `m4-complete`
+
+## `tab:fairness`: False-positive rate at the flag threshold (Wilson interval) and legitimate amount blocked at the block threshold of [value], by country and by channel, for the full-volume model on the test period
+
+In `sections/10-ethics.tex`.
+
+- `docs/benchmarks/pb66_d8083dbc.txt` at `850192b`, evidence commit `fcec52c`
+  - command: `/usr/bin/time -f PEAK_RSS_KB %M ELAPSED %e .venv/bin/python -u -m fraudshield_ml.cli pb66 /home/runner/work/_temp/cache/features_full_volume.parquet --out /home/runner/work/_temp/out/pb66_d8083dbc --seed 1 --resamples 1000 --scores-out /home/runner/work/_temp/out/scores/test_scores_seed1.csv --purpose PB-66 full-volume evaluation (run 39302165997, attempt 1): pb66`
+- `docs/prompts/FraudShield_Master_Build_Prompt.md` at `m4-complete`
 
 ## `app:identifiers`: Identifiers used in this paper
 

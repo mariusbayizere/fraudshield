@@ -1,0 +1,28 @@
+\begin{abstract}
+What can a synthetic fraud benchmark show, and what can it not? We answer the question for
+FraudShield-EAC, a seeded synthetic benchmark of East African digital payments (mobile money, USSD,
+agent banking, card, online and bank transfer, across \nCountries{} countries). The benchmark is easy
+in a specific way: a single velocity feature separates fraud from legitimate payments at an AUC of
+\nGateFloor{} on its own, so we report every ranking metric as a margin over that feature rather than
+over chance.
+
+Trained on all \nFvTrainRows{} training rows, a calibrated XGBoost and LightGBM ensemble reaches an AUC
+of \nFvAUC{}, a margin of \nFvMargin{}. Its recall at the specified flag threshold, \nFvRecallSix{},
+misses the target of \nTargetRecall{}, and more training data did not close that gap in any run we
+measured. At a fixed \nTrainUsed{} rows, the corpus they were drawn from moved mean recall across a
+range of \nSelMeanRange{}, against \nFvSeedGainFixed{} from \nTrainUsed{} rows to the whole period on one
+corpus; no interval was computed for these differences. Ablations measure
+redundancy rather than importance, and leave-one-country-out and a fraud variant held out in time are
+both null. Refitting without one fraud type at a time costs little recall at a \nFPRBudget{} false-positive
+budget for velocity, SIM-swap and
+mule fraud and much more for agent fraud and synthetic identity.
+
+The one failure of the production model on a pre-specified variant is a variant with no burst
+structure, modelled on a documented Kenyan mobile-money scam and committed, with the diagnostic model's predicted recall,
+alongside the generator code that produces it, before its evidence. It is never caught at the flag threshold; at
+a \nFPRBudget{} false-positive budget the model trained on \nTrainUsed{} rows catches \nGateRevNewBudgetCaught{} of the
+\nGateRevNewBudgetRows{} rows whose recipient the account had never paid and none of the
+\nGateRevKnownBudgetRows{} sent to a known payee, small counts from an observational split that do not isolate a cause. All results
+are on a synthetic benchmark whose fraud parameters are modelling choices; we state what a validation
+on real data would need to show.
+\end{abstract}

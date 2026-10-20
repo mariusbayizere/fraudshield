@@ -2,29 +2,36 @@
 \label{sec:conclusion}
 
 FraudShield-EAC was built to develop and evaluate a fraud detection system for East African digital
-payments without real customer data. Measured against it, the specified ensemble reaches an AUC of \nGateAUC{}, but the benchmark sets
-a high floor: one velocity feature alone separates the test rows at
-\nGateFloor{}, and the ensemble's margin over it on the same rows is \nGateMargin{}. Its recall at the flag
-threshold misses the specified target, and \nLcVolumeFactor{} times the training data does not close
-the gap for this model on this draw. Most of what
-a reader would like to learn from the benchmark it cannot teach. Feature ablations measure redundancy,
-because \nGroupsAboveCeiling{} disjoint groups each exceed the single-feature ceiling alone;
-leave-one-country-out and a novel variant held out in time are null, which we infer follows from
-fraud parameters not keyed by country and from the variant's multi-row shape respectively; and the one variant pre-specified without that structure is caught at
-\nRevRecall{}, for reasons the experiment does not isolate. What survives is a methodology, the record
-of how each of these limits was found, and a measurement on one laptop and one benchmark that the
-cost of an exact explanation grows with the model while accuracy does not; that this cost does not
-depend on how easy the data is, we infer and have not tested.
+payments without real customer data. The benchmark sets a high floor: one velocity feature alone
+separates the test rows at \nGateFloor{}. Trained on every one of the \nFvTrainRows{} rows of the
+training period, the specified ensemble reaches an AUC of \nFvAUC{}, a margin of \nFvMargin{} over that
+feature on the same rows. Its recall at the flag threshold, \nFvRecallSix{} \nFvRecallSixci{}, still
+misses the specified target; \textbf{training volume did not close the gap in any run measured}, from
+\nTrainUsed{} rows to the whole training period, while changing only the corpus \nTrainUsed{} training rows
+were drawn from moved the mean recall over seeds across a range of \nSelMeanRange{}, while on one fixed corpus going from
+\nTrainUsed{} rows to the whole period, with larger validation and calibration splits, gained \nFvSeedGainFixed{}; no interval was
+computed for these differences. Most of what a reader would like to learn
+from the benchmark it cannot teach. Feature ablations measure redundancy, because
+\nGroupsAboveCeiling{} disjoint groups each exceed the single-feature ceiling alone;
+leave-one-country-out and a novel variant held out in time are null, which we infer follows from fraud
+parameters not keyed by country and from the variant's multi-row shape respectively; holding out a
+fraud type costs the model little recall at the \nFPRBudget{} budget for velocity, SIM-swap and mule
+fraud and much more for agent fraud and synthetic identity, which confirms the stated hypothesis only in part and refutes several of the
+ranges set for it. The one variant pre-specified without burst structure is rarely caught, and never at the
+flag threshold. Within it the production ensemble catches \nGateRevNewBudgetCaught{} of the
+\nGateRevNewBudgetRows{} rows whose recipient the account had never paid and none of the
+\nGateRevKnownBudgetRows{} sent to a payee it had paid before, at the budget; the counts are small and
+the split is observational, so the cause is not isolated. What survives is a methodology, the record of how each of these limits
+was found, and a measurement on one benchmark and one shared runner that the cost of an exact explanation grows with the
+model while accuracy does not; that this cost does not depend on how easy the data is, we infer and
+have not tested.
 
 \paragraph{Future work.} The following work would turn these findings into claims about real payments.
 First, validation on real, labelled transactions, under a data protection impact assessment and in a
 permitted location, measuring the same floor, margins and calibration. Second, a held-out variant with
-a new recipient, as we read the documented form of the reversal scam, scored with per-row model
-outputs kept, which would separate the contributions of burst structure and counterparty novelty;
-this paper's variant removes novelty from only some of its rows, and its per-row scores were not
-kept. Next, the
-variation of the headline figures across selections of training rows, which the learning curve
-exposed at seed 1 and did not measure: several corpus depths and windows at a fixed volume, with the history
-each training row has reported beside each result (PB-76). Last, the serving and load
-measurements on dedicated hardware: the frontier at the \nPctlTail{}th percentile, end-to-end decision latency,
-and scale to \nSpecRows{} rows: \deferred{M10}.
+a new recipient on every row, as we read the documented form of the reversal scam, which would test
+directly what the within-variant split here only suggests: that counterparty novelty is what the model
+still detects once burst structure is gone. Next, why the choice of training rows moves recall so
+much: a test that separates the history each row carries from the months it comes from (PB-76). Last,
+the serving and load measurements on dedicated hardware: the frontier at the \nPctlTail{}th
+percentile, end-to-end decision latency, and scale to \nSpecRows{} rows: \deferred{M10}.

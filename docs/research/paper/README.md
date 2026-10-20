@@ -28,6 +28,12 @@ supported is removed or stated as not established, never softened until it survi
   typed into a section; identifiers, dates, citation locators and layout are stripped first, and
   `one`, `first` and `second` are exempt. Counts that are not results (the number of items in a
   list) are written without a number instead.
+  - Known false positive: an anaphoric `the two` ("they mix the two") refers back to things already
+    named; it is not a count, but the check rejects it (twice during the M11 revision). Do not swap
+    in a synonym to get past the check: name the things ("they mix corpus depth and training
+    volume"), which is the clearer sentence anyway. If it keeps recurring, the fix is a narrow
+    exemption for `the two` not followed by a noun, made in `check_numbers.py` with a test, not
+    rewording sentence by sentence.
 - Generated tables are not typed: Appendix B's feature definitions are written from the registry at
   `m4-complete` by `appendix_features.py` (`--check` fails if out of date), and Appendix D's evidence
   index is written by `audit_numbers.py` from the files it read.

@@ -290,6 +290,16 @@ def _reconcile(variant: str, kind: str, observed: bool, true: bool) -> str:
     )
 
 
+def _spread(values: list[Decimal]) -> Decimal:
+    return max(values) - min(values)
+
+
+#: The corpus depths of the training-selection test; the last reads the whole draw.
+SELECTION_DEPTHS = (
+    ("A", 300000), ("B", 360000), ("C", 400000), ("D", 520000), ("E", 700000), ("F", 2000000),
+)  # fmt: skip
+
+
 def _clu(pattern: str) -> Src:
     return Src(CLU, pattern, ref=CLU_REF)
 
@@ -953,6 +963,28 @@ SOURCES: dict[str, Src | Derived] = {
         lambda a, d: f"{Decimal(d.split()[0]) - Decimal(a.split()[0]):.3f}",
         "five-seed mean recall at 0.60, 240K minus 30K, to three places",
     ),
+    "nSelDepthCount": Derived(
+        tuple(f"nSel{point}Mean" for point, _ in SELECTION_DEPTHS),
+        lambda *means: NUMBER_WORDS[len(means)],
+        "corpus depths in the training-selection test",
+    ),
+    "nSelMaxSd": Derived(
+        tuple(f"nSel{point}Mean" for point, _ in SELECTION_DEPTHS),
+        lambda *means: str(max(Decimal(m.split()[2]) for m in means)),
+        "largest five-seed standard deviation of recall at 0.60 across corpus depths",
+    ),
+    "nFvSeedGainFixed": Derived(
+        ("nSelFMean", "nFvSeedRecallSix"),
+        lambda w, f: f"{Decimal(f.split()[0]) - Decimal(w.split()[0]):.3f}",
+        "five-seed mean recall at 0.60 on the whole-draw corpus, full volume minus 30,000 rows",
+    ),
+    "nLoFraudSum": Derived(
+        tuple(
+            f"nLo{k}Frauds" for k in ("Vel", "Sim", "Mule", "Agent", "Cnp", "Merch", "Ato", "Syn")
+        ),
+        lambda *counts: str(sum(int(c) for c in counts)),
+        "test frauds over the eight scenarios of leave-one-fraud-type-out",
+    ),
     "nLcSpanSeedOne": Derived(
         ("nLcRecallA", "nLcRecallB", "nLcRecallC", "nLcRecallD"),
         lambda *r: f"{max(map(Decimal, r)) - min(map(Decimal, r)):.3f}",
@@ -1108,11 +1140,6 @@ SOURCES: dict[str, Src | Derived] = {
         lambda t: _sd_rel(t, 1),
         "ensemble SD over LightGBM's minus one, per-seed AUCs",
     ),
-    "nFrontAUCDeltaRounded": Derived(
-        ("nFrAucA", "nFrAucE"),
-        lambda a, e: f"{Decimal(a) - Decimal(e):.3f}",
-        "rounded AUC of the smallest configuration minus the largest's",
-    ),
     "nCluTestAccounts": _clu(r"fraud 985, accounts (\d+), accounts with fraud"),
     "nCluFraudAccounts": _clu(r"accounts with fraud (\d+)"),
     "nCluAUCci": _clu(r"ML-GATE-01 AUC-ROC\s+[\d.]+\s+\[[\d., ]+\]\s+(\[[\d., ]+\])"),
@@ -1206,6 +1233,9 @@ SOURCES: dict[str, Src | Derived] = {
     ),
     "nEceBins": Src(GATE, r"ML-GATE-11  ECE, (\d+) equal-mass bins"),
     "nGateRealisedFPR": Src(GATE, r"budget's threshold the realised FPR is ([\d.]+)"),
+    "nFvRealisedFPR": Src(
+        FV_GATE, r"budget's threshold the realised FPR is ([\d.]+)", ref=PB66_REF
+    ),
     "nGatePrecCeilingRealised": Src(GATE, r"against D-01's ceiling of ([\d.]+) at that rate"),
     "nSmallCountThreshold": Src(BAT, r"CD rest on fewer than (\d+) fraud rows"),
     "nBaseLRGap": Derived(
@@ -1598,6 +1628,83 @@ SOURCES: dict[str, Src | Derived] = {
             ("Missed", lambda v, o, t: t and not o, "every missed-fraud noise row"),
         )
     },
+    # The training-selection test: 30,000 training rows at each corpus depth (round2_selection).
+    **{
+        f"nSel{point}{field}": Src(R2_SEL, rf"  corpus {depth}: .*?{pattern}", ref=R2_REF)
+        for point, depth in SELECTION_DEPTHS
+        for field, pattern in (
+            ("Median", r"quartiles [\d.]+ / ([\d.]+) /"),
+            ("Under", r"under 30 days ([\d.]+),"),
+            ("UnderLong", r"under 90 days ([\d.]+)"),
+            ("Recall", r"recall at 0\.60\s+seed 1 ([\d.]+)"),
+            (
+                "Recallci",
+                r"recall at 0\.60\s+seed 1 [\d.]+\s+rows \[[\d., ]+\]\s+clustered (\[[\d., ]+\])",
+            ),
+            ("Mean", r"recall at 0\.60\s+seed 1 .*?five seeds ([\d.]+ \+/- [\d.]+)"),
+        )
+    },
+    **{
+        f"nSel{point}Corpus": Src(R2_SEL, rf"  corpus ({depth}): history", ref=R2_REF)
+        for point, depth in SELECTION_DEPTHS[:-1]
+    },
+    "nSelShortDays": Src(R2_SEL, r"under (\d+) days [\d.]+, under", ref=R2_REF),
+    "nSelLongDays": Src(R2_SEL, r"under \d+ days [\d.]+, under (\d+) days", ref=R2_REF),
+    "nSelMeanRange": Derived(
+        tuple(f"nSel{point}Mean" for point, _ in SELECTION_DEPTHS),
+        lambda *means: f"{_spread([Decimal(m.split()[0]) for m in means]):.3f}",
+        "largest minus smallest five-seed mean recall at 0.60 across corpus depths",
+    ),
+    # PB-66's budget-10 prediction (its pre-specification) and the ties at each budget.
+    "nBudPredPrec": Src(
+        PB66_PREREG, r"precision at 10 is \*\*at least ([\d.]+)\*\*", ref=PB66_SRC_REF
+    ),
+    "nBudPredRecallLow": Src(
+        PB66_PREREG, r"recall is\s+\*\*between ([\d.]+) and [\d.]+\*\*", ref=PB66_SRC_REF
+    ),
+    "nBudPredRecallHigh": Src(
+        PB66_PREREG, r"recall is\s+\*\*between [\d.]+ and ([\d.]+)\*\*", ref=PB66_SRC_REF
+    ),
+    "nBaseBudATies": Src(PB66, _budget(10, "baseline", BUDGET_FIELDS.index("Ties")), ref=PB66_REF),
+    "nBudAAlerts": Derived(
+        ("nBudKA", "nPbDays"),
+        lambda k, days: str(int(k) * int(days)),
+        "the smallest budget's alerts over the period: alerts a day times whole days",
+    ),
+    "nBudATiesPct": Derived(
+        ("nBudATies", "nBudKA", "nPbDays"),
+        lambda ties, k, days: f"{round(100 * int(ties) / (int(k) * int(days)))}%",
+        "share of the smallest budget's alerts decided by ties",
+    ),
+    "nBudTiesPctLow": Derived(
+        ("nBudBTies", "nBudCTies", "nBudDTies", "nBudKB", "nBudKC", "nBudKD", "nPbDays"),
+        lambda b, c, d, kb, kc, kd, days: (
+            f"{min(int(t) * 100 // (int(k) * int(days)) for t, k in ((b, kb), (c, kc), (d, kd)))}%"
+        ),
+        "smallest share of alerts decided by ties at the three larger budgets, rounded down",
+    ),
+    "nBudTiesPctHigh": Derived(
+        ("nBudBTies", "nBudCTies", "nBudDTies", "nBudKB", "nBudKC", "nBudKD", "nPbDays"),
+        lambda b, c, d, kb, kc, kd, days: (
+            f"{max(int(t) * 100 // (int(k) * int(days)) for t, k in ((b, kb), (c, kc), (d, kd)))}%"
+        ),
+        "largest share of alerts decided by ties at the three larger budgets, rounded down",
+    ),
+    # LightGBM's early-stopping round in each run that records it.
+    **{
+        f"nLcLgbRounds{point}": Src(
+            LC.format(size), r"LightGBM (\d+), scale_pos_weight", ref=LC_REF
+        )
+        for point, size in (("A", "30k"), ("B", "60k"), ("C", "120k"), ("D", "240k"))
+    },
+    # Rows of Table tab:predictions that are PB-66's own, refuted, predictions.
+    "nPredPb": Derived(
+        (),
+        lambda: NUMBER_WORDS[
+            sum(1 for p in prespecified(_predictions_table()) if p[2] == PB66_SRC_REF)
+        ],
+        "rows of Table tab:predictions whose evidence is PB-66's evidence commit",
+    ),
 }
 
 
@@ -1736,10 +1843,16 @@ def check_prespecified(defined: dict[str, tuple[str, str]]) -> int:
             problems += 1
     # Every prediction in the table is in one group or the other.
     table = _predictions_table()
-    total = WORDS.get(defined["nPredTotal"][1].lower(), "") if "nPredTotal" in defined else ""
+    words = [
+        WORDS.get(defined[m][1].lower(), "") for m in ("nPredTotal", "nPredPb") if m in defined
+    ]
+    total = str(sum(int(w) for w in words if w.isdigit()))
     groups = len(prespecified(table)) + len(not_prespecified(table)) + len(rebased(table))
     if str(groups) != total:
-        print("  PRESPEC: the table's two groups do not add up to \\nPredTotal", file=sys.stderr)
+        print(
+            "  PRESPEC: the table's groups do not add up to \\nPredTotal + \\nPredPb",
+            file=sys.stderr,
+        )
         problems += 1
     for pred, pred_date, evidence, evidence_date in prespecified():
         for commit, date in ((pred, pred_date), (evidence, evidence_date)):
@@ -1798,6 +1911,26 @@ def check_derived(
         ok = normalise(value) == normalise(got) and capitalised(name, value)
         problems += not ok
         rows.append((name, value, got, "derived", source.how, "MATCH" if ok else "MISMATCH"))
+    return problems
+
+
+def check_consistency(found_values: dict[str, str]) -> int:
+    """Cross-checks between sources that no single macro carries; count problems."""
+    problems = 0
+    found = {k: v.replace(",", "") for k, v in found_values.items()}
+    observed = SOURCES["nRecObserved"]
+    try:
+        recomputed = observed.compute(*(found_values[i] for i in observed.inputs))
+    except (AttributeError, KeyError, ValueError):
+        recomputed = None
+    if recomputed is None or recomputed != found.get("nTestFraud"):
+        print("  CONSISTENCY: reconciled observed frauds differ from the test's", file=sys.stderr)
+        problems += 1
+    # Table tab:selection labels its deepest row "all \\nRowsDrawB": that corpus covers the draw.
+    deepest = dict(SELECTION_DEPTHS)["F"]
+    if "nRowsDrawB" not in found or deepest < int(found["nRowsDrawB"]):
+        print("  CONSISTENCY: the deepest selection corpus is short of the draw", file=sys.stderr)
+        problems += 1
     return problems
 
 
@@ -2046,6 +2179,7 @@ def main() -> int:
         rows.append((name, value, got, where, source.note, "MATCH" if ok else "MISMATCH"))
     problems += check_derived(defined, found_values, rows)
     problems += check_prespecified(defined)
+    problems += check_consistency(found_values)
     rows.sort(key=lambda r: list(defined).index(r[0]))
     count_helpers(used, cache, args.ref)
     # Checked in the checkout: CI runs on the commit (or the release tag) being audited.

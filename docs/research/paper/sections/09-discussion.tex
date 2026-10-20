@@ -52,19 +52,9 @@ precondition before their conclusion and that fixtures are specified by the prop
 before their size, are written rules; whether a test meets them is asserted by its author, not
 checked.
 
-The same defect appeared one level up, in a fix rather than a test. A concurrency fix in the
-staff-identity service (a refresh after a row-locking query, so that a stale copy of an account could
-not be written back) passed its test and was recorded as fixed, with a mutation killed. The test
-created the conflict in a way that never advanced the row's version, so it exercised only the branch
-where the fix was not needed; in the case the fix was written for, the locking query itself raised an
-error before the refresh ran. A second defence made every assertion hold, and the killed mutation
-removed both defences at once. A mutation removing only the refresh survived, and was first filed as
-``defence in depth''; the case was found when that explanation was required to be shown with a test
-that fails without the fix, and the test failed with the fix in place. Silent vacuous tests are bad; a
-record that reads ``fixed, tested, mutation killed'' for a fix that did nothing in its own scenario is
-worse. Counting killed mutations measures the tests; only investigating the survivors measures the
-claims, and an ``equivalent'' or ``defence in depth'' label on a survivor needs the same evidence as
-any other claim. That last rule is written, not enforced.
+The same defect appeared one level up, in a concurrency fix to the staff-identity service that
+passed its test without exercising the case it was written for; Appendix~\ref{app:engineering}
+gives the account.
 
 \paragraph{The wrong denominator.} The central methodological error of the dataset milestone was
 standardising a detector's offset against a theoretical null rather than the observed seed-to-seed
@@ -111,7 +101,8 @@ gate's, a difference of \nSelGapSeedOne{}, while the curve's points, spanning an
 \nLcVolumeFactor{}-fold change in volume, cover a range of \nLcSpanSeedOne{}. At seed 1, which rows
 were used moved recall more than how many.
 
-\textbf{The comparison does not hold on the means over seeds}, and we report it at seed 1 only. Over
+\textbf{This gate-against-curve comparison does not hold on the means over seeds}, and we report it
+at seed 1 only. Over
 \nSeeds{} seeds the curve's smallest point reads $\nLcSeedRecallA$ and the gate $\nGateSeedRecallSix$:
 a difference of \nSelGapMeans{}, smaller than either standard deviation and smaller than the
 \nLcSeedGain{} the mean over seeds gains across the curve. The seed-1 difference may be in part a
@@ -121,20 +112,57 @@ property of seed 1.
 features that summarise an account's past are computed over less of it where the corpus is
 shallower. The features PB-76 found to differ between the gate's cache and the curve's on the shared validation rows
 are \texttt{amount\_to\_max\_90d\_ratio}, \texttt{amount\_zscore\_90d},
-\texttt{counterparty\_confirmed\_fraud\_90d} and \texttt{distance\_from\_home\_centroid\_km}. How much
-history each training row actually had has not been measured for the gate's selection or the curve's, so the recall
-difference is attributed to that mechanism by inference only.
+\texttt{counterparty\_confirmed\_fraud\_90d} and \texttt{distance\_from\_home\_centroid\_km}.
 
-\textbf{The gate's selection and the curve's are not a distribution.} The gate's figure could be an
-unlucky selection, the curve's a lucky one, or the difference could be systematic; nothing measured
-separates these. A like-for-like test would hold the test rows, the model, the seeds and the
-\nTrainUsed{} training rows fixed and vary only the selection, over several corpus depths and several
-windows at each, reporting how much history each training row has beside each result. It has not
-been run.
+\textbf{The like-for-like test.} To see whether the selection matters beyond seed 1, the same test
+rows, model and seeds and the number of training rows (\nTrainUsed{}) were held fixed and only the
+corpus depth was varied, so that the training rows are spread over a different stretch of the training period and
+carry a different amount of history (\texttt{evidence/\allowbreak round2\_\allowbreak selection\_\allowbreak d8083dbc.txt};
+pre-specified in repository history, not blind to the test period). The run checked that the
+recomputed training rows matched each cache's, that the test rows were identical at every depth, and
+that the gate's own corpus depth reproduced the gate's \nGateRecallSix{}. Table~\ref{tab:selection}
+gives the result. \textbf{Where the corpus is held fixed, we infer that which training rows are used moved recall
+at the flag threshold more than how many}: the mean over \nSeeds{} seeds ranges by \nSelMeanRange{}
+across corpus depths at a fixed \nTrainUsed{} training rows, against a gain of \nLcSeedGainAC{}
+across the \nLcVolumeFactorAC{}-fold step of the learning curve within one cache and of
+\nFvSeedGainFixed{} from
+\nTrainUsed{} rows to full volume on the whole-draw corpus, where the validation and calibration
+splits grow too. Comparisons that change the corpus and the volume together are not used, since
+they mix corpus depth and training volume. No interval was computed for any of these differences, and a range over
+\nSelDepthCount{} means, each with a seed standard deviation up to \nSelMaxSd{}, is widened by seed
+noise by an amount not measured. The effect is not monotone in history: the shallowest corpus gives neither the lowest
+nor the highest mean, so we infer that the amount of history alone does not account for it. A deeper corpus both
+gives each row more history and spreads the rows over earlier months, and this test does not separate
+these effects; the mechanism above remains an inference.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Recall at the flag threshold with \nTrainUsed{} training rows at several corpus depths, on
+the same \nTestRows{} test rows (seed 1 with its account-clustered interval; mean and standard
+deviation over \nSeeds{} seeds), and the history the training rows carry: the median number of days
+from the corpus's first transaction to the row, and the share under \nSelShortDays{} and
+\nSelLongDays{} days. The last corpus is the whole draw.}
+\label{tab:selection}
+\begin{tabular}{rrrrrr}
+\toprule
+Corpus rows & History, median days & Under \nSelShortDays{} & Under \nSelLongDays{} & Recall at seed 1 & Over \nSeeds{} seeds \\
+\midrule
+\nSelACorpus & \nSelAMedian & \nSelAUnder & \nSelAUnderLong & \nSelARecall{} \nSelARecallci & $\nSelAMean$ \\
+\nSelBCorpus & \nSelBMedian & \nSelBUnder & \nSelBUnderLong & \nSelBRecall{} \nSelBRecallci & $\nSelBMean$ \\
+\nSelCCorpus & \nSelCMedian & \nSelCUnder & \nSelCUnderLong & \nSelCRecall{} \nSelCRecallci & $\nSelCMean$ \\
+\nSelDCorpus & \nSelDMedian & \nSelDUnder & \nSelDUnderLong & \nSelDRecall{} \nSelDRecallci & $\nSelDMean$ \\
+\nSelECorpus & \nSelEMedian & \nSelEUnder & \nSelEUnderLong & \nSelERecall{} \nSelERecallci & $\nSelEMean$ \\
+all \nRowsDrawB & \nSelFMedian & \nSelFUnder & \nSelFUnderLong & \nSelFRecall{} \nSelFRecallci & $\nSelFMean$ \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 What follows for this paper is a qualification, not a correction: every single-number result here
-measured at one sampling of training rows, the gate figures of Table~\ref{tab:gate} included, is a
-measurement of one selection at one corpus depth, and the variation across selections is unmeasured.
+measured at one selection of training rows, the gate figures of Table~\ref{tab:gate} included, is a
+measurement of one selection at one corpus depth, and that choice alone moved the mean recall at the
+flag threshold across a range of \nSelMeanRange{}, against \nFvSeedGainFixed{} from \nTrainUsed{}
+rows to full volume on one corpus, with no interval computed for either difference.
 
 \subsection{Predictions pre-specified in repository history}
 
@@ -148,21 +176,35 @@ ancestor of the commit that first contains its evidence, the prediction was comm
 evidence was. That is all it shows: it cannot show that the evidence had not already been seen when
 the prediction was written, and commits are ordered on the author's machine, so a history rewritten
 before it was pushed would look the same. Table~\ref{tab:predictions} lists the \nPredTotal{}
-predictions whose outcome the notebook records. For \nPrespecShown{} of them git orders the
+predictions whose outcome the notebook records, and \nPredPb{} of PB-66's own ranges that its run did
+not confirm in full (the owner's hypothesis for leave-one-fraud-type-out is reported in
+Section~\ref{sec:lofto});
+PB-66's other predictions, for full volume, precision-recall, the larger budgets, the months, the cost
+curve and the fairness report, held, and its pre-specification lists them
+(\texttt{docs/research/preregistration\_pb66\_full\_volume.md}). For \nPrespecShown{} of them git orders the
 prediction before its evidence; for the other \nPrespecNotShown{} it does not establish the order,
 and they are not counted as pre-specified. One of those, the learning-curve prediction, does sit
-before its evidence in the history, but both commits were rebased on 2026-10-18, after the outcome was known, so that
-order was written after the fact and shows nothing; GitHub's record of the pre-rebase commit's CI run
-is dated before the evidence, but that record is outside this repository and is not used here. Every
-commit pair and date in the table (UTC) is checked by \texttt{audit\_numbers.py} on every build: an
-ordered pair must be a strict ancestor relation, an unordered one must not be, and a rebased pair must
-have been rewritten after its evidence's author date. The entry that recorded the takeover-lead prediction also recorded others
+before its evidence in the history, but both commits were rebased on 2026-10-18, after the outcome was
+known, so that order was written after the fact and shows nothing. Every commit pair and date in the
+table (UTC) is checked by \texttt{audit\_numbers.py} on every build: an ordered pair must be a strict
+ancestor relation, an unordered one must not be, and a rebased pair must have been rewritten after its
+evidence's author date. The entry that recorded the takeover-lead prediction also recorded others
 whose outcomes are not reported there; they are not counted.
+
+The later analyses were specified the same way, in commits that precede their evidence: PB-66's
+full-volume run (\prespec{da3a492}{2026-10-19}{c61d512}{2026-10-20}), its alert budget of
+\nBudKA{} a day and that budget's prediction (\prespec{1eeba04}{2026-10-19}{c61d512}{2026-10-20}), its
+leave-one-fraud-type-out ranges (\prespec{eeccd60}{2026-10-19}{c61d512}{2026-10-20}), and this
+paper's second round of evidence (\prespec{74ea29a}{2026-10-19}{f29793c}{2026-10-20}). One part of
+that round was written later: the code that reads PB-66's per-row scores was committed before those
+scores were read, but after the round's other results were known. None of these analyses is blind:
+the test period had been scored \nPriorReads{} times before PB-66's run.
 
 \begin{table}[htbp]
 \centering
 \small
-\caption{Predictions recorded in the lab notebook, the commits that order them against their
+\caption{Predictions recorded in the lab notebook, and PB-66's own ranges that its run did not confirm in
+full, the commits that order them against their
 evidence, and their outcomes. Dates are UTC author dates.}
 \label{tab:predictions}
 \begin{tabular}{p{0.34\linewidth}p{0.29\linewidth}p{0.29\linewidth}}
@@ -181,6 +223,20 @@ The reversal scam is caught at \nRevPredLow{}--\nRevPredHigh{} recall &
 \prespec{656d24e}{2026-09-22}{6bc842d}{2026-09-22} &
 Refuted: \nRevRecall{} \nRevCI{}; below the range for the point estimate, not for the whole
 interval \\
+PB-66: at \nBudKA{} alerts a day, precision at least \nBudPredPrec{} and recall
+\nBudPredRecallLow{}--\nBudPredRecallHigh{} &
+\prespec{1eeba04}{2026-10-19}{c61d512}{2026-10-20} &
+Refuted: precision \nBudAPrec{} \nBudAPrecci, recall \nBudARecall{} \nBudARecallci{}
+(Section~\ref{sec:operational}) \\
+PB-66: account takeover, held out, keeps recall of at least \nLoRangeAto{} with a drop of at most
+\nLoRangeAtoDrop{} &
+\prespec{eeccd60}{2026-10-19}{c61d512}{2026-10-20} &
+Partly confirmed: \nLoAtoHeld{} meets the recall bound, but the drop of \nLoAtoDrop{} exceeds its
+range (Section~\ref{sec:lofto}) \\
+PB-66: synthetic identity, held out, keeps recall of \nLoRangeSynLow{}--\nLoRangeSynHigh{} with a
+drop of at most \nLoRangeSynDropHigh{} &
+\prespec{eeccd60}{2026-10-19}{c61d512}{2026-10-20} &
+Refuted on both: \nLoSynHeld{}, a drop of \nLoSynDrop{} (Section~\ref{sec:lofto}) \\
 \midrule
 \multicolumn{3}{l}{\emph{Not established: committed with or after the evidence, or rebased after it}} \\
 The detector's small positive offset is real and constant with scale &
@@ -205,17 +261,17 @@ the means (Section~\ref{sec:volume}) \\
 \end{tabular}
 \end{table}
 
-Of the \nPrespecShown{} pre-specified predictions, the history supports this much: falsifiable
-predictions were committed before their evidence, and their outcomes are those in the table. It does not support a claim that the author predicted well, nor
-that the other \nPrespecNotShown{} preceded their evidence; the notebook says they did, and the commits cannot confirm it. The notebook's own
-register of the first \nPredEarly{} (of which \nPredEarlyRight{} was partly right) says all
-\nPredEarly{} were written before the evidence; for the unordered rows among them git does not show
-it, and that
-register is corrected by a later notebook entry, not in place. For the first \nPredEarly{}, the
-notebook credits the refutations with a standing rule, the feature contract's \texttt{history\_key}
-field and E1's density threshold for component folding; the density threshold was itself found, the
-same day, to rule component folding out for most history keys, and the control adopted is the
-temporal one described above.
+For the \nPrespecShown{} pre-specified predictions the history supports this much: they were committed
+before their evidence, and their outcomes, most of them refutations, are those in the table. It
+does not support a claim that the author predicted well. For the other \nPrespecNotShown{}, the
+notebook says they were written first and the commits cannot confirm it: the learning-curve
+prediction was rebased after its outcome, and the rest were committed with or after their evidence. The
+notebook's own register of its earliest predictions, which said all of them preceded their evidence,
+is corrected by a later notebook entry rather than in place. The notebook credits those early
+refutations with a standing rule, the feature contract's \texttt{history\_key} field and E1's density
+threshold for component folding; the density threshold was itself found, the same day, to rule
+component folding out for most history keys, and the control adopted is the temporal one described
+above.
 
 \subsection{A benchmark audit protocol}
 

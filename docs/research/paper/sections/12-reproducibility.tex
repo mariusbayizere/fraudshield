@@ -19,8 +19,10 @@ set hash and the fingerprint. The dataset release is licensed CC BY 4.0
 \texttt{docs/benchmarks/} whose header records the command, its exit status, the commit and whether
 the working tree was clean. The exceptions are the single-feature measurement, whose file carries no
 such stamp; the dataset figures, which come from the realism report, the parameter provenance and the
-claims register; the figures quoted from the lab notebook and from ADRs; and one count produced for
-this paper under \texttt{docs/research/paper/evidence/}. Scoring runs on the test period are logged
+claims register; the figures quoted from the lab notebook and from ADRs; and the files produced for
+this paper under \texttt{docs/\allowbreak research/\allowbreak paper/\allowbreak evidence/}, among
+them the second round of evidence, whose headers record the commit and the command and, for most
+files, the machine. Scoring runs on the test period are logged
 in \texttt{docs/benchmarks/test\_set\_access.jsonl}, with earlier runs back-filled; the first read that
 produced that count was back-filled after the fact, and the paper's evidence scripts now log their
 own reads. The number
@@ -29,10 +31,15 @@ every push (\texttt{.github/\allowbreak workflows/\allowbreak paper.yml}). Exper
 tracking in MLflow was not used for the evidence in this paper (ADR 0030); the evidence files carry the
 provenance instead.
 
-\paragraph{Hardware.} The evidence files that record a machine name the development laptop (\nHwCPU{},
-\nHwMem{}, recorded in \texttt{docs/\allowbreak benchmarks/\allowbreak hardware.md}); earlier files record none, and that
-they were made on the same laptop is inferred. Latency figures from it are reported
-as shapes, not as gate numbers (ADR 0010).
+\paragraph{Hardware.} The evidence comes from runners and from the development laptop. PB-66's full-volume run, its
+leave-one-fraud-type-out run and this paper's second round of evidence, including the frontier's
+re-run, ran on GitHub-hosted runners, virtual machines on shared hardware. Most of these files' headers
+record the runner's processor and memory; the frontier and single-feature files record no machine,
+and that they ran on a runner is inferred from the paths in their recorded commands and from the
+run's record (\texttt{evidence/\allowbreak round2\_\allowbreak run\_\allowbreak d8083dbc.txt}). The earlier evidence files that record a machine name the development
+laptop (\nHwCPU{}, \nHwMem{}, recorded in \texttt{docs/\allowbreak benchmarks/\allowbreak
+hardware.md}); earlier files record none, and that they were made on the same laptop is inferred.
+Latency figures from either kind of machine are reported as shapes, not as gate numbers (ADR 0010).
 
 \paragraph{One command.} A single target that regenerates the dataset, trains, evaluates and
 produces the paper's tables and figures from a clean machine, with compute time and hardware

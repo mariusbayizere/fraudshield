@@ -74,9 +74,14 @@ diagnostic of the benchmark, not the production model, and its figures are label
         is given as a paired clustered interval, both evaluated on each resample; no $p$-value is
         reported, because the tests that produce them assume independent rows. These come from
         reproductions of the models that matched the published figures
-        (Section~\ref{sec:evaluation}). Some intervals were not re-computed and are narrower
-        than they should be by an amount not measured: those of the earlier-draw battery, and the
-        row-bootstrap intervals of the full-volume model's own evidence file.
+        (Section~\ref{sec:evaluation}). The other intervals treat rows as independent and are
+        narrower than they should be by an amount not measured: those of the earlier-draw
+        battery and its variant recalls, the Hanley--McNeil column of the floor's re-run, the
+        row-bootstrap intervals of the full-volume model's own evidence file and of PB-66's
+        monthly and precision--recall rows, and the Wilson intervals of the fairness table and
+        of leave-one-fraud-type-out. The alert-budget table's precision intervals resample whole
+        days, neither accounts nor rows; its recall intervals are bootstrapped, but their resampling
+        unit is not recorded in the evidence file.
   \item \textbf{The floor}: every gate ranking metric is reported beside the best single feature and
         the best trivial rule (one threshold on one feature) on the same rows, as a margin
         (Section~\ref{sec:floor}).
