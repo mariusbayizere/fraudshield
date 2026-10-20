@@ -495,3 +495,32 @@ words):
 
 M11's own round-two evidence is fixed in `docs/research/paper/evidence/round2_plan.md` before its
 first run (`.github/workflows/paper-evidence.yml`); its analyses are pre-specified, not blind either.
+
+## 17. Review rounds stopped, 2026-10-20: known drift left open
+
+The owner stopped the review loop after the fifth round of independent re-review (definition sweep
+and derived-text review), whose findings are fixed in `44314b4`; no sixth round was run. Each round
+had found fewer and narrower problems (the derived texts had no major finding in rounds three to five;
+the sweep found two genuine majors per round, each in a new place, and nothing fixed regressed), so
+**more drift of the same kind is likely and has not been looked for**. Known and left open:
+
+- **`contributions.md` contradicts the paper** in several places (an earlier draw's figures,
+  claims the paper has since narrowed, the frontier at p99). The paper README says the file belongs
+  to the M4 agent and is not edited here, yet M11 edited rows in it three times this round. It is not
+  part of the paper or the arXiv bundle. Owner to decide: rewrite against the paper, mark it
+  superseded, or return it to M4.
+- **The arXiv abstract omits secondary caveats for length** (1,900-character limit): the
+  leaky country holdout, the seed-noise caveat's full wording, the channel and country counts, and
+  the closing sentence on real-data validation. The full abstract carries them.
+- **A committed evidence header carries a local scratchpad path**
+  (`docs/research/paper/evidence/reversal_labels_d8083dbc.txt:3`); left as committed by owner rule.
+  The arXiv bundle excludes it.
+- **`\nSmallCountThreshold` stays `\meas`**: a constant read from the battery's output, which the
+  numbers.tex legend classes as measured; a reviewer read it as a document's definition.
+- **The macro class is not checked**: `audit_numbers.py` parses `\meas`/`\srcd` and never reads
+  the class, so classification errors pass every check; five rounds corrected classes by hand.
+- **The audit cannot catch its own pattern errors**: a cross-line regex once returned the same
+  value for five metrics and the audit passed, because it applied the same pattern. Caught by eye
+  (identical values). A check that flags identical values across a keyed family would catch it.
+- **The full-volume gate run names its feature cache only by path**; the paper says so. Runs from
+  `8d6a16f` on name their inputs by hash (`fs-evidence --input`).
