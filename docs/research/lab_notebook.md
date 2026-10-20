@@ -3046,3 +3046,28 @@ start, and the machine stayed responsive. The scripts are
 the 240K point look like it needed a 16 GB Codespace, which it did not. The constraint was never
 total memory; it was that a long run and another agent's test suite were competing for the last
 gigabyte with no policy about who should lose.
+
+### 2026-10-20 · M8B: a stale-decision defect that five contract drafts carried unreported
+
+**What was found.** M6's `GET /api/v1/decisions/{transaction_id}` (D-14) answered from Redis first.
+Redis can acknowledge a write and then lose it: a crash under its once-a-second disk sync, or a
+failover with asynchronous replication. The key then comes back holding the older state, and the
+read answers that superseded decision until the key expires, up to 8 days. A bank could be told a
+payment was declined after the customer's "yes, this was me" had approved it.
+
+**How long it went unseen.** The defect has been in M6 since September, about a month. Drafts 1 to 5
+of M8B's decision-commit contract all carried it, and their reviews did not report it. Review 6
+found it, and its delta review showed that the first fix (making the recording wait for the Redis
+write) closed only a write that fails, not one that is acknowledged and then lost.
+
+**Why it went unseen (owner, 2026-10-20).** Each review checked the draft's own changes rather than
+the mechanism underneath them. A review limited to "what did this draft change" cannot find a defect
+that every draft inherits unchanged.
+
+**What was decided.** The owner stopped the patching and took a reduction (ADR 0113): the poll reads
+PostgreSQL first, and Redis only when PostgreSQL is unavailable. Option (a) already commits every
+later state to PostgreSQL before it is published, so the database read is never behind. The cache
+was buying latency on a poll that is not on the ingest hot path.
+
+**Lesson for later reviews.** When a contract is redrafted, at least one review should be asked to
+check the mechanism the draft rests on, not only its diff.
