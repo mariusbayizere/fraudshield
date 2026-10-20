@@ -855,6 +855,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/AlertPage" }
         "400": { $ref: "#/components/responses/ValidationProblem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
@@ -873,6 +874,8 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/AlertDetail" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
@@ -892,6 +895,8 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Explanation" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
@@ -1057,6 +1062,8 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ScoringResult" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
@@ -1096,6 +1103,8 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/AccountTransactionPage" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
@@ -1120,6 +1129,8 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/BehaviourProfile" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
@@ -1139,6 +1150,8 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/AccountNetwork" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }

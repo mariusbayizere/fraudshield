@@ -258,7 +258,7 @@ public final class AlertQueries {
             """
             SELECT e.transaction_id, e.tier, f.ensemble_score, f.ml_unavailable_fallback,
               f.shap_all::text AS shap_all, f.shap_top5::text AS shap_top5, f.shap_base_value,
-              f.final_margin
+              f.final_margin, f.anomaly_score
             """
                 + FROM
                 + " WHERE e.id = ?",
@@ -271,9 +271,9 @@ public final class AlertQueries {
 
   private static Map<String, Object> explanation(ResultSet row) throws SQLException {
     String all = row.getString("shap_all");
-    double base = row.getDouble("shap_base_value");
+    final double base = row.getDouble("shap_base_value");
     boolean hasBase = !row.wasNull();
-    double margin = row.getDouble("final_margin");
+    final double margin = row.getDouble("final_margin");
     boolean hasMargin = !row.wasNull();
     if (all == null || !hasBase || !hasMargin) {
       return null;
@@ -293,7 +293,11 @@ public final class AlertQueries {
     boolean fallback = row.getBoolean("ml_unavailable_fallback");
     view.put("summary_template_key", Summaries.key(tier, fallback, reasons));
     view.put(
-        "summary_parameters", Summaries.parameters(row.getDouble("ensemble_score"), reasons, null));
+        "summary_parameters",
+        Summaries.parameters(
+            row.getDouble("ensemble_score"),
+            reasons,
+            fallback ? null : row.getDouble("anomaly_score")));
     return view;
   }
 
@@ -353,6 +357,7 @@ public final class AlertQueries {
         args.add(Views.rank(caller.role()));
         args.add(caller.userId());
       }
+      default -> throw new IllegalArgumentException("unknown queue " + queue);
     }
   }
 

@@ -28,7 +28,7 @@ class NetworksTest {
   }
 
   @Test
-  void aSecondDegreeNodeCountsItsStrongestLinkToAnyOneNeighbour() {
+  void secondDegreeNodesCountTheirStrongestLinkToOneNeighbour() {
     Map<String, Integer> degrees =
         Networks.firstDegree("A", List.of(link("A", "B"), link("A", "C")));
     List<Networks.Link> second =

@@ -4,6 +4,9 @@ import io.github.mariusbayizere.fraudshield.auth.testing.AuthIntegrationTest;
 import io.github.mariusbayizere.fraudshield.rules.dsl.FieldCatalogue;
 import java.math.BigDecimal;
 import java.security.SecureRandom;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -68,14 +71,16 @@ abstract class AnalystIntegrationTest extends AuthIntegrationTest {
     Tx write() {
       byte[] fingerprint = new byte[32];
       RANDOM.nextBytes(fingerprint);
-      superuser(
+      tenantWrite(
+          institution,
           "INSERT INTO fraudshield.transaction_ids (institution_id, transaction_id,"
               + " request_fingerprint, transaction_timestamp) VALUES (?, ?, ?, ?)",
           institution,
           id,
           fingerprint,
           Timestamp.from(at));
-      superuser(
+      tenantWrite(
+          institution,
           """
           INSERT INTO fraudshield.transactions (institution_id, transaction_id, account_token,
             counterparty_token, amount, currency, amount_rwf, channel, merchant_category_code,
@@ -98,7 +103,8 @@ abstract class AnalystIntegrationTest extends AuthIntegrationTest {
           Timestamp.from(at),
           Timestamp.from(at));
       boolean withShap = shap && !fallback;
-      superuser(
+      tenantWrite(
+          institution,
           """
           INSERT INTO fraudshield.fraud_scores (id, institution_id, transaction_id, scored_at,
             ensemble_score, xgboost_score, lightgbm_score, anomaly_score, anomaly_raw, risk_tier,
@@ -123,7 +129,8 @@ abstract class AnalystIntegrationTest extends AuthIntegrationTest {
           fallback,
           withShap ? -4.25 : null,
           withShap ? 0.9 : null);
-      superuser(
+      tenantWrite(
+          institution,
           """
           INSERT INTO fraudshield.decision_states (event_id, institution_id, transaction_id,
             decision_sequence, decision, final, decided_at, decided_by, review_deadline_at)
@@ -141,7 +148,8 @@ abstract class AnalystIntegrationTest extends AuthIntegrationTest {
 
     /** A later decision state, as the timeout, an analyst or a customer would record it. */
     Tx then(String next, String decidedBy) {
-      superuser(
+      tenantWrite(
+          institution,
           """
           INSERT INTO fraudshield.decision_states (event_id, institution_id, transaction_id,
             decision_sequence, decision, final, decided_at, decided_by, supersedes_decision)
@@ -210,7 +218,8 @@ abstract class AnalystIntegrationTest extends AuthIntegrationTest {
     /** Writes the entry. */
     Alert write() {
       boolean escalated = escalatedFrom != null;
-      superuser(
+      tenantWrite(
+          tx.institution,
           """
           INSERT INTO fraudshield.alert_queue_entries (id, institution_id, transaction_id,
             fraud_score_id, tier, status, fraud_probability, expected_loss_rwf, review_deadline_at,
@@ -235,6 +244,35 @@ abstract class AnalystIntegrationTest extends AuthIntegrationTest {
   }
 
   /**
+   * Runs one statement as the owner inside a transaction of one institution. The hypertables'
+   * insert guard (V1) refuses a row whose institution is not the transaction's, for every role, so
+   * seeding sets the tenant exactly as the application's own writers do.
+   *
+   * @param institution the institution
+   * @param sql the statement
+   * @param args its arguments
+   */
+  protected static void tenantWrite(UUID institution, String sql, Object... args) {
+    try (Connection admin = DB.superuser()) {
+      admin.setAutoCommit(false);
+      try (PreparedStatement tenant =
+          admin.prepareStatement("SELECT set_config('fraudshield.institution_id', ?, true)")) {
+        tenant.setString(1, institution.toString());
+        tenant.execute();
+      }
+      try (PreparedStatement statement = admin.prepareStatement(sql)) {
+        for (int i = 0; i < args.length; i++) {
+          statement.setObject(i + 1, args[i]);
+        }
+        statement.execute();
+      }
+      admin.commit();
+    } catch (SQLException e) {
+      throw new IllegalStateException(e);
+    }
+  }
+
+  /**
    * Records a label for a transaction.
    *
    * @param tx the transaction
@@ -242,7 +280,8 @@ abstract class AnalystIntegrationTest extends AuthIntegrationTest {
    * @param availableAt when the label became available
    */
   protected static void label(Tx tx, String label, Instant availableAt) {
-    superuser(
+    tenantWrite(
+        tx.institution,
         """
         INSERT INTO fraudshield.label_events (institution_id, transaction_id, label, source,
           transaction_timestamp, label_available_at)

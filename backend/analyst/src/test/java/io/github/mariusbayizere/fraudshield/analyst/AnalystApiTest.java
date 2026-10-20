@@ -54,8 +54,8 @@ class AnalystApiTest extends AnalystIntegrationTest {
     Alert high = new Alert(tx(account, 0.95).write());
     high.tier = "HIGH";
     high.write();
-    Alert medium80 = new Alert(tx(account, 0.80).write()).write();
-    Alert medium71 = new Alert(tx(account, 0.71).write()).write();
+    final Alert medium80 = new Alert(tx(account, 0.80).write()).write();
+    final Alert medium71 = new Alert(tx(account, 0.71).write()).write();
     Alert decided = new Alert(tx(account, 0.99).write());
     decided.status = "CONFIRMED_FRAUD";
     decided.write();
@@ -101,7 +101,7 @@ class AnalystApiTest extends AnalystIntegrationTest {
     String account = token();
     Tx small = tx(account, 0.7);
     small.amountRwf = new BigDecimal("900");
-    Alert smallAlert = new Alert(small.write()).write();
+    final Alert smallAlert = new Alert(small.write()).write();
     Tx card = tx(account, 0.7);
     card.channel = "CARD";
     card.amountRwf = new BigDecimal("50000");
@@ -147,11 +147,31 @@ class AnalystApiTest extends AnalystIntegrationTest {
     Alert highAlert = new Alert(high.write());
     highAlert.tier = "ANOMALY";
     highAlert.write();
+    Tx unscored = tx(account, 0.2);
+    unscored.fallback = true;
+    unscored.riskTier = "LOW";
+    unscored.decision = "APPROVE";
+    Alert unscoredAlert = new Alert(unscored.write());
+    unscoredAlert.tier = "ANOMALY";
+    unscoredAlert.write();
 
     JsonNode page =
         get(analyst(), "/api/v1/alerts?queue=anomaly&account_id=" + account, "AlertPage");
 
-    assertThat(ids(page)).containsExactly(highAlert.id.toString(), lowAlert.id.toString());
+    assertThat(ids(page))
+        .as("no model ran on the fallback's transaction, so it has no anomaly score and goes last")
+        .containsExactly(
+            highAlert.id.toString(), lowAlert.id.toString(), unscoredAlert.id.toString());
+    assertThat(page.get("items").get(2).get("anomaly_score").isNull()).isTrue();
+    List<String> paged = new ArrayList<>();
+    String path = "/api/v1/alerts?queue=anomaly&limit=1&account_id=" + account;
+    JsonNode one = get(analyst(), path, "AlertPage");
+    paged.addAll(ids(one));
+    while (!one.get("next_cursor").isNull()) {
+      one = get(analyst(), path + "&cursor=" + one.get("next_cursor").asString(), "AlertPage");
+      paged.addAll(ids(one));
+    }
+    assertThat(paged).as("paging crosses the missing score").isEqualTo(ids(page));
     assertThat(page.get("items").get(0).get("anomaly_score").asDouble()).isEqualTo(0.999);
   }
 
@@ -180,7 +200,7 @@ class AnalystApiTest extends AnalystIntegrationTest {
 
   @Test
   @Tag("FR-04-02")
-  void pagesFollowTheirCursorAndACursorBelongsToItsOrder() {
+  void pagesFollowTheirCursorAndEachCursorBelongsToItsOrder() {
     String account = token();
     List<String> expected = new ArrayList<>();
     for (double score : new double[] {0.9, 0.8, 0.7}) {
@@ -214,7 +234,8 @@ class AnalystApiTest extends AnalystIntegrationTest {
     Tx tx = tx(token(), 0.71).write();
     Alert alert = new Alert(tx).write();
     Session session = analyst();
-    superuser(
+    tenantWrite(
+        BANK,
         """
         INSERT INTO fraudshield.alert_decisions (institution_id, alert_queue_entry_id, decision,
           idempotency_key) VALUES (?, ?, 'AUTO_RELEASED', ?)
@@ -246,7 +267,7 @@ class AnalystApiTest extends AnalystIntegrationTest {
     Alert alert = new Alert(tx(token(), 0.71).write()).write();
     Tx fallback = tx(token(), 0.7);
     fallback.fallback = true;
-    Alert fallbackAlert = new Alert(fallback.write()).write();
+    final Alert fallbackAlert = new Alert(fallback.write()).write();
     Session session = analyst();
 
     JsonNode explanation =
@@ -271,7 +292,7 @@ class AnalystApiTest extends AnalystIntegrationTest {
 
   @Test
   @Tag("FR-02-01")
-  void aFallbackScoringResultCarriesAll44FeaturesAsMissing() {
+  void fallbackScoringResultsCarryEveryFeatureAsMissing() {
     Tx fallback = tx(token(), 0.7);
     fallback.fallback = true;
     fallback.write();
@@ -396,7 +417,29 @@ class AnalystApiTest extends AnalystIntegrationTest {
         .isEqualTo(partner);
     assertThat(nodes.get(1).get("confirmed_fraud").asBoolean()).isTrue();
     assertThat(nodes.get(2).get("token").asString()).isEqualTo(other);
-    assertThat(network.get("edges")).isNotEmpty();
+    assertThat(nodes.get(3).get("token").asString())
+        .as("the partner's counterparty is second degree")
+        .isEqualTo(partnersFraud.counterparty);
+    assertThat(nodes.get(3).get("degree").asInt()).isEqualTo(2);
+    assertThat(nodes).hasSize(4);
+    List<String> edges = new ArrayList<>();
+    for (JsonNode edge : network.get("edges")) {
+      edges.add(
+          edge.get("source").asString()
+              + ">"
+              + edge.get("target").asString()
+              + "="
+              + edge.get("transaction_count").asInt());
+    }
+    assertThat(edges)
+        .containsExactlyInAnyOrder(
+            account + ">" + partner + "=2",
+            account + ">" + other + "=1",
+            partner + ">" + partnersFraud.counterparty + "=1");
+    JsonNode receiver = get(analyst(), "/api/v1/accounts/" + other + "/network", "AccountNetwork");
+    assertThat(receiver.get("nodes").get(0).get("token").asString())
+        .as("an account that only receives is still known")
+        .isEqualTo(other);
   }
 
   @Test

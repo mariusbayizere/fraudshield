@@ -68,7 +68,7 @@ class AnalystInspectorTest extends AnalystIntegrationTest {
     tx.device = token();
     tx.merchant = "Kigali Fresh Market";
     tx.write();
-    Alert alert = new Alert(tx).write();
+    final Alert alert = new Alert(tx).write();
     Tx earlier = new Tx(BANK);
     earlier.account = tx.account;
     earlier.at = tx.at.minusSeconds(86_400);

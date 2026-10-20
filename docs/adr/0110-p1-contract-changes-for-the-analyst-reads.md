@@ -114,6 +114,13 @@ has to answer:
 
    A contract test checks the examples against every declared key.
 
+8. **Addendum (2026-10-20, P1's code review, finding 7): the seven reads declare 400 and 422.**
+   - **The gap.** They validate a token, a cursor, a UUID path parameter and their filters, and a
+     malformed value is answered with `ValidationProblem`. The contract declared neither status on
+     the account and alert reads, and `listAlerts` declared only 400.
+   - **The change.** Each of the seven now declares both. This adds declarations only; no success
+     shape changes.
+
 ## Consequences
 
 - **The console and P1's server ship in lockstep** (review 1, finding 10). The console's generated

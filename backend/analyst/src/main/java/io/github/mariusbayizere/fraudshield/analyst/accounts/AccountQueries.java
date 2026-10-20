@@ -145,8 +145,10 @@ public final class AccountQueries {
     boolean known =
         Boolean.TRUE.equals(
             jdbc.queryForObject(
-                "SELECT EXISTS (SELECT 1 FROM v_transactions WHERE account_token = ?)",
+                "SELECT EXISTS (SELECT 1 FROM v_transactions WHERE account_token = ?"
+                    + " OR counterparty_token = ?)",
                 Boolean.class,
+                account,
                 account));
     if (!known) {
       return Optional.empty();
@@ -178,7 +180,7 @@ public final class AccountQueries {
   /** Transactions of the window with a node at one end ({@code both}: at both ends). */
   private List<Networks.Link> links(Timestamp from, Set<String> tokens, boolean both) {
     String list = placeholders(tokens.size());
-    String sql =
+    final String sql =
         "SELECT account_token, counterparty_token FROM v_transactions WHERE"
             + " transaction_timestamp >= ? AND (account_token IN ("
             + list
