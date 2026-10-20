@@ -127,7 +127,9 @@ across corpus depths at a fixed \nTrainUsed{} training rows, against a gain of \
 across the \nLcVolumeFactorAC{}-fold step of the learning curve within one cache and of
 \nFvSeedGainFixed{} from
 \nTrainUsed{} rows to full volume on the whole-draw corpus, where the validation and calibration
-splits grow too. Comparisons that change the corpus and the volume together are not used, since
+splits grow too. The full-volume gate run names its feature cache only by path, so that it read
+the cache built from the whole draw rests on the workflow that passed the cache from its build to the gate run, not on the
+gate's evidence file. Comparisons that change the corpus and the volume together are not used, since
 they mix corpus depth and training volume. No interval was computed for any of these differences, and a range over
 \nSelDepthCount{} means, each with a seed standard deviation up to \nSelMaxSd{}, is widened by seed
 noise by an amount not measured. The effect is not monotone in history: the shallowest corpus gives neither the lowest

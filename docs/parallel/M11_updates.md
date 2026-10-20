@@ -177,6 +177,8 @@ appendix, documentation and history commits that follow. Checks at the end of th
    superseded first run the earlier brief quoted (section 2, item 1).
 8. **Email address.** The cover page gives `bayizeremarius119@gmail.com`, the contact the
    repository documents; the owner should confirm it is the address wanted on the paper.
+   **Resolved 2026-10-20:** the owner confirmed it is the correct address and their primary one;
+   the paper, the SRS and the other places that give it stand as they are.
 
 **Process note.** During reference checking, the first few Crossref API requests carried the
 owner's email address in the User-Agent header (Crossref's "polite pool" convention). This was
