@@ -1,7 +1,7 @@
 # M8B scope: the analyst API, in phases (proposed 2026-10-20, for the owner's approval)
 
-**Status: proposed.** No implementation code has been written. This file is the scope the owner
-asked for before any code: the 48 operations grouped into phases, the design questions each phase
+**Status: approved by the owner on 2026-10-20, with the answers in §7.** This file is the scope
+the owner asked for before any code: the 48 operations grouped into phases, the design questions each phase
 needs answered first, what M8's rows need from each, and which M10 items depend on which.
 
 **Sources:**
@@ -270,3 +270,29 @@ does not let M10 start early.
 4. **P6-a, P7-a and P8-d:** build campaign detection, SAR drafting and a retraining orchestrator,
    or serve the endpoints and leave those rows open?
 5. **X-4:** who names the CSRF cookie in the contract, and when.
+
+## 7. The owner's answers (2026-10-20)
+
+1. **Phase order:** P1 to P8, as proposed.
+2. **Delivery:** one merge to `main` per phase. "Eight smaller reviews beat one enormous one — M6
+   is the evidence."
+3. **The four contract additions are M8B's.** Each changes a frozen contract, so each gets its own
+   reviewed proposal before implementation, as `/system/status` did. Each is built in the phase
+   where it belongs:
+   - `/system/status` in P3;
+   - the real-time channel in P2;
+   - reassignment and team performance in P2, which serves their screens.
+4. **Domain logic is not built.** Serve the endpoints over the existing tables and leave these rows
+   open, each with its reason:
+   - **Campaign detection (P6, FR-05-04):** what counts as a campaign is a domain question.
+   - **SAR drafting (P7, FR-05-06):** what a regulator requires is a domain question, and D-22's
+     regulatory mapping is unverified and needs a compliance professional. "An endpoint that
+     returns a well-formed SAR draft nobody qualified has reviewed is a liability, not a feature."
+   - **The retraining orchestrator (P8, FR-06-04):** when a model should retrain is a domain
+     question.
+5. **CSRF:** M8B makes the contract change, in P1, since that is when the console first reads real
+   endpoints. `fs_csrf` is pinned in the contract, with a test both sides must satisfy.
+
+**Before P1's code**, the concurrency and cache contracts (P2-a, P4-b, P5-b) are written and
+reviewed on their own. That approach is what broke M6's cycle, and P2's undo is the same kind of
+cross-instance timing problem. P1 is reported to the owner before it merges.

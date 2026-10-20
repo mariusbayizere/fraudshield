@@ -23,6 +23,7 @@ taken twice. Claims made on branches not yet merged, as of 2026-10-17:
 | PB-76 | M4 | `M4_updates.md` on `m4/generalisation` | training rows near the corpus's start see truncated history (was a second `PB-69`) |
 | PB-77 to PB-101 | M6 | `M6_updates.md`, "Numbering reserved by this branch" | amendment 1's known gaps and the 22 section-8 rows proved only in part |
 | PB-102 to PB-130 | M7 | `M7_updates.md`, "Numbering reserved by this branch" | the merge round's unowned items and M7's rows proved only in part (PB-102 to PB-124 used) |
+| PB-151 to PB-170 | M8B | `M8B_updates.md`, "Numbering reserved by this branch" | the analyst API's follow-ups; M8B also holds ADR 0110–0119 and Flyway V80–V89 |
 
 ---
 
