@@ -20,11 +20,6 @@ patches:
       - op: replace
         path: /spec/replicas
         value: 2
-  - target: {kind: Deployment, name: fraudshield-ml-worker}
-    patch: |
-      - op: replace
-        path: /spec/replicas
-        value: 1
   - target: {kind: StatefulSet, name: fraudshield-prometheus}
     patch: |
       - op: replace

@@ -95,11 +95,7 @@ scrape_configs:
       - target_label: __address__
         replacement: fraudshield-blackbox-exporter:9115
 
-  - job_name: blackbox-ml-health
-    scrape_interval: 60s
-    metrics_path: /probe
-    params:
-      module: [http_status_up]
-    static_configs:
-      - targets: [http://fraudshield-api-management:8081/actuator/health/ml]
-    relabel_configs: *blackbox_relabeling
+  # The blackbox-ml-health job (http://fraudshield-api-management:8081/actuator/health/ml, every
+  # 60 s) is disabled until the API serves that endpoint (PB-173): today it would answer 404 and
+  # FraudShieldMlHealthProbeFailing would page forever (owner, 2026-10-20). The alert, its test
+  # and its runbook stay; with no probe_success series the alert cannot fire.
