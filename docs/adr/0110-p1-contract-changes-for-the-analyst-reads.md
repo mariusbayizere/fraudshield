@@ -114,7 +114,10 @@ has to answer:
 
    A contract test checks the examples against every declared key.
 
-8. **Addendum (2026-10-20, P1's code review, finding 7): the seven reads declare 400 and 422.**
+8. **Correction to the frozen contract (2026-10-20, P1's code review, finding 7; accepted by the owner
+   the same day): the seven reads declare 400 and 422.** The endpoints already answered these
+   statuses. The contract failed to declare them, so this records existing behaviour; no behaviour
+   changed. In the owner's words, it "documents reality rather than changing it".
    - **The gap.** They validate a token, a cursor, a UUID path parameter and their filters, and a
      malformed value is answered with `ValidationProblem`. The contract declared neither status on
      the account and alert reads, and `listAlerts` declared only 400.
