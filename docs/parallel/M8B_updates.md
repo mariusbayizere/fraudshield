@@ -129,7 +129,7 @@ ADR and migration directories of every remote branch.
 |---|---|---|
 | ADR | `0110`–`0119` (`0080`–`0089` are M8's, `0090`–`0099` M9's, `0100`–`0109` M10's) | `0110` (P1's contract changes), `0111` (held payments wait for the arbiter), `0112` (how P1 serves the reads) |
 | Flyway | `V80`–`V89` (`V60`–`V69` are M6's, `V70`–`V79` M7's) | `V80` (P1: SHAP base value and margin, counterparty index); planned `V81` (decision-commit contract, renumbered from V80) and `V82` (configuration contract, renumbered from V81), because P1 merges first (ADR 0112) |
-| Backlog | `PB-151` to `PB-170` (`PB-131`–`PB-140` are M8's, `PB-141`–`PB-150` M11's) | `PB-151` to `PB-158` |
+| Backlog | `PB-151` to `PB-170` (`PB-131`–`PB-140` are M8's, `PB-141`–`PB-150` M11's) | `PB-151` to `PB-159` |
 
 The scope and the owner's answers are in `M8B_scope.md`.
 

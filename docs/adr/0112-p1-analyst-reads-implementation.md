@@ -106,3 +106,19 @@ Both contracts' texts still say V80 and V81. They are corrected when they are ne
 - The M8 console must regenerate its client and ship in lockstep (ADR 0110).
 - M8's rows move past IN_PROGRESS only when the console runs against these endpoints in CI (the
   mock rule).
+
+## Deferred, with reasons (P1's code review, round 1)
+
+- **V80's counterparty index** (finding 6).
+  - **It locks writes while it builds.** A plain `CREATE INDEX` on `transactions` blocks ingest
+    inserts while it runs. The migration runs in the release's cutover, with writers stopped, so
+    nothing waits on it.
+  - **It doesn't help compressed chunks.** Chunks older than 30 days are compressed (V10, segmented
+    by account), so a network lookup by counterparty still scans the compressed part of the 90-day
+    window. On a production-sized history that is slow.
+  - Neither was measured on TimescaleDB 2.30. Both are filed as PB-159.
+- **The decision test double's SHAP base value** (finding 8). `InMemoryPorts` gives every
+  non-fallback score a base value and margin, with or without SHAP. So the sink's test checks that
+  the columns are written, not the rule that they are null without SHAP. That rule lives in
+  `ScoringContract`, and `GrpcScorerTest` checks it at both ends (SHAP present, and below 0.60).
+  Kept as is.
