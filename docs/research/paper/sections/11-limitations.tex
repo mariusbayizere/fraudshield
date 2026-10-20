@@ -109,7 +109,8 @@ and the gate measurement is \deferred{M10}.
 \paragraph{Intervals assume independence the data do not have.} Much of the fraud on this benchmark is staged as
 multi-row incidents on one account, and an account's rows share its history, so test rows are not
 independent. For the gate model's AUC, recalls, F1 and USSD AUC, the diagnostic model's group AUCs, the variant recalls, the
-learning curve, leave-one-country-out, the single-feature floor and the differences between models,
+learning curve, leave-one-country-out, the single-feature floor, the corpus-depth test's seed-1 recall
+and the differences between models,
 an account-clustered bootstrap from reproductions of the models is reported beside the row intervals;
 it widens them little except for USSD's AUC (Table~\ref{tab:clustered}), and the novel variant's
 \nNovelRows{} rows rest on \nNovelAccounts{} accounts. The other intervals treat rows as
@@ -125,7 +126,7 @@ intervals.
 group alone and is inferred, not measured, for the others: on the velocity group its test AUC
 peaks early and declines, ending below the group's own strongest feature
 (Section~\ref{sec:redundancy}). Every group-alone and leave-one-group-out figure comes from it, so
-the group figures are lower bounds and no ranking of groups by importance is supported.
+we infer the group figures are lower bounds and no ranking of groups by importance is supported.
 
 \paragraph{Small counts.} Variant, country and channel results rest on between \nAdaptFraud{} and
 \nBaseVarFraud{} fraud rows; intervals are reported for the variant recalls and the country AUCs (Table~\ref{tab:loco}) and in

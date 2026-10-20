@@ -311,7 +311,7 @@
 \newcommand{\nFrRequests}{\meas{900}}
 % SRS 2.3 claim, UNVERIFIED (claims register C-6); quoted only to report the measurement that
 % replaces it.
-\newcommand{\nSpecVarianceClaim}{\srcd{12\%}}
+\newcommand{\nSpecVarianceClaim}{\meas{12\%}}
 
 % Leave-one-country-out and variants, m4_battery_d8083dbc_e1.txt (evidence commit d40fca2):
 % country AUC in-sample (BY COUNTRY) and with the country removed from training (LOCO), fraud rows.
@@ -517,7 +517,7 @@
 \newcommand{\nGatePrecCeilingRealised}{\meas{0.505}}
 \newcommand{\nSmallCountThreshold}{\meas{30}}  % battery file's own "fewer than 30 fraud rows"
 \newcommand{\nBaseLRGap}{\meas{0.005}}         % derived: ensemble AUC minus logistic regression
-\newcommand{\nLcCorpusPlanned}{\srcd{360{,}000}}  % notebook, PB-67 design change
+\newcommand{\nLcCorpusPlanned}{\meas{360{,}000}}  % notebook, PB-67 design change
 \newcommand{\nLcRealFprA}{\meas{0.0068}}\newcommand{\nLcRealFprB}{\meas{0.0030}}
 \newcommand{\nLcRealFprC}{\meas{0.0082}}\newcommand{\nLcRealFprD}{\meas{0.0026}}
 \newcommand{\nBatLowBinRows}{\meas{100{,}798}}  % battery: rows scoring in [0.0, 0.1)

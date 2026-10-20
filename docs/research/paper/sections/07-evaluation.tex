@@ -286,7 +286,7 @@ volume also changes more than volume: the validation and calibration splits grow
 \nFvTruncatedDays{} days of the draw's first day, so their windowed history is truncated (PB-76).
 \textbf{At every volume measured, up to all \nFvTrainRows{} training rows of this draw, and for this
 model, the recall shortfall is not closed by training volume.} Whether a different model, or features
-that do not degrade with corpus depth, would reach the target is not tested.
+that do not depend on corpus depth, would reach the target is not tested.
 
 The prediction was partly wrong, and is reported with the others in Table~\ref{tab:predictions}.
 It said recall at the flag threshold would rise to between \nLcPredLow{} and \nLcPredHigh{} at the
@@ -355,7 +355,7 @@ AUC peaks at \nVelPeak{} near round \nVelPeakRound{} of those read and falls to 
 round \nVelRounds{}, where the battery stops; weighting the classes gives \nVelWeightedAtRounds{}
 (\texttt{evidence/\allowbreak clustered\_\allowbreak intervals\_\allowbreak d8083dbc.txt}). The
 model has no early stopping and no tuning, and on the velocity group it overfits; we infer the same
-for the other groups, where it was not measured. So each group-alone figure is a lower
+for the other groups, where it was not measured. So, we infer, each group-alone figure is a lower
 bound on what that group can do with a better-fitted model, and the leave-one-group-out drops are
 differences between overfitted models whose direction of error is not known. The redundancy finding
 survives this, because it rests on lower bounds: at their account-clustered lower bounds
@@ -475,8 +475,8 @@ From the smallest configuration to the largest, AUC changes by \nFrontAUCDelta{}
 computes it from unrounded values, while the cost of explaining a decision, as a difference of medians, grows between
 about \nFrontRatioLow- and \nFrontRatioHigh-fold (the range the rounded medians allow), from
 \nFrontShapSmall{} to \nFrontShapLarge{}~ms; prediction alone grows from
-\nFrPredA{} to \nFrPredE{}~ms. The accuracy side is a property of this easy benchmark
-and should not be generalised. We infer that the latency side is a property of the model and the
+\nFrPredA{} to \nFrPredE{}~ms. We infer that the flat accuracy is a property of this easy benchmark;
+it should not be generalised. We infer that the latency side is a property of the model and the
 explanation algorithm rather than of the data: exact TreeSHAP costs $O(TLD^2)$ for $T$ trees with at
 most $L$ leaves and depth $D$ \cite{lundberg2020trees}. The leaves a tree actually grows depend on
 the data, and only this benchmark was measured, so that inference is not tested.

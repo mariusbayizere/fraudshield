@@ -4,7 +4,7 @@
 
 Every identifier below is defined in the repository at \texttt{m4-complete}, except ADR~0034, ADR~0035,
 ADR~0055, ADR~0058, ADR~0059, PB-72 and PB-76, which are defined on the main branch after it (as are ADR 0031's amendment and
-PB-67's conclusion), and ADR 0084 and PB-132, which were written for the analyst console and are
+PB-67's conclusion); C-8's refutation and ADR 0028's correction are on this paper's branch only, and ADR 0084 and PB-132, which were written for the analyst console and are
 copied into this release from the console's separate, unmerged branch. The console itself is not part
 of this paper's release and is not evaluated. Resolutions D-xx are the
 binding corrections to the specification (\texttt{docs/srs/defect\_register.md}); ADRs are architecture
@@ -53,7 +53,7 @@ E1 & Every fold, split, sample and target encoding groups by the feature's unit 
 PB-43 & The cross-bloc and intercontinental corridor classes are unreachable on this dataset. \\
 PB-67 & The gate model trains on a subset of the training period; the learning curve over training volume (concluded). \\
 PB-76 & Training and validation rows near the corpus's start see truncated history; test rows do not. \\
-PB-66 & The evaluation protocol items M4 did not build: the full-volume run, alert budgets, months, the cost curve, fairness and leave-one-fraud-type-out. \\
+PB-66 & The evaluation protocol items M4 did not build: alert budgets, months, the cost curve, fairness and leave-one-fraud-type-out (the full-volume run that accompanied them is PB-67's follow-up). \\
 D-10 & Alert volume would overwhelm analysts, and the countdown that auto-releases a held medium-risk transaction would release most risky ones; the resolution calls for a capacity model, which does not exist. \\
 ADR 0034 & Trained features fed from state no deployed component writes, so the scoring service serves them as constants. \\
 CR-19 & A finding of the M1 contracts review that the author raised (Section~\ref{sec:disclosure}). \\
