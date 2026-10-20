@@ -81,9 +81,10 @@ jobs:
 
   # Guarded until M9 merges (owner, 2026-10-20). Trivy's configuration scan detects Kubernetes
   # manifests and Dockerfiles, among other IaC types this repository does not use; it has no
-  # scanner for compose files or GitHub workflows (on m9/infra it detected only the 15 Kubernetes
-  # files). Main has neither yet, so the scan would check nothing and pass. Until infrastructure/k8s/ exists the job is SKIPPED (shown as skipped, never
-  # as passed) and `trivy-configuration-target` says why.
+  # checks for compose files or GitHub workflows (on m9/infra it detected only the 15 Kubernetes
+  # files). Main has neither yet, so the scan would check nothing and pass. Until
+  # infrastructure/k8s/ exists the job is SKIPPED (shown as skipped, never as passed) and
+  # `trivy-configuration-target` says why.
   trivy-configuration-target:
     name: trivy (is there configuration to scan?)
     runs-on: ubuntu-24.04
