@@ -9,7 +9,10 @@
 %   \prov{x}      MEASURED on a milestone not yet tagged complete. Printed with a dagger. None is
 %                 in use: every M4 value was re-verified at m4-complete (72e7790) on 2026-09-22 by
 %                 audit_numbers.py and moved to \meas.
-%   \srcd{x}      A value fixed by the specification (a threshold or target), not a result.
+%   \srcd{x}      A value fixed in advance by a document, not a result: a specification threshold or
+%                 target, or a prediction or range pre-specified before its evidence. A count or a
+%                 measurement quoted from a document is \meas, whatever document it is quoted from.
+%                 The class is not checked by audit_numbers.py and both print the same.
 %   \notyet{Mx}   A result a later milestone produces. Printed in italics as "not yet measured (Mx)".
 %
 % Data draws (seed 20260917 throughout):
@@ -71,8 +74,8 @@
 \newcommand{\nEventDelayBefore}{\meas{0.758}}
 \newcommand{\nEventDelayAfter}{\meas{0.730}}
 \newcommand{\nEventDelayShare}{\meas{11\%}}
-\newcommand{\nEventDelayBandLow}{\meas{0.68}}
-\newcommand{\nEventDelayBandHigh}{\meas{0.74}}
+\newcommand{\nEventDelayBandLow}{\srcd{0.68}}
+\newcommand{\nEventDelayBandHigh}{\srcd{0.74}}
 
 % Draw d8083dbc (dataset/realism_report.md at m4-complete): distribution and split.
 \newcommand{\nRowsDrawB}{\meas{1{,}006{,}317}}
@@ -108,7 +111,7 @@
 \newcommand{\nImpliedSpeedM}{\meas{0.812}}
 \newcommand{\nSecondsSinceM}{\meas{0.811}}
 \newcommand{\nFeaturesAboveCeiling}{\meas{5}}
-\newcommand{\nCeiling}{\meas{0.80}}
+\newcommand{\nCeiling}{\srcd{0.80}}
 % single_feature_baseline.md: the truncation correction (fad43dd -> 2c80ef6).
 \newcommand{\nCounterpartyNewBefore}{\meas{0.816}}
 % ADR 0025 / docs/ml/training_serving_parity.md Decision 1.
@@ -226,9 +229,9 @@
 \newcommand{\nPredTotal}{\meas{seven}}
 \newcommand{\nPrespecShown}{\meas{six}}
 \newcommand{\nPrespecNotShown}{\meas{four}}
-\newcommand{\nRevPredLow}{\meas{0.15}}
-\newcommand{\nRevPredHigh}{\meas{0.55}}
-\newcommand{\nRevPredFloor}{\meas{0.10}}
+\newcommand{\nRevPredLow}{\srcd{0.15}}
+\newcommand{\nRevPredHigh}{\srcd{0.55}}
+\newcommand{\nRevPredFloor}{\srcd{0.10}}
 
 % ---------------------------------------------------------------------------------------------
 % Specification values (SOURCED: specification Part B / E.5, SRS 7.2)
@@ -457,10 +460,10 @@
 \newcommand{\nLcVolumeFactorAC}{\meas{four}} % 120K over 30K
 % Pre-registration (lab_notebook.md "Pre-registration: the PB-67 learning curve", read at 488c5b4,
 % the notebook on main; the commit that first recorded it is on m4/generalisation's history).
-\newcommand{\nLcPredLow}{\meas{0.76}}
-\newcommand{\nLcPredHigh}{\meas{0.84}}
-\newcommand{\nLcPredBudgetLow}{\meas{0.87}}
-\newcommand{\nLcPredBudgetHigh}{\meas{0.91}}
+\newcommand{\nLcPredLow}{\srcd{0.76}}
+\newcommand{\nLcPredHigh}{\srcd{0.84}}
+\newcommand{\nLcPredBudgetLow}{\srcd{0.87}}
+\newcommand{\nLcPredBudgetHigh}{\srcd{0.91}}
 
 % ---------------------------------------------------------------------------------------------
 % Features with no source data (ADR 0055, accepted 2026-10-17, read at m6-complete).
@@ -929,6 +932,7 @@
 % Single-feature floor re-run on d8083dbc (round2_single_feature_auc) and on the gate's test rows (round2_gate), at f29793c
 \newcommand{\nReScoredRows}{\meas{20{,}000}}
 \newcommand{\nReScoredFraud}{\meas{177}}
+\newcommand{\nReCorpusRows}{\meas{200{,}000}}  % round-two single-feature re-run: corpus behind the scored rows
 \newcommand{\nReVelocity}{\meas{0.880}}
 \newcommand{\nReVelocityci}{\meas{0.033}}
 \newcommand{\nReCounterparty}{\meas{0.825}}
@@ -1044,7 +1048,8 @@
 \newcommand{\nRecObserved}{\meas{985}}  % derived
 \newcommand{\nRecTrue}{\meas{990}}  % derived
 \newcommand{\nRecMissed}{\meas{13}}  % derived
-\newcommand{\nPriorReads}{\srcd{23}}\newcommand{\nPriorReadsFull}{\srcd{11}}  % PB-66 pre-specification, amendment 0e
+\newcommand{\nPriorReads}{\meas{23}}\newcommand{\nPriorReadsFull}{\meas{11}}  % PB-66 pre-specification, amendment 0e
+\newcommand{\nPriorReadsFullRows}{\meas{100{,}000}}  % PB-66 pre-specification: what "in full" means
 % Training-selection test (round2_selection at f29793c)
 \newcommand{\nSelAMedian}{\meas{30.2}}
 \newcommand{\nSelAUnder}{\meas{0.495}}

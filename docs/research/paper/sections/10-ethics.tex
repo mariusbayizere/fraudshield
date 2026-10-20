@@ -7,8 +7,8 @@ rate and blocked legitimate amount by country, channel, KYC tier and urban or ru
 measured here \textbf{only in part}. KYC tier and urban or rural location are not in the released
 data: the exported tables carry no such column and no proxy is joined, so the report cannot cover
 the specification's full set. By country and by channel, PB-66 measured the full-volume model's
-false-positive rate at the flag threshold and the legitimate amount it would block
-(Table~\ref{tab:fairness}; \texttt{docs/benchmarks/pb66\_d8083dbc.txt}). Every country's interval
+false-positive rate at the flag threshold and the legitimate amount it would block at the block
+threshold of \nBlockThreshold{} (Table~\ref{tab:fairness}; \texttt{docs/benchmarks/pb66\_d8083dbc.txt}). Every country's interval
 overlaps every other's. Among channels, the intervals for agent banking, bank transfer and online
 payments lie wholly above mobile money's; every rate is at most \nFairBankFPR{}. Because no fraud
 parameter in the generator is keyed by country, what this measures is the generator's base rates and

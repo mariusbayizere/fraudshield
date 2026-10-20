@@ -5,7 +5,7 @@ Unless a figure says otherwise, it is on the evaluation draw's test period (\nTe
 holding \nTestFraud{} observed fraud: rows the observed label marks as fraud, Table~\ref{tab:reconcile}). One design is reported at the gate's volume and at full volume. The declared
 gate model trains on \nTrainUsed{} rows, holding \nGateTrainFraud{} observed fraud; it is the model
 of every table built before the full-volume run. The full-volume model
-trains on all \nFvTrainRows{} rows of the training period, holding \nFvTrainFraud{} confirmed
+trains on all \nFvTrainRows{} rows of the training period, holding \nFvTrainFraud{} observed
 fraud, about \nFullVolumeFactor{} times as many, with validation and calibration splits enlarged
 to the whole of their periods (PB-66's run, pre-specified in repository history but not blind to the
 test period, which had been scored before; Section~\ref{sec:volume}); the diagnostic battery's evidence file does
@@ -216,13 +216,14 @@ deviations this close, so neither comparison supports the claim as a property of
 \label{sec:volume}
 
 The evaluated models train on \nTrainUsed{} of the \nTrainRows{} training-period rows, so the recall
-miss could have been a matter of training volume. A learning curve tested that (PB-67). Its design,
-its prediction and the rule for reading it were recorded in the lab notebook before any size was
-run: the same model, thresholds, seeds and resamples as the gate, the whole test period at every
+miss could have been a matter of training volume. A learning curve tested that (PB-67). The lab notebook
+records its design, its prediction and the rule for reading it as written before any size was run
+(the commit was rebased after the outcome, so the history cannot confirm that order;
+Table~\ref{tab:predictions}): the same model, thresholds, seeds and resamples as the gate, the whole test period at every
 size, and validation and calibration splits of the gate's size. The design changed before any model
 was fitted, because the development machine could not build the planned shared feature cache: the
 \nLcTrainA{}, \nLcTrainB{} and \nLcTrainC{} points come from one cache and the largest from its own
-\nLcCorpusLarge{}-row corpus. The change recorded before any result named a
+\nLcCorpusLarge{}-row corpus. The change the notebook records as made before any result named a
 \nLcCorpusPlanned{}-row corpus for the shared cache; the cache was built from \nLcCorpusSmall{} rows.
 The evidence files show the smaller points all fitted on that trimmed cache, so the trim preceded
 every fit, but it was written down only with the first results. The last step therefore changes the depth of the corpus as well as
@@ -365,7 +366,7 @@ leave-one-group-out ablation reports each as nearly free. This is a result about
 encodes signal. We infer, without having isolated it, that a generator that plants fraud as
 multi-row incidents writes the same structure into the velocity, counterparty, temporal and
 geographic views at once. In an earlier battery on draw \texttt{6abde44e}, with
-\nEarlyHeldOutRows{} held-out rows and made before the encoding correction of
+\nEarlyHeldOutRows{} test rows and made before the encoding correction of
 Section~\ref{sec:generalisation}, the same groups each reached at least \nEarlyGroupMin{}; the
 threshold moved between the runs and the finding did not, and the move cannot be attributed to any
 one of the differences between them.
@@ -412,13 +413,14 @@ The production ensemble, measured with the same definitions (the same reliabilit
 region), is calibrated less well where decisions are made than the diagnostic model, while its
 row-weighted error is of the same small size. At the gate's training volume its decision region holds
 \nGateCalRegionRows{} test rows, \nGateCalRegionFraud{} of them fraud, with an expected calibration
-error of \nGateCalRegionECE{}, against \nGateCalECEAll{} over all rows; at full volume the region holds
+error of \nGateCalRegionECE{}, against \nGateCalECEAll{} over all rows in these equal-width bins (the
+gate's own \nGateECE{} uses \nEceBins{} equal-mass bins); at full volume the region holds
 \nFvCalRegionRows{} rows (\nFvCalRegionFraud{} fraud) and the error is \nFvCalRegionECE{}, against
 \nFvCalECEAll{} over all rows (\texttt{evidence/round2\_gate\_d8083dbc.txt},
 \texttt{evidence/round2\_full\_volume\_d8083dbc.txt}). The production model is calibrated by isotonic
 regression on its own calibration split, the diagnostic model by Platt scaling (ADR 0029), so the
 comparison is between calibration methods as well as between models. The additivity error of the exact TreeSHAP
-contributions, which must sum to the model's margin, is \nBatAdditivity{}.
+contributions, which must sum to the model's log-odds output, is \nBatAdditivity{}.
 
 \subsection{The latency--explainability frontier}
 \label{sec:frontier}
@@ -510,8 +512,8 @@ model its resolution D-10 calls for does not exist, so no single budget can be q
 inventing it. Table~\ref{tab:budgets} reads the model at \nBudKA{}, \nBudKB{}, \nBudKC{} and
 \nBudKD{} alerts a day, \textbf{all assumed}, over the \nPbDays{} whole days of the test period; the
 smallest is below the period's typical daily fraud count, so it measures ranking rather than volume.
-Precision is shown beside its ceiling, the precision a perfect ranking would reach given that
-day's frauds, because at the larger budgets the ceiling, not the model, limits it. The outcomes are
+Precision is shown beside its cap, the precision a perfect ranking would reach given that
+day's frauds, because at the larger budgets the cap, not the model, limits it. The outcomes are
 amounts, not costs: the fraud amount the alerts catch and the legitimate amount they hold for review,
 in Rwandan francs, with no cost assumed for either.
 
@@ -525,7 +527,7 @@ had
 expectations under a random choice within the tied block; a deployed tie-break by time, by the
 uncalibrated score or by amount would give different figures, and none was evaluated. Many days hold
 fewer frauds than the budget, which we infer reflects frauds arriving in bursts: even a perfect ranking would reach a
-precision of only \nBudACeil{} at this budget, and the model reaches \nBudAShare{} of that ceiling.
+precision of only \nBudACeil{} at this budget, and the model reaches \nBudAShare{} of that cap.
 PB-66 had predicted a precision of at least \nBudPredPrec{} here; it was refuted
 (Table~\ref{tab:predictions}). What an operator can take from this, on this benchmark: a queue that
 takes the top scores of a calibrated model needs an explicit rule for breaking ties, and a daily budget
@@ -535,7 +537,7 @@ should be judged against that day's fraud count, not against a perfect score.
 \centering
 \small
 \caption{The full-volume model at assumed alert budgets (\nPbDays{} whole test days; precision
-intervals resampled by day). Ceiling: the precision of a perfect ranking at that budget.
+intervals resampled by day). Cap: the precision of a perfect ranking at that budget.
 RWF: Rwandan francs over the period. Single feature: \texttt{velocity\_ratio\_1h\_vs\_30d} at the
 same budget. Source \texttt{docs/benchmarks/pb66\_d8083dbc.txt}.}
 \label{tab:budgets}
@@ -543,7 +545,7 @@ same budget. Source \texttt{docs/benchmarks/pb66\_d8083dbc.txt}.}
 \begin{tabular}{rrrrrrrrr}
 \toprule
 \multicolumn{2}{c}{Alerts} & \multicolumn{4}{c}{Model} & \multicolumn{2}{c}{Amount, RWF} & Single feature \\
-a day & per \nPerThousand{} & Precision & Ceiling & Share & Recall & Fraud caught & Legitimate held & precision, recall \\
+a day & per \nPerThousand{} & Precision & Cap & Share & Recall & Fraud caught & Legitimate held & precision, recall \\
 \midrule
 \nBudKA & \nBudAPer & \nBudAPrec{} \nBudAPrecci & \nBudACeil & \nBudAShare & \nBudARecall{} \nBudARecallci & \nBudAFraudRwf & \nBudALegitRwf & \nBaseBudAPrec, \nBaseBudARecall \\
 \nBudKB & \nBudBPer & \nBudBPrec{} \nBudBPrecci & \nBudBCeil & \nBudBShare & \nBudBRecall{} \nBudBRecallci & \nBudBFraudRwf & \nBudBLegitRwf & \nBaseBudBPrec, \nBaseBudBRecall \\

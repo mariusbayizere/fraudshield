@@ -16,10 +16,10 @@ are backlog items (\texttt{docs/backlog/product.md}).
 Identifier & Meaning \\
 \midrule
 \endhead
-D-01 & The specified precision target at the false-positive budget is mathematically impossible at this base rate; the gate reports precision beside its ceiling. \\
+D-01 & The specified precision target at the false-positive budget is mathematically impossible at this base rate; the gate reports precision beside its cap, the precision a perfect ranking would reach. \\
 D-02 & The recall, F1 and false-negative targets lacked a defined operating point; the resolution defines the flag and block thresholds. \\
 D-04 & The specified USSD feature count without a device fingerprint was undefined; device features are structurally missing for USSD. \\
-D-05 & One calibration of the combined score, on the resolution's reasoning that calibrating each model separately and averaging does not yield a calibrated ensemble; SHAP additivity is exact only in each model's margin space. \\
+D-05 & One calibration of the combined score, on the resolution's reasoning that calibrating each model separately and averaging does not yield a calibrated ensemble; SHAP additivity is exact only in each model's log-odds (margin) space. \\
 D-06 & The Isolation Forest score range and threshold conflicted. \\
 D-07 & The temporal split definitions disagreed; the resolution fixes one split with a calibration tail and an embargo. \\
 D-08 & Results on synthetic data can look perfect and prove nothing; the resolution sets the realism and anti-leakage controls. \\

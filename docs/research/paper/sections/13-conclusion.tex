@@ -11,9 +11,9 @@ misses the specified target; \textbf{training volume did not close the gap in an
 were drawn from moved the mean recall over seeds across a range of \nSelMeanRange{}, while on one fixed corpus going from
 \nTrainUsed{} rows to the whole period, with larger validation and calibration splits, gained \nFvSeedGainFixed{}; no interval was
 computed for these differences. Most of what a reader would like to learn
-from the benchmark it cannot teach. Feature ablations measure redundancy, because
-\nGroupsAboveCeiling{} disjoint groups each exceed the single-feature ceiling alone;
-leave-one-country-out and a novel variant held out in time are null, which we infer follows from fraud
+from the benchmark it cannot teach. On the diagnostic model, feature ablations measure
+redundancy, because \nGroupsAboveCeiling{} disjoint groups each exceed the single-feature ceiling
+alone, and leave-one-country-out and a novel variant held out in time are null, which we infer follows from fraud
 parameters not keyed by country and from the variant's multi-row shape respectively; holding out a
 fraud type costs the model little recall at the \nFPRBudget{} budget for velocity, SIM-swap and mule
 fraud and much more for agent fraud and synthetic identity, which confirms the stated hypothesis only in part and refutes several of the

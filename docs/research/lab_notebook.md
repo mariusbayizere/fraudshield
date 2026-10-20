@@ -3167,8 +3167,31 @@ What the rounds found, none of which a number check can see:
   disclosure line dropped that the author directed the work and is responsible for every claim.
 
 Round five raised one paper-side defect as well: the paper called the test period's 985 frauds
-"confirmed" while its own reconciliation table defines confirmed as observed **and** true. Fixed the
-same day ("observed fraud", in every count that reads the observed label).
+"confirmed" while its own reconciliation table defines confirmed as observed **and** true. The
+reviewer, reading sentences, found two instances; checking the table's definition against every use
+of the word found six (Sections 5 to 8), all fixed the same day as "observed fraud". There were in
+fact seven: a grep for the phrase missed one because a line break fell between "confirmed" and
+"fraud", and the sweep below found it.
+
+A systematic sweep of about 30 defined terms, each definition checked against every use, then found
+17 more mismatches (3 major) and 6 terms of art the paper used without defining. The majors: the
+seventh "confirmed"; the learning curve's notebook order stated as fact where Section 9 says the
+rebased commit cannot confirm it; and the abstract applying the margin rule to "every ranking
+metric" where the paper defines it for the production model's gate metrics, which the arXiv
+abstract and the one-page summary had inherited. The minors were term drift: "scored" for the
+observed label, two calibration errors "over all rows" on different bins, three names for a
+precision bound, "single-row" for scenarios that can be single-row, "confirmed" for ranges that were
+fixed, "floor", "held out" and "gate run" each used in a second sense, diagnostic-model figures
+without that label, `\deferred` used for this milestone's own work, and measured and sourced
+macro classes swapped (`\srcd` and `\meas` print the same and the audit never reads the class, so
+nothing caught it). Checking the leave-one-country-out caveat the sweep inferred, against the
+battery code at its evidence commit, showed more than it guessed: the held-out country's labels reach
+the model through the two target-encoded categoricals. All fixed on 2026-10-20, with "burst",
+"corpus", "corpus depth", "cache", "declared", "base scenarios", "in full" and the re-run's scored
+rows defined at first use.
+
+**Term drift is invisible to both number checks and ordinary reading**: every number was right and
+every sentence read well on its own. Only putting each definition beside all its uses shows it.
 
 Why it happens: a summary is where qualifiers are dropped, because dropping them is how it fits on a
 page, and each dropped clause leaves the numbers intact. **Rule: derived text (summary, abstract,

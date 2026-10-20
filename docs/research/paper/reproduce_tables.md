@@ -56,7 +56,7 @@ In `sections/07-evaluation.tex`.
 - `docs/research/paper/evidence/clustered_intervals_d8083dbc.txt` at `33596a2`, evidence commit `c85a82c`
   - command: `python docs/research/paper/evidence/clustered_intervals.py --gate-cache /home/runner/work/_temp/features_gate.parquet --battery-cache /home/runner/work/_temp/features_full.parquet`
 
-## `tab:slices`: Test period by channel and by country: rows, confirmed fraud, and AUC
+## `tab:slices`: Test period by channel and by country: rows, observed fraud, and AUC
 
 In `sections/07-evaluation.tex`.
 
@@ -138,7 +138,7 @@ In `sections/08-generalisation.tex`.
 - `docs/research/paper/evidence/round2_gate_d8083dbc.txt` at `f29793c`, evidence commit `74ea29a`
   - command: `python docs/research/paper/evidence/round2.py --fingerprint d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32 gate --gate-cache /home/runner/work/_temp/features_gate.parquet --battery-cache /home/runner/work/_temp/features_full.parquet --dataset /home/runner/work/_temp/bench1m --split /home/runner/work/_temp/split.json --out /home/runner/work/_temp/out`
 
-## `tab:lofto`: Recall of each scenario's test frauds at the [value] budget, by the full-volume model (production) and by the same model refitted without that scenario (held out, Wilson interval), with the drop and the prediction confirmed before the run; the last column is held-out recall at the flag threshold
+## `tab:lofto`: Recall of each scenario's test frauds at the [value] budget, by the full-volume model (production) and by the same model refitted without that scenario (held out, Wilson interval), with the drop and the prediction fixed before the run; the last column is held-out recall at the flag threshold
 
 In `sections/08-generalisation.tex`.
 
@@ -209,7 +209,7 @@ In `sections/17-appendix-c.tex`.
 
 - `dataset/realism_report.md` at `m4-complete`
 
-## `app:deferred`: Measurements deferred to later milestones
+## `app:deferred`: Measurements deferred or not yet done
 
 In `sections/19-appendix-e.tex`.
 

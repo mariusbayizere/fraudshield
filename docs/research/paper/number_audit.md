@@ -2,7 +2,7 @@
 
 Every macro in `numbers.tex` checked against its evidence file at `m4-complete` (`72e7790`), or at the ref its row names, read with `git show`, by `audit_numbers.py`. Values are compared as printed: rounding, sign and interval bounds included. Regenerate with `python3 docs/research/paper/audit_numbers.py`; do not edit by hand.
 
-**1029 macros, 1029 MATCH, 0 not matching.**
+**1031 macros, 1031 MATCH, 0 not matching.**
 
 | Macro | Value in paper | Value in evidence | File | Note | Result |
 |---|---|---|---|---|---|
@@ -863,6 +863,7 @@ Every macro in `numbers.tex` checked against its evidence file at `m4-complete` 
 | `\nFrontMachine` | `AMD EPYC 9V45 96-Core Processor` | `AMD EPYC 9V45 96-Core Processor` | `docs/research/paper/evidence/round2_run_d8083dbc.txt` at `f29793c` |  | MATCH |
 | `\nReScoredRows` | `20{,}000` | `20000` | `docs/research/paper/evidence/round2_single_feature_auc_d8083dbc.txt` at `f29793c` (evidence commit `72e7790`) |  | MATCH |
 | `\nReScoredFraud` | `177` | `177` | `docs/research/paper/evidence/round2_single_feature_auc_d8083dbc.txt` at `f29793c` (evidence commit `72e7790`) |  | MATCH |
+| `\nReCorpusRows` | `200{,}000` | `200000` | `docs/research/paper/evidence/round2_single_feature_auc_d8083dbc.txt` at `f29793c` (evidence commit `72e7790`) |  | MATCH |
 | `\nReVelocity` | `0.880` | `0.880` | `docs/research/paper/evidence/round2_single_feature_auc_d8083dbc.txt` at `f29793c` (evidence commit `72e7790`) |  | MATCH |
 | `\nReVelocityci` | `0.033` | `0.033` | `docs/research/paper/evidence/round2_single_feature_auc_d8083dbc.txt` at `f29793c` (evidence commit `72e7790`) |  | MATCH |
 | `\nReCounterparty` | `0.825` | `0.825` | `docs/research/paper/evidence/round2_single_feature_auc_d8083dbc.txt` at `f29793c` (evidence commit `72e7790`) |  | MATCH |
@@ -978,6 +979,7 @@ Every macro in `numbers.tex` checked against its evidence file at `m4-complete` 
 | `\nRecMissed` | `13` | `13` | derived | every missed-fraud noise row | MATCH |
 | `\nPriorReads` | `23` | `23` | `docs/research/preregistration_pb66_full_volume.md` at `c61d512` |  | MATCH |
 | `\nPriorReadsFull` | `11` | `11` | `docs/research/preregistration_pb66_full_volume.md` at `c61d512` |  | MATCH |
+| `\nPriorReadsFullRows` | `100{,}000` | `100,000` | `docs/research/preregistration_pb66_full_volume.md` at `c61d512` |  | MATCH |
 | `\nSelAMedian` | `30.2` | `30.2` | `docs/research/paper/evidence/round2_selection_d8083dbc.txt` at `f29793c` (evidence commit `74ea29a`) |  | MATCH |
 | `\nSelAUnder` | `0.495` | `0.495` | `docs/research/paper/evidence/round2_selection_d8083dbc.txt` at `f29793c` (evidence commit `74ea29a`) |  | MATCH |
 | `\nSelAUnderLong` | `1.000` | `1.000` | `docs/research/paper/evidence/round2_selection_d8083dbc.txt` at `f29793c` (evidence commit `74ea29a`) |  | MATCH |

@@ -72,7 +72,8 @@ deterministic, byte-identical across batch sizes of \nBatchSizes{}. The online p
 \label{sec:floor}
 
 The single-column separation control of Section~\ref{sec:dataset} holds for the dataset's columns
-and not for the engineered features. Measured on the evaluation draw at \nReScoredRows{} scored rows
+and not for the engineered features. Measured on the evaluation draw at \nReScoredRows{} scored rows (the most recent rows of a
+\nReCorpusRows{}-row corpus, so each has the corpus behind it as history)
 holding \nReScoredFraud{} observed fraud, with categorical encodings folded by whole account,
 \nReAboveCeiling{} of the \nFeatures{} features exceed the \nCeiling{} ceiling alone at their point
 estimates (Table~\ref{tab:floor}); with intervals as wide as these, \nReAboveCeilingCI{} exceeds it

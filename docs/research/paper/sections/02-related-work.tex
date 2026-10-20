@@ -9,7 +9,7 @@ metrics that must reflect a limited budget of analyst alerts \cite{dalpozzolo201
 Learning under imbalance has its own methods and pitfalls \cite{he2009imbalanced}, and at a base
 rate such as this benchmark's \nFraudRateAll{} the receiver-operating curve can look reassuring while precision stays low
 \cite{saito2015prc}; we therefore report recall at a fixed false-positive rate and precision beside
-its ceiling rather than AUC alone. Our models are standard: gradient-boosted trees in their
+its cap (the precision a perfect ranking would reach) rather than AUC alone. Our models are standard: gradient-boosted trees in their
 XGBoost \cite{chen2016xgboost} and LightGBM \cite{ke2017lightgbm} implementations, and an
 Isolation Forest \cite{liu2008iforest} for anomaly scores. We claim no novelty in them.
 

@@ -1380,6 +1380,9 @@ SOURCES: dict[str, Src | Derived] = {
     "nPriorReadsFull": Src(
         PB66_PREREG, r"earlier entries,\s+(\d+) of them over at least", ref=PB66_SRC_REF
     ),
+    "nPriorReadsFullRows": Src(
+        PB66_PREREG, r"of them over at least ([\d,]+) test rows", ref=PB66_SRC_REF
+    ),
     "nFvPredTop": Src(
         PB66_PREREG, r"Recall at 0\.60, five-seed mean \| [\d.]+ to ([\d.]+) \|", ref=PB66_SRC_REF
     ),
@@ -1548,6 +1551,7 @@ SOURCES: dict[str, Src | Derived] = {
     # The single-feature floor re-run on d8083dbc exactly as recorded (round2_single_feature_auc),
     # and the same features on the gate's test rows with clustered intervals (round2_gate).
     "nReScoredRows": Src(R2_AUC, r"scored (\d+), fraud", ref=R2_REF),
+    "nReCorpusRows": Src(R2_AUC, r"corpus (\d+), scored", ref=R2_REF),
     "nReScoredFraud": Src(R2_AUC, r"scored \d+, fraud (\d+)", ref=R2_REF),
     **{
         f"nRe{key}{kind}": Src(R2_AUC, rf"^  {name}\s+{pattern}", ref=R2_REF)

@@ -15,7 +15,7 @@ notebook records most often, under several names (``a guard with two doors'', ``
 old behaviour as a floor''). A parameter digest guarded the generator's inputs while the claim lived
 in its output: changing a constant in the generator's code re-draws the whole dataset with every
 parameter value identical, which is why datasets are now identified by a fingerprint over their
-output. A statistical band kept a fixed floor that, at release scale, was \nBandWider{} times wider
+output. A statistical band kept a fixed minimum width that, at release scale, was \nBandWider{} times wider
 than the band it was meant to bound, so the check was blind to a construction leak landing between
 about \nBandBlindLow{} and \nBandBlindHigh{}. Out-of-fold encoding removed each row's own label but
 left the other rows of the same fraud incident in the estimate; grouping folds by account lowered the
@@ -127,9 +127,9 @@ across corpus depths at a fixed \nTrainUsed{} training rows, against a gain of \
 across the \nLcVolumeFactorAC{}-fold step of the learning curve within one cache and of
 \nFvSeedGainFixed{} from
 \nTrainUsed{} rows to full volume on the whole-draw corpus, where the validation and calibration
-splits grow too. The full-volume gate run names its feature cache only by path, so that it read
-the cache built from the whole draw rests on the workflow that passed the cache from its build to the gate run, not on the
-gate's evidence file. Comparisons that change the corpus and the volume together are not used, since
+splits grow too. The full-volume run's evidence file names its feature cache only by path, so
+that the run read the cache built from the whole draw rests on the workflow that passed the cache
+from its build to that run, not on the evidence file. Comparisons that change the corpus and the volume together are not used, since
 they mix corpus depth and training volume. No interval was computed for any of these differences, and a range over
 \nSelDepthCount{} means, each with a seed standard deviation up to \nSelMaxSd{}, is widened by seed
 noise by an amount not measured. The effect is not monotone in history: the shallowest corpus gives neither the lowest
@@ -300,18 +300,18 @@ floor (Section~\ref{sec:floor}) \\
 \addlinespace
 Leave-one-group-out \emph{and} one-group-only &
 Redundancy read as irrelevance: the first check alone cannot tell them apart &
-Removing any group costs at most \nGroupMaxDrop{}, yet \nGroupsAboveCeiling{} groups each reach at
+On the diagnostic model, removing any group costs at most \nGroupMaxDrop{}, yet \nGroupsAboveCeiling{} groups each reach at
 least \nGroupGeographic{} alone (Section~\ref{sec:redundancy}) \\
 \addlinespace
 Does each generalisation experiment withhold a \emph{mechanism}, or only a label? &
 Experiments that cannot fail, reported as evidence of generalisation &
-No fraud parameter is keyed by country, and leave-one-country-out costs at most \nLocoMaxLoss{};
+No fraud parameter is keyed by country, and leave-one-country-out costs the diagnostic model at most \nLocoMaxLoss{};
 the variant held out in time is still a multi-row incident and is caught at \nNovelRecall{}
 (Section~\ref{sec:generalisation}) \\
 \addlinespace
 A pre-specified variant drawn from a documented typology &
 Whether detection survives without the benchmark's dominant structure &
-Recall \nRevRecall{} \nRevCI{} against \nBaseVarRecall{} \nBaseVarCI{}, below the pre-specified
+Diagnostic-model recall \nRevRecall{} \nRevCI{} against \nBaseVarRecall{} \nBaseVarCI{}, below the pre-specified
 prediction; the variant departs from the documented typology in its recipient
 (Section~\ref{sec:generalisation}) \\
 \addlinespace

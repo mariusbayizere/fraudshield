@@ -65,9 +65,10 @@ repository and is checked against its evidence file at a named git reference, th
 service, are called \emph{gates}; gate ranking metrics are reported as margins over the best single feature on the same
 rows, not over chance. A statement that rests on inference rather than
 measurement says so in the sentence. Intervals are \nIntervalLevel{} unless stated otherwise. \textbf{Fraud on this benchmark arrives as
-multi-row incidents on one account, so test rows are not independent}: intervals marked
-account-clustered resample whole accounts, and the alert budgets' precision intervals resample
-days; every other interval treats rows as independent and is
+multi-row incidents on one account (\emph{bursts}), so test rows are not independent}: intervals marked
+account-clustered resample whole accounts, the alert budgets' precision intervals resample
+days, and their recall intervals are bootstrapped with a resampling unit the evidence does not record;
+every other interval treats rows as independent and is
 narrower than it should be by an amount not measured (Sections~\ref{sec:method}
 and~\ref{sec:limitations}). Results a
 later milestone will produce are marked \emph{deferred}, with the milestone; no value is

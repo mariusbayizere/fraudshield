@@ -11,8 +11,14 @@ reports the one experiment that did find a failure.
 
 \subsection{Leave-one-country-out}
 
-Each country is removed from training entirely and then scored, and each result is compared with
-the same country scored by the model that saw it (Table~\ref{tab:loco}). Removing a country costs
+Each country's rows are removed from the diagnostic model's training set and the country is then
+scored, and each result is compared with the same country scored by the model that saw it
+(Table~\ref{tab:loco}). This removes the country from what the model is fitted on, not from
+everything it uses: the features come from one cache computed over every country's transactions,
+and the target-encoded categoricals, channel and corridor class, are fitted once on the whole
+training period, the held-out country's rows and labels included (\texttt{run\_battery} at the
+evidence commit \texttt{d40fca2}). Neither is keyed by country; how much they carry about the
+held-out country, and so how much of the null they explain, is not measured. Removing a country costs
 at most \nLocoMaxLoss{} AUC. In the earlier battery on draw \texttt{6abde44e}, made before the
 encoding correction described below, it cost at most \nEarlyLocoMaxLoss{}.
 
@@ -59,7 +65,8 @@ test's desired answer (ADR 0028).
 \texttt{novel\_esim\_delayed\_drain} occurs only in the test period. All variants are scored
 against the same legitimate rows at one threshold, the \nFPRBudget{} false-positive budget over all
 legitimate rows. The unseen variant is caught at \nNovelRecall{} \nNovelCI{} (\nNovelCaught{} of
-\nNovelRows{}), against \nBaseVarRecall{} \nBaseVarCI{} for the base scenarios the model trained
+\nNovelRows{}), against \nBaseVarRecall{} \nBaseVarCI{} for the base scenarios (the generator's scenarios as generated,
+without a held-out variant) the model trained
 on: at least as often as the familiar shape. Those \nNovelRows{} rows sit on only \nNovelAccounts{}
 accounts, so they are far from independent; an account-clustered bootstrap gives \nCluNovelci{},
 and at a recall this close to one neither it nor the Wilson interval describes the uncertainty well.
@@ -110,14 +117,14 @@ model was scored on the whole test period (PB-66; \texttt{docs/benchmarks/lofto\
 the other rows' features were computed over a history that still contains the held-out scenario's
 rows, through velocity, counterparty novelty and device sharing. Like the rest of PB-66's run it was
 pre-specified in repository history and is not blind: the test period had been scored
-\nPriorReads{} times before, \nPriorReadsFull{} of them in full.
+\nPriorReads{} times before, \nPriorReadsFull{} of them over at least \nPriorReadsFullRows{} test rows.
 
-The owner's hypothesis, with numeric ranges confirmed before the run, was that scenarios sharing
+The owner's hypothesis, with numeric ranges fixed before the run, was that scenarios sharing
 burst or counterparty-novelty structure (velocity, SIM swap and mule) keep their recall when held out,
-and that single-row scenarios (agent, card-not-present and merchant) drop clearly: a drop of at least
+and that scenarios whose incidents can be a single row (agent, card-not-present and merchant) drop clearly: a drop of at least
 \nLoRangeSingleDrop{} with the held-out interval's upper bound below the production recall.
 Table~\ref{tab:lofto} reports each against its range. \textbf{The hypothesis is partly supported}, in the pre-specified rule's term.
-The burst scenarios keep their recall. Of the single-row scenarios only agent fraud drops
+The burst scenarios keep their recall. Of agent, card-not-present and merchant fraud, only agent fraud drops
 clearly. Card-not-present does not; merchant fraud's held-out recall is within its bound of
 \nLoRangeSingle{}, but its drop is smaller than \nLoRangeSingleDrop{}, so it does not drop clearly
 either; both are refuted as stated. PB-66's own ranges for the other scenarios fare no better.
@@ -132,7 +139,7 @@ without a scenario puts much of it below the threshold even where the ranking st
 \small
 \caption{Recall of each scenario's test frauds at the \nFPRBudget{} budget, by the full-volume model
 (production) and by the same model refitted without that scenario (held out, Wilson interval), with
-the drop and the prediction confirmed before the run; the last column is held-out recall at the
+the drop and the prediction fixed before the run; the last column is held-out recall at the
 flag threshold.
 Recall over all test frauds in production: \nLoProduction. The scenarios' frauds sum to
 \nLoFraudSum{}; the other \nRecBaseNoise{} observed frauds are label noise and carry no scenario
@@ -200,7 +207,7 @@ fraud. A test checks that each row is a single transaction in the test period to
 a counterparty on the payee list, but a listed counterparty need not have been paid before.
 Measured on the regenerated draw with complete history,
 \texttt{counterparty\_is\_new\_for\_account} is \textbf{true on \nRevNovelScored{} of the
-\nRevFraud{} rows scored as fraud}: their payee was on the list but had never been paid by that
+\nRevFraud{} rows the observed label marks as fraud}: their payee was on the list but had never been paid by that
 account. It is false on the other \nRevNotNovelScored{}, \nRevPriorThreePlus{} of which had paid
 the same counterparty at least \nRevPriorThreshold{} times before
 (\texttt{evidence/\allowbreak reversal\_\allowbreak novelty\_\allowbreak d8083dbc.txt}). The
