@@ -20,7 +20,7 @@ Review (Part I) and merge. The milestone gate is **not** met; see "Gate status".
 | Runbooks | `docs/runbooks/` (11, one per page alert) | `rule_conventions.py`, both directions |
 | Kubernetes | `infrastructure/k8s/{base,overlays/staging,overlays/production}`, `infrastructure/argo-rollouts/` | kubeconform strict (k8s 1.34.11 + Argo CRDs, schemas pinned by commit); `k8s_policy.py` (PSA restricted offline, digests, probes, resources, PDB/HPA/NetworkPolicy coverage), 24 break-one-rule tests; canary queries run through promtool |
 | CI workflows (new files only) | `.github/workflows/{infrastructure,security,supply-chain}.yml` | actionlint over all workflows |
-| Threat model | `docs/security/threat_model.md` sections 3.6–3.8, risks R-5–R-9 | review |
+| Threat model | `docs/security/threat_model.md` sections 3.8–3.10, risks R-14–R-18 | review |
 
 One command runs every local check: `infrastructure/checks/validate.sh` (`--quick` skips the
 week-long alert tests). It needs `uv` and network access for the first download only; no Docker.
@@ -90,7 +90,7 @@ All `IN_PROGRESS` until review and merge; evidence paths are on `m9/infra`.
 | OPS-CI-06 | `.github/workflows/supply-chain.yml` | source SBOM signed and verified in CI; images not built (no Dockerfiles) |
 | OPS-CI-07 | `infrastructure/k8s/overlays/staging` | rendered and validated; no deploy workflow yet |
 | OPS-CI-08 | `infrastructure/argo-rollouts`, `overlays/production` | `test_canary_analysis.py`; never applied to a cluster |
-| D-28 | threat model 3.6–3.8, Trivy, SBOM, cosign | CI runs above |
+| D-28 | threat model 3.8–3.10, Trivy, SBOM, cosign | CI runs above |
 
 ## 6. Interface requirements for other milestones
 
@@ -116,7 +116,7 @@ All `IN_PROGRESS` until review and merge; evidence paths are on `m9/infra`.
   over instances is the group's lag. If an exporter reports whole-group lag instead, change the
   alert to `max`.
 - `fs_spool_depth`: per API pod, number of decisions not yet acknowledged by Kafka.
-- No account, device or counterparty tokens as label values (threat model 3.7).
+- No account, device or counterparty tokens as label values (threat model 3.9).
 
 **M6: spool layout and replayer contract (ADR 0090).** Binding on the M6 spool module unless
 changed by a new ADR. The manifests provide the volume and two variables; everything else is M6's.
@@ -138,7 +138,7 @@ changed by a new ADR. The manifests provide the volume and two variables; everyt
     owner.
 - **Orphan detection.** A directory is orphaned when its `heartbeat` is older than 30 s
   (configurable, named constant with units). No Kubernetes API access is needed; API pods have no
-  service account token (threat model 3.6).
+  service account token (threat model 3.8).
 - **Claiming.** A live pod claims an orphan by an atomic `rename` of the directory to
   `$FRAUDSHIELD_SPOOL_DIR/.claimed/<original name>.<claimer pod name>`. Only the pod whose rename
   succeeds replays it. A claimed directory whose claimer's own heartbeat goes stale can be claimed
@@ -189,8 +189,8 @@ Remaining M9 work not started here: data store manifests (CloudNativePG for Post
 TimescaleDB and the PII vault, Kafka, Redis, MLflow, object store) with their NetworkPolicies
 and encryption at rest (D-20, D-49); Loki, a log collector and the OpenTelemetry Collector; the
 edge image (nginx: TLS 1.3, HSTS, CSP, rate limits); staging and production deploy workflows
-with the GitHub environment approval; an alerting dead-man's switch and HA (R-6); admission-time
-signature verification (R-7); OWASP Dependency-Check or its recorded substitution; SonarQube
+with the GitHub environment approval; an alerting dead-man's switch and HA (R-15); admission-time
+signature verification (R-16); OWASP Dependency-Check or its recorded substitution; SonarQube
 (skipped without a token, per E.11).
 
 **Scheduled and manual triggers.** The new workflows have nightly `schedule` and
