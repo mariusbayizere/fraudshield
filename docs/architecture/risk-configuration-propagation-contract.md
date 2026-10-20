@@ -204,11 +204,18 @@ institution's map entry (`ConcurrentHashMap.compute`).
      as a failure. Nothing is evicted or loaded.
   2. Load every cached institution whose probed versions differ from its installed ones, K at a
      time, each with deadline T_L. A failed load keeps the old snapshot and is retried next cycle.
+  2′. **Requested loads.** It then serves the requests other components have queued: the breaker
+     monitor's (breaker-monitor contract B3 and B6), merged to at most one per institution, for
+     cached and never-cached institutions alike, whatever the probe says. They are served K at a
+     time, each with deadline T_L, and installed by C3. This step was added on 2026-10-20 at the
+     breaker-monitor contract's review 3, F1.
   3. Mark every institution whose probed versions equal its installed ones, or that loaded
      successfully, as **confirmed** at this cycle's end.
   4. Wait R.
 - **The bound.** A version row committing at DB time t is installed, on every instance whose probe
-  and loads succeed, by `t + R + 2C`. The worst case is
+  and loads succeed, by `t + R + 2C`. C includes step 2′. The worst case below is stated from an
+  instance's **second cycle** on. Its first cycles after a start may also serve a burst of first
+  loads, one per institution that has active breakers. The worst case is
   `R + 2(T_P + ⌈N/K⌉·T_L)`:
   - E.6's 60 s holds while that sum is at most 60 s;
   - with R = 5 s, K = 4 and T_L = T_P = 2 s, that allows N ≤ 48 institutions all changing at once

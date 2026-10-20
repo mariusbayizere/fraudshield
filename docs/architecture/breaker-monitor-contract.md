@@ -1,8 +1,8 @@
 # The MCC circuit-breaker monitor: who writes breaker state, under which settings
 
-Status: **draft 3, for a delta review.** Review 2 (`docs/reviews/M8B/breaker-monitor-contract-review-2.md`)
-found draft 2 UNSOUND with one MAJOR (N1). The MAJOR is fixed by defining the pinned version v_p
-and using it everywhere. §8 maps review 2's findings.
+Status: **draft 3, reviewed SOUND_WITH_CHANGES with no MAJOR** (`docs/reviews/M8B/breaker-monitor-contract-review-3.md`).
+Its MINORs F1 to F4 are applied, below. Review 2 found draft 2 UNSOUND with one MAJOR (N1), which
+draft 3 fixed by defining the pinned version v_p. §8 maps review 2's findings, and §9 review 3's.
 
 
 **Review 1** (`docs/reviews/M8B/breaker-monitor-contract-review-1.md`) found draft 1 UNSOUND, with
@@ -99,11 +99,15 @@ The write stores v_p as the recorded version, and the event records v_p.
 - requests a reload of I's snapshot;
 - still reads each key's state, to refresh its `isOpen` copy (B5).
 
-**The reload** is a request to the configuration contract's refresh. It is merged, so at most one
-is outstanding per institution, and it is served at the start of the next cycle on that contract's
-K-thread pool. It is installed through C3's rule, never by `put`, and counts as one of that
-cycle's loads. It adds no load path, and C4's worst case already counts it, because a stale
-institution is one whose probed version differs.
+**The reload** is a request to the configuration contract's refresh.
+- **How it is served.** It is merged, so at most one is outstanding per institution. It is served by
+  that contract's step 2′ in the next cycle, on its K-thread pool, whatever the probe says, and is
+  installed through C3's rule, never by `put`.
+- **Never-cached institutions.** Step 2′ serves them too (B6).
+- **Restores.** Step 2′ serves a request even when the probe matches the installed version, so a
+  forced load can reveal a restore (B8).
+- **Its cost.** It is a load path the configuration contract now names (its C4, step 2′), and C
+  includes it. Its bound is stated from an instance's second cycle on (review 3, F1).
 
 **B4. One snapshot per pass, and settings bind from publication.**
 - **One snapshot per pass.** For each institution, a pass pins its snapshot once (v_p) and uses it
@@ -158,16 +162,21 @@ after a restore. A load that fails is B9's case, not this one, and raises nothin
 - **When it holds.** Breaker evaluation for institution I progresses while at least one live
   instance can install I's newest version.
 - **When it fails.** If none can, for instance because loads fail on every instance whose version
-  is behind, no instance writes I's breakers. Open ones then stay open, and new breaches do not
-  open.
+  is behind, no current instance writes I's breakers. Open ones then stay open, and new breaches do
+  not open. The exception is B7's: after Redis loses P(I), a stale instance can write keys recorded
+  at or below its v_p.
 - **The alert.**
   - **Which institutions.** It covers institutions that have at least one active key. An
     institution with no traffic has no breakers to evaluate.
-  - **The timestamp.** A pass that evaluates I, and writes or confirms its state, writes
+  - **The timestamp.** A pass that evaluates every active key of I, skipping none, writes
     `fs:{I}:mcc:evaluated-at` with Redis's own `TIME`, so instance clocks do not matter. A stale
     instance never writes it (B3).
   - **The metric.** `fs_breaker_unevaluated_seconds{institution}` is the age of that time on Redis's
     clock, and alerts at 60 s.
+  - **When the timestamp is absent.** After a first deployment, a lossy failover, or for an
+    institution no instance has loaded, an institution with active keys and no `evaluated-at`
+    takes its age from the earliest of its active keys' last activity. It therefore alerts too
+    (review 3, F3).
 - **The link to the other contract.** This is the breaker form of the configuration contract's Q1:
   a database outage that stops loads also stops breaker evaluation for any institution whose
   newest version is not yet installed everywhere.
@@ -213,18 +222,23 @@ minutes. The bound is when the new rules apply, not when every breaker reflects 
 | P15 | The monitor runs on its own scheduler; a slow task elsewhere does not delay it | B6 |
 | P16 | A stale instance's reload request is merged, served by the next refresh cycle, and installed through C3 | B3 |
 | P17 | Normal propagation, with no restore, never raises B8's alert; a successful load below P(I) does | B8 |
+| P18 | An institution the instance has never loaded is not loaded in the monitor's thread. Its load is requested and served by step 2′, and it is evaluated on a later pass | B6, B3 |
+| P19 | A requested load runs even when the probe matches the installed version | B3, B8 |
+| P20 | `evaluated-at` is written with Redis `TIME`, only by a pass that skipped no key, and an absent `evaluated-at` for an institution with active keys alerts | B9 |
 
 ## 6. Accepted costs
 
 - **Settings bind from publication.** A transition made under the old settings stands, and the new
   rules act on it.
-- **A stale instance can still write** before publication (at most R_m + E after the first install),
-  and for at most one pass after Redis loses P(I).
+- **A stale instance can still write** before publication (at most R_m + E after the first install).
+  After Redis loses P(I), it can write keys recorded at or below its v_p: for one pass when a
+  current instance is live, and otherwise until one returns, with the configuration contract's
+  freshness alert firing (B7).
 - **The two outages:**
   - **PostgreSQL** (B9): breakers freeze for institutions whose newest version is not installed;
   - **Redis** (B5): every decision uses its last `isOpen` copy.
-- **The breaker bound is longer than the threshold bound:** N ≤ 28 against the configuration
-  contract's N ≤ 48.
+- **The breaker bound is longer than the threshold bound:** N ≤ 36 against the configuration
+  contract's N ≤ 48, both from an instance's second cycle on.
 
 ## 7. Review 1's findings and their answers
 
@@ -255,3 +269,12 @@ minutes. The bound is when the new rules apply, not when every breaker reflects 
 | N7 rollback | A3: the same cutover in reverse |
 | N8 an extra pass charged | §4: `R + 2C + 2R_m + 4E`, N ≤ 36 |
 | N9 (a) code order, (b) skipped reads, (c) first loads | B2's order; B5 includes skipped institutions; B6 requests first loads outside the monitor thread |
+
+## 9. Review 3's findings and their answers
+
+| Finding | Answer |
+|---|---|
+| F1 the reload is a load path; never-cached institutions; restores | B3 rewritten; the configuration contract's C4 gains step 2′ (requests served whatever the probe says, never-cached included); the bounds stated from the second cycle; P18, P19 |
+| F2 §6 contradicted §4 and B7 | §6: N ≤ 36, and B7's condition |
+| F3 B9's edge cases | an absent `evaluated-at` alerts; B9's exception for a lost P(I); "evaluates every active key, skipping none" |
+| F4 missing properties | P18 to P20 |
