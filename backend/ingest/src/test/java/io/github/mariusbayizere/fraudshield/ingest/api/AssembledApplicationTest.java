@@ -12,6 +12,9 @@ import io.github.mariusbayizere.fraudshield.notify.webhook.WebhookEndpoints;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.Table;
 import jakarta.persistence.metamodel.EntityType;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.net.ServerSocket;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -68,6 +71,13 @@ class AssembledApplicationTest {
   private static final HttpClient CLIENT =
       HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
 
+  /**
+   * A fixed management port. The management chain admits {@code /actuator/**} only on the
+   * configured management port, so with ApiHarness's {@code management.server.port=0} every
+   * actuator request is refused with 401, however it arrives.
+   */
+  private static final int MANAGEMENT_PORT = freePort();
+
   @Autowired Environment environment;
 
   @Autowired ConfigurableApplicationContext context;
@@ -89,6 +99,15 @@ class AssembledApplicationTest {
     registry.add("fraudshield.sms.base-url", () -> "http://127.0.0.1:1/");
     registry.add("fraudshield.sms.username", () -> "sandbox");
     registry.add("fraudshield.sms.api-key", () -> "not-a-real-provider-key");
+    registry.add("management.server.port", () -> MANAGEMENT_PORT);
+  }
+
+  private static int freePort() {
+    try (ServerSocket socket = new ServerSocket(0)) {
+      return socket.getLocalPort();
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
+    }
   }
 
   @BeforeEach
@@ -357,7 +376,7 @@ class AssembledApplicationTest {
     // M9's FraudShieldSpoolBacklog alert and the fs-kafka-spool dashboard read the name Prometheus
     // scrapes, not the name the code registers. The gauge is registered as fs_spool_depth with base
     // unit "bytes"; this scrape records which name that becomes (M9_updates.md 3c, 2026-10-20).
-    String management = "http://127.0.0.1:" + environment.getProperty("local.management.port");
+    String management = "http://127.0.0.1:" + MANAGEMENT_PORT;
     HttpResponse<String> scrape =
         CLIENT.send(
             HttpRequest.newBuilder(URI.create(management + "/actuator/prometheus")).build(),
