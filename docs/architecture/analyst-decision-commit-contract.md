@@ -1,6 +1,13 @@
 # Analyst decisions: the commit and undo contract
 
-Status: **draft 3, for independent review.**
+Status: **draft 4, for independent review.** Draft 4 changes only two things:
+- **Review 3's three MAJORs** (`docs/reviews/M8B/decision-commit-contract-review-3.md`, SOUND_WITH_CHANGES);
+- **the owner's answers to Q1–Q3** of 2026-10-20.
+
+Review 3's MINORs are carried, unchanged, to §12.
+
+**The owner's rule.** If draft 4 produces another MAJOR from its own fixes, the author stops and
+reports rather than writing draft 5. The answer then is to simplify the design, not to patch it.
 
 **Reviews so far:**
 - Review 1 found draft 1 UNSOUND (6 MAJOR, 11 MINOR).
@@ -9,7 +16,14 @@ Status: **draft 3, for independent review.**
   reserve one sequence. Its MAJORs were:
   - a stranded or re-recorded reservation on the customer path;
   - timed-out entries left open under DECLINE_AND_VERIFY.
-- Both records are in `docs/reviews/M8B/`. §11 maps every review 2 finding to its answer.
+- Review 3 found draft 3 **SOUND_WITH_CHANGES** (3 MAJOR, 9 MINOR). The arbiters held. The MAJORs
+  were:
+  - a timeout committing before its alert entry existed;
+  - a deploy assumption that was false;
+  - an override's unblock write that could fail for ever.
+- All records are in `docs/reviews/M8B/`.
+  - §11 maps review 2's findings.
+  - §12 maps review 3's MAJORs, and lists the MINORs it carries.
 
 Code is written against this document, not the other way round.
 
@@ -67,9 +81,20 @@ It also sets the decision lifecycle (D1 to D7) and lists the changes to M6 (§8)
   transactions.
 - **A1.** Everything runs on the primary.
 - **A2.** No committed transaction is lost (as in the configuration contract).
-- **A3.** The analyst operations are enabled only once every instance runs the release that
-  implements this contract. V80 backfills `transaction_transitions` from `decision_states` (§3.6),
-  so writers on an older release, which do not reserve, never run alongside reserving writers.
+- **A3. The release that brings V80 is deployed by a stop-and-drain cutover, never rolled.** This
+  is a runbook requirement for M9 (review 3, MAJOR 2). The cutover runs in this order:
+  1. stop every instance's ingest;
+  2. wait until every instance's spool has drained to PostgreSQL and Kafka, which the spool's lag
+     gauges show as zero;
+  3. stop the instances;
+  4. run V80;
+  5. start only instances of the new release.
+
+  Its consequences:
+  - no writer that does not reserve ever runs after V80, and no older spool record drains after it;
+  - V80's backfill of `transaction_transitions` is complete;
+  - the backfill also writes a recording row for every backfilled reservation, so T5 never
+    re-records history.
 
 **Lock order, everywhere.** A transaction may skip levels but never reverses them:
 1. the entry row (`FOR UPDATE`);
@@ -91,6 +116,8 @@ in that order.
      to DB time by the same trigger;
    - `prior_status`, `alert_version`, `hold_owned`, `request_fingerprint`;
    - `override_decision`: NOT NULL exactly for SENIOR_OVERRIDE;
+   - `prior_hold_owner` and `prior_hold_deadline`: the owner and deadline an analyst decision's claim
+     replaced, so that an undo restores them (D2);
    - `escalated_to_alert_id`: for ESCALATE.
 2. **Commits:** `committed_at` is set to DB time by trigger. The commit trigger refuses while DB
    time < `undo_until`.
@@ -99,8 +126,11 @@ in that order.
 4. **The backstop for one live analyst decision per entry.** A BEFORE INSERT trigger on
    `alert_decisions`, under the entry advisory lock, refuses a second live analyst decision.
 5. **`hold_owners`** (mutable):
-   - columns: `institution_id`, `transaction_id`, `owner` (FREE, ANALYST or TIMEOUT),
-     `decision_id`, `updated_at`;
+   - columns: `institution_id`, `transaction_id`, `owner` (FREE, ANALYST, ESCALATED or TIMEOUT),
+     `decision_id`, `deadline`, `updated_at`;
+   - `deadline` is the time the hold runs to: the review deadline, or an escalation's longer one
+     (D6). It is written on insert from the transaction's `review_deadline_at`, and changed only by
+     D6 and D2.
    - primary key `(institution_id, transaction_id)`;
    - a CHECK that `decision_id` is not NULL exactly when the owner is ANALYST;
    - a trigger that refuses any change away from TIMEOUT;
@@ -138,18 +168,29 @@ in that order.
 ## 4. The arbiters
 
 **H1. `hold_owners` decides who owns a hold.** A missing row means FREE.
-- **The analyst's claim** is an upsert that succeeds only from FREE:
+- **The analyst's claim** is an upsert that succeeds from FREE or ESCALATED:
   `INSERT … ON CONFLICT (institution_id, transaction_id) DO UPDATE SET owner='ANALYST',
-  decision_id=… WHERE hold_owners.owner='FREE' RETURNING owner`.
-- **A timeout's claim** succeeds from FREE or TIMEOUT.
+  decision_id=… WHERE hold_owners.owner IN ('FREE','ESCALATED') RETURNING owner`.
+- **An escalation's claim** (D6) succeeds from FREE, and leaves ESCALATED unchanged.
+- **A timeout's claim** succeeds from FREE, ESCALATED or TIMEOUT, and only when DB time ≥ the row's
+  `deadline`. With no row, it compares against the hold's own deadline instead.
 - **Concurrent claims.** A second claimant waits for the first's transaction and then re-checks.
   Exactly one of ANALYST and TIMEOUT holds at a time, and TIMEOUT is final.
 
 **H2. Every timeout path claims first, in its own transaction.** The paths are the leader's poller,
 the local fallback and the overdue sweep.
 - **The claim checks the deadline on DB time.** It is refused while DB time < the hold's deadline:
-  `DueHold.deadline`, which equals the entry's `review_deadline_at`. A JVM clock that runs fast
-  therefore cannot time a hold out early. A refused claim reschedules the hold at its deadline.
+  `hold_owners.deadline`, or `DueHold.deadline` if there is no row. A JVM clock that runs fast
+  therefore cannot time a hold out early, and a hold whose escalation extended it is not timed out
+  at its first deadline. A refused claim reschedules the hold at that deadline.
+- **The claim requires the transaction's sequence-1 row in `decision_states` to be visible**
+  (review 3, MAJOR 1).
+  - **Why this guarantees the entries exist.** `PostgresSink` writes the alert entry in the same
+    transaction as that row, so a timeout can never commit before its entries exist.
+  - **When the row is not visible:** the claim rolls back, the path reschedules the hold 1 s later,
+    and the case is counted.
+  - **The cost.** The sink lagging after a PostgreSQL outage therefore delays timeouts, by the same
+    rule as Q3.
 - **What the claim's transaction does when it succeeds** (H5):
   - closes the transaction's open entries;
   - writes the AUTO_* decision row;
@@ -158,14 +199,20 @@ the local fallback and the overdue sweep.
 - **If the claim finds ANALYST,** the hold is dropped and nothing is recorded.
 - **If PostgreSQL is unavailable,** the poller and the local fallback reschedule the hold 1 s later
   and count it, and the sweep retries on its next run.
-  - This amends ADR 0064: no hold is timed out without a claim, so a PostgreSQL outage delays every
-    MEDIUM timeout past D-18's ±500 ms for the outage's length (question Q3).
+  - **This amends ADR 0064, and breaches D-18 for the outage (owner, Q3).** No hold is timed out
+    without a claim, so every MEDIUM payment stays held until the database returns and the sink has
+    written its sequence-1 row.
+    - The breach of D-18's ±500 ms is bounded by the outage's duration plus the sink's catch-up.
+    - **No measurement of that duration exists** (§9, limitations).
+    - The owner's reason: "a delayed payment is recoverable; a timeout that contradicts an analyst's
+      committed decision is not." 
   - The poller keeps its lease while it reschedules. After the outage it drains at most 500 holds
     a tick, as today.
   - The lateness metric measures from the original deadline, which the DueHold carries unchanged.
 
 **H3. The overdue sweep** selects HOLDs that meet all three conditions:
-- DB time ≥ their deadline + 10 s;
+- DB time ≥ their deadline + 10 s, where the deadline is `hold_owners.deadline` if a row exists,
+  else the HOLD's `review_deadline_at`;
 - the transaction has no reservation in `transaction_transitions`, and no `decision_states` row with
   sequence > 1;
 - its owner is not ANALYST.
@@ -186,6 +233,11 @@ and drops it. An undo frees the claim and, after its commit, reschedules the hol
 old record a no-op. Entries are therefore closed synchronously under both policies, including an
 escalated entry.
 
+**The sink's backstop** (review 3, MAJOR 1). H2 already guarantees the entry exists before a timeout
+commits. As a backstop, `PostgresSink` inserts an alert entry already closed (AUTO_RELEASED or
+AUTO_DECLINED) when `hold_owners` shows TIMEOUT for its transaction, and counts the case. It should
+never occur.
+
 **T1. Every transition after sequence 1 is reserved before it is recorded.** The writers are:
 - the analyst's E1;
 - a timeout;
@@ -201,12 +253,14 @@ escalated entry.
 4. computes `next` by `DecisionState`'s rules;
 5. inserts the reservation with its full `event_body` and `decided_at` = DB time.
 
-The **sequence-1 state** comes from `decision_states`. A timeout may instead take it from the Redis
-state cache, where it was saved at ingest. PostgreSQL holds it for every other writer:
-- the analyst's and the override's alerts arrive in the same sink transaction as it;
-- an unblock can exist only after its auto-block row, which arrives with it too (V5's foreign key).
+The **sequence-1 state** comes from `decision_states`, for every writer, the timeout included.
+Draft 3's exception, which let a timeout read it from Redis, is withdrawn (review 3, MAJOR 1). Why
+it is always there when needed:
+- the analyst's and the override's alerts arrive in the same sink transaction as that row;
+- an unblock can exist only after its auto-block row, which arrives with it too (V5's foreign key);
+- a timeout's claim requires it (H2).
 
-If neither is visible, the writer retries later. It never guesses.
+If it is not visible, the writer retries later. It never guesses.
 
 **T3. Deterministic ids.** Every event id and label id is the name-based UUID of a stable source:
 
@@ -218,7 +272,9 @@ If neither is visible, the writer retries later. It never guesses.
 | Customer "yes" and `UnblockReconciler` | `unblock|` + `unblock_events.id` | `unblock_label|` + `unblock_events.id` |
 | Customer "no" (a label, no transition) | — | `verification_label|` + the verification response's id |
 
-`UnblockReconciler` reads `u.id` in its query, so it re-derives the same ids.
+`UnblockReconciler` reads `u.id` in its query, so it re-derives the same ids. It treats an unblock
+as already handled if it has a reservation **or** a `decision_states` row by CUSTOMER_VERIFICATION.
+The second test matches unblocks handled before V80 (review 3, MAJOR 2).
 `DecisionState.next` takes the event id and `decided_at` as arguments.
 
 **T4. Recording.**
@@ -250,8 +306,12 @@ therefore always completed. **T4's "re-decide" happens only before a reservation
 - **(d)** If `alert_version` ≠ `version`: 409 `stale-alert`. If the entry is not open: 409
   `stale-alert`.
 - **(e)** For MEDIUM:
-  - if DB time ≥ `review_deadline_at`: 409 `review-deadline-passed`;
-  - otherwise claim (H1). If the owner is TIMEOUT: 409 `review-deadline-passed`.
+  - if DB time ≥ the hold's deadline: 409 `review-deadline-passed`. The deadline is
+    `hold_owners.deadline` if a row exists, which is the escalation deadline for an escalated
+    transaction; otherwise it is `review_deadline_at`;
+  - otherwise claim (H1), from FREE or ESCALATED, storing the replaced owner and deadline in
+    `prior_hold_owner` and `prior_hold_deadline`. If the owner is TIMEOUT: 409
+    `review-deadline-passed`.
 - **(f)** Insert the decision. Set the entry's status to CONFIRMED_FRAUD or MARKED_LEGITIMATE, and
   `version + 1`. Audit `ANALYST_DECISION` / `DECIDED`.
 - **(g)** Commit, and answer 202.
@@ -264,9 +324,10 @@ therefore always completed. **T4's "re-decide" happens only before a reservation
 - **(c)** Insert the undo row. If §3.3's trigger refuses: 409 `undo-window-expired`.
   - This includes a retry, after a 40001 or 40P01, that lands past `undo_until`. That is an accepted
     cost (§9).
-- **(d)** If `hold_owned`: set `hold_owners` to FREE where `decision_id` is this decision. Restore
+- **(d)** If `hold_owned`: where `decision_id` is this decision, set `hold_owners` back to
+  `prior_hold_owner` (FREE or ESCALATED) and its deadline to `prior_hold_deadline`. Restore
   `prior_status`, with `version + 1`. Audit `ANALYST_DECISION` / `UNDO`.
-- **(e)** After the commit, if `hold_owned`: reschedule the hold with its original deadline and the
+- **(e)** After the commit, if `hold_owned`: reschedule the hold at `prior_hold_deadline`, with the
   stored policy (`decision_states.timeout_policy`).
   - A past deadline is claimed on the poller's next tick, within one tick plus one claim
     transaction.
@@ -292,8 +353,11 @@ are safe by T3 to T5 and E2.
   - **An override:** reserve and record the transition by SENIOR_OVERRIDE to the outcome of
     `override_decision`, where `DecisionState` allows it, with a SENIOR_OVERRIDE label. The label's
     `supersedes_label_id` is the original's label.
-    - An override that lifts an auto-block (DECLINE → APPROVE) also writes the `unblock_events`
-      row, cause SENIOR_OVERRIDE, in the reservation's transaction.
+    - **An override that lifts an auto-block** (DECLINE → APPROVE) also writes an `unblock_events`
+      row with cause SENIOR_OVERRIDE, in the reservation's transaction. It does so **only when an
+      `auto_block_events` row exists** for the transaction, and with `ON CONFLICT DO NOTHING`.
+      - An override of a DECLINE_AND_VERIFY timeout has no auto-block, so it writes none.
+      - A block already lifted writes nothing again (review 3, MAJOR 3).
   - **Otherwise:** the label only. That covers HIGH (already blocked) and ANOMALY (never held).
   - **A transition that is not allowed, or is already in force:** outcome SKIPPED, with the reason,
     counted.
@@ -301,6 +365,14 @@ are safe by T3 to T5 and E2.
   never HIGH: one Lua step, `SET NX fs:mcc:confirmed:<inst>:<txn>` (expiry 25 h), then `HINCRBY`.
   It is called on Redis directly. A failure leaves the decision for the next run.
 - **(e) E3.** Insert the effects row `ON CONFLICT DO NOTHING`.
+- **(e′) A permanent failure does not stall the worker** (review 3, MAJOR 3).
+  - **What counts as permanent:** an effect whose transaction fails with a non-retryable SQLSTATE
+    (classes 22 and 23).
+  - **What happens:** the worker records the effects row with outcome FAILED, the SQLSTATE and the
+    effect, raises `fs_analyst_effects_failed_total`, and moves on. A FAILED effect is for an
+    operator to resolve.
+  - **Everything else is retried on the next run:** a 40001 or 40P01, a lost connection, Redis or
+    the spool unavailable.
 - **(f)** While Redis or the spool is unavailable, an ANALYST-owned hold stays HOLD until E1
   succeeds. `fs_analyst_effects_oldest_pending_seconds` alerts (Q3).
 
@@ -321,14 +393,33 @@ are safe by T3 to T5 and E2.
   `escalated_to_alert_id`, as it now stands.
 - **(b)** The version check, and the entry must be open. The target must rank strictly above the
   caller (422). An escalated entry needs the caller's role at or above its target (403).
-- **(c)** For MEDIUM: insert the `hold_owners` row as FREE if it is absent, then `FOR UPDATE` it. If
-  the owner is TIMEOUT: 409 `stale-alert`. The lock serialises the escalation with a timeout claim,
-  which then closes the new entry too (H5).
-- **(d)** Insert the new entry, copying the transaction, score, tier, probability, expected loss and
-  deadline, with the target and reason. Insert ESCALATE on the original, with
-  `escalated_to_alert_id`; it is committed on insert. Set the original's status to ESCALATED, and
-  `version + 1`. Audit `ANALYST_DECISION` / `ESCALATED`.
-- **(e)** The hold is untouched, and the timer keeps running (Q2).
+- **(c) For MEDIUM, escalation stops the timer** (owner, Q2):
+  - insert the `hold_owners` row as FREE if it is absent, then `FOR UPDATE` it;
+  - if the owner is TIMEOUT: 409 `stale-alert`;
+  - if it is FREE: claim ESCALATED, and set `deadline` to DB time + W, the escalation review window;
+  - if it is already ESCALATED (a senior escalating on to a risk officer): keep the existing
+    deadline. One escalation window covers the whole chain.
+  - **W** is 15 minutes by default. It is configurable and ASSUMED, because the SRS states no
+    figure.
+  - The lock serialises the escalation with a timeout claim. A claim that wins first closes the
+    original entry, and the escalation is refused.
+- **(d) The new entry.** Insert it, copying the transaction, score, tier, probability and expected
+  loss, with the target and the reason.
+  - Its `review_deadline_at` is the escalation deadline, so the senior sees the time they have.
+  - Insert ESCALATE on the original, with `escalated_to_alert_id`; it is committed on insert.
+  - Set the original's status to ESCALATED, and `version + 1`.
+  - Audit `ANALYST_DECISION` / `ESCALATED`.
+- **(e)** After the commit, reschedule the Redis hold at the escalation deadline. If that fails, the
+  poller fires at the old deadline, its claim is refused because DB time is before the row's
+  deadline, and it reschedules at the row's deadline (H2).
+- **(f) If no senior answers by the escalation deadline,** the timeout claims the hold (H1, H2). The
+  channel's MEDIUM timeout policy then applies, releasing the payment or declining it for
+  verification. The escalated entry is closed AUTO_RELEASED or AUTO_DECLINED (H5).
+  - **The escalation stays on record:** the ESCALATE decision on the original, and the AUTO_*
+    decision on the escalated entry.
+  - The owner's choice was "a longer bound, then the payment releases with the escalation
+    recorded". This contract says which: the longer bound is W, and then the channel's timeout
+    policy applies, so a DECLINE_AND_VERIFY channel declines rather than releases.
 
 **D7. Customer verification** (M6) reserves through T1 to T5 with T3's ids. That is the only change
 to it.
@@ -402,16 +493,22 @@ to it.
 - `override_decision` on `DecisionRecord`;
 - `AUTO_DECLINED` in `AlertStatus`.
 
-**Questions for the owner:**
-- **Q1.** MARK_LEGITIMATE on an auto-blocked HIGH alert labels it and leaves the block. Only customer
-  verification or a senior override lifts a block, as `DecisionState` requires. ANOMALY alerts
-  differ too: an analyst's decision only labels, while an override may decline.
-- **Q2.** Escalation does not stop the review timer, so a MEDIUM escalation is usually closed by
-  the timeout before a senior sees it.
-- **Q3.** During a PostgreSQL outage, no hold times out: every MEDIUM payment stays held until the
-  database returns, with an alert. This amends ADR 0064 and exceeds D-18's tolerance for the
-  outage. The alternative, timing out without the arbiter, can contradict an analyst's committed
-  decision.
+**The owner's decisions (2026-10-20):**
+- **Q1, kept as proposed.** MARK_LEGITIMATE on an auto-blocked HIGH alert labels it, and leaves the
+  block. Lifting a block needs customer verification or a senior override. In the owner's words:
+  "One analyst reversing a model block with a click makes them a single point of failure for a
+  compromised account, and the extra step protects the customer rather than the system."
+- **Q2, escalation stops the timer.** It holds the payment for up to W. If no senior answers, the
+  channel's timeout policy applies, with the escalation recorded (D6(c) to (f)).
+- **Q3, payments stay held until the database returns.** ADR 0064 is amended, and D-18 is breached
+  for the outage's duration (H2).
+
+**Limitations:**
+- **No measurement of PostgreSQL outage duration, or of the sink's catch-up, exists.** The length
+  of a Q3 hold, and therefore the size of D-18's breach, cannot be stated from evidence.
+- **W (15 min) is ASSUMED.** Escalated MEDIUM payments are held up to W. D-10 calls for a capacity
+  model of analysts and alerts (`docs/ml/capacity_model.md`). It does not exist yet, so nothing
+  measures whether seniors can answer within W.
 
 ## 10. Review 1's findings
 
@@ -435,3 +532,28 @@ brackets: 6 → N1, N9; 8 → N8; 9 → N5; 11 → N2; 14 → N7; 15 → N1; 16 
 | N10 override unblock; ANOMALY; reconciler starvation | D4(c) writes `unblock_events`; Q1 states the ANOMALY asymmetry; the reconciler's re-selection and starvation are M6's, filed as PB-156 |
 | N11 undo retry, timeouts, undo replay | §2's timeouts; D2(b) reschedules on replay; §9 states the retry cost |
 | N12 properties and text | P1, P3, P7, P8 and P12 reworded; P16 and P17 added; the V80 backfill; §8 completed; the §-numbers fixed; V71 means `DatabaseSecurityTest`'s list; T2 at READ COMMITTED |
+
+## 12. Review 3's findings: the MAJORs answered here, the MINORs carried
+
+| Finding | Answer in draft 4 |
+|---|---|
+| MAJOR 1: a timeout committing before its alert entry existed | H2 requires the sequence-1 row (written with the entry), and rolls back and reschedules otherwise; T2's Redis exception is withdrawn; the sink's closed-entry backstop |
+| MAJOR 2: A3 false, an incomplete backfill, the reconciler starved | A3 is a stop-and-drain cutover; the backfill writes recording rows; the reconciler also matches `decision_states` rows by CUSTOMER_VERIFICATION |
+| MAJOR 3: the override's unblock write fails, and the worker stalls | D4(c) writes it only with an auto-block, `ON CONFLICT DO NOTHING`; D4(e′) records permanent failures as FAILED and moves on |
+
+**Carried unchanged to the implementation's review,** under the owner's limit on draft 4:
+- **m4.** The timeout claim and the committer reverse §2's lock order. The runner retries the
+  deadlock, but §2's "never reverses" is false as written.
+- **m5.** Is an override's label recorded when its transition is SKIPPED?
+- **m6.** The feature store keeps the label that arrives last, so "receivers ignore repeated event
+  ids" is false for it. `availableAt` is missing from the stored body.
+- **m7.** A timeout's behaviour when sequence 1 is not visible. **Answered by MAJOR 1's fix** (H2).
+- **m8.** The policy's sources, and the `timeout_policy` column, are added by the configuration
+  contract's §3.4, not by this one's §3.
+- **m9.** `VerificationService` is missing from §8. The key is `verification_id`. The customer's
+  "No" label has no recorder of last resort.
+- **m10.** D5(b)'s overridable kinds go beyond the API's wording.
+- **m11.** The poller's lease during an outage, and skipping claims while the PostgreSQL breaker is
+  open.
+- **m12.** The 40P01 retry is not in §8. D1(b) cites (g) where it means (f). V80 drops V4's
+  triggers. The V62 and V64 listers. Six missing properties.

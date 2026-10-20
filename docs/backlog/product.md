@@ -23,7 +23,7 @@ taken twice. Claims made on branches not yet merged, as of 2026-10-17:
 | PB-76 | M4 | `M4_updates.md` on `m4/generalisation` | training rows near the corpus's start see truncated history (was a second `PB-69`) |
 | PB-77 to PB-101 | M6 | `M6_updates.md`, "Numbering reserved by this branch" | amendment 1's known gaps and the 22 section-8 rows proved only in part |
 | PB-102 to PB-130 | M7 | `M7_updates.md`, "Numbering reserved by this branch" | the merge round's unowned items and M7's rows proved only in part (PB-102 to PB-124 used) |
-| PB-151 to PB-170 | M8B | `M8B_updates.md`, "Numbering reserved by this branch" | the analyst API's follow-ups (PB-151 to PB-157 used); M8B also holds ADR 0110–0119 and Flyway V80–V89 |
+| PB-151 to PB-170 | M8B | `M8B_updates.md`, "Numbering reserved by this branch" | the analyst API's follow-ups (PB-151 to PB-158 used); M8B also holds ADR 0110–0119 and Flyway V80–V89 |
 
 ---
 
@@ -1508,6 +1508,11 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 - **Source:** M8B, ADR 0110 point 3 and review 2 of P1's contract changes, 2026-10-20 · **Priority:** medium · **Due:** owner
 - **Problem:** FR-04-03 wants a masked account on every card; nothing can supply one without reading the vault, which ADR 0069 limits to one SMS send at a time. Until decided, `masked_account` is always null and FR-04-03 is not met.
 - **Acceptance:** the owner's choice among ADR 0110's routes; for route (a), an ADR 0069 amendment, a non-secret suffix stored at enrolment, a port returning only it, and a test that the analyst API never reads a contact.
+
+### PB-158 · `ResilienceApiTest.theVerificationPageIsSmallScriptFreeAndLiftsTheBlock` times out intermittently
+- **Source:** M8B, CI run 39363427853 on `b7862af`, 2026-10-20 · **Priority:** low · **Due:** M6
+- **Problem:** attempt 1 of the java job failed with `ConditionTimeoutException` at `ResilienceApiTest.java:376` (the block not lifted within the 10 s Awaitility bound); attempt 2 of the same commit passed unchanged. The commit touched no Java runtime code and none of the verification page's operations, so the failure is the test's timing, not a change. Recorded so the next person who sees it does not re-investigate.
+- **Acceptance:** the wait is made deterministic (or its bound justified from the drain and reconciler periods it depends on), and the test passes repeatedly under CI load.
 
 ### PB-76 · Training rows near the corpus's start see truncated history; test rows do not
 - **Source:** PB-67's laptop cache, 2026-09-22 · **Priority:** high · **Due:** before the paper's

@@ -720,7 +720,13 @@ requirements:
   verification: test
   implementation: []
   evidence: []
-  deviations: []
+  deviations:
+  - docs/adr/0110-p1-contract-changes-for-the-analyst-reads.md
+  notes: 'M8B (2026-10-20, owner decision on ADR 0110 point 3): FraudShield holds no account-holder
+    names, so the card shows the masked account number (***4821) in place of a masked name, a recorded
+    deviation. Until the PII-vault amendment (PB-157) exists, the API serves masked_account as null, so
+    one of the eight elements is missing on every card: this row is incomplete and must not read DONE
+    until PB-157 lands and the card is exercised against the real value.'
 - id: FR-04-04
   section: 3.4 FR-04 Analyst dashboard
   title: One-click CONFIRM FRAUD or MARK LEGITIMATE with mandatory comment field (min 10 characters);

@@ -1,17 +1,33 @@
 # Risk configuration: the propagation contract
 
-Status: **draft 3, for independent review.**
+Status: **approved by the owner on 2026-10-20, as split.** Code is written against this document.
+
+**The owner's decision.** Draft 3 was the third draft found unsound, and the owner's reading was
+that "three unsound drafts means the scope is wrong, not the drafting". The parts review 3
+confirmed sound stand as this contract:
+- version-ordered snapshots;
+- the version probe;
+- the per-kind lock;
+- the 24-hour revert.
+
+The breaker monitor and its leadership question (draft 3's C8) became a contract of their own,
+reviewed on its own: `docs/architecture/breaker-monitor-contract.md`. Review 3's MAJOR on the
+rule-set triggers is fixed here as the one-line ordering correction the owner described: the lock
+is taken before the row write (§3.3).
+
+Since review 3, this contract has changed in only three ways:
+- §3.3's lock order;
+- C8 moved out;
+- C9's fallback corrected, because review 3's m3 showed it described a column that does not exist.
+
+Review 3's other MINORs (m5 to m9) are carried to the implementation's review, listed in §9.
 
 **Review history.**
 - Review 1 found draft 1 UNSOUND (4 MAJOR, 8 MINOR): `docs/reviews/M8B/config-propagation-contract-review-1.md`.
 - Review 2 found draft 2 UNSOUND (3 MAJOR, 11 MINOR): `docs/reviews/M8B/config-propagation-contract-review-2.md`.
   It confirmed that review 1's two ordering MAJORs are resolved.
+- Review 3 found draft 3 UNSOUND (2 MAJOR, 9 MINOR): `docs/reviews/M8B/config-propagation-contract-review-3.md`.
 - §8 maps every finding of review 2 to its answer.
-
-**If draft 3 is found unsound, the author stops and takes the design to the owner** rather than
-writing a fourth draft. That was the owner's rule for M7's cache contract.
-
-Code is written against this document, not the other way round.
 
 **Scope.** This contract governs three things:
 - how an approved threshold or circuit-breaker change (P4) and a rule change (P5) reach every
@@ -75,7 +91,6 @@ It does not govern who may propose, approve or reject. That is ADR 0014 §3, imp
 | **version of a part** | `risk_threshold_versions.version`, `mcc_circuit_breaker_settings_versions.version`, or the rule-set version (§3.3) |
 | **visible** | committed before the reading transaction's snapshot |
 | **the lock of a kind** | `pg_advisory_xact_lock(('risk_config', institution, kind))`, kind ∈ {CHANNEL_THRESHOLDS, MCC_CIRCUIT_BREAKER, RULES}. Transaction-scoped. **A transaction takes at most one such lock.** |
-| **the leader** | the instance holding M6's 2 s Redis lease (`acquireLeadership`), already used by the hold poller |
 
 - **A1.** Every transaction in this contract runs on the primary.
 - **A2. No committed transaction is lost.** Replication is synchronous, and the database is never
@@ -113,9 +128,19 @@ It does not govern who may propose, approve or reject. That is ADR 0014 §3, imp
 
    **The database appends it, not the application.** Triggers do the appending: AFTER INSERT on
    `alert_rule_versions`, and AFTER INSERT or UPDATE OF `state`, `current_version` on `alert_rules`.
-   Each trigger takes the lock of RULES, then appends `coalesce(max, 0) + 1`. So no write can change
-   the rule set without raising the version, and versions are allocated in commit order. The lock
-   is released after the commit becomes visible, so the next writer sees it.
+   Each trigger appends `coalesce(max, 0) + 1`. So no write can change the rule set without raising
+   the version.
+   - **The lock comes before the row write.** Every rule write (`createRule`, `createRuleVersion`,
+     `setRuleState`) runs in READ COMMITTED through the retrying runner (C6). It takes the lock of
+     RULES as its first statement, before it touches any rule row.
+   - **What that guarantees:**
+     - two rule writes never hold row locks in opposite orders, so they cannot deadlock;
+     - the version a write reads, and the `max` its trigger reads, are read after the lock;
+     - versions are therefore allocated in commit order.
+   - **The trigger as a backstop.** The trigger takes the same lock again, re-entrantly. A writer
+     that forgot it still allocates correctly, although it can then deadlock, and the runner
+     retries.
+   - The lock is released after the commit becomes visible, so the next writer sees it.
    - V81 seeds version 1 for every institution that already has rules.
    - The probe returns `coalesce(max, 0)`.
 4. **`decision_states` gains `timeout_policy text`.**
@@ -193,7 +218,7 @@ institution's map entry (`ConcurrentHashMap.compute`).
 - **One read per decision.** `ConfigurationPort` returns the snapshot object, and `DecisionService`
   reads it once.
 - **Breaker state is outside the snapshot.** Decisions read the breaker *state* (`isOpen`), not
-  breaker settings. A settings change reaches decisions through C8.
+  breaker settings. A settings change reaches decisions through the breaker-monitor contract.
 - **What is recorded today.** The decision records the thresholds version on
   `fs.transactions.scored`.
 - **Not done here.** Recording the rule-set version and a hash of the compiled rule set needs a
@@ -253,30 +278,20 @@ institution's map entry (`ConcurrentHashMap.compute`).
   - A rule that does not compile is refused at write (422). A stored rule a later compiler rejects
     is skipped at load and counted.
 
-**C8. The circuit-breaker monitor runs on the leader only.**
-- **Who writes.** Only the instance holding the lease evaluates and writes breaker state. Other
-  instances refresh their local `isOpen` copy from Redis, reading every R_monitor = 5 s, and never
-  write. Two instances can overlap only across a lease expiry. The existing compare-and-set settles
-  that overlap.
-- **State records its settings version.** The breaker state in Redis records the settings version
-  of the evaluation that last changed it.
-- **Re-evaluation under newer settings.** When the leader holds a newer settings version than a
-  breaker's recorded one, it re-decides that breaker from its stored history under the new
-  settings. It keeps `opened_at` and `last_breach_at`, and reopens or closes as the new settings
-  require, recording an event. So a transition made under old settings lasts at most until the
-  leader's first evaluation after it installs the new version.
-- **One institution's failure is isolated.** Each institution is evaluated separately, and one that
-  cannot load its snapshot is skipped and counted.
-- **The breaker bound.** A settings change reaches decisions by `t + R + 2C + 2·R_monitor`, plus one
-  evaluation: about 16 s in the usual case, within 60 s on C4's condition.
+**C8. The circuit-breaker monitor.** It moved out of this contract, to
+`docs/architecture/breaker-monitor-contract.md`. This contract supplies the breaker settings and
+their versions through the snapshot (C2, C3). That contract governs:
+- who evaluates and writes breaker state;
+- how a settings change reaches that state;
+- how decisions read that state.
 
 **C9. Holds keep the policy they were held under.**
 - **Where the policy is kept.** The Redis entry carries the policy of the decision's snapshot.
   `decision_states.timeout_policy` stores it too (§3.4).
-- **The overdue sweep** uses the stored policy. When it is NULL, the sweep uses the policy of the
-  decision's own `thresholds_version` if the row records one. Only otherwise does it use today's
-  computation from `decided_at`.
-- **Residual, stated in §6.** That last fallback applies only to holds written by the older release:
+- **The overdue sweep** uses the stored policy. When it is NULL, it uses today's computation from
+  `decided_at`. No table records the decision's `thresholds_version`, so that version cannot be
+  used (review 3, m3).
+- **Residual, stated in §6.** The fallback applies only to holds written by the older release:
   during a rolling deploy, or drained from a spool written before the upgrade.
 
 **C10. Outside this contract.**
@@ -298,7 +313,6 @@ institution's map entry (`ConcurrentHashMap.compute`).
 | P8 | A confirmation or rejection after `confirm_by` gets 409, and the change is REVERTED with cause NOT_CONFIRMED_IN_TIME and `reverted_at ≥ confirm_by` | C6, §3.6 |
 | P9 | Every institution, new ones included, has threshold and breaker version 1. Every threshold version has six channels, including one inserted with none | §3.1, §3.2 |
 | P10 | Every write to `alert_rules` or `alert_rule_versions` raises the rule-set version by exactly one, and it never decreases | §3.3 |
-| P11 | Only the leader writes breaker state. A transition made under older settings is re-decided at the leader's first evaluation after it installs the newer ones | C8 |
 | P12 | A hold's timeout policy is the decision's, through Redis and through the sweep, for every row the new release writes | C9 |
 | P13 | A failed or empty probe evicts nothing. The freshness alert stays quiet for unchanged institutions and fires when probes fail | C4 |
 | P14 | An incomparable snapshot is discarded and counted | C3 |
@@ -315,8 +329,6 @@ institution's map entry (`ConcurrentHashMap.compute`).
   - instances on different compilers can skip different stored rules (PB-151);
   - holds the old release writes fall back to a recomputed policy (C9).
 - **A2 is required.** A restore or lossy failover requires restarting every instance.
-- **A breaker transition made under old settings can stand** until the leader's next evaluation
-  after it installs the new ones.
 
 ## 7. Questions for the owner
 
@@ -329,7 +341,7 @@ institution's map entry (`ConcurrentHashMap.compute`).
 
 | Finding | Answer |
 |---|---|
-| N1 MAJOR: a stale instance closes a breaker | C8: leader-only writes; re-decision under newer settings; P11 |
+| N1 MAJOR: a stale instance closes a breaker | Moved, with C8, to the breaker-monitor contract (owner, 2026-10-20) |
 | N2 MAJOR: two kind locks, deadlock, 40P01 | C6: one kind lock per transaction, a fixed lister order, audit last, 40P01 retried; P7 |
 | N3 MAJOR: a lost commit and a reused version | A2 and the runbook restart; §6 |
 | N4: the age alert fires for quiet institutions | C4: "confirmed" by probe; P13 |
@@ -343,3 +355,18 @@ institution's map entry (`ConcurrentHashMap.compute`).
 | N12: the seeding trigger | §3.1: owner rights stated, the fixture changed; §3.5 grants and V71 |
 | N13: the lock is not the first statement | C6 (0): a pre-read of the immutable kind |
 | N14: P3 overclaims | P3 restated |
+
+## 9. Review 3's MINORs carried to the implementation's review
+
+- **m5.** "Lossy failover" cannot be detected. The runbook restarts every instance after every
+  failover or restore, not only lossy ones.
+- **m6.** A Spring transaction timeout does not bound connection acquire, commit or a hung socket.
+  The load deadline must be enforced by a future with cancellation, and P4's test must cover a hung
+  load.
+- **m7.** P6's revert bound must add the sweep's own length, its order, lock waits and retries.
+- **m8.** A revert version's `effective_at` must be `clock_timestamp()`, not the transaction start.
+- **m9.** C6's lock list must name the foreign-key share locks on `users` and `institutions`. "Audit
+  last" must hold for a fold's two audit events.
+
+m1 and m2 concern the breaker and moved with it. m3 is corrected above. m4 (grants on
+`alert_rule_set_versions`) is part of §3's grant list: SELECT and INSERT to `fs_app`.

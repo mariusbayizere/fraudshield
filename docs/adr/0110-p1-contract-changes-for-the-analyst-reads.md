@@ -1,12 +1,13 @@
 # 0110: P1's contract changes for the analyst reads
 
-- **Status:** Proposed (M8B, 2026-10-20). Review 1 (`docs/reviews/M8B/p1-contract-review-1.md`)
-  gave APPROVE_WITH_CHANGES with 3 MAJOR findings, and review 2 (`p1-contract-review-2.md`) gave
-  APPROVE_WITH_CHANGES with MINOR findings only. This revision answers both. Point 3 and PB-154
-  need the owner's decision.
+- **Status:** Accepted (owner, 2026-10-20). Point 3 takes route (a), the masked account number,
+  with the PII-vault amendment PB-157; until it exists `masked_account` is always null and FR-04-03
+  stays incomplete (its row says so). PB-154 is to be fixed, not kept as a backlog item. Reviews:
+  `docs/reviews/M8B/p1-contract-review-1.md` and `-review-2.md` (both APPROVE_WITH_CHANGES; every
+  MAJOR answered).
 - **Date:** 2026-10-20
-- **Decided by:** the owner decided points 1 and 2's ownership (`docs/parallel/M8B_scope.md` §7).
-  The author proposes the content; the owner decides point 3 and PB-154.
+- **Decided by:** the owner: points 1 and 2's ownership (`docs/parallel/M8B_scope.md` §7), point 3
+  (route (a)) and PB-154 (fix it), on 2026-10-20. The author proposed the content.
 - **Requirements affected:** D-27, FR-04-02, FR-04-03, FR-04-06, FR-04-07, FR-04-08, FR-04-09,
   NFR-SEC-03, D-10
 - **ADRs referenced:** 0014, 0065, 0069, 0081
@@ -40,8 +41,8 @@ has to answer:
    - The full lifecycle is in `docs/architecture/analyst-decision-commit-contract.md` §6. That
      contract is still under review, and point 2 stands or falls with it.
    - A search that should find decided alerts must pass `outcome` with every status it wants.
-3. **What the card shows for the account: the owner decides.** Until then the field is
-   `masked_account`, and it is always null.
+3. **The card shows the masked account number: route (a), decided by the owner on 2026-10-20.** Until
+   the PII-vault amendment (PB-157) exists, the field `masked_account` is always null.
    - **Nothing can produce a masked holder name.** The vault holds the phone, the locale and the
      masked account number (ADR 0069 point 4). The ingest contract carries no holder name, and no
      table stores one.
@@ -56,7 +57,7 @@ has to answer:
      | **(b)** Keep `masked_account_name`, nullable, always null | nothing | **not met**: one of the eight elements is missing | met | none |
      | **(c)** Show the account token | `tok_…` | not met in spirit: a token is no name | met literally | none; `AlertDetail` already carries `account_token` |
 
-   - **Recommendation: (a), with the suffix stored at enrolment.** It shows the analyst what the
+   - **Decided: (a), with the suffix stored at enrolment.** It shows the analyst what the
      customer sees, and it decrypts nothing at read time.
    - **What P1 builds meanwhile.** P1 serves null and builds no vault access. While the field is
      null, FR-04-03's "all 8 elements on every card" cannot be met, and its row says so.
@@ -79,7 +80,7 @@ has to answer:
    (item 6). The scorer takes the country implied by the transaction's currency, and uses that
    country pack's UTC offset (`serving/features.py:115, 240`). Draft 1 claimed the institution's
    country, which the code contradicts (review 1, finding 5).
-   - **A related skew, filed as PB-154 for the owner:** V67's feature-store fallback uses the
+   - **A related skew, PB-154, which the owner directed to be fixed, not kept as a backlog item:** V67's feature-store fallback uses the
      institution's country. A KES transaction at a Rwandan institution is therefore scored at +3 h
      online, and at +2 h by the fallback.
    - **The window** is the 90 days before the compared transaction.
