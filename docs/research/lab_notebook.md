@@ -3149,3 +3149,69 @@ depending on the clock rather than the code. The helper's unit test shows the di
 unique, and seven copies of the same idiom means the next one fails for the same reason."* (The
 count was nine institution-code prefixes in ten places, thirteen places in all; "seven" came from
 my report to the owner, which miscounted.)
+
+*The entries below were written on `m9/infra` on 2026-10-20 and reached `main` with its rebase
+of 2026-10-21; the notebook is append-only, so they follow later dates.*
+
+### 2026-10-20 · A check that lives on one branch protects nothing: three CRITICAL Tomcat findings
+
+**What happened.** The first run of M9's `security` workflow against `main`'s dependencies (CI run
+39373878840, on `m9/infra` `e4b589b`, rebased onto `main` `a7f0528`) failed its Trivy dependency
+gate. Findings with a fix:
+- `tomcat-embed-core` 11.0.24: three CRITICAL, authentication and security-constraint bypasses
+  (CVE-2026-65182, CVE-2026-65905, CVE-2026-68525), fixed in 11.0.25;
+- Jackson 3.1.5: five HIGH in `jackson-core` and `jackson-databind`, fixed in 3.1.7;
+- `lz4-java` 1.10.1: one HIGH (CVE-2026-106451), fixed in 1.11.4.
+
+All three versions come from Spring Boot 4.1.1's BOM, or from Kafka clients 4.2.1 for lz4-java.
+
+**How long, from the record.** The publication dates come from the Trivy JSON of CI run 39383785944
+(`PublishedDate`). The rest comes from git and the GitHub run history.
+- The Tomcat CVEs were published on 2026-08-25. Jackson's HIGH findings were published from
+  2026-09-11 to 2026-09-23, and lz4-java's on 2026-10-06.
+- Tomcat entered the backend with the API, in commits dated 2026-09-22 on the M6 and M7 branches
+  (`246412e`, `c280402`).
+- It reached `main` on 2026-09-24: `5c3f6b2` contains `246412e` and `spring-boot-starter-webmvc`,
+  and was pushed to `main` that day (ci run 35970682153). Every later `main` is on a Tomcat tree.
+- So `main` has carried the three CRITICAL findings **for about four weeks** (2026-09-24 to
+  2026-10-20), as the owner said. The branches building the API carried them from 2026-09-22.
+- The same Trivy job passed on `m9/infra` on 2026-09-22 and 2026-09-23 because that branch's
+  base had no Tomcat. Two earlier runs that day (`8d94d9c`, `e408828`) failed the dependency job
+  on Maven Central rate limits, recorded in `M9_updates.md` section 2, not on findings.
+- No scan ran on any tree containing Tomcat until 2026-10-20.
+
+(Correction, 2026-10-20: a first draft of this entry said "three days on `main`". It took the
+`m6-complete` tag date, 2026-10-17, as the date the code reached `main`. A tag is not a push; the
+run history shows the code on `main` from 2026-09-24. Found by the independent review of this
+entry.)
+
+**Why.** The vulnerability scan is in `.github/workflows/security.yml`, added by M9 on 2026-09-22.
+M9's branch was not merged, so `main` and every other milestone branch ran `ci`, `stack`,
+`devcontainer` and `dataset`, none of which scans dependencies. Every green tick on M6 and M7 was
+accurate about what it checked. Nothing checked this. **A check that exists only on one milestone's
+branch protects nothing until it merges.** The same applies to anything else M9 holds back: the
+configuration scan, the SBOM and signing, actionlint over all workflows.
+
+A second gap remains after a merge. The workflow's nightly `schedule` trigger registers only from
+the default branch, which is still `m0/bootstrap` (GOV-9). On `main` the scan would run on push
+and pull request, but a CVE published between pushes would not be found until the next push.
+
+**What was done (owner, 2026-10-20: "three CRITICAL authentication bypasses in a fraud system do
+not wait for a milestone handoff").** `backend/pom.xml` on `m9/infra` overrides `tomcat.version`
+11.0.25 and `jackson-bom.version` 3.1.7, and pins `at.yawk.lz4:lz4-java` 1.11.4 in
+`dependencyManagement`, each with a comment to drop it once Boot or Kafka manage the fixed version.
+
+**Proposal (for the owner).** Move the security workflow to `main` ahead of the rest of M9, on a
+branch from `main` that lands green. It needs: - `.github/workflows/security.yml`; - the pinned
+launchers it runs, `infrastructure/bin/trivy` and `infrastructure/bin/kustomize`, and
+`infrastructure/bin/lib/pinned.sh`, which they source; - this dependency bump; - for the
+configuration-scan job, which renders `infrastructure/k8s/overlays/*`, either the Kubernetes
+manifests (`infrastructure/k8s/`, with the trees the base and overlays pull in:
+`infrastructure/prometheus`, `alertmanager`, `grafana` and `argo-rollouts`), or the job guarded
+until M9 merges.
+
+That job's `trivy config` over `main`'s own Dockerfiles, compose file and workflows has never run on
+`main`'s tree, so its result there is unknown. The ZAP job skips itself, since `main`'s compose file
+has no API service. It gets its own review and CI at job level. Then every milestone branch rebased
+on `main` is scanned on every push. The default branch (GOV-9) is the owner's setting to change, so
+that the nightly scan also runs.

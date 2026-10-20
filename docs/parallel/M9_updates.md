@@ -168,6 +168,22 @@ The owner's words, then what was done on this branch. Sizes were reported to the
    harness's management port is 0. The API exports `# TYPE fs_spool_depth_bytes gauge`, and no
    series named `fs_spool_depth`.
 
+## 3d. Owner decisions, 2026-10-20 (third)
+
+1. **Dependency vulnerabilities.** "M9 bumps them now, on this branch. Do not file it for M6 —
+   three CRITICAL authentication bypasses in a fraud system do not wait for a milestone handoff.
+   Bump Tomcat to 11.0.25, Jackson to 3.1.7 and lz4-java to 1.11.4, get CI green at job level, and
+   get the change independently reviewed since it touches every module's dependency tree."
+   Done in `backend/pom.xml`, with an amendment to ADR 0007. The notebook entry of 2026-10-20 has
+   the record, including the exposure window: about four weeks on `main` (since 2026-09-24) and on
+   the branches building the API (since 2026-09-22). It also proposes moving the security workflow
+   to `main` ahead of the rest of M9.
+2. **ADR 0093: accepted, all four points.** The E.10 amendment and the catalogue change are
+   PB-178, not yet made.
+3. **The 7 alerts, 15 panels and the canary check that read nothing.** "that is the correct
+   status. Leave them not functional rather than quietly adjusting them to something that
+   resolves."
+
 ### Identifiers claimed by this branch
 
 | Id | Subject | State |
@@ -175,7 +191,7 @@ The owner's words, then what was done on this branch. Sizes were reported to the
 | ADR 0090 | API spool on a shared volume with orphan replay | written on this branch |
 | ADR 0091 | live AUC and label-coverage metrics | written on this branch |
 | ADR 0092 | the storage-class fsync fallback for ADR 0090 (decision 8) | claimed, not written |
-| ADR 0093 | the metrics the code emits that Part E.10 does not list | written, Proposed |
+| ADR 0093 | the metrics the code emits that Part E.10 does not list | Accepted 2026-10-20 |
 | PB-171 to PB-190 | infrastructure follow-ups | PB-171 to PB-179 used |
 
 ## 4. Deviations to record in the traceability rows

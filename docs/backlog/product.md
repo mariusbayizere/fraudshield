@@ -1561,7 +1561,7 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 ### PB-174 · Part E.10 metrics the API does not emit, or emits under another name
 - **Source:** owner decision, 2026-10-20 (`docs/parallel/M9_updates.md` 3c, on `m9/infra`) · **Priority:** high · **Due:** M6
 - **Problem:** the API emits `fs_decisions_total`, `fs_decision_latency_seconds` and `fs_alert_timeout_release_total`. `fs_ingest_requests_total{channel,status}` is missing, so the canary's error-rate check is empty and fails every rollout, and `FraudShieldTransactionRateDrop` cannot fire; `fs_kafka_consumer_lag{topic,group}` is missing for the API's consumers; `fs_db_pool_in_use` is missing (Boot exports `hikaricp_connections_active`); `fs_decision_latency_seconds` has no 0.08 bucket bound, so the p99 alert and canary interpolate; `fs_spool_depth` counts bytes, not records.
-- **Acceptance:** each metric emitted with E.10's name and labels, or E.10 amended (ADR 0093) where the code's name is kept; a scrape test over `/actuator/prometheus` asserts every exported name, label and the `le="0.04"` and `le="0.08"` bounds. `fs_ingest_requests_total` first: it unblocks the canary. The spool depth's unit follows PB-171.
+- **Acceptance:** each metric emitted with E.10's name and labels, or E.10 amended (ADR 0093) where the code's name is kept; a scrape test over `/actuator/prometheus` asserts every exported name, label and the `le="0.04"` and `le="0.08"` bounds. `fs_ingest_requests_total` first: it unblocks the canary. ADR 0093 (accepted 2026-10-20) settles two of these by amending E.10 rather than the code: the spool depth stays in bytes (revisited with PB-171), and the DB pool is read from `hikaricp_connections_active`.
 
 ### PB-175 · Scoring metrics in the scorer
 - **Source:** owner decision, 2026-10-20 (`docs/parallel/M9_updates.md` 3c, on `m9/infra`) · **Priority:** medium · **Due:** M5
@@ -1579,9 +1579,9 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 - **Acceptance:** both emitted, with the tier values from `AlertTier`, tested by a scrape.
 
 ### PB-178 · Part E.10 does not list 32 metrics the code emits
-- **Source:** owner decision, 2026-10-20 (`docs/parallel/M9_updates.md` 3c, on `m9/infra`) · **Priority:** medium · **Due:** M9, on the owner's decision of ADR 0093
+- **Source:** owner decision, 2026-10-20 (`docs/parallel/M9_updates.md` 3c, on `m9/infra`) · **Priority:** medium · **Due:** M9 (ADR 0093 accepted 2026-10-20)
 - **Problem:** the API, the notification consumers, the feature store, the scorer's hot swap and shadow scoring emit metrics E.10 does not list, so `metric_catalogue.py` rejects any rule or panel that uses them; `fs_redis_hit_ratio` has no definition of what it measures.
-- **Acceptance:** the owner decides ADR 0093; E.10 is amended accordingly; `metric_catalogue.py` handles the accepted suffixes, with tests.
+- **Acceptance:** ADR 0093 was accepted on 2026-10-20, all four points. E.10 is amended accordingly: the 32 names listed; `fs_spool_depth` kept in bytes as `fs_spool_depth_bytes`; `fs_db_pool_in_use` replaced by `hikaricp_connections_active{pool}`; `fs_redis_hit_ratio` dropped; labels without a value contract (`state`, `reason`, `entity`) stated as free-form. `metric_catalogue.py` handles the accepted suffixes and free-form labels, with tests.
 
 ### PB-179 · The scorer's manifest cannot start the scorer
 - **Source:** M9's staleness review, 2026-10-20 (`docs/parallel/M9_updates.md` 3c item 2, on `m9/infra`) · **Priority:** medium · **Due:** M9

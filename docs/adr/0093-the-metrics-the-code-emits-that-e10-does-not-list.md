@@ -1,8 +1,11 @@
 # 0093 — The metrics the code emits that Part E.10 does not list
 
-- **Status:** Proposed (for the owner's decision)
-- **Decided by:** not decided. The owner asked for this record on 2026-10-20
-  (`docs/parallel/M9_updates.md` 3c, item 4; backlog PB-178); the M9 agent wrote it.
+- **Status:** Accepted
+- **Decided by:** repository owner, 2026-10-20: "ADR 0093 accepted, all four points. Dropping
+  fs_redis_hit_ratio until someone can say what it measures is right — an unexplained metric on a
+  dashboard is worse than a blank panel, because someone will act on it." The owner asked for this
+  record the same day (`docs/parallel/M9_updates.md` 3c, item 4; backlog PB-178); the M9 agent wrote
+  it.
 - **Date:** 2026-10-20
 - **Requirements affected:** OPS-OBS-01, OPS-OBS-03, OPS-OBS-05
 - **Backlog:** PB-174, PB-175, PB-176, PB-177, PB-178
@@ -111,7 +114,7 @@ For the three mismatched entries:
 - **`fs_redis_hit_ratio`**: (a) define it (which cache, ratio of what to what) and have its owner
   emit it; or (b) drop it from E.10 and remove the dashboard panel's half that reads it.
 
-## Recommendation (the M9 agent's; the owner decides)
+## Recommendation (the M9 agent's; accepted by the owner on 2026-10-20, all four points)
 
 - **Option 1**, with the exported names. The catalogue check exists to stop a metric's rename
   emptying an alert silently, and it can only do that for names it lists; option 2 leaves 32
@@ -129,11 +132,11 @@ For the three mismatched entries:
 
 ## Consequences
 
-If accepted:
+Accepted, so, once PB-178 is done:
 - E.10 is amended in `docs/prompts/FraudShield_Master_Build_Prompt.md`, citing this ADR, as ADR
   0091 did.
 - `metric_catalogue.py` gains the suffix handling and the free-form labels, with tests.
 - M9 can then write the alert for M5's missing-producer counter and a spool-lag alert.
 
-Until it is decided, nothing changes. The alerts and panels that read metrics nobody emits are
-marked not functional in M9's traceability rows (PB-174 to PB-177).
+Until the amendment is made (PB-178), nothing else changes. The alerts and panels that read metrics
+nobody emits are marked not functional in M9's traceability rows (PB-174 to PB-177).
