@@ -13,7 +13,7 @@ by an amount not measured, against
 \nFvSeedGainFixed{} from \nTrainUsed{} rows to the whole period on one fixed corpus. That holds at the
 flag threshold only: of the other metrics fixed in advance, recall at the false-positive budget moved
 by similar amounts under either change and AUC moved more with volume, and no interval was computed for
-these differences. Most of what a reader would like to learn
+these differences; the metrics were fixed in advance, though not blind to the test period. Most of what a reader would like to learn
 from the benchmark it cannot teach. On the diagnostic model, leave-one-group-out ablations measure
 redundancy, because \nGroupsAboveCeiling{} disjoint groups each exceed the single-feature ceiling
 alone, and leave-one-country-out and the novel variant held out in time are null, which we infer follows from fraud
@@ -27,7 +27,7 @@ recall, \nRevRecall{}, is below by point estimate (its interval reaches above it
 prediction said would mean burst structure and
 counterparty novelty carry nearly all the detection power, a reading the variant's other differences
 keep us from supporting as stated. Neither production model catches it at the flag
-threshold. Within it the ensemble trained on \nTrainUsed{} rows (seed 1) catches \nGateRevNewBudgetCaught{} of the
+threshold. Within the variant, at the budget, the ensemble trained on \nTrainUsed{} rows (seed 1) catches \nGateRevNewBudgetCaught{} of the
 \nGateRevNewBudgetRows{} rows whose recipient the account had never paid and none of the
 \nGateRevKnownBudgetRows{} sent to a payee it had paid before, at the budget; the counts are small and
 the split is observational, so the cause is not isolated. What survives is a methodology, the record of how each of these limits

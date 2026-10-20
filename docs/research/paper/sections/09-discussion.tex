@@ -95,8 +95,8 @@ test rows, by the same model at the same thresholds; they differ in the corpus t
 computed from. The gate's come from a \nGateCorpus{}-row corpus, the curve's from a
 \nLcCorpusSmall{}-row one, so the training rows differ, each training row's features are computed over
 a different amount of that account's past, and even the shared validation rows, which drive early
-stopping, carry different values in some features (PB-76, a backlog item on truncated history near the
-corpus's start; Appendix~\ref{app:identifiers}). At seed 1, recall at the flag threshold is
+stopping, carry different values in some features (PB-76, a backlog item on truncated history for training and
+validation rows near the corpus's start; Appendix~\ref{app:identifiers}). At seed 1, recall at the flag threshold is
 \nLcRecallA{} \nLcRecallciA{} for the curve's rows and \nGateRecallSix{} \nGateRecallSixci{} for the
 gate's, a difference of \nSelGapSeedOne{}, while the curve's points, spanning an
 \nLcVolumeFactor{}-fold change in volume, cover a range of \nLcSpanSeedOne{}. At seed 1 we infer,

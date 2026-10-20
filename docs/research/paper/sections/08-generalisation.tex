@@ -68,7 +68,7 @@ test's desired answer (ADR 0028).
 against the same legitimate rows at one threshold, the \nFPRBudget{} false-positive budget over all
 legitimate rows. The unseen variant is caught at \nNovelRecall{} \nNovelCI{} (\nNovelCaught{} of
 \nNovelRows{}), against \nBaseVarRecall{} \nBaseVarCI{} for the base scenarios (the generator's scenarios as generated,
-without a held-out variant) the model trained
+without the novel, adapted or reversal variant) the model trained
 on: a point estimate no lower than the familiar shape's, with overlapping intervals. Those \nNovelRows{} rows sit on only \nNovelAccounts{}
 accounts, so they are far from independent; an account-clustered bootstrap gives \nCluNovelci{},
 and at a recall this close to one neither it nor the Wilson interval describes the uncertainty well.
@@ -127,7 +127,7 @@ burst or counterparty-novelty structure (velocity, SIM swap and mule) keep their
 and that scenarios whose incidents can be a single row (agent, card-not-present and merchant) drop clearly: a drop of at least
 \nLoRangeSingleDrop{} with the held-out interval's upper bound below the production recall.
 Table~\ref{tab:lofto} reports each against its range. \textbf{The hypothesis is partly supported}, in the pre-specified rule's term.
-The burst scenarios keep their recall. Of agent, card-not-present and merchant fraud, only agent fraud drops
+Velocity, SIM-swap and mule fraud keep their recall. Of agent, card-not-present and merchant fraud, only agent fraud drops
 clearly. Card-not-present does not; merchant fraud's held-out recall is within its bound of
 \nLoRangeSingle{}, but its drop is smaller than \nLoRangeSingleDrop{}, so it does not drop clearly
 either; both are refuted as stated. PB-66's own ranges for the other scenarios fare no better.

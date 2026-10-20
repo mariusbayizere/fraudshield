@@ -12,9 +12,12 @@
 %                 audit_numbers.py and moved to \meas.
 %   \srcd{x}      A value fixed by a document, not a result: a specification threshold, target or
 %                 count of the specification's own items, or a prediction or range recorded as made
-%                 in advance (whether that order is established is stated in the text, not here).
-%                 Any other count or measurement quoted from a document is \meas. The class is not
-%                 checked by audit_numbers.py and both print the same.
+%                 in advance (whether that order is established is stated in the text, not here),
+%                 including each component of a rule fixed in advance, an assumed value a
+%                 pre-specification fixes (the alert budgets) and a document's own definition of a
+%                 term. Any other count or measurement quoted from a document is \meas, and so is a
+%                 constant read from the code or its configuration. The class is not checked by
+%                 audit_numbers.py and both print the same.
 %   \notyet{Mx}   A result a later milestone produces. Printed in italics as "not yet measured (Mx)".
 %
 % Data draws (seed 20260917 throughout):
@@ -152,7 +155,7 @@
 \newcommand{\nGateECE}{\meas{0.001}}
 \newcommand{\nGatePassed}{\meas{9}}        % gate metrics passing, of those measured at M4
 \newcommand{\nGateMeasured}{\meas{11}}      % gate metrics measured at M4 (ML-GATE-01 to 11)
-\newcommand{\nGateTotal}{\meas{13}}         % gate metrics in the specification (requirements.yaml)
+\newcommand{\nGateTotal}{\srcd{13}}         % gate metrics in the specification (requirements.yaml)
 \newcommand{\nGateFPRFlag}{\meas{0.0006}}   % FPR at the flag threshold 0.60
 \newcommand{\nGatePrecFPR}{\meas{0.471}}
 \newcommand{\nGatePrecCeiling}{\meas{0.494}}
@@ -700,10 +703,10 @@
 \newcommand{\nBaseBudDPrec}{\meas{0.056}}
 \newcommand{\nBaseBudDShare}{\meas{0.72}}
 \newcommand{\nBaseBudDRecall}{\meas{0.720}}
-\newcommand{\nBudKA}{\meas{10}}
-\newcommand{\nBudKB}{\meas{50}}
-\newcommand{\nBudKC}{\meas{100}}
-\newcommand{\nBudKD}{\meas{200}}
+\newcommand{\nBudKA}{\srcd{10}}
+\newcommand{\nBudKB}{\srcd{50}}
+\newcommand{\nBudKC}{\srcd{100}}
+\newcommand{\nBudKD}{\srcd{200}}
 \newcommand{\nMonOctRows}{\meas{5{,}599}}
 \newcommand{\nMonOctFrauds}{\meas{54}}
 \newcommand{\nMonOctAUC}{\meas{0.955}}
@@ -1051,7 +1054,7 @@
 \newcommand{\nRecTrue}{\meas{990}}  % derived
 \newcommand{\nRecMissed}{\meas{13}}  % derived
 \newcommand{\nPriorReads}{\meas{23}}\newcommand{\nPriorReadsFull}{\meas{11}}  % PB-66 pre-specification, amendment 0e
-\newcommand{\nPriorReadsFullRows}{\meas{100{,}000}}  % PB-66 pre-specification: what "in full" means
+\newcommand{\nPriorReadsFullRows}{\srcd{100{,}000}}  % PB-66 pre-specification: what "in full" means
 % Training-selection test (round2_selection at f29793c)
 \newcommand{\nSelAMedian}{\meas{30.2}}
 \newcommand{\nSelAUnder}{\meas{0.495}}
@@ -1140,3 +1143,19 @@
 \newcommand{\nOffsetRuns}{\meas{24}}
 \newcommand{\nOffsetMean}{\meas{0.5031}}
 \newcommand{\nOffsetCI}{\meas{[0.4992, 0.5070]}}
+% The best trivial rule (one threshold on amount_log1p) per ranking metric, and margins over it.
+\newcommand{\nTrivAuc}{\meas{0.659}}
+\newcommand{\nTrivRecall}{\meas{0.039}}
+\newcommand{\nTrivMM}{\meas{0.699}}
+\newcommand{\nTrivUSSD}{\meas{0.613}}
+\newcommand{\nTrivAgent}{\meas{0.707}}
+\newcommand{\nTrivAucMarginGate}{\meas{+0.311}}
+\newcommand{\nTrivAucMarginFv}{\meas{+0.317}}
+\newcommand{\nTrivRecallMarginGate}{\meas{+0.832}}
+\newcommand{\nTrivRecallMarginFv}{\meas{+0.813}}
+\newcommand{\nTrivMMMarginGate}{\meas{+0.253}}
+\newcommand{\nTrivMMMarginFv}{\meas{+0.270}}
+\newcommand{\nTrivUSSDMarginGate}{\meas{+0.339}}
+\newcommand{\nTrivUSSDMarginFv}{\meas{+0.347}}
+\newcommand{\nTrivAgentMarginGate}{\meas{+0.273}}
+\newcommand{\nTrivAgentMarginFv}{\meas{+0.278}}

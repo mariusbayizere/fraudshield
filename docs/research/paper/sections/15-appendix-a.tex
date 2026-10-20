@@ -52,11 +52,14 @@ search, which found earlier public East African fraud datasets (Section~\ref{sec
 E1 & Every fold, split, sample and target encoding groups by the feature's unit of history (by account for most features); out-of-fold encodings use only earlier rows. \\
 PB-43 & The cross-bloc and intercontinental corridor classes are unreachable on this dataset. \\
 PB-67 & The gate model trains on a subset of the training period; the learning curve over training volume (concluded). \\
-PB-76 & Training rows near the corpus's start see truncated history; test rows do not. \\
+PB-76 & Training and validation rows near the corpus's start see truncated history; test rows do not. \\
+PB-66 & The evaluation protocol items M4 did not build: the full-volume run, alert budgets, months, the cost curve, fairness and leave-one-fraud-type-out. \\
+PB-72 & Re-measuring the training--serving skew end to end, and requiring the served features to equal the trained ones (owner M10). \\
 PB-132 & The plain-language explanation templates the specification requires; not written. \\
 M2, M3, M4 & Milestones: the dataset generator; the features and feature store; the models, calibration and evaluation. \\
 M5, M6, M8 & Milestones: the scoring service; ingestion and the decision engine; the analyst console
 (not part of this release). \\
+M1, M7 & Milestones: the frozen contracts; staff identity, authorisation and audit. \\
 M10, M11 & Milestones: the verification campaign on dedicated hardware; the research artefacts including this paper. \\
 \bottomrule
 \end{longtable}

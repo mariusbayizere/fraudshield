@@ -35,7 +35,7 @@ In `sections/05-features.tex`.
 - `docs/research/paper/evidence/round2_single_feature_auc_d8083dbc.txt` at `f29793c`, evidence commit `72e7790`
   - command: `uv run --frozen fs-features auc /home/runner/work/_temp/bench1m --packs /home/runner/work/_temp/packs.json --corpus-rows 200000 --sample-rows 20000`
 
-## `tab:gate`: Ranking metrics of the calibrated ensemble at the gate's training volume and at full volume, with the best single feature (velocity_ratio_1h_vs_30d) on the same rows and the margin over it, as each gate file computes it from unrounded values, so a margin can differ in its last digit from the difference of the rounded values shown
+## `tab:gate`: Ranking metrics of the calibrated ensemble at the gate's training volume and at full volume, with the best single feature (velocity_ratio_1h_vs_30d) and the best trivial rule (one threshold on amount_log1p) on the same rows and the margins over each, as each gate file computes it from unrounded values, so a margin can differ in its last digit from the difference of the rounded values shown
 
 In `sections/07-evaluation.tex`.
 

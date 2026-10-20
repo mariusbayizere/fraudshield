@@ -68,7 +68,7 @@ diagnostic of the benchmark, not the production model, and its figures are label
         threshold \nBlockThreshold{}.
   \item \textbf{Uncertainty}: \nResamples{} stratified bootstrap resamples
         \cite{efron1979bootstrap} for gate metrics, Hanley--McNeil intervals \cite{hanley1982auc}
-        for AUCs of single features and baselines, Wilson intervals \cite{wilson1927interval} for
+        for AUCs of single features, Wilson intervals \cite{wilson1927interval} for
         recall on small variant counts, and the mean and standard deviation over \nSeeds{} refits.
         \textbf{All of these treat test rows as independent, and they are not}: fraud is staged as
         multi-row incidents on one account, and an account's rows share its history. We therefore

@@ -4,24 +4,24 @@ FraudShield-EAC, a seeded synthetic benchmark of East African digital payments (
 agent banking, card, online and bank transfer, across \nCountries{} countries) built to develop and
 evaluate a fraud detection system. The benchmark is easy in a specific way: on the test period a single
 engineered feature, a short-to-long-window velocity ratio, separates fraud from legitimate payments at
-an AUC of \nGateFloor{} on its own, so we report every gate ranking metric (the specification's
-acceptance metrics) as a margin over that feature rather than over chance.
+an AUC of \nGateFloor{} on its own, so we report the gate ranking metrics (AUC, recall at the false-positive budget and the per-channel AUCs) as margins over that feature rather than over chance.
 
 Trained on all \nFvTrainRows{} rows of the training period, a calibrated XGBoost and LightGBM ensemble
 reaches an AUC of \nFvAUC{}, a margin of \nFvMargin{} over the single feature. Its recall at the
 specified flag threshold, \nFvRecallSix{}, misses the specified target of \nTargetRecall{}, and
 training volume did not close that gap in any run we measured, from \nTrainUsed{} rows to the whole
 training period. At a fixed \nTrainUsed{} rows, changing only the corpus they were drawn from (the span
-of recent transactions their features are computed over) moved mean recall at the flag threshold
+of recent transactions their features are computed over, which also sets the months the rows come
+from) moved mean recall at the flag threshold
 across a range of \nSelMeanRange{} over \nSelDepthCount{} corpora, a range that seed noise widens by an
 amount not measured, against \nLcSeedGainAC{} for a \nLcVolumeFactorAC{}-fold volume step within one
-cache and \nFvSeedGainFixed{} from \nTrainUsed{} rows to the whole period on one fixed corpus. Of the
+cache and \nFvSeedGainFixed{} from \nTrainUsed{} rows to the whole period on one fixed corpus, with larger validation and calibration splits. Of the
 metrics fixed in advance, this is the only one on which the corpus moved more than either volume step
 did (recall at the false-positive budget: \nSelBudgetRange{} against \nLcSeedBudgetGainAC{} and
 \nFvSeedBudgetGainFixed{}; AUC: \nSelAucRange{} against \nLcSeedAucGainAC{} and
 \nFvSeedAucGainFixed{}). No interval was computed for these differences. These analyses were
-pre-specified in repository history but are not blind: the test period had been scored \nPriorReads{}
-times before.
+pre-specified in repository history but are not blind: the test period had been scored at least
+\nPriorReads{} times before.
 
 On the diagnostic model, \nGroupsAboveCeiling{} disjoint feature groups each separate the classes
 beyond a \nCeiling{} single-feature ceiling alone, so leave-one-group-out ablations measure redundancy

@@ -2,7 +2,7 @@
 
 Every macro in `numbers.tex` checked against its evidence file at `m4-complete` (`72e7790`), or at the ref its row names, read with `git show`, by `audit_numbers.py`. Values are compared as printed: rounding, sign and interval bounds included. Regenerate with `python3 docs/research/paper/audit_numbers.py`; do not edit by hand.
 
-**1059 macros, 1059 MATCH, 0 not matching.**
+**1074 macros, 1074 MATCH, 0 not matching.**
 
 | Macro | Value in paper | Value in evidence | File | Note | Result |
 |---|---|---|---|---|---|
@@ -1065,3 +1065,18 @@ Every macro in `numbers.tex` checked against its evidence file at `m4-complete` 
 | `\nOffsetRuns` | `24` | `24` | `docs/research/lab_notebook.md` |  | MATCH |
 | `\nOffsetMean` | `0.5031` | `0.5031` | `docs/research/lab_notebook.md` |  | MATCH |
 | `\nOffsetCI` | `[0.4992, 0.5070]` | `[0.4992, 0.5070]` | `docs/research/lab_notebook.md` |  | MATCH |
+| `\nTrivAuc` | `0.659` | `0.659` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nTrivRecall` | `0.039` | `0.039` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nTrivMM` | `0.699` | `0.699` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nTrivUSSD` | `0.613` | `0.613` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nTrivAgent` | `0.707` | `0.707` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nTrivAucMarginGate` | `+0.311` | `+0.311` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nTrivAucMarginFv` | `+0.317` | `+0.317` | `docs/benchmarks/full_volume_gate_d8083dbc.txt` at `850192b` (evidence commit `fcec52c`) |  | MATCH |
+| `\nTrivRecallMarginGate` | `+0.832` | `+0.832` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nTrivRecallMarginFv` | `+0.813` | `+0.813` | `docs/benchmarks/full_volume_gate_d8083dbc.txt` at `850192b` (evidence commit `fcec52c`) |  | MATCH |
+| `\nTrivMMMarginGate` | `+0.253` | `+0.253` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nTrivMMMarginFv` | `+0.270` | `+0.270` | `docs/benchmarks/full_volume_gate_d8083dbc.txt` at `850192b` (evidence commit `fcec52c`) |  | MATCH |
+| `\nTrivUSSDMarginGate` | `+0.339` | `+0.339` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nTrivUSSDMarginFv` | `+0.347` | `+0.347` | `docs/benchmarks/full_volume_gate_d8083dbc.txt` at `850192b` (evidence commit `fcec52c`) |  | MATCH |
+| `\nTrivAgentMarginGate` | `+0.273` | `+0.273` | `docs/benchmarks/m4_gate_d8083dbc_v3.txt` (evidence commit `d40fca2`) |  | MATCH |
+| `\nTrivAgentMarginFv` | `+0.278` | `+0.278` | `docs/benchmarks/full_volume_gate_d8083dbc.txt` at `850192b` (evidence commit `fcec52c`) |  | MATCH |

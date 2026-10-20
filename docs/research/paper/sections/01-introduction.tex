@@ -49,7 +49,8 @@ repository and disagree with:
         enforces and which remain written rules.
   \item \textbf{A detection failure on a non-burst variant pre-specified in repository history}
         (Section~\ref{sec:generalisation}, which gives the commits; a burst is an incident spanning
-        several fraudulent transactions on one account): the diagnostic model catches it
+        several fraudulent transactions on one account; the variant also sends to a payee already on the
+        victim's list, a modelling choice, and has its own amount rule): the diagnostic model catches it
         at \nRevRecall{} \nRevCI{} against \nBaseVarRecall{} \nBaseVarCI{}, and the production
         ensemble never at the flag threshold. At a \nFPRBudget{} false-positive budget the ensemble trained on \nTrainUsed{} rows (seed 1) catches
         \nGateRevNewBudgetCaught{} of the \nGateRevNewBudgetRows{} rows whose recipient the
@@ -60,7 +61,7 @@ repository and disagree with:
         in any run measured, up to all \nFvTrainRows{} training rows. Changing only the corpus
         \nTrainUsed{} training rows were drawn from moved mean recall at the flag threshold across a
         range of \nSelMeanRange{}, which seed noise widens by an amount not measured, against \nFvSeedGainFixed{} from \nTrainUsed{} rows to all of them
-        on one fixed corpus; at the false-positive budget corpus and volume moved it by similar
+        on one fixed corpus, with larger validation and calibration splits; at the false-positive budget corpus and volume moved it by similar
         amounts, and in AUC volume moved it more. All of these metrics were fixed in advance; no interval was computed
         for these differences.
   \item \textbf{Generalisation nulls} (Section~\ref{sec:generalisation}): on the diagnostic model,

@@ -295,6 +295,11 @@ def _spread(values: list[Decimal]) -> Decimal:
 
 
 #: The corpus depths of the training-selection test; the last reads the whole draw.
+TRIVIAL_ROWS = (
+    ("Auc", "ML-GATE-01"), ("Recall", "ML-GATE-02"), ("MM", "ML-GATE-07"),
+    ("USSD", "ML-GATE-08"), ("Agent", "ML-GATE-09"),
+)  # fmt: skip
+
 SELECTION_DEPTHS = (
     ("A", 300000), ("B", 360000), ("C", 400000), ("D", 520000), ("E", 700000), ("F", 2000000),
 )  # fmt: skip
@@ -494,6 +499,20 @@ SOURCES: dict[str, Src | Derived] = {
     "nGateMargin": Src(
         GATE, r"ML-GATE-01  model [\d.]+  single [\d.]+ \(\w+\) margin ([+-][\d.]+)"
     ),
+    # The best trivial rule on each ranking metric's rows, and both models' margins over it.
+    **{
+        f"nTriv{key}": Src(GATE, rf"{gate}  model [\d.]+  single [^\n]*?trivial ([\d.]+) \(")
+        for key, gate in TRIVIAL_ROWS
+    },
+    **{
+        f"nTriv{key}Margin{model}": Src(
+            path,
+            rf"{gate}  model [\d.]+  single [^\n]*?trivial [^\n]*?margin ([+-][\d.]+)$",
+            ref=ref,
+        )
+        for key, gate in TRIVIAL_ROWS
+        for model, path, ref in (("Gate", GATE, None), ("Fv", FV_GATE, PB66_REF))
+    },
     "nGateTrivial": Src(GATE, r"ML-GATE-01 .*?trivial ([\d.]+) \(amount_log1p\)"),
     "nGateTrivialMargin": Src(
         GATE, r"ML-GATE-01 .*?trivial [\d.]+ \(amount_log1p\) margin ([+-][\d.]+)"

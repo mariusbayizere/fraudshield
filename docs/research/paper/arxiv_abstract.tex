@@ -1,15 +1,15 @@
 \begin{abstract}
 We ask what FraudShield-EAC, a seeded synthetic benchmark of East African digital payments (\nChannels{}
 channels in \nCountries{} countries), can and cannot show. One velocity feature separates fraud at an
-AUC of \nGateFloor{} alone, so the specification's gate metrics are reported as margins over it.
+AUC of \nGateFloor{} alone, so the gate ranking metrics are reported as margins over it.
 
 Trained on all \nFvTrainRows{} training rows, an XGBoost and LightGBM ensemble reaches an AUC of
-\nFvAUC{}, a margin of \nFvMargin{}. Its recall at the flag threshold, \nFvRecallSix{}, misses the
+\nFvAUC{} (margin \nFvMargin{}). Its recall at the flag threshold, \nFvRecallSix{}, misses the
 target of \nTargetRecall{}, and more training data did not close the gap in any run. At a fixed
 \nTrainUsed{} rows, the corpus they came from moved mean recall at the flag threshold by up to
 \nSelMeanRange{}, against \nFvSeedGainFixed{} from volume on one corpus; recall at the budget moved by
-similar amounts under either change, and AUC more with volume. No interval was computed, and the
-analyses are pre-specified but not blind. On the diagnostic model, leave-one-group-out ablations
+similar amounts under either change, and AUC more with volume. No interval was computed, seed noise
+widens the range, and the analyses are pre-specified but not blind. On the diagnostic model, leave-one-group-out ablations
 measure redundancy, and leave-one-country-out and a novel variant held out in time are null.
 Refitting the full-volume model without each fraud type in turn (never fitting on it, not never
 seeing it) costs little recall at a
@@ -22,6 +22,6 @@ listed payee, a choice the cited sources do not support, and was committed with 
 model's predicted recall before its first committed evidence. Neither production model flags it at
 the flag threshold; at the budget the \nTrainUsed{}-row model (seed 1) catches
 \nGateRevNewBudgetCaught{} of \nGateRevNewBudgetRows{} rows sent to a never-paid recipient and none of
-\nGateRevKnownBudgetRows{} sent to a known payee, small counts from an observational split that do
-not isolate a cause. No fraud parameter is sourced.
+\nGateRevKnownBudgetRows{} sent to a payee paid before, small counts from an observational split that isolate
+no cause. No fraud parameter is sourced.
 \end{abstract}
