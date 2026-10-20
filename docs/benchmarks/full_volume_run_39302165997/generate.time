@@ -1,0 +1,12 @@
+Downloading mypy (14.6MiB)
+Downloading ruff (9.8MiB)
+Downloading pygments (1.2MiB)
+Downloading ast-serialize (1.3MiB)
+Downloading virtualenv (5.1MiB)
+ Downloaded ast-serialize
+ Downloaded pygments
+ Downloaded virtualenv
+ Downloaded ruff
+ Downloaded mypy
+Installed 26 packages in 42ms
+PEAK_RSS_KB 225260 ELAPSED 172.21

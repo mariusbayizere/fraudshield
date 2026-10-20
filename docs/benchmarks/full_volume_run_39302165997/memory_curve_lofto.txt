@@ -1,0 +1,12 @@
+[lofto] swap devices:
+NAME      TYPE SIZE USED PRIO
+/swapfile file   3G   0B   -1
+[lofto] 18:54:23 mem used 1708 MB, available 14275 MB; swap used 0 of 3071 MB
+[lofto] 18:54:53 mem used 2493 MB, available 13490 MB; swap used 0 of 3071 MB
+[lofto] 18:55:23 mem used 2523 MB, available 13459 MB; swap used 0 of 3071 MB
+[lofto] 18:55:53 mem used 3015 MB, available 12968 MB; swap used 0 of 3071 MB
+[lofto] 18:56:23 mem used 2671 MB, available 13312 MB; swap used 0 of 3071 MB
+[lofto] 18:56:53 mem used 3151 MB, available 12832 MB; swap used 0 of 3071 MB
+[lofto] 18:57:23 mem used 3173 MB, available 12810 MB; swap used 0 of 3071 MB
+[lofto] 18:57:53 mem used 3153 MB, available 12830 MB; swap used 0 of 3071 MB
+[lofto] 18:58:23 mem used 2728 MB, available 13255 MB; swap used 0 of 3071 MB

@@ -1,0 +1,267 @@
+{
+  "complete": true,
+  "production_recall_at_budget_all_frauds": 0.8517766497461929,
+  "production_recall_at_budget_all_frauds_wilson": [
+    0.8282213990878231,
+    0.8725987311952268
+  ],
+  "rows_removed": {
+    "account_takeover": 1245,
+    "agent_fraud": 925,
+    "card_not_present": 1090,
+    "merchant_fraud": 613,
+    "mule_account": 909,
+    "sim_swap": 1334,
+    "synthetic_identity": 697,
+    "velocity": 909
+  },
+  "scenarios": [
+    {
+      "drop_at_budget": -0.03947368421052633,
+      "drop_at_flag": 0.11842105263157898,
+      "held_out_budget_wilson": [
+        0.9435841982454212,
+        0.9932653481129881
+      ],
+      "held_out_flag_wilson": [
+        0.717934551675119,
+        0.8467418872258399
+      ],
+      "held_out_recall_at_budget": 0.9802631578947368,
+      "held_out_recall_at_flag": 0.7894736842105263,
+      "production_budget_wilson": [
+        0.8913085177664228,
+        0.9685396960145829
+      ],
+      "production_flag_wilson": [
+        0.851339089373719,
+        0.9443413472594505
+      ],
+      "production_recall_at_budget": 0.9407894736842105,
+      "production_recall_at_flag": 0.9078947368421053,
+      "scenario": "sim_swap",
+      "test_frauds": 152
+    },
+    {
+      "drop_at_budget": 0.1586206896551724,
+      "drop_at_flag": 0.14482758620689662,
+      "held_out_budget_wilson": [
+        0.7655234237622384,
+        0.8861767192527106
+      ],
+      "held_out_flag_wilson": [
+        0.7350683716941625,
+        0.8628833059174915
+      ],
+      "held_out_recall_at_budget": 0.8344827586206897,
+      "held_out_recall_at_flag": 0.8068965517241379,
+      "production_budget_wilson": [
+        0.9619722689544055,
+        0.9987815501294883
+      ],
+      "production_flag_wilson": [
+        0.9037099869829122,
+        0.9764211339960396
+      ],
+      "production_recall_at_budget": 0.993103448275862,
+      "production_recall_at_flag": 0.9517241379310345,
+      "scenario": "account_takeover",
+      "test_frauds": 145
+    },
+    {
+      "drop_at_budget": 0.5283018867924528,
+      "drop_at_flag": 0.6603773584905661,
+      "held_out_budget_wilson": [
+        0.3435571272093163,
+        0.5289864446777461
+      ],
+      "held_out_flag_wilson": [
+        0.15713470742524072,
+        0.3148315189640177
+      ],
+      "held_out_recall_at_budget": 0.4339622641509434,
+      "held_out_recall_at_flag": 0.22641509433962265,
+      "production_budget_wilson": [
+        0.906965843891179,
+        0.9852291528993844
+      ],
+      "production_flag_wilson": [
+        0.8124873280829136,
+        0.9340431794357212
+      ],
+      "production_recall_at_budget": 0.9622641509433962,
+      "production_recall_at_flag": 0.8867924528301887,
+      "scenario": "agent_fraud",
+      "test_frauds": 106
+    },
+    {
+      "drop_at_budget": 0.03883495145631077,
+      "drop_at_flag": 0.12621359223300965,
+      "held_out_budget_wilson": [
+        0.7846989505636784,
+        0.9172757400465291
+      ],
+      "held_out_flag_wilson": [
+        0.5844380253755113,
+        0.761869488658858
+      ],
+      "held_out_recall_at_budget": 0.8640776699029126,
+      "held_out_recall_at_flag": 0.6796116504854369,
+      "production_budget_wilson": [
+        0.8304457619814031,
+        0.9464062289605603
+      ],
+      "production_flag_wilson": [
+        0.7190218285649657,
+        0.8706369115476087
+      ],
+      "production_recall_at_budget": 0.9029126213592233,
+      "production_recall_at_flag": 0.8058252427184466,
+      "scenario": "velocity",
+      "test_frauds": 103
+    },
+    {
+      "drop_at_budget": 0.0714285714285714,
+      "drop_at_flag": 0.11111111111111105,
+      "held_out_budget_wilson": [
+        0.7675124813817829,
+        0.8948337428605262
+      ],
+      "held_out_flag_wilson": [
+        0.6216697176328737,
+        0.7788186970252667
+      ],
+      "held_out_recall_at_budget": 0.8412698412698413,
+      "held_out_recall_at_flag": 0.7063492063492064,
+      "production_budget_wilson": [
+        0.8504236729488102,
+        0.9505531563674703
+      ],
+      "production_flag_wilson": [
+        0.7409638233815906,
+        0.8751721991693945
+      ],
+      "production_recall_at_budget": 0.9126984126984127,
+      "production_recall_at_flag": 0.8174603174603174,
+      "scenario": "card_not_present",
+      "test_frauds": 126
+    },
+    {
+      "drop_at_budget": -0.0055248618784530246,
+      "drop_at_flag": 0.05524861878453041,
+      "held_out_budget_wilson": [
+        0.5072767238348425,
+        0.6496144854480895
+      ],
+      "held_out_flag_wilson": [
+        0.3822460402650074,
+        0.525783250844998
+      ],
+      "held_out_recall_at_budget": 0.580110497237569,
+      "held_out_recall_at_flag": 0.4530386740331492,
+      "production_budget_wilson": [
+        0.5017445909326146,
+        0.6443265349514946
+      ],
+      "production_flag_wilson": [
+        0.4360441568920523,
+        0.5801859682061822
+      ],
+      "production_recall_at_budget": 0.574585635359116,
+      "production_recall_at_flag": 0.5082872928176796,
+      "scenario": "mule_account",
+      "test_frauds": 181
+    },
+    {
+      "drop_at_budget": 0.10256410256410253,
+      "drop_at_flag": 0.5128205128205129,
+      "held_out_budget_wilson": [
+        0.5696065591582605,
+        0.772518329663003
+      ],
+      "held_out_flag_wilson": [
+        0.07115322631234479,
+        0.22015950398646633
+      ],
+      "held_out_recall_at_budget": 0.6794871794871795,
+      "held_out_recall_at_flag": 0.1282051282051282,
+      "production_budget_wilson": [
+        0.6783929457018985,
+        0.8592318795886587
+      ],
+      "production_flag_wilson": [
+        0.5302680321422857,
+        0.738544380502993
+      ],
+      "production_recall_at_budget": 0.782051282051282,
+      "production_recall_at_flag": 0.6410256410256411,
+      "scenario": "merchant_fraud",
+      "test_frauds": 78
+    },
+    {
+      "drop_at_budget": 0.34883720930232565,
+      "drop_at_flag": 0.24418604651162795,
+      "held_out_budget_wilson": [
+        0.4415616959142949,
+        0.6474840531754034
+      ],
+      "held_out_flag_wilson": [
+        0.2986242725154595,
+        0.501022792032719
+      ],
+      "held_out_recall_at_budget": 0.5465116279069767,
+      "held_out_recall_at_flag": 0.3953488372093023,
+      "production_budget_wilson": [
+        0.8129297644077995,
+        0.943959102854637
+      ],
+      "production_flag_wilson": [
+        0.5341068512119144,
+        0.7330303960571808
+      ],
+      "production_recall_at_budget": 0.8953488372093024,
+      "production_recall_at_flag": 0.6395348837209303,
+      "scenario": "synthetic_identity",
+      "test_frauds": 86
+    },
+    {
+      "drop_at_budget": -0.008695652173912993,
+      "drop_at_flag": 0.08695652173913049,
+      "held_out_budget_wilson": [
+        0.7959024584651849,
+        0.9193361530722793
+      ],
+      "held_out_flag_wilson": [
+        0.6245398291343714,
+        0.7877741939872255
+      ],
+      "held_out_recall_at_budget": 0.8695652173913043,
+      "held_out_recall_at_flag": 0.7130434782608696,
+      "production_budget_wilson": [
+        0.7858987820513625,
+        0.9125106856852203
+      ],
+      "production_flag_wilson": [
+        0.7177361124382664,
+        0.8628693486921457
+      ],
+      "production_recall_at_budget": 0.8608695652173913,
+      "production_recall_at_flag": 0.8,
+      "scenario": "mule_account without reversal",
+      "test_frauds": 115
+    }
+  ],
+  "seconds_per_load_and_fit": 30.588720375,
+  "training_rows": {
+    "account_takeover": 791068,
+    "agent_fraud": 791341,
+    "card_not_present": 791189,
+    "merchant_fraud": 791616,
+    "mule_account": 791361,
+    "production": 792162,
+    "sim_swap": 790985,
+    "synthetic_identity": 791557,
+    "velocity": 791352
+  },
+  "volume": "full volume (792162 training rows): one load-and-fit took 0.5 min, 9 fit the 270-minute budget"
+}

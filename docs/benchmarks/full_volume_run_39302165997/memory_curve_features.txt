@@ -1,0 +1,66 @@
+[generate] swap devices:
+NAME      TYPE SIZE USED PRIO
+/swapfile file   3G   0B   -2
+[generate] 18:24:12 mem used 1122 MB, available 14867 MB; swap used 0 of 3071 MB
+[generate] 18:24:42 mem used 1180 MB, available 14809 MB; swap used 0 of 3071 MB
+[generate] 18:25:12 mem used 1179 MB, available 14809 MB; swap used 0 of 3071 MB
+[generate] 18:25:42 mem used 1170 MB, available 14819 MB; swap used 0 of 3071 MB
+[generate] 18:26:12 mem used 1168 MB, available 14820 MB; swap used 0 of 3071 MB
+[generate] 18:26:42 mem used 1173 MB, available 14816 MB; swap used 0 of 3071 MB
+[cache] swap devices:
+NAME      TYPE SIZE USED PRIO
+/swapfile file   3G   0B   -2
+[cache] 18:27:24 mem used 1008 MB, available 14980 MB; swap used 0 of 3071 MB
+[cache] 18:27:54 mem used 2871 MB, available 13118 MB; swap used 0 of 3071 MB
+[cache] 18:28:24 mem used 2875 MB, available 13114 MB; swap used 0 of 3071 MB
+[cache] 18:28:54 mem used 2946 MB, available 13043 MB; swap used 0 of 3071 MB
+[cache] 18:29:24 mem used 2994 MB, available 12994 MB; swap used 0 of 3071 MB
+[cache] 18:29:54 mem used 3042 MB, available 12947 MB; swap used 0 of 3071 MB
+[cache] 18:30:24 mem used 3085 MB, available 12904 MB; swap used 0 of 3071 MB
+[cache] 18:30:54 mem used 3127 MB, available 12862 MB; swap used 0 of 3071 MB
+[cache] 18:31:24 mem used 3158 MB, available 12831 MB; swap used 0 of 3071 MB
+[cache] 18:31:54 mem used 3210 MB, available 12779 MB; swap used 0 of 3071 MB
+[cache] 18:32:24 mem used 3251 MB, available 12737 MB; swap used 0 of 3071 MB
+[cache] 18:32:54 mem used 3291 MB, available 12698 MB; swap used 0 of 3071 MB
+[cache] 18:33:24 mem used 3323 MB, available 12666 MB; swap used 0 of 3071 MB
+[cache] 18:33:54 mem used 3355 MB, available 12634 MB; swap used 0 of 3071 MB
+[cache] 18:34:24 mem used 3379 MB, available 12609 MB; swap used 0 of 3071 MB
+[cache] 18:34:54 mem used 3426 MB, available 12562 MB; swap used 0 of 3071 MB
+[cache] 18:35:24 mem used 3445 MB, available 12544 MB; swap used 0 of 3071 MB
+[cache] 18:35:54 mem used 3468 MB, available 12520 MB; swap used 0 of 3071 MB
+[cache] 18:36:24 mem used 3508 MB, available 12481 MB; swap used 0 of 3071 MB
+[cache] 18:36:54 mem used 3524 MB, available 12465 MB; swap used 0 of 3071 MB
+[cache] 18:37:24 mem used 3547 MB, available 12442 MB; swap used 0 of 3071 MB
+[cache] 18:37:54 mem used 3592 MB, available 12397 MB; swap used 0 of 3071 MB
+[cache] 18:38:24 mem used 3608 MB, available 12381 MB; swap used 0 of 3071 MB
+[cache] 18:38:54 mem used 3631 MB, available 12358 MB; swap used 0 of 3071 MB
+[cache] 18:39:24 mem used 3679 MB, available 12310 MB; swap used 0 of 3071 MB
+[cache] 18:39:54 mem used 3702 MB, available 12287 MB; swap used 0 of 3071 MB
+[cache] 18:40:24 mem used 3720 MB, available 12269 MB; swap used 0 of 3071 MB
+[cache] 18:40:54 mem used 3739 MB, available 12250 MB; swap used 0 of 3071 MB
+[cache] 18:41:24 mem used 3754 MB, available 12234 MB; swap used 0 of 3071 MB
+[cache] 18:41:54 mem used 3811 MB, available 12177 MB; swap used 0 of 3071 MB
+[cache] 18:42:24 mem used 3830 MB, available 12158 MB; swap used 0 of 3071 MB
+[cache] 18:42:54 mem used 3847 MB, available 12142 MB; swap used 0 of 3071 MB
+[cache] 18:43:24 mem used 3864 MB, available 12124 MB; swap used 0 of 3071 MB
+[cache] 18:43:54 mem used 3881 MB, available 12108 MB; swap used 0 of 3071 MB
+[cache] 18:44:24 mem used 3928 MB, available 12060 MB; swap used 0 of 3071 MB
+[cache] 18:44:54 mem used 3944 MB, available 12045 MB; swap used 0 of 3071 MB
+[cache] 18:45:24 mem used 3957 MB, available 12032 MB; swap used 0 of 3071 MB
+[cache] 18:45:54 mem used 3970 MB, available 12018 MB; swap used 0 of 3071 MB
+[cache] 18:46:24 mem used 3987 MB, available 12002 MB; swap used 0 of 3071 MB
+[cache] 18:46:54 mem used 4002 MB, available 11986 MB; swap used 0 of 3071 MB
+[cache] 18:47:24 mem used 4018 MB, available 11970 MB; swap used 0 of 3071 MB
+[cache] 18:47:54 mem used 4056 MB, available 11933 MB; swap used 0 of 3071 MB
+[cache] 18:48:24 mem used 4071 MB, available 11917 MB; swap used 0 of 3071 MB
+[cache] 18:48:54 mem used 4080 MB, available 11908 MB; swap used 0 of 3071 MB
+[cache] 18:49:24 mem used 4096 MB, available 11892 MB; swap used 0 of 3071 MB
+[cache] 18:49:54 mem used 4112 MB, available 11877 MB; swap used 0 of 3071 MB
+[cache] 18:50:24 mem used 4132 MB, available 11857 MB; swap used 0 of 3071 MB
+[cache] 18:50:54 mem used 4143 MB, available 11846 MB; swap used 0 of 3071 MB
+[cache] 18:51:24 mem used 4162 MB, available 11827 MB; swap used 0 of 3071 MB
+[cache] 18:51:54 mem used 4234 MB, available 11755 MB; swap used 0 of 3071 MB
+[cache] 18:52:24 mem used 4248 MB, available 11740 MB; swap used 0 of 3071 MB
+[cache] 18:52:54 mem used 4266 MB, available 11723 MB; swap used 0 of 3071 MB
+[cache] 18:53:24 mem used 4278 MB, available 11710 MB; swap used 0 of 3071 MB
+[cache] 18:53:54 mem used 3984 MB, available 12005 MB; swap used 0 of 3071 MB

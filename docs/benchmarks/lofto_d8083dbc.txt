@@ -1,0 +1,33 @@
+# evidence-commit: fcec52cc9384c7b52f304cd9bd736634e2342981
+# evidence-tree-state: clean
+# evidence-machine: AMD EPYC 7763 64-Core Processor; 4 logical cores; 15.6 GiB; Linux-7.0.0-1017-azure-x86_64-with-glibc2.39
+# command: /usr/bin/time -f PEAK_RSS_KB %M ELAPSED %e .venv/bin/python -u -m fraudshield_ml.cli lofto /home/runner/work/_temp/cache/features_full_volume.parquet --out /home/runner/work/_temp/out/lofto_d8083dbc --seed 1 --budget-minutes 270 --purpose PB-66 leave-one-fraud-type-out (run 39302165997, attempt 1)
+# exit: 0
+
+volume: full volume (792162 training rows): one load-and-fit took 0.5 min, 9 fit the 270-minute budget
+  refitted 0 of 8: 
+  refitted 1 of 8: sim_swap
+  refitted 2 of 8: sim_swap, account_takeover
+  refitted 3 of 8: sim_swap, account_takeover, agent_fraud
+  refitted 4 of 8: sim_swap, account_takeover, agent_fraud, velocity
+  refitted 5 of 8: sim_swap, account_takeover, agent_fraud, velocity, card_not_present
+  refitted 6 of 8: sim_swap, account_takeover, agent_fraud, velocity, card_not_present, mule_account
+  refitted 7 of 8: sim_swap, account_takeover, agent_fraud, velocity, card_not_present, mule_account, merchant_fraud
+  refitted 8 of 8: sim_swap, account_takeover, agent_fraud, velocity, card_not_present, mule_account, merchant_fraud, synthetic_identity
+LEAVE-ONE-FRAUD-TYPE-OUT — each scenario's rows removed from every fitted set
+  volume: full volume (792162 training rows): one load-and-fit took 0.5 min, 9 fit the 270-minute budget
+  production recall at the 1% FPR budget, all test frauds: 0.852
+  recall of the held-out scenario's test frauds, Wilson 95% intervals:
+  scenario                        frauds  at 1% FPR: production -> held out (drop)      at 0.60: production -> held out (drop)
+  sim_swap                           152  0.941 [0.891, 0.969] -> 0.980 [0.944, 0.993] (-0.039)   0.908 -> 0.789 (0.118)
+  account_takeover                   145  0.993 [0.962, 0.999] -> 0.834 [0.766, 0.886] (0.159)   0.952 -> 0.807 (0.145)
+  agent_fraud                        106  0.962 [0.907, 0.985] -> 0.434 [0.344, 0.529] (0.528)   0.887 -> 0.226 (0.660)
+  velocity                           103  0.903 [0.830, 0.946] -> 0.864 [0.785, 0.917] (0.039)   0.806 -> 0.680 (0.126)
+  card_not_present                   126  0.913 [0.850, 0.951] -> 0.841 [0.768, 0.895] (0.071)   0.817 -> 0.706 (0.111)
+  mule_account                       181  0.575 [0.502, 0.644] -> 0.580 [0.507, 0.650] (-0.006)   0.508 -> 0.453 (0.055)
+  merchant_fraud                      78  0.782 [0.678, 0.859] -> 0.679 [0.570, 0.773] (0.103)   0.641 -> 0.128 (0.513)
+  synthetic_identity                  86  0.895 [0.813, 0.944] -> 0.547 [0.442, 0.647] (0.349)   0.640 -> 0.395 (0.244)
+  mule_account without reversal      115  0.861 [0.786, 0.913] -> 0.870 [0.796, 0.919] (-0.009)   0.800 -> 0.713 (0.087)
+  rows removed from the fitted sets: sim_swap 1334, account_takeover 1245, agent_fraud 925, velocity 909, card_not_present 1090, mule_account 909, merchant_fraud 613, synthetic_identity 697
+  training rows per fit: production 792162, sim_swap 790985, account_takeover 791068, agent_fraud 791341, velocity 791352, card_not_present 791189, mule_account 791361, merchant_fraud 791616, synthetic_identity 791557
+  wrote /home/runner/work/_temp/out/lofto_d8083dbc/lofto.json
