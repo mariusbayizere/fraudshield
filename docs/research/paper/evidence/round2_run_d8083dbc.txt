@@ -47,3 +47,9 @@ stamped, and every test-period read was logged. Nothing was re-run.
 
 Both gate-job caches are byte-identical to the first reproduction's (reproduce_d8083dbc.sha256,
 run 39273972313): same SHA-256 for features_gate.parquet and features_full.parquet.
+
+## full volume (plan section 4)
+
+Workflow run: https://github.com/mariusbayizere/fraudshield/actions/runs/39345544712, from
+f29793c (branch evidence-pb66/round2), reading the full-volume-evidence artefact of PB-66 run
+39302165997. Every cross-check of plan section 4 matched.

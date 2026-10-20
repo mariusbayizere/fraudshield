@@ -45,3 +45,4 @@
 {"command": "round2.py selection", "purpose": "paper evidence, selection at corpus 520000", "source": "/home/runner/work/_temp/sel_520000.parquet", "test_rows": 101909, "utc": "2026-10-19T18:54:13Z"}
 {"command": "round2.py selection", "purpose": "paper evidence, selection at corpus 700000", "source": "/home/runner/work/_temp/sel_700000.parquet", "test_rows": 101909, "utc": "2026-10-19T18:54:13Z"}
 {"command": "round2.py selection", "purpose": "paper evidence, selection at corpus 2000000", "source": "/home/runner/work/_temp/sel_2000000.parquet", "test_rows": 101909, "utc": "2026-10-19T18:54:13Z"}
+{"command": "round2.py full-volume", "purpose": "paper evidence, round two (PB-66 scores)", "source": "/home/runner/work/_temp/pb66/scores/test_scores_seed1.csv", "test_rows": 101909, "utc": "2026-10-20T00:05:50Z"}

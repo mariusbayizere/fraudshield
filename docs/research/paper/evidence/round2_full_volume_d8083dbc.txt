@@ -1,0 +1,72 @@
+# evidence-commit: f29793cc713e9225dbf3b286854d5613af791efe
+# evidence-tree-state: clean
+# evidence-machine: INTEL(R) XEON(R) PLATINUM 8573C; 4 logical cores; 15.6 GiB
+# command: python docs/research/paper/evidence/round2.py --fingerprint d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32 full-volume --scores /home/runner/work/_temp/pb66/scores/test_scores_seed1.csv --sha256 /home/runner/work/_temp/pb66/test_scores_seed1.sha256 --metrics /home/runner/work/_temp/pb66/pb66_d8083dbc/metrics.json
+# models and features: the code at 72e7790f02a3c67367ec2936698aae33e607926e
+# draw: d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32; plan: docs/research/paper/evidence/round2_plan.md
+# resamples: 1000 of whole accounts, stratified by fraud, resampling seed 1
+# exit: see RESULT at the end; a file without one is from a run that did not finish
+
+FULL-VOLUME MODEL (PB-66's seed-1 scores, sha256 a0cce92fa34e9cf22d0936d5556998fd068199f1209d381bc8d8c5c6ebe27eb3)
+  the draw's identity rests on PB-66's run, which regenerated and fingerprinted it;
+  this job reads that run's scores and has no dataset of its own to fingerprint
+  test rows 101909, confirmed fraud 985, accounts 5878; AUC 0.975
+
+REVERSAL VARIANT, full-volume model (1% FPR threshold 0.0372: rows strictly above it; flag: at or above 0.60)
+  clustered recall holds each threshold at its full-sample value, so it leaves out the
+  threshold's own uncertainty; a resample holding none of a subgroup's rows is dropped
+  all reversal rows: 66 confirmed-fraud rows on 66 accounts
+    1% FPR budget  caught 5/66  recall 0.076  Wilson [0.033, 0.165]  clustered [0.016, 0.143] (0 of 1000 resamples held none of these rows and were dropped)
+    flag 0.60      caught 0/66  recall 0.000  Wilson [0.000, 0.055]  clustered [0.000, 0.000] (0 of 1000 resamples held none of these rows and were dropped)
+  counterparty_is_new_for_account = 1: 19 confirmed-fraud rows on 19 accounts
+    1% FPR budget  caught 5/19  recall 0.263  Wilson [0.118, 0.488]  clustered [0.062, 0.500] (0 of 1000 resamples held none of these rows and were dropped)
+    flag 0.60      caught 0/19  recall 0.000  Wilson [0.000, 0.168]  clustered [0.000, 0.000] (0 of 1000 resamples held none of these rows and were dropped)
+  counterparty_is_new_for_account = 0: 47 confirmed-fraud rows on 47 accounts
+    1% FPR budget  caught 0/47  recall 0.000  Wilson [0.000, 0.076]  clustered [0.000, 0.000] (0 of 1000 resamples held none of these rows and were dropped)
+    flag 0.60      caught 0/47  recall 0.000  Wilson [0.000, 0.076]  clustered [0.000, 0.000] (0 of 1000 resamples held none of these rows and were dropped)
+  reversal fraud rows with counterparty_is_new_for_account undefined: 0
+
+CALIBRATION of the production ensemble (battery.reliability, battery.decision_region:
+the definitions behind the diagnostic model's published decision-region figure)
+  all test rows: 101909, expected calibration error 0.0011
+  decision region (score >= 0.60): rows 790, fraud 753, expected calibration error 0.0247, Brier 0.04183
+    predicted       rows   predicted   observed
+    [0.6, 0.7)        11    0.667      0.727
+    [0.7, 0.8)         4    0.747      1.000
+    [0.8, 0.9)        71    0.875      0.775
+    [0.9, 1.0)       704    0.990      0.974
+
+RECONCILIATION from PB-66's columns (variant, fraud type, observed, true)
+  adapted_below_threshold            account_takeover          True      True   1
+  adapted_below_threshold            card_not_present          True      True   5
+  adapted_below_threshold            merchant_fraud            True      True   5
+  base                               account_takeover          False     True   2
+  base                               account_takeover          True      True   144
+  base                               agent_fraud               False     True   2
+  base                               agent_fraud               True      True   106
+  base                               card_not_present          False     True   2
+  base                               card_not_present          True      True   121
+  base                               merchant_fraud            True      True   73
+  base                               mule_account              False     True   2
+  base                               mule_account              True      True   115
+  base                               none                      True      False  8
+  base                               sim_swap                  False     True   1
+  base                               sim_swap                  True      True   79
+  base                               synthetic_identity        False     True   1
+  base                               synthetic_identity        True      True   86
+  base                               velocity                  False     True   1
+  base                               velocity                  True      True   103
+  novel_esim_delayed_drain           sim_swap                  True      True   73
+  reversal_scam_social_engineering   mule_account              False     True   2
+  reversal_scam_social_engineering   mule_account              True      True   66
+
+CROSS-CHECKS (plan section 4)
+  test rows: 101909, expected 101909  MATCH
+  observed fraud: 985, expected 985  MATCH
+  reversal rows, observed fraud: 66, expected 66  MATCH
+  reversal rows, true fraud: 68, expected 68  MATCH
+  true-fraud rows without a fraud type: 0, expected 0  MATCH
+  cells differing from the gate job's reconciliation: 0, expected 0  MATCH
+  AUC differing from PB-66's metrics.json by more than 1e-9: 0, expected 0  MATCH
+
+RESULT: exit 0
