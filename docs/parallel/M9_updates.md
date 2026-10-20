@@ -162,8 +162,11 @@ The owner's words, then what was done on this branch. Sizes were reported to the
 5. **`fs_spool_depth` export.** "Confirm the fs_spool_depth_bytes export with one scrape." Java
    is built and tested in CI only, so the scrape is a test:
    `AssembledApplicationTest.theSpoolDepthGaugeIsExportedUnderTheNameM9sAlertAndDashboardRead`
-   scrapes the assembled API's `/actuator/prometheus` and expects `fs_spool_depth_bytes`. Its CI
-   result is the confirmation.
+   scrapes the assembled API's `/actuator/prometheus` and expects `fs_spool_depth_bytes`.
+   **Confirmed:** it passed in CI run 39376711927 (java job, `AssembledApplicationTest`: 5 tests,
+   0 failures) on `97f4504`, after a first run on `e4b589b` failed with 401 because the test
+   harness's management port is 0. The API exports `# TYPE fs_spool_depth_bytes gauge`, and no
+   series named `fs_spool_depth`.
 
 ### Identifiers claimed by this branch
 
@@ -302,14 +305,14 @@ spool on SIGTERM within 120 s.
 **Not functional until the metric exists (owner, 2026-10-20: "not done").** Checked on
 2026-10-20 by resolving every alert, recording rule, dashboard query and canary query on this branch
 to the `fs_` metrics it reads, against what `main` emits (`fs_decisions_total`,
-`fs_decision_latency_seconds`, `fs_alert_timeout_release_total`, `fs_spool_depth` under a name
-being confirmed).
+`fs_decision_latency_seconds`, `fs_alert_timeout_release_total`, and `fs_spool_depth_bytes`, the
+name the scrape test confirmed on 2026-10-20).
 
 | Reads | Missing metric | Backlog |
 |---|---|---|
 | Alert `FraudShieldTransactionRateDrop`; panels fs-decision-path "Transactions per second" and "Ingest responses by status"; **the canary's `error-rate` analysis, which fails every rollout** | `fs_ingest_requests_total` | PB-174 |
 | Alert `FraudShieldKafkaConsumerLagHigh`; panel fs-kafka-spool "Consumer lag by topic and group" | `fs_kafka_consumer_lag` | PB-174 |
-| Alert `FraudShieldSpoolBacklog`; panel fs-kafka-spool "Spool depth by pod" | `fs_spool_depth`, exported under another name if the scrape confirms `fs_spool_depth_bytes` | PB-174, ADR 0093 |
+| Alert `FraudShieldSpoolBacklog`; panel fs-kafka-spool "Spool depth by pod" | `fs_spool_depth`: the API exports `fs_spool_depth_bytes` (confirmed by the scrape, CI run 39376711927), so these read nothing | PB-174, ADR 0093 |
 | Panel fs-decision-path "Redis hit ratio and DB pool in use" | `fs_redis_hit_ratio`, `fs_db_pool_in_use` | PB-174 (DB pool), PB-178 and ADR 0093 (both) |
 | Panels fs-decision-path "Scoring latency p95 by stage", "Feature fetch latency p95 by source"; fs-model-health "Model versions by alias" | `fs_scoring_latency_seconds`, `fs_feature_latency_seconds`, `fs_model_version_info` | PB-175 |
 | Alerts `FraudShieldFalsePositiveRateHigh`, `FraudShieldFeatureDrift`, `FraudShieldModelAucDrop`; panels fs-risk-overview "False positive rate (labelled)", fs-model-health "Live AUC-ROC (production) and alert level", "Label coverage by alias", "Top 10 features by PSI" | `fs_false_positive_rate`, `fs_feature_psi`, `fs_model_auc_roc`, `fs_model_label_coverage` | PB-176 (after PB-172) |

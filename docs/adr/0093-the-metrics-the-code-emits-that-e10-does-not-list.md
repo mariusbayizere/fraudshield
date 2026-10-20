@@ -21,9 +21,11 @@ because the catalogue would reject it. Some of them are the signals M9 has been 
 
 Inventory, read from the source on `main` at `a7f0528` on 2026-10-20. The registered name is the
 one in the code. Prometheus exports Micrometer meters with a unit suffix and Timers in seconds.
-**No exported name is observed yet.** `fs_spool_depth`'s will be checked by the scrape test added
-on 2026-10-20 in `AssembledApplicationTest`, when CI runs it. The other exported names in the table are what that naming rule
-predicts, not observations; PB-174's scrape test pins them.
+**One exported name is observed:** `fs_spool_depth` is exported as `fs_spool_depth_bytes`, by the
+scrape test added on 2026-10-20 in `AssembledApplicationTest` (CI run 39376711927, on `m9/infra`
+commit `97f4504`, whose backend main code is the same as `main`'s). The other
+exported names in the table are what that naming rule predicts, not observations; PB-174's scrape
+test pins them.
 
 ### API (`backend/ingest`, Micrometer)
 
@@ -119,7 +121,7 @@ For the three mismatched entries:
   `fs_hold_timeout_lateness_ms` are queryable. That is PB-178's code change in
   `metric_catalogue.py`, with tests.
 - **`fs_spool_depth`: (b)**, bytes, exported as `fs_spool_depth_bytes`. Revisit it with PB-171,
-  which may leave one consumer per pod's volume. The scrape test settles the exported name.
+  which may leave one consumer per pod's volume. The scrape test settled the exported name.
 - **`fs_db_pool_in_use`: (b)**, HikariCP's own metric. It already exists, and a second name for
   the same number adds nothing.
 - **`fs_redis_hit_ratio`: (b)**, drop it until someone can say what it measures. The SRS 8.2 key

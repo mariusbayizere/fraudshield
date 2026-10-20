@@ -3445,14 +3445,14 @@ requirements:
   deviations: []
   notes: 'M9 (2026-10-20, owner: not done until the metrics exist): on m9/infra the alert rules and dashboards
     are written, but these read metrics nothing emits and are not functional: alerts FraudShieldTransactionRateDrop,
-    FraudShieldKafkaConsumerLagHigh, FraudShieldSpoolBacklog (exported name under confirmation) and FraudShieldFalsePositiveRateHigh;
-    panels fs-decision-path Transactions per second, Ingest responses by status, Scoring latency p95 by
-    stage, Feature fetch latency p95 by source, Redis hit ratio and DB pool in use; fs-kafka-spool Consumer
-    lag by topic and group, Spool depth by pod; fs-analyst-operations Alert queue depth by tier, Review
-    duration p50 / p90, Review duration distribution; fs-risk-overview False positive rate (labelled);
-    fs-model-health Model versions by alias. The p99 alert interpolates: fs_decision_latency_seconds has
-    no 0.08 bound. Backlog PB-174 to PB-177, ADR 0093 (Proposed); the list is in docs/parallel/M9_updates.md
-    section 7.'
+    FraudShieldKafkaConsumerLagHigh, FraudShieldSpoolBacklog (the API exports fs_spool_depth_bytes, confirmed
+    by a scrape in CI run 39376711927) and FraudShieldFalsePositiveRateHigh; panels fs-decision-path Transactions
+    per second, Ingest responses by status, Scoring latency p95 by stage, Feature fetch latency p95 by
+    source, Redis hit ratio and DB pool in use; fs-kafka-spool Consumer lag by topic and group, Spool
+    depth by pod; fs-analyst-operations Alert queue depth by tier, Review duration p50 / p90, Review duration
+    distribution; fs-risk-overview False positive rate (labelled); fs-model-health Model versions by alias.
+    The p99 alert interpolates: fs_decision_latency_seconds has no 0.08 bound. Backlog PB-174 to PB-177,
+    ADR 0093 (Proposed); the list is in docs/parallel/M9_updates.md section 7.'
 - id: OPS-OBS-02
   section: 8.2 Observability
   title: Structured Logs
