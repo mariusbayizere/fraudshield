@@ -13,7 +13,6 @@ import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -51,6 +50,18 @@ public class AlertController {
           "AUTO_RELEASED",
           "ESCALATED",
           "OVERRIDDEN");
+
+  private static final Map<String, AlertQueries.Queue> QUEUES =
+      Map.of(
+          "standard", AlertQueries.Queue.STANDARD,
+          "anomaly", AlertQueries.Queue.ANOMALY,
+          "escalated", AlertQueries.Queue.ESCALATED,
+          "all", AlertQueries.Queue.ALL);
+  private static final Map<String, AlertQueries.Sort> SORTS =
+      Map.of(
+          "priority", AlertQueries.Sort.PRIORITY,
+          "expected_loss", AlertQueries.Sort.EXPECTED_LOSS,
+          "newest", AlertQueries.Sort.NEWEST);
 
   private final TenantTransactions tenants;
   private final AlertQueries alerts;
@@ -110,7 +121,7 @@ public class AlertController {
     }
     AlertQueries.Filter filter =
         new AlertQueries.Filter(
-            choice("queue", queue, AlertQueries.Queue.class),
+            choice("queue", queue, QUEUES),
             transactionId,
             accountId,
             amount("amount_min", amountMin),
@@ -121,7 +132,7 @@ public class AlertController {
             members("tier", tier, TIERS),
             analystId,
             members("outcome", outcome, STATUSES),
-            choice("sort", sort, AlertQueries.Sort.class));
+            choice("sort", sort, SORTS));
     StaffClaims claims = AccessTokens.claims(jwt);
     AlertQueries.Caller caller = new AlertQueries.Caller(claims.userId(), claims.role());
     return tenants.inTenant(
@@ -164,14 +175,13 @@ public class AlertController {
         .orElseThrow(() -> ProblemException.notFound("explanation"));
   }
 
-  /** One of the contract's lower-case enum values, matched exactly. */
-  private static <E extends Enum<E>> E choice(String field, String value, Class<E> type) {
-    for (E constant : type.getEnumConstants()) {
-      if (constant.name().toLowerCase(Locale.ROOT).equals(value)) {
-        return constant;
-      }
+  /** One of the contract's enum values, matched exactly as the contract spells it. */
+  private static <E> E choice(String field, String value, Map<String, E> values) {
+    E choice = values.get(value);
+    if (choice == null) {
+      throw ProblemException.validation(field, "unsupported_value", "Unsupported value");
     }
-    throw ProblemException.validation(field, "unsupported_value", "Unsupported value");
+    return choice;
   }
 
   private static List<String> members(String field, List<String> values, Set<String> allowed) {

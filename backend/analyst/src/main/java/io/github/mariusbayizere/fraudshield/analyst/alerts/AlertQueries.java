@@ -114,9 +114,11 @@ public final class AlertQueries {
       SELECT e.id, e.version, e.transaction_id, e.tier, e.status, e.fraud_probability,
         e.expected_loss_rwf, e.review_deadline_at, e.escalated_from_alert_id, t.amount, t.currency,
         t.channel, t.merchant_name, t.transaction_timestamp, t.account_token, t.counterparty_token,
-        f.shap_top5::text AS shap_top5, %s AS anomaly_score, f.ml_unavailable_fallback
+        f.shap_top5::text AS shap_top5,\
       """
-          .formatted(ANOMALY_SCORE);
+          + " "
+          + ANOMALY_SCORE
+          + " AS anomaly_score, f.ml_unavailable_fallback ";
 
   private static final String FROM =
       """
