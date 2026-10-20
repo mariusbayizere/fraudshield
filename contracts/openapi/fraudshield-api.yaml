@@ -400,7 +400,9 @@ paths:
       summary: Email and password sign-in
       description: |
         Returns an access token in the body and sets a rotating refresh-token cookie
-        (httpOnly, Secure, SameSite=Strict, path `/api/v1/auth/refresh`) plus a CSRF cookie (D-27).
+        (httpOnly, Secure, SameSite=Strict, path `/api/v1/auth/refresh`) plus the CSRF cookie `fs_csrf`
+        (readable by script, Secure, SameSite=Strict, path `/`), whose value the `X-CSRF-Token`
+        header echoes (D-27, `x-csrf-cookie` on the `CsrfToken` parameter).
         10 attempts per 15 minutes per IP (higher for allow-listed office IPs, D-26); 5 failures lock
         the account. A password longer than 72 UTF-8 bytes is answered as invalid credentials
         without calling bcrypt. Correct credentials for an account in `PENDING_APPROVAL` or
@@ -799,15 +801,23 @@ paths:
       description: |
         Default order is HIGH first, then fraud probability descending (FR-04-02). `sort=expected_loss`
         orders by calibrated probability × amount in RWF (D-10). `queue=anomaly` lists
-        Isolation-Forest-only alerts, which hold nothing and have no timer (D-10). `queue=escalated`
-        lists only escalated entries whose target role is at or below the caller's role, plus
-        entries the caller escalated.
+        Isolation-Forest-only alerts, which hold nothing and have no timer (D-10); in it,
+        `sort=priority` orders by `anomaly_score` descending, since every entry's fraud probability
+        is below 0.60 by construction. `queue=escalated` lists only escalated entries whose target
+        role is at or below the caller's role, plus entries the caller escalated. `queue=all` is
+        the union of the other three as the caller may see them, for search (FR-04-09).
+
+        Without `outcome`, a queue lists only entries still awaiting a decision (status PENDING or
+        IN_REVIEW). A decision takes its entry out of every queue at once, while it is still
+        PENDING_COMMIT, and an undo puts it back with the next `version`; an escalated entry is
+        replaced by the new entry it created. `outcome` selects statuses explicitly, for search.
+        Order ties are broken by `alert_id`, so paging is stable.
       x-required-roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
       x-authorisation-rules:
         - rule: queue=escalated lists only entries whose target role is at or below the caller's role, plus entries the caller escalated
           effect: filter
       parameters:
-        - { name: queue, in: query, schema: { type: string, enum: [standard, anomaly, escalated], default: standard } }
+        - { name: queue, in: query, schema: { type: string, enum: [standard, anomaly, escalated, all], default: standard } }
         - { name: transaction_id, in: query, schema: { type: string, format: uuid } }
         - { name: account_id, in: query, schema: { $ref: "#/components/schemas/Token" } }
         - { name: amount_min, in: query, schema: { $ref: "#/components/schemas/DecimalAmount" } }
@@ -2494,7 +2504,10 @@ components:
       name: X-CSRF-Token
       in: header
       required: true
-      description: Double-submit token matching the CSRF cookie (D-27)
+      description: >-
+        Double-submit token (D-27): must equal the value of the cookie named by `x-csrf-cookie`,
+        which the server sets at sign-in and on refresh and which the console reads and echoes here.
+      x-csrf-cookie: fs_csrf
       schema: { type: string, minLength: 32, maxLength: 256 }
 
   responses:
@@ -3321,7 +3334,7 @@ components:
       $ref: "#/components/schemas/AlertSummaryBase"
       # Closed beside the $ref: additionalProperties sees only the names listed here, so a bad
       # value in the base reports one error instead of marking every field unexpected (NF-01).
-      properties: { alert_id: true, version: true, transaction_id: true, tier: true, status: true, fraud_probability: true, expected_loss_rwf: true, amount: true, channel: true, masked_account_name: true, merchant: true, transaction_timestamp: true, top_reasons: true, review_deadline_at: true, escalated_from_alert_id: true }
+      properties: { alert_id: true, version: true, transaction_id: true, tier: true, status: true, fraud_probability: true, expected_loss_rwf: true, amount: true, channel: true, masked_account: true, merchant: true, transaction_timestamp: true, top_reasons: true, review_deadline_at: true, escalated_from_alert_id: true, anomaly_score: true }
       additionalProperties: false
     AlertSummaryBase:
       type: object
@@ -3331,7 +3344,8 @@ components:
         composition unsatisfiable).
       required:
         [alert_id, version, transaction_id, tier, status, fraud_probability, amount, channel,
-         masked_account_name, merchant, transaction_timestamp, top_reasons, review_deadline_at]
+         masked_account, merchant, transaction_timestamp, top_reasons, review_deadline_at,
+         anomaly_score]
       properties:
         alert_id: { type: string, format: uuid }
         version: { type: integer, minimum: 0 }
@@ -3342,11 +3356,14 @@ components:
         expected_loss_rwf: { $ref: "#/components/schemas/DecimalAmount" }
         amount: { $ref: "#/components/schemas/Money" }
         channel: { $ref: "#/components/schemas/Channel" }
-        masked_account_name:
-          type: string
-          maxLength: 64
-          description: Masked display value from the PII vault, e.g. "J*** M***"; never a full name
-          pattern: "^[^@\\d]*$"
+        masked_account:
+          type: [string, "null"]
+          pattern: "^\\*{3,}[0-9A-Za-z]{2,4}$"
+          description: >-
+            The account number as the customer knows it, masked to its last characters (for
+            example `***4821`), from the PII vault (ADR 0069), the same value the customer's SMS
+            shows. Null when the vault holds no contact for the account. FraudShield holds no
+            account-holder names, so no name is ever shown.
         merchant: { type: [string, "null"], maxLength: 100 }
         transaction_timestamp: { $ref: "#/components/schemas/Timestamp" }
         top_reasons:
@@ -3358,14 +3375,17 @@ components:
             - $ref: "#/components/schemas/Timestamp"
             - type: "null"
         escalated_from_alert_id: { type: [string, "null"], format: uuid }
+        anomaly_score:
+          allOf: [{ $ref: "#/components/schemas/Probability" }]
+          description: The Isolation Forest's score; the reason an ANOMALY entry is in its queue (D-10)
     AlertDetail:
       # Closed at the composing level with the names from every allOf member (NF-01).
-      properties: { alert_id: true, version: true, transaction_id: true, tier: true, status: true, fraud_probability: true, expected_loss_rwf: true, amount: true, channel: true, masked_account_name: true, merchant: true, transaction_timestamp: true, top_reasons: true, review_deadline_at: true, escalated_from_alert_id: true, account_token: true, counterparty_token: true, summary_template_key: true, summary_parameters: true, anomaly_score: true, decisions: true }
+      properties: { alert_id: true, version: true, transaction_id: true, tier: true, status: true, fraud_probability: true, expected_loss_rwf: true, amount: true, channel: true, masked_account: true, merchant: true, transaction_timestamp: true, top_reasons: true, review_deadline_at: true, escalated_from_alert_id: true, account_token: true, counterparty_token: true, summary_template_key: true, summary_parameters: true, anomaly_score: true, decisions: true }
       additionalProperties: false
       allOf:
         - $ref: "#/components/schemas/AlertSummaryBase"
         - type: object
-          required: [account_token, counterparty_token, summary_template_key, anomaly_score, decisions]
+          required: [account_token, counterparty_token, summary_template_key, decisions]
           properties:
             account_token: { $ref: "#/components/schemas/Token" }
             counterparty_token: { $ref: "#/components/schemas/Token" }
@@ -3373,7 +3393,6 @@ components:
             summary_parameters:
               type: object
               additionalProperties: { type: [number, string] }
-            anomaly_score: { $ref: "#/components/schemas/Probability" }
             decisions:
               type: array
               items: { $ref: "#/components/schemas/DecisionRecord" }
@@ -3489,6 +3508,8 @@ components:
         items:
           type: array
           maxItems: 30
+          description: Most recent first; each `transaction_id` appears once (`x-unique-key`).
+          x-unique-key: [transaction_id]
           items: { $ref: "#/components/schemas/AccountTransaction" }
         next_cursor: { type: [string, "null"] }
     BehaviourProfile:
@@ -3501,9 +3522,15 @@ components:
           type: array
           minItems: 24
           maxItems: 24
+          description: >-
+            Transactions in the window by hour of day, index 0 for 00:00-00:59, in the account's
+            local time: the UTC offset of the institution's country pack, the same local time the
+            `local_hour` features use (an institution's accounts are domestic to it, V67).
           items: { type: integer, minimum: 0 }
         amount_histogram:
           type: array
+          description: Buckets in ascending order, half-open `[lower_rwf, upper_rwf)`, not overlapping.
+          x-unique-key: [lower_rwf]
           items:
             type: object
             required: [lower_rwf, upper_rwf, count]
@@ -3514,6 +3541,8 @@ components:
               count: { type: integer, minimum: 0 }
         channel_mix:
           type: array
+          description: One item per channel used in the window, most used first.
+          x-unique-key: [channel]
           items:
             type: object
             required: [channel, count]
@@ -3523,23 +3552,48 @@ components:
               count: { type: integer, minimum: 0 }
         comparison:
           type: array
+          description: >-
+            One item per attribute, in the enum's order. With fewer than 10 transactions in the
+            window, `normal` is null and `anomalous` false for every attribute. Values:
+            `local_hour` is this transaction's hour (0-23, local time as in `hourly_counts`) against
+            the shortest range of hours, written `HH-HH` and possibly wrapping midnight, that holds
+            at least 90% of the window's transactions. `amount_rwf` is the amount in RWF against the
+            window's 5th-95th percentile range, written `low-high`. `channel` is this channel
+            against the window's most used one, anomalous when under 5% of the window used it.
+            `counterparty_prior_transactions` and `device_prior_transactions` count the window's
+            earlier transactions with the same counterparty or device (`normal` null), anomalous at
+            0; the device item is null-valued and not anomalous when the transaction has no device.
+            `counterparty_country` is this transaction's counterparty country against the window's
+            most frequent, anomalous when never seen in the window.
+          x-unique-key: [attribute]
           items:
             type: object
             required: [attribute, this_transaction, normal, anomalous]
             additionalProperties: false
             properties:
-              attribute: { type: string, maxLength: 64 }
+              attribute:
+                type: string
+                enum: [local_hour, amount_rwf, channel, counterparty_prior_transactions,
+                       device_prior_transactions, counterparty_country]
               this_transaction: { type: [string, number, "null"] }
               normal: { type: [string, number, "null"] }
               anomalous: { type: boolean }
     AccountNetwork:
       type: object
+      description: >-
+        Over the last 90 days: the account (degree 0), the accounts it transacted with in either
+        direction (degree 1) and theirs (degree 2), at most 50 nodes, chosen by degree and then by
+        transaction count descending, ties by token. An edge is every (source, target) pair of
+        included nodes with at least one transaction from source to target. `confirmed_fraud` is
+        true when the node sent a transaction in the window whose latest label is FRAUD.
       required: [nodes, edges]
       additionalProperties: false
       properties:
         nodes:
           type: array
           maxItems: 50
+          description: Each token appears once, at its lowest degree.
+          x-unique-key: [token]
           items:
             type: object
             required: [token, degree, confirmed_fraud]
@@ -3550,6 +3604,8 @@ components:
               confirmed_fraud: { type: boolean }
         edges:
           type: array
+          description: Each ordered (source, target) pair appears once; both ends are nodes.
+          x-unique-key: [source, target]
           items:
             type: object
             required: [source, target, transaction_count]

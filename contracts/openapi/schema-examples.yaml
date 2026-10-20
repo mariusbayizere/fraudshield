@@ -48,7 +48,7 @@ examples:
       amount: '15000'
       currency: RWF
     channel: MOBILE_MONEY
-    masked_account_name: J*** M***
+    masked_account: '***4821'
     merchant: null
     transaction_timestamp: '2026-09-17T08:15:30Z'
     top_reasons:
@@ -101,7 +101,8 @@ examples:
         amount: '15000'
         currency: RWF
       channel: MOBILE_MONEY
-      masked_account_name: J*** M***
+      masked_account: '***4821'
+      anomaly_score: 0.42
       merchant: null
       transaction_timestamp: '2026-09-17T08:15:30Z'
       top_reasons:
@@ -135,7 +136,8 @@ examples:
       amount: '15000'
       currency: RWF
     channel: MOBILE_MONEY
-    masked_account_name: J*** M***
+    masked_account: '***4821'
+    anomaly_score: 0.42
     merchant: null
     transaction_timestamp: '2026-09-17T08:15:30Z'
     top_reasons:
@@ -1162,7 +1164,8 @@ examples:
         amount: '15000'
         currency: RWF
       channel: MOBILE_MONEY
-      masked_account_name: J*** M***
+      masked_account: '***4821'
+      anomaly_score: 0.42
       merchant: null
       transaction_timestamp: '2026-09-17T08:15:30Z'
       top_reasons:

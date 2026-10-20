@@ -536,3 +536,72 @@ def test_person_name_schema_defers_to_the_shared_unicode_rule() -> None:
     accepted = [v["normalised"] for v in vectors["accept"]]
     assert all(unicodedata.is_normalized("NFC", value) for value in accepted)
     assert any(not unicodedata.is_normalized("NFC", v["input"]) for v in vectors["accept"])
+
+
+@pytest.mark.req("D-27")
+def test_the_csrf_cookie_is_named_in_the_contract() -> None:
+    # Server (CsrfDoubleSubmitFilter.COOKIE) and console (csrf.ts) each assert against this value,
+    # so neither can drift from the other without failing a test (M8B scope X-4).
+    csrf = DOC["components"]["parameters"]["CsrfToken"]
+    assert (csrf["in"], csrf["name"]) == ("header", "X-CSRF-Token")
+    assert csrf["x-csrf-cookie"] == "fs_csrf"
+    refresh = DOC["components"]["securitySchemes"]["refreshCookie"]
+    assert (refresh["in"], refresh["name"]) == ("cookie", "fs_refresh")
+
+
+def test_unique_keys_name_properties_of_their_items() -> None:
+    found = 0
+
+    def walk(node: object) -> None:
+        nonlocal found
+        if isinstance(node, dict):
+            if "x-unique-key" in node:
+                found += 1
+                keys = node["x-unique-key"]
+                assert node["type"] == "array", node
+                assert keys, node
+                assert len(set(keys)) == len(keys), node
+                items = node["items"]
+                if "$ref" in items:
+                    items = SCHEMAS[items["$ref"].rsplit("/", 1)[1]]
+                assert set(keys) <= set(items["required"]), (keys, items["required"])
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    walk(SCHEMAS)
+    assert found == 6
+
+
+@pytest.mark.req("NFR-SEC-03")
+def test_alerts_show_a_masked_account_number_and_never_a_name() -> None:
+    base = SCHEMAS["AlertSummaryBase"]["properties"]
+    assert "masked_account_name" not in base
+    masked = re.compile(base["masked_account"]["pattern"])
+    cases = (("***4821", True), ("***A1", True), ("1234567890", False), ("J*** M***", False))
+    for value, shown in cases:
+        assert bool(masked.fullmatch(value)) is shown, value
+
+
+@pytest.mark.req("FR-04-07")
+def test_behaviour_comparison_attributes_are_a_closed_list() -> None:
+    item = SCHEMAS["BehaviourProfile"]["properties"]["comparison"]["items"]
+    assert item["properties"]["attribute"]["enum"] == [
+        "local_hour",
+        "amount_rwf",
+        "channel",
+        "counterparty_prior_transactions",
+        "device_prior_transactions",
+        "counterparty_country",
+    ]
+
+
+def test_alert_queues_include_all_for_search_and_summaries_carry_the_anomaly_score() -> None:
+    queue = next(
+        p for p in DOC["paths"]["/alerts"]["get"]["parameters"] if p.get("name") == "queue"
+    )
+    assert queue["schema"]["enum"] == ["standard", "anomaly", "escalated", "all"]
+    assert "anomaly_score" in SCHEMAS["AlertSummaryBase"]["required"]
+    assert SCHEMAS["AlertSummary"]["properties"]["anomaly_score"] is True
