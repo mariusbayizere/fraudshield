@@ -26,7 +26,10 @@ them, and no metric shows them, because `fs_spool_depth` covers live pods only.
   A full volume refuses new spool writes on every API pod.
 - **Do not delete, evict or drain API pods while a spool is non-zero**, and pause any rollout
   while Kafka is down (`kubectl argo rollouts -n fraudshield pause fraudshield-api`): a deleted
-  pod's spool is stranded, not replayed.
+  pod's spool is stranded, not replayed. The autoscaler deletes pods too: while any spool is
+  non-zero, stop the HPA scaling down (`kubectl -n fraudshield patch hpa fraudshield-api --type
+  merge -p '{"spec":{"behavior":{"scaleDown":{"selectPolicy":"Disabled"}}}}'`) and revert the patch
+  once every spool is empty.
 - A pod that was deleted anyway: its directory under `/var/lib/fraudshield/spool/<pod name>/` on
   `fraudshield-api-spool` still holds its records. Escalate; there is no packaged drain command
   yet (PB-171).
