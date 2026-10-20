@@ -1,21 +1,18 @@
 # Analyst decisions: the commit and undo contract
 
-Status: **draft 5, for independent review.** Draft 5 is limited to three things, all from the
-owner on 2026-10-20:
-- **Option A.** The timeout no longer depends on the sink's progress, and one mechanism closes an
-  entry that arrives after its transaction timed out: the sink, under the hold-owner lock (H2, H5,
-  T2).
-  - **Why.** Review 4 (`docs/reviews/M8B/decision-commit-contract-review-4.md`) found draft 4's own fix
-    (making the timeout wait for the sink) left a dead-lettered hold waiting for ever.
-  - **The owner's reasoning.** Option A "removes a dependency instead of adding one".
-- **The cutover's runbook line** (review 4, finding 2).
-- **W recorded as an assumption, with its reasoning.**
+Status: **draft 6, for independent review.** Draft 6 is the owner's option (a) of 2026-10-20, and
+nothing else: `transaction_transitions` becomes **the only record** of every decision state after
+the model's first (T6).
+- **Why.** Review 5 (`docs/reviews/M8B/decision-commit-contract-review-5.md`) found a MAJOR from
+  draft 5's own change: the sink, still writing later states into `decision_states`, could break
+  that table's foreign key and lose a transition for good.
+- **What it does.** Option (a) **removes that writer** instead of coordinating two. In the owner's
+  words, it "removes a writer rather than coordinating two".
+- **What it costs** is recorded in §9.
+- **What is carried.** Review 5's other findings are carried unchanged (§14).
 
-Draft 4's other review findings and review 3's MINORs are carried unchanged (§12, §13). ADR 0064's
-amendment and D-18's deviation are recorded in ADR 0111 and in the register.
-
-**The owner's rule.** If draft 5 still produces a MAJOR, the author stops again. The answer then is
-to reduce what the contract promises, not to keep drafting.
+**The owner's rule.** If draft 6 still produces a MAJOR, the author stops. The queue semantics then
+need rethinking, not the contract's wording.
 
 **Reviews so far:**
 - Review 1 found draft 1 UNSOUND (6 MAJOR, 11 MINOR).
@@ -89,7 +86,7 @@ It also sets the decision lifecycle (D1 to D7) and lists the changes to M6 (§8)
   transactions.
 - **A1.** Everything runs on the primary.
 - **A2.** No committed transaction is lost (as in the configuration contract).
-- **A3. The release that brings V80 is deployed by a stop-and-drain cutover, never rolled.** This
+- **A3. The release that brings V81 is deployed by a stop-and-drain cutover, never rolled.** This
   is a runbook requirement for M9 (review 3, MAJOR 2). The cutover runs in this order:
   1. stop every spool writer on every instance. That means ingest, the hold poller and overdue
      sweep, the unblock reconciler, the verification endpoint, the analyst API and the committer
@@ -98,12 +95,12 @@ It also sets the decision lifecycle (D1 to D7) and lists the changes to M6 (§8)
   2. wait until every instance's spool has drained to PostgreSQL and Kafka, which the spool's lag
      gauges show as zero;
   3. stop the instances;
-  4. run V80;
+  4. run V81;
   5. start only instances of the new release.
 
   Its consequences:
-  - no writer that does not reserve ever runs after V80, and no older spool record drains after it;
-  - V80's backfill of `transaction_transitions` is complete;
+  - no writer that does not reserve ever runs after V81, and no older spool record drains after it;
+  - V81's backfill of `transaction_transitions` is complete;
   - the backfill also writes a recording row for every backfilled reservation, so T5 never
     re-records history.
 
@@ -120,7 +117,7 @@ It also sets the decision lifecycle (D1 to D7) and lists the changes to M6 (§8)
 §3.2 and §3.3's triggers live in one trigger function per table, and each takes levels 2 then 3,
 in that order.
 
-## 3. Schema (V80, M8B's range)
+## 3. Schema (V81, M8B's range; renumbered from V80 because P1 took V80, ADR 0112)
 
 1. **`alert_decisions` gains these columns, each written once at insert:**
    - `undo_until`: analyst decisions only, set by trigger to `created_at + G`, with `created_at` set
@@ -154,9 +151,11 @@ in that order.
      (decision, reason codes, deadline, supersedes), the channel, the actor, and the label that
      goes with it (`label_id`, label, source, `supersedes_label_id`, `transaction_timestamp`);
    - primary key `(institution_id, transaction_id, sequence)`, with `event_id` unique;
-   - tenant-isolated.
-   - **V80 backfills it** from every `decision_states` row with sequence > 1, with the event id it
-     already has.
+   - tenant-isolated;
+   - **no foreign key to `transaction_ids`, deliberately.** A writer reserves a later state without
+     waiting for the sink, and a foreign key would bring back review 4's MAJOR 1 (review 5, m3).
+   - **V81 backfills it** from every `decision_states` row with sequence > 1, with the event id it
+     already has. From then on, `decision_states` receives sequence 1 only (T6).
    - **A companion append-only table, `transaction_transition_recordings`** (`event_id` primary key,
      `recorded_at`), marks a reservation whose spool record has been written.
 7. **`v_alert_decision_state`:**
@@ -226,8 +225,7 @@ the local fallback and the overdue sweep.
 **H3. The overdue sweep** selects HOLDs that meet all three conditions:
 - DB time ≥ their deadline + 10 s, where the deadline is `hold_owners.deadline` if a row exists,
   else the HOLD's `review_deadline_at`;
-- the transaction has no reservation in `transaction_transitions`, and no `decision_states` row with
-  sequence > 1;
+- the transaction has no later state in `v_decision_states` (T6);
 - its owner is not ANALYST.
 
 It claims each by H2. It runs every 5 s, so it acts 10 to 15 s after a deadline.
@@ -303,8 +301,8 @@ the only mechanism for that case, so it is specified as a rule, not a backstop.
 | Customer "no" (a label, no transition) | — | `verification_label|` + the verification response's id |
 
 `UnblockReconciler` reads `u.id` in its query, so it re-derives the same ids. It treats an unblock
-as already handled if it has a reservation **or** a `decision_states` row by CUSTOMER_VERIFICATION.
-The second test matches unblocks handled before V80 (review 3, MAJOR 2).
+as already handled if `v_decision_states` holds a state by CUSTOMER_VERIFICATION (T6). That
+includes unblocks handled before V81, which the backfill moved (review 3, MAJOR 2).
 `DecisionState.next` takes the event id and `decided_at` as arguments.
 
 **T4. Recording.**
@@ -320,6 +318,35 @@ Recording is idempotent, so the recorder needs no lock. A writer that crashed af
 therefore always completed. **T4's "re-decide" happens only before a reservation exists:**
 - a writer that finds the latest is not what it expected re-reads and re-decides;
 - if no transition is allowed, it records nothing and reports SKIPPED.
+
+**T6. `transaction_transitions` is the only record of every state after the first** (option (a)).
+- **`decision_states` holds sequence 1 only:** the model's decision, written by `PostgresSink` with
+  its transaction.
+- **Every later state exists in PostgreSQL only as its reservation,** written synchronously by its
+  writer: the analyst's effect, the timeout's claim, an override, or the customer's answer.
+- **The sink writes no later state.**
+  - A `DecisionChanged` with sequence > 1 that reaches the sink through the spool is not inserted
+    into `decision_states`. Its reservation already is the record.
+  - The sink still writes everything else that record carries: labels, and the notification and
+    unblock rows of its kind.
+  - A `DecisionChanged` with sequence > 1 that has no reservation can only come from a writer that
+    does not reserve. A3's cutover excludes that, and the sink counts and logs any it meets.
+- **One view, `v_decision_states`, is what every reader reads.** It is `decision_states` with
+  sequence 1, joined with `transaction_transitions` in the same columns, one row per
+  `(institution, transaction, sequence)`. It is tenant-isolated, and granted where
+  `decision_states` is. The readers that move to it:
+  - `JdbcDecisionStates`, the fallback of the bank-facing `GET /decisions/{id}` (D-14);
+  - `JdbcOverdueHolds` and V62's lister (H3);
+  - `UnblockReconciler` and V64's lister (T3);
+  - `CustomerSmsSender`'s classification, which asks whether the latest state is still DECLINE;
+  - P1's account history (`AccountQueries`), which reads each transaction's latest state.
+
+  `JdbcIdempotency` reads sequence 1 only, and keeps reading `decision_states`.
+- **Why the foreign-key failure is gone.** The only writer of `decision_states` is the sink, and it
+  writes sequence 1 in the same transaction as the `transaction_ids` row its foreign key needs.
+  `transaction_transitions` has no such key. So a timeout that reserves before the ingesting
+  instance's sink has run loses nothing: its state is in the view from the moment the claim
+  commits, and the sink's later sequence-1 row joins it there.
 
 ## 5. Decision rules
 
@@ -510,14 +537,47 @@ to it.
 - **`DecisionState.next`** takes its event id and `decided_at`.
 - **`UnblockReconciler`** selects `u.id` and checks for a reservation instead of `decision_states`.
 - **`PostgresSink`:**
+  - writes `decision_states` for sequence 1 only, and no later `DecisionChanged` (T6);
   - stops updating entries and stops writing the AUTO_RELEASED decision row (H5);
   - writes `decision_states.timeout_policy`;
   - writes `label_events.supersedes_label_id`.
 - **`LabelRecorded` and `KafkaMessages`** carry `supersedes_label_id`.
 - **`RedisDecisionStates`** gains the set-if-higher script.
+- **Every reader of later states reads `v_decision_states`** (T6): `JdbcDecisionStates`,
+  `JdbcOverdueHolds`, the V62 and V64 listers, `UnblockReconciler`, `CustomerSmsSender`, and
+  `backend/analyst`'s `AccountQueries`.
 - **`RedisCircuitBreakers`** gains the idempotent confirmed-fraud script.
 
 ## 9. Accepted costs, contract additions, and questions for the owner
+
+**What reducing to one record costs (option (a), owner 2026-10-20):**
+- **What the sink can no longer express:**
+  - **A later state that only exists on the spool.** Before V81, a transition reached PostgreSQL
+    only through the sink. Now a later state exists in PostgreSQL only if its writer reserved it.
+    A `DecisionChanged` with sequence > 1 and no reservation is dropped from PostgreSQL, counted and
+    logged, though Kafka still carries it. Only a writer that does not reserve can produce one: an
+    old release, or a pre-V81 spool record. A3's cutover excludes both. Outside the cutover, such a
+    state would be visible to Kafka's consumers and not to the database's readers.
+  - **Replaying history from the spool.** Replaying a spool's later states into PostgreSQL, for
+    instance after restoring the database from an older backup, no longer restores them. Their
+    record is the reservation table, which a restore brings back with everything else (A2).
+- **What ADR 0068 assumed** (hybrid persistence, amended).
+  - **Its assumption.** Every decision fact reaches PostgreSQL through the spool, asynchronously,
+    so PostgreSQL is never on the decision's critical path.
+  - **What now holds:** the model's decision on ingest, which is the hot path, still does. Every
+    later state does not: it is written to PostgreSQL synchronously, by a path that already needs
+    PostgreSQL to arbitrate (an analyst's request, a timeout's claim, a customer's answer, an
+    override). The ingest hot path is unchanged.
+  - **Where it is recorded:** in ADR 0111's consequences, and in a note on ADR 0068 when P2 lands.
+- **What D-44 assumed.** Its resolution publishes a decision's side effects "through the outbox"
+  after the grace.
+  - **What replaces it.** The reservation plus its recorder (T4, T5) does that job: the state is
+    written transactionally first, then published, and re-published until recorded. `outbox_events`
+    stays unused.
+  - **Why this is not a deviation.** The outbox's guarantee, published after a transactional write
+    and at least once, holds by another mechanism.
+- **Readers.** Every reader of later states moves to the view, which is one more join for
+  `GET /decisions/{id}`'s fallback, and that fallback is not on the ingest hot path.
 
 **Costs:**
 - **A decided MEDIUM transaction stays held longer.** It stays held for G + P plus the effects time,
@@ -610,3 +670,11 @@ brackets: 6 → N1, N9; 8 → N8; 9 → N5; 11 → N2; 14 → N7; 15 → N1; 16 
 timeout claim takes the `hold_owners` row before the entries it closes. A decide holding an entry
 can therefore deadlock with a claim. PostgreSQL detects it, the runner retries the loser, and a
 retried decide then reads TIMEOUT and answers 409.
+
+## 14. Review 5's findings: what draft 6 answers and what it carries
+
+| Finding | In draft 6 |
+|---|---|
+| 1 MAJOR: the sink's later-state write can lose a transition for good | T6: the sink writes no later state; the reservation is the only record; one view for every reader |
+| 3 MINOR: option A needs no foreign key on the arbiters | §3.6 states it for `transaction_transitions` (and `hold_owners` has none) |
+| 2, 4 to 9 MINOR | Carried unchanged under the owner's limit on draft 6. They are: the H5 rule's status guard and `ON CONFLICT` (2); the sink's lock timeout (4); `DueHold`'s new fields from old Redis members and reschedules (5); non-database claim failures dropping a batch (6); ADR 0111's D-18 row and the matrix (7); a dead letter plus a lost `DueHold` holding forever, as in M6 (8, a limitation); and the cutover's writer list and wording (9) |
