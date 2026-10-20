@@ -1,296 +1,345 @@
 # Risk configuration: the propagation contract
 
-Status: **draft 2, for independent review.**
-- **Review 1** (`docs/reviews/M8B/config-propagation-contract-review-1.md`) found draft 1 UNSOUND,
-  with 4 MAJOR and 8 MINOR findings. Draft 2 answers every finding; §8 maps each one to its answer.
-- **The rule for this document:** code is written against it, not the other way round. The owner
-  asked for it on 2026-10-20, before any of M8B's code.
+Status: **draft 3, for independent review.**
+
+**Review history.**
+- Review 1 found draft 1 UNSOUND (4 MAJOR, 8 MINOR): `docs/reviews/M8B/config-propagation-contract-review-1.md`.
+- Review 2 found draft 2 UNSOUND (3 MAJOR, 11 MINOR): `docs/reviews/M8B/config-propagation-contract-review-2.md`.
+  It confirmed that review 1's two ordering MAJORs are resolved.
+- §8 maps every finding of review 2 to its answer.
+
+**If draft 3 is found unsound, the author stops and takes the design to the owner** rather than
+writing a fourth draft. That was the owner's rule for M7's cache contract.
+
+Code is written against this document, not the other way round.
 
 **Scope.** This contract governs three things:
 - how an approved threshold or circuit-breaker change (P4) and a rule change (P5) reach every
   running decision instance;
-- the timed transitions that make a setting take or lose effect;
+- the timed transitions that make a setting take effect or lose it;
 - the locking that every dual-control action needs so those transitions stay consistent.
 
 It does not govern who may propose, approve or reject. That is ADR 0014 §3, implemented by
 `DualControlWorkflow`'s rules.
 
 **Sources:**
-- requirements FR-05-05, FR-05-07, FR-03-07, and E.6 ("effective within 60 s, target 5 s");
+- FR-05-05, FR-05-07, FR-03-07, and E.6: effective within 60 s, target 5 s;
 - ADR 0014 §3;
 - the contract's threshold, breaker, config-change and rule operations;
-- migrations V4, V6 and V62;
-- code: `JpaConfiguration`, `ConfigurationPort`, `BackgroundTasks`, `CircuitBreakerMonitor`,
-  `DualControlWorkflow`, `JdbcOverdueHolds`, and the Python scorer's `serving/thresholds.py`.
+- V4, V6, V8, V11, V62 and V71;
+- in the decision module: `JpaConfiguration`, `ConfigurationPort`, `DecisionService`,
+  `BackgroundTasks`, `CircuitBreakerMonitor`, `RedisCircuitBreakers`, `MccCircuitBreaker`,
+  `DualControlWorkflow`, `JdbcOverdueHolds` and `PostgresSink`;
+- the Python scorer's `serving/thresholds.py`.
 
 ## 1. What exists
 
-- **The decision path reads configuration from a per-institution snapshot** (`JpaConfiguration`)
-  of thresholds, rules and breaker settings.
+- **The snapshot.** The decision path reads a per-institution snapshot of thresholds, rules and
+  breaker settings (`JpaConfiguration`).
   - An institution's first request loads its snapshot synchronously.
-  - `refreshAll` reloads every cached institution in turn, one after another, then waits 5 s. It
-    runs on a two-thread scheduler that it shares with four other tasks.
+  - `refreshAll` reloads every cached institution one after another, then waits 5 s. It runs on a
+    two-thread scheduler shared with four other tasks.
   - A failed reload keeps the previous snapshot.
+- **Breaker settings and decisions.** The breaker monitor reads breaker settings and runs on every
+  instance. Decisions read only each instance's local copy of breaker state (`isOpen`), which that
+  instance's own monitor evaluation refreshes.
 - **Nothing else propagates.**
-  - `fs.config.changes` has no producer and no consumer.
+  - `fs.config.changes` has no producer or consumer.
   - `invalidate()` has no caller.
   - `DualControlWorkflow` is in memory and unwired.
 - **Defects this contract removes:**
-  - out-of-order installs by `put`;
-  - three separate reads per load, at READ COMMITTED;
-  - "in force" decided against the JVM clock;
-  - a rule-set version (`max(alert_rules.version)`) that can fall;
-  - a decision that reads thresholds and rules in two calls (`DecisionService:172,184`), so one
-    decision can mix two snapshots;
-  - nothing ever writes version 1, so an institution runs at "version 0" (defaults). That version
-    cannot be named as a `base_version` (V6 requires ≥ 1), and it breaks the foreign key of
-    `mcc_circuit_breaker_events.settings_version` when a breaker opens on defaults;
-  - the overdue-hold sweep recomputes a hold's timeout policy from the JVM time of the decision
-    (`JdbcOverdueHolds:30-34`).
+  - **Install order:** a snapshot is installed with `put`, so a slower, older load can overwrite a
+    newer one.
+  - **Consistency:** a load makes three reads at READ COMMITTED, so they can see different commits.
+  - **Clock:** "in force" is decided against the JVM clock.
+  - **Rule-set version:** it can fall, because it is `max(alert_rules.version)`.
+  - **Mixed snapshots:** a decision reads thresholds and rules in two calls, so one decision can
+    mix two snapshots.
+  - **No version 1:** nothing writes version 1, so institutions run at "version 0". That version
+    cannot be named as a base version, and it breaks the foreign key on
+    `mcc_circuit_breaker_events`.
+  - **Recomputed policy:** the overdue-hold sweep recomputes a hold's timeout policy from JVM time.
+  - **Racing monitors:** every instance's monitor writes breaker state, including instances that
+    have not installed a change yet.
 
-## 2. Terms
+## 2. Terms and assumptions
 
 | Term | Meaning |
 |---|---|
-| **R** | the refresh period: 5 s, configurable |
-| **K** | the number of loads run at once: 4 |
-| **T_L** | the timeout of one load: 2 s (a statement and connection-acquire timeout) |
-| **C** | the duration of one refresh cycle (C4). It is measured and exported. |
-| **part** | one of: thresholds, breaker settings, rules |
-| **version of a part** | thresholds: `risk_threshold_versions.version`. Breaker: `mcc_circuit_breaker_settings_versions.version`. Rules: the rule-set version (§3). |
-| **visible** | committed before the reading transaction's snapshot was taken |
-| **the lock of a kind** | `pg_advisory_xact_lock` on the key ('risk_config', institution, kind), where kind is CHANNEL_THRESHOLDS, MCC_CIRCUIT_BREAKER or RULES. It is transaction-scoped, so a pooled connection never keeps it. |
+| **R** | refresh period, 5 s (configurable) |
+| **K** | refresh worker threads, 4 |
+| **T_L** | deadline for one whole load, 2 s: a transaction timeout covering acquire, every statement and commit |
+| **T_P** | deadline for one probe, 2 s |
+| **C** | one refresh cycle's duration: probe plus loads (C4). Measured and exported |
+| **part** | thresholds, breaker settings or rules |
+| **version of a part** | `risk_threshold_versions.version`, `mcc_circuit_breaker_settings_versions.version`, or the rule-set version (§3.3) |
+| **visible** | committed before the reading transaction's snapshot |
+| **the lock of a kind** | `pg_advisory_xact_lock(('risk_config', institution, kind))`, kind ∈ {CHANNEL_THRESHOLDS, MCC_CIRCUIT_BREAKER, RULES}. Transaction-scoped. **A transaction takes at most one such lock.** |
+| **the leader** | the instance holding M6's 2 s Redis lease (`acquireLeadership`), already used by the hold poller |
 
-**Assumption A1.** Every transaction in this contract runs on the primary.
+- **A1.** Every transaction in this contract runs on the primary.
+- **A2. No committed transaction is lost.** Replication is synchronous, and the database is never
+  restored to an earlier point while instances run.
+  - Snapshots and versions are memory-only. After any restore or lossy failover, every API instance
+    is restarted, which clears them. This is a runbook item for M9.
+  - Without A2, a lost version's number can be reused, and an instance that installed the lost
+    version would keep it.
 
 ## 3. Schema additions (V81, M8B's range)
 
-1. **Version 1 is seeded.** For every institution, V81 inserts:
-   - threshold version 1: the SRS defaults for all six channels (0.60, 0.85,
+1. **Version 1 is seeded.** V81 inserts version 1 for every institution with no versions:
+   - thresholds for all six channels at the SRS defaults (0.60, 0.85,
      RELEASE_WITH_TIMEOUT_LABEL);
-   - breaker version 1: 5 %, 15 min, 100 transactions, 60 min.
+   - breaker settings 5 %, 15 min, 100 transactions, 60 min.
 
-   Both have `config_change_id` NULL, which V6 already allows for version 1 only. An AFTER INSERT
-   trigger on `institutions` does the same for every new institution. Version 0 then never
-   occurs, and the loader's default branch becomes an error that is counted. This also fixes the
-   `mcc_circuit_breaker_events` foreign-key failure for any institution created after V81 or
-   seeded by it.
-2. **Every threshold version is complete.** A deferred constraint trigger on `risk_thresholds`
-   refuses a commit that leaves a version with other than six channel rows.
-3. **A new append-only table, `alert_rule_set_versions`:**
-   - columns: `institution_id`, `version` (bigint), `changed_at`, `rule_id`, and `change` (CREATED,
+   `config_change_id` is NULL, as V6 allows for version 1 only.
+   - **For new institutions,** an AFTER INSERT trigger on `institutions` does the same.
+     - Institutions are inserted only by the owner, so the trigger runs as the owner and row-level
+       security does not apply. If an onboarding role is ever added, the trigger becomes SECURITY
+       DEFINER with a fixed `search_path`, as V8's chain trigger is.
+     - The decision test fixture, which inserts version 1 itself, is changed to rely on the
+       trigger.
+   - **Version 0 never occurs again.** A load that finds no version raises an error, which is
+     counted, rather than using defaults.
+2. **Every threshold version is complete.** Two deferred constraint triggers refuse to commit a
+   threshold version without exactly six channel rows: one on `risk_threshold_versions`, so a
+   version with no rows is caught, and one on `risk_thresholds`. V81 refuses to run if an existing
+   version is incomplete.
+3. **The rule-set version.** A new append-only table, `alert_rule_set_versions`:
+   - columns: `institution_id`, `version` bigint, `changed_at`, `rule_id`, and `change` (CREATED,
      VERSIONED, ENABLED, DISABLED or DELETED);
    - primary key `(institution_id, version)`;
    - tenant-isolated.
 
-   Every rule write runs in READ COMMITTED and takes the lock of RULES **before** it reads `max`. It
-   then appends `max + 1` in the same transaction as the change. Versions are therefore allocated in
-   commit order, and the primary key is a backstop.
-4. **`decision_states` gains `timeout_policy text`.** It is NULL except on HOLD rows, where it is the
-   policy the decision used, written by `PostgresSink` from the decision event. Rows written before
-   V81 keep NULL.
-5. **A new SECURITY DEFINER function, `risk_configuration_versions()`.** It returns, for every
-   institution, `(institution_id, thresholds_version, breaker_version, rule_set_version)`: the
-   highest visible version of each part. It returns numbers only, never settings.
+   **The database appends it, not the application.** Triggers do the appending: AFTER INSERT on
+   `alert_rule_versions`, and AFTER INSERT or UPDATE OF `state`, `current_version` on `alert_rules`.
+   Each trigger takes the lock of RULES, then appends `coalesce(max, 0) + 1`. So no write can change
+   the rule set without raising the version, and versions are allocated in commit order. The lock
+   is released after the commit becomes visible, so the next writer sees it.
+   - V81 seeds version 1 for every institution that already has rules.
+   - The probe returns `coalesce(max, 0)`.
+4. **`decision_states` gains `timeout_policy text`.**
+   - It is written on HOLD rows by `PostgresSink` from the decision event. The event payload gains
+     the field, in a new payload version.
+   - It is NULL on rows the older release wrote. That includes records spooled before the upgrade
+     and drained after it.
+5. **Two SECURITY DEFINER functions, each with `GRANT EXECUTE` to `fs_app` and an entry in V71's
+   pinned list:**
+   - `risk_configuration_versions()` returns `(institution_id, thresholds_version,
+     breaker_version, rule_set_version)` for every institution. It returns numbers only.
+   - `overdue_config_changes()` returns `(institution_id, kind)` pairs that have an
+     APPLIED_PENDING_CONFIRMATION change past `confirm_by`. It compares with `clock_timestamp()`
+     and orders the pairs by `(institution_id, kind)`.
+6. **`config_changes` gains a check:** `revert_cause <> 'NOT_CONFIRMED_IN_TIME' OR reverted_at >=
+   confirm_by`.
 
 ## 4. Rules
 
 **C1. A change is in force when its version row is visible.**
-- A version row is written in the same transaction as the state change that causes it (C6):
-  - a tightening applied;
-  - a loosening approved;
-  - a tightening rejected or reverted, which writes the previous settings as a new version;
-  - a rule written (§3.3).
-- `effective_at` keeps its default (the writer's `now()`). It is a record of the earliest possible
-  effect, not a filter. No load compares it with any clock.
+- **Which writes create a version.** Each is written in the same transaction as the change that
+  causes it:
+  - a tightening is applied;
+  - a loosening is approved;
+  - a tightening is rejected or reverted, which writes the previous settings as a new version;
+  - a rule is written (§3.3).
+- `effective_at` records the earliest possible effect. No load compares it with any clock.
 - What decided a transaction is the version the decision recorded (C5).
-- No change is announced by message. An instance learns of one only by reading PostgreSQL.
+- No change is announced by message.
 
 **C2. One load reads one consistent snapshot.** A load is one `REPEATABLE READ READ ONLY` tenant
-transaction that reads:
-- the highest visible threshold version, with its six rows;
+transaction, with the deadline T_L. It reads, with no time filter:
+- the highest visible threshold version and its six rows;
 - the highest visible breaker version;
-- the highest visible rule-set version;
-- the rules that are enabled at their current versions.
+- the highest visible rule-set version, and the enabled rules at their current versions.
 
-There is no time filter. All parts therefore come from one database snapshot.
-
-**C3. A snapshot is installed only if no part goes back.** It is installed in one atomic step on the
-institution's map entry (`ConcurrentHashMap.compute`). It is installed if there is no snapshot yet,
-or if each of its three versions is at least the installed snapshot's. Otherwise it is discarded.
-- **Why this orders correctly.** Versions are allocated in commit order: by the lock of a kind (C6,
-  §3.3) and the primary keys. A PostgreSQL snapshot sees a prefix of commit order. So of two loads,
-  the one whose snapshot was taken later has every version at least the other's, whatever their
-  start times.
-- **A snapshot that is neither ≥ nor ≤ the installed one** can come only from a lagging source,
-  which A1 excludes. It is discarded and counted (`fs_config_incomparable_snapshots_total`).
-- **Time plays no part in the ordering.** A clock step or a failover cannot hold a newer snapshot
-  back.
+**C3. A snapshot is installed only if no part goes back.** Installation is one atomic step on the
+institution's map entry (`ConcurrentHashMap.compute`).
+- **The rule.** A snapshot is installed if the entry has none, or if each of its three versions is
+  ≥ the installed snapshot's. Otherwise it is discarded.
+- **Why it holds.** Under A1 and A2, versions are allocated in commit order: by the lock of a kind
+  (C6), the rule-set triggers (§3.3) and the primary keys. A later snapshot sees a superset of
+  commits. So of two loads, the one whose snapshot is later is componentwise ≥, whatever their start
+  times.
+- **Incomparable snapshots.** A snapshot that is neither ≥ nor ≤ the installed one is discarded and
+  counted (`fs_config_incomparable_snapshots_total`).
+- **Entries are never removed.** Institutions are never deleted, and the map has no eviction. So
+  "no snapshot" is true only before an instance's first install for that institution.
 
 **C4. Refresh, and the bound.**
-- Refresh runs on its own single-thread scheduler, shared with nothing.
-- **Each cycle** does the following:
-  - (a) It calls `risk_configuration_versions()` once.
-  - (b) It loads, at most K at a time, every cached institution whose probed versions differ from
-    its installed ones. Each load has the timeout T_L. A load that fails or times out keeps the old
-    snapshot and is retried next cycle.
-  - (c) It evicts institutions that the probe no longer returns.
-  - (d) It waits R.
-- C is the duration of steps (a) and (b), exported as `fs_config_refresh_cycle_seconds`.
-- **Bound.** A version row that commits at DB time t is installed on every instance whose probe
-  and loads succeed by `t + R + 2C`. That is: the cycle in progress at t, the wait, then the next
-  cycle.
-- **What C costs.** A cycle loads only the institutions that changed, so C is the probe plus about
-  ⌈changed / K⌉ loads, each at most T_L.
-  - With one change and an ordinary load, C is well under 1 s and the bound is about 6 s.
-  - The guaranteed worst case, with every institution changing at once, is
-    `R + 2(probe + ⌈N/K⌉·T_L)`.
-  - E.6's 60 s holds while `⌈N/K⌉·T_L ≤ 27 s`, which is about 54 institutions at K = 4 and T_L = 2 s.
-    K is configurable for larger deployments.
-- **The bound does not hold while the probe or the loads fail.** The instance then keeps its
-  snapshots, and an alert fires when any installed snapshot's age passes 60 s. Age is measured on
-  the JVM's monotonic clock from the install, plus that load's own duration, so no clock mixes
-  with another (question Q1).
+- **Threads.** A dedicated single-thread scheduler runs the probe, and hands loads to a dedicated
+  pool of K threads. Each load uses its own connection, capped at K. Nothing here shares the
+  decision path's threads.
+- **One cycle:**
+  1. Probe once, with deadline T_P. A probe that fails, times out or returns no rows ends the cycle
+     as a failure. Nothing is evicted or loaded.
+  2. Load every cached institution whose probed versions differ from its installed ones, K at a
+     time, each with deadline T_L. A failed load keeps the old snapshot and is retried next cycle.
+  3. Mark every institution whose probed versions equal its installed ones, or that loaded
+     successfully, as **confirmed** at this cycle's end.
+  4. Wait R.
+- **The bound.** A version row committing at DB time t is installed, on every instance whose probe
+  and loads succeed, by `t + R + 2C`. The worst case is
+  `R + 2(T_P + ⌈N/K⌉·T_L)`:
+  - E.6's 60 s holds while that sum is at most 60 s;
+  - with R = 5 s, K = 4 and T_L = T_P = 2 s, that allows N ≤ 48 institutions all changing at once
+    (⌈48/4⌉ = 12, and 5 + 2·(2 + 24) = 57 s);
+  - with one change and ordinary loads, it is about 6 s.
+- **Freshness.** `fs_config_unconfirmed_seconds` is the largest, over this instance's
+  institutions, of the time since the institution was last confirmed. It is measured on the
+  monotonic clock. An alert fires at 60 s. A quiet institution is confirmed every cycle, so the
+  alert fires only when probes or loads fail (question Q1).
 
-**C5. A decision reads one snapshot.**
-- `ConfigurationPort` returns the institution's snapshot object. `DecisionService` reads it once
-  and takes thresholds, rules and breaker settings from it.
+**C5. A decision reads thresholds and rules from one snapshot.**
+- **One read per decision.** `ConfigurationPort` returns the snapshot object, and `DecisionService`
+  reads it once.
+- **Breaker state is outside the snapshot.** Decisions read the breaker *state* (`isOpen`), not
+  breaker settings. A settings change reaches decisions through C8.
 - **What is recorded today.** The decision records the thresholds version on
-  `fs.transactions.scored` (`DecisionService:216`).
-  - That schema is closed and requires `thresholds_version ≥ 1`. After §3.1 the clamp in
-    `KafkaMessages:454` is never exercised.
-- **Not done here (PB-151).** Recording the rule-set version, the breaker version and a hash of the
-  compiled rule set needs a change to the Kafka contract. It is filed as PB-151. Until it lands, a
-  decision's rule set is known only to within the propagation bound.
+  `fs.transactions.scored`.
+- **Not done here.** Recording the rule-set version and a hash of the compiled rule set needs a
+  change to the Kafka contract, filed as PB-151.
 
 **C6. Dual-control actions and the overdue revert.**
-- **Every action takes the lock of its kind first.** The actions are propose (which includes
-  supersede and fold), approve or confirm, reject, withdraw, and the overdue sweep. Each runs in
-  READ COMMITTED and takes the lock as its first statement after the tenant is set. Under the lock,
-  in the same transaction and in this order, it:
-  - (a) reverts every APPLIED_PENDING_CONFIRMATION change of that kind whose `confirm_by` ≤
-    `clock_timestamp()`. A revert sets REVERTED with cause NOT_CONFIRMED_IN_TIME, writes the
-    change's `previous` settings as a new version, and writes the `THRESHOLD_CHANGE` / `REVERTED`
-    audit event with the **system actor** (ADR 0014 §3);
-  - (b) re-reads the open change of that kind and the current version;
-  - (c) for a proposal, checks `base_version` against the current version: 409 `conflict` when
-    stale;
-  - (d) decides by the status read in (b). The decision is one of these:
+- **One lock per transaction.** Every action (propose, which includes supersede and fold; approve
+  or confirm; reject; withdraw) and every sweep step runs in READ COMMITTED and takes **exactly
+  one** kind lock.
+- **Action order.**
+  - **(0)** Approve, reject and withdraw first read the change's `(institution_id, kind)` by id. An
+    unknown id gives 404. This pre-read is safe because V6's guard trigger makes `kind` immutable.
+  - **(a) Overdue revert, its own transaction.** It takes the lock of the kind, then reverts every
+    APPLIED_PENDING_CONFIRMATION change of that kind whose `confirm_by` ≤ `clock_timestamp()`, and
+    commits. A revert:
+    - sets REVERTED, with cause NOT_CONFIRMED_IN_TIME and `reverted_at = clock_timestamp()`;
+    - writes the change's `previous` settings as a new version;
+    - writes a `THRESHOLD_CHANGE` / `REVERTED` audit event with the system actor (ADR 0014 §3) and
+      `event_at = clock_timestamp()`.
+  - **(b) The action's transaction.** It takes the lock again, then repeats (a) for any change that
+    became overdue in between. It then re-reads the open change of that kind and the current
+    version, and decides by what it read:
+    - a proposal with a stale `base_version` gets 409 `conflict`;
     - a confirmation or rejection of a change that is no longer open gets 409 `change-not-open`;
-    - a tightening that finds an open loosening supersedes it;
-    - a tightening that finds an APPLIED_PENDING_CONFIRMATION change folds it: the new change
-      takes the folded change's `previous` as its baseline, and gets its own 24-hour `confirm_by`
-      (ADR 0014 §3, as `DualControlWorkflow` does);
-    - a loosening that finds any open change gets 409 `open-change-exists`.
-- **The sweep.** Every instance runs it every R. It asks a SECURITY DEFINER lister, which compares
-  with its own `now()` and never a JVM time, which institutions and kinds have an overdue change. It
-  then runs step (a) for each, under the lock.
-- **Retries.** Every action and the sweep run through the audit module's `inTenant`, which retries
-  SQLSTATE 40001 (the audit chain's refusal). Each transaction is kept short.
+    - a tightening finding an open loosening supersedes it;
+    - a tightening finding an APPLIED_PENDING_CONFIRMATION change folds it: it takes that change's
+      `previous` as its baseline and gets its own 24-hour `confirm_by` (ADR 0014 §3);
+    - a loosening finding any open change gets 409 `open-change-exists`.
+  - **(c)** A refusal is returned as a value, after any revert in (b) has committed, so a refusal
+    never rolls a revert back.
+- **The sweep.** It runs every R_sweep = 5 s on its own single-thread scheduler. It calls
+  `overdue_config_changes()` and, for each `(institution, kind)` in the order returned, runs step
+  (a) as one transaction.
+- **Retries.** All of these run through a runner that retries SQLSTATE 40001 (the audit chain's
+  refusal) and 40P01. `inTenant` gains the second.
+- **Deadlock.** A transaction never holds two kind locks. The only locks taken after a kind lock are
+  rows of that kind, and the audit chain head, always last. That leaves no cycle.
 - **Consequences:**
-  - an overdue change is always reverted before anything else can touch it, so it is never folded,
-    confirmed or rejected;
-  - a confirmation and a fold of the same change are serialised, and the second sees the first's
-    status;
-  - a proposal always builds on the settings in force, never on a state an approval is about to
-    replace;
-  - a revert is in force on every instance by `confirm_by + R_sweep + d + R + 2C`, where d is one
-    sweep transaction.
-- **Folding, stated as the owner decided it (ADR 0014 §3).** A fold takes over the folded change's
-  baseline and starts a new 24-hour window. So an unconfirmed tightening's settings stay in force
-  past its own deadline while a later tightening carries them. They are restored when the carrying
-  change is reverted, unless that change is confirmed first.
+  - An overdue change is reverted before anything else can touch it.
+  - A confirmation and a fold are serialised, and each sees the other's result.
+  - A proposal builds on the settings in force.
+  - A revert is in force everywhere by `confirm_by + R_sweep + d + R + 2C`, where d is one sweep
+    step.
+- **Folding, as the owner decided it (ADR 0014 §3).** A fold keeps the folded change's baseline
+  and starts a new 24-hour window. So an unconfirmed tightening's settings can stay in force past
+  their own deadline while a later tightening carries them.
 
-**C7. Rules:**
-- **No dual control.** The frozen contract gives the rule operations none, and V6's `kind` admits no
-  rules, so a rule write is in force on commit (C1).
-- **Concurrency.** Every rule write takes the lock of RULES (§3.3). `setRuleState` carries the
-  rule's `version` and gets 409 when it is stale.
-- **Last writer wins on `createRuleVersion`.** The operation carries no expected version, so two
-  officers editing the same version are serialised and the second's draft becomes current. Both
-  drafts stay in `alert_rule_versions`. The frozen contract allows nothing better; filed as PB-152.
-- **Two notes for implementers:**
+**C7. Rules.**
+- **No dual control.** The frozen contract gives the rule operations none, and V6 admits no rules.
+  A rule write is in force on commit.
+- **Concurrent writes.** Rule writes are serialised by the RULES lock in the §3.3 triggers.
+  `setRuleState` carries the rule's `version`, and a stale one gets 409.
+- **`createRuleVersion` is last-writer-wins.** It carries no expected version, so of two concurrent
+  edits, the second draft becomes current. Both stay in `alert_rule_versions`. Filed as PB-152.
+- **Two constraints on future code:**
   - Writing `trigger_count` or `last_triggered_at` must not increment `alert_rules.version`.
-  - A rule that does not compile is refused at write with 422. A stored rule that a later compiler
-    rejects is skipped at load and counted.
+  - A rule that does not compile is refused at write (422). A stored rule a later compiler rejects
+    is skipped at load and counted.
 
-**C8. The circuit-breaker monitor:**
-- **Each evaluation reads the snapshot.** The breaker's state in Redis records the settings version
-  it was last evaluated under. A compare-and-set from an evaluation under a lower settings version
-  is refused, so an instance that has not yet installed a change can never undo the change's
-  effect.
-- **One institution's failure does not stop the others.** The monitor evaluates each institution
-  separately. A snapshot that cannot be loaded skips that institution for one evaluation and is
-  counted.
+**C8. The circuit-breaker monitor runs on the leader only.**
+- **Who writes.** Only the instance holding the lease evaluates and writes breaker state. Other
+  instances refresh their local `isOpen` copy from Redis, reading every R_monitor = 5 s, and never
+  write. Two instances can overlap only across a lease expiry. The existing compare-and-set settles
+  that overlap.
+- **State records its settings version.** The breaker state in Redis records the settings version
+  of the evaluation that last changed it.
+- **Re-evaluation under newer settings.** When the leader holds a newer settings version than a
+  breaker's recorded one, it re-decides that breaker from its stored history under the new
+  settings. It keeps `opened_at` and `last_breach_at`, and reopens or closes as the new settings
+  require, recording an event. So a transition made under old settings lasts at most until the
+  leader's first evaluation after it installs the new version.
+- **One institution's failure is isolated.** Each institution is evaluated separately, and one that
+  cannot load its snapshot is skipped and counted.
+- **The breaker bound.** A settings change reaches decisions by `t + R + 2C + 2·R_monitor`, plus one
+  evaluation: about 16 s in the usual case, within 60 s on C4's condition.
 
 **C9. Holds keep the policy they were held under.**
-- The Redis entry carries the policy from the decision's snapshot, and so does `decision_states`
-  (§3.4).
-- The overdue sweep uses the stored policy. Only for a row written before V81 does it fall back to
-  today's computation.
-- A policy change therefore never alters a hold already scheduled, by either path.
+- **Where the policy is kept.** The Redis entry carries the policy of the decision's snapshot.
+  `decision_states.timeout_policy` stores it too (§3.4).
+- **The overdue sweep** uses the stored policy. When it is NULL, the sweep uses the policy of the
+  decision's own `thresholds_version` if the row records one. Only otherwise does it use today's
+  computation from `decided_at`.
+- **Residual, stated in §6.** That last fallback applies only to holds written by the older release:
+  during a rolling deploy, or drained from a spool written before the upgrade.
 
-**C10. Outside this contract:**
-- **The scorer's threshold hash.** `fs:config:model_thresholds` is one global value: the model's
-  defaults, used only for the informational `model_risk_tier`. An institution's threshold change
-  does not touch it, and it belongs to model lifecycle (P8) (question Q2).
-- **The anomaly-review threshold.** It is a per-process deploy-time setting
-  (`DecisionWiring:297`). It must be uniform across instances by deployment, and it is not recorded
-  on the decision. Java compares with `>=` and the scorer with `>`. That mismatch is filed as
-  PB-153.
+**C10. Outside this contract.**
+- **The scorer's global threshold hash** belongs to model lifecycle, P8 (Q2).
+- **The anomaly-review threshold** is a per-process deploy-time setting that must be uniform. Java
+  compares with `>=` and the scorer with `>`. That mismatch is filed as PB-153.
 
 ## 5. Properties, each to be proved by a test that fails with its rule removed
 
 | # | Property | Rules |
 |---|---|---|
-| P1 | A load's parts come from one snapshot. A change committed between two of its statements is wholly visible or wholly invisible | C2 |
-| P2 | No part's version ever decreases on an instance. This holds for a slow refresh finishing after a first-request load, and for a load with an earlier `now()` but a later snapshot | C3 |
-| P3 | Whether a change is in force never depends on a clock. A JVM skewed by minutes, or a DB clock stepped back, changes nothing | C1, C2, C3 |
-| P4 | A committed change is installed by `t + R + 2C`. This holds with N institutions cached, and with one institution whose loads hang | C4 |
-| P5 | A decision's thresholds, rules and breaker settings come from one snapshot | C5 |
-| P6 | Every applied tightening ends in exactly one of CONFIRMED, REVERTED or SUPERSEDED. It is reverted by `confirm_by` plus the sweep's lateness unless confirmed or folded first. A confirmed change's settings are never restored away except by a later officer's change | C6 |
-| P7 | Races under the lock: confirm vs fold, approve-loosening vs supersede, sweep vs fold, sweep vs confirm, sweep vs reject. Each ends consistently and answers 409 to the loser | C6 |
-| P8 | A confirmation or rejection after `confirm_by` gets 409, and the change is REVERTED with cause NOT_CONFIRMED_IN_TIME | C6(a,d) |
-| P9 | Every institution has threshold and breaker version 1, a new institution included. Every threshold version has six channels | §3.1, §3.2 |
-| P10 | The rule-set version never decreases, and each rule write raises it by exactly one | §3.3, C7 |
-| P11 | An instance under stale breaker settings cannot change a breaker evaluated under newer settings | C8 |
-| P12 | A hold's timeout policy is the decision's, through Redis and through the overdue sweep | C9 |
+| P1 | A load's parts come from one snapshot | C2 |
+| P2 | No part's version ever decreases on an instance. This includes a slow refresh after a first-request load, and a load with an earlier `now()` but a later snapshot | C3 |
+| P3 | Which version is in force is decided by versions alone. Only the 24-hour deadline reads a clock, and that clock is the database's | C1, C2, C6 |
+| P4 | A committed change is installed by `t + R + 2C`, including with N institutions cached and one whose loads hang | C4 |
+| P5 | A decision's thresholds and rules come from one snapshot | C5 |
+| P6 | Every applied tightening ends in exactly one of CONFIRMED, REVERTED or SUPERSEDED. It is reverted by `confirm_by + R_sweep + d` unless confirmed or folded first | C6 |
+| P7 | Confirm vs fold, approve-loosening vs supersede, and the sweep vs fold, confirm, reject, and an approval of the other kind: each ends consistently, the loser gets 409, and nothing deadlocks | C6 |
+| P8 | A confirmation or rejection after `confirm_by` gets 409, and the change is REVERTED with cause NOT_CONFIRMED_IN_TIME and `reverted_at ≥ confirm_by` | C6, §3.6 |
+| P9 | Every institution, new ones included, has threshold and breaker version 1. Every threshold version has six channels, including one inserted with none | §3.1, §3.2 |
+| P10 | Every write to `alert_rules` or `alert_rule_versions` raises the rule-set version by exactly one, and it never decreases | §3.3 |
+| P11 | Only the leader writes breaker state. A transition made under older settings is re-decided at the leader's first evaluation after it installs the newer ones | C8 |
+| P12 | A hold's timeout policy is the decision's, through Redis and through the sweep, for every row the new release writes | C9 |
+| P13 | A failed or empty probe evicts nothing. The freshness alert stays quiet for unchanged institutions and fires when probes fail | C4 |
+| P14 | An incomparable snapshot is discarded and counted | C3 |
+| P15 | A stored rule that no longer compiles is skipped and counted | C7 |
 
 ## 6. Accepted costs
 
-- **Propagation is by polling.** Instances can disagree within the bound. Until PB-151, only the
+- **Propagation is by polling,** so instances can disagree within the bound. Until PB-151, only the
   thresholds version is recorded per decision.
-- **There is no announcement channel.** Without one there is nothing to race, and the API-key cache
-  needed six reviews of exactly that. The cost is seconds instead of milliseconds.
-  `fs.config.changes` stays declared and unproduced: its schema has no `institution_id`.
-- **An instance that cannot reach PostgreSQL keeps its snapshots, but cannot load a new
-  institution.** An institution's first decision on an instance needs PostgreSQL. After a restart
-  during a database outage, those first decisions fail.
-- **Rolling deploys.** Instances on different compiler versions can skip different stored rules
-  under the same rule-set version, until PB-151 records the compiled set.
+- **There is no announcement channel.** `fs.config.changes` stays unproduced.
+- **An instance without PostgreSQL** keeps its snapshots, but cannot load an institution for the
+  first time.
+- **Rolling deploys** have two costs:
+  - instances on different compilers can skip different stored rules (PB-151);
+  - holds the old release writes fall back to a recomputed policy (C9).
+- **A2 is required.** A restore or lossy failover requires restarting every instance.
+- **A breaker transition made under old settings can stand** until the leader's next evaluation
+  after it installs the new ones.
 
 ## 7. Questions for the owner
 
-- **Q1.** After 60 s of failed refreshes, an instance keeps deciding with its last snapshots, and
-  an alert fires. The alternative, failing closed, turns a database outage into an ingest outage
-  for every institution already loaded.
-- **Q2.** The scorer's global threshold hash is left to model lifecycle (P8). M5's handoff expected
-  `PATCH /admin/thresholds` to write it, but a global hash cannot represent per-institution,
-  per-channel thresholds.
+- **Q1.** After 60 s of failed refreshes, should an instance keep deciding with its last snapshots
+  (and alert), or fail closed?
+- **Q2.** The scorer's global threshold hash is left to model lifecycle (P8). M5's handoff to
+  `PATCH /admin/thresholds` cannot be met as written.
 
-## 8. Review 1's findings and their answers
+## 8. Review 2's findings and their answers
 
 | Finding | Answer |
 |---|---|
-| 1 MAJOR: read time does not order snapshots | C1 drops the time filter; C3 installs by versions; P2 and P3 |
-| 2 MAJOR: supersede and fold were unlocked | C6: the lock of a kind for every action, overdue reverts first, decisions by the status read under the lock; P6 restated for folding; P7 |
-| 3 MAJOR: the bound ignored the refresh loop | C4: a version probe, loads only of what changed, K parallel loads with T_L, a dedicated thread; the bound stated in C; P4 with N institutions and a hung load |
-| 4 MAJOR: the sweep recomputed a held policy | §3.4 and C9: the policy stored on `decision_states`; P12 |
-| 5 C5: two reads, and what is recorded | C5: one snapshot per decision; other versions filed as PB-151 |
-| 6 version 0 and partial versions | §3.1 seeds version 1 (and fixes the breaker foreign key for seeded institutions); §3.2 completeness; P9 |
-| 7 C6 clock, rejection, lister, retries, actor | C6: status under the lock, `clock_timestamp()`, rejection refused, a DB-time lister, `inTenant` retries, the system actor; P8 |
-| 8 C8 stale evaluations, one cold load | C8: the settings version in the breaker state, evaluation per institution; P11 |
-| 9 rule-set lock details, lost edit, `trigger_count` | §3.3 (READ COMMITTED, lock before `max`, transaction-scoped); C7 (last writer wins, PB-152; the `trigger_count` note) |
-| 10 anomaly threshold, eviction, first request, compiler skew | C10 and PB-153; C4(c) evicts; §6 states the first-request dependency and compiler skew |
-| 11 wording | C1 (`effective_at` is a record); P3 restated; C4's age on the monotonic clock |
-| 12 missing properties | P6 to P12 |
+| N1 MAJOR: a stale instance closes a breaker | C8: leader-only writes; re-decision under newer settings; P11 |
+| N2 MAJOR: two kind locks, deadlock, 40P01 | C6: one kind lock per transaction, a fixed lister order, audit last, 40P01 retried; P7 |
+| N3 MAJOR: a lost commit and a reused version | A2 and the runbook restart; §6 |
+| N4: the age alert fires for quiet institutions | C4: "confirmed" by probe; P13 |
+| N5: a version with no rows | §3.2: a trigger on the version table, and V81 checks existing data; P9 |
+| N6: rule writes that skip the set version, and pre-V81 rules | §3.3: triggers append it; V81 seeds; `coalesce` to 0; P10 |
+| N7: threads, T_L, probe timeout, arithmetic, sweep scheduler | C4: a K-thread pool, whole-load and probe deadlines, N ≤ 48; C6: the sweep's own scheduler |
+| N8: a refusal rolls back the revert, and early timestamps | C6 (a) commits on its own, (c) refusals are values, `clock_timestamp()`; §3.6; P8 |
+| N9: the NULL fallback after V81 | C9: the decision's own version first; the residual stated in §6 |
+| N10: decisions use breaker state | C5 restated; C8's own bound |
+| N11: dead eviction | C3 and C4: no eviction, and an empty probe is a failure; P13 |
+| N12: the seeding trigger | §3.1: owner rights stated, the fixture changed; §3.5 grants and V71 |
+| N13: the lock is not the first statement | C6 (0): a pre-read of the immutable kind |
+| N14: P3 overclaims | P3 restated |
