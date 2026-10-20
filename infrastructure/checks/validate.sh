@@ -39,8 +39,15 @@ step "Blackbox exporter modules"
 "$bin/blackbox_exporter" --config.check --config.file=infrastructure/prometheus/blackbox.yml \
   2>&1 | grep -q "Config file is ok"
 
-step "Loki log rules"
-"$bin/lokitool" rules lint --dry-run infrastructure/loki/rules/fraudshield/*.yml
+# lokitool is AGPL-3.0 and runs in CI only (owner, 2026-10-20; M9_updates.md 3b, decision 1):
+# it is never shipped and never run on a developer machine. GitHub Actions sets CI=true; the
+# infrastructure workflow runs this step there.
+if [[ "${CI:-}" == true ]]; then
+  step "Loki log rules"
+  "$bin/lokitool" rules lint --dry-run infrastructure/loki/rules/fraudshield/*.yml
+else
+  echo "skipped: Loki log rules (lokitool runs in CI only)"
+fi
 
 step "Alertmanager configuration and routing"
 am_config=infrastructure/alertmanager/alertmanager.yml
