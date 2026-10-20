@@ -8,6 +8,7 @@ tests are about the difference between "names a commit" and "was produced at one
 
 from __future__ import annotations
 
+import hashlib
 import subprocess
 from pathlib import Path
 
@@ -146,6 +147,63 @@ def test_an_artefact_names_the_machine_it_ran_on(
     )
     assert "logical cores" in line
     assert "GiB" in line
+
+
+def test_an_artefact_names_its_inputs_and_outputs_by_hash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A run that reads another run's output names it by content, so the two artefacts link by
+    the same hash rather than by the workflow that connected them (M11, the full-volume cache).
+    """
+    root = _repo(tmp_path / "repo")
+    monkeypatch.setattr("fraudshield_tools.evidence_run.REPO_ROOT", root)
+    cache = tmp_path / "cache.bin"
+    cache.write_bytes(b"corpus")
+    built = tmp_path / "built.bin"
+    output = tmp_path / "artefact.txt"
+    command = ["cp", str(cache), str(built)]
+    arguments = ["--input", str(cache), "--produces", str(built), "--output", str(output)]
+    assert evidence_main([*arguments, "--", *command]) == 0
+    text = output.read_text(encoding="utf-8")
+    digest = hashlib.sha256(b"corpus").hexdigest()
+    assert f"# evidence-input: {digest} 6 bytes {cache}" in text
+    assert f"# evidence-output: {digest} 6 bytes {built}" in text
+    assert provenance.parse(text) is not None
+
+
+def test_a_missing_input_refuses_and_a_missing_output_is_recorded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An input that is not there means the run cannot say what it read, so nothing runs; an
+    output that is not there is a fact about a failed run and is written down as one.
+    """
+    root = _repo(tmp_path / "repo")
+    monkeypatch.setattr("fraudshield_tools.evidence_run.REPO_ROOT", root)
+    output = tmp_path / "artefact.txt"
+    absent = tmp_path / "absent.bin"
+    assert evidence_main(["--input", str(absent), "--output", str(output), "--", "true"]) == 2
+    assert not output.exists()
+    assert evidence_main(["--produces", str(absent), "--output", str(output), "--", "true"]) == 0
+    assert f"# evidence-output: missing {absent}" in output.read_text(encoding="utf-8")
+
+
+def test_a_relative_path_is_read_where_the_command_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The command runs in the repository root, so a relative --input names the file there, not
+    one that happens to share the name in the caller's directory, and the artefact says which.
+    """
+    root = _repo(tmp_path / "repo")
+    monkeypatch.setattr("fraudshield_tools.evidence_run.REPO_ROOT", root)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "cache.bin").write_bytes(b"decoy")
+    monkeypatch.chdir(elsewhere)
+    output = tmp_path / "artefact.txt"
+    assert evidence_main(["--input", "tracked.txt", "--output", str(output), "--", "true"]) == 0
+    digest = hashlib.sha256(b"one\n").hexdigest()
+    assert f"# evidence-input: {digest} 4 bytes {root / 'tracked.txt'}" in output.read_text()
+    assert evidence_main(["--input", "cache.bin", "--output", str(output), "--", "true"]) == 2
 
 
 def _criterion(**evidence: object) -> dict[str, object]:

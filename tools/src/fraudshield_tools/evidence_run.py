@@ -13,6 +13,12 @@ Every artefact also names the machine it ran on â€” CPU, cores, memory and OS â€
 happen on more than one: accuracy results are admissible from any of them, and ADR 0010 restricts
 only latency, but a reader must be able to tell which machine produced which number.
 
+Files a run reads or writes can be named with ``--input`` and ``--produces``: each is stamped
+with its SHA-256 and size, inputs before the command runs and outputs after it. A run that reads
+a feature cache built by another run then names the same hash as the run that built it, so which
+corpus a result came from is a fact in both artefacts rather than an inference from the workflow
+that connected them (M11: the full-volume gate named its cache only by path).
+
 It refuses on a dirty tree, because an artefact produced from uncommitted code belongs to no
 commit and nothing downstream can tell. ``--allow-dirty`` runs anyway and stamps the artefact
 **NOT CITABLE**, so a development run is possible and is never mistaken for evidence.
@@ -21,6 +27,7 @@ commit and nothing downstream can tell. ``--allow-dirty`` runs anyway and stamps
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import platform
 import subprocess
@@ -32,6 +39,8 @@ from fraudshield_tools import REPO_ROOT
 from fraudshield_tools.provenance import DirtyTreeError, require_clean
 
 MACHINE_FIELD = "# evidence-machine:"
+INPUT_FIELD = "# evidence-input:"
+OUTPUT_FIELD = "# evidence-output:"
 
 
 def _read(path: str) -> str:
@@ -62,6 +71,16 @@ def machine() -> str:
     return f"{cpu}; {os.cpu_count()} logical cores; {total}; {platform.platform()}"
 
 
+def fingerprint(path: Path) -> str:
+    """``<sha256> <bytes> bytes <path>``, read in blocks so a large cache never has to fit in
+    memory."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(block)
+    return f"{digest.hexdigest()} {path.stat().st_size} bytes {path}"
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="fs-evidence", description=__doc__)
     parser.add_argument("--output", type=Path, required=True, help="artefact to write")
@@ -69,6 +88,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--allow-dirty",
         action="store_true",
         help="run on a modified tree and stamp the artefact NOT CITABLE",
+    )
+    parser.add_argument(
+        "--input",
+        type=Path,
+        action="append",
+        default=[],
+        help="a file the command reads; stamped with its SHA-256 before the run (repeatable)",
+    )
+    parser.add_argument(
+        "--produces",
+        type=Path,
+        action="append",
+        default=[],
+        help="a file the command writes; stamped with its SHA-256 after the run (repeatable)",
     )
     parser.add_argument("command", nargs=argparse.REMAINDER, help="-- then the command to run")
     args = parser.parse_args(argv)
@@ -82,6 +115,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"fs-evidence: {dirty}", file=sys.stderr)
         return 2
 
+    # The command runs in REPO_ROOT, so a relative path means what it means there, and the
+    # artefact records the absolute path that was hashed.
+    args.input = [p if p.is_absolute() else REPO_ROOT / p for p in args.input]
+    args.produces = [p if p.is_absolute() else REPO_ROOT / p for p in args.produces]
+    unusable = [
+        f"{path} ({'not a regular file' if path.exists() else 'not found'})"
+        for path in args.input
+        if not path.is_file()
+    ]
+    if unusable:
+        print(f"fs-evidence: unusable input: {', '.join(unusable)}", file=sys.stderr)
+        return 2
+    inputs = "".join(f"{INPUT_FIELD} {fingerprint(path)}\n" for path in args.input)
+
     finished = subprocess.run(  # noqa: S603 - argv comes from the operator's own command line
         command, cwd=REPO_ROOT, capture_output=True, text=True, check=False
     )
@@ -89,10 +136,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     sys.stderr.write(finished.stderr)
     # The artefact is written whatever the command's exit code: a failed evidence run is itself
     # evidence, and one that left no file would be indistinguishable from one never attempted.
+    outputs = "".join(
+        f"{OUTPUT_FIELD} {fingerprint(path) if path.is_file() else f'missing {path}'}\n"
+        for path in args.produces
+    )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
         stamp.header()
         + f"{MACHINE_FIELD} {machine()}\n"
+        + inputs
+        + outputs
         + f"# command: {' '.join(command)}\n"
         + f"# exit: {finished.returncode}\n\n"
         + finished.stdout,

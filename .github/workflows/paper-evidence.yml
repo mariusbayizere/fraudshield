@@ -98,7 +98,8 @@ jobs:
           # fs-features auc scores the last 20,000 corpus rows, all in the test period, and does not
           # log the read itself; it is logged here, through the tree's own access.record.
           uv run --frozen --package fraudshield-ml python -c "import importlib.util, sys; spec = importlib.util.spec_from_file_location('a', sys.argv[1]); m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m); m.record('fs-features auc (round two, d8083dbc)', sys.argv[2], 20000, purpose='paper evidence, round two: single-feature measurement re-run')" "$GITHUB_WORKSPACE/ml/src/fraudshield_ml/training/access.py" "$RUNNER_TEMP/bench1m" || exit 1
-          uv run --frozen fs-evidence --output "$RUNNER_TEMP/out/frontier_d8083dbc.txt" -- \
+          uv run --frozen fs-evidence --output "$RUNNER_TEMP/out/frontier_d8083dbc.txt" \
+            --input "$RUNNER_TEMP/features_full.parquet" -- \
             .venv/bin/python -u -m fraudshield_ml.cli frontier "$RUNNER_TEMP/features_full.parquet" --requests 300 --repeats 3
           frontier=$?
           set -e

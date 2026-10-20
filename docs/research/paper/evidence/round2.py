@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import gzip
+import hashlib
 import importlib.util
 import math
 import os
@@ -584,6 +585,9 @@ def selection_command(args: argparse.Namespace) -> int:
                 )
             start = rows[0].timestamp
             days = sorted((rows[i].timestamp - start).total_seconds() / 86_400 for i in chosen)
+            # The depth is a requested limit; a depth past the draw reads the whole draw, so the
+            # rows actually read are logged too (M11: "corpus 2000000" had to be inferred).
+            corpus_read = len(rows)
             del rows
             q = statistics.quantiles(days, n=4)
             short = sum(d < 30 for d in days) / len(days)
@@ -600,7 +604,7 @@ def selection_command(args: argparse.Namespace) -> int:
             emit([
                 f"  corpus {depth}: history days min {days[0]:.1f}, quartiles {q[0]:.1f} / "
                 f"{q[1]:.1f} / {q[2]:.1f}, max {days[-1]:.1f}; under 30 days {short:.3f}, "
-                f"under 90 days {medium:.3f}",
+                f"under 90 days {medium:.3f}; corpus rows read {corpus_read}",
                 *block,
             ])  # fmt: skip
             # 400,000 rows of corpus and 30,000 training rows is the gate's own design, so it must
@@ -806,6 +810,24 @@ def machine() -> str:
         return "unknown"
 
 
+def inputs(args: argparse.Namespace) -> list[str]:
+    """``# evidence-input:`` lines in the format ``fs-evidence --input`` writes (keep the two
+    identical): every file argument that exists, by SHA-256 and size, so a result names the cache
+    it read by content (M11). Directory arguments, the dataset among them, are not hashed."""
+    paths = [v for v in vars(args).values() if isinstance(v, Path)]
+    paths += [Path(pair.split("=", 1)[1]) for pair in getattr(args, "caches", None) or []]
+    lines = []
+    for path in paths:
+        if path.is_file():
+            digest = hashlib.sha256()
+            with path.open("rb") as handle:
+                for block in iter(lambda: handle.read(1 << 20), b""):
+                    digest.update(block)
+            size = path.stat().st_size
+            lines.append(f"# evidence-input: {digest.hexdigest()} {size} bytes {path}")
+    return lines
+
+
 def header(args: argparse.Namespace) -> None:
     """The stamp, printed before any work, so a run that dies still names what it was."""
     state = "clean" if not ci.git("status", "--porcelain").strip() else "DIRTY"
@@ -817,6 +839,7 @@ def header(args: argparse.Namespace) -> None:
         f"# evidence-commit: {ci.git('rev-parse', 'HEAD').strip()}",
         f"# evidence-tree-state: {state}",
         f"# evidence-machine: {machine()}",
+        *inputs(args),
         f"# command: python docs/research/paper/evidence/round2.py {' '.join(sys.argv[1:])}",
         f"# models and features: the code at {code or '(not a git checkout)'}",
         f"# draw: {args.fingerprint}; plan: docs/research/paper/evidence/round2_plan.md",
