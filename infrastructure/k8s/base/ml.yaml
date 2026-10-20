@@ -42,7 +42,7 @@ spec:
           image: ghcr.io/mariusbayizere/fraudshield-ml
           ports:
             - {name: grpc, containerPort: 50051}
-            - {name: admin, containerPort: 8000}
+            - {name: admin, containerPort: 8081}
           envFrom:
             - secretRef: {name: fraudshield-ml-secrets}
           resources:
