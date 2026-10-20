@@ -15,12 +15,13 @@ reviewed on its own: `docs/architecture/breaker-monitor-contract.md`. Review 3's
 rule-set triggers is fixed here as the one-line ordering correction the owner described: the lock
 is taken before the row write (§3.3).
 
-Since review 3, this contract has changed in only three ways:
+Since review 3, this contract has changed in these ways only:
 - §3.3's lock order;
 - C8 moved out;
-- C9's fallback corrected, because review 3's m3 showed it described a column that does not exist.
-
-Review 3's other MINORs (m5 to m9) are carried to the implementation's review, listed in §9.
+- C9's fallback corrected, because review 3's m3 showed it described a column that does not exist;
+- §3.3's grant (review 3's m4);
+- §9, which lists review 3's other MINORs (m5 to m9) as carried to the implementation's review;
+- the wording fixes of the delta check (`docs/reviews/M8B/config-propagation-contract-delta-split.md`).
 
 **Review history.**
 - Review 1 found draft 1 UNSOUND (4 MAJOR, 8 MINOR): `docs/reviews/M8B/config-propagation-contract-review-1.md`.
@@ -75,8 +76,9 @@ It does not govern who may propose, approve or reject. That is ADR 0014 §3, imp
     cannot be named as a base version, and it breaks the foreign key on
     `mcc_circuit_breaker_events`.
   - **Recomputed policy:** the overdue-hold sweep recomputes a hold's timeout policy from JVM time.
-  - **Racing monitors:** every instance's monitor writes breaker state, including instances that
-    have not installed a change yet.
+  - **Racing monitors** (removed by the breaker-monitor contract, not by this one): every
+    instance's monitor writes breaker state, including instances that have not installed a change
+    yet.
 
 ## 2. Terms and assumptions
 
@@ -138,8 +140,11 @@ It does not govern who may propose, approve or reject. That is ADR 0014 §3, imp
      - the version a write reads, and the `max` its trigger reads, are read after the lock;
      - versions are therefore allocated in commit order.
    - **The trigger as a backstop.** The trigger takes the same lock again, re-entrantly. A writer
-     that forgot it still allocates correctly, although it can then deadlock, and the runner
-     retries.
+     that forgot to take the lock first still allocates the rule-set version correctly. It can,
+     however, deadlock, or fail with 23505 on its own rule version. The runner retries the deadlock
+     but not the 23505. Taking the lock first is therefore required, not optional.
+   - **Grant:** `alert_rule_set_versions` grants SELECT and INSERT to `fs_app`, which the triggers
+     write as.
    - The lock is released after the commit becomes visible, so the next writer sees it.
    - V81 seeds version 1 for every institution that already has rules.
    - The probe returns `coalesce(max, 0)`.
@@ -269,7 +274,8 @@ institution's map entry (`ConcurrentHashMap.compute`).
 **C7. Rules.**
 - **No dual control.** The frozen contract gives the rule operations none, and V6 admits no rules.
   A rule write is in force on commit.
-- **Concurrent writes.** Rule writes are serialised by the RULES lock in the §3.3 triggers.
+- **Concurrent writes.** Rule writes are serialised by the RULES lock that each write takes as its
+  first statement (§3.3).
   `setRuleState` carries the rule's `version`, and a stale one gets 409.
 - **`createRuleVersion` is last-writer-wins.** It carries no expected version, so of two concurrent
   edits, the second draft becomes current. Both stay in `alert_rule_versions`. Filed as PB-152.
@@ -312,7 +318,7 @@ their versions through the snapshot (C2, C3). That contract governs:
 | P7 | Confirm vs fold, approve-loosening vs supersede, and the sweep vs fold, confirm, reject, and an approval of the other kind: each ends consistently, the loser gets 409, and nothing deadlocks | C6 |
 | P8 | A confirmation or rejection after `confirm_by` gets 409, and the change is REVERTED with cause NOT_CONFIRMED_IN_TIME and `reverted_at ≥ confirm_by` | C6, §3.6 |
 | P9 | Every institution, new ones included, has threshold and breaker version 1. Every threshold version has six channels, including one inserted with none | §3.1, §3.2 |
-| P10 | Every write to `alert_rules` or `alert_rule_versions` raises the rule-set version by exactly one, and it never decreases | §3.3 |
+| P10 | Every write to `alert_rules` or `alert_rule_versions` raises the rule-set version by exactly one, and it never decreases. A `setRuleState` racing a `createRuleVersion` on the same rule completes both, without deadlock or 23505 | §3.3, C7 |
 | P12 | A hold's timeout policy is the decision's, through Redis and through the sweep, for every row the new release writes | C9 |
 | P13 | A failed or empty probe evicts nothing. The freshness alert stays quiet for unchanged institutions and fires when probes fail | C4 |
 | P14 | An incomparable snapshot is discarded and counted | C3 |
@@ -349,8 +355,8 @@ their versions through the snapshot (C2, C3). That contract governs:
 | N6: rule writes that skip the set version, and pre-V81 rules | §3.3: triggers append it; V81 seeds; `coalesce` to 0; P10 |
 | N7: threads, T_L, probe timeout, arithmetic, sweep scheduler | C4: a K-thread pool, whole-load and probe deadlines, N ≤ 48; C6: the sweep's own scheduler |
 | N8: a refusal rolls back the revert, and early timestamps | C6 (a) commits on its own, (c) refusals are values, `clock_timestamp()`; §3.6; P8 |
-| N9: the NULL fallback after V81 | C9: the decision's own version first; the residual stated in §6 |
-| N10: decisions use breaker state | C5 restated; C8's own bound |
+| N9: the NULL fallback after V81 | C9: the stored policy, then today's computation, the residual stated in §6 (the "decision's own version" step was removed; review 3, m3) |
+| N10: decisions use breaker state | C5 restated; the breaker's own bound is in `breaker-monitor-contract.md` §4 |
 | N11: dead eviction | C3 and C4: no eviction, and an empty probe is a failure; P13 |
 | N12: the seeding trigger | §3.1: owner rights stated, the fixture changed; §3.5 grants and V71 |
 | N13: the lock is not the first statement | C6 (0): a pre-read of the immutable kind |
@@ -368,5 +374,8 @@ their versions through the snapshot (C2, C3). That contract governs:
 - **m9.** C6's lock list must name the foreign-key share locks on `users` and `institutions`. "Audit
   last" must hold for a fold's two audit events.
 
-m1 and m2 concern the breaker and moved with it. m3 is corrected above. m4 (grants on
-`alert_rule_set_versions`) is part of §3's grant list: SELECT and INSERT to `fs_app`.
+m1 and m2 concern the breaker and moved with it. m3 is corrected above. m4 is answered by
+§3.3's grant.
+
+For the code review, not this contract: two concurrent `createRule` calls with the same name. The
+second fails with 23505 on the name's unique index (V4:135), and must be answered with 409.
