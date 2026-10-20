@@ -24,7 +24,7 @@ encoding correction described below, it cost at most \nEarlyLocoMaxLoss{}.
 
 \begin{table}[htbp]
 \centering
-\caption{AUC per country, in-sample and with the country unseen in training (diagnostic model,
+\caption{AUC per country, in-sample and with the country held out of model fitting (diagnostic model,
 draw \texttt{d8083dbc}, \nBatTestRows{} test rows, evidence commit \texttt{d40fca2}, source
 \texttt{docs/benchmarks/m4\_battery\_d8083dbc\_e1.txt}), each with an account-clustered interval over
 that country's test rows from a reproduction of the same fits
@@ -35,7 +35,7 @@ all of the country's accounts in the test period, the unit the clustered bootstr
 \resizebox{\linewidth}{!}{%
 \begin{tabular}{lrrrrr}
 \toprule
-Country & In-sample & Clustered & Unseen in training & Clustered & Fraud rows (test accounts) \\
+Country & In-sample & Clustered & Held out of fitting & Clustered & Fraud rows (test accounts) \\
 \midrule
 KE & \nLocoKEin & \nLocoCluKEinci & \nLocoKEout & \nLocoCluKEoutci & \nLocoKEf{} (\nLocoCluKEAccounts) \\
 RW & \nLocoRWin & \nLocoCluRWinci & \nLocoRWout & \nLocoCluRWoutci & \nLocoRWf{} (\nLocoCluRWAccounts) \\
@@ -83,9 +83,9 @@ run on these rows. This is not an out-of-distribution test.
 
 \paragraph{Every fraud of the test period accounted for.} The variant counts in this section sum to
 fewer than the test period's \nTestFraud{} observed frauds. Table~\ref{tab:reconcile} accounts for
-all of them from the dataset's own labels: the difference is label noise, legitimate rows that the
-observed label marks as fraud, which carry no scenario and so no variant. The table also counts the
-opposite noise, frauds the observed label misses, which the evaluation scores as legitimate.
+all of them from the dataset's own labels: the difference is label noise. Label noise runs in both directions: legitimate rows
+that the observed label marks as fraud, which carry no scenario and so no variant, and frauds the
+observed label misses, which the evaluation scores as legitimate; the table counts both.
 
 \begin{table}[htbp]
 \centering
@@ -98,7 +98,8 @@ observed label misses.}
 \toprule
 Variant & Confirmed & Noise & Missed \\
 \midrule
-Base scenarios & \nRecBaseConfirmed & \nRecBaseNoise & \nRecBaseMissed \\
+Base scenarios & \nRecBaseConfirmed & -- & \nRecBaseMissed \\
+No scenario (label noise) & -- & \nRecBaseNoise & -- \\
 \texttt{novel\_esim\_delayed\_drain} & \nRecNovel & -- & -- \\
 \texttt{adapted\_below\_threshold} & \nRecAdapt & -- & -- \\
 \texttt{reversal\_scam\_social\_engineering} & \nRecRevConfirmed & -- & \nRecRevMissed \\
@@ -219,8 +220,8 @@ variant removes burst structure from every row, but counterparty novelty only fr
 \nRevNotNovelScored{} of the \nRevFraud{}. The generator stages each such row as a \texttt{mule\_account} row
 with its own sub-variant label (Table~\ref{tab:scenarios}).
 
-The variant's definition, its justification and the predicted result were committed (ADR 0028,
-\texttt{656d24e}) before the first committed evidence of it (\texttt{6bc842d}); the history shows that
+The variant's definition, its justification, the predicted result and the generator code that
+produces the variant were committed together (ADR 0028, \texttt{656d24e}) before the first committed evidence of it (\texttt{6bc842d}); the history shows that
 order, and cannot show that no uncommitted run preceded the commit. The prediction: recall at
 the same threshold \textbf{between \nRevPredLow{} and \nRevPredHigh{}}, lower than the base
 scenarios but with some of the variant still caught, with recall below about \nRevPredFloor{} stated as the outcome that would
@@ -242,7 +243,7 @@ Appendix~\ref{app:evidence}). The point estimate is below the pre-specified rang
 reaches past the range's lower edge, so ``below the predicted range'' holds for the point estimate
 and not for the whole interval.
 
-\textbf{The point estimate also crosses the floor the prediction set.} The notebook said that recall
+\textbf{The point estimate also crosses the bound the prediction set.} The notebook said that recall
 below about \nRevPredFloor{} would mean burst structure and counterparty novelty carry nearly all of
 the benchmark's detection power; \nRevRecall{} is below it, though the interval \nRevCI{} reaches
 above it. Read as the prediction asked, the result says exactly that. We cannot support that reading
@@ -250,7 +251,7 @@ as stated: the variant differs from the base scenarios in its recipient and its 
 in burst structure, and it removes counterparty novelty from only \nRevNotNovelScored{} of its
 \nRevFraud{} rows, so the outcome cannot assign the loss to burst structure and novelty rather than to
 those other differences. What it supports is narrower: on this benchmark, the diagnostic model rarely
-catches a fraud without burst structure.
+catches this non-burst variant.
 
 \begin{figure}[htbp]
 \centering

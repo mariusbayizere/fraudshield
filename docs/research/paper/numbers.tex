@@ -5,14 +5,16 @@
 % stated. Sections use these macros and never type a result directly; check_numbers.py enforces
 % that.
 %
-%   \meas{x}      MEASURED on main (M2/M3). Printed as is.
+%   \meas{x}      MEASURED: a result or a count, from an evidence file or quoted from a document.
+%                 Printed as is.
 %   \prov{x}      MEASURED on a milestone not yet tagged complete. Printed with a dagger. None is
 %                 in use: every M4 value was re-verified at m4-complete (72e7790) on 2026-09-22 by
 %                 audit_numbers.py and moved to \meas.
-%   \srcd{x}      A value fixed in advance by a document, not a result: a specification threshold or
-%                 target, or a prediction or range pre-specified before its evidence. A count or a
-%                 measurement quoted from a document is \meas, whatever document it is quoted from.
-%                 The class is not checked by audit_numbers.py and both print the same.
+%   \srcd{x}      A value fixed by a document, not a result: a specification threshold, target or
+%                 count of the specification's own items, or a prediction or range recorded as made
+%                 in advance (whether that order is established is stated in the text, not here).
+%                 Any other count or measurement quoted from a document is \meas. The class is not
+%                 checked by audit_numbers.py and both print the same.
 %   \notyet{Mx}   A result a later milestone produces. Printed in italics as "not yet measured (Mx)".
 %
 % Data draws (seed 20260917 throughout):
@@ -23,8 +25,7 @@
 % with its own evidence-commit and evidence-tree-state stamp.
 
 \newcommand{\meas}[1]{#1}
-% \srcd{x}: SOURCED from the specification (the Part B resolutions of the specification, or the SRS). A
-% requirement or threshold, not a result.
+% \srcd{x}: fixed by a document, not a result (see the legend above).
 \newcommand{\srcd}[1]{#1}
 \newcommand{\prov}[1]{#1\textsuperscript{\dag}}
 \newcommand{\notyet}[1]{\emph{not yet measured (#1)}}
@@ -492,7 +493,7 @@
 \newcommand{\nResolutions}{\srcd{51}}           % build prompt: "All 51 defect resolutions"
 \newcommand{\nLatencyTargetFlagged}{\srcd{40}}  % build prompt D-13: p95 for flagged, ms
 \newcommand{\nSpecRows}{\srcd{5{,}000{,}000}}   % build prompt Part E.3 targets (SRS 7.1)
-\newcommand{\nRazaqInterviews}{\srcd{96}}       % reference_audit.md, razaq2021scams abstract
+\newcommand{\nRazaqInterviews}{\meas{96}}       % reference_audit.md, razaq2021scams abstract
 \newcommand{\nFeatureGroups}{\meas{ten}}        % feature registry groups (test_registry.py)
 \newcommand{\nSynthTerms}{\meas{four}}          % registry: synthetic_identity_score definition
 \newcommand{\nSpecTolerance}{\srcd{\ensuremath{10^{-9}}}}  % build prompt Part E.2 parity tolerance
@@ -1135,3 +1136,7 @@
 \newcommand{\nLcSeedAucGainAC}{\meas{0.015}}
 \newcommand{\nFvSeedBudgetGainFixed}{\meas{0.021}}
 \newcommand{\nFvSeedAucGainFixed}{\meas{0.010}}
+% The shortcut detector's refuted offset prediction, pooled runs (lab notebook).
+\newcommand{\nOffsetRuns}{\meas{24}}
+\newcommand{\nOffsetMean}{\meas{0.5031}}
+\newcommand{\nOffsetCI}{\meas{[0.4992, 0.5070]}}

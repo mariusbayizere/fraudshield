@@ -51,7 +51,7 @@ repository and disagree with:
         (Section~\ref{sec:generalisation}, which gives the commits; a burst is an incident spanning
         several fraudulent transactions on one account): the diagnostic model catches it
         at \nRevRecall{} \nRevCI{} against \nBaseVarRecall{} \nBaseVarCI{}, and the production
-        ensemble never at the flag threshold. At a \nFPRBudget{} false-positive budget the ensemble catches
+        ensemble never at the flag threshold. At a \nFPRBudget{} false-positive budget the ensemble trained on \nTrainUsed{} rows (seed 1) catches
         \nGateRevNewBudgetCaught{} of the \nGateRevNewBudgetRows{} rows whose recipient the
         account had never paid and none of the \nGateRevKnownBudgetRows{} sent to a known payee.
         The counts are small and the split is observational, so the cause is not isolated.
@@ -59,12 +59,12 @@ repository and disagree with:
         (Sections~\ref{sec:volume} and~\ref{sec:rowselection}): the recall shortfall did not close
         in any run measured, up to all \nFvTrainRows{} training rows. Changing only the corpus
         \nTrainUsed{} training rows were drawn from moved mean recall at the flag threshold across a
-        range of \nSelMeanRange{}, against \nFvSeedGainFixed{} from \nTrainUsed{} rows to all of them
+        range of \nSelMeanRange{}, which seed noise widens by an amount not measured, against \nFvSeedGainFixed{} from \nTrainUsed{} rows to all of them
         on one fixed corpus; at the false-positive budget corpus and volume moved it by similar
         amounts, and in AUC volume moved it more. All of these metrics were fixed in advance; no interval was computed
         for these differences.
-  \item \textbf{Generalisation nulls} (Section~\ref{sec:generalisation}): leave-one-country-out
-        and a novel variant held out in time are both null, and we infer that neither tests generalisation
+  \item \textbf{Generalisation nulls} (Section~\ref{sec:generalisation}): on the diagnostic model,
+        leave-one-country-out and the novel variant held out in time are both null, and we infer that neither tests generalisation
         on this benchmark: the country holdout still shares the feature cache and target encodings
         with the held-out country, a contribution not measured. A test
         checks that no fraud parameter is keyed by country, and we infer that the country null

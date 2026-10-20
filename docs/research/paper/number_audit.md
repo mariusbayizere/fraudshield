@@ -2,7 +2,7 @@
 
 Every macro in `numbers.tex` checked against its evidence file at `m4-complete` (`72e7790`), or at the ref its row names, read with `git show`, by `audit_numbers.py`. Values are compared as printed: rounding, sign and interval bounds included. Regenerate with `python3 docs/research/paper/audit_numbers.py`; do not edit by hand.
 
-**1056 macros, 1056 MATCH, 0 not matching.**
+**1059 macros, 1059 MATCH, 0 not matching.**
 
 | Macro | Value in paper | Value in evidence | File | Note | Result |
 |---|---|---|---|---|---|
@@ -1062,3 +1062,6 @@ Every macro in `numbers.tex` checked against its evidence file at `m4-complete` 
 | `\nLcSeedAucGainAC` | `0.015` | `0.015` | derived | five-seed mean AUC, 120K minus 30K rows within one cache | MATCH |
 | `\nFvSeedBudgetGainFixed` | `0.021` | `0.021` | derived | five-seed mean recall at the 1% budget on the whole-draw corpus, full volume minus 30,000 rows | MATCH |
 | `\nFvSeedAucGainFixed` | `0.010` | `0.010` | derived | five-seed mean AUC on the whole-draw corpus, full volume minus 30,000 rows | MATCH |
+| `\nOffsetRuns` | `24` | `24` | `docs/research/lab_notebook.md` |  | MATCH |
+| `\nOffsetMean` | `0.5031` | `0.5031` | `docs/research/lab_notebook.md` |  | MATCH |
+| `\nOffsetCI` | `[0.4992, 0.5070]` | `[0.4992, 0.5070]` | `docs/research/lab_notebook.md` |  | MATCH |

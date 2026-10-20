@@ -38,10 +38,9 @@ which model they describe; the diagnostic battery below is at \nTrainUsed{} rows
 
 \subsection{Explanations}
 
-Exact TreeSHAP \cite{lundberg2017shap,lundberg2020trees} is computed per model in log-odds (margin) space, where additivity is exact, and
+Exact TreeSHAP \cite{lundberg2017shap,lundberg2020trees} is computed per model in log-odds space, where additivity is exact, and
 the analyst-facing contribution is the weighted combination $\nWeightXGB\,\phi_{\mathrm{xgb}} +
-\nWeightLGB\,\phi_{\mathrm{lgb}}$ in log-odds (margin) space, annotated with its base value and final
-margin. We never claim that SHAP values sum to the calibrated probability: isotonic calibration is
+\nWeightLGB\,\phi_{\mathrm{lgb}}$ in log-odds space, annotated with its base value and final log-odds output. We never claim that SHAP values sum to the calibrated probability: isotonic calibration is
 monotone but not additive. The specification requires plain-language explanations to come from
 deterministic, localised templates per feature and never from a language model. \textbf{No such
 template exists.} The scorer emits a template key per feature, but no catalogue of wording has been

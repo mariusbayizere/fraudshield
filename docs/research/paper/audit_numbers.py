@@ -973,6 +973,10 @@ SOURCES: dict[str, Src | Derived] = {
         lambda *means: str(max(Decimal(m.split()[2]) for m in means)),
         "largest five-seed standard deviation of recall at 0.60 across corpus depths",
     ),
+    # The shortcut detector's offset prediction, refuted over the pooled runs (lab notebook).
+    "nOffsetRuns": Src(NOTEBOOK, r"above the scenario minimum: n = (\d+), mean"),
+    "nOffsetMean": Src(NOTEBOOK, r"above the scenario minimum: n = \d+, mean ([\d.]+),"),
+    "nOffsetCI": Src(NOTEBOOK, r"mean [\d.]+, bootstrap 95% CI\s+(\[[\d., ]+\])"),
     "nFvSeedGainFixed": Derived(
         ("nSelFMean", "nFvSeedRecallSix"),
         lambda w, f: f"{Decimal(f.split()[0]) - Decimal(w.split()[0]):.3f}",

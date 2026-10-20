@@ -60,7 +60,7 @@ gives the account.
 standardising a detector's offset against a theoretical null rather than the observed seed-to-seed
 spread: a single reading of $t = \nDetectorT$ turned out to be noise once repeated seeds were run.
 The first model margin reported subtracted a feature measured on \nMarginRows{} rows holding
-\nMarginFraud{} confirmed frauds from a model measured on the whole sample. The evaluation report now
+\nMarginFraud{} observed frauds from a model measured on the whole sample. The evaluation report now
 refuses to subtract a partial-coverage feature from a model, and a test checks that it does.
 
 \paragraph{Records that run ahead of the facts.} A status table marked a gate as met by citing a
@@ -95,7 +95,8 @@ test rows, by the same model at the same thresholds; they differ in the corpus t
 computed from. The gate's come from a \nGateCorpus{}-row corpus, the curve's from a
 \nLcCorpusSmall{}-row one, so the training rows differ, each training row's features are computed over
 a different amount of that account's past, and even the shared validation rows, which drive early
-stopping, carry different values in some features (PB-76). At seed 1, recall at the flag threshold is
+stopping, carry different values in some features (PB-76, a backlog item on truncated history near the
+corpus's start; Appendix~\ref{app:identifiers}). At seed 1, recall at the flag threshold is
 \nLcRecallA{} \nLcRecallciA{} for the curve's rows and \nGateRecallSix{} \nGateRecallSixci{} for the
 gate's, a difference of \nSelGapSeedOne{}, while the curve's points, spanning an
 \nLcVolumeFactor{}-fold change in volume, cover a range of \nLcSpanSeedOne{}. At seed 1 we infer,
@@ -254,7 +255,8 @@ Refuted on both: \nLoSynHeld{}, a drop of \nLoSynDrop{} (Section~\ref{sec:lofto}
 \multicolumn{3}{l}{\emph{Not established: committed with or after the evidence, or rebased after it}} \\
 The detector's small positive offset is real and constant with scale &
 \notprespec{984351d}{984351d}: the same commit as its refutation &
-Refuted: pooled over seeds, the interval straddles chance \\
+Refuted: pooled over all \nOffsetRuns{} runs above the scenario minimum, the mean is
+\nOffsetMean{} \nOffsetCI{}, which straddles chance \\
 A counterparty-keyed feature will force a new field into the feature contract &
 \notprespec{d85385f}{5f0a8a1}, whose code already has the field &
 Confirmed on mechanism, wrong on sequence \\
@@ -317,7 +319,7 @@ least \nGroupGeographic{} alone (Section~\ref{sec:redundancy}) \\
 Does each generalisation experiment withhold a \emph{mechanism}, or only a label? &
 Experiments that cannot fail, reported as evidence of generalisation &
 No fraud parameter is keyed by country, and leave-one-country-out costs the diagnostic model at most \nLocoMaxLoss{};
-the variant held out in time is still a multi-row incident and is caught at \nNovelRecall{}
+the novel variant held out in time is still a multi-row incident and is caught at \nNovelRecall{}
 (Section~\ref{sec:generalisation}) \\
 \addlinespace
 A pre-specified variant drawn from a documented typology &

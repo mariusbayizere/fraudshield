@@ -7,7 +7,8 @@ We state these as findings about what the evidence supports, not as disclaimers.
 real fraud rates, real detection performance or any institution's customers. Whether it supports
 comparisons between methods is not established either: Section~\ref{sec:rowselection} finds the
 choice of training rows moving recall at the flag threshold across a wider range than training volume
-does where the corpus is held fixed, though not recall at the budget or AUC (no interval was computed
+does where the corpus is held fixed, while recall at the budget moved by about as much under either
+change and AUC moved more with volume (no interval was computed
 for any of these differences), and
 no comparison of methods here repeats over selections. Every figure here is a property of this
 generator.
@@ -82,7 +83,7 @@ draw cannot be tried; whether another model, or another draw, would close the ga
 at the flag threshold over a range of \nSelMeanRange{}, against \nLcSeedGainAC{} across the
 \nLcVolumeFactorAC{}-fold step of the learning curve within one cache and \nFvSeedGainFixed{} from
 \nTrainUsed{} rows to full volume on one corpus, with larger validation and calibration splits
-(Section~\ref{sec:rowselection}). On the other metrics fixed in advance it did not: recall at the
+(Section~\ref{sec:rowselection}). On the other metrics fixed in advance the corpus did not move more than volume: recall at the
 budget moved by \nSelBudgetRange{} against \nLcSeedBudgetGainAC{} and \nFvSeedBudgetGainFixed{}, and
 AUC by \nSelAucRange{} against \nLcSeedAucGainAC{} and \nFvSeedAucGainFixed{}. No interval was
 computed for any of these differences. The test does not separate the history each row carries from the

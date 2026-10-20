@@ -121,7 +121,7 @@ In `sections/07-evaluation.tex`.
 - `docs/benchmarks/pb66_d8083dbc.txt` at `850192b`, evidence commit `fcec52c`
   - command: `/usr/bin/time -f PEAK_RSS_KB %M ELAPSED %e .venv/bin/python -u -m fraudshield_ml.cli pb66 /home/runner/work/_temp/cache/features_full_volume.parquet --out /home/runner/work/_temp/out/pb66_d8083dbc --seed 1 --resamples 1000 --scores-out /home/runner/work/_temp/out/scores/test_scores_seed1.csv --purpose PB-66 full-volume evaluation (run 39302165997, attempt 1): pb66`
 
-## `tab:loco`: AUC per country, in-sample and with the country unseen in training (diagnostic model, draw d8083dbc, [value] test rows, evidence commit d40fca2, source docs/benchmarks/m4_battery_d8083dbc_e1.txt), each with an account-clustered interval over that country's test rows from a reproduction of the same fits (evidence/round2_gate_d8083dbc.txt)
+## `tab:loco`: AUC per country, in-sample and with the country held out of model fitting (diagnostic model, draw d8083dbc, [value] test rows, evidence commit d40fca2, source docs/benchmarks/m4_battery_d8083dbc_e1.txt), each with an account-clustered interval over that country's test rows from a reproduction of the same fits (evidence/round2_gate_d8083dbc.txt)
 
 In `sections/08-generalisation.tex`.
 

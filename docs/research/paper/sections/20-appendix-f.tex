@@ -25,7 +25,7 @@ any other claim. That last rule is written, not enforced.
 \subsection*{A ranking metric can hide a change in decisions}
  The scoring service as built (milestone
 M5) serves \nSkewConstantFeatures{} of the trained features as constants, because nothing deployed yet
-writes the state they read: the counterparty's confirmed-fraud count, the map cell's lagged fraud
+writes the state they read: the counterparty's labelled-fraud count, the map cell's lagged fraud
 rate and the days since a SIM swap; the synthetic-identity score is computed from fewer of its terms
 (ADR 0034). With the gate model rebuilt at seed 1 and scored over the whole test period on the
 features as served, AUC falls from \nSkewAucTrained{} to \nSkewAucBoth{}, by \nSkewAucDrop{}: more
