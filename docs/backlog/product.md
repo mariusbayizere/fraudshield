@@ -23,7 +23,7 @@ taken twice. Claims made on branches not yet merged, as of 2026-10-17:
 | PB-76 | M4 | `M4_updates.md` on `m4/generalisation` | training rows near the corpus's start see truncated history (was a second `PB-69`) |
 | PB-77 to PB-101 | M6 | `M6_updates.md`, "Numbering reserved by this branch" | amendment 1's known gaps and the 22 section-8 rows proved only in part |
 | PB-102 to PB-130 | M7 | `M7_updates.md`, "Numbering reserved by this branch" | the merge round's unowned items and M7's rows proved only in part (PB-102 to PB-124 used) |
-| PB-151 to PB-170 | M8B | `M8B_updates.md`, "Numbering reserved by this branch" | the analyst API's follow-ups; M8B also holds ADR 0110–0119 and Flyway V80–V89 |
+| PB-151 to PB-170 | M8B | `M8B_updates.md`, "Numbering reserved by this branch" | the analyst API's follow-ups (PB-151 to PB-155 used); M8B also holds ADR 0110–0119 and Flyway V80–V89 |
 
 ---
 
@@ -1473,6 +1473,31 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 - **Source:** review of M7 round 2, finding 7, 2026-10-17 · **Priority:** medium · **Due:** M8
 - **Problem:** NFR-REL-06 says the Google button shows "Temporarily unavailable" while Google is down; the server answers 503 with `Retry-After` (proved), but the console clause had no owner while the row stays with M7 (PB-112).
 - **Acceptance:** the console shows the state on a 503 from `/auth/google`, with a component test.
+
+### PB-151 · Decisions do not record the rule set or breaker settings they used
+- **Source:** M8B, configuration propagation contract (C5), 2026-10-20 · **Priority:** medium · **Due:** M8B P4
+- **Problem:** only the thresholds version reaches `fs.transactions.scored`, and its closed schema allows nothing else. During propagation, or a rolling deploy whose instances compile stored rules differently, nothing says which rule set decided a transaction.
+- **Acceptance:** a Kafka contract change carrying the rule-set version, the breaker settings version and a hash of the compiled rule set, recorded on every decision.
+
+### PB-152 · `createRuleVersion` loses a concurrent edit
+- **Source:** M8B, configuration propagation contract (C7), 2026-10-20 · **Priority:** low · **Due:** M8B P5
+- **Problem:** the operation carries no expected version, so of two officers editing the same version the second silently becomes current. Both drafts are kept, but nobody is told.
+- **Acceptance:** a contract change adding the expected version, with 409 when it is stale.
+
+### PB-153 · The anomaly-review threshold is compared differently in Java and Python
+- **Source:** M8B, review 1 of the configuration contract (finding 10), 2026-10-20 · **Priority:** low · **Due:** M8B P8
+- **Problem:** `DecisionEngine` tests `>=`, the scorer's `thresholds.py` tests `>`; a score equal to the threshold is an anomaly to one and not the other. The threshold is also a per-process setting not recorded on decisions.
+- **Acceptance:** one comparison, tested on both sides, and the setting owned by model lifecycle.
+
+### PB-154 · The feature-store fallback uses a different local time from the scorer
+- **Source:** M8B, review 1 of P1's contract changes (finding 5), 2026-10-20 · **Priority:** medium · **Due:** owner
+- **Problem:** the scorer derives an account's country from the transaction's currency (`serving/features.py:115`); V67's fallback uses the institution's country. A KES transaction at a Rwandan institution gets `local_hour` at +3 h online and +2 h from the fallback: training/serving skew in the temporal features when the feature store is degraded.
+- **Acceptance:** one rule for the account's country on both paths, with a test that compares them.
+
+### PB-155 · The rule-based fallback stores a made-up anomaly score
+- **Source:** M8B, review 1 of P1's contract changes (finding 4), 2026-10-20 · **Priority:** medium · **Due:** M8B P1 (alerts), owner (`ScoringResult`)
+- **Problem:** when the scorer is unavailable, `DecisionService.fallbackRecord` and `PostgresSink` store `anomaly_score` 0 in `fraud_scores` (NOT NULL) although no model ran; the decision event carries null. `ScoringResult.anomaly_score` is required and non-null in the contract, so a fallback scoring result reports 0 too.
+- **Acceptance:** P1's alerts serve null (ADR 0110); `ScoringResult` and the column made nullable, or the fallback marked, by a contract change.
 
 ### PB-76 · Training rows near the corpus's start see truncated history; test rows do not
 - **Source:** PB-67's laptop cache, 2026-09-22 · **Priority:** high · **Due:** before the paper's

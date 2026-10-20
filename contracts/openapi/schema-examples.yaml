@@ -260,6 +260,26 @@ examples:
       this_transaction: 2
       normal: 07-21
       anomalous: true
+    - attribute: amount_rwf
+      this_transaction: '15000'
+      normal: 2000-48000
+      anomalous: false
+    - attribute: channel
+      this_transaction: MOBILE_MONEY
+      normal: MOBILE_MONEY
+      anomalous: false
+    - attribute: counterparty_prior_transactions
+      this_transaction: 0
+      normal: null
+      anomalous: true
+    - attribute: device_prior_transactions
+      this_transaction: 41
+      normal: null
+      anomalous: false
+    - attribute: counterparty_country
+      this_transaction: RW
+      normal: RW
+      anomalous: false
   Campaign:
   - campaign_id: 3d4e5f60-7a8b-4c9d-8e0f-2a3b4c5d6e7f
     campaign_name: CMP-20260917-DEVICE-0042

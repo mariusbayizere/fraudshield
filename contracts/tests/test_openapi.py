@@ -576,13 +576,28 @@ def test_unique_keys_name_properties_of_their_items() -> None:
 
 
 @pytest.mark.req("NFR-SEC-03")
-def test_alerts_show_a_masked_account_number_and_never_a_name() -> None:
+def test_alerts_carry_the_sms_masked_account_and_no_holder_name() -> None:
     base = SCHEMAS["AlertSummaryBase"]["properties"]
     assert "masked_account_name" not in base
-    masked = re.compile(base["masked_account"]["pattern"])
-    cases = (("***4821", True), ("***A1", True), ("1234567890", False), ("J*** M***", False))
-    for value, shown in cases:
-        assert bool(masked.fullmatch(value)) is shown, value
+    masked = base["masked_account"]
+    # Nullable until the vault offers a masked-only lookup (ADR 0110), and in the customer
+    # SMS's own format, so the analyst sees what the customer is told.
+    assert masked["type"] == ["string", "null"]
+    sms = json.loads(
+        (CONTRACTS_ROOT / "kafka/schemas/notification-customer.schema.json").read_text()
+    )
+    sms_pattern = sms["properties"]["parameters"]["properties"]["masked_account"]["pattern"]
+    assert masked["pattern"] == sms_pattern
+    shape = re.compile(masked["pattern"])
+    for value, shown in (("***4821", True), ("1234567890", False), ("J*** M***", False)):
+        assert bool(shape.fullmatch(value)) is shown, value
+
+
+@pytest.mark.req("D-10")
+def test_the_anomaly_score_is_null_when_no_model_ran() -> None:
+    score = SCHEMAS["AlertSummaryBase"]["properties"]["anomaly_score"]
+    assert score["type"] == ["number", "null"]
+    assert "anomaly_score" in SCHEMAS["AlertSummaryBase"]["required"]
 
 
 @pytest.mark.req("FR-04-07")
@@ -603,5 +618,4 @@ def test_alert_queues_include_all_for_search_and_summaries_carry_the_anomaly_sco
         p for p in DOC["paths"]["/alerts"]["get"]["parameters"] if p.get("name") == "queue"
     )
     assert queue["schema"]["enum"] == ["standard", "anomaly", "escalated", "all"]
-    assert "anomaly_score" in SCHEMAS["AlertSummaryBase"]["required"]
     assert SCHEMAS["AlertSummary"]["properties"]["anomaly_score"] is True

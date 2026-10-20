@@ -802,15 +802,19 @@ paths:
         Default order is HIGH first, then fraud probability descending (FR-04-02). `sort=expected_loss`
         orders by calibrated probability × amount in RWF (D-10). `queue=anomaly` lists
         Isolation-Forest-only alerts, which hold nothing and have no timer (D-10); in it,
-        `sort=priority` orders by `anomaly_score` descending, since every entry's fraud probability
-        is below 0.60 by construction. `queue=escalated` lists only escalated entries whose target
-        role is at or below the caller's role, plus entries the caller escalated. `queue=all` is
-        the union of the other three as the caller may see them, for search (FR-04-09).
+        `sort=priority` orders by `anomaly_score` descending (nulls last), since every entry's
+        fraud probability is below its channel's MEDIUM threshold. `queue=escalated` lists the
+        escalated entries (those with `escalated_from_alert_id`) whose target role is at or below
+        the caller's role, plus the escalated entries the caller created. `queue=all` is the union
+        of the other three as the caller may see them, for search (FR-04-09); its
+        `sort=priority` is HIGH, then MEDIUM, then ANOMALY, each by fraud probability
+        descending.
 
         Without `outcome`, a queue lists only entries still awaiting a decision (status PENDING or
         IN_REVIEW). A decision takes its entry out of every queue at once, while it is still
         PENDING_COMMIT, and an undo puts it back with the next `version`; an escalated entry is
-        replaced by the new entry it created. `outcome` selects statuses explicitly, for search.
+        replaced by the new entry it created. `outcome` selects statuses explicitly: a search
+        that should find decided alerts passes every status it wants.
         Order ties are broken by `alert_id`, so paging is stable.
       x-required-roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
       x-authorisation-rules:
@@ -3340,8 +3344,8 @@ components:
       type: object
       description: >-
         Open base shared by AlertSummary and AlertDetail. Not used directly; the composing schemas
-        close it with unevaluatedProperties (additionalProperties inside allOf makes the
-        composition unsatisfiable).
+        close it by listing its properties beside `additionalProperties: false`
+        (additionalProperties inside allOf would make the composition unsatisfiable).
       required:
         [alert_id, version, transaction_id, tier, status, fraud_probability, amount, channel,
          masked_account, merchant, transaction_timestamp, top_reasons, review_deadline_at,
@@ -3359,11 +3363,14 @@ components:
         masked_account:
           type: [string, "null"]
           pattern: "^\\*{3,}[0-9A-Za-z]{2,4}$"
+          maxLength: 7
           description: >-
-            The account number as the customer knows it, masked to its last characters (for
-            example `***4821`), from the PII vault (ADR 0069), the same value the customer's SMS
-            shows. Null when the vault holds no contact for the account. FraudShield holds no
-            account-holder names, so no name is ever shown.
+            The account number as the customer knows it, masked to its last two to four
+            characters (for example `***4821`), in the customer SMS's format. FraudShield holds no
+            account-holder names, so no name is ever shown (ADR 0110, a recorded deviation from
+            FR-04-03's "masked account name"). Null until the PII vault offers a masked-only
+            lookup (an amendment to ADR 0069 the owner has not yet decided), and null for an
+            account the vault does not know.
         merchant: { type: [string, "null"], maxLength: 100 }
         transaction_timestamp: { $ref: "#/components/schemas/Timestamp" }
         top_reasons:
@@ -3376,8 +3383,12 @@ components:
             - type: "null"
         escalated_from_alert_id: { type: [string, "null"], format: uuid }
         anomaly_score:
-          allOf: [{ $ref: "#/components/schemas/Probability" }]
-          description: The Isolation Forest's score; the reason an ANOMALY entry is in its queue (D-10)
+          type: [number, "null"]
+          minimum: 0
+          maximum: 1
+          description: >-
+            The Isolation Forest's score, the reason an ANOMALY entry is in its queue (D-10). Null
+            when the decision was made by the rule-based fallback, which runs no model.
     AlertDetail:
       # Closed at the composing level with the names from every allOf member (NF-01).
       properties: { alert_id: true, version: true, transaction_id: true, tier: true, status: true, fraud_probability: true, expected_loss_rwf: true, amount: true, channel: true, masked_account: true, merchant: true, transaction_timestamp: true, top_reasons: true, review_deadline_at: true, escalated_from_alert_id: true, account_token: true, counterparty_token: true, summary_template_key: true, summary_parameters: true, anomaly_score: true, decisions: true }
@@ -3523,9 +3534,10 @@ components:
           minItems: 24
           maxItems: 24
           description: >-
-            Transactions in the window by hour of day, index 0 for 00:00-00:59, in the account's
-            local time: the UTC offset of the institution's country pack, the same local time the
-            `local_hour` features use (an institution's accounts are domestic to it, V67).
+            Transactions in the window by hour of day, index 0 for 00:00-00:59, each in local
+            time as the scorer computes it: the UTC offset, from its country pack, of the country
+            the scorer derives from the transaction's currency (`serving/features.py`). The window
+            is the 90 days before the compared transaction.
           items: { type: integer, minimum: 0 }
         amount_histogram:
           type: array
@@ -3552,19 +3564,24 @@ components:
               count: { type: integer, minimum: 0 }
         comparison:
           type: array
+          minItems: 6
+          maxItems: 6
           description: >-
-            One item per attribute, in the enum's order. With fewer than 10 transactions in the
-            window, `normal` is null and `anomalous` false for every attribute. Values:
+            Exactly one item per attribute, in the enum's order, over the 90 days before the
+            compared transaction. With fewer than 10 transactions in the window, `normal` is null
+            and `anomalous` false for every attribute. Values:
             `local_hour` is this transaction's hour (0-23, local time as in `hourly_counts`) against
             the shortest range of hours, written `HH-HH` and possibly wrapping midnight, that holds
-            at least 90% of the window's transactions. `amount_rwf` is the amount in RWF against the
+            at least 90% of the window's transactions (of equal ranges, the one starting earliest
+            after 00:00). `amount_rwf` is the amount in RWF against the
             window's 5th-95th percentile range, written `low-high`. `channel` is this channel
             against the window's most used one, anomalous when under 5% of the window used it.
             `counterparty_prior_transactions` and `device_prior_transactions` count the window's
             earlier transactions with the same counterparty or device (`normal` null), anomalous at
             0; the device item is null-valued and not anomalous when the transaction has no device.
             `counterparty_country` is this transaction's counterparty country against the window's
-            most frequent, anomalous when never seen in the window.
+            most frequent (ties by code), anomalous when never seen in the window; when the
+            transaction has none, both values are null and it is not anomalous.
           x-unique-key: [attribute]
           items:
             type: object
@@ -3583,9 +3600,12 @@ components:
       description: >-
         Over the last 90 days: the account (degree 0), the accounts it transacted with in either
         direction (degree 1) and theirs (degree 2), at most 50 nodes, chosen by degree and then by
-        transaction count descending, ties by token. An edge is every (source, target) pair of
-        included nodes with at least one transaction from source to target. `confirmed_fraud` is
-        true when the node sent a transaction in the window whose latest label is FRAUD.
+        the number of transactions linking the node to the node that brought it in, descending,
+        ties by token. An edge is every (source, target) pair of included nodes with at least one
+        transaction from source to target. `confirmed_fraud` is true when the node sent a
+        transaction in the window whose current label is FRAUD: the label no later label
+        supersedes, and of labels at the same `label_available_at`, the one with the greatest
+        `label_id`.
       required: [nodes, edges]
       additionalProperties: false
       properties:

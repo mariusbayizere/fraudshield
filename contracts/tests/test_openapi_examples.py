@@ -145,3 +145,31 @@ def test_the_check_rejects_the_unsatisfiable_composition_it_replaced() -> None:
     schemas["ApiKeyCreated"].pop("properties")
     schemas["ApiKeyCreated"].pop("additionalProperties")
     assert errors(broken, "ApiKeyCreated", EXAMPLES["ApiKeyCreated"][0])
+
+
+def _keyed_arrays(schema: dict[str, Any]) -> list[tuple[str, list[str]]]:
+    """(property, key) for each top-level array property of `schema` that declares a key."""
+    found = []
+    for name, prop in schema.get("properties", {}).items():
+        if isinstance(prop, dict) and "x-unique-key" in prop:
+            found.append((name, prop["x-unique-key"]))
+    return found
+
+
+def test_examples_respect_the_unique_keys_their_schemas_declare() -> None:
+    checked = 0
+    for name, examples in EXAMPLES.items():
+        keyed = _keyed_arrays(SCHEMAS.get(name, {}))
+        nested = SCHEMAS.get(name, {}).get("properties", {})
+        for example in examples:
+            for prop, key in keyed:
+                rows = [tuple(item[k] for k in key) for item in example[prop]]
+                assert len(rows) == len(set(rows)), (name, prop, key)
+                checked += 1
+            for prop, sub in nested.items():
+                if isinstance(sub, dict) and sub.get("type") == "object":
+                    for inner, key in _keyed_arrays(sub):
+                        rows = [tuple(item[k] for k in key) for item in example[prop][inner]]
+                        assert len(rows) == len(set(rows)), (name, prop, inner)
+                        checked += 1
+    assert checked >= 6

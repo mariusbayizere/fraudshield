@@ -27,6 +27,7 @@ class CsrfCookieContractTest {
 
     assertThat(csrf.get("x-csrf-cookie")).isEqualTo(CsrfDoubleSubmitFilter.COOKIE);
     assertThat(csrf.get("name")).isEqualTo(CsrfDoubleSubmitFilter.HEADER);
+    assertThat(csrf.get("in")).isEqualTo("header");
   }
 
   @Test
@@ -35,6 +36,7 @@ class CsrfCookieContractTest {
     Map<String, Object> refresh = section(section(components, "securitySchemes"), "refreshCookie");
 
     assertThat(refresh.get("name")).isEqualTo(SessionCookies.REFRESH);
+    assertThat(refresh.get("in")).isEqualTo("cookie");
   }
 
   private static Map<String, Object> contract() throws IOException {
