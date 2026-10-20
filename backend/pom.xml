@@ -35,6 +35,7 @@
     <module>audit</module>
     <module>auth</module>
     <module>admin</module>
+    <module>analyst</module>
   </modules>
 
   <properties>

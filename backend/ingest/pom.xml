@@ -30,6 +30,12 @@
       <artifactId>fraudshield-admin</artifactId>
       <version>${project.version}</version>
     </dependency>
+    <!-- The analyst API (M8B): its reads are served by the same application (ADR 0112). -->
+    <dependency>
+      <groupId>io.github.mariusbayizere.fraudshield</groupId>
+      <artifactId>fraudshield-analyst</artifactId>
+      <version>${project.version}</version>
+    </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-webmvc</artifactId>
