@@ -53,11 +53,14 @@ spec:
             - configMapRef: {name: fraudshield-api-config}
             - secretRef: {name: fraudshield-api-secrets}
           env:
-            # ADR 0090: every pod writes <FRAUDSHIELD_SPOOL_DIR>/<FRAUDSHIELD_SPOOL_INSTANCE>/ on the
-            # shared volume and replays directories of pods that no longer exist.
-            - {name: FRAUDSHIELD_SPOOL_DIR, value: /var/lib/fraudshield/spool}
+            # Stop-gap (owner, 2026-10-20): the API reads only FRAUDSHIELD_SPOOL_DIR, so each pod
+            # gets its own directory on the shared volume here; without it every pod would write
+            # the same segment files. Nothing replays a dead pod's directory: its records stay on
+            # the volume until an operator drains them. The real fix is a StatefulSet with a
+            # volume per pod (PB-171). INSTANCE must precede DIR for $(...) to expand.
             - name: FRAUDSHIELD_SPOOL_INSTANCE
               valueFrom: {fieldRef: {fieldPath: metadata.name}}
+            - {name: FRAUDSHIELD_SPOOL_DIR, value: "/var/lib/fraudshield/spool/$(FRAUDSHIELD_SPOOL_INSTANCE)"}
           resources:
             requests: {cpu: "1", memory: 1Gi}
             limits: {memory: 2Gi}
