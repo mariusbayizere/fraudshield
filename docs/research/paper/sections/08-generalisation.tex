@@ -125,7 +125,8 @@ pre-specified in repository history and is not blind: the test period had been s
 The owner's hypothesis, with numeric ranges fixed before the run, was that scenarios sharing
 burst or counterparty-novelty structure (velocity, SIM swap and mule) keep their recall when held out,
 and that scenarios whose incidents can be a single row (agent, card-not-present and merchant) drop clearly: a drop of at least
-\nLoRangeSingleDrop{} with the held-out interval's upper bound below the production recall.
+\nLoRangeSingleDrop{} with the held-out interval's upper bound below the production recall (the full-volume model's
+recall on that scenario before refitting).
 Table~\ref{tab:lofto} reports each against its range. \textbf{The hypothesis is partly supported}, in the pre-specified rule's term.
 Velocity, SIM-swap and mule fraud keep their recall. Of agent, card-not-present and merchant fraud, only agent fraud drops
 clearly. Card-not-present does not; merchant fraud's held-out recall is within its bound of
@@ -233,7 +234,7 @@ base scenarios on \nBaseVarFraud{} rows; its AUC is \nRevAUC{}. The variant's \n
 \nRevAccounts{} different accounts, so row-level dependence does not affect its interval (an
 account-clustered bootstrap gives \nCluRevci{}); the base scenarios' rows sit on \nBaseAccounts{}
 accounts, and clustering gives \nCluBaseci{}. Its AUC of \nRevAUC{} means the variant is partly ranked even
-though it is rarely flagged. The recall intervals do not overlap. The denominator is \nRevFraud{}
+though it is rarely caught at the budget's threshold. The recall intervals do not overlap. The denominator is \nRevFraud{}
 rather than the \nRevRows{} rows the generator wrote because the evaluation reads the observed
 label, as a deployed model would: all \nRevTrueFraud{} rows are in the test period and are fraud by
 their true label, and \nRevScoredUnlabelled{} of them carry the benchmark's missed-fraud label noise

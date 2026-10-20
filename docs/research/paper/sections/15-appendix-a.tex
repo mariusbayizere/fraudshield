@@ -2,7 +2,7 @@
 \section{Identifiers used in this paper}
 \label{app:identifiers}
 
-Every identifier below is defined in the repository at \texttt{m4-complete}, except ADR~0035,
+Every identifier below is defined in the repository at \texttt{m4-complete}, except ADR~0034, ADR~0035,
 ADR~0055, ADR~0058, ADR~0059 and PB-76, which are defined on the main branch after it (as are ADR 0031's amendment and
 PB-67's conclusion), and ADR 0084 and PB-132, which were written for the analyst console and are
 copied into this release from the console's separate, unmerged branch. The console itself is not part
@@ -54,6 +54,8 @@ PB-43 & The cross-bloc and intercontinental corridor classes are unreachable on 
 PB-67 & The gate model trains on a subset of the training period; the learning curve over training volume (concluded). \\
 PB-76 & Training and validation rows near the corpus's start see truncated history; test rows do not. \\
 PB-66 & The evaluation protocol items M4 did not build: the full-volume run, alert budgets, months, the cost curve, fairness and leave-one-fraud-type-out. \\
+D-10 & Alert volume would overwhelm analysts and the MEDIUM timer would auto-release most risky transactions; the resolution calls for a capacity model, which does not exist. \\
+ADR 0034 & Trained features fed from state no deployed component writes, so the scoring service serves them as constants. \\
 PB-72 & Re-measuring the training--serving skew end to end, and requiring the served features to equal the trained ones (owner M10). \\
 PB-132 & The plain-language explanation templates the specification requires; not written. \\
 M2, M3, M4 & Milestones: the dataset generator; the features and feature store; the models, calibration and evaluation. \\

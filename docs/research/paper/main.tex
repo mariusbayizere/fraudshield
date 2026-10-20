@@ -63,9 +63,9 @@ repository and is checked against its recorded source at a named git reference, 
 \texttt{m4-complete} (commit \texttt{72e7790}) unless Appendix~\ref{app:evidence} names another; the source of each is listed in \texttt{numbers.tex} and the check in
 \texttt{number\_audit.md}; Appendix~\ref{app:features}'s constants are quoted from the feature
 registry and checked by its generator instead. The specification's acceptance thresholds, for the model and for the
-service, are called \emph{gates}; gate ranking metrics are reported as margins over the best single feature on the same
-rows, not over chance. A statement that rests on inference rather than
-measurement says so in the sentence. Intervals are \nIntervalLevel{} unless stated otherwise. \textbf{Fraud on this benchmark arrives as
+service, are called \emph{gates}; gate ranking metrics are reported as margins over the best single feature and the best
+trivial rule on the same rows, not over chance. A statement that rests on inference rather than
+measurement says so in the sentence. Intervals are \nIntervalLevel{} unless stated otherwise. \textbf{Much of the fraud on this benchmark arrives as
 multi-row incidents on one account (\emph{bursts}), so test rows are not independent}: intervals marked
 account-clustered resample whole accounts, the alert budgets' precision intervals resample
 days, and their recall intervals are bootstrapped with a resampling unit the evidence does not record;

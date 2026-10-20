@@ -32,7 +32,8 @@ features as served, AUC falls from \nSkewAucTrained{} to \nSkewAucBoth{}, by \nS
 than the half-width of the gate's interval (\nSkewHalfWidth{}) and less than its full width, a change
 no AUC-expressed gate here would refuse. The decisions change more: the frauds reaching the flag
 threshold fall from \nSkewFlagTrained{} to \nSkewFlagBoth{}, \nSkewLost{} fewer (\nSkewLostPct{}),
-and \nSkewTierBoth{} risk-tier assignments change. The missing outcomes account for most of it (AUC
+and \nSkewTierBoth{} risk-tier assignments change (the scorer's low, medium and high tiers: high at the block threshold,
+medium at the flag threshold or when the anomaly score passes its review threshold). The missing outcomes account for most of it (AUC
 \nSkewAucOutcomes{}, \nSkewFlagOutcomes{} frauds flagged), the missing SIM swaps for less
 (\nSkewAucSim{}, \nSkewFlagSim{}). These figures come from ADR 0034 and the scoring milestone's
 re-review by an agent that had written neither the code nor the earlier review

@@ -296,7 +296,7 @@ the means, each step within a standard deviation. It said recall at the \nFPRBud
 (at \nLcTrainC{} rows it had read \nLcBudgetRecallC{}), and over \nSeeds{} seeds $\nLcSeedBudgetD$,
 inside it. The budget figures compare weakly across sizes: the false-positive rate realised at the
 budget's threshold was \nLcRealFprA{}, \nLcRealFprB{}, \nLcRealFprC{} and \nLcRealFprD{} at the
-sizes in turn, so each size is read at a different operating point. We infer that ties in the
+sizes in turn, so each size is read at a different operating point. We infer that ties (rows with the same calibrated score straddling the threshold) in the
 isotonic calibration cause the spread; the evidence files record the realised rate, not its cause.
 
 At seed 1, the curve's smallest point also differs from the gate run at the same \nTrainUsed{}
@@ -354,7 +354,8 @@ own. Refitting the velocity-only booster and reading it at each boosting round s
 AUC peaks at \nVelPeak{} near round \nVelPeakRound{} of those read and falls to \nVelAtRounds{} by
 round \nVelRounds{}, where the battery stops; weighting the classes gives \nVelWeightedAtRounds{}
 (\texttt{evidence/\allowbreak clustered\_\allowbreak intervals\_\allowbreak d8083dbc.txt}). The
-model has no early stopping and no tuning, and it overfits. So each group-alone figure is a lower
+model has no early stopping and no tuning, and on the velocity group it overfits; we infer the same
+for the other groups, where it was not measured. So each group-alone figure is a lower
 bound on what that group can do with a better-fitted model, and the leave-one-group-out drops are
 differences between overfitted models whose direction of error is not known. The redundancy finding
 survives this, because it rests on lower bounds: at their account-clustered lower bounds
@@ -575,7 +576,7 @@ claim remains unverified by this benchmark.
 \paragraph{Cost curve.} The Drummond--Holte cost curve uses no assumed costs: it plots the normalised
 expected cost, minimised over thresholds, against the ratio of the costs of a missed fraud and a false
 alarm. Over the range of ratios PB-66 evaluates (\nPbDHLow{} to \nPbDHHigh{} in its probability-cost
-terms) the model is below the trivial classifier everywhere; at equal costs its normalised cost is \nPbDHModel{},
+terms) the model is below the always-fraud and never-fraud classifiers everywhere; at equal costs its normalised cost is \nPbDHModel{},
 against \nPbDHBase{} for the single feature. A normalised curve hides the absolute amounts, which is
 why Table~\ref{tab:budgets} gives them.
 

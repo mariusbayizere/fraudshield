@@ -3,21 +3,22 @@ We ask what FraudShield-EAC, a seeded synthetic benchmark of East African digita
 channels in \nCountries{} countries), can and cannot show. One velocity feature separates fraud at an
 AUC of \nGateFloor{} alone, so the gate ranking metrics are reported as margins over it.
 
-Trained on all \nFvTrainRows{} training rows, an XGBoost and LightGBM ensemble reaches an AUC of
+On all \nFvTrainRows{} training rows, an XGBoost-LightGBM ensemble reaches an AUC of
 \nFvAUC{} (margin \nFvMargin{}). Its recall at the flag threshold, \nFvRecallSix{}, misses the
-target of \nTargetRecall{}, and more training data did not close the gap in any run. At a fixed
+target of \nTargetRecall{}, and no training volume tried closed the gap. At a fixed
 \nTrainUsed{} rows, the corpus they came from moved mean recall at the flag threshold by up to
-\nSelMeanRange{}, against \nFvSeedGainFixed{} from volume on one corpus; recall at the budget moved by
+\nSelMeanRange{}, against \nFvSeedGainFixed{} from volume on one corpus; recall at a \nFPRBudget{} false-positive budget moved by
 similar amounts under either change, and AUC more with volume. No interval was computed, seed noise
-widens the range, and the analyses are pre-specified but not blind. On the diagnostic model, leave-one-group-out ablations
+widens the range, and the analyses are pre-specified in
+repository history but not blind. On the diagnostic model, leave-one-group-out ablations
 measure redundancy, and leave-one-country-out and a novel variant held out in time are null.
 Refitting the full-volume model without each fraud type in turn (never fitting on it, not never
-seeing it) costs little recall at a
-\nFPRBudget{} false-positive budget for velocity, SIM-swap and mule fraud and much more for agent
+seeing it) costs little recall at that
+budget for velocity, SIM-swap and mule fraud and much more for agent
 fraud and synthetic identity.
 
 The one variant pre-specified in repository history, a single transfer rather than a multi-row
-burst, is the one detection failure found. It is modelled on a documented Kenyan scam but sent to a
+burst, is the one variant detection fails on. It is modelled on a documented Kenyan scam but sent to a
 listed payee, a choice the cited sources do not support, and was committed with the diagnostic
 model's predicted recall before its first committed evidence. Neither production model flags it at
 the flag threshold; at the budget the \nTrainUsed{}-row model (seed 1) catches

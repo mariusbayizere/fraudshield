@@ -15,7 +15,8 @@ of recent transactions their features are computed over, which also sets the mon
 from) moved mean recall at the flag threshold
 across a range of \nSelMeanRange{} over \nSelDepthCount{} corpora, a range that seed noise widens by an
 amount not measured, against \nLcSeedGainAC{} for a \nLcVolumeFactorAC{}-fold volume step within one
-cache and \nFvSeedGainFixed{} from \nTrainUsed{} rows to the whole period on one fixed corpus, with larger validation and calibration splits. Of the
+cache and \nFvSeedGainFixed{} from \nTrainUsed{} rows to the whole period on one fixed corpus (identified by the workflow that ran it), with larger
+validation and calibration splits. Of the
 metrics fixed in advance, this is the only one on which the corpus moved more than either volume step
 did (recall at the false-positive budget: \nSelBudgetRange{} against \nLcSeedBudgetGainAC{} and
 \nFvSeedBudgetGainFixed{}; AUC: \nSelAucRange{} against \nLcSeedAucGainAC{} and
@@ -35,8 +36,8 @@ SIM-swap and mule fraud and much more for agent fraud (\nLoAgentProd{} to \nLoAg
 synthetic identity.
 
 The one variant pre-specified in repository history has no burst structure (a single transfer, not an
-incident spanning several fraudulent transactions on one account), and it is the one detection failure
-found. It is modelled on a scam documented among Kenyan mobile-money users but sent to a payee already
+incident spanning several fraudulent transactions on one account), and it is the one failure found on a variant
+held out of training. It is modelled on a scam documented among Kenyan mobile-money users but sent to a payee already
 on the victim's list, a modelling choice the cited sources do not support, and it was committed, with
 the diagnostic model's predicted recall, alongside the generator code that produces it, before its
 first committed evidence. The diagnostic model catches it at \nRevRecall{}: by point estimate (its

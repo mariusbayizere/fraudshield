@@ -129,7 +129,7 @@ more than volume did, and only there.} At the flag threshold the mean over \nSee
 \nSelMeanRange{} across corpus depths at a fixed \nTrainUsed{} training rows, against a gain of
 \nLcSeedGainAC{} across the \nLcVolumeFactorAC{}-fold step of the learning curve within one cache and
 of \nFvSeedGainFixed{} from \nTrainUsed{} rows to full volume on the whole-draw corpus, where the
-validation and calibration splits grow too. At the budget the range across depths is
+validation and calibration splits grow too. At the false-positive budget the range across depths is
 \nSelBudgetRange{}, against volume gains of \nLcSeedBudgetGainAC{} and \nFvSeedBudgetGainFixed{}: the
 same scale. In AUC it is \nSelAucRange{}, against \nLcSeedAucGainAC{} and \nFvSeedAucGainFixed{}:
 volume moved it more. So the selection effect is a property of recall at one fixed threshold, not of
@@ -176,7 +176,7 @@ measured at one selection of training rows, the gate figures of Table~\ref{tab:g
 measurement of one selection at one corpus depth, and that choice alone moved the mean recall at the
 flag threshold across a range of \nSelMeanRange{}, against \nFvSeedGainFixed{} from \nTrainUsed{}
 rows to full volume on one corpus, with no interval computed for either difference; figures read at
-the budget or as AUC depend on it much less.
+the false-positive budget or as AUC depend on it much less.
 
 \subsection{Predictions pre-specified in repository history}
 
@@ -309,7 +309,7 @@ The best single \emph{engineered} feature, not only the best raw column &
 A benchmark one rule can solve, and model metrics quoted against chance &
 On the evaluation draw the velocity ratio alone reaches \nGateFloor{} on the test rows, while the
 strongest raw column reaches \nColumnMaxAUCB{}; every gate ranking metric is now a margin over the
-floor (Section~\ref{sec:floor}) \\
+floor and the best trivial rule (Section~\ref{sec:floor}) \\
 \addlinespace
 Leave-one-group-out \emph{and} one-group-only &
 Redundancy read as irrelevance: the first check alone cannot tell them apart &

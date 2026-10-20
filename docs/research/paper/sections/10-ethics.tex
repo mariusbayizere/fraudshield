@@ -11,8 +11,11 @@ false-positive rate at the flag threshold and the legitimate amount it would blo
 threshold of \nBlockThreshold{} (Table~\ref{tab:fairness}; \texttt{docs/benchmarks/pb66\_d8083dbc.txt}). Every country's interval
 overlaps every other's. Among channels, the intervals for agent banking, bank transfer and online
 payments lie wholly above mobile money's; every rate is at most \nFairBankFPR{}. Because no fraud
-parameter in the generator is keyed by country, what this measures is the generator's base rates and
-amount mixes per group passed through one model, not the model treating groups differently. On a
+parameter in the generator is keyed by country, we infer that the country rows measure the
+generator's base rates and amount mixes per country passed through one model, not the model treating
+countries differently; country still changes the fraud through some path that check does not cover
+(Section~\ref{sec:generalisation}), and fraud is channel-specific by construction, so the channel rows
+carry no such reading. On a
 synthetic benchmark whose population structure is partly sourced and whose fraud is assumed, it
 describes the generator's disparities, not a real population's. The per-country and per-channel AUCs
 of Sections~\ref{sec:evaluation} and~\ref{sec:generalisation} are not a fairness analysis either: they

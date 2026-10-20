@@ -7,7 +7,7 @@ We state these as findings about what the evidence supports, not as disclaimers.
 real fraud rates, real detection performance or any institution's customers. Whether it supports
 comparisons between methods is not established either: Section~\ref{sec:rowselection} finds the
 choice of training rows moving recall at the flag threshold across a wider range than training volume
-does where the corpus is held fixed, while recall at the budget moved by about as much under either
+does where the corpus is held fixed, while recall at the false-positive budget moved by about as much under either
 change and AUC moved more with volume (no interval was computed
 for any of these differences), and
 no comparison of methods here repeats over selections. Every figure here is a property of this
@@ -39,8 +39,8 @@ held in its KYC records; \texttt{agent\_float\_utilisation\_ratio} needs the age
 limit, and \texttt{agent\_distance\_from\_registered\_km} the agent's registered premises, both held by
 the agent network. The models learn nothing from them, and with one feature that is constant on this
 benchmark they are why the models train on \nTrainableFeatures{} features (Appendix~\ref{app:features}).
-\textbf{No model in this paper learned from these features}: the full models of the gate, the
-diagnostic battery and the learning curve train on \nTrainableFeatures{}; the specification's requirement that the features be computable for at least
+\textbf{No model in this paper learned from these features}: the full models of the gate, the full-volume run,
+the diagnostic battery and the learning curve train on \nTrainableFeatures{}; the specification's requirement that the features be computable for at least
 \nComputableTarget{} of records is recorded as not met (ADR 0055). One more feature is a different limitation. \texttt{round\_sum\_flag} produces a
 value for every record, but only because each country's configuration supplies the currency's round
 denominations, and those values are \textbf{assumed}: plausible note and typing steps, not a banknote
@@ -106,9 +106,9 @@ medians on a GitHub-hosted runner, a virtual machine on shared hardware; an earl
 end-to-end latencies have been measured only on shared development hardware (ADR 0035, ADR 0059),
 and the gate measurement is \deferred{M10}.
 
-\paragraph{Intervals assume independence the data do not have.} Fraud on this benchmark is staged as
+\paragraph{Intervals assume independence the data do not have.} Much of the fraud on this benchmark is staged as
 multi-row incidents on one account, and an account's rows share its history, so test rows are not
-independent. For the gate metrics, the diagnostic model's group AUCs, the variant recalls, the
+independent. For the gate model's AUC, recalls, F1 and USSD AUC, the diagnostic model's group AUCs, the variant recalls, the
 learning curve, leave-one-country-out, the single-feature floor and the differences between models,
 an account-clustered bootstrap from reproductions of the models is reported beside the row intervals;
 it widens them little except for USSD's AUC (Table~\ref{tab:clustered}), and the novel variant's
@@ -116,7 +116,8 @@ it widens them little except for USSD's AUC (Table~\ref{tab:clustered}), and the
 independent, so each is narrower than it should be by an amount not measured: those of the
 earlier-draw battery and its variant recalls, the floor re-run's Hanley--McNeil column, the
 full-volume model's evidence file, PB-66's monthly and precision--recall rows, the fairness table
-and leave-one-fraud-type-out (Section~\ref{sec:method}). The alert budgets' precision intervals
+and leave-one-fraud-type-out, and the diagnostic model's per-channel AUC intervals in the evidence
+files (Section~\ref{sec:method}). The alert budgets' precision intervals
 resample whole days, and their recall intervals' resampling unit is not recorded; the frontier reports medians without
 intervals.
 
