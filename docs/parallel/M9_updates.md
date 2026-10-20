@@ -362,3 +362,26 @@ excluded by a CPU-only xgboost, the other rows still apply.
 - **D-51** (from M7): WireMock stubs of Google's JWKS and token endpoints in the compose stack,
   and a Google sandbox contract suite reported as skipped without credentials (PB-113). M7's
   in-process `FakeGoogle` already backs the tests.
+
+## Before merging `security/scan-on-main` (owner, 2026-10-20)
+
+This branch moves M9's `security` workflow, its pinned Trivy launcher and the Tomcat, Jackson and
+lz4-java bump to `main` ahead of the rest of M9. It is not merged. Whoever merges it should expect
+three things:
+
+1. **Other branches get gated once rebased.** The workflow runs on a push to any branch that
+   contains it, so every milestone branch rebased onto `main` afterwards is scanned on every push
+   and fails on any HIGH or CRITICAL dependency finding that has a fix. For example,
+   `m8/frontend-rebase` changes `frontend/pnpm-lock.yaml`, and its frontend dependencies are gated
+   from its first push after a rebase.
+2. **M9's own rebase will conflict on `.github/workflows/security.yml`.** `m9/infra` added the file
+   in its own commits. `main`'s copy differs: the configuration job is guarded behind a
+   `trivy-configuration-target` job, and renamed to "misconfiguration in Kubernetes manifests and
+   Dockerfiles". The conflict stops the rebase at `ad6ccc2`, the commit that adds the file. Take
+   that commit's version, drop the target job (the manifests exist on M9), and keep `main`'s job
+   name: the old name claims compose files and workflows, which Trivy cannot scan
+   (`docs/research/lab_notebook.md`, 2026-10-20). M9's two later changes to the file (`74f3aef`,
+   `7a1d09a`) then apply cleanly. The bump commit drops out as already applied.
+3. **The nightly scan can turn `main` red on a new CVE**, with no code change, once the default
+   branch moves off `m0/bootstrap` (GOV-9). Until then the `schedule` trigger does not register,
+   and `main` is scanned only on push, on pull request and by manual dispatch.
