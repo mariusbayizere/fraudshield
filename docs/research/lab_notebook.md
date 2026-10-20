@@ -3154,3 +3154,78 @@ production):
 - **Caveat (owner: it goes in the paper's text).** LOFTO measures what never *fitting on* a scenario
   costs, not what never *seeing* it costs, because the remaining rows' features were computed over a
   history that includes it.
+
+### 2026-10-20 · PB-66 follow-up: LightGBM's 13 rounds, budget-10 ties, the two refuted ranges
+
+Owner, 2026-10-20: investigate the 13 rounds and report, without tuning; record the tie finding
+for M11; state my two LOFTO ranges as refuted. Nothing below was fitted or scored. Every number
+is read from evidence already committed.
+
+**LightGBM's 13 rounds: neither a scale property nor a misconfiguration. The stopping round is
+unstable.**
+- **The configuration matches its specification.** `model.fit_ensemble` stops LightGBM on
+  validation average precision, patience 50, at most 2,000 rounds. The settings are learning rate
+  0.1, 31 leaves and `is_unbalance`. `lgb.train` bins the validation set with the training set's
+  bins, and the model keeps `best_iteration`. XGBoost uses the same validation rows and metric, and it stopped at
+  108. I found no defect.
+- **The round count swings by hundreds at a fixed training volume.** These are seed-1 counts
+  from runs that are all committed:
+
+  | Run | Training rows | Validation rows / frauds | LightGBM rounds | LightGBM alone, AUC |
+  |---|---|---|---|---|
+  | `m4_gate_d8083dbc` | 30,000 | 20,000 / 165 | 331 | 0.948 |
+  | `m4_gate_d8083dbc_v2` | 30,000 | 20,000 / 165 | **45** | 0.936 |
+  | `m4_gate_d8083dbc_v3` | 30,000 | 20,000 / 165 | 342 | 0.952 |
+  | `m4_learning_curve_30k` | 30,000 | 20,000 / 165 | 592 | — |
+  | `m4_learning_curve_60k` | 60,000 | 20,000 / 165 | 837 | — |
+  | `m4_learning_curve_120k` | 120,000 | 20,000 / 165 | 924 | — |
+  | `m4_learning_curve_240k` | 240,000 | 20,000 / 165 | 167 | — |
+  | `full_volume_gate` | 792,162 | 60,632 / 520 | **13** | 0.946 |
+
+- **A cause outside the data moved it.** Between the first two runs the rows were identical. The
+  only change was `8abde0f`, which rounds inputs to float32. The count fell from 331 to 45.
+- **The count does not track volume.** It rose from 592 to 924 between 30K and 120K, then fell.
+- **Inference:** the validation curve is nearly flat after the first few dozen rounds. AP is
+  measured on 165 to 520 frauds, and any improvement resets the patience. So where the curve
+  peaks is closer to noise than to a property of the data. I have not plotted that curve.
+- **Inference:** the 13 rounds did not cost measurable ranking. LightGBM alone has AUC 0.946 at
+  13 rounds, within the 0.936–0.952 it reached at 45 to 342 rounds. XGBoost is ahead of LightGBM
+  in every run, including this one.
+- **The full-volume run changed more than training volume.** Validation is three times larger,
+  60,632 rows with 520 frauds against 20,000 with 165. Calibration is twice as large. So "eight
+  times the volume" is not the only difference between 167 rounds and 13.
+- **What would settle it, unrun:** record validation AP at every round for the full-volume fit
+  and the 240K fit. That touches training and validation rows only, never the test period. If the
+  owner wants it, it is a separate pre-specified job. Until then this stays an observation:
+  **LightGBM's early-stopping round is not stable at this benchmark's validation size**. A stopping
+  round reported in the paper should come with that caveat.
+
+**Budget 10: an operational result about alert budgets, not only a missed prediction.**
+- **266 of the 630 budget-10 alerts (42 %) were decided by a tie.** An alert counts as decided
+  by a tie when the day's tenth slot falls inside a block of equal scores larger than the slots
+  left, so the score cannot say which rows to alert. `pb66._top_k` shares those slots evenly.
+- **The baseline feature had 23 such alerts at the same budget.** The ties come from calibration:
+  isotonic regression maps ranges of raw scores onto a single value, and the top of the score range
+  is where the few distinct values are.
+- **Frauds arrive in bursts, which sets a ceiling.** Many days hold fewer than 10 frauds, so even
+  a perfect ranking reaches a precision of only 0.849 at 10 a day. The model reaches 91 % of that
+  ceiling (precision 0.770, recall 0.499). At 50, 100 and 200 a day ties decide 16 to 19 % of
+  alerts (605, 1,035 and 2,144), so tight budgets are where they matter most.
+- **What follows for operations:**
+  - A top-k analyst queue fed with calibrated scores needs an explicit tie-break rule, because at
+    a tight budget that rule decides almost half the queue.
+  - The budget has to be judged against the day's fraud count, not against 100 %.
+  - Recall 0.499 is the expectation over a random choice within each tie. A deployed tie-break by
+    time of day, by the uncalibrated score, or by amount would give a different number. None of
+    those was evaluated.
+
+**The paper's predictions table: my two LOFTO ranges are refuted.** Both were first committed in
+`eeccd60` (2026-10-19 19:46). The evidence was first committed in `c61d512` (2026-10-20 02:05),
+and `eeccd60` is its ancestor.
+- **Account takeover:** I predicted held-out recall at the budget ≥ 0.80 and a drop ≤ 0.10.
+  Measured: 0.834, with a drop of 0.159. **Refuted** on the drop; the recall bound held.
+- **Synthetic identity:** I predicted 0.70 to 0.92, with a drop of 0.00 to 0.20. Measured: 0.547,
+  with a drop of 0.349. **Refuted** on both.
+- **For completeness, the budget-10 prediction** (precision ≥ 0.90, recall 0.55–0.65) was first
+  committed in `1eeba04`, 2026-10-19 19:24. Measured: precision 0.770 and recall 0.499.
+  **Refuted.**
