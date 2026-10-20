@@ -3426,8 +3426,8 @@ requirements:
   notes: 'M9 (2026-10-20): the Argo Rollouts canary on m9/infra is not functional and its design is withdrawn.
     Its error-rate analysis reads fs_ingest_requests_total, which nothing emits, so it fails every rollout
     (PB-174). The owner rejected a canary by replica count needing 10 API pods (docs/parallel/M9_updates.md
-    3b, decision 2), and the spool''s real fix (PB-171) makes a canary by pod 33% at 3 replicas, so a 10%
-    step needs weighted traffic at the edge.'
+    3b, decision 2), and the spool''s real fix (PB-171) makes a canary by pod 33% at 3 replicas, so a
+    10% step needs weighted traffic at the edge.'
 - id: OPS-OBS-01
   section: 8.2 Observability
   title: Application Metrics
@@ -3449,9 +3449,10 @@ requirements:
     panels fs-decision-path Transactions per second, Ingest responses by status, Scoring latency p95 by
     stage, Feature fetch latency p95 by source, Redis hit ratio and DB pool in use; fs-kafka-spool Consumer
     lag by topic and group, Spool depth by pod; fs-analyst-operations Alert queue depth by tier, Review
-    duration p50 / p90, Review duration distribution; fs-risk-overview False positive rate (labelled); fs-model-health
-    Model versions by alias. The p99 alert interpolates: fs_decision_latency_seconds has no 0.08 bound.
-    Backlog PB-174 to PB-177, ADR 0093 (Proposed); the list is in docs/parallel/M9_updates.md section 7.'
+    duration p50 / p90, Review duration distribution; fs-risk-overview False positive rate (labelled);
+    fs-model-health Model versions by alias. The p99 alert interpolates: fs_decision_latency_seconds has
+    no 0.08 bound. Backlog PB-174 to PB-177, ADR 0093 (Proposed); the list is in docs/parallel/M9_updates.md
+    section 7.'
 - id: OPS-OBS-02
   section: 8.2 Observability
   title: Structured Logs
@@ -3485,8 +3486,8 @@ requirements:
   notes: 'M9 (2026-10-20, owner: not done until the metrics exist): on m9/infra FraudShieldFeatureDrift
     and FraudShieldModelAucDrop (ADR 0091) and the fs-model-health panels Live AUC-ROC (production) and
     alert level, Label coverage by alias and Top 10 features by PSI are written but not functional: nothing
-    emits fs_feature_psi, fs_model_auc_roc or fs_model_label_coverage, because the ML worker does not exist
-    (PB-172, PB-176).'
+    emits fs_feature_psi, fs_model_auc_roc or fs_model_label_coverage, because the ML worker does not
+    exist (PB-172, PB-176).'
 - id: OPS-OBS-04
   section: 8.2 Observability
   title: Regulatory Audit Trail
