@@ -1,35 +1,49 @@
 # Analyst decisions: the commit and undo contract
 
-Status: **draft 1, for independent review.** Code is written against this document, not the other way round. The owner asked for it on
-2026-10-20, before any of M8B's code: "P2's undo is exactly the kind of cross-instance timing
-problem" that produced M6's cycle. It governs P2's operations: `decideAlert`, `undoAlertDecision`,
-`escalateAlert` and `overrideAlertDecision`. It also covers how they meet M6's timeout poller and
-overdue sweep. P1's reads depend on it only through §5, which says what a queue lists.
+Status: **draft 2, for independent review.**
+- **Review 1** (`docs/reviews/M8B/decision-commit-contract-review-1.md`) found draft 1 UNSOUND,
+  with 6 MAJOR and 11 MINOR findings. §9 maps each finding to its answer.
+- **The cause of most of them:** draft 1 made Redis the arbiter of who owns a held transaction,
+  and claimed the hold outside the deciding PostgreSQL transaction. Draft 2 moves both arbiters
+  into PostgreSQL: who owns a hold, and which transition a transaction takes next. Each one is
+  claimed inside the transaction that relies on it.
+- **If draft 3 is ever found unsound,** the author stops and takes the design to the owner. That
+  was the owner's rule for M7's cache contract.
+- Code is written against this document, not the other way round.
 
-Sources: D-44 and D-29 in `docs/srs/defect_register.md`; the contract's four operations;
-`V4__alerts_rules_and_campaigns.sql`; `DecisionTransitionService`, `HoldTimeoutService`,
-`JdbcOverdueHolds` and `PostgresSink` in `backend/decision`; ADR 0056 and
-`decision-fact-ordering.md`, whose spool and id conventions this document reuses.
+**Scope.**
+- P2's operations: `decideAlert`, `undoAlertDecision`, `escalateAlert` and
+  `overrideAlertDecision`.
+- How they meet M6's hold timeout (the poller, its local fallback and the overdue sweep) and M6's
+  customer verification.
+- P1's reads depend on it only through §6, which says what a queue lists.
 
-## 1. What exists, and what this contract adds
+**Sources:** D-44, D-29, D-10; the four operations; V3, V4, V5, V8, V11, V62; in `backend/decision`,
+`DecisionTransitionService`, `HoldTimeoutService`, `RedisHoldSchedule`, `ResilientPorts`,
+`JdbcOverdueHolds`, `PostgresSink`, `DecisionService`, `DecisionState`, `RedisDecisionStates`,
+`RedisCircuitBreakers` and `KafkaMessages`; `notify`'s `VerificationService`; ADR 0056.
 
-**Exists (M6, V4):**
-- `alert_queue_entries` is mutable, with `status` and an optimistic-lock `version`. An escalation
-  is a new entry pointing at the old one.
-- `alert_decisions` is append-only. Each row is one decision, unique on
-  `(institution_id, idempotency_key)`.
-- `alert_decision_commits` and `alert_decision_undos` are append-only. The trigger
-  `forbid_commit_and_undo` takes `pg_advisory_xact_lock('alert_decision:' || decision_id)` and
-  refuses the second of a commit and an undo.
-- `v_alert_decision_state` derives PENDING_COMMIT, COMMITTED or UNDONE.
-- MEDIUM holds wait in a Redis schedule (`fs:holds`). Exactly one caller removes each entry: the
-  leader's poller (`claimDue`) or an analyst (`cancel`). A PostgreSQL sweep (`JdbcOverdueHolds`)
-  times out holds the schedule lost, 10 s after their deadline.
-- `DecisionTransitionService.analystDecidesHold` cancels the hold and records the transition and a
-  label through the spool. Only tests call it.
+## 1. What exists, and what changes
 
-**Missing, and added here:** a grace timestamp; anything that ever commits a decision; the link
-between a decision and the hold it stops; idempotent side effects; and the rules below.
+**M6 today:**
+- **Entries and decisions.** `alert_queue_entries` is mutable, with `status` and `version`.
+  `alert_decisions` is append-only. Commit and undo rows are append-only, guarded by
+  `forbid_commit_and_undo` under `pg_advisory_xact_lock('alert_decision:' || id)`.
+- **MEDIUM holds** sit in a Redis sorted set. Three paths can time one out:
+  - the leader's poller (`claimDue`, then `timeOut`);
+  - each instance's local fallback map while Redis is down;
+  - the PostgreSQL overdue sweep (`reconcile`, 10 s after the deadline by the leader's JVM clock).
+- **Transitions.** Every writer of a transition (analyst, timeout, customer verification, senior
+  override) computes `latest.next()` from Redis, or from PostgreSQL when Redis lacks the key. It
+  records the event through the spool with a random event id, and then attempts a Redis
+  compare-and-set whose result it ignores. Two writers can therefore emit the same sequence number.
+  `decision_states` in PostgreSQL is written asynchronously by `PostgresSink`.
+
+**This contract adds two arbiters in PostgreSQL, each written synchronously:**
+- `hold_owners`: who owns a held transaction (H1 to H4);
+- `transaction_transitions`: the reservation of every transition after sequence 1 (T1 to T4).
+
+It also adds the decision lifecycle rules (D1 to D7), and changes M6 where §8 lists.
 
 ## 2. Terms
 
@@ -37,270 +51,335 @@ between a decision and the hold it stops; idempotent side effects; and the rules
 |---|---|
 | **G** | the undo grace, 5 s (D-44) |
 | **P** | the committer's and the effects worker's period, 500 ms |
-| **DB time** | `clock_timestamp()` on the PostgreSQL primary. Every grace and deadline comparison in this contract uses it, so no instance clock decides one. |
-| **entry** | a row of `alert_queue_entries` |
-| **open entry** | an entry whose status is PENDING or IN_REVIEW |
-| **analyst decision** | an `alert_decisions` row whose decision is CONFIRM_FRAUD or MARK_LEGITIMATE |
-| **live decision** | an analyst decision with no undo row. It may or may not be committed. |
-| **hold** | the transaction's MEDIUM hold: `decision_states` sequence 1 is HOLD, plus its entry in the Redis schedule |
-| **claimed hold** | a hold that an analyst decision removed from the schedule (`hold_claimed = true` on the decision) |
-| **effects** | what a committed decision does outside its own tables (§3, D5) |
+| **DB time** | `clock_timestamp()` on the primary. Every grace, deadline and sweep comparison in this contract uses it, and none uses a JVM clock. |
+| **open entry** | status PENDING or IN_REVIEW |
+| **analyst decision** | an `alert_decisions` row with decision CONFIRM_FRAUD or MARK_LEGITIMATE |
+| **live decision** | an analyst decision with no undo row |
+| **committed** | per §3.7: a commit row exists, or the decision has no grace (`undo_until` IS NULL) |
+| **the runner** | the audit module's `inTenant`, extended to retry SQLSTATE 40001 and 40P01. Every transaction here runs through it, and none has a side effect outside PostgreSQL before it commits. |
 
-**Assumption A1.** Every transaction in this contract runs on the primary.
+- **A1.** Every transaction runs on the primary.
+- **A2.** No committed transaction is lost. The same assumption is made in the configuration
+  contract.
 
-## 3. Schema additions (V80, M8B's range)
+**Lock order, everywhere:**
+1. the entry row (`FOR UPDATE`);
+2. the entry's advisory lock (§3.4);
+3. the decision's advisory lock;
+4. the `hold_owners` row;
+5. the transition advisory lock (T2);
+6. the audit chain head, always last.
 
-1. `alert_decisions` gains three columns. All are written once, at insert:
-   - `undo_until timestamptz`, set by a BEFORE INSERT trigger to `created_at + G` for analyst
-     decisions and NULL for every other decision. `created_at` is also set by the trigger, to DB
-     time, so a caller cannot choose either value.
-   - `hold_claimed boolean NOT NULL DEFAULT false`.
-   - `prior_status text`, the entry's status when the decision was made: PENDING or IN_REVIEW for
-     an analyst decision, NULL otherwise.
-2. `alert_decision_commits` gains a BEFORE INSERT check, inside the existing advisory lock: refuse
-   if the decision's `undo_until` is not NULL and DB time is before it.
-3. `alert_decision_undos` gains a BEFORE INSERT check, inside the same lock: refuse unless the
-   decision is an analyst decision, `undo_until` is not NULL, and DB time is before `undo_until`.
-4. **A backstop for at most one live decision per entry.** A BEFORE INSERT trigger on
-   `alert_decisions` takes `pg_advisory_xact_lock('alert_entry:' || alert_queue_entry_id)` for an
-   analyst decision. It refuses if the entry already has a live analyst decision. The undo
-   trigger takes the same entry lock first.
-   - Lock order everywhere is entry, then decision, so undo and decide cannot deadlock.
-   - The application rule (D1) already prevents this case. The trigger is the database's
-     independent backstop, as V6's constraints are for dual control.
-5. A new append-only table, `alert_decision_effects`:
-   - columns: `decision_id` (primary key, FK), `institution_id`, `done_at` (DB time), and
-     `outcome` (APPLIED or SKIPPED, with a reason code);
-   - tenant-isolated, and granted SELECT and INSERT to `fs_app`.
-6. Two SECURITY DEFINER functions, as V62's `institutions_with_overdue_holds` is:
-   - `institutions_with_due_decisions()` lists institutions with an analyst decision past
-     `undo_until` that has neither a commit nor an undo;
-   - `institutions_with_pending_effects()` lists institutions with a committed decision that has
-     no effects row.
+A transaction may skip levels, but it never takes them out of order.
 
-   The workers then run in each tenant's own transaction, under row-level security.
+## 3. Schema (V80, M8B's range)
 
-## 4. Rules
+1. **`alert_decisions` gains six columns, all written once at insert:**
+   - `undo_until`: set by a BEFORE INSERT trigger, for analyst decisions only, to `created_at + G`.
+     For those decisions the same trigger also sets `created_at` to DB time. Other rows, such as
+     the sink's AUTO_RELEASED, keep their own `created_at` and get a NULL `undo_until`.
+   - `prior_status`: PENDING or IN_REVIEW, for analyst decisions.
+   - `alert_version`: the `alert_version` the request named, for idempotent replay.
+   - `hold_owned`: boolean.
+   - `override_decision`: CONFIRM_FRAUD or MARK_LEGITIMATE, NOT NULL exactly when the decision is
+     SENIOR_OVERRIDE.
+   - `request_fingerprint`: the SHA-256 of the canonical request body, for idempotent replay.
+2. **Commit rows.** `alert_decision_commits.committed_at` and `alert_decision_undos.undone_at` are
+   set by trigger to DB time. Inside the existing advisory lock, a commit is refused while DB time
+   is before `undo_until`.
+3. **Undo rows.** Inside the same lock, an undo is refused unless the decision is an analyst
+   decision with DB time before `undo_until`.
+4. **At most one live analyst decision per entry.** A BEFORE INSERT trigger on analyst decisions
+   takes `pg_advisory_xact_lock('alert_entry:' || entry_id)`, and refuses if a live analyst
+   decision exists. The undo trigger takes the same lock first. This is the database's backstop;
+   D1 already prevents the case.
+5. **`hold_owners`,** mutable:
+   - columns: `institution_id`, `transaction_id`, `owner` (FREE, ANALYST or TIMEOUT),
+     `decision_id`, `updated_at`;
+   - primary key `(institution_id, transaction_id)`;
+   - a CHECK that `decision_id` is not NULL exactly when the owner is ANALYST;
+   - a trigger that refuses any change away from TIMEOUT;
+   - tenant-isolated, with SELECT, INSERT and UPDATE granted to `fs_app`.
+6. **`transaction_transitions`,** append-only:
+   - columns: `institution_id`, `transaction_id`, `sequence` (≥ 2), `event_id`, `decision`,
+     `decided_by`, `decided_at` (DB time), `source_reference`;
+   - primary key `(institution_id, transaction_id, sequence)`, and `event_id` unique;
+   - tenant-isolated.
+7. **`v_alert_decision_state`** reports COMMITTED when a commit row exists *or* `undo_until` IS
+   NULL; UNDONE when an undo row exists; PENDING_COMMIT otherwise. ESCALATE, SENIOR_OVERRIDE and
+   AUTO_RELEASED rows are therefore committed on insert.
+8. **`alert_decision_effects`,** append-only: `decision_id` (primary key), `institution_id`,
+   `done_at`, `outcome` (APPLIED or SKIPPED) and `reason`.
+9. **`label_events` gains `supersedes_label_id`.** `DecisionEvent.LabelRecorded` and
+   `KafkaMessages`' label payload gain it too. The Kafka schema already has it.
+10. **Three SECURITY DEFINER listers.** Each compares with its own DB time, is granted to `fs_app`
+    and is pinned in V71's list:
+    - institutions with due decisions;
+    - institutions with pending effects;
+    - overdue holds.
 
-**D1. Deciding** (`decideAlert`). This is one tenant transaction T. The steps run in this order.
-- **(a) Idempotency first.** Look up `(institution_id, idempotency_key)` in `alert_decisions`.
-  - **Found, with the same caller, alert, decision, comment and `alert_version`:**
-    - if the decision is still undoable (no commit, no undo, and DB time before `undo_until`), the
-      answer is 202 with the stored `decision_id` and `undo_until`;
-    - otherwise the answer is 409 `stale-alert` with the current alert.
+## 4. The two arbiters
+
+**H1. Who owns a hold.** `hold_owners` decides it. A missing row means FREE.
+- An analyst decision claims ANALYST by an upsert that succeeds only from FREE:
+  `INSERT … ON CONFLICT DO UPDATE SET owner='ANALYST', decision_id=… WHERE hold_owners.owner='FREE'
+  RETURNING`.
+- A timeout claims TIMEOUT by an upsert that succeeds from FREE or TIMEOUT.
+- Both are row-level writes on one key. A second claimant waits for the first's transaction and then
+  re-checks against its result, so exactly one of ANALYST and TIMEOUT holds at any time. TIMEOUT is
+  final.
+
+**H2. Every timeout path claims first.** The leader's poller, the local fallback and the overdue
+sweep each claim TIMEOUT in their own short transaction before calling `timeOut`.
+- **The claim returns the row:** time out. A repeated claim and a repeated timeout are harmless,
+  because the timeout's transition is reserved under a deterministic id (T3).
+- **The claim returns nothing (ANALYST owns it):** drop the hold without timing it out.
+- **The claim fails (PostgreSQL unavailable):** the poller and the local fallback reschedule the
+  hold 1 s later and count it, and the sweep retries on its next run. **No hold is timed out without
+  a TIMEOUT claim** (question Q3).
+
+**H3. The overdue sweep** selects holds where all of the following are true:
+- the HOLD's deadline + 10 s is at or before DB time;
+- the transaction has no transition;
+- its owner is not ANALYST.
+
+It then claims each one by H2. Its cutoff is DB time, never a JVM clock.
+
+**H4. No request path touches the Redis schedule before it commits.** A decision claims in
+PostgreSQL only. The Redis entry stays scheduled, and when the poller takes it at the deadline, its
+H2 claim finds ANALYST and drops it. An undo (D3) frees the claim and reschedules the hold after its
+commit. If that reschedule fails, the sweep (H3) times it out.
+
+**T1. Every transition after sequence 1 is reserved in `transaction_transitions` before its event is
+recorded.** The writers are the analyst's effect (E1), the timeout, the senior override, and the
+customer's verification answer.
+
+**T2. Reservation.** One runner transaction does the following:
+1. takes `pg_advisory_xact_lock('txn_transition:' || transaction_id)`;
+2. reads the **latest**: the highest reserved transition, or the `decision_states` row with sequence
+   1 if there is none;
+3. computes `next` with `DecisionState`'s rules;
+4. inserts it with its deterministic `event_id` (T3) and `decided_at` = DB time;
+5. commits.
+
+`decision_states` sequence 1 is visible to every writer that has a reason to act. `PostgresSink`
+writes it in the same transaction as the alert entry, auto-block and verification rows that let a
+writer act (one spool record, one sink transaction). If it is not visible, the writer waits and
+retries; it never computes from a guess.
+
+**T3. Deterministic ids.** Each event id is the name-based UUID of a stable source:
+- the analyst's E1: `alert_decision|` + the decision id;
+- an override: `alert_decision|` + the override's decision id;
+- a timeout: `hold_timeout|` + institution + transaction;
+- a customer answer: `verification|` + the verification id.
+
+`DecisionState.next` takes the event id and `decided_at` as arguments instead of drawing them.
+
+**T4. Recording.**
+- **After the reservation commits,** the writer records the reserved event through the spool, and
+  then sets the Redis state cache with a "set if this sequence is higher" script. That cache is
+  only a cache.
+- **When the reservation already exists** with this writer's event id, the writer re-records it.
+  Receivers ignore repeated event ids.
+- **When the latest is not what the writer expected:** another writer won. The writer re-reads, and
+  re-decides by `DecisionState`'s rules (for instance, an override to APPROVE finds APPROVE already
+  in force). If no transition is allowed, it records nothing, and states the reason (E1's SKIPPED).
+- **The guarantee.** Two writers can never reserve the same sequence, and no event is recorded
+  without a reservation.
+
+## 5. Decision rules
+
+**D1. Deciding** (`decideAlert`) is one runner transaction:
+- **(a)** `SELECT … FOR UPDATE` on the entry. If there is no row (row-level security hides other
+  institutions' rows), the answer is 404.
+- **(b) Idempotency, under the entry lock.** Look up `(institution_id, idempotency_key)`.
+  - **Found, with the same caller, alert and `request_fingerprint`:** return the original response,
+    202 with the stored `decision_id`, `state: PENDING_COMMIT` and `undo_until`, whatever has
+    happened since. The contract's idempotency rule is that a replay returns the original outcome.
   - **Found with anything different:** 409 `idempotency-conflict`.
-  - **Not found:** continue. If two requests with the same key race, the unique constraint refuses
-    the second insert at (h). That transaction rolls back and is answered by re-running (a), once.
-- **(b)** `SELECT … FOR UPDATE` on the entry. If there is no row (row-level security hides other
-  institutions' rows too), the answer is 404.
-- **(c)** If the entry is escalated and the caller's role ranks below its `escalation_target_role`:
-  403 `escalation-level-required`.
-- **(d)** If `alert_version` is not the entry's `version`: 409 `stale-alert`.
-- **(e)** If the entry is not open: 409 `stale-alert`. The body carries the current alert, which
-  shows who decided it or whether it was auto-released (D-29).
-- **(f)** For a MEDIUM entry with a `review_deadline_at`: if DB time is at or after it, 409
-  `review-deadline-passed`.
-- **(g)** For a MEDIUM entry, claim the hold (D2). If the claim refuses, T rolls back and the
-  claim's answer is returned.
-- **(h)** Insert the decision, with `hold_claimed` and `prior_status`. In the same transaction:
-  - set the entry's status to CONFIRMED_FRAUD or MARKED_LEGITIMATE and increment `version`;
-  - write the audit event `ANALYST_DECISION` / `DECIDED` through `AuditLog`, with the actor, the
-    decision and the comment.
-- **(i)** Commit T. The answer is 202 `{decision_id, state: PENDING_COMMIT, undo_until}`.
-- **Nothing outside PostgreSQL happens before T commits, except the hold claim.** The effects
-  happen only after the commit row exists (D5).
+- **(c)** If the entry is escalated and the caller's role ranks below its target: 403.
+- **(d)** If `alert_version` ≠ the entry's `version`: 409 `stale-alert` with the current alert.
+- **(e)** If the entry is not open: 409 `stale-alert` with the current alert.
+- **(f)** For a MEDIUM entry, claim the hold (H1). If the owner is TIMEOUT: 409
+  `review-deadline-passed`. A MEDIUM entry with a `review_deadline_at` already past in DB time gets
+  the same answer before the claim.
+- **(g)** Insert the decision, with `hold_owned`, `prior_status`, `alert_version` and
+  `request_fingerprint`.
+  - Set the entry's status to CONFIRMED_FRAUD or MARKED_LEGITIMATE, and `version + 1`.
+  - Audit `ANALYST_DECISION` / `DECIDED`.
+- **(h)** Commit, and answer 202.
+- **Retries.** A 40001 or 40P01 re-runs (a) to (h) whole. Nothing outside PostgreSQL happened, so
+  the retry is exact.
 
-**D2. Claiming the hold.**
-- **(a)** M6's port gains `take(institution, transaction)`. It is the same Lua step as `cancel`
-  (`HGET`, `HDEL`, `ZREM`), and returns the removed hold or nothing. It is called on Redis
-  directly, never through the `ResilientPorts` fallback, because a local fallback cannot see a hold
-  scheduled by another instance.
-- **(b)** **It returns the hold:** `hold_claimed = true`.
-- **(c)** **It returns nothing:** the hold is gone. Either the timeout poller took it, or it was
-  never scheduled (`DecisionService` counts a failed schedule and goes on). In both cases a
-  timeout will decide, or already has, so the answer is 409 `review-deadline-passed`. That holds
-  for an escalated MEDIUM entry too.
-- **(d)** **Redis fails or times out:** T rolls back and the answer is 503 with `Retry-After`. A
-  MEDIUM decision is never accepted without knowing who owns the hold.
-- **(e)** **T fails after a successful take:** the hold is put back with `schedule`, best effort,
-  after the rollback. If that also fails, M6's overdue sweep times the transaction out 10 s after
-  its deadline. That is the sweep's existing guarantee, and the decision never existed.
-- **(f)** **The sweep must not time out a claimed hold.** `JdbcOverdueHolds`' query gains
-  `AND NOT EXISTS` (a live decision with `hold_claimed` on the same transaction). This is the one
-  change to M6's sweep.
-- **(g)** **Clock skew between DB time and the leader's clock** only decides which of the analyst
-  and the timeout wins near the deadline. `take` and `claimDue` are atomic on the same Redis keys,
-  so they never both win.
+**D2. Undoing** (`undoAlertDecision`) is one runner transaction:
+- **(a)** `FOR UPDATE` on the entry. The decision must be on it and must be an analyst decision,
+  otherwise 404. A caller who is not its author gets 403.
+- **(b)** An undo row by this caller already exists: 204.
+- **(c)** Insert the undo row. If §3.3 refuses: 409 `undo-window-expired`.
+- **(d)** If `hold_owned`: set `hold_owners` back to FREE, where `decision_id` is this decision.
+- **(e)** Set the entry's status to `prior_status`, and `version + 1`. Nothing else can have
+  changed the entry since D1: every other writer needs an open entry, and review 1 verified this.
+  Audit `ANALYST_DECISION` / `UNDO`.
+- **(f)** After the commit, if `hold_owned`: reschedule the Redis hold, rebuilt as the sweep rebuilds
+  one, with the policy from `decision_states.timeout_policy` (configuration contract C9).
+  - If the deadline has passed, the poller claims and times it out on its next tick.
+  - If rescheduling fails, H3 times it out between 10 and 15 s after the deadline.
 
-**D3. Undoing** (`undoAlertDecision`). This is one tenant transaction.
-- **(a)** `SELECT … FOR UPDATE` on the entry.
-- **(b)** The decision must belong to that entry and be an analyst decision. Otherwise the answer
-  is 404.
-- **(c)** If the caller is not the decision's author: 403 `not-decision-author`.
-- **(d)** If the decision already has an undo row by this caller, the answer is 204. A repeated
-  undo is harmless, and the operation takes no idempotency key.
-- **(e)** Insert the undo row. If the §3 trigger refuses (a commit exists, or DB time is at or after
-  `undo_until`): 409 `undo-window-expired`.
-- **(f)** In the same transaction:
-  - set the entry's status back to the decision's `prior_status` and increment `version`;
-  - write the audit event `ANALYST_DECISION` / `UNDO`. D-44's "compensating record" is the undo
-    row itself.
-- **(g)** Nothing else could have changed the entry since D1.
-  - Every writer needs an open entry: escalation needs one, the sink's AUTO_RELEASED update
-    needs PENDING or IN_REVIEW, and override needs a committed decision.
-  - The decision moved the entry out of open, so restoring `prior_status` overwrites no one.
-- **(h)** **After the commit**, if `hold_claimed`, the hold is scheduled again.
-  - It is rebuilt exactly as `JdbcOverdueHolds` rebuilds an overdue one: the transaction's
-    channel, the timeout policy in force at the hold, and `review_deadline_at`.
-  - If the deadline has passed, the poller times it out on its next tick (100 ms).
-  - If scheduling fails, the sweep times it out within 10 s of the deadline. The decision is no
-    longer live, so D2(f) no longer excludes it.
+**D3. Committing.** Every instance runs the committer every P. There is no leader.
+- **(a)** It lists institutions with due decisions. For each due decision, oldest first, it runs
+  **one runner transaction per decision**:
+  1. `pg_try_advisory_xact_lock` on the decision; skip it if the lock is held;
+  2. insert the commit row `ON CONFLICT DO NOTHING RETURNING`;
+  3. if a row came back, audit `ANALYST_DECISION` / `COMMITTED`.
 
-**D4. Committing.** Every instance runs the committer every P. There is no leader.
-- **(a)** For each institution that `institutions_with_due_decisions()` returns, one tenant
-  transaction selects up to 100 analyst decisions where all of these hold:
-  - DB time ≥ `undo_until`;
-  - there is no commit row;
-  - there is no undo row.
-- **(b)** For each one, it inserts a commit row with `ON CONFLICT (decision_id) DO NOTHING
-  RETURNING`, and for each row returned it writes the audit event `ANALYST_DECISION` /
-  `COMMITTED`.
-  - The §3 trigger serialises the insert with an undo of the same decision. Exactly one of the two
-    succeeds.
-  - A commit that loses to an undo raises inside its savepoint, is skipped, and does not abort the
-    batch.
-  - A second committer inserting the same commit row does nothing.
-- **(c)** **Bound:** while PostgreSQL is up and at least one instance runs, a decision commits
-  within `undo_until + P + d`, where d is one committer transaction.
-- **(d)** **The state is shown only once a commit exists.** Until the commit row exists, the
-  reported state stays PENDING_COMMIT, even after `undo_until`. Override requires the commit row
-  (D6), and undo is already refused by time (D3(e)).
+  The §3.2 trigger serialises the commit with an undo, so exactly one succeeds.
+- **(b) Bound:** `undo_until + P + d`, while PostgreSQL is up and the instances together commit
+  faster than decisions fall due. One transaction takes about 5 ms, so one instance commits about
+  100 per period.
 
-**D5. Effects.** Every instance runs the effects worker every P.
-- **(a) Which decisions.** For each institution `institutions_with_pending_effects()` returns, the
-  worker takes committed decisions with no effects row, oldest commit first. Each runs in its own
-  tenant transaction, under `pg_try_advisory_xact_lock('alert_decision_effects:' || decision_id)`.
-  A decision whose lock is held is skipped.
-- **(b) Ordering.** An override's effects wait until the decision it overrides has its effects row.
-- **(c) Every effect's identity derives from the decision id,** so running it twice is the same as
-  running it once:
-  - the transition's event id is `nameUUIDFromBytes("alert_decision|" + decision_id)`;
-  - the label id is `nameUUIDFromBytes("alert_label|" + decision_id)`.
-- **(d) The effects, in order:**
-  - **E1, the transaction.**
-    - **When `hold_claimed`:** M6's service gains `applyAnalystDecision(...)`. It is
-      `analystDecidesHold` without the cancel, because D2 already holds the lock, and it uses the
-      ids above.
-      - It records `DecisionChanged` (HOLD → APPROVE or DECLINE, by ANALYST) and `LabelRecorded`
-        (source ANALYST) through the spool.
-      - If the latest state is already this event, nothing is recorded again.
-      - If it is neither HOLD nor this event, the outcome is SKIPPED with reason
-        `transaction_not_held`. A metric counts it, because D2(f) makes it impossible.
-    - **Otherwise** (a HIGH entry, already auto-blocked, or an ANOMALY entry, never held): only
-      `LabelRecorded` is written, through the spool. MARK_LEGITIMATE on a HIGH entry does not
-      unblock the transaction. Under `DecisionState`'s rules only customer verification or a
-      senior override can (question Q1).
-  - **E2, the circuit breaker.** For a CONFIRM_FRAUD on a MEDIUM or ANOMALY entry (never on HIGH,
-    whose auto-block already counted), call `countConfirmedFraud`. It is made idempotent per
-    transaction, not per decision: one Lua step, `SET NX` on
-    `fs:mcc:confirmed:<institution>:<transaction>` with a 25-hour expiry, then `HINCRBY`. The
-    worker calls Redis directly, not through the fallback, which drops the count. A failure leaves
-    the decision for the next run.
-  - **E3.** Insert the effects row, and commit.
-- **(e) A crash between an effect and E3** runs the effects again, on any instance, with the same
-  ids:
-  - the spool's receivers ignore the repeated event ids (`decision_states.event_id` is unique,
-    `label_events` inserts are `ON CONFLICT DO NOTHING`, and Kafka consumers dedupe by event id);
-  - the breaker's `SET NX` refuses the second count.
-- **(f) No bound while Redis or the spool is unavailable.** A claimed MEDIUM transaction then
-  stays HOLD until E1 succeeds (question Q3). `fs_analyst_effects_oldest_pending_seconds` is
-  exported, so an alert can fire.
+**D4. Effects.** Every instance runs the effects worker every P.
+- **(a)** It lists institutions with pending effects. For each committed decision without an effects
+  row, oldest commit first, it runs `pg_try_advisory_xact_lock` on the effects key and skips the
+  decision if the lock is held.
+- **(b) Ordering.** An override's effects wait until the decision it overrides has an effects row.
+- **(c) E1, the transaction.** This step is skipped for ESCALATE.
+  - **An analyst decision with `hold_owned`:** reserve and record HOLD → APPROVE or DECLINE, by
+    ANALYST (T1 to T4), with a label of source ANALYST.
+  - **An override:** reserve and record the transition by SENIOR_OVERRIDE to `override_decision`'s
+    outcome, where `DecisionState` allows it. The label has source SENIOR_OVERRIDE and
+    `supersedes_label_id` set to the original's label id.
+  - **Otherwise** (HIGH, already auto-blocked; ANOMALY, never held): record the label only.
+  - **Label ids** are the name-based UUID of `alert_label|` + the decision id.
+  - **A transition that is not allowed, or already in force,** gives outcome SKIPPED, with the
+    reason, counted.
+- **(d) E2, the breaker.** On a CONFIRM_FRAUD (analyst or override) of a MEDIUM or ANOMALY entry,
+  never HIGH: `countConfirmedFraud`, once per transaction. It is one Lua step: `SET NX
+  fs:mcc:confirmed:<inst>:<txn>` with a 25-hour expiry, then `HINCRBY`. It is called on Redis
+  directly, and a failure leaves the decision for the next run.
+- **(e) E3.** Insert the effects row `ON CONFLICT DO NOTHING`, and commit.
+- **(f) No bound while Redis or the spool is unavailable.** A held MEDIUM transaction owned by
+  ANALYST stays HOLD until E1 succeeds. `fs_analyst_effects_oldest_pending_seconds` alerts (Q3).
 
-**D6. Overriding** (`overrideAlertDecision`). This is one tenant transaction.
-- **(a)** Idempotency as in D1(a); `SELECT … FOR UPDATE` on the entry; then the `alert_version`
-  check.
+**D5. Overriding** (`overrideAlertDecision`) is one runner transaction:
+- **(a)** Entry lock, idempotency as in D1(b), then the version check.
 - **(b)** `original_decision_id` must be the entry's latest decision that is neither undone nor
-  overridden. Otherwise the answer is 409 `stale-alert`.
-- **(c)** It must have a commit row. Otherwise the answer is 409 `decision-not-committed`.
-- **(d)** If its author is the caller, or it overrides one of the caller's own decisions: 403
-  `own-decision-override`.
-- **(e)** Insert the SENIOR_OVERRIDE decision (`undo_until` NULL) and its commit row together, so
-  it is COMMITTED at once. In the same transaction:
-  - set the entry's status to OVERRIDDEN and increment `version`;
-  - write the audit event `SENIOR_OVERRIDE`.
+  overridden: 409 `stale-alert` otherwise. It must be committed (§3.7): 409 `decision-not-committed`
+  otherwise. An own decision, or an override of one, gets 403 `own-decision-override`.
+- **(c)** Insert the SENIOR_OVERRIDE decision, with `override_decision`. It is committed on insert
+  (§3.7).
+  - Set the entry's status to OVERRIDDEN, and `version + 1`.
+  - Audit `SENIOR_OVERRIDE`.
+  - Answer 201.
+- **(d)** Its effects run through D4. A downgrade from fraud cannot remove a breaker count: that is
+  an accepted cost.
 
-  The answer is 201 with the record.
-- **(f) Effects, through D5:**
-  - a label with source SENIOR_OVERRIDE, whose `supersedes_label_id` is the original's label id
-    (derivable, by D5(c));
-  - the transaction transition by SENIOR_OVERRIDE, where `DecisionState` allows it;
-  - a breaker count for an upgrade to fraud (E2, once per transaction).
-  - A downgrade from fraud cannot remove a count, because the breaker has no decrement. That is an
-    accepted cost: the count ages out with its 25-hour bucket.
+**D6. Escalating** (`escalateAlert`) is one runner transaction:
+- **(a)** Entry lock, idempotency, the version check, and the entry must be open. The target must
+  rank strictly above the caller (422), and an escalated entry needs the caller's role at or above
+  its target (403).
+- **(b) For MEDIUM, lock and read the hold owner.** Insert the row as FREE if it is absent, then
+  `FOR UPDATE` it.
+  - If the owner is TIMEOUT: 409 `stale-alert`, because the transaction has already timed out.
+  - Otherwise the lock serialises the escalation with a concurrent timeout claim.
+- **(c) The new entry.** Insert it, copying the transaction, score, tier, probability, expected
+  loss and `review_deadline_at`, with `escalated_from_alert_id`, the target and the reason.
+  - Insert an ESCALATE decision on the original. It is committed on insert.
+  - Set the original's status to ESCALATED, and `version + 1`.
+  - Audit `ANALYST_DECISION` / `ESCALATED`.
+- **(d) The hold is untouched,** and the review timer keeps running (Q2).
+  - If the timer fires later, its H2 claim succeeds. The sink's AUTO_RELEASED update reaches the
+    new entry, which is open and already committed.
+  - `PostgresSink`'s AUTO_RELEASED decision row is attached to the open entry of that transaction,
+    or else to its newest entry. It is no longer attached to an arbitrary one (§8).
 
-**D7. Escalating** (`escalateAlert`). This is one tenant transaction.
-- **(a)** Idempotency as in D1(a); `FOR UPDATE` on the entry; the version check; the entry must be
-  open. The target must rank strictly above the caller (422), and an escalated entry needs the
-  caller's role at or above its target (403).
-- **(b)** Insert the new entry. It copies the transaction, score, tier, probability, expected loss
-  and `review_deadline_at`, and sets `escalated_from_alert_id`, the target and the reason.
-- **(c)** Insert an ESCALATE decision on the original, committed at once.
-- **(d)** Set the original's status to ESCALATED and increment `version`, and write the audit event
-  `ANALYST_DECISION` / `ESCALATED`.
-- **(e)** **The hold is not touched.** The review timer keeps running (question Q2).
-  - If it fires first, the sink's AUTO_RELEASED update reaches the new entry, which is open for
-    that transaction and tier.
-  - The senior then gets 409 `stale-alert`, as anyone would.
-  - If the senior decides first, D1 and D2 apply to the new entry unchanged.
+**D7. Customer verification** (M6, `customerAnswered`) reserves its transition by T1 to T4 before
+recording. That is the only change to it.
 
-## 5. What each queue lists (M8's item 5)
+## 6. What each queue lists (M8's item 5, as in the contract's `listAlerts`)
 
-A queue lists **open entries only**.
-- **Deciding** takes an entry out of every queue at once, because its status leaves open in D1.
-- **Undo** puts it back with the next `version`.
-- **Escalating** replaces the original with the new entry in the escalated queue.
-- **standard:** tiers HIGH and MEDIUM, `escalated_from_alert_id` NULL.
-- **anomaly:** tier ANOMALY, `escalated_from_alert_id` NULL.
-- **escalated:** `escalated_from_alert_id` not NULL, with the target role at or below the caller's,
-  plus entries the caller escalated.
+- **Without `outcome`, a queue lists open entries only.** Deciding takes an entry out at once. An
+  undo puts it back with the next `version`. Escalating replaces the original with the new entry.
+- **`outcome` selects statuses explicitly,** for search.
+- **The queues:**
+  - **standard:** HIGH and MEDIUM entries with no `escalated_from_alert_id`;
+  - **anomaly:** ANOMALY entries with none;
+  - **escalated:** entries with one, filtered by the caller's role;
+  - **all:** the union.
 
-So the console's rule, not re-reading the feed until the next refresh or an Undo, is no longer
-needed for correctness. A re-read cannot bring a decided alert back.
-
-## 6. Properties, each to be proved by a test that fails with its rule removed
+## 7. Properties, each to be proved by a test that fails with its rule removed
 
 | # | Property | Rules |
 |---|---|---|
-| P1 | An entry has at most one live analyst decision, even under concurrent decides with different keys | D1(b,e), §3.4 |
-| P2 | A decision is committed or undone, never both. A commit is never before `undo_until` by DB time; an undo is never at or after it | §3.2, §3.3, D3(e), D4(b) |
-| P3 | An undone decision has no effects. A committed decision's effects run after its commit row, and their outcome is the same however many times they run | D4, D5 |
-| P4 | Exactly one of the analyst and the timeout decides a held transaction. A claimed hold is never timed out while its decision is live. An undone decision's hold is timed out by its deadline, or within 10 s of it | D2, D3(h), D2(f) |
-| P5 | A replayed decide with the same key and body returns the same `decision_id` while undoable, and 409 after. A different body with the same key gets 409 `idempotency-conflict` | D1(a) |
-| P6 | A stale `alert_version` gets 409 with the current alert, on decide, escalate and override | D1(d), D6(a), D7(a) |
-| P7 | A decision commits on any surviving instance after the deciding instance dies | D4 |
-| P8 | The breaker counts a transaction's confirmation at most once, across retries, decisions and overrides | E2 |
-| P9 | DECIDED, UNDO, COMMITTED, ESCALATED and SENIOR_OVERRIDE are each audited in the same transaction as their change | D1(h), D3(f), D4(b), D6(e), D7(d) |
-| P10 | Redis unavailable: a MEDIUM decide gets 503 and changes nothing | D2(d) |
+| P1 | Concurrent decides with different keys on one entry: exactly one 202, the others 409 | D1(a,e), §3.4 |
+| P2 | A decision is committed or undone, never both. A commit is never before `undo_until` by DB time, and an undo never at or after it. `committed_at` ≥ `undo_until` | §3.2, §3.3, D2, D3 |
+| P3 | An undone decision has no effects. A committed one's effects run after its commit, and running them twice equals running them once | D3, D4, T3, T4 |
+| P4 | Exactly one of ANALYST and TIMEOUT owns a hold, against the poller, the local fallback and the sweep, including a sweep whose cutoff falls while the decide is uncommitted | H1, H2, H3 |
+| P5 | No request path changes the Redis schedule before committing. A decide whose commit acknowledgement is lost leaves the hold to the poller, which drops it | H4 |
+| P6 | A decide retried after 40001, 40P01 or a client 5xx with the same key returns the same 202, or fails with no change | D1 |
+| P7 | Two writers never reserve the same sequence for a transaction: override vs customer verification, and timeout vs a late analyst E1 | T1, T2 |
+| P8 | An override's transition is computed from the reserved history, never from Redis or a lagging `decision_states` | T2, D4(b) |
+| P9 | The breaker counts a transaction's confirmation at most once, and never for HIGH | D4(d) |
+| P10 | DECIDED, UNDO, COMMITTED, ESCALATED and SENIOR_OVERRIDE are each audited in the transaction of their change | D1, D2, D3, D5, D6 |
+| P11 | A committer, an undo and a decide racing on one entry and one audit partition finish without deadlock, or retry and finish | lock order, D3(a), the runner |
+| P12 | An undo restores the hold, and an undo past the deadline leads to a timeout within one poller tick | D2(f), H2 |
+| P13 | An escalation racing a timeout either refuses (409) or leaves the new entry closed by the sink, never open forever | D6(b,d) |
+| P14 | ESCALATE, SENIOR_OVERRIDE and AUTO_RELEASED rows read COMMITTED | §3.7 |
+| P15 | A queue without `outcome` never lists a decided entry, and lists it again after an undo | §6 |
 
-## 7. Accepted costs
+## 8. Changes to M6's code that this contract requires
 
-- **A decided MEDIUM transaction stays held for G plus P, plus the effects time,** longer than an
-  immediate decision would keep it. D-44 accepts this ("≤ 2 s server processing + 5 s grace").
-- **The analyst's countdown runs on their device, and the server's on DB time.** A click near the
-  end of the five seconds can get 409 `undo-window-expired`. The console should stop offering undo
-  a little before `undo_until`.
-- **A downgrade by override leaves the breaker's count in place** until its bucket expires.
-- **While Redis is unavailable,** MEDIUM decisions are refused (503), and claimed holds wait for
-  their effects (Q3).
+- `HoldTimeoutService.tick`, its local fallback and `reconcile` claim TIMEOUT first (H2).
+  `JdbcOverdueHolds` uses a DB-time cutoff and the owner check (H3).
+- `DecisionTransitionService`:
+  - `analystDecidesHold` is replaced by an effect method without the Redis cancel (E1);
+  - every transition goes through T1 to T4, `customerAnswered` and `timeOut` included;
+  - `DecisionState.next` takes the event id and `decided_at` as arguments.
+- `PostgresSink`: the AUTO_RELEASED decision row is attached to the open, or newest, entry (D6(d)).
+  `decision_states.timeout_policy` is written (configuration contract §3.4).
+- `LabelRecorded` and the label payload carry `supersedes_label_id`.
+- `RedisCircuitBreakers` gains the idempotent confirmed-fraud script (D4(d)).
 
-## 8. Questions for the owner (not decided by this contract)
+## 9. Accepted costs and questions for the owner
 
-- **Q1.** MARK_LEGITIMATE on a HIGH (auto-blocked) alert records a label and leaves the block. This
-  follows `DecisionState`: only customer verification or a senior override lifts a block. Should
-  the analyst's decision lift it instead?
+**Costs:**
+- **The hold lasts longer.** A decided MEDIUM transaction stays held for G + P plus the effects
+  time. An undo near the deadline holds it up to G past the deadline. D-44 accepts this.
+- **The device and the server count separately.** The countdown runs on the device and the grace
+  on DB time, so a click near the end of the five seconds can get 409 `undo-window-expired`.
+- **An override that downgrades from fraud** leaves the breaker count until its bucket expires.
+- **PostgreSQL is now required to time out a hold** (H2). Under D1, a database outage already stops
+  analyst decisions.
+
+**Questions for the owner:**
+- **Q1.** MARK_LEGITIMATE on a HIGH (auto-blocked) alert records a label and leaves the block, as
+  `DecisionState` requires. Only customer verification or a senior override lifts it.
 - **Q2.** Escalation does not stop the review timer, so a MEDIUM escalation is usually auto-released
-  before a senior sees it (D-10's arithmetic). The alternative is for escalation to claim the hold
-  and stop the clock, which would keep the customer's transaction held for an unbounded time.
-- **Q3.** While the effects cannot run (Redis or the spool unavailable), a claimed MEDIUM
-  transaction stays held, with an alert. The alternative is to let the timeout policy act after a
-  bound, which would contradict a committed analyst decision.
+  before a senior sees it.
+- **Q3.** During a PostgreSQL outage, holds are not timed out: they stay held, and an alert fires.
+  Holds owned by an analyst stay held while their effects cannot run. The alternative, timing out
+  without the arbiter, can contradict an analyst's committed decision.
+
+**Contract additions this needs, proposed with P2 (not P1):** declare `idempotency-conflict` and 503
+on the four operations, and `override_decision` on `DecisionRecord`.
+
+## 10. Review 1's findings and their answers
+
+| Finding | Answer |
+|---|---|
+| 1 MAJOR: a put-back after a lost commit | H4: no request path touches Redis, and nothing is ever put back; P5 |
+| 2 MAJOR: the sweep against an uncommitted decide | H1 and H2: the sweep's claim waits on T's row lock; H3's DB-time cutoff; P4 |
+| 3 MAJOR: `take` is not idempotent | `take` is gone; the claim is inside T; P6 |
+| 4 MAJOR: deadlock through the audit head | §2's lock order with the audit head last; one decision per committer transaction with a try-lock; 40P01 retried; P11 |
+| 5 MAJOR: the override's direction is not stored | §3.1 `override_decision`; §3.9 `supersedes_label_id`; the `DecisionRecord` addition |
+| 6 MAJOR: an override transition lost or doubled | T1 to T4: every transition reserved in PostgreSQL from the reserved history; P7, P8 |
+| 7 the replay race | D1(b) runs under the entry lock |
+| 8 idempotency vs schema and API | §3.1 `alert_version` and fingerprint; replays return the original 202; 409 and 503 declared with P2 |
+| 9 clocks | §3.1 and §3.2: trigger-set DB times; H3's DB-time cutoff; AUTO_RELEASED rows keep their own time |
+| 10 the sweep's 10 to 15 s, undo near the deadline | H3 and D2(f) state 10 to 15 s; §9 states the undo cost |
+| 11 escalation left open forever | D6(b) refuses after TIMEOUT and serialises with the claim; D6(d) the sink attaches to the open entry; P13 |
+| 12 incomplete case list | `take` is gone; H2 covers every timeout path |
+| 13 HIGH in the breaker count | D4(d) excludes HIGH, once per transaction |
+| 14 committer and worker mechanics | D3 and D4: one per transaction, try-locks, ordering, `ON CONFLICT`, the throughput condition |
+| 15 same ids need changes | T3 and §8 |
+| 16 AUTO_RELEASED never commits | §3.7; P14 |
+| 17 the properties table | P1 to P15 |
