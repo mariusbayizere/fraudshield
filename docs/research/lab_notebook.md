@@ -3210,8 +3210,49 @@ manifests (`infrastructure/k8s/`, with the trees the base and overlays pull in:
 `infrastructure/prometheus`, `alertmanager`, `grafana` and `argo-rollouts`), or the job guarded
 until M9 merges.
 
-That job's `trivy config` over `main`'s own Dockerfiles, compose file and workflows has never run on
-`main`'s tree, so its result there is unknown. The ZAP job skips itself, since `main`'s compose file
-has no API service. It gets its own review and CI at job level. Then every milestone branch rebased
-on `main` is scanned on every push. The default branch (GOV-9) is the owner's setting to change, so
-that the nightly scan also runs.
+(Correction, 2026-10-20: this entry as first recorded said this job's `trivy config` over `main`'s
+Dockerfiles, compose file and workflows had never run, so its result was unknown. `main` has no
+Dockerfiles, and Trivy has no checks for compose files or workflows, so on `main` it would scan
+nothing; see the entry "A scan pointed at files it cannot read reports green" below. On
+`security/scan-on-main` the job is skipped, visibly, until M9 merges.) The ZAP job skips itself,
+since `main`'s compose file has no API service. It gets its own review and CI at job level. Then
+every milestone branch rebased on `main` is scanned on every push. The default branch (GOV-9) is the
+owner's setting to change, so that the nightly scan also runs.
+
+### 2026-10-20 · A scan pointed at files it cannot read reports green
+
+M9's `security` workflow has a configuration job named "trivy (misconfiguration in k8s, Dockerfiles,
+compose, workflows)". It passed on all 13 of its runs on `m9/infra`, from 2026-09-22 to 2026-10-20
+(the workflow failed 5 of those runs, each time on the dependency job). On 2026-10-20 the job log of
+its latest run (CI run 39397849361, job 118544911995, on `b9f0146`) was read file by file: `Detected
+config files num=15`, and **all 15 were Kubernetes manifests**. Trivy's configuration scanner reads
+Kubernetes, Dockerfiles, Terraform, CloudFormation, Helm and a few other formats. It has no checks
+for compose files or GitHub workflows, and this repository has no Dockerfiles yet. Two of the four
+formats in the job's name were never scanned, and the third had no files. The tick was accurate
+about the 15 manifests and silent about everything else.
+
+**How it surfaced.** Moving the workflow to `main` (branch `security/scan-on-main`), the first draft
+kept the configuration scan running over `main`'s tree, expecting it to cover `main`'s compose file
+and workflows. `main` has no Kubernetes manifests, so the scan would have detected nothing and
+passed: a green job that checked nothing. The draft's comment and commit message called that
+coverage. The independent review of the branch found it by reading the scanner's detected-file
+count in the m9 log rather than the job's conclusion. On `main` the job is now skipped, visibly,
+until M9 brings the manifests, and it is renamed to "misconfiguration in Kubernetes manifests and
+Dockerfiles".
+
+**The family.** It belongs with two earlier cases:
+- *A green tick for a job that never ran* (2026-09-24): a path filter skipped the devcontainer
+  build, and the run reported success because nothing failed.
+- *The guard could not detect what it had just planted, 4% of the time* (2026-09-24): the gitleaks
+  self-test planted values gitleaks' own allowlists skip.
+- *This one*: a scanner configured over formats it cannot parse reports green, and the job's name
+  claims formats it never covered.
+
+In each, the tick was accurate about what was actually examined, which in the first case was
+nothing. The error was in what it was assumed to have examined.
+
+**Rule (owner, 2026-10-20): a scanner's coverage is what it can parse, not what it is pointed at.**
+When a scan is cited as evidence, read what it detected (files, targets, types), not only its exit
+status. A job name or comment that lists formats states coverage, and needs the same evidence as
+any other claim. Compose files and workflows remain unscanned for misconfiguration in this
+repository; actionlint covers workflow syntax on `m9/infra`, which is a different check.
