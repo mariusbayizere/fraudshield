@@ -1,18 +1,20 @@
 # Analyst decisions: the commit and undo contract
 
-Status: **draft 6, reviewed SOUND_WITH_CHANGES with no MAJOR from its own change (review 6); its
-findings applied below, for a delta review.** Draft 6 is the owner's option (a) of 2026-10-20, and
-nothing else: `transaction_transitions` becomes **the only record** of every decision state after
-the model's first (T6).
-- **Why.** Review 5 (`docs/reviews/M8B/decision-commit-contract-review-5.md`) found a MAJOR from
-  draft 5's own change: the sink, still writing later states into `decision_states`, could break
-  that table's foreign key and lose a transition for good.
-- **What it does.** Option (a) **removes that writer** instead of coordinating two. In the owner's
-  words, it "removes a writer rather than coordinating two".
-- **What it costs** is recorded in §9.
-- **What is carried.** Review 5's other findings are carried unchanged (§14).
+Status: **draft 7, for independent review.** Draft 7 is the owner's reduction of 2026-10-20 (ADR
+0113): the bank-facing `GET /decisions/{id}` reads PostgreSQL first, and Redis only when PostgreSQL
+is unavailable (T7).
+- **Why.** Review 6 and its delta review found that a Redis write acknowledged and then lost let that
+  read answer a superseded decision for up to 8 days. The defect is M6's; drafts 1 to 5 carried it
+  unreported, and draft 6's fix covered only a write that fails.
+- **What changes.**
+  - Redis leaves the commit path. The recording no longer waits for it (T4, T5).
+  - The final decision has one source of truth while PostgreSQL answers (T7).
+- **Draft 6 is unchanged otherwise.** It was option (a): `transaction_transitions` is the only
+  record of later states.
+- **What is carried.** Review 6's delta findings are carried in §16, except the one wording
+  contradiction fixed in T6.
 
-**The owner's rule.** If draft 6 still produces a MAJOR, the author stops. The queue semantics then
+**The owner's rule.** If a draft still produces a MAJOR, the author stops. The queue semantics then
 need rethinking, not the contract's wording.
 
 **Reviews so far:**
@@ -311,20 +313,21 @@ includes unblocks handled before V81, which the backfill moved (review 3, MAJOR 
 **T4. Recording.**
 - After the reservation commits, the writer records **the reservation's stored `event_body`**
   through the spool. A re-record is therefore byte-identical, whoever performs it.
-- It then sets the Redis state cache with a "set if this sequence is higher" script.
-- **Only after both succeed** does it insert the reservation's recording row (`ON CONFLICT DO
-  NOTHING`). A failed Redis write therefore leaves the reservation unrecorded, and T5 repeats both
-  steps.
-  - **Why the order matters.** `GET /decisions/{id}` reads Redis first (D-14). Draft 6 and every
-    draft before it wrote the recording row first, so a Redis failure between the two steps was never
-    retried. The bank then read a superseded state from the cache until its key expired, up to
-    8 days. That defect is M6's own, and review 6 (finding 1) found it.
-- Receivers ignore repeated event ids, and the set-if-higher script ignores a state it already
-  holds, so recording twice is recording once.
+- **Once the spool record succeeds,** it inserts the reservation's recording row (`ON CONFLICT DO
+  NOTHING`).
+- **It then sets the Redis state cache, best effort,** with a "set if this sequence is higher"
+  script, on Redis directly, not through `ResilientPorts`' fallback.
+  - **A failure is counted and not retried.** It never holds up the recording. Since ADR 0113 no read
+    trusts Redis while PostgreSQL answers (T7), so a missing or stale cache entry can only matter
+    during a PostgreSQL outage, which T7 bounds.
+  - Draft 6 made the recording wait for this write. That is withdrawn, together with the recorder's
+    repeated spooling while Redis is down (review 6's delta, findings D1 and D5).
+- Receivers ignore repeated event ids, so recording twice is recording once.
 
 **T5. No reservation is stranded.** Every instance runs the recorder every P. It lists
-reservations older than 30 s that have no recording row, and performs T4 for each: the spool record
-from the stored body, the Redis set, then the recording row.
+reservations older than 30 s that have no recording row, and for each one records the stored body
+through the spool, then inserts the recording row. The Redis set is attempted too, best effort, as in
+T4.
 Recording is idempotent, so the recorder needs no lock. A writer that crashed after reserving is
 therefore always completed. **T4's "re-decide" happens only before a reservation exists:**
 - a writer that finds the latest is not what it expected re-reads and re-decides;
@@ -357,11 +360,14 @@ therefore always completed. **T4's "re-decide" happens only before a reservation
     cross-institution SECURITY DEFINER listers.
   - **Grants.** It is granted to `fs_app`, `fs_app_readonly` and `fs_compliance_ro`, as
     `decision_states` is. `transaction_transitions` gets SELECT for the two read-only roles.
-  - **The V62 and V64 listers** read the two base tables directly, as their owner.
+  - **The V62 and V64 listers** read the two base tables directly, as their owner. Every other reader
+    reads the view.
+  - **`fs_app`** has SELECT and INSERT on `transaction_transitions` and
+    `transaction_transition_recordings`, and SELECT on the view.
   - **The readers that move to it:**
   - `JdbcDecisionStates`, the fallback of the bank-facing `GET /decisions/{id}` (D-14);
-  - `JdbcOverdueHolds` and V62's lister (H3);
-  - `UnblockReconciler` and V64's lister (T3);
+  - `JdbcOverdueHolds` (H3), whose lister (V62) reads the base tables;
+  - `UnblockReconciler` (T3), whose lister (V64) reads the base tables;
   - `CustomerSmsSender`'s classification, which asks whether the latest state is still DECLINE;
   - P1's account history (`AccountQueries`), which reads each transaction's latest state.
 
@@ -371,6 +377,24 @@ therefore always completed. **T4's "re-decide" happens only before a reservation
   `transaction_transitions` has no such key. So a timeout that reserves before the ingesting
   instance's sink has run loses nothing: its state is in the view from the moment the claim
   commits, and the sink's later sequence-1 row joins it there.
+
+**T7. The final decision is read from PostgreSQL first** (ADR 0113, owner 2026-10-20).
+`GET /api/v1/decisions/{transaction_id}` answers as follows:
+1. **From `v_decision_states`,** when it holds any state of the transaction: the highest sequence
+   there.
+2. **From Redis,** when the view holds no state of it. The model's decision is written to Redis at
+   ingest and reaches PostgreSQL through the sink, so a transaction can be in Redis before it is in
+   the view. Redis is right then: every later state is committed to the view before it is
+   published, so a transaction the view does not hold has no later state anywhere.
+3. **From Redis, when PostgreSQL is unavailable.**
+   - **Why it cannot fall behind during the outage.** Every writer of a later state needs
+     PostgreSQL (T2, H2, ADR 0111), so no later state is created while it is down.
+   - **When it can be stale.** Redis's answer can be stale only if it lost an acknowledged write
+     before the outage. That lasts at most for the outage.
+4. **404** when neither holds the transaction.
+
+This changes only the poll's read (`IngestController`), not `DecisionStatePort.latest`, which the
+decision path uses.
 
 ## 5. Decision rules
 
@@ -551,7 +575,8 @@ to it.
 | P17 | An override lifting an auto-block writes `unblock_events` with cause SENIOR_OVERRIDE | D4(c) |
 | P18 | A timeout that commits before the ingesting instance's sequence-1 row exists appears in `GET /decisions/{id}`'s database read at once, and the sink's later sequence-1 row joins it without error | T6 |
 | P19 | The sink writes no `decision_states` row with sequence > 1; a stray one is refused by the CHECK | T6 |
-| P20 | A Redis failure between the spool record and the cache set leaves the reservation unrecorded, and T5 sets the cache; `GET /decisions/{id}` then shows the new state | T4, T5 |
+| P20 | `GET /decisions/{id}` answers from the view whenever the view holds the transaction: a Redis key holding an older state never wins, and a lost Redis write changes nothing. With no view row it answers from Redis, and with PostgreSQL down from Redis | T7 |
+| P21 | A failed Redis set is counted, never retried, and does not stop the reservation's recording | T4 |
 
 ## 8. Changes to M6's code that this contract requires
 
@@ -571,8 +596,9 @@ to it.
 - **`LabelRecorded` and `KafkaMessages`** carry `supersedes_label_id`.
 - **`RedisDecisionStates`** gains the set-if-higher script.
 - **Every reader of later states reads `v_decision_states`** (T6): `JdbcDecisionStates`,
-  `JdbcOverdueHolds`, the V62 and V64 listers, `UnblockReconciler`, `CustomerSmsSender`, and
-  `backend/analyst`'s `AccountQueries`.
+  `JdbcOverdueHolds`, `UnblockReconciler`, `CustomerSmsSender`, and `backend/analyst`'s
+  `AccountQueries`. The V62 and V64 listers read the two base tables.
+- **`IngestController`'s `GET /decisions/{id}`** reads by T7 (ADR 0113).
 - **`RedisCircuitBreakers`** gains the idempotent confirmed-fraud script.
 
 ## 9. Accepted costs, contract additions, and questions for the owner
@@ -726,3 +752,13 @@ retried decide then reads TIMEOUT and answers 409.
 | 5 old dead letters | T6: the case stated, benign, counted |
 | 6 wording | T6 (labels only); §3.6 (backfilled bodies) |
 | 7 hardening | T6: `CHECK (decision_sequence = 1) NOT VALID` |
+
+## 16. Review 6's delta: what draft 7 answers and what it carries
+
+| Finding | In draft 7 |
+|---|---|
+| D0 MAJOR (M6's): a Redis write acknowledged and then lost | T7 and ADR 0113: the read trusts PostgreSQL while it answers; Redis's staleness is bounded by an outage; P20 |
+| D1 the resilient wrapper hides Redis failures | T4: the Redis set no longer gates anything, and it goes to Redis directly; P21 |
+| D5 re-spooling while Redis is down | T4 and T5: withdrawn |
+| D2 the listers' contradiction and `fs_app`'s grants | T6 and §8 corrected |
+| D3, D4 MINOR | Carried: a property for dropping an unreserved later state and for a dead-lettered sequence-1 record (D3); "benign" for pre-V81 dead letters holds for timeouts and unblocks, and an analyst's would be timed out again as in M6 (D4) |
