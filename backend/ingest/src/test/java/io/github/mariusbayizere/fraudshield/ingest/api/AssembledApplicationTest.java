@@ -351,6 +351,28 @@ class AssembledApplicationTest {
         .isEqualTo("malformed_envelope");
   }
 
+  @Test
+  @Tag("OPS-OBS-01")
+  void theSpoolDepthGaugeIsExportedUnderTheNameM9sAlertAndDashboardRead() throws Exception {
+    // M9's FraudShieldSpoolBacklog alert and the fs-kafka-spool dashboard read the name Prometheus
+    // scrapes, not the name the code registers. The gauge is registered as fs_spool_depth with base
+    // unit "bytes"; this scrape records which name that becomes (M9_updates.md 3b, 2026-10-20).
+    String management = "http://127.0.0.1:" + environment.getProperty("local.management.port");
+    HttpResponse<String> scrape =
+        CLIENT.send(
+            HttpRequest.newBuilder(URI.create(management + "/actuator/prometheus")).build(),
+            HttpResponse.BodyHandlers.ofString());
+    List<String> spoolLines =
+        scrape.body().lines().filter(line -> line.contains("fs_spool_depth")).toList();
+
+    assertThat(scrape.statusCode()).isEqualTo(200);
+    assertThat(spoolLines)
+        .as("every exported line naming fs_spool_depth")
+        .contains("# TYPE fs_spool_depth_bytes gauge")
+        .noneMatch(
+            line -> line.startsWith("fs_spool_depth{") || line.startsWith("fs_spool_depth "));
+  }
+
   private static UUID adminAccount() throws Exception {
     UUID id = UUID.randomUUID();
     try (Connection c = ApiHarness.DB.superuser()) {
