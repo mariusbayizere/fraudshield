@@ -954,9 +954,9 @@ SOURCES: dict[str, Src | Derived] = {
         "seed-1 recall at 0.60, 240K minus 120K",
     ),
     "nLcMaxUpper": Derived(
-        ("nLcRecallciA", "nLcRecallciB", "nLcRecallciC", "nLcRecallciD"),
+        (*(f"nLcRecallci{p}" for p in "ABCD"), *(f"nLcCluci{p}" for p in "ABCD")),
         lambda *cis: str(max(Decimal(ci.strip("[]").split(",")[1]) for ci in cis)),
-        "largest upper bound of the four seed-1 intervals",
+        "largest upper bound of the seed-1 row-bootstrap and account-clustered intervals",
     ),
     "nLcSeedGain": Derived(
         ("nLcSeedRecallA", "nLcSeedRecallD"),
@@ -1257,6 +1257,19 @@ SOURCES: dict[str, Src | Derived] = {
     "nEarlyHeldOutRows": Src(BAT_EARLY, r"\*\*([\d,]+) held-out rows holding"),
     "nLatencyPNineNineShap": Src(PROMPT, r"exceeds (\d+) ms on the reference hardware"),
     "_FrontRows": Src(R2_FRONT, r"(^\s+trees depth.*?)\n\n", ref=R2_REF),
+    **{
+        f"nFrontRatio{bound}": Derived(
+            ("nFrCostA", "nFrCostE"),
+            lambda small, large, sign=sign: str(
+                round(
+                    (Decimal(large) + sign * Decimal("0.005"))
+                    / (Decimal(small) - sign * Decimal("0.005"))
+                )
+            ),
+            f"largest SHAP cost over the smallest, {bound.lower()} end their rounding allows",
+        )
+        for bound, sign in (("Low", -1), ("High", 1))
+    },
     "nFrontRatio": Derived(
         ("nFrCostA", "nFrCostE"),
         lambda small, large: str(round(Decimal(large) / Decimal(small))),
@@ -1646,6 +1659,48 @@ SOURCES: dict[str, Src | Derived] = {
                 r"recall at 0\.60\s+seed 1 [\d.]+\s+rows \[[\d., ]+\]\s+clustered (\[[\d., ]+\])",
             ),
             ("Mean", r"recall at 0\.60\s+seed 1 .*?five seeds ([\d.]+ \+/- [\d.]+)"),
+            ("BudgetMean", r"recall at 1% FPR seed 1 .*?five seeds ([\d.]+ \+/- [\d.]+)"),
+            ("AucMean", r"AUC\s+seed 1 .*?five seeds ([\d.]+ \+/- [\d.]+)"),
+        )
+    },
+    # The plan (round2_plan.md, section 3) fixed three metrics in advance; each gets its range
+    # across corpus depths, and its volume gains on a fixed corpus, so none is reported alone.
+    **{
+        f"nSel{metric}Range": Derived(
+            tuple(f"nSel{point}{field}" for point, _ in SELECTION_DEPTHS),
+            lambda *means: f"{_spread([Decimal(m.split()[0]) for m in means]):.3f}",
+            f"largest minus smallest five-seed mean ({how}) across corpus depths",
+        )
+        for metric, field, how in (
+            ("Budget", "BudgetMean", "recall at the 1% FPR budget"),
+            ("Auc", "AucMean", "AUC"),
+        )
+    },
+    **{
+        f"nLcSeed{metric}{point}": Src(
+            LC.format(size), rf"SEEDS.*?{gate}  ([\d.]+ \+/- [\d.]+)", ref=LC_REF
+        )
+        for metric, gate in (("Budget", "ML-GATE-02"), ("Auc", "ML-GATE-01"))
+        for point, size in (("A", "30k"), ("C", "120k"))
+    },
+    "nFvSeedBudget": Src(FV_GATE, r"SEEDS.*?ML-GATE-02  ([\d.]+ \+/- [\d.]+)", ref=PB66_REF),
+    **{
+        f"nLcSeed{metric}GainAC": Derived(
+            (f"nLcSeed{metric}A", f"nLcSeed{metric}C"),
+            lambda a, c: f"{Decimal(c.split()[0]) - Decimal(a.split()[0]):.3f}",
+            f"five-seed mean {how}, 120K minus 30K rows within one cache",
+        )
+        for metric, how in (("Budget", "recall at the 1% budget"), ("Auc", "AUC"))
+    },
+    **{
+        f"nFvSeed{metric}GainFixed": Derived(
+            (f"nSelF{field}", full),
+            lambda w, f: f"{Decimal(f.split()[0]) - Decimal(w.split()[0]):.3f}",
+            f"five-seed mean {how} on the whole-draw corpus, full volume minus 30,000 rows",
+        )
+        for metric, field, full, how in (
+            ("Budget", "BudgetMean", "nFvSeedBudget", "recall at the 1% budget"),
+            ("Auc", "AucMean", "nFvSeedAUC", "AUC"),
         )
     },
     **{
@@ -1980,6 +2035,8 @@ LOOKS_LIKE_PATH = re.compile(
 TEXTTT = re.compile(r"\\texttt\{((?:\\.|[^{}\\])*)\}")
 #: Where a reader would resolve a relative citation: the paper's folder, docs/research/, the root.
 PATH_HOMES = (HERE, ROOT / "docs" / "research", ROOT)
+#: Branch names the text cites in \\texttt, which look like paths but name a branch on origin.
+CITED_BRANCHES = frozenset({"m11/paper"})
 
 
 def check_paths() -> int:
@@ -1989,7 +2046,7 @@ def check_paths() -> int:
         text = re.sub(r"\\allowbreak\s*", "", path.read_text())
         for raw in TEXTTT.findall(text):
             name = raw.replace("\\_", "_").strip()
-            if not LOOKS_LIKE_PATH.match(name):
+            if not LOOKS_LIKE_PATH.match(name) or name in CITED_BRANCHES:
                 continue
             if not any((home / name.rstrip("/")).exists() for home in PATH_HOMES):
                 print(

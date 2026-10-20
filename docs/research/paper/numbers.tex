@@ -214,6 +214,7 @@
 \newcommand{\nFrontShapLarge}{\meas{0.84}}
 \newcommand{\nFrontAUCDelta}{\meas{-0.003}}
 \newcommand{\nFrontRatio}{\meas{28}}
+\newcommand{\nFrontRatioLow}{\meas{24}}\newcommand{\nFrontRatioHigh}{\meas{34}}  % derived: rounding bounds of the ratio
 \newcommand{\nFrontNegative}{\meas{2 of 5}}
 
 % ---------------------------------------------------------------------------------------------
@@ -284,8 +285,8 @@
 \newcommand{\nRocLowRecall}{\meas{0.871}}
 \newcommand{\nRocHighFPR}{\meas{1.7\%}}
 \newcommand{\nRocHighRecall}{\meas{0.882}}
-% Reversal-scam rows by label, read from the draw (evidence/reversal_labels_d8083dbc.txt, 3559f8c;
-% script at 6fe4bf0, tree clean, fingerprint d8083dbc recomputed).
+% Reversal-scam rows by label, read from the draw (evidence/reversal_labels_d8083dbc.txt, stamped
+% 0b04197, recorded at 8f084e0; script added at eb0247a; tree clean, fingerprint d8083dbc recomputed).
 \newcommand{\nRevTrueFraud}{\meas{68}}
 \newcommand{\nRevScoredUnlabelled}{\meas{2}}
 \newcommand{\nAblUSSDD}{\meas{-0.0004}}
@@ -444,7 +445,7 @@
 \newcommand{\nGateCorpus}{\meas{400{,}000}}
 % Derived from the values above (audit_numbers.py states the arithmetic).
 \newcommand{\nLcStepCD}{\meas{-0.015}}       % seed 1, 120K -> 240K
-\newcommand{\nLcMaxUpper}{\meas{0.823}}      % largest upper bound of the four seed-1 intervals
+\newcommand{\nLcMaxUpper}{\meas{0.826}}      % largest upper bound of the four seed-1 intervals
 \newcommand{\nLcSeedGain}{\meas{0.028}}      % five-seed mean, 30K -> 240K
 \newcommand{\nSelDepthCount}{\meas{six}}  % derived: corpus depths in the selection test
 \newcommand{\nSelMaxSd}{\meas{0.0410}}  % derived: largest seed SD across depths
@@ -1109,3 +1110,28 @@
 \newcommand{\nBudATiesPct}{\meas{42\%}}  % derived
 \newcommand{\nBudTiesPctLow}{\meas{16\%}}\newcommand{\nBudTiesPctHigh}{\meas{19\%}}  % derived
 \newcommand{\nPredPb}{\meas{three}}  % derived: PB-66 rows of tab:predictions
+% Round two: all three metrics the plan fixed in advance (recall at 0.60, recall at the 1% budget,
+% AUC), across corpus depths and against volume on a fixed corpus.
+\newcommand{\nSelABudgetMean}{\meas{\ensuremath{0.8443 \pm 0.0206}}}
+\newcommand{\nSelAAucMean}{\meas{\ensuremath{0.9583 \pm 0.0120}}}
+\newcommand{\nSelBBudgetMean}{\meas{\ensuremath{0.8526 \pm 0.0155}}}
+\newcommand{\nSelBAucMean}{\meas{\ensuremath{0.9632 \pm 0.0054}}}
+\newcommand{\nSelCBudgetMean}{\meas{\ensuremath{0.8408 \pm 0.0252}}}
+\newcommand{\nSelCAucMean}{\meas{\ensuremath{0.9667 \pm 0.0040}}}
+\newcommand{\nSelDBudgetMean}{\meas{\ensuremath{0.8603 \pm 0.0274}}}
+\newcommand{\nSelDAucMean}{\meas{\ensuremath{0.9639 \pm 0.0030}}}
+\newcommand{\nSelEBudgetMean}{\meas{\ensuremath{0.8593 \pm 0.0169}}}
+\newcommand{\nSelEAucMean}{\meas{\ensuremath{0.9614 \pm 0.0039}}}
+\newcommand{\nSelFBudgetMean}{\meas{\ensuremath{0.8471 \pm 0.0169}}}
+\newcommand{\nSelFAucMean}{\meas{\ensuremath{0.9638 \pm 0.0067}}}
+\newcommand{\nSelBudgetRange}{\meas{0.020}}
+\newcommand{\nSelAucRange}{\meas{0.008}}
+\newcommand{\nLcSeedBudgetA}{\meas{\ensuremath{0.8514 \pm 0.0315}}}
+\newcommand{\nLcSeedBudgetC}{\meas{\ensuremath{0.8688 \pm 0.0186}}}
+\newcommand{\nLcSeedAucA}{\meas{\ensuremath{0.9562 \pm 0.0129}}}
+\newcommand{\nLcSeedAucC}{\meas{\ensuremath{0.9714 \pm 0.0025}}}
+\newcommand{\nFvSeedBudget}{\meas{\ensuremath{0.8680 \pm 0.0135}}}
+\newcommand{\nLcSeedBudgetGainAC}{\meas{0.017}}
+\newcommand{\nLcSeedAucGainAC}{\meas{0.015}}
+\newcommand{\nFvSeedBudgetGainFixed}{\meas{0.021}}
+\newcommand{\nFvSeedAucGainFixed}{\meas{0.010}}

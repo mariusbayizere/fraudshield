@@ -1,4 +1,4 @@
-\section{Generalisation: nulls, held-out fraud types and one failure}
+\section{Generalisation: nulls, held-out fraud types and a detection failure}
 \label{sec:generalisation}
 
 Once a single engineered feature separated the classes at \nGateFloor{} on the evaluation draw's
@@ -54,7 +54,9 @@ no fraud mechanism; that description is not itself tested. Country does change t
 some path the test does not cover: CD's test-period fraud rate is \nCoFraudRateCD{}, against
 \nCoFraudRateMin{} to \nCoFraudRateMax{} for the other countries (Table~\ref{tab:slices}). We infer
 that the null follows from the absence of country-keyed fraud mechanisms; no experiment isolates it.
-Country-level generalisation cannot be evaluated on this benchmark and belongs to a real-data
+We infer that country-level generalisation cannot be evaluated on this benchmark as
+leave-one-country-out was run here, since the holdout also shares the feature cache and the target
+encodings described above, whose contribution was not measured; it belongs to a real-data
 validation plan. We did not change the generator to make countries differ: no source read gives
 fraud prevalence by type and country for these markets, so the only way to choose such a parameter
 would be to pick whatever makes the experiment show a gap, which defines the ground truth from the
@@ -67,7 +69,7 @@ against the same legitimate rows at one threshold, the \nFPRBudget{} false-posit
 legitimate rows. The unseen variant is caught at \nNovelRecall{} \nNovelCI{} (\nNovelCaught{} of
 \nNovelRows{}), against \nBaseVarRecall{} \nBaseVarCI{} for the base scenarios (the generator's scenarios as generated,
 without a held-out variant) the model trained
-on: at least as often as the familiar shape. Those \nNovelRows{} rows sit on only \nNovelAccounts{}
+on: a point estimate no lower than the familiar shape's, with overlapping intervals. Those \nNovelRows{} rows sit on only \nNovelAccounts{}
 accounts, so they are far from independent; an account-clustered bootstrap gives \nCluNovelci{},
 and at a recall this close to one neither it nor the Wilson interval describes the uncertainty well.
 In the earlier battery the figures were
@@ -141,6 +143,7 @@ without a scenario puts much of it below the threshold even where the ranking st
 (production) and by the same model refitted without that scenario (held out, Wilson interval), with
 the drop and the prediction fixed before the run; the last column is held-out recall at the
 flag threshold.
+Drops are computed from the counts, not from the rounded recalls shown.
 Recall over all test frauds in production: \nLoProduction. The scenarios' frauds sum to
 \nLoFraudSum{}; the other \nRecBaseNoise{} observed frauds are label noise and carry no scenario
 (Table~\ref{tab:reconcile}). The mule row includes the reversal variant;
@@ -176,9 +179,10 @@ Not every scenario is multi-row (agent, card-not-present and merchant incidents 
 Appendix~\ref{app:scenarios}), and the agent and corridor groups alone barely separate the classes
 (Table~\ref{tab:groups}). No experiment varies the incident structure, so this explanation is an
 inference. What the benchmark supports is detection on its own scenarios, and, for one booster on one
-shared GitHub-hosted runner, the median cost of explaining that detection. It supports no claim about generalisation, geographic or temporal.
+shared GitHub-hosted runner, the median cost of explaining that detection. It supports no claim about geographic or temporal generalisation; the one result on a held-out
+shape follows.
 
-\subsection{A pre-specified non-burst variant: the production model's one failure on a variant}
+\subsection{The pre-specified non-burst variant: a detection failure}
 
 A generalisation test needs a mechanism that actually differs, and the ``sent by mistake'' reversal
 scam is one. Its ingredients are documented among Kenyan M-PESA users. In a survey of them,
@@ -215,8 +219,9 @@ variant removes burst structure from every row, but counterparty novelty only fr
 \nRevNotNovelScored{} of the \nRevFraud{}. The generator stages each such row as a \texttt{mule\_account} row
 with its own sub-variant label (Table~\ref{tab:scenarios}).
 
-The variant's definition, its justification and the predicted result were committed before the
-dataset was regenerated and before any measurement existed (ADR 0028). The prediction: recall at
+The variant's definition, its justification and the predicted result were committed (ADR 0028,
+\texttt{656d24e}) before the first committed evidence of it (\texttt{6bc842d}); the history shows that
+order, and cannot show that no uncommitted run preceded the commit. The prediction: recall at
 the same threshold \textbf{between \nRevPredLow{} and \nRevPredHigh{}}, lower than the base
 scenarios but with some of the variant still caught, with recall below about \nRevPredFloor{} stated as the outcome that would
 say burst structure and counterparty novelty carry nearly all of the benchmark's detection power.
@@ -236,6 +241,16 @@ their true label, and \nRevScoredUnlabelled{} of them carry the benchmark's miss
 Appendix~\ref{app:evidence}). The point estimate is below the pre-specified range; the interval
 reaches past the range's lower edge, so ``below the predicted range'' holds for the point estimate
 and not for the whole interval.
+
+\textbf{The point estimate also crosses the floor the prediction set.} The notebook said that recall
+below about \nRevPredFloor{} would mean burst structure and counterparty novelty carry nearly all of
+the benchmark's detection power; \nRevRecall{} is below it, though the interval \nRevCI{} reaches
+above it. Read as the prediction asked, the result says exactly that. We cannot support that reading
+as stated: the variant differs from the base scenarios in its recipient and its amount rule as well as
+in burst structure, and it removes counterparty novelty from only \nRevNotNovelScored{} of its
+\nRevFraud{} rows, so the outcome cannot assign the loss to burst structure and novelty rather than to
+those other differences. What it supports is narrower: on this benchmark, the diagnostic model rarely
+catches a fraud without burst structure.
 
 \begin{figure}[htbp]
 \centering
@@ -273,8 +288,9 @@ clustered and Wilson intervals describe the same uncertainty in different ways; 
 the budget's threshold fixed at its full-sample value.
 
 \textbf{What this does and does not show.} On a held-out shape, a variant with no burst structure,
-paid to a listed counterparty and with its own amount rule, is rarely caught by models trained on
-this benchmark's scenarios, and at the flag threshold not at all. Within the variant, every row the
+paid to a listed counterparty and with its own amount rule, is rarely caught by the diagnostic model
+and by both production ensembles (seed 1), and neither ensemble flags any of its rows at the flag
+threshold. Within the variant, every row the
 production ensemble catches at the budget has a never-paid recipient, and none of the rows sent to a
 payee the account had paid before is caught. Both groups share the variant's amount rule and its
 lack of burst structure, so this points to counterparty novelty as what the model still detects in

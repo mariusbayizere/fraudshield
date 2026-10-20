@@ -1,27 +1,26 @@
 \begin{abstract}
 We ask what FraudShield-EAC, a seeded synthetic benchmark of East African digital payments (\nChannels{}
-channels, mobile money and USSD among them, in \nCountries{} countries), can and
-cannot show. It is easy in a specific way: a single velocity feature separates fraud from legitimate
-payments at an AUC of \nGateFloor{} on its own, so every ranking metric of the production model is
-reported as a margin over it.
+channels in \nCountries{} countries), can and cannot show. It is easy in a specific way: one velocity
+feature separates fraud from legitimate payments at an AUC of \nGateFloor{} alone, so the production
+model's ranking metrics are reported as margins over it.
 
-Trained on all \nFvTrainRows{} training rows, a calibrated XGBoost and LightGBM ensemble reaches an AUC
+Trained on all \nFvTrainRows{} training rows, an XGBoost and LightGBM ensemble reaches an AUC
 of \nFvAUC{}, a margin of \nFvMargin{}. Its recall at the specified flag threshold, \nFvRecallSix{},
 misses the target of \nTargetRecall{}, and more training data did not close the gap in any run
-measured. At a fixed \nTrainUsed{} rows, the corpus they were drawn from moved mean recall across a
-range of \nSelMeanRange{}, against \nFvSeedGainFixed{} from \nTrainUsed{} rows to the whole period on one
-corpus; no interval was computed for these differences. On the diagnostic model, ablations measure
-redundancy rather than importance, and leave-one-country-out and a fraud variant held out in time are
-both null. Refitting without each fraud type in turn costs little recall at a \nFPRBudget{}
-false-positive budget for velocity, SIM-swap and mule fraud and much more for agent fraud and
-synthetic identity.
+measured. At a fixed \nTrainUsed{} rows, the corpus they came from moved mean recall at the flag
+threshold by up to \nSelMeanRange{}, against \nFvSeedGainFixed{} from volume on one corpus; recall at
+the budget moved by similar amounts under either change, and AUC more with volume. No interval was computed for these
+differences. On the diagnostic model, leave-one-group-out ablations measure redundancy, and
+leave-one-country-out and a variant held out in time are null. Refitting without each fraud type in
+turn costs little recall at a \nFPRBudget{} false-positive budget for velocity, SIM-swap and mule
+fraud and much more for agent fraud and synthetic identity.
 
-The production model's one failure on a pre-specified variant is a variant without burst structure
-(a single transfer, not a multi-row incident), modelled on a documented Kenyan mobile-money
-scam and committed with the diagnostic model's predicted recall and its generator code before any
-evidence. It is never caught at the flag threshold; at the same budget the model trained on
-\nTrainUsed{} rows catches \nGateRevNewBudgetCaught{} of the \nGateRevNewBudgetRows{} rows whose
-recipient the account had never paid and none of the \nGateRevKnownBudgetRows{} sent to a known payee,
-small counts from an observational split that do not isolate a cause. Every fraud parameter is a
-modelling choice; we state what a validation on real data would need to show.
+The one variant pre-specified in repository history, a single transfer rather than a multi-row
+burst, is the one detection failure found. It is modelled on a documented Kenyan scam but sent to a
+listed payee, a choice the cited sources do not support, and was committed with the diagnostic model's predicted
+recall before its evidence. Neither production model flags it at the flag threshold; at the budget the
+\nTrainUsed{}-row model catches \nGateRevNewBudgetCaught{} of \nGateRevNewBudgetRows{} rows sent to a
+never-paid recipient and none of \nGateRevKnownBudgetRows{} sent to a known payee, small counts from
+an observational split that do not isolate a cause. No fraud parameter is sourced; we state what a validation on real data would
+need to show.
 \end{abstract}

@@ -7,7 +7,8 @@ We state these as findings about what the evidence supports, not as disclaimers.
 real fraud rates, real detection performance or any institution's customers. Whether it supports
 comparisons between methods is not established either: Section~\ref{sec:rowselection} finds the
 choice of training rows moving recall at the flag threshold across a wider range than training volume
-does where the corpus is held fixed (an inference, since no interval was computed), and
+does where the corpus is held fixed, though not recall at the budget or AUC (no interval was computed
+for any of these differences), and
 no comparison of methods here repeats over selections. Every figure here is a property of this
 generator.
 
@@ -21,7 +22,7 @@ population and volume structure, partly from a neighbouring market's statistics.
 fraud as multi-row incidents. A single velocity feature reaches \nGateFloor{} on the test rows; on the diagnostic model,
 \nGroupsAboveCeiling{} feature groups each exceed the single-feature ceiling alone,
 leave-one-country-out and the novel variant are both null, and the one pre-specified variant
-without that structure is caught at \nRevRecall{}. We infer that the separability and the novel-variant null follow from
+without that structure is caught at \nRevRecall{} (diagnostic model, \nFPRBudget{} budget). We infer that the separability and the novel-variant null follow from
 the incident structure, and the country null from fraud parameters that are not keyed by country; no
 experiment varies either. Detection of this benchmark's own scenarios is what it measures;
 nothing here speaks to fraud with other structure, except as the failure in
@@ -62,7 +63,7 @@ victim's payee list, a modelling choice that differs from the documented form of
 the victim pays the scammer's own number, which we read as a new counterparty; it also differs from
 the base scenarios in its amount rule, and it carries counterparty novelty on \nRevNovelScored{} of its \nRevFraud{} rows labelled fraud, so
 it removes that signal from only some of them (Section~\ref{sec:generalisation}). The result says nothing about the
-documented form. Within the variant, every row the production ensemble catches has a never-paid
+documented form. Within the variant, every row the production ensemble catches at the \nFPRBudget{} budget has a never-paid
 recipient, but the counts are small and the split is observational, so it does not isolate why the
 variant is missed. And because no accuracy advantage
 of the specified ensemble over a single XGBoost model was detected here, the benchmark cannot show
@@ -76,12 +77,15 @@ close in any run measured, from \nLcTrainA{} training rows up to all \nFvTrainRo
 training period (Section~\ref{sec:volume}). The training period ends there, so more data of this
 draw cannot be tried; whether another model, or another draw, would close the gap is not tested.
 
-\paragraph{Training-row selection against volume rests on differences without intervals.} At a
-fixed \nTrainUsed{} training rows, varying only the corpus depth the rows are drawn from moved the
-mean recall at the flag threshold over a range of \nSelMeanRange{}, against \nLcSeedGainAC{} across
-the \nLcVolumeFactorAC{}-fold step of the learning curve within one cache and \nFvSeedGainFixed{}
-from \nTrainUsed{} rows to full volume on one corpus, with larger validation and calibration splits (Section~\ref{sec:rowselection}).
-No interval was computed for these differences, so that selection mattered more is inferred. The test does not separate the history each row carries from the
+\paragraph{Training-row selection outweighs volume on one pre-specified metric only.} At a fixed
+\nTrainUsed{} training rows, varying only the corpus depth the rows are drawn from moved mean recall
+at the flag threshold over a range of \nSelMeanRange{}, against \nLcSeedGainAC{} across the
+\nLcVolumeFactorAC{}-fold step of the learning curve within one cache and \nFvSeedGainFixed{} from
+\nTrainUsed{} rows to full volume on one corpus, with larger validation and calibration splits
+(Section~\ref{sec:rowselection}). On the other metrics fixed in advance it did not: recall at the
+budget moved by \nSelBudgetRange{} against \nLcSeedBudgetGainAC{} and \nFvSeedBudgetGainFixed{}, and
+AUC by \nSelAucRange{} against \nLcSeedAucGainAC{} and \nFvSeedAucGainFixed{}. No interval was
+computed for any of these differences. The test does not separate the history each row carries from the
 months it comes from, and every single-number result here is a measurement of one selection.
 
 \paragraph{Calibration where decisions are made.} The production ensemble's calibration error in the
@@ -129,7 +133,8 @@ only.
 
 \paragraph{Figures that depend on the run.} Figures moved between the earlier battery and the
 evaluated one, which differ in draw, encoding and test rows, among them the redundancy threshold,
-the leave-one-country-out loss and the variant recalls; the findings reported here did not change.
+the leave-one-country-out loss and the variant recalls; the conclusions narrowed in places, as
+reported where they did.
 Each figure is stated with the run it comes from. The single-feature floor of
 Section~\ref{sec:floor} was first measured on a draw whose fingerprint was not recorded; re-run on
 the evaluation draw, fewer features exceed the ceiling (\nReAboveCeiling{} rather than

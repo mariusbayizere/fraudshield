@@ -11,28 +11,33 @@ Trained on all \nFvTrainRows{} rows of the training period, a calibrated XGBoost
 reaches an AUC of \nFvAUC{}, a margin of \nFvMargin{} over the single feature. Its recall at the
 specified flag threshold, \nFvRecallSix{}, misses the specified target of \nTargetRecall{}, and
 training volume did not close that gap in any run we measured, from \nTrainUsed{} rows to the whole
-training period. At a fixed \nTrainUsed{} rows, changing only the corpus they were drawn from (the span of recent transactions their features are
-computed over) moved
-mean recall over seeds across a range of \nSelMeanRange{}, while on one fixed corpus going from
-\nTrainUsed{} rows to the whole period, with larger validation and calibration splits, gained \nFvSeedGainFixed{}. No interval
-was computed for these differences, so that which rows are used mattered more than how many is an
-inference.
+training period. At a fixed \nTrainUsed{} rows, changing only the corpus they were drawn from (the span of recent
+transactions their features are computed over) moved mean recall at the flag threshold across a range
+of \nSelMeanRange{}, against \nLcSeedGainAC{} for a \nLcVolumeFactorAC{}-fold volume step within one
+cache and \nFvSeedGainFixed{} from \nTrainUsed{} rows to the whole period on one fixed corpus; of the
+metrics fixed in advance, this is the only one on which the corpus moved more than either volume step
+did (recall at the false-positive budget: \nSelBudgetRange{} against \nLcSeedBudgetGainAC{} and
+\nFvSeedBudgetGainFixed{}; AUC: \nSelAucRange{} against \nLcSeedAucGainAC{} and \nFvSeedAucGainFixed{}). No interval was
+computed for these differences.
 On the diagnostic model, \nGroupsAboveCeiling{} disjoint feature groups each separate the classes beyond
-a \nCeiling{} single-feature ceiling alone, so ablations measure redundancy rather than importance, and
+a \nCeiling{} single-feature ceiling alone, so leave-one-group-out ablations measure redundancy rather than importance, and
 leave-one-country-out and a fraud variant held out in time are null; we infer, without isolating either cause, that this follows from fraud
 parameters not keyed by country and from the variant's multi-row shape. Refitting without one fraud
 type at a time costs little recall at a \nFPRBudget{} false-positive budget for velocity, SIM-swap and mule fraud and much more
 for agent fraud (\nLoAgentProd{} to \nLoAgentHeld{}) and synthetic identity.
 
-The one failure of the production model on a pre-specified variant is a variant with no burst
-structure (a single transfer, not an incident spanning several fraudulent transactions on one
-account), modelled on a scam documented among Kenyan mobile-money users and committed, with the diagnostic model's
-predicted recall, alongside the generator code that produces it, before its evidence. It is
-rarely caught and never at the flag threshold. At a \nFPRBudget{} false-positive budget the ensemble
+The one variant pre-specified in repository history has no burst structure (a single transfer, not
+an incident spanning several fraudulent transactions on one account), and it is the one detection
+failure found. It is modelled on a scam documented among Kenyan mobile-money users but sent to a payee
+already on the victim's list, a modelling choice the cited sources do not support, and it was
+committed, with the diagnostic model's predicted recall, alongside the generator code that produces
+it, before its evidence. The diagnostic model catches it at \nRevRecall{}, below the floor its
+prediction said would mean burst structure and counterparty novelty carry nearly all the detection
+power, a reading the variant's other differences keep us from supporting as stated; neither production model catches it at the flag threshold. At a \nFPRBudget{} false-positive budget the ensemble
 trained on \nTrainUsed{} rows catches \nGateRevNewBudgetCaught{} of its \nGateRevNewBudgetRows{} rows whose recipient the account
 had never paid (\nFvRevNewBudgetCaught{} at full volume) and none of the \nGateRevKnownBudgetRows{}
 sent to a payee it had paid before; the
-counts are small and the split is observational, so the cause is not isolated. All results are on a synthetic benchmark whose fraud
-parameters are modelling choices, not observations; we state what a validation on real data would
+counts are small and the split is observational, so the cause is not isolated. All results are on a synthetic benchmark none of whose fraud
+parameters is sourced; we state what a validation on real data would
 need to show.
 \end{abstract}

@@ -2,7 +2,7 @@
 
 Every macro in `numbers.tex` checked against its evidence file at `m4-complete` (`72e7790`), or at the ref its row names, read with `git show`, by `audit_numbers.py`. Values are compared as printed: rounding, sign and interval bounds included. Regenerate with `python3 docs/research/paper/audit_numbers.py`; do not edit by hand.
 
-**1031 macros, 1031 MATCH, 0 not matching.**
+**1056 macros, 1056 MATCH, 0 not matching.**
 
 | Macro | Value in paper | Value in evidence | File | Note | Result |
 |---|---|---|---|---|---|
@@ -138,6 +138,8 @@ Every macro in `numbers.tex` checked against its evidence file at `m4-complete` 
 | `\nFrontShapLarge` | `0.84` | `0.84` | `docs/research/paper/evidence/round2_frontier_d8083dbc.txt` at `f29793c` (evidence commit `72e7790`) |  | MATCH |
 | `\nFrontAUCDelta` | `-0.003` | `-0.003` | `docs/research/paper/evidence/round2_frontier_d8083dbc.txt` at `f29793c` (evidence commit `72e7790`) |  | MATCH |
 | `\nFrontRatio` | `28` | `28` | derived | the largest configuration's SHAP cost over the smallest's, rounded | MATCH |
+| `\nFrontRatioLow` | `24` | `24` | derived | largest SHAP cost over the smallest, low end their rounding allows | MATCH |
+| `\nFrontRatioHigh` | `34` | `34` | derived | largest SHAP cost over the smallest, high end their rounding allows | MATCH |
 | `\nFrontNegative` | `2 of 5` | `2 of 5` | `docs/benchmarks/m4_frontier_6abde44e.txt` (evidence commit `95b722c`) |  | MATCH |
 | `\nPredEarly` | `four` | `four` | `docs/research/lab_notebook.md` |  | MATCH |
 | `\nPredEarlyRight` | `one` | `One` | `docs/research/lab_notebook.md` |  | MATCH |
@@ -350,7 +352,7 @@ Every macro in `numbers.tex` checked against its evidence file at `m4-complete` 
 | `\nLcCorpusLarge` | `520{,}000` | `520000` | `docs/benchmarks/m4_learning_curve_cache_240k_d8083dbc.txt` at `3dacca6` (evidence commit `2a876d8`) |  | MATCH |
 | `\nGateCorpus` | `400{,}000` | `400000` | `docs/benchmarks/m4_evaluate_gate_d8083dbc.txt` (evidence commit `bcaea94`) |  | MATCH |
 | `\nLcStepCD` | `-0.015` | `-0.015` | derived | seed-1 recall at 0.60, 240K minus 120K | MATCH |
-| `\nLcMaxUpper` | `0.823` | `0.823` | derived | largest upper bound of the four seed-1 intervals | MATCH |
+| `\nLcMaxUpper` | `0.826` | `0.826` | derived | largest upper bound of the seed-1 row-bootstrap and account-clustered intervals | MATCH |
 | `\nLcSeedGain` | `0.028` | `0.028` | derived | five-seed mean recall at 0.60, 240K minus 30K, to three places | MATCH |
 | `\nSelDepthCount` | `six` | `six` | derived | corpus depths in the training-selection test | MATCH |
 | `\nSelMaxSd` | `0.0410` | `0.0410` | derived | largest five-seed standard deviation of recall at 0.60 across corpus depths | MATCH |
@@ -1037,3 +1039,26 @@ Every macro in `numbers.tex` checked against its evidence file at `m4-complete` 
 | `\nBudTiesPctLow` | `16\%` | `16%` | derived | smallest share of alerts decided by ties at the three larger budgets, rounded down | MATCH |
 | `\nBudTiesPctHigh` | `19\%` | `19%` | derived | largest share of alerts decided by ties at the three larger budgets, rounded down | MATCH |
 | `\nPredPb` | `three` | `three` | derived | rows of Table tab:predictions whose evidence is PB-66's evidence commit | MATCH |
+| `\nSelABudgetMean` | `\ensuremath{0.8443 \pm 0.0206}` | `0.8443 +/- 0.0206` | `docs/research/paper/evidence/round2_selection_d8083dbc.txt` at `f29793c` (evidence commit `74ea29a`) |  | MATCH |
+| `\nSelAAucMean` | `\ensuremath{0.9583 \pm 0.0120}` | `0.9583 +/- 0.0120` | `docs/research/paper/evidence/round2_selection_d8083dbc.txt` at `f29793c` (evidence commit `74ea29a`) |  | MATCH |
+| `\nSelBBudgetMean` | `\ensuremath{0.8526 \pm 0.0155}` | `0.8526 +/- 0.0155` | `docs/research/paper/evidence/round2_selection_d8083dbc.txt` at `f29793c` (evidence commit `74ea29a`) |  | MATCH |
+| `\nSelBAucMean` | `\ensuremath{0.9632 \pm 0.0054}` | `0.9632 +/- 0.0054` | `docs/research/paper/evidence/round2_selection_d8083dbc.txt` at `f29793c` (evidence commit `74ea29a`) |  | MATCH |
+| `\nSelCBudgetMean` | `\ensuremath{0.8408 \pm 0.0252}` | `0.8408 +/- 0.0252` | `docs/research/paper/evidence/round2_selection_d8083dbc.txt` at `f29793c` (evidence commit `74ea29a`) |  | MATCH |
+| `\nSelCAucMean` | `\ensuremath{0.9667 \pm 0.0040}` | `0.9667 +/- 0.0040` | `docs/research/paper/evidence/round2_selection_d8083dbc.txt` at `f29793c` (evidence commit `74ea29a`) |  | MATCH |
+| `\nSelDBudgetMean` | `\ensuremath{0.8603 \pm 0.0274}` | `0.8603 +/- 0.0274` | `docs/research/paper/evidence/round2_selection_d8083dbc.txt` at `f29793c` (evidence commit `74ea29a`) |  | MATCH |
+| `\nSelDAucMean` | `\ensuremath{0.9639 \pm 0.0030}` | `0.9639 +/- 0.0030` | `docs/research/paper/evidence/round2_selection_d8083dbc.txt` at `f29793c` (evidence commit `74ea29a`) |  | MATCH |
+| `\nSelEBudgetMean` | `\ensuremath{0.8593 \pm 0.0169}` | `0.8593 +/- 0.0169` | `docs/research/paper/evidence/round2_selection_d8083dbc.txt` at `f29793c` (evidence commit `74ea29a`) |  | MATCH |
+| `\nSelEAucMean` | `\ensuremath{0.9614 \pm 0.0039}` | `0.9614 +/- 0.0039` | `docs/research/paper/evidence/round2_selection_d8083dbc.txt` at `f29793c` (evidence commit `74ea29a`) |  | MATCH |
+| `\nSelFBudgetMean` | `\ensuremath{0.8471 \pm 0.0169}` | `0.8471 +/- 0.0169` | `docs/research/paper/evidence/round2_selection_d8083dbc.txt` at `f29793c` (evidence commit `74ea29a`) |  | MATCH |
+| `\nSelFAucMean` | `\ensuremath{0.9638 \pm 0.0067}` | `0.9638 +/- 0.0067` | `docs/research/paper/evidence/round2_selection_d8083dbc.txt` at `f29793c` (evidence commit `74ea29a`) |  | MATCH |
+| `\nSelBudgetRange` | `0.020` | `0.020` | derived | largest minus smallest five-seed mean (recall at the 1% FPR budget) across corpus depths | MATCH |
+| `\nSelAucRange` | `0.008` | `0.008` | derived | largest minus smallest five-seed mean (AUC) across corpus depths | MATCH |
+| `\nLcSeedBudgetA` | `\ensuremath{0.8514 \pm 0.0315}` | `0.8514 +/- 0.0315` | `docs/benchmarks/m4_learning_curve_30k_d8083dbc.txt` at `3dacca6` (evidence commit `c59da11`) |  | MATCH |
+| `\nLcSeedBudgetC` | `\ensuremath{0.8688 \pm 0.0186}` | `0.8688 +/- 0.0186` | `docs/benchmarks/m4_learning_curve_120k_d8083dbc.txt` at `3dacca6` (evidence commit `c59da11`) |  | MATCH |
+| `\nLcSeedAucA` | `\ensuremath{0.9562 \pm 0.0129}` | `0.9562 +/- 0.0129` | `docs/benchmarks/m4_learning_curve_30k_d8083dbc.txt` at `3dacca6` (evidence commit `c59da11`) |  | MATCH |
+| `\nLcSeedAucC` | `\ensuremath{0.9714 \pm 0.0025}` | `0.9714 +/- 0.0025` | `docs/benchmarks/m4_learning_curve_120k_d8083dbc.txt` at `3dacca6` (evidence commit `c59da11`) |  | MATCH |
+| `\nFvSeedBudget` | `\ensuremath{0.8680 \pm 0.0135}` | `0.8680 +/- 0.0135` | `docs/benchmarks/full_volume_gate_d8083dbc.txt` at `850192b` (evidence commit `fcec52c`) |  | MATCH |
+| `\nLcSeedBudgetGainAC` | `0.017` | `0.017` | derived | five-seed mean recall at the 1% budget, 120K minus 30K rows within one cache | MATCH |
+| `\nLcSeedAucGainAC` | `0.015` | `0.015` | derived | five-seed mean AUC, 120K minus 30K rows within one cache | MATCH |
+| `\nFvSeedBudgetGainFixed` | `0.021` | `0.021` | derived | five-seed mean recall at the 1% budget on the whole-draw corpus, full volume minus 30,000 rows | MATCH |
+| `\nFvSeedAucGainFixed` | `0.010` | `0.010` | derived | five-seed mean AUC on the whole-draw corpus, full volume minus 30,000 rows | MATCH |

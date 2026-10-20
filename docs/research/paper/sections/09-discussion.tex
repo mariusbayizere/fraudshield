@@ -98,8 +98,9 @@ a different amount of that account's past, and even the shared validation rows, 
 stopping, carry different values in some features (PB-76). At seed 1, recall at the flag threshold is
 \nLcRecallA{} \nLcRecallciA{} for the curve's rows and \nGateRecallSix{} \nGateRecallSixci{} for the
 gate's, a difference of \nSelGapSeedOne{}, while the curve's points, spanning an
-\nLcVolumeFactor{}-fold change in volume, cover a range of \nLcSpanSeedOne{}. At seed 1, which rows
-were used moved recall more than how many.
+\nLcVolumeFactor{}-fold change in volume, cover a range of \nLcSpanSeedOne{}. At seed 1 we infer,
+with no interval on the difference, that which rows were used moved recall at the flag threshold more
+than how many.
 
 \textbf{This gate-against-curve comparison does not hold on the means over seeds}, and we report it
 at seed 1 only. Over
@@ -121,13 +122,17 @@ carry a different amount of history (\texttt{evidence/\allowbreak round2\_\allow
 pre-specified in repository history, not blind to the test period). The run checked that the
 recomputed training rows matched each cache's, that the test rows were identical at every depth, and
 that the gate's own corpus depth reproduced the gate's \nGateRecallSix{}. Table~\ref{tab:selection}
-gives the result. \textbf{Where the corpus is held fixed, we infer that which training rows are used moved recall
-at the flag threshold more than how many}: the mean over \nSeeds{} seeds ranges by \nSelMeanRange{}
-across corpus depths at a fixed \nTrainUsed{} training rows, against a gain of \nLcSeedGainAC{}
-across the \nLcVolumeFactorAC{}-fold step of the learning curve within one cache and of
-\nFvSeedGainFixed{} from
-\nTrainUsed{} rows to full volume on the whole-draw corpus, where the validation and calibration
-splits grow too. The full-volume run's evidence file names its feature cache only by path, so
+gives the result for every metric the plan fixed in advance: recall at the flag threshold,
+recall at the \nFPRBudget{} budget, and AUC. \textbf{The corpus moved recall at the flag threshold
+more than volume did, and only there.} At the flag threshold the mean over \nSeeds{} seeds ranges by
+\nSelMeanRange{} across corpus depths at a fixed \nTrainUsed{} training rows, against a gain of
+\nLcSeedGainAC{} across the \nLcVolumeFactorAC{}-fold step of the learning curve within one cache and
+of \nFvSeedGainFixed{} from \nTrainUsed{} rows to full volume on the whole-draw corpus, where the
+validation and calibration splits grow too. At the budget the range across depths is
+\nSelBudgetRange{}, against volume gains of \nLcSeedBudgetGainAC{} and \nFvSeedBudgetGainFixed{}: the
+same scale. In AUC it is \nSelAucRange{}, against \nLcSeedAucGainAC{} and \nFvSeedAucGainFixed{}:
+volume moved it more. So the selection effect is a property of recall at one fixed threshold, not of
+the ranking; why it is confined there is not isolated. The full-volume run's evidence file names its feature cache only by path, so
 that the run read the cache built from the whole draw rests on the workflow that passed the cache
 from its build to that run, not on the evidence file. Comparisons that change the corpus and the volume together are not used, since
 they mix corpus depth and training volume. No interval was computed for any of these differences, and a range over
@@ -140,31 +145,37 @@ these effects; the mechanism above remains an inference.
 \begin{table}[htbp]
 \centering
 \small
-\caption{Recall at the flag threshold with \nTrainUsed{} training rows at several corpus depths, on
-the same \nTestRows{} test rows (seed 1 with its account-clustered interval; mean and standard
-deviation over \nSeeds{} seeds), and the history the training rows carry: the median number of days
-from the corpus's first transaction to the row, and the share under \nSelShortDays{} and
-\nSelLongDays{} days. The last corpus is the whole draw.}
+\caption{The metrics the plan fixed in advance, with \nTrainUsed{} training rows at several
+corpus depths, on the same \nTestRows{} test rows: recall at the flag threshold (seed 1 with its
+account-clustered interval, and mean and standard deviation over \nSeeds{} seeds), and the mean and
+standard deviation over \nSeeds{} seeds of recall at the \nFPRBudget{} budget and of AUC; with the
+history the training rows carry: the median number of days from the corpus's first transaction to
+the row, and the share under \nSelShortDays{} and \nSelLongDays{} days. The last corpus is the whole
+draw.}
 \label{tab:selection}
-\begin{tabular}{rrrrrr}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{rrrrrrrr}
 \toprule
-Corpus rows & History, median days & Under \nSelShortDays{} & Under \nSelLongDays{} & Recall at seed 1 & Over \nSeeds{} seeds \\
+& \multicolumn{3}{c}{History} & \multicolumn{2}{c}{Recall at \nFlagThreshold} & Recall at \nFPRBudget{} & AUC \\
+Corpus rows & Median days & Under \nSelShortDays{} & Under \nSelLongDays{} & seed 1 & Over seeds & Over seeds & Over seeds \\
 \midrule
-\nSelACorpus & \nSelAMedian & \nSelAUnder & \nSelAUnderLong & \nSelARecall{} \nSelARecallci & $\nSelAMean$ \\
-\nSelBCorpus & \nSelBMedian & \nSelBUnder & \nSelBUnderLong & \nSelBRecall{} \nSelBRecallci & $\nSelBMean$ \\
-\nSelCCorpus & \nSelCMedian & \nSelCUnder & \nSelCUnderLong & \nSelCRecall{} \nSelCRecallci & $\nSelCMean$ \\
-\nSelDCorpus & \nSelDMedian & \nSelDUnder & \nSelDUnderLong & \nSelDRecall{} \nSelDRecallci & $\nSelDMean$ \\
-\nSelECorpus & \nSelEMedian & \nSelEUnder & \nSelEUnderLong & \nSelERecall{} \nSelERecallci & $\nSelEMean$ \\
-all \nRowsDrawB & \nSelFMedian & \nSelFUnder & \nSelFUnderLong & \nSelFRecall{} \nSelFRecallci & $\nSelFMean$ \\
+\nSelACorpus & \nSelAMedian & \nSelAUnder & \nSelAUnderLong & \nSelARecall{} \nSelARecallci & $\nSelAMean$ & $\nSelABudgetMean$ & $\nSelAAucMean$ \\
+\nSelBCorpus & \nSelBMedian & \nSelBUnder & \nSelBUnderLong & \nSelBRecall{} \nSelBRecallci & $\nSelBMean$ & $\nSelBBudgetMean$ & $\nSelBAucMean$ \\
+\nSelCCorpus & \nSelCMedian & \nSelCUnder & \nSelCUnderLong & \nSelCRecall{} \nSelCRecallci & $\nSelCMean$ & $\nSelCBudgetMean$ & $\nSelCAucMean$ \\
+\nSelDCorpus & \nSelDMedian & \nSelDUnder & \nSelDUnderLong & \nSelDRecall{} \nSelDRecallci & $\nSelDMean$ & $\nSelDBudgetMean$ & $\nSelDAucMean$ \\
+\nSelECorpus & \nSelEMedian & \nSelEUnder & \nSelEUnderLong & \nSelERecall{} \nSelERecallci & $\nSelEMean$ & $\nSelEBudgetMean$ & $\nSelEAucMean$ \\
+all \nRowsDrawB & \nSelFMedian & \nSelFUnder & \nSelFUnderLong & \nSelFRecall{} \nSelFRecallci & $\nSelFMean$ & $\nSelFBudgetMean$ & $\nSelFAucMean$ \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \end{table}
 
 What follows for this paper is a qualification, not a correction: every single-number result here
 measured at one selection of training rows, the gate figures of Table~\ref{tab:gate} included, is a
 measurement of one selection at one corpus depth, and that choice alone moved the mean recall at the
 flag threshold across a range of \nSelMeanRange{}, against \nFvSeedGainFixed{} from \nTrainUsed{}
-rows to full volume on one corpus, with no interval computed for either difference.
+rows to full volume on one corpus, with no interval computed for either difference; figures read at
+the budget or as AUC depend on it much less.
 
 \subsection{Predictions pre-specified in repository history}
 
@@ -324,7 +335,7 @@ identical; datasets are now identified by a fingerprint over a fixed row sample 
 Encodings and folds grouped by each feature's unit of history &
 Leakage between rows of one incident, which inflates single-column scores &
 Out-of-fold encoding grouped by row inflated the strongest column's AUC by \nSiblingLeak{};
-grouping by account fixed it, and for counterparty- and cell-keyed features the control adopted is
+grouping by account lowered it, and for counterparty- and cell-keyed features the control adopted is
 temporal \\
 \addlinespace
 For every control, a named mutation that would kill it &

@@ -3198,3 +3198,21 @@ page, and each dropped clause leaves the numbers intact. **Rule: derived text (s
 slides, cover letter, README status) is reviewed sentence by sentence against the source text it
 derives from: model, seed, threshold or budget, caveat and degree of certainty, each attached to the
 right result. Matching numbers is necessary, not sufficient.**
+
+### 2026-10-20 · Report every metric the plan fixed, not the one that shows the effect
+
+The hostile final check (Part 4) found that the training-row selection result had been reported on
+one of the three metrics round two's plan fixed in advance (recall at 0.60, recall at the 1% budget,
+AUC; `round2_plan.md`, section 3): the one where the effect appears. On the other two it does not
+hold. At a fixed 30,000 rows the corpus moves recall at 0.60 across 0.107 against 0.012 and 0.032 for
+volume on a fixed corpus; recall at the budget across 0.020 against 0.017 and 0.021; AUC across 0.008
+against 0.015 and 0.010. Every number reported had been right and audited, and the claim had been
+narrowed twice (fixed corpus, then no interval) without anyone asking about the other two metrics.
+The paper now reports all three in Table `tab:selection` and states the claim as flag-threshold-only
+wherever it appears. **Rule: when a plan fixes several metrics, every one is reported wherever the
+result is stated; a claim that holds on one is labelled with that one.** This is the selection
+defect the paper exists to avoid, made by the paper itself.
+
+The same check found three evidence commits named in the paper (`c59da11`, `6b36fc5`, `2a876d8`,
+pre-rebase learning-curve stamps) reachable from no branch or tag and past git's prune window; they
+are now held by the local tag `evidence/pb67-pre-rebase`, to be pushed.

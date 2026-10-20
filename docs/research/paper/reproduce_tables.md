@@ -149,7 +149,7 @@ In `sections/08-generalisation.tex`.
   - command: `python docs/research/paper/evidence/round2.py --fingerprint d8083dbc742c20437bf3d060614f88849059eb8cf12bd0d3bbb092b518e6be32 gate --gate-cache /home/runner/work/_temp/features_gate.parquet --battery-cache /home/runner/work/_temp/features_full.parquet --dataset /home/runner/work/_temp/bench1m --split /home/runner/work/_temp/split.json --out /home/runner/work/_temp/out`
 - `docs/research/preregistration_pb66_full_volume.md` at `c61d512`
 
-## `tab:selection`: Recall at the flag threshold with [value] training rows at several corpus depths, on the same [value] test rows (seed 1 with its account-clustered interval; mean and standard deviation over [value] seeds), and the history the training rows carry: the median number of days from the corpus's first transaction to the row, and the share under [value] and [value] days
+## `tab:selection`: The metrics the plan fixed in advance, with [value] training rows at several corpus depths, on the same [value] test rows: recall at the flag threshold (seed 1 with its account-clustered interval, and mean and standard deviation over [value] seeds), and the mean and standard deviation over [value] seeds of recall at the [value] budget and of AUC; with the history the training rows carry: the median number of days from the corpus's first transaction to the row, and the share under [value] and [value] days
 
 In `sections/09-discussion.tex`.
 
