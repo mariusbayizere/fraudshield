@@ -91,6 +91,54 @@ class KafkaMessagesContractTest {
   }
 
   @Test
+  @Tag("FR-04-05")
+  void theCodecKeepsTheShapBaseValueAndTheFinalMargin() {
+    DecisionEvent.TransactionDecided original =
+        everyKindOfFact().stream()
+            .filter(DecisionEvent.TransactionDecided.class::isInstance)
+            .map(DecisionEvent.TransactionDecided.class::cast)
+            .findFirst()
+            .orElseThrow();
+    DecisionEvent.ScoringRecord r = original.scoring();
+    DecisionEvent.ScoringRecord withShap =
+        new DecisionEvent.ScoringRecord(
+            r.scoringResultId(),
+            r.ensembleScore(),
+            r.xgboostScore(),
+            r.lightgbmScore(),
+            r.anomalyScore(),
+            r.anomalyRaw(),
+            r.tier(),
+            r.shapTop5(),
+            r.shapAll(),
+            r.featureVector(),
+            r.modelVersion(),
+            r.featureRegistryVersion(),
+            r.scoringDurationMs(),
+            r.fallback(),
+            r.traceId(),
+            r.requiresAnalystReview(),
+            r.featureStoreDegraded(),
+            r.accountContext(),
+            -4.25,
+            -3.81);
+    DecisionEvent decided =
+        new DecisionEvent.TransactionDecided(
+            original.transaction(),
+            withShap,
+            original.outcome(),
+            original.state(),
+            original.thresholdsVersion(),
+            original.requestFingerprint(),
+            original.decisionLatencyMs());
+    DecisionEvent.TransactionDecided copy =
+        (DecisionEvent.TransactionDecided)
+            FactCodec.decode(FactCodec.encode(List.of(decided))).getFirst();
+    assertThat(copy.scoring().shapBaseValue()).isEqualTo(-4.25);
+    assertThat(copy.scoring().finalMargin()).isEqualTo(-3.81);
+  }
+
+  @Test
   void theCodecRoundTripsEveryFact() {
     List<DecisionEvent> events = everyKindOfFact();
     List<DecisionEvent> decoded = FactCodec.decode(FactCodec.encode(events));

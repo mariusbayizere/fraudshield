@@ -285,6 +285,9 @@ public sealed interface DecisionEvent {
    * @param traceId W3C trace id, or null
    * @param requiresAnalystReview whether an analyst queue receives it
    * @param featureStoreDegraded whether the scorer answered without the feature store (ADR 0033)
+   * @param accountContext the account context the scorer read, or null
+   * @param shapBaseValue the SHAP base value in margin space, or null without SHAP (ADR 0112)
+   * @param finalMargin the ensemble's margin, or null without SHAP (ADR 0112)
    */
   record ScoringRecord(
       UUID scoringResultId,
@@ -304,7 +307,9 @@ public sealed interface DecisionEvent {
       String traceId,
       boolean requiresAnalystReview,
       boolean featureStoreDegraded,
-      Map<String, Object> accountContext) {
+      Map<String, Object> accountContext,
+      Double shapBaseValue,
+      Double finalMargin) {
 
     /**
      * Copies the collections; feature values may be null (structurally missing, D-04). The account
@@ -358,7 +363,9 @@ public sealed interface DecisionEvent {
           traceId,
           review,
           featureStoreDegraded,
-          accountContext);
+          accountContext,
+          shapBaseValue,
+          finalMargin);
     }
   }
 }

@@ -153,7 +153,9 @@ public final class ScoringContract {
             null,
             false,
             r.getFeatureStoreDegraded(),
-            r.hasAccountContext() ? AccountContexts.toMap(r.getAccountContext()) : null);
+            r.hasAccountContext() ? AccountContexts.toMap(r.getAccountContext()) : null,
+            r.getShapAllCount() == 0 ? null : r.getShapBaseValue(),
+            r.getShapAllCount() == 0 ? null : r.getFinalMargin());
     return new ScoringPort.Scored(model, record);
   }
 

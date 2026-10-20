@@ -163,8 +163,13 @@ class GrpcScorerTest {
     assertThat(scored.record().shapAll()).hasSize(44);
     assertThat(scored.record().shapTop5().getFirst()).containsEntry("direction", "INCREASES_RISK");
     assertThat(score(Fixtures.transaction("100")).record().shapAll()).isNotNull();
+    assertThat(scored.record().shapBaseValue()).isEqualTo(-4.25);
+    assertThat(scored.record().finalMargin()).isEqualTo(-3.81);
     remote.score = r -> 0.3;
-    assertThat(score(Fixtures.transaction("100")).record().shapAll()).isNull();
+    ScoringPort.Scored low = score(Fixtures.transaction("100"));
+    assertThat(low.record().shapAll()).isNull();
+    assertThat(low.record().shapBaseValue()).as("no SHAP below 0.60, so no base value").isNull();
+    assertThat(low.record().finalMargin()).isNull();
   }
 
   @Test

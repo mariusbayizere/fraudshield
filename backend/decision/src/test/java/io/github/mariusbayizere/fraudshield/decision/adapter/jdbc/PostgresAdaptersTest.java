@@ -192,6 +192,18 @@ class PostgresAdaptersTest {
                     + " AND account_context IS NULL AND NOT ml_unavailable_fallback"))
         .as("a score the scorer made without the feature store says so (V66)")
         .isEqualTo("1");
+    assertThat(
+            one(
+                "SELECT count(*) FROM fraudshield.fraud_scores WHERE NOT ml_unavailable_fallback"
+                    + " AND shap_base_value = -4.25 AND final_margin = -3.81"))
+        .as("the explanation's base value and margin are kept with the score (V80, ADR 0112)")
+        .isEqualTo(
+            one("SELECT count(*) FROM fraudshield.fraud_scores WHERE NOT ml_unavailable_fallback"));
+    assertThat(
+            one(
+                "SELECT count(*) FROM fraudshield.fraud_scores WHERE ml_unavailable_fallback"
+                    + " AND shap_base_value IS NULL"))
+        .isEqualTo("1");
   }
 
   @Test

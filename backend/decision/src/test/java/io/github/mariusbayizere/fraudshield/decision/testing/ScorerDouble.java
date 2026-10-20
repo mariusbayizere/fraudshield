@@ -115,6 +115,7 @@ public final class ScorerDouble extends ScoringServiceGrpc.ScoringServiceImplBas
       for (String feature : FieldCatalogue.featureNames()) {
         result.addShapAll(velocity.toBuilder().setFeature(feature).setShap(0.01));
       }
+      result.setShapBaseValue(-4.25).setFinalMargin(-3.81);
     }
     response.onNext(ScoreResponse.newBuilder().setResult(tamper.apply(result)).build());
     response.onCompleted();

@@ -21,6 +21,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -67,8 +68,8 @@ public final class PostgresSink implements SpoolDrainer.Sink {
       xgboost_score, lightgbm_score, anomaly_score, anomaly_raw, risk_tier, shap_top5, shap_all,
       feature_vector, model_version, feature_registry_version, scoring_duration_ms,
       requires_analyst_review, ml_unavailable_fallback, trace_id, account_context,
-      feature_store_degraded) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?::jsonb,
-      ?, ?, ?, ?, ?, ?, ?::jsonb, ?) ON CONFLICT DO NOTHING
+      feature_store_degraded, shap_base_value, final_margin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+      ?::jsonb, ?::jsonb, ?::jsonb, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?, ?) ON CONFLICT DO NOTHING
       """;
 
   private static final String INSERT_ACCOUNT_PROFILES =
@@ -331,6 +332,8 @@ public final class PostgresSink implements SpoolDrainer.Sink {
       s.setString(19, r.traceId());
       s.setString(20, r.accountContext() == null ? null : json(r.accountContext()));
       s.setBoolean(21, r.featureStoreDegraded());
+      s.setObject(22, r.shapBaseValue(), Types.DOUBLE);
+      s.setObject(23, r.finalMargin(), Types.DOUBLE);
       s.executeUpdate();
     }
     state(c, e.state());

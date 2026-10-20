@@ -339,6 +339,8 @@ public final class FactCodec {
     map.put("requires_analyst_review", s.requiresAnalystReview());
     map.put("feature_store_degraded", s.featureStoreDegraded());
     map.put("account_context", s.accountContext());
+    map.put("shap_base_value", s.shapBaseValue());
+    map.put("final_margin", s.finalMargin());
     return map;
   }
 
@@ -367,7 +369,14 @@ public final class FactCodec {
         node.get("feature_store_degraded").asBoolean(),
         node.has("account_context") && !node.get("account_context").isNull()
             ? LONGS.convertValue(node.get("account_context"), MAP)
-            : null);
+            : null,
+        optionalDouble(node, "shap_base_value"),
+        optionalDouble(node, "final_margin"));
+  }
+
+  /** A number written by this release, absent from records spooled by an earlier one. */
+  private static Double optionalDouble(JsonNode node, String field) {
+    return node.has(field) && !node.get(field).isNull() ? node.get(field).asDouble() : null;
   }
 
   private static ObjectNode outcome(DecisionOutcome o) {
