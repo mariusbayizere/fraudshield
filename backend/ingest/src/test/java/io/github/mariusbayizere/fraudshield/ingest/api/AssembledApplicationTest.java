@@ -356,7 +356,7 @@ class AssembledApplicationTest {
   void theSpoolDepthGaugeIsExportedUnderTheNameM9sAlertAndDashboardRead() throws Exception {
     // M9's FraudShieldSpoolBacklog alert and the fs-kafka-spool dashboard read the name Prometheus
     // scrapes, not the name the code registers. The gauge is registered as fs_spool_depth with base
-    // unit "bytes"; this scrape records which name that becomes (M9_updates.md 3b, 2026-10-20).
+    // unit "bytes"; this scrape records which name that becomes (M9_updates.md 3c, 2026-10-20).
     String management = "http://127.0.0.1:" + environment.getProperty("local.management.port");
     HttpResponse<String> scrape =
         CLIENT.send(

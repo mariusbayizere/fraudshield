@@ -1544,47 +1544,47 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
   earliest training row, or report every model figure with that share stated. The owner decides.
 
 ### PB-171 · The API spool needs a volume per pod: a StatefulSet replaces the shared directory
-- **Source:** owner decision, 2026-10-20 (`docs/parallel/M9_updates.md` 3b, on `m9/infra`) · **Priority:** high · **Due:** M9 and M6, jointly
+- **Source:** owner decision, 2026-10-20 (`docs/parallel/M9_updates.md` 3c, on `m9/infra`) · **Priority:** high · **Due:** M9 and M6, jointly
 - **Problem:** ADR 0090's shared volume with orphan replay does not match what M6 built (`DurableSpool`: one directory per instance, two consumers, Kafka and PostgreSQL, each with its own checkpoint; ADR 0064, `docs/architecture/decision-fact-ordering.md` D-c2). Until 2026-10-20 the manifests gave every API pod the same directory. The stop-gap in `infrastructure/k8s/base/api.yaml` gives each pod its own directory on the shared volume; a dead pod's spool is then **stranded, not replayed**: its records stay on the volume until an operator drains them.
-- **Acceptance:** a StatefulSet with a ReadWriteOnce volume per pod (ADR 0090's own fallback), recorded in an ADR superseding 0090; `k8s_policy.py` accepts the volume claim template and rejects a shared spool; M6 drains the spool on SIGTERM within the grace period; a runbook for draining a removed ordinal's volume. **Canary consequence, stated in the ADR:** a canary by pod is one pod of N, 33% at 3 replicas, which is the constraint the owner rejected (3b, decision 2), so a 10% step needs weighted traffic at the edge. M10's chaos case 06 and its fsync benchmark row are re-worded to match. ADR 0090's option (a), heartbeat, claiming and fencing in M6, is **not** to be started (owner, 2026-10-20).
+- **Acceptance:** a StatefulSet with a ReadWriteOnce volume per pod (ADR 0090's own fallback), recorded in an ADR superseding 0090; `k8s_policy.py` accepts the volume claim template and rejects a shared spool; M6 drains the spool on SIGTERM within the grace period; a runbook for draining a removed ordinal's volume. **Canary consequence, stated in the ADR:** a canary by pod is one pod of N, 33% at 3 replicas, which is the constraint the owner rejected (3b, decision 2), so a 10% step needs weighted traffic at the edge. M10's chaos case 06 and its fsync benchmark row are re-worded to match. Records stranded on the volume are visible to monitoring (today `fs_spool_depth` covers live pods only). ADR 0090's option (a), heartbeat, claiming and fencing in M6, is **not** to be started (owner, 2026-10-20).
 
 ### PB-172 · The ML worker does not exist: no health, metrics, label consumer or drift job
-- **Source:** owner decision, 2026-10-20 (`docs/parallel/M9_updates.md` 3b, on `m9/infra`) · **Priority:** high · **Due:** M5
+- **Source:** owner decision, 2026-10-20 (`docs/parallel/M9_updates.md` 3c, on `m9/infra`) · **Priority:** high · **Due:** M5
 - **Problem:** `infrastructure/k8s/base/ml-worker.yaml` probes `/health/live` and `/health/ready` and scrapes `/metrics` on port 8000, but nothing in `ml/src` serves them, and no worker image is built. The manifest is taken out of the deployed base until the worker exists.
 - **Acceptance:** a worker entry point serving `/health/live`, `/health/ready` and `/metrics`, a Dockerfile at `ml/Dockerfile.worker`, and `ml-worker.yaml` back in `infrastructure/k8s/base/kustomization.yaml`, with its probes exercised against the image. Its metrics are PB-176.
 
 ### PB-173 · The API serves no `/actuator/health/ml`
-- **Source:** owner decision, 2026-10-20 (`docs/parallel/M9_updates.md` 3b, on `m9/infra`) · **Priority:** high · **Due:** M6
+- **Source:** owner decision, 2026-10-20 (`docs/parallel/M9_updates.md` 3c, on `m9/infra`) · **Priority:** high · **Due:** M6
 - **Problem:** OPS-OBS-05 probes `/actuator/health/ml` every 60 s (ADR 0014 section 6), but the API has no `ml` health indicator or group: the probe would get 404 and `FraudShieldMlHealthProbeFailing` would page forever. M9's `blackbox-ml-health` job is disabled until the endpoint exists; the alert, its test and its runbook stay.
 - **Acceptance:** `/actuator/health/ml` on the management port answers UP while the scorer answers and DOWN while it does not, shown by a test; M9 then restores the `blackbox-ml-health` job in `infrastructure/prometheus/prometheus.yml`.
 
 ### PB-174 · Part E.10 metrics the API does not emit, or emits under another name
-- **Source:** owner decision, 2026-10-20 (`docs/parallel/M9_updates.md` 3b, on `m9/infra`) · **Priority:** high · **Due:** M6
+- **Source:** owner decision, 2026-10-20 (`docs/parallel/M9_updates.md` 3c, on `m9/infra`) · **Priority:** high · **Due:** M6
 - **Problem:** the API emits `fs_decisions_total`, `fs_decision_latency_seconds` and `fs_alert_timeout_release_total`. `fs_ingest_requests_total{channel,status}` is missing, so the canary's error-rate check is empty and fails every rollout, and `FraudShieldTransactionRateDrop` cannot fire; `fs_kafka_consumer_lag{topic,group}` is missing for the API's consumers; `fs_db_pool_in_use` is missing (Boot exports `hikaricp_connections_active`); `fs_decision_latency_seconds` has no 0.08 bucket bound, so the p99 alert and canary interpolate; `fs_spool_depth` counts bytes, not records.
 - **Acceptance:** each metric emitted with E.10's name and labels, or E.10 amended (ADR 0093) where the code's name is kept; a scrape test over `/actuator/prometheus` asserts every exported name, label and the `le="0.04"` and `le="0.08"` bounds. `fs_ingest_requests_total` first: it unblocks the canary. The spool depth's unit follows PB-171.
 
 ### PB-175 · Scoring metrics in the scorer
-- **Source:** owner decision, 2026-10-20 (`docs/parallel/M9_updates.md` 3b, on `m9/infra`) · **Priority:** medium · **Due:** M5
+- **Source:** owner decision, 2026-10-20 (`docs/parallel/M9_updates.md` 3c, on `m9/infra`) · **Priority:** medium · **Due:** M5
 - **Problem:** the scorer records stage timings but exports no `fs_scoring_latency_seconds{stage}`; the feature store's read path exports no `fs_feature_latency_seconds{source}`; nothing exports `fs_model_version_info{alias,version}` (ADR 0091 assigns it to the worker, PB-172).
 - **Acceptance:** the three metrics in the scorer's registry, tested against it; ADR 0091 amended if the version gauge moves from the worker to the scorer.
 
 ### PB-176 · Label and drift metrics in the ML worker
-- **Source:** owner decision, 2026-10-20 (`docs/parallel/M9_updates.md` 3b, on `m9/infra`) · **Priority:** medium · **Due:** M5 (after PB-172)
+- **Source:** owner decision, 2026-10-20 (`docs/parallel/M9_updates.md` 3c, on `m9/infra`) · **Priority:** medium · **Due:** M5 (after PB-172)
 - **Problem:** `fs_false_positive_rate`, `fs_feature_psi{feature}`, `fs_model_auc_roc{alias}` and `fs_model_label_coverage{alias}` (ADR 0091) have no emitter, so `FraudShieldFalsePositiveRateHigh`, `FraudShieldFeatureDrift` and `FraudShieldModelAucDrop` cannot fire and the fs-model-health dashboard is empty.
 - **Acceptance:** the worker publishes them as ADR 0091 specifies, tested against its registry.
 
 ### PB-177 · Analyst metrics
-- **Source:** owner decision, 2026-10-20 (`docs/parallel/M9_updates.md` 3b, on `m9/infra`) · **Priority:** medium · **Due:** M6 and M8B (after M8B's decision path is on `main`)
+- **Source:** owner decision, 2026-10-20 (`docs/parallel/M9_updates.md` 3c, on `m9/infra`) · **Priority:** medium · **Due:** M6 and M8B (after M8B's decision path is on `main`)
 - **Problem:** `fs_alert_queue_depth{tier}` and `fs_review_duration_seconds` have no emitter; the fs-analyst-operations dashboard's three panels read nothing.
 - **Acceptance:** both emitted, with the tier values from `AlertTier`, tested by a scrape.
 
-### PB-178 · Part E.10 does not list about 35 metrics the code emits
-- **Source:** owner decision, 2026-10-20 (`docs/parallel/M9_updates.md` 3b, on `m9/infra`) · **Priority:** medium · **Due:** M9, on the owner's decision of ADR 0093
+### PB-178 · Part E.10 does not list 32 metrics the code emits
+- **Source:** owner decision, 2026-10-20 (`docs/parallel/M9_updates.md` 3c, on `m9/infra`) · **Priority:** medium · **Due:** M9, on the owner's decision of ADR 0093
 - **Problem:** the API, the notification consumers, the feature store, the scorer's hot swap and shadow scoring emit metrics E.10 does not list, so `metric_catalogue.py` rejects any rule or panel that uses them; `fs_redis_hit_ratio` has no definition of what it measures.
 - **Acceptance:** the owner decides ADR 0093; E.10 is amended accordingly; `metric_catalogue.py` handles the accepted suffixes, with tests.
 
 ### PB-179 · The scorer's manifest cannot start the scorer
-- **Source:** owner decision, 2026-10-20 (`docs/parallel/M9_updates.md` 3b, on `m9/infra`) · **Priority:** medium · **Due:** M9
+- **Source:** M9's staleness review, 2026-10-20 (`docs/parallel/M9_updates.md` 3c item 2, on `m9/infra`) · **Priority:** medium · **Due:** M9
 - **Problem:** `infrastructure/k8s/base/ml.yaml` passes no arguments and mounts no certificates, but `fs-scorer serve` refuses to start without its packs, a model source, a feature store and its mTLS certificate.
 - **Acceptance:** arguments and Secret mounts in `ml.yaml`, checked against `ml/src/fraudshield_ml/serving/cli.py`, and the pod started from the built image in CI once `ml/Dockerfile` exists.
 

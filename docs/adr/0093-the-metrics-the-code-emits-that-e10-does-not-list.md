@@ -2,7 +2,7 @@
 
 - **Status:** Proposed (for the owner's decision)
 - **Decided by:** not decided. The owner asked for this record on 2026-10-20
-  (`docs/parallel/M9_updates.md` 3b; backlog PB-178); the M9 agent wrote it.
+  (`docs/parallel/M9_updates.md` 3c, item 4; backlog PB-178); the M9 agent wrote it.
 - **Date:** 2026-10-20
 - **Requirements affected:** OPS-OBS-01, OPS-OBS-03, OPS-OBS-05
 - **Backlog:** PB-174, PB-175, PB-176, PB-177, PB-178
@@ -21,8 +21,8 @@ because the catalogue would reject it. Some of them are the signals M9 has been 
 
 Inventory, read from the source on `main` at `a7f0528` on 2026-10-20. The registered name is the
 one in the code. Prometheus exports Micrometer meters with a unit suffix and Timers in seconds.
-**Only `fs_spool_depth` has its exported name checked**, by the scrape test added on 2026-10-20 in
-`AssembledApplicationTest`. The other exported names in the table are what that naming rule
+**No exported name is observed yet.** `fs_spool_depth`'s will be checked by the scrape test added
+on 2026-10-20 in `AssembledApplicationTest`, when CI runs it. The other exported names in the table are what that naming rule
 predicts, not observations; PB-174's scrape test pins them.
 
 ### API (`backend/ingest`, Micrometer)
@@ -77,8 +77,8 @@ That is 32 names: 8 in the API, 13 in the notification consumers and 11 in ML.
 ### E.10 entries that do not match the code
 
 1. **`fs_spool_depth`**: E.10 and M9's contract mean records not yet acknowledged by Kafka. The
-   code exports bytes, the minimum over two consumers (Kafka and PostgreSQL), registered with unit
-   bytes. What it should count depends on the spool's redesign (PB-171).
+   code exports bytes: the lag of the slower of two consumers, Kafka and PostgreSQL
+   (`durableEnd - minimumCommitted()`), registered with unit bytes. What it should count depends on the spool's redesign (PB-171).
 2. **`fs_db_pool_in_use`**: not emitted. Spring Boot already exports HikariCP's pool as
    `hikaricp_connections_active{pool}`.
 3. **`fs_redis_hit_ratio`**: not emitted, and E.10 does not say which cache it measures: the
