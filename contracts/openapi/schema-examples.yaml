@@ -136,8 +136,8 @@ examples:
       amount: '15000'
       currency: RWF
     channel: MOBILE_MONEY
-    masked_account: '***4821'
-    anomaly_score: 0.42
+    masked_account: null
+    anomaly_score: null
     merchant: null
     transaction_timestamp: '2026-09-17T08:15:30Z'
     top_reasons:

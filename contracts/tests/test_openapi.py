@@ -575,8 +575,8 @@ def test_unique_keys_name_properties_of_their_items() -> None:
     assert found == 6
 
 
-@pytest.mark.req("NFR-SEC-03")
-def test_alerts_carry_the_sms_masked_account_and_no_holder_name() -> None:
+@pytest.mark.req("FR-04-03")
+def test_alerts_carry_the_masked_account_in_the_sms_format() -> None:
     base = SCHEMAS["AlertSummaryBase"]["properties"]
     assert "masked_account_name" not in base
     masked = base["masked_account"]

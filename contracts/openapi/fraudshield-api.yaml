@@ -401,8 +401,9 @@ paths:
       description: |
         Returns an access token in the body and sets a rotating refresh-token cookie
         (httpOnly, Secure, SameSite=Strict, path `/api/v1/auth/refresh`) plus the CSRF cookie `fs_csrf`
-        (readable by script, Secure, SameSite=Strict, path `/`), whose value the `X-CSRF-Token`
-        header echoes (D-27, `x-csrf-cookie` on the `CsrfToken` parameter).
+        (readable by script, Secure, SameSite=Strict, path `/`; the attributes are informative),
+        whose value the `X-CSRF-Token` header echoes (D-27, `x-csrf-cookie` on the `CsrfToken`
+        parameter, which is normative).
         10 attempts per 15 minutes per IP (higher for allow-listed office IPs, D-26); 5 failures lock
         the account. A password longer than 72 UTF-8 bytes is answered as invalid credentials
         without calling bcrypt. Correct credentials for an account in `PENDING_APPROVAL` or
@@ -3387,8 +3388,9 @@ components:
           minimum: 0
           maximum: 1
           description: >-
-            The Isolation Forest's score, the reason an ANOMALY entry is in its queue (D-10). Null
-            when the decision was made by the rule-based fallback, which runs no model.
+            The Isolation Forest's score as a percentile rank (D-06), the reason an ANOMALY entry is
+            in its queue (D-10). Null when the decision was made by the rule-based fallback, which
+            runs no model.
     AlertDetail:
       # Closed at the composing level with the names from every allOf member (NF-01).
       properties: { alert_id: true, version: true, transaction_id: true, tier: true, status: true, fraud_probability: true, expected_loss_rwf: true, amount: true, channel: true, masked_account: true, merchant: true, transaction_timestamp: true, top_reasons: true, review_deadline_at: true, escalated_from_alert_id: true, account_token: true, counterparty_token: true, summary_template_key: true, summary_parameters: true, anomaly_score: true, decisions: true }
@@ -3580,7 +3582,8 @@ components:
             earlier transactions with the same counterparty or device (`normal` null), anomalous at
             0; the device item is null-valued and not anomalous when the transaction has no device.
             `counterparty_country` is this transaction's counterparty country against the window's
-            most frequent (ties by code), anomalous when never seen in the window; when the
+            most frequent among window transactions that have one (ties by code), anomalous when
+            never seen in the window; when the
             transaction has none, both values are null and it is not anomalous.
           x-unique-key: [attribute]
           items:
@@ -3601,7 +3604,8 @@ components:
         Over the last 90 days: the account (degree 0), the accounts it transacted with in either
         direction (degree 1) and theirs (degree 2), at most 50 nodes, chosen by degree and then by
         the number of transactions linking the node to the node that brought it in, descending,
-        ties by token. An edge is every (source, target) pair of included nodes with at least one
+        ties by token; a degree-2 node reached through several degree-1 nodes counts the most
+        such transactions with any one of them. An edge is every (source, target) pair of included nodes with at least one
         transaction from source to target. `confirmed_fraud` is true when the node sent a
         transaction in the window whose current label is FRAUD: the label no later label
         supersedes, and of labels at the same `label_available_at`, the one with the greatest

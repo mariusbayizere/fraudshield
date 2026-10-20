@@ -129,7 +129,7 @@ ADR and migration directories of every remote branch.
 |---|---|---|
 | ADR | `0110`–`0119` (`0080`–`0089` are M8's, `0090`–`0099` M9's, `0100`–`0109` M10's) | `0110` (P1's contract changes) |
 | Flyway | `V80`–`V89` (`V60`–`V69` are M6's, `V70`–`V79` M7's) | planned: `V80` (decision commit contract), `V81` (configuration contract), `V82` (the counterparty index for P1) |
-| Backlog | `PB-151` to `PB-170` (`PB-131`–`PB-140` are M8's, `PB-141`–`PB-150` M11's) | `PB-151` to `PB-156` |
+| Backlog | `PB-151` to `PB-170` (`PB-131`–`PB-140` are M8's, `PB-141`–`PB-150` M11's) | `PB-151` to `PB-157` |
 
 The scope and the owner's answers are in `M8B_scope.md`.
 
@@ -143,7 +143,9 @@ The console should do the same, so that neither side can drift from the contract
   `contracts/openapi/fraudshield-api.yaml` and asserts `CSRF_COOKIE` equals that value, and that
   the header the console sends is the parameter's `name`.
 - **Further console changes ADR 0110 asks for.** Regenerate the client, then:
-  - show `masked_account` (no longer a holder name);
+  - show `masked_account` (no longer a holder name). Until the owner decides ADR 0110 point 3 it
+    is always null, and the card must render its absence without showing "null";
+  - pass `outcome` in search, or decided alerts are not found;
   - show `anomaly_score` on the card;
   - search with `queue=all`;
   - use the closed comparison-attribute list.
