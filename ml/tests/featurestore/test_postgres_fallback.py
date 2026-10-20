@@ -25,6 +25,7 @@ from fraudshield_ml.featurestore.postgres import (
 )
 
 AT = datetime(2026, 9, 1, tzinfo=UTC)
+COUNTRIES = {"KES": "KE", "RWF": "RW"}
 ACCOUNT = "tok_" + "A" * 24
 
 
@@ -125,7 +126,7 @@ SEEN: dict[str, list[tuple[Any, ...]]] = {
 
 def test_a_database_that_has_never_seen_the_account_answers_none() -> None:
     connection = _Connection(NEVER_SEEN)
-    reader = PostgresFallback(lambda: connection, {"KES": 2})
+    reader = PostgresFallback(lambda: connection, {"KES": 2}, country_of_currency=COUNTRIES)
     assert reader.account(ACCOUNT, AT) is None
     assert any("statement_timeout = 100" in s for s in connection.statements)
     assert any("default_transaction_read_only" in s for s in connection.statements)
@@ -135,7 +136,7 @@ def test_a_database_that_has_never_seen_the_account_answers_none() -> None:
 
 @pytest.mark.req("FR-02-09")
 def test_rows_become_the_durable_state_the_store_rebuilds_from() -> None:
-    reader = PostgresFallback(lambda: _Connection(SEEN), {"KES": 2})
+    reader = PostgresFallback(lambda: _Connection(SEEN), {"KES": 2}, country_of_currency=COUNTRIES)
     durable = reader.account(ACCOUNT, AT)
     assert durable is not None
     assert durable.last_location == (-1.95, 30.06)
@@ -145,16 +146,20 @@ def test_rows_become_the_durable_state_the_store_rebuilds_from() -> None:
     first, second = durable.transactions
     assert first.amount_minor == 150_000
     assert first.currency == "KES"
-    assert first.account_country == "RW"
+    # V67's column holds the institution's country ("RW"); the sender's country is the
+    # currency's, as serving derives it, or the fallback's rows disagree with the scorer (PB-154).
+    assert first.account_country == "KE"
     assert first.device_fingerprint == "tok_D"
     assert second.amount_minor is None, "10.505 KES is not a whole number of cents"
-    assert second.account_country is None
+    assert second.account_country == "KE", "derived from the currency, not the NULL column"
     assert second.merchant_category_code is None
     assert reader.device_first_seen("tok_D", AT) == AT
 
 
 def test_a_currency_without_minor_units_leaves_the_minor_amount_unknown() -> None:
-    durable = PostgresFallback(lambda: _Connection(SEEN), {}).account(ACCOUNT, AT)
+    durable = PostgresFallback(
+        lambda: _Connection(SEEN), {}, country_of_currency=COUNTRIES
+    ).account(ACCOUNT, AT)
     assert durable is not None
     assert all(t.amount_minor is None for t in durable.transactions)
 
@@ -168,7 +173,9 @@ def test_a_failure_is_unavailable_never_never_seen_and_the_connection_is_replace
         return connections[-1]
 
     now = [0.0]
-    reader = PostgresFallback(connect, {"KES": 2}, clock=lambda: now[0])
+    reader = PostgresFallback(
+        connect, {"KES": 2}, country_of_currency=COUNTRIES, clock=lambda: now[0]
+    )
     with pytest.raises(FallbackUnavailableError):
         reader.account(ACCOUNT, AT)
     assert connections[0].closed, "a connection that failed is not reused"
@@ -184,13 +191,13 @@ def test_an_unreachable_database_is_unavailable() -> None:
     def refuse() -> _Connection:
         raise ConnectionRefusedError("no route")
 
-    reader = PostgresFallback(refuse, {})
+    reader = PostgresFallback(refuse, {}, country_of_currency=COUNTRIES)
     with pytest.raises(FallbackUnavailableError):
         reader.device_first_seen("tok_D", AT)
 
 
 def test_a_function_that_returns_no_row_is_a_failure() -> None:
-    reader = PostgresFallback(lambda: _Connection({}), {})
+    reader = PostgresFallback(lambda: _Connection({}), {}, country_of_currency=COUNTRIES)
     with pytest.raises(FallbackUnavailableError):
         reader.account(ACCOUNT, AT)
 
@@ -201,7 +208,9 @@ def test_closing_a_connection_that_fails_to_close_still_forgets_it() -> None:
             raise OSError("already gone")
 
     connection = _Stubborn(NEVER_SEEN)
-    reader = PostgresFallback(lambda: connection, {}, statement_timeout_ms=250)
+    reader = PostgresFallback(
+        lambda: connection, {}, country_of_currency=COUNTRIES, statement_timeout_ms=250
+    )
     reader.account(ACCOUNT, AT)
     assert any("statement_timeout = 250" in s for s in connection.statements)
     reader.close()
@@ -240,7 +249,7 @@ def test_a_blackholed_database_fails_reads_fast_and_is_not_retried_during_the_co
         time.sleep(0.3)  # the socket timeout expiring
         raise TimeoutError("connect timed out")
 
-    reader = PostgresFallback(blackhole, {}, clock=lambda: now[0])
+    reader = PostgresFallback(blackhole, {}, country_of_currency=COUNTRIES, clock=lambda: now[0])
     failures: list[BaseException] = []
 
     def read() -> None:
@@ -284,7 +293,7 @@ def test_a_cancelled_statement_fails_that_read_only_and_keeps_the_session() -> N
         opened.append(connection)
         return connection
 
-    reader = PostgresFallback(connect, {"KES": 2}, clock=lambda: 0.0)
+    reader = PostgresFallback(connect, {"KES": 2}, country_of_currency=COUNTRIES, clock=lambda: 0.0)
     with pytest.raises(FallbackUnavailableError):
         reader.account(ACCOUNT, AT)
     assert connection.statements[-1] == "ROLLBACK", "the aborted transaction is ended"
@@ -304,7 +313,9 @@ def test_a_lost_connection_starts_the_cool_down() -> None:
     ):
         connection = _Connection(SEEN, fail_on="feature_fallback_transactions")
         connection.error = error
-        reader = PostgresFallback(_returning(connection), {"KES": 2}, clock=lambda: 0.0)
+        reader = PostgresFallback(
+            _returning(connection), {"KES": 2}, country_of_currency=COUNTRIES, clock=lambda: 0.0
+        )
         with pytest.raises(FallbackUnavailableError):
             reader.account(ACCOUNT, AT)
         assert connection.closed
@@ -316,7 +327,9 @@ def test_a_read_waits_for_another_no_longer_than_the_statement_timeout() -> None
     connection = _Connection(SEEN)
     connection.slow_on = "feature_fallback_transactions"
     connection.slow_s = 0.6
-    reader = PostgresFallback(lambda: connection, {"KES": 2}, statement_timeout_ms=100)
+    reader = PostgresFallback(
+        lambda: connection, {"KES": 2}, country_of_currency=COUNTRIES, statement_timeout_ms=100
+    )
     slow = threading.Thread(target=lambda: reader.account(ACCOUNT, AT))
     slow.start()
     time.sleep(0.1)
@@ -338,7 +351,9 @@ def test_a_read_queued_behind_a_failed_connect_does_not_connect_again() -> None:
 
     # A lock wait (1 s) longer than the failed connect, so the second read gets the lock after
     # the first failed and must see the cool-down it started.
-    reader = PostgresFallback(blackhole, {}, statement_timeout_ms=1000)
+    reader = PostgresFallback(
+        blackhole, {}, country_of_currency=COUNTRIES, statement_timeout_ms=1000
+    )
     threads = [threading.Thread(target=lambda: _swallow(reader)) for _ in range(2)]
     for thread in threads:
         thread.start()
@@ -377,7 +392,9 @@ def test_a_session_that_cannot_roll_back_is_lost_on_both_paths() -> None:
     """The fourth review's unpinned paths: a rollback that raises means the session is gone, after
     a successful read (whose answer is still returned) and after a statement-level failure."""
     ok = _RollbackFails(SEEN)
-    reader = PostgresFallback(_returning(ok), {"KES": 2}, clock=lambda: 0.0)
+    reader = PostgresFallback(
+        _returning(ok), {"KES": 2}, country_of_currency=COUNTRIES, clock=lambda: 0.0
+    )
     assert reader.device_first_seen("tok_D", AT) == AT, "the answer was read before the rollback"
     assert ok.closed
     with pytest.raises(FallbackUnavailableError, match="failed recently"):
@@ -385,7 +402,9 @@ def test_a_session_that_cannot_roll_back_is_lost_on_both_paths() -> None:
 
     failing = _RollbackFails(SEEN, fail_on="feature_fallback_transactions")
     failing.error = _database_error("22012")
-    reader = PostgresFallback(_returning(failing), {"KES": 2}, clock=lambda: 0.0)
+    reader = PostgresFallback(
+        _returning(failing), {"KES": 2}, country_of_currency=COUNTRIES, clock=lambda: 0.0
+    )
     with pytest.raises(FallbackUnavailableError):
         reader.account(ACCOUNT, AT)
     assert failing.closed

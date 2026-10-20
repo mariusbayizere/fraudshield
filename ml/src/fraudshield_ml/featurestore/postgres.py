@@ -21,7 +21,7 @@ from __future__ import annotations
 import contextlib
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Protocol
@@ -68,17 +68,22 @@ class PostgresFallback:
     reused under a lock, and replaced after any failure.
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - two reference tables and three bounds, each a setting
         self,
         connect: Callable[[], Connection],
         minor_units: dict[str, int],
         *,
+        country_of_currency: Mapping[str, str],
         statement_timeout_ms: int = DEFAULT_STATEMENT_TIMEOUT_MS,
         cool_down_s: float = DEFAULT_COOL_DOWN_S,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._connect = connect
         self._minor_units = dict(minor_units)
+        #: The sender's country is derived from the currency, as serving and training derive it
+        #: (`Reference.account_country`), not taken from V67's column, which holds the institution's
+        #: country: the two disagree for a foreign-currency transaction (PB-154).
+        self._country_of_currency = dict(country_of_currency)
         self._timeout_ms = int(statement_timeout_ms)
         self._cool_down_s = float(cool_down_s)
         #: How long a read waits for another read's turn: the statement timeout. Past it the read
@@ -210,7 +215,7 @@ class PostgresFallback:
             amount_rwf,
             latitude,
             longitude,
-            account_country,
+            _institution_country,
             counterparty,
             counterparty_country,
             channel,
@@ -226,7 +231,7 @@ class PostgresFallback:
             amount_rwf=float(amount_rwf),
             latitude=float(latitude),
             longitude=float(longitude),
-            account_country=account_country.strip() if account_country else None,
+            account_country=self._country_of_currency.get(currency),
             counterparty_country=counterparty_country.strip() if counterparty_country else None,
             counterparty_id=counterparty,
             amount_minor=_minor(amount, self._minor_units.get(currency)),

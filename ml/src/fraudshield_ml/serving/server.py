@@ -259,6 +259,7 @@ def start_worker(config: WorkerConfig) -> Worker:
                     config.feature_store_database, config.feature_store_database_password or ""
                 ),
                 dict(reference.minor_units),
+                country_of_currency=reference.country_of_currency,
             )
         store = FeatureStore(
             _redis(config.feature_store_url, timeout=0.1), reference, fallback=fallback

@@ -272,7 +272,10 @@ class _PostgresUnderTest:
         self.db = db
         self.names = _Names()
         self.reader = PostgresFallback(
-            db.scorer, dict(REFERENCE.minor_units), statement_timeout_ms=10_000
+            db.scorer,
+            dict(REFERENCE.minor_units),
+            country_of_currency=REFERENCE.country_of_currency,
+            statement_timeout_ms=10_000,
         )
         self.sim_swaps = _Appending(self._swap)
         self.tiers = _Appending(self._tier)
