@@ -2,12 +2,17 @@
 \label{sec:evaluation}
 
 Unless a figure says otherwise, it is on the evaluation draw's test period (\nTestRows{} rows
-holding \nTestFraud{} confirmed fraud), for models trained on \nTrainUsed{} rows. The gate run's
-training rows hold \nGateTrainFraud{} confirmed fraud; the diagnostic battery's evidence file does
+holding \nTestFraud{} confirmed fraud). One design is reported at the gate's volume and at full volume. The declared
+gate model trains on \nTrainUsed{} rows, holding \nGateTrainFraud{} confirmed fraud; it is the model
+of every table built before the full-volume run. The full-volume model
+trains on all \nFvTrainRows{} rows of the training period, holding \nFvTrainFraud{} confirmed
+fraud, about \nFullVolumeFactor{} times as many, with validation and calibration splits enlarged
+to the whole of their periods (PB-66's run, pre-specified in repository history but not blind to the
+test period, which had been scored before; Section~\ref{sec:volume}); the diagnostic battery's evidence file does
 not record its training fraud count. The exceptions are the learning curve of
 Section~\ref{sec:volume}, which varies the training volume; the earlier-draw comparison in
-Section~\ref{sec:redundancy}; and the frontier of Section~\ref{sec:frontier}, which uses the earlier
-draw \texttt{6abde44e} and \nFrHeldOutRows{} held-out rows. The seed-variance comparison of the
+Section~\ref{sec:redundancy}; and the frontier of Section~\ref{sec:frontier}, which uses one
+booster on the diagnostic battery's cache of the same draw. The seed-variance comparison of the
 C-6 paragraph is for the uncalibrated combination of XGBoost and LightGBM; the gate's own seed
 figures are refits of the calibrated ensemble.
 
@@ -21,22 +26,27 @@ device fingerprint; that the narrow margin follows from it is a hypothesis we ha
 
 \begin{table}[htbp]
 \centering
-\caption{Ranking metrics of the calibrated ensemble, with the best single feature
-(\texttt{velocity\_ratio\_1h\_vs\_30d}) on the same rows and the margin over it, as the gate file
-computes it from unrounded values, so a margin can differ in its last digit from the difference of
-the rounded values shown. Draw
-\texttt{d8083dbc}, test period of \nTestRows{} rows holding \nTestFraud{} fraud, evidence commit
-\texttt{d40fca2}, source \texttt{docs/benchmarks/m4\_gate\_d8083dbc\_v3.txt}.}
+\caption{Ranking metrics of the calibrated ensemble at the gate's training volume and at full
+volume, with the best single feature (\texttt{velocity\_ratio\_1h\_vs\_30d}) on the same rows and
+the margin over it, as each gate file computes it from unrounded values, so a margin can differ in
+its last digit from the difference of the rounded values shown. Draw \texttt{d8083dbc}, test period
+of \nTestRows{} rows holding \nTestFraud{} fraud; sources
+\texttt{docs/benchmarks/m4\_gate\_d8083dbc\_v3.txt} (evidence commit \texttt{d40fca2}) and
+\texttt{docs/benchmarks/full\_volume\_gate\_d8083dbc.txt} (\texttt{fcec52c}). Intervals are row
+bootstraps; Table~\ref{tab:clustered} gives account-clustered ones for the gate model.}
 \label{tab:gate}
-\begin{tabular}{lrrr}
+\begin{tabular}{lrrrrr}
 \toprule
-Metric & Ensemble & Single feature & Margin \\
+ & \multicolumn{2}{c}{Ensemble} & & \multicolumn{2}{c}{Margin} \\
+Metric & Gate model & Full volume & Single feature & Gate & Full \\
 \midrule
-AUC-ROC & \nGateAUC{} \nGateAUCci & \nGateFloor & \nGateMargin \\
-Recall at \nFPRBudget{} FPR & \nGateRecallFPR{} \nGateRecallFPRci & \nGateRecallFPRFloor & \nGateRecallFPRMargin \\
-AUC, \texttt{MOBILE\_MONEY} & \nGateMM & \nGateMMFloor & \nGateMMMargin \\
-AUC, \texttt{USSD} & \nGateUSSD & \nGateUSSDFloor & \nGateUSSDMargin \\
-AUC, \texttt{AGENT\_BANKING} & \nGateAgent & \nGateAgentFloor & \nGateAgentMargin \\
+AUC-ROC & \nGateAUC{} & \nFvAUC{} & \nGateFloor & \nGateMargin & \nFvMargin \\
+ & \nGateAUCci & \nFvAUCci & & & \\
+Recall at \nFPRBudget{} FPR & \nGateRecallFPR{} & \nFvRecallFPR{} & \nGateRecallFPRFloor & \nGateRecallFPRMargin & \nFvRecallFPRMargin \\
+ & \nGateRecallFPRci & \nFvRecallFPRci & & & \\
+AUC, \texttt{MOBILE\_MONEY} & \nGateMM & \nFvMM & \nGateMMFloor & \nGateMMMargin & \nFvMMMargin \\
+AUC, \texttt{USSD} & \nGateUSSD & \nFvUSSD & \nGateUSSDFloor & \nGateUSSDMargin & \nFvUSSDMargin \\
+AUC, \texttt{AGENT\_BANKING} & \nGateAgent & \nFvAgent & \nGateAgentFloor & \nGateAgentMargin & \nFvAgentMargin \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -65,8 +75,19 @@ threshold with a false-positive rate at or below \nFPRBudget{} reaches the targe
 threshold does. On the run's ROC curve, plotted through \nRocPoints{} vertices, recall is
 \nRocLowRecall{} at a false-positive rate of \nRocLowFPR{} and \nRocHighRecall{} at \nRocHighFPR{},
 so it first reaches \nTargetRecall{} somewhere between those rates, at more than the budget
-the specification's own recall-at-budget metric allows. The miss does not close with more training
-data over the volumes measured (Section~\ref{sec:volume}).
+the specification's own recall-at-budget metric allows.
+
+\textbf{At full volume the miss remains.} Trained on all \nFvTrainRows{} training-period rows, the
+same design reaches an AUC of \nFvAUC{} \nFvAUCci{} (\nFvSeedAUC{} over \nSeeds{} seeds), a margin of
+\nFvMargin{} over the same floor; its recall at the flag threshold is \nFvRecallSix{}
+\nFvRecallSixci{} at seed 1 and \nFvSeedRecallSix{} over \nSeeds{} seeds, its false-negative rate
+\nFvFNR{}, against targets of \nTargetRecall{} and \nTargetFNR{}; F1 is \nFvFone{} and precision at
+the flag threshold \nFvPrecSix{}. The same metrics fail, recall and false-negative rate at the flag
+threshold, and \nFvPassed{} of the
+\nGateMeasured{} pass. Its LightGBM member stopped early after \nFvLgbRounds{} boosting rounds and
+its XGBoost member after \nFvXgbRounds{}; why LightGBM stopped so early is not known, and nothing
+was tuned after it was seen. Section~\ref{sec:volume} reads this against the rule fixed before the
+run.
 
 Precision at the \nFPRBudget{} budget is \nGatePrecFPR{}. It is read at the threshold where the
 realised false-positive rate is \nGateRealisedFPR{}, at which this test period's base rate caps
@@ -137,32 +158,35 @@ CD & \nCoRowsCD & \nLocoCDf & -- & \nLocoCDin \\
 \end{tabular}
 \end{table}
 
-\paragraph{Baselines.} Table~\ref{tab:baselines}. The status-quo rule engine is far below every
-learned model. DeLong's test detects no difference between the ensemble and random forest
-($p = \nBaseRFp$) or XGBoost alone ($p = \nBaseXGBp$); that is an absence of a detected difference,
-not a demonstration of equivalence. Logistic regression comes within \nBaseLRGap{} of the ensemble's
-AUC (\nBaseLR{} against \nGateAUC{}, a difference DeLong's test detects, $p = \nBaseLRp$).
-\textbf{No accuracy advantage of the ensemble over a single XGBoost model was detected here.} It is
-kept because the specification requires it (resolution D-05); whether it earns its cost on real data
-is open.
+\paragraph{Baselines.} Table~\ref{tab:baselines}. Each difference from the ensemble's AUC carries a
+paired account-clustered interval: both models are scored on the same resample of whole accounts.
+No $p$-value is reported: the tests that produce them treat rows as independent. The status-quo rule engine is far below every learned model. The interval for
+random forest spans both signs, so no difference from the ensemble is detected; that is not a
+demonstration of equivalence. XGBoost alone ranks the test rows as the ensemble does, to the precision
+printed: its difference is \nBaseXGBDiff{} with an interval of \nBaseXGBDiffci{}. Logistic
+regression comes within \nBaseLRGap{} of the ensemble's AUC, a difference whose interval,
+\nBaseLRDiffci{}, lies wholly below the ensemble. \textbf{No accuracy advantage of the ensemble over a single XGBoost
+model was detected here, at either training volume.} It is kept because the specification requires
+it (resolution D-05); whether it earns its cost on real data is open.
 
 \begin{table}[htbp]
 \centering
 \caption{Baselines on the same test rows (draw \texttt{d8083dbc}, \nTestRows{} rows holding
-\nTestFraud{} fraud, evidence commit \texttt{d40fca2}, source
-\texttt{docs/benchmarks/m4\_gate\_d8083dbc\_v3.txt}): AUC, recall at \nFPRBudget{} FPR, and DeLong
-$p$ against the ensemble.}
+\nTestFraud{} fraud): AUC and recall at \nFPRBudget{} FPR at the gate's training volume
+(\texttt{docs/benchmarks/m4\_gate\_d8083dbc\_v3.txt}), the AUC minus the ensemble's with a paired
+account-clustered \nIntervalLevel{} interval (\texttt{evidence/round2\_gate\_d8083dbc.txt}), and the AUC of the
+same baseline at full volume (\texttt{docs/benchmarks/full\_volume\_gate\_d8083dbc.txt}).}
 \label{tab:baselines}
-\begin{tabular}{lrrr}
+\begin{tabular}{lrrrr}
 \toprule
-Model & AUC & Recall at \nFPRBudget{} FPR & DeLong $p$ \\
+Model & AUC & Recall at \nFPRBudget{} FPR & Minus ensemble, clustered & AUC, full volume \\
 \midrule
-Status-quo rule engine & \nBaseRules & \nBaseRulesR & $\nBaseRulesp$ \\
-Logistic regression & \nBaseLR & \nBaseLRR & \nBaseLRp \\
-Random forest & \nBaseRF & \nBaseRFR & \nBaseRFp \\
-XGBoost alone & \nBaseXGB & \nBaseXGBR & \nBaseXGBp \\
-LightGBM alone & \nBaseLGB & \nBaseLGBR & $\nBaseLGBp$ \\
-Isolation Forest alone & \nBaseIF & \nBaseIFR & $\nBaseIFp$ \\
+Status-quo rule engine & \nBaseRules & \nBaseRulesR & \nBaseRulesDiff{} \nBaseRulesDiffci & \nFvBaseRules \\
+Logistic regression & \nBaseLR & \nBaseLRR & \nBaseLRDiff{} \nBaseLRDiffci & \nFvBaseLR \\
+Random forest & \nBaseRF & \nBaseRFR & \nBaseRFDiff{} \nBaseRFDiffci & \nFvBaseRF \\
+XGBoost alone & \nBaseXGB & \nBaseXGBR & \nBaseXGBDiff{} \nBaseXGBDiffci & \nFvBaseXGB \\
+LightGBM alone & \nBaseLGB & \nBaseLGBR & \nBaseLGBDiff{} \nBaseLGBDiffci & \nFvBaseLGB \\
+Isolation Forest alone & \nBaseIF & \nBaseIFR & \nBaseIFDiff{} \nBaseIFDiffci & \nFvBaseIF \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -201,18 +225,24 @@ the volume.
 \centering
 \caption{Recall at the flag threshold against training volume (draw \texttt{d8083dbc}, the gate's
 \nTestRows{} test rows holding \nTestFraud{} fraud, \nResamples{} resamples, \nSeeds{} seeds;
-seed 1 with its interval, then the mean and standard deviation over the seeds). Sources:
+seed 1 with its row-bootstrap and account-clustered intervals, then the mean and standard
+deviation over the seeds). Sources:
 \texttt{docs/\allowbreak benchmarks/\allowbreak m4\_\allowbreak learning\_\allowbreak curve\_\allowbreak \{30k,60k,120k,240k\}\_\allowbreak d8083dbc.txt} (evidence commits
-\texttt{c59da11} and \texttt{6b36fc5}).}
+\texttt{c59da11} and \texttt{6b36fc5}); the clustered intervals come from rebuilding the same
+caches and fits, which reproduced every seed-1 value
+(\texttt{evidence/\allowbreak round2\_\allowbreak curve\_\allowbreak d8083dbc.txt}); the last row is the full-volume run
+(\texttt{docs/benchmarks/full\_volume\_gate\_d8083dbc.txt}), whose interval is a row bootstrap only.}
 \label{tab:volume}
-\begin{tabular}{lrr}
+\begin{tabular}{lrrrr}
 \toprule
-Training rows (fraud) & Recall at \nFlagThreshold{}, seed 1 & Over \nSeeds{} seeds \\
+Training rows (fraud) & At seed 1 & Row bootstrap & Account-clustered & Over \nSeeds{} seeds \\
 \midrule
-\nLcTrainA{} (\nLcFraudA) & \nLcRecallA{} \nLcRecallciA & $\nLcSeedRecallA$ \\
-\nLcTrainB{} (\nLcFraudB) & \nLcRecallB{} \nLcRecallciB & $\nLcSeedRecallB$ \\
-\nLcTrainC{} (\nLcFraudC) & \nLcRecallC{} \nLcRecallciC & $\nLcSeedRecallC$ \\
-\nLcTrainD{} (\nLcFraudD) & \nLcRecallD{} \nLcRecallciD & $\nLcSeedRecallD$ \\
+\nLcTrainA{} (\nLcFraudA) & \nLcRecallA{} & \nLcRecallciA & \nLcCluciA & $\nLcSeedRecallA$ \\
+\nLcTrainB{} (\nLcFraudB) & \nLcRecallB{} & \nLcRecallciB & \nLcCluciB & $\nLcSeedRecallB$ \\
+\nLcTrainC{} (\nLcFraudC) & \nLcRecallC{} & \nLcRecallciC & \nLcCluciC & $\nLcSeedRecallC$ \\
+\nLcTrainD{} (\nLcFraudD) & \nLcRecallD{} & \nLcRecallciD & \nLcCluciD & $\nLcSeedRecallD$ \\
+\midrule
+\nFvTrainRows{} (\nFvTrainFraud) & \nFvRecallSix{} & \nFvRecallSixci & -- & $\nFvSeedRecallSix$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -230,9 +260,23 @@ seed-1 interval on the curve. Across the whole \nLcVolumeFactor{}-fold range the
 rises at every step, each step smaller than one standard deviation; in all it rises by
 \nLcSeedGain{}, which is more than the standard deviation at every size except \nLcTrainB{} rows,
 while every interval stays below the target.
-\textbf{Over \nLcTrainA{} to \nLcTrainD{} training rows of this draw, and for this model, the recall
-shortfall is not closed by training volume.} Whether a different model, or features that do not
-degrade with corpus depth, would reach the target is not tested.
+Clustering the intervals by account changes none of this: each clustered interval is barely wider
+than its row interval, and every one still ends below the target.
+
+\textbf{Full volume.} PB-66 then trained the same design on the whole training period,
+\nFvTrainRows{} rows, about \nFullVolumeFactor{} times the gate's \nTrainUsed{}, under a rule fixed
+before that run (its pre-specification, \texttt{docs/research/preregistration\_pb66\_full\_volume.md}):
+volume would be said to move recall past the \nLcTrainD{}-row point only if the full-volume seed-1
+interval lay entirely above \nFvRuleBound{} and the mean over \nSeeds{} seeds exceeded \nFvRuleMean{} by more
+than \nFvRuleMargin{}. Neither holds: the seed-1 interval is \nFvRecallSixci{} and the mean
+\nFvSeedRecallSix{}. The rule was stated knowing it could not be met inside PB-66's own prediction:
+it needs a mean above \nFvRuleNeeded{}, and the predicted range topped out at \nFvPredTop{}. Full
+volume also changes more than volume: the validation and calibration splits grow, and
+\nFvTruncated{} of the training rows (a share of \nFvTruncatedShare{}) fall within
+\nFvTruncatedDays{} days of the draw's first day, so their windowed history is truncated (PB-76).
+\textbf{At every volume measured, up to all \nFvTrainRows{} training rows of this draw, and for this
+model, the recall shortfall is not closed by training volume.} Whether a different model, or features
+that do not degrade with corpus depth, would reach the target is not tested.
 
 The prediction was partly wrong, and is reported with the others in Table~\ref{tab:predictions}.
 It said recall at the flag threshold would rise to between \nLcPredLow{} and \nLcPredHigh{} at the
@@ -325,8 +369,9 @@ East African mobile money data; the claim is unverified (claims register, C-4), 
 replacement was to compare a card-style feature set with the full set. Restricting the production
 ensemble to the groups we assume a card-fraud model would carry (velocity, amount, temporal,
 geographic, device and account profile), which drops the counterparty, agent, corridor and
-synthetic-identity groups, changes AUC by \nAblCardD{}, to \nAblCardAUC{} (DeLong
-$p = \nAblCardp$) and recall at the \nFPRBudget{} budget from \nGateRecallFPR{} to \nAblCardR{}.
+synthetic-identity groups, changes AUC by \nAblCardD{}, to \nAblCardAUC{} (paired account-clustered
+interval \nAblCardDiffci{}), and recall at the \nFPRBudget{} budget from \nGateRecallFPR{} to
+\nAblCardR{}.
 The effect is real on this benchmark, and its size is exactly why it cannot answer the claim. The
 dropped groups include counterparty, the strongest group on its own (\nGroupCounterparty{}) and the
 one whose removal costs most, \nGroupMaxDrop{} on the diagnostic model, and the generator writes counterparty
@@ -339,13 +384,14 @@ a model built on other transactions and applied to East African ones, and a feat
 and tested on one synthetic population does not test a change of population at any effect size: a
 larger drop would say only that the generator puts more of its fraud into counterparty structure.
 The specification's other ablations of the production ensemble change AUC by less than the card-style
-one: without agent features by \nAblAgentD{} (DeLong $p = \nAblAgentp$), without the corridor
-feature by \nAblCorridorD{} ($p = \nAblCorridorp$), without round-sum awareness by \nAblRoundD{}
-($p = \nAblRoundp$; a feature computed from assumed denominations, Section~\ref{sec:limitations}),
-without month-end awareness by \nAblMonthD{} ($p = \nAblMonthp$), and without USSD-aware device
-handling by \nAblUSSDD{} ($p = \nAblUSSDp$). The agent and corridor differences are detected by
-DeLong's test. They are reported as measured on this benchmark, not as evidence of what matters in
-production.
+one, each given with its paired account-clustered interval: without agent features by \nAblAgentD{} \nAblAgentDiffci{}, without the corridor
+feature by \nAblCorridorD{} \nAblCorridorDiffci{}, without round-sum awareness by \nAblRoundD{}
+\nAblRoundDiffci{} (a feature computed from assumed denominations, Section~\ref{sec:limitations}),
+without month-end awareness by \nAblMonthD{} \nAblMonthDiffci{}, and without USSD-aware device
+handling by \nAblUSSDD{} \nAblUSSDDiffci{}. The agent and corridor intervals lie wholly below no
+change, so those differences are detected with the clustering taken into account; the round-sum
+interval reaches no change at its upper end, and the month-end and USSD intervals span it. They are
+reported as measured on this benchmark, not as evidence of what matters in production.
 
 \subsection{Calibration and explanation}
 
@@ -353,7 +399,18 @@ With equal-width bins the row-weighted calibration error says little at this bas
 diagnostic model, \nBatLowBinRows{} of the \nBatTestRows{} test rows score below
 \nBatLowBinTop{}, in the lowest bin, where no decision is made. On the diagnostic model we therefore also
 report it in the decision region (score at or above the flag threshold, \nBatDecisionRows{} rows):
-\nBatECEDecision{}, against \nBatECEAll{} over all rows. The additivity error of the exact TreeSHAP
+\nBatECEDecision{}, against \nBatECEAll{} over all rows.
+
+The production ensemble, measured with the same definitions (the same reliability bins and decision
+region), is calibrated less well where decisions are made than the diagnostic model, while its
+row-weighted error is of the same small size. At the gate's training volume its decision region holds
+\nGateCalRegionRows{} test rows, \nGateCalRegionFraud{} of them fraud, with an expected calibration
+error of \nGateCalRegionECE{}, against \nGateCalECEAll{} over all rows; at full volume the region holds
+\nFvCalRegionRows{} rows (\nFvCalRegionFraud{} fraud) and the error is \nFvCalRegionECE{}, against
+\nFvCalECEAll{} over all rows (\texttt{evidence/round2\_gate\_d8083dbc.txt},
+\texttt{evidence/round2\_full\_volume\_d8083dbc.txt}). The production model is calibrated by isotonic
+regression on its own calibration split, the diagnostic model by Platt scaling (ADR 0029), so the
+comparison is between calibration methods as well as between models. The additivity error of the exact TreeSHAP
 contributions, which must sum to the model's margin, is \nBatAdditivity{}.
 
 \subsection{The latency--explainability frontier}
@@ -362,16 +419,19 @@ contributions, which must sum to the model's margin, is \nBatAdditivity{}.
 Tree complexity is a latency-constrained hyperparameter here: the specification rejects a configuration whose
 single-request \nPctlTail{}th-percentile latency, model plus exact TreeSHAP, exceeds \nLatencyPNineNineShap{}~ms
 (resolution D-16). Table~\ref{tab:frontier} is the trade-off, measured one request at a time,
-\nFrRequests{} timed requests per configuration after a warm-up, on the development laptop.
+\nFrRequests{} timed requests per configuration after a warm-up, on draw \texttt{d8083dbc} and on a
+GitHub-hosted runner, a virtual machine on shared hardware. It replaces an earlier run on the development
+laptop and the earlier draw \texttt{6abde44e}, so that no table in this paper comes from another
+draw; the command was the same.
 
 \begin{table}[htbp]
 \centering
-\caption{Accuracy and median single-request latency, in milliseconds, across tree complexity (one XGBoost booster,
-draw \texttt{6abde44e}, \nFrHeldOutRows{} held-out rows holding \nFrHeldOutFraud{} fraud. The SHAP
-cost is the median with an explanation minus the median without, a difference of medians;
-\nFrRequests{} timed requests per configuration, evidence commit \texttt{95b722c}, source
-\texttt{docs/benchmarks/m4\_frontier\_6abde44e.txt}. Milliseconds
-are from the development laptop and are not gate figures (ADR 0010).}
+\caption{Accuracy and median single-request latency, in milliseconds, across tree complexity (one
+XGBoost booster on the diagnostic battery's cache of draw \texttt{d8083dbc}, scored on its test
+rows). The SHAP cost is the median with an explanation minus the median without, a difference of
+medians; \nFrRequests{} timed requests per configuration on a GitHub-hosted runner (\nFrontMachine), source
+\texttt{evidence/\allowbreak round2\_\allowbreak frontier\_\allowbreak d8083dbc.txt}. The milliseconds are not gate figures
+(ADR 0010).}
 \label{tab:frontier}
 \begin{tabular}{rrrrrr}
 \toprule
@@ -401,14 +461,14 @@ From the smallest configuration to the largest, AUC changes by \nFrontAUCDelta{}
 computes it from unrounded values (the rounded values in Table~\ref{tab:frontier} differ by
 \nFrontAUCDeltaRounded{}), inside every interval, while the cost of explaining a decision, as a difference of medians, grows about
 \nFrontRatio-fold, from \nFrontShapSmall{} to \nFrontShapLarge{}~ms; prediction alone grows from
-\nFrontPredSmall{} to \nFrontPredLarge{}~ms. The accuracy side is a property of this easy benchmark
+\nFrPredA{} to \nFrPredE{}~ms. The accuracy side is a property of this easy benchmark
 and should not be generalised. We infer that the latency side is a property of the model and the
 explanation algorithm rather than of the data: exact TreeSHAP costs $O(TLD^2)$ for $T$ trees with at
 most $L$ leaves and depth $D$ \cite{lundberg2020trees}. The leaves a tree actually grows depend on
 the data, and only this benchmark was measured, so that inference is not tested.
 
-The result needs to be kept in proportion. Every configuration explains a decision in a few
-milliseconds at the median on the development laptop. That is the cost of one booster's
+The result needs to be kept in proportion. Every configuration explains a decision in about a
+millisecond or less at the median on the runner. That is the cost of one booster's
 explanation in one process; the serving path's latency against the specification's budget is
 \deferred{M10}, so whether explanation cost binds at throughput or at the latency of a single request
 is not established here. The \nFrontRatio-fold ratio depends on the grid: it is measured from the cheapest configuration tried, and a different smallest configuration
@@ -416,28 +476,85 @@ would give a different ratio; the growth with trees and depth is the finding, no
 it is one machine's median. If the growth holds on serving hardware, then on data like this the explanation
 budget, not the accuracy target, would choose the tree configuration; that is not yet shown.
 
-\textbf{We report the median only.} In \nFrontNegative{} configurations the measured \nPctlTail{}th
-percentile shows a \emph{negative} explanation cost, which is impossible: explaining cannot be
-faster than not explaining. We attribute the tail on this shared machine to scheduler jitter rather than
-model complexity; the jitter itself was not measured. The \nLatencyPNineNineShap{}~ms constraint
-therefore cannot be applied from this run; the \nPctlTail{}th-percentile frontier on a dedicated machine is
-\deferred{M10}. The run is also limited to one model family (not the ensemble) and one process (not
+\textbf{We report the median only.} In the earlier laptop run, \nFrontNegative{} configurations
+showed a \emph{negative} explanation cost at the \nPctlTail{}th percentile, which is impossible:
+explaining cannot be faster than not explaining. We attributed that tail to scheduler jitter on a
+shared machine; the jitter itself was not measured. The runner's tail figures, in the evidence file,
+are from a virtual machine on shared hardware, so they are not used either. The
+\nLatencyPNineNineShap{}~ms constraint therefore cannot be applied from either run; the
+\nPctlTail{}th-percentile frontier on a dedicated machine is \deferred{M10}. The run is also limited to one model family (not the ensemble) and one process (not
 the specified multi-process service), and it pays the SHAP cost on every row, whereas in serving it
 is paid only on flagged transactions.
+
+\subsection{Operational measures at full volume}
+\label{sec:operational}
+
+PB-66 measured the full-volume model where an operator would read it, on the same test period
+(\texttt{docs/benchmarks/pb66\_d8083dbc.txt}), each figure beside the best single feature on the
+same rows. Like every result of that run, these were specified before it ran and are not blind to a
+test period scored before.
+
+\paragraph{Precision and recall in the alert region.} The PR-AUC is \nPbPRAUC{} \nPbPRAUCci{},
+against \nPbPRBase{} \nPbPRBaseci{} for the single feature; at this base rate it says more about the
+alerts an analyst sees than the AUC does.
+
+\paragraph{An alert budget, assumed.} The specification states no analyst capacity, and the capacity
+model its resolution D-10 calls for does not exist, so no single budget can be quoted without
+inventing it. Table~\ref{tab:budgets} reads the model at \nBudKA{}, \nBudKB{}, \nBudKC{} and
+\nBudKD{} alerts a day, \textbf{all assumed}, over the \nPbDays{} whole days of the test period; the
+smallest is below the period's typical daily fraud count, so it measures ranking rather than volume.
+Precision is shown beside its ceiling, the precision a perfect ranking would reach given that
+day's frauds, because at the larger budgets the ceiling, not the model, limits it. The outcomes are
+amounts, not costs: the fraud amount the alerts catch and the legitimate amount they hold for review,
+in Rwandan francs, with no cost assumed for either. The fewest-alerts row missed its prediction:
+frauds arrive in bursts, so many days hold fewer frauds than the budget, and \nBudATies{} of its alerts
+were decided by ties at the cut, because calibrated scores bunch together at the top.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{The full-volume model at assumed alert budgets (\nPbDays{} whole test days; precision
+intervals resampled by day). Ceiling: the precision of a perfect ranking at that budget.
+RWF: Rwandan francs over the period. Single feature: \texttt{velocity\_ratio\_1h\_vs\_30d} at the
+same budget. Source \texttt{docs/benchmarks/pb66\_d8083dbc.txt}.}
+\label{tab:budgets}
+\begin{tabular}{rrrrrrrrr}
+\toprule
+\multicolumn{2}{c}{Alerts} & \multicolumn{4}{c}{Model} & \multicolumn{2}{c}{Amount, RWF} & Single feature \\
+a day & per \nPerThousand{} & Precision & Ceiling & Share & Recall & Fraud caught & Legitimate held & precision, recall \\
+\midrule
+\nBudKA & \nBudAPer & \nBudAPrec{} \nBudAPrecci & \nBudACeil & \nBudAShare & \nBudARecall{} \nBudARecallci & \nBudAFraudRwf & \nBudALegitRwf & \nBaseBudAPrec, \nBaseBudARecall \\
+\nBudKB & \nBudBPer & \nBudBPrec{} \nBudBPrecci & \nBudBCeil & \nBudBShare & \nBudBRecall{} \nBudBRecallci & \nBudBFraudRwf & \nBudBLegitRwf & \nBaseBudBPrec, \nBaseBudBRecall \\
+\nBudKC & \nBudCPer & \nBudCPrec{} \nBudCPrecci & \nBudCCeil & \nBudCShare & \nBudCRecall{} \nBudCRecallci & \nBudCFraudRwf & \nBudCLegitRwf & \nBaseBudCPrec, \nBaseBudCRecall \\
+\nBudKD & \nBudDPer & \nBudDPrec{} \nBudDPrecci & \nBudDCeil & \nBudDShare & \nBudDRecall{} \nBudDRecallci & \nBudDFraudRwf & \nBudDLegitRwf & \nBaseBudDPrec, \nBaseBudDRecall \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{By month (claims register, C-5).} The test period covers the end of one month and the
+whole of the next and the one after. Recall at the flag threshold is \nMonNovRecall{} \nMonNovRecallci{} in the first whole month
+(\nMonNovFrauds{} frauds) and \nMonDecRecall{} \nMonDecRecallci{} in the second (\nMonDecFrauds{});
+the difference, \nMonDiff{} \nMonDiffci{}, includes no change, so no change between the months is
+detectable at this size. The partial month (\nMonOctFrauds{} frauds) reads \nMonOctRecall{}
+\nMonOctRecallci{}. \textbf{A span this short cannot test C-5's claim of a yearly degradation}, and the
+generator has no deliberate month-to-month drift apart from the novel variant held out in time, so
+the claim remains unverified by this benchmark.
+
+\paragraph{Cost curve.} The Drummond--Holte cost curve uses no assumed costs: it plots the normalised
+expected cost, minimised over thresholds, against the ratio of the costs of a missed fraud and a false
+alarm. Over the range of ratios PB-66 evaluates (\nPbDHLow{} to \nPbDHHigh{} in its probability-cost
+terms) the model is below the trivial classifier everywhere; at equal costs its normalised cost is \nPbDHModel{},
+against \nPbDHBase{} for the single feature. A normalised curve hides the absolute amounts, which is
+why Table~\ref{tab:budgets} gives them.
+
+\paragraph{Reliability by channel.} PB-66 also tabulates predicted against observed fraud rates in
+equal-width bins for each channel. They are descriptive, with no prediction attached, and are given
+in the evidence file rather than here.
 
 \subsection{What this evaluation does not yet report}
 
 \begin{itemize}
-  \item Precision at a fixed analyst alert budget, the operational number: \notyet{M4 follow-up}.
-  \item Performance by month of the test period (claims register, C-5): \notyet{M4 follow-up}.
-  \item The cost curve of fraud loss prevented against legitimate transactions blocked and
-        reviews required: \notyet{M4 follow-up}.
-  \item Leave-one-fraud-type-out and the value of Isolation Forest routing for novelty:
-        \notyet{M4 follow-up}.
-  \item Training on the full training period rather than a sample of it (Section~\ref{sec:method}):
-        \notyet{M4 follow-up}.
-  \item The fairness report the specification requires (Section~\ref{sec:ethics}):
-        \notyet{M4 follow-up}.
+  \item The value of Isolation Forest routing for novelty: not measured.
     \item Shadow-mode AUC delta and gate-admissible scoring latency of the serving path: measured only
         on shared development hardware or not at all (ADR 0035), \deferred{M10}.
   \item End-to-end decision latency and throughput at the specified load: measured only on shared

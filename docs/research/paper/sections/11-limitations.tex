@@ -123,14 +123,14 @@ and the gate measurement is \deferred{M10}.
 
 \paragraph{Intervals assume independence the data do not have.} Fraud on this benchmark is staged as
 multi-row incidents on one account, and an account's rows share its history, so test rows are not
-independent. For the gate metrics, the diagnostic model's group AUCs and the variant recalls, an
-account-clustered bootstrap from a reproduction of both models is reported beside the published
-intervals; it widens them little except for USSD's AUC (Table~\ref{tab:clustered}), and the novel
-variant's \nNovelRows{} rows rest on \nNovelAccounts{} accounts. Every other interval in the paper
-(the learning curve, leave-one-country-out, the single-feature floor, the baselines' DeLong tests, the
-frontier and the earlier-draw battery) treats rows as independent and was not re-computed, so each is
-narrower than it should be by an amount not measured, and comparisons that rest on those intervals
-not overlapping are weaker than they read.
+independent. For the gate metrics, the diagnostic model's group AUCs, the variant recalls, the
+learning curve, leave-one-country-out, the single-feature floor and the differences between models,
+an account-clustered bootstrap from reproductions of the models is reported beside the row intervals;
+it widens them little except for USSD's AUC (Table~\ref{tab:clustered}), and the novel variant's
+\nNovelRows{} rows rest on \nNovelAccounts{} accounts. The intervals of the earlier-draw battery and
+of the full-volume model's evidence file treat rows as independent and were not re-computed, so each
+is narrower than it should be by an amount not measured; the frontier reports medians without
+intervals.
 
 \paragraph{The diagnostic model is untuned, and overfit where it was measured.} Its overfitting was measured on the velocity
 group alone and is inferred, not measured, for the others: on the velocity group its test AUC

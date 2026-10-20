@@ -161,8 +161,6 @@
 \newcommand{\nBaseXGB}{\meas{0.970}}
 \newcommand{\nBaseLGB}{\meas{0.952}}
 \newcommand{\nBaseIF}{\meas{0.943}}
-\newcommand{\nBaseRFp}{\meas{0.21}}
-\newcommand{\nBaseXGBp}{\meas{0.67}}
 
 % Battery, E1-corrected: docs/benchmarks/m4_battery_d8083dbc_e1.txt (evidence commit d40fca2),
 % one untuned XGBoost, 38 features, trained on 30,000 rows.
@@ -210,12 +208,10 @@
 % Frontier: docs/benchmarks/m4_frontier_6abde44e.txt (evidence commit 95b722c), draw 6abde44e,
 % dev-laptop-01 (docs/benchmarks/hardware.md), 900 timed single requests per configuration.
 % p50 only; the p99 columns are not measurement on this machine (ADR 0010).
-\newcommand{\nFrontShapSmall}{\meas{0.08}}
-\newcommand{\nFrontShapLarge}{\meas{2.80}}
-\newcommand{\nFrontPredSmall}{\meas{0.48}}
-\newcommand{\nFrontPredLarge}{\meas{0.56}}
-\newcommand{\nFrontAUCDelta}{\meas{-0.004}}
-\newcommand{\nFrontRatio}{\meas{35}}
+\newcommand{\nFrontShapSmall}{\meas{0.03}}
+\newcommand{\nFrontShapLarge}{\meas{0.84}}
+\newcommand{\nFrontAUCDelta}{\meas{-0.003}}
+\newcommand{\nFrontRatio}{\meas{28}}
 \newcommand{\nFrontNegative}{\meas{2 of 5}}
 
 % ---------------------------------------------------------------------------------------------
@@ -261,10 +257,6 @@
 \newcommand{\nGateShapCov}{\meas{1.000}}
 \newcommand{\nGatePrecSix}{\meas{0.927}}
 \newcommand{\nGateSeedRecallSix}{\meas{\ensuremath{0.7440 \pm 0.0410}}}
-\newcommand{\nBaseRulesp}{\meas{\ensuremath{1.2 \times 10^{-223}}}}
-\newcommand{\nBaseLRp}{\meas{0.0049}}
-\newcommand{\nBaseLGBp}{\meas{\ensuremath{2.7 \times 10^{-8}}}}
-\newcommand{\nBaseIFp}{\meas{\ensuremath{4.8 \times 10^{-20}}}}
 \newcommand{\nBaseRulesR}{\meas{0.019}}
 \newcommand{\nBaseLRR}{\meas{0.815}}
 \newcommand{\nBaseRFR}{\meas{0.874}}
@@ -278,7 +270,6 @@
 \newcommand{\nAblMonthD}{\meas{-0.0008}}
 \newcommand{\nAblCardD}{\meas{-0.0420}}
 \newcommand{\nAblCardAUC}{\meas{0.928}}
-\newcommand{\nAblCardp}{\meas{\ensuremath{2.6 \times 10^{-23}}}}
 \newcommand{\nAblCardR}{\meas{0.677}}
 % ML-GATE-05 as a count: its unrounded value in metrics.json times the legitimate test rows.
 \newcommand{\nTestLegit}{\meas{100{,}924}}
@@ -305,11 +296,11 @@
 \newcommand{\nGroupCorridor}{\meas{0.507}}
 \newcommand{\nGroupWithoutCounterparty}{\meas{0.938}}
 % Frontier rows (m4_frontier_6abde44e.txt): AUC, predict p50 (ms), +SHAP p50 (ms), SHAP cost.
-\newcommand{\nFrAucA}{\meas{0.995}}\newcommand{\nFrPredA}{\meas{0.48}}\newcommand{\nFrShapA}{\meas{0.56}}\newcommand{\nFrCostA}{\meas{0.08}}
-\newcommand{\nFrAucB}{\meas{0.992}}\newcommand{\nFrPredB}{\meas{0.48}}\newcommand{\nFrShapB}{\meas{0.81}}\newcommand{\nFrCostB}{\meas{0.33}}
-\newcommand{\nFrAucC}{\meas{0.991}}\newcommand{\nFrPredC}{\meas{0.49}}\newcommand{\nFrShapC}{\meas{1.49}}\newcommand{\nFrCostC}{\meas{1.00}}
-\newcommand{\nFrAucD}{\meas{0.990}}\newcommand{\nFrPredD}{\meas{0.52}}\newcommand{\nFrShapD}{\meas{2.38}}\newcommand{\nFrCostD}{\meas{1.86}}
-\newcommand{\nFrAucE}{\meas{0.990}}\newcommand{\nFrPredE}{\meas{0.56}}\newcommand{\nFrShapE}{\meas{3.36}}\newcommand{\nFrCostE}{\meas{2.80}}
+\newcommand{\nFrAucA}{\meas{0.971}}\newcommand{\nFrPredA}{\meas{0.14}}\newcommand{\nFrShapA}{\meas{0.18}}\newcommand{\nFrCostA}{\meas{0.03}}
+\newcommand{\nFrAucB}{\meas{0.974}}\newcommand{\nFrPredB}{\meas{0.15}}\newcommand{\nFrShapB}{\meas{0.27}}\newcommand{\nFrCostB}{\meas{0.13}}
+\newcommand{\nFrAucC}{\meas{0.972}}\newcommand{\nFrPredC}{\meas{0.15}}\newcommand{\nFrShapC}{\meas{0.51}}\newcommand{\nFrCostC}{\meas{0.36}}
+\newcommand{\nFrAucD}{\meas{0.969}}\newcommand{\nFrPredD}{\meas{0.16}}\newcommand{\nFrShapD}{\meas{0.74}}\newcommand{\nFrCostD}{\meas{0.57}}
+\newcommand{\nFrAucE}{\meas{0.968}}\newcommand{\nFrPredE}{\meas{0.17}}\newcommand{\nFrShapE}{\meas{1.01}}\newcommand{\nFrCostE}{\meas{0.84}}
 \newcommand{\nFrRequests}{\meas{900}}
 % SRS 2.3 claim, UNVERIFIED (claims register C-6); quoted only to report the measurement that
 % replaces it.
@@ -517,9 +508,6 @@
 \newcommand{\nLcCorpusPlanned}{\meas{360{,}000}}  % notebook, PB-67 design change
 \newcommand{\nLcRealFprA}{\meas{0.0068}}\newcommand{\nLcRealFprB}{\meas{0.0030}}
 \newcommand{\nLcRealFprC}{\meas{0.0082}}\newcommand{\nLcRealFprD}{\meas{0.0026}}
-\newcommand{\nAblAgentp}{\meas{0.01}}\newcommand{\nAblCorridorp}{\meas{0.015}}
-\newcommand{\nAblRoundp}{\meas{0.073}}\newcommand{\nAblMonthp}{\meas{0.51}}
-\newcommand{\nAblUSSDp}{\meas{0.7}}
 \newcommand{\nBatLowBinRows}{\meas{100{,}798}}  % battery: rows scoring in [0.0, 0.1)
 \newcommand{\nBatLowBinTop}{\meas{0.1}}
 \newcommand{\nEarlyHeldOutRows}{\meas{60{,}000}}  % earlier battery, m4_battery.md
@@ -576,7 +564,7 @@
 \newcommand{\nRevPriorThreshold}{\meas{3}}
 \newcommand{\nSeedSdRelXGB}{\meas{+0.62\%}}   % derived from the seed-variance file's per-seed AUCs
 \newcommand{\nSeedSdRelLGB}{\meas{-12.49\%}}
-\newcommand{\nFrontAUCDeltaRounded}{\meas{0.005}}  % derived: rounded AUC of config A minus E
+\newcommand{\nFrontAUCDeltaRounded}{\meas{0.003}}  % derived: rounded AUC of config A minus E
 
 % ---------------------------------------------------------------------------------------------
 % Account-clustered intervals and the velocity diagnostic (evidence/clustered_intervals_d8083dbc.txt,
@@ -599,3 +587,458 @@
 \newcommand{\nVelPeak}{\meas{0.875}}\newcommand{\nVelPeakRound}{\meas{25}}
 \newcommand{\nVelRounds}{\meas{200}}\newcommand{\nVelAtRounds}{\meas{0.860}}
 \newcommand{\nVelWeightedAtRounds}{\meas{0.844}}
+
+% ---------------------------------------------------------------------------------------------
+% Round two (owner's second work order, 2026-10-19/20). Paper evidence at f29793c (plan at
+% 74ea29a) and 4b9499d; PB-66's full-volume evidence copied onto this branch at 850192b.
+% Full-volume gate run (docs/benchmarks/full_volume_gate_d8083dbc.txt, stamp fcec52c)
+\newcommand{\nFvTrainRows}{\meas{792{,}162}}\newcommand{\nFvTrainFraud}{\meas{6{,}846}}
+\newcommand{\nFvAUC}{\meas{0.975}}\newcommand{\nFvAUCci}{\meas{[0.969, 0.981]}}
+\newcommand{\nFvRecallFPR}{\meas{0.852}}\newcommand{\nFvRecallFPRci}{\meas{[0.828, 0.873]}}
+\newcommand{\nFvRecallSix}{\meas{0.764}}\newcommand{\nFvRecallSixci}{\meas{[0.736, 0.790]}}
+\newcommand{\nFvFone}{\meas{0.848}}\newcommand{\nFvFNR}{\meas{0.236}}
+\newcommand{\nFvMM}{\meas{0.969}}\newcommand{\nFvUSSD}{\meas{0.960}}\newcommand{\nFvAgent}{\meas{0.985}}
+\newcommand{\nFvMargin}{\meas{+0.096}}\newcommand{\nFvRecallFPRMargin}{\meas{+0.254}}
+\newcommand{\nFvMMMargin}{\meas{+0.087}}\newcommand{\nFvUSSDMargin}{\meas{+0.056}}
+\newcommand{\nFvAgentMargin}{\meas{+0.142}}
+\newcommand{\nFvSeedRecallSix}{\meas{\ensuremath{0.7884 \pm 0.0169}}}
+\newcommand{\nFvSeedAUC}{\meas{\ensuremath{0.9738 \pm 0.0015}}}
+\newcommand{\nFvXgbRounds}{\meas{108}}\newcommand{\nFvLgbRounds}{\meas{13}}
+\newcommand{\nFvPrecSix}{\meas{0.953}}\newcommand{\nFvPassed}{\meas{9}}
+\newcommand{\nFvBaseRules}{\meas{0.705}}\newcommand{\nFvBaseLR}{\meas{0.966}}
+\newcommand{\nFvBaseRF}{\meas{0.967}}\newcommand{\nFvBaseXGB}{\meas{0.975}}
+\newcommand{\nFvBaseLGB}{\meas{0.946}}\newcommand{\nFvBaseIF}{\meas{0.935}}
+\newcommand{\nFullVolumeFactor}{\meas{26}}  % full-volume training rows over the gate's 30,000
+% PB-66's pre-specified rule for "volume helps" (docs/research/preregistration_pb66_full_volume.md)
+\newcommand{\nFvRuleBound}{\srcd{0.783}}\newcommand{\nFvRuleMean}{\srcd{0.7945}}
+\newcommand{\nFvRuleMargin}{\srcd{0.049}}\newcommand{\nFvRuleNeeded}{\srcd{0.8435}}
+\newcommand{\nFvPredTop}{\srcd{0.83}}
+\newcommand{\nFvTruncated}{\meas{102{,}522}}\newcommand{\nFvTruncatedShare}{\meas{0.1294}}
+% Learning curve, account-clustered intervals at seed 1 (round2_curve)
+\newcommand{\nFvTruncatedDays}{\meas{90}}
+\newcommand{\nLcCluciA}{\meas{[0.765, 0.825]}}\newcommand{\nLcCluciB}{\meas{[0.771, 0.826]}}
+\newcommand{\nLcCluciC}{\meas{[0.772, 0.825]}}\newcommand{\nLcCluciD}{\meas{[0.752, 0.814]}}
+% Baselines and ablations: AUC minus the ensemble's, paired account-clustered intervals (round2_gate)
+\newcommand{\nBaseRulesDiff}{\meas{-0.2633}}\newcommand{\nBaseRulesDiffci}{\meas{[-0.288, -0.240]}}
+\newcommand{\nBaseLRDiff}{\meas{-0.0050}}\newcommand{\nBaseLRDiffci}{\meas{[-0.009, -0.002]}}
+\newcommand{\nBaseRFDiff}{\meas{-0.0027}}\newcommand{\nBaseRFDiffci}{\meas{[-0.007, 0.001]}}
+\newcommand{\nBaseXGBDiff}{\meas{+0.0000}}\newcommand{\nBaseXGBDiffci}{\meas{[-0.000, 0.000]}}
+\newcommand{\nBaseLGBDiff}{\meas{-0.0184}}\newcommand{\nBaseLGBDiffci}{\meas{[-0.026, -0.011]}}
+\newcommand{\nBaseIFDiff}{\meas{-0.0275}}\newcommand{\nBaseIFDiffci}{\meas{[-0.034, -0.021]}}
+\newcommand{\nAblAgentDiffci}{\meas{[-0.007, -0.001]}}\newcommand{\nAblCorridorDiffci}{\meas{[-0.007, -0.001]}}
+\newcommand{\nAblRoundDiffci}{\meas{[-0.005, -0.000]}}\newcommand{\nAblMonthDiffci}{\meas{[-0.003, 0.001]}}
+\newcommand{\nAblCardDiffci}{\meas{[-0.051, -0.033]}}\newcommand{\nAblUSSDDiffci}{\meas{[-0.002, 0.002]}}
+% Calibration of the production ensemble (round2_gate at 30K; round2_full_volume at full volume)
+\newcommand{\nGateCalECEAll}{\meas{0.0014}}\newcommand{\nGateCalRegionRows}{\meas{782}}
+\newcommand{\nGateCalRegionFraud}{\meas{725}}\newcommand{\nGateCalRegionECE}{\meas{0.0284}}
+\newcommand{\nFvCalECEAll}{\meas{0.0011}}\newcommand{\nFvCalRegionRows}{\meas{790}}
+\newcommand{\nFvCalRegionFraud}{\meas{753}}\newcommand{\nFvCalRegionECE}{\meas{0.0247}}
+% PB-66 operational results, fairness and LOFTO (pb66_d8083dbc.txt, lofto_d8083dbc.txt at 850192b; ranges from PB-66's pre-specification at c61d512)
+\newcommand{\nPbDays}{\meas{63}}\newcommand{\nPerThousand}{\meas{1{,}000}}
+\newcommand{\nPbPartialRows}{\meas{1{,}922}}
+\newcommand{\nPbPRAUC}{\meas{0.844}}
+\newcommand{\nPbPRAUCci}{\meas{[0.820, 0.866]}}
+\newcommand{\nPbPRBase}{\meas{0.527}}
+\newcommand{\nPbPRBaseci}{\meas{[0.495, 0.557]}}
+\newcommand{\nBudAPrec}{\meas{0.770}}
+\newcommand{\nBudAPrecci}{\meas{[0.692, 0.841]}}
+\newcommand{\nBudACeil}{\meas{0.849}}
+\newcommand{\nBudAShare}{\meas{0.91}}
+\newcommand{\nBudARecall}{\meas{0.499}}
+\newcommand{\nBudARecallci}{\meas{[0.461, 0.547]}}
+\newcommand{\nBudAPer}{\meas{6.30}}
+\newcommand{\nBudATies}{\meas{266}}
+\newcommand{\nBudAFraudRwf}{\meas{34{,}627{,}844}}
+\newcommand{\nBudALegitRwf}{\meas{9{,}945{,}998}}
+\newcommand{\nBudBPrec}{\meas{0.275}}
+\newcommand{\nBudBPrecci}{\meas{[0.232, 0.316]}}
+\newcommand{\nBudBCeil}{\meas{0.309}}
+\newcommand{\nBudBShare}{\meas{0.89}}
+\newcommand{\nBudBRecall}{\meas{0.892}}
+\newcommand{\nBudBRecallci}{\meas{[0.871, 0.910]}}
+\newcommand{\nBudBPer}{\meas{31.50}}
+\newcommand{\nBudBTies}{\meas{605}}
+\newcommand{\nBudBFraudRwf}{\meas{59{,}306{,}772}}
+\newcommand{\nBudBLegitRwf}{\meas{127{,}526{,}710}}
+\newcommand{\nBudCPrec}{\meas{0.142}}
+\newcommand{\nBudCPrecci}{\meas{[0.121, 0.163]}}
+\newcommand{\nBudCCeil}{\meas{0.154}}
+\newcommand{\nBudCShare}{\meas{0.92}}
+\newcommand{\nBudCRecall}{\meas{0.922}}
+\newcommand{\nBudCRecallci}{\meas{[0.903, 0.939]}}
+\newcommand{\nBudCPer}{\meas{63.01}}
+\newcommand{\nBudCTies}{\meas{1{,}035}}
+\newcommand{\nBudCFraudRwf}{\meas{60{,}148{,}079}}
+\newcommand{\nBudCLegitRwf}{\meas{235{,}317{,}045}}
+\newcommand{\nBudDPrec}{\meas{0.073}}
+\newcommand{\nBudDPrecci}{\meas{[0.062, 0.084]}}
+\newcommand{\nBudDCeil}{\meas{0.077}}
+\newcommand{\nBudDShare}{\meas{0.95}}
+\newcommand{\nBudDRecall}{\meas{0.947}}
+\newcommand{\nBudDRecallci}{\meas{[0.931, 0.962]}}
+\newcommand{\nBudDPer}{\meas{126.02}}
+\newcommand{\nBudDTies}{\meas{2{,}144}}
+\newcommand{\nBudDFraudRwf}{\meas{60{,}690{,}533}}
+\newcommand{\nBudDLegitRwf}{\meas{477{,}012{,}050}}
+\newcommand{\nBaseBudAPrec}{\meas{0.577}}
+\newcommand{\nBaseBudAShare}{\meas{0.68}}
+\newcommand{\nBaseBudARecall}{\meas{0.374}}
+\newcommand{\nBaseBudBPrec}{\meas{0.196}}
+\newcommand{\nBaseBudBShare}{\meas{0.64}}
+\newcommand{\nBaseBudBRecall}{\meas{0.635}}
+\newcommand{\nBaseBudCPrec}{\meas{0.103}}
+\newcommand{\nBaseBudCShare}{\meas{0.67}}
+\newcommand{\nBaseBudCRecall}{\meas{0.667}}
+\newcommand{\nBaseBudDPrec}{\meas{0.056}}
+\newcommand{\nBaseBudDShare}{\meas{0.72}}
+\newcommand{\nBaseBudDRecall}{\meas{0.720}}
+\newcommand{\nBudKA}{\meas{10}}
+\newcommand{\nBudKB}{\meas{50}}
+\newcommand{\nBudKC}{\meas{100}}
+\newcommand{\nBudKD}{\meas{200}}
+\newcommand{\nMonOctRows}{\meas{5{,}599}}
+\newcommand{\nMonOctFrauds}{\meas{54}}
+\newcommand{\nMonOctAUC}{\meas{0.955}}
+\newcommand{\nMonOctAUCci}{\meas{[0.909, 0.988]}}
+\newcommand{\nMonOctPR}{\meas{0.850}}
+\newcommand{\nMonOctRecall}{\meas{0.796}}
+\newcommand{\nMonOctRecallci}{\meas{[0.685, 0.907]}}
+\newcommand{\nMonNovRows}{\meas{47{,}692}}
+\newcommand{\nMonNovFrauds}{\meas{466}}
+\newcommand{\nMonNovAUC}{\meas{0.977}}
+\newcommand{\nMonNovAUCci}{\meas{[0.969, 0.985]}}
+\newcommand{\nMonNovPR}{\meas{0.851}}
+\newcommand{\nMonNovRecall}{\meas{0.781}}
+\newcommand{\nMonNovRecallci}{\meas{[0.742, 0.820]}}
+\newcommand{\nMonDecRows}{\meas{48{,}618}}
+\newcommand{\nMonDecFrauds}{\meas{465}}
+\newcommand{\nMonDecAUC}{\meas{0.976}}
+\newcommand{\nMonDecAUCci}{\meas{[0.967, 0.983]}}
+\newcommand{\nMonDecPR}{\meas{0.837}}
+\newcommand{\nMonDecRecall}{\meas{0.744}}
+\newcommand{\nMonDecRecallci}{\meas{[0.705, 0.783]}}
+\newcommand{\nMonDiff}{\meas{-0.037}}
+\newcommand{\nMonDiffci}{\meas{[-0.091, 0.015]}}
+\newcommand{\nPbDHLow}{\meas{0.01}}\newcommand{\nPbDHHigh}{\meas{0.99}}
+\newcommand{\nPbDHModel}{\meas{0.0588}}
+\newcommand{\nPbDHBase}{\meas{0.1909}}
+\newcommand{\nFairCDRows}{\meas{5{,}065}}
+\newcommand{\nFairCDLegit}{\meas{5{,}051}}
+\newcommand{\nFairCDFrauds}{\meas{14}}
+\newcommand{\nFairCDFPR}{\meas{0.0004}}
+\newcommand{\nFairCDFPRci}{\meas{[0.0001, 0.0014]}}
+\newcommand{\nFairCDFPRBlock}{\meas{0.0004}}
+\newcommand{\nFairCDFPRBlockci}{\meas{[0.0001, 0.0014]}}
+\newcommand{\nFairCDLegitRwf}{\meas{54{,}178}}
+\newcommand{\nFairCDShare}{\meas{0.00035}}
+\newcommand{\nFairKERows}{\meas{28{,}516}}
+\newcommand{\nFairKELegit}{\meas{28{,}252}}
+\newcommand{\nFairKEFrauds}{\meas{264}}
+\newcommand{\nFairKEFPR}{\meas{0.0004}}
+\newcommand{\nFairKEFPRci}{\meas{[0.0002, 0.0007]}}
+\newcommand{\nFairKEFPRBlock}{\meas{0.0003}}
+\newcommand{\nFairKEFPRBlockci}{\meas{[0.0002, 0.0006]}}
+\newcommand{\nFairKELegitRwf}{\meas{383{,}980}}
+\newcommand{\nFairKEShare}{\meas{0.00045}}
+\newcommand{\nFairRWRows}{\meas{42{,}810}}
+\newcommand{\nFairRWLegit}{\meas{42{,}365}}
+\newcommand{\nFairRWFrauds}{\meas{445}}
+\newcommand{\nFairRWFPR}{\meas{0.0003}}
+\newcommand{\nFairRWFPRci}{\meas{[0.0002, 0.0006]}}
+\newcommand{\nFairRWFPRBlock}{\meas{0.0003}}
+\newcommand{\nFairRWFPRBlockci}{\meas{[0.0002, 0.0006]}}
+\newcommand{\nFairRWLegitRwf}{\meas{1{,}068{,}383}}
+\newcommand{\nFairRWShare}{\meas{0.00083}}
+\newcommand{\nFairTZRows}{\meas{15{,}274}}
+\newcommand{\nFairTZLegit}{\meas{15{,}122}}
+\newcommand{\nFairTZFrauds}{\meas{152}}
+\newcommand{\nFairTZFPR}{\meas{0.0003}}
+\newcommand{\nFairTZFPRci}{\meas{[0.0001, 0.0008]}}
+\newcommand{\nFairTZFPRBlock}{\meas{0.0003}}
+\newcommand{\nFairTZFPRBlockci}{\meas{[0.0001, 0.0008]}}
+\newcommand{\nFairTZLegitRwf}{\meas{348{,}664}}
+\newcommand{\nFairTZShare}{\meas{0.00075}}
+\newcommand{\nFairUGRows}{\meas{10{,}244}}
+\newcommand{\nFairUGLegit}{\meas{10{,}134}}
+\newcommand{\nFairUGFrauds}{\meas{110}}
+\newcommand{\nFairUGFPR}{\meas{0.0005}}
+\newcommand{\nFairUGFPRci}{\meas{[0.0002, 0.0012]}}
+\newcommand{\nFairUGFPRBlock}{\meas{0.0004}}
+\newcommand{\nFairUGFPRBlockci}{\meas{[0.0002, 0.0010]}}
+\newcommand{\nFairUGLegitRwf}{\meas{190{,}765}}
+\newcommand{\nFairUGShare}{\meas{0.00063}}
+\newcommand{\nFairAllRows}{\meas{101{,}909}}
+\newcommand{\nFairAllLegit}{\meas{100{,}924}}
+\newcommand{\nFairAllFrauds}{\meas{985}}
+\newcommand{\nFairAllFPR}{\meas{0.0004}}
+\newcommand{\nFairAllFPRci}{\meas{[0.0003, 0.0005]}}
+\newcommand{\nFairAllFPRBlock}{\meas{0.0003}}
+\newcommand{\nFairAllFPRBlockci}{\meas{[0.0002, 0.0005]}}
+\newcommand{\nFairAllLegitRwf}{\meas{2{,}045{,}969}}
+\newcommand{\nFairAllShare}{\meas{0.00067}}
+\newcommand{\nFairAgentRows}{\meas{14{,}075}}
+\newcommand{\nFairAgentLegit}{\meas{13{,}924}}
+\newcommand{\nFairAgentFrauds}{\meas{151}}
+\newcommand{\nFairAgentFPR}{\meas{0.0009}}
+\newcommand{\nFairAgentFPRci}{\meas{[0.0005, 0.0015]}}
+\newcommand{\nFairAgentFPRBlock}{\meas{0.0007}}
+\newcommand{\nFairAgentFPRBlockci}{\meas{[0.0004, 0.0013]}}
+\newcommand{\nFairAgentLegitRwf}{\meas{346{,}675}}
+\newcommand{\nFairAgentShare}{\meas{0.00148}}
+\newcommand{\nFairBankRows}{\meas{6{,}315}}
+\newcommand{\nFairBankLegit}{\meas{6{,}197}}
+\newcommand{\nFairBankFrauds}{\meas{118}}
+\newcommand{\nFairBankFPR}{\meas{0.0010}}
+\newcommand{\nFairBankFPRci}{\meas{[0.0004, 0.0021]}}
+\newcommand{\nFairBankFPRBlock}{\meas{0.0010}}
+\newcommand{\nFairBankFPRBlockci}{\meas{[0.0004, 0.0021]}}
+\newcommand{\nFairBankLegitRwf}{\meas{880{,}572}}
+\newcommand{\nFairBankShare}{\meas{0.00203}}
+\newcommand{\nFairCardRows}{\meas{12{,}228}}
+\newcommand{\nFairCardLegit}{\meas{12{,}080}}
+\newcommand{\nFairCardFrauds}{\meas{148}}
+\newcommand{\nFairCardFPR}{\meas{0.0002}}
+\newcommand{\nFairCardFPRci}{\meas{[0.0001, 0.0007]}}
+\newcommand{\nFairCardFPRBlock}{\meas{0.0002}}
+\newcommand{\nFairCardFPRBlockci}{\meas{[0.0001, 0.0007]}}
+\newcommand{\nFairCardLegitRwf}{\meas{351{,}438}}
+\newcommand{\nFairCardShare}{\meas{0.00027}}
+\newcommand{\nFairMMRows}{\meas{41{,}439}}
+\newcommand{\nFairMMLegit}{\meas{41{,}189}}
+\newcommand{\nFairMMFrauds}{\meas{250}}
+\newcommand{\nFairMMFPR}{\meas{0.0001}}
+\newcommand{\nFairMMFPRci}{\meas{[0.0001, 0.0003]}}
+\newcommand{\nFairMMFPRBlock}{\meas{0.0001}}
+\newcommand{\nFairMMFPRBlockci}{\meas{[0.0001, 0.0003]}}
+\newcommand{\nFairMMLegitRwf}{\meas{90{,}032}}
+\newcommand{\nFairMMShare}{\meas{0.00014}}
+\newcommand{\nFairOnlineRows}{\meas{9{,}527}}
+\newcommand{\nFairOnlineLegit}{\meas{9{,}402}}
+\newcommand{\nFairOnlineFrauds}{\meas{125}}
+\newcommand{\nFairOnlineFPR}{\meas{0.0007}}
+\newcommand{\nFairOnlineFPRci}{\meas{[0.0004, 0.0015]}}
+\newcommand{\nFairOnlineFPRBlock}{\meas{0.0006}}
+\newcommand{\nFairOnlineFPRBlockci}{\meas{[0.0003, 0.0014]}}
+\newcommand{\nFairOnlineLegitRwf}{\meas{294{,}086}}
+\newcommand{\nFairOnlineShare}{\meas{0.00105}}
+\newcommand{\nFairUSSDRows}{\meas{18{,}325}}
+\newcommand{\nFairUSSDLegit}{\meas{18{,}132}}
+\newcommand{\nFairUSSDFrauds}{\meas{193}}
+\newcommand{\nFairUSSDFPR}{\meas{0.0002}}
+\newcommand{\nFairUSSDFPRci}{\meas{[0.0001, 0.0006]}}
+\newcommand{\nFairUSSDFPRBlock}{\meas{0.0002}}
+\newcommand{\nFairUSSDFPRBlockci}{\meas{[0.0001, 0.0006]}}
+\newcommand{\nFairUSSDLegitRwf}{\meas{83{,}168}}
+\newcommand{\nFairUSSDShare}{\meas{0.00056}}
+\newcommand{\nLoProduction}{\meas{0.852}}
+\newcommand{\nLoSimFrauds}{\meas{152}}
+\newcommand{\nLoSimProd}{\meas{0.941}}
+\newcommand{\nLoSimProdci}{\meas{[0.891, 0.969]}}
+\newcommand{\nLoSimHeld}{\meas{0.980}}
+\newcommand{\nLoSimHeldci}{\meas{[0.944, 0.993]}}
+\newcommand{\nLoSimDrop}{\meas{-0.039}}
+\newcommand{\nLoSimProdSix}{\meas{0.908}}
+\newcommand{\nLoSimHeldSix}{\meas{0.789}}
+\newcommand{\nLoSimDropSix}{\meas{0.118}}
+\newcommand{\nLoAtoFrauds}{\meas{145}}
+\newcommand{\nLoAtoProd}{\meas{0.993}}
+\newcommand{\nLoAtoProdci}{\meas{[0.962, 0.999]}}
+\newcommand{\nLoAtoHeld}{\meas{0.834}}
+\newcommand{\nLoAtoHeldci}{\meas{[0.766, 0.886]}}
+\newcommand{\nLoAtoDrop}{\meas{0.159}}
+\newcommand{\nLoAtoProdSix}{\meas{0.952}}
+\newcommand{\nLoAtoHeldSix}{\meas{0.807}}
+\newcommand{\nLoAtoDropSix}{\meas{0.145}}
+\newcommand{\nLoAgentFrauds}{\meas{106}}
+\newcommand{\nLoAgentProd}{\meas{0.962}}
+\newcommand{\nLoAgentProdci}{\meas{[0.907, 0.985]}}
+\newcommand{\nLoAgentHeld}{\meas{0.434}}
+\newcommand{\nLoAgentHeldci}{\meas{[0.344, 0.529]}}
+\newcommand{\nLoAgentDrop}{\meas{0.528}}
+\newcommand{\nLoAgentProdSix}{\meas{0.887}}
+\newcommand{\nLoAgentHeldSix}{\meas{0.226}}
+\newcommand{\nLoAgentDropSix}{\meas{0.660}}
+\newcommand{\nLoVelFrauds}{\meas{103}}
+\newcommand{\nLoVelProd}{\meas{0.903}}
+\newcommand{\nLoVelProdci}{\meas{[0.830, 0.946]}}
+\newcommand{\nLoVelHeld}{\meas{0.864}}
+\newcommand{\nLoVelHeldci}{\meas{[0.785, 0.917]}}
+\newcommand{\nLoVelDrop}{\meas{0.039}}
+\newcommand{\nLoVelProdSix}{\meas{0.806}}
+\newcommand{\nLoVelHeldSix}{\meas{0.680}}
+\newcommand{\nLoVelDropSix}{\meas{0.126}}
+\newcommand{\nLoCnpFrauds}{\meas{126}}
+\newcommand{\nLoCnpProd}{\meas{0.913}}
+\newcommand{\nLoCnpProdci}{\meas{[0.850, 0.951]}}
+\newcommand{\nLoCnpHeld}{\meas{0.841}}
+\newcommand{\nLoCnpHeldci}{\meas{[0.768, 0.895]}}
+\newcommand{\nLoCnpDrop}{\meas{0.071}}
+\newcommand{\nLoCnpProdSix}{\meas{0.817}}
+\newcommand{\nLoCnpHeldSix}{\meas{0.706}}
+\newcommand{\nLoCnpDropSix}{\meas{0.111}}
+\newcommand{\nLoMuleFrauds}{\meas{181}}
+\newcommand{\nLoMuleProd}{\meas{0.575}}
+\newcommand{\nLoMuleProdci}{\meas{[0.502, 0.644]}}
+\newcommand{\nLoMuleHeld}{\meas{0.580}}
+\newcommand{\nLoMuleHeldci}{\meas{[0.507, 0.650]}}
+\newcommand{\nLoMuleDrop}{\meas{-0.006}}
+\newcommand{\nLoMuleProdSix}{\meas{0.508}}
+\newcommand{\nLoMuleHeldSix}{\meas{0.453}}
+\newcommand{\nLoMuleDropSix}{\meas{0.055}}
+\newcommand{\nLoMerchFrauds}{\meas{78}}
+\newcommand{\nLoMerchProd}{\meas{0.782}}
+\newcommand{\nLoMerchProdci}{\meas{[0.678, 0.859]}}
+\newcommand{\nLoMerchHeld}{\meas{0.679}}
+\newcommand{\nLoMerchHeldci}{\meas{[0.570, 0.773]}}
+\newcommand{\nLoMerchDrop}{\meas{0.103}}
+\newcommand{\nLoMerchProdSix}{\meas{0.641}}
+\newcommand{\nLoMerchHeldSix}{\meas{0.128}}
+\newcommand{\nLoMerchDropSix}{\meas{0.513}}
+\newcommand{\nLoSynFrauds}{\meas{86}}
+\newcommand{\nLoSynProd}{\meas{0.895}}
+\newcommand{\nLoSynProdci}{\meas{[0.813, 0.944]}}
+\newcommand{\nLoSynHeld}{\meas{0.547}}
+\newcommand{\nLoSynHeldci}{\meas{[0.442, 0.647]}}
+\newcommand{\nLoSynDrop}{\meas{0.349}}
+\newcommand{\nLoSynProdSix}{\meas{0.640}}
+\newcommand{\nLoSynHeldSix}{\meas{0.395}}
+\newcommand{\nLoSynDropSix}{\meas{0.244}}
+\newcommand{\nLoMuleNrFrauds}{\meas{115}}
+\newcommand{\nLoMuleNrProd}{\meas{0.861}}
+\newcommand{\nLoMuleNrProdci}{\meas{[0.786, 0.913]}}
+\newcommand{\nLoMuleNrHeld}{\meas{0.870}}
+\newcommand{\nLoMuleNrHeldci}{\meas{[0.796, 0.919]}}
+\newcommand{\nLoMuleNrDrop}{\meas{-0.009}}
+\newcommand{\nLoMuleNrProdSix}{\meas{0.800}}
+\newcommand{\nLoMuleNrHeldSix}{\meas{0.713}}
+\newcommand{\nLoMuleNrDropSix}{\meas{0.087}}
+\newcommand{\nLoRangeBurst}{\srcd{0.85}}
+\newcommand{\nLoRangeBurstDrop}{\srcd{0.10}}
+\newcommand{\nLoRangeMule}{\srcd{0.80}}
+\newcommand{\nLoRangeSingle}{\srcd{0.70}}
+\newcommand{\nLoRangeSingleDrop}{\srcd{0.20}}
+\newcommand{\nLoRangeAto}{\srcd{0.80}}
+\newcommand{\nLoRangeAtoDrop}{\srcd{0.10}}
+\newcommand{\nLoRangeSynLow}{\srcd{0.70}}
+\newcommand{\nLoRangeSynHigh}{\srcd{0.92}}
+\newcommand{\nLoRangeSynDropHigh}{\srcd{0.20}}
+\newcommand{\nFrontMachine}{\meas{AMD EPYC 9V45 96-Core Processor}}
+% Single-feature floor re-run on d8083dbc (round2_single_feature_auc) and on the gate's test rows (round2_gate), at f29793c
+\newcommand{\nReScoredRows}{\meas{20{,}000}}
+\newcommand{\nReScoredFraud}{\meas{177}}
+\newcommand{\nReVelocity}{\meas{0.880}}
+\newcommand{\nReVelocityci}{\meas{0.033}}
+\newcommand{\nReCounterparty}{\meas{0.825}}
+\newcommand{\nReCounterpartyci}{\meas{0.038}}
+\newcommand{\nReTxHour}{\meas{0.805}}
+\newcommand{\nReTxHourci}{\meas{0.039}}
+\newcommand{\nReSpeed}{\meas{0.784}}
+\newcommand{\nReSpeedci}{\meas{0.040}}
+\newcommand{\nReSeconds}{\meas{0.786}}
+\newcommand{\nReSecondsci}{\meas{0.040}}
+\newcommand{\nGrVelocity}{\meas{0.879}}
+\newcommand{\nGrVelocityci}{\meas{[0.862, 0.894]}}
+\newcommand{\nGrCounterparty}{\meas{0.819}}
+\newcommand{\nGrCounterpartyci}{\meas{[0.796, 0.843]}}
+\newcommand{\nGrTxHour}{\meas{0.814}}
+\newcommand{\nGrTxHourci}{\meas{[0.797, 0.831]}}
+\newcommand{\nReAboveCeiling}{\meas{three}}  % derived
+\newcommand{\nReAboveCeilingCI}{\meas{one}}  % derived
+% Section 8 round two: clustered LOCO and the reversal split (round2_gate at f29793c, round2_full_volume at 4b9499d)
+\newcommand{\nLocoCluCDin}{\meas{0.989}}
+\newcommand{\nLocoCluCDinci}{\meas{[0.955, 1.000]}}
+\newcommand{\nLocoCluCDout}{\meas{0.988}}
+\newcommand{\nLocoCluCDoutci}{\meas{[0.944, 1.000]}}
+\newcommand{\nLocoCluCDAccounts}{\meas{294}}
+\newcommand{\nLocoCluKEin}{\meas{0.980}}
+\newcommand{\nLocoCluKEinci}{\meas{[0.964, 0.991]}}
+\newcommand{\nLocoCluKEout}{\meas{0.977}}
+\newcommand{\nLocoCluKEoutci}{\meas{[0.958, 0.989]}}
+\newcommand{\nLocoCluKEAccounts}{\meas{1{,}646}}
+\newcommand{\nLocoCluRWin}{\meas{0.969}}
+\newcommand{\nLocoCluRWinci}{\meas{[0.954, 0.980]}}
+\newcommand{\nLocoCluRWout}{\meas{0.964}}
+\newcommand{\nLocoCluRWoutci}{\meas{[0.950, 0.977]}}
+\newcommand{\nLocoCluRWAccounts}{\meas{2{,}469}}
+\newcommand{\nLocoCluTZin}{\meas{0.967}}
+\newcommand{\nLocoCluTZinci}{\meas{[0.939, 0.984]}}
+\newcommand{\nLocoCluTZout}{\meas{0.964}}
+\newcommand{\nLocoCluTZoutci}{\meas{[0.935, 0.983]}}
+\newcommand{\nLocoCluTZAccounts}{\meas{882}}
+\newcommand{\nLocoCluUGin}{\meas{0.967}}
+\newcommand{\nLocoCluUGinci}{\meas{[0.930, 0.987]}}
+\newcommand{\nLocoCluUGout}{\meas{0.961}}
+\newcommand{\nLocoCluUGoutci}{\meas{[0.922, 0.985]}}
+\newcommand{\nLocoCluUGAccounts}{\meas{587}}
+\newcommand{\nGateRevAllBudgetCaught}{\meas{6}}
+\newcommand{\nGateRevAllBudgetRows}{\meas{66}}
+\newcommand{\nGateRevAllBudgetRecall}{\meas{0.091}}
+\newcommand{\nGateRevAllBudgetWilson}{\meas{[0.042, 0.184]}}
+\newcommand{\nGateRevAllBudgetClustered}{\meas{[0.029, 0.161]}}
+\newcommand{\nGateRevAllFlagCaught}{\meas{0}}
+\newcommand{\nGateRevAllFlagRows}{\meas{66}}
+\newcommand{\nGateRevAllFlagRecall}{\meas{0.000}}
+\newcommand{\nGateRevAllFlagWilson}{\meas{[0.000, 0.055]}}
+\newcommand{\nGateRevAllFlagClustered}{\meas{[0.000, 0.000]}}
+\newcommand{\nGateRevNewBudgetCaught}{\meas{6}}
+\newcommand{\nGateRevNewBudgetRows}{\meas{19}}
+\newcommand{\nGateRevNewBudgetRecall}{\meas{0.316}}
+\newcommand{\nGateRevNewBudgetWilson}{\meas{[0.154, 0.540]}}
+\newcommand{\nGateRevNewBudgetClustered}{\meas{[0.105, 0.522]}}
+\newcommand{\nGateRevNewFlagCaught}{\meas{0}}
+\newcommand{\nGateRevNewFlagRows}{\meas{19}}
+\newcommand{\nGateRevNewFlagRecall}{\meas{0.000}}
+\newcommand{\nGateRevNewFlagWilson}{\meas{[0.000, 0.168]}}
+\newcommand{\nGateRevNewFlagClustered}{\meas{[0.000, 0.000]}}
+\newcommand{\nGateRevKnownBudgetCaught}{\meas{0}}
+\newcommand{\nGateRevKnownBudgetRows}{\meas{47}}
+\newcommand{\nGateRevKnownBudgetRecall}{\meas{0.000}}
+\newcommand{\nGateRevKnownBudgetWilson}{\meas{[0.000, 0.076]}}
+\newcommand{\nGateRevKnownBudgetClustered}{\meas{[0.000, 0.000]}}
+\newcommand{\nGateRevKnownFlagCaught}{\meas{0}}
+\newcommand{\nGateRevKnownFlagRows}{\meas{47}}
+\newcommand{\nGateRevKnownFlagRecall}{\meas{0.000}}
+\newcommand{\nGateRevKnownFlagWilson}{\meas{[0.000, 0.076]}}
+\newcommand{\nGateRevKnownFlagClustered}{\meas{[0.000, 0.000]}}
+\newcommand{\nFvRevAllBudgetCaught}{\meas{5}}
+\newcommand{\nFvRevAllBudgetRows}{\meas{66}}
+\newcommand{\nFvRevAllBudgetRecall}{\meas{0.076}}
+\newcommand{\nFvRevAllBudgetWilson}{\meas{[0.033, 0.165]}}
+\newcommand{\nFvRevAllBudgetClustered}{\meas{[0.016, 0.143]}}
+\newcommand{\nFvRevAllFlagCaught}{\meas{0}}
+\newcommand{\nFvRevAllFlagRows}{\meas{66}}
+\newcommand{\nFvRevAllFlagRecall}{\meas{0.000}}
+\newcommand{\nFvRevAllFlagWilson}{\meas{[0.000, 0.055]}}
+\newcommand{\nFvRevAllFlagClustered}{\meas{[0.000, 0.000]}}
+\newcommand{\nFvRevNewBudgetCaught}{\meas{5}}
+\newcommand{\nFvRevNewBudgetRows}{\meas{19}}
+\newcommand{\nFvRevNewBudgetRecall}{\meas{0.263}}
+\newcommand{\nFvRevNewBudgetWilson}{\meas{[0.118, 0.488]}}
+\newcommand{\nFvRevNewBudgetClustered}{\meas{[0.062, 0.500]}}
+\newcommand{\nFvRevNewFlagCaught}{\meas{0}}
+\newcommand{\nFvRevNewFlagRows}{\meas{19}}
+\newcommand{\nFvRevNewFlagRecall}{\meas{0.000}}
+\newcommand{\nFvRevNewFlagWilson}{\meas{[0.000, 0.168]}}
+\newcommand{\nFvRevNewFlagClustered}{\meas{[0.000, 0.000]}}
+\newcommand{\nFvRevKnownBudgetCaught}{\meas{0}}
+\newcommand{\nFvRevKnownBudgetRows}{\meas{47}}
+\newcommand{\nFvRevKnownBudgetRecall}{\meas{0.000}}
+\newcommand{\nFvRevKnownBudgetWilson}{\meas{[0.000, 0.076]}}
+\newcommand{\nFvRevKnownBudgetClustered}{\meas{[0.000, 0.000]}}
+\newcommand{\nFvRevKnownFlagCaught}{\meas{0}}
+\newcommand{\nFvRevKnownFlagRows}{\meas{47}}
+\newcommand{\nFvRevKnownFlagRecall}{\meas{0.000}}
+\newcommand{\nFvRevKnownFlagWilson}{\meas{[0.000, 0.076]}}
+\newcommand{\nFvRevKnownFlagClustered}{\meas{[0.000, 0.000]}}
+% Reconciliation of the test period's frauds (round2_gate at f29793c)
+\newcommand{\nRecBaseConfirmed}{\meas{827}}  % derived
+\newcommand{\nRecBaseNoise}{\meas{8}}  % derived
+\newcommand{\nRecBaseMissed}{\meas{11}}  % derived
+\newcommand{\nRecNovel}{\meas{73}}  % derived
+\newcommand{\nRecAdapt}{\meas{11}}  % derived
+\newcommand{\nRecRevConfirmed}{\meas{66}}  % derived
+\newcommand{\nRecRevMissed}{\meas{2}}  % derived
+\newcommand{\nRecObserved}{\meas{985}}  % derived
+\newcommand{\nRecTrue}{\meas{990}}  % derived
+\newcommand{\nRecMissed}{\meas{13}}  % derived
+\newcommand{\nPriorReads}{\srcd{23}}\newcommand{\nPriorReadsFull}{\srcd{11}}  % PB-66 pre-specification, amendment 0e

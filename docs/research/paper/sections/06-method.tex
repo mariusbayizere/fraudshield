@@ -22,14 +22,13 @@ a percentile of its training reference distribution, so that the anomaly score l
 separate review queue that does not hold the payment; that routing belongs to the decision
 engine (M6) and is not evaluated here.
 
-\paragraph{Training volume.} The evaluated models were trained on \nTrainUsed{} rows holding
+\paragraph{Training volume.} The declared gate model was trained on \nTrainUsed{} rows holding
 \nGateTrainFraud{} confirmed fraud, a subset of the \nTrainRows{} rows in the training period.
 The backlog records the reason as the cost of the feature pass, about \nFeaturePassRate{} rows a
 second on the development machine (PB-67); no document records why \nTrainUsed{} rather than another
-size. Every figure in
-Section~\ref{sec:evaluation} is at that training volume except the learning curve of
-Section~\ref{sec:volume}, which reaches \nLcTrainD{} rows; full-volume training is
-\notyet{M4 follow-up}.
+size. The same design was later trained on every one of the \nFvTrainRows{} training rows, on a
+GitHub-hosted runner (PB-66; Section~\ref{sec:volume}). Figures in Section~\ref{sec:evaluation} say
+which model they describe; the diagnostic battery below is at \nTrainUsed{} rows throughout.
 
 \subsection{Explanations}
 
@@ -65,17 +64,19 @@ diagnostic of the benchmark, not the production model, and its figures are label
   \item \textbf{Uncertainty}: \nResamples{} stratified bootstrap resamples
         \cite{efron1979bootstrap} for gate metrics, Hanley--McNeil intervals \cite{hanley1982auc}
         for AUCs of single features and baselines, Wilson intervals \cite{wilson1927interval} for
-        recall on small variant counts, DeLong's test \cite{delong1988auc} for AUC differences, and the mean and
-        standard deviation over \nSeeds{} refits. \textbf{All of these treat test rows as
-        independent, and they are not}: fraud is staged as multi-row incidents on one account, and
-        an account's rows share its history. For the gate metrics, the diagnostic model's group
-        AUCs and the variant recalls we therefore also report an account-clustered bootstrap,
-        which resamples whole accounts (\nResamples{} resamples, stratified by whether an account
-        has any fraud), computed from a reproduction of both models that matched the published
-        figures (Section~\ref{sec:evaluation}). The remaining intervals (the learning curve,
-        leave-one-country-out, the single-feature floor, the baselines' DeLong tests, the frontier
-        and the earlier-draw battery) were not re-computed and are narrower than they should be by
-        an amount not measured.
+        recall on small variant counts, and the mean and standard deviation over \nSeeds{} refits.
+        \textbf{All of these treat test rows as independent, and they are not}: fraud is staged as
+        multi-row incidents on one account, and an account's rows share its history. We therefore
+        also report an account-clustered bootstrap, which resamples whole accounts (\nResamples{}
+        resamples, stratified by whether an account has any fraud), for the gate metrics, the
+        diagnostic model's group AUCs, the variant recalls, the learning curve,
+        leave-one-country-out and the single-feature floor. A difference between models' AUCs
+        is given as a paired clustered interval, both evaluated on each resample; no $p$-value is
+        reported, because the tests that produce them assume independent rows. These come from
+        reproductions of the models that matched the published figures
+        (Section~\ref{sec:evaluation}). Some intervals were not re-computed and are narrower
+        than they should be by an amount not measured: those of the earlier-draw battery, and the
+        row-bootstrap intervals of the full-volume model's own evidence file.
   \item \textbf{The floor}: every gate ranking metric is reported beside the best single feature and
         the best trivial rule (one threshold on one feature) on the same rows, as a margin
         (Section~\ref{sec:floor}).

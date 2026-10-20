@@ -65,6 +65,24 @@ LC_REF = "3dacca6"
 GATE_CACHE = "docs/benchmarks/m4_evaluate_gate_d8083dbc.txt"
 #: The notebook on main, which carries PB-67's pre-registration (no tag carries it yet).
 NOTEBOOK_MAIN_REF = "488c5b4"
+#: Round two: the paper's own evidence (plan at 74ea29a, run 39303322723) and the full-volume
+#: reading of PB-66's scores (run 39345544712), and PB-66's evidence copied onto this branch.
+R2_REF = "f29793c"
+FV_READ_REF = "4b9499d"
+PB66_REF = "850192b"
+R2_GATE = "docs/research/paper/evidence/round2_gate_d8083dbc.txt"
+R2_CURVE = "docs/research/paper/evidence/round2_curve_d8083dbc.txt"
+R2_SEL = "docs/research/paper/evidence/round2_selection_d8083dbc.txt"
+R2_AUC = "docs/research/paper/evidence/round2_single_feature_auc_d8083dbc.txt"
+R2_FRONT = "docs/research/paper/evidence/round2_frontier_d8083dbc.txt"
+R2_FULL = "docs/research/paper/evidence/round2_full_volume_d8083dbc.txt"
+R2_RUN = "docs/research/paper/evidence/round2_run_d8083dbc.txt"
+FV_GATE = "docs/benchmarks/full_volume_gate_d8083dbc.txt"
+PB66 = "docs/benchmarks/pb66_d8083dbc.txt"
+LOFTO = "docs/benchmarks/lofto_d8083dbc.txt"
+PB66_PREREG = "docs/research/preregistration_pb66_full_volume.md"
+#: PB-66's own evidence commit, where its pre-specification is read (copied here unchanged).
+PB66_SRC_REF = "c61d512"
 ADR55 = "docs/adr/0055-five-features-have-no-source-data-on-this-benchmark.md"
 ADR55_REF = "m6-complete"
 REGISTRY = "ml/src/fraudshield_ml/features/registry.py"
@@ -153,6 +171,123 @@ def _sd_rel(table: str, column: int) -> str:
     single = statistics.stdev(float(r[column]) for r in rows)
     ensemble = statistics.stdev(float(r[2]) for r in rows)
     return f"{(ensemble - single) / single * 100:+.2f}%"
+
+
+BUDGET_FIELDS = (
+    "Prec", "Precci", "Ceil", "Share", "Recall", "Recallci", "Per", "Ties", "FraudRwf", "LegitRwf",
+)  # fmt: skip
+#: One row of PB-66's budget table: budget, who, then the fields above in order.
+BUDGET_ROW = (
+    r"^\s+{size}  {who}\s+([\d.]+) (\[[\d., ]+\])\s+([\d.]+)\s+([\d.]+)\s+([\d.]+) (\[[\d., ]+\])"
+    r"\s+([\d.]+)\s+(\d+)\s+(\d+)\s+(\d+)"
+)
+MONTH_ROW = (
+    r"^  {month}\s+(\d+)\s+(\d+)\s+([\d.]+) (\[[\d., ]+\])\s+([\d.]+)\s+([\d.]+) (\[[\d., ]+\])"
+)
+FAIR_FIELDS = (
+    "Rows",
+    "Legit",
+    "Frauds",
+    "FPR",
+    "FPRci",
+    "FPRBlock",
+    "FPRBlockci",
+    "LegitRwf",
+    "Share",
+)
+FAIR_ROW = (
+    r"^  {group}\s+(\d+)\s+(\d+)\s+(\d+)\s+([\d.]+) (\[[\d., ]+\])\s+([\d.]+) (\[[\d., ]+\])"
+    r"\s+(\d+) \(([\d.]+)\)"
+)
+LOFTO_FIELDS = (
+    "Frauds",
+    "Prod",
+    "Prodci",
+    "Held",
+    "Heldci",
+    "Drop",
+    "ProdSix",
+    "HeldSix",
+    "DropSix",
+)
+LOFTO_ROW = (
+    r"^  {scenario}\s+(\d+)  ([\d.]+) (\[[\d., ]+\]) -> ([\d.]+) (\[[\d., ]+\]) \(([-\d.]+)\)"
+    r"\s+([\d.]+) -> ([\d.]+) \(([-\d.]+)\)"
+)
+
+
+def _only(row: str, column: int) -> str:
+    """`row` with only its `column`th group capturing, the others made non-capturing."""
+    parts = re.split(r"(?<!\\)\((?!\?)", row)
+    out = parts[0]
+    for k, part in enumerate(parts[1:]):
+        out += ("(" if k == column else "(?:") + part
+    return out
+
+
+def _budget(size: int, who: str, column: int) -> str:
+    return _only(BUDGET_ROW.format(size=size, who=who), column)
+
+
+def _month(month: str, column: int) -> str:
+    return _only(MONTH_ROW.format(month=month), column)
+
+
+def _fair(section: str, group: str, column: int) -> str:
+    return re.escape(section) + r".*?" + _only(FAIR_ROW.format(group=re.escape(group)), column)
+
+
+def _lofto(scenario: str, column: int) -> str:
+    return _only(LOFTO_ROW.format(scenario=re.escape(scenario)), column)
+
+
+#: The features the floor table shows: every one over the ceiling on the earlier draw. The first
+#: three are defined on every gate test row; the last two are not.
+FLOOR_FEATURES = (
+    ("Velocity", "velocity_ratio_1h_vs_30d"),
+    ("Counterparty", "counterparty_is_new_for_account"),
+    ("TxHour", "tx_count_1h"),
+    ("Speed", "implied_speed_kmh"),
+    ("Seconds", "seconds_since_last_tx"),
+)
+
+
+REVERSAL_NAME = "reversal_scam_social_engineering"
+REVERSAL_FIELDS = ("Caught", "Rows", "Recall", "Wilson", "Clustered")
+REVERSAL_ROW = (
+    r"  {label}: .*?    {rule}\s+caught (\d+)/(\d+)  recall ([\d.]+)  Wilson (\[[\d., ]+\])  "
+    r"clustered (\[[\d., ]+\])"
+)
+#: The cells of round2_gate's reconciliation table: (variant, fraud type, observed, true).
+RECONCILE_CELLS = (
+    ("adapted_below_threshold", "account_takeover", True, True),
+    ("adapted_below_threshold", "card_not_present", True, True),
+    ("adapted_below_threshold", "merchant_fraud", True, True),
+    *(
+        ("base", kind, observed, True)
+        for kind in (
+            "account_takeover", "agent_fraud", "card_not_present", "mule_account", "sim_swap",
+            "synthetic_identity", "velocity",
+        )
+        for observed in (False, True)
+    ),
+    ("base", "merchant_fraud", True, True),
+    ("base", "none", True, False),
+    ("novel_esim_delayed_drain", "sim_swap", True, True),
+    ("reversal_scam_social_engineering", "mule_account", False, True),
+    ("reversal_scam_social_engineering", "mule_account", True, True),
+)  # fmt: skip
+
+
+def _reversal(label: str, rule: str, column: int) -> str:
+    return _only(REVERSAL_ROW.format(label=re.escape(label), rule=re.escape(rule)), column)
+
+
+def _reconcile(variant: str, kind: str, observed: bool, true: bool) -> str:
+    return (
+        r"RECONCILIATION of the test period.*?^  "
+        + rf"{variant}\s+{kind}\s+{observed}\s+{true}\s+(\d+)$"
+    )
 
 
 def _clu(pattern: str) -> Src:
@@ -373,22 +508,16 @@ SOURCES: dict[str, Src | Derived] = {
     "nGateSeedRecallSix": Src(GATE, r"SEEDS.*?ML-GATE-03  ([\d.]+ \+/- [\d.]+)"),
     "nBaseRules": Src(GATE, row("status-quo rule engine", 1)),
     "nBaseRulesR": Src(GATE, r"status-quo rule engine\s+[\d.]+ \+/-[\d.]+  R@1%FPR ([\d.]+)"),
-    "nBaseRulesp": Src(GATE, r"status-quo rule engine.*?  p ([\d.e+-]+)"),
     "nBaseLR": Src(GATE, row("logistic regression", 1)),
     "nBaseLRR": Src(GATE, r"logistic regression\s+[\d.]+ \+/-[\d.]+  R@1%FPR ([\d.]+)"),
-    "nBaseLRp": Src(GATE, r"logistic regression.*?  p ([\d.e+-]+)"),
     "nBaseRF": Src(GATE, row("random forest", 1)),
     "nBaseRFR": Src(GATE, r"random forest\s+[\d.]+ \+/-[\d.]+  R@1%FPR ([\d.]+)"),
-    "nBaseRFp": Src(GATE, r"random forest.*?  p ([\d.e+-]+)"),
     "nBaseXGB": Src(GATE, row("XGBoost alone", 1)),
     "nBaseXGBR": Src(GATE, r"XGBoost alone\s+[\d.]+ \+/-[\d.]+  R@1%FPR ([\d.]+)"),
-    "nBaseXGBp": Src(GATE, r"XGBoost alone.*?  p ([\d.e+-]+)"),
     "nBaseLGB": Src(GATE, row("LightGBM alone", 1)),
     "nBaseLGBR": Src(GATE, r"LightGBM alone\s+[\d.]+ \+/-[\d.]+  R@1%FPR ([\d.]+)"),
-    "nBaseLGBp": Src(GATE, r"LightGBM alone.*?  p ([\d.e+-]+)"),
     "nBaseIF": Src(GATE, row("Isolation Forest alone", 1)),
     "nBaseIFR": Src(GATE, r"Isolation Forest alone\s+[\d.]+ \+/-[\d.]+  R@1%FPR ([\d.]+)"),
-    "nBaseIFp": Src(GATE, r"Isolation Forest alone.*?  p ([\d.e+-]+)"),
     "nAblAgentD": Src(GATE, r"without agent features\s+\d+ feat  AUC [\d.]+ \(([+-][\d.]+),"),
     "nAblCorridorD": Src(
         GATE, r"without the corridor feature\s+\d+ feat  AUC [\d.]+ \(([+-][\d.]+),"
@@ -397,7 +526,6 @@ SOURCES: dict[str, Src | Derived] = {
     "nAblMonthD": Src(GATE, r"without month-end awareness\s+\d+ feat  AUC [\d.]+ \(([+-][\d.]+),"),
     "nAblCardD": Src(GATE, r"card-style features only\s+\d+ feat  AUC [\d.]+ \(([+-][\d.]+),"),
     "nAblCardAUC": Src(GATE, r"card-style features only\s+\d+ feat  AUC ([\d.]+)"),
-    "nAblCardp": Src(GATE, r"card-style features only\s+.*?, p ([\d.e-]+)\)"),
     "nAblCardR": Src(GATE, r"card-style features only\s+.*?R@1%FPR ([\d.]+)"),
     "_GateFPRBlockExact": Src(GATE_JSON, r'"id": "ML-GATE-05",.*?"value": ([\d.eE-]+)'),
     "_RocPoints": Src(ROC, r'<polyline points="(48\.0,312\.0 48\.0,[^"]*)"'),
@@ -519,17 +647,18 @@ SOURCES: dict[str, Src | Derived] = {
     "nSeedSdXGB": Src(SEEDS, r"xgboost\s+[\d.]+\s+([\d.]+)\n"),
     "nSeedSdLGB": Src(SEEDS, r"lightgbm\s+[\d.]+\s+([\d.]+)\n"),
     "nSeedSdEnsemble": Src(SEEDS, r"ensemble\s+[\d.]+\s+([\d.]+)\n"),
-    # ---- frontier (draw 6abde44e) ----
-    "nFrRequests": Src(FRONT, r"over (\d+) timed requests per configuration"),
+    # ---- frontier: re-run on draw d8083dbc on a GitHub-hosted runner (round two); the laptop's
+    # earlier run on 6abde44e is quoted only for its impossible tail ----
+    "nFrRequests": Src(R2_FRONT, r"over (\d+) timed requests per configuration", ref=R2_REF),
     "nFrontNegative": Src(FRONT, r"(\d+ of \d+) configurations show a NEGATIVE"),
-    "nFrontAUCDelta": Src(FRONT, r"From 50 trees at depth 3 to 800 at depth 8: AUC ([+-][\d.]+)"),
-    "nFrontRatio": Src(FRONT_MD, r"grows \*\*(\d+)×\*\*"),
-    "nFrontShapSmall": Src(FRONT, r"goes ([\d.]+) -> [\d.]+ ms"),
-    "nFrontShapLarge": Src(FRONT, r"goes [\d.]+ -> ([\d.]+) ms"),
-    "nFrontPredSmall": Src(FRONT_MD, r"from ([\d.]+) to [\d.]+ ms, so essentially"),
-    "nFrontPredLarge": Src(FRONT_MD, r"from [\d.]+ to ([\d.]+) ms, so essentially"),
+    "nFrontAUCDelta": Src(
+        R2_FRONT, r"From 50 trees at depth 3 to 800 at depth 8: AUC ([+-][\d.]+)", ref=R2_REF
+    ),
+    "nFrontShapSmall": Src(R2_FRONT, r"goes ([\d.]+) -> [\d.]+ ms", ref=R2_REF),
+    "nFrontShapLarge": Src(R2_FRONT, r"goes [\d.]+ -> ([\d.]+) ms", ref=R2_REF),
+    "nFrontMachine": Src(R2_RUN, r"## gate.*?^runner: \d+ cores, (.*?), \d+Gi", ref=R2_REF),
     **{
-        f"nFr{kind}{letter}": Src(FRONT, rf"\n\s+{trees}\s+{depth}\s+" + pattern)
+        f"nFr{kind}{letter}": Src(R2_FRONT, rf"\n\s+{trees}\s+{depth}\s+" + pattern, ref=R2_REF)
         for letter, trees, depth in (
             ("A", 50, 3),
             ("B", 100, 4),
@@ -1093,21 +1222,16 @@ SOURCES: dict[str, Src | Derived] = {
         f"nLcRealFpr{point}": Src(LC.format(size), r"realised FPR is ([\d.]+)", ref=LC_REF)
         for point, size in (("A", "30k"), ("B", "60k"), ("C", "120k"), ("D", "240k"))
     },
-    **{
-        f"nAbl{name}p": Src(GATE, rf"{re.escape(label)}\s+\d+ feat .*?, p ([\d.e-]+)\)")
-        for name, label in (
-            ("Agent", "without agent features"),
-            ("Corridor", "without the corridor feature"),
-            ("Round", "without round-sum awareness"),
-            ("Month", "without month-end awareness"),
-            ("USSD", "without USSD-aware device handling"),
-        )
-    },
     "nBatLowBinRows": Src(BAT, r"\[0\.0, 0\.1\)\s+(\d+)"),
     "nBatLowBinTop": Src(BAT, r"\[0\.0, (0\.1)\)"),
     "nEarlyHeldOutRows": Src(BAT_EARLY, r"\*\*([\d,]+) held-out rows holding"),
     "nLatencyPNineNineShap": Src(PROMPT, r"exceeds (\d+) ms on the reference hardware"),
-    "_FrontRows": Src(FRONT, r"(^\s+trees depth.*?)\n\n"),
+    "_FrontRows": Src(R2_FRONT, r"(^\s+trees depth.*?)\n\n", ref=R2_REF),
+    "nFrontRatio": Derived(
+        ("nFrCostA", "nFrCostE"),
+        lambda small, large: str(round(Decimal(large) / Decimal(small))),
+        "the largest configuration's SHAP cost over the smallest's, rounded",
+    ),
     **{
         f"nFr{kind}{point}": Derived(
             ("_FrontRows",),
@@ -1160,6 +1284,320 @@ SOURCES: dict[str, Src | Derived] = {
         lambda n, total: f"{Decimal(WORDS[n.lower()]) * 100 / Decimal(total):.0f}%",
         "the no-source count over the catalogue's 44, to a whole per cent",
     ),
+    # ---- round two (owner's second work order): evidence committed at R2_REF and FV_READ_REF,
+    # and PB-66's full-volume evidence, copied byte for byte onto this branch at PB66_REF ----
+    # The gate table's full-volume column.
+    **{
+        f"nFv{name}": Src(FV_GATE, pattern, ref=PB66_REF)
+        for name, pattern in (
+            ("TrainRows", r"rows/fraud\s+train ([\d,]+)/"),
+            ("TrainFraud", r"rows/fraud\s+train [\d,]+/([\d,]+)"),
+            ("AUC", r"ML-GATE-01  AUC-ROC\s+([\d.]+)"),
+            ("AUCci", r"ML-GATE-01  AUC-ROC\s+[\d.]+\s+(\[[\d., ]+\])"),
+            ("RecallFPR", r"ML-GATE-02  Recall at 1% FPR \(D-01\)\s+([\d.]+)"),
+            ("RecallFPRci", r"ML-GATE-02  Recall at 1% FPR \(D-01\)\s+[\d.]+\s+(\[[\d., ]+\])"),
+            ("RecallSix", r"ML-GATE-03  Recall at 0\.60\s+([\d.]+)"),
+            ("RecallSixci", r"ML-GATE-03  Recall at 0\.60\s+[\d.]+\s+(\[[\d., ]+\])"),
+            ("Fone", r"ML-GATE-04  F1 at 0\.60\s+([\d.]+)"),
+            ("FNR", r"ML-GATE-06  FNR at 0\.60\s+([\d.]+)"),
+            ("MM", r"ML-GATE-07  MOBILE_MONEY AUC-ROC\s+([\d.]+)"),
+            ("USSD", r"ML-GATE-08  USSD AUC-ROC\s+([\d.]+)"),
+            ("Agent", r"ML-GATE-09  AGENT_BANKING AUC-ROC\s+([\d.]+)"),
+            ("Margin", r"ML-GATE-01  model [\d.]+  single [\d.]+ \(\w+\) margin (\+[\d.]+)"),
+            (
+                "RecallFPRMargin",
+                r"ML-GATE-02  model [\d.]+  single [\d.]+ \(\w+\) margin (\+[\d.]+)",
+            ),
+            ("MMMargin", r"ML-GATE-07  model [\d.]+  single [\d.]+ \(\w+\) margin (\+[\d.]+)"),
+            ("USSDMargin", r"ML-GATE-08  model [\d.]+  single [\d.]+ \(\w+\) margin (\+[\d.]+)"),
+            ("AgentMargin", r"ML-GATE-09  model [\d.]+  single [\d.]+ \(\w+\) margin (\+[\d.]+)"),
+            ("SeedRecallSix", r"SEEDS.*?ML-GATE-03  ([\d.]+ \+/- [\d.]+)"),
+            ("SeedAUC", r"SEEDS.*?ML-GATE-01  ([\d.]+ \+/- [\d.]+)"),
+            ("XgbRounds", r"XGBoost (\d+) rounds"),
+            ("LgbRounds", r"LightGBM (\d+), scale_pos_weight"),
+            ("PrecSix", r"at 0\.60: precision ([\d.]+)"),
+            ("Passed", r"(\d+) of \d+ gate metrics pass"),
+        )
+    },
+    **{
+        f"nFvBase{key}": Src(FV_GATE, rf"{name}\s+([\d.]+) \+/-", ref=PB66_REF)
+        for key, name in (
+            ("Rules", "status-quo rule engine"),
+            ("LR", "logistic regression"),
+            ("RF", "random forest"),
+            ("XGB", "XGBoost alone"),
+            ("LGB", "LightGBM alone"),
+            ("IF", "Isolation Forest alone"),
+        )
+    },
+    "nFullVolumeFactor": Derived(
+        ("nFvTrainRows", "nTrainUsed"),
+        lambda full, used: str(round(int(full.replace(",", "")) / int(used.replace(",", "")))),
+        "full-volume training rows over the gate's, rounded to a whole number",
+    ),
+    # PB-66's pre-specified "volume helps" rule, read from its pre-specification at PB66_REF.
+    "nFvRuleBound": Src(PB66_PREREG, r"lies entirely above ([\d.]+);", ref=PB66_SRC_REF),
+    "nFvRuleMean": Src(
+        PB66_PREREG, r"five-seed mean exceeds ([\d.]+) by more than", ref=PB66_SRC_REF
+    ),
+    "nFvRuleMargin": Src(
+        PB66_PREREG, r"five-seed mean exceeds [\d.]+ by more than ([\d.]+)", ref=PB66_SRC_REF
+    ),
+    "nFvRuleNeeded": Src(
+        PB66_PREREG, r"above [\d.]+ \+ [\d.]+ = ([\d.]+)\. The predicted range", ref=PB66_SRC_REF
+    ),
+    "nPriorReads": Src(PB66_PREREG, r"access log holds\s+(\d+) earlier entries", ref=PB66_SRC_REF),
+    "nPriorReadsFull": Src(
+        PB66_PREREG, r"earlier entries,\s+(\d+) of them over at least", ref=PB66_SRC_REF
+    ),
+    "nFvPredTop": Src(
+        PB66_PREREG, r"Recall at 0\.60, five-seed mean \| [\d.]+ to ([\d.]+) \|", ref=PB66_SRC_REF
+    ),
+    "nFvTruncated": Src(PB66, r"\(truncated history, PB-76\): ([\d,]+) of", ref=PB66_REF),
+    "nFvTruncatedDays": Src(PB66, r"training rows within (\d+) days of the first", ref=PB66_REF),
+    "nFvTruncatedShare": Src(
+        PB66, r"\(truncated history, PB-76\): [\d,]+ of [\d,]+ \(([\d.]+)\)", ref=PB66_REF
+    ),
+    # The learning curve's account-clustered intervals at seed 1 (round2_curve).
+    **{
+        f"nLcCluci{point}": Src(
+            R2_CURVE,
+            rf"  {size} training rows, cache.*?recall at 0\.60\s+seed 1 [\d.]+\s+rows "
+            r"\[[\d., ]+\]\s+clustered (\[[\d., ]+\])",
+            ref=R2_REF,
+        )
+        for point, size in (("A", 30000), ("B", 60000), ("C", 120000), ("D", 240000))
+    },
+    # The baselines' and ablations' AUC differences from the ensemble, with paired clustered
+    # intervals (round2_gate), in place of DeLong p-values.
+    **{
+        f"nBase{key}{kind}": Src(
+            R2_GATE, rf"  {re.escape(name)}\s+AUC [\d.]+  {pattern}", ref=R2_REF
+        )
+        for key, name in (
+            ("Rules", "status-quo rule engine"),
+            ("LR", "logistic regression"),
+            ("RF", "random forest"),
+            ("XGB", "XGBoost alone"),
+            ("LGB", "LightGBM alone"),
+            ("IF", "Isolation Forest alone"),
+        )
+        for kind, pattern in (
+            ("Diff", r"difference ([+-][\d.]+)"),
+            ("Diffci", r"difference [+-][\d.]+  clustered (\[[\d., -]+\])"),
+        )
+    },
+    **{
+        f"nAbl{key}{kind}": Src(
+            R2_GATE, rf"  {re.escape(name)}\s+\d+ feat  AUC [\d.]+  {pattern}", ref=R2_REF
+        )
+        for key, name in (
+            ("Agent", "without agent features"),
+            ("Corridor", "without the corridor feature"),
+            ("Round", "without round-sum awareness"),
+            ("Month", "without month-end awareness"),
+            ("Card", "card-style features only"),
+            ("USSD", "without USSD-aware device handling"),
+        )
+        for kind, pattern in (("Diffci", r"difference [+-][\d.]+  clustered (\[[\d., -]+\])"),)
+    },
+    # Calibration of the production ensemble, at 30K (round2_gate) and full volume (round2_full).
+    **{
+        f"n{who}Cal{name}": Src(path, pattern, ref=ref)
+        for who, path, ref in (("Gate", R2_GATE, R2_REF), ("Fv", R2_FULL, FV_READ_REF))
+        for name, pattern in (
+            ("ECEAll", r"all test rows: \d+, expected calibration error ([\d.]+)"),
+            ("RegionRows", r"decision region \(score >= 0\.60\): rows (\d+), fraud"),
+            ("RegionFraud", r"decision region \(score >= 0\.60\): rows \d+, fraud (\d+)"),
+            ("RegionECE", r"decision region .*?expected calibration error ([\d.]+), Brier"),
+        )
+    },
+    # PB-66's evaluations of the full-volume seed-1 model (pb66_d8083dbc.txt, at PB66_REF).
+    "nPbDays": Src(PB66, r"(\d+) full UTC days,", ref=PB66_REF),
+    "nPerThousand": Src(PB66, r"per (1,000) tx", ref=PB66_REF),
+    "nPbPartialRows": Src(PB66, r"excluded as partial: .*?\((\d+) rows\)", ref=PB66_REF),
+    "nPbPRAUC": Src(PB66, r"model\s+AUC-ROC [\d.]+ \[[\d., ]+\]\s+PR-AUC ([\d.]+)", ref=PB66_REF),
+    "nPbPRAUCci": Src(
+        PB66, r"model\s+AUC-ROC [\d.]+ \[[\d., ]+\]\s+PR-AUC [\d.]+ (\[[\d., ]+\])", ref=PB66_REF
+    ),
+    "nPbPRBase": Src(
+        PB66, r"baseline\s+AUC-ROC [\d.]+ \[[\d., ]+\]\s+PR-AUC ([\d.]+)", ref=PB66_REF
+    ),
+    "nPbPRBaseci": Src(
+        PB66, r"baseline\s+AUC-ROC [\d.]+ \[[\d., ]+\]\s+PR-AUC [\d.]+ (\[[\d., ]+\])", ref=PB66_REF
+    ),
+    **{
+        f"n{who}Bud{point}{field}": Src(PB66, _budget(size, label, column), ref=PB66_REF)
+        for who, label, fields in (
+            ("", "model", BUDGET_FIELDS),
+            ("Base", "baseline", ("Prec", "Share", "Recall")),
+        )
+        for point, size in (("A", 10), ("B", 50), ("C", 100), ("D", 200))
+        for field in fields
+        for column in (BUDGET_FIELDS.index(field),)
+    },
+    **{
+        f"nBudK{point}": Src(PB66, rf"^\s+({size})  model", ref=PB66_REF)
+        for point, size in (("A", 10), ("B", 50), ("C", 100), ("D", 200))
+    },
+    **{
+        f"nMon{name}{field}": Src(PB66, _month(month, column), ref=PB66_REF)
+        for name, month in (("Oct", "2025-10"), ("Nov", "2025-11"), ("Dec", "2025-12"))
+        for column, field in enumerate(
+            ("Rows", "Frauds", "AUC", "AUCci", "PR", "Recall", "Recallci")
+        )
+    },
+    "nMonDiff": Src(PB66, r"2025-12-minus-2025-11: ([-\d.]+) \[", ref=PB66_REF),
+    "nMonDiffci": Src(PB66, r"2025-12-minus-2025-11: [-\d.]+ (\[[-\d., ]+\])", ref=PB66_REF),
+    "nPbDHModel": Src(PB66, r"model at PC=0\.5: ([\d.]+);", ref=PB66_REF),
+    "nPbDHLow": Src(PB66, r"PC in \[([\d.]+), [\d.]+\] where", ref=PB66_REF),
+    "nPbDHHigh": Src(PB66, r"PC in \[[\d.]+, ([\d.]+)\] where", ref=PB66_REF),
+    "nPbDHBase": Src(PB66, r"model at PC=0\.5: [\d.]+; baseline: ([\d.]+)", ref=PB66_REF),
+    **{
+        f"nFair{name}{field}": Src(PB66, _fair(section, group, column), ref=PB66_REF)
+        for section, groups in (
+            (
+                "by country",
+                (
+                    ("CD", "CD"),
+                    ("KE", "KE"),
+                    ("RW", "RW"),
+                    ("TZ", "TZ"),
+                    ("UG", "UG"),
+                    ("All", "all"),
+                ),
+            ),
+            (
+                "by channel",
+                (
+                    ("Agent", "AGENT_BANKING"),
+                    ("Bank", "BANK_TRANSFER"),
+                    ("Card", "CARD"),
+                    ("MM", "MOBILE_MONEY"),
+                    ("Online", "ONLINE"),
+                    ("USSD", "USSD"),
+                ),
+            ),
+        )
+        for name, group in groups
+        for column, field in enumerate(FAIR_FIELDS)
+    },
+    # Leave-one-fraud-type-out at full volume (lofto_d8083dbc.txt, at PB66_REF).
+    "nLoProduction": Src(LOFTO, r"all test frauds: ([\d.]+)", ref=PB66_REF),
+    **{
+        f"nLo{name}{field}": Src(LOFTO, _lofto(scenario, column), ref=PB66_REF)
+        for name, scenario in (
+            ("Sim", "sim_swap"),
+            ("Ato", "account_takeover"),
+            ("Agent", "agent_fraud"),
+            ("Vel", "velocity"),
+            ("Cnp", "card_not_present"),
+            ("Mule", "mule_account"),
+            ("Merch", "merchant_fraud"),
+            ("Syn", "synthetic_identity"),
+            ("MuleNr", "mule_account without reversal"),
+        )
+        for column, field in enumerate(LOFTO_FIELDS)
+    },
+    # The LOFTO ranges confirmed by the owner, from PB-66's pre-specification (at PB66_SRC_REF).
+    **{
+        f"nLoRange{name}": Src(PB66_PREREG, pattern, ref=PB66_SRC_REF)
+        for name, pattern in (
+            ("Burst", r"\| velocity \| ≥ ([\d.]+) \| ≤ [\d.]+ \|"),
+            ("BurstDrop", r"\| velocity \| ≥ [\d.]+ \| ≤ ([\d.]+) \|"),
+            ("Mule", r"\| mule, without reversal \| ≥ ([\d.]+) \|"),
+            ("Single", r"\| agent \| ≤ ([\d.]+) \| ≥ [\d.]+ \|"),
+            ("SingleDrop", r"\| agent \| ≤ [\d.]+ \| ≥ ([\d.]+) \|"),
+            ("Ato", r"\| account takeover \| ≥ ([\d.]+) \|"),
+            ("AtoDrop", r"\| account takeover \| ≥ [\d.]+ \| ≤ ([\d.]+) \|"),
+            ("SynLow", r"\| synthetic identity \| ([\d.]+) to [\d.]+ \|"),
+            ("SynHigh", r"\| synthetic identity \| [\d.]+ to ([\d.]+) \|"),
+            ("SynDropHigh", r"\| synthetic identity \| [\d.]+ to [\d.]+ \| [\d.]+ to ([\d.]+) \|"),
+        )
+    },
+    # The single-feature floor re-run on d8083dbc exactly as recorded (round2_single_feature_auc),
+    # and the same features on the gate's test rows with clustered intervals (round2_gate).
+    "nReScoredRows": Src(R2_AUC, r"scored (\d+), fraud", ref=R2_REF),
+    "nReScoredFraud": Src(R2_AUC, r"scored \d+, fraud (\d+)", ref=R2_REF),
+    **{
+        f"nRe{key}{kind}": Src(R2_AUC, rf"^  {name}\s+{pattern}", ref=R2_REF)
+        for key, name in FLOOR_FEATURES
+        for kind, pattern in (("", r"([\d.]+) \+/-"), ("ci", r"[\d.]+ \+/-([\d.]+)"))
+    },
+    **{
+        f"nGr{key}{kind}": Src(R2_GATE, rf"^  {name}\s+{pattern}", ref=R2_REF)
+        for key, name in FLOOR_FEATURES[:3]
+        for kind, pattern in (
+            ("", r"([\d.]+)  \+/-"),
+            ("ci", r"[\d.]+  \+/-[\d.]+  clustered (\[[\d., ]+\])"),
+        )
+    },
+    "nReAboveCeiling": Derived(
+        ("nCeiling", *(f"nRe{key}" for key, _ in FLOOR_FEATURES)),
+        lambda ceiling, *values: NUMBER_WORDS[sum(Decimal(v) > Decimal(ceiling) for v in values)],
+        "re-run features whose point estimate exceeds the ceiling",
+    ),
+    "nReAboveCeilingCI": Derived(
+        ("nCeiling", *(f"nRe{key}{kind}" for key, _ in FLOOR_FEATURES for kind in ("", "ci"))),
+        lambda ceiling, *pairs: NUMBER_WORDS[
+            sum(
+                Decimal(pairs[i]) - Decimal(pairs[i + 1]) > Decimal(ceiling)
+                for i in range(0, len(pairs), 2)
+            )
+        ],
+        "re-run features whose interval lies wholly above the ceiling",
+    ),
+    # Leave-one-country-out with account-clustered intervals over each country's test rows.
+    **{
+        f"nLocoClu{country}{kind}": Src(R2_GATE, rf"^  {country}  rows .*?{pattern}", ref=R2_REF)
+        for country in ("CD", "KE", "RW", "TZ", "UG")
+        for kind, pattern in (
+            ("in", r"in-sample ([\d.]+) "),
+            ("inci", r"in-sample [\d.]+ (\[[\d., ]+\])"),
+            ("out", r"unseen ([\d.]+) "),
+            ("outci", r"unseen [\d.]+ (\[[\d., ]+\])"),
+            ("Accounts", r"accounts (\d+):"),
+        )
+    },
+    # The reversal variant split by counterparty novelty, production ensemble at 30K (round2_gate)
+    # and at full volume (round2_full_volume).
+    **{
+        f"n{who}Rev{group}{rule}{field}": Src(path, _reversal(label, rule_text, column), ref=ref)
+        for who, path, ref in (("Gate", R2_GATE, R2_REF), ("Fv", R2_FULL, FV_READ_REF))
+        for group, label in (
+            ("All", "all reversal rows"),
+            ("New", "counterparty_is_new_for_account = 1"),
+            ("Known", "counterparty_is_new_for_account = 0"),
+        )
+        for rule, rule_text in (("Budget", "1% FPR budget"), ("Flag", "flag 0.60"))
+        for column, field in enumerate(REVERSAL_FIELDS)
+    },
+    # Every confirmed fraud of the test period by variant, fraud type, observed and true label.
+    **{
+        f"_Rec{variant}{kind}{observed}{true}": Src(
+            R2_GATE, _reconcile(variant, kind, observed, true), ref=R2_REF
+        )
+        for variant, kind, observed, true in RECONCILE_CELLS
+    },
+    **{
+        f"nRec{name}": Derived(
+            tuple(f"_Rec{v}{k}{o}{t}" for v, k, o, t in RECONCILE_CELLS if select(v, o, t)),
+            lambda *counts: str(sum(int(c) for c in counts)),
+            how,
+        )
+        for name, select, how in (
+            ("BaseConfirmed", lambda v, o, t: v == "base" and o and t, "base: observed and true"),
+            ("BaseNoise", lambda v, o, t: v == "base" and o and not t, "observed, not true fraud"),
+            ("BaseMissed", lambda v, o, t: v == "base" and t and not o, "true, not observed"),
+            ("Novel", lambda v, o, t: v == "novel_esim_delayed_drain", "novel variant, observed"),
+            ("Adapt", lambda v, o, t: v == "adapted_below_threshold", "adapted variant"),
+            ("RevConfirmed", lambda v, o, t: v == REVERSAL_NAME and o and t, "reversal, observed"),
+            ("RevMissed", lambda v, o, t: v == REVERSAL_NAME and t and not o, "reversal, missed"),
+            ("Observed", lambda v, o, t: o, "every observed fraud of the test period"),
+            ("True", lambda v, o, t: t, "every true fraud of the test period"),
+            ("Missed", lambda v, o, t: t and not o, "every missed-fraud noise row"),
+        )
+    },
 }
 
 

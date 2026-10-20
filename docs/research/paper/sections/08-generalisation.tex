@@ -1,8 +1,8 @@
 \section{Generalisation: nulls and one failure}
 \label{sec:generalisation}
 
-Once a single engineered feature separated the classes at \nFloorM{} on an earlier draw
-(Section~\ref{sec:floor}), the headline AUC could no longer show that a model had learned anything a
+Once a single engineered feature separated the classes at \nGateFloor{} on the evaluation draw's
+test rows (Section~\ref{sec:floor}), the headline AUC could no longer show that a model had learned anything a
 one-line rule could not.
 Leave-one-country-out and a fraud sub-variant that appears only in the test period were meant to
 carry that weight instead. Both are null. This section reports them as null results rather than
@@ -20,18 +20,20 @@ encoding correction described below, it cost at most \nEarlyLocoMaxLoss{}.
 \centering
 \caption{AUC per country, in-sample and with the country unseen in training (diagnostic model,
 draw \texttt{d8083dbc}, \nBatTestRows{} test rows, evidence commit \texttt{d40fca2}, source
-\texttt{docs/benchmarks/m4\_battery\_d8083dbc\_e1.txt}). The evidence file marks CD, which rests on
+\texttt{docs/benchmarks/m4\_battery\_d8083dbc\_e1.txt}), each with an account-clustered interval over
+that country's test rows from a reproduction of the same fits
+(\texttt{evidence/\allowbreak round2\_\allowbreak gate\_\allowbreak d8083dbc.txt}). The evidence file marks CD, which rests on
 fewer than \nSmallCountThreshold{} fraud rows, as direction rather than measurement.}
 \label{tab:loco}
-\begin{tabular}{lrrr}
+\begin{tabular}{lrrrrr}
 \toprule
-Country & In-sample & Unseen in training & Fraud rows \\
+Country & In-sample & Clustered & Unseen in training & Clustered & Fraud rows (accounts) \\
 \midrule
-KE & \nLocoKEin & \nLocoKEout & \nLocoKEf \\
-RW & \nLocoRWin & \nLocoRWout & \nLocoRWf \\
-TZ & \nLocoTZin & \nLocoTZout & \nLocoTZf \\
-UG & \nLocoUGin & \nLocoUGout & \nLocoUGf \\
-CD & \nLocoCDin & \nLocoCDout & \nLocoCDf \\
+KE & \nLocoKEin & \nLocoCluKEinci & \nLocoKEout & \nLocoCluKEoutci & \nLocoKEf{} (\nLocoCluKEAccounts) \\
+RW & \nLocoRWin & \nLocoCluRWinci & \nLocoRWout & \nLocoCluRWoutci & \nLocoRWf{} (\nLocoCluRWAccounts) \\
+TZ & \nLocoTZin & \nLocoCluTZinci & \nLocoTZout & \nLocoCluTZoutci & \nLocoTZf{} (\nLocoCluTZAccounts) \\
+UG & \nLocoUGin & \nLocoCluUGinci & \nLocoUGout & \nLocoCluUGoutci & \nLocoUGf{} (\nLocoCluUGAccounts) \\
+CD & \nLocoCDin & \nLocoCluCDinci & \nLocoCDout & \nLocoCluCDoutci & \nLocoCDf{} (\nLocoCluCDAccounts) \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -66,6 +68,34 @@ distribution with a median of \nLeadMedianMinutes{} minutes), and in its channel
 customers with a smartphone). Its transaction pattern is still a multi-row incident. We infer that a
 model that detects such incidents catches it without having seen it; no attribution or ablation was
 run on these rows. This is not an out-of-distribution test.
+
+\paragraph{Every fraud of the test period accounted for.} The variant counts in this section sum to
+fewer than the test period's \nTestFraud{} confirmed frauds. Table~\ref{tab:reconcile} accounts for
+all of them from the dataset's own labels: the difference is label noise, legitimate rows that the
+observed label marks as fraud, which carry no scenario and so no variant. The table also counts the
+opposite noise, frauds the observed label misses, which the evaluation scores as legitimate.
+
+\begin{table}[htbp]
+\centering
+\caption{The test period's frauds by variant and label (\nTestRows{} rows; dataset labels, test
+segment by the published split; \texttt{evidence/\allowbreak round2\_\allowbreak gate\_\allowbreak d8083dbc.txt}).
+Confirmed: observed and true fraud. Noise: observed fraud on a legitimate row. Missed: true fraud the
+observed label misses.}
+\label{tab:reconcile}
+\begin{tabular}{lrrr}
+\toprule
+Variant & Confirmed & Noise & Missed \\
+\midrule
+Base scenarios & \nRecBaseConfirmed & \nRecBaseNoise & \nRecBaseMissed \\
+\texttt{novel\_esim\_delayed\_drain} & \nRecNovel & -- & -- \\
+\texttt{adapted\_below\_threshold} & \nRecAdapt & -- & -- \\
+\texttt{reversal\_scam\_social\_engineering} & \nRecRevConfirmed & -- & \nRecRevMissed \\
+\midrule
+Observed fraud (confirmed and noise) & \multicolumn{3}{r}{\nRecObserved} \\
+True fraud (confirmed and missed) & \multicolumn{3}{r}{\nRecTrue} \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \subsection{What the nulls have in common}
 
@@ -156,16 +186,36 @@ history); re-running on the same data with the permitted encoding produced the f
 the first figures the whole interval lay below the predicted range; with the corrected ones only the
 point estimate does, so the conclusion narrowed.
 
+\textbf{The production ensemble, row by row.} The figures above are the diagnostic model's. The
+production ensemble was scored on the same rows with its per-row scores kept
+(\texttt{evidence/\allowbreak round2\_\allowbreak gate\_\allowbreak d8083dbc.txt},
+\texttt{evidence/\allowbreak round2\_\allowbreak full\_\allowbreak volume\_\allowbreak d8083dbc.txt}). \textbf{The counts are small,
+and the counts come first.} At the \nFPRBudget{} budget the gate model catches \nGateRevAllBudgetCaught{}
+of the \nGateRevAllBudgetRows{} reversal rows. All of them are rows whose recipient the account had
+never paid: \nGateRevNewBudgetCaught{} of the \nGateRevNewBudgetRows{} such rows (recall
+\nGateRevNewBudgetRecall{}, Wilson \nGateRevNewBudgetWilson{}, account-clustered
+\nGateRevNewBudgetClustered{}), against \nGateRevKnownBudgetCaught{} of the
+\nGateRevKnownBudgetRows{} rows whose recipient it had paid before (Wilson
+\nGateRevKnownBudgetWilson{}). The full-volume model gives the same pattern:
+\nFvRevNewBudgetCaught{} of \nFvRevNewBudgetRows{} never-paid rows (Wilson \nFvRevNewBudgetWilson{})
+and \nFvRevKnownBudgetCaught{} of \nFvRevKnownBudgetRows{} listed-payee rows. At the flag threshold
+neither model catches any reversal row (\nGateRevAllFlagCaught{} of \nGateRevAllFlagRows{} and
+\nFvRevAllFlagCaught{} of \nFvRevAllFlagRows{}). Each reversal row is on its own account, so the
+clustered and Wilson intervals describe the same uncertainty in different ways; the clustered ones hold
+the budget's threshold fixed at its full-sample value.
+
 \textbf{What this does and does not show.} On a held-out shape, a variant with no burst structure,
-paid to a listed counterparty and with its own amount rule, is rarely caught by a model trained on
-this benchmark's scenarios. Because the variant differs from them in several respects at once, the
-result cannot say which of them causes the miss. Counterparty novelty is present on
-\nRevNovelScored{} of the rows, and recall over all of them is \nRevRecall{}; the battery's
-per-row scores were not kept, so whether the rows caught are among those \nRevNovelScored{} cannot
-be read from the evidence, and the part novelty plays is not isolated. We infer that the absence of
-burst structure is a likely contributor. A variant with a new
-recipient, as in the documented form, would separate those causes and has not been measured; whether it
-would be easier or harder to catch is not established. The result concerns this one variant, not
+paid to a listed counterparty and with its own amount rule, is rarely caught by models trained on
+this benchmark's scenarios, and at the flag threshold not at all. Within the variant, every row the
+production ensemble catches at the budget has a never-paid recipient, and none of the rows sent to a
+payee the account had paid before is caught. Both groups share the variant's amount rule and its
+lack of burst structure, so this points to counterparty novelty as what the model still detects in
+it. It does not isolate novelty as a cause: the split is observational, not a designed comparison;
+the groups were not assigned at random and may differ in other ways, such as the history their
+accounts carry; and the counts are \nGateRevNewBudgetRows{} and \nGateRevKnownBudgetRows{}. We infer
+that the absence of burst structure is a likely contributor to the miss overall. A variant built with
+a new recipient on every row, as in the documented form, would test this directly and has not been
+measured. The result concerns this one variant, not
 non-burst fraud in general: other typologies are untested, and whether data this benchmark does not
 contain, such as an institution's account and KYC records (ADR 0055), would help is not known.
 \texttt{adapted\_below\_threshold}, a variant present in both training and test, rests on

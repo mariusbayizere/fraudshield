@@ -81,9 +81,11 @@ that reason. Explanations are Shapley-value attributions \cite{lundberg2017shap}
 for tree ensembles by TreeSHAP \cite{lundberg2020trees}.
 
 \paragraph{Evaluation statistics.} We use Hanley and McNeil's standard error for single AUCs
-\cite{hanley1982auc}, DeLong's test for correlated AUCs \cite{delong1988auc}, Wilson intervals for
-proportions on small counts \cite{wilson1927interval}, and the bootstrap \cite{efron1979bootstrap}
-for the gate metrics.
+\cite{hanley1982auc}, Wilson intervals for proportions on small counts \cite{wilson1927interval},
+and the bootstrap \cite{efron1979bootstrap}, resampling rows for the gate metrics and whole accounts
+where the dependence between an account's rows matters. Correlated AUCs are compared with a paired
+bootstrap over accounts rather than with DeLong's test \cite{delong1988auc}, whose $p$-values assume
+independent rows.
 
 \paragraph{Engineering and research practice.} Machine-learning systems accumulate hidden costs at
 their boundaries \cite{sculley2015debt}, and production readiness can be scored by the tests a
