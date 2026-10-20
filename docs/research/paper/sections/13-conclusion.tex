@@ -23,11 +23,11 @@ not measured. Refitting the full-volume model without one fraud type at a time (
 not never seeing it) costs little recall at the \nFPRBudget{} budget for velocity, SIM-swap and mule
 fraud and much more for agent fraud and synthetic identity, which partly supports the stated hypothesis, in the pre-specified rule's term, and refutes several of the
 ranges set for it. The one variant pre-specified without burst structure is rarely caught: the diagnostic model's
-recall, \nRevRecall{}, is below by point estimate (its interval reaches above it) the bound its
+recall at the \nFPRBudget{} false-positive budget, \nRevRecall{}, is below by point estimate (its interval reaches above it) the bound its
 prediction said would mean burst structure and
 counterparty novelty carry nearly all the detection power, a reading the variant's other differences
 keep us from supporting as stated. Neither production model catches it at the flag
-threshold. Within the variant, at the false-positive budget, the ensemble trained on \nTrainUsed{} rows (seed 1) catches \nGateRevNewBudgetCaught{} of the
+threshold. Within the variant, at the false-positive budget, the declared gate model (trained on \nTrainUsed{} rows, seed 1) catches \nGateRevNewBudgetCaught{} of the
 \nGateRevNewBudgetRows{} rows whose recipient the account had never paid and none of the
 \nGateRevKnownBudgetRows{} sent to a payee it had paid before; the counts are small and
 the split is observational, so the cause is not isolated. What survives is a methodology, the record of how each of these limits
@@ -41,6 +41,6 @@ permitted location, measuring the same floor, margins and calibration. Second, a
 a new recipient on every row, as we read the documented form of the reversal scam, which would test
 directly what the within-variant split here only suggests: that counterparty novelty is what the model
 still detects once burst structure is gone. Next, why the choice of training rows moves recall at the flag threshold more than
-volume does, but not recall at the false-positive budget or AUC: a test that separates the history each row carries from the months it comes from (PB-76). Last,
+volume does, but not recall at the false-positive budget or AUC: a test that separates the history each row carries from the months it comes from. Last,
 the serving and load measurements on dedicated hardware: the frontier at the \nPctlTail{}th
 percentile, end-to-end decision latency, and scale to \nSpecRows{} rows: \deferred{M10}.

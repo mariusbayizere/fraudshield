@@ -51,8 +51,8 @@ repository and disagree with:
         (Section~\ref{sec:generalisation}, which gives the commits; a burst is an incident spanning
         several fraudulent transactions on one account; the variant also sends to a payee already on the
         victim's list, a modelling choice, and has its own amount rule): the diagnostic model catches it
-        at \nRevRecall{} \nRevCI{} against \nBaseVarRecall{} \nBaseVarCI{}, and the production
-        ensemble never at the flag threshold. At a \nFPRBudget{} false-positive budget the ensemble trained on \nTrainUsed{} rows (seed 1) catches
+        at \nRevRecall{} \nRevCI{} at the \nFPRBudget{} false-positive budget against \nBaseVarRecall{} \nBaseVarCI{}, and the production
+        ensemble never at the flag threshold. At a \nFPRBudget{} false-positive budget the declared gate model (trained on \nTrainUsed{} rows, seed 1) catches
         \nGateRevNewBudgetCaught{} of the \nGateRevNewBudgetRows{} rows whose recipient the
         account had never paid and none of the \nGateRevKnownBudgetRows{} sent to a payee it had paid before.
         The counts are small and the split is observational, so the cause is not isolated.
@@ -71,11 +71,11 @@ repository and disagree with:
         checks that no fraud parameter is keyed by country, and we infer that the country null
         follows from that and the variant null from the variant's multi-row shape; no experiment
         isolates either cause. Every result at the specification's \nSpecRows{}-row scale is
-        \deferred{M10}; we infer that a repeat at that scale with the same fraud parameters could
-        show whether the nulls hold at scale but not make leave-one-country-out informative.
+        \deferred{M10}.
   \item \textbf{The latency--explainability frontier} (Section~\ref{sec:evaluation}): how the
         median cost of an exact TreeSHAP explanation changes across tree complexity, reported at the
-        median only, because an earlier run's \nPctlTail{}th percentile was not credible: in
+        median only, because the runner's tail comes from shared hardware and an earlier run's
+        \nPctlTail{}th percentile was not credible: in
         \nFrontNegative{} configurations it showed a negative explanation cost. It is a measurement
         of one model on one shared machine. M10 would add the
         frontier the specification defines: the single-request \nPctlTail{}th percentile of the

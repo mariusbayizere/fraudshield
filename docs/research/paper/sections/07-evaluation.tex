@@ -217,7 +217,7 @@ deviations this close, so neither comparison supports the claim as a property of
 \subsection{Training volume}
 \label{sec:volume}
 
-The evaluated models train on \nTrainUsed{} of the \nTrainRows{} training-period rows, so the recall
+The declared gate model trains on \nTrainUsed{} of the \nTrainRows{} training-period rows, so the recall
 miss could have been a matter of training volume. A learning curve tested that (PB-67). The lab notebook
 records its design, its prediction and the rule for reading it as written before any size was run
 (the commit was rebased after the outcome, so the history cannot confirm that order;
@@ -488,7 +488,7 @@ explanation in one process; the serving path's latency against the specification
 is not established here. The ratio depends on the grid: it is measured from the cheapest configuration tried, and a different smallest configuration
 would give a different ratio; the growth with trees and depth is the finding, not the number. And
 it is one machine's median. If the growth holds on serving hardware, then on data like this the explanation
-budget, not the accuracy target, would choose the tree configuration; that is not yet shown.
+budget (the latency the specification allows for an explained decision), not the accuracy target, would choose the tree configuration; that is not yet shown.
 
 \textbf{We report the median only.} In the earlier laptop run, \nFrontNegative{} configurations
 showed a \emph{negative} explanation cost at the \nPctlTail{}th percentile, which is impossible:
@@ -508,7 +508,7 @@ PB-66 measured the full-volume model where an operator would read it, on the sam
 same rows. Like every result of that run, these were specified before it ran and are not blind to a
 test period scored before.
 
-\paragraph{Precision and recall in the alert region.} The PR-AUC is \nPbPRAUC{} \nPbPRAUCci{},
+\paragraph{Precision and recall in the alert region.} The PR-AUC (area under the precision--recall curve) is \nPbPRAUC{} \nPbPRAUCci{},
 against \nPbPRBase{} \nPbPRBaseci{} for the single feature; at this base rate it says more about the
 alerts an analyst sees than the AUC does.
 
