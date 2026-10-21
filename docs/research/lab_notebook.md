@@ -3095,3 +3095,31 @@ runs it. The helper was written at `c280402` on 2026-09-22 but reached main only
 every push to main, and to every branch, since 2026-09-17. It belongs with
 "The status table said "met" and cited a run that did not exist" and "A revoke that revoked
 nothing, and a cause I named wrongly": a claim that outran its evidence.
+
+### 2026-10-21 · Three flakes from one commit, each an assumption about a random string
+
+The day after the employee-ID flake (above), main's java job failed again, on `0e03940` (run
+39566866785, job 119111116356), a commit whose own branch run had passed (run 39548346422).
+`NetworkAndKeysTest` checks that the API-key list shows a key's last four characters and never its
+secret. It found the secret with `raw.substring(raw.lastIndexOf('_') + 1)`. A key is
+`fsk_<env>_<keyId>_<secret>`, and the secret is 43 characters of base64url, whose alphabet contains
+`_`. When the secret's fifth-from-last character was `_`, the "secret" the test extracted was the
+last four, which the list is meant to show: `not to contain: "03WE"`. The generator redraws only
+until the last four are alphanumeric, so that character is uniform over 64 values: about 1 run in
+64, computed from the code, not observed. The fix takes the secret by its fixed length, in one test
+helper, and a unit test feeds it a secret ending in `_03WE` and checks it against the production
+parser.
+
+Both flakes came from the same commit, `c280402` (2026-09-22), and from the same habit: test code
+that assumed something about a randomly generated string which holds for most values and not all.
+The employee-ID helper assumed a random number always has ten base-36 digits. This test assumed a
+secret never contains its own alphabet's `_`. A sweep of the auth and admin tests for the habit
+found a third, already fixed: `CryptoTest`, also from `c280402`, tampered with a token's last
+base64url character, whose low bits can be padding, so the "tampered" token sometimes decoded to
+the same bytes and verified. It failed CI on `6303efe` and was fixed in `cca1283` (2026-10-18).
+The sweep's other findings are reported to the owner, not fixed here.
+
+**The rule** (the owner's words). *"A test that draws random input must hold for every value it
+can draw, and a parser that splits on a character the alphabet contains will eventually meet it."*
+The remedy for the second half: take a fixed-format field by its position or length, or use the
+production parser.
