@@ -608,33 +608,34 @@ excluded by a CPU-only xgboost, the other rows still apply.
   and a Google sandbox contract suite reported as skipped without credentials (PB-113). M7's
   in-process `FakeGoogle` already backs the tests.
 
-## Before merging `security/scan-on-main` (owner, 2026-10-20)
+## Merging `security/scan-on-main` (owner, 2026-10-20)
 
-This branch moves M9's `security` workflow, its pinned Trivy launcher and the Tomcat, Jackson and
-lz4-java bump to `main` ahead of the rest of M9. It is not merged. Whoever merges it should expect
-three things:
+That branch moved M9's `security` workflow, its pinned Trivy launcher and the Tomcat, Jackson and
+lz4-java bump to `main` ahead of the rest of M9. It was merged on 2026-10-20, a fast-forward of
+`main` to `810206b`. The owner asked for three consequences to be recorded for whoever merged it:
 
 1. **Other branches get gated once rebased.** The workflow runs on a push to any branch that
    contains it, so every milestone branch rebased onto `main` afterwards is scanned on every push
    and fails on any HIGH or CRITICAL dependency finding that has a fix. For example,
    `m8/frontend-rebase` changes `frontend/pnpm-lock.yaml`, and its frontend dependencies are gated
    from its first push after a rebase.
-2. **M9's own rebase will conflict on `.github/workflows/security.yml`.** `m9/infra` added the file
-   in its own commits. `main`'s copy differs: the configuration job is guarded behind a
-   `trivy-configuration-target` job, and renamed to "misconfiguration in Kubernetes manifests and
-   Dockerfiles". The conflict stops the rebase at `ad6ccc2`, the commit that adds the file. Take
-   that commit's version, drop the target job (the manifests exist on M9), and keep `main`'s job
-   name: the old name claims compose files and workflows, which Trivy cannot scan
-   (`docs/research/lab_notebook.md`, 2026-10-20). M9's two later changes to the file (`74f3aef`,
-   `7a1d09a`) then apply cleanly. The bump commit drops out as already applied.
+2. **M9's own rebase conflicted on `.github/workflows/security.yml`** (2026-10-21). `m9/infra` had
+   added the file in its own commits, and `main`'s copy differed: the configuration job was guarded
+   behind a `trivy-configuration-target` job and renamed to "misconfiguration in Kubernetes
+   manifests and Dockerfiles". The conflict stopped the rebase at the commit that adds the file
+   (`ad6ccc2` before the rebase, `b630462` after). It was resolved as planned: that commit's
+   version, without the target job (the manifests exist on M9), and with `main`'s job name, since
+   the old name claimed compose files and workflows, which Trivy cannot scan
+   (`docs/research/lab_notebook.md`, 2026-10-20). M9's two later changes to the file (now `a6c6b77`
+   and `41b9132`) applied cleanly, and the bump commit dropped out as already applied.
 3. **The nightly scan can turn `main` red on a new CVE**, with no code change, once the default
    branch moves off `m0/bootstrap` (GOV-9). Until then the `schedule` trigger does not register,
    and `main` is scanned only on push, on pull request and by manual dispatch.
 
 ## Backlog ids filed on `main` from M9's reservation (2026-10-21)
 
-M9 reserved PB-171 to PB-190 on `m9/infra` (its claims table and `docs/backlog/product.md`'s claims
-row, not yet on `main`); PB-171 to PB-179 are used there. The test-flake work on `main` uses three
+M9 reserved PB-171 to PB-190 on `m9/infra`, in its claims table and in `docs/backlog/product.md`'s
+claims row; PB-171 to PB-179 are used there. The test-flake work on `main` uses three
 more, claimed here before use: **PB-180** (`ApiKeyLifecycleTest:142`, splitting a key on its last
 "_"), **PB-181** (`ApiKeyLifecycleTest:174`, tampering with a secret's last character) and
 **PB-182** (wall-clock assertions in the auth tests). The owner directed (2026-10-21) that they go
