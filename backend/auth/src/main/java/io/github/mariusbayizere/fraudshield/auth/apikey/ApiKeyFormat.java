@@ -76,7 +76,9 @@ public final class ApiKeyFormat {
 
   /**
    * Generates a key. The secret is drawn again until its last four characters are alphanumeric,
-   * because the contract shows them as {@code [A-Za-z0-9]{4}}; this removes about 2 of 256 bits.
+   * because the contract shows them as {@code [A-Za-z0-9]{4}}. That removes about 0.14 of 256 bits:
+   * the last character is always alphanumeric, and each of the three before it is with probability
+   * 62/64, so a draw is kept with probability (62/64)^3, about 0.91.
    *
    * @param environment environment segment
    * @return the new key
