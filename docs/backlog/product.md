@@ -24,6 +24,7 @@ taken twice. Claims made on branches not yet merged, as of 2026-10-17:
 | PB-77 to PB-101 | M6 | `M6_updates.md`, "Numbering reserved by this branch" | amendment 1's known gaps and the 22 section-8 rows proved only in part |
 | PB-102 to PB-130 | M7 | `M7_updates.md`, "Numbering reserved by this branch" | the merge round's unowned items and M7's rows proved only in part (PB-102 to PB-124 used) |
 | PB-151 to PB-170 | M8B | `M8B_updates.md`, "Numbering reserved by this branch" | the analyst API's follow-ups (PB-151 to PB-159 used); M8B also holds ADR 0110–0119 and Flyway V80–V89 |
+| PB-171 to PB-190 | M9 | `M9_updates.md` on `m9/infra`; PB-180 to PB-182 also in `main`'s copy, "Backlog ids filed on `main`" | M9's follow-ups and items it files for other owners (PB-171 to PB-182 used) |
 
 ---
 
@@ -1541,3 +1542,24 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 - **Acceptance:** measure the share of training rows whose windows reach before the corpus start,
   and either build training features from a corpus that reaches at least 90 days before the
   earliest training row, or report every model figure with that share stated. The owner decides.
+
+### PB-180 · `ApiKeyLifecycleTest` finds a key's secret by splitting on the last "_"
+- **Source:** the auth and admin test sweep after the API-key flake, 2026-10-21 (`docs/research/lab_notebook.md`) · **Priority:** low · **Owner:** M7
+- **Problem:** `ApiKeyLifecycleTest.java:142` takes the secret as `raw.substring(raw.lastIndexOf('_') + 1)`. The secret is base64url, whose alphabet contains `_`, so for a secret that contains one this returns only a tail. It is not a practical flake: the test asserts the stored HMAC text does not contain the tail, and a tail's absence implies the whole secret's (the reviewer's estimate of a chance match is about 1e-8 per run, an inference). But it checks less than it claims. Line 454 of the same file already takes the last 43 characters.
+- **Acceptance:** the test takes the secret with `ApiKeys.secretOf(raw)` (auth test-jar), as `NetworkAndKeysTest` does since `b85e588`.
+
+### PB-181 · `ApiKeyLifecycleTest` tampers with a secret's last character
+- **Source:** the same sweep, 2026-10-21 · **Priority:** low · **Owner:** M7
+- **Problem:** `ApiKeyLifecycleTest.java:174` builds a wrong secret by replacing the last character (`A` to `B`, anything else to `A`). It is safe today only because `ApiKeyAuthenticator.java:304` takes the HMAC of the secret's ASCII text. The last base64url character of 32 bytes carries two padding bits, so if the authenticator ever took the HMAC of the decoded bytes, `A` to `B` would decode to the same bytes and the test would fail about 1 run in 16 (an inference from the encoding, not measured). It is the pattern `CryptoTest` had until `cca1283` (2026-10-18).
+- **Acceptance:** the test changes a middle character, as `cca1283` did, or states in a comment why the last character is safe.
+
+### PB-182 · Wall-clock assertions in the auth tests
+- **Source:** the reviewer of the same sweep, 2026-10-21; outside the random-string habit, so not examined for a failure rate · **Priority:** medium · **Owner:** M7
+- **Problem:** these tests assert on elapsed wall-clock time, so their outcome depends on the machine's speed and load, not only on the code:
+  `PasswordHasherTest.java:45-55` (a bcrypt check must take more than 100 ms and 150 ms: a lower bound, which a faster runner breaks),
+  `GoogleSignInTest.java:195-198` (the sign-in flow under 3 s),
+  `ApiKeyCacheContractTest.java:505-508` (an unavailable key store refuses within 10 s),
+  `ApiKeyLifecycleTest.java:835-843` (a spin loop measuring time until refusal) and
+  `SessionInvalidationTimingTest` (a 5 s gate and stalls of up to 1.5 s).
+  None is known to have failed (CI logs were not searched), and none has a measured rate.
+- **Acceptance:** a sweep of each: what the bound protects, whether it can be stated against an injected clock or a counted operation instead, and, for the bounds that must stay on wall-clock time, a margin justified against CI's runners.
