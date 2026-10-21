@@ -3085,3 +3085,13 @@ handling in the test helper, which none of those libraries touch.
 something the merge changed. A test that draws random input without a seed has to be correct for
 every value it can draw, and its edge values belong in a unit test, because a green run samples
 too few of them to show they work.*
+
+**Addendum (owner, 2026-10-21).** "I supplied a lesson the record did not support, and the check
+that caught it was going back to when the code reached main rather than when it was written." The
+lesson was that this was the first defect the move of CI to main surfaced on main's own tree,
+latent there for a month, and that a flake invisible on a branch becomes visible once every push
+runs it. The helper was written at `c280402` on 2026-09-22 but reached main only at `71b0ec9` on
+2026-10-18, two days before it failed. And the move did not bring `ci` to main: it had run on
+every push to main, and to every branch, since 2026-09-17. It belongs with
+"The status table said "met" and cited a run that did not exist" and "A revoke that revoked
+nothing, and a cause I named wrongly": a claim that outran its evidence.
