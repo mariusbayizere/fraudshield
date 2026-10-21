@@ -3123,3 +3123,29 @@ The sweep's other findings are reported to the owner, not fixed here.
 can draw, and a parser that splits on a character the alphabet contains will eventually meet it."*
 The remedy for the second half: take a fixed-format field by its position or length, or use the
 production parser.
+
+### 2026-10-21 · A unique value built from a truncated clock, thirteen times
+
+The sweep after the API-key flake (above) found the auth and admin tests making values that must
+not repeat from `System.nanoTime() % 100000`: ten institution codes (`institutions.code` is
+`UNIQUE`, V1), two live API-key names (the API refuses a second live key with the same name) and one
+email, which a sequence number already made unique. Ten of the thirteen came from `c280402`; two
+later commits the same day, `11cadf6` and `8f6bdba`, copied the idiom into new tests. Every
+`AuthIntegrationTest` subclass in one test JVM shares one database, so the codes meet. Only one
+prefix, `self-`, is used twice today (`UserAdministrationTest`); the other eight prefixes are each
+one copy away from the same collision. All thirteen now come from one helper,
+`UniqueCodes.of(prefix)`: the prefix and twelve hex digits of a random UUID, 48 random bits.
+
+How often the two `self-` codes collide is reasoned, not measured. It depends on the clock's
+granularity. If `nanoTime` ticks in nanoseconds, the residue mod 100,000 is close to uniform and two
+codes collide about once in 100,000 runs. Java promises `nanoTime` nanosecond precision but not
+nanosecond resolution, which is the platform's; if it ticks in microseconds, every reading is a
+multiple of 1,000, only 100 residues remain, and they collide about once in 100 runs. The same test
+can therefore pass for months on one machine and fail about one run in 100 on another, indefinitely,
+depending on the clock rather than the code. The helper's unit test shows the difference directly:
+100,000 clock-derived codes repeat, while 1,000 helper codes repeat with probability about 1.8e-9.
+
+**The rule** (the owner's words). *"A test that builds a unique value from a truncated clock is not
+unique, and seven copies of the same idiom means the next one fails for the same reason."* (The
+count was nine institution-code prefixes in ten places, thirteen places in all; "seven" came from
+my report to the owner, which miscounted.)
