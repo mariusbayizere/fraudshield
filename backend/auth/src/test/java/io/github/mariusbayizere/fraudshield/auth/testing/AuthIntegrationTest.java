@@ -172,10 +172,7 @@ public abstract class AuthIntegrationTest {
 
   /** A unique employee ID. */
   protected static String uniqueEmployeeId() {
-    return "E"
-        + Long.toString(Math.abs(RANDOM.nextLong()), 36)
-            .substring(0, 10)
-            .toUpperCase(java.util.Locale.ROOT);
+    return EmployeeIds.of(RANDOM.nextLong());
   }
 
   /**
