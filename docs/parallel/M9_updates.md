@@ -192,7 +192,7 @@ The owner's words, then what was done on this branch. Sizes were reported to the
 | ADR 0091 | live AUC and label-coverage metrics | written on this branch |
 | ADR 0092 | the storage-class fsync fallback for ADR 0090 (decision 8) | claimed, not written |
 | ADR 0093 | the metrics the code emits that Part E.10 does not list | Accepted 2026-10-20 |
-| PB-171 to PB-190 | infrastructure follow-ups | PB-171 to PB-179 used |
+| PB-171 to PB-190 | infrastructure follow-ups | PB-171 to PB-179 used here; PB-180 to PB-182 used on `main` (2026-10-21, auth test items for M7); next free PB-183 |
 
 ## 4. Deviations to record in the traceability rows
 
