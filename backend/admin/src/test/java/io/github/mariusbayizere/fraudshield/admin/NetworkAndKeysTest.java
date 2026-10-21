@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import io.github.mariusbayizere.fraudshield.auth.testing.ApiKeys;
 import io.github.mariusbayizere.fraudshield.auth.testing.AuthIntegrationTest;
 import io.github.mariusbayizere.fraudshield.auth.testing.Http;
+import io.github.mariusbayizere.fraudshield.auth.testing.UniqueCodes;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -17,8 +18,7 @@ class NetworkAndKeysTest extends AuthIntegrationTest {
   @Test
   @Tag("D-26")
   void allowlistEntriesAreValidatedAddedListedAndRemovedWithAudit() {
-    Account admin =
-        createAccount(DB.createInstitution("net-" + System.nanoTime() % 100000), "ADMIN", "ACTIVE");
+    Account admin = createAccount(DB.createInstitution(UniqueCodes.of("net-")), "ADMIN", "ACTIVE");
     Session session = issueSession(admin);
     Http.Response added =
         http.post(
@@ -89,7 +89,7 @@ class NetworkAndKeysTest extends AuthIntegrationTest {
             "/api/v1/admin/api-keys",
             Map.of(
                 "name",
-                "Core banking prod " + System.nanoTime() % 100000,
+                UniqueCodes.of("Core banking prod "),
                 "scopes",
                 List.of("ingest:write", "decisions:read")),
             admin.bearer());
@@ -126,8 +126,7 @@ class NetworkAndKeysTest extends AuthIntegrationTest {
     Http.Response created =
         http.post(
             "/api/v1/admin/api-keys",
-            Map.of(
-                "name", "Rotating " + System.nanoTime() % 100000, "scopes", List.of("jobs:read")),
+            Map.of("name", UniqueCodes.of("Rotating "), "scopes", List.of("jobs:read")),
             admin.bearer());
     String keyId = created.json().get("key_id").asString();
     String original = created.json().get("raw_key").asString();

@@ -9,6 +9,7 @@ import io.github.mariusbayizere.fraudshield.audit.AuditLog;
 import io.github.mariusbayizere.fraudshield.audit.jdbc.TenantTransactions;
 import io.github.mariusbayizere.fraudshield.auth.testing.AuthIntegrationTest;
 import io.github.mariusbayizere.fraudshield.auth.testing.Http;
+import io.github.mariusbayizere.fraudshield.auth.testing.UniqueCodes;
 import io.github.mariusbayizere.fraudshield.common.config.StaffRole;
 import java.time.Instant;
 import java.util.Map;
@@ -28,7 +29,7 @@ class AuditSearchTest extends AuthIntegrationTest {
   @Test
   @Tag("D-32")
   void allTwelveEventTypesAreWrittenAndSearchableByTypeUserAndDateRange() {
-    UUID institution = DB.createInstitution("audit-" + System.nanoTime() % 100000);
+    UUID institution = DB.createInstitution(UniqueCodes.of("audit-"));
     Account admin = createAccount(institution, "ADMIN", "ACTIVE");
     Account analyst = createAccount(institution, "ANALYST", "ACTIVE");
     AuditActor actor = new AuditActor(analyst.id(), "Amani", "Uwase", StaffRole.ANALYST);
@@ -107,8 +108,8 @@ class AuditSearchTest extends AuthIntegrationTest {
 
   @Test
   void anotherInstitutionsEventsAreInvisible() {
-    UUID mine = DB.createInstitution("mine-" + System.nanoTime() % 100000);
-    UUID theirs = DB.createInstitution("theirs-" + System.nanoTime() % 100000);
+    UUID mine = DB.createInstitution(UniqueCodes.of("mine-"));
+    UUID theirs = DB.createInstitution(UniqueCodes.of("theirs-"));
     tenants.runInTenant(
         theirs,
         () ->

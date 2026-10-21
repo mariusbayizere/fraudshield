@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import io.github.mariusbayizere.fraudshield.auth.mail.StaffMailer;
 import io.github.mariusbayizere.fraudshield.auth.testing.AuthIntegrationTest;
 import io.github.mariusbayizere.fraudshield.auth.testing.Http;
+import io.github.mariusbayizere.fraudshield.auth.testing.UniqueCodes;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
@@ -150,9 +151,7 @@ class UserAdministrationTest extends AuthIntegrationTest {
   @Test
   @Tag("FR-07-01")
   void adminCannotChangeOwnRoleOrStatus() {
-    Account admin =
-        createAccount(
-            DB.createInstitution("self-" + System.nanoTime() % 100000), "ADMIN", "ACTIVE");
+    Account admin = createAccount(DB.createInstitution(UniqueCodes.of("self-")), "ADMIN", "ACTIVE");
     Session session = issueSession(admin);
     long version = version(session, admin.id());
     Http.Response role =
@@ -258,7 +257,7 @@ class UserAdministrationTest extends AuthIntegrationTest {
   @Test
   @Tag("FR-07-01")
   void concurrentMutualDemotionLeavesOneActiveAdmin() throws Exception {
-    UUID institution = DB.createInstitution("race-" + System.nanoTime() % 100000);
+    UUID institution = DB.createInstitution(UniqueCodes.of("race-"));
     Account first = createAccount(institution, "ADMIN", "ACTIVE");
     Account second = createAccount(institution, "ADMIN", "ACTIVE");
     Session firstSession = issueSession(first);
@@ -310,7 +309,7 @@ class UserAdministrationTest extends AuthIntegrationTest {
   @Test
   @Tag("FR-06-02")
   void selfEditRacingFailureLockDecidesOnTheLockedRow() throws Exception {
-    UUID institution = DB.createInstitution("self-" + System.nanoTime() % 100000);
+    UUID institution = DB.createInstitution(UniqueCodes.of("self-"));
     Account admin = createAccount(institution, "ADMIN", "ACTIVE");
     Session session = issueSession(admin);
     long seen = version(session, admin.id());
@@ -427,7 +426,7 @@ class UserAdministrationTest extends AuthIntegrationTest {
 
   @Test
   void listPaginatesWithCursorAndFilters() {
-    UUID institution = DB.createInstitution("paging-" + System.nanoTime() % 100000);
+    UUID institution = DB.createInstitution(UniqueCodes.of("paging-"));
     Session admin = issueSession(createAccount(institution, "ADMIN", "ACTIVE"));
     for (int i = 0; i < 5; i++) {
       createAccount(institution, "ANALYST", "ACTIVE");

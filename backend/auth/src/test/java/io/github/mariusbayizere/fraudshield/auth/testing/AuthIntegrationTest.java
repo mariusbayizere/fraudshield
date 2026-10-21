@@ -165,7 +165,7 @@ public abstract class AuthIntegrationTest {
         + "."
         + SEQUENCE.incrementAndGet()
         + "."
-        + System.nanoTime() % 100000
+        + UniqueCodes.of("")
         + "@"
         + BANK_A_DOMAIN;
   }

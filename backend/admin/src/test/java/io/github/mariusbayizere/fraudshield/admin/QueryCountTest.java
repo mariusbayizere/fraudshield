@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.mariusbayizere.fraudshield.auth.testing.AuthIntegrationTest;
 import io.github.mariusbayizere.fraudshield.auth.testing.Http;
+import io.github.mariusbayizere.fraudshield.auth.testing.UniqueCodes;
 import jakarta.persistence.EntityManagerFactory;
 import java.util.UUID;
 import org.hibernate.SessionFactory;
@@ -69,7 +70,7 @@ class QueryCountTest extends AuthIntegrationTest {
 
   @Test
   void listingOfficeRangesWithTheirCreatorsIsOneQueryWhateverTheCount() {
-    UUID institution = DB.createInstitution("n1-net-" + System.nanoTime() % 100000);
+    UUID institution = DB.createInstitution(UniqueCodes.of("n1-net-"));
     Account admin = createAccount(institution, "ADMIN", "ACTIVE");
     Session session = issueSession(admin);
     addRange(institution, admin.id(), "10.1.0.0/24");
@@ -85,7 +86,7 @@ class QueryCountTest extends AuthIntegrationTest {
 
   @Test
   void listingUsersApprovalsAndKeysIsOneQueryWhateverTheCount() {
-    UUID institution = DB.createInstitution("n1-users-" + System.nanoTime() % 100000);
+    UUID institution = DB.createInstitution(UniqueCodes.of("n1-users-"));
     Account admin = createAccount(institution, "ADMIN", "ACTIVE");
     Session session = issueSession(admin);
     final long usersFew = statementsFor("/api/v1/admin/users?limit=200", session);
