@@ -3046,3 +3046,42 @@ start, and the machine stayed responsive. The scripts are
 the 240K point look like it needed a 16 GB Codespace, which it did not. The constraint was never
 total memory; it was that a long run and another agent's test suite were competing for the last
 gigabyte with no policy about who should lose.
+
+### 2026-10-21 · A one-in-90,000 flake that reddened main on the merge it had nothing to do with
+
+On 2026-10-20 main was fast-forwarded to `810206b`, the security workflow's move. The java job of
+`ci` failed on it (run 39454246164, job 118736788073): `UserAdministrationTest` threw
+`StringIndexOutOfBoundsException: Range [0, 10) out of bounds for length 9`. The same commit's java
+job had passed on its branch (job 118700135735).
+
+The cause is a test helper, `AuthIntegrationTest.uniqueEmployeeId()`, which wrote a random `long`
+in base 36 and took its first ten characters. A value below 36^9 has nine digits or fewer, about 1
+in 90,000 calls (36^9 / 2^63 ≈ 1.1 × 10⁻⁵), and the substring throws. The random source is an
+unseeded `SecureRandom`, so no rerun reproduces it. The fix pads the digits with zeros instead of
+truncating them, reads the value as unsigned so no ID can carry a minus sign (which the API's
+`^[A-Za-z0-9]{4,20}$` rejects), and a unit test feeds it a nine-digit value, the case that threw
+on main.
+
+What the record says about how long it was latent, read from the git history and the run list on
+2026-10-21:
+- The helper was written on 2026-09-22 (`c280402`) and reached main on 2026-10-18 (`71b0ec9`).
+- `ci`, including the java job, has run on every push to main since 2026-09-17. The security move
+  added the security workflow, not `ci`. On main the java job passed six times with the helper
+  (`0869c9b`, `eff2bde`, `c5c136f`, `a7f0528`, `e1ecc00`, `749e457`; the run on `71b0ec9` was
+  cancelled) before it failed on the seventh.
+- It also ran on branch pushes, which `ci` runs on too (`push: branches ["**"]`, unchanged since
+  2026-09-17). I did not count the java jobs on commits that contain the helper. Whether any failed
+  java job on a branch was this flake, and was re-run past, I did not check either.
+
+So the move of the security workflow did not surface it. Whether branches hid it is an open
+question, since their failures were not searched, but nothing in the record says they did. A defect
+with a chance of about 10⁻⁵ per call passes almost every run, wherever it runs, and fails at random
+on whichever commit is current. This time that was a merge that changed `backend/pom.xml` (the
+Tomcat, Jackson and lz4-java versions) but no test code, so the red tick looked like the merge's.
+It was not: the same commit's java job passed on its branch, and the exception comes from string
+handling in the test helper, which none of those libraries touch.
+
+**The rule.** *A red job on a merge is evidence about the merge only once the failure is traced to
+something the merge changed. A test that draws random input without a seed has to be correct for
+every value it can draw, and its edge values belong in a unit test, because a green run samples
+too few of them to show they work.*
