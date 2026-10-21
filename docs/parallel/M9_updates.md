@@ -639,8 +639,6 @@ more, claimed here before use: **PB-180** (`ApiKeyLifecycleTest:142`, splitting 
 "_"), **PB-181** (`ApiKeyLifecycleTest:174`, tampering with a secret's last character) and
 **PB-182** (wall-clock assertions in the auth tests). The owner directed (2026-10-21) that they go
 to whoever owns those modules; that is M7, which built staff identity, admin and audit (the
-backlog's header). `m9/infra` cannot see this until it is rebased, so its own table still shows
-PB-180 as next free: the next free M9 id is PB-183. The rebase will conflict on
-`docs/backlog/product.md`, where both branches add a PB-171 to PB-190 row; resolve it to one row
-whose Where names both `M9_updates.md` locations and whose used-count reads PB-171 to PB-182, and
-keep this section.
+backlog's header). The next free M9 id is PB-183. The rebase of `m9/infra` onto `main` (2026-10-21)
+resolved the two branches' PB-171 to PB-190 rows in `docs/backlog/product.md` to one row naming both
+sections, PB-171 to PB-182 used.

@@ -3150,8 +3150,9 @@ unique, and seven copies of the same idiom means the next one fails for the same
 count was nine institution-code prefixes in ten places, thirteen places in all; "seven" came from
 my report to the owner, which miscounted.)
 
-*The entries below were written on `m9/infra` on 2026-10-20 and reached `main` with its rebase
-of 2026-10-21; the notebook is append-only, so they follow later dates.*
+*The entries below were written on `m9/infra` on 2026-10-20 and placed after the entries above
+when that branch was rebased onto `main` on 2026-10-21; the notebook is append-only, so they follow
+later dates.*
 
 ### 2026-10-20 · A check that lives on one branch protects nothing: three CRITICAL Tomcat findings
 
