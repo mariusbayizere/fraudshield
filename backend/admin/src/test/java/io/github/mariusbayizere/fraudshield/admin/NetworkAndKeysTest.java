@@ -2,6 +2,7 @@ package io.github.mariusbayizere.fraudshield.admin;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.mariusbayizere.fraudshield.auth.testing.ApiKeys;
 import io.github.mariusbayizere.fraudshield.auth.testing.AuthIntegrationTest;
 import io.github.mariusbayizere.fraudshield.auth.testing.Http;
 import java.time.Duration;
@@ -102,7 +103,7 @@ class NetworkAndKeysTest extends AuthIntegrationTest {
     assertThat(list)
         .contains(keyId)
         .contains(raw.substring(raw.length() - 4))
-        .doesNotContain(raw.substring(raw.lastIndexOf('_') + 1));
+        .doesNotContain(ApiKeys.secretOf(raw));
 
     assertThat(http.post("/api/v1/transactions/ingest", "{}", "X-API-Key", raw).status())
         .as("the key reaches its scope's operation (no handler yet in M7)")
