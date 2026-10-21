@@ -24,7 +24,7 @@ taken twice. Claims made on branches not yet merged, as of 2026-10-17:
 | PB-77 to PB-101 | M6 | `M6_updates.md`, "Numbering reserved by this branch" | amendment 1's known gaps and the 22 section-8 rows proved only in part |
 | PB-102 to PB-130 | M7 | `M7_updates.md`, "Numbering reserved by this branch" | the merge round's unowned items and M7's rows proved only in part (PB-102 to PB-124 used) |
 | PB-151 to PB-170 | M8B | `M8B_updates.md`, "Numbering reserved by this branch" | the analyst API's follow-ups (PB-151 to PB-159 used); M8B also holds ADR 0110–0119 and Flyway V80–V89 |
-| PB-171 to PB-190 | M9 | `M9_updates.md`, "Identifiers claimed by this branch" and "Backlog ids filed on `main`" | M9's follow-ups and items it files for other owners (PB-171 to PB-182 used; next free PB-183) |
+| PB-171 to PB-190 | M9 | `M9_updates.md`, "Identifiers claimed by this branch" and "Backlog ids filed on `main`" | M9's follow-ups and items it files for other owners (PB-171 to PB-183 used; next free PB-184) |
 
 ---
 
@@ -1608,3 +1608,11 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
   `SessionInvalidationTimingTest` (a 5 s gate and stalls of up to 1.5 s).
   None is known to have failed (CI logs were not searched), and none has a measured rate.
 - **Acceptance:** a sweep of each: what the bound protects, whether it can be stated against an injected clock or a counted operation instead, and, for the bounds that must stay on wall-clock time, a margin justified against CI's runners.
+
+### PB-183 · M9's post-merge review: alert rules, documents and the evidence table
+- **Source:** owner, 2026-10-21, before M9's merge: the three workflows and `k8s_policy.py` are reviewed first; "The alert rules, the documents and the evidence table can be reviewed after the merge, since none of them runs anything." · **Priority:** medium · **Due:** M9 · **Owner:** a reviewer independent of M9
+- **Problem:** M9 merges with an independent review of `.github/workflows/{infrastructure,security,supply-chain}.yml` and `infrastructure/checks/k8s_policy.py` only. These parts have had no independent review:
+  the alert and recording rules (`infrastructure/prometheus/rules/`, `infrastructure/loki/rules/`), against the SRS 8.2 thresholds and the five deviations in `docs/parallel/M9_updates.md` section 4, and whether the 13 promtool unit tests reach each threshold's boundary;
+  the documents: `docs/security/threat_model.md` sections 3.8 to 3.10 (R-14 to R-18), ADRs 0090, 0091 and 0093, the 11 runbooks in `docs/runbooks/` against the alerts they serve, and M9's notes in `docs/traceability/requirements.yaml` (OPS-OBS-01's note still calls ADR 0093 "Proposed"; the owner accepted it on 2026-10-20);
+  the evidence table, `M9_updates.md` section 2, which cites runs from before `m9/infra` was rebased onto `main` on 2026-10-21.
+- **Acceptance:** a review recorded under `docs/reviews/M9/` that covers each part, with every finding fixed or filed; section 2's checks re-run on `main` and the table updated to those runs.

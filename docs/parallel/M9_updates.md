@@ -1,9 +1,11 @@
 # M9 updates (branch `m9/infra`)
 
-Written by the M9 agent for the owner and the M5, M6, M7 and M8 agents. Shared files
-(`requirements.yaml`, `docs/backlog/`, `lab_notebook.md`, `SESSION_STATE.md`, `docs/adr/`) are not
-edited on this branch; everything they need is proposed here. Scope as assigned: the parts of M9
-that need no running services, no Docker and no heavy suites on the laptop.
+Written by the M9 agent for the owner and the M5, M6, M7 and M8 agents. This branch edits shared
+files: `docs/traceability/requirements.yaml` (notes on OPS-CI-08, OPS-OBS-01, OPS-OBS-03 and
+OPS-OBS-05; no status changes) and its rendered matrix, `docs/backlog/product.md` (the PB-171 to
+PB-190 claims row, PB-171 to PB-179 and PB-183), `docs/research/lab_notebook.md` (M9's entries) and
+`docs/adr/` (0090, 0091 and 0093). It does not edit `SESSION_STATE.md`. Scope as assigned: the
+parts of M9 that need no running services, no Docker and no heavy suites on the laptop.
 
 **Status: not reviewed, not merged.** No requirement below may move to `DONE` until Principal
 Review (Part I) and merge. The milestone gate is **not** met; see "Gate status".
@@ -192,7 +194,7 @@ The owner's words, then what was done on this branch. Sizes were reported to the
 | ADR 0091 | live AUC and label-coverage metrics | written on this branch |
 | ADR 0092 | the storage-class fsync fallback for ADR 0090 (decision 8) | claimed, not written |
 | ADR 0093 | the metrics the code emits that Part E.10 does not list | Accepted 2026-10-20 |
-| PB-171 to PB-190 | infrastructure follow-ups | PB-171 to PB-179 used here; PB-180 to PB-182 used on `main` (2026-10-21, auth test items for M7); next free PB-183 |
+| PB-171 to PB-190 | infrastructure follow-ups | PB-171 to PB-179 and PB-183 used here; PB-180 to PB-182 used on `main` (2026-10-21, auth test items for M7); next free PB-184 |
 
 ## 4. Deviations to record in the traceability rows
 
@@ -640,6 +642,7 @@ more, claimed here before use: **PB-180** (`ApiKeyLifecycleTest:142`, splitting 
 "_"), **PB-181** (`ApiKeyLifecycleTest:174`, tampering with a secret's last character) and
 **PB-182** (wall-clock assertions in the auth tests). The owner directed (2026-10-21) that they go
 to whoever owns those modules; that is M7, which built staff identity, admin and audit (the
-backlog's header). The next free M9 id is PB-183. The rebase of `m9/infra` onto `main` (2026-10-21)
+backlog's header). PB-183 then went to M9's post-merge review (2026-10-21, on `m9/infra`); the
+next free M9 id is PB-184. The rebase of `m9/infra` onto `main` (2026-10-21)
 resolved the two branches' PB-171 to PB-190 rows in `docs/backlog/product.md` to one row naming both
 sections, PB-171 to PB-182 used.
