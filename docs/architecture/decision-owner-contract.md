@@ -1,6 +1,6 @@
 # One owner per transaction's decision: the contract
 
-Status: **draft 2, for independent review.** This is a new contract, not draft 9 of
+Status: **draft 3, for independent review.** This is a new contract, not draft 9 of
 `analyst-decision-commit-contract.md`. It replaces that contract, which stays in the repository as
 history and is marked superseded.
 
@@ -9,6 +9,10 @@ history and is marked superseded.
   reviewer framed them;
 - its MINORs;
 - its inherited MAJOR, which is recorded as M6's residual with its real frequency (§7.3).
+
+**Draft 3** answers review 2 (`docs/reviews/M8B/decision-owner-contract-review-2.md`), §16. Review 2
+found no MAJOR in the owner mechanism. It found one edge MAJOR, which draft 2's PRE_V81 markers
+introduced, the inherited MAJOR again with a frequency correction, and seven MINORs.
 
 **The owner's decision (2026-10-22), on review 8:**
 - **One owner per transaction.** Each held payment, and every transaction that a later request
@@ -96,20 +100,23 @@ place where the next state is decided. What a writer used to decide on its own, 
 | **committed** | a commit row exists, or `undo_until` IS NULL |
 | **the owner** | the transaction's `decision_owners` row, and the procedure that evaluates requests under its lock (§4) |
 | **a request** | a call to the procedure (§5). Its outcome is APPLIED, LABEL_ONLY, REFUSED or DEFERRED |
-| **the runner** | the audit module's `inTenant` |
+| **the runner** | a tenant transaction runner with the settings and retries below: the audit module's `TenantTransactions.inTenant` for the analyst module, and the decision module's own `adapter/jpa/TenantTransactions` for `decision` and `notify`, which do not depend on `audit` (review 2, finding 8). P2 gives the decision module's runner the same settings and retries; today it retries nothing |
 
 - **Every transaction here runs through the runner at READ COMMITTED,** with `lock_timeout` 2 s and
   `statement_timeout` 5 s. A timeout answers 503 with `Retry-After`.
-- **The runner retries SQLSTATE 40001 and 40P01.** Today it retries 40001 only
-  (`TenantTransactions`). P2 adds 40P01 **before** any code of this contract runs, because §3's
+- **The runner retries SQLSTATE 40001 and 40P01.** Today the audit module's retries 40001 only, and
+  the decision module's none. P2 adds 40P01 **before** any code of this contract runs, because §3's
   exceptions to the lock order rely on it.
 - **Every requester runs on the runner** (review 1, finding 11): D1 to D6, the effects worker, the
   resolver (§7.2), the timeout paths' request transactions, `VerificationService.answer` and
   `UnblockReconciler`. M6's raw-connection code in the last four moves onto it. The sink is not a
   requester and keeps its own batch handling (§6.1).
 - **What a timeout path does when its request transaction fails** after it has taken a hold from
-  Redis or memory: on 40P01 after the runner's retries, 55P03 (lock timeout), 57014 (statement
-  timeout) or class 08, it reschedules the hold 1 s later and counts it. It never drops it.
+  Redis or memory (review 2, finding 5). On **any** failure of that hold's request transaction,
+  whatever the SQLSTATE or exception, it reschedules that hold 1 s later and counts it. It catches
+  per hold, so one failure never loses the rest of a claimed batch: M6's `tick()` today leaves the
+  loop on the first exception, and the members it had already removed from Redis are lost until
+  the sweep. A hold is dropped only on a REFUSED outcome that §6.3 says to drop.
 - **No transaction has an effect outside PostgreSQL before it commits.** Redis, spool, SMS and Kafka
   calls happen after the commit.
 - **A1.** Everything runs on the primary.
@@ -271,11 +278,23 @@ row's sequence + 1, as a backstop.
 - **From then on,** `decision_states` receives sequence 1 only. A CHECK `(decision_sequence = 1)
   NOT VALID` refuses any stray later write.
 
-**PRE_V81 markers** (review 1, MAJOR 3). V81 also writes one row with outcome PRE_V81 for every
-customer verification response that exists at the cutover. It has request id `verification|` + the
-response's id, no event and no label, and it is never recorded. So every answer M6 already handled
-is "already requested", and neither the reconciler nor the deferred-answer alarm sees it again. The
-join is response → verification → auto-block → transaction.
+**PRE_V81 markers** (review 1, MAJOR 3; corrected after review 2, MAJOR 1). V81 writes one row with
+outcome PRE_V81, request id `verification|` + the response's `verification_id`, no event and no
+label, never recorded, for each customer response at the cutover **whose effect is complete or
+moot**:
+- every NOT_ME response;
+- a WAS_ME whose transaction has a CUSTOMER_VERIFICATION state;
+- a WAS_ME whose transaction's latest state is no longer DECLINE by MODEL or TIMEOUT_POLICY.
+
+**A WAS_ME that M6 recorded but never applied gets no marker.** That is one still under DECLINE by
+MODEL or TIMEOUT_POLICY, with no CUSTOMER_VERIFICATION state: its transition failed before the
+cutover, or PB-156 starved it.
+- **After the cutover** the reconciler submits it like any deferred answer, and §5 applies it once.
+- **Its `unblock_events` row already exists,** written by M6. CUSTOMER_YES therefore writes the
+  unblock row `ON CONFLICT (auto_block_event_id) DO NOTHING` (§5).
+
+The join is response (keyed by `verification_id`; V5's responses have no other id) → verification →
+auto-block → transaction.
 
 **`transaction_request_recordings`** (append-only; `event_id` primary key, `recorded_at`) marks a
 request whose spool record has been written.
@@ -290,7 +309,7 @@ across institutions:
 | EFFECT (analyst decision) | `effect|` + decision id | `alert_label|` + decision id |
 | OVERRIDE | `override|` + override's decision id | `alert_label|` + override's decision id |
 | TIMEOUT | `hold_timeout|` + institution + `|` + transaction | none |
-| CUSTOMER_YES, CUSTOMER_NO | `verification|` + the verification response's id | `verification_label|` + the response's id |
+| CUSTOMER_YES, CUSTOMER_NO | `verification|` + the response's `verification_id` (one response per verification, V5) | `verification_label|` + the same |
 | RESOLVE | `resolve|` + the resolution's id | `resolve_label|` + the resolution's id |
 
 - **The event id** of an APPLIED or LABEL_ONLY row is derived from the request id (`event|` +
@@ -343,7 +362,7 @@ The owner evaluates each request against the row it has locked. **Two checks app
 
 | Request | From | Applies when | Outcome and writes | Otherwise |
 |---|---|---|---|---|
-| **TIMEOUT** (basis: the hold's first decision and policy). Checked in this order: contested; basis against `first_decision`; HOLD; claim; deadline (review 1, finding 5) | the poller, the local fallback, the overdue sweep | `decision` = HOLD; `claim` ≠ ANALYST; DB time ≥ `deadline`; the basis's decision value equals `first_decision` | APPLIED: HOLD → TIMEOUT_RELEASE or DECLINE by TIMEOUT_POLICY, from `timeout_policy`. `claim` → NONE. Closes every open entry of the transaction as AUTO_RELEASED or AUTO_DECLINED, `version + 1`, and writes one AUTO_RELEASED or AUTO_BLOCKED decision row on the newest, with an idempotency key from the request id | **DB time < `deadline`:** REFUSED, reschedule at `deadline`. **Claim ANALYST, or not HOLD:** REFUSED, drop. **Basis value ≠ `first_decision`:** the basis is recorded as a second first decision (§7.1), and the hold is dropped. Nothing is written to `transaction_requests` |
+| **TIMEOUT** (basis: the hold's first decision and policy). Checked in this order: contested; basis against `first_decision`; HOLD; claim; deadline (review 1, finding 5) | the poller, the local fallback, the overdue sweep | `decision` = HOLD; `claim` ≠ ANALYST; DB time ≥ `deadline`; the basis's decision value equals `first_decision` | APPLIED: HOLD → TIMEOUT_RELEASE or DECLINE by TIMEOUT_POLICY, from `timeout_policy`. `claim` → NONE. Closes every open entry of the transaction, and every entry whose analyst decision's effect is FAILED and released, as AUTO_RELEASED or AUTO_DECLINED, `version + 1`, and writes one AUTO_RELEASED or AUTO_BLOCKED decision row on the newest, with an idempotency key from the request id | **DB time < `deadline`:** REFUSED, reschedule at `deadline`. **Claim ANALYST, or not HOLD:** REFUSED, drop. **Basis value ≠ `first_decision`:** the basis is recorded as a second first decision (§7.1), and the hold is dropped. Nothing is written to `transaction_requests` |
 | **CLAIM** (an analyst decision) | D1 | `claim` is NONE or ESCALATED; for HOLD, DB time < `deadline` | `claim` → ANALYST, `claim_decision_id` set, the replaced claim and deadline kept in `prior_claim`, `prior_deadline`. No request row | 409 by D1 |
 | **RELEASE** (an undo) | D2 | `claim_decision_id` is this decision | `claim` and `deadline` restored from `prior_*`. No request row | nothing to do |
 | **EFFECT** (a committed analyst decision) | the effects worker, D4 | `claim_decision_id` is this decision | See EFFECT's rows below. `claim` → NONE | **The claim was cleared by a RESOLVE:** LABEL_ONLY, reason `claim-lost`. The analyst's label is recorded and its state is not applied (review 1, finding 8) |
@@ -352,7 +371,7 @@ The owner evaluates each request against the row it has locked. **Two checks app
 | **CUSTOMER_YES** | `VerificationService`, `UnblockReconciler` | see below | see below | see below |
 | **CUSTOMER_NO** | the same | always, contested included | LABEL_ONLY: a FRAUD label, source CUSTOMER | none |
 | **RESOLVE** (value: APPROVE or DECLINE) | the resolver, §7.2 | `contested_since` equals the resolution's recorded `contested_since` | APPLIED: the current state → value by SENIOR_OVERRIDE, reason code `CONTEST_RESOLVED`, whatever the current value. `contested_since` → NULL, `claim` → NONE. Closes open entries as OVERRIDDEN. A FRAUD or LEGITIMATE label. On → APPROVE of an auto-blocked transaction with no unblock yet, an `unblock_events` row (cause SENIOR_OVERRIDE, actor the resolving officer) | REFUSED, recorded, reason `contest-changed`: the transaction is no longer contested, or was contested again after the resolution was made. The alarm stays on until a fresh resolution |
-| **RELEASE_FAILED** (an ANALYST claim whose effect FAILED) | the resolver, §7.2 | `claim_decision_id` is the decision, and its effects row is FAILED | `claim` and `deadline` restored from `prior_*`, as an undo would. No state; a held payment is then timed out at its deadline, or at once if it has passed (review 1, finding 13) | REFUSED, recorded, reason `not-failed` |
+| **RELEASE_FAILED** (an ANALYST claim whose effect FAILED) | the resolver, §7.2 | `claim_decision_id` is the decision, and its effects row is FAILED | `claim` and `deadline` restored from `prior_*`, as an undo would. No state. After the commit the resolver reschedules a held payment's hold at `deadline`, as D2(e) does, so it is timed out at its deadline, or on the poller's next tick if that has passed (review 2, finding 6). The entry keeps the analyst's status, with the FAILED effects row as its record; a later TIMEOUT closes it (above), and a payment that is not held can then be overridden (D5) | REFUSED, recorded, reason `not-failed` |
 
 **EFFECT, by the analyst decision and the current state:**
 
@@ -387,7 +406,7 @@ original's label.
 3. **Declined by the model or the policy.** If `decision` is DECLINE, by MODEL or TIMEOUT_POLICY, the
    request is **APPLIED:** → APPROVE by CUSTOMER_VERIFICATION, with a LEGITIMATE label. The
    `unblock_events` row (cause CUSTOMER_VERIFICATION) is written in the same transaction, and only
-   here.
+   here, `ON CONFLICT (auto_block_event_id) DO NOTHING`: a pre-V81 answer's row already exists.
 4. **Already approved.** If `decision` is APPROVE or TIMEOUT_RELEASE, the outcome is **LABEL_ONLY**: a
    LEGITIMATE label, and no unblock row.
 
@@ -451,11 +470,19 @@ it.
   event ids before values. "Written in full" means the record's `transaction_ids`, `transactions`,
   `fraud_scores`, sequence-1 `decision_states` row, `account_profiles`, entries, auto-block and
   notification facts, as M6 writes them.
-  1. **`transaction_ids` already exists** (M6's duplicate path: another first record drained before
-     this one). A re-delivery of the same record, with the same event id, is M6's
-     `sameFirstDecision` case and its writes are idempotent, as today. The record is dropped as today, counted, and compared by value with the kept
-     sequence-1 row. A different value is a second first decision (§7.1): the sink creates the owner
-     from the kept row if absent (§4.2) and records it. The same value is not contested (§7.1).
+  1. **`transaction_ids` already exists.** Two sub-cases (review 2, finding 3):
+     - **(a) The same event id as the kept sequence-1 row:** an at-least-once re-delivery. This is
+       M6's `sameFirstDecision` case. It is not dropped, and its writes are idempotent, as today.
+     - **(b) Another event id:** M6's duplicate path, where another first record drained first.
+       The record is dropped as today and counted. Whether it is a new conflict is decided against
+       **the owner first**, if one exists:
+       - if its event id is the owner's `first_event_id`, or is already in `decision_conflicts`, it
+         is not a new conflict and nothing more happens. This covers the owner's own decision
+         draining after case 5;
+       - otherwise it is compared by value with the owner's `first_decision`, or, with no owner,
+         with the kept sequence-1 row. A different value is a second first decision (§7.1): the sink
+         creates the owner from the kept row if absent (§4.2) and records it. The same value is not
+         contested (§7.1).
   2. **No `transaction_ids`, no owner row.** The ordinary case: written in full.
   3. **No `transaction_ids`, an owner row whose `first_event_id` is this record's event id.** This is
      the owner's own first decision arriving after a TIMEOUT created the owner from its `DueHold`,
@@ -474,10 +501,20 @@ it.
      - **What the view then shows.** Sequence 1 is this record, and sequence 2 is the TIMEOUT that
        the owner applied from the `DueHold`. The poll answers 503 `decision-contested` until RESOLVE
        (§8).
+     - **That history is not a `FinalDecision` chain** (review 2, finding 4). Sequence 2's
+       `supersedes_decision` (HOLD) is not sequence 1's decision, which the frozen schema calls a
+       server defect. The bank never reads it, because the poll answers 503 while contested and the
+       resolution's higher sequence afterwards. P1's account history and exports do read it. The
+       exception for a contested transaction's stored history is one of §11's contract additions,
+       and §12 lists it.
      - **What the customer is sent.** The auto-block's SMS intent is written, but `CustomerSmsSender`
        classifies a block as resolved when the latest state in `v_decision_states` is not DECLINE.
        After a TIMEOUT_RELEASE it is therefore never sent. After a DECLINE timeout it is sent, which
        matches the payment's state.
+     - **If the risk officer later resolves to DECLINE,** the intent was consumed as resolved and
+       is not re-requested. The customer receives no SMS and no verification link for that block,
+       and the customer path is lost for it. This is a stated cost of case 5 (§11, §12). The bank
+       receives the final DECLINE, and its own process informs the customer.
 - **It writes `decision_states` for sequence 1 only.** A `DecisionChanged` with sequence > 1 is not
   inserted: its `transaction_requests` row is the record. One with no such row can only be a
   pre-V81 dead letter replayed. It is counted, logged and dropped. The overdue sweep times out a
@@ -573,7 +610,12 @@ The writer then records the outcome (§4.6).
 - It submits each by §5.
 
 A deferred answer is re-listed only once its owner can act on it, so contested or claimed
-transactions cannot starve the batch (review 8, finding 8). The V64 lister gains the same exclusion.
+transactions cannot starve the batch (review 8, finding 8).
+
+**V64's `institutions_with_unapplied_unblocks` is rewritten,** not extended (review 2, finding 8).
+Today it lists institutions with an `unblock_events` row and no CUSTOMER_VERIFICATION row in
+`decision_states`. After V81 no such row is ever written there, so it would list every institution
+with any unblock, for good. It becomes the same response-based selection as the reconciler's.
 
 ## 7. Contested: two different first decisions
 
@@ -619,12 +661,20 @@ sees the contest or committed before it (review 8, finding 7). Detection means t
   - **Authorising and recording, in SQL.** A RISK_OFFICER of the institution calls the SECURITY
     DEFINER function `resolve_contested_decision(transaction_id, decision, staff_user_id, reason)`.
     It checks the role, reads the owner row `FOR UPDATE` and refuses unless it is contested, then
-    inserts a `decision_conflict_resolutions` row: id, transaction, kind `RESOLVE`, chosen value,
-    the owner's `contested_since` at that moment, the staff user, reason and DB time. Its audit
-    entry is written in the same transaction. **It evaluates no rule and writes no state.**
+    inserts a `decision_conflict_resolutions` row: id, transaction, kind (`RESOLVE` or
+    `RELEASE_FAILED`), `decision_id` (for `RELEASE_FAILED`), chosen value (for `RESOLVE`), the
+    owner's `contested_since` at that moment, the staff user, the database login, reason and DB
+    time. Its audit entry, recording the authorisation, is written in the same transaction. **It
+    evaluates no rule and writes no state.**
+  - **Who the actor is** (review 2, finding 7). The function cannot authenticate the officer: it
+    takes `staff_user_id` from its caller. It therefore records both the asserted staff user and
+    `session_user`, the database login that called it. Accountability rests on M9's runbook giving
+    each operator an individual database login that is granted the function, never a shared one.
+    The officer's identity is asserted, not proven, and that is a stated limitation (§11).
   - **Applying, in Java.** The **resolver** runs on every instance every P, on the runner. It lists
     resolutions with no `transaction_requests` row for `resolve|` + their id, and makes each one's
-    RESOLVE request through `DecisionOwner` (§5). Then it records the outcome (§4.6), as every
+    RESOLVE request through `DecisionOwner` (§5). In the same transaction it writes the audit entry
+    for the state change, naming the claims it cleared. Then it records the outcome (§4.6), as every
     writer does.
   - **The same pair releases a FAILED claim.** `release_failed_claim(decision_id, staff_user_id,
     reason)` inserts a resolution of kind `RELEASE_FAILED`, which the resolver applies as §5's
@@ -638,7 +688,13 @@ sees the contest or committed before it (review 8, finding 7). Detection means t
   the chosen value (§5).
   - **The bank.** That sequence is higher than anything either first decision led to, so the webhook
     and Kafka deliver it as the final word, and the poll answers it.
-  - **Entries.** Open entries are closed as OVERRIDDEN.
+  - **Entries.** Open entries are closed as OVERRIDDEN, with a new column
+    `alert_queue_entries.resolution_id` naming the resolution. No `alert_decisions` row is written:
+    V4 requires a SENIOR_OVERRIDE row to name an overridden decision and carry a comment, and a
+    resolution may have neither. D5(b) refuses an override on an entry with a `resolution_id` (409
+    `stale-alert`). So **a resolution is final through the API**; a further change needs another
+    operator action, which is a stated cost (§11).
+  - **The label** has source SENIOR_OVERRIDE, the only one of V5's four sources that fits.
   - **A pending analyst decision.** RESOLVE clears its claim, so its EFFECT later ends LABEL_ONLY,
     reason `claim-lost`. The analyst's label is recorded, and the state the analyst chose is not
     applied. The RESOLVE request row's `event_body` names each claim it cleared, and the resolver
@@ -689,7 +745,9 @@ inherited from M6, recorded and scoped). A path that acted before detection has 
 
   So any PostgreSQL outage during which an instance also dies with undrained HOLDs and banks retry
   produces this case, for every such transaction. Outside an outage it needs a sink lagging by more
-  than the hold window. **No measurement exists** of how often instances die inside a lease, how
+  than the hold window less the lease and the bank's retry delay: Y is decided at least a lease
+  (10 s) plus the retry delay after X, so about 20 s for a 30-second hold, not the whole window
+  (review 2, finding 2). **No measurement exists** of how often instances die inside a lease, how
   often banks retry, or how long outages last, so the number of such transactions cannot be stated
   from evidence.
 - **What resolves it.** The contest alarm fires when Y drains, and RESOLVE's new state supersedes
@@ -709,17 +767,24 @@ inherited from M6, recorded and scoped). A path that acted before detection has 
 
 ### 7.4 Alarms
 
-Each instance computes these from PostgreSQL every 30 s, without a leader lease:
-- **`fs_decisions_contested`:** the count, and the oldest `contested_since`. It alerts on any value
-  above zero.
+Each instance computes these from PostgreSQL every 30 s, without a leader lease, through
+SECURITY DEFINER listers (§14). Each has an alert condition, which M9's rules implement:
+- **`fs_decisions_contested`:** the count, and the oldest `contested_since`. Alert: any value above
+  zero.
 - **`fs_holds_overdue_oldest_seconds`:** the oldest HOLD past its deadline + 15 s, from owner rows
   and from sequence-1 HOLDs with no owner row. It covers every way a hold can outlive its deadline:
   an ANALYST claim whose effect has not run, a contest, a lost schedule entry, or a lease outage.
-- **`fs_customer_answers_deferred_oldest_seconds`:** WAS_ME responses with no request row.
+  Alert: any value above zero.
+- **`fs_customer_answers_deferred_oldest_seconds`:** WAS_ME responses with no request row and no
+  pending claim or contest. Alert: above 60 s. Answers waiting on a claim or contest are covered by
+  the overdue and contested alerts, or bounded by G + P and W.
 - **`fs_analyst_effects_oldest_pending_seconds`:** committed analyst decisions with no effects row.
+  Alert: above 60 s.
 
-**So no payment is held past its deadline + 45 s without an alert, while PostgreSQL answers,**
-whatever holds it: 15 s of grace plus up to 30 s of sampling (review 1, finding 12). The exceptions:
+**So every payment held past its deadline + 45 s is visible in the overdue gauge, while PostgreSQL
+answers,** whatever holds it: 15 s of grace plus up to 30 s of sampling (review 1, finding 12). That
+bounds when the gauge shows it, not when someone is paged: the scrape, the rule evaluation and any
+`for:` duration are M9's and are not counted here (review 2, finding 9). The exceptions:
 - **A PostgreSQL outage.** No gauge can be computed then, and ADR 0111 holds every payment. The live
   signal is the timeout paths' count of rescheduled requests (§2, §6.3), which every instance
   computes in memory. M9 alerts on it (ADR 0111).
@@ -830,7 +895,8 @@ Bound: `undo_until + P + d` while PostgreSQL is up.
   - **Its record.** Success inserts `alert_decision_breaker_counts(decision_id)`, which is
     append-only.
   - **Its retry.** The worker also selects every CONFIRM_FRAUD decision, analyst or override, of a
-    MEDIUM or ANOMALY entry, whose effects row exists but which has no breaker row. A failure is
+    MEDIUM or ANOMALY entry, whose effects row is APPLIED or LABEL_ONLY and which has no breaker row.
+    A decision whose effect was SKIPPED or FAILED is never counted (review 2, finding 6). A failure is
     retried on the next run, and `SET NX` makes the retry count once.
 - **(e) Permanent failure** (SQLSTATE class 22 or 23, other than a unique violation on
   `request_id`, which §4.3 treats as a re-run): an effects row FAILED, with the SQLSTATE, and
@@ -952,6 +1018,11 @@ Nothing has measured either half. D-10's capacity model, when it exists, replace
   or leave.
 - **The resolution and the release of a FAILED claim are operator functions, not API operations.**
   The console cannot show or perform them.
+- **The resolving officer's identity is asserted, not proven** (§7.2). The database login is recorded
+  beside it, and M9's runbook must give each operator an individual login.
+- **A resolution is final through the API** (§7.2). Changing it needs another operator action.
+- **After §6.1's case 5, a resolution to DECLINE sends no SMS** for that block, because the intent
+  was consumed while the payment was released (§6.1).
 
 **Contract additions, proposed with P2:**
 - `idempotency-conflict`, `decision-contested` and 503 declared on the four operations;
@@ -959,6 +1030,9 @@ Nothing has measured either half. D-10's capacity model, when it exists, replace
 - `AUTO_DECLINED` in `AlertStatus`;
 - §5.1's seven transitions in `FinalDecision`'s description, with their conditions in words, and
   the analyst in `FinalDecision.final`'s text;
+- an exception to "`supersedes_decision` is the decision of sequence n-1" for the stored history of
+  a transaction contested by §6.1's case 5. The bank never receives that history, but stored reads
+  do;
 - the poll's 503 `decision-contested`.
 
 **Carried, as recorded in the old contract's §12 to §17, to the implementation's review:**
@@ -986,7 +1060,9 @@ the old one would otherwise assume:
 | An override's effect runs in the effects worker after its original's | An override applies synchronously, and answers 409 while its original's effect is pending |
 | An analyst's MARK_LEGITIMATE or CONFIRM_FRAUD on a HIGH alert is a label only | CONFIRM_FRAUD on a declined payment is a state (DECLINE → DECLINE by ANALYST). MARK_LEGITIMATE is still a label only (Q1) |
 | A contest freezes the transaction until "an operator resolves it by hand" | A contest is a state with an explicit exit, RESOLVE, which gives the bank a new final decision. The freeze defers work; after RESOLVE a deferred analyst effect is reduced to its label and named, and its state is not applied |
-| The reconciler treats unblocks handled before V81 as done by matching a CUSTOMER_VERIFICATION state | V81 writes a PRE_V81 marker for every existing response, which the reconciler and the alarm key on (§4.4) |
+| The reconciler treats unblocks handled before V81 as done by matching a CUSTOMER_VERIFICATION state | V81 writes a PRE_V81 marker for every existing response whose effect is complete or moot. A "yes" M6 recorded but never applied gets none, and the reconciler applies it once after the cutover (§4.4) |
+| Every stored history is a `FinalDecision` chain | A transaction contested by §6.1's case 5 stores a sequence 2 that does not supersede sequence 1's decision (§6.1, §11) |
+| An auto-blocked customer is always sent the block's SMS | After case 5 and a resolution to DECLINE, the SMS is not sent (§6.1) |
 | M6's sink closed a MEDIUM entry only on TIMEOUT_RELEASE | A timeout under either policy closes every open entry, as AUTO_RELEASED or AUTO_DECLINED (§5) |
 | A double first decision was a rare race | Its reverse order is common after a PostgreSQL outage, and is stated as M6's residual (§7.3) |
 | "Once detected, nothing automatic acts again" | Nothing moves the owner's state. Publications of earlier events still go out (§7.3) |
@@ -1007,9 +1083,9 @@ the old one would otherwise assume:
 | P7a | The owner's own first decision arriving after its `DueHold`'s TIMEOUT is written in full: sequence 1, `transaction_ids`, the scores and the MEDIUM entry, which §6.2 then closes (review 1, MAJOR 1) | §6.1, §6.2 |
 | P8 | A committed analyst decision whose effect meets a contest is deferred, then after RESOLVE ends LABEL_ONLY with its label recorded, and is named in the RESOLVE request's record. It is never terminally skipped unnoticed (review 8, MAJOR 2) | §7.2, §7.3, D4 |
 | P8a | A resolution made by the SQL function is applied by the resolver through `DecisionOwner`, exactly once, also after a crash between the two; a resolution made before the transaction was contested again is REFUSED `contest-changed` (review 1, MAJOR 2) | §7.2 |
-| P8b | After the cutover the reconciler submits no response that existed before V81, and the deferred-answer alarm does not fire for them (review 1, MAJOR 3) | §4.4, §6.5 |
-| P8c | A conflicting decision detected twice, by its `DueHold` and then by its own record or a re-delivered batch, does not re-contest a resolved transaction | §7.1 |
-| P8d | `release_failed_claim` releases an ANALYST claim whose effect FAILED, and a held payment is then timed out | §5, §7.2 |
+| P8b | After the cutover a response M6 had applied or refused is not resubmitted and raises no alarm; a WAS_ME M6 recorded but never applied is applied exactly once, without a unique violation on `unblock_events` (review 1, MAJOR 3; review 2, MAJOR 1) | §4.4, §5, §6.5 |
+| P8c | A conflicting decision detected twice, by its `DueHold` and then by its own record or a re-delivered batch, does not re-contest a resolved transaction; nor does the owner's own first decision draining after §6.1's case 5 (review 2, finding 3) | §6.1, §7.1 |
+| P8d | `release_failed_claim` releases an ANALYST claim whose effect FAILED; the hold is rescheduled and timed out at its deadline, the entry is closed by the TIMEOUT, and the breaker never counts the failed decision | §5, §7.2, D4(d) |
 | P9 | RESOLVE ends the 503, and the bank receives the resolution at a higher sequence | §7.2, §8 |
 | P10 | A senior's CONFIRM_FRAUD on a payment still declined by the model creates a state, and a customer's later "yes" is refused, with no LEGITIMATE label and no unblock row (review 8, MAJOR 3) | §5 |
 | P11 | A customer's "yes" during an ANALYST claim is deferred, then refused if the analyst confirmed fraud, or applied if the analyst undid | §5, §6.5 |
@@ -1022,8 +1098,8 @@ the old one would otherwise assume:
 | P18 | Committer, undo, decide and timeout racing on one entry finish without an unretried deadlock | §3 |
 | P19 | An expired idempotency lease is verified against PostgreSQL, and a lease still running answers InFlight | §7.5 |
 | P19a | Escalating an ANOMALY alert succeeds, with a NULL `review_deadline_at` on the new entry | D6(d) |
-| P19b | A timeout path whose request transaction fails on 40P01, 55P03 or 57014 reschedules the hold rather than dropping it | §2 |
-| P20 | DECIDED, UNDO, COMMITTED, ESCALATED, SENIOR_OVERRIDE and RESOLVE are each audited in their change's transaction | §9, §7.2 |
+| P19b | A timeout path whose request transaction fails, for any reason, reschedules that hold and loses no other hold of its batch | §2 |
+| P20 | DECIDED, UNDO, COMMITTED, ESCALATED and SENIOR_OVERRIDE are each audited in their change's transaction. A resolution is audited twice: its authorisation in the function's transaction, and its state change in the resolver's | §9, §7.2 |
 | P21 | The breaker counts a transaction at most once, and never for HIGH | D4(d) |
 
 ## 14. Changes to M6's code that this contract requires
@@ -1055,7 +1131,20 @@ the old one would otherwise assume:
 - **V62's `institutions_with_overdue_holds`** (§6.3), and `v_auto_block_status`'s
   `currently_blocked` (§5).
 - **`HoldTimeoutService`, `VerificationService`, `UnblockReconciler` and the effects worker** run
-  their transactions on the runner (§2).
+  their transactions on the runner (§2). **The decision module's `TenantTransactions`** gains the
+  settings and the 40001 and 40P01 retries; `HoldTimeoutService.tick` catches per hold.
+- **V64's `institutions_with_unapplied_unblocks`** is rewritten (§6.5).
+- **SECURITY DEFINER listers** (review 2, finding 8). Row-level security scopes `fs_app` to one
+  institution, so each worker that crosses institutions needs a lister. Each compares on its own DB
+  time, is granted to `fs_app` and is pinned in `DatabaseSecurityTest` as V71 requires:
+  - the committer's due decisions;
+  - the effects worker's pending effects, excluding contested owners, and its pending breaker
+    counts;
+  - the recorder's unrecorded requests;
+  - the resolver's unapplied resolutions;
+  - the reconciler's deferred answers (V64, rewritten);
+  - the overdue sweep's holds (V62, changed);
+  - the four alarms' figures.
 
 ## 15. Review 1's findings and their answers
 
@@ -1079,3 +1168,20 @@ the old one would otherwise assume:
 | 16 §14's omissions | §6.3 (V62), §4.2 point 5 (the member format), §5.1 and §14 (`changeAction`) |
 | 17 the block record after RESOLVE and a re-decline | §5 RESOLVE, `currently_blocked` |
 | 18 the sink's lock order, class 53 | §3 exception 2; §6.1 |
+
+## 16. Review 2's findings and their answers
+
+Review 2 found no MAJOR in the owner mechanism: the row, its lock and the rule table's ordering
+held.
+
+| Finding | Answer in draft 3 |
+|---|---|
+| 1 MAJOR (edge): PRE_V81 markers abandon a "yes" M6 recorded but never applied; the resubmitted unblock insert hits V5's unique key | §4.4: markers only for complete or moot responses, keyed by `verification_id`; §5: the unblock insert is `ON CONFLICT DO NOTHING`; P8b and §12 rewritten |
+| 2 MAJOR (M6's): the reverse-order double decision | §7.3: recorded, and the non-outage frequency corrected to the hold window less the lease and the retry delay (about 20 s) |
+| 3 the owner's own decision re-contests after case 5; case 1's wording | §6.1 case 1 split into (a) and (b); (b) compares with the owner first; P8c extended |
+| 4 case 5's history and the lost SMS | §6.1 case 5; §11's contract addition and limitation; §12 |
+| 5 the timeout paths' failure list and the lost batch | §2: reschedule on any failure, per hold; §14; P19b aligned |
+| 6 RELEASE_FAILED: no reschedule, the entry, the breaker, the decision id | §5 RELEASE_FAILED and TIMEOUT; D4(d); §7.2's resolution row; P8d |
+| 7 the asserted actor, the label source, the closed entries, P20 | §7.2; §11; P20 corrected |
+| 8 V64, the cross-tenant listers, the runner's module | §2's runner; §6.5; §14 |
+| 9 the alarm bound counts the gauge, not the alert | §7.4: "visible in the gauge"; each gauge's alert condition; the pipeline is M9's |
