@@ -134,6 +134,12 @@
       </resource>
     </resources>
     <plugins>
+      <!-- The runnable jar the API image runs (backend/Dockerfile); the parent configures its
+           repackage goal. -->
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
       <plugin>
         <groupId>com.github.spotbugs</groupId>
         <artifactId>spotbugs-maven-plugin</artifactId>

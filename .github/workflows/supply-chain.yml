@@ -9,7 +9,8 @@
 #
 # Images: `image-matrix` lists every service image and keeps those whose Dockerfile exists. Only
 # those get an `images` job; a missing Dockerfile is a warning and a "NOT BUILT" line in the
-# summary. No job reports success for an image that was never built.
+# summary. No job reports success for an image that was never built. Each built image runs its
+# start test (`infrastructure/docker/start-tests/<image>.sh`); an image without one fails.
 name: supply-chain
 
 on:
@@ -73,7 +74,7 @@ jobs:
         # Size limits from SRS 8.1 stage 6; edge and worker limits are FraudShield's own.
         run: |
           all='[
-            {"image": "fraudshield-api", "dockerfile": "backend/Dockerfile", "context": "backend", "max_mb": 500},
+            {"image": "fraudshield-api", "dockerfile": "backend/Dockerfile", "context": ".", "max_mb": 500},
             {"image": "fraudshield-ml", "dockerfile": "ml/Dockerfile", "context": ".", "max_mb": 1200},
             {"image": "fraudshield-ml-worker", "dockerfile": "ml/Dockerfile.worker", "context": ".", "max_mb": 1200},
             {"image": "fraudshield-frontend", "dockerfile": "frontend/Dockerfile", "context": "frontend", "max_mb": 150},
@@ -123,6 +124,17 @@ jobs:
           mb=$((bytes / 1000000))
           echo "${{ matrix.image }}: ${mb} MB (limit ${MAX_MB} MB)" | tee -a "$GITHUB_STEP_SUMMARY"
           test "$mb" -lt "$MAX_MB"
+      # Every built image must start (owner, 2026-10-22): a missing start test fails the job
+      # rather than letting a build that cannot start pass.
+      - name: Start test
+        run: |
+          set -o pipefail
+          test="infrastructure/docker/start-tests/${{ matrix.image }}.sh"
+          if [ ! -x "$test" ]; then
+            echo "::error title=${{ matrix.image }} has no start test::$test is missing"
+            exit 1
+          fi
+          "$test" "$IMAGE:$GITHUB_SHA" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Trivy image scan (HIGH/CRITICAL with a fix)
         run: |
           infrastructure/bin/trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
