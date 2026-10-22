@@ -93,7 +93,7 @@ class AnalystAuthorisationTest extends AnalystIntegrationTest {
     }
     assertThat(problems).isEmpty();
     assertThat(implemented)
-        .as("P1 serves the seven analyst reads (M8B scope, ADR 0110)")
+        .as("P1's seven reads (ADR 0110) and P2's four decisions (ADR 0114)")
         .containsExactlyInAnyOrder(
             "listAlerts",
             "getAlert",
@@ -101,7 +101,11 @@ class AnalystAuthorisationTest extends AnalystIntegrationTest {
             "getScoringResult",
             "listAccountTransactions",
             "getBehaviourProfile",
-            "getAccountNetwork");
+            "getAccountNetwork",
+            "decideAlert",
+            "undoAlertDecision",
+            "escalateAlert",
+            "overrideAlertDecision");
   }
 
   private static String normalise(String rule) {

@@ -99,14 +99,27 @@ class AnalystInspectorTest extends AnalystIntegrationTest {
     assertThat(problems).isEmpty();
   }
 
-  /** The operation ids of every handler this module serves. */
+  /**
+   * The operation ids of every read this module serves. P2's writes (decide, undo, escalate,
+   * override) answer with closed schemas whose fields carry no customer data, which
+   * AnalystDecisionsTest validates; the reads are where account data could leak.
+   */
   private Set<String> analystOperations() {
     Set<String> operations = new TreeSet<>();
-    for (HandlerMethod handler : mappings.getHandlerMethods().values()) {
-      if (handler
-          .getBeanType()
-          .getPackageName()
-          .startsWith("io.github.mariusbayizere.fraudshield.analyst")) {
+    for (Map.Entry<org.springframework.web.servlet.mvc.method.RequestMappingInfo, HandlerMethod>
+        entry : mappings.getHandlerMethods().entrySet()) {
+      HandlerMethod handler = entry.getValue();
+      boolean read =
+          entry
+              .getKey()
+              .getMethodsCondition()
+              .getMethods()
+              .contains(org.springframework.web.bind.annotation.RequestMethod.GET);
+      if (read
+          && handler
+              .getBeanType()
+              .getPackageName()
+              .startsWith("io.github.mariusbayizere.fraudshield.analyst")) {
         ContractOperation operation = handler.getMethod().getAnnotation(ContractOperation.class);
         operations.add(operation == null ? handler.toString() : operation.value());
       }

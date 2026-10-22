@@ -146,22 +146,43 @@ abstract class AnalystIntegrationTest extends AuthIntegrationTest {
       return this;
     }
 
-    /** A later decision state, as the timeout, an analyst or a customer would record it. */
+    /**
+     * A later decision state, as the transaction's owner records it (decision-owner contract
+     * §4.4): an owner row, then an APPLIED request row at sequence 2.
+     */
     Tx then(String next, String decidedBy) {
       tenantWrite(
           institution,
           """
-          INSERT INTO fraudshield.decision_states (event_id, institution_id, transaction_id,
-            decision_sequence, decision, final, decided_at, decided_by, supersedes_decision)
-          VALUES (?, ?, ?, 2, ?, true, ?, ?, ?)
+          INSERT INTO fraudshield.decision_owners (institution_id, transaction_id, first_event_id,
+            first_decision, first_deadline, sequence, decision, decided_by, deadline)
+          SELECT institution_id, transaction_id, event_id, decision, review_deadline_at, 1,
+            decision, 'MODEL', review_deadline_at FROM fraudshield.decision_states
+          WHERE transaction_id = ?
           """,
-          UUID.randomUUID(),
+          id);
+      tenantWrite(
+          institution,
+          """
+          INSERT INTO fraudshield.transaction_requests (institution_id, transaction_id,
+            request_id, kind, outcome, sequence, decision, supersedes_decision, reason_codes,
+            event_id, decided_by, decided_at, event_body)
+          VALUES (?, ?, gen_random_uuid(), 'TIMEOUT', 'APPLIED', 2, ?, ?, '{}', gen_random_uuid(),
+            ?, ?, '[]'::jsonb)
+          """,
           institution,
           id,
           next,
-          Timestamp.from(at.plusSeconds(40)),
+          decision,
           decidedBy,
-          decision);
+          Timestamp.from(at.plusSeconds(40)));
+      tenantWrite(
+          institution,
+          "UPDATE fraudshield.decision_owners SET sequence = 2, decision = ?, decided_by = ?,"
+              + " deadline = NULL WHERE transaction_id = ?",
+          next,
+          decidedBy,
+          id);
       return this;
     }
 
