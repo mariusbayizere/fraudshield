@@ -18,7 +18,8 @@ import org.springframework.web.bind.annotation.RestController;
  * SyntheticDataGuard} decided at startup; the endpoint reveals nothing else about the deployment.
  */
 @RestController
-public final class EnvironmentController {
+// Not final: @PreAuthorize makes Spring proxy the controller with a CGLIB subclass.
+public class EnvironmentController {
 
   private final byte[] body;
 
