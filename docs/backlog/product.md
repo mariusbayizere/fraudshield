@@ -1515,6 +1515,7 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 - **Source:** M8B, CI run 39363427853 on `b7862af`, 2026-10-20 · **Priority:** low · **Due:** M6
 - **Problem:** attempt 1 of the java job failed with `ConditionTimeoutException` at `ResilienceApiTest.java:376` (the block not lifted within the 10 s Awaitility bound); attempt 2 of the same commit passed unchanged. The commit touched no Java runtime code and none of the verification page's operations, so the failure is the test's timing, not a change. Recorded so the next person who sees it does not re-investigate.
 - **Acceptance:** the wait is made deterministic (or its bound justified from the drain and reconciler periods it depends on), and the test passes repeatedly under CI load.
+- **Seen again:** 2026-10-22, at the same line in the devcontainer job's `make ci` (job 119584499076, attempt 1 of run 39705498272, on `39b12d7`), where the same commit's `ci` java job passed; attempt 2 passed unchanged. Two occurrences in two days on different jobs. It is the wall-clock family of PB-182.
 
 ### PB-159 · The network's counterparty lookups on compressed history
 - **Source:** M8B, P1's code review round 1 (finding 6), 2026-10-20 · **Priority:** medium · **Due:** M10
@@ -1607,6 +1608,7 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
   `ApiKeyLifecycleTest.java:835-843` (a spin loop measuring time until refusal) and
   `SessionInvalidationTimingTest` (a 5 s gate and stalls of up to 1.5 s).
   None is known to have failed (CI logs were not searched), and none has a measured rate.
+- **Same family, outside the auth tests:** PB-158 (`ResilienceApiTest.java:376`, a 10 s wait in the ingest tests, owner M6), which has failed twice (2026-10-20 and 2026-10-22).
 - **Acceptance:** a sweep of each: what the bound protects, whether it can be stated against an injected clock or a counted operation instead, and, for the bounds that must stay on wall-clock time, a margin justified against CI's runners.
 
 ### PB-183 · M9's post-merge review: alert rules, documents and the evidence table
