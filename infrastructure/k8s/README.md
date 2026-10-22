@@ -13,8 +13,10 @@ prerequisite the code cannot satisfy (D-21).
 **Validate** (no cluster or Docker needed): `infrastructure/checks/validate.sh`. For each overlay
 it renders with the pinned kustomize, validates against Kubernetes 1.34 and Argo Rollouts CRD
 schemas pinned by commit (kubeconform, strict), and runs `infrastructure/checks/k8s_policy.py`
-(Pod Security `restricted` offline, digest-pinned third-party images, probes, resources, and a
-NetworkPolicy, PodDisruptionBudget and, for serving components, an HPA for every workload).
+(on Deployments, StatefulSets and DaemonSets: Pod Security `restricted`, listed controls only,
+offline; digest-pinned third-party images, probes, resources, and a NetworkPolicy,
+PodDisruptionBudget and, for serving components, an HPA for every such workload; gaps PB-184 to
+PB-189).
 
 ## Cluster prerequisites
 

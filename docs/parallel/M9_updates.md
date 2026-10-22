@@ -3,8 +3,8 @@
 Written by the M9 agent for the owner and the M5, M6, M7 and M8 agents. This branch edits shared
 files: `docs/traceability/requirements.yaml` (notes on OPS-CI-08, OPS-OBS-01, OPS-OBS-03 and
 OPS-OBS-05; no status changes) and its rendered matrix, `docs/backlog/product.md` (the PB-171 to
-PB-190 claims row, PB-171 to PB-179 and PB-183), `docs/research/lab_notebook.md` (M9's entries) and
-`docs/adr/` (0090, 0091 and 0093). It does not edit `SESSION_STATE.md`. Scope as assigned: the
+PB-190 claims row, PB-171 to PB-179 and PB-183 to PB-190), `docs/research/lab_notebook.md` (M9's
+entries) and `docs/adr/` (0090, 0091 and 0093). It does not edit `SESSION_STATE.md`. Scope as assigned: the
 parts of M9 that need no running services, no Docker and no heavy suites on the laptop.
 
 **Status: not reviewed, not merged.** No requirement below may move to `DONE` until Principal
@@ -20,7 +20,7 @@ Review (Part I) and merge. The milestone gate is **not** met; see "Gate status".
 | Dashboards | `infrastructure/grafana/generate_dashboards.py` → `dashboards/*.json` (5), provisioning | `--check` against committed JSON; grid, datasource and runbook-link tests |
 | Metric catalogue guard | `infrastructure/checks/metric_catalogue.py` | every query under infrastructure/ uses only Part E.10 metrics and labels and contract label values |
 | Runbooks | `docs/runbooks/` (11, one per page alert) | `rule_conventions.py`, both directions |
-| Kubernetes | `infrastructure/k8s/{base,overlays/staging,overlays/production}`, `infrastructure/argo-rollouts/` | kubeconform strict (k8s 1.34.11 + Argo CRDs, schemas pinned by commit); `k8s_policy.py` (PSA restricted offline, digests, probes, resources, PDB/HPA/NetworkPolicy coverage), 24 break-one-rule tests; canary queries run through promtool |
+| Kubernetes | `infrastructure/k8s/{base,overlays/staging,overlays/production}`, `infrastructure/argo-rollouts/` | kubeconform strict (k8s 1.34.11 + Argo CRDs, schemas pinned by commit); `k8s_policy.py` on Deployments, StatefulSets and DaemonSets, listed controls (PSA restricted in part, digests, probes, resources, PDB/HPA/NetworkPolicy coverage; gaps PB-184 to PB-189), 30 tests of which 26 break one rule each; canary queries run through promtool |
 | CI workflows (new files only) | `.github/workflows/{infrastructure,security,supply-chain}.yml` | actionlint over all workflows |
 | Threat model | `docs/security/threat_model.md` sections 3.8–3.10, risks R-14–R-18 | review |
 
@@ -194,7 +194,7 @@ The owner's words, then what was done on this branch. Sizes were reported to the
 | ADR 0091 | live AUC and label-coverage metrics | written on this branch |
 | ADR 0092 | the storage-class fsync fallback for ADR 0090 (decision 8) | claimed, not written |
 | ADR 0093 | the metrics the code emits that Part E.10 does not list | Accepted 2026-10-20 |
-| PB-171 to PB-190 | infrastructure follow-ups | PB-171 to PB-179 and PB-183 used here; PB-180 to PB-182 used on `main` (2026-10-21, auth test items for M7); next free PB-184 |
+| PB-171 to PB-190 | infrastructure follow-ups | PB-171 to PB-179 and PB-183 to PB-190 used here; PB-180 to PB-182 used on `main` (2026-10-21, auth test items for M7); all used |
 
 ## 4. Deviations to record in the traceability rows
 
@@ -642,7 +642,7 @@ more, claimed here before use: **PB-180** (`ApiKeyLifecycleTest:142`, splitting 
 "_"), **PB-181** (`ApiKeyLifecycleTest:174`, tampering with a secret's last character) and
 **PB-182** (wall-clock assertions in the auth tests). The owner directed (2026-10-21) that they go
 to whoever owns those modules; that is M7, which built staff identity, admin and audit (the
-backlog's header). PB-183 then went to M9's post-merge review (2026-10-21, on `m9/infra`); the
-next free M9 id is PB-184. The rebase of `m9/infra` onto `main` (2026-10-21)
+backlog's header). PB-183 to PB-190 then went to M9's post-merge review and the pre-merge review's findings
+(2026-10-21, on `m9/infra`); the reservation is used up. The rebase of `m9/infra` onto `main` (2026-10-21)
 resolved the two branches' PB-171 to PB-190 rows in `docs/backlog/product.md` to one row naming both
-sections, PB-171 to PB-182 used.
+sections, PB-171 to PB-182 used at that point.

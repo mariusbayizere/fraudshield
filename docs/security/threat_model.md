@@ -138,18 +138,20 @@ developer machine ↔ public repository.
 
 Controls are in `infrastructure/k8s/` and are checked on every change by
 `infrastructure/checks/validate.sh`: kubeconform (strict, Kubernetes 1.34 schemas) and
-`infrastructure/checks/k8s_policy.py`, whose tests break each rule once and expect a failure.
+`infrastructure/checks/k8s_policy.py`, whose tests break each rule once and expect a failure. The policy
+check covers Deployments, StatefulSets and DaemonSets and the controls it lists; an independent
+mutation review (2026-10-21) found the gaps filed as PB-184 to PB-189.
 
 | STRIDE | Threat | Control | Status |
 |---|---|---|---|
-| E | A compromised container escalates to the node | Namespace enforces Pod Security `restricted`; every pod non-root, `allowPrivilegeEscalation: false`, all capabilities dropped, RuntimeDefault seccomp, read-only root filesystem, no host namespaces or hostPath; checked offline so a violation fails CI, not admission | implemented (manifests) |
+| E | A compromised container escalates to the node | Namespace enforces Pod Security `restricted`; every pod non-root, `allowPrivilegeEscalation: false`, all capabilities dropped, RuntimeDefault seccomp, read-only root filesystem, no host namespaces or hostPath; checked offline for Deployments, StatefulSets and DaemonSets so a violation fails CI, not admission (other kinds and the profile's remaining controls: PB-184, PB-185) | implemented (manifests) |
 | S/E | A stolen service account token calls the Kubernetes API | One service account per workload, token not mounted except Prometheus, whose Role allows only get/list/watch on pods in its own namespace | implemented (manifests) |
 | I/T | Lateral movement between workloads | Default-deny ingress and egress; one allow policy per flow of section 2. The management port (health detail, metrics) admits only Prometheus and the blackbox exporter (ADR 0014); the PII vault is reachable from the API only, never from the scorer or ML worker | implemented (manifests) |
 | I | The API's internet egress (webhooks, SMS, email, OAuth) used to reach internal services | Egress on 443 and 587 only, with RFC 1918, CGNAT and link-local ranges excluded | implemented (manifests) |
 | T | A mutable tag deploys an unreviewed image | Third-party images pinned by digest; FraudShield images untagged in manifests and pinned by digest at deploy; the policy check fails on any tag | implemented (manifests); deploy step planned |
 | D | Voluntary disruption (node drain, upgrade) takes a component down | PodDisruptionBudgets for every workload, HPAs for serving components, spread across nodes and zones | implemented (manifests) |
 | D/T | A bad release degrades decisions | Argo Rollouts canary: 10% for 30 minutes, background analysis on canary pods only, rollback on 5xx > 0.5% or p99 > 80 ms, fail-closed when metrics are missing (`test_canary_analysis.py`) | implemented (manifests) |
-| R/I | Decisions spooled on an API pod are lost when the pod is deleted during a Kafka outage (D-15) | Spool on a shared ReadWriteMany volume, one directory per pod; any live API pod claims and replays the directories of dead pods (ADR 0090); `k8s_policy.py` rejects ephemeral spool storage | manifests implemented; replayer M6; latency and chaos proof M10 (R-14) |
+| R/I | Decisions spooled on an API pod are lost when the pod is deleted during a Kafka outage (D-15) | Spool on a shared ReadWriteMany volume, one directory per pod; any live API pod claims and replays the directories of dead pods (ADR 0090); `k8s_policy.py` rejects an ephemeral `spool` volume (the mount itself is not checked: PB-188) | manifests implemented; replayer M6; latency and chaos proof M10 (R-14) |
 
 ### 3.9 Observability and alerting (M9)
 

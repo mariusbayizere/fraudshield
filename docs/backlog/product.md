@@ -24,7 +24,7 @@ taken twice. Claims made on branches not yet merged, as of 2026-10-17:
 | PB-77 to PB-101 | M6 | `M6_updates.md`, "Numbering reserved by this branch" | amendment 1's known gaps and the 22 section-8 rows proved only in part |
 | PB-102 to PB-130 | M7 | `M7_updates.md`, "Numbering reserved by this branch" | the merge round's unowned items and M7's rows proved only in part (PB-102 to PB-124 used) |
 | PB-151 to PB-170 | M8B | `M8B_updates.md`, "Numbering reserved by this branch" | the analyst API's follow-ups (PB-151 to PB-159 used); M8B also holds ADR 0110–0119 and Flyway V80–V89 |
-| PB-171 to PB-190 | M9 | `M9_updates.md`, "Identifiers claimed by this branch" and "Backlog ids filed on `main`" | M9's follow-ups and items it files for other owners (PB-171 to PB-183 used; next free PB-184) |
+| PB-171 to PB-190 | M9 | `M9_updates.md`, "Identifiers claimed by this branch" and "Backlog ids filed on `main`" | M9's follow-ups and items it files for other owners (PB-171 to PB-190 all used) |
 
 ---
 
@@ -1616,3 +1616,46 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
   the documents: `docs/security/threat_model.md` sections 3.8 to 3.10 (R-14 to R-18), ADRs 0090, 0091 and 0093, the 11 runbooks in `docs/runbooks/` against the alerts they serve, and M9's notes in `docs/traceability/requirements.yaml` (OPS-OBS-01's note still calls ADR 0093 "Proposed"; the owner accepted it on 2026-10-20);
   the evidence table, `M9_updates.md` section 2, which cites runs from before `m9/infra` was rebased onto `main` on 2026-10-21.
 - **Acceptance:** a review recorded under `docs/reviews/M9/` that covers each part, with every finding fixed or filed; section 2's checks re-run on `main` and the table updated to those runs.
+
+### PB-184 · `k8s_policy.py` checks only Deployments, StatefulSets and DaemonSets
+- **Source:** independent mutation review of `k8s_policy.py`, 2026-10-21 (80 mutations, before M9's merge) · **Priority:** high · **Owner:** M9 · **Flag:** whoever lands the ML worker (PB-172) or any Job or CronJob must close this first or in the same change
+- **Problem:** `WORKLOAD_KINDS` (`k8s_policy.py:39`) is Deployment, StatefulSet and DaemonSet. A Job, CronJob, bare Pod or ReplicaSet passes with `hostNetwork: true`, a privileged container and `busybox:latest`, and so does an Argo Rollout whose `workloadRef` is replaced by an inline template. No manifest uses Job, CronJob, Pod or ReplicaSet today, and the one Rollout takes its pod template from the API Deployment by `workloadRef`, so nothing deployed is unchecked; the first such manifest added will be.
+- **Acceptance:** pod specs are read from Job, CronJob (`jobTemplate`), Pod, ReplicaSet and Rollout `spec.template`; any other kind that carries a pod spec fails as unknown; a break-one-rule test for each kind.
+
+### PB-185 · `k8s_policy.py` checks only part of the restricted profile
+- **Source:** the same review · **Priority:** medium · **Owner:** M9
+- **Problem:** `ports[].hostPort`, unsafe `sysctls`, `procMount: Unmasked`, an AppArmor `Unconfined` profile, an SELinux type such as `spc_t` and Windows `hostProcess` all pass. The namespace's admission label would refuse them on a cluster; CI does not.
+- **Acceptance:** each control checked as the restricted profile defines it, with a break-one-rule test each, or a real Pod Security evaluator run offline in CI.
+
+### PB-186 · The service account token exemption is keyed on the account's name only
+- **Source:** the same review · **Priority:** medium · **Owner:** M9
+- **Problem:** `TOKEN_ALLOWED` (`k8s_policy.py:45`) exempts any pod whose `serviceAccountName` is `fraudshield-prometheus`. A workload can borrow that account with automount on, get Prometheus's RBAC and pass. A projected `serviceAccountToken` volume also passes.
+- **Acceptance:** the exemption names the workload and its account together; projected service account tokens are rejected; tests for both.
+
+### PB-187 · An allow-all NetworkPolicy passes the policy check
+- **Source:** the same review · **Priority:** medium · **Owner:** M9
+- **Problem:** the check asks only that a default-deny policy exists and that every workload is selected by some allow policy. Adding a policy with `podSelector: {}`, `ingress: [{}]` and `egress: [{}]` passes. Egress to `0.0.0.0/0` and ingress from any namespace are not checked, so threat model 3.8's exclusion of RFC 1918, CGNAT and link-local ranges from the API's egress rests on the manifests alone.
+- **Acceptance:** empty ingress and egress rules, `namespaceSelector: {}` without a pod restriction and `0.0.0.0/0` without `except` fail, each with a test.
+
+### PB-188 · The spool check reads the volume, not the mount
+- **Source:** the same review · **Priority:** medium · **Owner:** M9 (with PB-171)
+- **Problem:** ADR 0090 says the check fails "when the API's spool mount is not" a ReadWriteMany claim. It checks the `spool` volume instead: pointing the spool's `volumeMount` at an emptyDir, or not mounting the claim, passes.
+- **Acceptance:** the check resolves the `volumeMount` at the spool path and checks the volume it names; tests for both mutations. PB-171's StatefulSet changes what is checked; do the two together.
+
+### PB-189 · `k8s_policy.py` rejects every init container
+- **Source:** the same review · **Priority:** low · **Owner:** M9
+- **Problem:** probes are required on every container, init containers included, but an ordinary init container cannot have liveness or readiness probes. A valid init container therefore fails ("needs a livenessProbe"), so in practice none is allowed.
+- **Acceptance:** probes required on `containers` only; the security controls still apply to `initContainers`; a test with a valid init container.
+
+### PB-190 · Lower-severity findings of the workflow review
+- **Source:** independent review of `.github/workflows/{infrastructure,security,supply-chain}.yml`, 2026-10-21, before M9's merge · **Priority:** low · **Owner:** M9
+- **Problem:** found low or informational, and not fixed with the signing change:
+  1. Trivy downloads its vulnerability database and its misconfiguration check bundle at run time, unpinned; `trivy image` (`supply-chain.yml`) has no retry, so a download outage reads as a failed scan.
+  2. `zap-baseline` and `images` are skipped today, and GitHub counts a skipped job as passing a required check.
+  3. `cancel-in-progress` keyed on the ref can cancel the scan and the signing of an intermediate `main` commit.
+  4. No `.dockerignore` exists, and the ML images build from the repository root, so `.git` enters their build context; `actions/checkout` keeps its default `persist-credentials`, although no job needs git authentication.
+  5. `${{ matrix.image }}` is interpolated into `run:` scripts; the values come from a hard-coded list, so only people who can push control them.
+  6. `run:` steps use the default `bash -e` without `pipefail`; the masked pipes are display-only and every gate fails closed.
+  7. Each signing writes the repository, workflow, branch and commit to the public Rekor log; the repository is public, so only branch names outlive their deletion.
+  8. `images` holds `packages: write` and `id-token: write` on every ref, though only `main` uses them; a feature branch's signature would fail the anchored verification, so this is hardening only.
+- **Acceptance:** 1: a retried database step before `trivy image` and the check bundle pinned by digest; 2: a gate job that fails on `main` when a target is absent, if these become required checks; 3: `cancel-in-progress` false on `main`; 4: `.dockerignore` files excluding `.git` and `persist-credentials: false`; 5: the value passed through `env:`; 6: `defaults.run.shell: bash` (which adds `pipefail`); 7: no change needed, recorded; 8: the push and signing steps in a job that runs only on `refs/heads/main`.

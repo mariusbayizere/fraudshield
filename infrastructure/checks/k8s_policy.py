@@ -3,7 +3,12 @@
 kubeconform proves the manifests are well-formed; this proves they meet the M9 gate and the
 project's own rules (build prompt D.3 M9, H.1, A.3 rule 10):
 
-* **Pod Security "restricted"** for every pod template, checked offline so a violation fails in CI
+Scope: Deployments, StatefulSets and DaemonSets (``WORKLOAD_KINDS``), and the controls listed
+below. Pods in any other kind (Job, CronJob, bare Pod, ReplicaSet, a Rollout with an inline
+template) are not checked (PB-184), and the parts of the restricted profile not listed here are
+not checked either (PB-185).
+
+* **Pod Security "restricted", listed controls**, checked offline so a violation fails in CI
   rather than at admission: non-root, no privilege escalation, all capabilities dropped (only
   NET_BIND_SERVICE may be added), RuntimeDefault or Localhost seccomp, no host namespaces or
   hostPath, only the volume types the profile allows. On top of the profile: read-only root
