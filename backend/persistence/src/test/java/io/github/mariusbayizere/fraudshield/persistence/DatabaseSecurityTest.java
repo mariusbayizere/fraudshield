@@ -225,6 +225,74 @@ class DatabaseSecurityTest {
     }
   }
 
+  /**
+   * ADR 0116 point 5: the assignment history is append-only, granted SELECT and INSERT only, and
+   * isolated by institution.
+   */
+  @Test
+  @Tag("FR-04-10")
+  @Tag("NFR-SEC-05")
+  void alertAssignmentsAreAppendOnlyAndIsolated() throws SQLException {
+    assertThat(appendOnlyTables()).contains("alert_assignments");
+    UUID alertA;
+    try (Connection admin = db.superuser()) {
+      for (String privilege : List.of("SELECT", "INSERT")) {
+        assertThat(
+                bool(
+                    admin,
+                    "SELECT has_table_privilege('fs_app', 'fraudshield.alert_assignments', '"
+                        + privilege
+                        + "')"))
+            .as("fs_app %s", privilege)
+            .isTrue();
+      }
+      for (String role : List.of("fs_app_readonly", "fs_compliance_ro")) {
+        for (String privilege : List.of("SELECT", "INSERT")) {
+          assertThat(
+                  bool(
+                      admin,
+                      "SELECT has_table_privilege('"
+                          + role
+                          + "', 'fraudshield.alert_assignments', '"
+                          + privilege
+                          + "')"))
+              .as("%s %s", role, privilege)
+              .isEqualTo("SELECT".equals(privilege));
+        }
+      }
+      alertA =
+          uuid(
+              admin,
+              "SELECT alert_queue_entry_id FROM fraudshield.alert_decisions WHERE id = '"
+                  + decisionA
+                  + "'");
+    }
+    final String insert =
+        "INSERT INTO alert_assignments (institution_id, alert_queue_entry_id, assignee_id,"
+            + " assigned_by, idempotency_key, request_fingerprint) VALUES ('{institution}', '"
+            + alertA
+            + "', '"
+            + analystA
+            + "', '"
+            + analystA
+            + "', gen_random_uuid(), sha256('assign'::bytea))";
+    try (Connection app = tenant("fs_app", BANK_A)) {
+      exec(app, insert.replace("{institution}", BANK_A.toString()));
+      assertThat(count(app, "SELECT count(*) FROM alert_assignments")).isEqualTo(1);
+      assertSqlState(app, "UPDATE alert_assignments SET assignee_id = NULL", PERMISSION_DENIED);
+      assertSqlState(app, "DELETE FROM alert_assignments", PERMISSION_DENIED);
+      assertSqlState(app, "TRUNCATE alert_assignments", PERMISSION_DENIED);
+      assertSqlState(app, insert.replace("{institution}", BANK_B.toString()), PERMISSION_DENIED);
+      app.commit();
+    }
+    try (Connection app = tenant("fs_app", BANK_B)) {
+      // BANK_A's committed row is invisible here.
+      assertThat(count(app, "SELECT count(*) FROM alert_assignments")).isZero();
+      // BANK_A's entry and analyst cannot be named from BANK_B: the composite keys refuse them.
+      assertSqlState(app, insert.replace("{institution}", BANK_B.toString()), "23503");
+    }
+  }
+
   @Test
   void everyForeignKeyBetweenTenantTablesIncludesTheInstitution() throws SQLException {
     // A single-column reference ignores row-level security: it could point at another
