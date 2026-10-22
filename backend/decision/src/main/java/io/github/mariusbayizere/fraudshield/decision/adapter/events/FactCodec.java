@@ -169,6 +169,9 @@ public final class FactCodec {
         node.put("source", e.source());
         putInstant(node, "transaction_timestamp", e.transactionTimestamp());
         putInstant(node, "available_at", e.availableAt());
+        node.put(
+            "supersedes_label_id",
+            e.supersedesLabelId() == null ? null : e.supersedesLabelId().toString());
       }
       case DecisionEvent.IdempotencyConflict e -> {
         node.put("type", "idempotency_conflict");
@@ -259,7 +262,8 @@ public final class FactCodec {
               node.get("fraud").asBoolean(),
               node.get("source").asString(),
               instant(node, "transaction_timestamp"),
-              instant(node, "available_at"));
+              instant(node, "available_at"),
+              node.hasNonNull("supersedes_label_id") ? uuid(node, "supersedes_label_id") : null);
       case "circuit_breaker_changed" ->
           new DecisionEvent.CircuitBreakerChanged(
               uuid(node, "institution_id"),

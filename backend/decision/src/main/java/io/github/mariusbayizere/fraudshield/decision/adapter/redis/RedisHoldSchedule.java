@@ -83,12 +83,23 @@ public final class RedisHoldSchedule implements HoldSchedulePort {
     String id = hold.institutionId() + "|" + hold.transactionId();
     String member =
         id + "|" + hold.channel() + "|" + hold.policy() + "|" + hold.deadline().toEpochMilli();
+    if (hold.eventId() != null) {
+      // The HOLD's own state (decision-owner contract §4.2). Reason codes are [A-Z0-9_]: no
+      // separator can occur in them.
+      member +=
+          "|"
+              + hold.eventId()
+              + "|"
+              + hold.decidedAt().toEpochMilli()
+              + "|"
+              + String.join(",", hold.reasonCodes());
+    }
     RedisSupport.await(
         redis.eval(
             SCHEDULE,
             ScriptOutputType.INTEGER,
             new String[] {RedisKeys.HOLDS, RedisKeys.HOLDS_INDEX},
-            Long.toString(hold.deadline().toEpochMilli()),
+            Long.toString(hold.dueAt().toEpochMilli()),
             member,
             id),
         timeout);
@@ -120,14 +131,20 @@ public final class RedisHoldSchedule implements HoldSchedulePort {
             timeout);
     List<DueHold> due = new ArrayList<>(members.size());
     for (Object member : members) {
-      String[] f = ((String) member).split("\\|");
+      // Both member formats: five fields before V81, eight after (§4.2 point 5).
+      String[] f = ((String) member).split("\\|", -1);
+      boolean basis = f.length >= 8;
       due.add(
           new DueHold(
               UUID.fromString(f[0]),
               UUID.fromString(f[1]),
               f[2],
               MediumTimeoutPolicy.valueOf(f[3]),
-              Instant.ofEpochMilli(Long.parseLong(f[4]))));
+              Instant.ofEpochMilli(Long.parseLong(f[4])),
+              basis ? UUID.fromString(f[5]) : null,
+              basis ? Instant.ofEpochMilli(Long.parseLong(f[6])) : null,
+              basis && !f[7].isEmpty() ? List.of(f[7].split(",")) : List.of(),
+              null));
     }
     return due;
   }

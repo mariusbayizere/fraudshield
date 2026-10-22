@@ -32,7 +32,7 @@ public final class RedisDecisionStates implements DecisionStatePort {
   private static final String SAVE =
       """
       local current = tonumber(redis.call('HGET', KEYS[1], 'sequence') or '0')
-      if current + 1 ~= tonumber(ARGV[1]) then return 0 end
+      if current >= tonumber(ARGV[1]) then return 0 end
       redis.call('HSET', KEYS[1], 'sequence', ARGV[1], 'state', ARGV[2])
       redis.call('PEXPIRE', KEYS[1], ARGV[3])
       return 1
@@ -73,6 +73,24 @@ public final class RedisDecisionStates implements DecisionStatePort {
                 Long.toString(RETENTION.toMillis())),
             timeout);
     return saved == 1L;
+  }
+
+  /**
+   * The cached state only, never PostgreSQL: the bank's poll asks Redis only when PostgreSQL holds
+   * nothing or cannot answer (decision-owner contract §8, ADR 0113).
+   *
+   * @param institutionId institution
+   * @param transactionId transaction
+   * @return the cached state, if any
+   * @throws RuntimeException when Redis cannot answer
+   */
+  public Optional<DecisionState> cached(UUID institutionId, UUID transactionId) {
+    String cached =
+        RedisSupport.await(
+            redis.hget(RedisKeys.decision(institutionId, transactionId), "state"), timeout);
+    return cached == null
+        ? Optional.empty()
+        : Optional.of(FactCodec.state(JSON.readTree(cached)));
   }
 
   @Override

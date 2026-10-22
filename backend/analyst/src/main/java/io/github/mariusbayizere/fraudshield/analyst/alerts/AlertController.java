@@ -48,6 +48,7 @@ public class AlertController {
           "CONFIRMED_FRAUD",
           "MARKED_LEGITIMATE",
           "AUTO_RELEASED",
+          "AUTO_DECLINED",
           "ESCALATED",
           "OVERRIDDEN");
 

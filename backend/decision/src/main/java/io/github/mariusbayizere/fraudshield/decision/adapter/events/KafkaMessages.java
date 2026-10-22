@@ -532,6 +532,9 @@ public final class KafkaMessages {
     p.put("source", e.source().equals("CUSTOMER") ? "CUSTOMER_VERIFICATION" : e.source());
     p.put("label_available_at", e.availableAt().toString());
     p.put("transaction_timestamp", e.transactionTimestamp().toString());
+    p.put(
+        "supersedes_label_id",
+        e.supersedesLabelId() == null ? null : e.supersedesLabelId().toString());
     return p;
   }
 }

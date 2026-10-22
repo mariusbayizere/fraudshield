@@ -2,7 +2,10 @@ package io.github.mariusbayizere.fraudshield.notify.verification;
 
 import io.github.mariusbayizere.fraudshield.common.money.CurrencyCode;
 import io.github.mariusbayizere.fraudshield.common.money.Money;
-import io.github.mariusbayizere.fraudshield.decision.application.DecisionTransitionService;
+import io.github.mariusbayizere.fraudshield.decision.owner.DecisionOwner;
+import io.github.mariusbayizere.fraudshield.decision.owner.OwnerRequest;
+import io.github.mariusbayizere.fraudshield.decision.owner.OwnerTransactions;
+import io.github.mariusbayizere.fraudshield.decision.owner.RequestRecorder;
 import io.github.mariusbayizere.fraudshield.notify.sms.LocalTimes;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -26,6 +29,12 @@ import javax.sql.DataSource;
  * this was me" lifts the block (a new decision state, delivered by webhook) and records a
  * LEGITIMATE label for retraining; "No" records a FRAUD label and keeps the block. The database
  * enforces single use (one response per verification) and expiry (V5 triggers).
+ *
+ * <p>The answer is a request to the transaction's owner, made in the same transaction as the
+ * response (decision-owner contract §6.5): the response and its outcome commit together, and an
+ * {@code unblock_events} row exists only for an applied "yes". If the database is unavailable,
+ * nothing is stored and the token is not spent. A "yes" waits while a human reviews the payment,
+ * and is refused after a human declined it.
  */
 public final class VerificationService {
 
@@ -56,11 +65,6 @@ public final class VerificationService {
       INSERT INTO customer_verification_responses (verification_id, institution_id, answer,
       self_service_allowed, responded_at) VALUES (?, ?, ?, true, ?) ON CONFLICT DO NOTHING
       """;
-  private static final String UNBLOCK =
-      """
-      INSERT INTO unblock_events (institution_id, auto_block_event_id, cause, verification_id,
-      unblocked_at) VALUES (?, ?, 'CUSTOMER_VERIFICATION', ?, ?) ON CONFLICT DO NOTHING
-      """;
 
   /** Why a token cannot be used; shown to the customer only as "expired or already used". */
   public enum Unusable {
@@ -85,13 +89,23 @@ public final class VerificationService {
    * The result of an answer.
    *
    * @param unusable why the token could not be used, when it could not
-   * @param pending true when the answer is recorded but the decision transition did not run, so the
-   *     block is lifted by {@link UnblockReconciler} within seconds rather than at once
+   * @param pending kept for the page's contract; always false since the answer and its outcome
+   *     commit together
+   * @param deferred true when a human is reviewing the payment, so the answer waits for that
+   *     decision and {@link UnblockReconciler} submits it afterwards (§6.5)
+   * @param stillBlocked true when a human declined the payment, so a "yes" cannot lift it (§5)
    */
-  public record Answered(Optional<Unusable> unusable, boolean pending) {
+  public record Answered(
+      Optional<Unusable> unusable, boolean pending, boolean deferred, boolean stillBlocked) {
 
-    /** An accepted answer that reached the decision path. */
-    static final Answered APPLIED = new Answered(Optional.empty(), false);
+    /** An accepted answer whose outcome is applied. */
+    static final Answered APPLIED = new Answered(Optional.empty(), false, false, false);
+
+    /** An accepted answer waiting for a human's decision. */
+    static final Answered DEFERRED = new Answered(Optional.empty(), false, true, false);
+
+    /** An accepted "yes" that a human's decline overrules. */
+    static final Answered STILL_BLOCKED = new Answered(Optional.empty(), false, false, true);
 
     /**
      * A token that cannot be used.
@@ -100,7 +114,7 @@ public final class VerificationService {
      * @return the result
      */
     static Answered refused(Unusable why) {
-      return new Answered(Optional.of(why), false);
+      return new Answered(Optional.of(why), false, false, false);
     }
   }
 
@@ -123,20 +137,30 @@ public final class VerificationService {
       Instant expiresAt) {}
 
   private final DataSource dataSource;
-  private final DecisionTransitionService transitions;
+  private final OwnerTransactions transactions;
+  private final DecisionOwner owner;
+  private final RequestRecorder recorder;
   private final Clock clock;
 
   /**
    * Creates the service.
    *
    * @param dataSource connections as {@code fs_app}
-   * @param transitions decision transitions
+   * @param transactions the owner's runner
+   * @param owner the transaction's owner
+   * @param recorder records an outcome after the commit
    * @param clock clock
    */
   public VerificationService(
-      DataSource dataSource, DecisionTransitionService transitions, Clock clock) {
+      DataSource dataSource,
+      OwnerTransactions transactions,
+      DecisionOwner owner,
+      RequestRecorder recorder,
+      Clock clock) {
     this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
-    this.transitions = Objects.requireNonNull(transitions, "transitions");
+    this.transactions = Objects.requireNonNull(transactions, "transactions");
+    this.owner = Objects.requireNonNull(owner, "owner");
+    this.recorder = Objects.requireNonNull(recorder, "recorder");
     this.clock = Objects.requireNonNull(clock, "clock");
   }
 
@@ -191,17 +215,12 @@ public final class VerificationService {
   }
 
   /**
-   * Records the customer's answer.
-   *
-   * <p>The answer and its {@code unblock_events} row commit first; the decision transition follows.
-   * If the transition fails, the answer stands and {@link UnblockReconciler} applies it within
-   * seconds, and the result says so, so the page never promises the customer an unblock that did
-   * not happen and never asks for an answer the token can no longer give (finding 6).
+   * Records the customer's answer, and its owner request, in one transaction.
    *
    * @param token token from the link
    * @param wasMe true for "Yes, this was me"
-   * @return whether the answer was accepted, and whether the unblock is still pending
-   * @throws SQLException when the database is unavailable
+   * @return whether the answer was accepted, and what it did
+   * @throws SQLException when the database is unavailable; nothing is stored then
    */
   public Answered answer(String token, boolean wasMe) throws SQLException {
     Optional<Found> found = find(token);
@@ -214,54 +233,47 @@ public final class VerificationService {
       return Answered.refused(unusable.get());
     }
     Instant now = clock.instant();
-    try (Connection c = dataSource.getConnection()) {
-      c.setAutoCommit(false);
-      try {
-        tenant(c, f.institution());
-        try (PreparedStatement s = c.prepareStatement(RESPOND)) {
-          s.setObject(1, f.verification());
-          s.setObject(2, f.institution());
-          s.setString(3, wasMe ? "WAS_ME" : "NOT_ME");
-          s.setObject(4, utc(now));
-          if (s.executeUpdate() == 0) {
-            c.rollback();
-            return Answered.refused(Unusable.USED);
-          }
-        }
-        if (wasMe) {
-          try (PreparedStatement s = c.prepareStatement(UNBLOCK)) {
-            s.setObject(1, f.institution());
-            s.setObject(2, f.block());
-            s.setObject(3, f.verification());
-            s.setObject(4, utc(now));
-            s.executeUpdate();
-          }
-        }
-        c.commit();
-      } catch (SQLException e) {
-        c.rollback();
-        if ("P0001".equals(e.getSQLState()) || "23514".equals(e.getSQLState())) {
-          return Answered.refused(Unusable.EXPIRED);
-        }
-        throw e;
-      }
-    }
+    DecisionOwner.Result result;
     try {
-      transitions.customerAnswered(f.institution(), f.transaction(), wasMe, f.transactionAt());
-    } catch (DecisionTransitionService.TransitionRefusedException alreadyResolved) {
-      // The answer is recorded; the decision had already moved on (for example a senior
-      // override), so there is nothing to lift.
-    } catch (RuntimeException failed) {
-      // The answer is durable and the token is spent, so failing the page would strand the
-      // customer. The sweep applies the transition (V64); the page says the unblock is on its way.
-      LOG.warn(
-          "the customer's answer for transaction {} did not reach the decision path; the sweep"
-              + " applies it",
-          f.transaction(),
-          failed);
-      return new Answered(Optional.empty(), wasMe);
+      result =
+          transactions.inTenant(
+              f.institution(),
+              c -> {
+                try (PreparedStatement s = c.prepareStatement(RESPOND)) {
+                  s.setObject(1, f.verification());
+                  s.setObject(2, f.institution());
+                  s.setString(3, wasMe ? "WAS_ME" : "NOT_ME");
+                  s.setObject(4, utc(now));
+                  if (s.executeUpdate() == 0) {
+                    return null;
+                  }
+                }
+                return owner.submit(
+                    c,
+                    f.institution(),
+                    f.transaction(),
+                    new OwnerRequest.Customer(f.verification(), wasMe));
+              });
+    } catch (SQLException e) {
+      if ("P0001".equals(e.getSQLState()) || "23514".equals(e.getSQLState())) {
+        return Answered.refused(Unusable.EXPIRED);
+      }
+      throw e;
     }
-    return Answered.APPLIED;
+    if (result == null) {
+      return Answered.refused(Unusable.USED);
+    }
+    recorder.record(f.institution(), result);
+    return switch (result.outcome()) {
+      case DEFERRED -> {
+        LOG.info(
+            "the customer's answer for transaction {} waits for a human's decision",
+            f.transaction());
+        yield Answered.DEFERRED;
+      }
+      case REFUSED -> Answered.STILL_BLOCKED;
+      default -> Answered.APPLIED;
+    };
   }
 
   private Optional<Unusable> unusable(Found f) {

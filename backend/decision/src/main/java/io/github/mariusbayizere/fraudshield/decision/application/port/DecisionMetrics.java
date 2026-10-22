@@ -51,6 +51,13 @@ public interface DecisionMetrics {
    */
   default void stateWriteFailed(String what) {}
 
+  /**
+   * A timeout request failed or found no first decision, and its hold was rescheduled 1 s later
+   * (decision-owner contract §2). During a PostgreSQL outage this is the live signal that payments
+   * are being held (ADR 0111); M9 alerts on it.
+   */
+  default void holdRequestRetried() {}
+
   /** Metrics that record nothing, for callers that have none. */
   DecisionMetrics NONE =
       new DecisionMetrics() {

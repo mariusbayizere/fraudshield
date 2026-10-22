@@ -40,9 +40,12 @@ class DecisionStateTest {
                             && (to == DecisionValue.TIMEOUT_RELEASE
                                 || to == DecisionValue.DECLINE));
                 case DECLINE ->
-                    to == DecisionValue.APPROVE
-                        && (by == DecidedBy.CUSTOMER_VERIFICATION
-                            || by == DecidedBy.SENIOR_OVERRIDE);
+                    (to == DecisionValue.APPROVE
+                            && (by == DecidedBy.CUSTOMER_VERIFICATION
+                                || by == DecidedBy.SENIOR_OVERRIDE))
+                        // A human confirms a decline (decision-owner contract §5.1).
+                        || (to == DecisionValue.DECLINE
+                            && (by == DecidedBy.ANALYST || by == DecidedBy.SENIOR_OVERRIDE));
                 case APPROVE, TIMEOUT_RELEASE ->
                     to == DecisionValue.DECLINE && by == DecidedBy.SENIOR_OVERRIDE;
               };
@@ -52,6 +55,65 @@ class DecisionStateTest {
         }
       }
     }
+  }
+
+  @Test
+  void analystMayOverruleOnlyCustomerApproval() {
+    assertThat(
+            DecisionState.allowed(
+                DecisionValue.APPROVE,
+                DecidedBy.CUSTOMER_VERIFICATION,
+                DecisionValue.DECLINE,
+                DecidedBy.ANALYST,
+                false))
+        .isTrue();
+    for (DecidedBy maker : DecidedBy.values()) {
+      if (maker != DecidedBy.CUSTOMER_VERIFICATION) {
+        assertThat(
+                DecisionState.allowed(
+                    DecisionValue.APPROVE, maker, DecisionValue.DECLINE, DecidedBy.ANALYST, false))
+            .as("APPROVE by %s", maker)
+            .isFalse();
+      }
+    }
+  }
+
+  @Test
+  void resolutionSetsAnyStateToApproveOrDeclineBySeniorOverrideOnly() {
+    for (DecisionValue from : DecisionValue.values()) {
+      for (DecisionValue to : DecisionValue.values()) {
+        for (DecidedBy by : DecidedBy.values()) {
+          boolean expected =
+              by == DecidedBy.SENIOR_OVERRIDE
+                  && (to == DecisionValue.APPROVE || to == DecisionValue.DECLINE);
+          assertThat(DecisionState.allowed(from, DecidedBy.MODEL, to, by, true))
+              .as(from + "->" + to + " by " + by)
+              .isEqualTo(expected);
+        }
+      }
+    }
+  }
+
+  @Test
+  void succeedingRepeatsAValueAtTheNextSequence() {
+    UUID tx = UUID.randomUUID();
+    DecisionState declined =
+        DecisionState.initial(INSTITUTION, tx, Decision.DECLINE, NOW, List.of(), null);
+    DecisionState confirmed =
+        DecisionState.succeeding(
+            INSTITUTION,
+            tx,
+            declined.sequence(),
+            declined.decision(),
+            declined.decidedBy(),
+            UUID.randomUUID(),
+            DecisionValue.DECLINE,
+            DecidedBy.SENIOR_OVERRIDE,
+            NOW,
+            List.of(),
+            false);
+    assertThat(confirmed.sequence()).isEqualTo(2);
+    assertThat(confirmed.supersedes()).isEqualTo(DecisionValue.DECLINE);
   }
 
   @Test

@@ -62,7 +62,6 @@ class PostgresAdaptersTest {
     "account_freeze_events",
     "label_events",
     "mcc_circuit_breaker_events",
-    "alert_decisions",
     "account_profiles"
   };
 
@@ -149,21 +148,23 @@ class PostgresAdaptersTest {
             .count();
     assertThat(released).isEqualTo(2);
     List<SpoolRecord> records = records(facts);
+    long later = facts.stream().filter(DecisionEvent.DecisionChanged.class::isInstance).count();
     sink.accept(records);
     Map<String, Long> first = counts();
     assertThat(first).allSatisfy((table, count) -> assertThat(count).as(table).isPositive());
     assertThat(first.get("transaction_ids")).isEqualTo(8);
     assertThat(first.get("account_freeze_events")).isEqualTo(1);
-    assertThat(first.get("alert_decisions")).as("one AUTO_RELEASED per hold").isEqualTo(released);
+    // Decision-owner contract §6.1: later states are the owner's request rows. The sink writes
+    // sequence 1 only, closes no entry and writes no AUTO_* row; these scenario states have no
+    // request behind them, so each is counted and dropped.
+    assertThat(sink.unreservedStates()).isEqualTo(later);
+    assertThat(one("SELECT count(*) FROM fraudshield.decision_states WHERE decision_sequence > 1"))
+        .isEqualTo("0");
+    assertThat(one("SELECT count(*) FROM fraudshield.alert_decisions")).isEqualTo("0");
 
     sink.accept(records);
     assertThat(counts()).isEqualTo(first);
     assertThat(sink.deadLettered()).isZero();
-    assertThat(
-            one(
-                "SELECT status FROM fraudshield.alert_queue_entries WHERE tier = 'MEDIUM'"
-                    + " AND status = 'AUTO_RELEASED'"))
-        .isEqualTo("AUTO_RELEASED");
     assertThat(
             one("SELECT count(*) FROM fraudshield.fraud_scores" + " WHERE ml_unavailable_fallback"))
         .isEqualTo("1");
@@ -441,20 +442,19 @@ class PostgresAdaptersTest {
   void theLatestPersistedStateIsReadBack() throws Exception {
     List<DecisionEvent> facts = FactScenarios.everyKindOfFact();
     sink.accept(records(facts));
-    DecisionState released =
+    DecisionState held =
         facts.stream()
-            .filter(DecisionEvent.DecisionChanged.class::isInstance)
-            .map(e -> ((DecisionEvent.DecisionChanged) e).state())
-            .filter(s -> s.decidedBy() == DecidedBy.TIMEOUT_POLICY)
+            .filter(DecisionEvent.TransactionDecided.class::isInstance)
+            .map(e -> ((DecisionEvent.TransactionDecided) e).state())
+            .filter(s -> s.decision() == DecisionValue.HOLD)
             .findFirst()
             .orElseThrow();
     JdbcDecisionStates states = new JdbcDecisionStates(db.dataSource("fs_app"));
-    assertThat(states.latest(INSTITUTION, released.transactionId())).contains(released);
+    assertThat(states.latest(INSTITUTION, held.transactionId())).contains(held);
     assertThat(states.latest(INSTITUTION, UUID.randomUUID())).isEmpty();
-    assertThat(states.latest(UUID.randomUUID(), released.transactionId()))
+    assertThat(states.latest(UUID.randomUUID(), held.transactionId()))
         .as("other tenant")
         .isEmpty();
-    assertThat(released.decision()).isEqualTo(DecisionValue.TIMEOUT_RELEASE);
   }
 
   @Test

@@ -21,6 +21,12 @@ import java.util.concurrent.TimeoutException;
  * that dies mid-decision cannot block a retry for 24 hours; a completed record lives 24 hours
  * (FR-01-03: TTL = 24 h).
  *
+ * <p>An in-flight claim outlives its lease (decision-owner contract §7.5): the record lives 24
+ * hours and carries {@code lease_until}. A retry that finds a lease expired, rather than no claim
+ * at all, is verified against PostgreSQL before it may decide afresh, so a retry does not decide a
+ * second time where the dead attempt's decision may still drain. ADR 0114 amends ADR 0067 points 3
+ * and 4 for this.
+ *
  * <p>Only the owner of a claim can release it or mark it uncertain, and completion always stores
  * the fingerprint, so a decision that finishes after its lease expired is still replayed to
  * identical requests rather than reported as a conflict. If a duplicate re-claimed and completed
@@ -51,10 +57,16 @@ public final class RedisIdempotency implements IdempotencyStore {
       local state = redis.call('HGET', KEYS[1], 'state')
       if state and redis.call('HGET', KEYS[1], 'fp') ~= ARGV[1] then return {'CONFLICT'} end
       if state == 'DONE' then return {'REPLAY', redis.call('HGET', KEYS[1], 'response')} end
-      if state == 'INFLIGHT' then return {'INFLIGHT'} end
+      if state == 'INFLIGHT' then
+        if tonumber(redis.call('HGET', KEYS[1], 'lease_until') or '0') > now then
+          return {'INFLIGHT'}
+        end
+        verify = 1
+      end
       if state == 'UNCERTAIN' then verify = 1 end
-      redis.call('HSET', KEYS[1], 'fp', ARGV[1], 'state', 'INFLIGHT', 'owner', ARGV[3])
-      redis.call('PEXPIRE', KEYS[1], ARGV[2])
+      redis.call('HSET', KEYS[1], 'fp', ARGV[1], 'state', 'INFLIGHT', 'owner', ARGV[3],
+        'lease_until', tostring(now + tonumber(ARGV[2])))
+      redis.call('PEXPIRE', KEYS[1], ARGV[5])
       return {'CLAIMED', tostring(verify)}
       """;
 

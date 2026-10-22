@@ -19,11 +19,13 @@ import org.springframework.transaction.support.TransactionTemplate;
  * <p>The audit hash chain refuses, with SQLSTATE 40001, a transaction that started before the last
  * row of its chain was written (V8). Such a transaction is retried from the start, a bounded number
  * of times; the work must therefore have no side effects outside the transaction except through
- * after-commit callbacks.
+ * after-commit callbacks. A deadlock (40P01) is retried the same way: the decision-owner contract's
+ * two stated exceptions to its lock order rely on it (§2, §3).
  */
 public final class TenantTransactions {
 
   private static final String SERIALIZATION_FAILURE = "40001";
+  private static final String DEADLOCK = "40P01";
 
   private final TransactionTemplate transactions;
   private final JdbcTemplate jdbc;
@@ -90,7 +92,9 @@ public final class TenantTransactions {
 
   static boolean isSerializationFailure(Throwable error) {
     for (Throwable cause = error; cause != null; cause = cause.getCause()) {
-      if (cause instanceof SQLException sql && SERIALIZATION_FAILURE.equals(sql.getSQLState())) {
+      if (cause instanceof SQLException sql
+          && (SERIALIZATION_FAILURE.equals(sql.getSQLState())
+              || DEADLOCK.equals(sql.getSQLState()))) {
         return true;
       }
     }

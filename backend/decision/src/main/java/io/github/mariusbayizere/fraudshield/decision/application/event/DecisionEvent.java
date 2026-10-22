@@ -220,6 +220,8 @@ public sealed interface DecisionEvent {
    * @param source ANALYST, SENIOR_OVERRIDE, CUSTOMER or CHARGEBACK
    * @param transactionTimestamp the transaction's time
    * @param availableAt when the label became known
+   * @param supersedesLabelId the label this one supersedes, or null (an override's, when the
+   *     original's label was recorded; decision-owner contract §5)
    */
   record LabelRecorded(
       UUID labelId,
@@ -228,7 +230,8 @@ public sealed interface DecisionEvent {
       boolean fraud,
       String source,
       Instant transactionTimestamp,
-      Instant availableAt)
+      Instant availableAt,
+      UUID supersedesLabelId)
       implements DecisionEvent {}
 
   /**

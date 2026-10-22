@@ -206,6 +206,16 @@ public class InMemoryPorts
     holds.put(hold.transactionId(), hold);
   }
 
+  /**
+   * The hold scheduled for a transaction, if any.
+   *
+   * @param transactionId transaction
+   * @return the hold
+   */
+  public Optional<DueHold> scheduled(UUID transactionId) {
+    return Optional.ofNullable(holds.get(transactionId));
+  }
+
   @Override
   public boolean cancel(UUID institutionId, UUID transactionId) {
     return holds.remove(transactionId) != null;
@@ -216,7 +226,7 @@ public class InMemoryPorts
     List<DueHold> due = new ArrayList<>();
     for (DueHold hold : List.copyOf(holds.values())) {
       if (due.size() < max
-          && !hold.deadline().isAfter(now)
+          && !hold.dueAt().isAfter(now)
           && holds.remove(hold.transactionId()) != null) {
         due.add(hold);
       }

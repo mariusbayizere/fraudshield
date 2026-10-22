@@ -156,6 +156,13 @@ public final class ResilientPorts {
       }
 
       @Override
+      public boolean countConfirmedFraudOnce(
+          UUID institutionId, UUID transactionId, String mcc, Instant at) {
+        // Redis directly: a failure must reach the effects worker, which retries it (E2).
+        return redis.countConfirmedFraudOnce(institutionId, transactionId, mcc, at);
+      }
+
+      @Override
       public Collection<Key> active(Instant now) {
         return attempt(mode, () -> redis.active(now), List::of);
       }
@@ -222,7 +229,7 @@ public final class ResilientPorts {
       List<DueHold> due = new ArrayList<>();
       for (DueHold hold : List.copyOf(local.values())) {
         if (due.size() < max
-            && !hold.deadline().isAfter(now)
+            && !hold.dueAt().isAfter(now)
             && local.remove(hold.transactionId()) != null) {
           due.add(hold);
         }

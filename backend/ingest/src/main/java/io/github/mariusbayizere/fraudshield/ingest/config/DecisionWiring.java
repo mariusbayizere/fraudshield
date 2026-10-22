@@ -18,6 +18,12 @@ import io.github.mariusbayizere.fraudshield.decision.adapter.kafka.KafkaSink;
 import io.github.mariusbayizere.fraudshield.decision.adapter.redis.RedisAccountStatus;
 import io.github.mariusbayizere.fraudshield.decision.adapter.redis.RedisCircuitBreakers;
 import io.github.mariusbayizere.fraudshield.decision.adapter.redis.RedisDecisionStates;
+import io.github.mariusbayizere.fraudshield.decision.owner.DecisionAlarms;
+import io.github.mariusbayizere.fraudshield.decision.owner.DecisionOwner;
+import io.github.mariusbayizere.fraudshield.decision.owner.FinalDecisions;
+import io.github.mariusbayizere.fraudshield.decision.owner.OwnerHoldTimeouts;
+import io.github.mariusbayizere.fraudshield.decision.owner.OwnerTransactions;
+import io.github.mariusbayizere.fraudshield.decision.owner.RequestRecorder;
 import io.github.mariusbayizere.fraudshield.decision.adapter.redis.RedisFreezes;
 import io.github.mariusbayizere.fraudshield.decision.adapter.redis.RedisHoldSchedule;
 import io.github.mariusbayizere.fraudshield.decision.adapter.resilience.DegradedMode;
@@ -28,7 +34,6 @@ import io.github.mariusbayizere.fraudshield.decision.adapter.spool.SpoolingEvent
 import io.github.mariusbayizere.fraudshield.decision.application.CircuitBreakerMonitor;
 import io.github.mariusbayizere.fraudshield.decision.application.DecisionService;
 import io.github.mariusbayizere.fraudshield.decision.application.DecisionSettings;
-import io.github.mariusbayizere.fraudshield.decision.application.DecisionTransitionService;
 import io.github.mariusbayizere.fraudshield.decision.application.HoldTimeoutService;
 import io.github.mariusbayizere.fraudshield.decision.application.port.CircuitBreakerPort;
 import io.github.mariusbayizere.fraudshield.decision.application.port.DecisionMetrics;
@@ -299,36 +304,98 @@ public class DecisionWiring {
         afterResponse);
   }
 
+  /** The owner's runner for the decision and notify modules (decision-owner contract §2). */
+  @Bean
+  OwnerTransactions ownerTransactions(DataSource dataSource) {
+    return new OwnerTransactions(dataSource, 3);
+  }
+
+  /** The one owner of every transaction's later states (§4). Stateless. */
+  @Bean
+  DecisionOwner decisionOwner() {
+    return new DecisionOwner();
+  }
+
+  /**
+   * Records owner requests (§4.6). Its Redis state write goes to Redis directly, not through the
+   * resilient fallback, and is best effort.
+   */
+  @Bean
+  RequestRecorder requestRecorder(
+      DataSource dataSource,
+      OwnerTransactions transactions,
+      EventRecorder recorder,
+      StatefulRedisConnection<String, String> redis,
+      JdbcDecisionStates durable,
+      FraudShieldProperties properties) {
+    return new RequestRecorder(
+        dataSource,
+        transactions,
+        recorder,
+        new RedisDecisionStates(redis, durable, properties.redisTimeout()));
+  }
+
+  /** The bank's poll, PostgreSQL first (§8, ADR 0113). */
+  @Bean
+  FinalDecisions finalDecisions(
+      JdbcDecisionStates durable,
+      StatefulRedisConnection<String, String> redis,
+      FraudShieldProperties properties) {
+    return new FinalDecisions(
+        durable, new RedisDecisionStates(redis, durable, properties.redisTimeout()));
+  }
+
+  /** The alarms' figures (§7.4), read every 30 s without a leader lease. */
+  @Bean
+  DecisionAlarms decisionAlarms(DataSource dataSource, MeterRegistry registry) {
+    DecisionAlarms alarms = new DecisionAlarms(dataSource);
+    for (String alarm : DecisionAlarms.ALARMS) {
+      Gauge.builder("fs_decision_alarm_count", alarms, a -> a.count(alarm))
+          .tag("alarm", alarm)
+          .description("Decision-owner alarm: how many (contract §7.4)")
+          .register(registry);
+      Gauge.builder("fs_decision_alarm_oldest_seconds", alarms, a -> a.oldestSeconds(alarm))
+          .tag("alarm", alarm)
+          .baseUnit("seconds")
+          .description("Decision-owner alarm: the oldest's age (contract §7.4)")
+          .register(registry);
+    }
+    return alarms;
+  }
+
   @Bean
   HoldTimeoutService holdTimeouts(
       HoldSchedulePort holds,
-      DecisionStatePort states,
-      EventRecorder recorder,
+      OwnerTransactions transactions,
+      DecisionOwner owner,
+      RequestRecorder recorder,
       DecisionMetrics metrics,
       Clock clock,
       FraudShieldProperties properties) {
-    return new HoldTimeoutService(holds, states, recorder, metrics, clock, properties.instanceId());
+    return new HoldTimeoutService(
+        holds,
+        new OwnerHoldTimeouts(transactions, owner, recorder),
+        metrics,
+        clock,
+        properties.instanceId());
   }
 
   @Bean
   UnblockReconciler unblockReconciler(
       DataSource dataSource,
-      DecisionTransitionService transitions,
+      OwnerTransactions transactions,
+      DecisionOwner owner,
+      RequestRecorder recorder,
       HoldSchedulePort holds,
       Clock clock,
       FraudShieldProperties properties) {
-    return new UnblockReconciler(dataSource, transitions, holds, properties.instanceId(), clock);
+    return new UnblockReconciler(
+        dataSource, transactions, owner, recorder, holds, properties.instanceId(), clock);
   }
 
   @Bean
   JdbcOverdueHolds overdueHolds(DataSource dataSource) {
     return new JdbcOverdueHolds(dataSource);
-  }
-
-  @Bean
-  DecisionTransitionService transitions(
-      HoldSchedulePort holds, DecisionStatePort states, EventRecorder recorder, Clock clock) {
-    return new DecisionTransitionService(holds, states, recorder, clock);
   }
 
   @Bean
@@ -405,8 +472,12 @@ public class DecisionWiring {
 
   @Bean
   VerificationService verifications(
-      DataSource dataSource, DecisionTransitionService transitions, Clock clock) {
-    return new VerificationService(dataSource, transitions, clock);
+      DataSource dataSource,
+      OwnerTransactions transactions,
+      DecisionOwner owner,
+      RequestRecorder recorder,
+      Clock clock) {
+    return new VerificationService(dataSource, transactions, owner, recorder, clock);
   }
 
   /**

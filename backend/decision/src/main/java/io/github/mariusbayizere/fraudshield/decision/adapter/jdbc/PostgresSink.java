@@ -6,10 +6,10 @@ import io.github.mariusbayizere.fraudshield.decision.adapter.spool.SpoolDrainer;
 import io.github.mariusbayizere.fraudshield.decision.adapter.spool.SpoolRecord;
 import io.github.mariusbayizere.fraudshield.decision.application.event.DecisionEvent;
 import io.github.mariusbayizere.fraudshield.decision.domain.AlertTier;
-import io.github.mariusbayizere.fraudshield.decision.domain.DecidedBy;
 import io.github.mariusbayizere.fraudshield.decision.domain.DecisionState;
 import io.github.mariusbayizere.fraudshield.decision.domain.DecisionValue;
 import io.github.mariusbayizere.fraudshield.decision.domain.Transaction;
+import io.github.mariusbayizere.fraudshield.decision.owner.DecisionOwner;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
@@ -24,6 +24,7 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.sql.DataSource;
@@ -40,6 +41,11 @@ import org.slf4j.LoggerFactory;
  * sequence 1. A record the database refuses for a non-transient reason is written to a dead-letter
  * file beside the spool and counted, rather than blocking every record behind it; transient
  * failures fail the batch, which the drainer retries.
+ *
+ * <p>Under the decision-owner contract (§6.1) it writes sequence 1 only. For every first decision
+ * it takes the first-decision lock and asks the transaction's owner, if there is one, whether the
+ * record is the owner's own, a duplicate, or a second first decision; later states are the owner's
+ * request rows, and a spooled one is not written again.
  */
 public final class PostgresSink implements SpoolDrainer.Sink {
 
@@ -82,16 +88,35 @@ public final class PostgresSink implements SpoolDrainer.Sink {
 
   private static final String SELECT_DECISION_STATES =
       """
-      SELECT event_id FROM decision_states WHERE institution_id = ? AND transaction_id = ? AND
-      decision_sequence = 1
+      SELECT event_id, decision FROM decision_states WHERE institution_id = ? AND transaction_id =
+      ? AND decision_sequence = 1
       """;
+
+  private static final String FIRST_DECISION_LOCK =
+      "SELECT pg_advisory_xact_lock(hashtextextended('first_decision:' || ? || ':' || ?, 0))";
+
+  private static final String SELECT_TIMEOUT_POLICY =
+      """
+      SELECT medium_timeout_policy FROM risk_thresholds WHERE institution_id = ? AND version = ?
+      AND channel = ?
+      """;
+
+  private static final String SELECT_REQUEST_EVENT =
+      "SELECT 1 FROM transaction_requests WHERE event_id = ?";
 
   private static final String INSERT_DECISION_STATES =
       """
       INSERT INTO decision_states (event_id, institution_id, transaction_id, decision_sequence,
       decision, final, decided_at, decided_by, reason_codes, review_deadline_at,
-      supersedes_decision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING
+      supersedes_decision, timeout_policy) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT
+      DO NOTHING
       """;
+
+  /** Stateless: every call runs on the sink's own connection and transaction. */
+  private static final DecisionOwner OWNER = new DecisionOwner();
+
+  /** SQLSTATE 53200: the shared lock table is full (§6.1, the lock budget). */
+  private static final String OUT_OF_LOCKS = "53200";
 
   private static final String INSERT_ALERT_QUEUE_ENTRIES =
       """
@@ -121,25 +146,11 @@ public final class PostgresSink implements SpoolDrainer.Sink {
       NOTHING
       """;
 
-  private static final String INSERT_ALERT_DECISIONS =
-      """
-      INSERT INTO alert_decisions (institution_id, alert_queue_entry_id, decision,
-      idempotency_key, created_at) SELECT institution_id, id, 'AUTO_RELEASED', ?, ? FROM
-      alert_queue_entries WHERE transaction_id = ? AND tier = ? ON CONFLICT (institution_id,
-      idempotency_key) DO NOTHING
-      """;
-
-  private static final String UPDATE_ALERT_QUEUE_ENTRIES =
-      """
-      UPDATE alert_queue_entries SET status = 'AUTO_RELEASED', version = version + 1 WHERE
-      transaction_id = ? AND tier = ? AND status IN ('PENDING', 'IN_REVIEW')
-      """;
-
   private static final String INSERT_LABEL_EVENTS =
       """
       INSERT INTO label_events (id, institution_id, transaction_id, label, source,
-      transaction_timestamp, label_available_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO
-      NOTHING
+      transaction_timestamp, label_available_at, supersedes_label_id) VALUES (?, ?, ?, ?, ?, ?, ?,
+      ?) ON CONFLICT DO NOTHING
       """;
 
   private static final String INSERT_MCC_CIRCUIT_BREAKER_EVENTS =
@@ -153,6 +164,7 @@ public final class PostgresSink implements SpoolDrainer.Sink {
   private final Path deadLetters;
   private final AtomicLong deadLettered = new AtomicLong();
   private final AtomicLong duplicateDecisions = new AtomicLong();
+  private final AtomicLong unreservedStates = new AtomicLong();
 
   /**
    * Creates the sink.
@@ -172,6 +184,16 @@ public final class PostgresSink implements SpoolDrainer.Sink {
    */
   public long deadLettered() {
     return deadLettered.get();
+  }
+
+  /**
+   * Later states that reached the sink with no owner request behind them (a pre-V81 dead letter,
+   * contract §6.1), dropped and counted.
+   *
+   * @return count
+   */
+  public long unreservedStates() {
+    return unreservedStates.get();
   }
 
   /**
@@ -195,6 +217,14 @@ public final class PostgresSink implements SpoolDrainer.Sink {
         return;
       } catch (SQLException e) {
         connection.rollback();
+        if (OUT_OF_LOCKS.equals(e.getSQLState()) && records.size() > 1) {
+          // One first-decision lock per record is held to the batch's commit: halve, never retry
+          // an over-large batch for ever (§6.1).
+          int half = records.size() / 2;
+          accept(records.subList(0, half));
+          accept(records.subList(half, records.size()));
+          return;
+        }
         if (Tenant.transientError(e)) {
           throw new SpoolDrainer.SinkException("PostgreSQL is unavailable", e);
         }
@@ -276,18 +306,22 @@ public final class PostgresSink implements SpoolDrainer.Sink {
   private boolean transactionDecided(Connection c, DecisionEvent.TransactionDecided e)
       throws SQLException {
     Transaction t = e.transaction();
-    boolean inserted;
+    try (PreparedStatement s = c.prepareStatement(FIRST_DECISION_LOCK)) {
+      s.setString(1, t.institutionId().toString());
+      s.setString(2, t.transactionId().toString());
+      s.execute();
+    }
+    if (!OWNER.firstDecisionArrives(c, e.state(), kept(c, e.state()))) {
+      duplicateDecisions.incrementAndGet();
+      return false;
+    }
     try (PreparedStatement s = c.prepareStatement(INSERT_TRANSACTION_IDS)) {
       s.setObject(1, t.institutionId());
       s.setObject(2, t.transactionId());
       s.setBytes(3, e.requestFingerprint());
       s.setObject(4, Tenant.utc(t.transactionTimestamp()));
       s.setObject(5, Tenant.utc(t.receivedAt()));
-      inserted = s.executeUpdate() == 1;
-    }
-    if (!inserted && !sameFirstDecision(c, e.state())) {
-      duplicateDecisions.incrementAndGet();
-      return false;
+      s.executeUpdate();
     }
     try (PreparedStatement s = c.prepareStatement(INSERT_TRANSACTIONS)) {
       s.setObject(1, t.institutionId());
@@ -336,7 +370,7 @@ public final class PostgresSink implements SpoolDrainer.Sink {
       s.setObject(23, r.finalMargin(), Types.DOUBLE);
       s.executeUpdate();
     }
-    state(c, e.state());
+    state(c, e.state(), timeoutPolicy(c, e));
     try (PreparedStatement s = c.prepareStatement(INSERT_ACCOUNT_PROFILES)) {
       s.setObject(1, t.institutionId());
       s.setString(2, t.accountToken());
@@ -346,17 +380,39 @@ public final class PostgresSink implements SpoolDrainer.Sink {
     return true;
   }
 
-  private static boolean sameFirstDecision(Connection c, DecisionState state) throws SQLException {
+  private static Optional<DecisionOwner.FirstDecision> kept(Connection c, DecisionState state)
+      throws SQLException {
     try (PreparedStatement s = c.prepareStatement(SELECT_DECISION_STATES)) {
       s.setObject(1, state.institutionId());
       s.setObject(2, state.transactionId());
       try (ResultSet rows = s.executeQuery()) {
-        return !rows.next() || rows.getObject(1, UUID.class).equals(state.eventId());
+        return rows.next()
+            ? Optional.of(
+                new DecisionOwner.FirstDecision(
+                    rows.getObject(1, UUID.class), DecisionValue.valueOf(rows.getString(2))))
+            : Optional.empty();
       }
     }
   }
 
-  private static void state(Connection c, DecisionState st) throws SQLException {
+  /** The policy of the record's own thresholds version, for a HOLD (contract §4.2 point 4). */
+  private static String timeoutPolicy(Connection c, DecisionEvent.TransactionDecided e)
+      throws SQLException {
+    if (e.state().decision() != DecisionValue.HOLD) {
+      return null;
+    }
+    try (PreparedStatement s = c.prepareStatement(SELECT_TIMEOUT_POLICY)) {
+      s.setObject(1, e.transaction().institutionId());
+      s.setLong(2, e.thresholdsVersion());
+      s.setString(3, e.transaction().channel().name());
+      try (ResultSet row = s.executeQuery()) {
+        return row.next() ? row.getString(1) : null;
+      }
+    }
+  }
+
+  private static void state(Connection c, DecisionState st, String timeoutPolicy)
+      throws SQLException {
     try (PreparedStatement s = c.prepareStatement(INSERT_DECISION_STATES)) {
       s.setObject(1, st.eventId());
       s.setObject(2, st.institutionId());
@@ -369,6 +425,7 @@ public final class PostgresSink implements SpoolDrainer.Sink {
       s.setArray(9, c.createArrayOf("text", st.reasonCodes().toArray()));
       s.setObject(10, Tenant.utc(st.reviewDeadlineAt()));
       s.setString(11, st.supersedes() == null ? null : st.supersedes().name());
+      s.setString(12, timeoutPolicy);
       s.executeUpdate();
     }
   }
@@ -385,6 +442,9 @@ public final class PostgresSink implements SpoolDrainer.Sink {
       s.setObject(8, Tenant.utc(e.reviewDeadlineAt()));
       s.setObject(9, Tenant.utc(e.createdAt()));
       s.executeUpdate();
+    }
+    if (e.tier() == AlertTier.MEDIUM) {
+      OWNER.lateEntry(c, e.institutionId(), e.transaction().transactionId(), e.alertId());
     }
   }
 
@@ -431,23 +491,22 @@ public final class PostgresSink implements SpoolDrainer.Sink {
     }
   }
 
-  private static void decisionChanged(Connection c, DecisionEvent.DecisionChanged e)
+  /**
+   * A later state needs no write: its owner request row is its record (contract §4.4). One with no
+   * such row can only be a pre-V81 dead letter replayed; it is counted, logged and dropped, and the
+   * overdue sweep times out a hold it left open.
+   */
+  private void decisionChanged(Connection c, DecisionEvent.DecisionChanged e)
       throws SQLException {
-    DecisionState st = e.state();
-    state(c, st);
-    if (st.decidedBy() == DecidedBy.TIMEOUT_POLICY
-        && st.decision() == DecisionValue.TIMEOUT_RELEASE) {
-      try (PreparedStatement s = c.prepareStatement(INSERT_ALERT_DECISIONS)) {
-        s.setObject(1, st.eventId());
-        s.setObject(2, Tenant.utc(st.decidedAt()));
-        s.setObject(3, st.transactionId());
-        s.setString(4, AlertTier.MEDIUM.name());
-        s.executeUpdate();
-      }
-      try (PreparedStatement s = c.prepareStatement(UPDATE_ALERT_QUEUE_ENTRIES)) {
-        s.setObject(1, st.transactionId());
-        s.setString(2, AlertTier.MEDIUM.name());
-        s.executeUpdate();
+    try (PreparedStatement s = c.prepareStatement(SELECT_REQUEST_EVENT)) {
+      s.setObject(1, e.state().eventId());
+      try (ResultSet row = s.executeQuery()) {
+        if (!row.next()) {
+          unreservedStates.incrementAndGet();
+          LOG.warn(
+              "a later state of transaction {} has no owner request and was dropped",
+              e.state().transactionId());
+        }
       }
     }
   }
@@ -461,6 +520,7 @@ public final class PostgresSink implements SpoolDrainer.Sink {
       s.setString(5, e.source());
       s.setObject(6, Tenant.utc(e.transactionTimestamp()));
       s.setObject(7, Tenant.utc(e.availableAt()));
+      s.setObject(8, e.supersedesLabelId());
       s.executeUpdate();
     }
   }

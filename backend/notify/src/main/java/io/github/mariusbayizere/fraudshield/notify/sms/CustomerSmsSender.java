@@ -64,7 +64,7 @@ public final class CustomerSmsSender {
         AND n.institution_id = ? AND n.event IN ('SENT', 'FAILED') ORDER BY n.event DESC LIMIT 1),
       b.id IS NOT NULL AND (EXISTS (SELECT 1 FROM unblock_events u
         WHERE u.auto_block_event_id = b.id AND u.institution_id = b.institution_id)
-        OR (SELECT s.decision FROM decision_states s WHERE s.institution_id = b.institution_id
+        OR (SELECT s.decision FROM v_decision_states s WHERE s.institution_id = b.institution_id
           AND s.transaction_id = b.transaction_id ORDER BY s.decision_sequence DESC LIMIT 1)
           <> 'DECLINE'),
       CASE WHEN CAST(? AS uuid) IS NULL THEN NULL ELSE EXISTS (SELECT 1 FROM decision_states k

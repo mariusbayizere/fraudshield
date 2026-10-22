@@ -129,16 +129,92 @@ public record DecisionState(
   }
 
   static boolean allowed(DecisionValue from, DecisionValue to, DecidedBy by) {
+    return allowed(from, null, to, by, false);
+  }
+
+  /**
+   * A later state, with an id and time the caller derived (decision-owner contract §4.5): the only
+   * way {@code DecisionOwner} makes one, so that a re-run makes the same one. The owner row holds
+   * the current value and its maker, not the current state's event, so this takes them directly.
+   *
+   * @param institutionId institution
+   * @param transactionId transaction
+   * @param currentSequence the current state's sequence
+   * @param current the current value
+   * @param currentBy who made the current value
+   * @param eventId the new state's event id
+   * @param value the new value
+   * @param by who decides
+   * @param at when, on DB time
+   * @param reasons reasons
+   * @param resolution whether a risk officer's resolution of a contest makes it (§7.2)
+   * @return the new state with sequence + 1
+   * @throws IllegalStateException if the transition is not allowed
+   */
+  public static DecisionState succeeding(
+      UUID institutionId,
+      UUID transactionId,
+      int currentSequence,
+      DecisionValue current,
+      DecidedBy currentBy,
+      UUID eventId,
+      DecisionValue value,
+      DecidedBy by,
+      Instant at,
+      List<String> reasons,
+      boolean resolution) {
+    if (!allowed(current, currentBy, value, by, resolution)) {
+      throw new IllegalStateException(
+          "transition " + current + " -> " + value + " by " + by + " is not allowed");
+    }
+    return new DecisionState(
+        eventId,
+        institutionId,
+        transactionId,
+        currentSequence + 1,
+        value,
+        at,
+        by,
+        reasons,
+        null,
+        current);
+  }
+
+  /**
+   * The transitions the decision-owner contract allows (§5.1): M6's, and seven more. A human
+   * confirms a decline (DECLINE → DECLINE by an analyst or a senior); an analyst overrules a
+   * customer's "yes" (APPROVE by CUSTOMER_VERIFICATION → DECLINE); and a resolution sets any state
+   * to APPROVE or DECLINE by SENIOR_OVERRIDE.
+   *
+   * @param from the current value
+   * @param fromBy who made the current value, or null when unknown (M6's callers)
+   * @param to the new value
+   * @param by who decides
+   * @param resolution whether a risk officer's resolution makes it
+   * @return whether the transition is allowed
+   */
+  public static boolean allowed(
+      DecisionValue from, DecidedBy fromBy, DecisionValue to, DecidedBy by, boolean resolution) {
+    if (resolution) {
+      return by == DecidedBy.SENIOR_OVERRIDE
+          && (to == DecisionValue.APPROVE || to == DecisionValue.DECLINE);
+    }
     return switch (from) {
       case HOLD ->
           (by == DecidedBy.ANALYST && (to == DecisionValue.APPROVE || to == DecisionValue.DECLINE))
               || (by == DecidedBy.TIMEOUT_POLICY
                   && (to == DecisionValue.TIMEOUT_RELEASE || to == DecisionValue.DECLINE));
       case DECLINE ->
-          to == DecisionValue.APPROVE
-              && (by == DecidedBy.CUSTOMER_VERIFICATION || by == DecidedBy.SENIOR_OVERRIDE);
+          (to == DecisionValue.APPROVE
+                  && (by == DecidedBy.CUSTOMER_VERIFICATION || by == DecidedBy.SENIOR_OVERRIDE))
+              || (to == DecisionValue.DECLINE
+                  && (by == DecidedBy.ANALYST || by == DecidedBy.SENIOR_OVERRIDE));
       case APPROVE, TIMEOUT_RELEASE ->
-          to == DecisionValue.DECLINE && by == DecidedBy.SENIOR_OVERRIDE;
+          to == DecisionValue.DECLINE
+              && (by == DecidedBy.SENIOR_OVERRIDE
+                  || (by == DecidedBy.ANALYST
+                      && from == DecisionValue.APPROVE
+                      && fromBy == DecidedBy.CUSTOMER_VERIFICATION));
     };
   }
 }

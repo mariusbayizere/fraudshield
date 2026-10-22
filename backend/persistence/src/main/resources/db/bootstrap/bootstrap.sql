@@ -18,6 +18,18 @@ BEGIN
 END
 $$;
 
+-- fs_operator (ADR 0114, decision-owner contract §7.2): a group role, NOLOGIN, that V81 grants the
+-- operator exits to (resolve_contested_decision, release_failed_claim). Each operator logs in as an
+-- individual role that is a member of it, never a shared one, so the login a resolution records
+-- names a person (M9's runbook; flagged to M12's audit).
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'fs_operator') THEN
+    CREATE ROLE fs_operator NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+  END IF;
+END
+$$;
+
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 
 DO $$
@@ -35,6 +47,7 @@ GRANT USAGE ON SCHEMA fraudshield TO fs_app, fs_app_readonly, fs_compliance_ro;
 -- fs_scorer (ADR 0062 point 6): the scorer's feature-store fallback. USAGE on the schema lets it
 -- call the feature_fallback_* functions V67 grants it; it holds no grant on any table or view.
 GRANT USAGE ON SCHEMA fraudshield TO fs_scorer;
+GRANT USAGE ON SCHEMA fraudshield TO fs_operator;
 
 -- Every role resolves unqualified names in the fraudshield schema only.
 DO $$

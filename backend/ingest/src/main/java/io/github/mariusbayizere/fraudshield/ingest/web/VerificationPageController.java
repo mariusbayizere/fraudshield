@@ -42,6 +42,9 @@ public final class VerificationPageController {
                   "pending",
                   "Thank you. Your answer is recorded and the payment is being unblocked."
                       + " This can take a moment.",
+                  "recorded",
+                  "Thank you. Your answer is recorded. Your bank will contact you if anything"
+                      + " more is needed.",
                   "fraud",
                   "Thank you. The payment stays blocked. Call your bank on its official number.",
                   "unusable",
@@ -62,6 +65,9 @@ public final class VerificationPageController {
                   "pending",
                   "Merci. Votre réponse est enregistrée et le paiement est en cours de"
                       + " déblocage. Cela peut prendre un instant.",
+                  "recorded",
+                  "Thank you. Your answer is recorded. Your bank will contact you if anything"
+                      + " more is needed.",
                   "fraud",
                   "Merci. Le paiement reste bloqué. Appelez votre banque à son numéro officiel.",
                   "unusable",
@@ -82,6 +88,9 @@ public final class VerificationPageController {
                   "pending",
                   "Murakoze. Igisubizo cyawe cyanditswe kandi ubwishyu buri gufungurwa."
                       + " Bishobora gufata akanya.",
+                  "recorded",
+                  "Thank you. Your answer is recorded. Your bank will contact you if anything"
+                      + " more is needed.",
                   "fraud",
                   "Murakoze. Ubwishyu bukomeje guhagarikwa. Hamagara banki yawe.",
                   "unusable",
@@ -101,6 +110,9 @@ public final class VerificationPageController {
                   "pending",
                   "Asante. Jibu lako limehifadhiwa na malipo yanafunguliwa. Inaweza kuchukua"
                       + " muda kidogo.",
+                  "recorded",
+                  "Thank you. Your answer is recorded. Your bank will contact you if anything"
+                      + " more is needed.",
                   "fraud",
                   "Asante. Malipo yanabaki yamezuiwa. Piga simu benki yako.",
                   "unusable",
@@ -192,6 +204,14 @@ public final class VerificationPageController {
     String message;
     if (answered.unusable().isPresent()) {
       message = t.get("unusable");
+    } else if (answered.stillBlocked()) {
+      // A human declined the payment, so the customer's "yes" cannot lift it (decision-owner
+      // contract §5): the page says it stays blocked, never that it is lifted.
+      message = t.get("fraud");
+    } else if (answered.deferred()) {
+      // A human is reviewing the payment: the answer waits for that decision (§6.5), so the page
+      // promises neither an unblock nor a block.
+      message = t.get("recorded");
     } else if (answered.pending()) {
       // The answer is recorded and the sweep lifts the block within seconds (finding 6): saying
       // "unblocked" here would promise something that has not happened yet.

@@ -40,6 +40,11 @@ public final class ReasonCodes {
   /** A hold was declined at its deadline under DECLINE_AND_VERIFY (D-10). */
   public static final String REVIEW_TIMEOUT_DECLINED = "REVIEW_TIMEOUT_DECLINED";
 
+  /**
+   * A risk officer resolved two conflicting first decisions (decision-owner contract §7.2).
+   */
+  public static final String CONTEST_RESOLVED = "CONTEST_RESOLVED";
+
   private static final Map<String, String> BY_FEATURE =
       Map.ofEntries(
           Map.entry("velocity_ratio_1h_vs_30d", "VELOCITY_SPIKE"),

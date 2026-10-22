@@ -256,7 +256,11 @@ public final class DecisionService {
                 transaction.transactionId(),
                 transaction.channel().name(),
                 threshold.timeoutPolicy(),
-                outcome.reviewDeadlineAt()));
+                outcome.reviewDeadlineAt(),
+                state.eventId(),
+                state.decidedAt(),
+                state.reasonCodes(),
+                null));
       } catch (RuntimeException failed) {
         metrics.stateWriteFailed("hold_schedule");
       }

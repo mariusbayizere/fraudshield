@@ -13,7 +13,11 @@ import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.PostgresSink;
 import io.github.mariusbayizere.fraudshield.decision.adapter.spool.SpoolRecord;
 import io.github.mariusbayizere.fraudshield.decision.application.DecisionService;
 import io.github.mariusbayizere.fraudshield.decision.application.DecisionSettings;
-import io.github.mariusbayizere.fraudshield.decision.application.DecisionTransitionService;
+import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcDecisionStates;
+import io.github.mariusbayizere.fraudshield.decision.domain.DecisionState;
+import io.github.mariusbayizere.fraudshield.decision.owner.DecisionOwner;
+import io.github.mariusbayizere.fraudshield.decision.owner.OwnerTransactions;
+import io.github.mariusbayizere.fraudshield.decision.owner.RequestRecorder;
 import io.github.mariusbayizere.fraudshield.decision.application.event.DecisionEvent;
 import io.github.mariusbayizere.fraudshield.decision.application.port.DecisionMetrics;
 import io.github.mariusbayizere.fraudshield.decision.domain.DecidedBy;
@@ -70,6 +74,8 @@ class VerificationFlowTest {
   private final List<String> sent = new CopyOnWriteArrayList<>();
   private TestDatabase db;
   private VerificationService verifications;
+  private OwnerTransactions transactions;
+  private RequestRecorder recorder;
   private CustomerSmsSender sender;
   private JsonNode intent;
   private UUID blockedTransaction;
@@ -117,9 +123,11 @@ class VerificationFlowTest {
     intent = JSON.readTree(message.value()).get("payload");
     ((tools.jackson.databind.node.ObjectNode) intent).put("verification_link_allowed", true);
 
-    DecisionTransitionService transitions =
-        new DecisionTransitionService(ports, ports, ports, clock);
-    verifications = new VerificationService(db.dataSource("fs_app"), transitions, clock);
+    transactions = new OwnerTransactions(db.dataSource("fs_app"), 3);
+    recorder = new RequestRecorder(db.dataSource("fs_app"), transactions, ports, ports);
+    verifications =
+        new VerificationService(
+            db.dataSource("fs_app"), transactions, new DecisionOwner(), recorder, clock);
     sender =
         new CustomerSmsSender(
             db.dataSource("fs_app"),
@@ -143,6 +151,20 @@ class VerificationFlowTest {
     int start =
         text.indexOf("https://verify.fsbank.rw/v/") + "https://verify.fsbank.rw/v/".length();
     return text.substring(start, start + 22);
+  }
+
+  /** The transaction's latest state, as the bank's poll reads it (v_decision_states). */
+  private DecisionState latest() throws Exception {
+    return new JdbcDecisionStates(db.dataSource("fs_app"))
+        .latest(INSTITUTION, blockedTransaction)
+        .orElseThrow();
+  }
+
+  private void superuser(String sql) throws Exception {
+    try (Connection c = db.superuser();
+        Statement s = c.createStatement()) {
+      s.execute(sql);
+    }
   }
 
   private String one(String sql) throws Exception {
@@ -193,9 +215,8 @@ class VerificationFlowTest {
             });
     clock.advance(Duration.ofMinutes(9));
     assertThat(verifications.answer(token, true)).isEqualTo(VerificationService.Answered.APPLIED);
-    assertThat(ports.latest.get(blockedTransaction).decision()).isEqualTo(DecisionValue.APPROVE);
-    assertThat(ports.latest.get(blockedTransaction).decidedBy())
-        .isEqualTo(DecidedBy.CUSTOMER_VERIFICATION);
+    assertThat(latest().decision()).isEqualTo(DecisionValue.APPROVE);
+    assertThat(latest().decidedBy()).isEqualTo(DecidedBy.CUSTOMER_VERIFICATION);
     assertThat(ports.eventsOf(DecisionEvent.LabelRecorded.class))
         .singleElement()
         .satisfies(l -> assertThat(l.fraud()).isFalse());
@@ -208,40 +229,85 @@ class VerificationFlowTest {
 
   @Test
   @Tag("NFR-REL-01")
-  void anAnswerThatDidNotReachTheDecisionPathIsAppliedByTheSweep() throws Exception {
+  void answerWhoseRecordingFailedIsRecordedByTheRecorder() throws Exception {
     sender.send(INSTITUTION, intent);
     String token = token();
 
-    // The spool refuses: the answer and its unblock_events row are already committed, and the
-    // token is spent, so the customer must not be told to try again (Principal Review finding 6).
+    // The answer and its outcome commit together (decision-owner contract §6.5); only the
+    // recording after the commit fails, and the recorder completes it (§4.6).
     ports.recorderFull = true;
+    assertThat(verifications.answer(token, true)).isEqualTo(VerificationService.Answered.APPLIED);
+    assertThat(latest().decision()).isEqualTo(DecisionValue.APPROVE);
+    assertThat(ports.eventsOf(DecisionEvent.LabelRecorded.class)).isEmpty();
+
+    ports.recorderFull = false;
+    assertThat(recorder.recordPending(java.time.Instant.now().plusSeconds(60))).isEqualTo(1);
+    assertThat(ports.eventsOf(DecisionEvent.LabelRecorded.class))
+        .singleElement()
+        .satisfies(l -> assertThat(l.fraud()).isFalse());
+    assertThat(recorder.recordPending(java.time.Instant.now().plusSeconds(60)))
+        .as("recorded once")
+        .isZero();
+  }
+
+  @Test
+  @Tag("NFR-REL-01")
+  void yesDeferredWhileContestedIsSubmittedByTheSweepAfterTheContestEnds() throws Exception {
+    sender.send(INSTITUTION, intent);
+    String token = token();
+    superuser(
+        "INSERT INTO fraudshield.decision_owners (institution_id, transaction_id, first_event_id,"
+            + " first_decision, sequence, decision, decided_by, contested_since) SELECT"
+            + " institution_id, transaction_id, event_id, decision, 1, decision, 'MODEL', now()"
+            + " FROM fraudshield.decision_states WHERE transaction_id = '"
+            + blockedTransaction
+            + "'");
     VerificationService.Answered answered = verifications.answer(token, true);
-    assertThat(answered.unusable()).isEmpty();
-    assertThat(answered.pending()).isTrue();
-    assertThat(one("SELECT cause FROM fraudshield.unblock_events"))
-        .isEqualTo("CUSTOMER_VERIFICATION");
-    assertThat(ports.latest.get(blockedTransaction).decision()).isEqualTo(DecisionValue.DECLINE);
+    assertThat(answered.deferred()).isTrue();
+    assertThat(latest().decision()).isEqualTo(DecisionValue.DECLINE);
+    assertThat(one("SELECT count(*) FROM fraudshield.unblock_events")).isEqualTo("0");
 
     UnblockReconciler reconciler =
         new UnblockReconciler(
             db.dataSource("fs_app"),
-            new DecisionTransitionService(ports, ports, ports, clock),
+            transactions,
+            new DecisionOwner(),
+            recorder,
             ports,
             "instance-1",
             clock);
-    assertThat(reconciler.reconcile()).as("inside the grace period").isZero();
     clock.advance(UnblockReconciler.GRACE.plusSeconds(1));
-    assertThat(reconciler.reconcile()).as("the spool is still refusing").isZero();
+    assertThat(reconciler.reconcile()).as("still contested: not listed").isZero();
 
-    ports.recorderFull = false;
+    superuser("UPDATE fraudshield.decision_owners SET contested_since = NULL");
     assertThat(reconciler.reconcile()).isEqualTo(1);
-    assertThat(ports.latest.get(blockedTransaction).decision()).isEqualTo(DecisionValue.APPROVE);
-    assertThat(ports.latest.get(blockedTransaction).decidedBy())
-        .isEqualTo(DecidedBy.CUSTOMER_VERIFICATION);
-    assertThat(ports.eventsOf(DecisionEvent.LabelRecorded.class))
-        .singleElement()
-        .satisfies(l -> assertThat(l.fraud()).isFalse());
-    assertThat(reconciler.reconcile()).as("nothing left to apply").isZero();
+    assertThat(latest().decision()).isEqualTo(DecisionValue.APPROVE);
+    assertThat(latest().decidedBy()).isEqualTo(DecidedBy.CUSTOMER_VERIFICATION);
+    assertThat(one("SELECT cause FROM fraudshield.unblock_events"))
+        .isEqualTo("CUSTOMER_VERIFICATION");
+    assertThat(reconciler.reconcile()).as("nothing left to submit").isZero();
+  }
+
+  @Test
+  void yesAfterHumanDeclinedIsRefusedWithNoLabelAndNoUnblock() throws Exception {
+    sender.send(INSTITUTION, intent);
+    String token = token();
+    // A risk officer re-declined the payment: DECLINE → DECLINE by SENIOR_OVERRIDE (§5).
+    superuser(
+        "INSERT INTO fraudshield.decision_owners (institution_id, transaction_id, first_event_id,"
+            + " first_decision, sequence, decision, decided_by) SELECT institution_id,"
+            + " transaction_id, event_id, decision, 2, decision, 'SENIOR_OVERRIDE'"
+            + " FROM fraudshield.decision_states WHERE transaction_id = '"
+            + blockedTransaction
+            + "'");
+    VerificationService.Answered answered = verifications.answer(token, true);
+    assertThat(answered.stillBlocked()).isTrue();
+    assertThat(ports.eventsOf(DecisionEvent.LabelRecorded.class)).isEmpty();
+    assertThat(one("SELECT count(*) FROM fraudshield.unblock_events")).isEqualTo("0");
+    assertThat(
+            one(
+                "SELECT reason FROM fraudshield.transaction_requests WHERE kind = 'CUSTOMER_YES'"))
+        .isEqualTo("human-declined");
   }
 
   @Test
@@ -258,7 +324,7 @@ class VerificationFlowTest {
         .contains(VerificationService.Unusable.UNKNOWN);
     assertThat(verifications.open("'; DROP TABLE x; --").unusable())
         .contains(VerificationService.Unusable.UNKNOWN);
-    assertThat(ports.latest.get(blockedTransaction).decision()).isEqualTo(DecisionValue.DECLINE);
+    assertThat(latest().decision()).isEqualTo(DecisionValue.DECLINE);
   }
 
   @Test
@@ -266,7 +332,7 @@ class VerificationFlowTest {
     sender.send(INSTITUTION, intent);
     assertThat(verifications.answer(token(), false))
         .isEqualTo(VerificationService.Answered.APPLIED);
-    assertThat(ports.latest.get(blockedTransaction).decision()).isEqualTo(DecisionValue.DECLINE);
+    assertThat(latest().decision()).isEqualTo(DecisionValue.DECLINE);
     assertThat(ports.eventsOf(DecisionEvent.LabelRecorded.class).getFirst().fraud()).isTrue();
     assertThat(one("SELECT count(*) FROM fraudshield.unblock_events")).isEqualTo("0");
   }

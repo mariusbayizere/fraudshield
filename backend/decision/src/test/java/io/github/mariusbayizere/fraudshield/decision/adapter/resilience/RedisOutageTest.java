@@ -43,6 +43,10 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import javax.sql.DataSource;
+import io.github.mariusbayizere.fraudshield.decision.owner.DecisionOwner;
+import io.github.mariusbayizere.fraudshield.decision.owner.OwnerHoldTimeouts;
+import io.github.mariusbayizere.fraudshield.decision.owner.OwnerTransactions;
+import io.github.mariusbayizere.fraudshield.decision.owner.RequestRecorder;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
@@ -79,6 +83,7 @@ class RedisOutageTest {
   private DecisionStatePort states;
   private JdbcOverdueHolds overdue;
   private HoldSchedulePort redisHolds;
+  private OwnerHoldTimeouts owner;
 
   @BeforeEach
   void wire() throws Exception {
@@ -123,8 +128,17 @@ class RedisOutageTest {
             DecisionMetrics.NONE,
             DecisionSettings.DEFAULTS,
             clock);
-    timeouts =
-        new HoldTimeoutService(holds, states, recorder, DecisionMetrics.NONE, clock, "api-0");
+    OwnerTransactions transactions = new OwnerTransactions(app, 3);
+    owner =
+        new OwnerHoldTimeouts(
+            transactions,
+            new DecisionOwner(),
+            new RequestRecorder(
+                app,
+                transactions,
+                recorder,
+                new RedisDecisionStates(connection, durableStates, TIMEOUT)));
+    timeouts = new HoldTimeoutService(holds, owner, DecisionMetrics.NONE, clock, "api-0");
     overdue = new JdbcOverdueHolds(app);
   }
 
@@ -227,12 +241,7 @@ class RedisOutageTest {
     // stands in for the instance that claims it.
     HoldTimeoutService elsewhere =
         new HoldTimeoutService(
-            ResilientPorts.holds(redisHolds, mode),
-            states,
-            new SpoolingEventRecorder(spool, Duration.ofSeconds(5)),
-            DecisionMetrics.NONE,
-            clock,
-            "api-0");
+            ResilientPorts.holds(redisHolds, mode), owner, DecisionMetrics.NONE, clock, "api-0");
     assertThat(timeouts.tick()).as("nothing is due yet; the local hold is drained").isZero();
     clock.advance(Duration.ofSeconds(30));
     assertThat(elsewhere.tick()).as("claimed from Redis, not from local memory").isEqualTo(1);

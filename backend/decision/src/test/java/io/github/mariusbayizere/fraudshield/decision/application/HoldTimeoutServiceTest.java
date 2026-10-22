@@ -3,7 +3,6 @@ package io.github.mariusbayizere.fraudshield.decision.application;
 import static io.github.mariusbayizere.fraudshield.decision.testing.Fixtures.NOW;
 import static io.github.mariusbayizere.fraudshield.decision.testing.Fixtures.transaction;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.mariusbayizere.fraudshield.common.config.MediumTimeoutPolicy;
 import io.github.mariusbayizere.fraudshield.decision.application.event.DecisionEvent;
@@ -13,6 +12,7 @@ import io.github.mariusbayizere.fraudshield.decision.domain.DecidedBy;
 import io.github.mariusbayizere.fraudshield.decision.domain.DecisionValue;
 import io.github.mariusbayizere.fraudshield.decision.domain.Transaction;
 import io.github.mariusbayizere.fraudshield.decision.testing.Fixtures;
+import io.github.mariusbayizere.fraudshield.decision.testing.InMemoryHoldOwner;
 import io.github.mariusbayizere.fraudshield.decision.testing.InMemoryPorts;
 import io.github.mariusbayizere.fraudshield.decision.testing.MutableClock;
 import java.time.Duration;
@@ -34,9 +34,10 @@ class HoldTimeoutServiceTest {
   private MutableClock clock;
   private DecisionService decisions;
   private HoldTimeoutService timeouts;
-  private DecisionTransitionService transitions;
+  private InMemoryHoldOwner owner;
   private final List<String> released = new ArrayList<>();
   private final List<Long> late = new ArrayList<>();
+  private final List<String> retried = new ArrayList<>();
 
   @BeforeEach
   void setUp() {
@@ -60,6 +61,11 @@ class HoldTimeoutServiceTest {
           public void holdLateness(long millis) {
             late.add(millis);
           }
+
+          @Override
+          public void holdRequestRetried() {
+            retried.add("retried");
+          }
         };
     decisions =
         new DecisionService(
@@ -75,8 +81,8 @@ class HoldTimeoutServiceTest {
             metrics,
             DecisionSettings.DEFAULTS,
             clock);
-    timeouts = new HoldTimeoutService(ports, ports, ports, metrics, clock, "api-0");
-    transitions = new DecisionTransitionService(ports, ports, ports, clock);
+    owner = new InMemoryHoldOwner(ports, clock);
+    timeouts = new HoldTimeoutService(ports, owner, metrics, clock, "api-0");
   }
 
   private UUID hold() {
@@ -129,33 +135,62 @@ class HoldTimeoutServiceTest {
   }
 
   @Test
-  void analystDecisionsBeforeTheDeadlineWinAndAreNeverTimedOut() {
+  void holdTheOwnerGaveToAnalystIsDroppedNotTimedOut() {
     UUID tx = hold();
-    clock.advance(Duration.ofSeconds(10));
-    transitions.analystDecidesHold(
-        Fixtures.INSTITUTION, tx, false, UUID.randomUUID(), "MOBILE_MONEY", NOW);
+    owner.claimed.add(tx);
     clock.advance(Duration.ofSeconds(30));
     assertThat(timeouts.tick()).isZero();
-    assertThat(ports.latest.get(tx).decision()).isEqualTo(DecisionValue.DECLINE);
-    assertThat(ports.latest.get(tx).decidedBy()).isEqualTo(DecidedBy.ANALYST);
-    assertThat(ports.eventsOf(DecisionEvent.LabelRecorded.class))
-        .singleElement()
-        .extracting(DecisionEvent.LabelRecorded::fraud)
-        .isEqualTo(true);
+    assertThat(ports.latest.get(tx).decision()).isEqualTo(DecisionValue.HOLD);
+    assertThat(ports.scheduled(tx)).isEmpty();
   }
 
   @Test
-  void analystsAfterTheTimeoutAreRefused() {
+  void holdWhoseEscalationExtendedItIsRescheduledAtTheNewDeadline() {
     UUID tx = hold();
+    owner.extended.put(tx, NOW.plusSeconds(900));
+    clock.advance(Duration.ofSeconds(30));
+    assertThat(timeouts.tick()).isZero();
+    assertThat(ports.scheduled(tx))
+        .get()
+        .satisfies(
+            h -> {
+              assertThat(h.dueAt()).isEqualTo(NOW.plusSeconds(900));
+              assertThat(h.deadline()).isEqualTo(NOW.plusSeconds(30));
+            });
+  }
+
+  @Test
+  void failedRequestKeepsTheHoldAndRetriesItOneSecondLater() {
+    UUID tx = hold();
+    owner.failing = true;
+    clock.advance(Duration.ofSeconds(30));
+    assertThat(timeouts.tick()).isZero();
+    assertThat(retried).hasSize(1);
+    assertThat(ports.scheduled(tx)).get().extracting(h -> h.dueAt()).isEqualTo(NOW.plusSeconds(31));
+    owner.failing = false;
+    clock.advance(Duration.ofSeconds(1));
+    assertThat(timeouts.tick()).isEqualTo(1);
+    assertThat(late).containsExactly(1000L);
+  }
+
+  @Test
+  void oneFailureNeverLosesTheRestOfAClaimedBatch() {
+    List<UUID> held = List.of(hold(), hold(), hold());
+    owner.failing = true;
     clock.advance(Duration.ofSeconds(30));
     timeouts.tick();
-    assertThatThrownBy(
-            () ->
-                transitions.analystDecidesHold(
-                    Fixtures.INSTITUTION, tx, true, UUID.randomUUID(), "MOBILE_MONEY", NOW))
-        .isInstanceOf(DecisionTransitionService.TransitionRefusedException.class)
-        .extracting(e -> ((DecisionTransitionService.TransitionRefusedException) e).refusal())
-        .isEqualTo(DecisionTransitionService.Refusal.REVIEW_DEADLINE_PASSED);
+    for (UUID tx : held) {
+      assertThat(ports.scheduled(tx)).as("hold %s kept", tx).isPresent();
+    }
+  }
+
+  @Test
+  void holdWithNoFirstDecisionYetIsRetried() {
+    UUID tx = hold();
+    owner.noFirstDecision = true;
+    clock.advance(Duration.ofSeconds(30));
+    assertThat(timeouts.tick()).isZero();
+    assertThat(ports.scheduled(tx)).isPresent();
   }
 
   @Test
@@ -178,7 +213,8 @@ class HoldTimeoutServiceTest {
                     tx,
                     "CARD",
                     MediumTimeoutPolicy.RELEASE_WITH_TIMEOUT_LABEL,
-                    NOW)))
-        .isEmpty();
+                    NOW),
+                true))
+        .isFalse();
   }
 }

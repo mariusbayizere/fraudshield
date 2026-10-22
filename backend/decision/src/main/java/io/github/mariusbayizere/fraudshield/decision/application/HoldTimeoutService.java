@@ -1,25 +1,26 @@
 package io.github.mariusbayizere.fraudshield.decision.application;
 
-import io.github.mariusbayizere.fraudshield.decision.application.event.DecisionEvent;
 import io.github.mariusbayizere.fraudshield.decision.application.port.DecisionMetrics;
-import io.github.mariusbayizere.fraudshield.decision.application.port.DecisionStatePort;
-import io.github.mariusbayizere.fraudshield.decision.application.port.EventRecorder;
+import io.github.mariusbayizere.fraudshield.decision.application.port.HoldOwnerPort;
 import io.github.mariusbayizere.fraudshield.decision.application.port.HoldSchedulePort;
 import io.github.mariusbayizere.fraudshield.decision.application.port.OverdueHoldsPort;
-import io.github.mariusbayizere.fraudshield.decision.domain.DecisionState;
 import io.github.mariusbayizere.fraudshield.decision.domain.DecisionValue;
-import io.github.mariusbayizere.fraudshield.decision.domain.HoldTimeout;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 
 /**
- * The MEDIUM deadline scheduler (E.6, FR-03-02, D-14, D-18): the leader claims due holds every 100
- * ms and applies each channel's timeout policy. A hold an analyst decided first is no longer in the
- * schedule and is never timed out.
+ * The MEDIUM deadline scheduler (E.6, FR-03-02, D-14, D-18). The leader claims due holds every 100
+ * ms; each becomes a TIMEOUT request to its transaction's owner (decision-owner contract §6.3),
+ * which alone decides whether the hold times out. A hold an analyst decided is dropped by the owner,
+ * because the analyst's claim stands; a hold whose escalation extended it is rescheduled.
+ *
+ * <p>A hold already taken from the schedule is never lost: if its request fails for any reason, or
+ * finds no first decision yet, it is rescheduled 1 s later and counted, one hold at a time, so one
+ * failure never loses the rest of a claimed batch (§2). During a PostgreSQL outage every hold is
+ * therefore kept, which is ADR 0111's decision.
  */
 public final class HoldTimeoutService {
 
@@ -29,9 +30,11 @@ public final class HoldTimeoutService {
   /** Lateness beyond which a timed-out hold is reported (D-18: ±500 ms). */
   public static final Duration TOLERANCE = Duration.ofMillis(500);
 
+  /** How long after a failed or deferred request its hold is tried again. */
+  public static final Duration RETRY = Duration.ofSeconds(1);
+
   private final HoldSchedulePort holds;
-  private final DecisionStatePort states;
-  private final EventRecorder recorder;
+  private final HoldOwnerPort owner;
   private final DecisionMetrics metrics;
   private final Clock clock;
   private final String instanceId;
@@ -40,29 +43,26 @@ public final class HoldTimeoutService {
    * Creates the service.
    *
    * @param holds deadline schedule
-   * @param states decision states
-   * @param recorder durable events
+   * @param owner the TIMEOUT request to the transaction's owner
    * @param metrics metrics
    * @param clock clock
    * @param instanceId this instance, for leader election
    */
   public HoldTimeoutService(
       HoldSchedulePort holds,
-      DecisionStatePort states,
-      EventRecorder recorder,
+      HoldOwnerPort owner,
       DecisionMetrics metrics,
       Clock clock,
       String instanceId) {
     this.holds = Objects.requireNonNull(holds, "holds");
-    this.states = Objects.requireNonNull(states, "states");
-    this.recorder = Objects.requireNonNull(recorder, "recorder");
+    this.owner = Objects.requireNonNull(owner, "owner");
     this.metrics = Objects.requireNonNull(metrics, "metrics");
     this.clock = Objects.requireNonNull(clock, "clock");
     this.instanceId = Objects.requireNonNull(instanceId, "instanceId");
   }
 
   /**
-   * One scheduler tick: if this instance leads, times out every due hold.
+   * One scheduler tick: if this instance leads, requests the timeout of every due hold.
    *
    * @return holds timed out
    */
@@ -75,7 +75,7 @@ public final class HoldTimeoutService {
     do {
       due = holds.claimDue(clock.instant(), BATCH);
       for (HoldSchedulePort.DueHold hold : due) {
-        if (timeOut(hold).isPresent()) {
+        if (timeOut(hold, true)) {
           resolved++;
         }
       }
@@ -84,11 +84,9 @@ public final class HoldTimeoutService {
   }
 
   /**
-   * The safety net (E.6, D-14): times out persisted holds whose deadline passed more than {@code
-   * grace} ago with no later state, whatever happened to their schedule entry. Leader only. A hold
-   * the scheduler already resolved is skipped because its latest state is no longer HOLD; when the
-   * fast-path state was lost too, a repeated timeout carries the same sequence and decision, which
-   * receivers ignore (ADR 0011 section 9).
+   * The safety net (E.6, D-14): requests the timeout of holds the overdue sweep lists, whatever
+   * happened to their schedule entry (§6.3). Leader only. The owner makes a repeated timeout a
+   * no-op: its request id names only the institution and the transaction.
    *
    * @param overdue durable overdue holds
    * @param grace how long after a deadline the sweep waits for the scheduler
@@ -100,8 +98,7 @@ public final class HoldTimeoutService {
     }
     int resolved = 0;
     for (HoldSchedulePort.DueHold hold : overdue.overdue(clock.instant().minus(grace), BATCH)) {
-      holds.cancel(hold.institutionId(), hold.transactionId());
-      if (timeOut(hold).isPresent()) {
+      if (timeOut(hold, false)) {
         resolved++;
       }
     }
@@ -109,27 +106,55 @@ public final class HoldTimeoutService {
   }
 
   /**
-   * Times out one claimed hold.
+   * Requests one hold's timeout and acts on the answer.
    *
-   * @param hold a hold this caller claimed
-   * @return the new state, or empty if the transaction is no longer held
+   * @param hold the hold
+   * @param scheduled whether it was taken from the schedule, so must be put back unless done
+   * @return whether the timeout was applied now
    */
-  Optional<DecisionState> timeOut(HoldSchedulePort.DueHold hold) {
-    Optional<DecisionState> latest = states.latest(hold.institutionId(), hold.transactionId());
-    if (latest.isEmpty() || latest.get().decision() != DecisionValue.HOLD) {
-      return Optional.empty();
+  boolean timeOut(HoldSchedulePort.DueHold hold, boolean scheduled) {
+    HoldOwnerPort.Answer answer;
+    try {
+      answer = owner.timeOut(hold);
+    } catch (RuntimeException failed) {
+      retry(hold, scheduled);
+      return false;
     }
-    Instant now = clock.instant();
-    DecisionState next = HoldTimeout.resolve(latest.get(), hold.policy(), now);
-    recorder.record(List.of(new DecisionEvent.DecisionChanged(next, hold.channel(), null)));
-    states.save(next);
-    if (next.decision() == DecisionValue.TIMEOUT_RELEASE) {
-      metrics.timeoutRelease(hold.channel());
+    switch (answer.next()) {
+      case APPLIED -> {
+        Instant now = clock.instant();
+        if (answer.state() != null && answer.state().decision() == DecisionValue.TIMEOUT_RELEASE) {
+          metrics.timeoutRelease(hold.channel());
+        }
+        long late = Duration.between(hold.deadline(), now).toMillis();
+        if (late > TOLERANCE.toMillis()) {
+          metrics.holdLateness(late);
+        }
+        return true;
+      }
+      case RESCHEDULE -> reschedule(hold.dueAgainAt(answer.at()));
+      case RETRY -> retry(hold, scheduled);
+      default -> {
+        // DROP: the owner decided the hold is no longer the timeout's (§6.3).
+      }
     }
-    long late = Duration.between(hold.deadline(), now).toMillis();
-    if (late > TOLERANCE.toMillis()) {
-      metrics.holdLateness(late);
+    return false;
+  }
+
+  private void retry(HoldSchedulePort.DueHold hold, boolean scheduled) {
+    metrics.holdRequestRetried();
+    if (scheduled) {
+      reschedule(hold.dueAgainAt(clock.instant().plus(RETRY)));
     }
-    return Optional.of(next);
+  }
+
+  private void reschedule(HoldSchedulePort.DueHold hold) {
+    try {
+      holds.schedule(hold);
+    } catch (RuntimeException failed) {
+      // The schedule falls back to this process while Redis is down (ResilientPorts); if even that
+      // fails, the overdue sweep times the hold out 10 to 15 s after its deadline.
+      metrics.stateWriteFailed("hold_schedule");
+    }
   }
 }

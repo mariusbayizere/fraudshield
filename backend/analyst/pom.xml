@@ -12,7 +12,7 @@
 
   <artifactId>fraudshield-analyst</artifactId>
   <name>FraudShield analyst API</name>
-  <description>The analyst API's reads (M8B P1): alert queues, alert detail and explanation, scoring results and the account's context (FR-04-02 to FR-04-09, NFR-SEC-03)</description>
+  <description>The analyst API (M8B): P1's reads (alert queues, alert detail and explanation, scoring results and the account's context, FR-04-02 to FR-04-09, NFR-SEC-03) and P2's decisions under the decision-owner contract (FR-04-04, FR-04-10, D-29, D-44)</description>
 
   <dependencies>
     <dependency>
@@ -23,6 +23,12 @@
     <dependency>
       <groupId>io.github.mariusbayizere.fraudshield</groupId>
       <artifactId>fraudshield-rules</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <!-- P2: the decision-owner contract's owner, runner and recorder (ADR 0114). -->
+    <dependency>
+      <groupId>io.github.mariusbayizere.fraudshield</groupId>
+      <artifactId>fraudshield-decision</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>

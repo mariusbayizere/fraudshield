@@ -13,7 +13,9 @@ import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.PostgresSink;
 import io.github.mariusbayizere.fraudshield.decision.adapter.spool.SpoolRecord;
 import io.github.mariusbayizere.fraudshield.decision.application.DecisionService;
 import io.github.mariusbayizere.fraudshield.decision.application.DecisionSettings;
-import io.github.mariusbayizere.fraudshield.decision.application.DecisionTransitionService;
+import io.github.mariusbayizere.fraudshield.decision.owner.DecisionOwner;
+import io.github.mariusbayizere.fraudshield.decision.owner.OwnerTransactions;
+import io.github.mariusbayizere.fraudshield.decision.owner.RequestRecorder;
 import io.github.mariusbayizere.fraudshield.decision.application.event.DecisionEvent;
 import io.github.mariusbayizere.fraudshield.decision.application.port.DecisionMetrics;
 import io.github.mariusbayizere.fraudshield.decision.domain.Transaction;
@@ -138,7 +140,11 @@ class SmsOrderingTest {
         contacts,
         institutions,
         new VerificationService(
-            dataSource, new DecisionTransitionService(ports, ports, ports, clock), clock),
+            dataSource,
+            new OwnerTransactions(dataSource, 3),
+            new DecisionOwner(),
+            new RequestRecorder(dataSource, new OwnerTransactions(dataSource, 3), ports, ports),
+            clock),
         gateway,
         new SmsCatalogue(),
         clock);

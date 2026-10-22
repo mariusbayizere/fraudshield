@@ -41,6 +41,15 @@ public final class RedisCircuitBreakers implements CircuitBreakerPort {
       return 1
       """;
 
+  /** E2: one marker per transaction, then the count, in one step (decision-owner contract D4(d)). */
+  private static final String COUNT_ONCE =
+      """
+      if not redis.call('SET', KEYS[1], '1', 'NX', 'PX', ARGV[1]) then return 0 end
+      redis.call('HINCRBY', KEYS[2], 'f', 1)
+      redis.call('PEXPIRE', KEYS[2], ARGV[1])
+      return 1
+      """;
+
   private final RedisAsyncCommands<String, String> redis;
   private final Duration timeout;
   private final Map<Key, Boolean> open = new ConcurrentHashMap<>();
@@ -86,6 +95,23 @@ public final class RedisCircuitBreakers implements CircuitBreakerPort {
     String bucket = RedisKeys.mccBucket(institutionId, mcc, minute(at));
     RedisSupport.await(redis.hincrby(bucket, "f", 1), timeout);
     RedisSupport.await(redis.pexpire(bucket, BUCKET_TTL.toMillis()), timeout);
+  }
+
+  @Override
+  public boolean countConfirmedFraudOnce(
+      UUID institutionId, UUID transactionId, String mcc, Instant at) {
+    Long counted =
+        RedisSupport.await(
+            redis.eval(
+                COUNT_ONCE,
+                ScriptOutputType.INTEGER,
+                new String[] {
+                  RedisKeys.mccConfirmed(institutionId, transactionId),
+                  RedisKeys.mccBucket(institutionId, mcc, minute(at))
+                },
+                Long.toString(BUCKET_TTL.toMillis())),
+            timeout);
+    return counted == 1L;
   }
 
   @Override

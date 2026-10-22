@@ -7,7 +7,8 @@ import io.github.mariusbayizere.fraudshield.common.config.MediumTimeoutPolicy;
 import io.github.mariusbayizere.fraudshield.common.transaction.Channel;
 import io.github.mariusbayizere.fraudshield.decision.application.DecisionService;
 import io.github.mariusbayizere.fraudshield.decision.application.DecisionSettings;
-import io.github.mariusbayizere.fraudshield.decision.application.DecisionTransitionService;
+import io.github.mariusbayizere.fraudshield.decision.domain.DecidedBy;
+import io.github.mariusbayizere.fraudshield.decision.domain.DecisionValue;
 import io.github.mariusbayizere.fraudshield.decision.application.HoldTimeoutService;
 import io.github.mariusbayizere.fraudshield.decision.application.event.DecisionEvent;
 import io.github.mariusbayizere.fraudshield.decision.application.port.DecisionMetrics;
@@ -83,15 +84,17 @@ public final class FactScenarios {
     service.decide(Fixtures.transaction("20"), new byte[32], System.nanoTime());
 
     clock.advance(Duration.ofSeconds(30));
-    new HoldTimeoutService(ports, ports, ports, DecisionMetrics.NONE, clock, "api-0").tick();
+    new HoldTimeoutService(
+            ports, new InMemoryHoldOwner(ports, clock), DecisionMetrics.NONE, clock, "api-0")
+        .tick();
     UUID declined =
         ports.latest.values().stream()
             .filter(s -> s.decision().name().equals("DECLINE") && s.sequence() == 1)
             .findFirst()
             .orElseThrow()
             .transactionId();
-    new DecisionTransitionService(ports, ports, ports, clock)
-        .customerAnswered(INSTITUTION, declined, true, NOW);
+    // The customer's "yes", as the owner records it (decision-owner contract §5).
+    later(ports, declined, DecisionValue.APPROVE, DecidedBy.CUSTOMER_VERIFICATION, false, "CUSTOMER");
     UUID heldAgain =
         ports.latest.values().stream()
             .filter(s -> s.decision().name().equals("HOLD"))
@@ -106,8 +109,8 @@ public final class FactScenarios {
       service.decide(second, new byte[32], System.nanoTime());
       heldAgain = second.transactionId();
     }
-    new DecisionTransitionService(ports, ports, ports, clock)
-        .analystDecidesHold(INSTITUTION, heldAgain, true, UUID.randomUUID(), "ONLINE", NOW);
+    // An analyst's MARK_LEGITIMATE on the hold, as the owner records its effect (§5).
+    later(ports, heldAgain, DecisionValue.APPROVE, DecidedBy.ANALYST, false, "ANALYST");
 
     List<DecisionEvent> events = new ArrayList<>(ports.events);
     events.add(
@@ -122,6 +125,36 @@ public final class FactScenarios {
             1,
             NOW));
     return events;
+  }
+
+  private static void later(
+      InMemoryPorts ports,
+      UUID transactionId,
+      DecisionValue value,
+      DecidedBy by,
+      boolean fraud,
+      String source) {
+    DecisionState current = ports.latest.get(transactionId);
+    DecisionState next =
+        DecisionState.succeeding(
+            INSTITUTION,
+            transactionId,
+            current.sequence(),
+            current.decision(),
+            current.decidedBy(),
+            UUID.randomUUID(),
+            value,
+            by,
+            NOW,
+            List.of(),
+            false);
+    ports.record(
+        List.of(
+            new DecisionEvent.DecisionChanged(
+                next, null, by == DecidedBy.ANALYST ? UUID.randomUUID() : null),
+            new DecisionEvent.LabelRecorded(
+                UUID.randomUUID(), INSTITUTION, transactionId, fraud, source, NOW, NOW, null)));
+    ports.save(next);
   }
 
   /**

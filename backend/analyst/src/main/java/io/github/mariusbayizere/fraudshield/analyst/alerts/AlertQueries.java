@@ -223,6 +223,20 @@ public final class AlertQueries {
   }
 
   /**
+   * One entry as the contract's {@code AlertSummary}: the body of an escalation's 201 and the
+   * {@code current} member of a stale-alert problem (D-29). Must run in the caller's tenant
+   * transaction.
+   *
+   * @param alertId the entry
+   * @return the summary, or empty
+   */
+  public Optional<Map<String, Object>> summary(UUID alertId) {
+    List<Row> rows =
+        jdbc.query(COLUMNS + FROM + " WHERE e.id = ?", (row, i) -> row(row, 0), alertId);
+    return rows.isEmpty() ? Optional.empty() : Optional.of(rows.getFirst().summary());
+  }
+
+  /**
    * {@code getAlert}. Must run in the caller's tenant transaction.
    *
    * @param alertId the entry

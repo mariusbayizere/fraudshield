@@ -1,7 +1,7 @@
 package io.github.mariusbayizere.fraudshield.ingest.web;
 
 import io.github.mariusbayizere.fraudshield.decision.adapter.events.FactCodec;
-import io.github.mariusbayizere.fraudshield.decision.application.port.DecisionStatePort;
+import io.github.mariusbayizere.fraudshield.decision.owner.FinalDecisions;
 import io.github.mariusbayizere.fraudshield.decision.domain.DecisionState;
 import io.github.mariusbayizere.fraudshield.ingest.application.BatchJobs;
 import io.github.mariusbayizere.fraudshield.ingest.application.IngestService;
@@ -48,7 +48,7 @@ public final class IngestController {
 
   private final IngestService ingest;
   private final BatchJobs batches;
-  private final DecisionStatePort states;
+  private final FinalDecisions decisions;
   private final RateLimiter limiter;
 
   /**
@@ -56,14 +56,14 @@ public final class IngestController {
    *
    * @param ingest single submissions
    * @param batches batch jobs
-   * @param states decision states
+   * @param decisions the final decision, PostgreSQL first (decision-owner contract §8)
    * @param limiter the per-key budget, which charges a batch by its item count
    */
   public IngestController(
-      IngestService ingest, BatchJobs batches, DecisionStatePort states, RateLimiter limiter) {
+      IngestService ingest, BatchJobs batches, FinalDecisions decisions, RateLimiter limiter) {
     this.ingest = Objects.requireNonNull(ingest, "ingest");
     this.batches = Objects.requireNonNull(batches, "batches");
-    this.states = Objects.requireNonNull(states, "states");
+    this.decisions = Objects.requireNonNull(decisions, "decisions");
     this.limiter = Objects.requireNonNull(limiter, "limiter");
   }
 
@@ -288,14 +288,26 @@ public final class IngestController {
     if (id.isEmpty()) {
       return notFound(correlation);
     }
-    Optional<DecisionState> state = states.latest(principal(request).institutionId(), id.get());
-    return state
-        .map(
-            s ->
-                ResponseEntity.ok()
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(JSON.writeValueAsBytes(FactCodec.finalDecision(s))))
-        .orElseGet(() -> notFound(correlation));
+    return switch (decisions.read(principal(request).institutionId(), id.get())) {
+      case FinalDecisions.Answer.Found found ->
+          ResponseEntity.ok()
+              .contentType(MediaType.APPLICATION_JSON)
+              .body(JSON.writeValueAsBytes(FactCodec.finalDecision(found.state())));
+      case FinalDecisions.Answer.Contested contested ->
+          ResponseEntity.status(503)
+              .header(HttpHeaders.RETRY_AFTER, "60")
+              .contentType(MediaType.parseMediaType(Problems.MEDIA_TYPE))
+              .body(
+                  JSON.writeValueAsBytes(
+                      Problems.problem(
+                          "decision-contested",
+                          "Decision contested",
+                          503,
+                          "two first decisions exist; a risk officer is resolving them",
+                          correlation)));
+      case FinalDecisions.Answer.Unavailable unavailable -> unavailable(correlation);
+      case FinalDecisions.Answer.NotFound notFound -> notFound(correlation);
+    };
   }
 
   private static Optional<ResponseEntity<byte[]>> refuse(

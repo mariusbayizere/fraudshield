@@ -1,7 +1,10 @@
 package io.github.mariusbayizere.fraudshield.notify.verification;
 
-import io.github.mariusbayizere.fraudshield.decision.application.DecisionTransitionService;
 import io.github.mariusbayizere.fraudshield.decision.application.port.HoldSchedulePort;
+import io.github.mariusbayizere.fraudshield.decision.owner.DecisionOwner;
+import io.github.mariusbayizere.fraudshield.decision.owner.OwnerRequest;
+import io.github.mariusbayizere.fraudshield.decision.owner.OwnerTransactions;
+import io.github.mariusbayizere.fraudshield.decision.owner.RequestRecorder;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -20,19 +23,18 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Applies the decision transition of a customer unblock that was recorded but never reached the
- * decision path (Principal Review finding 6).
+ * Submits customer answers that have no owner request yet (decision-owner contract §6.5): answers
+ * deferred while a human reviewed the payment or while it was contested, and answers M6 recorded
+ * but never applied before the cutover (V81 marks only those whose effect is complete). A "no"
+ * whose label was never recorded is submitted too, so it has a recorder of last resort.
  *
- * <p>{@link VerificationService#answer} commits the customer's answer and the {@code
- * unblock_events} row before calling {@link DecisionTransitionService#customerAnswered}. If that
- * call fails, the block is recorded as lifted while the decision stays DECLINE: no webhook, no
- * label, and no second chance for the customer, whose token is now used. This leader-run sweep
- * finds those rows (V64) and applies the transition. It is safe to run repeatedly: a transition the
- * decision path already made is refused and skipped.
+ * <p>It lists only answers whose owner can act on them now, so a contested or claimed transaction
+ * never holds a batch's head (review 8, finding 8). Each answer is one owner request, applied at
+ * most once whatever the number of runs: its request id is the verification's.
  */
 public final class UnblockReconciler {
 
-  /** How long after the answer the sweep waits before applying the transition itself. */
+  /** How long after the answer the sweep waits before submitting it itself. */
   public static final Duration GRACE = Duration.ofSeconds(10);
 
   private static final int BATCH = 100;
@@ -43,17 +45,22 @@ public final class UnblockReconciler {
 
   private static final String SELECT_UNAPPLIED =
       """
-      SELECT b.transaction_id, t.transaction_timestamp FROM unblock_events u
-      JOIN auto_block_events b ON b.id = u.auto_block_event_id
-      JOIN v_transactions t ON t.transaction_id = b.transaction_id
-      WHERE u.cause = 'CUSTOMER_VERIFICATION' AND u.unblocked_at < ?
-      AND NOT EXISTS (SELECT 1 FROM decision_states s WHERE s.transaction_id = b.transaction_id
-        AND s.decided_by = 'CUSTOMER_VERIFICATION')
-      ORDER BY u.unblocked_at LIMIT ?
+      SELECT r.verification_id, r.answer, b.transaction_id FROM customer_verification_responses r
+      JOIN customer_verifications v ON v.id = r.verification_id
+      JOIN auto_block_events b ON b.id = v.auto_block_event_id
+      WHERE r.responded_at < ?
+      AND NOT EXISTS (SELECT 1 FROM transaction_requests q
+        WHERE q.request_id = fs_name_uuid('verification|' || r.verification_id::text))
+      AND NOT EXISTS (SELECT 1 FROM decision_owners o WHERE o.transaction_id = b.transaction_id
+        AND (o.contested_since IS NOT NULL OR o.claim = 'ANALYST'
+          OR (o.claim = 'ESCALATED' AND o.deadline > clock_timestamp())))
+      ORDER BY r.responded_at LIMIT ?
       """;
 
   private final DataSource dataSource;
-  private final DecisionTransitionService transitions;
+  private final OwnerTransactions transactions;
+  private final DecisionOwner owner;
+  private final RequestRecorder recorder;
   private final HoldSchedulePort holds;
   private final String instanceId;
   private final Clock clock;
@@ -62,54 +69,62 @@ public final class UnblockReconciler {
    * Creates the reconciler.
    *
    * @param dataSource connections as {@code fs_app}
-   * @param transitions decision transitions
+   * @param transactions the owner's runner
+   * @param owner the transaction's owner
+   * @param recorder records an outcome after the commit
    * @param holds the leadership lease shared with the hold sweep
    * @param instanceId this instance
    * @param clock clock
    */
   public UnblockReconciler(
       DataSource dataSource,
-      DecisionTransitionService transitions,
+      OwnerTransactions transactions,
+      DecisionOwner owner,
+      RequestRecorder recorder,
       HoldSchedulePort holds,
       String instanceId,
       Clock clock) {
     this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
-    this.transitions = Objects.requireNonNull(transitions, "transitions");
+    this.transactions = Objects.requireNonNull(transactions, "transactions");
+    this.owner = Objects.requireNonNull(owner, "owner");
+    this.recorder = Objects.requireNonNull(recorder, "recorder");
     this.holds = Objects.requireNonNull(holds, "holds");
     this.instanceId = Objects.requireNonNull(instanceId, "instanceId");
     this.clock = Objects.requireNonNull(clock, "clock");
   }
 
   /**
-   * Applies what is outstanding, as the leader.
+   * Submits what is outstanding, as the leader.
    *
-   * @return the transitions this sweep made
+   * @return the answers whose request was made by this sweep
    */
   public int reconcile() {
     if (!holds.acquireLeadership(instanceId)) {
       return 0;
     }
-    int applied = 0;
-    for (Unapplied unblock : unapplied(clock.instant().minus(GRACE))) {
+    int submitted = 0;
+    for (Unapplied answer : unapplied(clock.instant().minus(GRACE))) {
       try {
-        transitions.customerAnswered(
-            unblock.institution(), unblock.transaction(), true, unblock.transactionAt());
-        applied++;
-        LOG.warn(
-            "an unblock recorded for transaction {} had not reached the decision path; applied by"
-                + " the sweep",
-            unblock.transaction());
-      } catch (DecisionTransitionService.TransitionRefusedException resolved) {
-        // The decision moved on (an analyst, a senior override): nothing to lift.
-      } catch (RuntimeException failed) {
-        LOG.warn("an unblock could not be applied; the sweep tries again on its next tick", failed);
-        return applied;
+        DecisionOwner.Result result =
+            transactions.inTenant(
+                answer.institution(),
+                c ->
+                    owner.submit(
+                        c,
+                        answer.institution(),
+                        answer.transaction(),
+                        new OwnerRequest.Customer(answer.verification(), answer.wasMe())));
+        recorder.record(answer.institution(), result);
+        submitted++;
+      } catch (SQLException | RuntimeException failed) {
+        LOG.warn("a customer answer could not be submitted; the sweep tries again next tick", failed);
+        return submitted;
       }
     }
-    return applied;
+    return submitted;
   }
 
-  private record Unapplied(UUID institution, UUID transaction, Instant transactionAt) {}
+  private record Unapplied(UUID institution, UUID verification, boolean wasMe, UUID transaction) {}
 
   private List<Unapplied> unapplied(Instant before) {
     List<Unapplied> unapplied = new ArrayList<>();
@@ -140,7 +155,8 @@ public final class UnblockReconciler {
                   new Unapplied(
                       institution,
                       row.getObject(1, UUID.class),
-                      row.getObject(2, OffsetDateTime.class).toInstant()));
+                      "WAS_ME".equals(row.getString(2)),
+                      row.getObject(3, UUID.class)));
             }
           }
         }
@@ -151,7 +167,7 @@ public final class UnblockReconciler {
       c.commit();
       return unapplied;
     } catch (SQLException e) {
-      throw new IllegalStateException("unapplied unblocks are unavailable", e);
+      throw new IllegalStateException("unapplied answers are unavailable", e);
     }
   }
 

@@ -4,8 +4,11 @@ import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcOverdueHol
 import io.github.mariusbayizere.fraudshield.decision.adapter.jpa.JpaConfiguration;
 import io.github.mariusbayizere.fraudshield.decision.application.CircuitBreakerMonitor;
 import io.github.mariusbayizere.fraudshield.decision.application.HoldTimeoutService;
+import io.github.mariusbayizere.fraudshield.decision.owner.DecisionAlarms;
+import io.github.mariusbayizere.fraudshield.decision.owner.RequestRecorder;
 import io.github.mariusbayizere.fraudshield.ingest.application.BatchJobs;
 import io.github.mariusbayizere.fraudshield.notify.verification.UnblockReconciler;
+import java.time.Clock;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.Executors;
@@ -21,6 +24,9 @@ import org.springframework.stereotype.Component;
  * the overdue-hold sweep, the unblock sweep and the MCC breaker monitor every 5 s, and
  * configuration refresh every 5 s, which keeps threshold and rule changes effective well within 60
  * s. A failing task is logged and runs again on its next tick.
+ *
+ * <p>The decision-owner contract's recorder (every 500 ms) and alarms (every 30 s) run on a
+ * scheduler of their own, so that a long timeout backlog cannot starve them, nor they it (§4.3).
  */
 @Component
 public final class BackgroundTasks implements SmartLifecycle {
@@ -34,6 +40,12 @@ public final class BackgroundTasks implements SmartLifecycle {
   /** How long after a deadline the sweep waits for the poller. */
   public static final Duration SWEEP_GRACE = Duration.ofSeconds(10);
 
+  /** The recorder's period, P (decision-owner contract §2). */
+  public static final Duration RECORDER_TICK = Duration.ofMillis(500);
+
+  /** How often the alarms' figures are read (§7.4). */
+  public static final Duration ALARM_TICK = Duration.ofSeconds(30);
+
   private static final Logger LOG = LoggerFactory.getLogger(BackgroundTasks.class);
 
   private final HoldTimeoutService holds;
@@ -42,7 +54,11 @@ public final class BackgroundTasks implements SmartLifecycle {
   private final JpaConfiguration configuration;
   private final UnblockReconciler unblocks;
   private final BatchJobs batches;
+  private final RequestRecorder recorder;
+  private final DecisionAlarms alarms;
+  private final Clock clock;
   private ScheduledExecutorService scheduler;
+  private ScheduledExecutorService ownerScheduler;
 
   /**
    * Creates the tasks.
@@ -53,6 +69,9 @@ public final class BackgroundTasks implements SmartLifecycle {
    * @param configuration risk configuration
    * @param unblocks customer unblocks that did not reach the decision path
    * @param batches batch jobs, for the start-up sweep
+   * @param recorder records owner requests a writer left unrecorded
+   * @param alarms the decision-owner alarms
+   * @param clock clock
    */
   public BackgroundTasks(
       HoldTimeoutService holds,
@@ -60,13 +79,19 @@ public final class BackgroundTasks implements SmartLifecycle {
       CircuitBreakerMonitor breakers,
       JpaConfiguration configuration,
       UnblockReconciler unblocks,
-      BatchJobs batches) {
+      BatchJobs batches,
+      RequestRecorder recorder,
+      DecisionAlarms alarms,
+      Clock clock) {
     this.holds = Objects.requireNonNull(holds, "holds");
     this.overdue = Objects.requireNonNull(overdue, "overdue");
     this.breakers = Objects.requireNonNull(breakers, "breakers");
     this.configuration = Objects.requireNonNull(configuration, "configuration");
     this.unblocks = Objects.requireNonNull(unblocks, "unblocks");
     this.batches = Objects.requireNonNull(batches, "batches");
+    this.recorder = Objects.requireNonNull(recorder, "recorder");
+    this.alarms = Objects.requireNonNull(alarms, "alarms");
+    this.clock = Objects.requireNonNull(clock, "clock");
   }
 
   @Override
@@ -85,10 +110,19 @@ public final class BackgroundTasks implements SmartLifecycle {
     every(SLOW_TICK, breakers::evaluate);
     every(SLOW_TICK, configuration::refreshAll);
     every(SLOW_TICK, unblocks::reconcile);
+    ownerScheduler =
+        Executors.newScheduledThreadPool(
+            2, Thread.ofPlatform().name("owner-tasks-", 0).daemon(true).factory());
+    every(ownerScheduler, RECORDER_TICK, () -> recorder.recordPending(clock.instant()));
+    every(ownerScheduler, ALARM_TICK, alarms::refresh);
   }
 
   private void every(Duration period, Runnable task) {
-    scheduler.scheduleWithFixedDelay(
+    every(scheduler, period, task);
+  }
+
+  private static void every(ScheduledExecutorService on, Duration period, Runnable task) {
+    on.scheduleWithFixedDelay(
         () -> {
           try {
             task.run();
@@ -106,6 +140,10 @@ public final class BackgroundTasks implements SmartLifecycle {
     if (scheduler != null) {
       scheduler.shutdownNow();
       scheduler = null;
+    }
+    if (ownerScheduler != null) {
+      ownerScheduler.shutdownNow();
+      ownerScheduler = null;
     }
   }
 

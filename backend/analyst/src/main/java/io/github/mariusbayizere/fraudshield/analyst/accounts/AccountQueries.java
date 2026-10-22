@@ -39,7 +39,7 @@ public final class AccountQueries {
       FROM v_transactions t
       JOIN LATERAL (SELECT s.ensemble_score, s.risk_tier FROM v_fraud_scores s
         WHERE s.transaction_id = t.transaction_id ORDER BY s.scored_at DESC LIMIT 1) f ON true
-      LEFT JOIN LATERAL (SELECT ds.decision FROM decision_states ds
+      LEFT JOIN LATERAL (SELECT ds.decision FROM v_decision_states ds
         WHERE ds.transaction_id = t.transaction_id ORDER BY ds.decision_sequence DESC LIMIT 1) d
         ON true
       WHERE t.account_token = ?

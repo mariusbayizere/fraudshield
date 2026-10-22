@@ -25,6 +25,10 @@ final class RedisKeys {
     return "fs:{" + institution + "}:mcc:" + mcc + ":" + minute;
   }
 
+  static String mccConfirmed(UUID institution, UUID transaction) {
+    return "fs:mcc:confirmed:" + institution + ":" + transaction;
+  }
+
   static String mccState(UUID institution, String mcc) {
     return "fs:{" + institution + "}:mccstate:" + mcc;
   }

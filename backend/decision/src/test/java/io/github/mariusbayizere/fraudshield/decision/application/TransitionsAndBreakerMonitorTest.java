@@ -26,50 +26,6 @@ class TransitionsAndBreakerMonitorTest {
   private final InMemoryPorts ports = new InMemoryPorts();
   private final MutableClock clock = new MutableClock(NOW);
 
-  private UUID declined() {
-    UUID tx = UUID.randomUUID();
-    ports.latest.put(
-        tx,
-        DecisionState.initial(
-            INSTITUTION, tx, Decision.DECLINE, NOW, List.of("VELOCITY_SPIKE"), null));
-    return tx;
-  }
-
-  @Test
-  @Tag("FR-03-05")
-  void yesThisWasMeLiftsTheBlockAndLabelsItLegitimate() {
-    DecisionTransitionService transitions =
-        new DecisionTransitionService(ports, ports, ports, clock);
-    UUID tx = declined();
-    DecisionState next = transitions.customerAnswered(INSTITUTION, tx, true, NOW);
-    assertThat(next.decision()).isEqualTo(DecisionValue.APPROVE);
-    assertThat(next.decidedBy()).isEqualTo(DecidedBy.CUSTOMER_VERIFICATION);
-    assertThat(ports.eventsOf(DecisionEvent.LabelRecorded.class))
-        .singleElement()
-        .satisfies(
-            label -> {
-              assertThat(label.fraud()).isFalse();
-              assertThat(label.source()).isEqualTo("CUSTOMER");
-            });
-    assertThatThrownBy(() -> transitions.customerAnswered(INSTITUTION, tx, true, NOW))
-        .isInstanceOf(DecisionTransitionService.TransitionRefusedException.class);
-  }
-
-  @Test
-  @Tag("FR-03-05")
-  void noThisWasNotMeLabelsFraudAndKeepsTheBlock() {
-    DecisionTransitionService transitions =
-        new DecisionTransitionService(ports, ports, ports, clock);
-    UUID tx = declined();
-    assertThat(transitions.customerAnswered(INSTITUTION, tx, false, NOW).decision())
-        .isEqualTo(DecisionValue.DECLINE);
-    assertThat(ports.eventsOf(DecisionEvent.LabelRecorded.class).getFirst().fraud()).isTrue();
-    assertThatThrownBy(
-            () -> transitions.customerAnswered(INSTITUTION, UUID.randomUUID(), true, NOW))
-        .extracting(e -> ((DecisionTransitionService.TransitionRefusedException) e).refusal())
-        .isEqualTo(DecisionTransitionService.Refusal.NOT_FOUND);
-  }
-
   @Test
   @Tag("FR-03-07")
   void theMonitorOpensAndClosesBreakersAndRecordsEachChangeOnce() {

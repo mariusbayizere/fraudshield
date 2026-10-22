@@ -46,6 +46,24 @@ public interface CircuitBreakerPort {
   void countConfirmedFraud(UUID institutionId, String merchantCategoryCode, Instant at);
 
   /**
+   * Counts a confirmed fraud at most once per transaction (decision-owner contract D4(d), E2): a
+   * retried or concurrent effects run counts it once. The default counts unconditionally, for
+   * adapters without shared state.
+   *
+   * @param institutionId institution
+   * @param transactionId the transaction, which keys the once-only marker
+   * @param merchantCategoryCode MCC
+   * @param at the transaction's time
+   * @return whether this call counted it
+   * @throws RuntimeException when the count cannot be made; the caller retries
+   */
+  default boolean countConfirmedFraudOnce(
+      UUID institutionId, UUID transactionId, String merchantCategoryCode, Instant at) {
+    countConfirmedFraud(institutionId, merchantCategoryCode, at);
+    return true;
+  }
+
+  /**
    * MCCs with activity in the window, for the monitor.
    *
    * @param now evaluation time
