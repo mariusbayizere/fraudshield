@@ -49,6 +49,11 @@ The owner was asked two questions:
 
 - **No measurement exists of how long PostgreSQL outages last.** The size of the D-18 breach
   cannot be stated from evidence; it is bounded only by each outage's duration.
+- **A Redis outage delays held payments too.** The overdue sweep and the unblock reconciler run
+  only on the instance holding M6's Redis leader lease, so during a Redis outage they do not run on
+  any instance that holds no local holds. A held payment whose schedule entry was lost then waits
+  for the Redis outage's duration as well. This is M6's design, recorded here (contract review 7,
+  finding 8).
 - **Escalated payments wait up to W.** D-10's capacity model, which does not exist yet, should
   replace the assumed W.
 - **Effective dates.** Both deviations take effect when P2 ships the arbiter. Until then, M6's

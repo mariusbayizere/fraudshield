@@ -1,18 +1,18 @@
 # Analyst decisions: the commit and undo contract
 
-Status: **draft 7, for independent review.** Draft 7 is the owner's reduction of 2026-10-20 (ADR
-0113): the bank-facing `GET /decisions/{id}` reads PostgreSQL first, and Redis only when PostgreSQL
-is unavailable (T7).
-- **Why.** Review 6 and its delta review found that a Redis write acknowledged and then lost let that
-  read answer a superseded decision for up to 8 days. The defect is M6's; drafts 1 to 5 carried it
-  unreported, and draft 6's fix covered only a write that fails.
-- **What changes.**
-  - Redis leaves the commit path. The recording no longer waits for it (T4, T5).
-  - The final decision has one source of truth while PostgreSQL answers (T7).
-- **Draft 6 is unchanged otherwise.** It was option (a): `transaction_transitions` is the only
-  record of later states.
-- **What is carried.** Review 6's delta findings are carried in §16, except the one wording
-  contradiction fixed in T6.
+Status: **draft 8, for independent review.** Draft 8 is limited to the owner's decisions of
+2026-10-20 on review 7 (`docs/reviews/M8B/decision-commit-contract-review-7.md`), and review 7's
+MINORs:
+- **One first decision stands** (review 7's MAJOR, M6's): options 1 and 2 together (T8).
+  - **Option 1.** A retry may not decide afresh where an earlier decision may still drain.
+  - **Option 2.** When two different first decisions are found, every automatic path stops for that
+    payment instead of acting.
+
+  In the owner's words, option 2 "takes a writer away instead of adding one".
+- **A senior's fraud decision blocks the customer path** (D7). The asymmetry is deliberate: the
+  customer path can confirm a payment the system doubted, but cannot overturn a human who declined
+  it.
+- **Review 7's MINORs 2 to 9**, answered in §17.
 
 **The owner's rule.** If a draft still produces a MAJOR, the author stops. The queue semantics then
 need rethinking, not the contract's wording.
@@ -243,7 +243,8 @@ and drops it. An undo frees the claim and, after its commit, reschedules the hol
 - every open entry of the transaction is set to AUTO_RELEASED (RELEASE_WITH_TIMEOUT_LABEL) or
   AUTO_DECLINED (DECLINE_AND_VERIFY), with `version + 1`;
 - one AUTO_RELEASED, or AUTO_BLOCKED for a decline, decision row is written on the newest of those
-  entries, with an idempotency key derived from the transaction.
+  entries, with an idempotency key derived from the institution and the transaction (review 7,
+  finding 2).
 
 `PostgresSink` no longer updates entries or writes that row. Its status guard makes any redelivered
 old record a no-op. Entries are therefore closed synchronously under both policies, including an
@@ -295,13 +296,16 @@ the only mechanism for that case, so it is specified as a rule, not a backstop.
 
   If it is not visible, that writer retries later. It never guesses.
 
-**T3. Deterministic ids.** Every event id and label id is the name-based UUID of a stable source:
+**T3. Deterministic ids.** Every event id and label id is the name-based UUID of a stable source,
+and every source is unique across institutions: a random UUID (a decision's or an unblock's id), or
+the institution together with the transaction. A transaction id alone is unique only per
+institution, while `event_id` is unique across all of them (review 7, finding 2). The sources:
 
 | Writer | Event id from | Label id from |
 |---|---|---|
 | Analyst E1 | `alert_decision|` + decision id | `alert_label|` + decision id |
 | Override | `alert_decision|` + override's decision id | `alert_label|` + override's decision id |
-| Timeout | `hold_timeout|` + transaction | — |
+| Timeout | `hold_timeout|` + institution + `|` + transaction | — |
 | Customer "yes" and `UnblockReconciler` | `unblock|` + `unblock_events.id` | `unblock_label|` + `unblock_events.id` |
 | Customer "no" (a label, no transition) | — | `verification_label|` + the verification response's id |
 
@@ -389,12 +393,59 @@ therefore always completed. **T4's "re-decide" happens only before a reservation
 3. **From Redis, when PostgreSQL is unavailable.**
    - **Why it cannot fall behind during the outage.** Every writer of a later state needs
      PostgreSQL (T2, H2, ADR 0111), so no later state is created while it is down.
-   - **When it can be stale.** Redis's answer can be stale only if it lost an acknowledged write
-     before the outage. That lasts at most for the outage.
-4. **404** when neither holds the transaction.
+   - **When it can be stale.** Redis's answer can be stale if any write to it before the outage was
+     lost after it was acknowledged, or failed: since draft 7 its set is best effort (T4). That
+     lasts at most for the outage, because once PostgreSQL answers, the read uses it (review 7,
+     finding 4).
+   - **What "unavailable" means:** a connection failure or a timeout, meaning SQLSTATE class 08,
+     a statement timeout (57014), or the pool's connection timeout. Any other database error is a
+     500, never a silent fallback to Redis (review 7, finding 4).
+4. **When PostgreSQL is unavailable and Redis holds nothing, or is unavailable too:** 503 with
+   `Retry-After`, never 404. The transaction may be decided, and the poll cannot tell (review 7,
+   finding 3).
+5. **404** only when PostgreSQL answers and neither the view nor Redis holds the transaction.
+6. **A contested transaction** (T8) is answered 503 with `Retry-After` and the problem type
+   `decision-contested`, until an operator resolves it.
 
-This changes only the poll's read (`IngestController`), not `DecisionStatePort.latest`, which the
-decision path uses.
+This changes only the poll's read (`IngestController`), not `DecisionStatePort.latest`. No decision
+trusts Redis's state after draft 8: the decision path's own reads go through T2, and
+`customerAnswered` is changed by D7 (review 7, finding 5).
+
+**T8. One first decision stands** (owner, 2026-10-20; review 7's MAJOR).
+- **The defect.** M6 can decide one transaction twice: ADR 0067 points 3 and 4 accept it.
+  - A process dies inside its 10-second idempotency lease, and the retry re-claims and decides
+    afresh.
+  - Two first submissions race while Redis is down.
+
+  PostgreSQL keeps the first record that drains. Redis, the scheduled hold and the bank's response
+  can hold the other.
+- **(a) A retry does not decide afresh where an earlier decision may still drain** (option 1). A
+  claim that finds an expired lease, rather than no claim at all, is treated as `UNCERTAIN` (ADR 0067
+  point 5). It verifies against PostgreSQL first, and replays the decision it finds there. If
+  PostgreSQL holds none, the retry decides.
+  - **What this closes:** the common case, in which the dead instance's record drained before the
+    retry.
+  - **What it does not close:** a record still on the dead instance's spool, and the race while Redis
+    is down. Both are left to (b).
+- **(b) Two different first decisions stop the automatic paths** (option 2).
+  - **The sink records the conflict.** When `PostgresSink` meets a `TransactionDecided` for a
+    transaction whose `transaction_ids` row holds another decision, it inserts
+    `decision_conflicts(institution_id, transaction_id, kept_event_id, other_event_id, other_decision,
+    recorded_at)`. That table is append-only, tenant-isolated, and keyed on
+    `(institution_id, transaction_id)` with `ON CONFLICT DO NOTHING`. Today the sink only counts the
+    case.
+  - **A contested transaction is frozen for every automatic path:**
+    - the timeout's claim (H2) and the sweep (H3) refuse it, and drop the hold from the schedule;
+    - every reservation (T2) refuses it, with outcome SKIPPED and reason `contested`;
+    - a decide, escalate or override on its alert answers 409 `conflict`, with the detail that the
+      transaction is contested;
+    - the poll answers 503 `decision-contested` (T7).
+  - **An operator is alerted** (`fs_decision_conflicts_total`, and the table), and resolves the
+    conflict by hand. The resolution is a runbook step for M9, not a mechanism of this contract.
+- **The residual, stated.** Detection happens when the second record drains to PostgreSQL. A path
+  that acted before that moment, such as a timeout at the deadline before a stalled instance's
+  spool drained, has acted. Once detected, nothing automatic acts again, and the alert names the
+  transaction.
 
 ## 5. Decision rules
 
@@ -476,10 +527,11 @@ are safe by T3 to T5 and E2.
   - **What happens:** the worker records the effects row with outcome FAILED, the SQLSTATE and the
     effect, raises `fs_analyst_effects_failed_total`, and moves on. A FAILED effect is for an
     operator to resolve.
-  - **Everything else is retried on the next run:** a 40001 or 40P01, a lost connection, Redis or
-    the spool unavailable.
-- **(f)** While Redis or the spool is unavailable, an ANALYST-owned hold stays HOLD until E1
-  succeeds. `fs_analyst_effects_oldest_pending_seconds` alerts (Q3).
+  - **Everything else is retried on the next run:** a 40001 or 40P01, a lost connection, the spool
+    unavailable, and, for E2 only, Redis unavailable.
+- **(f)** While the spool is unavailable, an ANALYST-owned hold stays HOLD until E1 succeeds. E1
+  needs PostgreSQL and the spool, not Redis; only E2 (the breaker count) uses Redis (review 7,
+  finding 7). `fs_analyst_effects_oldest_pending_seconds` alerts (Q3).
 
 **D5. Overriding** (`overrideAlertDecision`) is one runner transaction:
 - **(a)** Entry row and lock, then idempotency as in D1(b). A replay returns the stored decision as
@@ -535,8 +587,19 @@ are safe by T3 to T5 and E2.
     recorded". This contract says which: the longer bound is W, and then the channel's timeout
     policy applies, so a DECLINE_AND_VERIFY channel declines rather than releases.
 
-**D7. Customer verification** (M6) reserves through T1 to T5 with T3's ids. That is the only change
-to it.
+**D7. Customer verification** (M6) reserves through T1 to T5 with T3's ids.
+- **Where the current state comes from.** `customerAnswered` reads the transaction's current state
+  inside T2, from the reservation history, never from Redis first (review 7, finding 5).
+- **A senior's fraud decision blocks the customer path** (owner, 2026-10-20). When the latest state
+  is DECLINE by SENIOR_OVERRIDE, a customer's "yes, this was me" makes no transition and records no
+  LEGITIMATE label. The response itself is stored, as every response is, and audited.
+  - The owner's reason: "a senior re-declining has seen something the model and the first analyst
+    did not, and a customer's 'yes' is exactly what a compromised account would send".
+  - **The asymmetry is deliberate.** The customer path can confirm a payment the system doubted,
+    but cannot overturn a human who declined it.
+- **A "yes" for a payment already approved** (by a senior override that lifted the block) makes no
+  transition and writes no unblock row. Its label is the verification response's (T3), and it is
+  recorded once (review 7, finding 6).
 
 ## 6. What each queue lists
 
@@ -595,6 +658,14 @@ to it.
   - writes `label_events.supersedes_label_id`.
 - **`LabelRecorded` and `KafkaMessages`** carry `supersedes_label_id`.
 - **`RedisDecisionStates`** gains the set-if-higher script.
+- **`TenantTransactions.inTenant`** retries SQLSTATE 40P01 as well as 40001. Today it retries only
+  40001 (review 7, re-checked).
+- **The idempotency claim** treats an expired lease as `UNCERTAIN` (T8(a)), and **`PostgresSink`**
+  records `decision_conflicts` (T8(b)).
+- **`HoldTimeoutService`, `JdbcOverdueHolds`, T2's writers, the analyst writes and the poll** refuse
+  a contested transaction (T8(b)).
+- **`DecisionTransitionService.customerAnswered`** reads its current state in T2, and refuses a
+  "yes" after a senior's re-decline (D7).
 - **Every reader of later states reads `v_decision_states`** (T6): `JdbcDecisionStates`,
   `JdbcOverdueHolds`, `UnblockReconciler`, `CustomerSmsSender`, and `backend/analyst`'s
   `AccountQueries`. The V62 and V64 listers read the two base tables.
@@ -668,6 +739,15 @@ to it.
 - **No measurement of PostgreSQL outage duration exists.** The length of a Q3 hold, and therefore
   the size of D-18's breach, cannot be stated from evidence. Under option A the sink's catch-up no
   longer delays a timeout; only the database's own availability does.
+- **The overdue sweep and the unblock reconciler need the Redis leader lease** (M6's code). While
+  Redis is down they run on no instance that holds no local holds. So H3's "10 to 15 s" and D2(e)'s
+  fallback do not hold during a Redis outage, and a held payment whose hold was lost can wait for
+  the outage's duration. ADR 0111 records this alongside the PostgreSQL case (review 7, finding 8).
+- **A recorded reservation means "written to the local spool", not "published"** (M6's assumption,
+  ADR 0064). An instance that loses its spool volume loses the states it had not yet published.
+  Their reservations stand in PostgreSQL, so the poll and the database are right, but Kafka and the
+  webhook never receive them. The runbook replays reservations recorded on that instance (review 7,
+  finding 9).
 - **W (15 min) is ASSUMED.** Escalated MEDIUM payments are held up to W. D-10 calls for a capacity
   model of analysts and alerts (`docs/ml/capacity_model.md`). It does not exist yet, so nothing
   measures whether seniors can answer within W.
@@ -762,3 +842,18 @@ retried decide then reads TIMEOUT and answers 409.
 | D5 re-spooling while Redis is down | T4 and T5: withdrawn |
 | D2 the listers' contradiction and `fs_app`'s grants | T6 and §8 corrected |
 | D3, D4 MINOR | Carried: a property for dropping an unreserved later state and for a dead-lettered sequence-1 record (D3); "benign" for pre-V81 dead letters holds for timeouts and unblocks, and an analyst's would be timed out again as in M6 (D4) |
+
+## 17. Review 7's findings: what draft 8 answers
+
+| Finding | In draft 8 |
+|---|---|
+| 1 MAJOR (M6's): two different first decisions | T8 (options 1 and 2, the owner's decision); T7 answers 503 for a contested transaction; the residual stated |
+| 2 the timeout's id omits the institution | T3 and H5: every id names the institution |
+| 3 404 during an outage | T7 steps 4 and 5: 503, and 404 only when PostgreSQL answers |
+| 4 "unavailable" undefined; staleness outside an outage | T7 step 3: defined; staleness restated, and ADR 0113 corrected |
+| 5 `customerAnswered` read Redis first | D7: it reads inside T2; T7's last sentence corrected |
+| 6 the customer path after overrides | D7: a senior's re-decline blocks it (owner); "yes" after an approval makes no transition |
+| 7 D4(e′) and (f) on Redis | D4(e′) and (f) corrected: only E2 uses Redis |
+| 8 the sweep needs the Redis leader lease | §9 limitations, and ADR 0111 |
+| 9 a lost spool volume | §9 limitations |
+| Re-checked: the runner retries only 40001 today | §8 already lists the change; to be made in P2: `inTenant` retries 40P01 too |

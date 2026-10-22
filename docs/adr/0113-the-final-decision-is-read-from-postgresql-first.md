@@ -65,10 +65,16 @@ The owner's reasoning, recorded as given:
   - **No new state while PostgreSQL is down.** Every writer of a later state needs PostgreSQL: the
     analyst's effect, the timeout's claim (ADR 0111), an override, and the customer's answer. So no
     later state is created during the outage, and Redis cannot fall behind *during* it.
-  - **Stale only from before the outage.** Redis can be stale during an outage only if it lost an
-    acknowledged write before the outage began, the case this ADR removes otherwise. Such a stale
-    answer lasts at most for the outage's duration: once PostgreSQL answers again, the read is
-    correct.
+  - **Stale only from before the outage.** Redis can be stale during an outage if any write to it
+    before the outage was lost after being acknowledged, or failed: its set is best effort (contract
+    T4). Such a stale answer lasts at most for the outage's duration: once PostgreSQL answers again,
+    the read is correct.
+  - **What counts as unavailable.** "Unavailable" means a connection failure or a timeout (contract
+    T7). Any other database error is a 500, never a fallback to Redis.
+  - **When neither can answer.** If PostgreSQL is unavailable and Redis holds nothing, the poll
+    answers 503, never 404, because the transaction may be decided (contract T7).
+  - **A contested transaction** (two different first decisions, contract T8) is answered 503 until
+    an operator resolves it.
   - **The bound is not measured.** No measurement of outage duration exists (ADR 0111's
     limitation).
 - **Redis's role shrinks.** For final decisions it is now an availability fallback, not a source the
