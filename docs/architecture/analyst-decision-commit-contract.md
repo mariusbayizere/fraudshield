@@ -1,6 +1,9 @@
 # Analyst decisions: the commit and undo contract
 
-Status: **draft 8, for independent review.** Draft 8 is limited to the owner's decisions of
+Status: **superseded (2026-10-22)** by `decision-owner-contract.md` and ADR 0114, after review 8
+found three MAJORs. Kept as history; code is not written against it.
+
+Was: **draft 8, for independent review.** Draft 8 is limited to the owner's decisions of
 2026-10-20 on review 7 (`docs/reviews/M8B/decision-commit-contract-review-7.md`), and review 7's
 MINORs:
 - **One first decision stands** (review 7's MAJOR, M6's): options 1 and 2 together (T8).
