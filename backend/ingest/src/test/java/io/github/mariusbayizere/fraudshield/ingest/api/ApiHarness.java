@@ -144,6 +144,7 @@ public final class ApiHarness {
     try {
       DB = TestDatabase.create();
       DB.institution(Fixtures.INSTITUTION);
+      notDemoData();
       apiKeyRows();
       VAULT = new TestVault();
       REDIS = new RedisTestServer();
@@ -177,6 +178,20 @@ public final class ApiHarness {
   }
 
   private ApiHarness() {}
+
+  /**
+   * TestDatabase marks its institution as synthetic demo data, as demo seeding does. The API runs
+   * the synthetic-data guard (ADR 0019 point 5) under the {@code test} profile, which refuses a
+   * database holding demo data; this test bank is not demo data, so the marker is cleared.
+   */
+  private static void notDemoData() throws SQLException {
+    try (Connection c = DB.superuser()) {
+      TestDatabase.exec(
+          c,
+          "UPDATE fraudshield.institutions SET synthetic = false WHERE id = ?",
+          Fixtures.INSTITUTION);
+    }
+  }
 
   private static void apiKeyRows() throws SQLException {
     UUID admin = UUID.randomUUID();

@@ -4468,6 +4468,7 @@ requirements:
   - backend/deployment-guard/src/main/java/io/github/mariusbayizere/fraudshield/deployment/DemoSeedGuard.java
   - backend/deployment-guard/src/main/java/io/github/mariusbayizere/fraudshield/deployment/SyntheticDataFlag.java
   - backend/deployment-guard/src/main/java/io/github/mariusbayizere/fraudshield/deployment/SyntheticDataGuard.java
+  - backend/ingest/src/main/java/io/github/mariusbayizere/fraudshield/ingest/web/EnvironmentController.java
   - frontend/src/lib/environment/syntheticDataBanner.ts
   - tools/src/fraudshield_tools/seed_demo.py
   evidence: []

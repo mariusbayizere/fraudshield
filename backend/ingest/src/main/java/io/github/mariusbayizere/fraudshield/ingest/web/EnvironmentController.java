@@ -8,6 +8,7 @@ import java.util.Objects;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -39,6 +40,7 @@ public final class EnvironmentController {
    * @return the contract's {@code DeploymentEnvironment}
    */
   @ContractOperation("getDeploymentEnvironment")
+  @PreAuthorize("permitAll()")
   @GetMapping(value = "/api/v1/environment", produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<byte[]> environment() {
     return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(body.clone());

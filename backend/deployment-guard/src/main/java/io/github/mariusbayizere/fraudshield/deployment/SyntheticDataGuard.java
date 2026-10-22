@@ -83,6 +83,12 @@ public final class SyntheticDataGuard implements ApplicationListener<Application
     if (password != null) {
       credentials.setProperty("password", password);
     }
+    // A database that accepts the connection but never answers must not stall start-up: the check
+    // fails closed after these bounds instead (PostgreSQL driver properties, in seconds; another
+    // driver ignores them).
+    credentials.setProperty("connectTimeout", "5");
+    credentials.setProperty("loginTimeout", "10");
+    credentials.setProperty("socketTimeout", "10");
     try (Connection connection = DriverManager.getConnection(url, credentials);
         Statement statement = connection.createStatement();
         ResultSet row =

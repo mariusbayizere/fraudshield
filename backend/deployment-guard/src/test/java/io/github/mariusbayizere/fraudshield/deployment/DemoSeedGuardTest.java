@@ -27,8 +27,9 @@ class DemoSeedGuardTest {
     if (!profiles.isEmpty()) {
       builder.profiles(profiles.split(","));
     }
-    // A command-line argument, not builder.properties(): default properties rank below
-    // application.yml, which disables seeding, so the guard would never see the value.
+    // A command-line argument, not builder.properties(): default properties rank below an
+    // application's application.yml, which in the database tool disables seeding, so the guard
+    // would never see the value there.
     return builder.run(
         "--" + DemoSeedGuard.ENABLED_PROPERTY + "=" + seeding, "--spring.datasource.url=");
   }

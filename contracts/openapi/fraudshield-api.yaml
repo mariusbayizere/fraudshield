@@ -228,7 +228,8 @@ paths:
       operationId: getDeploymentEnvironment
       summary: Whether this deployment runs on synthetic data, for the UI banner
       description: >-
-        synthetic_data is true when demo seeding is enabled or the dev or demo profile is active.
+        synthetic_data is true when the database holds demo data, demo seeding is enabled, or the dev
+        or demo profile is active (ADR 0019 point 4).
         The UI then shows the banner "SYNTHETIC DATA — NOT FOR PRODUCTION" on every page, including
         the login page, so the endpoint is public (D-21, ADR 0019). It reveals nothing else about
         the deployment.

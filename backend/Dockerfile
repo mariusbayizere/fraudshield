@@ -11,6 +11,10 @@
 
 # eclipse-temurin:21.0.12.1_1-jdk-noble
 FROM eclipse-temurin@sha256:107215954359f1ab0be058a247d7c64ed6e69c71c1682d471d38ef751ec8e964 AS build
+# The Maven wrapper (only-script mode) unpacks Maven's .zip with unzip, which the JDK image lacks.
+RUN apt-get update \
+ && apt-get install --yes --no-install-recommends unzip \
+ && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY backend/ backend/
 COPY contracts/openapi/ contracts/openapi/

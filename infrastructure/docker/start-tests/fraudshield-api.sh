@@ -5,9 +5,10 @@
 # What it proves, and what it does not. With no database reachable, the API must start its JVM,
 # load the layered jar and its libraries, prepare the Spring context, and then refuse to start at
 # the synthetic-data guard (ADR 0019 point 5; the guard is in the API since the amendment of
-# 2026-10-22). Seeing both lines proves the image, its launcher, its classpath and the guard's
-# registration. It does not prove the API serves requests: that is the compose stack's start test
-# (`fraudshield-api` healthy in the `full` profile).
+# 2026-10-22). The three lines below prove that the image's launcher, its classpath (the PostgreSQL
+# driver included: its own refusal must appear, not a missing-driver error) and the guard's
+# registration work. It does not prove that the API serves requests; the compose stack's start
+# test will, once the API is in the `full` profile (not yet).
 #
 # The container runs as the Kubernetes manifest runs it: user 10001, read-only root filesystem,
 # a writable /tmp, every capability dropped (infrastructure/k8s/base/api.yaml).
@@ -39,4 +40,5 @@ if [ "$status" -eq 0 ] || [ "$status" -eq 124 ]; then
 fi
 expect "Starting FraudShieldApiApplication"
 expect "Refusing to start: cannot check the database for synthetic demo data (ADR 0019)"
+expect "Connection to 127.0.0.1:1 refused"
 echo "fraudshield-api: starts as far as the synthetic-data guard, which fails closed (exit $status)"

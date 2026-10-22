@@ -76,8 +76,8 @@ class SyntheticDataGuardCoverageTest {
     try (ConfigurableApplicationContext context =
         new SpringApplicationBuilder(NoDatabaseApplication.class)
             .web(WebApplicationType.NONE)
-            // The module's application.yml has a default URL; an application without a database
-            // has none.
+            // An empty URL, as an application without a database has (the database tool's
+            // application.yml sets a default one).
             .run("--spring.profiles.active=prod", "--spring.datasource.url=")) {
       assertThat(context.getBean(SyntheticDataStatus.class).syntheticData()).isFalse();
     }

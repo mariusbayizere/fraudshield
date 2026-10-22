@@ -626,6 +626,7 @@ class IngestApiTest {
     assertThat(environment.statusCode()).isEqualTo(200);
     assertThat(environment.headers().firstValue("Content-Type"))
         .hasValueSatisfying(type -> assertThat(type).startsWith("application/json"));
-    assertThat(environment.body()).matches("\\{\"synthetic_data\":(true|false)\\}");
+    // The test profile and a database without demo data: the flag is off (SyntheticDataFlag).
+    assertThat(environment.body()).isEqualTo("{\"synthetic_data\":false}");
   }
 }
