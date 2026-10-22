@@ -221,8 +221,8 @@ class WebhookDeliveryTest {
     try (Connection c = db.superuser()) {
       TestDatabase.exec(
           c,
-          "INSERT INTO fraudshield.institutions (id, code, name, country)"
-              + " VALUES (?, 'no-hooks', 'No webhooks bank', 'RW')",
+          "INSERT INTO fraudshield.institutions (id, code, name, country, time_zone)"
+              + " VALUES (?, 'no-hooks', 'No webhooks bank', 'RW', 'Africa/Kigali')",
           other);
     }
     DecisionState elsewhere =

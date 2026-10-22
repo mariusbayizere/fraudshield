@@ -170,8 +170,8 @@ public final class TestDatabase {
     try (Connection admin = superuser();
         var insert =
             admin.prepareStatement(
-                "INSERT INTO fraudshield.institutions (id, code, name, country)"
-                    + " VALUES (?, ?, ?, 'RW')")) {
+                "INSERT INTO fraudshield.institutions (id, code, name, country, time_zone)"
+                    + " VALUES (?, ?, ?, 'RW', 'Africa/Kigali')")) {
       insert.setObject(1, id);
       insert.setString(2, code);
       insert.setString(3, "Synthetic " + code);

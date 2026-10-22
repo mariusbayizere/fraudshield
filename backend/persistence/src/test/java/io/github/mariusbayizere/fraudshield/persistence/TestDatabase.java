@@ -57,6 +57,44 @@ public final class TestDatabase {
    * @return the database
    */
   public static synchronized TestDatabase create() {
+    TestDatabase db = createUnmigrated();
+    db.migrate(null);
+    return db;
+  }
+
+  /**
+   * Creates and bootstraps a new database and migrates it up to a version, so that a test can seed
+   * rows as they were before a later migration and then run it with {@link #migrate(String)}.
+   *
+   * @param target the last version to apply, for example {@code "81"}
+   * @return the database
+   */
+  public static synchronized TestDatabase createAt(String target) {
+    TestDatabase db = createUnmigrated();
+    db.migrate(Objects.requireNonNull(target, "target"));
+    return db;
+  }
+
+  /**
+   * Applies the pending migrations as {@code fs_migrator}.
+   *
+   * @param target the last version to apply, or null for all
+   */
+  public void migrate(String target) {
+    var flyway =
+        Flyway.configure()
+            .dataSource(url(), "fs_migrator", PASSWORDS.get("fs_migrator"))
+            .schemas("fraudshield")
+            .defaultSchema("fraudshield")
+            .createSchemas(false)
+            .locations("classpath:db/migration");
+    if (target != null) {
+      flyway.target(target);
+    }
+    flyway.load().migrate();
+  }
+
+  private static TestDatabase createUnmigrated() {
     String adminUrl = System.getenv(EXTERNAL_URL_VARIABLE);
     if (adminUrl == null || adminUrl.isBlank()) {
       adminUrl = containerAdminUrl();
@@ -70,14 +108,6 @@ public final class TestDatabase {
     }
     TestDatabase db = new TestDatabase(adminUrl, name);
     db.bootstrap();
-    Flyway.configure()
-        .dataSource(db.url(), "fs_migrator", PASSWORDS.get("fs_migrator"))
-        .schemas("fraudshield")
-        .defaultSchema("fraudshield")
-        .createSchemas(false)
-        .locations("classpath:db/migration")
-        .load()
-        .migrate();
     return db;
   }
 

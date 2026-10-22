@@ -35,6 +35,11 @@ public class InstitutionEntity {
   @Column(name = "country", nullable = false, length = 2)
   private String country;
 
+  // V83: the IANA zone whose local day is the institution's "today" (ADR 0117). Named explicitly
+  // when an institution is created; nothing derives it from the country.
+  @Column(name = "time_zone", nullable = false)
+  private String timeZone;
+
   @Column(name = "synthetic", nullable = false)
   private boolean synthetic;
 
@@ -54,13 +59,16 @@ public class InstitutionEntity {
    * @param code its short code
    * @param name its display name
    * @param country ISO 3166-1 alpha-2
+   * @param timeZone its IANA time zone, for example {@code Africa/Kigali} (ADR 0117)
    * @param synthetic true for demo and test data (ADR 0019)
    */
-  public InstitutionEntity(UUID id, String code, String name, String country, boolean synthetic) {
+  public InstitutionEntity(
+      UUID id, String code, String name, String country, String timeZone, boolean synthetic) {
     this.id = id;
     this.code = code;
     this.name = name;
     this.country = country;
+    this.timeZone = timeZone;
     this.synthetic = synthetic;
   }
 

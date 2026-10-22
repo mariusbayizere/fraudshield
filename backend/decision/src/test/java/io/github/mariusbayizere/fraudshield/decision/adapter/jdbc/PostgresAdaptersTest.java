@@ -328,8 +328,8 @@ class PostgresAdaptersTest {
     try (Connection c = db.superuser()) {
       TestDatabase.exec(
           c,
-          "INSERT INTO fraudshield.institutions (id, code, name, country)"
-              + " VALUES (?, 'bare-bank', 'Bare bank', 'RW')",
+          "INSERT INTO fraudshield.institutions (id, code, name, country, time_zone)"
+              + " VALUES (?, 'bare-bank', 'Bare bank', 'RW', 'Africa/Kigali')",
           unconfigured);
     }
     assertThat(configuration.thresholds(unconfigured).version()).isZero();

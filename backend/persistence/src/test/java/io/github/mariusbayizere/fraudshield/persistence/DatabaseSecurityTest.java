@@ -41,11 +41,11 @@ class DatabaseSecurityTest {
     try (Connection admin = db.superuser()) {
       exec(
           admin,
-          "INSERT INTO fraudshield.institutions (id, code, name, country) VALUES ('"
+          "INSERT INTO fraudshield.institutions (id, code, name, country, time_zone) VALUES ('"
               + BANK_A
-              + "', 'bank-a', 'Synthetic Bank A', 'RW'), ('"
+              + "', 'bank-a', 'Synthetic Bank A', 'RW', 'Africa/Kigali'), ('"
               + BANK_B
-              + "', 'bank-b', 'Synthetic Bank B', 'KE')");
+              + "', 'bank-b', 'Synthetic Bank B', 'KE', 'Africa/Nairobi')");
     }
     analystA = insertUser(BANK_A, "analyst.a@example.com", "EMPA0001", "ANALYST");
     insertUser(BANK_B, "analyst.b@example.com", "EMPB0001", "ANALYST");
@@ -707,6 +707,87 @@ class DatabaseSecurityTest {
       exec(app, commit(late));
       assertSqlState(app, undo(late), "23514");
     }
+  }
+
+  @Test
+  @Tag("FR-04-11")
+  @Tag("UX-DASH-01")
+  void institutionNamesOneZoneTheDatabaseKnowsOnInsertAndOnUpdate() throws SQLException {
+    // V83 (ADR 0117 point 1): no default, no fill from the country, and an unknown zone refused.
+    try (Connection admin = db.superuser()) {
+      admin.setAutoCommit(false);
+      assertSqlState(
+          admin,
+          "INSERT INTO fraudshield.institutions (code, name, country) VALUES"
+              + " ('no-zone', 'Synthetic No Zone', 'RW')",
+          "23502");
+      assertSqlState(
+          admin,
+          "INSERT INTO fraudshield.institutions (code, name, country, time_zone) VALUES"
+              + " ('mars-bank', 'Synthetic Mars Bank', 'RW', 'Mars/Olympus_Mons')",
+          "23514");
+      assertSqlState(
+          admin,
+          "UPDATE fraudshield.institutions SET time_zone = 'Africa/Atlantis' WHERE id = '"
+              + BANK_A
+              + "'",
+          "23514");
+      exec(
+          admin,
+          "INSERT INTO fraudshield.institutions (code, name, country, time_zone) VALUES"
+              + " ('lubumbashi-bank', 'Synthetic Lubumbashi Bank', 'CD', 'Africa/Lubumbashi')");
+      admin.rollback();
+    }
+  }
+
+  @Test
+  @Tag("FR-04-11")
+  void timeToDecisionIsComputedOnDbTimeAndNeverNegative() throws SQLException {
+    // V83 (ADR 0117 point 3): an entry raised on an instance clock ahead of the database must not
+    // fail the decision on V4's CHECK; its time to decision is stored as 0. A value the inserting
+    // role supplies is replaced.
+    try (Connection app = tenant("fs_app", BANK_A)) {
+      final UUID ahead = reviewOf(app, entry(app, "now() + interval '1 hour'"));
+      final UUID earlier = reviewOf(app, entry(app, "now() - interval '90 seconds'"));
+      List<Long> durations =
+          longs(
+              app,
+              "SELECT d.decision_duration_seconds FROM alert_decisions d WHERE d.id IN ('"
+                  + ahead
+                  + "', '"
+                  + earlier
+                  + "') ORDER BY d.decision_duration_seconds");
+      assertThat(durations).hasSize(2);
+      assertThat(durations.get(0)).isZero();
+      assertThat(durations.get(1)).isBetween(90L, 120L);
+      app.rollback();
+    }
+  }
+
+  private static UUID entry(Connection app, String createdAt) throws SQLException {
+    return uuid(
+        app,
+        "INSERT INTO alert_queue_entries (institution_id, transaction_id, fraud_score_id, tier,"
+            + " fraud_probability, review_deadline_at, created_at) VALUES ('"
+            + BANK_A
+            + "', gen_random_uuid(), gen_random_uuid(), 'MEDIUM', 0.7,"
+            + " now() + interval '30 seconds', "
+            + createdAt
+            + ") RETURNING id");
+  }
+
+  private static UUID reviewOf(Connection app, UUID entry) throws SQLException {
+    return uuid(
+        app,
+        "INSERT INTO alert_decisions (institution_id, alert_queue_entry_id, analyst_id, decision,"
+            + " analyst_comment, idempotency_key, decision_duration_seconds) VALUES ('"
+            + BANK_A
+            + "', '"
+            + entry
+            + "', '"
+            + analystA
+            + "', 'MARK_LEGITIMATE', 'Customer travels every month', gen_random_uuid(), 7)"
+            + " RETURNING id");
   }
 
   private static String commit(UUID decision) {

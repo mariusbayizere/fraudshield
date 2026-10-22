@@ -121,6 +121,7 @@ public final class DemoDataSeeder implements ApplicationRunner {
                       INSTITUTION_CODE,
                       "Synthetic Demo Bank (not a real institution)",
                       "RW",
+                      "Africa/Kigali",
                       true));
               // The institutions policy keys on id, so the row above is written before the tenant
               // is set, as fs_migrator. Everything after it is tenant-scoped.

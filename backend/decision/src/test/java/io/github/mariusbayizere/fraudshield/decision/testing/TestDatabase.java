@@ -166,8 +166,8 @@ public final class TestDatabase {
       c.setAutoCommit(false);
       exec(
           c,
-          "INSERT INTO fraudshield.institutions (id, code, name, country, synthetic)"
-              + " VALUES (?, ?, 'Synthetic test bank', 'RW', true)",
+          "INSERT INTO fraudshield.institutions (id, code, name, country, time_zone, synthetic)"
+              + " VALUES (?, ?, 'Synthetic test bank', 'RW', 'Africa/Kigali', true)",
           id,
           "test-" + id.toString().substring(0, 8));
       exec(

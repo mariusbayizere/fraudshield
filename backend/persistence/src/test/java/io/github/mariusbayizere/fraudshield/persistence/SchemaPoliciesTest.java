@@ -40,11 +40,11 @@ class SchemaPoliciesTest {
     try (Connection admin = db.superuser();
         Statement statement = admin.createStatement()) {
       statement.execute(
-          "INSERT INTO fraudshield.institutions (id, code, name, country) VALUES ('"
+          "INSERT INTO fraudshield.institutions (id, code, name, country, time_zone) VALUES ('"
               + BANK_A
-              + "', 'bank-a', 'Synthetic Bank A', 'RW'), ('"
+              + "', 'bank-a', 'Synthetic Bank A', 'RW', 'Africa/Kigali'), ('"
               + BANK_B
-              + "', 'bank-b', 'Synthetic Bank B', 'KE')");
+              + "', 'bank-b', 'Synthetic Bank B', 'KE', 'Africa/Nairobi')");
     }
   }
 

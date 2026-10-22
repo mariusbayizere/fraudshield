@@ -108,8 +108,9 @@ class _Database:
             self.admin = self.connect("postgres", self.password)
             self.admin.autocommit = True
             self.admin.run(
-                "INSERT INTO fraudshield.institutions (id, code, name, country)"
-                " VALUES (CAST(:i AS uuid), 'fallback-test', 'Fallback Test', 'RW')",
+                "INSERT INTO fraudshield.institutions (id, code, name, country, time_zone)"
+                " VALUES (CAST(:i AS uuid), 'fallback-test', 'Fallback Test', 'RW',"
+                " 'Africa/Kigali')",
                 i=INSTITUTION,
             )
             self.admin.run(
