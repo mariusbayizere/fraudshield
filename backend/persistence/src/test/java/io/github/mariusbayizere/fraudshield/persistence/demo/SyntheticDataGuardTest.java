@@ -3,6 +3,7 @@ package io.github.mariusbayizere.fraudshield.persistence.demo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
+import io.github.mariusbayizere.fraudshield.deployment.SyntheticDataStatus;
 import io.github.mariusbayizere.fraudshield.persistence.DatabaseToolApplication;
 import io.github.mariusbayizere.fraudshield.persistence.TestDatabase;
 import java.sql.Connection;

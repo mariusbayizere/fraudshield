@@ -1,4 +1,4 @@
-package io.github.mariusbayizere.fraudshield.persistence.demo;
+package io.github.mariusbayizere.fraudshield.deployment;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -12,7 +12,6 @@ import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
-import org.springframework.mock.env.MockEnvironment;
 
 /** Demo seeding must refuse to run outside the dev and demo profiles (ADR 0019, D-21). */
 @Tag("D-21")
@@ -48,17 +47,6 @@ class DemoSeedGuardTest {
     assertThatThrownBy(() -> start("", true)).isInstanceOf(IllegalStateException.class);
   }
 
-  @Test
-  void applicationYamlLeavesSeedingDisabledByDefault() {
-    try (ConfigurableApplicationContext context =
-        new SpringApplicationBuilder(EmptyApplication.class)
-            .web(WebApplicationType.NONE)
-            .profiles("prod")
-            .run("--spring.datasource.url=")) {
-      assertThat(DemoSeedGuard.isEnabled(context.getEnvironment())).isFalse();
-    }
-  }
-
   @ParameterizedTest
   @ValueSource(strings = {"dev", "demo", "dev,demo"})
   void devAndDemoProfilesMaySeed(String profiles) {
@@ -70,18 +58,5 @@ class DemoSeedGuardTest {
   @Test
   void productionStartsNormallyWhenSeedingIsDisabled() {
     assertThatCode(() -> start("prod", false).close()).doesNotThrowAnyException();
-  }
-
-  @Test
-  void seederBeanFactoryChecksAgain() {
-    MockEnvironment environment = new MockEnvironment();
-    environment.setActiveProfiles("prod");
-    environment.setProperty(DemoSeedGuard.ENABLED_PROPERTY, "true");
-    assertThatThrownBy(
-            () ->
-                new DemoSeedConfiguration()
-                    .demoDataSeeder(
-                        environment, null, null, null, null, null, null, null, null, null))
-        .isInstanceOf(IllegalStateException.class);
   }
 }

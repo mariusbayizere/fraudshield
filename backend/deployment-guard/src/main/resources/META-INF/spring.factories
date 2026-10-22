@@ -1,0 +1,3 @@
+org.springframework.context.ApplicationListener=\
+io.github.mariusbayizere.fraudshield.deployment.DemoSeedGuard,\
+io.github.mariusbayizere.fraudshield.deployment.SyntheticDataGuard

@@ -1,4 +1,4 @@
-package io.github.mariusbayizere.fraudshield.persistence.demo;
+package io.github.mariusbayizere.fraudshield.deployment;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;

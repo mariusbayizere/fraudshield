@@ -1,4 +1,4 @@
-package io.github.mariusbayizere.fraudshield.persistence.demo;
+package io.github.mariusbayizere.fraudshield.deployment;
 
 import java.util.Arrays;
 import java.util.Set;

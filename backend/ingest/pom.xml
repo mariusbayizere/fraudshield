@@ -17,6 +17,11 @@
   <dependencies>
     <dependency>
       <groupId>io.github.mariusbayizere.fraudshield</groupId>
+      <artifactId>fraudshield-deployment-guard</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.github.mariusbayizere.fraudshield</groupId>
       <artifactId>fraudshield-decision</artifactId>
     </dependency>
     <dependency>

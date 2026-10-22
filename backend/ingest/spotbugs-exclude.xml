@@ -23,6 +23,13 @@
     <Class name="io.github.mariusbayizere.fraudshield.ingest.web.VerificationPageController"/>
     <Bug pattern="SPRING_ENDPOINT"/>
   </Match>
+  <!-- EnvironmentController serves one constant body decided at start-up by SyntheticDataGuard:
+       {"synthetic_data": boolean}, public by contract so the banner shows before login (ADR 0019,
+       D-21). It takes no parameter and reads no request state. -->
+  <Match>
+    <Class name="io.github.mariusbayizere.fraudshield.ingest.web.EnvironmentController"/>
+    <Bug pattern="SPRING_ENDPOINT"/>
+  </Match>
   <!-- ApiDocsController serves one constant byte array read at start-up: the frozen OpenAPI
        contract, which is public by definition (FR-01-07). It takes no parameter and reads no
        request state, so there is nothing to authenticate or validate. -->

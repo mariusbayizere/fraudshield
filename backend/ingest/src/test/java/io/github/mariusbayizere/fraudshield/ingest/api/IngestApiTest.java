@@ -617,4 +617,15 @@ class IngestApiTest {
     assertThat(health.statusCode()).isEqualTo(200);
     assertThat(health.body()).isEqualTo("{\"status\":\"UP\"}");
   }
+
+  @Test
+  @Tag("D-21")
+  void theEnvironmentIsPublicAndCarriesOnlyTheSyntheticDataFlag() throws Exception {
+    // ADR 0019: the banner's flag, before login, and nothing else about the deployment.
+    HttpResponse<String> environment = get("/api/v1/environment", null);
+    assertThat(environment.statusCode()).isEqualTo(200);
+    assertThat(environment.headers().firstValue("Content-Type"))
+        .hasValueSatisfying(type -> assertThat(type).startsWith("application/json"));
+    assertThat(environment.body()).matches("\\{\"synthetic_data\":(true|false)\\}");
+  }
 }

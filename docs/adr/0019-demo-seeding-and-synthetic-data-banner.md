@@ -98,3 +98,30 @@ only and to show "SYNTHETIC DATA — NOT FOR PRODUCTION" in the UI.
   `dev,prod`, `demo,staging` and no profile; succeeds under `dev`, `demo`; `application.yml` keeps
   seeding off), `DemoDataSeederTest`, `SyntheticDataFlagTest`, `tools/tests/test_seed_demo.py`, the
   contract test for `getDeploymentEnvironment` and the front-end banner test.
+
+## Amendment (M9, 2026-10-22): the guards move to their own module, and the API now carries them
+
+- **What was found.** The guards lived in `backend/persistence`, and nothing depended on that
+  module except the database tool itself. The API process (`backend/ingest`) therefore ran neither
+  `DemoSeedGuard` nor `SyntheticDataGuard`, and no `SyntheticDataStatus` existed for
+  `GET /api/v1/environment` to serve. Point 5's "runs in every Spring Boot application" was true of
+  the database tool only, so an API started under `prod` against a seeded database would not have
+  refused to start.
+- **Why the API does not simply depend on `persistence`.** That module is the database tool: its
+  `application.yml` sets `web-application-type: none`, and it carries a `@SpringBootApplication` and
+  JPA entities that the API's root-package scan would pick up.
+- **The change.** `DemoSeedGuard`, `SyntheticDataGuard`, `SyntheticDataFlag`, `SyntheticDataStatus`
+  and the `spring.factories` that registers the guards move to `backend/deployment-guard`
+  (package `io.github.mariusbayizere.fraudshield.deployment`), which depends on Spring Boot alone.
+  `persistence` and `ingest` both depend on it, so the database tool and the API run the same
+  guards. `EnvironmentController` in `ingest` serves the flag.
+- **Tests.** The guard's tests without a database (`DemoSeedGuardTest`, `SyntheticDataFlagTest`,
+  `SyntheticDataGuardCoverageTest`, and the new `SyntheticDataGuardStartupTest`, which covers
+  failing closed on an unreachable database) move with it. `SyntheticDataGuardTest`, which starts
+  the database tool against seeded, clean and unmigrated databases, and `DemoSeedConfigurationTest`
+  (the tool's `application.yml` and the seeder's own check) stay in `persistence`.
+  `IngestApiTest.theEnvironmentIsPublicAndCarriesOnlyTheSyntheticDataFlag` checks the endpoint in
+  the assembled API.
+- **A consequence for the API, stated.** The API now fails closed at start-up when its database
+  cannot be reached for the check, as point 5 already specified for every process. Anything that
+  starts the API must start it after the database is up.

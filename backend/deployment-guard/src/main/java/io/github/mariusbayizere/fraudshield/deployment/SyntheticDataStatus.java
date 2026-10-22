@@ -1,4 +1,4 @@
-package io.github.mariusbayizere.fraudshield.persistence.demo;
+package io.github.mariusbayizere.fraudshield.deployment;
 
 /**
  * Whether the UI must show the synthetic-data banner, decided once at startup by {@link

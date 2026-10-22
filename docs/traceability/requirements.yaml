@@ -4465,9 +4465,9 @@ requirements:
   status: IN_PROGRESS
   verification: test
   implementation:
-  - backend/persistence/src/main/java/io/github/mariusbayizere/fraudshield/persistence/demo/DemoSeedGuard.java
-  - backend/persistence/src/main/java/io/github/mariusbayizere/fraudshield/persistence/demo/SyntheticDataFlag.java
-  - backend/persistence/src/main/java/io/github/mariusbayizere/fraudshield/persistence/demo/SyntheticDataGuard.java
+  - backend/deployment-guard/src/main/java/io/github/mariusbayizere/fraudshield/deployment/DemoSeedGuard.java
+  - backend/deployment-guard/src/main/java/io/github/mariusbayizere/fraudshield/deployment/SyntheticDataFlag.java
+  - backend/deployment-guard/src/main/java/io/github/mariusbayizere/fraudshield/deployment/SyntheticDataGuard.java
   - frontend/src/lib/environment/syntheticDataBanner.ts
   - tools/src/fraudshield_tools/seed_demo.py
   evidence: []
