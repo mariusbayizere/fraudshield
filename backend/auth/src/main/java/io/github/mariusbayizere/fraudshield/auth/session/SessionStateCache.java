@@ -6,10 +6,12 @@ import io.github.mariusbayizere.fraudshield.auth.jwt.StaffClaims;
 import io.github.mariusbayizere.fraudshield.auth.support.SafeRedis;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Function;
 import java.util.function.LongSupplier;
 
@@ -58,8 +60,60 @@ public final class SessionStateCache {
   private final Clock clock;
   private final Map<UUID, Cached<Long>> versions = new ConcurrentHashMap<>();
   private final Map<UUID, Cached<Boolean>> sessions = new ConcurrentHashMap<>();
+  private final List<ChangeListener> listeners = new CopyOnWriteArrayList<>();
 
   private record Cached<T>(T value, long expiresAtNanos) {}
+
+  /** The answer of a gated check (ADR 0115 point 3). */
+  public enum Currency {
+    /** The session is current. */
+    CURRENT,
+    /** The session is not current. */
+    NOT_CURRENT,
+    /** The answer needed a database load the gate refused. */
+    UNKNOWN
+  }
+
+  /** A gate on database loads only: in-process and Redis answers never consult it. */
+  @FunctionalInterface
+  public interface LoadGate {
+    /**
+     * Whether a database load may proceed now.
+     *
+     * @return true to load
+     */
+    boolean tryAcquire();
+  }
+
+  /**
+   * Told of an invalidation after the local entry is removed (ADR 0115 point 3), so a re-check it
+   * triggers can never be answered from the stale in-process entry.
+   */
+  public interface ChangeListener {
+    /**
+     * A user's token version changed.
+     *
+     * @param userId the user
+     */
+    void versionChanged(UUID userId);
+
+    /**
+     * A session (family) ended.
+     *
+     * @param sessionId the session
+     */
+    void sessionEnded(UUID sessionId);
+  }
+
+  /**
+   * Registers a listener of invalidations. It must not block: {@link #onMessage} calls it on the
+   * pub/sub thread.
+   *
+   * @param listener the listener
+   */
+  public void addChangeListener(ChangeListener listener) {
+    listeners.add(Objects.requireNonNull(listener, "listener"));
+  }
 
   /**
    * Creates the cache.
@@ -119,6 +173,31 @@ public final class SessionStateCache {
       active = state.active();
     }
     return version != null && version == claims.tokenVersion() && active;
+  }
+
+  /**
+   * Whether the token's session is current, with database loads gated (ADR 0115 point 3): the gate
+   * is consulted only immediately before a load, and a refused gate answers {@link
+   * Currency#UNKNOWN} without reading the database.
+   *
+   * @param claims the token's claims
+   * @param gate the load gate
+   * @return the answer
+   */
+  public Currency isCurrent(StaffClaims claims, LoadGate gate) {
+    Long version = cachedVersion(claims.userId());
+    Boolean active = cachedSession(claims.sessionId());
+    if (version == null || active == null) {
+      if (!gate.tryAcquire()) {
+        return Currency.UNKNOWN;
+      }
+      State state = load(claims);
+      version = state.version();
+      active = state.active();
+    }
+    return version != null && version == claims.tokenVersion() && active
+        ? Currency.CURRENT
+        : Currency.NOT_CURRENT;
   }
 
   private record State(Long version, boolean active) {}
@@ -235,9 +314,18 @@ public final class SessionStateCache {
   public void onMessage(String message) {
     try {
       if (message.startsWith(VERSION_MESSAGE)) {
-        versions.remove(UUID.fromString(message.substring(VERSION_MESSAGE.length())));
+        UUID userId = UUID.fromString(message.substring(VERSION_MESSAGE.length()));
+        versions.remove(userId);
+        // After the removal, so a re-check reads Redis or the database (ADR 0115 point 3).
+        for (ChangeListener listener : listeners) {
+          listener.versionChanged(userId);
+        }
       } else if (message.startsWith(SESSION_MESSAGE)) {
-        sessions.remove(UUID.fromString(message.substring(SESSION_MESSAGE.length())));
+        UUID sessionId = UUID.fromString(message.substring(SESSION_MESSAGE.length()));
+        sessions.remove(sessionId);
+        for (ChangeListener listener : listeners) {
+          listener.sessionEnded(sessionId);
+        }
       }
     } catch (IllegalArgumentException ignored) {
       // Not a message of ours; the time to live still bounds staleness.

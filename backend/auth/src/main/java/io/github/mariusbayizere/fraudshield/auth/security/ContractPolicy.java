@@ -171,7 +171,8 @@ public final class ContractPolicy {
         roles,
         scopes,
         Boolean.TRUE.equals(declared.get("public")),
-        Boolean.TRUE.equals(declared.get("refresh-cookie")));
+        Boolean.TRUE.equals(declared.get("refresh-cookie")),
+        (String) declared.get("in-band"));
   }
 
   @SuppressWarnings("unchecked")

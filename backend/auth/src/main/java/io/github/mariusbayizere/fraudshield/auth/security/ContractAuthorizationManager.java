@@ -53,6 +53,11 @@ public final class ContractAuthorizationManager
     if (access.isPublic() || access.refreshCookie()) {
       return GRANTED;
     }
+    if (access.inBand() != null) {
+      // The real-time handshake authenticates no one; its roles are enforced at the STOMP CONNECT
+      // (ADR 0115 point 9). Only the exact path matches, so sub-paths stay denied.
+      return GRANTED;
+    }
     Authentication caller = authentication.get();
     if (caller == null || !caller.isAuthenticated()) {
       return DENIED;
