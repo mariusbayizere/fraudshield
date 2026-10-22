@@ -132,6 +132,19 @@ operations:
       - { problem: decision-not-committed, status: 409 }
       - { problem: own-decision-override, status: 403 }
       - { problem: stale-alert, status: 409 }
+  assignAlert:
+    roles: [SENIOR_ANALYST, RISK_OFFICER]
+    ref: "UX-ROLE-SN-02 (reassign, self-assign from the pool); RISK_OFFICER per UX-ROLE-RO-01 'additional to SENIOR_ANALYST'; advisory (ADR 0116)"
+    rules:
+      - { problem: escalation-level-required, status: 403 }
+      - { problem: assignment-held-by-higher-role, status: 403 }
+      - { problem: validation, status: 422, code: assignee_not_eligible }
+      - { problem: stale-alert, status: 409 }
+  listAssignableStaff:
+    roles: [SENIOR_ANALYST, RISK_OFFICER]
+    ref: "UX-ROLE-SN-02 analyst dropdown (purpose=assign), UX-ROLE-SN-01 analyst autocomplete filter (purpose=filter); RISK_OFFICER per UX-ROLE-RO-01; no e-mail (ADR 0116)"
+    rules:
+      - { effect: filter }
   getScoringResult:
     roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
     ref: "FR-02-01, D-12 (full result on staff endpoints only)"

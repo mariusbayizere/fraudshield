@@ -145,7 +145,10 @@ def test_api_keys_reach_only_the_four_machine_operations() -> None:
 @pytest.mark.req("FR-07-01")
 @pytest.mark.parametrize(
     "operation_id",
-    sorted(ALERT_DECISION_OPERATIONS | {"updateUser", *DUAL_CONTROL[:2], *DUAL_CONTROL[4:]}),
+    sorted(
+        ALERT_DECISION_OPERATIONS
+        | {"assignAlert", "updateUser", *DUAL_CONTROL[:2], *DUAL_CONTROL[4:]}
+    ),
 )
 def test_object_level_rules_are_declared_with_documented_problems(operation_id: str) -> None:
     spec = OPS[operation_id].spec

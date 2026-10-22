@@ -328,6 +328,7 @@ def test_every_staff_name_field_uses_the_person_name_rule() -> None:
         "StaffUserUpdate",
         "RegistrationRequest",
         "TeamMemberPerformance",
+        "AssignableStaff",
     ):
         properties = SCHEMAS[name]["properties"]
         for field in ("first_name", "last_name"):
@@ -581,8 +582,9 @@ def test_unique_keys_name_properties_of_their_items() -> None:
                 walk(value)
 
     walk(SCHEMAS)
-    # ADR 0117 adds two keyed arrays: AnalystPerformance.daily and TeamPerformance.analysts.
-    assert found == 8
+    # ADR 0117 adds two keyed arrays (AnalystPerformance.daily, TeamPerformance.analysts) and
+    # ADR 0116 one (AssignableStaffList.staff).
+    assert found == 9
 
 
 @pytest.mark.req("FR-04-03")

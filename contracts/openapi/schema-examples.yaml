@@ -36,6 +36,11 @@ examples:
   - decision: CONFIRM_FRAUD
     comment: Velocity spike after SIM swap
     alert_version: 2
+  AlertAssignmentRequest:
+  - assignee_user_id: 5b1f0a2c-3d4e-4f60-8a7b-9c0d1e2f3a4b
+    alert_version: 2
+  - assignee_user_id: null
+    alert_version: 3
   AlertDetail:
   - alert_id: 0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d
     version: 2
@@ -75,6 +80,11 @@ examples:
     summary_parameters:
       count: 6
     anomaly_score: 0.42
+    assigned_analyst:
+      user_id: 5b1f0a2c-3d4e-4f60-8a7b-9c0d1e2f3a4b
+      first_name: Amani
+      last_name: Uwase
+      role: ANALYST
     decisions:
     - decision_id: 1b2c3d4e-5f60-4a7b-9c8d-0e1f2a3b4c5d
       decision: CONFIRM_FRAUD
@@ -123,6 +133,11 @@ examples:
         template_key: feature.tx_count_24h.high
       review_deadline_at: '2026-09-17T08:16:00Z'
       escalated_from_alert_id: null
+      assigned_analyst:
+        user_id: 5b1f0a2c-3d4e-4f60-8a7b-9c0d1e2f3a4b
+        first_name: Amani
+        last_name: Uwase
+        role: ANALYST
     next_cursor: eyJvZmZzZXQiOjUwfQ
   AlertSummary:
   - alert_id: 0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d
@@ -158,6 +173,7 @@ examples:
       template_key: feature.tx_count_24h.high
     review_deadline_at: '2026-09-17T08:16:00Z'
     escalated_from_alert_id: null
+    assigned_analyst: null
   AnalystPerformance:
   - reviewed_today: 38
     average_seconds_to_decision: 21.4
@@ -291,6 +307,23 @@ examples:
     last_used_at: null
     raw_key: fsk_prod_a1b2c3d4e5f6_EXAMPLEexampleEXAMPLEexampleEXAMPLEexample0
     webhook_signing_secret: whsec_prod_EXAMPLEexampleEXAMPLEexample0000
+  AssignableStaffList:
+  - items:
+    - user_id: 5b1f0a2c-3d4e-4f60-8a7b-9c0d1e2f3a4b
+      first_name: Amani
+      last_name: Uwase
+      role: ANALYST
+  - items:
+    - user_id: 5b1f0a2c-3d4e-4f60-8a7b-9c0d1e2f3a4b
+      first_name: Amani
+      last_name: Uwase
+      role: ANALYST
+      status: ACTIVE
+    - user_id: 7c2e1b3d-4f50-4a61-9b8c-0d1e2f3a4b5c
+      first_name: Jean Claude
+      last_name: Habimana
+      role: RISK_OFFICER
+      status: DEACTIVATED
   AuditEventPage:
   - items:
     - event_id: 4e5f6071-8a9b-4cad-9e0f-3a4b5c6d7e8f
@@ -1378,6 +1411,7 @@ examples:
         template_key: feature.tx_count_24h.high
       review_deadline_at: '2026-09-17T08:16:00Z'
       escalated_from_alert_id: null
+      assigned_analyst: null
   SystemHealth:
   - kafka_consumer_lag:
     - topic: fs.transactions.scored

@@ -894,7 +894,20 @@ paths:
           style: form
           explode: false
           schema: { type: array, items: { $ref: "#/components/schemas/AlertTier" }, uniqueItems: true }
-        - { name: analyst_id, in: query, schema: { type: string, format: uuid } }
+        - name: analyst_id
+          in: query
+          description: >-
+            Entries currently assigned to this staff user, or carrying a decision by them that has
+            not been undone. Without `outcome` a queue lists open entries only, and an open entry has
+            no such decision, so this is "assigned to them".
+          schema: { type: string, format: uuid }
+        - name: assignment
+          in: query
+          description: >-
+            `unassigned`: entries with no assigned analyst (the pool). `assigned`: entries with one.
+            Omitted: both. With `analyst_id`, only `assigned` is accepted; `unassigned` answers 422
+            `validation`, code `unsupported_value`, field `assignment`.
+          schema: { type: string, enum: [assigned, unassigned] }
         - name: outcome
           in: query
           style: form
@@ -1105,6 +1118,96 @@ paths:
         "409": { $ref: "#/components/responses/StateConflict" }
         "422": { $ref: "#/components/responses/ValidationProblem" }
         "503": { $ref: "#/components/responses/ServiceUnavailable" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /alerts/{alert_id}/assignment:
+    put:
+      tags: [alerts]
+      operationId: assignAlert
+      summary: Assign an alert to an analyst, take it from the pool, or return it to the pool (UX-ROLE-SN-02)
+      description: |
+        Advisory: sets who is expected to work the entry; it does not change who may see or decide it.
+        Only open entries (PENDING, IN_REVIEW) can be assigned; an entry whose decision is
+        PENDING_COMMIT is not open, and an undo returns it open with its previous assignment. Never
+        touches the transaction's decision owner or an analyst's claim. Increments `version`.
+        Checks run in this order: 404; idempotency; escalation level; assignment held by a higher
+        role; open and current (409 stale-alert with the current alert); assignee eligibility (422);
+        no change (422). Replays with the same Idempotency-Key, caller, alert and fingerprint return
+        200 with the entry as it now stands; the same key with anything else is 409
+        idempotency-conflict. Keys are scoped to this operation. A refused request records no key.
+      x-required-roles: [SENIOR_ANALYST, RISK_OFFICER]
+      x-authorisation-rules:
+        - rule: Callers rank ANALYST < SENIOR_ANALYST < RISK_OFFICER (E.8). An escalated entry can be assigned only by a caller whose role is at or above its target_role
+          problem: urn:fraudshield:problem:escalation-level-required
+          status: 403
+        - rule: An entry assigned to an ACTIVE or LOCKED user whose current role ranks above the caller cannot be reassigned or unassigned by the caller
+          problem: urn:fraudshield:problem:assignment-held-by-higher-role
+          status: 403
+        - rule: The assignee must be an ACTIVE or LOCKED ANALYST, SENIOR_ANALYST or RISK_OFFICER of the caller's institution, ranking at or below the caller and, for an escalated entry, at or above its target_role
+          problem: urn:fraudshield:problem:validation
+          code: assignee_not_eligible
+          status: 422
+        - rule: The entry must be open and alert_version current; otherwise the current alert is returned
+          problem: urn:fraudshield:problem:stale-alert
+          status: 409
+      parameters:
+        - $ref: "#/components/parameters/AlertId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AlertAssignmentRequest" }
+      responses:
+        "200":
+          description: Assigned; the entry as it now stands
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AlertSummary" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/AuthorisationRuleViolation" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/StateConflict" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /team/assignees:
+    get:
+      tags: [alerts]
+      operationId: listAssignableStaff
+      summary: Staff the caller may assign alerts to, or may filter alerts by (UX-ROLE-SN-02, UX-ROLE-SN-01)
+      description: |
+        purpose=assign (default): users of the caller's institution with status ACTIVE or LOCKED
+        and role ANALYST, SENIOR_ANALYST or RISK_OFFICER, ranking at or below the caller (ADR 0116
+        rule A2). With `alert_id`, only the users A2 admits for that entry (for an escalated entry,
+        also at or above its target role). Returns id, names and role; never e-mail or status.
+        purpose=filter: every user of the caller's institution whose current role is ANALYST,
+        SENIOR_ANALYST or RISK_OFFICER, whatever their status or rank, with id, names, role and
+        status, for the analyst filter; `alert_id` is refused (422 validation, unsupported_value).
+        Never e-mail. Ordered by last name, then first name, then user_id.
+      x-required-roles: [SENIOR_ANALYST, RISK_OFFICER]
+      x-authorisation-rules:
+        - rule: With purpose=assign, lists only ACTIVE or LOCKED users whose role ranks at or below the caller's role; with purpose=filter, lists users of the caller's institution with a decision role only
+          effect: filter
+      parameters:
+        - { name: alert_id, in: query, schema: { type: string, format: uuid } }
+        - name: purpose
+          in: query
+          description: "`assign` (default): the users the caller may assign. `filter`: every decision-role user, with status, for the analyst filter"
+          schema: { type: string, enum: [assign, filter], default: assign }
+      responses:
+        "200":
+          description: The users the caller may assign, or may filter by
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AssignableStaffList" }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/ValidationOrLimitProblem" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
 
   /transactions/{transaction_id}/scoring-result:
@@ -2648,6 +2751,20 @@ components:
                   - field: currency
                     code: required
                     message: currency is required
+    ValidationOrLimitProblem:
+      description: >-
+        422: a well-formed field with an unacceptable value (validation, with field codes), or a
+        valid request whose answer would exceed a documented server limit (result-too-large, no
+        field codes; the limit is named in `detail`). Nothing is truncated.
+      x-problem-types:
+        - "urn:fraudshield:problem:validation"
+        - "urn:fraudshield:problem:result-too-large"
+      content:
+        application/problem+json:
+          schema:
+            oneOf:
+              - $ref: "#/components/schemas/ValidationProblem"
+              - $ref: "#/components/schemas/ResultTooLargeProblem"
     Unauthorized:
       description: Missing, invalid, expired or revoked credentials
       x-problem-types: ["urn:fraudshield:problem:unauthorized"]
@@ -2771,6 +2888,7 @@ components:
       x-problem-types:
         - "urn:fraudshield:problem:forbidden"
         - "urn:fraudshield:problem:escalation-level-required"
+        - "urn:fraudshield:problem:assignment-held-by-higher-role"
         - "urn:fraudshield:problem:not-decision-author"
         - "urn:fraudshield:problem:own-decision-override"
         - "urn:fraudshield:problem:self-modification"
@@ -2824,20 +2942,6 @@ components:
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
-    ValidationOrLimitProblem:
-      description: >-
-        422: a well-formed field with an unacceptable value (validation, with field codes), or a
-        valid request whose answer would exceed a documented server limit (result-too-large, no
-        field codes; the limit is named in `detail`). Nothing is truncated.
-      x-problem-types:
-        - "urn:fraudshield:problem:validation"
-        - "urn:fraudshield:problem:result-too-large"
-      content:
-        application/problem+json:
-          schema:
-            oneOf:
-              - $ref: "#/components/schemas/ValidationProblem"
-              - $ref: "#/components/schemas/ResultTooLargeProblem"
 
   examples:
     IngestMobileMoney:
@@ -3099,6 +3203,7 @@ components:
         - urn:fraudshield:problem:account-not-active
         - urn:fraudshield:problem:self-modification
         - urn:fraudshield:problem:escalation-level-required
+        - urn:fraudshield:problem:assignment-held-by-higher-role
         - urn:fraudshield:problem:not-decision-author
         - urn:fraudshield:problem:own-decision-override
         - urn:fraudshield:problem:self-review
@@ -3135,7 +3240,7 @@ components:
         well-formed field with an unacceptable value. A response with codes of both classes is 400
         and lists all errors. `fraudshield_contracts.validation` maps JSON Schema errors to these
         codes; shared vectors: contracts/validation/request-validation-vectors.json.
-      enum: [malformed_json, required, unknown_field, not_a_token, type_mismatch, invalid_format, unsupported_value, out_of_range, length_out_of_range, item_count_out_of_range, duplicate_items, timestamp_in_future, thresholds_not_ordered, duplicate_channel, invalid_cidr, webhook_url_not_allowed, password_policy, person_name, escalation_target_not_higher, no_change]
+      enum: [malformed_json, required, unknown_field, not_a_token, type_mismatch, invalid_format, unsupported_value, out_of_range, length_out_of_range, item_count_out_of_range, duplicate_items, timestamp_in_future, thresholds_not_ordered, duplicate_channel, invalid_cidr, webhook_url_not_allowed, password_policy, person_name, escalation_target_not_higher, no_change, assignee_not_eligible]
       x-status-by-code:
         malformed_json: 400
         required: 400
@@ -3157,6 +3262,7 @@ components:
         person_name: 422
         escalation_target_not_higher: 422
         no_change: 422
+        assignee_not_eligible: 422
     ValidationProblem:
       allOf:
         - $ref: "#/components/schemas/Problem"
@@ -3546,7 +3652,7 @@ components:
       $ref: "#/components/schemas/AlertSummaryBase"
       # Closed beside the $ref: additionalProperties sees only the names listed here, so a bad
       # value in the base reports one error instead of marking every field unexpected (NF-01).
-      properties: { alert_id: true, version: true, transaction_id: true, tier: true, status: true, fraud_probability: true, expected_loss_rwf: true, amount: true, channel: true, masked_account: true, merchant: true, transaction_timestamp: true, top_reasons: true, review_deadline_at: true, escalated_from_alert_id: true, anomaly_score: true }
+      properties: { alert_id: true, version: true, transaction_id: true, tier: true, status: true, fraud_probability: true, expected_loss_rwf: true, amount: true, channel: true, masked_account: true, merchant: true, transaction_timestamp: true, top_reasons: true, review_deadline_at: true, escalated_from_alert_id: true, anomaly_score: true, assigned_analyst: true }
       additionalProperties: false
     AlertSummaryBase:
       type: object
@@ -3557,7 +3663,7 @@ components:
       required:
         [alert_id, version, transaction_id, tier, status, fraud_probability, amount, channel,
          masked_account, merchant, transaction_timestamp, top_reasons, review_deadline_at,
-         anomaly_score]
+         anomaly_score, assigned_analyst]
       properties:
         alert_id: { type: string, format: uuid }
         version: { type: integer, minimum: 0 }
@@ -3598,9 +3704,14 @@ components:
             The Isolation Forest's score as a percentile rank (D-06), the reason an ANOMALY entry is
             in its queue (D-10). Null when the decision was made by the rule-based fallback, which
             runs no model.
+        assigned_analyst:
+          description: >-
+            The staff member expected to work this entry, or null for the unassigned pool
+            (ADR 0116). Advisory: it does not restrict who may see or decide the entry.
+          $ref: "#/components/schemas/StaffReference"
     AlertDetail:
       # Closed at the composing level with the names from every allOf member (NF-01).
-      properties: { alert_id: true, version: true, transaction_id: true, tier: true, status: true, fraud_probability: true, expected_loss_rwf: true, amount: true, channel: true, masked_account: true, merchant: true, transaction_timestamp: true, top_reasons: true, review_deadline_at: true, escalated_from_alert_id: true, account_token: true, counterparty_token: true, summary_template_key: true, summary_parameters: true, anomaly_score: true, decisions: true }
+      properties: { alert_id: true, version: true, transaction_id: true, tier: true, status: true, fraud_probability: true, expected_loss_rwf: true, amount: true, channel: true, masked_account: true, merchant: true, transaction_timestamp: true, top_reasons: true, review_deadline_at: true, escalated_from_alert_id: true, account_token: true, counterparty_token: true, summary_template_key: true, summary_parameters: true, anomaly_score: true, decisions: true, assigned_analyst: true }
       additionalProperties: false
       allOf:
         - $ref: "#/components/schemas/AlertSummaryBase"
@@ -3658,6 +3769,37 @@ components:
         new_decision: { type: string, enum: [CONFIRM_FRAUD, MARK_LEGITIMATE] }
         reason: { type: string, minLength: 20, maxLength: 2000 }
         alert_version: { type: integer, minimum: 0 }
+    AlertAssignmentRequest:
+      type: object
+      required: [assignee_user_id, alert_version]
+      additionalProperties: false
+      properties:
+        assignee_user_id: { type: [string, "null"], format: uuid, description: Null returns the entry to the pool }
+        alert_version: { type: integer, minimum: 0 }
+    AssignableStaffList:
+      type: object
+      required: [items]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          maxItems: 1000
+          description: Each `user_id` appears once (`x-unique-key`)
+          x-unique-key: [user_id]
+          items: { $ref: "#/components/schemas/AssignableStaff" }
+    AssignableStaff:
+      type: object
+      required: [user_id, first_name, last_name, role]
+      additionalProperties: false
+      properties:
+        user_id: { type: string, format: uuid }
+        first_name: { $ref: "#/components/schemas/PersonName" }
+        last_name: { $ref: "#/components/schemas/PersonName" }
+        role: { type: string, enum: [ANALYST, SENIOR_ANALYST, RISK_OFFICER] }
+        status:
+          type: string
+          enum: [PENDING_APPROVAL, ACTIVE, LOCKED, DEACTIVATED]
+          description: Present only with purpose=filter; absent with purpose=assign
     DecisionRecord:
       type: object
       required: [decision_id, decision, analyst, decided_at, state]
