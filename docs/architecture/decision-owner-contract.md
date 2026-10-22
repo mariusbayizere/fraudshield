@@ -1,6 +1,6 @@
 # One owner per transaction's decision: the contract
 
-Status: **draft 3, for independent review.** This is a new contract, not draft 9 of
+Status: **draft 4, for independent review.** This is a new contract, not draft 9 of
 `analyst-decision-commit-contract.md`. It replaces that contract, which stays in the repository as
 history and is marked superseded.
 
@@ -13,6 +13,11 @@ history and is marked superseded.
 **Draft 3** answers review 2 (`docs/reviews/M8B/decision-owner-contract-review-2.md`), §16. Review 2
 found no MAJOR in the owner mechanism. It found one edge MAJOR, which draft 2's PRE_V81 markers
 introduced, the inherited MAJOR again with a frequency correction, and seven MINORs.
+
+**Draft 4** answers review 3 (`docs/reviews/M8B/decision-owner-contract-review-3.md`), §17. Review 3
+found no MAJOR in the owner mechanism, and no path that moves a state outside it. It found two edge
+MAJORs: a failed claim that defers a customer with no alarm, and a resolution that is not final. It
+also found seven MINORs.
 
 **The owner's decision (2026-10-22), on review 8:**
 - **One owner per transaction.** Each held payment, and every transaction that a later request
@@ -182,6 +187,7 @@ no foreign key to `transaction_ids` (a timeout may create it before the sink run
 | `deadline` | while `decision` is HOLD: the time the hold runs to, the review deadline or an escalation's longer one. Under an ESCALATED claim on a transaction that is not held: the end of the escalation window |
 | `prior_claim`, `prior_deadline` | what an ANALYST claim replaced, so that an undo restores it |
 | `contested_since` | NULL, or when two different first decisions were found (§7) |
+| `resolution_id` | the last RESOLVE applied to the transaction, or NULL. While it is set, OVERRIDE is refused (§5) |
 | `version`, `updated_at` | for audit and tests |
 
 CHECKs:
@@ -251,7 +257,17 @@ Every request runs inside the caller's runner transaction:
    - **DEFERRED:** nothing is written. The caller retries later (§5 names who).
 
 The procedure is Java in the decision module (`DecisionOwner`), called by every requester inside
-its own transaction. It is not a database function, so that its rule table is tested as plain code.
+its own transaction, **on the caller's transaction-bound connection**, which it takes as an
+argument and never opens itself (review 3, finding 5). It is not a database function, so that its
+rule table is tested as plain code.
+
+**Where each part lives** (review 3, finding 5):
+- **`decision`:** `DecisionOwner`, the timeout paths, the effects worker, the recorder and the
+  alarms;
+- **`notify`:** `VerificationService` and `UnblockReconciler`. It already depends on `decision`;
+- **`analyst`:** D1 to D6 and the resolver. It gains a dependency on `fraudshield-decision`, beside
+  `fraudshield-audit`, which the resolver needs for the audit chain. `decision` depends on neither,
+  so no cycle forms.
 A database trigger on `transaction_requests` refuses an APPLIED row whose sequence is not the owner
 row's sequence + 1, as a backstop.
 
@@ -262,7 +278,8 @@ row's sequence + 1, as a backstop.
 **Columns:**
 - `institution_id`, `transaction_id`;
 - `request_id` (unique across institutions), `kind` (§5);
-- `outcome` (APPLIED, LABEL_ONLY, REFUSED or PRE_V81), `reason`;
+- `outcome` (APPLIED, LABEL_ONLY, REFUSED, RELEASED or PRE_V81), `reason`. RELEASED is a
+  RELEASE_FAILED that succeeded: it has no event and is never recorded (review 3, finding 3);
 - `sequence`: set only for APPLIED, and unique per transaction when set;
 - `event_id` (unique), `decided_by`, `decided_at` (DB time);
 - `event_body`, a jsonb object holding everything a re-record needs:
@@ -273,8 +290,9 @@ row's sequence + 1, as a backstop.
 
 **What it replaces.** It replaces the old contract's `transaction_transitions`.
 - **The backfill.** V81 backfills it from every `decision_states` row with sequence > 1. Each
-  backfilled row is APPLIED, with the row's event id, and with a recording row already written, so
-  it is never re-recorded.
+  backfilled row is APPLIED, with the row's event id, request id `backfill|` + that event id (a
+  prefix no live request uses, so it cannot collide with a PRE_V81 marker; review 3, finding 7), and
+  a recording row already written, so it is never re-recorded.
 - **From then on,** `decision_states` receives sequence 1 only. A CHECK `(decision_sequence = 1)
   NOT VALID` refuses any stray later write.
 
@@ -282,7 +300,9 @@ row's sequence + 1, as a backstop.
 outcome PRE_V81, request id `verification|` + the response's `verification_id`, no event and no
 label, never recorded, for each customer response at the cutover **whose effect is complete or
 moot**:
-- every NOT_ME response;
+- a NOT_ME whose transaction has a CUSTOMER label in `label_events`. A NOT_ME whose label M6 failed
+  to spool gets no marker, and the reconciler submits its CUSTOMER_NO after the cutover (review 3,
+  finding 6);
 - a WAS_ME whose transaction has a CUSTOMER_VERIFICATION state;
 - a WAS_ME whose transaction's latest state is no longer DECLINE by MODEL or TIMEOUT_POLICY.
 
@@ -366,12 +386,12 @@ The owner evaluates each request against the row it has locked. **Two checks app
 | **CLAIM** (an analyst decision) | D1 | `claim` is NONE or ESCALATED; for HOLD, DB time < `deadline` | `claim` → ANALYST, `claim_decision_id` set, the replaced claim and deadline kept in `prior_claim`, `prior_deadline`. No request row | 409 by D1 |
 | **RELEASE** (an undo) | D2 | `claim_decision_id` is this decision | `claim` and `deadline` restored from `prior_*`. No request row | nothing to do |
 | **EFFECT** (a committed analyst decision) | the effects worker, D4 | `claim_decision_id` is this decision | See EFFECT's rows below. `claim` → NONE | **The claim was cleared by a RESOLVE:** LABEL_ONLY, reason `claim-lost`. The analyst's label is recorded and its state is not applied (review 1, finding 8) |
-| **ESCALATE** | D6 | `claim` is NONE (sets ESCALATED, `deadline` = for HOLD, DB time + W, never earlier than the current `deadline`; otherwise DB time + W) or ESCALATED (unchanged: one window covers the chain). For HOLD, DB time < `deadline` | `claim` → ESCALATED. No request row | 409 `stale-alert` |
-| **OVERRIDE** (value: the senior's decision) | D5 | `claim` ≠ ANALYST | See OVERRIDE's rows below | **Claim ANALYST:** 409 `decision-not-committed` (the original's effect is still pending) |
+| **ESCALATE** | D6 | `claim` is NONE, or ESCALATED with DB time ≥ `deadline` on a payment that is not held (both set ESCALATED, `deadline` = for HOLD, DB time + W, never earlier than the current `deadline`; otherwise DB time + W: a lapsed window opens afresh, review 3, finding 9), or ESCALATED before its deadline (unchanged: one window covers the chain). For HOLD, DB time < `deadline` | `claim` → ESCALATED. No request row | 409 `stale-alert` |
+| **OVERRIDE** (value: the senior's decision) | D5 | `claim` ≠ ANALYST and `resolution_id` IS NULL | See OVERRIDE's rows below | **Claim ANALYST whose effect is pending:** 409 `decision-not-committed`. **Claim ANALYST whose effect FAILED:** 409 `decision-effect-failed`; an operator releases it first (§7.2) (review 3, finding 1). **Resolved:** 409 `stale-alert`; a resolution is final through the API (review 3, finding 2) |
 | **CUSTOMER_YES** | `VerificationService`, `UnblockReconciler` | see below | see below | see below |
 | **CUSTOMER_NO** | the same | always, contested included | LABEL_ONLY: a FRAUD label, source CUSTOMER | none |
 | **RESOLVE** (value: APPROVE or DECLINE) | the resolver, §7.2 | `contested_since` equals the resolution's recorded `contested_since` | APPLIED: the current state → value by SENIOR_OVERRIDE, reason code `CONTEST_RESOLVED`, whatever the current value. `contested_since` → NULL, `claim` → NONE. Closes open entries as OVERRIDDEN. A FRAUD or LEGITIMATE label. On → APPROVE of an auto-blocked transaction with no unblock yet, an `unblock_events` row (cause SENIOR_OVERRIDE, actor the resolving officer) | REFUSED, recorded, reason `contest-changed`: the transaction is no longer contested, or was contested again after the resolution was made. The alarm stays on until a fresh resolution |
-| **RELEASE_FAILED** (an ANALYST claim whose effect FAILED) | the resolver, §7.2 | `claim_decision_id` is the decision, and its effects row is FAILED | `claim` and `deadline` restored from `prior_*`, as an undo would. No state. After the commit the resolver reschedules a held payment's hold at `deadline`, as D2(e) does, so it is timed out at its deadline, or on the poller's next tick if that has passed (review 2, finding 6). The entry keeps the analyst's status, with the FAILED effects row as its record; a later TIMEOUT closes it (above), and a payment that is not held can then be overridden (D5) | REFUSED, recorded, reason `not-failed` |
+| **RELEASE_FAILED** (an ANALYST claim whose effect FAILED) | the resolver, §7.2 | `claim_decision_id` is the decision, and its effects row is FAILED | RELEASED, recorded with no event: `claim` and `deadline` restored from `prior_*`, as an undo would. No state. A re-run returns the stored RELEASED (§4.3). After the commit the resolver reschedules a held payment's hold at `deadline`, as D2(e) does, so it is timed out at its deadline, or on the poller's next tick if that has passed (review 2, finding 6). The entry keeps the analyst's status, with the FAILED effects row as its record; a later TIMEOUT closes it (above), and a payment that is not held can then be overridden (D5) | REFUSED, recorded, reason `not-failed` |
 
 **EFFECT, by the analyst decision and the current state:**
 
@@ -388,7 +408,7 @@ The owner evaluates each request against the row it has locked. **Two checks app
 |---|---|---|
 | DECLINE | **APPLIED: DECLINE → DECLINE by SENIOR_OVERRIDE.** The senior's decline is a state even though the value does not change (MAJOR 3) | APPLIED: → APPROVE by SENIOR_OVERRIDE, with an `unblock_events` row (cause SENIOR_OVERRIDE) when an auto-block exists and has no unblock yet |
 | APPROVE or TIMEOUT_RELEASE | APPLIED: → DECLINE by SENIOR_OVERRIDE | LABEL_ONLY |
-| HOLD | not reachable: an override needs a committed original whose effect has run, and every EFFECT ends HOLD | |
+| HOLD | 409 `stale-alert`. Reachable only after RELEASE_FAILED, which leaves a held payment HOLD with a committed original (review 3, finding 4). The hold is decided by its timeout, at its deadline | 409 `stale-alert`, likewise |
 
 Every OVERRIDE outcome carries a label by SENIOR_OVERRIDE whose `supersedes_label_id` is the
 original's label.
@@ -604,7 +624,9 @@ The writer then records the outcome (§4.6).
   the customer. The refusal answers APPLIED no longer (review 8, finding 6).
 
 **`UnblockReconciler` completes deferred answers.**
-- It lists WAS_ME responses older than 10 s that have no `transaction_requests` row.
+- It lists responses older than 10 s, WAS_ME and NOT_ME, that have no `transaction_requests` row.
+  A NOT_ME is submitted as CUSTOMER_NO, so a "no" whose label was not recorded has a recorder of
+  last resort (the old contract's m9).
 - It skips those whose owner is contested or holds a pending claim (ANALYST, or ESCALATED before its
   deadline).
 - It submits each by §5.
@@ -691,9 +713,13 @@ sees the contest or committed before it (review 8, finding 7). Detection means t
   - **Entries.** Open entries are closed as OVERRIDDEN, with a new column
     `alert_queue_entries.resolution_id` naming the resolution. No `alert_decisions` row is written:
     V4 requires a SENIOR_OVERRIDE row to name an overridden decision and carry a comment, and a
-    resolution may have neither. D5(b) refuses an override on an entry with a `resolution_id` (409
-    `stale-alert`). So **a resolution is final through the API**; a further change needs another
-    operator action, which is a stated cost (§11).
+    resolution may have neither.
+  - **Finality is enforced on the owner, not the entry** (review 3, finding 2). RESOLVE sets the
+    owner's `resolution_id`, and OVERRIDE is refused while it is set (§5), whichever entry it comes
+    from: an entry RESOLVE closed, a late entry §6.2 closed, or an analyst's entry whose claim
+    RESOLVE cleared. So **a resolution is final through the API**; a further change needs another
+    operator action, which is a stated cost (§11). A later contest and resolution replace
+    `resolution_id`.
   - **The label** has source SENIOR_OVERRIDE, the only one of V5's four sources that fits.
   - **A pending analyst decision.** RESOLVE clears its claim, so its EFFECT later ends LABEL_ONLY,
     reason `claim-lost`. The analyst's label is recorded, and the state the analyst chose is not
@@ -776,10 +802,18 @@ SECURITY DEFINER listers (§14). Each has an alert condition, which M9's rules i
   an ANALYST claim whose effect has not run, a contest, a lost schedule entry, or a lease outage.
   Alert: any value above zero.
 - **`fs_customer_answers_deferred_oldest_seconds`:** WAS_ME responses with no request row and no
-  pending claim or contest. Alert: above 60 s. Answers waiting on a claim or contest are covered by
-  the overdue and contested alerts, or bounded by G + P and W.
+  pending claim or contest. Alert: above 60 s. An answer waiting on a contest is covered by the
+  contested alert; on a claim whose effect is pending, it is bounded by G + P and the pending-effects
+  alert; on a claim whose effect FAILED, by the failed-claims alert; on an escalation, by W.
 - **`fs_analyst_effects_oldest_pending_seconds`:** committed analyst decisions with no effects row.
   Alert: above 60 s.
+- **`fs_analyst_claims_failed`:** the count, and the oldest, of ANALYST claims whose decision's
+  effects row is FAILED. Alert: any value above zero. It covers a payment that is not held, which
+  the overdue gauge cannot see: an auto-blocked payment whose customer's "yes" is deferred behind a
+  failed claim (review 3, finding 1).
+- **`fs_requests_unrecorded_oldest_seconds`:** the oldest APPLIED or LABEL_ONLY request with no
+  recording row. Alert: above 60 s. While it fires, the poll is right but the webhook and Kafka have
+  not been sent the state (review 3, finding 8).
 
 **So every payment held past its deadline + 45 s is visible in the overdue gauge, while PostgreSQL
 answers,** whatever holds it: 15 s of grace plus up to 30 s of sampling (review 1, finding 12). That
@@ -1030,6 +1064,7 @@ Nothing has measured either half. D-10's capacity model, when it exists, replace
 - `AUTO_DECLINED` in `AlertStatus`;
 - §5.1's seven transitions in `FinalDecision`'s description, with their conditions in words, and
   the analyst in `FinalDecision.final`'s text;
+- the problem type `decision-effect-failed` on `overrideAlertDecision`;
 - an exception to "`supersedes_decision` is the decision of sequence n-1" for the stored history of
   a transaction contested by §6.1's case 5. The bank never receives that history, but stored reads
   do;
@@ -1097,6 +1132,9 @@ the old one would otherwise assume:
 | P17 | The sink writes no `decision_states` row with sequence > 1, and a stray one is refused | §4.4 |
 | P18 | Committer, undo, decide and timeout racing on one entry finish without an unretried deadlock | §3 |
 | P19 | An expired idempotency lease is verified against PostgreSQL, and a lease still running answers InFlight | §7.5 |
+| P8e | An auto-blocked payment whose analyst's effect FAILED, with the customer's "yes" deferred behind the claim, raises `fs_analyst_claims_failed`; an override on it answers 409 `decision-effect-failed` (review 3, finding 1) | §5, §7.4 |
+| P8f | After a RESOLVE, an override from any entry of the transaction, closed by RESOLVE, by §6.2 or by the analyst's decision, answers 409 `stale-alert` (review 3, finding 2) | §5, §7.2 |
+| P8g | A NOT_ME whose label M6 never recorded is submitted after the cutover and its label recorded once; RELEASE_FAILED re-run returns RELEASED | §4.4, §6.5, §5 |
 | P19a | Escalating an ANOMALY alert succeeds, with a NULL `review_deadline_at` on the new entry | D6(d) |
 | P19b | A timeout path whose request transaction fails, for any reason, reschedules that hold and loses no other hold of its batch | §2 |
 | P20 | DECIDED, UNDO, COMMITTED, ESCALATED and SENIOR_OVERRIDE are each audited in their change's transaction. A resolution is audited twice: its authorisation in the function's transaction, and its state change in the resolver's | §9, §7.2 |
@@ -1123,8 +1161,9 @@ the old one would otherwise assume:
 - **`RedisCircuitBreakers`:** the idempotent confirmed-fraud script.
 - **`LabelRecorded` and `KafkaMessages`:** `supersedes_label_id`.
 - **`CustomerSmsSender`:** reads `v_decision_states`, and is otherwise unchanged (§7.3).
-- **The resolver** (new) and the SQL functions `resolve_contested_decision` and
-  `release_failed_claim` (§7.2).
+- **The resolver** (new, in `analyst`) and the SQL functions `resolve_contested_decision` and
+  `release_failed_claim` (§7.2). **`analyst`'s pom** gains `fraudshield-decision`.
+- **`decision_owners.resolution_id`** (§4.1).
 - **`RedisHoldSchedule`:** the `DueHold` member format with the basis fields, and a parser that
   accepts both formats (§4.2).
 - **`KafkaMessages.changeAction`:** the new ANALYST and SENIOR_OVERRIDE transitions (§5.1).
@@ -1144,7 +1183,7 @@ the old one would otherwise assume:
   - the resolver's unapplied resolutions;
   - the reconciler's deferred answers (V64, rewritten);
   - the overdue sweep's holds (V62, changed);
-  - the four alarms' figures.
+  - the six alarms' figures.
 
 ## 15. Review 1's findings and their answers
 
@@ -1185,3 +1224,19 @@ held.
 | 7 the asserted actor, the label source, the closed entries, P20 | §7.2; §11; P20 corrected |
 | 8 V64, the cross-tenant listers, the runner's module | §2's runner; §6.5; §14 |
 | 9 the alarm bound counts the gauge, not the alert | §7.4: "visible in the gauge"; each gauge's alert condition; the pipeline is M9's |
+
+## 17. Review 3's findings and their answers
+
+Review 3 found no MAJOR in the owner mechanism, and no path that moves a state outside it.
+
+| Finding | Answer in draft 4 |
+|---|---|
+| 1 MAJOR (edge): a failed claim defers a customer's "yes" on a payment that is not held, with no alarm; the override's 409 says "pending" | §7.4: `fs_analyst_claims_failed` with an alert; §5 OVERRIDE: 409 `decision-effect-failed`; §11's contract additions; P8e |
+| 2 MAJOR (edge): a resolution is not final, because entries closed before or after RESOLVE carry no `resolution_id` | §4.1 and §7.2: `decision_owners.resolution_id`; §5 OVERRIDE refused while it is set; P8f |
+| 3 RELEASE_FAILED's success has no outcome | §4.4: outcome RELEASED; §5 |
+| 4 OVERRIDE on HOLD after RELEASE_FAILED | §5: 409 `stale-alert`, and the timeout decides |
+| 5 module placement and the caller's connection | §4.3 |
+| 6 (M6's) a NOT_ME whose label was never spooled | §4.4: no marker without the CUSTOMER label; §6.5: the reconciler submits CUSTOMER_NO; P8g |
+| 7 the backfill's request ids | §4.4: `backfill|` + event id |
+| 8 no gauge on the recorder's backlog | §7.4: `fs_requests_unrecorded_oldest_seconds` |
+| 9 a second escalation after W on a payment that is not held | §5 ESCALATE: a lapsed window opens afresh |
