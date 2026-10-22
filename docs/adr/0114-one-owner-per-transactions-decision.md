@@ -34,8 +34,9 @@ wording.
 
 **The owner's further decisions, recorded with this one:**
 - **Two different first decisions make the transaction contested.** That is a state with an
-  explicit exit, a risk officer's resolution, and an alarm. While contested, work is deferred, not
-  discarded.
+  explicit exit, a risk officer's resolution, and an alarm. While contested, work is deferred. After
+  the resolution, a deferred analyst decision keeps its label and is named, but its state is not
+  applied.
 - **A senior's decline is recorded as a state even when the value does not change.** The customer
   path can confirm a payment the system doubted, but cannot overturn a human who declined it.
 - **The new contract is numbered from draft 1,** because what it promises is different. Its §12
@@ -54,7 +55,7 @@ wording.
 
 ## Consequences
 
-- **Five transitions are added to `FinalDecision`** (contract §5.1).
+- **Seven transitions are added to `FinalDecision`** (contract §5.1).
   - **A repeated value.** A bank can receive a final decision whose value repeats the previous one,
     at a higher sequence.
   - **The contract change.** It is a change to the frozen contract, proposed with P2.
@@ -63,3 +64,10 @@ wording.
   answers 503.
 - **No measurement exists of how often M6 decides a transaction twice.** The contested path's load
   on risk officers is therefore unknown.
+- **M6's double decision in reverse order remains** (contract §7.3). A timeout can release a payment
+  before the retry's decline reaches PostgreSQL. It is common after a PostgreSQL outage, detected
+  when the decline drains, and resolved by a risk officer. The bank may already have acted on the
+  release.
+- **The stopping rule** for this contract's reviews (owner, 2026-10-22): stop on a MAJOR in the
+  owner mechanism itself, meaning the owner row, its lock, or the rule table's ordering. An
+  edge-specification error with a local fix is draft work.
