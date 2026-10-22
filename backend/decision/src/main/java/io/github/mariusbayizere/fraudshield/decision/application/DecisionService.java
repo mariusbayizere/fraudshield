@@ -231,7 +231,11 @@ public final class DecisionService {
                         record.scoringResultId(),
                         outcome.reviewDeadlineAt(),
                         outcome.reasonCodes(),
-                        decidedAt)));
+                        decidedAt,
+                        // The request's merchant name is not carried to the row today, so the read
+                        // answers null; the card matches it (ADR 0115 point 6.1).
+                        null,
+                        topReasons(record.shapTop5()))));
     if (outcome.autoBlock()) {
       addAutoBlock(events, transaction, requestFingerprint, record, outcome, scoring, decidedAt);
     }
@@ -299,6 +303,14 @@ public final class DecisionService {
     long now = System.nanoTime();
     metrics.stage(name, now - since);
     return now;
+  }
+
+  /** The card's three largest contributions, as the read takes them (ADR 0115 point 6.1). */
+  private static List<Map<String, Object>> topReasons(List<Map<String, Object>> shapTop5) {
+    if (shapTop5 == null) {
+      return List.of();
+    }
+    return shapTop5.size() > 3 ? List.copyOf(shapTop5.subList(0, 3)) : shapTop5;
   }
 
   private record Scores(Scoring scoring, DecisionEvent.ScoringRecord record) {}

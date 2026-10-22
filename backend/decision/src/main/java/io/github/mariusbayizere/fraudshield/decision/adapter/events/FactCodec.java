@@ -120,6 +120,10 @@ public final class FactCodec {
         putInstant(node, "review_deadline_at", e.reviewDeadlineAt());
         node.set("reason_codes", JSON.valueToTree(e.reasonCodes()));
         putInstant(node, "created_at", e.createdAt());
+        if (e.topReasons() != null) {
+          node.put("merchant", e.merchant());
+          node.set("top_reasons", JSON.valueToTree(e.topReasons()));
+        }
       }
       case DecisionEvent.AutoBlocked e -> {
         node.put("type", "auto_blocked");
@@ -218,7 +222,11 @@ public final class FactCodec {
               uuid(node, "scoring_result_id"),
               instant(node, "review_deadline_at"),
               strings(node.get("reason_codes")),
-              instant(node, "created_at"));
+              instant(node, "created_at"),
+              node.hasNonNull("merchant") ? node.get("merchant").asString() : null,
+              node.has("top_reasons")
+                  ? JSON.convertValue(node.get("top_reasons"), LIST_OF_MAPS)
+                  : null);
       case "auto_blocked" ->
           new DecisionEvent.AutoBlocked(
               uuid(node, "auto_block_event_id"),

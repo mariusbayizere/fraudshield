@@ -102,6 +102,9 @@ public sealed interface DecisionEvent {
    * @param reviewDeadlineAt the hold's deadline; null unless MEDIUM
    * @param reasonCodes reasons
    * @param createdAt creation time
+   * @param merchant the card's merchant, or null (ADR 0115 point 6.1)
+   * @param topReasons the card's top three SHAP contributions, empty without SHAP; null on a record
+   *     spooled before ADR 0115, whose message then omits both card fields
    */
   record AlertRaised(
       UUID alertId,
@@ -113,15 +116,58 @@ public sealed interface DecisionEvent {
       UUID scoringResultId,
       Instant reviewDeadlineAt,
       List<String> reasonCodes,
-      Instant createdAt)
+      Instant createdAt,
+      String merchant,
+      List<Map<String, Object>> topReasons)
       implements DecisionEvent {
 
     /** Copies the reasons and checks the hold rule of the alert schema. */
     public AlertRaised {
       reasonCodes = List.copyOf(reasonCodes);
+      topReasons = topReasons == null ? null : List.copyOf(topReasons);
       if ((tier == AlertTier.MEDIUM) != (reviewDeadlineAt != null)) {
         throw new IllegalArgumentException("MEDIUM alerts, and only they, carry a deadline");
       }
+    }
+
+    /**
+     * An alert without the card fields, as spooled before ADR 0115.
+     *
+     * @param alertId alert id
+     * @param institutionId institution
+     * @param transaction the transaction
+     * @param tier the queue
+     * @param fraudProbability ensemble score
+     * @param anomalyScore anomaly percentile, or null
+     * @param scoringResultId the scoring result
+     * @param reviewDeadlineAt the hold's deadline; null unless MEDIUM
+     * @param reasonCodes reasons
+     * @param createdAt creation time
+     */
+    public AlertRaised(
+        UUID alertId,
+        UUID institutionId,
+        Transaction transaction,
+        AlertTier tier,
+        double fraudProbability,
+        Double anomalyScore,
+        UUID scoringResultId,
+        Instant reviewDeadlineAt,
+        List<String> reasonCodes,
+        Instant createdAt) {
+      this(
+          alertId,
+          institutionId,
+          transaction,
+          tier,
+          fraudProbability,
+          anomalyScore,
+          scoringResultId,
+          reviewDeadlineAt,
+          reasonCodes,
+          createdAt,
+          null,
+          null);
     }
   }
 

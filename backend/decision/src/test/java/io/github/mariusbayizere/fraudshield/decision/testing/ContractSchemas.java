@@ -55,8 +55,9 @@ public final class ContractSchemas {
     } catch (IOException e) {
       throw new UncheckedIOException(e);
     }
-    if (topics.size() != 13) {
-      throw new IllegalStateException("expected 13 topics in topics.yaml, found " + topics.size());
+    if (topics.size() != 14) {
+      throw new IllegalStateException(
+          "expected 14 topics in topics.yaml (C.3 and ADR 0115), found " + topics.size());
     }
     SchemaRegistryConfig config =
         SchemaRegistryConfig.builder().formatAssertionsEnabled(true).build();

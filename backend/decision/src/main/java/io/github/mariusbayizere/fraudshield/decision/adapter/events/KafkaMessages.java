@@ -497,6 +497,12 @@ public final class KafkaMessages {
         e.reviewDeadlineAt() == null ? null : e.reviewDeadlineAt().toString());
     p.put("holds_transaction", e.tier() == AlertTier.MEDIUM);
     p.set("reason_codes", FactCodec.JSON.valueToTree(e.reasonCodes()));
+    // The card fields (ADR 0115 point 6.1); a record spooled before them omits both, and the
+    // fan-out marks its card provisional.
+    if (e.topReasons() != null) {
+      p.put("merchant", e.merchant());
+      p.set("top_reasons", FactCodec.JSON.valueToTree(e.topReasons()));
+    }
     return p;
   }
 

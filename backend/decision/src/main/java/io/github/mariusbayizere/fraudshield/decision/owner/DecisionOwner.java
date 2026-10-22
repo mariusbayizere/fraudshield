@@ -101,13 +101,14 @@ public final class DecisionOwner {
         JOIN decision_conflict_resolutions z ON z.decision_id = d.id AND z.kind = 'RELEASE_FAILED'
         JOIN transaction_requests q ON q.request_id = fs_name_uuid('release_failed|' || z.id)
           AND q.outcome = 'RELEASED')))
-      RETURNING id, created_at
+      RETURNING id, created_at, version
       """;
 
   private static final String CLOSE_ON_RESOLVE =
       """
       UPDATE alert_queue_entries SET status = 'OVERRIDDEN', resolution_id = ?, version = version
-      + 1 WHERE transaction_id = ? AND status IN ('PENDING', 'IN_REVIEW') RETURNING id, created_at
+      + 1 WHERE transaction_id = ? AND status IN ('PENDING', 'IN_REVIEW') RETURNING id, created_at,
+      version
       """;
 
   /**
@@ -161,7 +162,7 @@ public final class DecisionOwner {
    * @param replay whether the request had already been made, and nothing was written now
    * @param state the new state, for APPLIED (null for a replay)
    * @param events the events to record after the commit (empty for a replay: the recorder has them)
-   * @param closedEntries entries the request closed
+   * @param closedEntries entries the request closed, with their new versions (ADR 0115 point 6.2)
    * @param clearedClaim the analyst decision whose claim a resolution cleared, or null
    */
   public record Result(
@@ -172,7 +173,7 @@ public final class DecisionOwner {
       boolean replay,
       DecisionState state,
       List<DecisionEvent> events,
-      List<UUID> closedEntries,
+      List<Closed> closedEntries,
       UUID clearedClaim) {
     /** Copies the lists. */
     public Result {
@@ -180,6 +181,14 @@ public final class DecisionOwner {
       closedEntries = List.copyOf(closedEntries);
     }
   }
+
+  /**
+   * An entry a request closed, with its version after the change.
+   *
+   * @param alertId the entry
+   * @param version its new version
+   */
+  public record Closed(UUID alertId, long version) {}
 
   /**
    * Submits a request. Runs in the caller's transaction, which must have the tenant set.
@@ -299,7 +308,7 @@ public final class DecisionOwner {
     if (verdict.owner() != null) {
       updateOwner(c, verdict.owner());
     }
-    List<UUID> closed = close(c, owner, request, requestId, verdict);
+    List<Closed> closed = close(c, owner, request, requestId, verdict);
     if (verdict.unblock() != null) {
       unblock(c, inst, txn, request, verdict.unblock(), now);
     }
@@ -315,7 +324,7 @@ public final class DecisionOwner {
       UUID requestId,
       DecisionState state,
       List<DecisionEvent> events,
-      List<UUID> closed,
+      List<Closed> closed,
       UUID cleared) {
     return new Result(
         verdict.outcome(),
@@ -530,13 +539,13 @@ public final class DecisionOwner {
   }
 
   /** §5: a TIMEOUT closes open and released entries as AUTO_*; a RESOLVE closes open ones. */
-  private static List<UUID> close(
+  private static List<Closed> close(
       Connection c, OwnerState o, OwnerRequest request, UUID requestId, Verdict verdict)
       throws SQLException {
     if (verdict.closeEntries() == Closing.NONE) {
       return List.of();
     }
-    List<UUID> closed = new ArrayList<>();
+    List<Closed> closed = new ArrayList<>();
     UUID newest = null;
     Instant newestAt = null;
     boolean declined = verdict.transition().value() == DecisionValue.DECLINE;
@@ -553,7 +562,7 @@ public final class DecisionOwner {
         while (rows.next()) {
           UUID id = rows.getObject(1, UUID.class);
           Instant at = instant(rows, 2);
-          closed.add(id);
+          closed.add(new Closed(id, rows.getLong(3)));
           if (newestAt == null || at.isAfter(newestAt)) {
             newest = id;
             newestAt = at;
@@ -698,19 +707,21 @@ public final class DecisionOwner {
    * @param inst institution
    * @param txn transaction
    * @param entryId the new entry
+   * @return the entry and its new version when it was closed
    * @throws SQLException on a database error
    */
-  public void lateEntry(Connection c, UUID inst, UUID txn, UUID entryId) throws SQLException {
+  public Optional<LateClose> lateEntry(Connection c, UUID inst, UUID txn, UUID entryId)
+      throws SQLException {
     createFromFirst(c, inst, txn);
     Optional<OwnerState> owner = selectOwner(c, inst, txn);
     if (owner.isEmpty() || owner.get().held()) {
-      return;
+      return Optional.empty();
     }
     UUID timeout =
         new OwnerRequest.Timeout(
                 null, null, null, MediumTimeoutPolicy.RELEASE_WITH_TIMEOUT_LABEL, null)
             .requestId(inst, txn);
-    String timedOut = null;
+    String timedOut;
     try (PreparedStatement s =
         c.prepareStatement(
             "SELECT decision FROM transaction_requests WHERE request_id = ? AND outcome ="
@@ -722,13 +733,16 @@ public final class DecisionOwner {
     }
     if (timedOut != null) {
       boolean declined = DecisionValue.DECLINE.name().equals(timedOut);
+      Optional<Long> version;
       try (PreparedStatement s =
           c.prepareStatement(
               "UPDATE alert_queue_entries SET status = ?, version = version + 1 WHERE id = ?"
-                  + " AND status IN ('PENDING', 'IN_REVIEW')")) {
+                  + " AND status IN ('PENDING', 'IN_REVIEW') RETURNING version")) {
         s.setString(1, declined ? "AUTO_DECLINED" : "AUTO_RELEASED");
         s.setObject(2, entryId);
-        s.executeUpdate();
+        try (ResultSet row = s.executeQuery()) {
+          version = row.next() ? Optional.of(row.getLong(1)) : Optional.empty();
+        }
       }
       try (PreparedStatement s = c.prepareStatement(INSERT_AUTO_DECISION)) {
         s.setObject(1, inst);
@@ -736,17 +750,34 @@ public final class DecisionOwner {
         s.setString(3, declined ? "AUTO_BLOCKED" : "AUTO_RELEASED");
         s.executeUpdate();
       }
-    } else if (owner.get().resolutionId() != null) {
+      return version.map(v -> new LateClose(inst, new Closed(entryId, v), false));
+    }
+    if (owner.get().resolutionId() != null) {
       try (PreparedStatement s =
           c.prepareStatement(
               "UPDATE alert_queue_entries SET status = 'OVERRIDDEN', resolution_id = ?, version ="
-                  + " version + 1 WHERE id = ? AND status IN ('PENDING', 'IN_REVIEW')")) {
+                  + " version + 1 WHERE id = ? AND status IN ('PENDING', 'IN_REVIEW')"
+                  + " RETURNING version")) {
         s.setObject(1, owner.get().resolutionId());
         s.setObject(2, entryId);
-        s.executeUpdate();
+        try (ResultSet row = s.executeQuery()) {
+          if (row.next()) {
+            return Optional.of(new LateClose(inst, new Closed(entryId, row.getLong(1)), true));
+          }
+        }
       }
     }
+    return Optional.empty();
   }
+
+  /**
+   * A late entry the sink closed (§6.2), for the real-time channel (ADR 0115 point 6.2).
+   *
+   * @param institutionId the entry's institution, from the writing tenant transaction
+   * @param entry the entry and its new version
+   * @param resolved true after a RESOLVE, false after a TIMEOUT
+   */
+  public record LateClose(UUID institutionId, Closed entry, boolean resolved) {}
 
   /**
    * The sequence-1 row already in PostgreSQL.

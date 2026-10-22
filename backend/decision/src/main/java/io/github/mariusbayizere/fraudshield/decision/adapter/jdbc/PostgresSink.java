@@ -5,6 +5,7 @@ import io.github.mariusbayizere.fraudshield.decision.adapter.events.KafkaMessage
 import io.github.mariusbayizere.fraudshield.decision.adapter.spool.SpoolDrainer;
 import io.github.mariusbayizere.fraudshield.decision.adapter.spool.SpoolRecord;
 import io.github.mariusbayizere.fraudshield.decision.application.event.DecisionEvent;
+import io.github.mariusbayizere.fraudshield.decision.application.port.AlertChangePublisher;
 import io.github.mariusbayizere.fraudshield.decision.domain.AlertTier;
 import io.github.mariusbayizere.fraudshield.decision.domain.DecisionState;
 import io.github.mariusbayizere.fraudshield.decision.domain.DecisionValue;
@@ -22,6 +23,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -165,6 +167,7 @@ public final class PostgresSink implements SpoolDrainer.Sink {
   private final AtomicLong deadLettered = new AtomicLong();
   private final AtomicLong duplicateDecisions = new AtomicLong();
   private final AtomicLong unreservedStates = new AtomicLong();
+  private final AlertChangePublisher changes;
 
   /**
    * Creates the sink.
@@ -173,8 +176,20 @@ public final class PostgresSink implements SpoolDrainer.Sink {
    * @param deadLetters directory for records the database refuses
    */
   public PostgresSink(DataSource dataSource, Path deadLetters) {
+    this(dataSource, deadLetters, AlertChangePublisher.NONE);
+  }
+
+  /**
+   * Creates the sink, publishing the late entries it closes (ADR 0115 point 6.2).
+   *
+   * @param dataSource connections as {@code fs_app}
+   * @param deadLetters directory for records the database refuses
+   * @param changes the real-time channel's publisher, offered each late close after its commit
+   */
+  public PostgresSink(DataSource dataSource, Path deadLetters, AlertChangePublisher changes) {
     this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
     this.deadLetters = Objects.requireNonNull(deadLetters, "deadLetters");
+    this.changes = Objects.requireNonNull(changes, "changes");
   }
 
   /**
@@ -227,10 +242,12 @@ public final class PostgresSink implements SpoolDrainer.Sink {
     try (Connection connection = dataSource.getConnection()) {
       connection.setAutoCommit(false);
       try {
+        List<DecisionOwner.LateClose> closed = new ArrayList<>();
         for (SpoolRecord record : records) {
-          write(connection, FactCodec.decode(record.payload()));
+          write(connection, FactCodec.decode(record.payload()), closed);
         }
         connection.commit();
+        publish(closed);
         return true;
       } catch (SQLException e) {
         connection.rollback();
@@ -243,8 +260,10 @@ public final class PostgresSink implements SpoolDrainer.Sink {
       }
       for (SpoolRecord record : records) {
         try {
-          write(connection, FactCodec.decode(record.payload()));
+          List<DecisionOwner.LateClose> closed = new ArrayList<>();
+          write(connection, FactCodec.decode(record.payload()), closed);
           connection.commit();
+          publish(closed);
         } catch (SQLException e) {
           connection.rollback();
           if (Tenant.transientError(e)) {
@@ -280,7 +299,22 @@ public final class PostgresSink implements SpoolDrainer.Sink {
     LOG.error("a spool record was refused by PostgreSQL and dead-lettered", cause);
   }
 
-  private void write(Connection c, List<DecisionEvent> facts) throws SQLException {
+  /** After the commit: each late close, as TIMED_OUT or RESOLVED (ADR 0115 point 6.2). */
+  private void publish(List<DecisionOwner.LateClose> closed) {
+    for (DecisionOwner.LateClose late : closed) {
+      changes.offer(
+          late.institutionId(),
+          late.entry().alertId(),
+          late.entry().version(),
+          late.resolved()
+              ? AlertChangePublisher.Change.RESOLVED
+              : AlertChangePublisher.Change.TIMED_OUT,
+          null);
+    }
+  }
+
+  private void write(Connection c, List<DecisionEvent> facts, List<DecisionOwner.LateClose> closed)
+      throws SQLException {
     boolean skip = false;
     for (DecisionEvent fact : facts) {
       Tenant.use(c, fact.institutionId());
@@ -288,7 +322,7 @@ public final class PostgresSink implements SpoolDrainer.Sink {
         case DecisionEvent.TransactionDecided e -> skip = !transactionDecided(c, e);
         case DecisionEvent.AlertRaised e -> {
           if (!skip) {
-            alert(c, e);
+            alert(c, e).ifPresent(closed::add);
           }
         }
         case DecisionEvent.AutoBlocked e -> {
@@ -443,7 +477,8 @@ public final class PostgresSink implements SpoolDrainer.Sink {
     }
   }
 
-  private static void alert(Connection c, DecisionEvent.AlertRaised e) throws SQLException {
+  private static Optional<DecisionOwner.LateClose> alert(Connection c, DecisionEvent.AlertRaised e)
+      throws SQLException {
     try (PreparedStatement s = c.prepareStatement(INSERT_ALERT_QUEUE_ENTRIES)) {
       s.setObject(1, e.alertId());
       s.setObject(2, e.institutionId());
@@ -457,8 +492,9 @@ public final class PostgresSink implements SpoolDrainer.Sink {
       s.executeUpdate();
     }
     if (e.tier() == AlertTier.MEDIUM) {
-      OWNER.lateEntry(c, e.institutionId(), e.transaction().transactionId(), e.alertId());
+      return OWNER.lateEntry(c, e.institutionId(), e.transaction().transactionId(), e.alertId());
     }
+    return Optional.empty();
   }
 
   private static void autoBlock(Connection c, DecisionEvent.AutoBlocked e) throws SQLException {

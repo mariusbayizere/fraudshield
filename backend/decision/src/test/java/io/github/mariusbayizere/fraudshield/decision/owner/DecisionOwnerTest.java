@@ -9,6 +9,10 @@ import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcDecisionSt
 import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.PostgresSink;
 import io.github.mariusbayizere.fraudshield.decision.adapter.spool.SpoolRecord;
 import io.github.mariusbayizere.fraudshield.decision.application.event.DecisionEvent;
+import io.github.mariusbayizere.fraudshield.decision.application.port.AlertChangePublisher;
+import io.github.mariusbayizere.fraudshield.decision.application.port.DecisionStatePort;
+import io.github.mariusbayizere.fraudshield.decision.application.port.HoldOwnerPort;
+import io.github.mariusbayizere.fraudshield.decision.application.port.HoldSchedulePort;
 import io.github.mariusbayizere.fraudshield.decision.domain.DecisionState;
 import io.github.mariusbayizere.fraudshield.decision.domain.DecisionValue;
 import io.github.mariusbayizere.fraudshield.decision.testing.FactScenarios;
@@ -21,6 +25,7 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
@@ -43,6 +48,13 @@ class DecisionOwnerTest {
   private OwnerTransactions transactions;
   private final DecisionOwner owner = new DecisionOwner();
 
+  /** What the real-time port was offered (ADR 0115 point 6.2), as "alert|version|change|actor". */
+  private final List<String> offered = new CopyOnWriteArrayList<>();
+
+  private final AlertChangePublisher changes =
+      (institution, alert, version, change, actor) ->
+          offered.add(alert + "|" + version + "|" + change + "|" + actor);
+
   /** A MEDIUM hold's sequence-1 record and its alert, from the shared scenarios. */
   private List<DecisionEvent> heldRecord;
 
@@ -53,7 +65,7 @@ class DecisionOwnerTest {
     db = TestDatabase.create();
     db.institution(INSTITUTION);
     app = db.dataSource("fs_app");
-    sink = new PostgresSink(app, deadLetters);
+    sink = new PostgresSink(app, deadLetters, changes);
     transactions = new OwnerTransactions(app, 3);
     List<DecisionEvent> facts = FactScenarios.everyKindOfFact();
     DecisionEvent.TransactionDecided decided =
@@ -123,7 +135,10 @@ class DecisionOwnerTest {
     assertThat(first.outcome()).isEqualTo(Verdict.Outcome.APPLIED);
     assertThat(first.state().decision()).isEqualTo(DecisionValue.TIMEOUT_RELEASE);
     assertThat(first.state().sequence()).isEqualTo(2);
-    assertThat(first.closedEntries()).hasSize(1);
+    assertThat(first.closedEntries())
+        .extracting(DecisionOwner.Closed::version)
+        .as("the closed entry's new version, for the real-time channel")
+        .containsExactly(1L);
     assertThat(one("SELECT status FROM fraudshield.alert_queue_entries"))
         .isEqualTo("AUTO_RELEASED");
     assertThat(one("SELECT decision FROM fraudshield.alert_decisions")).isEqualTo("AUTO_RELEASED");
@@ -151,6 +166,50 @@ class DecisionOwnerTest {
     assertThat(one("SELECT status FROM fraudshield.alert_queue_entries"))
         .as("§6.2 closes the late entry")
         .isEqualTo("AUTO_RELEASED");
+    assertThat(offered)
+        .as("the sink publishes the late close after its batch commits (ADR 0115 point 6.2)")
+        .containsExactly(
+            one("SELECT id FROM fraudshield.alert_queue_entries") + "|1|TIMED_OUT|null");
+  }
+
+  @Test
+  @Tag("FR-04-02")
+  void theTimeoutPublishesEachEntryItClosesAfterTheCommit() throws Exception {
+    sink.accept(records(heldRecord));
+    DecisionStatePort noCache =
+        new DecisionStatePort() {
+          @Override
+          public boolean save(DecisionState state) {
+            return true;
+          }
+
+          @Override
+          public java.util.Optional<DecisionState> latest(UUID institutionId, UUID transactionId) {
+            return java.util.Optional.empty();
+          }
+        };
+    OwnerHoldTimeouts timeouts =
+        new OwnerHoldTimeouts(
+            transactions,
+            owner,
+            new RequestRecorder(app, transactions, batch -> {}, noCache),
+            changes);
+    HoldOwnerPort.Answer answer =
+        timeouts.timeOut(
+            new HoldSchedulePort.DueHold(
+                INSTITUTION,
+                hold.transactionId(),
+                "CARD",
+                MediumTimeoutPolicy.RELEASE_WITH_TIMEOUT_LABEL,
+                hold.reviewDeadlineAt(),
+                hold.eventId(),
+                hold.decidedAt(),
+                hold.reasonCodes(),
+                null));
+    assertThat(answer.next()).isEqualTo(HoldOwnerPort.Next.APPLIED);
+    assertThat(offered)
+        .containsExactly(
+            one("SELECT id FROM fraudshield.alert_queue_entries") + "|1|TIMED_OUT|null");
   }
 
   @Test

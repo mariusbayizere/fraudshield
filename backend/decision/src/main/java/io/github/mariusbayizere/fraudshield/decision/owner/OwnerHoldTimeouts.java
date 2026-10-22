@@ -1,5 +1,6 @@
 package io.github.mariusbayizere.fraudshield.decision.owner;
 
+import io.github.mariusbayizere.fraudshield.decision.application.port.AlertChangePublisher;
 import io.github.mariusbayizere.fraudshield.decision.application.port.HoldOwnerPort;
 import io.github.mariusbayizere.fraudshield.decision.application.port.HoldSchedulePort;
 import io.github.mariusbayizere.fraudshield.decision.domain.DecisionValue;
@@ -15,6 +16,7 @@ public final class OwnerHoldTimeouts implements HoldOwnerPort {
   private final OwnerTransactions transactions;
   private final DecisionOwner owner;
   private final RequestRecorder recorder;
+  private final AlertChangePublisher changes;
 
   /**
    * Creates the adapter.
@@ -25,9 +27,26 @@ public final class OwnerHoldTimeouts implements HoldOwnerPort {
    */
   public OwnerHoldTimeouts(
       OwnerTransactions transactions, DecisionOwner owner, RequestRecorder recorder) {
+    this(transactions, owner, recorder, AlertChangePublisher.NONE);
+  }
+
+  /**
+   * Creates the adapter, publishing the entries a timeout closes (ADR 0115 point 6.2).
+   *
+   * @param transactions the runner
+   * @param owner the owner
+   * @param recorder records an applied state after the commit
+   * @param changes offered each closed entry after the commit
+   */
+  public OwnerHoldTimeouts(
+      OwnerTransactions transactions,
+      DecisionOwner owner,
+      RequestRecorder recorder,
+      AlertChangePublisher changes) {
     this.transactions = Objects.requireNonNull(transactions, "transactions");
     this.owner = Objects.requireNonNull(owner, "owner");
     this.recorder = Objects.requireNonNull(recorder, "recorder");
+    this.changes = Objects.requireNonNull(changes, "changes");
   }
 
   @Override
@@ -54,6 +73,14 @@ public final class OwnerHoldTimeouts implements HoldOwnerPort {
     return switch (result.outcome()) {
       case APPLIED -> {
         recorder.record(hold.institutionId(), result);
+        for (DecisionOwner.Closed closed : result.closedEntries()) {
+          changes.offer(
+              hold.institutionId(),
+              closed.alertId(),
+              closed.version(),
+              AlertChangePublisher.Change.TIMED_OUT,
+              null);
+        }
         yield new Answer(Next.APPLIED, null, result.state());
       }
       case DEFERRED -> new Answer(Next.RETRY, null, null);
