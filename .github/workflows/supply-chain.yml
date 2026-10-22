@@ -3,8 +3,9 @@
 #
 # Signing is keyless (Sigstore): the signature is bound to this workflow's GitHub OIDC identity and
 # recorded in the public Rekor log, so no signing key exists to leak. Every signature is verified
-# in the same job against the expected workflow identity. Pull requests only build and scan;
-# signing and pushing happen on pushes to this repository's branches.
+# in the same job against the expected workflow identity. Only `main` signs and pushes: a signature
+# from this workflow then means code that reached `main`, and the identity below accepts `main`
+# alone. Feature branches and pull requests build and scan without signing.
 #
 # Images: `image-matrix` lists every service image and keeps those whose Dockerfile exists. Only
 # those get an `images` job; a missing Dockerfile is a warning and a "NOT BUILT" line in the
@@ -26,7 +27,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  CERTIFICATE_IDENTITY: ^https://github\.com/mariusbayizere/fraudshield/\.github/workflows/supply-chain\.yml@refs/heads/
+  CERTIFICATE_IDENTITY: ^https://github\.com/mariusbayizere/fraudshield/\.github/workflows/supply-chain\.yml@refs/heads/main$
   CERTIFICATE_ISSUER: https://token.actions.githubusercontent.com
 
 jobs:
@@ -46,7 +47,7 @@ jobs:
           jq -e '.bomFormat == "CycloneDX" and (.components | length) > 0' fraudshield-source.cdx.json
           echo "components: $(jq '.components | length' fraudshield-source.cdx.json)" >>"$GITHUB_STEP_SUMMARY"
       - name: Sign and verify the SBOM
-        if: github.event_name != 'pull_request'
+        if: github.ref == 'refs/heads/main'
         run: |
           infrastructure/bin/cosign sign-blob --yes --bundle fraudshield-source.cdx.json.sigstore.json \
             fraudshield-source.cdx.json
@@ -131,7 +132,7 @@ jobs:
           infrastructure/bin/syft scan "docker:$IMAGE:$GITHUB_SHA" \
             --output "cyclonedx-json=${{ matrix.image }}.cdx.json"
       - name: Push, sign and attest the SBOM by digest
-        if: github.event_name != 'pull_request'
+        if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
