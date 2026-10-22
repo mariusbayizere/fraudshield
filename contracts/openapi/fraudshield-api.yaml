@@ -13,7 +13,9 @@ info:
     * Errors are RFC 9457 problem details with `type` URNs and a `correlation_id`.
     * Machine clients authenticate with `X-API-Key`; staff with an RS256 bearer JWT.
     * Every operation declares `x-required-scopes` (API keys), `x-required-roles` (staff),
-      `x-refresh-cookie: true` (token refresh) or `x-public: true`.
+      `x-refresh-cookie: true` (token refresh), `x-public: true`, or
+      `x-auth-in-band: stomp-connect` with `x-required-roles` (the real-time channel: roles enforced
+      at the STOMP CONNECT, ADR 0115).
 
     SYNTHETIC DATA ONLY in development and demo environments (D-21).
   license:
@@ -793,6 +795,58 @@ paths:
               schema: { $ref: "#/components/schemas/DashboardStats" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /realtime:
+    get:
+      tags: [alerts]
+      operationId: openRealtimeChannel
+      summary: Real-time alert feed and header figures, STOMP 1.2 over WebSocket (FR-04-02, UX-DASH-01)
+      description: |
+        Upgrade to WebSocket with subprotocol `v12.stomp`, at this exact path (no SockJS). The
+        handshake carries no credentials and the server ignores cookies here; `Origin` must be an
+        allowed origin (403 otherwise); a request that is not a valid upgrade answers 426. The
+        handshake answers every caller alike: it never answers 401, or 403 on role.
+        The STOMP CONNECT frame must arrive within 5 s and carry `Authorization: Bearer <access
+        token>`, validated as on every staff operation; the roles below are enforced there. Any
+        frame before an accepted CONNECT, a second CONNECT, or a frame to another destination
+        receives ERROR and the socket is closed. Before the token's `exp`, the client
+        re-authenticates with SEND to `/app/session.reauth` carrying the new token, with the same
+        `sub`, `sid`, `institution_id` and `role`. A session whose token expires, or whose session
+        is revoked, receives ERROR and is closed (within 5 s of revocation, D-27).
+        Destinations (SUBSCRIBE, each with a `receipt` header): `/user/queue/alerts`
+        (RealtimeAlertEvent) and `/user/queue/figures` (RealtimeFiguresEvent). Events are
+        snapshots: apply the highest `version` per `alert_id`; a read replaces a held card at an
+        equal or higher `version`. Delivery is not guaranteed and nothing is replayed: after
+        (re)connecting, subscribe, wait for both RECEIPTs, then re-read listAlerts and
+        getDashboardStats. Only entries listAlerts would show the caller are pushed. ERROR frame
+        bodies are Problem documents (the RealtimeError response).
+      security: []
+      x-auth-in-band: stomp-connect
+      x-required-roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
+      x-authorisation-rules:
+        - rule: Pushes an alert only to sessions listAlerts would show it to (queue=all, every outcome) - escalated entries only to roles at or above the target role, plus the user who escalated them
+          effect: filter
+      x-realtime:
+        protocol: stomp-1.2
+        subscribe:
+          /user/queue/alerts: { $ref: "#/components/schemas/RealtimeAlertEvent" }
+          /user/queue/figures: { $ref: "#/components/schemas/RealtimeFiguresEvent" }
+        send:
+          /app/session.reauth: { headers: [Authorization, receipt] }
+        error: { $ref: "#/components/responses/RealtimeError" }
+      responses:
+        "101": { description: Switching protocols to WebSocket (STOMP 1.2) }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+          description: >-
+            Never sent by the handshake, which authenticates no one. Documented because the
+            operation is role-protected: an unauthenticated or expired CONNECT is refused with a
+            STOMP ERROR frame whose body is this problem (unauthorized), and the socket is closed.
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "426": { $ref: "#/components/responses/UpgradeRequired" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
 
   /alerts:
@@ -2637,6 +2691,27 @@ components:
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
+    UpgradeRequired:
+      description: Not a valid WebSocket upgrade request for the real-time channel (ADR 0115)
+      x-problem-types: ["urn:fraudshield:problem:upgrade-required"]
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    RealtimeError:
+      description: >-
+        Not an HTTP response: the body of a STOMP ERROR frame on the real-time channel (ADR 0115).
+        The socket is closed after it. A `validation` problem here has no `errors` member, since a
+        frame has no fields.
+      x-problem-types:
+        - "urn:fraudshield:problem:unauthorized"
+        - "urn:fraudshield:problem:forbidden"
+        - "urn:fraudshield:problem:validation"
+        - "urn:fraudshield:problem:rate-limited"
+        - "urn:fraudshield:problem:realtime-overflow"
+        - "urn:fraudshield:problem:service-unavailable"
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
     ServiceUnavailable:
       description: A dependency is unavailable and no safe fallback exists
       x-problem-types: ["urn:fraudshield:problem:service-unavailable"]
@@ -2993,6 +3068,8 @@ components:
         - urn:fraudshield:problem:rate-limited
         - urn:fraudshield:problem:service-unavailable
         - urn:fraudshield:problem:internal
+        - urn:fraudshield:problem:realtime-overflow
+        - urn:fraudshield:problem:upgrade-required
     ValidationErrorCode:
       type: string
       description: >-
@@ -3545,6 +3622,39 @@ components:
         first_name: { $ref: "#/components/schemas/PersonName" }
         last_name: { $ref: "#/components/schemas/PersonName" }
         role: { $ref: "#/components/schemas/Role" }
+    RealtimeAlertEvent:
+      type: object
+      description: A frame on `/user/queue/alerts` of the real-time channel (ADR 0115 point 6)
+      required: [event_id, occurred_at, change, actor_user_id, provisional, alert]
+      additionalProperties: false
+      properties:
+        event_id:
+          type: string
+          format: uuid
+          description: The Kafka envelope's event_id; a repeated publication repeats it
+        occurred_at: { $ref: "#/components/schemas/Timestamp" }
+        change:
+          type: string
+          enum: [RAISED, DECIDED, UNDONE, ESCALATED, ESCALATION_CREATED, OVERRIDDEN, TIMED_OUT, RESOLVED, ASSIGNED]
+        actor_user_id:
+          type: [string, "null"]
+          format: uuid
+          description: The person who made the change; null for RAISED, TIMED_OUT and RESOLVED, and for a late entry closed by the sink
+        provisional:
+          type: boolean
+          description: >-
+            True when the Kafka payload lacked fields the read may have (merchant, top_reasons);
+            the card then carries merchant null and top_reasons empty, and a read completes it.
+            False when top_reasons is genuinely empty.
+        alert: { $ref: "#/components/schemas/AlertSummary" }
+    RealtimeFiguresEvent:
+      type: object
+      description: A frame on `/user/queue/figures` of the real-time channel (ADR 0115 point 6.3)
+      required: [as_of, stats]
+      additionalProperties: false
+      properties:
+        as_of: { $ref: "#/components/schemas/Timestamp" }
+        stats: { $ref: "#/components/schemas/DashboardStats" }
     DashboardStats:
       type: object
       required:

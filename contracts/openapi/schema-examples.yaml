@@ -941,6 +941,72 @@ examples:
       - SHADOW_UNDER_24_HOURS
       - SHADOW_UNDER_50000_SCORED
       - INSUFFICIENT_LABELS
+  RealtimeAlertEvent:
+  - event_id: 6f1c2d3e-4a5b-5c6d-8e7f-9a0b1c2d3e4f
+    occurred_at: '2026-09-17T08:16:02Z'
+    change: DECIDED
+    actor_user_id: 5b1f0a2c-3d4e-4f60-8a7b-9c0d1e2f3a4b
+    provisional: false
+    alert:
+      alert_id: 0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d
+      version: 3
+      transaction_id: 3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11
+      tier: MEDIUM
+      status: CONFIRMED_FRAUD
+      fraud_probability: 0.71
+      expected_loss_rwf: '10650'
+      amount:
+        amount: '15000'
+        currency: RWF
+      channel: MOBILE_MONEY
+      masked_account: null
+      anomaly_score: null
+      merchant: null
+      transaction_timestamp: '2026-09-17T08:15:30Z'
+      top_reasons:
+      - feature: tx_count_60s
+        value: 0.5
+        shap: 0.9
+        direction: INCREASES_RISK
+        template_key: feature.tx_count_60s.high
+      review_deadline_at: '2026-09-17T08:16:00Z'
+      escalated_from_alert_id: null
+  - event_id: 7a2d3e4f-5b6c-5d7e-9f80-1a2b3c4d5e6f
+    occurred_at: '2026-09-17T08:15:31Z'
+    change: RAISED
+    actor_user_id: null
+    provisional: true
+    alert:
+      alert_id: 0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d
+      version: 0
+      transaction_id: 3f8e0c5a-6b1d-4f5e-9a2b-7c4d1e8f0a11
+      tier: MEDIUM
+      status: PENDING
+      fraud_probability: 0.71
+      expected_loss_rwf: '10650'
+      amount:
+        amount: '15000'
+        currency: RWF
+      channel: MOBILE_MONEY
+      masked_account: null
+      anomaly_score: null
+      merchant: null
+      transaction_timestamp: '2026-09-17T08:15:30Z'
+      top_reasons: []
+      review_deadline_at: '2026-09-17T08:16:00Z'
+      escalated_from_alert_id: null
+  RealtimeFiguresEvent:
+  - as_of: '2026-09-17T08:16:05Z'
+    stats:
+      high_open: 3
+      medium_open: 11
+      auto_blocked_today: 42
+      reviewed_today: 120
+      fraud_prevented_today:
+        amount: '8450000'
+        currency: RWF
+      average_review_seconds: 19.5
+      analysts_online: 6
   RegistrationRequest:
   - first_name: Marie Claire
     last_name: Uwimana-Mukamana

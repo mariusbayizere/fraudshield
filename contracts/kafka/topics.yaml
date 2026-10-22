@@ -1,4 +1,5 @@
-# Kafka topic catalogue (build prompt C.3; ADR 0012). Topics are created from this file, never
+# Kafka topic catalogue (build prompt C.3; ADR 0012), plus one recorded deviation from C.3's thirteen
+# topics: fs.alerts.changes (ADR 0115 point 9). Topics are created from this file, never
 # implicitly by producers (auto-create is disabled in every environment).
 #
 # Every message value is a JSON event envelope (schemas/envelope.schema.json) whose `payload`
@@ -11,7 +12,8 @@
 # Core banking never reads or writes these topics: it sends transactions over the authenticated
 # HTTP API (the API key identifies the institution) and receives decisions by signed webhook or
 # GET /decisions. The producing service sets the envelope institution_id from the authenticated
-# principal, so no event can claim another institution.
+# principal, or, for an event about a stored row, from that row's institution_id read in the writing
+# tenant transaction (ADR 0115 point 4), so no event can claim another institution.
 #
 # event_type, schema_version: every envelope on the topic must carry exactly these values. A breaking
 #   payload change is published as a new topic <name>.v<N> with schema_version N (ADR 0012).
@@ -78,6 +80,21 @@ topics:
     payload_schema: schemas/alert.schema.json
     producers: [fraudshield-api]
     consumers: [websocket-fanout]
+  - name: fs.alerts.changes
+    event_type: alert.changed
+    schema_version: 1
+    purpose: >-
+      Every change to an alert queue entry after it is raised (decided, undone, escalated, overridden,
+      timed out, resolved, closed late by the sink, assigned), as the entry's AlertSummary after the
+      change with staff as ids only, for the real-time channel (ADR 0115). Published after commit,
+      best effort; the reads are authoritative. Partitions and retention are ASSUMED, sized like the
+      alert topics; nothing replays it
+    key: transaction_id
+    partitions: 12
+    retention: P1D
+    payload_schema: schemas/alert-change.schema.json
+    producers: [fraudshield-api]
+    consumers: [websocket-fanout]
   - name: fs.decisions.final
     event_type: decision.final
     schema_version: 1
@@ -111,13 +128,13 @@ topics:
   - name: fs.notifications.staff
     event_type: notification.requested
     schema_version: 1
-    purpose: Staff email, push and WebSocket notifications (freeze, escalation, unlock, approvals)
+    purpose: Staff email and push notifications (freeze, escalation, unlock, approvals)
     key: recipient_user_id
     partitions: 6
     retention: P3D
     payload_schema: schemas/notification-staff.schema.json
     producers: [fraudshield-api]
-    consumers: [notification-service, websocket-fanout]
+    consumers: [notification-service]
   - name: fs.labels
     event_type: label.recorded
     schema_version: 1

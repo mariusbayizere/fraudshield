@@ -55,6 +55,14 @@
     "channel": {
       "$ref": "urn:fraudshield:kafka:common#/$defs/Channel"
     },
+    "merchant": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 100,
+      "description": "Optional (ADR 0115 point 6.1): absent on records written before it was added"
+    },
     "transaction_timestamp": {
       "$ref": "urn:fraudshield:kafka:common#/$defs/Timestamp"
     },
@@ -80,6 +88,49 @@
       "maxItems": 3,
       "items": {
         "$ref": "urn:fraudshield:kafka:common#/$defs/ReasonCode"
+      }
+    },
+    "top_reasons": {
+      "type": "array",
+      "maxItems": 3,
+      "description": "Optional (ADR 0115 point 6.1): the scorer's top contributions as the OpenAPI ShapContribution, template_key included (the scorer sets it); absent on records written before it was added, empty when there are none",
+      "items": {
+        "type": "object",
+        "required": [
+          "feature",
+          "value",
+          "shap",
+          "direction",
+          "template_key"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "feature": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{1,63}$"
+          },
+          "value": {
+            "type": [
+              "number",
+              "string",
+              "null"
+            ]
+          },
+          "shap": {
+            "type": "number"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "INCREASES_RISK",
+              "DECREASES_RISK"
+            ]
+          },
+          "template_key": {
+            "type": "string",
+            "pattern": "^feature\\.[a-z0-9_]+\\.[a-z_]+$"
+          }
+        }
       }
     }
   },

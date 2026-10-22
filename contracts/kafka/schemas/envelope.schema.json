@@ -33,7 +33,7 @@
     },
     "institution_id": {
       "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid",
-      "description": "Set by the producing FraudShield service from the authenticated principal (API key or staff token), never copied from client input (ADR 0012, tenant isolation)"
+      "description": "Set by the producing FraudShield service from the authenticated principal (API key or staff token), or, for an event about a stored row, from that row's institution_id read in the writing tenant transaction (ADR 0115 point 4); never copied from client input (ADR 0012, tenant isolation)"
     },
     "producer": {
       "type": "string",

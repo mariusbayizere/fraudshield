@@ -13,6 +13,9 @@ from fraudshield_contracts.openapi import operations
 
 MATRIX_PATH = CONTRACTS_ROOT / "openapi" / "authorisation-matrix.yaml"
 ACCESS_KEYS = ("roles", "scopes", "public", "refresh-cookie")
+# In-band authentication (ADR 0115 point 9): HTTP authentication is skipped and the roles are
+# enforced inside the protocol, at the STOMP CONNECT. It always comes with roles and nothing else.
+IN_BAND_KEY = "in-band"
 
 
 @cache
@@ -26,6 +29,9 @@ def load_matrix(path: Path = MATRIX_PATH) -> dict[str, dict[str, Any]]:
 
 def declared_access(spec: dict[str, Any]) -> tuple[str, frozenset[str]]:
     """The access class an operation declares, with its roles or scopes."""
+    if "x-auth-in-band" in spec:
+        roles = frozenset(spec.get("x-required-roles", []))
+        return f"{IN_BAND_KEY}:{spec['x-auth-in-band']}", roles
     if "x-required-roles" in spec:
         return "roles", frozenset(spec["x-required-roles"])
     if "x-required-scopes" in spec:
@@ -39,6 +45,10 @@ def declared_access(spec: dict[str, Any]) -> tuple[str, frozenset[str]]:
 
 def matrix_access(row: dict[str, Any]) -> tuple[str, frozenset[str]]:
     keys = [key for key in ACCESS_KEYS if key in row]
+    if IN_BAND_KEY in row:
+        if keys != ["roles"] or not row["roles"]:
+            return "invalid", frozenset()
+        return f"{IN_BAND_KEY}:{row[IN_BAND_KEY]}", frozenset(row["roles"])
     if len(keys) != 1:
         return "invalid", frozenset()
     key = keys[0]

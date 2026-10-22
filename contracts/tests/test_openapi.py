@@ -17,6 +17,7 @@ SCHEMAS = DOC["components"]["schemas"]
 EXAMPLES = DOC["components"]["examples"]
 CHANNELS = {"MOBILE_MONEY", "CARD", "AGENT_BANKING", "USSD", "ONLINE", "BANK_TRANSFER"}
 AUTH_MARKERS = ("x-required-scopes", "x-required-roles", "x-public", "x-refresh-cookie")
+IN_BAND_OPERATIONS = {"openRealtimeChannel"}
 MACHINE_PATH_PREFIXES = ("/transactions/ingest", "/jobs/", "/decisions/")
 # Probes and component health return their status schema for every outcome, the verification
 # page returns HTML, and the JWKS document is static.
@@ -62,7 +63,14 @@ def test_every_operation_declares_exactly_one_authorisation_class() -> None:
         markers = [marker for marker in AUTH_MARKERS if marker in op.spec]
         assert len(markers) == 1, f"{where}: declares {markers}"
         security = op.spec.get("security")
-        if "x-public" in op.spec:
+        if "x-auth-in-band" in op.spec:
+            # ADR 0115 point 9: no HTTP authentication; the roles are enforced at STOMP CONNECT.
+            assert op.operation_id in IN_BAND_OPERATIONS, f"{where}: only the channel is in-band"
+            assert op.spec["x-auth-in-band"] == "stomp-connect", where
+            assert security == [], f"{where}: in-band operations set security: []"
+            assert markers == ["x-required-roles"], where
+            assert set(op.spec["x-required-roles"]) <= role_enum, where
+        elif "x-public" in op.spec:
             assert security == [], f"{where}: public operations must set security: []"
         elif "x-refresh-cookie" in op.spec:
             assert security == [{"refreshCookie": []}], where
@@ -619,3 +627,44 @@ def test_alert_queues_include_all_for_search_and_summaries_carry_the_anomaly_sco
     )
     assert queue["schema"]["enum"] == ["standard", "anomaly", "escalated", "all"]
     assert SCHEMAS["AlertSummary"]["properties"]["anomaly_score"] is True
+
+
+def _resolve_pointer(ref: str) -> Any:
+    assert ref.startswith("#/"), ref
+    node: Any = DOC
+    for part in ref[2:].split("/"):
+        assert isinstance(node, dict), f"unresolved {ref}"
+        assert part in node, f"unresolved {ref}"
+        node = node[part]
+    return node
+
+
+def _realtime_refs(node: object, found: list[str]) -> None:
+    if isinstance(node, dict):
+        if "$ref" in node:
+            found.append(node["$ref"])
+        for value in node.values():
+            _realtime_refs(value, found)
+    elif isinstance(node, list):
+        for value in node:
+            _realtime_refs(value, found)
+
+
+@pytest.mark.req("FR-04-02")
+def test_every_ref_under_x_realtime_resolves() -> None:
+    """ADR 0115 point 9: validators do not follow references inside extensions, so check them."""
+    found: list[str] = []
+    for op in operations(DOC):
+        _realtime_refs(op.spec.get("x-realtime", {}), found)
+    assert sorted(found) == [
+        "#/components/responses/RealtimeError",
+        "#/components/schemas/RealtimeAlertEvent",
+        "#/components/schemas/RealtimeFiguresEvent",
+    ]
+    for ref in found:
+        _resolve_pointer(ref)
+
+
+def test_the_x_realtime_check_notices_a_dangling_ref() -> None:
+    with pytest.raises(AssertionError):
+        _resolve_pointer("#/components/schemas/RealtimeMissingEvent")

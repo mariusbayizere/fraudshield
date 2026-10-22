@@ -1,7 +1,8 @@
 # Golden authorisation matrix (ADR 0014). Reviewed row by row against the SRS FRs and build
 # prompt E.8. contracts/tests/test_authorisation_matrix.py fails if the OpenAPI document differs
 # from this file in either direction, so a role change needs a deliberate edit here too.
-# access: roles (staff bearer JWT), scopes (API key), public, or refresh-cookie.
+# access: roles (staff bearer JWT), scopes (API key), public, or refresh-cookie; in-band (with roles
+#   only) means the roles are enforced inside the protocol, at the STOMP CONNECT (ADR 0115).
 # rules: the object-level rules each operation must declare in x-authorisation-rules, as
 #   problem/status (plus code for validation) or effect: filter. Rule wording may change; these may
 #   not without a deliberate edit here.
@@ -87,6 +88,12 @@ operations:
   getDashboardStats:
     roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
     ref: "SRS 5.4, FR-04-01; decision roles only"
+  openRealtimeChannel:
+    roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
+    in-band: stomp-connect
+    ref: "FR-04-02, UX-DASH-01, FR-04-10; roles enforced at STOMP CONNECT; pushes only what listAlerts shows the caller (ADR 0115)"
+    rules:
+      - { effect: filter }
   listAlerts:
     roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
     ref: "FR-04-02, FR-04-09, FR-05-01"

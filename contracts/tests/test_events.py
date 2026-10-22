@@ -55,6 +55,9 @@ C3_TOPICS = {
     "fs.ml.retrain",
     "fs.ml.shadow",
     "fs.config.changes",
+    # A recorded deviation from C.3's thirteen topics (ADR 0115 point 9): the queue entry's changes
+    # after it is raised, for the real-time channel. The constant keeps its name.
+    "fs.alerts.changes",
 }
 
 
@@ -374,6 +377,74 @@ def test_decision_final_payload_is_the_openapi_final_decision() -> None:
     kafka = _resolve(schemas()["urn:fraudshield:kafka:decision-final"])
     api = _resolve(load()["components"]["schemas"]["FinalDecision"])
     assert kafka == api
+
+
+def _closed_object(schema: Any) -> dict[str, Any]:
+    """A closed object's required set and resolved properties, flattening `$ref` + listed names.
+
+    AlertSummary closes AlertSummaryBase by listing its property names as `true` beside the `$ref`,
+    which `_resolve`'s shallow merge would keep as `true`; this takes each listed property from the
+    base instead.
+    """
+    base = schema
+    listed: set[str] | None = None
+    ref = schema.get("$ref", "")
+    if ref.startswith("#/components/schemas/"):
+        base = load()["components"]["schemas"][ref.rsplit("/", 1)[1]]
+        listed = set(schema.get("properties", {}))
+    properties = {
+        name: _resolve(value)
+        for name, value in base["properties"].items()
+        if listed is None or name in listed
+    }
+    assert schema.get("additionalProperties") is False
+    return {"required": set(base["required"]), "properties": properties}
+
+
+@pytest.mark.req("FR-04-02")
+def test_alert_change_payload_is_the_openapi_alert_summary_with_staff_as_ids() -> None:
+    """ADR 0115 point 9: `alert` is AlertSummary with assigned_analyst as assigned_analyst_id."""
+    kafka = _closed_object(schemas()["urn:fraudshield:kafka:alert-change"]["properties"]["alert"])
+    api = _closed_object(load()["components"]["schemas"]["AlertSummary"])
+    assert kafka["properties"].pop("assigned_analyst_id") == {
+        "type": ["string", "null"],
+        "format": "uuid",
+    }
+    kafka["required"].discard("assigned_analyst_id")
+    # ADR 0116 adds assigned_analyst (a StaffReference) to AlertSummary; Kafka never carries it.
+    api["properties"].pop("assigned_analyst", None)
+    api["required"].discard("assigned_analyst")
+    assert kafka == api
+
+
+def test_alert_change_payload_names_no_person() -> None:
+    """ADR 0012 point 4 and the owner's 2026-10-22 decision: staff are ids only."""
+    text = json.dumps(schemas()["urn:fraudshield:kafka:alert-change"])
+    for field in ("name", "first_name", "last_name", "assigned_analyst", "display_name"):
+        assert f'"{field}":' not in text, field
+    payload = _example("fs.alerts.changes")["payload"]
+    assert "assigned_analyst" not in payload["alert"]
+
+
+def test_alert_payload_card_fields_are_optional_and_reasons_are_shap_contributions() -> None:
+    """ADR 0115 point 6.1: merchant and top_reasons are optional; each reason is a full
+    ShapContribution, because template_key comes from the scorer and cannot be derived later."""
+    alert = schemas()["urn:fraudshield:kafka:alert"]
+    assert {"merchant", "top_reasons"}.isdisjoint(alert["required"])
+    item = alert["properties"]["top_reasons"]["items"]
+    assert _resolve(item) == _resolve(load()["components"]["schemas"]["ShapContribution"])
+    medium = _example("fs.alerts.medium")
+    medium["payload"]["merchant"] = "Kigali Market"
+    medium["payload"]["top_reasons"] = [
+        {
+            "feature": "amount_zscore_30d",
+            "value": 4.2,
+            "shap": 0.8,
+            "direction": "INCREASES_RISK",
+            "template_key": "feature.amount_zscore_30d.high",
+        }
+    ]
+    assert validate_event(_topic("fs.alerts.medium"), medium) == []
 
 
 def test_structural_comparison_notices_a_weakened_identifier() -> None:

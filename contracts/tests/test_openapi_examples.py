@@ -41,6 +41,8 @@ def _operation_schemas() -> set[str]:
     for op in operations(DOC):
         _schema_refs(op.spec.get("requestBody", {}), found)
         _schema_refs(op.spec.get("responses", {}), found)
+        # The real-time channel's frames are reached only through x-realtime (ADR 0115 point 9).
+        _schema_refs(op.spec.get("x-realtime", {}), found)
     return found
 
 

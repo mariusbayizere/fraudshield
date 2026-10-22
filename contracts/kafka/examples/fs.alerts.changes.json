@@ -1,0 +1,48 @@
+{
+  "event_id": "6f1c2d3e-4a5b-5c6d-8e7f-9a0b1c2d3e4f",
+  "event_type": "alert.changed",
+  "schema_version": 1,
+  "occurred_at": "2026-09-17T08:16:02Z",
+  "institution_id": "5b1e8f4a-2c3d-4e5f-8a9b-0c1d2e3f4a5b",
+  "producer": "fraudshield-api",
+  "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b8-01",
+  "payload": {
+    "alert_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+    "version": 1,
+    "transaction_id": "7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60",
+    "change": "DECIDED",
+    "actor_user_id": "5b1f0a2c-3d4e-4f60-8a7b-9c0d1e2f3a4b",
+    "escalation_target_role": null,
+    "escalated_by_user_id": null,
+    "alert": {
+      "alert_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+      "version": 1,
+      "transaction_id": "7a2c9e41-0d3b-4c8a-b5f6-1e2d3c4b5a60",
+      "tier": "MEDIUM",
+      "status": "CONFIRMED_FRAUD",
+      "fraud_probability": 0.71,
+      "expected_loss_rwf": "3550",
+      "amount": {
+        "amount": "5000",
+        "currency": "RWF"
+      },
+      "channel": "USSD",
+      "masked_account": null,
+      "merchant": null,
+      "transaction_timestamp": "2026-09-17T06:02:11Z",
+      "top_reasons": [
+        {
+          "feature": "amount_zscore_30d",
+          "value": 4.2,
+          "shap": 0.83,
+          "direction": "INCREASES_RISK",
+          "template_key": "feature.amount_zscore_30d.high"
+        }
+      ],
+      "review_deadline_at": "2026-09-17T06:02:41Z",
+      "escalated_from_alert_id": null,
+      "anomaly_score": 0.42,
+      "assigned_analyst_id": "5b1f0a2c-3d4e-4f60-8a7b-9c0d1e2f3a4b"
+    }
+  }
+}

@@ -318,3 +318,41 @@ def test_domain_refusals_match_the_contract() -> None:
             assert str(status) in documented, (name, operation_id)
             ref = documented[str(status)]["$ref"].rsplit("/", 1)[1]
             assert problem in responses[ref]["x-problem-types"], (name, operation_id, ref)
+
+
+@pytest.mark.req("FR-04-02")
+def test_the_realtime_channel_is_in_band_with_the_decision_roles() -> None:
+    """ADR 0115 point 9: the handshake authenticates no one; roles are enforced at CONNECT."""
+    decision_roles = frozenset({"ANALYST", "SENIOR_ANALYST", "RISK_OFFICER"})
+    assert declared_access(OPS["openRealtimeChannel"].spec) == (
+        "in-band:stomp-connect",
+        decision_roles,
+    )
+    assert [op.operation_id for op in OPS.values() if "x-auth-in-band" in op.spec] == [
+        "openRealtimeChannel"
+    ]
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        {"in-band": "stomp-connect", "ref": "x"},
+        {"in-band": "stomp-connect", "roles": ["ANALYST"], "public": True, "ref": "x"},
+        {"in-band": "stomp-connect", "roles": ["ANALYST"], "scopes": ["jobs:read"], "ref": "x"},
+        {"in-band": "stomp-connect", "refresh-cookie": True, "ref": "x"},
+    ],
+)
+def test_in_band_rows_need_roles_and_nothing_else(row: dict[str, Any]) -> None:
+    matrix = copy.deepcopy(MATRIX)
+    matrix["openRealtimeChannel"] = row | {"rules": [{"effect": "filter"}]}
+    assert [d for d in matrix_differences(DOC, matrix) if d.startswith("openRealtimeChannel")]
+
+
+def test_a_channel_declared_as_plain_roles_differs_from_the_matrix() -> None:
+    mutated = copy.deepcopy(DOC)
+    del mutated["paths"]["/realtime"]["get"]["x-auth-in-band"]
+    assert matrix_differences(mutated, MATRIX) == [
+        "openRealtimeChannel: document declares roles "
+        "['ANALYST', 'RISK_OFFICER', 'SENIOR_ANALYST'], "
+        "matrix says in-band:stomp-connect ['ANALYST', 'RISK_OFFICER', 'SENIOR_ANALYST']"
+    ]

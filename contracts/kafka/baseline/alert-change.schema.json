@@ -1,0 +1,233 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:fraudshield:kafka:alert-change",
+  "title": "fs.alerts.changes payload (ADR 0115 point 6.2)",
+  "description": "A change to an alert queue entry after it was raised, published after the writing transaction commits, best effort. `alert` is the OpenAPI AlertSummary as re-read after the commit, with `assigned_analyst` replaced by `assigned_analyst_id`; contract tests compare the two after resolving references. Staff appear as user ids only, never names (ADR 0012 point 4). The re-read may see a later version than the change that caused it; consumers apply the highest version per alert_id.",
+  "type": "object",
+  "required": [
+    "alert_id",
+    "version",
+    "transaction_id",
+    "change",
+    "actor_user_id",
+    "escalation_target_role",
+    "escalated_by_user_id",
+    "alert"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "alert_id": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "transaction_id": {
+      "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+    },
+    "change": {
+      "type": "string",
+      "enum": [
+        "DECIDED",
+        "UNDONE",
+        "ESCALATED",
+        "ESCALATION_CREATED",
+        "OVERRIDDEN",
+        "TIMED_OUT",
+        "RESOLVED",
+        "ASSIGNED"
+      ],
+      "description": "The change that caused this publication; a hint only, never used for ordering. RAISED is not published here: raised alerts are on fs.alerts.*"
+    },
+    "actor_user_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid",
+      "description": "The person who made the change; null for TIMED_OUT and RESOLVED, and for a late entry closed by the sink"
+    },
+    "escalation_target_role": {
+      "enum": [
+        "SENIOR_ANALYST",
+        "RISK_OFFICER",
+        null
+      ],
+      "description": "For routing only (ADR 0115 point 4); not pushed to the console"
+    },
+    "escalated_by_user_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid",
+      "description": "The analyst_id of the ESCALATE decision on the parent entry; for routing only, not pushed"
+    },
+    "alert": {
+      "type": "object",
+      "required": [
+        "alert_id",
+        "version",
+        "transaction_id",
+        "tier",
+        "status",
+        "fraud_probability",
+        "amount",
+        "channel",
+        "masked_account",
+        "merchant",
+        "transaction_timestamp",
+        "top_reasons",
+        "review_deadline_at",
+        "anomaly_score",
+        "assigned_analyst_id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "alert_id": {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "transaction_id": {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/Uuid"
+        },
+        "tier": {
+          "type": "string",
+          "enum": [
+            "HIGH",
+            "MEDIUM",
+            "ANOMALY"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "PENDING",
+            "IN_REVIEW",
+            "CONFIRMED_FRAUD",
+            "MARKED_LEGITIMATE",
+            "AUTO_RELEASED",
+            "AUTO_DECLINED",
+            "ESCALATED",
+            "OVERRIDDEN"
+          ]
+        },
+        "fraud_probability": {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/Probability"
+        },
+        "expected_loss_rwf": {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/DecimalAmount"
+        },
+        "amount": {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/Money"
+        },
+        "channel": {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/Channel"
+        },
+        "masked_account": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^\\*{3,}[0-9A-Za-z]{2,4}$",
+          "maxLength": 7,
+          "description": "Always null today (ADR 0110 point 3); never an account-holder name"
+        },
+        "merchant": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 100
+        },
+        "transaction_timestamp": {
+          "$ref": "urn:fraudshield:kafka:common#/$defs/Timestamp"
+        },
+        "top_reasons": {
+          "type": "array",
+          "maxItems": 3,
+          "items": {
+            "$ref": "urn:fraudshield:kafka:alert-change#/$defs/ShapContribution"
+          }
+        },
+        "review_deadline_at": {
+          "oneOf": [
+            {
+              "$ref": "urn:fraudshield:kafka:common#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "escalated_from_alert_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "anomaly_score": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "assigned_analyst_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid",
+          "description": "The assigned analyst's user id, null when the entry is in the pool (ADR 0116). The fan-out resolves the name; no name is ever on Kafka (ADR 0012 point 4)"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "ShapContribution": {
+      "type": "object",
+      "required": [
+        "feature",
+        "value",
+        "shap",
+        "direction",
+        "template_key"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "feature": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{1,63}$"
+        },
+        "value": {
+          "type": [
+            "number",
+            "string",
+            "null"
+          ]
+        },
+        "shap": {
+          "type": "number"
+        },
+        "direction": {
+          "type": "string",
+          "enum": [
+            "INCREASES_RISK",
+            "DECREASES_RISK"
+          ]
+        },
+        "template_key": {
+          "type": "string",
+          "pattern": "^feature\\.[a-z0-9_]+\\.[a-z_]+$"
+        }
+      }
+    }
+  }
+}
