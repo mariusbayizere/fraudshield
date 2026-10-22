@@ -2,7 +2,9 @@ package io.github.mariusbayizere.fraudshield.analyst;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.mariusbayizere.fraudshield.analyst.decisions.OwnerTestAutoConfiguration;
 import io.github.mariusbayizere.fraudshield.auth.testing.Http;
+import io.github.mariusbayizere.fraudshield.decision.application.port.AlertChangePublisher;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -75,6 +77,22 @@ class AnalystDecisionsTest extends AnalystIntegrationTest {
     }
   }
 
+  /** Whether the entry's change was offered to the real-time channel (ADR 0115 point 6.2). */
+  private static void published(
+      UUID alertId, long version, AlertChangePublisher.Change change, boolean byPerson) {
+    eventually(
+        change + " published",
+        () ->
+            OwnerTestAutoConfiguration.CHANGES.offered.stream()
+                .anyMatch(
+                    o ->
+                        o.alertId().equals(alertId)
+                            && o.version() == version
+                            && o.change() == change
+                            && o.institutionId().equals(BANK)
+                            && (o.actorUserId() != null) == byPerson));
+  }
+
   private static String one(String sql, Object... args) {
     Object value = query(sql, args);
     return value == null ? null : value.toString();
@@ -96,6 +114,7 @@ class AnalystDecisionsTest extends AnalystIntegrationTest {
     JsonNode body = accepted.json();
     assertThat(OpenApiSchemas.errors("AlertDecisionAccepted", body)).isEmpty();
     assertThat(body.get("state").asString()).isEqualTo("PENDING_COMMIT");
+    published(alert.id, 1, AlertChangePublisher.Change.DECIDED, true);
 
     Http.Response replay =
         post(
@@ -152,6 +171,7 @@ class AnalystDecisionsTest extends AnalystIntegrationTest {
             Map.of(),
             null);
     assertThat(undone.status()).as(undone.body()).isEqualTo(204);
+    published(alert.id, 2, AlertChangePublisher.Change.UNDONE, true);
     assertThat(one("SELECT status FROM fraudshield.alert_queue_entries WHERE id = ?", alert.id))
         .isEqualTo("PENDING");
     assertThat(
@@ -222,6 +242,8 @@ class AnalystDecisionsTest extends AnalystIntegrationTest {
     AnalystInspectorTest.inspect("escalateAlert", "", null, summary, problems);
     assertThat(problems).isEmpty();
     UUID escalatedId = UUID.fromString(summary.get("alert_id").asString());
+    published(alert.id, 1, AlertChangePublisher.Change.ESCALATED, true);
+    published(escalatedId, 0, AlertChangePublisher.Change.ESCALATION_CREATED, true);
     assertThat(one("SELECT status FROM fraudshield.alert_queue_entries WHERE id = ?", alert.id))
         .isEqualTo("ESCALATED");
     assertThat(
@@ -292,6 +314,7 @@ class AnalystDecisionsTest extends AnalystIntegrationTest {
                     + " decision_sequence DESC LIMIT 1",
                 alert.tx.id))
         .isEqualTo("DECLINE/DECLINE/SENIOR_OVERRIDE");
+    published(alert.id, 2, AlertChangePublisher.Change.OVERRIDDEN, true);
   }
 
   @Test
@@ -376,5 +399,11 @@ class AnalystDecisionsTest extends AnalystIntegrationTest {
         .isEqualTo("true");
     assertThat(one("SELECT status FROM fraudshield.alert_queue_entries WHERE id = ?", alert.id))
         .isEqualTo("OVERRIDDEN");
+    published(
+        alert.id,
+        Long.parseLong(
+            one("SELECT version FROM fraudshield.alert_queue_entries WHERE id = ?", alert.id)),
+        AlertChangePublisher.Change.RESOLVED,
+        false);
   }
 }

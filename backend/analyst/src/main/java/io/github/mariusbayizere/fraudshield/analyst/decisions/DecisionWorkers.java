@@ -5,6 +5,7 @@ import io.github.mariusbayizere.fraudshield.audit.AuditEventType;
 import io.github.mariusbayizere.fraudshield.audit.AuditLog;
 import io.github.mariusbayizere.fraudshield.audit.jdbc.TenantTransactions;
 import io.github.mariusbayizere.fraudshield.common.config.MediumTimeoutPolicy;
+import io.github.mariusbayizere.fraudshield.decision.application.port.AlertChangePublisher;
 import io.github.mariusbayizere.fraudshield.decision.application.port.CircuitBreakerPort;
 import io.github.mariusbayizere.fraudshield.decision.application.port.HoldSchedulePort;
 import io.github.mariusbayizere.fraudshield.decision.domain.DecisionValue;
@@ -51,6 +52,7 @@ public final class DecisionWorkers {
   private final CircuitBreakerPort breakers;
   private final HoldSchedulePort holds;
   private final Clock clock;
+  private final AlertChangePublisher changes;
   private final AtomicLong commitFailures = new AtomicLong();
   private final AtomicLong effectFailures = new AtomicLong();
 
@@ -77,6 +79,44 @@ public final class DecisionWorkers {
       CircuitBreakerPort breakers,
       HoldSchedulePort holds,
       Clock clock) {
+    this(
+        tenants,
+        jdbc,
+        dataSource,
+        owner,
+        recorder,
+        audit,
+        breakers,
+        holds,
+        clock,
+        AlertChangePublisher.NONE);
+  }
+
+  /**
+   * Creates the workers, publishing the entries a resolution closes (ADR 0115 point 6.2).
+   *
+   * @param tenants the runner
+   * @param jdbc JDBC template of the same data source
+   * @param dataSource the data source, for the owner's transaction-bound connection
+   * @param owner the transaction's owner
+   * @param recorder records an owner outcome after the commit
+   * @param audit the audit log
+   * @param breakers the MCC breaker, for E2; null where the application has none
+   * @param holds the hold schedule, rescheduled after a released claim; null where none
+   * @param clock clock
+   * @param changes offered each closed entry after the commit
+   */
+  public DecisionWorkers(
+      TenantTransactions tenants,
+      JdbcTemplate jdbc,
+      DataSource dataSource,
+      DecisionOwner owner,
+      RequestRecorder recorder,
+      AuditLog audit,
+      CircuitBreakerPort breakers,
+      HoldSchedulePort holds,
+      Clock clock,
+      AlertChangePublisher changes) {
     this.tenants = Objects.requireNonNull(tenants, "tenants");
     this.jdbc = Objects.requireNonNull(jdbc, "jdbc");
     this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
@@ -86,6 +126,7 @@ public final class DecisionWorkers {
     this.breakers = breakers;
     this.holds = holds;
     this.clock = Objects.requireNonNull(clock, "clock");
+    this.changes = Objects.requireNonNull(changes, "changes");
   }
 
   // ------------------------------------------------------------------------------- D3: commit
@@ -386,6 +427,14 @@ public final class DecisionWorkers {
               return r;
             });
     recorder.record(institution, result);
+    for (DecisionOwner.Closed closed : result.closedEntries()) {
+      changes.offer(
+          institution,
+          closed.alertId(),
+          closed.version(),
+          AlertChangePublisher.Change.RESOLVED,
+          null);
+    }
     if (result.outcome() == Verdict.Outcome.RELEASED && holds != null) {
       rescheduleHeld(institution, transactionId);
     }

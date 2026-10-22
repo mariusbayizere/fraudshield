@@ -35,6 +35,24 @@
       <groupId>org.yaml</groupId>
       <artifactId>snakeyaml</artifactId>
     </dependency>
+    <!-- The real-time channel (ADR 0115): STOMP 1.2 frames over a plain WebSocket handler, the
+         change publisher's and the fan-out's Kafka clients, and the fan-out's schema checks. -->
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-websocket</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-messaging</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.kafka</groupId>
+      <artifactId>kafka-clients</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.networknt</groupId>
+      <artifactId>json-schema-validator</artifactId>
+    </dependency>
 
     <dependency>
       <groupId>io.github.mariusbayizere.fraudshield</groupId>
@@ -75,11 +93,6 @@
       <artifactId>testcontainers</artifactId>
       <scope>test</scope>
     </dependency>
-    <dependency>
-      <groupId>com.networknt</groupId>
-      <artifactId>json-schema-validator</artifactId>
-      <scope>test</scope>
-    </dependency>
   </dependencies>
 
   <build>
@@ -94,6 +107,15 @@
         <targetPath>fraudshield/countries</targetPath>
         <includes>
           <include>*.yaml</include>
+        </includes>
+      </resource>
+      <!-- The fan-out validates each record against the frozen Kafka schemas (ADR 0115 point 5);
+           packaged, never copied. -->
+      <resource>
+        <directory>${maven.multiModuleProjectDirectory}/../contracts/kafka/schemas</directory>
+        <targetPath>fraudshield/kafka-schemas</targetPath>
+        <includes>
+          <include>*.schema.json</include>
         </includes>
       </resource>
     </resources>

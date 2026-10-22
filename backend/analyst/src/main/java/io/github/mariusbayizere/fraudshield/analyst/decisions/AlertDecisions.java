@@ -10,6 +10,7 @@ import io.github.mariusbayizere.fraudshield.audit.jdbc.TenantTransactions;
 import io.github.mariusbayizere.fraudshield.auth.support.AfterCommit;
 import io.github.mariusbayizere.fraudshield.auth.web.ProblemException;
 import io.github.mariusbayizere.fraudshield.common.config.StaffRole;
+import io.github.mariusbayizere.fraudshield.decision.application.port.AlertChangePublisher;
 import io.github.mariusbayizere.fraudshield.decision.application.port.HoldSchedulePort;
 import io.github.mariusbayizere.fraudshield.decision.owner.DecisionOwner;
 import io.github.mariusbayizere.fraudshield.decision.owner.OwnerIds;
@@ -25,6 +26,7 @@ import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -57,6 +59,18 @@ public final class AlertDecisions {
 
   private static final String CONTEST_TYPE = "decision-contested";
 
+  private static final String SET_STATUS =
+      "UPDATE alert_queue_entries SET status = ?, version = version + 1 WHERE id = ?"
+          + " RETURNING version";
+
+  private static final String SET_ESCALATED =
+      "UPDATE alert_queue_entries SET status = 'ESCALATED', version = version + 1 WHERE id = ?"
+          + " RETURNING version";
+
+  private static final String SET_OVERRIDDEN =
+      "UPDATE alert_queue_entries SET status = 'OVERRIDDEN', version = version + 1 WHERE id = ?"
+          + " RETURNING version";
+
   private static final String LOCK_ENTRY =
       """
       SELECT id, transaction_id, tier, status, version, escalation_target_role, resolution_id
@@ -82,6 +96,7 @@ public final class AlertDecisions {
   private final HoldSchedulePort holds;
   private final Duration escalationWindow;
   private final Clock clock;
+  private final AlertChangePublisher changes;
 
   /**
    * Creates the service.
@@ -109,6 +124,47 @@ public final class AlertDecisions {
       HoldSchedulePort holds,
       Duration escalationWindow,
       Clock clock) {
+    this(
+        tenants,
+        jdbc,
+        dataSource,
+        owner,
+        recorder,
+        audit,
+        alerts,
+        holds,
+        escalationWindow,
+        clock,
+        AlertChangePublisher.NONE);
+  }
+
+  /**
+   * Creates the service, publishing each entry change after its commit (ADR 0115 point 6.2).
+   *
+   * @param tenants the runner, which retries 40001 and 40P01
+   * @param jdbc JDBC template of the same data source
+   * @param dataSource the data source, for the owner's transaction-bound connection
+   * @param owner the transaction's owner
+   * @param recorder records an owner outcome after the commit
+   * @param audit the audit log
+   * @param alerts alert reads, for the contract's bodies
+   * @param holds the hold schedule; null when the application has none
+   * @param escalationWindow W
+   * @param clock clock
+   * @param changes offered each entry change after the commit
+   */
+  public AlertDecisions(
+      TenantTransactions tenants,
+      JdbcTemplate jdbc,
+      DataSource dataSource,
+      DecisionOwner owner,
+      RequestRecorder recorder,
+      AuditLog audit,
+      AlertQueries alerts,
+      HoldSchedulePort holds,
+      Duration escalationWindow,
+      Clock clock,
+      AlertChangePublisher changes) {
     this.tenants = Objects.requireNonNull(tenants, "tenants");
     this.jdbc = Objects.requireNonNull(jdbc, "jdbc");
     this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
@@ -119,6 +175,7 @@ public final class AlertDecisions {
     this.holds = holds;
     this.escalationWindow = Objects.requireNonNull(escalationWindow, "escalationWindow");
     this.clock = Objects.requireNonNull(clock, "clock");
+    this.changes = Objects.requireNonNull(changes, "changes");
   }
 
   /**
@@ -172,12 +229,16 @@ public final class AlertDecisions {
     String kind = fraud ? "CONFIRM_FRAUD" : "MARK_LEGITIMATE";
     byte[] fingerprint =
         fingerprint("decide", alertId.toString(), kind, comment, Long.toString(alertVersion));
+    Changes made = new Changes();
+    Map<String, Object> body;
     try {
-      return decideOnce(caller, alertId, key, kind, comment, alertVersion, fingerprint);
+      body = decideOnce(caller, alertId, key, kind, comment, alertVersion, fingerprint, made);
     } catch (DuplicateKeyException sameKeyElsewhere) {
       // D1(b): the same key used concurrently; re-run once and answer by the stored row.
-      return decideOnce(caller, alertId, key, kind, comment, alertVersion, fingerprint);
+      body = decideOnce(caller, alertId, key, kind, comment, alertVersion, fingerprint, made);
     }
+    made.publish(caller);
+    return body;
   }
 
   private Map<String, Object> decideOnce(
@@ -187,10 +248,12 @@ public final class AlertDecisions {
       String kind,
       String comment,
       long alertVersion,
-      byte[] fingerprint) {
+      byte[] fingerprint,
+      Changes made) {
     return inTenant(
         caller.institutionId(),
         () -> {
+          made.clear();
           bound();
           Entry entry = lockEntry(alertId);
           Optional<Keyed> keyed = byKey(key);
@@ -246,10 +309,15 @@ public final class AlertDecisions {
             }
             throw e;
           }
-          jdbc.update(
-              "UPDATE alert_queue_entries SET status = ?, version = version + 1 WHERE id = ?",
-              "CONFIRM_FRAUD".equals(kind) ? "CONFIRMED_FRAUD" : "MARKED_LEGITIMATE",
-              alertId);
+          made.add(
+              alertId,
+              version(
+                  jdbc.queryForObject(
+                      SET_STATUS,
+                      Long.class,
+                      "CONFIRM_FRAUD".equals(kind) ? "CONFIRMED_FRAUD" : "MARKED_LEGITIMATE",
+                      alertId)),
+              AlertChangePublisher.Change.DECIDED);
           audit.record(
               AuditEvent.of(caller.institutionId(), AuditEventType.ANALYST_DECISION, "DECIDED")
                   .entity("alert_decision", decisionId)
@@ -279,10 +347,12 @@ public final class AlertDecisions {
    * @param decisionId the decision
    */
   public void undo(Caller caller, UUID alertId, UUID decisionId) {
+    Changes made = new Changes();
     Optional<HoldSchedulePort.DueHold> reschedule =
         inTenant(
             caller.institutionId(),
             () -> {
+              made.clear();
               bound();
               Entry entry = lockEntry(alertId);
               List<Map<String, Object>> found =
@@ -338,10 +408,12 @@ public final class AlertDecisions {
                 // the entry would leave one nothing can decide (D2(a); code review 1, MAJOR 5).
                 throw new StaleAfterRollback(entry.id());
               }
-              jdbc.update(
-                  "UPDATE alert_queue_entries SET status = ?, version = version + 1 WHERE id = ?",
-                  found.getFirst().get("prior_status"),
-                  alertId);
+              made.add(
+                  alertId,
+                  version(
+                      jdbc.queryForObject(
+                          SET_STATUS, Long.class, found.getFirst().get("prior_status"), alertId)),
+                  AlertChangePublisher.Change.UNDONE);
               audit.record(
                   AuditEvent.of(caller.institutionId(), AuditEventType.ANALYST_DECISION, "UNDO")
                       .entity("alert_decision", decisionId)
@@ -350,6 +422,7 @@ public final class AlertDecisions {
                       .at(clock.instant()));
               return heldAt(caller.institutionId(), entry.transactionId());
             });
+    made.publish(caller);
     reschedule.ifPresent(this::reschedule);
   }
 
@@ -375,10 +448,12 @@ public final class AlertDecisions {
     byte[] fingerprint =
         fingerprint(
             "escalate", alertId.toString(), target.name(), reason, Long.toString(alertVersion));
+    Changes made = new Changes();
     Escalated escalated =
         inTenant(
             caller.institutionId(),
             () -> {
+              made.clear();
               bound();
               Entry entry = lockEntry(alertId);
               Optional<Keyed> keyed = byKey(key);
@@ -438,10 +513,11 @@ public final class AlertDecisions {
                   alertVersion,
                   fingerprint,
                   escalatedId);
-              jdbc.update(
-                  "UPDATE alert_queue_entries SET status = 'ESCALATED', version = version + 1"
-                      + " WHERE id = ?",
-                  alertId);
+              made.add(
+                  alertId,
+                  version(jdbc.queryForObject(SET_ESCALATED, Long.class, alertId)),
+                  AlertChangePublisher.Change.ESCALATED);
+              made.add(escalatedId, 0, AlertChangePublisher.Change.ESCALATION_CREATED);
               audit.record(
                   AuditEvent.of(
                           caller.institutionId(), AuditEventType.ANALYST_DECISION, "ESCALATED")
@@ -458,6 +534,7 @@ public final class AlertDecisions {
                   escalatedId,
                   held ? heldAt(caller.institutionId(), entry.transactionId()) : Optional.empty());
             });
+    made.publish(caller);
     escalated.reschedule().ifPresent(this::reschedule);
     return inTenant(
         caller.institutionId(),
@@ -500,10 +577,12 @@ public final class AlertDecisions {
             newDecision,
             reason,
             Long.toString(alertVersion));
+    Changes made = new Changes();
     Overridden overridden =
         inTenant(
             caller.institutionId(),
             () -> {
+              made.clear();
               bound();
               Entry entry = lockEntry(alertId);
               Optional<Keyed> keyed = byKey(key);
@@ -573,10 +652,10 @@ public final class AlertDecisions {
                   decisionId,
                   caller.institutionId(),
                   outcome);
-              jdbc.update(
-                  "UPDATE alert_queue_entries SET status = 'OVERRIDDEN', version = version + 1"
-                      + " WHERE id = ?",
-                  alertId);
+              made.add(
+                  alertId,
+                  version(jdbc.queryForObject(SET_OVERRIDDEN, Long.class, alertId)),
+                  AlertChangePublisher.Change.OVERRIDDEN);
               audit.record(
                   AuditEvent.of(
                           caller.institutionId(), AuditEventType.SENIOR_OVERRIDE, "OVERRIDDEN")
@@ -595,6 +674,7 @@ public final class AlertDecisions {
     if (overridden.result() != null) {
       recorder.record(caller.institutionId(), overridden.result());
     }
+    made.publish(caller);
     return overridden.record();
   }
 
@@ -667,10 +747,10 @@ public final class AlertDecisions {
 
   /** §2: the bounds every transaction here runs with, set inside it. */
   private void bound() {
-    jdbc.queryForObject(
+    // Two columns: read as a row list, not queryForObject, which demands exactly one.
+    jdbc.queryForList(
         "SELECT set_config('lock_timeout', '2s', true), set_config('statement_timeout', '5s',"
-            + " true)",
-        Object.class);
+            + " true)");
   }
 
   private Entry lockEntry(UUID alertId) {
@@ -905,4 +985,36 @@ public final class AlertDecisions {
       throw new IllegalStateException("SHA-256 is unavailable", e);
     }
   }
+
+  private static long version(Long returned) {
+    if (returned == null) {
+      throw new IllegalStateException("the entry's update returned no version");
+    }
+    return returned;
+  }
+
+  /**
+   * The entry changes one operation made, offered only after its commit (ADR 0115 point 6.2).
+   * Cleared at the start of each attempt, so a retried transaction offers its last attempt's.
+   */
+  private final class Changes {
+    private final List<Made> made = new ArrayList<>();
+
+    void clear() {
+      made.clear();
+    }
+
+    void add(UUID alertId, long version, AlertChangePublisher.Change change) {
+      made.add(new Made(alertId, version, change));
+    }
+
+    void publish(Caller caller) {
+      for (Made m : made) {
+        changes.offer(
+            caller.institutionId(), m.alertId(), m.version(), m.change(), caller.userId());
+      }
+    }
+  }
+
+  private record Made(UUID alertId, long version, AlertChangePublisher.Change change) {}
 }

@@ -2,6 +2,7 @@ package io.github.mariusbayizere.fraudshield.analyst.decisions;
 
 import io.github.mariusbayizere.fraudshield.analyst.config.AnalystAutoConfiguration;
 import io.github.mariusbayizere.fraudshield.decision.application.event.DecisionEvent;
+import io.github.mariusbayizere.fraudshield.decision.application.port.AlertChangePublisher;
 import io.github.mariusbayizere.fraudshield.decision.application.port.DecisionStatePort;
 import io.github.mariusbayizere.fraudshield.decision.application.port.EventRecorder;
 import io.github.mariusbayizere.fraudshield.decision.domain.DecisionState;
@@ -33,6 +34,41 @@ public class OwnerTestAutoConfiguration {
     public void record(List<DecisionEvent> batch) {
       events.addAll(batch);
     }
+  }
+
+  /**
+   * The real-time port of the analyst tests: it keeps every offered change (ADR 0115 point 6.2), so
+   * a test can assert that each writer publishes.
+   */
+  public static final class RecordingChanges implements AlertChangePublisher {
+    /**
+     * One offered change.
+     *
+     * @param institutionId institution
+     * @param alertId entry
+     * @param version its version
+     * @param change the change
+     * @param actorUserId the actor, or null
+     */
+    public record Offered(
+        UUID institutionId, UUID alertId, long version, Change change, UUID actorUserId) {}
+
+    /** What was offered, in order. */
+    public final List<Offered> offered = new CopyOnWriteArrayList<>();
+
+    @Override
+    public void offer(
+        UUID institutionId, UUID alertId, long version, Change change, UUID actorUserId) {
+      offered.add(new Offered(institutionId, alertId, version, change, actorUserId));
+    }
+  }
+
+  /** The one recording publisher, shared with the tests. */
+  public static final RecordingChanges CHANGES = new RecordingChanges();
+
+  @Bean
+  AlertChangePublisher recordingChanges() {
+    return CHANGES;
   }
 
   @Bean

@@ -53,4 +53,14 @@
     </Or>
     <Bug pattern="SQL_INJECTION_SPRING_JDBC"/>
   </Match>
+  <!--
+    Outbound.take holds its lock from before the try to the finally on every path; the loop's
+    Condition.awaitNanos releases and re-acquires it, which the detector reads as an unlock without
+    a lock (ADR 0115 point 8).
+  -->
+  <Match>
+    <Class name="io.github.mariusbayizere.fraudshield.analyst.realtime.Outbound"/>
+    <Method name="take"/>
+    <Bug pattern="CWO_CLOSED_WITHOUT_OPENED"/>
+  </Match>
 </FindBugsFilter>

@@ -212,6 +212,24 @@ class AuthorisationMatrixTest extends AuthIntegrationTest {
     StringBuilder matrix = new StringBuilder("{\"calls\": [\n");
     int calls = 0;
     for (ContractPolicy.Operation operation : policy.operations().values()) {
+      if (operation.access().inBand() != null) {
+        // The real-time handshake authenticates no one (ADR 0115 point 9): every caller gets the
+        // same answer, never 401 or 403 on role; its roles are tested at the STOMP CONNECT.
+        java.util.Set<Integer> answers = new java.util.TreeSet<>();
+        for (Caller caller : callers) {
+          answers.add(call(operation, caller).status());
+          calls++;
+        }
+        if (answers.size() != 1 || answers.contains(401) || answers.contains(403)) {
+          violations.add(operation.operationId() + " answered callers differently: " + answers);
+        }
+        matrix.append(
+            String.format(
+                "  {\"operation\": \"%s\", \"caller\": \"every\", \"in_band\": true,"
+                    + " \"statuses\": \"%s\"},%n",
+                operation.operationId(), answers));
+        continue;
+      }
       for (Caller caller : callers) {
         Http.Response response = call(operation, caller);
         calls++;

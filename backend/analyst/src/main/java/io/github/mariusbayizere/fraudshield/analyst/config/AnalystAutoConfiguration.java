@@ -9,11 +9,13 @@ import io.github.mariusbayizere.fraudshield.analyst.decisions.AlertDecisions;
 import io.github.mariusbayizere.fraudshield.analyst.decisions.DecisionController;
 import io.github.mariusbayizere.fraudshield.analyst.decisions.DecisionWorkerTasks;
 import io.github.mariusbayizere.fraudshield.analyst.decisions.DecisionWorkers;
+import io.github.mariusbayizere.fraudshield.analyst.realtime.RealtimeConfiguration;
 import io.github.mariusbayizere.fraudshield.analyst.scoring.ScoringResultController;
 import io.github.mariusbayizere.fraudshield.analyst.support.CountryPacks;
 import io.github.mariusbayizere.fraudshield.audit.AuditLog;
 import io.github.mariusbayizere.fraudshield.audit.jdbc.TenantTransactions;
 import io.github.mariusbayizere.fraudshield.auth.session.SessionService;
+import io.github.mariusbayizere.fraudshield.decision.application.port.AlertChangePublisher;
 import io.github.mariusbayizere.fraudshield.decision.application.port.CircuitBreakerPort;
 import io.github.mariusbayizere.fraudshield.decision.application.port.HoldSchedulePort;
 import io.github.mariusbayizere.fraudshield.decision.owner.DecisionOwner;
@@ -37,7 +39,12 @@ import org.springframework.jdbc.core.JdbcTemplate;
 @AutoConfiguration(
     afterName = "io.github.mariusbayizere.fraudshield.auth.config.AuthAutoConfiguration")
 @ConditionalOnBean(SessionService.class)
-@Import({AlertController.class, ScoringResultController.class, AccountController.class})
+@Import({
+  AlertController.class,
+  ScoringResultController.class,
+  AccountController.class,
+  RealtimeConfiguration.class
+})
 public class AnalystAutoConfiguration {
 
   @Bean
@@ -69,7 +76,8 @@ public class AnalystAutoConfiguration {
         AuditLog audit,
         AlertQueries alerts,
         ObjectProvider<HoldSchedulePort> holds,
-        ObjectProvider<Clock> clock) {
+        ObjectProvider<Clock> clock,
+        ObjectProvider<AlertChangePublisher> changes) {
       return new AlertDecisions(
           tenants,
           jdbc,
@@ -80,7 +88,8 @@ public class AnalystAutoConfiguration {
           alerts,
           holds.getIfAvailable(),
           AlertDecisions.DEFAULT_ESCALATION_WINDOW,
-          clock.getIfAvailable(Clock::systemUTC));
+          clock.getIfAvailable(Clock::systemUTC),
+          changes.getIfAvailable(() -> AlertChangePublisher.NONE));
     }
 
     @Bean
@@ -94,7 +103,8 @@ public class AnalystAutoConfiguration {
         ObjectProvider<CircuitBreakerPort> breakers,
         ObjectProvider<HoldSchedulePort> holds,
         ObjectProvider<Clock> clock,
-        ObjectProvider<MeterRegistry> registry) {
+        ObjectProvider<MeterRegistry> registry,
+        ObjectProvider<AlertChangePublisher> changes) {
       DecisionWorkers workers =
           new DecisionWorkers(
               tenants,
@@ -105,7 +115,8 @@ public class AnalystAutoConfiguration {
               audit,
               breakers.getIfAvailable(),
               holds.getIfAvailable(),
-              clock.getIfAvailable(Clock::systemUTC));
+              clock.getIfAvailable(Clock::systemUTC),
+              changes.getIfAvailable(() -> AlertChangePublisher.NONE));
       registry.ifAvailable(
           meters -> {
             FunctionCounter.builder(

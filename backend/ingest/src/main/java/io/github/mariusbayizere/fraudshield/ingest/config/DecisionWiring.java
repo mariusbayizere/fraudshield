@@ -29,6 +29,7 @@ import io.github.mariusbayizere.fraudshield.decision.application.CircuitBreakerM
 import io.github.mariusbayizere.fraudshield.decision.application.DecisionService;
 import io.github.mariusbayizere.fraudshield.decision.application.DecisionSettings;
 import io.github.mariusbayizere.fraudshield.decision.application.HoldTimeoutService;
+import io.github.mariusbayizere.fraudshield.decision.application.port.AlertChangePublisher;
 import io.github.mariusbayizere.fraudshield.decision.application.port.CircuitBreakerPort;
 import io.github.mariusbayizere.fraudshield.decision.application.port.DecisionMetrics;
 import io.github.mariusbayizere.fraudshield.decision.application.port.DecisionStatePort;
@@ -77,6 +78,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import javax.sql.DataSource;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -173,9 +175,13 @@ public class DecisionWiring {
       DurableSpool spool,
       DataSource dataSource,
       FraudShieldProperties properties,
-      MeterRegistry registry) {
+      MeterRegistry registry,
+      ObjectProvider<AlertChangePublisher> changes) {
     PostgresSink sink =
-        new PostgresSink(dataSource, Path.of(properties.spoolDirectory()).resolve("dead-letters"));
+        new PostgresSink(
+            dataSource,
+            Path.of(properties.spoolDirectory()).resolve("dead-letters"),
+            changes.getIfAvailable(() -> AlertChangePublisher.NONE));
     FunctionCounter.builder("fs_sink_unreserved_states_total", sink, PostgresSink::unreservedStates)
         .description("Later states the sink dropped: no owner request behind them (contract §6.1)")
         .register(registry);
@@ -399,10 +405,12 @@ public class DecisionWiring {
       RequestRecorder recorder,
       DecisionMetrics metrics,
       Clock clock,
-      FraudShieldProperties properties) {
+      FraudShieldProperties properties,
+      ObjectProvider<AlertChangePublisher> changes) {
     return new HoldTimeoutService(
         holds,
-        new OwnerHoldTimeouts(transactions, owner, recorder),
+        new OwnerHoldTimeouts(
+            transactions, owner, recorder, changes.getIfAvailable(() -> AlertChangePublisher.NONE)),
         metrics,
         clock,
         properties.instanceId());
