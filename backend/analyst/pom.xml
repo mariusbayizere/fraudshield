@@ -49,11 +49,12 @@
       <groupId>org.apache.kafka</groupId>
       <artifactId>kafka-clients</artifactId>
     </dependency>
-    <!-- The container's session, to bound its blocking sends and closes; the application's
-         servlet container provides it. -->
+    <!-- The container's session (jakarta.websocket, as Tomcat ships it), to bound its blocking
+         sends and closes with Tomcat's own property; the application's servlet container provides
+         it at run time. -->
     <dependency>
-      <groupId>jakarta.websocket</groupId>
-      <artifactId>jakarta.websocket-api</artifactId>
+      <groupId>org.apache.tomcat.embed</groupId>
+      <artifactId>tomcat-embed-websocket</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
