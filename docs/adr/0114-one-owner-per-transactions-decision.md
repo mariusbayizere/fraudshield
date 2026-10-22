@@ -1,6 +1,6 @@
 # 0114: One owner per transaction's decision
 
-- **Status:** Proposed. It becomes Accepted when the contract is reviewed clean.
+- **Status:** Accepted (2026-10-22): review 4 found the contract SOUND_WITH_CHANGES, with no MAJOR; its MINORs are applied in draft 5.
 - **Date:** 2026-10-22
 - **Decided by:** the owner, on review 8 of the decision-commit contract
 - **Requirements affected:** D-14, D-44, FR-03-02, FR-03-05, FR-04-10
