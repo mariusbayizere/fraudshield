@@ -1,14 +1,111 @@
 # M9 updates (branch `m9/infra`)
 
-Written by the M9 agent for the owner and the M5, M6, M7 and M8 agents. This branch edits shared
+Written by the M9 agent for the owner and the M5, M6, M7 and M8 agents. `m9/infra` edited shared
 files: `docs/traceability/requirements.yaml` (notes on OPS-CI-08, OPS-OBS-01, OPS-OBS-03 and
 OPS-OBS-05; no status changes) and its rendered matrix, `docs/backlog/product.md` (the PB-171 to
 PB-190 claims row, PB-171 to PB-179 and PB-183 to PB-190), `docs/research/lab_notebook.md` (M9's
-entries) and `docs/adr/` (0090, 0091 and 0093). It does not edit `SESSION_STATE.md`. Scope as assigned: the
-parts of M9 that need no running services, no Docker and no heavy suites on the laptop.
+entries) and `docs/adr/` (0090, 0091 and 0093). `docs/walkthrough/SESSION_STATE.md` was edited only
+for the handover, after the merge. Scope as assigned: the parts of M9 that need no running services,
+no Docker and no heavy suites on the laptop.
 
-**Status: not reviewed, not merged.** No requirement below may move to `DONE` until Principal
-Review (Part I) and merge. The milestone gate is **not** met; see "Gate status".
+**Status: merged into `main` by fast-forward at `39b12d7` on 2026-10-22, with its gaps recorded.**
+No requirement below may move to `DONE` until Principal Review (Part I). The milestone gate is
+**not** met; see section 0 and "Gate status".
+
+## 0. Handover (2026-10-22)
+
+M9 was merged into `main` by fast-forward at `39b12d7` on 2026-10-22, on the owner's decision to
+merge with its gaps recorded. Before the merge, an independent review covered only the three
+workflows and `k8s_policy.py` (2026-10-21). The alert rules, the documents and section 2's
+evidence table are reviewed after the merge (PB-183). The milestone gate is not met, and no M9
+requirement moves to `DONE`.
+
+### Functional, with evidence on `39b12d7`
+
+- **`infrastructure` workflow** (`validate.sh` plus actionlint), green on `39b12d7` (`main`'s push
+  run 39711643618):
+  - promtool rule checks and unit tests covering all 13 alerts (22 promtool test groups);
+  - amtool and the routing assertions; blackbox config check; lokitool lint;
+  - the 5 dashboards regenerated and compared with the committed JSON;
+  - the metric catalogue guard (every query names only Part E.10 metrics);
+  - kubeconform strict on both overlays, and `k8s_policy.py` on Deployments, StatefulSets and
+    DaemonSets, listed controls only (30 tests, 26 breaking one rule each).
+- **`security` workflow:** Trivy on dependencies (0 HIGH/CRITICAL with a fix) and Trivy on the
+  rendered Kubernetes manifests, both green (run 39711643616).
+- **`supply-chain` workflow:** a CycloneDX source SBOM on every push; it is signed with keyless
+  cosign and verified only on `main`, against an identity anchored at `@refs/heads/main$`. The
+  step ran and passed on `main`'s push run 39711643690 and was skipped on `m9/infra`'s 39705486164.
+- **Alerts that read emitted series:** decision latency (it interpolates: the histogram has no
+  0.08 bound, PB-174), the D-10 timeout-release rate, the fraud-rate anomaly, the auto-block
+  anomaly and the fallback-active alert (all on metrics `main` emits), and the API health probe
+  (blackbox; nothing is deployed for it to probe).
+- **`fs_spool_depth_bytes`** is the API's exported name, confirmed by a scrape test.
+- **Manifests** for the application and observability workloads, validated offline only: each
+  API pod has its own spool directory (stop-gap), the scorer's admin port is fixed, and the probes
+  that could only fail are disabled.
+
+### Recorded as not functional, with backlog ids
+
+| What | Backlog |
+|---|---|
+| A dead API pod's spool is stranded, not replayed (stop-gap; a StatefulSet replaces it) | PB-171 |
+| The ML worker does not exist | PB-172 |
+| The ML health probe is disabled: the API serves no `/actuator/health/ml` | PB-173 |
+| 6 alerts and 15 panels read metrics nothing emits (the 7th alert that cannot fire is PB-173's); the canary's error-rate analysis fails every rollout | PB-174 to PB-178 (table in section 7) |
+| Part E.10 does not list 32 emitted metrics: ADR 0093 is accepted, the E.10 amendment is not made (owner, when `security/scan-on-main` was merged: "ADR 0092 and PB-178: not now") | PB-178, ADR 0093 |
+| The scorer's manifest cannot start the scorer | PB-179 |
+| The alert rules, documents and evidence table have had no independent review | PB-183 |
+| `k8s_policy.py` gaps: other workload kinds (flagged for whoever lands the ML worker or any Job), the rest of the restricted profile, the token exemption, allow-all NetworkPolicies, the spool mount, init containers rejected | PB-184 to PB-189 |
+| The workflow review's low and informational findings | PB-190 |
+
+Recorded without a backlog id:
+- **The canary design is withdrawn** (3b, decision 2) and has no replacement ADR.
+- **Owner decisions not built:** the generic webhook sink (Alertmanager still routes to
+  PagerDuty), the Kubernetes version floor (still 1.34), the ADR recording Trivy as the
+  substitution for OWASP Dependency-Check, the vendor-free KMS reference implementation (section
+  8.2's acceptance 1 and 2 stay open until a vendor is chosen, 3b, decision 6), the ADR for
+  lokitool in CI only (3b, decision 1), and ADR 0092 (claimed, not written).
+- **Never exercised:** nothing has been applied to a cluster; the ZAP baseline has never run
+  (`docker-compose.yml` has no `fraudshield-api` service); no service image is built, scanned or
+  signed (no Dockerfiles exist); there are no staging or production deploy workflows.
+- **Not started:** the data-store manifests, Loki, a log collector and the OpenTelemetry
+  Collector, the edge image, an alerting dead-man's switch and HA (R-15), admission-time
+  signature verification (R-16), and D-51's WireMock stubs of Google's endpoints (PB-113:
+  `infrastructure/docker/wiremock/mappings/` has no stubs, and the sandbox suite skipped without
+  credentials does not exist).
+- **Also open:** no integration stage or ML gate in CI, SonarQube skipped (section 7); the data
+  stores' NetworkPolicies and encryption at rest, and Redis TLS (D-20, D-49, section 8.3);
+  section 8.1's acceptance 1 to 6; M5's two alerts (`LabelsConsumerNotWritingOutcomes`,
+  `AccountReferenceStateHasNoProducer`) are not in `alerts.yml`; M7's licence-notice scan of the
+  ML image.
+- **The nightly scans never fire** while the default branch is `m0/bootstrap` (GOV-9).
+
+### What M10 needs from M9 that does not exist yet
+
+M10's own list is in `docs/parallel/M10_updates.md` on `m10/verification` (`1e9e34a`, not on
+`main`), sections "Prerequisites that belong to other milestones" and 5.
+
+- **Data-store manifests** (PostgreSQL/TimescaleDB, Redis, Kafka) carrying the label
+  `fraudshield.io/datastore: <name>` and the operator's primary-role label, so chaos cases 02, 03
+  and 04 select real pods.
+- **Chaos Mesh in its own namespace**, with a NetworkPolicy that lets it act on `fraudshield` pods
+  under restricted Pod Security and default-deny networking.
+- **Service images** (an inference from the campaign's scope; M10's list does not name them):
+  Dockerfiles for the API, scorer, ML worker, frontend and edge, so the
+  `images` job builds, scans, signs and pushes them; M10's load and chaos runs need something to
+  deploy.
+- **A way to deploy** (the same inference): staging and production deploy workflows, or a
+  documented apply procedure; nothing has been applied to a cluster.
+- **The StatefulSet spool** (PB-171) and ADR 0092, which ADR 0090's orphan-spool chaos case and
+  the fsync benchmark row depend on (from PB-171's acceptance, not M10's list; ADR 0092's part is
+  an inference).
+- **The metrics the dashboards and alerts read** (PB-174 to PB-177, PB-178) and the ML worker
+  (PB-172), so a campaign run can be observed on the dashboards rather than only in Locust (an
+  inference).
+- **The API in the compose stack**, so the ZAP baseline has a target; M10's security suite needs it
+  if it runs ZAP (an inference: M10's list does not name it).
+- **A canary design** that works at the replica count M10 deploys, if the campaign tests a rollout
+  (an inference: M10's list does not name it).
 
 ## 1. What exists
 
