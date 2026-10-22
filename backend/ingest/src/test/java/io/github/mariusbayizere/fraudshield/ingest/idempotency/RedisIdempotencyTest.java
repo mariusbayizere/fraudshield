@@ -61,8 +61,12 @@ class RedisIdempotencyTest {
     return (IdempotencyStore.Claimed) store.claim(institution, transaction, FINGERPRINT);
   }
 
-  private static void outliveTheLease() throws InterruptedException {
-    Thread.sleep(LEASE.toMillis() * 2);
+  /**
+   * The lease is judged by the store's clock and recorded as lease_until (decision-owner contract
+   * §7.5), so it is outlived by advancing that clock; the record itself lives 24 hours.
+   */
+  private void outliveTheLease() {
+    clock.advance(LEASE.multipliedBy(2));
   }
 
   @Test
