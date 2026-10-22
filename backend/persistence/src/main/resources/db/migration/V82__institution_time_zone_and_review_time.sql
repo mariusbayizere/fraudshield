@@ -12,7 +12,9 @@ CREATE FUNCTION institution_time_zone_known() RETURNS trigger
   LANGUAGE plpgsql
   AS $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_timezone_names z WHERE z.name = NEW.time_zone) THEN
+  -- A missing zone is left to the NOT NULL constraint, so it reports not_null_violation.
+  IF NEW.time_zone IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_timezone_names z WHERE z.name = NEW.time_zone) THEN
     RAISE EXCEPTION 'time zone % is not known to the database', NEW.time_zone
       USING ERRCODE = 'check_violation';
   END IF;

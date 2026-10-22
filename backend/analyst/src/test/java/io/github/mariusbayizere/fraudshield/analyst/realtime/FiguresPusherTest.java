@@ -90,4 +90,19 @@ class FiguresPusherTest {
     pusher.tick();
     assertThat(computed).hasValue(0);
   }
+
+  @Test
+  @Tag("UX-DASH-01")
+  void figuresStopWhenTheInstitutionsLastSessionEnds() throws InterruptedException {
+    FakeSocket socket = subscribed();
+    pusher.tick();
+    assertThat(socket.next()).startsWith("MESSAGE");
+    RealtimeSession session = registry.sessionsOf(BANK).iterator().next();
+    Binding binding = session.binding();
+    registry.closed(session);
+    pusher.ended(binding);
+    nanos.addAndGet(60 * SECOND);
+    pusher.tick();
+    assertThat(computed).as("no local session: nothing computed").hasValue(1);
+  }
 }

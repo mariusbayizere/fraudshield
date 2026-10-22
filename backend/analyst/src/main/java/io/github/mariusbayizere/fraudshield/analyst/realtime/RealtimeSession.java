@@ -33,6 +33,9 @@ final class RealtimeSession {
 
   private static final Logger LOG = LoggerFactory.getLogger(RealtimeSession.class);
 
+  /** How long a failed session's writer has to write its ERROR before the socket is closed. */
+  static final long FAIL_GRACE_MILLIS = 1_000;
+
   private final WebSocketSession socket;
   private final String address;
   private final long openedNanos;
@@ -44,7 +47,6 @@ final class RealtimeSession {
   private volatile long sendEveryMillis;
   private volatile long expectEveryMillis;
   private volatile long lastInboundNanos;
-  private volatile long boundNanos;
 
   RealtimeSession(
       WebSocketSession socket,
@@ -108,9 +110,13 @@ final class RealtimeSession {
       }
     } catch (IOException | IllegalStateException closed) {
       LOG.debug("a real-time socket closed while writing", closed);
-      closeQuietly();
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
+    } catch (RuntimeException failed) {
+      LOG.warn("a real-time writer failed; its socket is closed", failed);
+    } finally {
+      // Whatever ends the writer ends the socket: no session outlives its writer (code review 2,
+      // MINOR 4).
       closeQuietly();
     }
   }
@@ -141,10 +147,26 @@ final class RealtimeSession {
    * @param problem the problem
    * @param detail its detail
    * @param receiptId the receipt of the frame that caused it, or null
+   * @return true when this call queued the ERROR; false when the session was already failing
    */
-  void fail(StompFrames.Problem problem, String detail, String receiptId) {
+  boolean fail(StompFrames.Problem problem, String detail, String receiptId) {
     // A session already failing keeps its first ERROR; closing it here could drop that frame.
-    outbound.fail(StompFrames.control(StompFrames.error(problem, detail, receiptId)));
+    if (!outbound.fail(StompFrames.control(StompFrames.error(problem, detail, receiptId)))) {
+      return false;
+    }
+    // The writer normally closes after writing the ERROR; a writer blocked on a stalled link must
+    // not keep a revoked session open past D-27's 5 s, so the close never depends on it.
+    Thread.ofVirtual()
+        .start(
+            () -> {
+              try {
+                Thread.sleep(FAIL_GRACE_MILLIS);
+              } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+              }
+              closeQuietly();
+            });
+    return true;
   }
 
   /** Closes the socket once what is already queued has been written (DISCONNECT). */
@@ -193,19 +215,12 @@ final class RealtimeSession {
     return lastInboundNanos;
   }
 
-  void bind(Binding binding, long nanos) {
+  void bind(Binding binding) {
     this.binding = binding;
-    if (boundNanos == 0) {
-      boundNanos = nanos;
-    }
   }
 
   Binding binding() {
     return binding;
-  }
-
-  long boundNanos() {
-    return boundNanos;
   }
 
   boolean authenticated() {

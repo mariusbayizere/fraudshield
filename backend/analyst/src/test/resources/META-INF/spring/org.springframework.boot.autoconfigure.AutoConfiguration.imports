@@ -1,1 +1,2 @@
 io.github.mariusbayizere.fraudshield.analyst.decisions.OwnerTestAutoConfiguration
+io.github.mariusbayizere.fraudshield.analyst.realtime.RealtimeTestAutoConfiguration

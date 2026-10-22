@@ -272,6 +272,84 @@ class AnalystPerformanceTest extends AnalystIntegrationTest {
 
   @Test
   @Tag("FR-04-11")
+  void timeFromAssignmentStartsAtTheEarliestAssignmentByAnotherUser() throws Exception {
+    // ADR 0117 point 3 (code review 2, MINOR 13): one analyst per rule. assigned_at is the
+    // database's clock_timestamp(), so the gaps are made with real sleeps.
+    final UUID bank = DB.createInstitution("figures-assignment");
+    final UUID senior = createAccount(bank, "SENIOR_ANALYST", "ACTIVE").id();
+    final UUID earliest = createAccount(bank, "ANALYST", "ACTIVE").id();
+    final UUID other = createAccount(bank, "ANALYST", "ACTIVE").id();
+    final UUID self = createAccount(bank, "SENIOR_ANALYST", "ACTIVE").id();
+    final UUID late = createAccount(bank, "ANALYST", "ACTIVE").id();
+    final UUID anomaly = createAccount(bank, "ANALYST", "ACTIVE").id();
+    final UUID undone = createAccount(bank, "ANALYST", "ACTIVE").id();
+
+    UUID reassigned = entry(bank, "HIGH", "PENDING", null, Instant.now());
+    assigned(bank, reassigned, null, earliest, senior);
+    Thread.sleep(1_200);
+    assigned(bank, reassigned, earliest, other, senior);
+    assigned(bank, reassigned, other, earliest, senior);
+    Thread.sleep(1_200);
+    review(bank, reassigned, earliest, "CONFIRM_FRAUD");
+
+    UUID selfAssigned = entry(bank, "HIGH", "PENDING", null, Instant.now());
+    assigned(bank, selfAssigned, null, self, self);
+    review(bank, selfAssigned, self, "MARK_LEGITIMATE");
+
+    UUID afterwards = entry(bank, "MEDIUM", "PENDING", null, Instant.now());
+    review(bank, afterwards, late, "CONFIRM_FRAUD");
+    assigned(bank, afterwards, null, late, senior);
+
+    UUID anomalous = entry(bank, "ANOMALY", "PENDING", null, Instant.now());
+    assigned(bank, anomalous, null, anomaly, senior);
+    review(bank, anomalous, anomaly, "CONFIRM_FRAUD");
+
+    UUID withdrawn = entry(bank, "HIGH", "PENDING", null, Instant.now());
+    assigned(bank, withdrawn, null, undone, senior);
+    UUID decision = review(bank, withdrawn, undone, "CONFIRM_FRAUD");
+    tenantWrite(
+        bank,
+        "INSERT INTO fraudshield.alert_decision_undos (decision_id, institution_id, undone_by)"
+            + " VALUES (?, ?, ?)",
+        decision,
+        bank,
+        undone);
+
+    JsonNode team =
+        get(
+            issueSession(new Account(senior, bank, null, "SENIOR_ANALYST", "ACTIVE")),
+            "/api/v1/team/performance",
+            "TeamPerformance");
+    assertThat(row(team, earliest).get("average_seconds_from_assignment").asDouble())
+        .as("from the earliest assignment, not the latest")
+        .isGreaterThan(2.0);
+    for (UUID none : List.of(self, late, anomaly, undone)) {
+      assertThat(row(team, none).get("average_seconds_from_assignment").isNull())
+          .as("self-assigned, assigned after, ANOMALY, or undone")
+          .isTrue();
+    }
+  }
+
+  private static void assigned(UUID bank, UUID entry, UUID previous, UUID assignee, UUID by) {
+    byte[] fingerprint = new byte[32];
+    RANDOM.nextBytes(fingerprint);
+    tenantWrite(
+        bank,
+        """
+        INSERT INTO fraudshield.alert_assignments (institution_id, alert_queue_entry_id,
+          previous_assignee_id, assignee_id, assigned_by, idempotency_key, request_fingerprint)
+        VALUES (?, ?, ?, ?, ?, gen_random_uuid(), ?)
+        """,
+        bank,
+        entry,
+        previous,
+        assignee,
+        by,
+        fingerprint);
+  }
+
+  @Test
+  @Tag("FR-04-11")
   void theRangeIsValidatedAndOnlySeniorsAndRiskOfficersMayCall() {
     final UUID bank = DB.createInstitution("figures-range");
     Http.Response analyst =

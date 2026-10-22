@@ -60,6 +60,7 @@ class StompEndpointTest {
           settings,
           () -> true,
           thread,
+          thread,
           System::nanoTime,
           Clock.systemUTC());
   private final StompEndpoint endpoint =
@@ -342,5 +343,33 @@ class StompEndpointTest {
     send(socket, subscribe(StompEndpoint.ALERTS, "s1", "r1"));
     assertThat(socket.next()).startsWith("RECEIPT");
     return socket;
+  }
+
+  @Test
+  @Tag("FR-04-02")
+  void connectOutsideStompOneTwoOrItsHeartBeatCapIsRefused() throws InterruptedException {
+    String token = token(BANK_A, StaffRole.ANALYST);
+    FakeSocket oldStomp = open();
+    send(oldStomp, "CONNECT\nAuthorization:Bearer " + token + "\n\n\0");
+    assertError(oldStomp, "validation");
+    FakeSocket slowBeats = open();
+    send(
+        slowBeats,
+        "CONNECT\naccept-version:1.2\nheart-beat:120000,0\nAuthorization:Bearer "
+            + token
+            + "\n\n\0");
+    assertError(slowBeats, "validation");
+  }
+
+  @Test
+  @Tag("FR-04-02")
+  void connectWhileTheChannelIsClosedIsRefused() throws InterruptedException {
+    org.mockito.Mockito.when(redis.ping()).thenReturn(false);
+    org.mockito.Mockito.when(redis.available()).thenReturn(false);
+    guard.probeRedis();
+    FakeSocket socket = open();
+    send(socket, connect(token(BANK_A, StaffRole.ANALYST)));
+    assertError(socket, "service-unavailable");
+    assertThat(registry.authenticated()).isZero();
   }
 }

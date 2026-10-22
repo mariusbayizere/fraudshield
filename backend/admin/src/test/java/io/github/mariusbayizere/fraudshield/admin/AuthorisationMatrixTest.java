@@ -214,7 +214,10 @@ class AuthorisationMatrixTest extends AuthIntegrationTest {
     for (ContractPolicy.Operation operation : policy.operations().values()) {
       if (operation.access().inBand() != null) {
         // The real-time handshake authenticates no one (ADR 0115 point 9): every caller gets the
-        // same answer, never 401 or 403 on role; its roles are tested at the STOMP CONNECT.
+        // same answer, never 401 or 403 on role; its roles are tested at the STOMP CONNECT. This
+        // application has no analyst module, so the path is unmapped and answers alike for
+        // everyone; AnalystRealtimeTest checks the handshake's 426 in the application that serves
+        // it.
         java.util.Set<Integer> answers = new java.util.TreeSet<>();
         for (Caller caller : callers) {
           answers.add(call(operation, caller).status());

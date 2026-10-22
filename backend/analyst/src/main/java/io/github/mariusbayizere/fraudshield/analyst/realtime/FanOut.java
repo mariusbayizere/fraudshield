@@ -42,6 +42,7 @@ final class FanOut implements AutoCloseable {
   private final Map<TopicPartition, Long> lag = new ConcurrentHashMap<>();
   private final AtomicLong invalid = new AtomicLong();
   private final AtomicLong overflows = new AtomicLong();
+  private final AtomicLong lagMisses = new AtomicLong();
   private final Thread thread;
   private volatile boolean ready;
   private volatile boolean running = true;
@@ -163,18 +164,31 @@ final class FanOut implements AutoCloseable {
   /** Fixes a lazy seek by asking for the position, and starts its lag at zero (point 5). */
   private void positioned(
       org.apache.kafka.clients.consumer.Consumer<String, byte[]> consumer, TopicPartition p) {
-    lag.put(
-        p, Math.max(0, consumer.endOffsets(java.util.List.of(p)).get(p) - consumer.position(p)));
+    // position() makes no broker request once metadata is known, and fixes the lazy seek.
+    if (consumer.position(p) < 0) {
+      throw new IllegalStateException("no position for " + p);
+    }
+    lag.put(p, 0L);
     assignedHook.accept(p);
   }
 
-  private void measureLag(
+  void measureLag(
       org.apache.kafka.clients.consumer.Consumer<String, byte[]> consumer,
       Set<TopicPartition> assigned) {
-    Map<TopicPartition, Long> ends = consumer.endOffsets(assigned, Duration.ofMillis(50));
-    for (Map.Entry<TopicPartition, Long> end : ends.entrySet()) {
-      lag.put(end.getKey(), Math.max(0, end.getValue() - consumer.position(end.getKey())));
+    // currentLag reads what the last fetch reported and makes no request, so a slow broker can
+    // never turn a metric into a consumer failure (code review 2, MAJOR 2). A partition with no
+    // fetch yet keeps its last value.
+    for (TopicPartition p : assigned) {
+      try {
+        consumer.currentLag(p).ifPresent(value -> lag.put(p, value));
+      } catch (RuntimeException unknown) {
+        lagMisses.incrementAndGet();
+      }
     }
+  }
+
+  long lagMisses() {
+    return lagMisses.get();
   }
 
   /**
@@ -232,9 +246,17 @@ final class FanOut implements AutoCloseable {
           || !visibility.admits(binding)) {
         continue;
       }
-      if (!session.deliver(frame)) {
+      if (!session.deliver(frame)
+          && session.fail(StompFrames.Problem.OVERFLOW, "too far behind", null)) {
         overflows.incrementAndGet();
-        session.fail(StompFrames.Problem.OVERFLOW, "too far behind", null);
+      }
+    }
+    // The instance budget is enforced as each record is delivered, not only by the sweep, so the
+    // counted total passes the budget by at most one record's frames (code review 2, MINOR 6).
+    for (RealtimeSession largest : registry.toShed()) {
+      if (largest.fail(
+          StompFrames.Problem.OVERFLOW, "the instance's outbound budget was exceeded", null)) {
+        overflows.incrementAndGet();
       }
     }
   }

@@ -95,4 +95,16 @@ class AlertFramesTest {
   private static byte[] bytes(ObjectNode node) {
     return JsonMapper.builder().build().writeValueAsBytes(node);
   }
+
+  @Test
+  @Tag("FR-04-02")
+  void fallbackAlertWithoutAnomalyScoreCarriesNullAsTheReadDoes() {
+    ObjectNode envelope = RealtimeFixtures.example("fs.alerts.high");
+    envelope.put("institution_id", BANK.toString());
+    ((ObjectNode) envelope.get("payload")).remove("anomaly_score");
+    AlertFrames.Routed r = frames.route("fs.alerts.high", bytes(envelope), 1).orElseThrow();
+    @SuppressWarnings("unchecked")
+    Map<String, Object> alert = (Map<String, Object>) r.body().get("alert");
+    assertThat(alert).containsEntry("anomaly_score", null);
+  }
 }

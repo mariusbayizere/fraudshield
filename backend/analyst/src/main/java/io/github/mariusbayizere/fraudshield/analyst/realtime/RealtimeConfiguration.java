@@ -22,6 +22,7 @@ import org.apache.kafka.common.TopicPartition;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.SmartLifecycle;
@@ -126,6 +127,7 @@ public class RealtimeConfiguration implements WebSocketConfigurer {
   }
 
   @Bean(destroyMethod = "close")
+  @ConditionalOnMissingBean(FanOut.class)
   FanOut realtimeFanOut(
       @Value("${fraudshield.kafka-bootstrap-servers:}") String bootstrapServers,
       StaffNames names,
@@ -181,6 +183,8 @@ public class RealtimeConfiguration implements WebSocketConfigurer {
         fanOut::healthy,
         Executors.newSingleThreadScheduledExecutor(
             Thread.ofPlatform().name("fs-realtime-guard").daemon().factory()),
+        Executors.newSingleThreadScheduledExecutor(
+            Thread.ofPlatform().name("fs-realtime-checks").daemon().factory()),
         System::nanoTime,
         clock.getIfAvailable(Clock::systemUTC));
   }

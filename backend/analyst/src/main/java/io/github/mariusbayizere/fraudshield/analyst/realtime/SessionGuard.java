@@ -54,6 +54,7 @@ final class SessionGuard implements SessionStateCache.ChangeListener, AutoClosea
   private final RealtimeSettings settings;
   private final BooleanSupplier consumerHealthy;
   private final ScheduledExecutorService thread;
+  private final ScheduledExecutorService checks;
   private final LongSupplier nanoTime;
   private final Clock clock;
   private final Map<StaffClaims, Long> unknownSince = new HashMap<>();
@@ -69,6 +70,7 @@ final class SessionGuard implements SessionStateCache.ChangeListener, AutoClosea
       RealtimeSettings settings,
       BooleanSupplier consumerHealthy,
       ScheduledExecutorService thread,
+      ScheduledExecutorService checks,
       LongSupplier nanoTime,
       Clock clock) {
     this.registry = registry;
@@ -77,6 +79,7 @@ final class SessionGuard implements SessionStateCache.ChangeListener, AutoClosea
     this.settings = settings;
     this.consumerHealthy = consumerHealthy;
     this.thread = thread;
+    this.checks = checks;
     this.nanoTime = nanoTime;
     this.clock = clock;
     this.gate = new LoadGate(settings.loadsPerSecond(), nanoTime);
@@ -98,12 +101,21 @@ final class SessionGuard implements SessionStateCache.ChangeListener, AutoClosea
   @Override
   public void versionChanged(UUID userId) {
     // Never blocks the pub/sub thread: the re-check runs on the guard's own thread (point 3).
-    thread.execute(() -> recheck(s -> s.binding().userId().equals(userId)));
+    hand(() -> recheck(s -> s.binding().userId().equals(userId)));
   }
 
   @Override
   public void sessionEnded(UUID sessionId) {
-    thread.execute(() -> recheck(s -> s.binding().sessionId().equals(sessionId)));
+    hand(() -> recheck(s -> s.binding().sessionId().equals(sessionId)));
+  }
+
+  /** Hands a re-check to the checks thread; during shutdown there is nothing left to close. */
+  private void hand(Runnable check) {
+    try {
+      checks.execute(check);
+    } catch (java.util.concurrent.RejectedExecutionException stopping) {
+      LOG.debug("a revocation arrived during shutdown", stopping);
+    }
   }
 
   private void recheck(java.util.function.Predicate<RealtimeSession> matching) {
@@ -119,13 +131,13 @@ final class SessionGuard implements SessionStateCache.ChangeListener, AutoClosea
   // ---------------------------------------------------------------------------- the backstop
 
   private void scheduleBackstop() {
-    if (thread.isShutdown()) {
+    if (checks.isShutdown()) {
       return;
     }
     long period = settings.backstopPeriod().toMillis();
     long jitter = settings.backstopJitter().toMillis();
     long delay = period + JITTER.nextLong(-jitter, jitter + 1);
-    thread.schedule(
+    checks.schedule(
         () -> {
           try {
             backstop();
@@ -289,6 +301,7 @@ final class SessionGuard implements SessionStateCache.ChangeListener, AutoClosea
   @Override
   public void close() {
     thread.shutdownNow();
+    checks.shutdownNow();
   }
 
   /** At most so many database loads a second (point 3); in-process and Redis answers are free. */

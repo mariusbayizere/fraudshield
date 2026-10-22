@@ -32,6 +32,7 @@ final class SessionRegistry {
   private final Map<Binding.Pair, Integer> pairs = new HashMap<>();
   private final Map<UUID, Deque<Long>> connects = new HashMap<>();
   private final Map<String, Deque<Long>> handshakes = new HashMap<>();
+  private final Map<String, Deque<Long>> reserved = new HashMap<>();
   private int authenticated;
 
   SessionRegistry(RealtimeSettings settings, InstanceBudget budget, LongSupplier nanoTime) {
@@ -58,6 +59,13 @@ final class SessionRegistry {
     if (authenticated >= settings.sessionsPerInstance()) {
       return Optional.of(Refusal.INSTANCE_FULL);
     }
+    // A slot is reserved at admission and released when the socket is counted (opened), so
+    // concurrent handshakes cannot all pass before any is counted; an unused reservation lapses
+    // after the time allowed to CONNECT.
+    long now = nanoTime.getAsLong();
+    long lapse = settings.connectTimeout().toNanos();
+    reserved.values().forEach(r -> r.removeIf(at -> now - at >= lapse));
+    reserved.values().removeIf(Deque::isEmpty);
     int pending = 0;
     int pendingHere = 0;
     for (RealtimeSession s : sockets.values()) {
@@ -68,24 +76,41 @@ final class SessionRegistry {
         }
       }
     }
+    for (Map.Entry<String, Deque<Long>> r : reserved.entrySet()) {
+      pending += r.getValue().size();
+      if (r.getKey().equals(address)) {
+        pendingHere += r.getValue().size();
+      }
+    }
     if (pending >= settings.pendingPerInstance()) {
       return Optional.of(Refusal.PENDING_FULL);
     }
     if (pendingHere >= settings.pendingPerAddress()) {
       return Optional.of(Refusal.ADDRESS_PENDING);
     }
-    if (!withinRate(handshakes, address, settings.handshakesPerAddressPerMinute())) {
+    if (!allowed(handshakes, address, settings.handshakesPerAddressPerMinute())) {
       return Optional.of(Refusal.ADDRESS_RATE);
     }
+    record(handshakes, address);
+    reserved.computeIfAbsent(address, a -> new ArrayDeque<>()).addLast(now);
     return Optional.empty();
   }
 
-  void opened(RealtimeSession session) {
+  synchronized void opened(RealtimeSession session) {
     sockets.put(session.id(), session);
+    Deque<Long> mine = reserved.get(session.address());
+    if (mine != null) {
+      mine.pollFirst();
+      if (mine.isEmpty()) {
+        reserved.remove(session.address());
+      }
+    }
   }
 
   /** Why a CONNECT is refused (point 8). */
   enum ConnectRefusal {
+    /** The socket closed while its CONNECT was being authenticated: nothing to bind. */
+    CLOSED,
     RATE_LIMITED,
     INSTANCE_FULL,
     PAIRS_FULL
@@ -102,7 +127,12 @@ final class SessionRegistry {
    */
   synchronized Optional<ConnectRefusal> bind(
       RealtimeSession session, Binding binding, List<RealtimeSession> evicted) {
-    if (!withinRate(connects, binding.userId(), settings.connectsPerUserPerMinute())) {
+    // The close callback may run on another thread while the CONNECT was being authenticated;
+    // a socket it has already forgotten must never be counted (code review 2, MAJOR 1).
+    if (!sockets.containsKey(session.id())) {
+      return Optional.of(ConnectRefusal.CLOSED);
+    }
+    if (!allowed(connects, binding.userId(), settings.connectsPerUserPerMinute())) {
       return Optional.of(ConnectRefusal.RATE_LIMITED);
     }
     if (authenticated >= settings.sessionsPerInstance()) {
@@ -118,13 +148,15 @@ final class SessionRegistry {
       unbind(oldest);
       evicted.add(oldest);
     }
-    session.bind(binding, nanoTime.getAsLong());
+    session.bind(binding);
     mine.addLast(session);
     pairs.merge(pair, 1, Integer::sum);
     byInstitution
         .computeIfAbsent(binding.institutionId(), i -> ConcurrentHashMap.newKeySet())
         .add(session);
     authenticated++;
+    // Point 8 counts accepted CONNECTs only.
+    record(connects, binding.userId());
     return Optional.empty();
   }
 
@@ -135,40 +167,40 @@ final class SessionRegistry {
    * @param binding the new binding, with the same user, institution, role and sid
    */
   synchronized void rebind(RealtimeSession session, Binding binding) {
-    session.bind(binding, nanoTime.getAsLong());
+    session.bind(binding);
   }
 
   /**
    * Forgets a closed socket.
    *
    * @param session the session
-   * @return true when it was the user's last local session
    */
-  synchronized boolean closed(RealtimeSession session) {
+  synchronized void closed(RealtimeSession session) {
     sockets.remove(session.id());
-    return unbind(session);
+    unbind(session);
   }
 
-  private boolean unbind(RealtimeSession session) {
+  private void unbind(RealtimeSession session) {
     Binding binding = session.binding();
     if (binding == null) {
-      return false;
+      return;
     }
     Deque<RealtimeSession> mine = byUser.get(binding.userId());
     if (mine == null || !mine.remove(session)) {
-      return false;
+      return;
     }
     authenticated--;
     pairs.computeIfPresent(binding.pair(), (p, n) -> n == 1 ? null : n - 1);
-    Set<RealtimeSession> institution = byInstitution.get(binding.institutionId());
-    if (institution != null) {
-      institution.remove(session);
-    }
+    // An institution with no local session leaves the map, so the figures stop for it (6.3).
+    byInstitution.computeIfPresent(
+        binding.institutionId(),
+        (id, sessions) -> {
+          sessions.remove(session);
+          return sessions.isEmpty() ? null : sessions;
+        });
     if (mine.isEmpty()) {
       byUser.remove(binding.userId());
-      return true;
     }
-    return false;
   }
 
   /**
@@ -199,16 +231,6 @@ final class SessionRegistry {
    */
   List<RealtimeSession> all() {
     return List.copyOf(sockets.values());
-  }
-
-  /**
-   * Whether a user still has a local session.
-   *
-   * @param userId the user
-   * @return true if so
-   */
-  synchronized boolean hasUser(UUID userId) {
-    return byUser.containsKey(userId);
   }
 
   /**
@@ -254,19 +276,24 @@ final class SessionRegistry {
     return shed;
   }
 
-  private <K> boolean withinRate(Map<K, Deque<Long>> windows, K key, int perMinute) {
+  /** Whether one more event fits the key's one-minute window; prunes, records nothing. */
+  private <K> boolean allowed(Map<K, Deque<Long>> windows, K key, int perMinute) {
     long now = nanoTime.getAsLong();
-    Deque<Long> window = windows.computeIfAbsent(key, k -> new ArrayDeque<>());
+    Deque<Long> window = windows.get(key);
+    if (window == null) {
+      return perMinute > 0;
+    }
     while (!window.isEmpty() && now - window.peekFirst() >= MINUTE_NANOS) {
       window.pollFirst();
     }
-    if (window.size() >= perMinute) {
-      return false;
-    }
-    window.addLast(now);
+    return window.size() < perMinute;
+  }
+
+  private <K> void record(Map<K, Deque<Long>> windows, K key) {
+    long now = nanoTime.getAsLong();
+    windows.computeIfAbsent(key, k -> new ArrayDeque<>()).addLast(now);
     if (windows.size() > 10_000) {
       windows.values().removeIf(w -> w.isEmpty() || now - w.peekLast() >= MINUTE_NANOS);
     }
-    return true;
   }
 }

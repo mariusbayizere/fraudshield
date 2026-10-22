@@ -44,6 +44,7 @@ class SessionGuardTest {
           settings,
           consumer::get,
           thread,
+          thread,
           nanos::get,
           Clock.fixed(NOW, ZoneOffset.UTC));
 

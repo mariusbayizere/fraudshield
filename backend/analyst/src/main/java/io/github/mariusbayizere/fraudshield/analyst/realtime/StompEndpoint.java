@@ -247,8 +247,23 @@ public final class StompEndpoint extends AbstractWebSocketHandler implements Sub
 
   private boolean connect(RealtimeSession session, StompHeaderAccessor frame) {
     Set<String> versions = frame.getAcceptVersion();
-    if (versions != null && !versions.isEmpty() && !versions.contains("1.2")) {
+    // A CONNECT without accept-version is STOMP 1.0's; only 1.2 is spoken (point 1).
+    if (versions == null || !versions.contains("1.2")) {
       session.fail(StompFrames.Problem.VALIDATION, "STOMP 1.2 is required", null);
+      return false;
+    }
+    long[] beats = frame.getHeartbeat();
+    long cap = settings.maxClientHeartBeat().toMillis();
+    if (beats != null && (beats[0] > cap || beats[1] > cap)) {
+      // Refused rather than capped: a client beating less often than the cap would be closed for
+      // silence at the edge of every beat (code review 2, MINOR 7).
+      session.fail(StompFrames.Problem.VALIDATION, "heart-beat above " + cap + " ms", null);
+      return false;
+    }
+    if (!guard.open()) {
+      // The channel is closed while Redis is down or the consumer is not positioned (points 3
+      // and 5); a socket admitted just before the closure must not bind.
+      session.fail(StompFrames.Problem.UNAVAILABLE, "real-time channel unavailable", null);
       return false;
     }
     Optional<Binding> binding = authenticate(session, frame);
@@ -264,6 +279,7 @@ public final class StompEndpoint extends AbstractWebSocketHandler implements Sub
         registry.bind(session, binding.get(), evicted);
     if (refused.isPresent()) {
       switch (refused.get()) {
+        case CLOSED -> session.closeQuietly();
         case RATE_LIMITED ->
             session.fail(StompFrames.Problem.RATE_LIMITED, "too many connections", null);
         case INSTANCE_FULL, PAIRS_FULL ->
@@ -275,11 +291,9 @@ public final class StompEndpoint extends AbstractWebSocketHandler implements Sub
     for (RealtimeSession oldest : evicted) {
       oldest.fail(StompFrames.Problem.RATE_LIMITED, "too many sessions for this user", null);
     }
-    long[] beats = frame.getHeartbeat();
     long offer = settings.heartBeat().toMillis();
-    long cap = settings.maxClientHeartBeat().toMillis();
-    long clientSends = beats == null ? 0 : Math.min(beats[0], cap);
-    long clientWants = beats == null ? 0 : Math.min(beats[1], cap);
+    long clientSends = beats == null ? 0 : beats[0];
+    long clientWants = beats == null ? 0 : beats[1];
     long sendEvery = clientWants == 0 ? 0 : Math.max(offer, clientWants);
     long expectEvery = clientSends == 0 ? 0 : Math.max(offer, clientSends);
     session.heartBeats(sendEvery, expectEvery);

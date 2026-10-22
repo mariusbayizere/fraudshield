@@ -9,7 +9,11 @@ import java.util.UUID;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-/** Point 4's filter, case by case; its equality with listAlerts is proven in CI. */
+/**
+ * Point 4's filter, case by case. Its equality with listAlerts, through the change publisher's
+ * re-read and the fan-out's mapping, is
+ * AnalystRealtimeTest.pushedEqualsListedForEveryEntryRoleAndUser.
+ */
 class VisibilityTest {
 
   private static Binding as(UUID user, StaffRole role) {

@@ -108,6 +108,10 @@ final class FiguresPusher implements StompEndpoint.Subscribed {
         session.fail(StompFrames.Problem.OVERFLOW, "too far behind", null);
       }
     }
+    for (RealtimeSession largest : registry.toShed()) {
+      largest.fail(
+          StompFrames.Problem.OVERFLOW, "the instance's outbound budget was exceeded", null);
+    }
   }
 
   private State state(UUID institutionId) {

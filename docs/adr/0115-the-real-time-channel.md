@@ -1029,18 +1029,35 @@ during P2; the owner may overrule.
   `AlertRaised` therefore carries `merchant: null`, which keeps the pushed card equal to the read
   card. Carrying the name through is PB-161.
 - **`anomaly_score` under the fallback** was already omitted by M6 (`DecisionService` passes null
-  when the fallback decided), so that change was not needed; a test of the mapped card covers it.
+  when the fallback decided), so that change was not needed. `AlertFramesTest` checks that a
+  payload without it maps to a null `anomaly_score`; the card-equality test of point 6.1 is not
+  written (below).
 - **`escalated_by_user_id`** is the author of the ESCALATE decision that created the entry
   (`escalated_to_alert_id`), where `listAlerts` matches any ESCALATE on the parent. They agree
-  because an escalated parent is closed and cannot be escalated again; the push-equals-list test in
-  CI checks it.
+  because an escalated parent is closed and cannot be escalated again.
+  `AnalystRealtimeTest.pushedEqualsListedForEveryEntryRoleAndUser` checks the whole rule: every
+  seeded entry (each status, and escalation chains of depth 2), every role and every user, through
+  the publisher's re-read, the Kafka payload and the fan-out's filter, against `listAlerts`.
 - **The STOMP server is a plain WebSocket handler** (`analyst/realtime/StompEndpoint`): frames are
   decoded by Spring's `StompDecoder`, outbound frames are written by the session's own virtual
   thread, and there is no broker or Spring STOMP security interceptor, so no CSRF check runs on
   CONNECT (point 2).
-- **The figures destination** is accepted and subscribed, and its frames are sent once ADR 0117's
-  computation is merged; until then `/user/queue/figures` carries nothing, which the console's
-  re-read of `getDashboardStats` already covers.
+- **The figures** are pushed by `FiguresPusher`, computed once per institution by ADR 0117's
+  `DashboardFigures`, under point 6.3's rules.
+- **The instance budget** is enforced as each record is delivered and by the 250 ms sweep, so the
+  counted total passes 32 MiB by at most one record's frames across the sessions.
+- **An inbound frame above the servlet container's text buffer** (Tomcat's default, 8,192 bytes,
+  ASSUMED) is closed by the container with WebSocket status 1009 before the handler sees it, not
+  with the ERROR `validation` of point 8; frames up to that size get the ERROR.
+- **What is tested, and what is not (code review 2, MAJOR 3).** In CI, `AnalystRealtimeTest` runs
+  the channel in the application with real sockets, the security chain and Redis: the handshake's
+  one answer for every caller, CONNECT, routing by institution, re-authentication without loss,
+  revocation by push within 5 s, and push equals list. Kafka there is `MockConsumer`, so the broker
+  is not exercised. Not written yet, and open before release: the card-equality test of point 6.1
+  (the mapped `AlertSummary` of a raised alert equals `listAlerts`' item, with SHAP, without SHAP
+  and under the fallback), the load test of point 11 (200 sessions, the server leg's p99), the
+  reconnect storm of point 8, revocation by the backstop alone end to end, and the per-session
+  overflow and instance budget over real sockets (both are unit-tested).
 - **Without Kafka configured,** the endpoint still answers its handshake rules and refuses upgrades
   with 503, because no consumer is positioned.
 
@@ -1113,6 +1130,10 @@ overrule". None of them is an owner decision:
   anyway, and the alternative is idle sockets competing with decisions for the pool.
 
 ## Required follow-ups
+
+- **The tests left open by P2** (implementation notes): the card-equality test of point 6.1, the
+  load test and reconnect storm of points 8 and 11, revocation by the backstop alone end to end,
+  and the overflow and budget over real sockets. They are owed before release.
 
 Made outside this ADR, by whoever changes the named file; none is made by this proposal:
 - **The deployment's load balancer** must spread new WebSocket connections across ready instances

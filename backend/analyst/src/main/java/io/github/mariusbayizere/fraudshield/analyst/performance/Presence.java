@@ -11,9 +11,9 @@ import org.springframework.data.redis.core.script.RedisScript;
 /**
  * Who has the console open, for {@code analysts_online} (ADR 0117 point 4): one Redis sorted set
  * per institution, members the user ids of ANALYST, SENIOR_ANALYST and RISK_OFFICER sessions,
- * scores their expiry in epoch milliseconds. ADR 0115's real-time channel writes and refreshes it;
- * that writer is built separately (m8b/analyst-api), against {@link #key(UUID)}. Until it runs, the
- * set does not exist and the count is 0 whenever Redis answers.
+ * scores their expiry in epoch milliseconds. ADR 0115's real-time channel writes and refreshes it
+ * ({@code SessionGuard}), against {@link #key(UUID)}; with no session open, the set does not exist
+ * and the count is 0 whenever Redis answers.
  *
  * <p>Reading removes the expired members ({@code ZREMRANGEBYSCORE}), without which the set would
  * grow, then counts the rest ({@code ZCOUNT}), in one script so the two see the same set. Redis is

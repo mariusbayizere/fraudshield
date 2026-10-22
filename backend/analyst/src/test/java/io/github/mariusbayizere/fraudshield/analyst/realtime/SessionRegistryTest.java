@@ -21,6 +21,10 @@ class SessionRegistryTest {
   private final SessionRegistry registry = new SessionRegistry(settings, budget, nanos::get);
 
   private RealtimeSession socket(String address) {
+    return socketIn(registry, address);
+  }
+
+  private RealtimeSession socketIn(SessionRegistry into, String address) {
     RealtimeSession s =
         new RealtimeSession(
             new FakeSocket(address),
@@ -28,7 +32,7 @@ class SessionRegistryTest {
             nanos.get(),
             new Outbound(settings.queueFrames(), settings.queueBytes(), budget),
             frame -> {});
-    registry.opened(s);
+    into.opened(s);
     return s;
   }
 
@@ -53,6 +57,7 @@ class SessionRegistryTest {
   void handshakesPerAddressAreLimitedPerMinute() {
     for (int i = 0; i < settings.handshakesPerAddressPerMinute(); i++) {
       assertThat(registry.admit("10.1.1.1")).isEmpty();
+      registry.closed(socket("10.1.1.1"));
     }
     assertThat(registry.admit("10.1.1.1")).contains(SessionRegistry.Refusal.ADDRESS_RATE);
     nanos.addAndGet(60_000_000_000L);
@@ -83,9 +88,9 @@ class SessionRegistryTest {
     UUID sid = UUID.randomUUID();
     List<RealtimeSession> evicted = new ArrayList<>();
     for (int i = 0; i < settings.connectsPerUserPerMinute(); i++) {
-      assertThat(fresh.bind(socket("10.0.0.1"), binding(user, sid), evicted)).isEmpty();
+      assertThat(fresh.bind(socketIn(fresh, "10.0.0.1"), binding(user, sid), evicted)).isEmpty();
     }
-    assertThat(fresh.bind(socket("10.0.0.1"), binding(user, sid), evicted))
+    assertThat(fresh.bind(socketIn(fresh, "10.0.0.1"), binding(user, sid), evicted))
         .contains(SessionRegistry.ConnectRefusal.RATE_LIMITED);
     assertThat(evicted).hasSize(settings.connectsPerUserPerMinute() - settings.sessionsPerUser());
   }
@@ -113,5 +118,59 @@ class SessionRegistryTest {
     into.opened(s);
     s.deliver(new Outbound.Frame("/user/queue/alerts", "x", bytes, 1));
     return s;
+  }
+
+  @Test
+  @Tag("FR-04-02")
+  void socketClosedWhileItsConnectWasAuthenticatedIsNeverCounted() {
+    // Code review 2, MAJOR 1: the close callback ran first, on another thread.
+    RealtimeSession session = socket("10.0.0.1");
+    registry.closed(session);
+    assertThat(
+            registry.bind(
+                session, binding(UUID.randomUUID(), UUID.randomUUID()), new ArrayList<>()))
+        .contains(SessionRegistry.ConnectRefusal.CLOSED);
+    assertThat(registry.authenticated()).isZero();
+    assertThat(registry.pairs()).isZero();
+    assertThat(registry.institutions()).isEmpty();
+  }
+
+  @Test
+  @Tag("FR-04-02")
+  void refusedConnectsDoNotUseTheUsersRate() {
+    UUID user = UUID.randomUUID();
+    RealtimeSession closed = socket("10.0.0.1");
+    registry.closed(closed);
+    for (int i = 0; i < 2 * settings.connectsPerUserPerMinute(); i++) {
+      registry.bind(closed, binding(user, UUID.randomUUID()), new ArrayList<>());
+    }
+    assertThat(
+            registry.bind(socket("10.0.0.1"), binding(user, UUID.randomUUID()), new ArrayList<>()))
+        .isEmpty();
+  }
+
+  @Test
+  @Tag("FR-04-02")
+  void institutionLeavesWithItsLastSession() {
+    RealtimeSession session = socket("10.0.0.1");
+    Binding b = binding(UUID.randomUUID(), UUID.randomUUID());
+    registry.bind(session, b, new ArrayList<>());
+    assertThat(registry.institutions()).containsExactly(b.institutionId());
+    registry.closed(session);
+    assertThat(registry.institutions()).isEmpty();
+    assertThat(registry.sessionsOf(b.institutionId())).isEmpty();
+  }
+
+  @Test
+  @Tag("FR-04-02")
+  void admittedHandshakesReserveTheirSlotUntilCountedOrLapsed() {
+    for (int i = 0; i < settings.pendingPerInstance(); i++) {
+      assertThat(registry.admit("10.2.2." + i)).isEmpty();
+    }
+    assertThat(registry.admit("10.2.3.1"))
+        .as("reserved, though no socket is counted yet")
+        .contains(SessionRegistry.Refusal.PENDING_FULL);
+    nanos.addAndGet(settings.connectTimeout().toNanos());
+    assertThat(registry.admit("10.2.3.1")).as("unused reservations lapse").isEmpty();
   }
 }

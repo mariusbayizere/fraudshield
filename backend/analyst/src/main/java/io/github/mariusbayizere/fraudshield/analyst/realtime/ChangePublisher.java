@@ -39,9 +39,13 @@ public final class ChangePublisher implements AlertChangePublisher, AutoCloseabl
   private static final Logger LOG = LoggerFactory.getLogger(ChangePublisher.class);
   private static final JsonMapper JSON = JsonMapper.builder().build();
 
+  private static final String BOUNDS =
+      "SELECT set_config('lock_timeout', '1s', true), set_config('statement_timeout', '2s', true),"
+          + " set_config('transaction_read_only', 'on', true)";
+
   // The escalator is the author of the ESCALATE that created the entry. listAlerts matches any
   // ESCALATE on the parent; the two agree because an escalated parent is closed and cannot be
-  // escalated again, which the push-equals-list test checks.
+  // escalated again (AnalystRealtimeTest.pushedEqualsListedForEveryEntryRoleAndUser).
   private static final String ROUTING =
       """
       SELECT e.escalation_target_role,
@@ -158,6 +162,8 @@ public final class ChangePublisher implements AlertChangePublisher, AutoCloseabl
   private record Message(String key, byte[] value) {}
 
   private Optional<Message> read(Offer offer) {
+    // One short read-only transaction (point 6.2): bounded like every other in the module.
+    jdbc.queryForList(BOUNDS);
     Optional<Map<String, Object>> summary = alerts.summary(offer.alertId());
     if (summary.isEmpty()) {
       return Optional.empty();
