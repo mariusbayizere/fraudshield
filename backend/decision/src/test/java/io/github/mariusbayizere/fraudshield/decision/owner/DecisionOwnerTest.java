@@ -305,8 +305,13 @@ class DecisionOwnerTest {
 
   @Test
   void timeoutUnderDeclineAndVerifyClosesTheEntryAsAutoDeclined() throws Exception {
-    // P13.
+    // P13. The owner holds the hold's policy, from the record's own thresholds (§4.2 point 4),
+    // and it governs over the request's; the channel's policy here is DECLINE_AND_VERIFY.
     sink.accept(records(heldRecord));
+    try (Connection c = db.superuser();
+        Statement s = c.createStatement()) {
+      s.execute("UPDATE fraudshield.decision_owners SET timeout_policy = 'DECLINE_AND_VERIFY'");
+    }
     DecisionOwner.Result result =
         submit(
             new OwnerRequest.Timeout(
