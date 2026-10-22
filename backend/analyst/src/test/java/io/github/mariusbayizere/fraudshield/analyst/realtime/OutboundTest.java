@@ -53,4 +53,23 @@ class OutboundTest {
     queue.close();
     assertThat(queue.take(5, TimeUnit.MILLISECONDS)).isNull();
   }
+
+  @Test
+  @Tag("FR-04-02")
+  void theChannelRefusesToStartAboveAnEighthOfTheHeap() {
+    RealtimeSettings settings = RealtimeSettings.defaults();
+    long needed = settings.allocationBytes();
+    assertThat(needed).as("about 42 MiB with the ASSUMED values").isBetween(40L << 20, 44L << 20);
+    settings.checkFits(needed * 8);
+    org.assertj.core.api.Assertions.assertThatThrownBy(() -> settings.checkFits(needed * 8 - 8))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("one eighth");
+  }
+
+  @Test
+  @Tag("FR-04-02")
+  void headerValuesAreEscapedAsStompOneTwoRequires() {
+    assertThat(StompFrames.escape("a:b\nc\\d\re")).isEqualTo("a\\cb\\nc\\\\d\\re");
+    assertThat(StompFrames.receipt("r:1")).isEqualTo("RECEIPT\nreceipt-id:r\\c1\n\n\0");
+  }
 }

@@ -156,4 +156,16 @@ class SessionGuardTest {
     guard.sweep();
     assertThat(socket.next()).startsWith("ERROR").contains("feed interrupted");
   }
+
+  @Test
+  @Tag("FR-04-02")
+  void theLoadGateAdmitsItsRateEachSecondAndNoMore() {
+    SessionGuard.LoadGate gate = new SessionGuard.LoadGate(3, nanos::get);
+    assertThat(gate.tryAcquire()).isTrue();
+    assertThat(gate.tryAcquire()).isTrue();
+    assertThat(gate.tryAcquire()).isTrue();
+    assertThat(gate.tryAcquire()).as("the fourth in one second").isFalse();
+    nanos.addAndGet(1_000_000_000L);
+    assertThat(gate.tryAcquire()).isTrue();
+  }
 }

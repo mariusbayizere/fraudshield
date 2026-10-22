@@ -373,4 +373,94 @@ class StompEndpointTest {
     assertError(socket, "service-unavailable");
     assertThat(registry.authenticated()).isZero();
   }
+
+  @Test
+  @Tag("FR-04-02")
+  void unsubscribeStopsEventsAndDisconnectAnswersItsReceiptThenCloses()
+      throws InterruptedException {
+    FanOut fanOut =
+        new FanOut(
+            null,
+            new AlertFrames(),
+            mock(StaffNames.class),
+            registry,
+            institution -> {},
+            settings,
+            System::nanoTime,
+            partition -> {});
+    FakeSocket socket = subscribed(token(BANK_A, StaffRole.ANALYST));
+    send(socket, "UNSUBSCRIBE\nid:s1\nreceipt:r-u\n\n\0");
+    assertThat(socket.next()).isEqualTo("RECEIPT\nreceipt-id:r-u\n\n\0");
+    fanOut.route("fs.alerts.high", RealtimeFixtures.raised(BANK_A, true), 1);
+    assertThat(socket.next()).as("no longer subscribed").isNull();
+    send(socket, "DISCONNECT\nreceipt:r-d\n\n\0");
+    assertThat(socket.next()).isEqualTo("RECEIPT\nreceipt-id:r-d\n\n\0");
+    assertThat(socket.awaitClosed()).isTrue();
+  }
+
+  @Test
+  @Tag("FR-04-02")
+  void binaryFramesAndUnsupportedCommandsAreRefused() throws InterruptedException {
+    FakeSocket binary = connected(token(BANK_A, StaffRole.ANALYST));
+    endpoint.handleBinaryMessage(
+        binary, new org.springframework.web.socket.BinaryMessage(new byte[] {1, 2}));
+    assertError(binary, "validation");
+    FakeSocket ack = connected(token(BANK_A, StaffRole.ANALYST));
+    send(ack, "ACK\nid:1\n\n\0");
+    assertError(ack, "forbidden");
+    FakeSocket garbled = connected(token(BANK_A, StaffRole.ANALYST));
+    send(garbled, "NOT-A-COMMAND\n\n\0");
+    assertError(garbled, "forbidden");
+    FakeSocket noId = connected(token(BANK_A, StaffRole.ANALYST));
+    send(noId, "SUBSCRIBE\ndestination:/user/queue/figures\n\n\0");
+    assertError(noId, "validation");
+  }
+
+  @Test
+  @Tag("FR-04-02")
+  void anAssigneesNameComesFromTheCacheOrTheResolver() throws InterruptedException {
+    StaffNames names = mock(StaffNames.class);
+    FanOut fanOut =
+        new FanOut(
+            null,
+            new AlertFrames(),
+            names,
+            registry,
+            institution -> {},
+            settings,
+            System::nanoTime,
+            partition -> {});
+    FakeSocket socket = subscribed(token(BANK_A, StaffRole.ANALYST));
+    UUID assignee = UUID.randomUUID();
+    java.util.Map<String, Object> reference =
+        java.util.Map.of(
+            "user_id",
+            assignee.toString(),
+            "first_name",
+            "Amani",
+            "last_name",
+            "Uwase",
+            "role",
+            "ANALYST");
+    org.mockito.Mockito.when(names.cached(BANK_A, assignee))
+        .thenReturn(java.util.Optional.of(reference));
+    fanOut.route(ChangePublisher.TOPIC, RealtimeFixtures.assigned(BANK_A, assignee), 1);
+    assertThat(socket.next()).contains("\"first_name\":\"Amani\"");
+
+    UUID uncached = UUID.randomUUID();
+    org.mockito.Mockito.when(names.cached(BANK_A, uncached)).thenReturn(java.util.Optional.empty());
+    org.mockito.Mockito.doAnswer(
+            call -> {
+              java.util.function.Consumer<java.util.Map<String, Object>> then = call.getArgument(2);
+              then.accept(reference);
+              return null;
+            })
+        .when(names)
+        .resolve(
+            org.mockito.ArgumentMatchers.eq(BANK_A),
+            org.mockito.ArgumentMatchers.eq(uncached),
+            any());
+    fanOut.route(ChangePublisher.TOPIC, RealtimeFixtures.assigned(BANK_A, uncached), 1);
+    assertThat(socket.next()).as("delivered once resolved").contains("\"assigned_analyst\":{");
+  }
 }

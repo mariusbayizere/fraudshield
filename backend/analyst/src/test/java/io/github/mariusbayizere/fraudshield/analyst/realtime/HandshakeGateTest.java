@@ -203,4 +203,26 @@ class HandshakeGateTest {
     }
     assertProblem(answer(gate, upgrade("https://console.example.rw")), 503, "service-unavailable");
   }
+
+  @Test
+  @Tag("FR-04-02")
+  void frameworksOwnUpgradeRefusalsBecomeTheCataloguesProblem() throws IOException {
+    HandshakeGate.Handshakes handshakes = new HandshakeGate.Handshakes();
+    MockHttpServletResponse upgrade = new MockHttpServletResponse();
+    handshakes.handleInvalidUpgradeHeader(
+        new ServletServerHttpRequest(new MockHttpServletRequest()),
+        new ServletServerHttpResponse(upgrade));
+    assertProblem(upgrade, 426, "upgrade-required");
+    MockHttpServletResponse connection = new MockHttpServletResponse();
+    handshakes.handleInvalidConnectHeader(
+        new ServletServerHttpRequest(new MockHttpServletRequest()),
+        new ServletServerHttpResponse(connection));
+    assertProblem(connection, 426, "upgrade-required");
+    MockHttpServletResponse version = new MockHttpServletResponse();
+    handshakes.handleWebSocketVersionNotSupported(
+        new ServletServerHttpRequest(new MockHttpServletRequest()),
+        new ServletServerHttpResponse(version));
+    assertProblem(version, 426, "upgrade-required");
+    assertThat(version.getHeader("Sec-WebSocket-Version")).isEqualTo("13");
+  }
 }
