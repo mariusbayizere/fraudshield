@@ -29,6 +29,18 @@ abstract class AnalystIntegrationTest extends AuthIntegrationTest {
   protected static final Instant NOW = Instant.now();
 
   /**
+   * Every analyst integration test shares one context. Its revocation backstop is too slow to
+   * matter, so the real-time test's "within 5 s" can pass only through revocation by push (code
+   * review 3, MINOR 4); the backstop itself is unit-tested (SessionGuardTest).
+   *
+   * @param properties the context's properties
+   */
+  @org.springframework.test.context.DynamicPropertySource
+  static void realtime(org.springframework.test.context.DynamicPropertyRegistry properties) {
+    properties.add("fraudshield.realtime.backstop-period", () -> "10m");
+  }
+
+  /**
    * A fresh token in the contract's form.
    *
    * @return the token

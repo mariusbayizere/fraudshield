@@ -43,6 +43,11 @@ final class FanOut implements AutoCloseable {
   private final AtomicLong invalid = new AtomicLong();
   private final AtomicLong overflows = new AtomicLong();
   private final AtomicLong lagMisses = new AtomicLong();
+  private final AtomicLong refreshMisses = new AtomicLong();
+
+  /** How long resolving one partition's position may take (ASSUMED). */
+  private static final Duration POSITION_TIMEOUT = Duration.ofSeconds(5);
+
   private final Thread thread;
   private volatile boolean ready;
   private volatile boolean running = true;
@@ -109,7 +114,13 @@ final class FanOut implements AutoCloseable {
         ConsumerRecords<String, byte[]> polled = consumer.poll(Duration.ofMillis(100));
         lastPollNanos = nanoTime.getAsLong();
         for (ConsumerRecord<String, byte[]> record : polled) {
-          route(record.topic(), record.value(), record.timestamp());
+          try {
+            route(record.topic(), record.value(), record.timestamp());
+          } catch (RuntimeException failed) {
+            // One record's failure never stops the consumer (code review 3, MAJOR 1).
+            invalid.incrementAndGet();
+            LOG.warn("a real-time record could not be routed; dropped", failed);
+          }
         }
         long now = nanoTime.getAsLong();
         if (now - nextLag >= 0) {
@@ -143,29 +154,40 @@ final class FanOut implements AutoCloseable {
   }
 
   /** New partitions start from their earliest offset: at most one refresh period of data. */
-  private Set<TopicPartition> refresh(
+  Set<TopicPartition> refresh(
       org.apache.kafka.clients.consumer.Consumer<String, byte[]> consumer,
       Set<TopicPartition> assigned) {
-    Set<TopicPartition> now = new HashSet<>(partitions(consumer));
-    now.addAll(assigned);
-    if (now.equals(assigned)) {
+    // A refresh that times out keeps the current assignment and is tried again at the next one;
+    // it never fails the consumer, which would close every session (code review 3, MINOR 6).
+    try {
+      Set<TopicPartition> now = new HashSet<>(partitions(consumer));
+      now.addAll(assigned);
+      if (now.equals(assigned)) {
+        return assigned;
+      }
+      Set<TopicPartition> added = new HashSet<>(now);
+      added.removeAll(assigned);
+      consumer.assign(now);
+      consumer.seekToBeginning(added);
+      for (TopicPartition p : added) {
+        positioned(consumer, p);
+      }
+      return now;
+    } catch (RuntimeException unavailable) {
+      refreshMisses.incrementAndGet();
+      LOG.warn(
+          "new partitions could not be assigned; tried again at the next refresh", unavailable);
+      consumer.assign(assigned);
       return assigned;
     }
-    Set<TopicPartition> added = new HashSet<>(now);
-    added.removeAll(assigned);
-    consumer.assign(now);
-    consumer.seekToBeginning(added);
-    for (TopicPartition p : added) {
-      positioned(consumer, p);
-    }
-    return now;
   }
 
   /** Fixes a lazy seek by asking for the position, and starts its lag at zero (point 5). */
   private void positioned(
       org.apache.kafka.clients.consumer.Consumer<String, byte[]> consumer, TopicPartition p) {
-    // position() makes no broker request once metadata is known, and fixes the lazy seek.
-    if (consumer.position(p) < 0) {
+    // The seek is lazy: position() resolves it, with a bounded broker request (ListOffsets).
+    // Kafka never answers a negative position; the check guards the contract, not a case seen.
+    if (consumer.position(p, POSITION_TIMEOUT) < 0) {
       throw new IllegalStateException("no position for " + p);
     }
     lag.put(p, 0L);
@@ -185,6 +207,10 @@ final class FanOut implements AutoCloseable {
         lagMisses.incrementAndGet();
       }
     }
+  }
+
+  long refreshMisses() {
+    return refreshMisses.get();
   }
 
   long lagMisses() {

@@ -31,7 +31,8 @@ import org.springframework.web.socket.TextMessage;
 
 /**
  * The STOMP rules of ADR 0115 points 2, 3, 4 and 8, against the endpoint with a fake socket and a
- * fake token decoder. The same rules over real sockets, Kafka and Redis run in CI.
+ * fake token decoder. AnalystRealtimeTest runs a subset over real sockets and Redis, with Kafka as
+ * MockConsumer (it needs Docker, so it runs in CI only).
  */
 class StompEndpointTest {
 

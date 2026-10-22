@@ -1044,14 +1044,16 @@ during P2; the owner may overrule.
   CONNECT (point 2).
 - **The figures** are pushed by `FiguresPusher`, computed once per institution by ADR 0117's
   `DashboardFigures`, under point 6.3's rules.
-- **The instance budget** is enforced as each record is delivered and by the 250 ms sweep, so the
-  counted total passes 32 MiB by at most one record's frames across the sessions.
+- **The instance budget** is enforced after each delivery (by the fan-out, the name resolver's
+  threads and the figures) and by the 250 ms sweep. Those threads deliver concurrently, so the
+  counted total can pass 32 MiB by up to one record's frames per delivering thread before it is
+  shed.
 - **An inbound frame above the servlet container's text buffer** (Tomcat's default, 8,192 bytes,
   ASSUMED) is closed by the container with WebSocket status 1009 before the handler sees it, not
   with the ERROR `validation` of point 8; frames up to that size get the ERROR.
-- **What is tested, and what is not (code review 2, MAJOR 3).** In CI, `AnalystRealtimeTest` runs
-  the channel in the application with real sockets, the security chain and Redis: the handshake's
-  one answer for every caller, CONNECT, routing by institution, re-authentication without loss,
+- **What is tested, and what is not (code review 2, MAJOR 3).** `AnalystRealtimeTest` (Docker, so
+  CI only) is written to run the channel in the application with real sockets, the security chain
+  and Redis: the handshake's one answer for every caller, CONNECT, routing by institution, re-authentication without loss,
   revocation by push within 5 s, and push equals list. Kafka there is `MockConsumer`, so the broker
   is not exercised. Not written yet, and open before release: the card-equality test of point 6.1
   (the mapped `AlertSummary` of a raised alert equals `listAlerts`' item, with SHAP, without SHAP

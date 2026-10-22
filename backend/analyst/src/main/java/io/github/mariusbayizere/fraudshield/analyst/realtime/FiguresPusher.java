@@ -67,6 +67,15 @@ final class FiguresPusher implements StompEndpoint.Subscribed {
 
   /** Recomputes and pushes where point 6.3 says to; runs every second on its own thread. */
   void tick() {
+    try {
+      tickOnce();
+    } catch (RuntimeException failed) {
+      // A scheduled task that throws never runs again: keep the schedule alive.
+      LOG.warn("the figures tick failed; tried again next second", failed);
+    }
+  }
+
+  private void tickOnce() {
     long now = nanoTime.getAsLong();
     for (UUID institution : registry.institutions()) {
       State state = state(institution);

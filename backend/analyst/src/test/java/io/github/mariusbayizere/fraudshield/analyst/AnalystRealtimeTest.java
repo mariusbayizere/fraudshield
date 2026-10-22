@@ -185,7 +185,8 @@ class AnalystRealtimeTest extends AnalystIntegrationTest {
     RealtimeTestAutoConfiguration.KAFKA.publish("fs.alerts.medium", RealtimeProbe.raised(BANK));
     assertThat(client.next(10)).startsWith("MESSAGE");
 
-    // Revocation by push: signing out ends the socket within D-27's 5 s.
+    // Revocation by push: signing out ends the socket within D-27's 5 s. The backstop runs every
+    // 10 minutes in these tests, so only the push can pass this.
     long start = System.nanoTime();
     assertThat(http.post("/api/v1/auth/logout", Map.of(), analyst.bearerWithCsrf()).status())
         .isLessThan(300);

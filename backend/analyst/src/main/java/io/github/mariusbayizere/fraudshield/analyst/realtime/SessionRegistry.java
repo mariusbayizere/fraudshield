@@ -261,19 +261,41 @@ final class SessionRegistry {
     if (!budget.exceeded()) {
       return List.of();
     }
-    List<RealtimeSession> largest = new ArrayList<>(sockets.values());
-    largest.sort(Comparator.comparingLong(RealtimeSession::queuedBytes).reversed());
+    // Sorted on a snapshot of the sizes: queues change while sorting, and a comparator over live
+    // sizes can break the sort's contract (code review 3, MAJOR 1).
+    List<Sized> largest = new ArrayList<>();
+    for (RealtimeSession s : sockets.values()) {
+      largest.add(new Sized(s, s.queuedBytes()));
+    }
+    largest.sort(Comparator.comparingLong(Sized::bytes).reversed());
     List<RealtimeSession> shed = new ArrayList<>();
     long remaining = budget.queued();
     long lowWater = budget.lowWater();
-    for (RealtimeSession s : largest) {
+    for (Sized s : largest) {
       if (remaining < lowWater) {
         break;
       }
-      remaining -= s.queuedBytes();
-      shed.add(s);
+      remaining -= s.bytes();
+      shed.add(s.session());
     }
     return shed;
+  }
+
+  private record Sized(RealtimeSession session, long bytes) {}
+
+  /**
+   * Releases an admission's reservation when its upgrade failed (code review 3, MINOR 3).
+   *
+   * @param address the client address
+   */
+  synchronized void released(String address) {
+    Deque<Long> mine = reserved.get(address);
+    if (mine != null) {
+      mine.pollLast();
+      if (mine.isEmpty()) {
+        reserved.remove(address);
+      }
+    }
   }
 
   /** Whether one more event fits the key's one-minute window; prunes, records nothing. */

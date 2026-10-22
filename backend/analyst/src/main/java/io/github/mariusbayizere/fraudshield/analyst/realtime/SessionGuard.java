@@ -88,11 +88,12 @@ final class SessionGuard implements SessionStateCache.ChangeListener, AutoClosea
   /** Registers the change listener and starts the schedules. */
   void start() {
     sessions.addChangeListener(this);
-    thread.scheduleWithFixedDelay(this::sweep, 250, 250, TimeUnit.MILLISECONDS);
+    thread.scheduleWithFixedDelay(guarded(this::sweep), 250, 250, TimeUnit.MILLISECONDS);
     long ping = settings.redisPing().toMillis();
-    thread.scheduleWithFixedDelay(this::probeRedis, ping, ping, TimeUnit.MILLISECONDS);
+    thread.scheduleWithFixedDelay(guarded(this::probeRedis), ping, ping, TimeUnit.MILLISECONDS);
     long refresh = settings.presenceRefresh().toMillis();
-    thread.scheduleWithFixedDelay(this::refreshPresence, refresh, refresh, TimeUnit.MILLISECONDS);
+    thread.scheduleWithFixedDelay(
+        guarded(this::refreshPresence), refresh, refresh, TimeUnit.MILLISECONDS);
     scheduleBackstop();
   }
 
@@ -128,6 +129,17 @@ final class SessionGuard implements SessionStateCache.ChangeListener, AutoClosea
     grouped.forEach(this::check);
   }
 
+  /** A scheduled task that throws never runs again; each run's failure is logged instead. */
+  private static Runnable guarded(Runnable task) {
+    return () -> {
+      try {
+        task.run();
+      } catch (RuntimeException failed) {
+        LOG.warn("a real-time guard task failed; it runs again at its next period", failed);
+      }
+    };
+  }
+
   // ---------------------------------------------------------------------------- the backstop
 
   private void scheduleBackstop() {
@@ -140,7 +152,7 @@ final class SessionGuard implements SessionStateCache.ChangeListener, AutoClosea
     checks.schedule(
         () -> {
           try {
-            backstop();
+            guarded(this::backstop).run();
           } finally {
             scheduleBackstop();
           }

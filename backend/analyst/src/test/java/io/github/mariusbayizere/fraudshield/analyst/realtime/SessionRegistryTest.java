@@ -173,4 +173,51 @@ class SessionRegistryTest {
     nanos.addAndGet(settings.connectTimeout().toNanos());
     assertThat(registry.admit("10.2.3.1")).as("unused reservations lapse").isEmpty();
   }
+
+  @Test
+  @Tag("FR-04-02")
+  void connectsRefusedForFullInstanceDoNotUseTheUsersRate() {
+    // Code review 3, MINOR 7: the INSTANCE_FULL and PAIRS_FULL refusals of finding 10.
+    List<RealtimeSession> holders = new ArrayList<>();
+    for (int i = 0; i < settings.pairsPerInstance(); i++) {
+      RealtimeSession holder = socket("10.0.0.1");
+      registry.bind(holder, binding(UUID.randomUUID(), UUID.randomUUID()), new ArrayList<>());
+      holders.add(holder);
+    }
+    UUID user = UUID.randomUUID();
+    for (int i = 0; i < 2 * settings.connectsPerUserPerMinute(); i++) {
+      assertThat(
+              registry.bind(
+                  socket("10.0.0.2"), binding(user, UUID.randomUUID()), new ArrayList<>()))
+          .contains(SessionRegistry.ConnectRefusal.PAIRS_FULL);
+    }
+    registry.closed(holders.getFirst());
+    assertThat(
+            registry.bind(socket("10.0.0.2"), binding(user, UUID.randomUUID()), new ArrayList<>()))
+        .as("the refusals used none of the user's ten a minute")
+        .isEmpty();
+  }
+
+  @Test
+  @Tag("FR-04-02")
+  void reservationIsReleasedWhenItsSocketIsCountedOrItsUpgradeFails() {
+    List<RealtimeSession> admitted = new ArrayList<>();
+    for (int i = 0; i < settings.pendingPerInstance(); i++) {
+      String address = "10.4.4." + i;
+      assertThat(registry.admit(address)).isEmpty();
+      admitted.add(socket(address));
+    }
+    for (RealtimeSession s : admitted) {
+      registry.bind(s, binding(UUID.randomUUID(), UUID.randomUUID()), new ArrayList<>());
+    }
+    assertThat(registry.admit("10.4.5.1"))
+        .as("counted sockets released their reservations, and are no longer pending")
+        .isEmpty();
+    for (int i = 1; i < settings.pendingPerInstance(); i++) {
+      assertThat(registry.admit("10.4.6." + i)).isEmpty();
+    }
+    assertThat(registry.admit("10.4.7.1")).contains(SessionRegistry.Refusal.PENDING_FULL);
+    registry.released("10.4.6.1");
+    assertThat(registry.admit("10.4.7.1")).as("a failed upgrade's slot is free again").isEmpty();
+  }
 }

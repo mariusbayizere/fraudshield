@@ -24,6 +24,7 @@ import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.SubProtocolCapable;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
+import org.springframework.web.socket.adapter.NativeWebSocketSession;
 import org.springframework.web.socket.handler.AbstractWebSocketHandler;
 
 /**
@@ -52,6 +53,12 @@ public final class StompEndpoint extends AbstractWebSocketHandler implements Sub
       EnumSet.of(StaffRole.ANALYST, StaffRole.SENIOR_ANALYST, StaffRole.RISK_OFFICER);
 
   private static final String ADDRESS = "fs.realtime.address";
+
+  /** Tomcat's per-session bound on a blocking send, which its close frame also uses. */
+  static final String BLOCKING_SEND_TIMEOUT = "org.apache.tomcat.websocket.BLOCKING_SEND_TIMEOUT";
+
+  /** A send, or the close, waits at most this long on a stalled link (ASSUMED). */
+  static final Long BLOCKING_SEND_MILLIS = 2_000L;
 
   private final SessionRegistry registry;
   private final SessionGuard guard;
@@ -125,6 +132,12 @@ public final class StompEndpoint extends AbstractWebSocketHandler implements Sub
 
   @Override
   public void afterConnectionEstablished(WebSocketSession socket) {
+    // Bounds every blocking send and the close frame, so a stalled link holds neither a writer nor
+    // a revoked session's close for the container's default 20 s (code review 3, MINOR 2).
+    if (socket instanceof NativeWebSocketSession nativeSocket
+        && nativeSocket.getNativeSession() instanceof jakarta.websocket.Session container) {
+      container.getUserProperties().put(BLOCKING_SEND_TIMEOUT, BLOCKING_SEND_MILLIS);
+    }
     RealtimeSession session =
         new RealtimeSession(
             socket,

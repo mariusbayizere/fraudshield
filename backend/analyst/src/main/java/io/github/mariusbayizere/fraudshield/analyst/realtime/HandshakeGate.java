@@ -12,6 +12,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
 import org.springframework.http.server.ServletServerHttpRequest;
+import org.springframework.http.server.ServletServerHttpResponse;
 import org.springframework.web.socket.WebSocketHandler;
 import org.springframework.web.socket.server.HandshakeInterceptor;
 import org.springframework.web.socket.server.support.DefaultHandshakeHandler;
@@ -79,7 +80,16 @@ final class HandshakeGate implements HandshakeInterceptor {
       ServerHttpResponse response,
       WebSocketHandler handler,
       Exception exception) {
-    // Nothing to undo: the socket is counted only once it is established.
+    // Called only after this gate admitted the handshake. An upgrade that failed afterwards never
+    // becomes a socket, so its reserved pending slot is released here rather than left to lapse
+    // (code review 3, MINOR 3).
+    boolean upgraded =
+        exception == null
+            && (!(response instanceof ServletServerHttpResponse servlet)
+                || servlet.getServletResponse().getStatus() == 101);
+    if (!upgraded) {
+      registry.released(address(request));
+    }
   }
 
   static boolean isStompUpgrade(ServerHttpRequest request) {

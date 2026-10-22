@@ -39,4 +39,28 @@ class FanOutTest {
     assertThat(fanOut.lagMisses()).isEqualTo(1);
     assertThat(fanOut.lag()).containsEntry(known, 7L);
   }
+
+  @Test
+  @Tag("FR-04-02")
+  @SuppressWarnings("unchecked")
+  void partitionRefreshThatTimesOutKeepsTheAssignment() {
+    RealtimeSettings settings = RealtimeSettings.defaults();
+    FanOut fanOut =
+        new FanOut(
+            null,
+            new AlertFrames(),
+            mock(StaffNames.class),
+            new SessionRegistry(settings, new InstanceBudget(1_000), System::nanoTime),
+            institution -> {},
+            settings,
+            System::nanoTime,
+            partition -> {});
+    Consumer<String, byte[]> consumer = mock(Consumer.class);
+    when(consumer.partitionsFor(org.mockito.ArgumentMatchers.anyString()))
+        .thenThrow(new TimeoutException("metadata"));
+    Set<TopicPartition> assigned = Set.of(new TopicPartition("fs.alerts.high", 0));
+    assertThat(fanOut.refresh(consumer, assigned)).isEqualTo(assigned);
+    assertThat(fanOut.refreshMisses()).isEqualTo(1);
+    org.mockito.Mockito.verify(consumer).assign(assigned);
+  }
 }
