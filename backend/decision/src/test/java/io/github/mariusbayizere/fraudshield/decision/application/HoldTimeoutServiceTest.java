@@ -161,7 +161,7 @@ class HoldTimeoutServiceTest {
 
   @Test
   void failedRequestKeepsTheHoldAndRetriesItOneSecondLater() {
-    UUID tx = hold();
+    final UUID tx = hold();
     owner.failing = true;
     clock.advance(Duration.ofSeconds(30));
     assertThat(timeouts.tick()).isZero();
@@ -174,8 +174,8 @@ class HoldTimeoutServiceTest {
   }
 
   @Test
-  void oneFailureNeverLosesTheRestOfAClaimedBatch() {
-    List<UUID> held = List.of(hold(), hold(), hold());
+  void oneFailureNeverLosesTheRestOfTheClaimedBatch() {
+    final List<UUID> held = List.of(hold(), hold(), hold());
     owner.failing = true;
     clock.advance(Duration.ofSeconds(30));
     timeouts.tick();
@@ -186,7 +186,7 @@ class HoldTimeoutServiceTest {
 
   @Test
   void holdWithNoFirstDecisionYetIsRetried() {
-    UUID tx = hold();
+    final UUID tx = hold();
     owner.noFirstDecision = true;
     clock.advance(Duration.ofSeconds(30));
     assertThat(timeouts.tick()).isZero();

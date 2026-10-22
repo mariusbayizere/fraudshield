@@ -88,9 +88,7 @@ public final class RedisDecisionStates implements DecisionStatePort {
     String cached =
         RedisSupport.await(
             redis.hget(RedisKeys.decision(institutionId, transactionId), "state"), timeout);
-    return cached == null
-        ? Optional.empty()
-        : Optional.of(FactCodec.state(JSON.readTree(cached)));
+    return cached == null ? Optional.empty() : Optional.of(FactCodec.state(JSON.readTree(cached)));
   }
 
   @Override

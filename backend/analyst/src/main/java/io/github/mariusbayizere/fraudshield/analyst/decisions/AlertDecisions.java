@@ -212,23 +212,23 @@ public final class AlertDecisions {
           try {
             undoUntil =
                 jdbc.queryForObject(
-                    """
-                    INSERT INTO alert_decisions (id, institution_id, alert_queue_entry_id,
-                    analyst_id, decision, analyst_comment, idempotency_key, prior_status,
-                    alert_version, request_fingerprint) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    RETURNING undo_until
-                    """,
-                    Timestamp.class,
-                    decisionId,
-                    caller.institutionId(),
-                    alertId,
-                    caller.userId(),
-                    kind,
-                    comment,
-                    key,
-                    entry.status(),
-                    alertVersion,
-                    fingerprint)
+                        """
+                        INSERT INTO alert_decisions (id, institution_id, alert_queue_entry_id,
+                        analyst_id, decision, analyst_comment, idempotency_key, prior_status,
+                        alert_version, request_fingerprint) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        RETURNING undo_until
+                        """,
+                        Timestamp.class,
+                        decisionId,
+                        caller.institutionId(),
+                        alertId,
+                        caller.userId(),
+                        kind,
+                        comment,
+                        key,
+                        entry.status(),
+                        alertVersion,
+                        fingerprint)
                     .toInstant();
           } catch (DuplicateKeyException e) {
             if (e.getMessage() != null && e.getMessage().contains("live analyst decision")) {
@@ -357,7 +357,8 @@ public final class AlertDecisions {
           "target_role", "escalation_target_not_higher", "Escalate to a higher role");
     }
     byte[] fingerprint =
-        fingerprint("escalate", alertId.toString(), target.name(), reason, Long.toString(alertVersion));
+        fingerprint(
+            "escalate", alertId.toString(), target.name(), reason, Long.toString(alertVersion));
     Escalated escalated =
         tenants.inTenant(
             caller.institutionId(),
@@ -426,7 +427,8 @@ public final class AlertDecisions {
                       + " WHERE id = ?",
                   alertId);
               audit.record(
-                  AuditEvent.of(caller.institutionId(), AuditEventType.ANALYST_DECISION, "ESCALATED")
+                  AuditEvent.of(
+                          caller.institutionId(), AuditEventType.ANALYST_DECISION, "ESCALATED")
                       .entity("alert_decision", decisionId)
                       .actor(actor(caller))
                       .after(
@@ -443,7 +445,10 @@ public final class AlertDecisions {
     escalated.reschedule().ifPresent(this::reschedule);
     return tenants.inTenant(
         caller.institutionId(),
-        () -> alerts.summary(escalated.entryId()).orElseThrow(() -> ProblemException.notFound("alert")));
+        () ->
+            alerts
+                .summary(escalated.entryId())
+                .orElseThrow(() -> ProblemException.notFound("alert")));
   }
 
   private record Escalated(UUID entryId, Optional<HoldSchedulePort.DueHold> reschedule) {}
@@ -557,13 +562,16 @@ public final class AlertDecisions {
                       + " WHERE id = ?",
                   alertId);
               audit.record(
-                  AuditEvent.of(caller.institutionId(), AuditEventType.SENIOR_OVERRIDE, "OVERRIDDEN")
+                  AuditEvent.of(
+                          caller.institutionId(), AuditEventType.SENIOR_OVERRIDE, "OVERRIDDEN")
                       .entity("alert_decision", decisionId)
                       .actor(actor(caller))
                       .after(
                           Map.of(
-                              "override_of_decision_id", originalId.toString(),
-                              "override_decision", newDecision))
+                              "override_of_decision_id",
+                              originalId.toString(),
+                              "override_decision",
+                              newDecision))
                       .context(caller.context())
                       .at(clock.instant()));
               return new Overridden(record(decisionId), result);
@@ -595,7 +603,9 @@ public final class AlertDecisions {
     return latest.getFirst();
   }
 
-  /** The original's label id when its label was recorded: its effects row is APPLIED or LABEL_ONLY. */
+  /**
+   * The original's label id when its label was recorded: its effects row is APPLIED or LABEL_ONLY.
+   */
   private UUID recordedLabel(UUID originalId) {
     Integer recorded =
         jdbc.queryForObject(
@@ -756,7 +766,8 @@ public final class AlertDecisions {
     };
   }
 
-  private DecisionOwner.Result submit(UUID institutionId, UUID transactionId, OwnerRequest request) {
+  private DecisionOwner.Result submit(
+      UUID institutionId, UUID transactionId, OwnerRequest request) {
     Connection c = DataSourceUtils.getConnection(dataSource);
     try {
       return owner.submit(c, institutionId, transactionId, request);

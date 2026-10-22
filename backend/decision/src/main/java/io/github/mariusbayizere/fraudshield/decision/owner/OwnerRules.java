@@ -235,8 +235,7 @@ public final class OwnerRules {
   }
 
   /** CUSTOMER_YES in order, and CUSTOMER_NO (§5). */
-  private static Verdict customer(
-      OwnerState o, OwnerRequest.Customer c, Instant now, Facts facts) {
+  private static Verdict customer(OwnerState o, OwnerRequest.Customer c, Instant now, Facts facts) {
     if (!c.wasMe()) {
       return labelOnly(null, new Label(true, CUSTOMER, null), null);
     }
@@ -255,8 +254,7 @@ public final class OwnerRules {
       Unblock unblock = facts.autoBlocked() ? new Unblock("CUSTOMER_VERIFICATION", null) : null;
       return applied(
           o,
-          new Transition(
-              DecisionValue.APPROVE, DecidedBy.CUSTOMER_VERIFICATION, List.of(), false),
+          new Transition(DecisionValue.APPROVE, DecidedBy.CUSTOMER_VERIFICATION, List.of(), false),
           new Label(false, CUSTOMER, null),
           Closing.NONE,
           unblock,
@@ -276,10 +274,7 @@ public final class OwnerRules {
     return applied(
         o,
         new Transition(
-            r.chosen(),
-            DecidedBy.SENIOR_OVERRIDE,
-            List.of(ReasonCodes.CONTEST_RESOLVED),
-            true),
+            r.chosen(), DecidedBy.SENIOR_OVERRIDE, List.of(ReasonCodes.CONTEST_RESOLVED), true),
         new Label(r.chosen() == DecisionValue.DECLINE, SENIOR, null),
         Closing.RESOLVE,
         unblock,

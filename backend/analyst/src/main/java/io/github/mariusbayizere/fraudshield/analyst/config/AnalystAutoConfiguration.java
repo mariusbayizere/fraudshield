@@ -21,10 +21,10 @@ import io.github.mariusbayizere.fraudshield.decision.owner.RequestRecorder;
 import java.time.Clock;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.context.annotation.Configuration;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -49,8 +49,8 @@ public class AnalystAutoConfiguration {
   }
 
   /**
-   * P2's decisions (decision-owner contract §9), wired only where the assembled application provides
-   * the transaction's owner and recorder.
+   * P2's decisions (decision-owner contract §9), wired only where the assembled application
+   * provides the transaction's owner and recorder.
    */
   @Configuration(proxyBeanMethods = false)
   @ConditionalOnBean(RequestRecorder.class)

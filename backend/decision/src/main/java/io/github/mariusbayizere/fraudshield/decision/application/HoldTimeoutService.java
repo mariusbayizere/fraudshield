@@ -14,8 +14,8 @@ import java.util.Objects;
 /**
  * The MEDIUM deadline scheduler (E.6, FR-03-02, D-14, D-18). The leader claims due holds every 100
  * ms; each becomes a TIMEOUT request to its transaction's owner (decision-owner contract §6.3),
- * which alone decides whether the hold times out. A hold an analyst decided is dropped by the owner,
- * because the analyst's claim stands; a hold whose escalation extended it is rescheduled.
+ * which alone decides whether the hold times out. A hold an analyst decided is dropped by the
+ * owner, because the analyst's claim stands; a hold whose escalation extended it is rescheduled.
  *
  * <p>A hold already taken from the schedule is never lost: if its request fails for any reason, or
  * finds no first decision yet, it is rescheduled 1 s later and counted, one hold at a time, so one

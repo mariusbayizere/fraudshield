@@ -128,10 +128,6 @@ public record DecisionState(
         decision);
   }
 
-  static boolean allowed(DecisionValue from, DecisionValue to, DecidedBy by) {
-    return allowed(from, null, to, by, false);
-  }
-
   /**
    * A later state, with an id and time the caller derived (decision-owner contract §4.5): the only
    * way {@code DecisionOwner} makes one, so that a re-run makes the same one. The owner row holds
@@ -178,6 +174,10 @@ public record DecisionState(
         reasons,
         null,
         current);
+  }
+
+  static boolean allowed(DecisionValue from, DecisionValue to, DecidedBy by) {
+    return allowed(from, null, to, by, false);
   }
 
   /**

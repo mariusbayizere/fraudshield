@@ -147,8 +147,8 @@ abstract class AnalystIntegrationTest extends AuthIntegrationTest {
     }
 
     /**
-     * A later decision state, as the transaction's owner records it (decision-owner contract
-     * §4.4): an owner row, then an APPLIED request row at sequence 2.
+     * A later decision state, as the transaction's owner records it (decision-owner contract §4.4):
+     * an owner row, then an APPLIED request row at sequence 2.
      */
     Tx then(String next, String decidedBy) {
       tenantWrite(

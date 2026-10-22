@@ -117,7 +117,8 @@ public final class UnblockReconciler {
         recorder.record(answer.institution(), result);
         submitted++;
       } catch (SQLException | RuntimeException failed) {
-        LOG.warn("a customer answer could not be submitted; the sweep tries again next tick", failed);
+        LOG.warn(
+            "a customer answer could not be submitted; the sweep tries again next tick", failed);
         return submitted;
       }
     }

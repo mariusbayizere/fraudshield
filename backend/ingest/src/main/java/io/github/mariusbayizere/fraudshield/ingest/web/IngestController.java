@@ -2,7 +2,6 @@ package io.github.mariusbayizere.fraudshield.ingest.web;
 
 import io.github.mariusbayizere.fraudshield.decision.adapter.events.FactCodec;
 import io.github.mariusbayizere.fraudshield.decision.owner.FinalDecisions;
-import io.github.mariusbayizere.fraudshield.decision.domain.DecisionState;
 import io.github.mariusbayizere.fraudshield.ingest.application.BatchJobs;
 import io.github.mariusbayizere.fraudshield.ingest.application.IngestService;
 import io.github.mariusbayizere.fraudshield.ingest.application.Problems;

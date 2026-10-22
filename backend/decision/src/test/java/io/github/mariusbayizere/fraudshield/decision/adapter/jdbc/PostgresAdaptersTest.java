@@ -13,7 +13,6 @@ import io.github.mariusbayizere.fraudshield.decision.adapter.jpa.JpaConfiguratio
 import io.github.mariusbayizere.fraudshield.decision.adapter.spool.SpoolDrainer;
 import io.github.mariusbayizere.fraudshield.decision.adapter.spool.SpoolRecord;
 import io.github.mariusbayizere.fraudshield.decision.application.event.DecisionEvent;
-import io.github.mariusbayizere.fraudshield.decision.domain.DecidedBy;
 import io.github.mariusbayizere.fraudshield.decision.domain.DecisionState;
 import io.github.mariusbayizere.fraudshield.decision.domain.DecisionValue;
 import io.github.mariusbayizere.fraudshield.decision.domain.MccCircuitBreaker;
@@ -148,7 +147,8 @@ class PostgresAdaptersTest {
             .count();
     assertThat(released).isEqualTo(2);
     List<SpoolRecord> records = records(facts);
-    long later = facts.stream().filter(DecisionEvent.DecisionChanged.class::isInstance).count();
+    final long later =
+        facts.stream().filter(DecisionEvent.DecisionChanged.class::isInstance).count();
     sink.accept(records);
     Map<String, Long> first = counts();
     assertThat(first).allSatisfy((table, count) -> assertThat(count).as(table).isPositive());
@@ -452,9 +452,7 @@ class PostgresAdaptersTest {
     JdbcDecisionStates states = new JdbcDecisionStates(db.dataSource("fs_app"));
     assertThat(states.latest(INSTITUTION, held.transactionId())).contains(held);
     assertThat(states.latest(INSTITUTION, UUID.randomUUID())).isEmpty();
-    assertThat(states.latest(UUID.randomUUID(), held.transactionId()))
-        .as("other tenant")
-        .isEmpty();
+    assertThat(states.latest(UUID.randomUUID(), held.transactionId())).as("other tenant").isEmpty();
   }
 
   @Test

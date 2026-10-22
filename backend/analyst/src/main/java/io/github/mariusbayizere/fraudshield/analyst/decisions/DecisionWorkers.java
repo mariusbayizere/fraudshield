@@ -306,7 +306,8 @@ public final class DecisionWorkers {
    */
   public int applyResolutions() {
     int applied = 0;
-    for (UUID institution : institutions("SELECT * FROM institutions_with_unapplied_resolutions()")) {
+    for (UUID institution :
+        institutions("SELECT * FROM institutions_with_unapplied_resolutions()")) {
       List<Map<String, Object>> unapplied =
           tenants.inTenant(
               institution,
@@ -326,7 +327,8 @@ public final class DecisionWorkers {
           resolve(institution, row);
           applied++;
         } catch (RuntimeException failed) {
-          LOG.warn("resolution {} could not be applied; tried again next run", row.get("id"), failed);
+          LOG.warn(
+              "resolution {} could not be applied; tried again next run", row.get("id"), failed);
         }
       }
     }
@@ -360,8 +362,10 @@ public final class DecisionWorkers {
                       .entity("transaction", transactionId)
                       .after(
                           Map.of(
-                              "resolution_id", resolutionId.toString(),
-                              "outcome", r.outcome().name(),
+                              "resolution_id",
+                              resolutionId.toString(),
+                              "outcome",
+                              r.outcome().name(),
                               "cleared_claim",
                               r.clearedClaim() == null ? "" : r.clearedClaim().toString()))
                       .at(clock.instant()));
@@ -390,7 +394,9 @@ public final class DecisionWorkers {
                             transactionId,
                             r.getString(3),
                             MediumTimeoutPolicy.valueOf(
-                                r.getString(2) == null ? "RELEASE_WITH_TIMEOUT_LABEL" : r.getString(2)),
+                                r.getString(2) == null
+                                    ? "RELEASE_WITH_TIMEOUT_LABEL"
+                                    : r.getString(2)),
                             r.getTimestamp(1).toInstant()),
                     transactionId));
     for (HoldSchedulePort.DueHold hold : held) {

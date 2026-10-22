@@ -17,9 +17,9 @@ import javax.sql.DataSource;
 
 /**
  * Overdue holds from the owner rows and {@code decision_states} across institutions (decision-owner
- * contract §6.3). Runs as {@code fs_app}: V62's
- * {@code institutions_with_overdue_holds} names the institutions (ids only), then one query per
- * institution, because row-level security scopes every read to one tenant.
+ * contract §6.3). Runs as {@code fs_app}: V62's {@code institutions_with_overdue_holds} names the
+ * institutions (ids only), then one query per institution, because row-level security scopes every
+ * read to one tenant.
  */
 public final class JdbcOverdueHolds implements OverdueHoldsPort {
 
@@ -27,9 +27,10 @@ public final class JdbcOverdueHolds implements OverdueHoldsPort {
       "SELECT institutions_with_overdue_holds FROM institutions_with_overdue_holds(?)";
 
   /**
-   * The owner's view of overdue holds (decision-owner contract §6.3): owners still HOLD, not claimed
-   * by an analyst, not contested, past their deadline (which an escalation may have extended); and
-   * sequence-1 HOLDs that no owner has taken yet. The basis is the first decision either stands on.
+   * The owner's view of overdue holds (decision-owner contract §6.3): owners still HOLD, not
+   * claimed by an analyst, not contested, past their deadline (which an escalation may have
+   * extended); and sequence-1 HOLDs that no owner has taken yet. The basis is the first decision
+   * either stands on.
    */
   private static final String SELECT_OVERDUE =
       """

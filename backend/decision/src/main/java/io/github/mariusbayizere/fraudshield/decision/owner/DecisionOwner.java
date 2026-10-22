@@ -144,8 +144,7 @@ public final class DecisionOwner {
    * @param requestId the request's id, or null
    * @param replay whether the request had already been made, and nothing was written now
    * @param state the new state, for APPLIED (null for a replay)
-   * @param events the events to record after the commit (empty for a replay: the recorder has
-   *     them)
+   * @param events the events to record after the commit (empty for a replay: the recorder has them)
    * @param closedEntries entries the request closed
    * @param clearedClaim the analyst decision whose claim a resolution cleared, or null
    */
@@ -176,8 +175,7 @@ public final class DecisionOwner {
    * @return what it did
    * @throws SQLException on a database error, which the caller's runner handles
    */
-  public Result submit(
-      Connection c, UUID institutionId, UUID transactionId, OwnerRequest request)
+  public Result submit(Connection c, UUID institutionId, UUID transactionId, OwnerRequest request)
       throws SQLException {
     Instant now = dbTime(c);
     if (request instanceof OwnerRequest.Timeout || request instanceof OwnerRequest.Resolve) {
@@ -314,8 +312,8 @@ public final class DecisionOwner {
   }
 
   /** §4.2: the row, created at most once from sequence 1 or a timeout's basis. */
-  private Optional<OwnerState> lockOrCreate(
-      Connection c, UUID inst, UUID txn, OwnerRequest request) throws SQLException {
+  private Optional<OwnerState> lockOrCreate(Connection c, UUID inst, UUID txn, OwnerRequest request)
+      throws SQLException {
     Optional<OwnerState> existing = selectOwner(c, inst, txn);
     if (existing.isPresent()) {
       return existing;
@@ -451,8 +449,7 @@ public final class DecisionOwner {
         String stored = row.getString(1);
         Outcome outcome = "PRE_V81".equals(stored) ? Outcome.REFUSED : Outcome.valueOf(stored);
         return Optional.of(
-            new Result(
-                outcome, null, null, requestId, true, null, List.of(), List.of(), null));
+            new Result(outcome, null, null, requestId, true, null, List.of(), List.of(), null));
       }
     }
   }
@@ -509,8 +506,7 @@ public final class DecisionOwner {
       s.setObject(11, withEvent ? OwnerIds.event(requestId) : null);
       s.setObject(13, utc(now));
       s.setString(
-          14,
-          withEvent ? new String(FactCodec.encode(events), StandardCharsets.UTF_8) : null);
+          14, withEvent ? new String(FactCodec.encode(events), StandardCharsets.UTF_8) : null);
       return s.executeUpdate() == 1;
     }
   }
@@ -559,16 +555,12 @@ public final class DecisionOwner {
   }
 
   private static void unblock(
-      Connection c,
-      UUID inst,
-      UUID txn,
-      OwnerRequest request,
-      Verdict.Unblock unblock,
-      Instant now)
+      Connection c, UUID inst, UUID txn, OwnerRequest request, Verdict.Unblock unblock, Instant now)
       throws SQLException {
     try (PreparedStatement s =
         c.prepareStatement(
-            "SELECT id FROM auto_block_events WHERE transaction_id = ? ORDER BY blocked_at LIMIT 1")) {
+            "SELECT id FROM auto_block_events WHERE transaction_id = ? ORDER BY blocked_at"
+                + " LIMIT 1")) {
       s.setObject(1, txn);
       try (ResultSet row = s.executeQuery()) {
         if (!row.next()) {
@@ -689,12 +681,15 @@ public final class DecisionOwner {
     if (owner.isEmpty() || owner.get().held()) {
       return;
     }
-    UUID timeout = new OwnerRequest.Timeout(null, null, null, null, null,
-        MediumTimeoutPolicy.RELEASE_WITH_TIMEOUT_LABEL, null).requestId(inst, txn);
+    UUID timeout =
+        new OwnerRequest.Timeout(
+                null, null, null, null, null, MediumTimeoutPolicy.RELEASE_WITH_TIMEOUT_LABEL, null)
+            .requestId(inst, txn);
     String timedOut = null;
     try (PreparedStatement s =
         c.prepareStatement(
-            "SELECT decision FROM transaction_requests WHERE request_id = ? AND outcome = 'APPLIED'")) {
+            "SELECT decision FROM transaction_requests WHERE request_id = ? AND outcome ="
+                + " 'APPLIED'")) {
       s.setObject(1, timeout);
       try (ResultSet row = s.executeQuery()) {
         timedOut = row.next() ? row.getString(1) : null;
@@ -780,7 +775,13 @@ public final class DecisionOwner {
     List<DecisionEvent> events =
         List.of(
             new DecisionEvent.LabelRecorded(
-                OwnerIds.label(customer), inst, txn, true, "CUSTOMER", transactionTime(c, txn), now,
+                OwnerIds.label(customer),
+                inst,
+                txn,
+                true,
+                "CUSTOMER",
+                transactionTime(c, txn),
+                now,
                 null));
     if (!insertRequest(c, inst, txn, requestId, customer, verdict, null, events, now)) {
       return stored(c, requestId).orElseThrow();

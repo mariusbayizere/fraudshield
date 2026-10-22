@@ -126,14 +126,14 @@ class DecisionOwnerTest {
     assertThat(first.state().decision()).isEqualTo(DecisionValue.TIMEOUT_RELEASE);
     assertThat(first.state().sequence()).isEqualTo(2);
     assertThat(first.closedEntries()).hasSize(1);
-    assertThat(one("SELECT status FROM fraudshield.alert_queue_entries")).isEqualTo("AUTO_RELEASED");
+    assertThat(one("SELECT status FROM fraudshield.alert_queue_entries"))
+        .isEqualTo("AUTO_RELEASED");
     assertThat(one("SELECT decision FROM fraudshield.alert_decisions")).isEqualTo("AUTO_RELEASED");
 
     DecisionOwner.Result again = submit(timeoutOf(hold));
     assertThat(again.replay()).isTrue();
     assertThat(one("SELECT count(*) FROM fraudshield.transaction_requests")).isEqualTo("1");
-    assertThat(
-            new JdbcDecisionStates(app).latest(INSTITUTION, hold.transactionId()).orElseThrow())
+    assertThat(new JdbcDecisionStates(app).latest(INSTITUTION, hold.transactionId()).orElseThrow())
         .extracting(DecisionState::decision)
         .isEqualTo(DecisionValue.TIMEOUT_RELEASE);
   }
@@ -147,8 +147,7 @@ class DecisionOwnerTest {
     assertThat(timedOut.outcome()).isEqualTo(Verdict.Outcome.APPLIED);
     sink.accept(records(heldRecord));
     assertThat(sink.duplicateDecisions()).isZero();
-    assertThat(
-            one("SELECT count(*) FROM fraudshield.decision_states WHERE decision_sequence = 1"))
+    assertThat(one("SELECT count(*) FROM fraudshield.decision_states WHERE decision_sequence = 1"))
         .isEqualTo("1");
     assertThat(one("SELECT count(*) FROM fraudshield.transaction_ids")).isEqualTo("1");
     assertThat(one("SELECT status FROM fraudshield.alert_queue_entries"))
@@ -186,8 +185,7 @@ class DecisionOwnerTest {
     assertThat(one("SELECT contested_since IS NOT NULL FROM fraudshield.decision_owners"))
         .isEqualTo("t");
     assertThat(one("SELECT count(*) FROM fraudshield.transaction_requests")).isEqualTo("0");
-    assertThat(
-            new JdbcDecisionStates(app).poll(INSTITUTION, hold.transactionId()).contested())
+    assertThat(new JdbcDecisionStates(app).poll(INSTITUTION, hold.transactionId()).contested())
         .isTrue();
   }
 

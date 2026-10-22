@@ -105,9 +105,22 @@ class OwnerRulesTest {
   void timeoutUnderDeclineAndVerifyDeclines() {
     OwnerState o =
         new OwnerState(
-            INSTITUTION, TX, FIRST, DecisionValue.HOLD, DEADLINE,
-            MediumTimeoutPolicy.DECLINE_AND_VERIFY, 1, DecisionValue.HOLD, DecidedBy.MODEL,
-            Claim.NONE, null, DEADLINE, null, null, null, null);
+            INSTITUTION,
+            TX,
+            FIRST,
+            DecisionValue.HOLD,
+            DEADLINE,
+            MediumTimeoutPolicy.DECLINE_AND_VERIFY,
+            1,
+            DecisionValue.HOLD,
+            DecidedBy.MODEL,
+            Claim.NONE,
+            null,
+            DEADLINE,
+            null,
+            null,
+            null,
+            null);
     assertThat(evaluate(o, timeout(DecisionValue.HOLD), DEADLINE).transition().value())
         .isEqualTo(DecisionValue.DECLINE);
   }
@@ -133,7 +146,9 @@ class OwnerRulesTest {
     // contest is checked before HOLD and the deadline (review 1, finding 5).
     Verdict v =
         evaluate(
-            state(1, DecisionValue.DECLINE, DecidedBy.MODEL), timeout(DecisionValue.HOLD), DEADLINE);
+            state(1, DecisionValue.DECLINE, DecidedBy.MODEL),
+            timeout(DecisionValue.HOLD),
+            DEADLINE);
     assertThat(v.refusal()).isEqualTo(Refusal.CONFLICT);
     assertThat(v.contest()).isNotNull();
     assertThat(v.contest().detectedBy()).isEqualTo("DUE_HOLD");
@@ -182,8 +197,7 @@ class OwnerRulesTest {
   @Test
   void effectDecidesTheHoldAndHumanFraudDecisionOnDeclineIsState() {
     UUID decision = UUID.randomUUID();
-    OwnerState claimed =
-        held().withClaim(Claim.ANALYST, decision, DEADLINE, Claim.NONE, DEADLINE);
+    OwnerState claimed = held().withClaim(Claim.ANALYST, decision, DEADLINE, Claim.NONE, DEADLINE);
     Verdict onHold =
         evaluate(claimed, new OwnerRequest.Effect(decision, true, UUID.randomUUID()), NOW);
     assertThat(onHold.transition().value()).isEqualTo(DecisionValue.DECLINE);
@@ -347,7 +361,8 @@ class OwnerRulesTest {
             evaluate(contested, new OwnerRequest.ClaimRequest(UUID.randomUUID(), true), NOW)
                 .refusal())
         .isEqualTo(Refusal.CONTESTED);
-    assertThat(evaluate(contested, new OwnerRequest.Escalate(Duration.ofMinutes(15)), NOW).refusal())
+    assertThat(
+            evaluate(contested, new OwnerRequest.Escalate(Duration.ofMinutes(15)), NOW).refusal())
         .isEqualTo(Refusal.CONTESTED);
     assertThat(
             evaluate(contested, new OwnerRequest.Customer(UUID.randomUUID(), true), NOW).outcome())
@@ -411,8 +426,7 @@ class OwnerRulesTest {
   @Test
   void releasingFailedClaimRestoresWhatItReplaced() {
     UUID decision = UUID.randomUUID();
-    OwnerState claimed =
-        held().withClaim(Claim.ANALYST, decision, DEADLINE, Claim.NONE, DEADLINE);
+    OwnerState claimed = held().withClaim(Claim.ANALYST, decision, DEADLINE, Claim.NONE, DEADLINE);
     Verdict released =
         OwnerRules.evaluate(
             claimed,

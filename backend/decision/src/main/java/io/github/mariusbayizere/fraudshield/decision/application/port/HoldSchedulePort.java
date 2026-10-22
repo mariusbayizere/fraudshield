@@ -69,7 +69,14 @@ public interface HoldSchedulePort {
      */
     public DueHold dueAgainAt(Instant at) {
       return new DueHold(
-          institutionId, transactionId, channel, policy, deadline, eventId, decidedAt, reasonCodes,
+          institutionId,
+          transactionId,
+          channel,
+          policy,
+          deadline,
+          eventId,
+          decidedAt,
+          reasonCodes,
           at);
     }
   }

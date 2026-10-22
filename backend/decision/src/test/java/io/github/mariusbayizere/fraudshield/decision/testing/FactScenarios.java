@@ -7,14 +7,14 @@ import io.github.mariusbayizere.fraudshield.common.config.MediumTimeoutPolicy;
 import io.github.mariusbayizere.fraudshield.common.transaction.Channel;
 import io.github.mariusbayizere.fraudshield.decision.application.DecisionService;
 import io.github.mariusbayizere.fraudshield.decision.application.DecisionSettings;
-import io.github.mariusbayizere.fraudshield.decision.domain.DecidedBy;
-import io.github.mariusbayizere.fraudshield.decision.domain.DecisionValue;
 import io.github.mariusbayizere.fraudshield.decision.application.HoldTimeoutService;
 import io.github.mariusbayizere.fraudshield.decision.application.event.DecisionEvent;
 import io.github.mariusbayizere.fraudshield.decision.application.port.DecisionMetrics;
 import io.github.mariusbayizere.fraudshield.decision.application.port.HoldSchedulePort;
+import io.github.mariusbayizere.fraudshield.decision.domain.DecidedBy;
 import io.github.mariusbayizere.fraudshield.decision.domain.Decision;
 import io.github.mariusbayizere.fraudshield.decision.domain.DecisionState;
+import io.github.mariusbayizere.fraudshield.decision.domain.DecisionValue;
 import io.github.mariusbayizere.fraudshield.decision.domain.MccCircuitBreaker;
 import io.github.mariusbayizere.fraudshield.decision.domain.Transaction;
 import java.time.Duration;
@@ -94,7 +94,8 @@ public final class FactScenarios {
             .orElseThrow()
             .transactionId();
     // The customer's "yes", as the owner records it (decision-owner contract §5).
-    later(ports, declined, DecisionValue.APPROVE, DecidedBy.CUSTOMER_VERIFICATION, false, "CUSTOMER");
+    later(
+        ports, declined, DecisionValue.APPROVE, DecidedBy.CUSTOMER_VERIFICATION, false, "CUSTOMER");
     UUID heldAgain =
         ports.latest.values().stream()
             .filter(s -> s.decision().name().equals("HOLD"))

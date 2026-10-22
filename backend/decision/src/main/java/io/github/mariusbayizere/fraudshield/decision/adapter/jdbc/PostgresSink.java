@@ -496,8 +496,7 @@ public final class PostgresSink implements SpoolDrainer.Sink {
    * such row can only be a pre-V81 dead letter replayed; it is counted, logged and dropped, and the
    * overdue sweep times out a hold it left open.
    */
-  private void decisionChanged(Connection c, DecisionEvent.DecisionChanged e)
-      throws SQLException {
+  private void decisionChanged(Connection c, DecisionEvent.DecisionChanged e) throws SQLException {
     try (PreparedStatement s = c.prepareStatement(SELECT_REQUEST_EVENT)) {
       s.setObject(1, e.state().eventId());
       try (ResultSet row = s.executeQuery()) {

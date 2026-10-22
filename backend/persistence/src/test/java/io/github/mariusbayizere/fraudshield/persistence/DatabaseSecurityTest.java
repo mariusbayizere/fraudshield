@@ -691,26 +691,40 @@ class DatabaseSecurityTest {
   }
 
   @Test
-  void decisionIsCommittedOrUndoneButNeverBoth() throws SQLException {
+  void decisionIsCommittedOrUndoneButNeverBothAndOnlyOnItsWindowsSide()
+      throws SQLException, InterruptedException {
+    // V81 (decision-owner contract §9): an analyst decision commits only after its 5-second undo
+    // window, and is undone only inside it, on DB time; V4: never both.
+    UUID early = insertDecision(BANK_A, analystA);
+    UUID late = insertDecision(BANK_A, analystA);
     try (Connection app = tenant("fs_app", BANK_A)) {
-      exec(
-          app,
-          "INSERT INTO alert_decision_commits (decision_id, institution_id) VALUES ('"
-              + decisionA
-              + "', '"
-              + BANK_A
-              + "')");
-      assertSqlState(
-          app,
-          "INSERT INTO alert_decision_undos (decision_id, institution_id, undone_by) VALUES ('"
-              + decisionA
-              + "', '"
-              + BANK_A
-              + "', '"
-              + analystA
-              + "')",
-          "23514");
+      assertSqlState(app, commit(early), "23514");
+      exec(app, undo(early));
+      assertSqlState(app, commit(early), "23514");
     }
+    Thread.sleep(5_100);
+    try (Connection app = tenant("fs_app", BANK_A)) {
+      exec(app, commit(late));
+      assertSqlState(app, undo(late), "23514");
+    }
+  }
+
+  private static String commit(UUID decision) {
+    return "INSERT INTO alert_decision_commits (decision_id, institution_id) VALUES ('"
+        + decision
+        + "', '"
+        + BANK_A
+        + "')";
+  }
+
+  private static String undo(UUID decision) {
+    return "INSERT INTO alert_decision_undos (decision_id, institution_id, undone_by) VALUES ('"
+        + decision
+        + "', '"
+        + BANK_A
+        + "', '"
+        + analystA
+        + "')";
   }
 
   @Test

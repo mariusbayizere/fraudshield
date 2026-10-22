@@ -95,7 +95,7 @@ class DecisionStateTest {
   }
 
   @Test
-  void succeedingRepeatsAValueAtTheNextSequence() {
+  void succeedingRepeatsTheValueAtTheNextSequence() {
     UUID tx = UUID.randomUUID();
     DecisionState declined =
         DecisionState.initial(INSTITUTION, tx, Decision.DECLINE, NOW, List.of(), null);

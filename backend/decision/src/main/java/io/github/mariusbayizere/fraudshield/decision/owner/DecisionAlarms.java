@@ -53,7 +53,8 @@ public final class DecisionAlarms {
   public void refresh() {
     try (Connection c = dataSource.getConnection();
         PreparedStatement s =
-            c.prepareStatement("SELECT alarm, total, oldest_seconds FROM decision_alarm_figures()");
+            c.prepareStatement(
+                "SELECT alarm, total, oldest_seconds FROM decision_alarm_figures()");
         ResultSet rows = s.executeQuery()) {
       while (rows.next()) {
         latest.put(rows.getString(1), new double[] {rows.getLong(2), rows.getDouble(3)});

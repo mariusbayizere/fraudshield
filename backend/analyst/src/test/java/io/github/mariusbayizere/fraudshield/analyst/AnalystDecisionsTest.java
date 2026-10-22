@@ -12,9 +12,9 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 
 /**
- * P2's four decision operations against the real application and database, under the
- * decision-owner contract (§9, ADR 0114). The committer, the effects worker and the resolver run
- * on their own schedulers, every 500 ms, as in production.
+ * P2's four decision operations against the real application and database, under the decision-owner
+ * contract (§9, ADR 0114). The committer, the effects worker and the resolver run on their own
+ * schedulers, every 500 ms, as in production.
  */
 @Tag("FR-04-04")
 @Tag("FR-04-10")
@@ -54,7 +54,8 @@ class AnalystDecisionsTest extends AnalystIntegrationTest {
   }
 
   private static Map<String, Object> decision(String kind, long version) {
-    return Map.of("decision", kind, "comment", "Checked the device history", "alert_version", version);
+    return Map.of(
+        "decision", kind, "comment", "Checked the device history", "alert_version", version);
   }
 
   private static void eventually(String what, Supplier<Boolean> condition) {
@@ -84,14 +85,22 @@ class AnalystDecisionsTest extends AnalystIntegrationTest {
     UUID key = UUID.randomUUID();
 
     Http.Response accepted =
-        post(analyst, "/api/v1/alerts/" + alert.id + "/decisions", decision("CONFIRM_FRAUD", 0), key);
+        post(
+            analyst,
+            "/api/v1/alerts/" + alert.id + "/decisions",
+            decision("CONFIRM_FRAUD", 0),
+            key);
     assertThat(accepted.status()).as(accepted.body()).isEqualTo(202);
     JsonNode body = accepted.json();
     assertThat(OpenApiSchemas.errors("AlertDecisionAccepted", body)).isEmpty();
     assertThat(body.get("state").asString()).isEqualTo("PENDING_COMMIT");
 
     Http.Response replay =
-        post(analyst, "/api/v1/alerts/" + alert.id + "/decisions", decision("CONFIRM_FRAUD", 0), key);
+        post(
+            analyst,
+            "/api/v1/alerts/" + alert.id + "/decisions",
+            decision("CONFIRM_FRAUD", 0),
+            key);
     assertThat(replay.status()).isEqualTo(202);
     assertThat(replay.json().get("decision_id")).isEqualTo(body.get("decision_id"));
     Http.Response conflicting =
@@ -143,7 +152,10 @@ class AnalystDecisionsTest extends AnalystIntegrationTest {
     assertThat(undone.status()).as(undone.body()).isEqualTo(204);
     assertThat(one("SELECT status FROM fraudshield.alert_queue_entries WHERE id = ?", alert.id))
         .isEqualTo("PENDING");
-    assertThat(one("SELECT claim FROM fraudshield.decision_owners WHERE transaction_id = ?", alert.tx.id))
+    assertThat(
+            one(
+                "SELECT claim FROM fraudshield.decision_owners WHERE transaction_id = ?",
+                alert.tx.id))
         .isEqualTo("NONE");
 
     Session other = as("ANALYST");
@@ -195,7 +207,8 @@ class AnalystDecisionsTest extends AnalystIntegrationTest {
         post(
             as("ANALYST"),
             "/api/v1/alerts/" + alert.id + "/escalations",
-            Map.of("target_role", "SENIOR_ANALYST", "reason", "Unusual pattern", "alert_version", 0),
+            Map.of(
+                "target_role", "SENIOR_ANALYST", "reason", "Unusual pattern", "alert_version", 0),
             UUID.randomUUID());
     assertThat(escalated.status()).as(escalated.body()).isEqualTo(201);
     JsonNode summary = escalated.json();
@@ -252,10 +265,14 @@ class AnalystDecisionsTest extends AnalystIntegrationTest {
             as("RISK_OFFICER"),
             "/api/v1/alerts/" + alert.id + "/overrides",
             Map.of(
-                "original_decision_id", original,
-                "new_decision", "CONFIRM_FRAUD",
-                "reason", "Device seen on three other fraud cases",
-                "alert_version", 1),
+                "original_decision_id",
+                original,
+                "new_decision",
+                "CONFIRM_FRAUD",
+                "reason",
+                "Device seen on three other fraud cases",
+                "alert_version",
+                1),
             UUID.randomUUID());
     assertThat(override.status()).as(override.body()).isEqualTo(201);
     assertThat(OpenApiSchemas.errors("DecisionRecord", override.json())).isEmpty();

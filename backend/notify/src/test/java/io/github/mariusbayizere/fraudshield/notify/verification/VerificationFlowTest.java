@@ -9,19 +9,19 @@ import com.sun.net.httpserver.HttpServer;
 import io.github.mariusbayizere.fraudshield.decision.adapter.events.FactCodec;
 import io.github.mariusbayizere.fraudshield.decision.adapter.events.KafkaMessage;
 import io.github.mariusbayizere.fraudshield.decision.adapter.events.KafkaMessages;
+import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcDecisionStates;
 import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.PostgresSink;
 import io.github.mariusbayizere.fraudshield.decision.adapter.spool.SpoolRecord;
 import io.github.mariusbayizere.fraudshield.decision.application.DecisionService;
 import io.github.mariusbayizere.fraudshield.decision.application.DecisionSettings;
-import io.github.mariusbayizere.fraudshield.decision.adapter.jdbc.JdbcDecisionStates;
-import io.github.mariusbayizere.fraudshield.decision.domain.DecisionState;
-import io.github.mariusbayizere.fraudshield.decision.owner.DecisionOwner;
-import io.github.mariusbayizere.fraudshield.decision.owner.OwnerTransactions;
-import io.github.mariusbayizere.fraudshield.decision.owner.RequestRecorder;
 import io.github.mariusbayizere.fraudshield.decision.application.event.DecisionEvent;
 import io.github.mariusbayizere.fraudshield.decision.application.port.DecisionMetrics;
 import io.github.mariusbayizere.fraudshield.decision.domain.DecidedBy;
+import io.github.mariusbayizere.fraudshield.decision.domain.DecisionState;
 import io.github.mariusbayizere.fraudshield.decision.domain.DecisionValue;
+import io.github.mariusbayizere.fraudshield.decision.owner.DecisionOwner;
+import io.github.mariusbayizere.fraudshield.decision.owner.OwnerTransactions;
+import io.github.mariusbayizere.fraudshield.decision.owner.RequestRecorder;
 import io.github.mariusbayizere.fraudshield.decision.testing.Fixtures;
 import io.github.mariusbayizere.fraudshield.decision.testing.InMemoryPorts;
 import io.github.mariusbayizere.fraudshield.decision.testing.MutableClock;
@@ -305,8 +305,7 @@ class VerificationFlowTest {
     assertThat(ports.eventsOf(DecisionEvent.LabelRecorded.class)).isEmpty();
     assertThat(one("SELECT count(*) FROM fraudshield.unblock_events")).isEqualTo("0");
     assertThat(
-            one(
-                "SELECT reason FROM fraudshield.transaction_requests WHERE kind = 'CUSTOMER_YES'"))
+            one("SELECT reason FROM fraudshield.transaction_requests WHERE kind = 'CUSTOMER_YES'"))
         .isEqualTo("human-declined");
   }
 

@@ -9,8 +9,8 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * A request to a transaction's owner (decision-owner contract §5). Each is evaluated under the owner
- * row's lock against {@link OwnerRules}; none writes a state in its own right.
+ * A request to a transaction's owner (decision-owner contract §5). Each is evaluated under the
+ * owner row's lock against {@link OwnerRules}; none writes a state in its own right.
  */
 public sealed interface OwnerRequest {
 

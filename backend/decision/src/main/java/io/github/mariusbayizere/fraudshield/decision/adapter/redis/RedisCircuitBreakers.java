@@ -41,7 +41,9 @@ public final class RedisCircuitBreakers implements CircuitBreakerPort {
       return 1
       """;
 
-  /** E2: one marker per transaction, then the count, in one step (decision-owner contract D4(d)). */
+  /**
+   * E2: one marker per transaction, then the count, in one step (decision-owner contract D4(d)).
+   */
   private static final String COUNT_ONCE =
       """
       if not redis.call('SET', KEYS[1], '1', 'NX', 'PX', ARGV[1]) then return 0 end

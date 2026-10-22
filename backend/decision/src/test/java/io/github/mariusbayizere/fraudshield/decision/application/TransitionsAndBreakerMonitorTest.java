@@ -3,21 +3,14 @@ package io.github.mariusbayizere.fraudshield.decision.application;
 import static io.github.mariusbayizere.fraudshield.decision.testing.Fixtures.INSTITUTION;
 import static io.github.mariusbayizere.fraudshield.decision.testing.Fixtures.NOW;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.mariusbayizere.fraudshield.decision.application.event.DecisionEvent;
 import io.github.mariusbayizere.fraudshield.decision.application.port.CircuitBreakerPort;
 import io.github.mariusbayizere.fraudshield.decision.domain.CircuitBreakerState;
-import io.github.mariusbayizere.fraudshield.decision.domain.DecidedBy;
-import io.github.mariusbayizere.fraudshield.decision.domain.Decision;
-import io.github.mariusbayizere.fraudshield.decision.domain.DecisionState;
-import io.github.mariusbayizere.fraudshield.decision.domain.DecisionValue;
 import io.github.mariusbayizere.fraudshield.decision.domain.MccCircuitBreaker;
 import io.github.mariusbayizere.fraudshield.decision.testing.InMemoryPorts;
 import io.github.mariusbayizere.fraudshield.decision.testing.MutableClock;
 import java.time.Duration;
-import java.util.List;
-import java.util.UUID;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
