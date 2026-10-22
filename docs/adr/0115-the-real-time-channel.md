@@ -320,7 +320,8 @@ If the owner later restricts an ANALYST to their own assigned alerts (UX-ROLE-AN
 - **A restarted instance starts at the end of each partition.** Its consoles reconnect and re-read
   (point 7), so it never needs history.
 - **New partitions.** It re-reads partition metadata every 5 minutes (ASSUMED interval) and
-  assigns any new partition from its **earliest** offset, which is at most 5 minutes of data. From
+  assigns any new partition from its **earliest** offset, which is at most 5 minutes of data (more
+  if a refresh fails and is retried: P2's implementation notes). From
   the end, the first minutes of a new partition's events would be skipped silently.
 - **Lag is exported** per partition as `fs_realtime_consumer_lag` (end offset minus position),
   because with no group, Kafka's own lag tooling sees nothing.
@@ -1048,6 +1049,13 @@ during P2; the owner may overrule.
   threads and the figures) and by the 250 ms sweep. Those threads deliver concurrently, so the
   counted total can pass 32 MiB by up to one record's frames per delivering thread before it is
   shed.
+- **A slow link is dropped after 2 s, not 20 s.** Each session bounds Tomcat's blocking send and
+  its close frame to 2 s (ASSUMED; the container's default is 20 s), so a reader whose link stalls
+  for longer is disconnected and re-reads, and a revoked session closes within about 3 s.
+- **A partition refresh that fails** (metadata or a position past its 5 s bound, ASSUMED) keeps
+  the current assignment and is retried at the next refresh, counted in
+  `fs_realtime_partition_refresh_failed_total`; a new partition is then read from its earliest
+  offset when the refresh succeeds, which can be more than one refresh period of data.
 - **An inbound frame above the servlet container's text buffer** (Tomcat's default, 8,192 bytes,
   ASSUMED) is closed by the container with WebSocket status 1009 before the handler sees it, not
   with the ERROR `validation` of point 8; frames up to that size get the ERROR.
@@ -1117,7 +1125,7 @@ overrule". None of them is an owner decision:
   and its 75 % target; the 1.5 s ± 0.25 s revocation backstop and its limit of 50 database loads a
   second; Redis "down" after 3 consecutive failed operations, the 1 s `PING`, and "back" after two
   successful `PING`s 1 s apart; the 25 s heart-beat; the 5 s figure interval and the 30 s figure
-  refresh; the 5-minute partition refresh; the 30 s consumer-stall limit; `fetch.max.wait.ms` 50 and
+  refresh; the 5-minute partition refresh and its 5 s bound per partition position (P2); the 30 s consumer-stall limit; the 2 s bound on a blocking send and on the close frame (P2); `fetch.max.wait.ms` 50 and
   the 100/50/850 ms split; the hand-off queue of 10,000 entries and `max.block.ms` 100; the 60 s
   name cache; the name resolver's 2 threads, 1,000-record queue and 500 ms timeout; 12 partitions and P1D for `fs.alerts.changes`; the back-off schedule; the allowed
   origin default; and the CI test's load (200 sessions, 2 institutions, 4 events a second each for

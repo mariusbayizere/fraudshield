@@ -186,4 +186,21 @@ class HandshakeGateTest {
         null);
     assertThat(answer(gate, upgrade("https://console.example.rw")).getStatus()).isEqualTo(101);
   }
+
+  @Test
+  @Tag("FR-04-02")
+  void successfulUpgradeKeepsItsSlotUntilTheSocketIsCounted() throws IOException {
+    HandshakeGate gate = new HandshakeGate(registry, guard, List.of());
+    for (int i = 0; i < settings.pendingPerInstance(); i++) {
+      assertThat(answer(gate, upgrade("https://console.example.rw")).getStatus()).isEqualTo(101);
+      MockHttpServletResponse upgraded = new MockHttpServletResponse();
+      upgraded.setStatus(101);
+      gate.afterHandshake(
+          new ServletServerHttpRequest(upgrade("https://console.example.rw")),
+          new ServletServerHttpResponse(upgraded),
+          null,
+          null);
+    }
+    assertProblem(answer(gate, upgrade("https://console.example.rw")), 503, "service-unavailable");
+  }
 }

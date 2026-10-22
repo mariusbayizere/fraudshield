@@ -170,7 +170,13 @@ final class FanOut implements AutoCloseable {
       consumer.assign(now);
       consumer.seekToBeginning(added);
       for (TopicPartition p : added) {
-        positioned(consumer, p);
+        resolvePosition(consumer, p);
+      }
+      // Lag and its gauge only once the whole refresh has succeeded, so a rolled-back partition
+      // never reports a lag of 0 while it is not read (code review 4, MINOR 1).
+      for (TopicPartition p : added) {
+        lag.put(p, 0L);
+        assignedHook.accept(p);
       }
       return now;
     } catch (RuntimeException unavailable) {
@@ -185,13 +191,18 @@ final class FanOut implements AutoCloseable {
   /** Fixes a lazy seek by asking for the position, and starts its lag at zero (point 5). */
   private void positioned(
       org.apache.kafka.clients.consumer.Consumer<String, byte[]> consumer, TopicPartition p) {
+    resolvePosition(consumer, p);
+    lag.put(p, 0L);
+    assignedHook.accept(p);
+  }
+
+  private static void resolvePosition(
+      org.apache.kafka.clients.consumer.Consumer<String, byte[]> consumer, TopicPartition p) {
     // The seek is lazy: position() resolves it, with a bounded broker request (ListOffsets).
     // Kafka never answers a negative position; the check guards the contract, not a case seen.
     if (consumer.position(p, POSITION_TIMEOUT) < 0) {
       throw new IllegalStateException("no position for " + p);
     }
-    lag.put(p, 0L);
-    assignedHook.accept(p);
   }
 
   void measureLag(
@@ -278,7 +289,8 @@ final class FanOut implements AutoCloseable {
       }
     }
     // The instance budget is enforced as each record is delivered, not only by the sweep, so the
-    // counted total passes the budget by at most one record's frames (code review 2, MINOR 6).
+    // counted total passes it by at most one record's frames per delivering thread (code review
+    // 2, MINOR 6; code review 4, MINOR 3).
     for (RealtimeSession largest : registry.toShed()) {
       if (largest.fail(
           StompFrames.Problem.OVERFLOW, "the instance's outbound budget was exceeded", null)) {

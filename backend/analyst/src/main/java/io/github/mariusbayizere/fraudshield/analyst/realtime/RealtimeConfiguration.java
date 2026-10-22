@@ -160,6 +160,13 @@ public class RealtimeConfiguration implements WebSocketConfigurer {
       FunctionCounter.builder("fs_realtime_invalid_total", fanOut, FanOut::invalid)
           .description("Fan-out records dropped as invalid (ADR 0115 point 5)")
           .register(m);
+      FunctionCounter.builder(
+              "fs_realtime_partition_refresh_failed_total", fanOut, FanOut::refreshMisses)
+          .description("Partition refreshes that failed and kept the old assignment (point 5)")
+          .register(m);
+      FunctionCounter.builder("fs_realtime_lag_unreadable_total", fanOut, FanOut::lagMisses)
+          .description("Lag readings that failed; the last value is kept (point 5)")
+          .register(m);
       FunctionCounter.builder("fs_realtime_overflow_total", fanOut, FanOut::overflows)
           .description("Sessions closed with realtime-overflow by the fan-out (ADR 0115 point 8)")
           .register(m);
