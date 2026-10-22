@@ -23,7 +23,7 @@ taken twice. Claims made on branches not yet merged, as of 2026-10-17:
 | PB-76 | M4 | `M4_updates.md` on `m4/generalisation` | training rows near the corpus's start see truncated history (was a second `PB-69`) |
 | PB-77 to PB-101 | M6 | `M6_updates.md`, "Numbering reserved by this branch" | amendment 1's known gaps and the 22 section-8 rows proved only in part |
 | PB-102 to PB-130 | M7 | `M7_updates.md`, "Numbering reserved by this branch" | the merge round's unowned items and M7's rows proved only in part (PB-102 to PB-124 used) |
-| PB-151 to PB-170 | M8B | `M8B_updates.md`, "Numbering reserved by this branch" | the analyst API's follow-ups (PB-151 to PB-159 used); M8B also holds ADR 0110–0119 and Flyway V80–V89 |
+| PB-151 to PB-170 | M8B | `M8B_updates.md`, "Numbering reserved by this branch" | the analyst API's follow-ups (PB-151 to PB-160 used); M8B also holds ADR 0110–0119 and Flyway V80–V89 |
 
 ---
 
@@ -1519,6 +1519,11 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 - **Source:** M8B, P1's code review round 1 (finding 6), 2026-10-20 · **Priority:** medium · **Due:** M10
 - **Problem:** `getAccountNetwork` looks transactions up by counterparty over 90 days. V80 indexes the counterparty on uncompressed chunks, but chunks older than 30 days are compressed and segmented by account (V10), so two thirds of the window is scanned. Not measured on a production-sized history.
 - **Acceptance:** a measured network read at production volume, and either a segmenting or summary table that bounds it, or a recorded limit.
+
+### PB-160 · Translate the verification page's "answer recorded" message
+- **Source:** M8B P2, the decision-owner contract §6.5, 2026-10-22 · **Priority:** medium · **Due:** M10
+- **Problem:** a customer's "yes" that waits while a human reviews the payment now shows a new message, "Your answer is recorded. Your bank will contact you if anything more is needed." The French, Kinyarwanda and Swahili pages show it in English, because nobody qualified has translated it.
+- **Acceptance:** reviewed translations in the three languages, alongside the page's other texts.
 
 ### PB-76 · Training rows near the corpus's start see truncated history; test rows do not
 - **Source:** PB-67's laptop cache, 2026-09-22 · **Priority:** high · **Due:** before the paper's
