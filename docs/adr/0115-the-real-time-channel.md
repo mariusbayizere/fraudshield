@@ -1,10 +1,13 @@
 # 0115: The real-time channel
 
 - **Status:** Proposed (M8B, 2026-10-22), revised after review 1
-  (`docs/reviews/M8B/realtime-channel-proposal-review-1.md`), for re-review before any code. It
+  (`docs/reviews/M8B/realtime-channel-proposal-review-1.md`) and review 2
+  (`docs/reviews/M8B/realtime-channel-proposal-review-2.md`), for re-review before any code. It
   changes the frozen contract (`contracts/openapi/fraudshield-api.yaml`,
-  `contracts/openapi/authorisation-matrix.yaml`, `contracts/kafka/topics.yaml`, one new and one
-  changed Kafka payload schema), and it is a concurrency contract, so under
+  `contracts/openapi/authorisation-matrix.yaml`, `contracts/kafka/topics.yaml`,
+  `contracts/kafka/schemas/envelope.schema.json`'s `institution_id` description, one new and one
+  changed Kafka payload schema), it adds a fourteenth topic to the master prompt's C.3 catalogue (a
+  recorded deviation, point 9), and it is a concurrency contract, so under
   `docs/parallel/M8B_scope.md` §5 it is reviewed on its own before P2's code relies on it.
 - **Date:** 2026-10-22
 - **Requirements affected:** FR-04-02, UX-DASH-01, NFR-PERF-05, FR-04-10, MOB-DEV-03, FR-06-04
@@ -131,11 +134,15 @@ What exists today:
   carrying another institution's token is refused and closes, and that socket never receives the
   other institution's events.
 
-**Presence, for ADR 0117's `analysts_online`.** On an accepted CONNECT the instance adds the user to
-its institution's Redis presence set (ADR 0117 point 4), and refreshes it every 10 s while the
-session lives. When the user's last local session ends (close, expiry, revocation, overflow or
-shutdown), the instance stops refreshing it, and the entry expires within 30 s (both timings
-ASSUMED, ADR 0117). A user is counted while any instance refreshes them.
+**Presence, for ADR 0117's `analysts_online`.** On an accepted CONNECT **by a session whose role is
+ANALYST, SENIOR_ANALYST or RISK_OFFICER** the instance adds the user to its institution's Redis
+presence set (ADR 0117 point 4), and refreshes it every 10 s while the session lives. Sessions of
+any other role (ADMIN, once P8 admits it, point 10) are never written to the presence set, because
+ADR 0117 counts only those three roles as analysts online. When the user's last local session ends
+(close, expiry, revocation, overflow or shutdown), the instance stops refreshing it, and the entry
+expires within 30 s (both timings ASSUMED, ADR 0117). A user is counted while any instance
+refreshes them. A unit test of the presence writer asserts that a session bound to any other role
+leaves the presence set unchanged, so the rule holds before P8 admits ADMIN.
 
 **Rejected ways to carry the token:**
 - **The access token in the query string.** It would land in access logs and proxies, and the
@@ -187,11 +194,18 @@ the re-read repairs them.
 - **What ends a session:** sign-out, sign-out everywhere, a role change, a lock by an administrator,
   deactivation and a password change. Each ends the session's `sid` or increments `token_version`
   (ADR 0070 point 2).
-- **Closure is driven by push.** Each instance listens on `fs:auth:sessions` (the listener that
-  `SessionStateCache.onMessage` already serves). When a `tv:<user>` or `sid:<sid>` message arrives,
-  the instance re-checks the matching local sessions at once and closes those no longer current with
-  `ERROR` (`unauthorized`, detail "session ended"). The delay is the announcement's, well under a
-  second in normal operation.
+- **Closure is driven by push.** The channel adds **no second listener** on `fs:auth:sessions`.
+  `SessionStateCache.onMessage` stays the only one, and gains a hook: after it has removed the local
+  entry that a `tv:<user>` or `sid:<sid>` message names, it calls the registered session-change
+  listeners with that user or session id (a `SessionStateCache.addChangeListener` method, a change
+  to `backend/auth`, point 9). The real-time module registers one, which re-checks the matching
+  local sessions and closes those no longer current with `ERROR` (`unauthorized`, detail "session
+  ended"). Because the call comes after the invalidation, the re-check can never be answered from
+  the stale 1 s in-process entry: it reads Redis, or PostgreSQL. The listener only hands the ids to
+  the real-time module's own thread, so it never blocks `onMessage`. The delay is the
+  announcement's, well under a second in normal operation. (Two listeners on one
+  `RedisMessageListenerContainer`, `AuthAutoConfiguration.java:575-588`, have no order between
+  them, which is why the first revision's separate listener could read the stale local entry.)
 - **A polling backstop covers a lost announcement.** The instance re-checks each **distinct
   (`user`, `sid`) pair** it holds, not each socket, every 1.5 s with ±0.25 s of jitter (both
   ASSUMED). The bound when the announcement is lost is `worstCaseStaleness()` (2 s) + clock skew +
@@ -202,16 +216,39 @@ the re-read repairs them.
   - a database load (one tenant transaction, two queries) only when the shared Redis value has
     passed its 2 s deadline. Redis is shared, so across the deployment that is at most one load per
     pair per 2 s: at most 50 tenant transactions a second for one instance's 100 pairs;
-  - a limiter caps the backstop's database loads at 50 a second per instance (ASSUMED, matching the
-    cap). A pair whose check cannot complete within two backstop periods is treated as revoked: its
+  - a limiter caps the backstop's **database loads**, not its checks, at 50 a second per instance
+    (ASSUMED, matching the cap). A caller of today's `SessionStateCache.isCurrent` cannot see
+    whether a check goes to PostgreSQL (the decision is made inside the private `cached`/`load`,
+    `SessionStateCache.java:113-189`), and limiting whole checks to 50 a second against the 67 the
+    backstop needs would starve a quarter of them in steady state. So `SessionStateCache` gains an
+    overload, `isCurrent(claims, LoadGate gate)` (a change to `backend/auth`, point 9): it consults
+    `gate.tryAcquire()` only immediately before `load`, and when the gate refuses it answers
+    **unknown** instead of reading PostgreSQL. The overload returns one of `CURRENT`,
+    `NOT_CURRENT` and `UNKNOWN`; the existing `isCurrent(claims)` is unchanged for HTTP. Checks
+    answered from the in-process tier or from Redis never touch the gate, so in steady state (at
+    most 50 loads a second for 100 pairs, above) the gate never refuses;
+  - an `UNKNOWN` pair is checked again at the next backstop period. A pair whose check has not
+    returned `CURRENT` or `NOT_CURRENT` within two backstop periods is treated as revoked: its
     sessions are closed with `ERROR` (`service-unavailable`), and the console reconnects and
     re-reads. The channel fails closed, never open.
-- **While Redis is unavailable, the channel is closed.** `SessionStateCache` would otherwise send
-  every check to PostgreSQL, about one tenant transaction per pair per check, competing with the
-  decision path for the same pool. Instead, an instance that sees Redis as down closes every session
-  with `ERROR` (`service-unavailable`) and answers new handshakes 503 with `Retry-After` until Redis
-  is back. The console falls back to its 60-second re-read, which it runs anyway. HTTP
-  authentication is unchanged: it already reads PostgreSQL when Redis is down.
+- **While Redis is unavailable, the channel is closed** (the author's choice on review 2's
+  recommendation; the owner may overrule). `SessionStateCache` would otherwise send every check to
+  PostgreSQL, about one tenant transaction per pair per check, competing with the decision path for
+  the same pool. Instead, an instance that sees Redis as down closes every session with `ERROR`
+  (`service-unavailable`) and answers new handshakes 503 with `Retry-After` until Redis is back. The
+  console falls back to its 60-second re-read, which it runs anyway. HTTP authentication is
+  unchanged: it already reads PostgreSQL when Redis is down.
+- **How an instance "sees Redis as down".** Today nothing reports it: `SafeRedis.get` answers
+  `Optional.empty()` both for a missing key and for an unreachable Redis (`SafeRedis.java:13-17`,
+  `:41-51`), and `BackgroundSubscriber.subscribed()` reports only the pub/sub link. So `SafeRedis`
+  gains an availability signal (a change to `backend/auth`, point 9): it counts **consecutive
+  failed operations** (an exception caught, never a missing key) and resets the count on any
+  success, and exposes `available()`, false once the count reaches 3 (ASSUMED). The real-time
+  module also sends a `PING` through `SafeRedis` every 1 s (ASSUMED), so the signal moves even when
+  no session is being checked. The channel closes when `available()` is false, and reopens after
+  two consecutive successful `PING`s 1 s apart (ASSUMED). The window before detection (at most
+  about 3 s of failed operations) is covered by the load gate above: checks that fall through to
+  PostgreSQL in that window are capped at 50 a second per instance.
 - **A role change always ends the session,** because it increments `token_version`. Role filtering
   (point 4) therefore never runs on a stale role.
 
@@ -224,8 +261,11 @@ the re-read repairs them.
   `alert.changed`, most writers have no staff principal (the TIMEOUT poller, its local fallback and
   the overdue sweep, the resolver, and the sink closing a late entry; decision-owner contract §6.2,
   §6.3). So the publisher sets it to **the changed row's `institution_id`, read in the same
-  row-level-security tenant transaction that wrote the row,** for every writer. It is never taken
-  from a principal or a request.
+  row-level-security tenant transaction that wrote the row,** for every writer. The writer passes it
+  to the publisher with the entry's id (point 6.2), and the publisher's re-read runs in that
+  institution's tenant transaction, so row-level security refuses a row of any other institution. It
+  is never taken from a principal or a request. The frozen descriptions that say otherwise are
+  amended (point 9).
 - **A test per writer** asserts that the event of a change made in institution A carries A, and that
   a session of institution B never receives it.
 - **Who receives it:** only sessions bound to that `institution_id`.
@@ -240,7 +280,8 @@ the re-read repairs them.
 - **Who "the user who escalated it" is.** `escalated_by_user_id` is the `analyst_id` of the ESCALATE
   decision on the **parent** entry (`escalated_from_alert_id`), as `listAlerts` reads it. It is not
   the actor of the current change: a DECIDED on an escalated entry routes to the escalator, not to
-  the decider. The publisher reads it in the writing transaction and puts it in the Kafka payload.
+  the decider. The publisher reads it, with the rest of the summary, in its re-read after the
+  commit (point 6.2), and puts it in the Kafka payload.
 
 **A second implementation, proven equal by test.** `listAlerts` applies its rule in SQL, with an
 `EXISTS` on `alert_decisions` for the escalator. The push evaluates payload fields in memory. It is
@@ -291,8 +332,10 @@ If the owner later restricts an ANALYST to their own assigned alerts (UX-ROLE-AN
 **How it routes a record.** For each record, the consumer:
 1. validates the envelope and payload against their schemas. An invalid record is dropped and
    counted (`fs_realtime_invalid_total`), and never dead-lettered: this reader owns nothing;
-2. resolves staff names (point 6.2) and serialises the frame **once** per record: the frame is the
-   same for every recipient;
+2. resolves staff names from the cache (point 6.2) and serialises the frame **once** per record: the
+   frame is the same for every recipient. A record whose name is not in the cache is handed to the
+   name resolver (point 6.2) and leaves the poll thread; it re-enters at step 3 when resolved. The
+   poll thread never opens a database transaction;
 3. finds the local sessions of the envelope's institution;
 4. applies point 4's filter;
 5. offers the shared, immutable frame bytes to each matching session's outbound queue, without
@@ -364,7 +407,8 @@ kept only as a name and implies no broker translation.
 **The payload carries staff ids, never names (decided by the owner, 2026-10-22).** ADR 0012 point 4
 is "No personal data or credentials in events", with no restriction to customers, and `topics.yaml`
 says "No message carries raw personal data". The payload is:
-- `alert`: the entry's `AlertSummary` as committed, with `assigned_analyst` (a `StaffReference`)
+- `alert`: the entry's `AlertSummary` as read by the publisher after the commit (below), with
+  `assigned_analyst` (a `StaffReference`)
   replaced by **`assigned_analyst_id`** (a user id or null);
 - `change`;
 - `actor_user_id` (null when no person acted);
@@ -376,11 +420,24 @@ says "No message carries raw personal data". The payload is:
 of `(user_id → first name, last name, role)` read in a tenant transaction.
 - **The cache's entries live 60 s** (ASSUMED), so a renamed user's card may show the old name for up
   to a minute; the next read shows the new one.
-- **A name that cannot be resolved** (the database unavailable on a cache miss) drops the event,
-  counted as `fs_realtime_unresolved_total`. The next re-read repairs it. The frame is never sent
-  with a wrong or missing assignee, since `assigned_analyst: null` means "in the pool".
+- **A cache miss is resolved off the poll thread.** The consumer thread must do nothing but poll and
+  route (point 11's 100 ms leg), and a miss is a tenant transaction with the runner's 5 s statement
+  timeout: on the poll thread, one slow miss would stall every institution's events, and a 30 s
+  stall closes every local session (point 5). So a record with a missing name is handed to a **name
+  resolver**: a small executor of 2 threads (ASSUMED) with a bounded queue of 1,000 records
+  (ASSUMED). The resolver loads the name in a tenant transaction with a 500 ms timeout (ASSUMED),
+  fills the cache, and returns the record to routing (point 5, step 3). G2 makes the record's
+  later arrival harmless: the console orders by `version`, not by arrival.
+- **A name that cannot be resolved** (the database unavailable or slower than the timeout, or the
+  resolver's queue full) drops the event, counted as `fs_realtime_unresolved_total`. The next
+  re-read repairs it. The frame is never sent with a wrong or missing assignee, since
+  `assigned_analyst: null` means "in the pool". A RAISED event has no assignee and never needs the
+  resolver. A resolved miss's extra latency is inside `fs_realtime_push_seconds` (point 11) and is
+  not excluded from the budget; misses are rare with a 60 s cache, and are counted
+  (`fs_realtime_name_cache_miss_total`).
 
-**Who publishes.** The transaction that changed the entry publishes, **after its commit**:
+**Who publishes.** The transaction that changed the entry publishes, **after its commit**, through
+one port (below):
 
 | `change` | Written by (decision-owner contract) | Entry after |
 |---|---|---|
@@ -397,6 +454,38 @@ of `(user_id → first name, last name, role)` read in a tenant transaction.
 `AUTO_DECLINED` is not added by this ADR: it is one of the decision-owner contract's §11 contract
 additions, and this ADR depends on it.
 
+**How a writer outside `analyst` publishes: a port, and a re-read after the commit.**
+- **The module boundary.** The only builder of an `AlertSummary` is `AlertQueries.summary` in the
+  `analyst` module (`analyst/alerts/AlertQueries.java:226-236`). `analyst` depends on `decision`
+  (`backend/analyst/pom.xml:31`); `decision` does not depend on `analyst`. Two writers are in
+  `decision`: the TIMEOUT request (`OwnerHoldTimeouts.java:33-60`, through `DecisionOwner.submit`,
+  whose `CLOSE_ON_TIMEOUT` today returns only `id, created_at`, `DecisionOwner.java:95-104`) and the
+  sink's late close (`PostgresSink.java:433-449`). The resolver is in `analyst`
+  (`DecisionWorkers.java:336`).
+- **The port.** `decision` gains a port, `AlertChangePublisher`, with one method
+  `offer(institutionId, alertId, version, change, actorUserId)`. Every writer, in either module,
+  calls it after its commit. `analyst` implements it; a no-op implementation is wired when the
+  `analyst` module is absent. The implementation only offers the tuple to the hand-off queue
+  (below), so the port never blocks.
+- **What each `decision` writer must collect.** `DecisionOwner`'s TIMEOUT and RESOLVE paths return
+  the ids and new `version`s of the entries they closed (today `CLOSE_ON_TIMEOUT` returns only
+  `id, created_at`), and `OwnerHoldTimeouts` and the resolver offer them after commit; the sink
+  collects the late closes of its batch and offers them after the batch commits. These are changes
+  to M6's code (point 9).
+- **The summary is re-read after the commit, not in the writing transaction** (the simpler of
+  review 2's two options). The publisher thread reads the entry's summary with `AlertQueries`, with
+  `escalation_target_role` and `escalated_by_user_id`, in one short read-only tenant transaction of
+  the offered institution. So the TIMEOUT and sink transactions, which hold the owner row, are not
+  lengthened by a summary read.
+- **What that costs, stated.** The re-read may see a **later** version than the one offered, when
+  another change committed in between. The event then carries the version and the snapshot it read,
+  and its `event_id` is derived from that version (below), so the two publications of that snapshot
+  share an `event_id`. G2 tolerates it: the console applies the highest version. The event's
+  `change` names the change that caused the publication; it may be older than the snapshot, and the
+  console uses it only as a hint, never for ordering. A re-read that fails (the database unavailable)
+  drops the event, counted in `fs_realtime_publish_failed_total`; the next re-read of the console
+  repairs it.
+
 **What is not pushed, deliberately.** None of these changes the queue entry's status or `version`:
 - **D3's commit.** The deciding console already holds `undo_until`, and a commit changes nothing a
   card shows.
@@ -406,12 +495,18 @@ additions, and this ADR depends on it.
 **How the publication is made: best effort, never blocking (decided by the owner, 2026-10-22).**
 - **A dedicated producer.** The publisher has its own Kafka producer instance (idempotent,
   `acks=all`), not the spool's, so it never competes with the decision path's buffer.
-- **A bounded hand-off queue.** After the commit, the writing thread only **offers** the event to an
-  in-memory queue of 10,000 events (ASSUMED); the offer never blocks. When the queue is full, the
-  event is dropped and counted (`fs_realtime_publish_dropped_total`).
-- **Its own thread.** One publisher thread drains the queue and calls `send`. `send` can block for
-  up to `max.block.ms` (on a missing metadata fetch or a full buffer), so `max.block.ms` is small,
-  100 ms (ASSUMED), and only this thread ever waits on it.
+- **A bounded hand-off queue.** After the commit, the writing thread only **offers** the port's
+  tuple (institution, entry id, version, change, actor: ids, an enum and a number, never a
+  summary) to an in-memory queue of 10,000 entries (ASSUMED); the offer never blocks. When the queue
+  is full, the event is dropped and counted (`fs_realtime_publish_dropped_total`). Because the queue
+  holds fixed-size tuples, its count bounds its bytes: about 128 bytes per entry (estimated, not
+  measured), so about 1.25 MiB, and the summaries exist only one at a time on the publisher thread.
+- **Its own thread.** One publisher thread drains the queue, re-reads the summary (above), and calls
+  `send`. `send` can block for up to `max.block.ms` (on a missing metadata fetch or a full buffer),
+  so `max.block.ms` is small, 100 ms (ASSUMED), and only this thread ever waits on it.
+- **The producer's buffer is bounded and budgeted.** The dedicated producer's `buffer.memory` is set
+  to 8 MiB (ASSUMED), not Kafka's 32 MiB default. It and the hand-off queue are counted in point
+  8's start-up check with the outbound budget.
 - **`send` is never called on a request thread, the TIMEOUT poller, or the sink.** So a Kafka
   problem never stalls `decideAlert` or `undoAlertDecision` past FR-04-04's 2 s, never delays a
   TIMEOUT, and never slows the sink.
@@ -530,9 +625,13 @@ slow reader; it does not protect the process.
 - **Frames are shared.** Each record is serialised once (point 5), and every queue holds a
   reference to the same immutable bytes.
 - **An instance-wide outbound budget of 32 MiB** (ASSUMED) bounds the sum of the frame sizes queued
-  across all sessions, counted per queue as if unshared, which over-counts. It must be at most one
-  eighth of the API instance's maximum heap; the instance refuses to start if configured above
-  that.
+  across all sessions, counted per queue as if unshared, which over-counts.
+- **The start-up check covers the channel's every allocation, not only the outbound budget.** The
+  sum of the outbound budget (32 MiB), the change producer's `buffer.memory` (8 MiB, point 6.2), the
+  hand-off queue's bound (about 1.25 MiB, point 6.2) and the name resolver's queue (1,000 records,
+  point 6.2, counted at the ASSUMED 1 KiB a record, about 1 MiB), about 42 MiB with the ASSUMED
+  values, must be at most one eighth of the API instance's maximum heap; the instance refuses to
+  start if configured above that.
 - **When the budget is exceeded,** the instance closes the sessions with the largest queues, with
   `realtime-overflow`, until the total is below 75 % of the budget. A burst (a TIMEOUT sweep closing
   many entries, or a restart while many phones sit on stalled 3G links) therefore costs the slowest
@@ -546,16 +645,48 @@ slow reader; it does not protect the process.
 |---|---|---|
 | Authenticated sessions per user | 5 (tabs and a phone), **counted per instance**: with N instances a user can hold 5N. Accepted, because the cost is bounded by the per-instance caps below | the oldest session is closed with `ERROR` `rate-limited` |
 | Authenticated sessions per instance | 500 | the handshake answers 503 with `Retry-After`, so the client or the load balancer tries another instance |
-| Distinct (`user`, `sid`) pairs per instance | 100, so the revocation backstop's rates of point 3 hold | a CONNECT that would add a pair receives `ERROR` `service-unavailable` and is closed; the client retries, reaching another instance |
+| Distinct (`user`, `sid`) pairs per instance | 100, so the revocation backstop's rates of point 3 hold | a CONNECT that would add a pair receives `ERROR` `service-unavailable` and is closed; the client retries, and reaches another instance only under the load-balancer requirement below |
 | Sockets awaiting CONNECT, per instance | 50, counted apart from the authenticated sessions, so unauthenticated sockets can never take authenticated capacity | the handshake answers 503 with `Retry-After` |
-| Sockets awaiting CONNECT, per client IP, at once | 5 | the handshake answers 429 |
-| Handshakes per client IP | 30 a minute | 429 |
+| Sockets awaiting CONNECT, per client IP, at once | 200, so a whole office behind one address can be mid-handshake at once (derivation below) | the handshake answers 429 |
+| Handshakes per client IP | 1,000 a minute (derivation below) | 429 |
+| Accepted CONNECTs per user, per instance | 10 a minute, counted after authentication | `ERROR` `rate-limited`, close |
 | Time from upgrade to CONNECT | 5 s | close |
 | Inbound frame size | 8 KiB. The console only sends CONNECT, SUBSCRIBE, the re-auth SEND and heart-beats | `ERROR` `validation`, close |
 | Destinations | the two of point 6; any other SUBSCRIBE or SEND | `ERROR` `forbidden`, close |
 
 **"Client IP"** is the forwarded address, resolved as `Requests` already documents
 (`backend/auth/.../web/Requests.java`), not the proxy's address.
+
+**The per-IP limits are derived for an office behind one address** (re-derived after review 2, on
+its recommendation, before release; the author's choice on review 2's recommendation; the owner may
+overrule).
+- **Why the first values were wrong.** Staff are expected to sit behind office addresses
+  (`office_ip_allowlist`, `V2:107`). With 30 handshakes a minute and 5 pending CONNECTs per address,
+  a mass reconnect that this ADR itself causes (the Redis-down closure, point 3; a stalled consumer,
+  point 5; a deploy, below) would admit 30 of 200 analysts a minute, and send the rest into back-off
+  of up to 30 s.
+- **The derivation.** The largest office behind one address is ASSUMED at 200 staff, the CI test's
+  session count (point 11). In a mass reconnect each client succeeds at its first or second attempt
+  unless an instance is full; allowing 5 handshakes per person per minute covers retries after a
+  503 from a full or not-yet-ready instance, so 200 × 5 = 1,000 a minute. All 200 may be between
+  upgrade and CONNECT at the same moment, so 200 at once. Both are ASSUMED.
+- **What still protects capacity.** The per-instance cap of 50 sockets awaiting CONNECT, counted
+  apart from authenticated sessions, and the 5 s to CONNECT. One address can now hold one
+  instance's 50 pending slots for at most 5 s at a time; that costs other clients a 503 and a retry
+  on another instance, never authenticated capacity. After authentication, a user is limited to 10
+  accepted CONNECTs a minute per instance (ASSUMED), which bounds a single credential's churn
+  whatever its address.
+- **Why not exempt the institution's allowlisted addresses,** the other remedy review 2 offered.
+  The handshake carries no credentials, so the institution, and therefore its allowlist, is unknown
+  until CONNECT; exempting the union of every institution's allowlist would need a cross-tenant read
+  of `office_ip_allowlist` outside row-level security.
+- **A deployment requirement.** The load balancer in front of the API must spread new WebSocket
+  connections across ready instances (round robin or least connections, with no source-address
+  affinity), so that a client retrying after a 503 can reach another instance. This is a
+  requirement on the deployment, recorded here and listed in "Required follow-ups".
+- **The CI test** (point 11) gains a reconnect-storm case: 200 sessions from one address dropped at
+  once (100 users with two tabs each, so within the cap of 100 pairs on the one test instance) all
+  reconnect and subscribe within 60 s, and none receives 429.
 
 **Heart-beats.**
 - **The server offers 25,000 ms each way** (ASSUMED, below common proxy idle timeouts). It accepts
@@ -725,7 +856,8 @@ the STOMP CONNECT, ADR 0115)".
 
 **Examples.** `schema-examples.yaml` gains examples of `RealtimeAlertEvent` and
 `RealtimeFiguresEvent`, so the examples test validates them (they are reached only through
-`x-realtime`, not through an operation's responses).
+`x-realtime`, not through an operation's responses). The `RealtimeAlertEvent` example's `alert`
+carries `assigned_analyst`, which ADR 0116 makes required on every `AlertSummary`.
 
 **The authorisation matrix:**
 
@@ -757,7 +889,37 @@ the STOMP CONNECT, ADR 0115)".
     consumers: [websocket-fanout]
 ```
 
-**`fs.notifications.staff`** loses `websocket-fanout` from its consumers (point 5).
+**A recorded deviation from the master prompt's C.3** (the author's choice on review 2's
+recommendation; the owner may overrule). C.3 lists exactly thirteen topics
+(`docs/prompts/FraudShield_Master_Build_Prompt.md:283`), and `topics.yaml:1` cites it.
+`fs.alerts.changes` is a fourteenth. The reason: `fs.decisions.final` carries the transaction's
+state, not the queue entry's, so it cannot carry an undo, an escalation or a PENDING_COMMIT
+decision (Context), and the reads stay authoritative. The owner's decision of 2026-10-22 on ids-only
+changes was made about this topic's payload, which implies the topic, but it did not record the
+deviation; this does. Its consequences:
+- **`contracts/tests/test_events.py`:** `C3_TOPICS` (`:43-57`) gains `fs.alerts.changes`, so
+  `test_catalogue_lists_exactly_the_c3_topics_with_key_retention_and_dlq` (`:66-68`) holds; the
+  constant keeps its name, and a comment cites this ADR as the deviation.
+- **`contracts/kafka/examples/fs.alerts.changes.json`** is added, so `test_topic_examples_validate`
+  (`:61-62`, `:136`) finds and validates it. Its `alert` carries `assigned_analyst_id`, and no
+  property carries a name.
+- **`topics.yaml:1`**'s header comment says the catalogue is C.3's plus this ADR's deviation.
+- **Its DLQ.** The catalogue's defaults give every topic a `.dlq`, so `fs.alerts.changes.dlq` is
+  created. Nothing writes to it: the fan-out never dead-letters (point 5). It is created and unused,
+  which is harmless, and is kept so the catalogue's every-topic-has-a-DLQ rule needs no exception.
+
+**`fs.notifications.staff`** loses `websocket-fanout` from its consumers (point 5), and its
+`purpose` (`topics.yaml:114`) changes from "Staff email, push and WebSocket notifications (freeze,
+escalation, unlock, approvals)" to "Staff email and push notifications (freeze, escalation, unlock,
+approvals)".
+
+**Where `institution_id` comes from, in the frozen text.** Two descriptions say it comes only from
+the authenticated principal, which point 4 contradicts for `alert.changed`. Both change to "from the
+authenticated principal, or, for an event about a stored row, from that row's `institution_id` read
+in the writing tenant transaction":
+- `contracts/kafka/schemas/envelope.schema.json:36`, the `institution_id` property's
+  `description` (a description change, which the compatibility check accepts);
+- `contracts/kafka/topics.yaml:12-14`, the header comment's last sentence on tenant isolation.
 
 **Its payload schema,** `schemas/alert-change.schema.json`:
 - **Required:** `alert_id`, `version`, `transaction_id`, `change`, `actor_user_id`,
@@ -778,7 +940,25 @@ the STOMP CONNECT, ADR 0115)".
   (point 6.1);
 - `AlertRaised` omits `anomaly_score` under the rule-based fallback (point 6.1);
 - `PostgresSink` publishes `TIMED_OUT` or `RESOLVED` after its batch commits when it closes a late
-  entry (point 6.2), through the non-blocking publisher.
+  entry (point 6.2), through the non-blocking publisher;
+- `decision` gains the `AlertChangePublisher` port (point 6.2), with a no-op default;
+- `DecisionOwner`'s TIMEOUT (`CLOSE_ON_TIMEOUT`, `DecisionOwner.java:95-104`) and RESOLVE paths
+  return the ids and new `version`s of the entries they close, and `OwnerHoldTimeouts`
+  (`OwnerHoldTimeouts.java:33-60`) and the resolver (`DecisionWorkers.java:336`) offer them to the
+  port after commit;
+- `PostgresSink` collects its batch's late closes for the same purpose.
+
+**Changes to `backend/auth`** (made with P2's code, each with its test):
+- `SessionStateCache.addChangeListener`, called by `onMessage` after it removes the local entry
+  (point 3), with a test that the listener runs after the invalidation;
+- `SessionStateCache.isCurrent(claims, LoadGate)`, answering `CURRENT`, `NOT_CURRENT` or `UNKNOWN`,
+  consulting the gate only before a database load (point 3), with a test that a refused gate never
+  reaches PostgreSQL and that a Redis-answered check never consults the gate;
+- `SafeRedis.available()`, from a count of consecutive failed operations that a missing key never
+  increments (point 3), with a test of both;
+- `Access`'s check that an operation has exactly one access kind (`Access.java:19-29`) accepts
+  `roles` together with `IN_BAND`, which point 9's "distinct kind" implies, and still refuses
+  `IN_BAND` together with scopes, `public` or `refresh-cookie`, and `IN_BAND` without roles.
 
 ### 10. P8's retraining stream reuses this channel
 
@@ -789,6 +969,8 @@ the STOMP CONNECT, ADR 0115)".
 It must keep this ADR's rules:
 - CONNECT authentication and in-band re-authentication;
 - the institution filter;
+- presence written only for ANALYST, SENIOR_ANALYST and RISK_OFFICER sessions (point 2), so ADMIN
+  sessions never count as analysts online;
 - snapshot frames, a `RetrainingJob` with a field that only increases (`progress_percent` within a
   `state`);
 - no replay. On reconnect the console re-reads `getRetrainingJob`.
@@ -820,7 +1002,8 @@ inside it.
   and the re-auth rules. Kafka, the application and a browser together do not fit in its memory
   (the resource rules).
 - **In CI:** an integration test with Kafka (Testcontainers) and real STOMP clients asserts the
-  server leg, from record to socket write, under a stated load: 200 sessions across 2 institutions,
+  server leg, from record to socket write, under a stated load: 200 sessions across 2 institutions
+  (100 users with two tabs each, within point 8's cap of 100 distinct pairs per instance),
   4 alert events a second per institution for 60 s, with p99 of the server leg at or under 50 ms
   (the load is ASSUMED, matching point 8's peak rate). It also asserts the isolation and filter
   tests (G1), re-authentication without loss, revocation within 5 s by push and by the backstop,
@@ -861,27 +1044,54 @@ inside it.
 
 None remain open from the first draft. Questions 1, 4 and 5 were decided by the owner on
 2026-10-22; questions 2 and 3 are answered by the author on the review's recommendations, marked in
-the text as "the author's choice on the review's recommendation; the owner may overrule":
+the text as "the author's choice on the review's recommendation; the owner may overrule". Review 2
+repeated questions 2 and 3, and added two (6 and 7); all four are answered on review 2's
+recommendations, marked "the author's choice on review 2's recommendation; the owner may
+overrule". None of them is an owner decision:
 - **1. Best effort for changes** (decided): accepted, with a dedicated producer and a bounded
   hand-off queue, so publishing never blocks a decision, the TIMEOUT poller or the sink (point 6.2).
-- **2. `merchant` and `top_reasons` on `alert.created`** (author's choice): added, with the
-  card-equality test, and the M6 changes listed (points 6.1 and 9).
-- **3. The ASSUMED numbers** (author's choice): accepted as starting values, to be revised by M10,
-  after the changes of review 1. The complete list: 5 s to CONNECT; the 60 s re-auth margin; 5
-  sessions per user (per instance); 500 sessions, 100 distinct (`user`, `sid`) pairs and 50
-  pre-CONNECT sockets per instance; 5 pre-CONNECT sockets per IP at once; 30 handshakes a minute
-  per IP; the 8 KiB inbound frame; 256 frames or 256 KiB per session queue, from a peak of 4 alert
+- **2. `merchant` and `top_reasons` on `alert.created`** (author's choice on review 2's
+  recommendation; the owner may overrule): added, with the card-equality test, and the M6 changes
+  listed (points 6.1 and 9). Optional additions are backward compatible under ADR 0012 point 5,
+  and `merchant_name` is already on `fs.transactions.raw`.
+- **3. The ASSUMED numbers** (author's choice on review 2's recommendation; the owner may
+  overrule): accepted as starting values, to be revised by M10, after the changes of reviews 1 and
+  2, except the per-IP handshake limits, which were re-derived for office NAT before release (point
+  8). The complete list: 5 s to CONNECT; the 60 s re-auth margin; 5 sessions per user (per
+  instance); 500 sessions, 100 distinct (`user`, `sid`) pairs and 50 pre-CONNECT sockets per
+  instance; the office of 200 staff behind one address, and from it 200 pre-CONNECT sockets per IP
+  at once and 1,000 handshakes a minute per IP (5 per person); 10 accepted CONNECTs a minute per
+  user per instance; the 8 KiB inbound frame; 256 frames or 256 KiB per session queue, from a peak of 4 alert
   events a second per institution and 1 KiB frames; the 32 MiB instance budget (at most one eighth
-  of the heap) and its 75 % target; the 1.5 s ± 0.25 s revocation backstop and its limit of 50
-  database loads a second; the 25 s heart-beat; the 5 s figure interval and the 30 s figure
+  of the heap, together with the 8 MiB producer `buffer.memory` and the 1 KiB per resolver record)
+  and its 75 % target; the 1.5 s ± 0.25 s revocation backstop and its limit of 50 database loads a
+  second; Redis "down" after 3 consecutive failed operations, the 1 s `PING`, and "back" after two
+  successful `PING`s 1 s apart; the 25 s heart-beat; the 5 s figure interval and the 30 s figure
   refresh; the 5-minute partition refresh; the 30 s consumer-stall limit; `fetch.max.wait.ms` 50 and
-  the 100/50/850 ms split; the hand-off queue of 10,000 events and `max.block.ms` 100; the 60 s
-  name cache; 12 partitions and P1D for `fs.alerts.changes`; the back-off schedule; the allowed
+  the 100/50/850 ms split; the hand-off queue of 10,000 entries and `max.block.ms` 100; the 60 s
+  name cache; the name resolver's 2 threads, 1,000-record queue and 500 ms timeout; 12 partitions and P1D for `fs.alerts.changes`; the back-off schedule; the allowed
   origin default; and the CI test's load (200 sessions, 2 institutions, 4 events a second each for
   60 s).
 - **4. Staff names on Kafka** (decided): ids only; names are resolved in the fan-out (point 6.2).
 - **5. The 60-second re-read** (decided): kept while the socket is open, until M10 measures loss
   (point 1).
+- **6. The fourteenth topic as a deviation from C.3** (author's choice on review 2's
+  recommendation; the owner may overrule): accepted and recorded (point 9).
+- **7. Closing the whole channel while Redis is down** (author's choice on review 2's
+  recommendation; the owner may overrule): accepted (point 3). It fails closed, the console polls
+  anyway, and the alternative is idle sockets competing with decisions for the pool.
+
+## Required follow-ups
+
+Made outside this ADR, by whoever changes the named file; none is made by this proposal:
+- **The deployment's load balancer** must spread new WebSocket connections across ready instances
+  with no source-address affinity (point 8). The deployment configuration and its documentation
+  must state it before FR-04-02 is released.
+- **The master prompt's C.3 deviation** (point 9) is recorded here; if the owner overrules it, the
+  channel has no source for later changes and points 6.2 and 9 fall.
+- **The frozen-text amendments of point 9** (`envelope.schema.json:36`, `topics.yaml:1`,
+  `topics.yaml:12-14`, `topics.yaml:114`, `C3_TOPICS`, the new Kafka example) are made in the same
+  contract change as the topic, not later.
 
 ## Review 1's findings and their answers
 
@@ -917,3 +1127,24 @@ the text as "the author's choice on the review's recommendation; the owner may o
 | Q3 | | The ASSUMED numbers | Accepted as starting values after findings 1, 2 and 16; author's choice on the review's recommendation |
 | Q4 | | Staff names on Kafka | Decided by the owner (2026-10-22): ids only (finding 4) |
 | Q5 | | The 60-second re-read | Decided by the owner (2026-10-22): kept until M10 measures loss (point 1) |
+
+## Review 2's findings and their answers
+
+Review 2 (`docs/reviews/M8B/realtime-channel-proposal-review-2.md`): SOUND_WITH_CHANGES, no MAJOR,
+eight MINOR findings and four owner questions.
+
+| # | Severity | Finding | Answer |
+|---|---|---|---|
+| 1 | MINOR | The backstop's limiter, the Redis-down closure and the push re-check need hooks the auth code does not have | Fixed in point 3 and the `backend/auth` changes of point 9: `isCurrent(claims, LoadGate)` limits database loads only and answers `UNKNOWN` when refused, so the 67 checks a second are never starved; `SafeRedis.available()` from consecutive failed operations (3, ASSUMED) plus a 1 s `PING` (ASSUMED), with the reopening rule; no second pub/sub listener: `SessionStateCache.onMessage` calls the real-time module's change listener after it has invalidated the local entry, so the re-check never reads the stale 1 s tier |
+| 2 | MINOR | Publishing a full `AlertSummary` from the TIMEOUT path and the sink crosses a module boundary; the TIMEOUT path is missing from the M6-change list | Fixed in point 6.2: an `AlertChangePublisher` port in `decision`, implemented in `analyst` with `AlertQueries`; the writer offers ids and version after commit, and the publisher re-reads the summary after the commit (not in the writing transaction), with the consequence for the version and `event_id` stated. `DecisionOwner`, `OwnerHoldTimeouts`, the resolver and the sink added to "Changes to M6's code"; point 4 updated |
+| 3 | MINOR | Name resolution can put a database transaction on the single consumer thread | Fixed in points 5 and 6.2: a cache miss goes to a name resolver of 2 threads with a 1,000-record queue and a 500 ms timeout (all ASSUMED); the poll thread never opens a transaction; an unresolved record is dropped and counted |
+| 4 | MINOR | The frozen contract still says `institution_id` comes from the principal | Fixed in point 9: `envelope.schema.json:36` and `topics.yaml:12-14` gain "or, for an event about a stored row, from that row's `institution_id` read in the writing tenant transaction"; listed in "Required follow-ups" as part of the same contract change |
+| 5 | MINOR | The per-IP admission limits fit attackers, not an office behind one address | Fixed in point 8: re-derived from an office of 200 staff (ASSUMED) to 200 pending CONNECTs and 1,000 handshakes a minute per address, with a per-user limit of 10 accepted CONNECTs a minute after authentication; the per-instance pre-CONNECT cap still reserves authenticated capacity; why the allowlist exemption was not chosen (the institution is unknown before CONNECT); the load-balancer requirement stated and listed as a follow-up; a reconnect-storm case added to the CI test |
+| 6 | MINOR | The producer side has no memory bound in the budget | Fixed in points 6.2 and 8: the hand-off queue holds fixed-size id tuples (about 1.25 MiB at 10,000), `buffer.memory` is 8 MiB (ASSUMED), and both, with the resolver's queue, are in the one-eighth-of-heap start-up check (about 42 MiB) |
+| 7 | MINOR | The presence write is not role-filtered | Fixed in point 2: presence only for ANALYST, SENIOR_ANALYST and RISK_OFFICER sessions, with a unit test; added to the rules P8 must keep (point 10) |
+| 8 | MINOR | The new topic extends C.3 and breaks two Kafka tests; the staff topic's purpose still says WebSocket; the DLQ is unused | Fixed in point 9: the fourteenth topic recorded as a deviation from C.3; `C3_TOPICS` and the new example `fs.alerts.changes.json` named; `topics.yaml:1`'s header updated; the staff topic's purpose amended; the unused DLQ stated as harmless |
+| Q1 | | Accept the fourteenth topic as a recorded deviation from C.3? | Accepted: the author's choice on review 2's recommendation; the owner may overrule (point 9, open question 6) |
+| Q2 | | `merchant` and `top_reasons` on `alert.created` | Accepted: the author's choice on review 2's recommendation; the owner may overrule (point 6.1, open question 2) |
+| Q3 | | Close the whole channel while Redis is down | Accepted: the author's choice on review 2's recommendation; the owner may overrule (point 3, open question 7) |
+| Q4 | | The ASSUMED numbers | Accepted as starting values, except the per-IP limits, re-derived for office NAT (finding 5): the author's choice on review 2's recommendation; the owner may overrule (open question 3) |
+| r1-17 note | | `Access`'s "exactly one kind" check must accept roles with in-band | Fixed in point 9's `backend/auth` changes |

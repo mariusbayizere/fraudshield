@@ -1,7 +1,8 @@
 # 0116: Alert reassignment
 
 - **Status:** Proposed (M8B, 2026-10-22), revised after review 1
-  (`docs/reviews/M8B/reassignment-proposal-review-1.md`), for re-review before any code. It adds two
+  (`docs/reviews/M8B/reassignment-proposal-review-1.md`) and review 2
+  (`docs/reviews/M8B/reassignment-proposal-review-2.md`), for re-review before any code. It adds two
   operations to the frozen contract (`assignAlert` and `listAssignableStaff`) and changes
   `AlertSummary`, `AlertDetail` and `listAlerts`.
 - **Date:** 2026-10-22
@@ -124,8 +125,8 @@ ADR's acceptance.
 | # | Rule | Problem |
 |---|---|---|
 | A1 | An escalated entry can be assigned only by a caller whose role is at or above its target role, the same rule as deciding it | 403 `escalation-level-required` |
-| A2 | The assignee must be an ACTIVE user of the caller's institution with role ANALYST, SENIOR_ANALYST or RISK_OFFICER, ranking **at or below the caller**, and, for an escalated entry, **at or above its target role** | 422 `validation`, code `assignee_not_eligible` |
-| A3 | An entry assigned to an ACTIVE user whose **current** role ranks above the caller cannot be reassigned or unassigned by that caller | 403 `assignment-held-by-higher-role` |
+| A2 | The assignee must be an **on-duty** user (status ACTIVE or LOCKED, below) of the caller's institution with role ANALYST, SENIOR_ANALYST or RISK_OFFICER, ranking **at or below the caller**, and, for an escalated entry, **at or above its target role** | 422 `validation`, code `assignee_not_eligible` |
+| A3 | An entry assigned to an on-duty user (ACTIVE or LOCKED) whose **current** role ranks above the caller cannot be reassigned or unassigned by that caller | 403 `assignment-held-by-higher-role` |
 | A4 | The entry must be open (PENDING or IN_REVIEW) | 409 `stale-alert`, with the current alert |
 | A5 | `alert_version` must equal the entry's `version` | 409 `stale-alert`, with the current alert |
 | A6 | Assigning the user already assigned (or null to an unassigned entry) | 422 `validation`, code `no_change` |
@@ -152,9 +153,26 @@ can rely on that order.
   without one.
 - **A3 is ASSUMED,** by analogy with SN-02's "cannot override RISK_OFFICER decisions": a senior
   should not take back work a risk officer has taken.
-- **That ACTIVE stands in for "on-duty" is ASSUMED.** No roster or shift data exists, so "on-duty"
-  (SN-02) cannot be checked. ACTIVE also excludes LOCKED users (V2's `users.status`): a user locked
-  after failed sign-ins cannot work an entry until unlocked.
+- **That `status IN ('ACTIVE', 'LOCKED')` stands in for "on-duty" is ASSUMED** (the author's choice
+  on review 2's recommendation; the owner may overrule). No roster or shift data exists, so
+  "on-duty" (SN-02) cannot be checked. The set is the one that can hold a working session:
+  `SessionService.canHoldSession` (`SessionService.java:248-250`) admits exactly ACTIVE and LOCKED.
+  - **Why LOCKED is included.** The first revision said "a user locked after failed sign-ins cannot
+    work an entry until unlocked". That is false in the code: a lock after failed sign-ins sets
+    `status = LOCKED` and `locked_until`, but does not touch `token_version` or the refresh tokens
+    (`AuthenticationService.java:207-217`, `StaffUserJpaRepository.java:96-103`), so the user's
+    open console keeps working and they can still decide alerts. The status also stays LOCKED after
+    `locked_until` has passed, until the next sign-in attempt or an unlock
+    (`AuthenticationService.java:171-177`). And sign-in takes only an e-mail (V2:34), so anyone who
+    knows a staff e-mail can put the account into LOCKED by failing its password (D-26). Excluding
+    LOCKED would make a working analyst un-assignable, and would strip A3's protection from a risk
+    officer's entries, at the will of an unauthenticated party.
+  - **What including it costs, stated.** An administrator's lock also sets LOCKED, and it revokes
+    the user's sessions. Such a user stays eligible under A2 and keeps A3's protection although they
+    cannot work until unlocked. Assignment is advisory, so the entry stays visible and decidable by
+    everyone who could decide it before; a senior or risk officer at or above the assignee's rank
+    can reassign it.
+  - **DEACTIVATED and PENDING_APPROVAL users are never on duty:** neither can hold a session.
   - **What the console may show instead.** It may mark which eligible users are online. That is the
     presence of ADR 0117 point 4, which this operation does not consult.
 - **That "any on-duty analyst" includes SENIOR_ANALYST and RISK_OFFICER assignees is ASSUMED.**
@@ -168,21 +186,27 @@ can rely on that order.
 - **A2 reads the assignee's `users` row `FOR SHARE`** (lock level 6, point 4). An administrator's
   concurrent role change or deactivation either commits first, and A2 sees it, or waits until the
   assignment commits. An entry is therefore never assigned to a user who was ineligible at commit.
+  (A failure lock is a concurrent change too, but it does not change eligibility, since LOCKED is
+  on duty.)
 - **A later demotion or deactivation does not undo an assignment.** Assignment is advisory, so the
   entry stays assigned to that user until someone reassigns it. This is accepted, and stated: an
   ANALYST can be left holding an entry escalated to SENIOR_ANALYST, or a DEACTIVATED user can hold
   an entry.
-- **A3 uses the assignee's current role and status.** An assignee who is no longer ACTIVE does not
-  hold the entry against A3, so any senior or risk officer can free it. Without that rule, a
-  deactivated risk officer's entries could be freed only by another risk officer.
-- **Known limitation.** An entry assigned to a user who is no longer ACTIVE is not in
-  `assignment=unassigned`. The console can find such entries by the assignee's name on the card;
-  no filter selects them. A filter for them is left out (point 9).
+- **A3 uses the assignee's current role and status.** An assignee who is no longer on duty
+  (DEACTIVATED) does not hold the entry against A3, so any senior or risk officer can free it.
+  Without that rule, a deactivated risk officer's entries could be freed only by another risk
+  officer. A LOCKED risk officer still holds their entries, so a failure lock caused by an outsider
+  hands no senior a lever over them.
+- **Known limitation.** An entry assigned to a user who is no longer on duty is not in
+  `assignment=unassigned`. The console can find such entries by the assignee's name on the card, or
+  by `listAlerts?analyst_id=` with an id from `listAssignableStaff?purpose=filter` (point 8), which
+  lists them with their status; no filter selects all of them at once. That filter is left out
+  (point 9).
 
 **Users of another institution are invisible.** Row-level security hides them, and V4's composite
 foreign key `(assigned_analyst_id, institution_id)` refuses them even if the check in code is
 wrong. A request for one is answered by A2 as `assignee_not_eligible`, never a different status.
-The same answer is given for an id that is unknown, in another institution, inactive or
+The same answer is given for an id that is unknown, in another institution, not on duty or
 ineligible, so the answer reveals nothing about other institutions.
 
 ### 4. The decision-owner contract's claim, and PENDING_COMMIT
@@ -317,8 +341,16 @@ the owner may overrule.
 `AlertDetail`. Adding a required response field breaks the console's generated client until it is
 regenerated, so the console and the server ship in lockstep (as ADR 0110's consequences).
 
-**Examples.** `schema-examples.yaml`'s `AlertSummary`, `AlertDetail` and `AlertPage` examples gain
-`assigned_analyst` (one null, one a `StaffReference`), or the examples test fails.
+**Examples.** Every example that carries an `AlertSummary`-shaped value gains `assigned_analyst`
+(one null, one a `StaffReference`), or the examples test fails:
+- `schema-examples.yaml`'s `AlertSummary`, `AlertDetail` and `AlertPage`;
+- `StaleAlertProblem` (`schema-examples.yaml:1170-1208`), whose `current` is an `AlertSummary`;
+  without it `test_example_is_valid_so_the_schema_is_satisfiable[StaleAlertProblem]`
+  (`test_openapi_examples.py:84-88`) fails;
+- with ADR 0115, the new `RealtimeAlertEvent` example's `alert` (ADR 0115 point 9).
+
+The implementer checks every example whose schema reaches `AlertSummaryBase`, rather than relying on
+this list alone.
 
 **NFR-SEC-03.** The inspector already accepts `StaffReference` in `DecisionRecord.analyst`. It must
 accept it here too: staff names in an HTTP response are not customer personal data. This concerns
@@ -375,9 +407,11 @@ assigned to** that user, **or** with a decision by that user that has **not been
 
 ### 8. The operations
 
-**`assignAlert`:**
+**`assignAlert`** (the snippet is split into its `paths` and `components/schemas` parts, so it
+parses as it will be merged):
 
 ```yaml
+paths:
   /alerts/{alert_id}/assignment:
     put:
       tags: [alerts]
@@ -398,10 +432,10 @@ assigned to** that user, **or** with a decision by that user that has **not been
         - rule: Callers rank ANALYST < SENIOR_ANALYST < RISK_OFFICER (E.8). An escalated entry can be assigned only by a caller whose role is at or above its target_role
           problem: urn:fraudshield:problem:escalation-level-required
           status: 403
-        - rule: An entry assigned to an ACTIVE user whose current role ranks above the caller cannot be reassigned or unassigned by the caller
+        - rule: An entry assigned to an ACTIVE or LOCKED user whose current role ranks above the caller cannot be reassigned or unassigned by the caller
           problem: urn:fraudshield:problem:assignment-held-by-higher-role
           status: 403
-        - rule: The assignee must be an ACTIVE ANALYST, SENIOR_ANALYST or RISK_OFFICER of the caller's institution, ranking at or below the caller and, for an escalated entry, at or above its target_role
+        - rule: The assignee must be an ACTIVE or LOCKED ANALYST, SENIOR_ANALYST or RISK_OFFICER of the caller's institution, ranking at or below the caller and, for an escalated entry, at or above its target_role
           problem: urn:fraudshield:problem:validation
           code: assignee_not_eligible
           status: 422
@@ -430,7 +464,8 @@ assigned to** that user, **or** with a decision by that user that has **not been
         "422": { $ref: "#/components/responses/ValidationProblem" }
         "503": { $ref: "#/components/responses/ServiceUnavailable" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
-
+components:
+  schemas:
     AlertAssignmentRequest:
       type: object
       required: [assignee_user_id, alert_version]
@@ -440,41 +475,68 @@ assigned to** that user, **or** with a decision by that user that has **not been
         alert_version: { type: integer, minimum: 0 }
 ```
 
-**`409` covers more than `stale-alert`.** It also carries `idempotency-conflict`. The contract
-change is named: `StateConflict.x-problem-types` gains
-`urn:fraudshield:problem:idempotency-conflict`. The decision-owner contract's §11 adds the same
-type to the same response for the four decision operations; whichever lands first adds it, and the
-other adds nothing. `IdempotencyConflict` (the response) is not reused, because its description is
+**`409` covers more than `stale-alert`.** It also carries `idempotency-conflict`, which
+`StateConflict.x-problem-types` **already declares** at `6a45ed2` (`fraudshield-api.yaml:2673`,
+beside `decision-contested` and `decision-effect-failed`, added with the decision-owner contract's
+§11). This ADR therefore adds nothing to `StateConflict`; the first revision's "whichever lands
+first" was stale. `IdempotencyConflict` (the response) is not reused, because its description is
 specific to FR-01-03's `transaction_id`.
 
 **503** is the runner's lock or statement timeout (decision-owner contract §2).
 
-**`listAssignableStaff`: the assignee list for the dropdown.** This is the author's choice on the
-review's recommendation; the owner may overrule. Without it, SN-02's "analyst dropdown" cannot be
-built honestly: the only staff list today is `listUsers`, which is ADMIN-only and returns the full
-`StaffUser`, e-mail included. The names the console has already seen (in `AlertDetail.decisions`
-and `assigned_analyst`) are not the list of eligible users.
+**`listAssignableStaff`: the assignee list for the dropdown, and the people list for the filter.**
+Keeping it is the author's choice on review 2's recommendation, with review 2's filter mode; the
+owner may overrule. Without it, SN-02's "analyst dropdown" cannot be built honestly: the only staff
+list today is `listUsers`, which is ADMIN-only and returns the full `StaffUser`, e-mail included.
+The names the console has already seen (in `AlertDetail.decisions` and `assigned_analyst`) are not
+the list of eligible users.
+
+**Two modes, because the dropdown and the filter need different people.**
+- **`purpose=assign`** (the default): the users the caller may assign, under A2: on-duty (ACTIVE or
+  LOCKED) users with a decision role, ranking at or below the caller; with `alert_id`, only those A2
+  admits for that entry.
+- **`purpose=filter`**: every user of the caller's institution whose **current** role is ANALYST,
+  SENIOR_ANALYST or RISK_OFFICER, **whatever their status and rank**, with their `status`. SN-01's
+  "analyst autocomplete filter" is a filter, not the assignment dropdown, so it needs the names of
+  everyone an entry can be assigned to: a risk officer who self-assigned (seen by a senior), and a
+  user later deactivated (point 3), whom the assign mode never lists. `alert_id` is refused in this
+  mode (422 `validation`, code `unsupported_value`, field `alert_id`).
+- **Neither mode returns e-mail.** `status` is returned only in the filter mode, where the console
+  needs it to mark users who can no longer work an entry; the assign mode lists only on-duty users,
+  and does not say which of them is LOCKED.
+- **What the filter mode still misses, stated.** A user whose current role is no longer a decision
+  role (made ADMIN after an assignment) is not listed. Such an entry is found by the assignee's name
+  on its card. This is rare (an ADMIN is not a decision role) and is left open.
 
 ```yaml
+paths:
   /team/assignees:
     get:
       tags: [alerts]
       operationId: listAssignableStaff
-      summary: Staff the caller may assign alerts to, for the assignee dropdown and the analyst filter (UX-ROLE-SN-02, UX-ROLE-SN-01)
+      summary: Staff the caller may assign alerts to, or may filter alerts by (UX-ROLE-SN-02, UX-ROLE-SN-01)
       description: |
-        ACTIVE users of the caller's institution with role ANALYST, SENIOR_ANALYST or RISK_OFFICER,
-        ranking at or below the caller (ADR 0116 rule A2). With `alert_id`, only the users A2 admits
-        for that entry (for an escalated entry, also at or above its target role). Returns id, names
-        and role only; never e-mail or status. Ordered by last name, then first name, then user_id.
+        purpose=assign (default): users of the caller's institution with status ACTIVE or LOCKED
+        and role ANALYST, SENIOR_ANALYST or RISK_OFFICER, ranking at or below the caller (ADR 0116
+        rule A2). With `alert_id`, only the users A2 admits for that entry (for an escalated entry,
+        also at or above its target role). Returns id, names and role; never e-mail or status.
+        purpose=filter: every user of the caller's institution whose current role is ANALYST,
+        SENIOR_ANALYST or RISK_OFFICER, whatever their status or rank, with id, names, role and
+        status, for the analyst filter; `alert_id` is refused (422 validation, unsupported_value).
+        Never e-mail. Ordered by last name, then first name, then user_id.
       x-required-roles: [SENIOR_ANALYST, RISK_OFFICER]
       x-authorisation-rules:
-        - rule: Lists only ACTIVE users whose role ranks at or below the caller's role
+        - rule: With purpose=assign, lists only ACTIVE or LOCKED users whose role ranks at or below the caller's role; with purpose=filter, lists users of the caller's institution with a decision role only
           effect: filter
       parameters:
         - { name: alert_id, in: query, schema: { type: string, format: uuid } }
+        - name: purpose
+          in: query
+          description: "`assign` (default): the users the caller may assign. `filter`: every decision-role user, with status, for the analyst filter"
+          schema: { type: string, enum: [assign, filter], default: assign }
       responses:
         "200":
-          description: The users the caller may assign
+          description: The users the caller may assign, or may filter by
           content:
             application/json:
               schema: { $ref: "#/components/schemas/AssignableStaffList" }
@@ -484,7 +546,8 @@ and `assigned_analyst`) are not the list of eligible users.
         "404": { $ref: "#/components/responses/NotFound" }
         "422": { $ref: "#/components/responses/ValidationOrLimitProblem" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
-
+components:
+  schemas:
     AssignableStaffList:
       type: object
       required: [items]
@@ -505,22 +568,33 @@ and `assigned_analyst`) are not the list of eligible users.
         first_name: { $ref: "#/components/schemas/PersonName" }
         last_name: { $ref: "#/components/schemas/PersonName" }
         role: { type: string, enum: [ANALYST, SENIOR_ANALYST, RISK_OFFICER] }
+        status:
+          type: string
+          enum: [PENDING_APPROVAL, ACTIVE, LOCKED, DEACTIVATED]
+          description: Present only with purpose=filter; absent with purpose=assign
 ```
 
 - **The path is under `/team`, not `/alerts`,** so it cannot collide with `/alerts/{alert_id}`.
 - **The 1,000 bound** matches ADR 0117's team table, and that 1,000 is far above any institution's
-  team is ASSUMED, as there. An institution with more eligible staff is answered, not truncated,
-  with 422 `result-too-large` through the response `ValidationOrLimitProblem`, which ADR 0117
-  point 8 defines; whichever ADR lands first adds that response and its problem type.
-- **It also serves SN-01's "analyst autocomplete filter",** for the roles that hold SN-01.
+  team is ASSUMED, as there. An institution with more matching staff is answered, not truncated,
+  with 422 `result-too-large` through the response `ValidationOrLimitProblem`.
+- **That response is ADR 0117's** (point 8 there: `ValidationOrLimitProblem`,
+  `ResultTooLargeProblem` and the `result-too-large` value of `ProblemType`). So that this ADR does
+  not depend on 0117's timing: **0116's contract change merges with or after 0117's**; if 0117 is
+  delayed, 0116 carries those three definitions verbatim from ADR 0117 point 8, and 0117 then adds
+  nothing. They are never defined twice in different words.
+- **The filter mode serves SN-01's "analyst autocomplete filter",** for the roles that hold SN-01;
+  the assign mode serves SN-02's dropdown.
 
 **Contract catalogue additions:**
 - `ProblemType` and `AuthorisationRuleViolation.x-problem-types` gain
   `urn:fraudshield:problem:assignment-held-by-higher-role`;
-- `StateConflict.x-problem-types` gains `urn:fraudshield:problem:idempotency-conflict` (above);
+- nothing for `StateConflict`: `idempotency-conflict` is already declared there (above);
 - `ValidationErrorCode` gains `assignee_not_eligible`, with status 422 in `x-status-by-code`;
 - `schema-examples.yaml` gains `AlertAssignmentRequest` and `AssignableStaffList` examples (the
-  examples test requires one for every object schema an operation uses);
+  examples test requires one for every object schema an operation uses); the `AssignableStaffList`
+  example has one item without `status` (assign mode) and is accompanied by a second example in the
+  filter mode's shape, with `status`, so both shapes are validated;
 - `test_every_staff_name_field_uses_the_person_name_rule` gains `AssignableStaff`;
 - `test_unique_keys_name_properties_of_their_items` counts one more keyed array (`items`). At
   `11448ce` the count is 6; ADR 0117 adds two, so with both ADRs it becomes 9.
@@ -538,7 +612,7 @@ and `assigned_analyst`) are not the list of eligible users.
       - { problem: stale-alert, status: 409 }
   listAssignableStaff:
     roles: [SENIOR_ANALYST, RISK_OFFICER]
-    ref: "UX-ROLE-SN-02 analyst dropdown, UX-ROLE-SN-01 analyst autocomplete; RISK_OFFICER per UX-ROLE-RO-01; no e-mail (ADR 0116)"
+    ref: "UX-ROLE-SN-02 analyst dropdown (purpose=assign), UX-ROLE-SN-01 analyst autocomplete filter (purpose=filter); RISK_OFFICER per UX-ROLE-RO-01; no e-mail (ADR 0116)"
     rules:
       - { effect: filter }
 ```
@@ -556,7 +630,8 @@ problem.
 - **A reason for reassignment.** The SRS asks for none, and the audit event records who, whom and
   when.
 - **Bulk reassignment.**
-- **A filter for entries assigned to users who are no longer ACTIVE** (point 3's known limitation).
+- **A filter for entries assigned to users who are no longer on duty** (point 3's known
+  limitation).
 - **Notifying the assignee,** beyond the real-time `ASSIGNED` event, which reaches them if they are
   connected.
 
@@ -567,13 +642,18 @@ problem.
   does not edit that file.
 - **The register's UX-ROLE-AN-01 note** (on `m8/frontend-rebase`): record that the restriction is
   left open by the owner's decision of 2026-10-22, with this ADR's reason.
+- **Merge order with ADR 0117:** this ADR's contract change merges with or after ADR 0117's
+  `ValidationOrLimitProblem`, `ResultTooLargeProblem` and `result-too-large`, or carries them
+  verbatim (point 8).
+- **ADR 0117's description of LOCKED** (`0117:430-431`, "temporary … 30 minutes") is corrected in
+  ADR 0117 itself: a failure lock lasts until the next sign-in attempt or an unlock (point 3).
 
 ## Requirements: closed, and left open
 
 | Row | What this does | What stays open |
 |---|---|---|
-| UX-ROLE-SN-02 | Reassign, self-assign and unassign (`assignAlert`), and the dropdown's list (`listAssignableStaff`) | **Deviations from "any alert to any on-duty analyst":** A2's upper bound (no assigning to a role above the caller's) and A3 (no taking work from a higher role), both ASSUMED; "on-duty" is read as ACTIVE (ASSUMED; no roster). The code and the console against it (the mock rule) |
-| UX-ROLE-SN-01 | The "Assigned To" column (`assigned_analyst`), the pool (`assignment=unassigned`), filtering by assigned analyst (`analyst_id`, narrowed in point 7) and the list behind the autocomplete (`listAssignableStaff`) | The analyst autocomplete filter itself, in the console. The code and the console against it |
+| UX-ROLE-SN-02 | Reassign, self-assign and unassign (`assignAlert`), and the dropdown's list (`listAssignableStaff`, `purpose=assign`) | **Deviations from "any alert to any on-duty analyst":** A2's upper bound (no assigning to a role above the caller's) and A3 (no taking work from a higher role), both ASSUMED; "on-duty" is read as status ACTIVE or LOCKED, the statuses that can hold a session (ASSUMED; no roster). The code and the console against it (the mock rule) |
+| UX-ROLE-SN-01 | The "Assigned To" column (`assigned_analyst`), the pool (`assignment=unassigned`), filtering by assigned analyst (`analyst_id`, narrowed in point 7) and the list behind the autocomplete (`listAssignableStaff`, `purpose=filter`: every decision-role user of the institution, any status or rank) | The analyst autocomplete filter itself, in the console. An assignee whose current role is no longer a decision role is not in the filter list (point 8). The code and the console against it |
 | UX-ROLE-AN-01 | Nothing | **Not met, and newly unmet.** Its Cannot-Do, in full, is "Cannot see alerts assigned to other analysts; cannot see unassigned pool". Under advisory assignment (the owner's decision, 2026-10-22) this ADR adds `assigned_analyst` on every card and two filters (`analyst_id` for a colleague, `assignment=unassigned`) that let an ANALYST see colleagues' assignments and the pool, which AN-01 forbids. The reason it stays open: enforcing it needs an auto-assignment rule that no source gives. AN-01 cannot leave IN_PROGRESS while assignment is advisory, and the scope table's P1 claim must be corrected (point 10) |
 | FR-04-10 | An escalated entry can be assigned only to someone at or above its target role, by someone at or above it | none new |
 
@@ -587,8 +667,16 @@ overrule":
 - **3. The audit type is ANALYST_DECISION with action ASSIGNED or UNASSIGNED** (point 5); no
   thirteenth type.
 - **4. A minimal eligible-assignees read is added** (`listAssignableStaff`, point 8): id, names and
-  role, no e-mail, for SENIOR_ANALYST and RISK_OFFICER.
+  role, no e-mail, for SENIOR_ANALYST and RISK_OFFICER. Review 2 recommended keeping it with a
+  filter mode; it is kept, with `purpose=filter` (the author's choice on review 2's
+  recommendation; the owner may overrule).
 - **5. The two ASSUMED rank rules are accepted** (point 3), recorded as deviations in SN-02's row.
+- **6. Which statuses count as "on duty"** (review 2's question 1): ACTIVE or LOCKED, for A2, A3 and
+  `listAssignableStaff` (point 3; the author's choice on review 2's recommendation; the owner may
+  overrule). This is not an owner decision.
+
+Review 2 also recommended keeping questions 2, 3 and 5's answers; they are kept, and remain the
+author's choices, not owner decisions.
 
 ## Review 1's findings and their answers
 
@@ -597,12 +685,12 @@ overrule":
 | 1 | MAJOR | The new `analyst_id` text claimed "assigned to them" without `outcome`, which P1's query (any decision row, undone included) does not give | Fixed in point 7: `analyst_id` now matches assignment, or a decision **not undone**; the description says so and explains why it means "assigned to them" without `outcome`. Overridden decisions still match, with the reason (a narrower reading than the review's option (a)). The P1 query change and a test that fails when undone decisions match are named |
 | 2 | MAJOR | AN-01 quoted with half its restriction missing; the proposal makes the missing half real | Fixed: AN-01 is quoted in full in Sources, point 2 and the requirements table; point 2 and the table say which restriction is newly unmet and by what (the field and the two filters); point 2 and point 10 record that AN-01 cannot leave IN_PROGRESS and that `M8B_scope.md` line 208 must be corrected, as a required follow-up this ADR does not make |
 | 3 | MINOR | The lock paragraph omitted levels 6 and 7 | Fixed in point 4: "levels 1, 2, 6 and 7, in order; never 3 to 5", with what each is |
-| 4 | MINOR | The assignee check was a plain read; A3's role and inactive assignees undefined | Fixed in point 3: A2 reads the assignee `FOR SHARE`; later demotion or deactivation is accepted and stated; A3 uses the current role and status, and an assignee no longer ACTIVE does not hold the entry; the entries such users hold are a named limitation |
+| 4 | MINOR | The assignee check was a plain read; A3's role and inactive assignees undefined | Fixed in point 3: A2 reads the assignee `FOR SHARE`; later demotion or deactivation is accepted and stated; A3 uses the current role and status, and an assignee no longer ACTIVE does not hold the entry; the entries such users hold are a named limitation. (Review 2, finding 1, widened ACTIVE to ACTIVE or LOCKED) |
 | 5 | MINOR | Idempotency key scope, concurrent collisions and refusals unspecified | Fixed in point 5: keys are scoped to this operation, with the reason; a concurrent same-key collision re-runs once as D1(b) and answers 409; refusals record no key. The replay body is unchanged, as the review accepted |
 | 6 | MINOR | `idempotency-conflict` emitted but not declared | Fixed in point 8: `StateConflict.x-problem-types` gains the type, named as a contract change, coordinated with the decision-owner contract's §11; `IdempotencyConflict` is not reused, with the reason |
 | 7 | MINOR | The order of A1 to A6 was not fixed | Fixed in point 3 and the operation's description: 404, idempotency, A1, A3, A4/A5, A2, A6 |
 | 8 | MINOR | SN-01 and SN-02 rows overclaimed; §8's dropdown sentence contradicted the next | Fixed: SN-01's row lists the autocomplete as open; SN-02's row lists A2's upper bound and A3 as deviations; the contradictory sentence is removed and the dropdown is served by `listAssignableStaff` |
-| 9 | MINOR | Three interpretations not marked ASSUMED; the 422 had no code | Fixed in points 3 and 7: ACTIVE for "on-duty" (also excluding LOCKED), senior and risk-officer assignees, and the `assignment` + `analyst_id` refusal are each marked ASSUMED; the refusal uses `unsupported_value`, field `assignment` |
+| 9 | MINOR | Three interpretations not marked ASSUMED; the 422 had no code | Fixed in points 3 and 7: ACTIVE for "on-duty" (also excluding LOCKED), senior and risk-officer assignees, and the `assignment` + `analyst_id` refusal are each marked ASSUMED; the refusal uses `unsupported_value`, field `assignment`. The reading of "on-duty" is superseded by review 2, finding 1: ACTIVE or LOCKED |
 | 10 | MINOR | The history table's purpose, constraints and grants underspecified | Fixed in point 5: its two purposes (the idempotency record and ADR 0117's history), composite foreign keys as V4, an index, `make_append_only`, `enable_tenant_isolation`, SELECT and INSERT only, and a `DatabaseSecurityTest` case |
 | 11 | MINOR | A senior could reset their own measured review time by unassigning and self-assigning | Fixed with ADR 0117 (its point 3): time to decision starts at the entry's creation alone, which no one can move, and the separate `average_seconds_from_assignment` uses the earliest assignment of the entry to the decider **by another user**, so self-assignments never start it |
 | Q1 | | Advisory or binding | Decided by the owner (2026-10-22): advisory, with AN-01 open (finding 2) |
@@ -610,3 +698,20 @@ overrule":
 | Q3 | | Audit type | ANALYST_DECISION with ASSIGNED/UNASSIGNED, and the counting consequence for FR-06-06 (point 5); author's choice on the review's recommendation |
 | Q4 | | Assignee dropdown | `listAssignableStaff` added (point 8); author's choice on the review's recommendation |
 | Q5 | | The two ASSUMED rank rules | Accepted, and recorded as SN-02 deviations (point 3, requirements table); author's choice on the review's recommendation |
+
+## Review 2's findings and their answers
+
+Review 2 (`docs/reviews/M8B/reassignment-proposal-review-2.md`): SOUND_WITH_CHANGES, no MAJOR, four
+MINOR findings and five owner questions.
+
+| # | Severity | Finding | Answer |
+|---|---|---|---|
+| 1 | MINOR | "ACTIVE" excludes LOCKED users who are signed in and working, and anyone who knows a staff e-mail can cause a lock | Fixed in point 3: "on duty" is `status IN ('ACTIVE', 'LOCKED')`, the set `SessionService.canHoldSession` admits, ASSUMED and marked as the author's choice on review 2's recommendation; applied to A2, A3 (table, operation rules) and `listAssignableStaff`; the false sentence about locked users is replaced by what the code does (`AuthenticationService.java:171-177`, `:207-217`); the cost (an administrator-locked user stays eligible) is stated; ADR 0117's "30 minutes" is corrected there (point 10) |
+| 2 | MINOR | The `StaleAlertProblem` example is not in the list of examples to change | Fixed in point 6: `StaleAlertProblem` and, with ADR 0115, `RealtimeAlertEvent` are listed, with the test each would fail |
+| 3 | MINOR | `idempotency-conflict` already in `StateConflict`; snippets not split into `paths` and `components/schemas`; the 422 response borrowed from ADR 0117 | Fixed in point 8: the `StateConflict` addition is dropped, citing `fraudshield-api.yaml:2673`; both snippets are split into `paths` and `components/schemas` parts; the merge order with ADR 0117 is stated (with or after 0117, or carrying 0117's three definitions verbatim), and listed in point 10 |
+| 4 | MINOR | `listAssignableStaff` cannot serve SN-01's filter for every assignee | Fixed in point 8: `purpose=filter` lists every decision-role user of the institution, any status or rank, with `status` and no e-mail; `alert_id` refused in that mode; the residual (an assignee now ADMIN) stated; the SN-01 and SN-02 rows name the mode each uses |
+| Q1 | | Which statuses count as "on duty" | ACTIVE or LOCKED (finding 1): the author's choice on review 2's recommendation; the owner may overrule |
+| Q2 | | `version + 1` on every assignment | Kept (point 5): the author's choice on review 2's recommendation; the owner may overrule |
+| Q3 | | Audit as ANALYST_DECISION / ASSIGNED, UNASSIGNED | Kept (point 5): the author's choice on review 2's recommendation; the owner may overrule |
+| Q4 | | `listAssignableStaff` | Kept, with the filter mode (finding 4): the author's choice on review 2's recommendation; the owner may overrule |
+| Q5 | | The two ASSUMED rank rules | Kept, recorded as SN-02 deviations (point 3): the author's choice on review 2's recommendation; the owner may overrule |

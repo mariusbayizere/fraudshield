@@ -205,8 +205,8 @@ evidence is tests against the real application, never a console test against a m
 
 | Phase | IN_PROGRESS rows it releases (with any other condition) | NOT_STARTED rows it makes buildable |
 |---|---|---|
-| P1 | FR-04-03, FR-04-05 (also D-45/PB-132), FR-04-06, FR-04-07, FR-04-08, FR-04-09 (P1-c), UX-DASH-02, UX-DASH-04, UX-DASH-05, UX-DASH-07, MOB-COMP-02, MOB-COMP-08, UX-ROLE-AN-01, UX-ROLE-AN-02 | UX-DASH-03, UX-DASH-08, UX-DASH-09 |
-| P2 | FR-04-04, FR-04-10, FR-04-11 (item 11), UX-DASH-06, UX-ROLE-AN-03, UX-ROLE-AN-04, D-29, D-44. **BLOCKED until the real-time channel exists:** FR-04-02, UX-DASH-01 | FR-05-01, UX-ROLE-SN-01, UX-ROLE-SN-03, TEST-06; UX-ROLE-SN-02 and SN-04 if P2-g is yes |
+| P1 | FR-04-03, FR-04-05 (also D-45/PB-132), FR-04-06, FR-04-07, FR-04-08, FR-04-09 (P1-c), UX-DASH-02, UX-DASH-04, UX-DASH-05, UX-DASH-07, MOB-COMP-02, MOB-COMP-08, UX-ROLE-AN-01 (in part: "cannot see alerts assigned to other analysts" stays open under advisory assignment, ADR 0116), UX-ROLE-AN-02 | UX-DASH-03, UX-DASH-08, UX-DASH-09 |
+| P2 | FR-04-04, FR-04-10, FR-04-11 (item 11; met except strict accuracy, which cannot be computed from existing data, ADR 0117), UX-DASH-06, UX-ROLE-AN-03, UX-ROLE-AN-04, D-29, D-44. **BLOCKED until the real-time channel exists:** FR-04-02, UX-DASH-01 | FR-05-01, UX-ROLE-SN-01, UX-ROLE-SN-03, TEST-06; UX-ROLE-SN-02 and SN-04 if P2-g is yes |
 | P3 | none by name; E.9's banners have no row (M8 §4) | UX-ROLE-AD-09 |
 | P4 | none | FR-05-07, UX-ROLE-RO-05 |
 | P5 | none | FR-05-05, UX-ROLE-RO-04 |

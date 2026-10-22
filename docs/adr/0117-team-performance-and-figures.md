@@ -1,9 +1,11 @@
 # 0117: Team performance, and what P2's figures mean
 
 - **Status:** Proposed (M8B, 2026-10-22), revised after review 1
-  (`docs/reviews/M8B/team-performance-proposal-review-1.md`), for re-review before any code. It adds
-  one operation to the frozen contract, changes `DashboardStats` and `AnalystPerformance`, adds a
-  time-zone column to `institutions`, and adds one problem type and one response.
+  (`docs/reviews/M8B/team-performance-proposal-review-1.md`) and review 2
+  (`docs/reviews/M8B/team-performance-proposal-review-2.md`), for re-review before any code. It adds
+  one operation to the frozen contract, changes `DashboardStats` and `AnalystPerformance` (and
+  `getMyPerformance`'s summary), adds a time-zone column to `institutions`, and adds one problem type
+  and one response.
 - **Date:** 2026-10-22
 - **Requirements affected:** UX-ROLE-SN-04, FR-04-11, UX-ROLE-AN-04, UX-DASH-01, FR-04-01
 - **ADRs referenced:** 0013, 0110, 0112, 0114, 0115, 0116
@@ -50,17 +52,32 @@
 filled from the country, and every response carries an explicit `utc_offset` beside
 `day_starts_at`.
 
-**The column.** `institutions.time_zone text NOT NULL`, an IANA zone name.
-- **How it is filled.** The migration fills every existing row from its `country` through a fixed
+**Review 2 narrowed "filled from the country" to existing rows** (the author's choice on review 2's
+recommendation; the owner may overrule). The master prompt, which governs, says "DRC spans two
+zones (Kinshasa UTC+1, Lubumbashi UTC+2)" and "The UI always shows the zone abbreviation"
+(`docs/prompts/FraudShield_Master_Build_Prompt.md:210`). A country map puts every DR Congo
+institution on Kinshasa time, so a Lubumbashi institution's day would start an hour late: the
+error review 1 raised against the first draft, mirrored. So the zone is an explicit input when an
+institution is created, and the map only backfills the rows that exist before the migration. This
+changes how the owner's column is filled, not the column or the responses' `utc_offset`.
+
+**The column.** `institutions.time_zone text NOT NULL`, an IANA zone name, with no default.
+- **Existing rows.** The migration fills every existing row from its `country` through a fixed
   map: RW Africa/Kigali, KE Africa/Nairobi, UG Africa/Kampala, TZ Africa/Dar_es_Salaam, and CD
-  (DR Congo) Africa/Kinshasa. A BEFORE INSERT trigger fills it the same way when an insert gives no
-  zone, so demo seeding and tests keep working.
-- **A country outside the map** fails the migration, or the insert, with a message naming the
-  country. No silent default: a wrong day boundary is worse than a refused row.
-- **A zone the database does not know** is refused by the same trigger (it must appear in
-  `pg_timezone_names`).
+  (DR Congo) Africa/Kinshasa. The map exists only in the migration. An existing CD institution that
+  is in fact outside Kinshasa's zone is corrected by a later migration naming its zone; the
+  migration's notice lists every CD row it filled, so the check is made, not assumed.
+- **A country outside the map** fails the migration with a message naming the country. No silent
+  default: a wrong day boundary is worse than a refused row.
+- **New rows must name their zone.** An INSERT without `time_zone` fails on `NOT NULL`; there is no
+  insert-time fill from the country. Demo seeding and test fixtures therefore name the zone
+  explicitly (a required follow-up, below).
+- **A zone the database does not know is refused, on INSERT and on UPDATE.** A BEFORE INSERT OR
+  UPDATE OF `time_zone` trigger requires it to appear in `pg_timezone_names`, so the migrations that
+  are the only way to change it are checked too.
 - **Who can change it.** `fs_app` holds SELECT only on `institutions` (V11), and no API
-  administers institutions, so only a migration changes it.
+  administers institutions, so only a migration (or the seeding that creates an institution)
+  writes it.
 - **The migration number** is claimed at implementation from M8B's range (V80 to V89; V81 and V82
   are taken), so it is written here as V8x, claimed in `M8B_updates.md` before use. The indexes of
   point 9 go in the same migration.
@@ -74,9 +91,14 @@ and Kinshasa with `zdump` over 2000 to 2040), but the definition does not depend
 - `day_starts_at`, a UTC `Timestamp` (the contract's timestamps are UTC only, pattern `Z$`);
 - `utc_offset`, the offset in force at `day_starts_at`, as `"+02:00"` (pattern
   `^[+-][0-9]{2}:[0-9]{2}$`), so the console can label "since 00:00, UTC+02:00" without inferring
-  the offset from the timestamp.
+  the offset from the timestamp;
+- **`time_zone`**, the institution's IANA zone name (for example `Africa/Kigali`), added on review
+  2's recommendation (the author's choice; the owner may overrule). The master prompt requires the
+  UI to show the zone abbreviation; an offset alone does not name a zone (+02:00 is CAT, but also
+  other zones), so the console derives the abbreviation (CAT, EAT, WAT) from the name with the
+  browser's time-zone data. The field is additive and ships in the same lockstep release (point 10).
 
-The CSV carries a `utc_offset` column (point 8).
+The CSV carries `utc_offset` and `time_zone` columns (point 8).
 
 **Rejected:**
 - **UTC.** A Kigali dashboard would reset at 02:00 local time, and "today" would include 22:00 to
@@ -122,11 +144,25 @@ institution's working day.
 - **The start** is the entry's `created_at`, always. No one can move it: not the decider, and not a
   self-assignment (ADR 0116, review 1 of 0116 finding 11, and this ADR's review finding 12). The
   first draft's start at `assigned_at` is withdrawn.
+  - **Whose clock the start is on.** For a raised entry it is the raise time **on the clock of the
+    instance that made the payment decision**, not the database's: the sink writes it from
+    `AlertRaised.createdAt()` (`PostgresSink.java:121-126`, `:443`). For an escalated entry it is
+    the **escalation** time, on the database's clock (`now()`, `V4:21`, at D6,
+    `AlertDecisions.java:393-405`), so an escalated entry's figure runs from the escalation, not
+    from the original alert's raise. Both are stated in the field descriptions.
 - **The end** is the decision's `created_at`, which V81's `alert_decisions_timing` trigger sets to
   DB time (`clock_timestamp()`).
+- **A negative difference is stored as 0.** An instance clock ahead of the database by more than
+  the time to decision would make the difference negative, and `decision_duration_seconds` has
+  `CHECK (decision_duration_seconds >= 0)` (`V4:50`), so the D1 INSERT would fail and `decideAlert`
+  would answer 500: a metric must not be able to fail a decision. The trigger therefore stores
+  `greatest(0, …)`. The cost, stated: a raised entry's figure is off by up to the clock skew between
+  the deciding instance and the database (a few seconds in a healthy deployment, ASSUMED), and a
+  clamped 0 biases an average slightly low. A test inserts a decision on an entry whose
+  `created_at` is later than the database's `now()` and asserts the insert succeeds with 0.
 - **Where it is stored.** `alert_decisions.decision_duration_seconds`, the existing column, is
-  computed **at insert, in a BEFORE INSERT trigger,** from `NEW.created_at` minus the entry's
-  `created_at`, for CONFIRM_FRAUD and MARK_LEGITIMATE. The trigger runs after V81's timing trigger
+  computed **at insert, in a BEFORE INSERT trigger,** as `greatest(0, NEW.created_at` minus the
+  entry's `created_at)`, for CONFIRM_FRAUD and MARK_LEGITIMATE. The trigger runs after V81's timing trigger
   (its name sorts after it, or V81's function computes it), so `NEW.created_at` is already DB time.
   `alert_decisions` is append-only (V4), so the value cannot be written later, and an application
   computation would use a different clock.
@@ -162,10 +198,10 @@ property's `description`.
 | `high_open`, `medium_open` | Open entries (PENDING or IN_REVIEW) of that tier in the **standard** queue, so that clicking the badge (UX-DASH-01) lists exactly that many for every role. Escalated entries are not counted here |
 | `auto_blocked_today` | `auto_block_events` whose `blocked_at` is in today |
 | `reviewed_today` | Reviews (point 2) in today, by anyone in the institution, anomaly reviews included |
-| `fraud_prevented_today` | The sum in RWF of the amounts of transactions **whose first DECLINE state** (`decided_at` of the lowest-sequence DECLINE in `v_decision_states`, decision-owner contract §4.7) **falls in today**, whose owner's current state is still DECLINE, and whose latest label is FRAUD. The currency is always RWF |
-| `average_review_seconds` | Mean of `decision_duration_seconds` (time to decision, point 3) over today's reviews of HIGH and MEDIUM entries; **null when there are none** |
+| `fraud_prevented_today` | The sum in RWF of the amounts of transactions **whose first DECLINE state** (`decided_at` of the lowest-sequence DECLINE in `v_decision_states`, decision-owner contract §4.7) **falls in today**, whose **latest state in `v_decision_states`** is still DECLINE, and whose latest label is FRAUD. The currency is always RWF |
+| `average_seconds_to_decision` (renamed from `average_review_seconds`, point 10) | Mean of `decision_duration_seconds` (time to decision, point 3) over today's reviews of HIGH and MEDIUM entries; **null when there are none** |
 | `analysts_online` | Distinct users of the institution with role ANALYST, SENIOR_ANALYST or RISK_OFFICER who hold an authenticated real-time session now (ADR 0115), that is, who **have the console open**; null when unknown |
-| `day_starts_at`, `utc_offset` (new) | Point 1 |
+| `day_starts_at`, `utc_offset`, `time_zone` (new) | Point 1 |
 
 **`fraud_prevented_today`: confirmed declines.** This is the author's choice on the review's
 recommendation; the owner may overrule.
@@ -175,6 +211,12 @@ recommendation; the owner may overrule.
   the customer (`label_events.source` ANALYST, SENIOR_OVERRIDE or CUSTOMER; CHARGEBACK has no
   producer). It is **not** "declines without false positives": labels mostly come from the
   analysts' own decisions (point 5), so it is not ground truth either.
+- **"Still DECLINE" is read the contract's way,** from the latest state in `v_decision_states`,
+  which the decision-owner contract makes what readers read (`decision-owner-contract.md:373-387`),
+  not from `decision_owners`. Not every transaction has an owner row: none is created for a HIGH
+  decline that no request ever touched, and a NOT_ME received before the sequence-1 row is visible
+  records its FRAUD label without one (`DecisionOwner.java:193-195`, `labelWithoutOwner`). Reading
+  the owner row would silently drop such transactions.
 - **It rises as labels arrive** and can lag the blocks.
 - **The transaction lookup is bounded by time.** Amounts are read from the `transactions`
   hypertable through its view, with `transaction_timestamp` no earlier than 30 days before today's
@@ -182,15 +224,18 @@ recommendation; the owner may overrule.
   first DECLINE comes more than 30 days after it was made is not counted, and that is stated in the
   field's description.
 
-**`average_review_seconds` is nullable now** (`[number, "null"]`), null when there is no HIGH or
+**`average_seconds_to_decision` is nullable** (`[number, "null"]`), null when there is no HIGH or
 MEDIUM review today. A 0 would be a measured value that was never measured, and a consumer could not
 tell "only anomaly reviews today" from "instant reviews". This is a response type change, shipped in
-the same lockstep release as the other changes (point 10). The name is kept; see point 10.
+the same lockstep release as the other changes (point 10), together with the rename from
+`average_review_seconds` (point 10).
 
 **`analysts_online` needs presence shared by every instance.**
 - **How it is kept.** Each instance keeps its sessions' users in a Redis sorted set per institution,
-  scored by expiry, refreshed every 10 s with a 30 s lifetime (both ASSUMED). ADR 0115 points 2, 3
-  and 8 define when the real-time channel writes, refreshes and removes a user's presence.
+  scored by expiry, refreshed every 10 s with a 30 s lifetime (both ASSUMED). ADR 0115 point 2
+  defines when the real-time channel writes, refreshes and stops refreshing a user's presence (only
+  for ANALYST, SENIOR_ANALYST and RISK_OFFICER sessions), and its point 6.3 when the figures are
+  recomputed.
 - **How it is read.** `ZREMRANGEBYSCORE` removes entries whose expiry has passed, then `ZCOUNT` counts
   the rest. Without the removal the set would grow. That a Redis sorted set is the mechanism is
   ASSUMED: it is the smallest shared store the deployment already has.
@@ -201,23 +246,34 @@ the same lockstep release as the other changes (point 10). The name is kept; see
 - **The definition is "has the console open"** (any console screen holding a real-time session). It
   is not "on duty", which no data records.
 
-**The contract change:**
+**The contract change** (split into its `paths` and `components/schemas` parts, so it parses as it
+will be merged):
 
 ```yaml
+paths:
   /dashboard/stats:
     get:
       summary: The header statistics (SRS 5.4, UX-DASH-01), each defined in its description (ADR 0117)
-
+components:
+  schemas:
+    InstitutionTimeZone:
+      type: string
+      minLength: 1
+      maxLength: 64
+      pattern: "^[A-Za-z][A-Za-z0-9_+/-]*$"
+      description: >-
+        The institution's IANA time-zone name, for example Africa/Kigali (ADR 0117). The console
+        derives the zone abbreviation from it.
     DashboardStats:
       type: object
       required:
         [high_open, medium_open, auto_blocked_today, reviewed_today, fraud_prevented_today,
-         average_review_seconds, analysts_online, day_starts_at, utc_offset]
+         average_seconds_to_decision, analysts_online, day_starts_at, utc_offset, time_zone]
       additionalProperties: false
       description: >-
         Institution-wide figures, the same for every caller (ADR 0117). "Today" is the institution's
-        day in its own time zone: from day_starts_at (UTC) to the next local midnight; utc_offset
-        is the offset in force at day_starts_at.
+        day in its own time zone (time_zone): from day_starts_at (UTC) to the next local midnight;
+        utc_offset is the offset in force at day_starts_at.
       properties:
         high_open: { type: integer, minimum: 0, description: Open HIGH entries in the standard queue }
         medium_open: { type: integer, minimum: 0, description: Open MEDIUM entries in the standard queue }
@@ -228,18 +284,21 @@ the same lockstep release as the other changes (point 10). The name is kept; see
           description: CONFIRM_FRAUD and MARK_LEGITIMATE decisions made today and not undone, anomaly reviews included
         fraud_prevented_today:
           description: >-
-            Amount (RWF) of transactions whose first DECLINE state is today, still declined, and
-            confirmed as fraud by a FRAUD label (from an analyst, a risk officer or the customer).
-            Not ground truth. Transactions made more than 30 days before today are not counted.
+            Amount (RWF) of transactions whose first DECLINE state is today, whose latest state in
+            v_decision_states is still DECLINE, and which a FRAUD label (from an analyst, a risk
+            officer or the customer) confirms. Not ground truth. Transactions made more than 30
+            days before today are not counted.
           $ref: "#/components/schemas/Money"
-        average_review_seconds:
+        average_seconds_to_decision:
           type: [number, "null"]
           minimum: 0
           description: >-
             Mean time to decision of today's reviews of HIGH and MEDIUM entries, from the entry's
-            creation to the decision. It includes time waiting in the queue, so it measures the
-            queue as much as the analysts; the server cannot observe when a review starts. Null
-            when there is no such review today.
+            creation to the decision (the UI's "Avg Review"). The start is the alert's raise time on
+            the clock of the instance that decided the payment, or, for an escalated entry, the
+            escalation time; a negative difference from clock skew counts as 0. It includes time
+            waiting in the queue, so it measures the queue as much as the analysts; the server
+            cannot observe when a review starts. Null when there is no such review today.
         analysts_online:
           type: [integer, "null"]
           minimum: 0
@@ -251,10 +310,11 @@ the same lockstep release as the other changes (point 10). The name is kept; see
           type: string
           pattern: "^[+-][0-9]{2}:[0-9]{2}$"
           description: The institution's UTC offset in force at day_starts_at, for example +02:00
+        time_zone: { $ref: "#/components/schemas/InstitutionTimeZone" }
 ```
 
-**Examples.** `schema-examples.yaml`'s `DashboardStats` example gains `day_starts_at` and
-`utc_offset`, or the examples test fails.
+**Examples.** `schema-examples.yaml`'s `DashboardStats` example gains `day_starts_at`,
+`utc_offset` and `time_zone`, and renames `average_review_seconds`, or the examples test fails.
 
 ### 5. Agreement with customers: what can be computed honestly, and what is returned
 
@@ -305,6 +365,9 @@ review's recommendation; the owner may overrule.
   window, and the rate is null while that count is below 20 (ASSUMED, as above).
 - **Its caveat, in its description:** a WAS_ME may come from a compromised account, so a "false
   positive" here may be a fraud the customer's account confirmed.
+- **It is not comparable to `ModelPerformance.false_positive_rate`.** It is the SRS's formula over a
+  self-selected population (below), not over every legitimate transaction, and its description
+  says so.
 - **The share of fraud confirmations that customers disputed** (the first draft's figure) is not
   returned. If the owner wants it, it would be a separate field named
   `disputed_fraud_confirmation_rate`.
@@ -319,30 +382,49 @@ choice on the review's recommendation; the owner may overrule.
   officer who re-confirms an analyst's fraud decision has not disagreed with it.
 - **"A senior" was wrong.** Only RISK_OFFICER may override (the authorisation matrix).
 
+**Both populations are self-selected** (review 2's finding 4; inferred, not tested). Only reviews
+whose customer chose to answer **after** the decision count, and whether a customer answers depends
+on the decision. After CONFIRM_FRAUD the payment stays blocked, and a genuine customer has every
+reason to answer WAS_ME; after MARK_LEGITIMATE the payment goes through, and the customer has little
+reason to answer at all. So among WAS_ME answers, CONFIRM_FRAUD decisions are over-represented, and
+`false_positive_rate` overstates the share of genuine customers declined; the agreement rate is
+biased in its own way. The names are kept (the FPR is the SRS's formula), and both descriptions
+say: "over reviews whose customer chose to answer after the decision; customers whose payment
+stayed blocked answer more often, so this overstates the share of genuine customers declined" (the
+agreement rate's description carries the first half and "so it is not a share of all reviews").
+
 **What these numbers cannot show:**
 - **MEDIUM and ANOMALY alerts are never verified.** Verification follows an auto-block, which only
   HIGH decisions make. An analyst who works only MEDIUM holds has a null agreement rate for ever.
 - **The rates move after the fact.** They change as customers answer after the decision.
+- **They will be null for most people for some time** (review 2's note on the owner's "after the
+  decision" rule, which is not reopened). For HIGH alerts the verification SMS goes out at the
+  block, so most answers will precede the analyst's review and do not count. The console shows the
+  verified count beside each rate (above), so a null is read as "too few answers", not as zero.
 
 ### 6. `getMyPerformance`: defined, with a daily series
 
 ```yaml
+components:
+  schemas:
     AnalystPerformance:
       type: object
       required:
-        [reviewed_today, average_review_seconds, backlog, customer_agreement_rate,
+        [reviewed_today, average_seconds_to_decision, backlog, customer_agreement_rate,
          verified_decisions, false_positive_rate, verified_legitimate_decisions,
-         overturned_decisions, day_starts_at, utc_offset, daily]
+         overturned_decisions, day_starts_at, utc_offset, time_zone, daily]
       additionalProperties: false
       description: The caller's own figures (ADR 0117); "today" is the institution's day in its time zone.
       properties:
         reviewed_today: { type: integer, minimum: 0, description: The caller's reviews today, anomaly reviews included }
-        average_review_seconds:
+        average_seconds_to_decision:
           type: [number, "null"]
           minimum: 0
           description: >-
             Mean time to decision of the caller's reviews of HIGH and MEDIUM entries today, from the
-            entry's creation; includes queue waiting time. Null when there is none.
+            entry's creation (the raise time on the deciding instance's clock, or the escalation
+            time for an escalated entry; a negative difference counts as 0); includes queue waiting
+            time. Null when there is none.
         backlog: { type: integer, minimum: 0, description: Open entries assigned to the caller (ADR 0116) }
         customer_agreement_rate:
           type: [number, "null"]
@@ -352,8 +434,10 @@ choice on the review's recommendation; the owner may overrule.
             Customer agreement, not accuracy: of the caller's reviews in the last 30 institution days
             whose auto-blocked transaction's customer answered the verification after the decision,
             the share where the answer agreed (CONFIRM_FRAUD with NOT_ME, MARK_LEGITIMATE with
-            WAS_ME). Null while verified_decisions is below 20. No ground truth exists to compute
-            accuracy (ADR 0117).
+            WAS_ME). Over reviews whose customer chose to answer after the decision; customers whose
+            payment stayed blocked answer more often, so it is not a share of all reviews. Null
+            while verified_decisions is below 20. No ground truth exists to compute accuracy (ADR
+            0117).
         verified_decisions:
           type: integer
           minimum: 0
@@ -365,8 +449,11 @@ choice on the review's recommendation; the owner may overrule.
           description: >-
             Of the caller's reviews in the last 30 institution days whose customer answered WAS_ME
             after the decision, the share the caller marked CONFIRM_FRAUD (FP / (FP + TN), the SRS's
-            FPR, FR-04-11). A WAS_ME may come from a compromised account. Null while
-            verified_legitimate_decisions is below 20.
+            FPR, FR-04-11). Over reviews whose customer chose to answer after the decision;
+            customers whose payment stayed blocked answer more often, so this overstates the share
+            of genuine customers declined, and it is not comparable to
+            ModelPerformance.false_positive_rate. A WAS_ME may come from a compromised account.
+            Null while verified_legitimate_decisions is below 20.
         verified_legitimate_decisions:
           type: integer
           minimum: 0
@@ -377,6 +464,7 @@ choice on the review's recommendation; the owner may overrule.
           description: The caller's reviews in the last 30 institution days that a risk officer overrode with a different decision
         day_starts_at: { $ref: "#/components/schemas/Timestamp" }
         utc_offset: { type: string, pattern: "^[+-][0-9]{2}:[0-9]{2}$" }
+        time_zone: { $ref: "#/components/schemas/InstitutionTimeZone" }
         daily:
           type: array
           minItems: 30
@@ -403,7 +491,13 @@ is used (ADR 0116) it is 0 for everyone.
 reviews in one day is rare.
 
 **Examples.** `schema-examples.yaml`'s `AnalystPerformance` example is rewritten with the new and
-renamed fields and a 30-item `daily`, or the examples test fails.
+renamed fields (`average_seconds_to_decision`, `time_zone`) and a 30-item `daily`, or the examples
+test fails.
+
+**`getMyPerformance`'s summary** (`fraudshield-api.yaml:1081`) still says "Reviews today, average
+review time, accuracy from customer verifications, backlog (FR-04-11)". It changes to "Reviews
+today, average time to decision, customer agreement from verifications, backlog, and a 30-day trend
+(FR-04-11)", so no contract text calls the figure accuracy.
 
 **`getMyPerformance` is not pushed** over the real-time channel (ADR 0115 point 6.3). The console
 re-reads it after its own decisions.
@@ -428,7 +522,10 @@ choice on the review's recommendation; the owner may overrule.
 **Row membership.** One row per user of the caller's institution, among the roles the caller may
 see, who either is ACTIVE or LOCKED now, or made a review, an escalation or an override in the
 range. A deactivated user's work in the range therefore still shows, and a LOCKED user (V2's
-`users.status`, a temporary lock after failed sign-ins) does not disappear for 30 minutes.
+`users.status`) does not disappear. A failure lock is not "30 minutes", as the first revision said:
+`status` stays LOCKED after `locked_until` has passed, until the next sign-in attempt or an unlock
+(`AuthenticationService.java:171-177`), and the user's open console keeps working meanwhile (ADR
+0116 point 3). Including LOCKED is therefore what keeps working people in the table.
 - **`role` is the user's current role,** not the role held during the range. A user promoted
   within the range appears once, under the new role, with all their work in it.
 
@@ -464,7 +561,11 @@ range. A deactivated user's work in the range therefore still shows, and a LOCKE
   recommendation; the owner may overrule.
 - **The agreement columns**, over the 30 days ending at `to` (above).
 
+The snippet is split into its `paths` and `components/schemas` parts, so it parses as it will be
+merged:
+
 ```yaml
+paths:
   /team/performance:
     get:
       tags: [alerts]
@@ -506,10 +607,11 @@ range. A deactivated user's work in the range therefore still shows, and a LOCKE
         "422": { $ref: "#/components/responses/ValidationOrLimitProblem" }
         "503": { $ref: "#/components/responses/ServiceUnavailable" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
-
+components:
+  schemas:
     TeamPerformance:
       type: object
-      required: [from, to, day_starts_at, utc_offset, agreement_from, generated_at, analysts]
+      required: [from, to, day_starts_at, utc_offset, time_zone, agreement_from, generated_at, analysts]
       additionalProperties: false
       properties:
         from: { type: string, format: date }
@@ -519,6 +621,7 @@ range. A deactivated user's work in the range therefore still shows, and a LOCKE
           type: string
           pattern: "^[+-][0-9]{2}:[0-9]{2}$"
           description: The institution's UTC offset in force at day_starts_at
+        time_zone: { $ref: "#/components/schemas/InstitutionTimeZone" }
         agreement_from:
           type: string
           format: date
@@ -560,8 +663,10 @@ range. A deactivated user's work in the range therefore still shows, and a LOCKE
           minimum: 0
           description: >-
             Mean time from the entry's creation to the decision, over the range's HIGH and MEDIUM
-            reviews. It includes time the alert waited in the queue, so it measures the queue as
-            much as the person: someone who works an overnight backlog looks slow. Null when none
+            reviews. The start is the raise time on the deciding instance's clock, or the escalation
+            time for an escalated entry; a negative difference counts as 0. It includes time the
+            alert waited in the queue, so it measures the queue as much as the person: someone who
+            works an overnight backlog looks slow. Null when none
         average_seconds_from_assignment:
           type: [number, "null"]
           minimum: 0
@@ -580,13 +685,13 @@ range. A deactivated user's work in the range therefore still shows, and a LOCKE
           type: [number, "null"]
           minimum: 0
           maximum: 1
-          description: Customer agreement (not accuracy) over the 30 days ending at `to`, as AnalystPerformance; null while verified_decisions is below 20
+          description: Customer agreement (not accuracy) over the 30 days ending at `to`, as AnalystPerformance; over reviews whose customer chose to answer after the decision, so not a share of all reviews; null while verified_decisions is below 20
         verified_legitimate_decisions: { type: integer, minimum: 0, description: The denominator of false_positive_rate, over the 30 days ending at `to` }
         false_positive_rate:
           type: [number, "null"]
           minimum: 0
           maximum: 1
-          description: FP / (FP + TN) over the 30 days ending at `to`, as AnalystPerformance; a WAS_ME may come from a compromised account; null while verified_legitimate_decisions is below 20
+          description: FP / (FP + TN) over the 30 days ending at `to`, as AnalystPerformance; over reviews whose customer chose to answer after the decision, and customers whose payment stayed blocked answer more often, so this overstates the share of genuine customers declined and is not comparable to ModelPerformance.false_positive_rate; a WAS_ME may come from a compromised account; null while verified_legitimate_decisions is below 20
 ```
 
 - **The row is flat.** `user_id`, `first_name`, `last_name` and `role` sit at the row's top level,
@@ -670,7 +775,7 @@ what is needed to read it:
 |---|---|
 | `user_id` | Needed to tell apart two staff with the same name, and to join exports of different ranges; an opaque id, no more personal than the name beside it |
 | `first_name`, `last_name`, `role` | UX-ROLE-SN-04 "All analysts": identifies the row |
-| `from`, `to`, `utc_offset` | Needed to read the file: which days, in which offset (review finding 9) |
+| `from`, `to`, `utc_offset`, `time_zone` | Needed to read the file: which days, in which offset and zone (review 1 finding 9, review 2 finding 3) |
 | `reviews`, `active_hours`, `reviews_per_active_hour` | SN-04 "reviews/hour" (the proxy and its inputs) |
 | `average_seconds_to_decision`, `average_seconds_from_assignment` | SN-04 "avg review time", under the names of point 7 |
 | `verified_decisions`, `customer_agreement_rate` | SN-04 "accuracy rate", as customer agreement (point 5), with its denominator |
@@ -691,6 +796,11 @@ is prefixed with `'`. Names already pass the person-name rule (ADR 0013), so thi
   0.96 MB for 1,000 rows: under the bound, but not well under. With the Basic Multilingual Plane
   letters Kinyarwanda and French use, it is well under. A test builds the worst-case row and
   asserts the bound.
+  - **The `time_zone` column** (review 2) adds at most 65 bytes a row (a name at the schema's
+    64-character maximum, and its separator), at most 65,000 bytes for 1,000 rows; the worst case
+    then stays under 1,048,576 bytes, but closer to it (inferred from the figure above, not
+    measured). The real zone names are at most 20 characters (`Africa/Dar_es_Salaam`). The
+    worst-case test includes a 64-character zone name, so the test, not this arithmetic, decides.
 - **More rows** are answered with 422 `result-too-large`, never truncated (point 7).
 - **No paging,** because sorting is the client's and needs every row.
 
@@ -700,7 +810,7 @@ row filter and the same rows.
 **The export is audited.** This is the author's choice on the review's recommendation; the owner
 may overrule.
 - **The event:** `USER_ADMIN`, action `TEAM_PERFORMANCE_EXPORTED`, recording the caller, `from`,
-  `to`, `utc_offset` and the number of rows. No thirteenth D-32 type is needed: D-32's types carry
+  `to`, `utc_offset`, `time_zone` and the number of rows. No thirteenth D-32 type is needed: D-32's types carry
   an `action`.
 - **When:** written and committed before the first byte of the file is sent. If the audit write
   fails, the answer is 503 and no file is sent.
@@ -713,7 +823,7 @@ The team query and the 30-day windows scan `alert_decisions` by institution and 
 migration of point 1 (V8x, claimed in `M8B_updates.md`) adds:
 - **`(institution_id, created_at)` on `alert_decisions`, partial on
   `decision IN ('CONFIRM_FRAUD', 'MARK_LEGITIMATE')`,** for the institution-wide figures
-  (`reviewed_today`, `average_review_seconds`). With `analyst_id` second, the per-analyst index
+  (`reviewed_today`, `average_seconds_to_decision`). With `analyst_id` second, the per-analyst index
   would scan the institution's whole range, since PostgreSQL before 18 has no skip scan.
 - **`(institution_id, analyst_id, created_at)` on `alert_decisions`,** for per-person windows.
 - **`(institution_id, blocked_at)` on `auto_block_events`,** for `auto_blocked_today`; V5 has only
@@ -725,31 +835,40 @@ migration of point 1 (V8x, claimed in `M8B_updates.md`) adds:
 the agreement window) of one institution's decisions. Whether a cache is needed is decided by
 measurement in CI, not assumed.
 
-### 10. What ships together, and one name left as it is
+### 10. What ships together, and one name for one quantity
 
 **One lockstep release.** These response changes break the console's generated client until it is
 regenerated, so the console and the server ship together (as ADR 0110's consequences):
 - `accuracy_rate` renamed `customer_agreement_rate` (the owner's decision);
-- `average_review_seconds` and `analysts_online` made nullable;
-- new required fields in `DashboardStats` and `AnalystPerformance`;
+- `average_review_seconds` renamed `average_seconds_to_decision` in `DashboardStats` and
+  `AnalystPerformance` (below);
+- `average_seconds_to_decision` and `analysts_online` made nullable;
+- new required fields in `DashboardStats` and `AnalystPerformance` (`day_starts_at`, `utc_offset`,
+  `time_zone`, and the agreement and series fields);
+- `getMyPerformance`'s summary (point 6);
 - the console's labels: "Agreement with customers" beside its verified count, never "Accuracy".
 
-**`average_review_seconds` keeps its name** in `DashboardStats` and `AnalystPerformance`, made
-nullable, with "time to decision" and the queue caveat in its description. Review finding 5 asked
-for the honest name in the new schemas (`TeamMemberPerformance`, `daily`, the CSV), and they use
-`average_seconds_to_decision`. The two existing fields were not in that finding, and the header's
-SRS label is "Avg Review". The cost is that one quantity carries two names across operations.
-Renaming both existing fields too costs nothing more in this lockstep release; that is left to the
-owner (open questions).
+**`average_review_seconds` is renamed `average_seconds_to_decision` in `DashboardStats` and
+`AnalystPerformance` too, in the same lockstep release** (the author's choice on review 2's
+recommendation; the owner may overrule). So one quantity has one name across the header, "My
+performance", the team table, `daily` and the CSV.
+- **Why now.** The release already breaks the generated client (the nullable type, the renamed
+  `accuracy_rate`, the new required fields), so the rename costs nothing more. A field name, unlike
+  a description, reaches every tile and pivot that reads it.
+- **The SRS's label survives in the UI.** "Avg Review" is a UI label (the header, SRS 5.4); the
+  console may keep it, with a tooltip saying "time to decision, from the alert's creation".
+- **What it touches:** the two schemas and their examples (points 4 and 6), the console's generated
+  client and every reader of the two fields, the `DashboardStats` mock, and the index note of point
+  9. No database column is renamed: the stored value is `decision_duration_seconds`.
 
 ## Requirements: closed, and left open
 
 | Row | What this does | What stays open |
 |---|---|---|
 | UX-ROLE-SN-04 | Every analyst's reviews per active hour, time to decision (and from assignment), customer agreement with its count, sortable on the client, and the CSV | "Reviews/hour" is per *active* hour (no shift data). "Accuracy" is customer agreement (point 5). A senior sees analyst and senior rows only. The code and the console |
-| FR-04-11 | Defines each figure. `false_positive_rate` is the SRS's FPR, computed from the verification tables, as the acceptance asks | **"Accuracy rate" in the strict sense stays open:** it is not computable from existing data, because no ground truth exists (no chargeback producer; a customer's answer can come from a compromised account; labels mostly echo the analysts' own decisions). "Update in real time" depends on the console re-reading after its own decisions (ADR 0115). MEDIUM-only analysts have no agreement figure |
+| FR-04-11 | Defines each figure. `false_positive_rate` is the SRS's FPR formula, computed from the verification tables, as the acceptance asks, over a self-selected population (point 5) | **"Accuracy rate" in the strict sense stays open:** it is not computable from existing data, because no ground truth exists (no chargeback producer; a customer's answer can come from a compromised account; labels mostly echo the analysts' own decisions). "Update in real time" depends on the console re-reading after its own decisions (ADR 0115). MEDIUM-only analysts have no agreement figure. **FR-04-11 can therefore be released only as "met except strict accuracy (not computable)", and the scope's P2 row must say so** (Required follow-ups) |
 | UX-ROLE-AN-04 | The daily trend (`daily`) | the console's chart |
-| UX-DASH-01 | Defines all seven figures, plus `day_starts_at` and `utc_offset` | `analysts_online` is null while Redis is down, and lags by up to 30 s. The real-time part is ADR 0115's |
+| UX-DASH-01 | Defines all seven figures, plus `day_starts_at`, `utc_offset` and `time_zone` | `analysts_online` is null while Redis is down, and lags by up to 30 s. The real-time part is ADR 0115's |
 | Item 9 | Anomaly reviews count, and are excluded from averages (ASSUMED) | none |
 
 ## Deliberately left out
@@ -777,16 +896,47 @@ the text as "the author's choice on the review's recommendation; the owner may o
 - **4.** `overrides_made` is added for risk officers (point 7).
 - **5.** `fraud_prevented_today` stays "confirmed declines", with its anchor and honest wording
   (point 4).
-- **6.** `average_review_seconds` is nullable now (point 4).
+- **6.** The average time to decision is nullable now (point 4).
 - **7.** The CSV export is audited under USER_ADMIN (point 8).
 - **8.** The ASSUMED constants are starting values: the 30-day windows and the minimum of 20, with
   the denominators exposed; the 31-day range, now one rule with the agreement window (point 7); the
   BOM; the presence timings, with the extra recompute; 1,000 rows, with `result-too-large`; and
   the 30-day bound on the decline lookup (point 4).
 
-One question remains:
-1. **Rename `average_review_seconds` to `average_seconds_to_decision`** in `DashboardStats` and
-   `AnalystPerformance` too, in the same lockstep release, so one quantity has one name (point 10)?
+Review 2's questions are answered on its recommendations, each marked in the text as "the author's
+choice on review 2's recommendation; the owner may overrule". None of them is an owner decision:
+- **9. The rename** of `average_review_seconds` to `average_seconds_to_decision` in
+  `DashboardStats` and `AnalystPerformance`, in the same lockstep release, so one quantity has one
+  name (point 10). This was the one question left open after review 1.
+- **10. FR-04-11 in the scope's P2 releases:** the scope is to be corrected so FR-04-11 is released
+  only as "met except strict accuracy (not computable)" (Required follow-ups).
+- **11. A DR Congo institution outside Kinshasa:** the zone is an explicit input when an institution
+  is created, with the country map only as the backfill of existing rows; responses carry
+  `time_zone` beside `utc_offset` (point 1). This narrows how the owner's 2026-10-22 column is
+  filled, and is marked as the author's choice, not the owner's.
+- **Questions 3 and 7 above** (seniors seeing other seniors' rows; the export audit under
+  USER_ADMIN) are kept, as review 2 recommends (its questions 4 and 5).
+- **The "after the decision" rule** was the owner's decision and is not reopened; review 2's note on
+  its consequence is recorded in point 5.
+
+No question remains open.
+
+## Required follow-ups
+
+Made outside this ADR, by whoever changes the named file; none is made by this proposal:
+- **`docs/parallel/M8B_scope.md` §3, line 209 (the P2 row):** it lists "FR-04-11 (item 11)" among
+  the IN_PROGRESS rows P2 **releases**. Under this ADR the strict "accuracy rate" stays open (point
+  5), so the row must be corrected to release FR-04-11 only as "met except strict accuracy (not
+  computable)", with this ADR's reason, so that the scope and the register agree. This is the same
+  kind of correction as ADR 0116 point 10 records for UX-ROLE-AN-01. This ADR does not edit the
+  scope document; the correction must land with this ADR's acceptance.
+- **The register's FR-04-11 note** (on `m8/frontend-rebase`): record that strict accuracy is not
+  computable from existing data, with this ADR's reason, and that `customer_agreement_rate` and
+  `false_positive_rate` are over a self-selected population.
+- **Demo seeding and test fixtures** that insert into `institutions` must name `time_zone`
+  explicitly, since there is no insert-time fill from the country (point 1).
+- **An existing DR Congo institution outside Kinshasa's zone**, if any is listed by the
+  migration's notice, is corrected by a migration naming its zone (point 1).
 
 ## Review 1's findings and their answers
 
@@ -796,7 +946,7 @@ One question remains:
 | 2 | MAJOR | `false_positive_rate` was a false discovery rate under the SRS's FPR name | Fixed in point 5: FP ÷ (FP + TN), with `verified_legitimate_decisions` as its denominator and the compromised-account caveat; the disputed-confirmation figure is not returned (named, left out); author's choice on the review's recommendation |
 | 3 | MAJOR | `overridden_decisions` counted same-value overrides, and "a senior" is a risk officer | Fixed in point 5: renamed `overturned_decisions`, counting only overrides whose `override_decision` differs, "by a risk officer"; author's choice on the review's recommendation |
 | 4 | MAJOR | `average_review_seconds` was 0 with no data | Fixed in points 4 and 6: `[number, "null"]` in `DashboardStats` and `AnalystPerformance`, null when no HIGH or MEDIUM review, in the lockstep release |
-| 5 | MAJOR | The team table and CSV ranked people on a figure that measures the queue | Fixed in points 3 and 7: the per-person figure is `average_seconds_to_decision` with the queue caveat in its description (team table, `daily`, CSV); `average_seconds_from_assignment` added beside it, which measures the person once assignment is used. The two existing fields keep their name; renaming them is the one open question (point 10) |
+| 5 | MAJOR | The team table and CSV ranked people on a figure that measures the queue | Fixed in points 3 and 7: the per-person figure is `average_seconds_to_decision` with the queue caveat in its description (team table, `daily`, CSV); `average_seconds_from_assignment` added beside it, which measures the person once assignment is used. The two existing fields were renamed too after review 2 (point 10) |
 | 6 | MAJOR | Seniors saw risk officers' personal figures by default | Fixed in point 7: seniors get ANALYST and SENIOR_ANALYST rows, risk officers all three, declared as an `x-authorisation-rules` filter entry and a matrix `{ effect: filter }` rule |
 | 7 | MINOR | `x-unique-key: [analyst.user_id]` failed the contract's checks | Fixed in point 7: the row is flattened (`user_id` at the top level); the keyed-array count is raised (6 to 8, or 9 with ADR 0116) |
 | 8 | MINOR | OpenAPI conventions: CSV schema, Content-Type, the 1,000-row 422, the stats summary, examples, the `allOf` | Fixed: `contentMediaType: text/csv` with the byte bound in the description; `text/csv; charset=utf-8; header=present`; the limit answers 422 `result-too-large` through `ValidationOrLimitProblem`, not a field code (point 7); the `getDashboardStats` summary no longer says "seven" (point 4); the example edits are listed (points 4, 6, 7); the `allOf` is gone with the flat row |
@@ -818,3 +968,24 @@ One question remains:
 | Q6 | | Nullable average | Yes (finding 4); author's choice on the review's recommendation |
 | Q7 | | Auditing the export | USER_ADMIN, TEAM_PERFORMANCE_EXPORTED (point 8); author's choice on the review's recommendation |
 | Q8 | | The ASSUMED constants | Accepted as starting values with the review's conditions (open questions); author's choice on the review's recommendation |
+
+## Review 2's findings and their answers
+
+Review 2 (`docs/reviews/M8B/team-performance-proposal-review-2.md`): SOUND_WITH_CHANGES, no MAJOR,
+six MINOR findings and six owner questions.
+
+| # | Severity | Finding | Answer |
+|---|---|---|---|
+| 1 | MINOR | The duration subtracts an application-clock start from a DB-clock end, and the CHECK turns a negative result into a failed decision | Fixed in point 3: the trigger stores `greatest(0, …)`, so `CHECK (decision_duration_seconds >= 0)` (`V4:50`) can never fail a decision, with a test; the start is stated as the raise time on the deciding instance's clock, or the escalation time for an escalated entry; the skew and the clamp's bias stated; both in the field descriptions of `DashboardStats`, `AnalystPerformance` and `TeamMemberPerformance` |
+| 2 | MINOR | The scope still says P2 releases FR-04-11 | Fixed: "Required follow-ups" names the correction of `M8B_scope.md:209` (release FR-04-11 only as "met except strict accuracy (not computable)") and the register note, like ADR 0116 point 10; the FR-04-11 requirements row says so |
+| 3 | MINOR | Responses carry an offset but not the zone; every DR Congo institution put on Kinshasa time; the zone validated on INSERT only | Fixed in point 1: `time_zone` (the IANA name, `InstitutionTimeZone`) returned beside `utc_offset` in all three schemas and the CSV, additive in the lockstep release; the zone is an explicit input at institution creation (no insert-time country fill), with the country map only as the backfill of existing rows and its CD rows listed for checking; the trigger validates on INSERT and on UPDATE |
+| 4 | MINOR | The agreement and false-positive populations are self-selected | Fixed in point 5 and the schema descriptions: both state that they are over reviews whose customer chose to answer after the decision and that blocked customers answer more often, so the FPR overstates the share of genuine customers declined; the FPR is stated as not comparable to `ModelPerformance.false_positive_rate`; marked inferred, not tested |
+| 5 | MINOR | `fraud_prevented_today` reads the owner's current state instead of the contract's reader | Fixed in point 4: "whose latest state in `v_decision_states` is still DECLINE", with the reason (transactions with no owner row), in the table and the description |
+| 6 | MINOR | Loose ends: `getMyPerformance`'s summary says "accuracy"; the wrong ADR 0115 points cited; snippets not split | Fixed: the summary change is named (point 6); presence cited to ADR 0115 point 2 (and 6.3) (point 4); the `DashboardStats`, `AnalystPerformance` and team snippets are split into `paths` and `components/schemas` parts |
+| r1-17 note | | LOCKED is not "30 minutes" | Fixed in point 7: LOCKED persists until the next sign-in attempt or an unlock |
+| Q1 | | Rename `average_review_seconds` to `average_seconds_to_decision` in `DashboardStats` and `AnalystPerformance` too? | Yes, in the same lockstep release, so one quantity has one name (points 4, 6, 10): the author's choice on review 2's recommendation; the owner may overrule |
+| Q2 | | FR-04-11 in the scope's P2 releases | The scope correction is a required follow-up (finding 2): the author's choice on review 2's recommendation; the owner may overrule |
+| Q3 | | How a DR Congo institution outside Kinshasa gets its zone | An explicit zone at institution creation, the country map only for existing rows, and `time_zone` returned (finding 3): the author's choice on review 2's recommendation; the owner may overrule |
+| Q4 | | Seniors see other seniors' rows | Kept (point 7): the author's choice on review 2's recommendation; the owner may overrule |
+| Q5 | | Export audit under USER_ADMIN / TEAM_PERFORMANCE_EXPORTED | Kept (point 8): the author's choice on review 2's recommendation; the owner may overrule |
+| Q6 | | The "after the decision" rule | The owner's decision, not reopened; the consequence (rates null for most people for some time, the count shown beside them) recorded in point 5 |
