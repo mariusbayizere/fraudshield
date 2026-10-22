@@ -86,7 +86,10 @@ public final class HoldTimeoutService {
   /**
    * The safety net (E.6, D-14): requests the timeout of holds the overdue sweep lists, whatever
    * happened to their schedule entry (§6.3). Leader only. The owner makes a repeated timeout a
-   * no-op: its request id names only the institution and the transaction.
+   * no-op: its request id names only the institution and the transaction. The cutoff is this
+   * instance's clock less the grace, compared with DB-time deadlines; the owner then judges on DB
+   * time, so a skewed JVM clock can only list a hold early or late, never time it out early (code
+   * review 1, minor 6).
    *
    * @param overdue durable overdue holds
    * @param grace how long after a deadline the sweep waits for the scheduler

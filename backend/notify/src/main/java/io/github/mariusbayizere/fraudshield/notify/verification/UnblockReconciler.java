@@ -64,6 +64,8 @@ public final class UnblockReconciler {
   private final HoldSchedulePort holds;
   private final String instanceId;
   private final Clock clock;
+  private final java.util.concurrent.atomic.AtomicLong failures =
+      new java.util.concurrent.atomic.AtomicLong();
 
   /**
    * Creates the reconciler.
@@ -117,12 +119,22 @@ public final class UnblockReconciler {
         recorder.record(answer.institution(), result);
         submitted++;
       } catch (SQLException | RuntimeException failed) {
+        // Per answer: one that keeps failing never holds up the others (code review 1, minor 5).
+        failures.incrementAndGet();
         LOG.warn(
             "a customer answer could not be submitted; the sweep tries again next tick", failed);
-        return submitted;
       }
     }
     return submitted;
+  }
+
+  /**
+   * Answers whose submission failed and was left for the next tick.
+   *
+   * @return count
+   */
+  public long failures() {
+    return failures.get();
   }
 
   private record Unapplied(UUID institution, UUID verification, boolean wasMe, UUID transaction) {}

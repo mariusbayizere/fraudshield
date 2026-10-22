@@ -272,7 +272,7 @@ class RedisAdaptersTest {
 
   @Test
   @Tag("D-14")
-  void decisionStatesAreCompareAndSetAndFallBackToPostgres() throws Exception {
+  void decisionStatesAreSetIfHigherAndFallBackToPostgres() throws Exception {
     RedisDecisionStates states =
         new RedisDecisionStates(
             connection, new JdbcDecisionStates(db.dataSource("fs_app")), TIMEOUT);
@@ -285,11 +285,30 @@ class RedisAdaptersTest {
             DecidedBy.TIMEOUT_POLICY,
             NOW.plusSeconds(30),
             List.of("REVIEW_TIMEOUT"));
-    assertThat(states.save(released)).as("sequence 2 before 1").isFalse();
-    assertThat(states.save(hold)).isTrue();
-    assertThat(states.save(hold)).isFalse();
-    assertThat(states.save(released)).isTrue();
+    // Set-if-higher (decision-owner contract §4.6): the owner records states in order but its
+    // recorder may complete them late, so a higher sequence wins and a lower or equal one is
+    // refused, whatever arrives first.
+    assertThat(states.save(released)).as("sequence 2 may arrive before 1").isTrue();
+    assertThat(states.save(hold)).as("a lower sequence never overwrites").isFalse();
+    assertThat(states.save(released)).as("an equal one neither").isFalse();
     assertThat(states.latest(INSTITUTION, tx)).contains(released);
     assertThat(states.latest(INSTITUTION, UUID.randomUUID())).isEmpty();
+  }
+
+  @Test
+  @Tag("FR-03-07")
+  void confirmedFraudIsCountedOncePerTransactionWhateverTheRetries() {
+    // P21 (decision-owner contract D4(d)): a retried or concurrent effects run counts once.
+    RedisCircuitBreakers breakers = new RedisCircuitBreakers(connection, TIMEOUT);
+    for (int i = 0; i < 3; i++) {
+      breakers.count(INSTITUTION, "6051", NOW, false);
+    }
+    UUID tx = UUID.randomUUID();
+    assertThat(breakers.countConfirmedFraudOnce(INSTITUTION, tx, "6051", NOW)).isTrue();
+    assertThat(breakers.countConfirmedFraudOnce(INSTITUTION, tx, "6051", NOW)).isFalse();
+    assertThat(breakers.countConfirmedFraudOnce(INSTITUTION, UUID.randomUUID(), "6051", NOW))
+        .isTrue();
+    assertThat(breakers.counts(new CircuitBreakerPort.Key(INSTITUTION, "6051"), 15, NOW).fraud())
+        .isEqualTo(2);
   }
 }

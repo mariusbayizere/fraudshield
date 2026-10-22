@@ -60,6 +60,7 @@ public final class RequestRecorder {
   private final EventRecorder spool;
   private final DecisionStatePort cache;
   private final AtomicLong cacheFailures = new AtomicLong();
+  private final AtomicLong recordFailures = new AtomicLong();
 
   /**
    * Creates the recorder.
@@ -128,7 +129,9 @@ public final class RequestRecorder {
    * Records every request older than {@link #AGE} that has no recording row (contract §4.6).
    * Recording is idempotent, so concurrent runs on several instances are safe.
    *
-   * @param now this instance's clock; the lister compares with the database's time
+   * @param now this instance's clock. The cutoff is this clock less {@link #AGE}, compared with the
+   *     rows' DB-time {@code decided_at}, so a JVM clock behind the database's delays the recorder
+   *     by the skew, and one ahead shortens the writer's grace by it (code review 1, minor 6)
    * @return requests recorded
    */
   public int recordPending(Instant now) {
@@ -143,8 +146,10 @@ public final class RequestRecorder {
                 FactCodec.decode(pending.body().getBytes(StandardCharsets.UTF_8)));
             recorded++;
           } catch (RuntimeException | SQLException failed) {
+            // Per request: one that keeps failing never holds up the others (code review 1,
+            // minor 5).
+            recordFailures.incrementAndGet();
             LOG.warn("an unrecorded request could not be recorded; tried again next run", failed);
-            return recorded;
           }
         }
       }
@@ -152,6 +157,15 @@ public final class RequestRecorder {
       LOG.warn("unrecorded requests are unavailable", e);
     }
     return recorded;
+  }
+
+  /**
+   * Recordings the recorder could not make and left for its next run.
+   *
+   * @return count
+   */
+  public long recordFailures() {
+    return recordFailures.get();
   }
 
   /**

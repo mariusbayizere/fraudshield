@@ -203,12 +203,13 @@ public final class OwnerRules {
 
   /** OVERRIDE, by the senior's decision and the current state (§5). */
   private static Verdict override(OwnerState o, OwnerRequest.SeniorOverride v, Facts facts) {
-    if (o.resolutionId() != null || o.held()) {
-      return Verdict.refused(Refusal.STALE, false);
-    }
+    // D5(d)'s order: the original's claim, then a resolution, then a hold (code review 1, minor 2).
     if (o.claim() == Claim.ANALYST) {
       return Verdict.refused(
           facts.claimEffectFailed() ? Refusal.EFFECT_FAILED : Refusal.NOT_COMMITTED, false);
+    }
+    if (o.resolutionId() != null || o.held()) {
+      return Verdict.refused(Refusal.STALE, false);
     }
     Label label = new Label(v.fraud(), SENIOR, v.supersedesLabelId());
     if (v.fraud()) {
@@ -245,7 +246,9 @@ public final class OwnerRules {
     }
     DecisionValue value = o.decision();
     if (value == DecisionValue.HOLD) {
-      return Verdict.refused(Refusal.HELD, true);
+      // The customer path follows an auto-block, so it never meets a hold; if it did, the answer
+      // waits rather than being refused for good (code review 1, minor 13).
+      return Verdict.deferred(Refusal.HELD);
     }
     if (value == DecisionValue.DECLINE) {
       if (o.decidedBy() == DecidedBy.ANALYST || o.decidedBy() == DecidedBy.SENIOR_OVERRIDE) {

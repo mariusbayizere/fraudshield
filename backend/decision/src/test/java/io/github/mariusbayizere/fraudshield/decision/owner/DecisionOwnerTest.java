@@ -89,8 +89,6 @@ class DecisionOwnerTest {
         basis.eventId(),
         basis.decision(),
         basis.reviewDeadlineAt(),
-        basis.decidedAt(),
-        basis.reasonCodes(),
         MediumTimeoutPolicy.RELEASE_WITH_TIMEOUT_LABEL,
         "CARD");
   }
@@ -247,6 +245,137 @@ class DecisionOwnerTest {
                           + " '[]')"))
           .isInstanceOf(SQLException.class)
           .hasMessageContaining("not the owner's next");
+    }
+  }
+
+  /** A model DECLINE for the scenario's transaction, as the sink would have written it. */
+  private DecisionState declined() throws Exception {
+    DecisionEvent.TransactionDecided decided = (DecisionEvent.TransactionDecided) heldRecord.get(0);
+    DecisionState decline =
+        DecisionState.initial(
+            INSTITUTION,
+            hold.transactionId(),
+            io.github.mariusbayizere.fraudshield.decision.domain.Decision.DECLINE,
+            hold.decidedAt(),
+            List.of(),
+            null);
+    sink.accept(
+        records(
+            List.of(
+                new DecisionEvent.TransactionDecided(
+                    decided.transaction(),
+                    decided.scoring(),
+                    decided.outcome(),
+                    decline,
+                    decided.thresholdsVersion(),
+                    decided.requestFingerprint(),
+                    3))));
+    return decline;
+  }
+
+  @Test
+  @Tag("FR-03-05")
+  void concurrentRequestsTakeConsecutiveSequencesNeverTheSameOne() throws Exception {
+    // P5: a senior's override and a customer's "yes" race on one transaction.
+    declined();
+    java.util.concurrent.ExecutorService pool =
+        java.util.concurrent.Executors.newFixedThreadPool(2);
+    try {
+      java.util.concurrent.Future<DecisionOwner.Result> override =
+          pool.submit(
+              () ->
+                  submit(
+                      new OwnerRequest.SeniorOverride(
+                          UUID.randomUUID(), true, UUID.randomUUID(), null)));
+      java.util.concurrent.Future<DecisionOwner.Result> customer =
+          pool.submit(() -> submit(new OwnerRequest.Customer(UUID.randomUUID(), true)));
+      override.get();
+      customer.get();
+    } finally {
+      pool.shutdown();
+    }
+    assertThat(
+            one(
+                "SELECT string_agg(sequence::text, ',' ORDER BY sequence) FROM"
+                    + " fraudshield.transaction_requests WHERE outcome = 'APPLIED'"))
+        .isIn("2", "2,3");
+    assertThat(one("SELECT sequence FROM fraudshield.decision_owners"))
+        .isEqualTo(one("SELECT coalesce(max(sequence), 1) FROM fraudshield.transaction_requests"));
+  }
+
+  @Test
+  void timeoutUnderDeclineAndVerifyClosesTheEntryAsAutoDeclined() throws Exception {
+    // P13.
+    sink.accept(records(heldRecord));
+    DecisionOwner.Result result =
+        submit(
+            new OwnerRequest.Timeout(
+                hold.eventId(),
+                hold.decision(),
+                hold.reviewDeadlineAt(),
+                MediumTimeoutPolicy.DECLINE_AND_VERIFY,
+                "CARD"));
+    assertThat(result.state().decision()).isEqualTo(DecisionValue.DECLINE);
+    assertThat(one("SELECT status FROM fraudshield.alert_queue_entries"))
+        .isEqualTo("AUTO_DECLINED");
+    assertThat(one("SELECT decision FROM fraudshield.alert_decisions")).isEqualTo("AUTO_BLOCKED");
+  }
+
+  @Test
+  @Tag("FR-04-10")
+  void effectDeferredByContestKeepsOnlyItsLabelOnceTheContestIsResolved() throws Exception {
+    // P8: a claim, a contest, the effect deferred, the resolution, then the effect's label only.
+    sink.accept(records(heldRecord));
+    UUID decision = UUID.randomUUID();
+    assertThat(submit(new OwnerRequest.ClaimRequest(decision, false)).outcome())
+        .isEqualTo(Verdict.Outcome.CLAIMED);
+    try (Connection c = db.superuser();
+        Statement s = c.createStatement()) {
+      s.execute("UPDATE fraudshield.decision_owners SET contested_since = now()");
+    }
+    assertThat(submit(new OwnerRequest.Effect(decision, true, UUID.randomUUID())).outcome())
+        .isEqualTo(Verdict.Outcome.DEFERRED);
+    java.time.Instant since;
+    try (Connection c = db.superuser();
+        Statement s = c.createStatement();
+        ResultSet rows =
+            s.executeQuery("SELECT contested_since FROM fraudshield.decision_owners")) {
+      rows.next();
+      since = rows.getObject(1, java.time.OffsetDateTime.class).toInstant();
+    }
+    DecisionOwner.Result resolved =
+        submit(
+            new OwnerRequest.Resolve(
+                UUID.randomUUID(), DecisionValue.DECLINE, UUID.randomUUID(), since));
+    assertThat(resolved.outcome()).isEqualTo(Verdict.Outcome.APPLIED);
+    assertThat(resolved.clearedClaim()).isEqualTo(decision);
+    DecisionOwner.Result effect =
+        submit(new OwnerRequest.Effect(decision, true, UUID.randomUUID()));
+    assertThat(effect.outcome()).isEqualTo(Verdict.Outcome.LABEL_ONLY);
+    assertThat(effect.refusal()).isEqualTo(Verdict.Refusal.CLAIM_LOST);
+    assertThat(effect.events()).singleElement().isInstanceOf(DecisionEvent.LabelRecorded.class);
+    assertThat(one("SELECT status FROM fraudshield.alert_queue_entries")).isEqualTo("OVERRIDDEN");
+  }
+
+  @Test
+  void theSequenceOneTableRefusesLaterStates() throws Exception {
+    // P17: from V81 on, decision_states holds sequence 1 only.
+    sink.accept(records(heldRecord));
+    try (Connection c = db.superuser();
+        Statement s = c.createStatement()) {
+      s.execute("SET fraudshield.institution_id = '" + INSTITUTION + "'");
+      org.assertj.core.api.Assertions.assertThatThrownBy(
+              () ->
+                  s.execute(
+                      "INSERT INTO fraudshield.decision_states (event_id, institution_id,"
+                          + " transaction_id, decision_sequence, decision, final, decided_at,"
+                          + " decided_by, supersedes_decision) VALUES (gen_random_uuid(), '"
+                          + INSTITUTION
+                          + "', '"
+                          + hold.transactionId()
+                          + "', 2, 'APPROVE', true, now(), 'ANALYST', 'HOLD')"))
+          .isInstanceOf(SQLException.class)
+          .hasMessageContaining("decision_states_first_only");
     }
   }
 }

@@ -207,6 +207,23 @@ public final class PostgresSink implements SpoolDrainer.Sink {
 
   @Override
   public void accept(List<SpoolRecord> records) throws SpoolDrainer.SinkException {
+    if (!acceptOnce(records)) {
+      // One first-decision lock per record is held to the batch's commit, so an exhausted lock
+      // table (53200) halves the batch, down to one record, never retrying an over-large batch for
+      // ever (§6.1). The connection is closed first, so the halves draw on the pool afresh (code
+      // review 1, minor 3).
+      int half = records.size() / 2;
+      accept(records.subList(0, half));
+      accept(records.subList(half, records.size()));
+    }
+  }
+
+  /**
+   * Writes a batch once.
+   *
+   * @return false when the lock table is exhausted and the batch has more than one record
+   */
+  private boolean acceptOnce(List<SpoolRecord> records) throws SpoolDrainer.SinkException {
     try (Connection connection = dataSource.getConnection()) {
       connection.setAutoCommit(false);
       try {
@@ -214,16 +231,11 @@ public final class PostgresSink implements SpoolDrainer.Sink {
           write(connection, FactCodec.decode(record.payload()));
         }
         connection.commit();
-        return;
+        return true;
       } catch (SQLException e) {
         connection.rollback();
         if (OUT_OF_LOCKS.equals(e.getSQLState()) && records.size() > 1) {
-          // One first-decision lock per record is held to the batch's commit: halve, never retry
-          // an over-large batch for ever (§6.1).
-          int half = records.size() / 2;
-          accept(records.subList(0, half));
-          accept(records.subList(half, records.size()));
-          return;
+          return false;
         }
         if (Tenant.transientError(e)) {
           throw new SpoolDrainer.SinkException("PostgreSQL is unavailable", e);
@@ -241,6 +253,7 @@ public final class PostgresSink implements SpoolDrainer.Sink {
           deadLetter(record, e);
         }
       }
+      return true;
     } catch (SQLException e) {
       throw new SpoolDrainer.SinkException("could not reach PostgreSQL", e);
     }
@@ -501,10 +514,10 @@ public final class PostgresSink implements SpoolDrainer.Sink {
       s.setObject(1, e.state().eventId());
       try (ResultSet row = s.executeQuery()) {
         if (!row.next()) {
-          unreservedStates.incrementAndGet();
+          long dropped = unreservedStates.incrementAndGet();
           LOG.warn(
-              "a later state of transaction {} has no owner request and was dropped",
-              e.state().transactionId());
+              "a later state with no owner request was dropped ({} so far; contract §6.1)",
+              dropped);
         }
       }
     }

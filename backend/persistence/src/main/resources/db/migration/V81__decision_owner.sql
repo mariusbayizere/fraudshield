@@ -50,6 +50,11 @@ ALTER TABLE alert_decisions ADD CONSTRAINT alert_decisions_escalated_to
 ALTER TABLE alert_decisions ADD FOREIGN KEY (escalated_to_alert_id, institution_id)
   REFERENCES alert_queue_entries (id, institution_id);
 
+-- One AUTO_* row per entry (§5's TIMEOUT). Its idempotency key is random: a key derived from ids an
+-- analyst sees could be pre-empted by a client's Idempotency-Key (code review 1, minor 10).
+CREATE UNIQUE INDEX alert_decisions_one_auto_per_entry ON alert_decisions (alert_queue_entry_id)
+  WHERE decision IN ('AUTO_RELEASED', 'AUTO_BLOCKED');
+
 -- DB time, the undo window, and one live analyst decision per entry (§9's backstop). The entry's
 -- advisory lock is lock level 2 (§3), taken here re-entrantly after D1 took it explicitly.
 CREATE FUNCTION alert_decision_timing() RETURNS trigger

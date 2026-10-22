@@ -57,14 +57,4 @@ public final class OwnerIds {
   public static UUID decisionLabel(UUID decisionId) {
     return name("alert_label|" + decisionId);
   }
-
-  /**
-   * The idempotency key of the AUTO_* decision row a TIMEOUT writes (§5).
-   *
-   * @param requestId the TIMEOUT's request id
-   * @return the key
-   */
-  static UUID autoDecisionKey(UUID requestId) {
-    return name("auto_decision|" + requestId);
-  }
 }

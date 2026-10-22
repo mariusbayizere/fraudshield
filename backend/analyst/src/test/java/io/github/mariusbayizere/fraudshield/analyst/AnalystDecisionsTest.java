@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.mariusbayizere.fraudshield.auth.testing.Http;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -79,7 +81,7 @@ class AnalystDecisionsTest extends AnalystIntegrationTest {
   }
 
   @Test
-  void decidingHoldIsUndoableThenCommitsAndItsEffectDeclinesThePayment() {
+  void decidingHoldCommitsAfterTheWindowAndItsEffectDeclinesThePayment() {
     Alert alert = heldNow();
     Session analyst = as("ANALYST");
     UUID key = UUID.randomUUID();
@@ -133,7 +135,7 @@ class AnalystDecisionsTest extends AnalystIntegrationTest {
   }
 
   @Test
-  void undoInsideTheWindowPutsTheAlertBackAndTheHoldIsTheTimeoutsAgain() {
+  void undoInsideTheWindowPutsTheAlertBackAndReleasesTheClaim() {
     Alert alert = heldNow();
     Session analyst = as("ANALYST");
     Http.Response accepted =
@@ -182,6 +184,9 @@ class AnalystDecisionsTest extends AnalystIntegrationTest {
         .isEqualTo("urn:fraudshield:problem:stale-alert");
     assertThat(stale.json().get("current").get("alert_id").asString())
         .isEqualTo(alert.id.toString());
+    List<String> problems = new ArrayList<>();
+    AnalystInspectorTest.inspect("stale-alert", "", null, stale.json(), problems);
+    assertThat(problems).as("the current alert carries tokens and masked values only").isEmpty();
   }
 
   @Test
@@ -213,6 +218,9 @@ class AnalystDecisionsTest extends AnalystIntegrationTest {
     assertThat(escalated.status()).as(escalated.body()).isEqualTo(201);
     JsonNode summary = escalated.json();
     assertThat(OpenApiSchemas.errors("AlertSummary", summary)).isEmpty();
+    List<String> problems = new ArrayList<>();
+    AnalystInspectorTest.inspect("escalateAlert", "", null, summary, problems);
+    assertThat(problems).isEmpty();
     UUID escalatedId = UUID.fromString(summary.get("alert_id").asString());
     assertThat(one("SELECT status FROM fraudshield.alert_queue_entries WHERE id = ?", alert.id))
         .isEqualTo("ESCALATED");
@@ -284,5 +292,89 @@ class AnalystDecisionsTest extends AnalystIntegrationTest {
                     + " decision_sequence DESC LIMIT 1",
                 alert.tx.id))
         .isEqualTo("DECLINE/DECLINE/SENIOR_OVERRIDE");
+  }
+
+  @Test
+  void concurrentDecidesOnOneAlertWithDifferentKeysAcceptExactlyOne() throws Exception {
+    // P1: the entry lock and the one-live-decision backstop.
+    Alert alert = heldNow();
+    Session first = as("ANALYST");
+    Session second = as("ANALYST");
+    java.util.concurrent.ExecutorService pool =
+        java.util.concurrent.Executors.newFixedThreadPool(2);
+    try {
+      java.util.concurrent.Future<Http.Response> a =
+          pool.submit(
+              () ->
+                  post(
+                      first,
+                      "/api/v1/alerts/" + alert.id + "/decisions",
+                      decision("CONFIRM_FRAUD", 0),
+                      UUID.randomUUID()));
+      java.util.concurrent.Future<Http.Response> b =
+          pool.submit(
+              () ->
+                  post(
+                      second,
+                      "/api/v1/alerts/" + alert.id + "/decisions",
+                      decision("MARK_LEGITIMATE", 0),
+                      UUID.randomUUID()));
+      List<Integer> statuses = List.of(a.get().status(), b.get().status());
+      assertThat(statuses).containsExactlyInAnyOrder(202, 409);
+    } finally {
+      pool.shutdown();
+    }
+    assertThat(
+            one(
+                "SELECT count(*) FROM fraudshield.alert_decisions WHERE alert_queue_entry_id = ?",
+                alert.id))
+        .isEqualTo("1");
+  }
+
+  @Test
+  void operatorResolutionIsAppliedByTheResolverAndEndsTheContest() {
+    // P8a, P9: the SQL function authorises and records; the resolver applies it through the owner.
+    Alert alert = highBlocked();
+    tenantWrite(
+        BANK,
+        """
+        INSERT INTO fraudshield.decision_owners (institution_id, transaction_id, first_event_id,
+          first_decision, sequence, decision, decided_by, contested_since)
+        SELECT institution_id, transaction_id, event_id, decision, 1, decision, 'MODEL', now()
+        FROM fraudshield.decision_states WHERE transaction_id = ?
+        """,
+        alert.tx.id);
+    Account officer = createAccount(BANK, "RISK_OFFICER", "ACTIVE");
+    Object resolution =
+        query(
+            "SELECT fraudshield.resolve_contested_decision(?, 'APPROVE', ?,"
+                + " 'Two first decisions; the bank was told DECLINE')",
+            alert.tx.id,
+            officer.id());
+    assertThat(resolution).isNotNull();
+    eventually(
+        "the resolver",
+        () ->
+            "APPLIED"
+                .equals(
+                    one(
+                        "SELECT outcome FROM fraudshield.transaction_requests WHERE kind ="
+                            + " 'RESOLVE' AND transaction_id = ?",
+                        alert.tx.id)));
+    assertThat(
+            one(
+                "SELECT decision || '/' || decided_by || '/' || array_to_string(reason_codes, ',')"
+                    + " FROM fraudshield.v_decision_states WHERE transaction_id = ? ORDER BY"
+                    + " decision_sequence DESC LIMIT 1",
+                alert.tx.id))
+        .isEqualTo("APPROVE/SENIOR_OVERRIDE/CONTEST_RESOLVED");
+    assertThat(
+            one(
+                "SELECT contested_since IS NULL FROM fraudshield.decision_owners WHERE"
+                    + " transaction_id = ?",
+                alert.tx.id))
+        .isEqualTo("true");
+    assertThat(one("SELECT status FROM fraudshield.alert_queue_entries WHERE id = ?", alert.id))
+        .isEqualTo("OVERRIDDEN");
   }
 }

@@ -4,7 +4,6 @@ import io.github.mariusbayizere.fraudshield.common.config.MediumTimeoutPolicy;
 import io.github.mariusbayizere.fraudshield.decision.domain.DecisionValue;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -38,8 +37,6 @@ public sealed interface OwnerRequest {
    *     before V81 (§4.2 point 5)
    * @param basisDecision its value, or null with the event id
    * @param basisDeadline the deadline the hold was scheduled for
-   * @param basisDecidedAt when that decision was made, or null
-   * @param basisReasons its reason codes
    * @param policy the hold's policy
    * @param channel the transaction's channel, for the timeout-release metric
    */
@@ -47,14 +44,11 @@ public sealed interface OwnerRequest {
       UUID basisEventId,
       DecisionValue basisDecision,
       Instant basisDeadline,
-      Instant basisDecidedAt,
-      List<String> basisReasons,
       MediumTimeoutPolicy policy,
       String channel)
       implements OwnerRequest {
-    /** Copies the reasons. */
+    /** Requires the policy. */
     public Timeout {
-      basisReasons = basisReasons == null ? List.of() : List.copyOf(basisReasons);
       Objects.requireNonNull(policy, "policy");
     }
 

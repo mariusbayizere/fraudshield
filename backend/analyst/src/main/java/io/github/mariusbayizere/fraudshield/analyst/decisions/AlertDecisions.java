@@ -32,9 +32,15 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Supplier;
 import javax.sql.DataSource;
+import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.dao.QueryTimeoutException;
+import org.springframework.jdbc.UncategorizedSQLException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceUtils;
 
@@ -182,7 +188,7 @@ public final class AlertDecisions {
       String comment,
       long alertVersion,
       byte[] fingerprint) {
-    return tenants.inTenant(
+    return inTenant(
         caller.institutionId(),
         () -> {
           bound();
@@ -211,28 +217,32 @@ public final class AlertDecisions {
           Instant undoUntil;
           try {
             undoUntil =
-                jdbc.queryForObject(
-                        """
-                        INSERT INTO alert_decisions (id, institution_id, alert_queue_entry_id,
-                        analyst_id, decision, analyst_comment, idempotency_key, prior_status,
-                        alert_version, request_fingerprint) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        RETURNING undo_until
-                        """,
-                        Timestamp.class,
-                        decisionId,
-                        caller.institutionId(),
-                        alertId,
-                        caller.userId(),
-                        kind,
-                        comment,
-                        key,
-                        entry.status(),
-                        alertVersion,
-                        fingerprint)
+                Objects.requireNonNull(
+                        jdbc.queryForObject(
+                            """
+                            INSERT INTO alert_decisions (id, institution_id, alert_queue_entry_id,
+                            analyst_id, decision, analyst_comment, idempotency_key, prior_status,
+                            alert_version, request_fingerprint) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            RETURNING undo_until
+                            """,
+                            Timestamp.class,
+                            decisionId,
+                            caller.institutionId(),
+                            alertId,
+                            caller.userId(),
+                            kind,
+                            comment,
+                            key,
+                            entry.status(),
+                            alertVersion,
+                            fingerprint),
+                        "undo_until")
                     .toInstant();
           } catch (DuplicateKeyException e) {
             if (e.getMessage() != null && e.getMessage().contains("live analyst decision")) {
-              throw stale(entry.id());
+              // The transaction is aborted: the problem is built after the rollback (code review
+              // 1, minor 9).
+              throw new StaleAfterRollback(entry.id());
             }
             throw e;
           }
@@ -270,7 +280,7 @@ public final class AlertDecisions {
    */
   public void undo(Caller caller, UUID alertId, UUID decisionId) {
     Optional<HoldSchedulePort.DueHold> reschedule =
-        tenants.inTenant(
+        inTenant(
             caller.institutionId(),
             () -> {
               bound();
@@ -318,10 +328,16 @@ public final class AlertDecisions {
                     "Undo window expired",
                     "The decision can no longer be undone");
               }
-              submit(
-                  caller.institutionId(),
-                  entry.transactionId(),
-                  new OwnerRequest.Release(decisionId));
+              DecisionOwner.Result released =
+                  submit(
+                      caller.institutionId(),
+                      entry.transactionId(),
+                      new OwnerRequest.Release(decisionId));
+              if (released.outcome() != Verdict.Outcome.CLAIMED) {
+                // The claim is not this decision's any more: a resolution cleared it, and reopening
+                // the entry would leave one nothing can decide (D2(a); code review 1, MAJOR 5).
+                throw new StaleAfterRollback(entry.id());
+              }
               jdbc.update(
                   "UPDATE alert_queue_entries SET status = ?, version = version + 1 WHERE id = ?",
                   found.getFirst().get("prior_status"),
@@ -360,7 +376,7 @@ public final class AlertDecisions {
         fingerprint(
             "escalate", alertId.toString(), target.name(), reason, Long.toString(alertVersion));
     Escalated escalated =
-        tenants.inTenant(
+        inTenant(
             caller.institutionId(),
             () -> {
               bound();
@@ -443,7 +459,7 @@ public final class AlertDecisions {
                   held ? heldAt(caller.institutionId(), entry.transactionId()) : Optional.empty());
             });
     escalated.reschedule().ifPresent(this::reschedule);
-    return tenants.inTenant(
+    return inTenant(
         caller.institutionId(),
         () ->
             alerts
@@ -485,7 +501,7 @@ public final class AlertDecisions {
             reason,
             Long.toString(alertVersion));
     Overridden overridden =
-        tenants.inTenant(
+        inTenant(
             caller.institutionId(),
             () -> {
               bound();
@@ -772,9 +788,52 @@ public final class AlertDecisions {
     try {
       return owner.submit(c, institutionId, transactionId, request);
     } catch (SQLException e) {
-      throw new IllegalStateException("the owner request failed: " + e.getSQLState(), e);
+      // Translated, so the runner sees a 40001 or 40P01 and retries it, and a timeout reaches
+      // inTenant's mapping to 503 (code review 1, MAJOR 1).
+      DataAccessException translated =
+          jdbc.getExceptionTranslator().translate("the owner request", null, e);
+      throw translated != null
+          ? translated
+          : new UncategorizedSQLException("the owner request", null, e);
     } finally {
       DataSourceUtils.releaseConnection(c, dataSource);
+    }
+  }
+
+  /**
+   * One runner transaction with §2's bounds. A lock or statement timeout, or a lost connection,
+   * answers 503 with Retry-After, as §2 requires; a stale alert detected in an aborted transaction
+   * is answered from a fresh one.
+   */
+  private <T> T inTenant(UUID institutionId, Supplier<T> work) {
+    try {
+      return tenants.inTenant(
+          institutionId,
+          () -> {
+            bound();
+            return work.get();
+          });
+    } catch (StaleAfterRollback stale) {
+      throw tenants.inTenant(institutionId, () -> stale(stale.alertId()));
+    } catch (PessimisticLockingFailureException
+        | QueryTimeoutException
+        | DataAccessResourceFailureException unavailable) {
+      throw ProblemException.serviceUnavailable(1);
+    }
+  }
+
+  /** A stale alert found where the transaction can no longer read it. */
+  private static final class StaleAfterRollback extends RuntimeException {
+    private static final long serialVersionUID = 1L;
+    private final UUID alertId;
+
+    StaleAfterRollback(UUID alertId) {
+      super("stale alert " + alertId, null, false, false);
+      this.alertId = alertId;
+    }
+
+    UUID alertId() {
+      return alertId;
     }
   }
 

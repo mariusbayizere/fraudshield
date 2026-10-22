@@ -11,7 +11,6 @@ import io.github.mariusbayizere.fraudshield.decision.owner.Verdict.Outcome;
 import io.github.mariusbayizere.fraudshield.decision.owner.Verdict.Refusal;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -71,13 +70,7 @@ class OwnerRulesTest {
 
   private static OwnerRequest.Timeout timeout(DecisionValue basis) {
     return new OwnerRequest.Timeout(
-        UUID.randomUUID(),
-        basis,
-        DEADLINE,
-        NOW,
-        List.of(),
-        MediumTimeoutPolicy.RELEASE_WITH_TIMEOUT_LABEL,
-        "CARD");
+        UUID.randomUUID(), basis, DEADLINE, MediumTimeoutPolicy.RELEASE_WITH_TIMEOUT_LABEL, "CARD");
   }
 
   private static Verdict evaluate(OwnerState o, OwnerRequest r, Instant at) {
@@ -96,6 +89,7 @@ class OwnerRulesTest {
     assertThat(due.outcome()).isEqualTo(Outcome.APPLIED);
     assertThat(due.transition().value()).isEqualTo(DecisionValue.TIMEOUT_RELEASE);
     assertThat(due.transition().by()).isEqualTo(DecidedBy.TIMEOUT_POLICY);
+    assertThat(due.transition().reasons()).containsExactly("REVIEW_TIMEOUT");
     assertThat(due.closeEntries()).isEqualTo(Verdict.Closing.TIMEOUT);
     assertThat(due.owner().sequence()).isEqualTo(2);
     assertThat(due.owner().claim()).isEqualTo(Claim.NONE);
@@ -121,8 +115,9 @@ class OwnerRulesTest {
             null,
             null,
             null);
-    assertThat(evaluate(o, timeout(DecisionValue.HOLD), DEADLINE).transition().value())
-        .isEqualTo(DecisionValue.DECLINE);
+    Verdict declined = evaluate(o, timeout(DecisionValue.HOLD), DEADLINE);
+    assertThat(declined.transition().value()).isEqualTo(DecisionValue.DECLINE);
+    assertThat(declined.transition().reasons()).containsExactly("REVIEW_TIMEOUT_DECLINED");
   }
 
   @Test

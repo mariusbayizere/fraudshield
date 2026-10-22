@@ -110,10 +110,26 @@ public final class DecisionOwner {
       + 1 WHERE transaction_id = ? AND status IN ('PENDING', 'IN_REVIEW') RETURNING id, created_at
       """;
 
+  /**
+   * The entry of the analyst decision whose claim a RESOLVE clears: it is not open, so it is not
+   * closed, but it names the resolution so that an undo inside the window is refused (D2(a); code
+   * review 1, MAJOR 5).
+   */
+  private static final String STAMP_CLAIMED_ENTRY =
+      """
+      UPDATE alert_queue_entries SET resolution_id = ? WHERE id = (SELECT alert_queue_entry_id
+      FROM alert_decisions WHERE id = ?)
+      """;
+
+  /**
+   * One AUTO_* row per entry, by V81's partial unique index, with a random idempotency key: a key
+   * derived from ids an analyst sees could be pre-empted by a client's Idempotency-Key (code review
+   * 1, minor 10).
+   */
   private static final String INSERT_AUTO_DECISION =
       """
       INSERT INTO alert_decisions (institution_id, alert_queue_entry_id, decision, idempotency_key)
-      VALUES (?, ?, ?, ?) ON CONFLICT (institution_id, idempotency_key) DO NOTHING
+      VALUES (?, ?, ?, gen_random_uuid()) ON CONFLICT DO NOTHING
       """;
 
   private static final String INSERT_UNBLOCK =
@@ -177,7 +193,6 @@ public final class DecisionOwner {
    */
   public Result submit(Connection c, UUID institutionId, UUID transactionId, OwnerRequest request)
       throws SQLException {
-    Instant now = dbTime(c);
     if (request instanceof OwnerRequest.Timeout || request instanceof OwnerRequest.Resolve) {
       lockOpenEntries(c, transactionId);
     }
@@ -189,6 +204,9 @@ public final class DecisionOwner {
         return stored.get();
       }
     }
+    // DB time is read once the row is locked, so a request that waited for the lock is judged at
+    // the moment it is evaluated (code review 1, minor 1).
+    Instant now = dbTime(c);
     if (locked.isEmpty()) {
       if (request instanceof OwnerRequest.Customer customer && !customer.wasMe()) {
         return labelWithoutOwner(c, institutionId, transactionId, customer, requestId, now);
@@ -522,9 +540,10 @@ public final class DecisionOwner {
     UUID newest = null;
     Instant newestAt = null;
     boolean declined = verdict.transition().value() == DecisionValue.DECLINE;
-    String sql = verdict.closeEntries() == Closing.TIMEOUT ? CLOSE_ON_TIMEOUT : CLOSE_ON_RESOLVE;
-    try (PreparedStatement s = c.prepareStatement(sql)) {
-      if (verdict.closeEntries() == Closing.TIMEOUT) {
+    boolean timeout = verdict.closeEntries() == Closing.TIMEOUT;
+    try (PreparedStatement s =
+        timeout ? c.prepareStatement(CLOSE_ON_TIMEOUT) : c.prepareStatement(CLOSE_ON_RESOLVE)) {
+      if (timeout) {
         s.setString(1, declined ? "AUTO_DECLINED" : "AUTO_RELEASED");
       } else {
         s.setObject(1, ((OwnerRequest.Resolve) request).resolutionId());
@@ -542,12 +561,18 @@ public final class DecisionOwner {
         }
       }
     }
+    if (verdict.closeEntries() == Closing.RESOLVE && o.claimDecisionId() != null) {
+      try (PreparedStatement s = c.prepareStatement(STAMP_CLAIMED_ENTRY)) {
+        s.setObject(1, ((OwnerRequest.Resolve) request).resolutionId());
+        s.setObject(2, o.claimDecisionId());
+        s.executeUpdate();
+      }
+    }
     if (verdict.closeEntries() == Closing.TIMEOUT && newest != null) {
       try (PreparedStatement s = c.prepareStatement(INSERT_AUTO_DECISION)) {
         s.setObject(1, o.institutionId());
         s.setObject(2, newest);
         s.setString(3, declined ? "AUTO_BLOCKED" : "AUTO_RELEASED");
-        s.setObject(4, OwnerIds.autoDecisionKey(requestId));
         s.executeUpdate();
       }
     }
@@ -641,7 +666,7 @@ public final class DecisionOwner {
         return false;
       }
       if (record.decision() != k.decision()) {
-        lockOrCreateForSink(c, inst, txn);
+        createFromFirst(c, inst, txn);
         Optional<OwnerState> created = selectOwner(c, inst, txn);
         if (created.isPresent()) {
           contest(c, created.get(), contestOf(record, "SINK"), now);
@@ -683,7 +708,7 @@ public final class DecisionOwner {
     }
     UUID timeout =
         new OwnerRequest.Timeout(
-                null, null, null, null, null, MediumTimeoutPolicy.RELEASE_WITH_TIMEOUT_LABEL, null)
+                null, null, null, MediumTimeoutPolicy.RELEASE_WITH_TIMEOUT_LABEL, null)
             .requestId(inst, txn);
     String timedOut = null;
     try (PreparedStatement s =
@@ -709,7 +734,6 @@ public final class DecisionOwner {
         s.setObject(1, inst);
         s.setObject(2, entryId);
         s.setString(3, declined ? "AUTO_BLOCKED" : "AUTO_RELEASED");
-        s.setObject(4, OwnerIds.autoDecisionKey(timeout));
         s.executeUpdate();
       }
     } else if (owner.get().resolutionId() != null) {
@@ -722,10 +746,6 @@ public final class DecisionOwner {
         s.executeUpdate();
       }
     }
-  }
-
-  private void lockOrCreateForSink(Connection c, UUID inst, UUID txn) throws SQLException {
-    createFromFirst(c, inst, txn);
   }
 
   /**

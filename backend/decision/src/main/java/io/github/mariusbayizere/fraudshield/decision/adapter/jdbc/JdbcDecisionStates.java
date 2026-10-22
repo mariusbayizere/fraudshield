@@ -54,6 +54,9 @@ public final class JdbcDecisionStates {
     try (Connection c = dataSource.getConnection()) {
       c.setAutoCommit(false);
       c.setReadOnly(true);
+      // One snapshot for both statements, so a contest committed between them cannot be missed
+      // (code review 1, minor 8).
+      c.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
       try {
         Tenant.use(c, institutionId);
         boolean contested;

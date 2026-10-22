@@ -101,4 +101,16 @@ public final class MicrometerDecisionMetrics implements DecisionMetrics {
   public void holdLateness(long lateMillis) {
     lateness.record(lateMillis);
   }
+
+  /**
+   * The live signal of a PostgreSQL outage (decision-owner contract §7.4, ADR 0111): every hold
+   * whose TIMEOUT request failed or found no first decision, rescheduled 1 s later.
+   */
+  @Override
+  public void holdRequestRetried() {
+    Counter.builder("fs_hold_requests_rescheduled_total")
+        .description("Hold timeouts rescheduled because their owner request failed (ADR 0111)")
+        .register(registry)
+        .increment();
+  }
 }

@@ -127,7 +127,16 @@ class AnalystInspectorTest extends AnalystIntegrationTest {
     return operations;
   }
 
-  private static void inspect(
+  /**
+   * Inspects one response body; the decision operations' tests call it on their bodies too.
+   *
+   * @param operation the operation, for messages
+   * @param path the JSON path so far
+   * @param field the member's name, or null
+   * @param node the node
+   * @param problems where problems are added
+   */
+  static void inspect(
       String operation, String path, String field, JsonNode node, List<String> problems) {
     if (node.isObject()) {
       for (Map.Entry<String, JsonNode> member : node.properties()) {

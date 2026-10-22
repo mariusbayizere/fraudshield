@@ -37,8 +37,6 @@ public final class OwnerHoldTimeouts implements HoldOwnerPort {
             hold.eventId(),
             hold.eventId() == null ? null : DecisionValue.HOLD,
             hold.deadline(),
-            hold.decidedAt(),
-            hold.reasonCodes(),
             hold.policy(),
             hold.channel());
     DecisionOwner.Result result;

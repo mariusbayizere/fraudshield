@@ -6,6 +6,7 @@ import io.github.mariusbayizere.fraudshield.decision.domain.DecidedBy;
 import io.github.mariusbayizere.fraudshield.decision.domain.Decision;
 import io.github.mariusbayizere.fraudshield.decision.domain.DecisionState;
 import io.github.mariusbayizere.fraudshield.decision.domain.DecisionValue;
+import io.github.mariusbayizere.fraudshield.decision.domain.ReasonCodes;
 import io.github.mariusbayizere.fraudshield.decision.domain.Transaction;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -285,12 +286,31 @@ public final class KafkaMessages {
     }
   }
 
-  private static String changeAction(DecisionState s) {
+  /**
+   * The audit action of a later state (decision-owner contract §5.1, §14): a human's confirmation
+   * of a decline, an analyst overruling a customer's "yes" and a resolution each have their own, so
+   * a payment that was never held is never audited as a hold decision.
+   */
+  static String changeAction(DecisionState s) {
+    if (s.reasonCodes().contains(ReasonCodes.CONTEST_RESOLVED)) {
+      return "CONTEST_RESOLVED";
+    }
+    boolean confirms =
+        s.decision() == DecisionValue.DECLINE && s.supersedes() == DecisionValue.DECLINE;
     return switch (s.decidedBy()) {
       case TIMEOUT_POLICY ->
           s.decision() == DecisionValue.TIMEOUT_RELEASE ? "TIMEOUT_RELEASE" : "TIMEOUT_DECLINE";
       case CUSTOMER_VERIFICATION -> "BLOCK_LIFTED";
-      case ANALYST -> s.decision() == DecisionValue.APPROVE ? "HOLD_APPROVED" : "HOLD_DECLINED";
+      case ANALYST -> {
+        if (confirms) {
+          yield "DECLINE_CONFIRMED";
+        }
+        if (s.supersedes() == DecisionValue.APPROVE) {
+          yield "CUSTOMER_APPROVAL_OVERRULED";
+        }
+        yield s.decision() == DecisionValue.APPROVE ? "HOLD_APPROVED" : "HOLD_DECLINED";
+      }
+      case SENIOR_OVERRIDE -> confirms ? "DECLINE_CONFIRMED" : "DECISION_" + s.decision().name();
       default -> "DECISION_" + s.decision().name();
     };
   }

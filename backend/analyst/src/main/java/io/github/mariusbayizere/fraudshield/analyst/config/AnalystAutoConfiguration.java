@@ -18,6 +18,8 @@ import io.github.mariusbayizere.fraudshield.decision.application.port.CircuitBre
 import io.github.mariusbayizere.fraudshield.decision.application.port.HoldSchedulePort;
 import io.github.mariusbayizere.fraudshield.decision.owner.DecisionOwner;
 import io.github.mariusbayizere.fraudshield.decision.owner.RequestRecorder;
+import io.micrometer.core.instrument.FunctionCounter;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.ObjectProvider;
@@ -91,17 +93,31 @@ public class AnalystAutoConfiguration {
         AuditLog audit,
         ObjectProvider<CircuitBreakerPort> breakers,
         ObjectProvider<HoldSchedulePort> holds,
-        ObjectProvider<Clock> clock) {
-      return new DecisionWorkers(
-          tenants,
-          jdbc,
-          dataSource,
-          owner,
-          recorder,
-          audit,
-          breakers.getIfAvailable(),
-          holds.getIfAvailable(),
-          clock.getIfAvailable(Clock::systemUTC));
+        ObjectProvider<Clock> clock,
+        ObjectProvider<MeterRegistry> registry) {
+      DecisionWorkers workers =
+          new DecisionWorkers(
+              tenants,
+              jdbc,
+              dataSource,
+              owner,
+              recorder,
+              audit,
+              breakers.getIfAvailable(),
+              holds.getIfAvailable(),
+              clock.getIfAvailable(Clock::systemUTC));
+      registry.ifAvailable(
+          meters -> {
+            FunctionCounter.builder(
+                    "fs_analyst_effects_failed_total", workers, DecisionWorkers::effectFailures)
+                .description("Analyst effects recorded FAILED (decision-owner contract D4(e))")
+                .register(meters);
+            FunctionCounter.builder(
+                    "fs_analyst_commit_failures_total", workers, DecisionWorkers::commitFailures)
+                .description("Analyst commits that failed and were left for the next run (D3)")
+                .register(meters);
+          });
+      return workers;
     }
 
     @Bean

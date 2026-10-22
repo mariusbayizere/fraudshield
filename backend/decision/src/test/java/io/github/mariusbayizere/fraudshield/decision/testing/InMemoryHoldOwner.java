@@ -1,11 +1,13 @@
 package io.github.mariusbayizere.fraudshield.decision.testing;
 
+import io.github.mariusbayizere.fraudshield.common.config.MediumTimeoutPolicy;
 import io.github.mariusbayizere.fraudshield.decision.application.event.DecisionEvent;
 import io.github.mariusbayizere.fraudshield.decision.application.port.HoldOwnerPort;
 import io.github.mariusbayizere.fraudshield.decision.application.port.HoldSchedulePort;
+import io.github.mariusbayizere.fraudshield.decision.domain.DecidedBy;
 import io.github.mariusbayizere.fraudshield.decision.domain.DecisionState;
 import io.github.mariusbayizere.fraudshield.decision.domain.DecisionValue;
-import io.github.mariusbayizere.fraudshield.decision.domain.HoldTimeout;
+import io.github.mariusbayizere.fraudshield.decision.domain.ReasonCodes;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.HashMap;
@@ -69,7 +71,20 @@ public final class InMemoryHoldOwner implements HoldOwnerPort {
     if (now.isBefore(deadline)) {
       return new Answer(Next.RESCHEDULE, deadline, null);
     }
-    DecisionState next = HoldTimeout.resolve(latest, hold.policy(), now);
+    boolean decline = hold.policy() == MediumTimeoutPolicy.DECLINE_AND_VERIFY;
+    DecisionState next =
+        DecisionState.succeeding(
+            latest.institutionId(),
+            latest.transactionId(),
+            latest.sequence(),
+            latest.decision(),
+            latest.decidedBy(),
+            UUID.randomUUID(),
+            decline ? DecisionValue.DECLINE : DecisionValue.TIMEOUT_RELEASE,
+            DecidedBy.TIMEOUT_POLICY,
+            now,
+            List.of(decline ? ReasonCodes.REVIEW_TIMEOUT_DECLINED : ReasonCodes.REVIEW_TIMEOUT),
+            false);
     ports.record(List.of(new DecisionEvent.DecisionChanged(next, hold.channel(), null)));
     ports.save(next);
     return new Answer(Next.APPLIED, null, next);

@@ -83,7 +83,7 @@ public final class RedisHoldSchedule implements HoldSchedulePort {
     String id = hold.institutionId() + "|" + hold.transactionId();
     String member =
         id + "|" + hold.channel() + "|" + hold.policy() + "|" + hold.deadline().toEpochMilli();
-    if (hold.eventId() != null) {
+    if (hold.eventId() != null && hold.decidedAt() != null) {
       // The HOLD's own state (decision-owner contract §4.2). Reason codes are [A-Z0-9_]: no
       // separator can occur in them.
       member +=

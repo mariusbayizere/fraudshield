@@ -400,7 +400,7 @@ The owner evaluates each request against the row it has locked. **Two checks app
 
 | Request | From | Applies when | Outcome and writes | Otherwise |
 |---|---|---|---|---|
-| **TIMEOUT** (basis: the hold's first decision and policy). Checked in this order: contested; basis against `first_decision`; HOLD; claim; deadline (review 1, finding 5) | the poller, the local fallback, the overdue sweep | `decision` = HOLD; `claim` ≠ ANALYST; DB time ≥ `deadline`; the basis's decision value equals `first_decision` | APPLIED: HOLD → TIMEOUT_RELEASE or DECLINE by TIMEOUT_POLICY, from `timeout_policy`. `claim` → NONE. Closes every open entry of the transaction, and every entry whose analyst decision's effect is FAILED and released, as AUTO_RELEASED or AUTO_DECLINED, `version + 1`, and writes one AUTO_RELEASED or AUTO_BLOCKED decision row on the newest, with an idempotency key from the request id | **DB time < `deadline`:** REFUSED, reschedule at `deadline`. **Claim ANALYST, or not HOLD:** REFUSED, drop. **Basis value ≠ `first_decision`:** the basis is recorded as a second first decision (§7.1), and the hold is dropped. Nothing is written to `transaction_requests` |
+| **TIMEOUT** (basis: the hold's first decision and policy). Checked in this order: contested; basis against `first_decision`; HOLD; claim; deadline (review 1, finding 5) | the poller, the local fallback, the overdue sweep | `decision` = HOLD; `claim` ≠ ANALYST; DB time ≥ `deadline`; the basis's decision value equals `first_decision` | APPLIED: HOLD → TIMEOUT_RELEASE or DECLINE by TIMEOUT_POLICY, from `timeout_policy`. `claim` → NONE. Closes every open entry of the transaction, and every entry whose analyst decision's effect is FAILED and released, as AUTO_RELEASED or AUTO_DECLINED, `version + 1`, and writes one AUTO_RELEASED or AUTO_BLOCKED decision row on the newest, made unique per entry by an index, with a random idempotency key (code review 1, minor 10: a key derived from ids an analyst sees could be pre-empted by a client's Idempotency-Key) | **DB time < `deadline`:** REFUSED, reschedule at `deadline`. **Claim ANALYST, or not HOLD:** REFUSED, drop. **Basis value ≠ `first_decision`:** the basis is recorded as a second first decision (§7.1), and the hold is dropped. Nothing is written to `transaction_requests` |
 | **CLAIM** (an analyst decision) | D1 | `claim` is NONE or ESCALATED; for HOLD, DB time < `deadline` | `claim` → ANALYST, `claim_decision_id` set, the replaced claim and deadline kept in `prior_claim`, `prior_deadline`. No request row | 409 by D1 |
 | **RELEASE** (an undo) | D2 | `claim_decision_id` is this decision | `claim` and `deadline` restored from `prior_*`. No request row | nothing to do |
 | **EFFECT** (a committed analyst decision) | the effects worker, D4 | `claim_decision_id` is this decision | See EFFECT's rows below. `claim` → NONE | **The claim was cleared by a RESOLVE:** LABEL_ONLY, reason `claim-lost`. The analyst's label is recorded and its state is not applied (review 1, finding 8) |
@@ -449,6 +449,8 @@ SKIPPED or FAILED (review 4, finding 3).
    here, `ON CONFLICT (auto_block_event_id) DO NOTHING`: a pre-V81 answer's row already exists.
 4. **Already approved.** If `decision` is APPROVE or TIMEOUT_RELEASE, the outcome is **LABEL_ONLY**: a
    LEGITIMATE label, and no unblock row.
+5. **Held.** The customer path follows an auto-block, so it never meets a HOLD. If it did, the answer
+   is **DEFERRED**, never refused for good (code review 1, minor 13).
 
 **The block record after a re-decline** (review 1, finding 17). `unblock_events` is append-only,
 so a customer's lift stays recorded after a human re-declines. V81 therefore adds
@@ -615,13 +617,12 @@ In the transaction that writes a MEDIUM `AlertRaised`, `PostgresSink`:
    locks it;
 3. if the owner's `decision` is no longer HOLD (a TIMEOUT or a RESOLVE has already applied), it
    closes the new entry at once:
-   - after a TIMEOUT: the TIMEOUT's outcome, with the AUTO_* row and its request-derived key;
+   - after a TIMEOUT: the TIMEOUT's outcome, with the AUTO_* row, one per entry by its index;
    - after a RESOLVE: OVERRIDDEN.
 
 **Why no entry is left open.** Either the sink holds the row first, so the TIMEOUT waits and its
 UPDATE then sees the committed entry. Or the TIMEOUT holds it first, so the sink waits, then reads
-the new state and closes the entry. The AUTO_* row's key is derived from the request, so it is
-written exactly once.
+the new state and closes the entry. The AUTO_* row is unique per entry by an index, so it is written exactly once.
 
 ### 6.3 The timeout paths
 
@@ -657,8 +658,10 @@ The leader's poller, the local fallback and the overdue sweep are requesters.
     NULL.
 - **`transaction_requests`,** as §4.4 says, including the PRE_V81 markers for every existing
   customer response.
-- **`decision_states.timeout_policy`** for existing rows, from `risk_thresholds` at `decided_at`
-  (§4.2).
+- **`decision_states.timeout_policy` is not backfilled** (corrected after code review 1, minor 7).
+  `decision_states` is append-only, even for the migration's owner, and every pre-V81 HOLD gets an
+  owner row whose `timeout_policy` V81 derives from `risk_thresholds` at `decided_at` (§4.2 point
+  4). The column is NULL on pre-V81 rows, and nothing reads it there.
 - **Analyst decisions.** P2 is the first code to write them, so none are in flight at the cutover.
 
 ### 6.5 Customer verification

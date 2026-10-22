@@ -26,6 +26,7 @@ import javax.sql.DataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
+import org.springframework.jdbc.UncategorizedSQLException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceUtils;
 
@@ -96,9 +97,11 @@ public final class DecisionWorkers {
    */
   public int commitDue() {
     int committed = 0;
-    for (UUID institution : institutions("SELECT * FROM institutions_with_due_commits()")) {
+    for (UUID institution :
+        institutions(
+            () -> jdbc.queryForList("SELECT * FROM institutions_with_due_commits()", UUID.class))) {
       List<UUID> due =
-          tenants.inTenant(
+          inTenant(
               institution,
               () ->
                   jdbc.queryForList(
@@ -117,7 +120,7 @@ public final class DecisionWorkers {
           }
         } catch (RuntimeException failed) {
           commitFailures.incrementAndGet();
-          LOG.warn("decision {} could not be committed; tried again next run", decisionId, failed);
+          LOG.warn("a decision could not be committed; tried again next run", failed);
         }
       }
     }
@@ -125,7 +128,7 @@ public final class DecisionWorkers {
   }
 
   private boolean commit(UUID institution, UUID decisionId) {
-    return tenants.inTenant(
+    return inTenant(
         institution,
         () -> {
           Boolean locked =
@@ -166,9 +169,13 @@ public final class DecisionWorkers {
    */
   public int runEffects() {
     int done = 0;
-    for (UUID institution : institutions("SELECT * FROM institutions_with_pending_effects()")) {
+    for (UUID institution :
+        institutions(
+            () ->
+                jdbc.queryForList(
+                    "SELECT * FROM institutions_with_pending_effects()", UUID.class))) {
       List<Map<String, Object>> pending =
-          tenants.inTenant(
+          inTenant(
               institution,
               () ->
                   jdbc.queryForList(
@@ -201,7 +208,7 @@ public final class DecisionWorkers {
     DecisionOwner.Result result;
     try {
       result =
-          tenants.inTenant(
+          inTenant(
               institution,
               () -> {
                 DecisionOwner.Result r = submit(institution, transactionId, request);
@@ -230,7 +237,7 @@ public final class DecisionWorkers {
       if (state != null && (state.startsWith("22") || state.startsWith("23"))) {
         // D4(e): a permanent failure is recorded FAILED, counted, and the worker moves on.
         effectFailures.incrementAndGet();
-        tenants.inTenant(
+        inTenant(
             institution,
             () ->
                 jdbc.update(
@@ -243,7 +250,7 @@ public final class DecisionWorkers {
                     state,
                     "effect"));
       }
-      LOG.warn("the effect of decision {} failed", decisionId, failed);
+      LOG.warn("an analyst decision's effect failed", failed);
       return false;
     }
     recorder.record(institution, result);
@@ -256,7 +263,7 @@ public final class DecisionWorkers {
       return;
     }
     List<Map<String, Object>> uncounted =
-        tenants.inTenant(
+        inTenant(
             institution,
             () ->
                 jdbc.queryForList(
@@ -280,7 +287,7 @@ public final class DecisionWorkers {
             (UUID) row.get("transaction_id"),
             (String) row.get("merchant_category_code"),
             ((Timestamp) row.get("transaction_timestamp")).toInstant());
-        tenants.inTenant(
+        inTenant(
             institution,
             () ->
                 jdbc.update(
@@ -307,9 +314,12 @@ public final class DecisionWorkers {
   public int applyResolutions() {
     int applied = 0;
     for (UUID institution :
-        institutions("SELECT * FROM institutions_with_unapplied_resolutions()")) {
+        institutions(
+            () ->
+                jdbc.queryForList(
+                    "SELECT * FROM institutions_with_unapplied_resolutions()", UUID.class))) {
       List<Map<String, Object>> unapplied =
-          tenants.inTenant(
+          inTenant(
               institution,
               () ->
                   jdbc.queryForList(
@@ -327,8 +337,7 @@ public final class DecisionWorkers {
           resolve(institution, row);
           applied++;
         } catch (RuntimeException failed) {
-          LOG.warn(
-              "resolution {} could not be applied; tried again next run", row.get("id"), failed);
+          LOG.warn("a resolution could not be applied; tried again next run", failed);
         }
       }
     }
@@ -348,10 +357,15 @@ public final class DecisionWorkers {
                 ((Timestamp) row.get("contested_since")).toInstant())
             : new OwnerRequest.ReleaseFailed(resolutionId, (UUID) row.get("decision_id"));
     DecisionOwner.Result result =
-        tenants.inTenant(
+        inTenant(
             institution,
             () -> {
               DecisionOwner.Result r = submit(institution, transactionId, request);
+              if (r.replay() || r.outcome() == Verdict.Outcome.DEFERRED) {
+                // Another instance applied it, or it waits: its state change is audited once, by
+                // the run that makes it (P20; code review 1, MAJOR 4).
+                return r;
+              }
               audit.record(
                   AuditEvent.of(
                           institution,
@@ -379,7 +393,7 @@ public final class DecisionWorkers {
 
   private void rescheduleHeld(UUID institution, UUID transactionId) {
     List<HoldSchedulePort.DueHold> held =
-        tenants.inTenant(
+        inTenant(
             institution,
             () ->
                 jdbc.query(
@@ -410,9 +424,10 @@ public final class DecisionWorkers {
 
   // -------------------------------------------------------------------------------- helpers
 
-  private List<UUID> institutions(String lister) {
+  /** A lister's institutions; its SQL is a literal at each call site. */
+  private static List<UUID> institutions(java.util.function.Supplier<List<UUID>> lister) {
     try {
-      return new ArrayList<>(jdbc.queryForList(lister, UUID.class));
+      return new ArrayList<>(lister.get());
     } catch (DataAccessException e) {
       LOG.warn("a decision worker's lister failed", e);
       return List.of();
@@ -421,18 +436,32 @@ public final class DecisionWorkers {
 
   private DecisionOwner.Result submit(
       UUID institutionId, UUID transactionId, OwnerRequest request) {
-    jdbc.queryForObject(
-        "SELECT set_config('lock_timeout', '2s', true), set_config('statement_timeout', '5s',"
-            + " true)",
-        Object.class);
     Connection c = DataSourceUtils.getConnection(dataSource);
     try {
       return owner.submit(c, institutionId, transactionId, request);
     } catch (SQLException e) {
-      throw new IllegalStateException(e.getSQLState(), e);
+      // Translated, so the runner retries a 40001 or 40P01 (code review 1, MAJOR 1).
+      DataAccessException translated =
+          jdbc.getExceptionTranslator().translate("the owner request", null, e);
+      throw translated != null
+          ? translated
+          : new UncategorizedSQLException("the owner request", null, e);
     } finally {
       DataSourceUtils.releaseConnection(c, dataSource);
     }
+  }
+
+  /** One runner transaction with §2's lock and statement timeouts (code review 1, minor 11). */
+  private <T> T inTenant(UUID institutionId, java.util.function.Supplier<T> work) {
+    return tenants.inTenant(
+        institutionId,
+        () -> {
+          jdbc.queryForObject(
+              "SELECT set_config('lock_timeout', '2s', true), set_config('statement_timeout',"
+                  + " '5s', true)",
+              Object.class);
+          return work.get();
+        });
   }
 
   private static String sqlState(Throwable error) {

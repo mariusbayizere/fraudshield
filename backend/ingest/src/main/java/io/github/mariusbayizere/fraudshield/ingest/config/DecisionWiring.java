@@ -64,6 +64,7 @@ import io.lettuce.core.RedisClient;
 import io.lettuce.core.TimeoutOptions;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.FunctionCounter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.io.IOException;
@@ -169,14 +170,17 @@ public class DecisionWiring {
 
   @Bean(destroyMethod = "close")
   SpoolDrainer postgresDrainer(
-      DurableSpool spool, DataSource dataSource, FraudShieldProperties properties) {
+      DurableSpool spool,
+      DataSource dataSource,
+      FraudShieldProperties properties,
+      MeterRegistry registry) {
+    PostgresSink sink =
+        new PostgresSink(dataSource, Path.of(properties.spoolDirectory()).resolve("dead-letters"));
+    FunctionCounter.builder("fs_sink_unreserved_states_total", sink, PostgresSink::unreservedStates)
+        .description("Later states the sink dropped: no owner request behind them (contract §6.1)")
+        .register(registry);
     return new SpoolDrainer(
-        spool,
-        POSTGRES_CONSUMER,
-        new PostgresSink(dataSource, Path.of(properties.spoolDirectory()).resolve("dead-letters")),
-        200,
-        Duration.ofMillis(5),
-        Duration.ofSeconds(5));
+        spool, POSTGRES_CONSUMER, sink, 200, Duration.ofMillis(5), Duration.ofSeconds(5));
   }
 
   @Bean
@@ -327,12 +331,23 @@ public class DecisionWiring {
       EventRecorder recorder,
       StatefulRedisConnection<String, String> redis,
       JdbcDecisionStates durable,
-      FraudShieldProperties properties) {
-    return new RequestRecorder(
-        dataSource,
-        transactions,
-        recorder,
-        new RedisDecisionStates(redis, durable, properties.redisTimeout()));
+      FraudShieldProperties properties,
+      MeterRegistry registry) {
+    RequestRecorder requests =
+        new RequestRecorder(
+            dataSource,
+            transactions,
+            recorder,
+            new RedisDecisionStates(redis, durable, properties.redisTimeout()));
+    FunctionCounter.builder(
+            "fs_request_cache_failures_total", requests, RequestRecorder::cacheFailures)
+        .description("Redis state writes that failed and were not retried (contract §4.6)")
+        .register(registry);
+    FunctionCounter.builder(
+            "fs_request_record_failures_total", requests, RequestRecorder::recordFailures)
+        .description("Owner requests the recorder could not record on a run (contract §4.6)")
+        .register(registry);
+    return requests;
   }
 
   /** The bank's poll, PostgreSQL first (§8, ADR 0113). */
@@ -349,18 +364,31 @@ public class DecisionWiring {
   @Bean
   DecisionAlarms decisionAlarms(DataSource dataSource, MeterRegistry registry) {
     DecisionAlarms alarms = new DecisionAlarms(dataSource);
-    for (String alarm : DecisionAlarms.ALARMS) {
-      Gauge.builder("fs_decision_alarm_count", alarms, a -> a.count(alarm))
-          .tag("alarm", alarm)
-          .description("Decision-owner alarm: how many (contract §7.4)")
-          .register(registry);
-      Gauge.builder("fs_decision_alarm_oldest_seconds", alarms, a -> a.oldestSeconds(alarm))
-          .tag("alarm", alarm)
-          .baseUnit("seconds")
-          .description("Decision-owner alarm: the oldest's age (contract §7.4)")
-          .register(registry);
-    }
+    // The names §7.4 gives, which M9's alert rules are written against.
+    Gauge.builder("fs_decisions_contested", alarms, a -> a.count("contested"))
+        .description("Contested transactions (contract §7.4); alert above zero")
+        .register(registry);
+    Gauge.builder(
+            "fs_decisions_contested_oldest_seconds", alarms, a -> a.oldestSeconds("contested"))
+        .baseUnit("seconds")
+        .register(registry);
+    oldest(registry, alarms, "fs_holds_overdue_oldest_seconds", "holds_overdue");
+    oldest(registry, alarms, "fs_customer_answers_deferred_oldest_seconds", "answers_deferred");
+    oldest(registry, alarms, "fs_analyst_effects_oldest_pending_seconds", "effects_pending");
+    Gauge.builder("fs_analyst_claims_failed", alarms, a -> a.count("claims_failed"))
+        .description("ANALYST claims whose effect FAILED (contract §7.4); alert above zero")
+        .register(registry);
+    oldest(registry, alarms, "fs_analyst_commits_overdue_oldest_seconds", "commits_overdue");
+    oldest(registry, alarms, "fs_requests_unrecorded_oldest_seconds", "requests_unrecorded");
     return alarms;
+  }
+
+  private static void oldest(
+      MeterRegistry registry, DecisionAlarms alarms, String name, String alarm) {
+    Gauge.builder(name, alarms, a -> a.oldestSeconds(alarm))
+        .baseUnit("seconds")
+        .description("Decision-owner alarm " + alarm + ": the oldest's age (contract §7.4)")
+        .register(registry);
   }
 
   @Bean
@@ -388,9 +416,16 @@ public class DecisionWiring {
       RequestRecorder recorder,
       HoldSchedulePort holds,
       Clock clock,
-      FraudShieldProperties properties) {
-    return new UnblockReconciler(
-        dataSource, transactions, owner, recorder, holds, properties.instanceId(), clock);
+      FraudShieldProperties properties,
+      MeterRegistry registry) {
+    UnblockReconciler reconciler =
+        new UnblockReconciler(
+            dataSource, transactions, owner, recorder, holds, properties.instanceId(), clock);
+    FunctionCounter.builder(
+            "fs_unblock_reconciler_failures_total", reconciler, UnblockReconciler::failures)
+        .description("Customer answers whose submission failed on a run (contract §6.5)")
+        .register(registry);
+    return reconciler;
   }
 
   @Bean

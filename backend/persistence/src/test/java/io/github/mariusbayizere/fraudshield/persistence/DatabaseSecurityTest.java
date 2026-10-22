@@ -728,6 +728,111 @@ class DatabaseSecurityTest {
   }
 
   @Test
+  void operatorExitsAuthoriseRecordAndAuditForAnActiveRiskOfficerOnly() throws SQLException {
+    // Decision-owner contract §7.2: the SQL functions authorise and record; they evaluate no rule.
+    UUID officer = insertUser(BANK_A, "officer.ops@example.com", "EMPA0201", "RISK_OFFICER");
+    UUID tx = UUID.randomUUID();
+    String login = "op_" + tx.toString().substring(0, 8);
+    try (Connection admin = db.superuser()) {
+      exec(admin, "BEGIN");
+      exec(admin, "SET LOCAL fraudshield.institution_id = '" + BANK_A + "'");
+      exec(
+          admin,
+          "INSERT INTO fraudshield.decision_owners (institution_id, transaction_id,"
+              + " first_event_id, first_decision, sequence, decision, decided_by,"
+              + " contested_since) VALUES ('"
+              + BANK_A
+              + "', '"
+              + tx
+              + "', gen_random_uuid(), 'APPROVE', 1, 'APPROVE', 'MODEL', now())");
+      exec(admin, "COMMIT");
+      exec(admin, "CREATE ROLE " + login + " LOGIN PASSWORD 'op-test' IN ROLE fs_operator");
+      exec(
+          admin,
+          "GRANT CONNECT ON DATABASE "
+              + db.url().substring(db.url().lastIndexOf('/') + 1)
+              + " TO "
+              + login);
+    }
+    String reason = "Two first decisions; the bank was told DECLINE";
+    try (Connection op = java.sql.DriverManager.getConnection(db.url(), login, "op-test")) {
+      String resolution =
+          strings(
+                  op,
+                  "SELECT fraudshield.resolve_contested_decision('"
+                      + tx
+                      + "', 'DECLINE', '"
+                      + officer
+                      + "', '"
+                      + reason
+                      + "')::text")
+              .get(0);
+      assertThat(resolution).isNotNull();
+      assertSqlState(
+          op,
+          "SELECT fraudshield.resolve_contested_decision('"
+              + tx
+              + "', 'DECLINE', '"
+              + analystA
+              + "', '"
+              + reason
+              + "')",
+          PERMISSION_DENIED);
+      assertSqlState(
+          op,
+          "SELECT fraudshield.release_failed_claim(gen_random_uuid(), '"
+              + officer
+              + "', '"
+              + reason
+              + "')",
+          "23514");
+    }
+    try (Connection admin = db.superuser()) {
+      assertThat(
+              strings(
+                  admin,
+                  "SELECT db_login || '/' || kind || '/' || chosen_decision FROM"
+                      + " fraudshield.decision_conflict_resolutions WHERE transaction_id = '"
+                      + tx
+                      + "'"))
+          .containsExactly(login + "/RESOLVE/DECLINE");
+      assertThat(
+              strings(
+                  admin,
+                  "SELECT action FROM fraudshield.audit_events WHERE entity_id = '" + tx + "'"))
+          .containsExactly("RESOLUTION_AUTHORISED");
+    }
+    try (Connection app = db.as("fs_app")) {
+      assertSqlState(
+          app,
+          "SELECT fraudshield.resolve_contested_decision('"
+              + tx
+              + "', 'DECLINE', '"
+              + officer
+              + "', '"
+              + reason
+              + "')",
+          PERMISSION_DENIED);
+      assertThat(strings(app, "SELECT alarm FROM fraudshield.decision_alarm_figures()"))
+          .containsExactlyInAnyOrder(
+              "contested",
+              "holds_overdue",
+              "answers_deferred",
+              "effects_pending",
+              "claims_failed",
+              "commits_overdue",
+              "requests_unrecorded");
+      assertThat(
+              strings(
+                  app,
+                  "SELECT total::text FROM fraudshield.decision_alarm_figures()"
+                      + " WHERE alarm = 'contested'"))
+          .as("counts across institutions, contents never")
+          .containsExactly("1");
+    }
+  }
+
+  @Test
   @Tag("FR-05-07")
   void configurationChangesCannotBeSelfReviewedOrStacked() throws SQLException {
     UUID officerA = insertUser(BANK_A, "risk.a@example.com", "EMPA0101", "RISK_OFFICER");

@@ -8,6 +8,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import io.github.mariusbayizere.fraudshield.common.money.CurrencyCode;
 import io.github.mariusbayizere.fraudshield.common.money.Money;
 import io.github.mariusbayizere.fraudshield.decision.application.event.DecisionEvent;
+import io.github.mariusbayizere.fraudshield.decision.domain.DecidedBy;
+import io.github.mariusbayizere.fraudshield.decision.domain.DecisionValue;
 import io.github.mariusbayizere.fraudshield.decision.domain.Transaction;
 import io.github.mariusbayizere.fraudshield.decision.testing.ContractSchemas;
 import io.github.mariusbayizere.fraudshield.decision.testing.FactScenarios;
@@ -185,5 +187,62 @@ class KafkaMessagesContractTest {
             () -> FactCodec.decode("[{\"type\":\"unknown\"}]".getBytes(StandardCharsets.UTF_8)))
         .isInstanceOf(IllegalArgumentException.class);
     assertThat(Map.of()).isEmpty();
+  }
+
+  @Test
+  void laterStatesAreAuditedByWhatTheyAreNotAsHoldDecisions() {
+    java.util.UUID tx = java.util.UUID.randomUUID();
+    io.github.mariusbayizere.fraudshield.decision.domain.DecisionState declined =
+        io.github.mariusbayizere.fraudshield.decision.domain.DecisionState.initial(
+            Fixtures.INSTITUTION,
+            tx,
+            io.github.mariusbayizere.fraudshield.decision.domain.Decision.DECLINE,
+            Fixtures.NOW,
+            java.util.List.of(),
+            null);
+    assertThat(
+            KafkaMessages.changeAction(later(declined, DecisionValue.DECLINE, DecidedBy.ANALYST)))
+        .isEqualTo("DECLINE_CONFIRMED");
+    assertThat(
+            KafkaMessages.changeAction(
+                later(declined, DecisionValue.DECLINE, DecidedBy.SENIOR_OVERRIDE)))
+        .isEqualTo("DECLINE_CONFIRMED");
+    io.github.mariusbayizere.fraudshield.decision.domain.DecisionState lifted =
+        later(declined, DecisionValue.APPROVE, DecidedBy.CUSTOMER_VERIFICATION);
+    assertThat(KafkaMessages.changeAction(lifted)).isEqualTo("BLOCK_LIFTED");
+    assertThat(KafkaMessages.changeAction(later(lifted, DecisionValue.DECLINE, DecidedBy.ANALYST)))
+        .isEqualTo("CUSTOMER_APPROVAL_OVERRULED");
+    io.github.mariusbayizere.fraudshield.decision.domain.DecisionState resolved =
+        io.github.mariusbayizere.fraudshield.decision.domain.DecisionState.succeeding(
+            Fixtures.INSTITUTION,
+            tx,
+            1,
+            DecisionValue.DECLINE,
+            DecidedBy.MODEL,
+            java.util.UUID.randomUUID(),
+            DecisionValue.APPROVE,
+            DecidedBy.SENIOR_OVERRIDE,
+            Fixtures.NOW,
+            java.util.List.of("CONTEST_RESOLVED"),
+            true);
+    assertThat(KafkaMessages.changeAction(resolved)).isEqualTo("CONTEST_RESOLVED");
+  }
+
+  private static io.github.mariusbayizere.fraudshield.decision.domain.DecisionState later(
+      io.github.mariusbayizere.fraudshield.decision.domain.DecisionState current,
+      DecisionValue value,
+      DecidedBy by) {
+    return io.github.mariusbayizere.fraudshield.decision.domain.DecisionState.succeeding(
+        current.institutionId(),
+        current.transactionId(),
+        current.sequence(),
+        current.decision(),
+        current.decidedBy(),
+        java.util.UUID.randomUUID(),
+        value,
+        by,
+        Fixtures.NOW,
+        java.util.List.of(),
+        false);
   }
 }
