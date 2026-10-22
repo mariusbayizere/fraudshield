@@ -1013,6 +1013,37 @@ inside it.
 - **Nowhere yet:** latency over real mobile networks, and a fan-out at production volume across
   several instances.
 
+## Implementation notes (P2)
+
+Where the implementation departs from, or settles, the text above. Each is the author's choice
+during P2; the owner may overrule.
+- **`top_reasons` on `fs.alerts.*` carries the whole `ShapContribution`** (`feature`, `value`,
+  `shap`, `direction`, `template_key`), not three fields. Point 6.1 said the fan-out derives
+  `direction` and `template_key` "exactly as the reads do", but the reads derive nothing: both come
+  from the scorer (`ScoringContract.java:176-177`) and are stored in `shap_top5`. `template_key`
+  cannot be derived, so `alert.schema.json` carries it, and a contract test checks each item equals
+  `ShapContribution`.
+- **`merchant` is always null today, on the push and on the read.** The ingest request's
+  `merchant_name` is validated (`RequestValidator.java:136`) but never carried to the transaction
+  or written to `transactions.merchant_name`, so `listAlerts` answers null for every entry.
+  `AlertRaised` therefore carries `merchant: null`, which keeps the pushed card equal to the read
+  card. Carrying the name through is PB-161.
+- **`anomaly_score` under the fallback** was already omitted by M6 (`DecisionService` passes null
+  when the fallback decided), so that change was not needed; a test of the mapped card covers it.
+- **`escalated_by_user_id`** is the author of the ESCALATE decision that created the entry
+  (`escalated_to_alert_id`), where `listAlerts` matches any ESCALATE on the parent. They agree
+  because an escalated parent is closed and cannot be escalated again; the push-equals-list test in
+  CI checks it.
+- **The STOMP server is a plain WebSocket handler** (`analyst/realtime/StompEndpoint`): frames are
+  decoded by Spring's `StompDecoder`, outbound frames are written by the session's own virtual
+  thread, and there is no broker or Spring STOMP security interceptor, so no CSRF check runs on
+  CONNECT (point 2).
+- **The figures destination** is accepted and subscribed, and its frames are sent once ADR 0117's
+  computation is merged; until then `/user/queue/figures` carries nothing, which the console's
+  re-read of `getDashboardStats` already covers.
+- **Without Kafka configured,** the endpoint still answers its handshake rules and refuses upgrades
+  with 503, because no consumer is positioned.
+
 ## Requirements: closed, and left open
 
 | Row | What this does | What stays open |
