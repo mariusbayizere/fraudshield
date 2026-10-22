@@ -150,7 +150,8 @@ class AnalystDecisionsTest extends AnalystIntegrationTest {
                     + " transaction_id = ? AND decision_sequence = 2",
                 alert.tx.id))
         .isEqualTo("DECLINE/ANALYST");
-    assertThat(auditActions(UUID.fromString(decisionId))).contains("DECIDED", "COMMITTED");
+    assertThat(auditActions(UUID.fromString(decisionId)))
+        .contains("ANALYST_DECISION/DECIDED", "ANALYST_DECISION/COMMITTED");
   }
 
   @Test

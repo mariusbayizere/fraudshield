@@ -628,7 +628,9 @@ public final class AlertDecisions {
                   reason,
                   originalId,
                   key,
-                  entry.status(),
+                  // An override is never undone, so it has no status to restore; the column takes
+                  // only an open entry's status (V81), and an overridden entry is closed.
+                  null,
                   alertVersion,
                   fingerprint,
                   newDecision);
