@@ -92,17 +92,22 @@ class AnalystInspectorTest extends AnalystIntegrationTest {
     cases.put("getDashboardStats", "/api/v1/dashboard/stats");
     cases.put("getMyPerformance", "/api/v1/me/performance");
     cases.put("getTeamPerformance", "/api/v1/team/performance");
+    cases.put("listAssignableStaff", "/api/v1/team/assignees?purpose=filter");
 
     assertThat(cases.keySet())
         .as("every analyst endpoint has an inspector case")
         .containsExactlyInAnyOrderElementsOf(analystOperations());
 
     Session session = issueSession(createAccount(BANK, "ANALYST", "ACTIVE"));
-    // The team table is for seniors and risk officers (ADR 0117 point 7).
+    // The team table (ADR 0117 point 7) and the assignee list (ADR 0116) are for seniors and risk
+    // officers; the assignee list must never carry e-mail.
     Session senior = issueSession(createAccount(BANK, "SENIOR_ANALYST", "ACTIVE"));
     List<String> problems = new ArrayList<>();
     for (Map.Entry<String, String> entry : cases.entrySet()) {
-      Session caller = "getTeamPerformance".equals(entry.getKey()) ? senior : session;
+      Session caller =
+          "getTeamPerformance".equals(entry.getKey()) || "listAssignableStaff".equals(entry.getKey())
+              ? senior
+              : session;
       Http.Response response = http.get(entry.getValue(), caller.bearer());
       assertThat(response.status()).as(entry.getKey() + " " + response.body()).isEqualTo(200);
       inspect(entry.getKey(), "", null, response.json(), problems);

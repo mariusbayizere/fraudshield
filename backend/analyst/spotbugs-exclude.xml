@@ -21,6 +21,7 @@
       <Class name="io.github.mariusbayizere.fraudshield.analyst.accounts.AccountController"/>
       <Class name="io.github.mariusbayizere.fraudshield.analyst.decisions.DecisionController"/>
       <Class name="io.github.mariusbayizere.fraudshield.analyst.performance.PerformanceController"/>
+      <Class name="io.github.mariusbayizere.fraudshield.analyst.assignments.AssignmentController"/>
     </Or>
     <Or>
       <Bug pattern="SPRING_ENDPOINT"/>

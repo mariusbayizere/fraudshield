@@ -58,6 +58,10 @@ public class AlertController {
           "anomaly", AlertQueries.Queue.ANOMALY,
           "escalated", AlertQueries.Queue.ESCALATED,
           "all", AlertQueries.Queue.ALL);
+  private static final Map<String, AlertQueries.Assignment> ASSIGNMENTS =
+      Map.of(
+          "assigned", AlertQueries.Assignment.ASSIGNED,
+          "unassigned", AlertQueries.Assignment.UNASSIGNED);
   private static final Map<String, AlertQueries.Sort> SORTS =
       Map.of(
           "priority", AlertQueries.Sort.PRIORITY,
@@ -91,7 +95,8 @@ public class AlertController {
    * @param from earliest transaction time, inclusive
    * @param to latest transaction time, exclusive
    * @param tier tiers
-   * @param analystId an analyst who is assigned to or decided the entry
+   * @param analystId an analyst who is assigned to the entry or decided it (not undone)
+   * @param assignment assigned or unassigned (the pool), ADR 0116
    * @param outcome statuses
    * @param sort the order
    * @param cursor cursor
@@ -113,6 +118,7 @@ public class AlertController {
       @RequestParam(required = false) String to,
       @RequestParam(required = false) List<String> tier,
       @RequestParam(name = "analyst_id", required = false) UUID analystId,
+      @RequestParam(required = false) String assignment,
       @RequestParam(required = false) List<String> outcome,
       @RequestParam(defaultValue = "priority") String sort,
       @RequestParam(required = false) @Size(max = 512) String cursor,
@@ -132,6 +138,7 @@ public class AlertController {
             timestamp("to", to),
             members("tier", tier, TIERS),
             analystId,
+            assignment(assignment, analystId),
             members("outcome", outcome, STATUSES),
             choice("sort", sort, SORTS));
     StaffClaims claims = AccessTokens.claims(jwt);
@@ -183,6 +190,19 @@ public class AlertController {
       throw ProblemException.validation(field, "unsupported_value", "Unsupported value");
     }
     return choice;
+  }
+
+  /** ADR 0116 point 7: with {@code analyst_id}, only {@code assigned} is accepted (ASSUMED). */
+  private static AlertQueries.Assignment assignment(String value, UUID analystId) {
+    if (value == null) {
+      return null;
+    }
+    AlertQueries.Assignment assignment = choice("assignment", value, ASSIGNMENTS);
+    if (analystId != null && assignment == AlertQueries.Assignment.UNASSIGNED) {
+      throw ProblemException.validation(
+          "assignment", "unsupported_value", "With analyst_id, only assigned is accepted");
+    }
+    return assignment;
   }
 
   private static List<String> members(String field, List<String> values, Set<String> allowed) {

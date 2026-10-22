@@ -52,6 +52,14 @@ public final class AlertQueries {
     NEWEST
   }
 
+  /** {@code listAlerts}' {@code assignment} filter (ADR 0116 point 7). */
+  public enum Assignment {
+    /** Entries with an assigned analyst. */
+    ASSIGNED,
+    /** Entries with none: the unassigned pool. */
+    UNASSIGNED
+  }
+
   /**
    * The caller, as the escalated queue's filter needs it.
    *
@@ -72,7 +80,9 @@ public final class AlertQueries {
    * @param from earliest transaction time, inclusive, or null
    * @param to latest transaction time, exclusive, or null
    * @param tiers tiers, empty for all
-   * @param analystId an analyst who is assigned to or decided the entry, or null
+   * @param analystId an analyst who is assigned to the entry or made a decision on it that is not
+   *     undone, or null
+   * @param assignment assigned or unassigned entries only, or null for both
    * @param outcomes statuses, empty for entries still awaiting a decision
    * @param sort the order
    */
@@ -87,6 +97,7 @@ public final class AlertQueries {
       Instant to,
       List<String> tiers,
       UUID analystId,
+      Assignment assignment,
       List<String> outcomes,
       Sort sort) {
 
@@ -114,7 +125,9 @@ public final class AlertQueries {
       SELECT e.id, e.version, e.transaction_id, e.tier, e.status, e.fraud_probability,
         e.expected_loss_rwf, e.review_deadline_at, e.escalated_from_alert_id, t.amount, t.currency,
         t.channel, t.merchant_name, t.transaction_timestamp, t.account_token, t.counterparty_token,
-        f.shap_top5::text AS shap_top5,\
+        f.shap_top5::text AS shap_top5, au.id AS assigned_user_id,
+        au.first_name AS assigned_first_name, au.last_name AS assigned_last_name,
+        au.role AS assigned_role,\
       """
           + " "
           + ANOMALY_SCORE
@@ -125,6 +138,7 @@ public final class AlertQueries {
       FROM alert_queue_entries e
       JOIN v_transactions t ON t.transaction_id = e.transaction_id
       JOIN v_fraud_scores f ON f.id = e.fraud_score_id AND f.transaction_id = e.transaction_id
+      LEFT JOIN users au ON au.id = e.assigned_analyst_id AND au.institution_id = e.institution_id
       """;
 
   private static final String ESCALATION_VISIBLE =
@@ -191,11 +205,18 @@ public final class AlertQueries {
     }
     in(sql, args, "e.tier", filter.tiers());
     if (filter.analystId() != null) {
+      // Assigned to them, or a decision of theirs that is not undone (ADR 0116 point 7).
       sql.append(
           " AND (e.assigned_analyst_id = ? OR EXISTS (SELECT 1 FROM alert_decisions d"
-              + " WHERE d.alert_queue_entry_id = e.id AND d.analyst_id = ?))");
+              + " WHERE d.alert_queue_entry_id = e.id AND d.analyst_id = ? AND NOT EXISTS"
+              + " (SELECT 1 FROM alert_decision_undos u WHERE u.decision_id = d.id)))");
       args.add(filter.analystId());
       args.add(filter.analystId());
+    }
+    if (filter.assignment() == Assignment.ASSIGNED) {
+      sql.append(" AND e.assigned_analyst_id IS NOT NULL");
+    } else if (filter.assignment() == Assignment.UNASSIGNED) {
+      sql.append(" AND e.assigned_analyst_id IS NULL");
     }
     String order = order(filter);
     Position after = Position.decode(cursor, order, keys.size());
@@ -440,7 +461,22 @@ public final class AlertQueries {
         row.getBoolean("ml_unavailable_fallback"),
         row.getString("account_token"),
         row.getString("counterparty_token"),
+        assignee(row),
         List.copyOf(keys));
+  }
+
+  /** The assigned analyst as the contract's {@code StaffReference}, or null for the pool. */
+  private static Map<String, Object> assignee(ResultSet row) throws SQLException {
+    UUID user = row.getObject("assigned_user_id", UUID.class);
+    if (user == null) {
+      return null;
+    }
+    Map<String, Object> staff = new LinkedHashMap<>();
+    staff.put("user_id", user);
+    staff.put("first_name", row.getString("assigned_first_name"));
+    staff.put("last_name", row.getString("assigned_last_name"));
+    staff.put("role", row.getString("assigned_role"));
+    return staff;
   }
 
   private static List<Map<String, Object>> top3(List<Map<String, Object>> top5) {
@@ -471,6 +507,7 @@ public final class AlertQueries {
       boolean fallback,
       String accountToken,
       String counterpartyToken,
+      Map<String, Object> assignedAnalyst,
       List<Double> keys) {
 
     Map<String, Object> summary() {
@@ -497,6 +534,7 @@ public final class AlertQueries {
       view.put("review_deadline_at", Views.timestamp(reviewDeadline));
       view.put("escalated_from_alert_id", escalatedFrom);
       view.put("anomaly_score", anomalyScore);
+      view.put("assigned_analyst", assignedAnalyst);
       return view;
     }
   }

@@ -37,7 +37,8 @@ public record FieldProblem(String field, String code, String message) {
           Map.entry("password_policy", 422),
           Map.entry("person_name", 422),
           Map.entry("escalation_target_not_higher", 422),
-          Map.entry("no_change", 422));
+          Map.entry("no_change", 422),
+          Map.entry("assignee_not_eligible", 422));
 
   /** Validates the code against the catalogue. */
   public FieldProblem {

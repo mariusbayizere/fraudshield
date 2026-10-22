@@ -5,6 +5,8 @@ import io.github.mariusbayizere.fraudshield.analyst.accounts.AccountQueries;
 import io.github.mariusbayizere.fraudshield.analyst.accounts.BehaviourProfiles;
 import io.github.mariusbayizere.fraudshield.analyst.alerts.AlertController;
 import io.github.mariusbayizere.fraudshield.analyst.alerts.AlertQueries;
+import io.github.mariusbayizere.fraudshield.analyst.assignments.AlertAssignments;
+import io.github.mariusbayizere.fraudshield.analyst.assignments.AssignmentController;
 import io.github.mariusbayizere.fraudshield.analyst.decisions.AlertDecisions;
 import io.github.mariusbayizere.fraudshield.analyst.decisions.DecisionController;
 import io.github.mariusbayizere.fraudshield.analyst.decisions.DecisionWorkerTasks;
@@ -37,8 +39,9 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * Wires the analyst API (M8B) on top of staff identity, as M7's administration is: P1's reads, and
- * P2's decisions where the application has the decision-owner contract's owner and recorder.
+ * Wires the analyst API (M8B) on top of staff identity, as M7's administration is: P1's reads,
+ * alert assignment (ADR 0116), and P2's decisions where the application has the decision-owner
+ * contract's owner and recorder.
  */
 @AutoConfiguration(
     afterName = "io.github.mariusbayizere.fraudshield.auth.config.AuthAutoConfiguration")
@@ -48,13 +51,26 @@ import org.springframework.jdbc.core.JdbcTemplate;
   ScoringResultController.class,
   AccountController.class,
   RealtimeConfiguration.class,
-  PerformanceController.class
+  PerformanceController.class,
+  AssignmentController.class
 })
 public class AnalystAutoConfiguration {
 
   @Bean
   AlertQueries alertQueries(JdbcTemplate jdbc) {
     return new AlertQueries(jdbc);
+  }
+
+  /** Alert assignment (ADR 0116): advisory, and independent of the decision owner. */
+  @Bean
+  AlertAssignments alertAssignments(
+      TenantTransactions tenants,
+      JdbcTemplate jdbc,
+      AuditLog audit,
+      AlertQueries alerts,
+      ObjectProvider<Clock> clock) {
+    return new AlertAssignments(
+        tenants, jdbc, audit, alerts, clock.getIfAvailable(Clock::systemUTC));
   }
 
   @Bean
