@@ -327,6 +327,7 @@ def test_every_staff_name_field_uses_the_person_name_rule() -> None:
         "StaffUserCreate",
         "StaffUserUpdate",
         "RegistrationRequest",
+        "TeamMemberPerformance",
     ):
         properties = SCHEMAS[name]["properties"]
         for field in ("first_name", "last_name"):
@@ -580,7 +581,8 @@ def test_unique_keys_name_properties_of_their_items() -> None:
                 walk(value)
 
     walk(SCHEMAS)
-    assert found == 6
+    # ADR 0117 adds two keyed arrays: AnalystPerformance.daily and TeamPerformance.analysts.
+    assert found == 8
 
 
 @pytest.mark.req("FR-04-03")
@@ -668,3 +670,24 @@ def test_every_ref_under_x_realtime_resolves() -> None:
 def test_the_x_realtime_check_notices_a_dangling_ref() -> None:
     with pytest.raises(AssertionError):
         _resolve_pointer("#/components/schemas/RealtimeMissingEvent")
+
+
+@pytest.mark.req("FR-04-11", "UX-DASH-01")
+def test_performance_figures_name_their_institution_day_and_no_accuracy() -> None:
+    """ADR 0117: every figure says which day it counts, and nothing calls agreement accuracy."""
+    for name in ("DashboardStats", "AnalystPerformance", "TeamPerformance"):
+        assert {"day_starts_at", "utc_offset", "time_zone"} <= set(SCHEMAS[name]["required"]), name
+    for name in ("AnalystPerformance", "TeamMemberPerformance"):
+        properties = SCHEMAS[name]["properties"]
+        assert "accuracy_rate" not in properties
+        assert properties["customer_agreement_rate"]["type"] == ["number", "null"]
+    for name in ("DashboardStats", "AnalystPerformance"):
+        assert "average_review_seconds" not in SCHEMAS[name]["properties"]
+        assert SCHEMAS[name]["properties"]["average_seconds_to_decision"]["type"] == [
+            "number",
+            "null",
+        ]
+    team = DOC["paths"]["/team/performance"]["get"]
+    assert set(team["responses"]["200"]["content"]) == {"application/json", "text/csv"}
+    assert team["responses"]["422"]["$ref"].endswith("/ValidationOrLimitProblem")
+    assert team["x-required-roles"] == ["SENIOR_ANALYST", "RISK_OFFICER"]

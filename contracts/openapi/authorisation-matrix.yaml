@@ -138,6 +138,11 @@ operations:
   getMyPerformance:
     roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
     ref: "FR-04-11"
+  getTeamPerformance:
+    roles: [SENIOR_ANALYST, RISK_OFFICER]
+    ref: "UX-ROLE-SN-04; RISK_OFFICER per UX-ROLE-RO-01; ANALYST excluded by UX-ROLE-AN-04; seniors see analyst and senior rows only (ADR 0117)"
+    rules:
+      - { effect: filter }
   listAccountTransactions:
     roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
     ref: "FR-04-06"

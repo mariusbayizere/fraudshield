@@ -160,10 +160,107 @@ examples:
     escalated_from_alert_id: null
   AnalystPerformance:
   - reviewed_today: 38
-    average_review_seconds: 21.4
+    average_seconds_to_decision: 21.4
     backlog: 5
-    accuracy_rate: null
-    verified_decisions: 0
+    customer_agreement_rate: 0.9167
+    verified_decisions: 24
+    false_positive_rate: null
+    verified_legitimate_decisions: 7
+    overturned_decisions: 1
+    day_starts_at: '2026-10-21T22:00:00Z'
+    utc_offset: '+02:00'
+    time_zone: Africa/Kigali
+    daily:
+    - date: '2026-09-23'
+      reviews: 30
+      average_seconds_to_decision: 15.5
+    - date: '2026-09-24'
+      reviews: 37
+      average_seconds_to_decision: 28.5
+    - date: '2026-09-25'
+      reviews: 44
+      average_seconds_to_decision: 21.5
+    - date: '2026-09-26'
+      reviews: 36
+      average_seconds_to_decision: 34.5
+    - date: '2026-09-27'
+      reviews: 0
+      average_seconds_to_decision: null
+    - date: '2026-09-28'
+      reviews: 35
+      average_seconds_to_decision: 20.5
+    - date: '2026-09-29'
+      reviews: 42
+      average_seconds_to_decision: 33.5
+    - date: '2026-09-30'
+      reviews: 34
+      average_seconds_to_decision: 26.5
+    - date: '2026-10-01'
+      reviews: 41
+      average_seconds_to_decision: 19.5
+    - date: '2026-10-02'
+      reviews: 33
+      average_seconds_to_decision: 32.5
+    - date: '2026-10-03'
+      reviews: 40
+      average_seconds_to_decision: 25.5
+    - date: '2026-10-04'
+      reviews: 0
+      average_seconds_to_decision: null
+    - date: '2026-10-05'
+      reviews: 39
+      average_seconds_to_decision: 31.5
+    - date: '2026-10-06'
+      reviews: 31
+      average_seconds_to_decision: 24.5
+    - date: '2026-10-07'
+      reviews: 38
+      average_seconds_to_decision: 17.5
+    - date: '2026-10-08'
+      reviews: 30
+      average_seconds_to_decision: 30.5
+    - date: '2026-10-09'
+      reviews: 37
+      average_seconds_to_decision: 23.5
+    - date: '2026-10-10'
+      reviews: 44
+      average_seconds_to_decision: 16.5
+    - date: '2026-10-11'
+      reviews: 0
+      average_seconds_to_decision: null
+    - date: '2026-10-12'
+      reviews: 43
+      average_seconds_to_decision: 22.5
+    - date: '2026-10-13'
+      reviews: 35
+      average_seconds_to_decision: 15.5
+    - date: '2026-10-14'
+      reviews: 42
+      average_seconds_to_decision: 28.5
+    - date: '2026-10-15'
+      reviews: 34
+      average_seconds_to_decision: 21.5
+    - date: '2026-10-16'
+      reviews: 41
+      average_seconds_to_decision: 34.5
+    - date: '2026-10-17'
+      reviews: 33
+      average_seconds_to_decision: 27.5
+    - date: '2026-10-18'
+      reviews: 0
+      average_seconds_to_decision: null
+    - date: '2026-10-19'
+      reviews: 32
+      average_seconds_to_decision: 33.5
+    - date: '2026-10-20'
+      reviews: 39
+      average_seconds_to_decision: 26.5
+    - date: '2026-10-21'
+      reviews: 31
+      average_seconds_to_decision: 19.5
+    - date: '2026-10-22'
+      reviews: 38
+      average_seconds_to_decision: 32.5
   ApiKey:
   - key_id: a1b2c3d4e5f6
     name: Core banking production
@@ -531,8 +628,11 @@ examples:
     fraud_prevented_today:
       amount: '8450000'
       currency: RWF
-    average_review_seconds: 19.5
+    average_seconds_to_decision: 19.5
     analysts_online: 6
+    day_starts_at: '2026-10-21T22:00:00Z'
+    utc_offset: '+02:00'
+    time_zone: Africa/Kigali
   DecisionRecord:
   - decision_id: 1b2c3d4e-5f60-4a7b-9c8d-0e1f2a3b4c5d
     decision: CONFIRM_FRAUD
@@ -1017,6 +1117,12 @@ examples:
     requested_role: ANALYST
     password: Str0ng!pass
     preferred_locale: fr
+  ResultTooLargeProblem:
+  - type: urn:fraudshield:problem:result-too-large
+    title: Result too large
+    status: 422
+    detail: The answer would have more than 1000 rows; narrow the request
+    correlation_id: 6f1c2d8e-5b0a-4c55-9f7a-2a1d3c4b5e6f
   RetrainingJob:
   - job_id: 8293a4b5-c2d3-4ef1-9c4d-7e8f9a0b1c23
     dataset_id: 93a4b5c6-d3e4-4f02-8d5e-8f9a0b1c2d34
@@ -1293,6 +1399,47 @@ examples:
       p50: 18.0
       p90: 45.0
     degraded_modes: []
+  TeamPerformance:
+  - from: '2026-10-20'
+    to: '2026-10-22'
+    day_starts_at: '2026-10-19T22:00:00Z'
+    utc_offset: '+02:00'
+    time_zone: Africa/Kigali
+    agreement_from: '2026-09-23'
+    generated_at: '2026-10-22T13:05:00Z'
+    analysts:
+    - user_id: 8d0c6a1e-2b3f-4c5d-9e6f-7a8b9c0d1e2f
+      first_name: Aline
+      last_name: Uwase
+      role: ANALYST
+      reviews: 96
+      active_hours: 18
+      reviews_per_active_hour: 5.3333
+      average_seconds_to_decision: 412.5
+      average_seconds_from_assignment: null
+      escalations: 4
+      overturned_decisions: 1
+      overrides_made: null
+      verified_decisions: 24
+      customer_agreement_rate: 0.9167
+      verified_legitimate_decisions: 7
+      false_positive_rate: null
+    - user_id: 3e4f5a6b-7c8d-4e9f-a0b1-c2d3e4f5a6b7
+      first_name: Jean-Paul
+      last_name: Habimana
+      role: RISK_OFFICER
+      reviews: 0
+      active_hours: 0
+      reviews_per_active_hour: null
+      average_seconds_to_decision: null
+      average_seconds_from_assignment: null
+      escalations: 0
+      overturned_decisions: 0
+      overrides_made: 3
+      verified_decisions: 0
+      customer_agreement_rate: null
+      verified_legitimate_decisions: 0
+      false_positive_rate: null
   ThresholdSet:
   - version: 4
     effective_at: '2026-09-17T08:15:30Z'

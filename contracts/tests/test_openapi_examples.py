@@ -17,7 +17,13 @@ EXAMPLES: dict[str, list[Any]] = yaml.safe_load(
 )["examples"]
 
 # RFC 9457 lets problem details carry extension members, so problem schemas stay open.
-OPEN_BY_DESIGN = {"Problem", "ValidationProblem", "StaleAlertProblem", "PromotionGateProblem"}
+OPEN_BY_DESIGN = {
+    "Problem",
+    "ValidationProblem",
+    "StaleAlertProblem",
+    "PromotionGateProblem",
+    "ResultTooLargeProblem",
+}
 COMPOSITION = ("allOf", "anyOf", "oneOf")
 
 

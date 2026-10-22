@@ -785,7 +785,7 @@ paths:
     get:
       tags: [alerts]
       operationId: getDashboardStats
-      summary: The seven header statistics (SRS 5.4)
+      summary: The header statistics (SRS 5.4, UX-DASH-01), each defined in its description (ADR 0117)
       x-required-roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
       responses:
         "200":
@@ -1132,7 +1132,7 @@ paths:
     get:
       tags: [alerts]
       operationId: getMyPerformance
-      summary: Reviews today, average review time, accuracy from customer verifications, backlog (FR-04-11)
+      summary: Reviews today, average time to decision, customer agreement from verifications, backlog, and a 30-day trend (FR-04-11)
       x-required-roles: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
       responses:
         "200":
@@ -1142,6 +1142,48 @@ paths:
               schema: { $ref: "#/components/schemas/AnalystPerformance" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        default: { $ref: "#/components/responses/UnexpectedProblem" }
+
+  /team/performance:
+    get:
+      tags: [alerts]
+      operationId: getTeamPerformance
+      summary: Every analyst's reviews, time to decision and customer agreement over a range of days, as JSON or CSV (UX-ROLE-SN-04)
+      description: |
+        Days are institution days in the institution's time zone (ADR 0117), inclusive; at most 31
+        days; `to` defaults to today and `from` to `to`. Review counts and times are over the range;
+        the agreement figures are always over the 30 institution days ending at `to`. A
+        SENIOR_ANALYST sees ANALYST and SENIOR_ANALYST rows; a RISK_OFFICER sees all three roles.
+        Rows are unsorted; sorting is the client's. `Accept: text/csv` returns a subset of the
+        columns as RFC 4180 CSV (UTF-8 with a byte-order mark, CRLF, one header row), with
+        `Content-Type: text/csv; charset=utf-8; header=present`, at most 1 MiB (1,048,576 bytes);
+        each CSV export is audited (USER_ADMIN, action TEAM_PERFORMANCE_EXPORTED). More than 1,000
+        rows is answered with 422 result-too-large, never truncated.
+      x-required-roles: [SENIOR_ANALYST, RISK_OFFICER]
+      x-authorisation-rules:
+        - rule: A SENIOR_ANALYST caller gets ANALYST and SENIOR_ANALYST rows only; a RISK_OFFICER caller gets all three roles
+          effect: filter
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+      responses:
+        "200":
+          description: The team's figures
+          headers:
+            Content-Disposition:
+              description: "For text/csv: attachment; filename=team-performance_<from>_<to>.csv"
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TeamPerformance" }
+            text/csv:
+              schema: { type: string, contentMediaType: text/csv }
+        "400": { $ref: "#/components/responses/ValidationProblem" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "406": { $ref: "#/components/responses/NotAcceptable" }
+        "422": { $ref: "#/components/responses/ValidationOrLimitProblem" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
         default: { $ref: "#/components/responses/UnexpectedProblem" }
 
   /accounts/{account_token}/transactions:
@@ -2782,6 +2824,20 @@ components:
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
+    ValidationOrLimitProblem:
+      description: >-
+        422: a well-formed field with an unacceptable value (validation, with field codes), or a
+        valid request whose answer would exceed a documented server limit (result-too-large, no
+        field codes; the limit is named in `detail`). Nothing is truncated.
+      x-problem-types:
+        - "urn:fraudshield:problem:validation"
+        - "urn:fraudshield:problem:result-too-large"
+      content:
+        application/problem+json:
+          schema:
+            oneOf:
+              - $ref: "#/components/schemas/ValidationProblem"
+              - $ref: "#/components/schemas/ResultTooLargeProblem"
 
   examples:
     IngestMobileMoney:
@@ -3070,6 +3126,7 @@ components:
         - urn:fraudshield:problem:internal
         - urn:fraudshield:problem:realtime-overflow
         - urn:fraudshield:problem:upgrade-required
+        - urn:fraudshield:problem:result-too-large
     ValidationErrorCode:
       type: string
       description: >-
@@ -3126,6 +3183,13 @@ components:
           properties:
             type: { const: "urn:fraudshield:problem:idempotency-conflict" }
             status: { const: 409 }
+    ResultTooLargeProblem:
+      allOf:
+        - $ref: "#/components/schemas/Problem"
+        - type: object
+          properties:
+            type: { const: "urn:fraudshield:problem:result-too-large" }
+            status: { const: 422 }
     StaleAlertProblem:
       allOf:
         - $ref: "#/components/schemas/Problem"
@@ -3655,30 +3719,219 @@ components:
       properties:
         as_of: { $ref: "#/components/schemas/Timestamp" }
         stats: { $ref: "#/components/schemas/DashboardStats" }
+    InstitutionTimeZone:
+      type: string
+      minLength: 1
+      maxLength: 64
+      pattern: "^[A-Za-z][A-Za-z0-9_+/-]*$"
+      description: >-
+        The institution's IANA time-zone name, for example Africa/Kigali (ADR 0117). The console
+        derives the zone abbreviation from it.
     DashboardStats:
       type: object
       required:
         [high_open, medium_open, auto_blocked_today, reviewed_today, fraud_prevented_today,
-         average_review_seconds, analysts_online]
+         average_seconds_to_decision, analysts_online, day_starts_at, utc_offset, time_zone]
       additionalProperties: false
+      description: >-
+        Institution-wide figures, the same for every caller (ADR 0117). "Today" is the institution's
+        day in its own time zone (time_zone): from day_starts_at (UTC) to the next local midnight;
+        utc_offset is the offset in force at day_starts_at.
       properties:
-        high_open: { type: integer, minimum: 0 }
-        medium_open: { type: integer, minimum: 0 }
-        auto_blocked_today: { type: integer, minimum: 0 }
-        reviewed_today: { type: integer, minimum: 0 }
-        fraud_prevented_today: { $ref: "#/components/schemas/Money" }
-        average_review_seconds: { type: number, minimum: 0 }
-        analysts_online: { type: integer, minimum: 0 }
+        high_open: { type: integer, minimum: 0, description: Open HIGH entries in the standard queue }
+        medium_open: { type: integer, minimum: 0, description: Open MEDIUM entries in the standard queue }
+        auto_blocked_today: { type: integer, minimum: 0, description: Auto-blocks whose blocked_at is today }
+        reviewed_today:
+          type: integer
+          minimum: 0
+          description: CONFIRM_FRAUD and MARK_LEGITIMATE decisions made today and not undone, anomaly reviews included
+        fraud_prevented_today:
+          description: >-
+            Amount (RWF) of transactions whose first DECLINE state is today, whose latest state in
+            v_decision_states is still DECLINE, and which a FRAUD label (from an analyst, a risk
+            officer or the customer) confirms. Not ground truth. Transactions made more than 30
+            days before today are not counted.
+          $ref: "#/components/schemas/Money"
+        average_seconds_to_decision:
+          type: [number, "null"]
+          minimum: 0
+          description: >-
+            Mean time to decision of today's reviews of HIGH and MEDIUM entries, from the entry's
+            creation to the decision (the UI's "Avg Review"). The start is the alert's raise time on
+            the clock of the instance that decided the payment, or, for an escalated entry, the
+            escalation time; a negative difference from clock skew counts as 0. It includes time
+            waiting in the queue, so it measures the queue as much as the analysts; the server
+            cannot observe when a review starts. Null when there is no such review today.
+        analysts_online:
+          type: [integer, "null"]
+          minimum: 0
+          description: >-
+            Staff with a decision role who have the console open (hold a real-time session, ADR
+            0115) now; lags by up to 30 s; null when unknown
+        day_starts_at: { $ref: "#/components/schemas/Timestamp" }
+        utc_offset:
+          type: string
+          pattern: "^[+-][0-9]{2}:[0-9]{2}$"
+          description: The institution's UTC offset in force at day_starts_at, for example +02:00
+        time_zone: { $ref: "#/components/schemas/InstitutionTimeZone" }
     AnalystPerformance:
       type: object
-      required: [reviewed_today, average_review_seconds, backlog, accuracy_rate, verified_decisions]
+      required:
+        [reviewed_today, average_seconds_to_decision, backlog, customer_agreement_rate,
+         verified_decisions, false_positive_rate, verified_legitimate_decisions,
+         overturned_decisions, day_starts_at, utc_offset, time_zone, daily]
+      additionalProperties: false
+      description: The caller's own figures (ADR 0117); "today" is the institution's day in its time zone.
+      properties:
+        reviewed_today: { type: integer, minimum: 0, description: The caller's reviews today, anomaly reviews included }
+        average_seconds_to_decision:
+          type: [number, "null"]
+          minimum: 0
+          description: >-
+            Mean time to decision of the caller's reviews of HIGH and MEDIUM entries today, from the
+            entry's creation (the raise time on the deciding instance's clock, or the escalation
+            time for an escalated entry; a negative difference counts as 0); includes queue waiting
+            time. Null when there is none.
+        backlog: { type: integer, minimum: 0, description: Open entries assigned to the caller (ADR 0116) }
+        customer_agreement_rate:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 1
+          description: >-
+            Customer agreement, not accuracy: of the caller's reviews in the last 30 institution days
+            whose auto-blocked transaction's customer answered the verification after the decision,
+            the share where the answer agreed (CONFIRM_FRAUD with NOT_ME, MARK_LEGITIMATE with
+            WAS_ME). Over reviews whose customer chose to answer after the decision; customers whose
+            payment stayed blocked answer more often, so it is not a share of all reviews. Null
+            while verified_decisions is below 20. No ground truth exists to compute accuracy (ADR
+            0117).
+        verified_decisions:
+          type: integer
+          minimum: 0
+          description: The denominator of customer_agreement_rate, over the same 30 days
+        false_positive_rate:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 1
+          description: >-
+            Of the caller's reviews in the last 30 institution days whose customer answered WAS_ME
+            after the decision, the share the caller marked CONFIRM_FRAUD (FP / (FP + TN), the SRS's
+            FPR, FR-04-11). Over reviews whose customer chose to answer after the decision;
+            customers whose payment stayed blocked answer more often, so this overstates the share
+            of genuine customers declined, and it is not comparable to
+            ModelPerformance.false_positive_rate. A WAS_ME may come from a compromised account.
+            Null while verified_legitimate_decisions is below 20.
+        verified_legitimate_decisions:
+          type: integer
+          minimum: 0
+          description: The denominator of false_positive_rate, over the same 30 days
+        overturned_decisions:
+          type: integer
+          minimum: 0
+          description: The caller's reviews in the last 30 institution days that a risk officer overrode with a different decision
+        day_starts_at: { $ref: "#/components/schemas/Timestamp" }
+        utc_offset: { type: string, pattern: "^[+-][0-9]{2}:[0-9]{2}$" }
+        time_zone: { $ref: "#/components/schemas/InstitutionTimeZone" }
+        daily:
+          type: array
+          minItems: 30
+          maxItems: 30
+          description: The last 30 institution days, oldest first, today last; days with no review included
+          x-unique-key: [date]
+          items:
+            type: object
+            required: [date, reviews, average_seconds_to_decision]
+            additionalProperties: false
+            properties:
+              date: { type: string, format: date }
+              reviews: { type: integer, minimum: 0 }
+              average_seconds_to_decision:
+                type: [number, "null"]
+                minimum: 0
+                description: Mean time to decision (from the entry's creation, queue waiting included) of that day's HIGH and MEDIUM reviews; null on a day with none
+    TeamPerformance:
+      type: object
+      required: [from, to, day_starts_at, utc_offset, time_zone, agreement_from, generated_at, analysts]
       additionalProperties: false
       properties:
-        reviewed_today: { type: integer, minimum: 0 }
-        average_review_seconds: { type: number, minimum: 0 }
-        backlog: { type: integer, minimum: 0 }
-        accuracy_rate: { type: [number, "null"], minimum: 0, maximum: 1, description: Null until customer verifications exist }
-        verified_decisions: { type: integer, minimum: 0 }
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        day_starts_at: { $ref: "#/components/schemas/Timestamp", description: Start of the from day, in UTC }
+        utc_offset:
+          type: string
+          pattern: "^[+-][0-9]{2}:[0-9]{2}$"
+          description: The institution's UTC offset in force at day_starts_at
+        time_zone: { $ref: "#/components/schemas/InstitutionTimeZone" }
+        agreement_from:
+          type: string
+          format: date
+          description: First day of the 30 institution days ending at `to`, over which the agreement columns are computed
+        generated_at: { $ref: "#/components/schemas/Timestamp" }
+        analysts:
+          type: array
+          maxItems: 1000
+          description: One row per user; each `user_id` appears once (`x-unique-key`)
+          x-unique-key: [user_id]
+          items: { $ref: "#/components/schemas/TeamMemberPerformance" }
+    TeamMemberPerformance:
+      type: object
+      required:
+        [user_id, first_name, last_name, role, reviews, active_hours, reviews_per_active_hour,
+         average_seconds_to_decision, average_seconds_from_assignment, escalations,
+         overturned_decisions, overrides_made, verified_decisions, customer_agreement_rate,
+         verified_legitimate_decisions, false_positive_rate]
+      additionalProperties: false
+      properties:
+        user_id: { type: string, format: uuid }
+        first_name: { $ref: "#/components/schemas/PersonName" }
+        last_name: { $ref: "#/components/schemas/PersonName" }
+        role:
+          type: string
+          enum: [ANALYST, SENIOR_ANALYST, RISK_OFFICER]
+          description: The user's current role, not the role held during the range
+        reviews: { type: integer, minimum: 0 }
+        active_hours: { type: integer, minimum: 0, description: Distinct institution clock-hours in the range with at least one review }
+        reviews_per_active_hour:
+          type: [number, "null"]
+          minimum: 0
+          description: >-
+            reviews / active_hours; a proxy for reviews per hour worked, which no shift data allows.
+            At least 1 whenever there is a review, and it favours bursts over steady work. Null when
+            active_hours is 0
+        average_seconds_to_decision:
+          type: [number, "null"]
+          minimum: 0
+          description: >-
+            Mean time from the entry's creation to the decision, over the range's HIGH and MEDIUM
+            reviews. The start is the raise time on the deciding instance's clock, or the escalation
+            time for an escalated entry; a negative difference counts as 0. It includes time the
+            alert waited in the queue, so it measures the queue as much as the person: someone who
+            works an overnight backlog looks slow. Null when none
+        average_seconds_from_assignment:
+          type: [number, "null"]
+          minimum: 0
+          description: >-
+            Mean time from the earliest assignment of the entry to this person by another user to
+            the decision, over the range's HIGH and MEDIUM reviews of such entries (ADR 0116);
+            self-assignments never start it. Null when none
+        escalations: { type: integer, minimum: 0, description: ESCALATE decisions in the range }
+        overturned_decisions: { type: integer, minimum: 0, description: Reviews in the range that a risk officer overrode with a different decision }
+        overrides_made:
+          type: [integer, "null"]
+          minimum: 0
+          description: SENIOR_OVERRIDE decisions in the range; null on ANALYST and SENIOR_ANALYST rows
+        verified_decisions: { type: integer, minimum: 0, description: The denominator of customer_agreement_rate, over the 30 days ending at `to` }
+        customer_agreement_rate:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 1
+          description: Customer agreement (not accuracy) over the 30 days ending at `to`, as AnalystPerformance; over reviews whose customer chose to answer after the decision, so not a share of all reviews; null while verified_decisions is below 20
+        verified_legitimate_decisions: { type: integer, minimum: 0, description: The denominator of false_positive_rate, over the 30 days ending at `to` }
+        false_positive_rate:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 1
+          description: FP / (FP + TN) over the 30 days ending at `to`, as AnalystPerformance; over reviews whose customer chose to answer after the decision, and customers whose payment stayed blocked answer more often, so this overstates the share of genuine customers declined and is not comparable to ModelPerformance.false_positive_rate; a WAS_ME may come from a compromised account; null while verified_legitimate_decisions is below 20
 
     # --- accounts -------------------------------------------------------------------------------
     AccountTransaction:
