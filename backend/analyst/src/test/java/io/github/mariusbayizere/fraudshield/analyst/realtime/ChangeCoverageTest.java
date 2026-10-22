@@ -58,6 +58,9 @@ class ChangeCoverageTest {
               "DecisionOwner.java: UPDATE alert_queue_entries SET resolution_id = ?",
               "none: marks the claimed entry resolved; status and version are unchanged"),
           Map.entry(
+              "AlertAssignments.java: UPDATE alert_queue_entries SET assigned_analyst_id = ?",
+              "ASSIGNED: AnalystAssignmentsTest seniorAssignsReplays..."),
+          Map.entry(
               "PostgresSink.java: INSERT INTO alert_queue_entries",
               "excepted: a raised entry's event is its fs.alerts.* message (point 6.2)"));
 
@@ -84,7 +87,9 @@ class ChangeCoverageTest {
     assertThat(found.keySet())
         .as("a new writer of alert_queue_entries must publish and be listed here")
         .isSubsetOf(KNOWN.keySet());
-    assertThat(found.keySet()).as("the scan still finds every known writer").isEqualTo(KNOWN.keySet());
+    assertThat(found.keySet())
+        .as("the scan still finds every known writer")
+        .isEqualTo(KNOWN.keySet());
   }
 
   /** The longest known key the statement starts with, or the statement itself. */

@@ -11,17 +11,18 @@ import io.github.mariusbayizere.fraudshield.analyst.decisions.AlertDecisions;
 import io.github.mariusbayizere.fraudshield.analyst.decisions.DecisionController;
 import io.github.mariusbayizere.fraudshield.analyst.decisions.DecisionWorkerTasks;
 import io.github.mariusbayizere.fraudshield.analyst.decisions.DecisionWorkers;
-import io.github.mariusbayizere.fraudshield.analyst.realtime.RealtimeConfiguration;
+import io.github.mariusbayizere.fraudshield.analyst.performance.DashboardFigures;
 import io.github.mariusbayizere.fraudshield.analyst.performance.PerformanceController;
 import io.github.mariusbayizere.fraudshield.analyst.performance.PerformanceQueries;
 import io.github.mariusbayizere.fraudshield.analyst.performance.Presence;
+import io.github.mariusbayizere.fraudshield.analyst.realtime.RealtimeConfiguration;
 import io.github.mariusbayizere.fraudshield.analyst.scoring.ScoringResultController;
 import io.github.mariusbayizere.fraudshield.analyst.support.CountryPacks;
 import io.github.mariusbayizere.fraudshield.audit.AuditLog;
 import io.github.mariusbayizere.fraudshield.audit.jdbc.TenantTransactions;
 import io.github.mariusbayizere.fraudshield.auth.session.SessionService;
-import io.github.mariusbayizere.fraudshield.decision.application.port.AlertChangePublisher;
 import io.github.mariusbayizere.fraudshield.auth.support.SafeRedis;
+import io.github.mariusbayizere.fraudshield.decision.application.port.AlertChangePublisher;
 import io.github.mariusbayizere.fraudshield.decision.application.port.CircuitBreakerPort;
 import io.github.mariusbayizere.fraudshield.decision.application.port.HoldSchedulePort;
 import io.github.mariusbayizere.fraudshield.decision.owner.DecisionOwner;
@@ -68,9 +69,15 @@ public class AnalystAutoConfiguration {
       JdbcTemplate jdbc,
       AuditLog audit,
       AlertQueries alerts,
-      ObjectProvider<Clock> clock) {
+      ObjectProvider<Clock> clock,
+      ObjectProvider<AlertChangePublisher> changes) {
     return new AlertAssignments(
-        tenants, jdbc, audit, alerts, clock.getIfAvailable(Clock::systemUTC));
+        tenants,
+        jdbc,
+        audit,
+        alerts,
+        clock.getIfAvailable(Clock::systemUTC),
+        changes.getIfAvailable(() -> AlertChangePublisher.NONE));
   }
 
   @Bean
@@ -91,6 +98,15 @@ public class AnalystAutoConfiguration {
   @Bean
   Presence analystPresence(ObjectProvider<SafeRedis> redis, ObjectProvider<Clock> clock) {
     return new Presence(redis.getIfAvailable(), clock.getIfAvailable(Clock::systemUTC));
+  }
+
+  @Bean
+  DashboardFigures dashboardFigures(
+      TenantTransactions tenants,
+      PerformanceQueries queries,
+      Presence presence,
+      ObjectProvider<Clock> clock) {
+    return new DashboardFigures(tenants, queries, presence, clock.getIfAvailable(Clock::systemUTC));
   }
 
   /**

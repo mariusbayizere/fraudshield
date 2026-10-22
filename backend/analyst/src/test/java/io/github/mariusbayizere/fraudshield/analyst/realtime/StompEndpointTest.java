@@ -9,6 +9,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 
+import io.github.mariusbayizere.fraudshield.analyst.performance.Presence;
 import io.github.mariusbayizere.fraudshield.auth.session.SessionStateCache;
 import io.github.mariusbayizere.fraudshield.auth.support.SafeRedis;
 import io.github.mariusbayizere.fraudshield.common.config.StaffRole;

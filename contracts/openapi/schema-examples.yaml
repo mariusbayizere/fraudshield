@@ -1104,6 +1104,11 @@ examples:
         template_key: feature.tx_count_60s.high
       review_deadline_at: '2026-09-17T08:16:00Z'
       escalated_from_alert_id: null
+      assigned_analyst:
+        user_id: 5b1f0a2c-3d4e-4f60-8a7b-9c0d1e2f3a4b
+        first_name: Amani
+        last_name: Uwase
+        role: ANALYST
   - event_id: 7a2d3e4f-5b6c-5d7e-9f80-1a2b3c4d5e6f
     occurred_at: '2026-09-17T08:15:31Z'
     change: RAISED
@@ -1128,6 +1133,7 @@ examples:
       top_reasons: []
       review_deadline_at: '2026-09-17T08:16:00Z'
       escalated_from_alert_id: null
+      assigned_analyst: null
   RealtimeFiguresEvent:
   - as_of: '2026-09-17T08:16:05Z'
     stats:
@@ -1138,8 +1144,11 @@ examples:
       fraud_prevented_today:
         amount: '8450000'
         currency: RWF
-      average_review_seconds: 19.5
+      average_seconds_to_decision: 19.5
       analysts_online: 6
+      day_starts_at: '2026-10-21T22:00:00Z'
+      utc_offset: '+02:00'
+      time_zone: Africa/Kigali
   RegistrationRequest:
   - first_name: Marie Claire
     last_name: Uwimana-Mukamana

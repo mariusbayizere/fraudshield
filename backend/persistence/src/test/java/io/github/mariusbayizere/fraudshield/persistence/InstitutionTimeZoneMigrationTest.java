@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 /**
- * V83's backfill (ADR 0117 point 1): institutions that exist before it take their zone from a fixed
+ * V82's backfill (ADR 0117 point 1): institutions that exist before it take their zone from a fixed
  * map of their country, and a country outside the map fails the migration, naming the country,
  * instead of guessing a day boundary.
  */
@@ -22,12 +22,12 @@ import org.junit.jupiter.api.Test;
 @Tag("UX-DASH-01")
 class InstitutionTimeZoneMigrationTest {
 
-  /** The last migration before V83. */
-  private static final String BEFORE_V83 = "81";
+  /** The last migration before V82. */
+  private static final String BEFORE_V82 = "81";
 
   @Test
   void existingInstitutionsTakeTheirCountrysZone() throws SQLException {
-    TestDatabase db = TestDatabase.createAt(BEFORE_V83);
+    TestDatabase db = TestDatabase.createAt(BEFORE_V82);
     insert(
         db,
         "('rw-bank', 'Synthetic RW', 'RW'), ('ke-bank', 'Synthetic KE', 'KE'),"
@@ -55,7 +55,7 @@ class InstitutionTimeZoneMigrationTest {
 
   @Test
   void countryOutsideTheMapFailsTheMigrationAndNamesIt() throws SQLException {
-    TestDatabase db = TestDatabase.createAt(BEFORE_V83);
+    TestDatabase db = TestDatabase.createAt(BEFORE_V82);
     insert(db, "('rw-bank', 'Synthetic RW', 'RW'), ('za-bank', 'Synthetic ZA', 'ZA')");
     assertThatThrownBy(() -> db.migrate(null))
         .hasMessageContaining("no time zone is mapped for institutions in country ZA");

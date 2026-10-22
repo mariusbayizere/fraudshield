@@ -35,7 +35,7 @@ public class InstitutionEntity {
   @Column(name = "country", nullable = false, length = 2)
   private String country;
 
-  // V83: the IANA zone whose local day is the institution's "today" (ADR 0117). Named explicitly
+  // V82: the IANA zone whose local day is the institution's "today" (ADR 0117). Named explicitly
   // when an institution is created; nothing derives it from the country.
   @Column(name = "time_zone", nullable = false)
   private String timeZone;

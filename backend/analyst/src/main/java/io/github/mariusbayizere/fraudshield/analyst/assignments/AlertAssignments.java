@@ -10,6 +10,7 @@ import io.github.mariusbayizere.fraudshield.audit.RequestContext;
 import io.github.mariusbayizere.fraudshield.audit.jdbc.TenantTransactions;
 import io.github.mariusbayizere.fraudshield.auth.web.ProblemException;
 import io.github.mariusbayizere.fraudshield.common.config.StaffRole;
+import io.github.mariusbayizere.fraudshield.decision.application.port.AlertChangePublisher;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -77,7 +78,7 @@ public final class AlertAssignments {
   private static final String UPDATE_ENTRY =
       """
       UPDATE alert_queue_entries SET assigned_analyst_id = ?, assigned_at = ?, version = version + 1
-      WHERE id = ?
+      WHERE id = ? RETURNING version
       """;
 
   private static final String ACTOR = "SELECT first_name, last_name FROM users WHERE id = ?";
@@ -107,6 +108,7 @@ public final class AlertAssignments {
   private final AuditLog audit;
   private final AlertQueries alerts;
   private final Clock clock;
+  private final AlertChangePublisher changes;
 
   /**
    * Creates the service.
@@ -123,6 +125,27 @@ public final class AlertAssignments {
       AuditLog audit,
       AlertQueries alerts,
       Clock clock) {
+    this(tenants, jdbc, audit, alerts, clock, AlertChangePublisher.NONE);
+  }
+
+  /**
+   * Creates the service, publishing each applied assignment after its commit (ADR 0115 point 6.2).
+   *
+   * @param tenants the runner, which retries 40001 and 40P01
+   * @param jdbc JDBC template of the same data source
+   * @param audit the audit log
+   * @param alerts alert reads, for the contract's bodies
+   * @param clock clock
+   * @param changes offered each applied assignment after the commit
+   */
+  public AlertAssignments(
+      TenantTransactions tenants,
+      JdbcTemplate jdbc,
+      AuditLog audit,
+      AlertQueries alerts,
+      Clock clock,
+      AlertChangePublisher changes) {
+    this.changes = Objects.requireNonNull(changes, "changes");
     this.tenants = Objects.requireNonNull(tenants, "tenants");
     this.jdbc = Objects.requireNonNull(jdbc, "jdbc");
     this.audit = Objects.requireNonNull(audit, "audit");
@@ -179,20 +202,40 @@ public final class AlertAssignments {
             alertId.toString(),
             assignee == null ? "" : assignee.toString(),
             Long.toString(alertVersion));
+    // The version an applied assignment wrote; reset by each attempt, so a retried transaction
+    // offers only its last attempt's, and a replay or a no-change offers nothing.
+    long[] applied = {-1};
+    Map<String, Object> body;
     try {
-      return assignOnce(caller, alertId, key, assignee, alertVersion, fingerprint);
+      body = assignOnce(caller, alertId, key, assignee, alertVersion, fingerprint, applied);
     } catch (DuplicateKeyException sameKeyElsewhere) {
       // ADR 0116 point 5, as D1(b): the same key used concurrently; re-run once and answer by the
       // stored row.
-      return assignOnce(caller, alertId, key, assignee, alertVersion, fingerprint);
+      body = assignOnce(caller, alertId, key, assignee, alertVersion, fingerprint, applied);
     }
+    if (applied[0] >= 0) {
+      changes.offer(
+          caller.institutionId(),
+          alertId,
+          applied[0],
+          AlertChangePublisher.Change.ASSIGNED,
+          caller.userId());
+    }
+    return body;
   }
 
   private Map<String, Object> assignOnce(
-      Caller caller, UUID alertId, UUID key, UUID assignee, long alertVersion, byte[] fingerprint) {
+      Caller caller,
+      UUID alertId,
+      UUID key,
+      UUID assignee,
+      long alertVersion,
+      byte[] fingerprint,
+      long[] applied) {
     return inTenant(
         caller.institutionId(),
         () -> {
+          applied[0] = -1;
           // 1. 404, with lock levels 1 and 2.
           final Entry entry = lockEntry(alertId);
           // 2. Idempotency, scoped to this operation.
@@ -266,7 +309,13 @@ public final class AlertAssignments {
                   caller.userId(),
                   key,
                   fingerprint);
-          jdbc.update(UPDATE_ENTRY, assignee, assignee == null ? null : at, alertId);
+          Long version =
+              jdbc.queryForObject(
+                  UPDATE_ENTRY, Long.class, assignee, assignee == null ? null : at, alertId);
+          if (version == null) {
+            throw new IllegalStateException("the entry's update returned no version");
+          }
+          applied[0] = version;
           Map<String, Object> before = new LinkedHashMap<>();
           before.put("assigned_analyst_id", text(entry.assignee()));
           Map<String, Object> after = new LinkedHashMap<>();
@@ -414,7 +463,7 @@ public final class AlertAssignments {
       return tenants.inTenant(
           institutionId,
           () -> {
-            jdbc.queryForObject(BOUNDS, Object.class);
+            jdbc.queryForList(BOUNDS); // two columns: queryForObject demands exactly one
             return work.get();
           });
     } catch (PessimisticLockingFailureException

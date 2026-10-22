@@ -1,5 +1,6 @@
 package io.github.mariusbayizere.fraudshield.analyst.realtime;
 
+import io.github.mariusbayizere.fraudshield.analyst.performance.Presence;
 import io.github.mariusbayizere.fraudshield.auth.jwt.StaffClaims;
 import io.github.mariusbayizere.fraudshield.auth.session.SessionStateCache;
 import io.github.mariusbayizere.fraudshield.auth.support.SafeRedis;

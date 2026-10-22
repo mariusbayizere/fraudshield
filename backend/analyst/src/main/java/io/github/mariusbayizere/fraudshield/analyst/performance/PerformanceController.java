@@ -51,7 +51,7 @@ public class PerformanceController {
 
   private final TenantTransactions tenants;
   private final PerformanceQueries queries;
-  private final Presence presence;
+  private final DashboardFigures figures;
   private final AuditLog audit;
   private final JdbcTemplate jdbc;
   private final Clock clock;
@@ -61,7 +61,7 @@ public class PerformanceController {
    *
    * @param tenants tenant transactions
    * @param queries the figures
-   * @param presence who has the console open
+   * @param figures the header figures
    * @param audit the audit log, for the CSV export
    * @param jdbc JDBC template, for the audit's actor
    * @param clock the clock
@@ -69,13 +69,13 @@ public class PerformanceController {
   public PerformanceController(
       TenantTransactions tenants,
       PerformanceQueries queries,
-      Presence presence,
+      DashboardFigures figures,
       AuditLog audit,
       JdbcTemplate jdbc,
       Clock clock) {
     this.tenants = Objects.requireNonNull(tenants);
     this.queries = Objects.requireNonNull(queries);
-    this.presence = Objects.requireNonNull(presence);
+    this.figures = Objects.requireNonNull(figures);
     this.audit = Objects.requireNonNull(audit);
     this.jdbc = Objects.requireNonNull(jdbc);
     this.clock = Objects.requireNonNull(clock);
@@ -91,21 +91,7 @@ public class PerformanceController {
   @PreAuthorize("hasAnyRole('ANALYST', 'SENIOR_ANALYST', 'RISK_OFFICER')")
   @GetMapping("/api/v1/dashboard/stats")
   public Map<String, Object> dashboard(@AuthenticationPrincipal Jwt jwt) {
-    StaffClaims claims = AccessTokens.claims(jwt);
-    final Instant now = clock.instant();
-    Map<String, Object> stats =
-        tenants.inTenant(
-            claims.institutionId(),
-            () -> {
-              InstitutionDay today = InstitutionDay.of(queries.zone(), now);
-              Map<String, Object> figures = queries.dashboard(today);
-              day(figures, today);
-              return figures;
-            });
-    // Outside the transaction: Redis is not the database, and its answer must not hold a
-    // connection.
-    stats.put("analysts_online", presence.online(claims.institutionId()));
-    return stats;
+    return figures.stats(AccessTokens.claims(jwt).institutionId());
   }
 
   /**
@@ -240,9 +226,7 @@ public class PerformanceController {
   }
 
   private static void day(Map<String, Object> figures, InstitutionDay day) {
-    figures.put("day_starts_at", Views.timestamp(day.start()));
-    figures.put("utc_offset", day.utcOffset());
-    figures.put("time_zone", day.zone().getId());
+    DashboardFigures.day(figures, day);
   }
 
   private static ProblemException tooLarge() {

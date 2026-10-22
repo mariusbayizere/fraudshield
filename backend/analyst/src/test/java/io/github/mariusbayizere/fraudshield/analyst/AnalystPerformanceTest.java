@@ -601,7 +601,7 @@ class AnalystPerformanceTest extends AnalystIntegrationTest {
 
   /**
    * A review dated in the past. V81's timing trigger stamps every decision with DB time, so the row
-   * is written with the triggers off, and with the time to decision V83 would have stored.
+   * is written with the triggers off, and with the time to decision V82 would have stored.
    */
   private static void backdated(
       UUID bank, UUID entry, UUID analyst, Instant createdAt, int durationSeconds) {

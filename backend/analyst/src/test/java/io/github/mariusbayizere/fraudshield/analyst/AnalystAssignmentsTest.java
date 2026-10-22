@@ -2,6 +2,7 @@ package io.github.mariusbayizere.fraudshield.analyst;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.mariusbayizere.fraudshield.analyst.decisions.OwnerTestAutoConfiguration;
 import io.github.mariusbayizere.fraudshield.auth.testing.Http;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -148,6 +149,13 @@ class AnalystAssignmentsTest extends AnalystIntegrationTest {
         .isEqualTo("true");
     assertThat(auditActions(alert.id))
         .containsExactly("ANALYST_DECISION/ASSIGNED", "ANALYST_DECISION/UNASSIGNED");
+    assertThat(
+            OwnerTestAutoConfiguration.CHANGES.offered.stream()
+                .filter(o -> o.alertId().equals(alert.id))
+                .map(o -> o.change() + "/" + o.version() + "/" + o.institutionId().equals(BANK))
+                .toList())
+        .as("each applied assignment is published once, and a replay or no_change never is")
+        .containsExactly("ASSIGNED/1/true", "ASSIGNED/2/true");
   }
 
   @Test

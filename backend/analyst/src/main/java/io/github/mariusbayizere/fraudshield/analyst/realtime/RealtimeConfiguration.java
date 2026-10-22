@@ -1,6 +1,7 @@
 package io.github.mariusbayizere.fraudshield.analyst.realtime;
 
 import io.github.mariusbayizere.fraudshield.analyst.alerts.AlertQueries;
+import io.github.mariusbayizere.fraudshield.analyst.performance.DashboardFigures;
 import io.github.mariusbayizere.fraudshield.audit.jdbc.TenantTransactions;
 import io.github.mariusbayizere.fraudshield.auth.session.SessionStateCache;
 import io.github.mariusbayizere.fraudshield.auth.support.SafeRedis;
@@ -15,6 +16,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import org.apache.kafka.common.TopicPartition;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
@@ -104,12 +107,31 @@ public class RealtimeConfiguration implements WebSocketConfigurer {
     return names;
   }
 
+  @Bean
+  FiguresPusher realtimeFigures(
+      SessionRegistry registry,
+      ObjectProvider<DashboardFigures> figures,
+      ObjectProvider<Clock> clock) {
+    DashboardFigures source = figures.getIfAvailable();
+    return new FiguresPusher(
+        registry,
+        institution -> {
+          if (source == null) {
+            throw new IllegalStateException("no figures in this application");
+          }
+          return source.stats(institution);
+        },
+        System::nanoTime,
+        clock.getIfAvailable(Clock::systemUTC));
+  }
+
   @Bean(destroyMethod = "close")
   FanOut realtimeFanOut(
       @Value("${fraudshield.kafka-bootstrap-servers:}") String bootstrapServers,
       StaffNames names,
       SessionRegistry registry,
       RealtimeSettings settings,
+      FiguresPusher figures,
       ObjectProvider<MeterRegistry> meters) {
     MeterRegistry m = meters.getIfAvailable();
     Set<TopicPartition> gauged = ConcurrentHashMap.newKeySet();
@@ -120,7 +142,7 @@ public class RealtimeConfiguration implements WebSocketConfigurer {
             new AlertFrames(),
             names,
             registry,
-            institution -> {},
+            figures::alertSeen,
             settings,
             System::nanoTime,
             p -> {
@@ -170,35 +192,31 @@ public class RealtimeConfiguration implements WebSocketConfigurer {
       JwtDecoder tokens,
       RealtimeSettings settings,
       InstanceBudget budget,
+      FiguresPusher figures,
       ObjectProvider<MeterRegistry> meters) {
     MeterRegistry m = meters.getIfAvailable();
     Map<String, Timer> timers = new ConcurrentHashMap<>();
     RealtimeSession.Written written =
-        m == null
-            ? frame -> {}
-            : frame ->
-                timers
-                    .computeIfAbsent(
-                        frame.destination(),
-                        d ->
-                            Timer.builder("fs_realtime_push_seconds")
-                                .description(
-                                    "Kafka record CreateTime to socket write (ADR 0115 point 11)")
-                                .tag("destination", d)
-                                .publishPercentileHistogram()
-                                .register(m))
-                    .record(
-                        Duration.ofMillis(
-                            Math.max(0, System.currentTimeMillis() - frame.createdMillis())));
+        frame -> {
+          if (m == null || frame.createdMillis() == 0) {
+            return; // the figures are computed here, not read from a Kafka record
+          }
+          timers
+              .computeIfAbsent(
+                  frame.destination(),
+                  d ->
+                      Timer.builder("fs_realtime_push_seconds")
+                          .description(
+                              "Kafka record CreateTime to socket write (ADR 0115 point 11)")
+                          .tag("destination", d)
+                          .publishPercentileHistogram()
+                          .register(m))
+              .record(
+                  Duration.ofMillis(
+                      Math.max(0, System.currentTimeMillis() - frame.createdMillis())));
+        };
     return new StompEndpoint(
-        registry,
-        guard,
-        tokens,
-        settings,
-        budget,
-        written,
-        StompEndpoint.Subscribed.NONE,
-        System::nanoTime);
+        registry, guard, tokens, settings, budget, written, figures, System::nanoTime);
   }
 
   @Bean
@@ -208,20 +226,25 @@ public class RealtimeConfiguration implements WebSocketConfigurer {
   }
 
   @Bean
-  SmartLifecycle realtimeLifecycle(SessionGuard guard, FanOut fanOut) {
+  SmartLifecycle realtimeLifecycle(SessionGuard guard, FanOut fanOut, FiguresPusher figures) {
     return new SmartLifecycle() {
+      private final ScheduledExecutorService ticks =
+          Executors.newSingleThreadScheduledExecutor(
+              Thread.ofPlatform().name("fs-realtime-figures").daemon().factory());
       private volatile boolean running;
 
       @Override
       public void start() {
         guard.start();
         fanOut.start();
+        ticks.scheduleWithFixedDelay(figures::tick, 1, 1, TimeUnit.SECONDS);
         running = true;
       }
 
       @Override
       public void stop() {
         guard.shutdown();
+        ticks.shutdownNow();
         running = false;
       }
 

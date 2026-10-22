@@ -781,7 +781,7 @@ class DatabaseSecurityTest {
   @Tag("FR-04-11")
   @Tag("UX-DASH-01")
   void institutionNamesOneZoneTheDatabaseKnowsOnInsertAndOnUpdate() throws SQLException {
-    // V83 (ADR 0117 point 1): no default, no fill from the country, and an unknown zone refused.
+    // V82 (ADR 0117 point 1): no default, no fill from the country, and an unknown zone refused.
     try (Connection admin = db.superuser()) {
       admin.setAutoCommit(false);
       assertSqlState(
@@ -811,7 +811,7 @@ class DatabaseSecurityTest {
   @Test
   @Tag("FR-04-11")
   void timeToDecisionIsComputedOnDbTimeAndNeverNegative() throws SQLException {
-    // V83 (ADR 0117 point 3): an entry raised on an instance clock ahead of the database must not
+    // V82 (ADR 0117 point 3): an entry raised on an instance clock ahead of the database must not
     // fail the decision on V4's CHECK; its time to decision is stored as 0. A value the inserting
     // role supplies is replaced.
     try (Connection app = tenant("fs_app", BANK_A)) {

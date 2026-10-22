@@ -505,10 +505,10 @@ public final class DecisionWorkers {
     return tenants.inTenant(
         institutionId,
         () -> {
-          jdbc.queryForObject(
+          // Two columns: read as a row list, not queryForObject, which demands exactly one.
+          jdbc.queryForList(
               "SELECT set_config('lock_timeout', '2s', true), set_config('statement_timeout',"
-                  + " '5s', true)",
-              Object.class);
+                  + " '5s', true)");
           return work.get();
         });
   }

@@ -105,7 +105,8 @@ class AnalystInspectorTest extends AnalystIntegrationTest {
     List<String> problems = new ArrayList<>();
     for (Map.Entry<String, String> entry : cases.entrySet()) {
       Session caller =
-          "getTeamPerformance".equals(entry.getKey()) || "listAssignableStaff".equals(entry.getKey())
+          "getTeamPerformance".equals(entry.getKey())
+                  || "listAssignableStaff".equals(entry.getKey())
               ? senior
               : session;
       Http.Response response = http.get(entry.getValue(), caller.bearer());

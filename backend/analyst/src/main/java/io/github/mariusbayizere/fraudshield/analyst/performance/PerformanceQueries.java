@@ -21,13 +21,13 @@ import org.springframework.jdbc.core.JdbcTemplate;
 /**
  * The figures of ADR 0117 over the decision tables. Every query runs inside the caller's tenant
  * transaction, so row-level security limits it to the caller's institution; the explicit {@code
- * institution_id = current_institution()} predicates only let the planner use V83's indexes. The
+ * institution_id = current_institution()} predicates only let the planner use V82's indexes. The
  * SQL is constants only; every value is a bind parameter.
  *
  * <p>A review is a CONFIRM_FRAUD or MARK_LEGITIMATE decision by a user that was not undone (point
- * 2); a decision still in its undo window counts. Its time to decision is V83's {@code
+ * 2); a decision still in its undo window counts. Its time to decision is V82's {@code
  * decision_duration_seconds}; averages are over HIGH and MEDIUM entries only, and a NULL (a
- * decision made before V83) is left out of an average, never counted as 0 (point 3).
+ * decision made before V82) is left out of an average, never counted as 0 (point 3).
  */
 public final class PerformanceQueries {
 
@@ -173,6 +173,28 @@ public final class PerformanceQueries {
           + " GROUP BY d.analyst_id";
 
   /**
+   * Point 3: time from assignment, for the team table. Over each person's HIGH and MEDIUM reviews
+   * of entries that another user assigned to them before the decision, from the earliest such
+   * assignment (ADR 0116's alert_assignments) to the decision. Self-assignments never start it.
+   */
+  private static final String TEAM_FROM_ASSIGNMENT =
+      """
+      SELECT d.analyst_id, avg(extract(epoch FROM d.created_at - (SELECT min(a.assigned_at)
+          FROM alert_assignments a
+          WHERE a.institution_id = d.institution_id
+            AND a.alert_queue_entry_id = d.alert_queue_entry_id
+            AND a.assignee_id = d.analyst_id AND a.assigned_by <> d.analyst_id
+            AND a.assigned_at < d.created_at))) AS average
+      FROM alert_decisions d
+      JOIN alert_queue_entries e ON e.id = d.alert_queue_entry_id
+      WHERE d.institution_id = current_institution() AND d.analyst_id IS NOT NULL
+        AND d.decision IN ('CONFIRM_FRAUD', 'MARK_LEGITIMATE') AND e.tier IN ('HIGH', 'MEDIUM')
+        AND d.created_at >= ? AND d.created_at < ?
+      """
+          + NOT_UNDONE
+          + " GROUP BY d.analyst_id";
+
+  /**
    * Point 7: the rows. Users of the roles the caller may see (the filter rule: risk officers only
    * for a risk officer) who are ACTIVE or LOCKED now, or did work in the range; one more than the
    * limit, so that a larger answer is refused rather than truncated.
@@ -202,7 +224,7 @@ public final class PerformanceQueries {
   }
 
   /**
-   * The caller's institution's zone (V83).
+   * The caller's institution's zone (V82).
    *
    * @return the zone
    */
@@ -314,6 +336,17 @@ public final class PerformanceQueries {
     final Map<UUID, Long> overturned = overturned(TEAM_OVERTURNED, start, end);
     final InstitutionDay first = to.plusDays(1 - Figures.WINDOW_DAYS);
     final Map<UUID, Agreement> agreements = agreements(TEAM_AGREEMENT, ts(first.start()), end);
+    final Map<UUID, Double> fromAssignment = new HashMap<>();
+    jdbc.query(
+        TEAM_FROM_ASSIGNMENT,
+        row -> {
+          Double average = average(row);
+          if (average != null) {
+            fromAssignment.put(row.getObject("analyst_id", UUID.class), average);
+          }
+        },
+        start,
+        end);
     for (Map<String, Object> row : rows) {
       UUID user = (UUID) row.get("user_id");
       Activity work = activity.getOrDefault(user, Activity.NONE);
@@ -321,9 +354,8 @@ public final class PerformanceQueries {
       row.put("active_hours", work.activeHours());
       row.put("reviews_per_active_hour", Figures.perActiveHour(work.reviews(), work.activeHours()));
       row.put("average_seconds_to_decision", work.average());
-      // ADR 0116's alert_assignments (V84) is not in this schema yet, so no entry has an
-      // assignment by another user: null for everyone until assignment is in use (point 3).
-      row.put("average_seconds_from_assignment", null);
+      // Null for a person with no review of an entry another user assigned them (point 3).
+      row.put("average_seconds_from_assignment", fromAssignment.get(user));
       row.put("escalations", work.escalations());
       row.put("overturned_decisions", overturned.getOrDefault(user, 0L));
       row.put("overrides_made", "RISK_OFFICER".equals(row.get("role")) ? work.overrides() : null);
