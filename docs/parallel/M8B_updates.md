@@ -149,3 +149,26 @@ The console should do the same, so that neither side can drift from the contract
   - show `anomaly_score` on the card;
   - search with `queue=all`;
   - use the closed comparison-attribute list.
+
+## For M12: an identity recorded but not proven (owner, 2026-10-22)
+
+The owner asked for this to be flagged to M12's audit.
+
+**What happens.** The decision-owner contract's operator exits are SQL functions:
+`resolve_contested_decision` and `release_failed_claim` (`docs/architecture/decision-owner-contract.md`,
+§7.2). Each takes the acting risk officer's `staff_user_id` from its caller, and cannot authenticate
+it.
+
+**What is recorded.** Each resolution records:
+- the asserted staff user, with the database login (`session_user`) beside it;
+- an audit entry for the authorisation, in the function's transaction;
+- a second audit entry for the state change, written by the resolver.
+
+**What is not proven.** The officer named on a resolution has not been shown to be the person who
+acted. Accountability rests on M9's runbook giving each operator an individual database login that
+is granted the functions, never a shared one.
+
+**What an auditor will ask.** "Who resolved this contested payment, and how do you know?" Today the
+answer is "the login that called the function, and the officer that login asserted". M12 should
+decide whether that is acceptable evidence. If not, the remedy is an authenticated operator
+endpoint. That would be a frozen-contract change, so a reviewed proposal comes first.

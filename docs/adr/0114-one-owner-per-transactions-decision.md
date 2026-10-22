@@ -68,6 +68,12 @@ wording.
   before the retry's decline reaches PostgreSQL. It is common after a PostgreSQL outage, detected
   when the decline drains, and resolved by a risk officer. The bank may already have acted on the
   release.
+  - **Not narrowed with Redis** (owner, 2026-10-22). Using the Redis state cache as a detector was
+    declined, because it would put the cache back into a decision path, which ADR 0113 removed.
+- **A repeated value at a higher sequence** is explained to bank integrators in the contract (§5.2)
+  and in the OpenAPI `FinalDecision` description. That was the owner's condition for approving the
+  transitions.
+- **The asserted identity on a resolution is flagged to M12's audit** (`M8B_updates.md`).
 - **The stopping rule** for this contract's reviews (owner, 2026-10-22): stop on a MAJOR in the
   owner mechanism itself, meaning the owner row, its lock, or the rule table's ordering. An
   edge-specification error with a local fix is draft work.

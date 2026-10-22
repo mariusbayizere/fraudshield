@@ -1,6 +1,7 @@
 # One owner per transaction's decision: the contract
 
-Status: **draft 5: review 4's MINORs applied.** Review 4 found draft 4 **SOUND_WITH_CHANGES**,
+Status: **approved (owner, 2026-10-22), draft 5: review 4's MINORs applied.** The owner approved
+the contract changes with one condition, met in §5.2. Review 4 found draft 4 **SOUND_WITH_CHANGES**,
 with no MAJOR, and none in the owner mechanism. Its MINORs are applied here (§18) without a further
 review round, as for the breaker contract's draft 3. This is a new contract, not draft 9 of
 `analyst-decision-commit-contract.md`. It replaces that contract, which stays in the repository as
@@ -494,9 +495,45 @@ P2 (§11):
   confirmation or re-decline, not `HOLD_DECLINED`.
 - **The reason code** is `CONTEST_RESOLVED`, which matches the frozen `ReasonCode` pattern.
 
-**A bank can now receive a `decision.final` whose value equals the previous one,** for a human's
-confirmation and for a resolution. Its sequence is higher, so the webhook's supersede rule delivers
-it.
+### 5.2 A repeated value at a higher sequence: what a bank integrator must expect
+
+The owner approved the transitions on one condition (2026-10-22). This case must be stated in the
+contract text, with what a bank should do, because an integrator will meet it in production without
+expecting it.
+
+**What happens.** A bank can receive a `decision.final`, on the webhook, on Kafka or from the poll,
+whose `decision` equals the previous sequence's.
+- **Its fields.** Its `sequence` is higher, its `event_id` is new, and its `supersedes_decision`
+  equals its own `decision`.
+- **Its causes.** There are two:
+  - **a human confirms a decline:** DECLINE → DECLINE by ANALYST or SENIOR_OVERRIDE (§5, EFFECT and
+    OVERRIDE);
+  - **a resolution chooses the value already in force:** for example APPROVE → APPROVE by
+    SENIOR_OVERRIDE, reason code `CONTEST_RESOLVED` (§7.2).
+- **Why it is delivered.** The webhook's supersede rule compares sequences only, and this one is
+  higher.
+
+**What a bank should do:**
+1. **Treat it as final and authoritative,** like any `decision.final`. The payment's outcome is its
+   `decision`, and a repeated value changes nothing about whether money moves.
+2. **Do not treat it as a duplicate.** Deduplicate by `event_id`, never by value. A repeated value
+   is a new event: it records that a human (`decided_by`) has now confirmed the outcome, or that a
+   contest was resolved.
+3. **Do not reverse or re-apply anything.** A DECLINE → DECLINE asks the bank to keep the payment
+   blocked. It is not a second block to act on, and it does not reopen anything.
+4. **Read it as a signal where the bank cares:**
+   - **A human-confirmed decline.** `decided_by` ANALYST or SENIOR_OVERRIDE on a DECLINE means a
+     human has confirmed fraud. The customer's self-service "this was me" will no longer lift the
+     block (§5), so the bank's own support process is the customer's route.
+   - **A resolved contest.** Reason code `CONTEST_RESOLVED` means the transaction had two
+     conflicting first decisions and a risk officer has settled it (§7.2). If the bank acted on an
+     earlier, different answer, this is the one to reconcile to.
+5. **Apply sequences in order, and ignore a lower or equal sequence,** as the webhook dispatcher
+   itself does. That rule is unchanged, and it is what makes a repeated value safe.
+
+**Where else this is stated.** P2's change to the OpenAPI `FinalDecision` description carries the
+same five points (§11). An integrator therefore reads them where the schema is defined, not only in
+this contract.
 
 ## 6. The paths that feed the owner
 
@@ -804,12 +841,12 @@ inherited from M6, recorded and scoped). A path that acted before detection has 
   from evidence.
 - **What resolves it.** The contest alarm fires when Y drains, and RESOLVE's new state supersedes
   both at the bank. The payment may already have moved, because the bank acted on the release.
-- **An option not taken: Redis as a detector.** Before creating an owner from a `DueHold`, the
-  TIMEOUT could compare the `DueHold`'s event id with the Redis state cache's sequence-1 event id,
-  which Y wrote at decision time. On a mismatch it would defer or record the contest. That would
-  close step 3 except during a Redis outage. It reads Redis as evidence, not as the state, but it
-  is a new dependency on the cache that ADR 0113 retired from the read path. It is left to the owner
-  (§11).
+- **Redis as a detector: declined by the owner (2026-10-22).**
+  - **The option.** Before creating an owner from a `DueHold`, the TIMEOUT could have compared the
+    `DueHold`'s event id with the sequence-1 event id in the Redis state cache. That would have
+    narrowed step 3, except during a Redis outage.
+  - **Why it is not done.** It puts the cache back into a decision path, which ADR 0113 removed.
+  - **What stands.** The residual stays as recorded here.
 - **The one case never detected (M6's, inherited).** The other decision's record never reaches
   PostgreSQL, and no `DueHold` carries it either: the retry's instance loses its spool volume
   before draining. PostgreSQL is then consistent with itself, and the bank holds an answer
@@ -1086,8 +1123,8 @@ Nothing has measured either half. D-10's capacity model, when it exists, replace
   dead-letter count is its only signal (old contract, review 5's m8).
 - **W (15 min) is ASSUMED.**
 - **M6's double decision in reverse order is a residual** (§7.3). It is common after a PostgreSQL
-  outage, and unmeasured. The Redis-as-detector option that would narrow it is the owner's to take
-  or leave.
+  outage, and unmeasured. Narrowing it with Redis as a detector was declined by the owner, because
+  it would put the cache back into a decision path (ADR 0113).
 - **The resolution and the release of a FAILED claim are operator functions, not API operations.**
   The console cannot show or perform them.
 - **The resolving officer's identity is asserted, not proven** (§7.2). The database login is recorded
@@ -1102,6 +1139,8 @@ Nothing has measured either half. D-10's capacity model, when it exists, replace
 - `AUTO_DECLINED` in `AlertStatus`;
 - §5.1's seven transitions in `FinalDecision`'s description, with their conditions in words, and
   the analyst in `FinalDecision.final`'s text;
+- §5.2's repeated value at a higher sequence, and what a bank should do, in `FinalDecision`'s
+  description. This was the owner's condition of approval (2026-10-22);
 - the problem type `decision-effect-failed` on `overrideAlertDecision`;
 - an exception to "`supersedes_decision` is the decision of sequence n-1" for the stored history of
   a transaction contested by §6.1's case 5. The bank never receives that history, but stored reads
