@@ -20,6 +20,7 @@
       <Class name="io.github.mariusbayizere.fraudshield.analyst.scoring.ScoringResultController"/>
       <Class name="io.github.mariusbayizere.fraudshield.analyst.accounts.AccountController"/>
       <Class name="io.github.mariusbayizere.fraudshield.analyst.decisions.DecisionController"/>
+      <Class name="io.github.mariusbayizere.fraudshield.analyst.performance.PerformanceController"/>
     </Or>
     <Or>
       <Bug pattern="SPRING_ENDPOINT"/>
@@ -36,6 +37,8 @@
       <Class name="io.github.mariusbayizere.fraudshield.analyst.alerts.AlertQueries"/>
       <Class name="io.github.mariusbayizere.fraudshield.analyst.accounts.AccountQueries"/>
       <Class name="io.github.mariusbayizere.fraudshield.analyst.accounts.BehaviourProfiles"/>
+      <Class name="io.github.mariusbayizere.fraudshield.analyst.performance.PerformanceQueries"/>
+      <Class name="io.github.mariusbayizere.fraudshield.analyst.performance.Presence"/>
     </Or>
     <Bug pattern="EI_EXPOSE_REP2"/>
   </Match>
@@ -62,5 +65,15 @@
     <Class name="io.github.mariusbayizere.fraudshield.analyst.realtime.Outbound"/>
     <Method name="take"/>
     <Bug pattern="CWO_CLOSED_WITHOUT_OPENED"/>
+  </Match>
+
+  <!--
+    ADR 0117's figures: every statement is a compile-time constant of PerformanceQueries, passed to
+    its private helpers (reviews, agreements, overturned, count) as a parameter; every value (times,
+    ids, the zone name, the role flag, the limit) is a bind parameter.
+  -->
+  <Match>
+    <Class name="io.github.mariusbayizere.fraudshield.analyst.performance.PerformanceQueries"/>
+    <Bug pattern="SQL_INJECTION_SPRING_JDBC"/>
   </Match>
 </FindBugsFilter>

@@ -58,6 +58,11 @@ class AnalystInspectorTest extends AnalystIntegrationTest {
   private static final Set<String> AMOUNT_FIELDS =
       Set.of("amount", "expected_loss_rwf", "lower_rwf", "upper_rwf", "this_transaction", "normal");
 
+  /** ISO dates of the performance figures (ADR 0117), which are digits and hyphens. */
+  private static final Set<String> DATE_FIELDS = Set.of("date", "from", "to", "agreement_from");
+
+  private static final Pattern DATE = Pattern.compile("^[0-9]{4}-[0-9]{2}-[0-9]{2}$");
+
   @Autowired
   @Qualifier("requestMappingHandlerMapping")
   private RequestMappingHandlerMapping mappings;
@@ -84,15 +89,21 @@ class AnalystInspectorTest extends AnalystIntegrationTest {
         "getBehaviourProfile",
         "/api/v1/accounts/" + tx.account + "/behaviour-profile?transaction_id=" + tx.id);
     cases.put("getAccountNetwork", "/api/v1/accounts/" + tx.account + "/network");
+    cases.put("getDashboardStats", "/api/v1/dashboard/stats");
+    cases.put("getMyPerformance", "/api/v1/me/performance");
+    cases.put("getTeamPerformance", "/api/v1/team/performance");
 
     assertThat(cases.keySet())
         .as("every analyst endpoint has an inspector case")
         .containsExactlyInAnyOrderElementsOf(analystOperations());
 
     Session session = issueSession(createAccount(BANK, "ANALYST", "ACTIVE"));
+    // The team table is for seniors and risk officers (ADR 0117 point 7).
+    Session senior = issueSession(createAccount(BANK, "SENIOR_ANALYST", "ACTIVE"));
     List<String> problems = new ArrayList<>();
     for (Map.Entry<String, String> entry : cases.entrySet()) {
-      Http.Response response = http.get(entry.getValue(), session.bearer());
+      Session caller = "getTeamPerformance".equals(entry.getKey()) ? senior : session;
+      Http.Response response = http.get(entry.getValue(), caller.bearer());
       assertThat(response.status()).as(entry.getKey() + " " + response.body()).isEqualTo(200);
       inspect(entry.getKey(), "", null, response.json(), problems);
     }
@@ -164,7 +175,8 @@ class AnalystInspectorTest extends AnalystIntegrationTest {
       if (EMAIL.matcher(value).find()) {
         problems.add(operation + path + ": looks like an e-mail address");
       }
-      if (!AMOUNT_FIELDS.contains(field) && PHONE_OR_ACCOUNT.matcher(value).matches()) {
+      boolean date = DATE_FIELDS.contains(field) && DATE.matcher(value).matches();
+      if (!AMOUNT_FIELDS.contains(field) && !date && PHONE_OR_ACCOUNT.matcher(value).matches()) {
         problems.add(operation + path + ": looks like a phone or account number");
       }
     }

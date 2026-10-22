@@ -10,12 +10,16 @@ import io.github.mariusbayizere.fraudshield.analyst.decisions.DecisionController
 import io.github.mariusbayizere.fraudshield.analyst.decisions.DecisionWorkerTasks;
 import io.github.mariusbayizere.fraudshield.analyst.decisions.DecisionWorkers;
 import io.github.mariusbayizere.fraudshield.analyst.realtime.RealtimeConfiguration;
+import io.github.mariusbayizere.fraudshield.analyst.performance.PerformanceController;
+import io.github.mariusbayizere.fraudshield.analyst.performance.PerformanceQueries;
+import io.github.mariusbayizere.fraudshield.analyst.performance.Presence;
 import io.github.mariusbayizere.fraudshield.analyst.scoring.ScoringResultController;
 import io.github.mariusbayizere.fraudshield.analyst.support.CountryPacks;
 import io.github.mariusbayizere.fraudshield.audit.AuditLog;
 import io.github.mariusbayizere.fraudshield.audit.jdbc.TenantTransactions;
 import io.github.mariusbayizere.fraudshield.auth.session.SessionService;
 import io.github.mariusbayizere.fraudshield.decision.application.port.AlertChangePublisher;
+import io.github.mariusbayizere.fraudshield.auth.support.SafeRedis;
 import io.github.mariusbayizere.fraudshield.decision.application.port.CircuitBreakerPort;
 import io.github.mariusbayizere.fraudshield.decision.application.port.HoldSchedulePort;
 import io.github.mariusbayizere.fraudshield.decision.owner.DecisionOwner;
@@ -43,7 +47,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
   AlertController.class,
   ScoringResultController.class,
   AccountController.class,
-  RealtimeConfiguration.class
+  RealtimeConfiguration.class,
+  PerformanceController.class
 })
 public class AnalystAutoConfiguration {
 
@@ -55,6 +60,21 @@ public class AnalystAutoConfiguration {
   @Bean
   AccountQueries accountQueries(JdbcTemplate jdbc) {
     return new AccountQueries(jdbc, new BehaviourProfiles(CountryPacks.load()));
+  }
+
+  @Bean
+  PerformanceQueries performanceQueries(JdbcTemplate jdbc) {
+    return new PerformanceQueries(jdbc);
+  }
+
+  /**
+   * The presence reader of {@code analysts_online} (ADR 0117 point 4). Redis is optional here: an
+   * application without it, such as this module's own tests, answers null for the figure rather
+   * than failing to start.
+   */
+  @Bean
+  Presence analystPresence(ObjectProvider<SafeRedis> redis, ObjectProvider<Clock> clock) {
+    return new Presence(redis.getIfAvailable(), clock.getIfAvailable(Clock::systemUTC));
   }
 
   /**
