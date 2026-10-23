@@ -1,10 +1,10 @@
 """Shared configuration, credentials and payload factories for the ingest load tests.
 
-**NOT YET EXECUTED — requires the integrated system and dedicated hardware (ADR 0010).** The
-ingest API does not exist as code on any merged branch, and no machine recorded in
-`docs/benchmarks/hardware.md` can carry the specified load. These modules are written against the
-frozen contract (`contracts/openapi/fraudshield-api.yaml`, `info.version 1.0.0-m1`) so that the
-campaign can run the moment the integrated system and the benchmark machine exist.
+**NO MEASUREMENT EXISTS — measurements require dedicated hardware (ADR 0010).** The ingest API is
+on `main` and runs in the Compose stack; no machine recorded in `docs/benchmarks/hardware.md` can
+carry the specified load. These modules are written against the frozen contract
+(`contracts/openapi/fraudshield-api.yaml`, `info.version 1.0.0-m1`); the only runs made with them
+are the campaign's step 2 harness proof, whose numbers are evidence of nothing.
 
 Every payload here is built from the contract's own schemas: tokens match `Token`, amounts match
 `PositiveAmount` (decimal **strings**, never JSON numbers), `agent_id` is present exactly when the

@@ -1,0 +1,74 @@
+# M10 plan step 2, ingest leg: the load harness is shown to run against the API in the Compose
+# stack, and to fail when it must (wrong key, environment endpoint false, failing or unreachable,
+# key revoked mid-run, nothing sent, a task raising). The cases and their expected exit statuses
+# are in tests/performance/step2/prove-harness.sh.
+#
+# This is not a measurement and produces no evidence for any requirement row: it runs on a shared
+# runner at a trivial rate (ADR 0010). Its only output is whether each case behaved as expected.
+#
+# It runs when the harness or this workflow changes, on any branch. workflow_dispatch registers
+# only from the default branch (GOV-9), so until then a re-run is the way to repeat it.
+name: m10-harness
+
+on:
+  push:
+    paths:
+      - "tests/performance/**"
+      - ".github/workflows/m10-harness.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: m10-harness-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  step2-ingest:
+    name: M10 step 2 (ingest harness runs, and fails when it must)
+    runs-on: ubuntu-24.04
+    # The API's image is built inside the job (Maven, no layer cache between runs), as in stack.
+    timeout-minutes: 45
+    env:
+      REQUIRE_DOCKER: "1"
+      LOCUST_VERSION: "2.43.4"
+      STEP2_OUT: build/m10-step2
+    steps:
+      # Locust and its dependencies are resolved from PyPI at run time, without hashes; the token
+      # is not left in the checkout for them to find.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: make env
+      - name: make up (wait for every healthcheck)
+        run: make up
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "21.0.12"
+          cache: maven
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+      - name: make seed-demo (the demo API key the harness uses)
+        shell: bash
+        run: |
+          set -o pipefail
+          make seed-demo 2>&1 | grep -v -e 'fsk_dev_' -e '@example.com'
+      - name: Start the API (profile full) and wait for it to be healthy
+        run: docker compose --profile full up -d --build --wait --wait-timeout 900 fraudshield-api
+      - name: Prove the harness runs and fails when it must
+        shell: bash
+        run: ./tests/performance/step2/prove-harness.sh
+      # Locust's logs and CSVs, the proxy counts and the summary. The API key is never printed:
+      # the harness sends it only as a header, and neither Locust nor the proxy logs headers.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: m10-step2-ingest
+          path: build/m10-step2
+          if-no-files-found: ignore
+      - name: API log tail on failure
+        if: failure()
+        run: docker compose --profile full logs --no-color --tail 150 fraudshield-api
+      - if: always()
+        run: docker compose --profile full down -v

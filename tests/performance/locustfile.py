@@ -1,8 +1,9 @@
 """Distributed Locust scenarios for the FraudShield ingest API.
 
-**NOT YET EXECUTED — requires the integrated system and dedicated hardware (ADR 0010).** No run,
-no number and no report exists. The file is the harness the M10 campaign will run once the ingest
-API is deployed and a benchmark machine is recorded in `docs/benchmarks/hardware.md`.
+**NO MEASUREMENT EXISTS — measurements require dedicated hardware (ADR 0010).** The only runs made
+are the campaign's step 2 (`docs/benchmarks/m10_plan.md` §3): a short, low-rate run on a CI runner
+against the Compose stack, and the refusals that prove the run can fail
+(`.github/workflows/m10-harness.yml`). No number from those runs is evidence of any requirement.
 
 What each scenario exists to measure (requirement text in `docs/traceability/requirements.yaml`):
 
@@ -33,12 +34,15 @@ Run (see README.md for the full campaign procedure)::
 from __future__ import annotations
 
 import json
+import logging
 import random
+import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+import gevent
 from common import (
     API_ROOT,
     AccountPool,
@@ -49,7 +53,7 @@ from common import (
 )
 from locust import FastHttpUser, LoadTestShape, constant_throughput, events, tag, task
 from locust.env import Environment
-from locust.runners import MasterRunner
+from locust.runners import MasterRunner, WorkerRunner
 
 #: Vectors of invalid bodies with the status each must produce, frozen alongside the API contract.
 VALIDATION_VECTORS = (
@@ -96,28 +100,137 @@ def _add_arguments(parser: Any) -> None:
     )
 
 
-@events.test_start.add_listener
-def _refuse_real_data(environment: Environment, **_: Any) -> None:
-    """Stop before the first request if the target is not serving synthetic data.
+#: Process exit status when the preflight refuses the target: unreachable, not serving synthetic
+#: data, or refusing the key. Distinct from Locust's 1 (requests failed) so that a run which never
+#: sent load cannot be mistaken for one that sent load and saw errors.
+EXIT_PREFLIGHT_REFUSED = 3
 
-    The public `GET /api/v1/environment` endpoint reports it (ADR 0019's banner reads the same
-    flag). A load test points thousands of requests per second at whatever it is given; this is
-    the one check that keeps a mistyped host from becoming an incident.
+#: Process exit status when the API refuses the key during the run (401 or 403 on any request).
+EXIT_KEY_REFUSED_IN_RUN = 4
+
+
+def _call(
+    url: str, request_headers: dict[str, str], data: bytes | None = None
+) -> tuple[int, bytes]:
+    """One GET (or POST with ``data``); the status and body, an HTTP error status returned."""
+    request = urllib.request.Request(url, data=data, headers=request_headers)  # noqa: S310
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:  # noqa: S310
+            return response.status, response.read()
+    except urllib.error.HTTPError as error:
+        return error.code, error.read()
+
+
+# One return per refusal reason, each with its own message: splitting them would hide the list.
+def preflight_problem(host: str, settings: Settings) -> str | None:  # noqa: PLR0911
+    """Why the run must not start against ``host``, or None if it may.
+
+    Two requests, neither of which writes a transaction or a decision:
+
+    1. The public `GET /api/v1/environment` must answer 200 with ``synthetic_data`` true (ADR
+       0019's banner reads the same flag). A load test points thousands of requests per second at
+       whatever it is given; this is the one check that keeps a mistyped host from becoming an
+       incident. An endpoint that cannot be reached or read is a refusal, not a pass: a check that
+       cannot run has not checked anything.
+    2. `POST /api/v1/transactions/ingest` with the key and a body that is not JSON must answer 400.
+       The API checks the key and its `ingest:write` scope before it reads the body, so a 401 or
+       403 means every request of the run would be refused, and a 400 means the key may ingest;
+       the malformed body is refused before anything is written. A run that measures only
+       refusals measures nothing.
     """
-    settings = Settings.from_env()
-    if isinstance(environment.runner, MasterRunner) or not settings.require_synthetic:
-        return
-    url = f"{environment.host.rstrip('/')}{API_ROOT}/environment"
-    request = urllib.request.Request(url, headers={"Accept": "application/json"})  # noqa: S310
-    with urllib.request.urlopen(request, timeout=10) as response:  # noqa: S310
-        payload = json.load(response)
-    if payload.get("synthetic_data") is not True:
-        environment.runner.quit()
-        raise RuntimeError(
-            f"{url} reports synthetic_data={payload.get('synthetic_data')!r}; refusing to load "
-            "test a target that is not serving synthetic data (set FS_PERF_ALLOW_REAL_DATA=1 "
-            "only with the owner's written authorisation)"
+    base = f"{host.rstrip('/')}{API_ROOT}"
+    try:
+        status, body = _call(f"{base}/environment", {"Accept": "application/json"})
+    except (OSError, ValueError) as error:
+        return f"{base}/environment could not be read ({error}); refusing to start"
+    if status != 200:
+        return f"{base}/environment answered HTTP {status}; refusing to start"
+    try:
+        payload = json.loads(body)
+    except ValueError:
+        return f"{base}/environment did not answer JSON; refusing to start"
+    synthetic = payload.get("synthetic_data") if isinstance(payload, dict) else None
+    if synthetic is not True and settings.require_synthetic:
+        return (
+            f"{base}/environment reports synthetic_data={synthetic!r}; refusing to load test a "
+            "target that is not serving synthetic data (set FS_PERF_ALLOW_REAL_DATA=1 only with "
+            "the owner's written authorisation)"
         )
+    try:
+        status, _ = _call(f"{base}/transactions/ingest", headers(settings), data=b"{")
+    except (OSError, ValueError) as error:
+        return f"the key check could not reach {base} ({error}); refusing to start"
+    if status in (401, 403):
+        return f"the API refused the key (HTTP {status} on the key check); refusing to start"
+    if status != 400:
+        return f"the key check expected HTTP 400 for a malformed body, got {status}; refusing"
+    return None
+
+
+@events.test_start.add_listener
+def _preflight(environment: Environment, **_: Any) -> None:
+    """Stop before the first request unless the preflight passes (see `preflight_problem`).
+
+    Local (single-process) runs only report the refusal as the exit status. In a distributed run a
+    worker that refuses quits alone, with the status on the worker; the master does not see it.
+    """
+    if isinstance(environment.runner, MasterRunner):
+        return
+    try:
+        problem = preflight_problem(environment.host or "", Settings.from_env())
+    except Exception as error:
+        # Anything the checks did not anticipate is a refusal: the event hook would otherwise log
+        # the exception and spawn users at a target nobody checked.
+        problem = f"the preflight itself failed ({type(error).__name__}: {error})"
+    if problem is None:
+        logging.info("preflight passed: synthetic data, key accepted")
+        return
+    logging.error("PREFLIGHT REFUSED: %s", problem)
+    environment.process_exit_code = EXIT_PREFLIGHT_REFUSED
+    # From its own greenlet: quit() kills the runner's greenlets, and this listener runs in one.
+    gevent.spawn(environment.runner.quit)
+
+
+#: The runner, captured at init, so the request listener can stop it.
+_RUNNER: dict[str, Any] = {}
+
+
+@events.init.add_listener
+def _capture_runner(environment: Environment, **_: Any) -> None:
+    """Keep the runner where the request listener, which is not given it, can reach it."""
+    _RUNNER["runner"] = environment.runner
+
+
+@events.request.add_listener
+def _stop_on_refused_key(response: Any = None, **kwargs: Any) -> None:
+    """Stop the run the first time the API refuses the key.
+
+    The preflight catches a wrong key; this catches one revoked during the run. Continuing would
+    turn the rest of the run into a measurement of the refusal path. As with the preflight, the
+    status and the stop are a local run's; in a distributed run only the worker that saw it stops.
+    """
+    status = getattr(response, "status_code", None)
+    if status not in (401, 403):
+        return
+    runner = _RUNNER.get("runner")
+    if runner is None or runner.environment.process_exit_code == EXIT_KEY_REFUSED_IN_RUN:
+        return
+    logging.error("KEY REFUSED IN RUN: HTTP %s on %s; stopping", status, kwargs.get("name"))
+    runner.environment.process_exit_code = EXIT_KEY_REFUSED_IN_RUN
+    gevent.spawn(runner.quit)
+
+
+def json_object(response: Any) -> dict[str, Any] | None:
+    """The response body as a JSON object, or None when it is empty, not JSON, or not an object.
+
+    An earlier version read ``response.js``, which Locust's ``FastHttpUser`` responses do not have:
+    every task raised after its first request.
+    """
+    try:
+        payload = response.json()
+    except ValueError:
+        return None
+    return payload if isinstance(payload, dict) else None
 
 
 class IngestUser(FastHttpUser):
@@ -131,9 +244,16 @@ class IngestUser(FastHttpUser):
         self.rng = random.Random()  # noqa: S311
         self.pool = AccountPool(settings=self.settings, rng=self.rng)
         self.headers = headers(self.settings)
-        self.wait_time = constant_throughput(  # type: ignore[method-assign]
-            self.environment.parsed_options.fs_user_throughput
-        )
+        self.pacing = constant_throughput(self.environment.parsed_options.fs_user_throughput)
+
+    def wait_time(self) -> float:
+        """Pace each user at ``--fs-user-throughput`` requests a second.
+
+        Locust's pacing function takes the user as its argument, as a class attribute would be
+        called. An earlier version assigned it to the instance, where it is called without one:
+        every user raised on its first wait.
+        """
+        return float(self.pacing(self))
 
     def ingest(self, body: dict[str, Any], *, name: str) -> dict[str, Any] | None:
         """POST one transaction and check the decision against the contract."""
@@ -147,7 +267,7 @@ class IngestUser(FastHttpUser):
             if response.status_code != 200:
                 response.failure(f"HTTP {response.status_code}")
                 return None
-            payload = response.js if isinstance(response.js, dict) else None
+            payload = json_object(response)
             if payload is None:
                 response.failure("response body is not a JSON object")
                 return None
@@ -236,7 +356,7 @@ class DuplicateStormUser(IngestUser):
                 response.failure(f"duplicate returned HTTP {response.status_code}")
             elif response.headers.get("Idempotent-Replayed") != "true":
                 response.failure("duplicate lacked Idempotent-Replayed: true")
-            elif response.js != self.first_decision:
+            elif json_object(response) != self.first_decision:
                 response.failure("duplicate returned a different decision from the first")
             else:
                 response.success()
@@ -261,7 +381,7 @@ class IdempotencyConflictUser(IngestUser):
             name="POST /transactions/ingest (conflict)",
             catch_response=True,
         ) as response:
-            problem = response.js if isinstance(response.js, dict) else {}
+            problem = json_object(response) or {}
             if response.status_code != 409:
                 response.failure(f"expected 409, got HTTP {response.status_code}")
             elif problem.get("type") != "urn:fraudshield:problem:idempotency-conflict":
@@ -289,7 +409,7 @@ class BatchIngestUser(IngestUser):
             name="POST /transactions/ingest/batch",
             catch_response=True,
         ) as response:
-            payload = response.js if isinstance(response.js, dict) else {}
+            payload = json_object(response) or {}
             if response.status_code != 202:
                 response.failure(f"expected 202, got HTTP {response.status_code}")
                 return
@@ -310,7 +430,7 @@ class BatchIngestUser(IngestUser):
             name="GET /jobs/{job_id}",
             catch_response=True,
         ) as response:
-            payload = response.js if isinstance(response.js, dict) else {}
+            payload = json_object(response) or {}
             state = payload.get("state")
             if response.status_code != 200:
                 response.failure(f"HTTP {response.status_code}")
@@ -340,7 +460,7 @@ class HoldFollowUpUser(IngestUser):
             name="GET /decisions/{transaction_id}",
             catch_response=True,
         ) as response:
-            payload = response.js if isinstance(response.js, dict) else {}
+            payload = json_object(response) or {}
             if response.status_code != 200:
                 response.failure(f"HTTP {response.status_code}")
             elif payload.get("decision_sequence") == 1 and payload.get("decided_by") != "MODEL":
@@ -383,7 +503,7 @@ class ValidationMixUser(IngestUser):
             name=f"POST /transactions/ingest (invalid: {case['label']})",
             catch_response=True,
         ) as response:
-            payload = response.js if isinstance(response.js, dict) else {}
+            payload = json_object(response) or {}
             if response.status_code != expected:
                 response.failure(f"expected HTTP {expected}, got {response.status_code}")
             elif "correlation_id" not in payload:
@@ -395,21 +515,28 @@ class ValidationMixUser(IngestUser):
 class SustainedPlateauShape(LoadTestShape):
     """Ramp to the target user count, hold it for the specified plateau, then stop.
 
-    Disabled unless ``--fs-target-users`` (or ``FS_PERF_TARGET_USERS``) is set, so that an
-    exploratory run can still use ``-u``/``-r``. The plateau is what the requirement asks for: a
-    rate *sustained*, measured over the flat part only, with the ramp excluded when the campaign
-    reports percentiles.
+    Without ``--fs-target-users`` (or ``FS_PERF_TARGET_USERS``) it follows ``-u``, ``-r`` and
+    ``-t`` instead, so that an exploratory run and step 2's harness proof can set them. Locust uses
+    a shape class whenever the file defines one, and a ``tick`` that returns None stops the run:
+    an earlier version returned None in that case, so every run without a target ended at once,
+    sent nothing, and exited 0. The plateau is what the requirement asks for: a rate *sustained*,
+    measured over the flat part only, with the ramp excluded when the campaign reports percentiles.
     """
 
+    #: Tells Locust this shape reads -u, -r and -t, so it does not warn that they are ignored.
+    use_common_options = True
+
     def tick(self) -> tuple[int, float] | None:
-        options = getattr(self.runner, "environment", None)
-        parsed = getattr(options, "parsed_options", None) if options else None
-        target = getattr(parsed, "fs_target_users", 0) if parsed else 0
+        parsed = self.runner.environment.parsed_options
+        elapsed = self.get_run_time()
+        target = getattr(parsed, "fs_target_users", 0)
         if not target:
-            return None
+            run_time = getattr(parsed, "run_time", None)
+            if run_time and elapsed >= run_time:
+                return None
+            return parsed.num_users or 1, float(parsed.spawn_rate or 1)
         ramp = max(1, getattr(parsed, "fs_ramp_seconds", 120))
         plateau = getattr(parsed, "fs_plateau_seconds", 300)
-        elapsed = self.get_run_time()
         if elapsed < ramp:
             users = max(1, int(target * elapsed / ramp))
             return users, max(1.0, target / ramp)
@@ -418,14 +545,38 @@ class SustainedPlateauShape(LoadTestShape):
         return None
 
 
+#: Process exit status when a run that was allowed to start sent no request at all.
+EXIT_NOTHING_SENT = 5
+
+#: Process exit status when a task raised: the harness itself broke, whatever the API answered.
+#: Locust's own status for it is 1, the same as for failed requests; this one tells them apart.
+EXIT_TASK_RAISED = 6
+
+
 @events.quitting.add_listener
 def _mark_unexecuted(environment: Environment, **_: Any) -> None:
-    """Every run writes its own provenance next to the results.
+    """Every run writes its own provenance next to the results, and a run that sent nothing fails.
 
     A throughput number without the machine, the commit and the scenario that produced it is not
-    evidence (ADR 0010); the campaign's report reads this file rather than a pasted summary.
+    evidence (ADR 0010); the campaign's report reads this file rather than a pasted summary. A run
+    with no request has no failures either, and Locust would exit 0; that is the failure that looks
+    like success, so it exits with its own status unless a refusal already set one. Workers are
+    exempt: their statistics go to the master, which judges the whole run.
     """
     stats = environment.stats.total
+    # Read without creating: stats.get() would add an empty row to the run's report.
+    accepted = environment.stats.entries.get(("POST /transactions/ingest", "POST"))
+    if (
+        stats.num_requests == 0
+        and environment.process_exit_code is None
+        and not isinstance(environment.runner, WorkerRunner)
+    ):
+        logging.error("NOTHING SENT: the run made no request; failing it")
+        environment.process_exit_code = EXIT_NOTHING_SENT
+    if environment.runner.exceptions and environment.process_exit_code is None:
+        count = len(environment.runner.exceptions)
+        logging.error("TASK RAISED: %d distinct exception(s) in tasks; failing the run", count)
+        environment.process_exit_code = EXIT_TASK_RAISED
     run_id = uuid4()
     print(
         json.dumps(
@@ -434,6 +585,8 @@ def _mark_unexecuted(environment: Environment, **_: Any) -> None:
                 "host": environment.host,
                 "requests": stats.num_requests,
                 "failures": stats.num_failures,
+                # Non-replay ingests the API accepted: what step 2 reconciles against Kafka.
+                "accepted_new": accepted.num_requests - accepted.num_failures if accepted else 0,
                 "note": "no gate number may be read from this run unless the machine is recorded "
                 "in docs/benchmarks/hardware.md (ADR 0010)",
             }

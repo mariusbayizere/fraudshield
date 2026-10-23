@@ -1,8 +1,9 @@
 # Load tests (M10)
 
-**NOT YET EXECUTED — requires the integrated system and dedicated hardware (ADR 0010).** Nothing
-here has been run. No throughput, latency, error rate or lag figure exists, and none may be quoted
-from a laptop or a shared CI runner.
+**NO MEASUREMENT EXISTS — measurements require dedicated hardware (ADR 0010).** No throughput,
+latency, error rate or lag figure exists, and none may be quoted from a laptop or a shared CI
+runner. The only runs made are the campaign's step 2 (`docs/benchmarks/m10_plan.md` §3), described
+below, whose numbers are evidence of nothing.
 
 Distributed Locust scenarios for the ingest API, written against the frozen contract
 (`contracts/openapi/fraudshield-api.yaml`, `info.version 1.0.0-m1`).
@@ -34,10 +35,10 @@ to the locked environment for a suite that cannot run yet would put a dependency
 developer's environment for no benefit. The campaign installs it on the load machines:
 
 ```console
-$ uv run --with 'locust==2.*' locust -f tests/performance --master --expect-workers <N> \
+$ uv run --no-project --with 'locust==2.43.4' locust -f tests/performance --master --expect-workers <N> \
     --host https://<ingest-host> --tags sustained --headless \
     --fs-target-users <target rate / FS_PERF_USER_TPS> --fs-plateau-seconds <held seconds>
-$ uv run --with 'locust==2.*' locust -f tests/performance --worker --master-host <master>
+$ uv run --no-project --with 'locust==2.43.4' locust -f tests/performance --worker --master-host <master>
 ```
 
 The user count follows from the rate: each simulated user issues `--fs-user-throughput` requests a
@@ -52,16 +53,51 @@ ingest scope. The key comes from `FS_PERF_API_KEY`, or from `FRAUDSHIELD_DEMOSEE
 `make seed-demo` exports it. No key is committed, and the harness refuses to start without one
 rather than sending unauthenticated load.
 
-## Two safeguards worth knowing about
+## Safeguards, and the exit statuses that report them
 
-1. **The target must report synthetic data.** Before the first request the run reads
-   `GET /api/v1/environment` and stops unless `synthetic_data` is true. Overriding it needs
-   `FS_PERF_ALLOW_REAL_DATA=1`, which exists so that the override is a deliberate act with the
-   owner's authorisation, not a default.
+Each refusal has its own exit status, so a run that never sent load cannot be mistaken for one that
+sent load and saw errors (Locust's own status is 1 when requests failed):
+
+| Exit | Meaning |
+|---|---|
+| 0 | The run sent requests and none failed |
+| 1 | Requests failed (Locust's own status) |
+| 3 | **Preflight refused** before the first request: `GET /api/v1/environment` unreachable, not 200, not JSON, or `synthetic_data` not true; the key check (`POST /api/v1/transactions/ingest` with a body that is not JSON) answered anything but 400, 401 and 403 included; or the preflight itself raised |
+| 4 | **The API refused the key during the run** (401 or 403 on any request); the run stops at once |
+| 5 | **Nothing was sent**: the run was allowed to start and made no request |
+| 6 | **A task raised**: the harness itself broke, whatever the API answered (Locust's own status for this is 1) |
+
+The API checks the key and its `ingest:write` scope before it reads the body, so the key check's
+400 means this key may ingest, and no transaction or decision is written. **These statuses are a local
+(single-process) run's.** In a distributed run, a worker whose preflight refuses or which sees a
+401 quits alone and the status stays on that worker; the master ends with 5 or 1 and keeps the
+other workers running (an inference from Locust's source, not observed). Making the master stop the whole run is still to be done before the
+distributed campaign runs.
+
+1. **The target must report synthetic data.** Overriding it needs `FS_PERF_ALLOW_REAL_DATA=1`,
+   which exists so that the override is a deliberate act with the owner's authorisation, not a
+   default. It skips only the synthetic-data check: an unreachable endpoint and a refused key still
+   stop the run.
 2. **Every response is checked against the contract.** A 200 that has stopped carrying its
    decision, or that returns HOLD without a review deadline, is counted as a failure. Load tests
    that count only status codes are how a system passes its throughput gate while returning
    nothing useful.
+
+## Step 2: proving the harness can fail
+
+`step2/prove-harness.sh`, run by `.github/workflows/m10-harness.yml` against the API in the Compose
+stack, runs ten cases at a low rate in a local run: two that must pass (against the API, and
+through the fault proxy with no fault), six refusals with exit 3 or 4, and two mutants, copies of
+the harness with one of the defects below restored, that must exit 5 and 6. Each asserts its exact
+exit status and what reached the API (the Kafka topic `fs.transactions.raw`, or the request count of
+`step2/fault_proxy.py`, which injects the faults the correctly configured stack cannot produce and
+forwards everything else to the real API). Step 2 found three defects, all
+fixed, in a harness that had never run: the plateau shape stopped every run without
+`--fs-target-users` at once, with no request and exit status 0 (observed with Locust 2.43.4);
+`response.js` does not exist on Locust's responses; and the pacing function was assigned to the
+instance, so each user raised on its first wait. Locust records a task's exception and exits 1, so a run with
+`--fs-target-users` would have failed, after at most one request per simulated user, with the same
+status as one whose requests failed (an inference from Locust's source, not observed).
 
 ## What this harness cannot decide by itself
 
