@@ -11,7 +11,7 @@ The review is `images-review-1.md` (branch `m9/images` at `581a752`; 2 BLOCKER, 
 | m2 | MINOR | The start test passes on any `SQLException`, a missing driver included | Fixed: it also expects the PostgreSQL driver's own refusal, "Connection to 127.0.0.1:1 refused" |
 | m3 | MINOR | The start test's comment claims more than it shows and cites a compose test that does not exist | Fixed: it says what the three lines prove, and that the compose start test comes with piece 3 (not yet) |
 | m4 | MINOR | The guard's connection has no timeouts | Fixed: connect 5 s, login 10 s, socket 10 s (PostgreSQL driver properties); a database that never answers now fails start-up closed instead of stalling it |
-| m5 | MINOR | `@PreAuthorize("permitAll()")` missing | Added, as the matrix's `public: true` implies. The first version left the class `final`, which Spring cannot proxy: every API test's context failed on CI (c5e325a); the class is no longer final |
+| m5 | MINOR | `@PreAuthorize("permitAll()")` missing | Added, as the matrix's `public: true` implies. The first version left the class `final`, which Spring cannot proxy: every API test's context failed on CI (c5e325a); the class is no longer final. Superseded by review 2's N1: the annotation is removed and the class is final again |
 | N1 | NOTE | Stale comments in the moved tests | Fixed |
 | N4 | NOTE | The contract's description of `synthetic_data` omits the database marker | Fixed (a description change) |
 | N | NOTE | The D-21 row does not list `EnvironmentController.java` | Added |

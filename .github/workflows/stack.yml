@@ -36,7 +36,7 @@ env:
   # targets that drive them, the devcontainer, and dependency locks. Since the API joined the
   # `full` profile (M9), also everything its image is built from: the backend's main sources
   # and the contracts and country packs the build reads (backend/Dockerfile).
-  STACK_INPUTS: '^(docker-compose[^/]*\.ya?ml|.*Dockerfile[^/]*|\.dockerignore|\.env\.example|infrastructure/docker/.*|\.devcontainer/.*|Makefile|uv\.lock|frontend/pnpm-lock\.yaml|backend/(.*/)?pom\.xml|backend/.*/src/main/.*|contracts/(openapi|proto|kafka)/.*|dataset/generator/params/countries/.*|tools/src/fraudshield_tools/seed_demo\.py|\.github/workflows/stack\.yml)$'
+  STACK_INPUTS: '^(docker-compose[^/]*\.ya?ml|.*Dockerfile[^/]*|\.dockerignore|\.env\.example|infrastructure/docker/.*|\.devcontainer/.*|Makefile|uv\.lock|frontend/pnpm-lock\.yaml|backend/(.*/)?pom\.xml|backend/mvnw|backend/\.mvn/.*|backend/.*/src/main/.*|contracts/(openapi|proto|kafka)/.*|dataset/generator/params/countries/.*|tools/src/fraudshield_tools/seed_demo\.py|\.github/workflows/stack\.yml)$'
 
 jobs:
   changes:

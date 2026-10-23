@@ -3268,25 +3268,31 @@ module's `META-INF/spring.factories`. Only the database tool depended on that mo
 neither `SyntheticDataGuard` nor `DemoSeedGuard`. From then until 2026-10-22, an API started under
 `prod` against a seeded database would have started; this is inferred from the dependency graph and
 was not run. The ADR's sentence stayed as written for those 30 days. The guard's tests either
-exercised its classes directly or started the database tool (`SyntheticDataGuardTest`), the one
-application that had the guard, so they passed throughout.
+exercised its classes directly or started applications inside `persistence`
+(`SyntheticDataGuardTest` starts the database tool and a bare test application there), where the
+guard is on the classpath. None started the API. That they passed throughout is inferred from their
+design; their runs over the period were not checked one by one.
 
 **How it surfaced.** Nothing looked for it. M9 had to serve `GET /api/v1/environment`, which returns
 the `synthetic_data` flag the UI banner reads (D-21). The flag comes from the `SyntheticDataStatus`
 bean, which the guard publishes. The endpoint already had a contract and a traceability row; it had
 no controller, because the bean did not exist in the API. Writing the controller exposed the
 missing bean, and the missing bean exposed the missing guard. If nothing had needed to read the
-flag, nothing would have shown that the guard was absent. The fix (`b745c83`, ADR 0019 amendment of
-2026-10-22) moves the guards to a module, `backend/deployment-guard`, that both applications depend
-on. The API now refuses to start when it cannot check its database.
+flag, no check in place would have shown that the guard was absent. The fix (`b745c83`, ADR 0019
+amendment of 2026-10-22) moves the guards to a module, `backend/deployment-guard`, that both
+applications depend on. The API now refuses to start when it cannot check its database.
 
 **The family.** This is the same failure as:
 - *a scan that read nothing*: a scan pointed at files it cannot read, reporting green (2026-10-20);
 - *a self-test that could not detect what it planted*: the gitleaks self-test whose planted values
   the scanner's allowlists skip (2026-09-24).
 
-In each case the check was correct where it ran, and the claim was about somewhere it did not run.
-Here the claim was a sentence in an ADR, and the "check" was a set of tests built around the only
-application that already had the guard. A guarantee that is phrased for "every application" is a
-claim about the set of applications. It needs a test over that set, or a registration that each
-new application cannot omit. A test of one member does not cover the set.
+The three differ in mechanism. The scan was pointed at formats it cannot read; the self-test's
+parts were each correct and their composition was not. What they share with this case: a green
+result was taken as covering more than was actually examined. Here the claim was a sentence in an
+ADR, and the "check" was a set of tests built around the only application that already had the
+guard. A guarantee that is phrased for "every application" is a claim about the set of
+applications. It needs a test over that set, or a registration that each new application cannot
+omit. A test of one member does not cover the set. The registration still has to be declared by
+each application; since M9 piece 3, `tools/tests/test_deployment_guard_everywhere.py` fails when
+a module with a `@SpringBootApplication` does not depend on `deployment-guard`.

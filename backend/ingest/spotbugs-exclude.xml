@@ -30,13 +30,6 @@
     <Class name="io.github.mariusbayizere.fraudshield.ingest.web.EnvironmentController"/>
     <Bug pattern="SPRING_ENDPOINT"/>
   </Match>
-  <!-- EnvironmentController is not final because @PreAuthorize makes Spring proxy it. Its only
-       constructor check is the null check on the start-up status; Spring creates it once, and a
-       partially built instance is never reachable. -->
-  <Match>
-    <Class name="io.github.mariusbayizere.fraudshield.ingest.web.EnvironmentController"/>
-    <Bug pattern="CT_CONSTRUCTOR_THROW"/>
-  </Match>
   <!-- ApiDocsController serves one constant byte array read at start-up: the frozen OpenAPI
        contract, which is public by definition (FR-01-07). It takes no parameter and reads no
        request state, so there is nothing to authenticate or validate. -->

@@ -23,10 +23,22 @@ class CompositeKeysTest {
     return key;
   }
 
-  private static <K> void valueSemantics(Supplier<K> empty, Object[] same, Object[] other) {
-    K a = key(empty, same);
-    K b = key(empty, same);
-    assertThat(a).isEqualTo(b).hasSameHashCodeAs(b).isNotEqualTo(key(empty, other));
+  /**
+   * Equal keys from equal fields, and a different key when any one field differs.
+   *
+   * @param empty the key's no-argument constructor
+   * @param fields field names and values, alternating
+   * @param others for each field, in the same order, a different value
+   */
+  private static <K> void valueSemantics(Supplier<K> empty, Object[] fields, Object... others) {
+    K a = key(empty, fields);
+    K b = key(empty, fields);
+    assertThat(a).isEqualTo(b).hasSameHashCodeAs(b);
+    for (int i = 0; i < others.length; i++) {
+      Object[] changed = fields.clone();
+      changed[2 * i + 1] = others[i];
+      assertThat(a).as("differs in %s", fields[2 * i]).isNotEqualTo(key(empty, changed));
+    }
     assertThat(a.equals(null)).isFalse();
     assertThat(a.equals("not a key")).isFalse();
   }
@@ -36,7 +48,9 @@ class CompositeKeysTest {
     valueSemantics(
         RiskThresholdEntity.Key::new,
         new Object[] {"institutionId", BANK, "version", 1L, "channel", "CARD"},
-        new Object[] {"institutionId", BANK, "version", 1L, "channel", "USSD"});
+        UUID.randomUUID(),
+        2L,
+        "USSD");
   }
 
   @Test
@@ -44,7 +58,8 @@ class CompositeKeysTest {
     valueSemantics(
         RiskThresholdVersionEntity.Key::new,
         new Object[] {"institutionId", BANK, "version", 1L},
-        new Object[] {"institutionId", BANK, "version", 2L});
+        UUID.randomUUID(),
+        2L);
   }
 
   @Test
@@ -52,6 +67,7 @@ class CompositeKeysTest {
     valueSemantics(
         BreakerSettingsEntity.Key::new,
         new Object[] {"institutionId", BANK, "version", 1L},
-        new Object[] {"institutionId", UUID.randomUUID(), "version", 1L});
+        UUID.randomUUID(),
+        2L);
   }
 }

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Start test of the API in the Compose stack (M9; owner, 2026-10-23: the API must be shown to
-# serve requests, not merely to start). Run after `make up` and `make seed-demo`, from the
+# serve requests, not merely to start). What it checks is listed below; that it passes is
+# evidence only from a recorded CI run of the stack job, cited in docs/reviews/M9. Run after `make up` and `make seed-demo`, from the
 # repository root; CI's stack job runs it. Usage: compose-fraudshield-api.sh
 #
-# It starts the API with `docker compose --profile full up --wait`, which builds the image and
+# It starts the API with `docker compose --profile full up --build --wait`, which builds the image and
 # waits for every dependency: the main database's migrations (fraudshield-migrate), the vault's
 # (pii-vault-migrate) and the Kafka topics (kafka-topics-init) must complete, and the API's own
 # healthcheck (actuator health: database, Redis, mail) must pass. Then, over the published port:
@@ -17,7 +18,8 @@
 #   5. the identical request again is an idempotent replay (Idempotent-Replayed: true), which
 #      the API answers from its idempotency record rather than by deciding again;
 #   6. GET /api/v1/decisions/{id} with the same key answers 200 for that transaction;
-#   7. the accepted transaction reached Kafka: fs.transactions.raw holds at least one record.
+#   7. the accepted transaction reached Kafka: fs.transactions.raw holds more records than it did
+#      before step 4 (waiting up to 30 s for the API to publish).
 #
 # Steps 4 to 7 need PostgreSQL (API-key lookup under the tenant), Redis, Kafka and the rule
 # engine working together in the built image. The API key is read from .demo-credentials and
@@ -43,7 +45,7 @@ api_key=$(grep '^FRAUDSHIELD_DEMOSEED_APIKEY=' .demo-credentials | cut -d= -f2-)
 [[ -n "$api_key" ]] || fail "no demo API key in .demo-credentials"
 
 started=$(date +%s)
-"${compose[@]}" up -d --wait --wait-timeout 900 fraudshield-api \
+"${compose[@]}" up -d --build --wait --wait-timeout 900 fraudshield-api \
   || fail "the API did not become healthy"
 echo "fraudshield-api healthy after $(($(date +%s) - started)) s (build included)"
 for job in fraudshield-migrate pii-vault-migrate kafka-topics-init; do
@@ -61,8 +63,16 @@ trap 'rm -rf "$work"' EXIT
 request() {
   local name=$1 method=$2 path=$3
   shift 3
+  # A connection failure prints 000 rather than failing inside $(...), where fail() would run
+  # in a subshell and lose its annotation.
   curl -sS -o "$work/$name.body" -D "$work/$name.headers" -w '%{http_code}' \
-    -X "$method" "$base$path" "$@"
+    -X "$method" "$base$path" "$@" || true
+}
+
+raw_records() {
+  "${compose[@]}" exec -T -e KAFKA_HEAP_OPTS=-Xmx64m kafka \
+    /opt/kafka/bin/kafka-get-offsets.sh --bootstrap-server kafka:29092 \
+    --topic fs.transactions.raw --time -1 | awk -F: '{sum += $3} END {print sum + 0}'
 }
 
 status=$(request health GET /health)
@@ -84,6 +94,8 @@ cat >"$work/transaction.json" <<JSON
  "device_fingerprint":"tok_D3v1c3F1ng3rpr1ntAaBbCc0","counterparty_country":"RW",
  "transaction_timestamp":"$now"}
 JSON
+
+before=$(raw_records)
 
 status=$(request anonymous POST /transactions/ingest \
   -H 'Content-Type: application/json' --data-binary @"$work/transaction.json")
@@ -121,11 +133,13 @@ done
   || fail "GET /decisions/{id} answered $status: $(head -c 500 "$work/decision.body")"
 echo "6. GET /decisions/{id} with the demo key: 200"
 
-records=$("${compose[@]}" exec -T -e KAFKA_HEAP_OPTS=-Xmx64m kafka \
-  /opt/kafka/bin/kafka-get-offsets.sh --bootstrap-server kafka:29092 \
-  --topic fs.transactions.raw --time -1 | awk -F: '{sum += $3} END {print sum + 0}')
-[[ "$records" -ge 1 ]] || fail "fs.transactions.raw holds no record"
-echo "7. fs.transactions.raw holds $records record(s)"
+for _ in $(seq 1 30); do
+  records=$(raw_records)
+  ((records > before)) && break
+  sleep 1
+done
+((records > before)) || fail "fs.transactions.raw still holds $records record(s), as before"
+echo "7. fs.transactions.raw: $before record(s) before, $records after"
 
 echo "--- fraudshield-api memory (limit 1 GiB, ASSUMED) ---"
 docker stats --no-stream --format '{{.Name}} {{.MemUsage}} {{.MemPerc}}' \

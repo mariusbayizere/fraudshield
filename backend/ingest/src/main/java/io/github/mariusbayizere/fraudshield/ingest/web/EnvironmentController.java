@@ -8,7 +8,6 @@ import java.util.Objects;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -18,8 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
  * SyntheticDataGuard} decided at startup; the endpoint reveals nothing else about the deployment.
  */
 @RestController
-// Not final: @PreAuthorize makes Spring proxy the controller with a CGLIB subclass.
-public class EnvironmentController {
+public final class EnvironmentController {
 
   private final byte[] body;
 
@@ -41,7 +39,6 @@ public class EnvironmentController {
    * @return the contract's {@code DeploymentEnvironment}
    */
   @ContractOperation("getDeploymentEnvironment")
-  @PreAuthorize("permitAll()")
   @GetMapping(value = "/api/v1/environment", produces = MediaType.APPLICATION_JSON_VALUE)
   public ResponseEntity<byte[]> environment() {
     return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(body.clone());

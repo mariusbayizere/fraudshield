@@ -136,7 +136,7 @@ def load_or_create(path: Path, pepper: str | None = None) -> tuple[dict[str, str
             raise SeedDemoError(
                 f"{path.name} is missing {', '.join(missing)}; delete it to regenerate"
             )
-        if pepper is not None and credentials[PEPPER] != pepper:
+        if pepper is not None and credentials[PEPPER].lower() != pepper.lower():
             raise SeedDemoError(
                 f"{path.name} holds an API-key pepper other than {API_PEPPER} in .env, so the API"
                 f" would reject its API key; delete {path.name} and reset the database"

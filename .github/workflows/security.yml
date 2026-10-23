@@ -129,7 +129,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: make env
       - name: Start the stack with the API
-        run: docker compose --profile full up -d --wait fraudshield-api
+        # Builds the API's image here, uncached; the bound keeps a hung start inside the job's limit.
+        run: docker compose --profile full up -d --build --wait --wait-timeout 900 fraudshield-api
       - name: ZAP baseline scan of the API
         run: |
           mkdir -p zap && chmod 777 zap

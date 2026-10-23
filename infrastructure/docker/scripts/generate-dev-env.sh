@@ -31,9 +31,10 @@ generated() {
 # as the file's owner. Synthetic development stack only (D-21).
 make_jwt_key() {
   [ -f "$jwt_key" ] && return 0
+  # Only the API (profile full) needs the key; without openssl the core stack still starts.
   command -v openssl >/dev/null 2>&1 || {
-    echo "openssl is needed to create $jwt_key" >&2
-    exit 1
+    echo "warning: openssl not found; $jwt_key not created, so the API (profile full) cannot start" >&2
+    return 0
   }
   mkdir -p "$secrets_dir"
   chmod 700 "$secrets_dir"

@@ -40,7 +40,9 @@ services:
       - ./infrastructure/docker/timescaledb/init:/docker-entrypoint-initdb.d:ro
       - ./backend/persistence/src/main/resources/db/bootstrap:/fraudshield-bootstrap:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d fraudshield_db && psql -U postgres -d mlflow -tAc 'select 1' >/dev/null"]
+      # -h 127.0.0.1: over TCP, so the check fails while initdb's scripts still run on the
+      # socket-only temporary server, and passes only once the server the clients use listens.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d fraudshield_db && psql -U postgres -d mlflow -tAc 'select 1' >/dev/null"]
       interval: 5s
       timeout: 5s
       retries: 30
@@ -68,8 +70,7 @@ services:
       FLYWAY_DEFAULT_SCHEMA: fraudshield
       FLYWAY_CREATE_SCHEMAS: "false"
       FLYWAY_LOCATIONS: filesystem:/flyway/sql
-      # The healthcheck can pass while initdb's scripts still run on a socket-only server, before
-      # PostgreSQL listens on TCP; retry the connection rather than fail on that window.
+      # The healthcheck checks over TCP; retries cover a server that restarts just after it.
       FLYWAY_CONNECT_RETRIES: "20"
       JAVA_ARGS: -Xmx80m
     command: ["migrate"]
@@ -97,7 +98,8 @@ services:
       - ./infrastructure/docker/pii-vault/init:/docker-entrypoint-initdb.d:ro
       - ./backend/persistence/src/main/resources/db/vault:/fraudshield-vault:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d fraudshield_pii"]
+      # Over TCP, as for timescaledb.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d fraudshield_pii"]
       interval: 5s
       timeout: 5s
       retries: 30
@@ -126,6 +128,7 @@ services:
       FLYWAY_USER: fs_vault_migrator
       FLYWAY_PASSWORD: ${FS_VAULT_MIGRATOR_DB_PASSWORD:?run make env}
       FLYWAY_SCHEMAS: vault
+      FLYWAY_CONNECT_RETRIES: "20"
       FLYWAY_LOCATIONS: filesystem:/flyway/sql
       JAVA_ARGS: -Xmx80m
     command: ["migrate"]
