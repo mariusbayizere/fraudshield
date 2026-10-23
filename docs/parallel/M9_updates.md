@@ -110,11 +110,17 @@ M10's own list is in `docs/parallel/M10_updates.md` on `m10/verification` (`1e9e
 ## 0b. Handover: images and the API in compose (branch `m9/images`, 2026-10-23)
 
 Work on M9's deployability, on `m9/images` (worktree `~/fs-wt/m9-images`, from `main` at
-`4e0a7bc`). Not merged when this section was written; the owner ordered the merge on 2026-10-23,
-once CI is green at job level on the final commit. Section 0 above is the 2026-10-22 snapshot of
+`4e0a7bc`). **Merged into `main` by fast-forward at `e17cc18` on 2026-10-23** (owner's order;
+ref API, `force=false`). Every job on `e17cc18` executed and passed, none skipped: ci 39900536879
+(java 120240856190), infrastructure 39900536882, supply-chain 39900536947 (API image
+120240885104), security 39900537039 (ZAP API scan 120240896320: 3 references cut, 282 URLs
+against the floor of 82, 0 High-risk), stack 39900536950 (job 120240888221: compose start test
+passed; the API at 466.6 MiB of 1 GiB), devcontainer 39900536944 (job 120240892648). The
+commit after the merge, on `m9/images` only, files PB-191 to PB-194 and answers review 5's
+recheck; it is not on `main`. Section 0 above is the 2026-10-22 snapshot of
 `main`. Its "never exercised" line is out of date on this branch in two of its four clauses:
-"the ZAP baseline has never run" (ZAP's API scan has run and reached all 89 operations; see "ZAP"
-below) and "no service image is built, scanned or signed" (the API image is built, scanned and
+"the ZAP baseline has never run" (ZAP's API scan has run and sent requests for all 89
+operations, 84 of them at their served address; see "ZAP" below) and "no service image is built, scanned or signed" (the API image is built, scanned and
 start-tested; signing runs on `main` only). Nothing has been applied to a cluster, and there are
 no deploy workflows. Owner decisions for this work (2026-10-22): xgboost CPU-only, with unchanged scores as the
 condition of the lock change; the API in the `full` profile with 1 GiB, recorded as ASSUMED; build
@@ -162,9 +168,11 @@ for every image.
 - **Third scan, the first to reach the API's operations** (`a150edc`, run 39897867857, job
   120232689891): 3 references cut; 109 URLs imported, 282 in total against the floor of 82; 0
   High-risk alerts; gate passed. Requests kept the `/api/v1` prefix (`-O` with the relative
-  server works). Findings, reported to the owner before any fix, none fixed here:
+  server works). Findings, reported to the owner before any fix, none fixed here, and filed as PB-191 to PB-194 (owner,
+  2026-10-23):
   - **Low: `/verify/{token}` answers 500** to `GET /verify/token?=` (a query parameter with an
-    empty name) and to `POST /verify/token`, while the same token with `?lang=en` gets 200. A
+    empty name) and to `POST /verify/token`, while the same token with `?lang=en` rendered the page
+    (its status is not in ZAP's report; 200 is INFERRED). A
     server error where a client error is expected; the POST body ZAP sent is not in its report;
     cause not investigated.
   - **Medium (two alerts, both rule 10055): CSP on the verification page** (`default-src 'none';
@@ -182,8 +190,8 @@ for every image.
   not what the import reached (review 3, M1). The five actuator paths were sent to 8080 and
   answered 401 there; their real home is the unpublished management port 8081, which was not
   scanned (review 5, M2).
-- **Limits:** unauthenticated: in run 39897867857, 69 of 89 operations were answered 401 and
-  `POST /auth/refresh` 403. The public sign-in, registration and reset endpoints have per-IP
+- **Limits:** unauthenticated: in run 39897867857, of the 70 operations that need a key or a
+  session, 69 were answered 401 and `POST /auth/refresh` 403. The public sign-in, registration and reset endpoints have per-IP
   limits, and 429 answers were observed (review 5, n4). An answer of 401, 403, 404 or 429 counts
   as reached.
 
@@ -404,6 +412,7 @@ The owner's words, then what was done on this branch. Sizes were reported to the
 | ADR 0092 | the storage-class fsync fallback for ADR 0090 (decision 8) | claimed, not written |
 | ADR 0093 | the metrics the code emits that Part E.10 does not list | Accepted 2026-10-20 |
 | PB-171 to PB-190 | infrastructure follow-ups | PB-171 to PB-179 and PB-183 to PB-190 used here; PB-180 to PB-182 used on `main` (2026-10-21, auth test items for M7); all used |
+| PB-191 to PB-194 | ZAP's first API-scan findings, filed for their owners (owner, 2026-10-23); claimed on `m9/images` after reading every branch's backlog and updates files, where the highest id in use anywhere was PB-190 | all used: PB-191 to PB-193 for M6, PB-194 for M7 |
 
 ## 4. Deviations to record in the traceability rows
 

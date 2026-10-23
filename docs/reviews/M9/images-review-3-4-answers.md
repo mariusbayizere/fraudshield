@@ -8,7 +8,7 @@ written.
 | # | Finding | Answer |
 |---|---|---|
 | R3 B1 | ZAP's import fails on the self-referring RuleExpression | Fixed in `a150edc` (owner's decision): ZAP scans a copy of the served contract with the three nested references cut; the step fails unless exactly three are cut |
-| R3 M1 | The coverage floor does not show "every path reached" | Not changed (owner: keep the floor exactly as written). What it reads, and the 6 paths off the scanned address, are now stated in `M9_updates.md` 0b. The job's name still says "every path reached"; that wording is the owner's to revisit |
+| R3 M1 | The coverage floor does not show "every path reached" | Not changed (owner: keep the floor exactly as written). What it reads is now stated in `M9_updates.md` 0b, with the five actuator operations sent to 8080 instead of their management port (corrected after review 5, M2). The job's name still says "every path reached"; that wording is the owner's to revisit |
 | R3 M2 | "Imports every operation" stated as fact; "not run yet" stale; 401/429 make "reached" weak | Fixed in the job comment and in 0b, which now gives both runs and the limits |
 | R3 m1 | `-O` with the relative server is unverified | Settled by run 39897867857: the requests carry `/api/v1` |
 | R3 m2 | Nothing bounds the active scan's duration | Not changed: the scan took about 1.5 minutes in run 39897867857, inside the job's 60-minute limit |
@@ -29,15 +29,15 @@ written.
 
 ## Review 5 (`images-review-5.md`, `d522d74`: 1 BLOCKER, 2 MAJOR, 4 MINOR, 5 NOTE)
 
-`d522d74` was never merged. It was rebuilt without the wheel as the commit that carries these
-answers; `d522d74` stays only on the remote branch until it is replaced.
+`d522d74` was never merged. It was rebuilt without the wheel as `e17cc18` and the branch was
+force-pushed with a lease on `d522d74` (owner's choice, 2026-10-23); no branch contains `d522d74`.
 
 | # | Finding | Answer |
 |---|---|---|
 | B1 | A 3.8 MB shellcheck wheel committed at the repository root | Removed by rebuilding the commit, so it never reaches `main`'s history. It came from a `pip download` fallback run in the worktree, then `git add -A` |
-| M1 | 0b's opening and R-18 say no run scanned an API operation | Fixed: run 39897867857 reached all 89 operations; 0b's opening quotes section 0's four clauses correctly |
+| M1 | 0b's opening and R-18 say no run scanned an API operation | Fixed: run 39897867857 sent requests for all 89 operations, 84 at their served address; 0b's opening quotes section 0's four clauses correctly |
 | M2 | `/verify/{token}` was scanned; the actuator paths were reached on 8080 | Fixed in 0b |
-| m1 | The 500's trigger misdescribed | Fixed: `?=` (an empty parameter name) and the POST; the same token with `?lang=en` got 200 |
+| m1 | The 500's trigger misdescribed | Fixed: `?=` (an empty parameter name) and the POST; the same token with `?lang=en` rendered the page (200 INFERRED: the report keeps no status for it) |
 | m2 | Alert 100001's source | Fixed: ZAP's script list; the contract declares `text/html` |
 | m3 | 70 vs 69 + 1 | Fixed: 69 answered 401, `POST /auth/refresh` 403 |
 | m4 | The R3 m6 answer named the wrong sections | Fixed: sections 5 and 7 |
@@ -45,3 +45,17 @@ answers; `d522d74` stays only on the remote branch until it is replaced.
 | n3 | Cite the measured scan time | Fixed in R3 m2 |
 | n4 | Wording not shown by the artifact | "JSON" dropped from the CORP line; 429s stated as observed; PB-190's "skipping" corrected |
 | n2, n5 | Notes | Recorded |
+
+## Review 5 recheck (`images-review-5-recheck.md`, `e17cc18`: 0 BLOCKER, 0 MAJOR, 4 MINOR, 3 NOTE)
+
+Answered after the merge of `e17cc18`, in the commit that files PB-191 to PB-194.
+
+| # | Finding | Answer |
+|---|---|---|
+| m-a | Row R3 M1 still named "6 paths off the scanned address" | Fixed |
+| m-b | "All 89 operations" counts the five actuator operations sent to 8080 | Fixed: 84 of 89 at their served address, in 0b, R-18 and the answers |
+| m-c | "69 of 89 answered 401" drops its qualifier | Fixed: 69 of the 70 that need a key or session |
+| m-d | "`?lang=en` gets 200" is not in the report | Fixed: marked INFERRED |
+| n-a | R-18 says "findings filed" before they were | Filed in this commit (PB-191 to PB-194) |
+| n-b | The d522d74 note was out of date | Fixed |
+| n-c | Governance before merge | safe-push ran the governance chain on `e17cc18` before pushing it |

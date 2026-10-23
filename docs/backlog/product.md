@@ -25,6 +25,7 @@ taken twice. Claims made on branches not yet merged, as of 2026-10-17:
 | PB-102 to PB-130 | M7 | `M7_updates.md`, "Numbering reserved by this branch" | the merge round's unowned items and M7's rows proved only in part (PB-102 to PB-124 used) |
 | PB-151 to PB-170 | M8B | `M8B_updates.md`, "Numbering reserved by this branch" | the analyst API's follow-ups (PB-151 to PB-159 used); M8B also holds ADR 0110–0119 and Flyway V80–V89 |
 | PB-171 to PB-190 | M9 | `M9_updates.md`, "Identifiers claimed by this branch" and "Backlog ids filed on `main`" | M9's follow-ups and items it files for other owners (PB-171 to PB-190 all used) |
+| PB-191 to PB-194 | M9 (`m9/images`), owned by M6 and M7 | `M9_updates.md`, "Identifiers claimed by this branch" | ZAP's first API-scan findings (run 39897867857) |
 
 ---
 
@@ -1649,6 +1650,26 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 - **Source:** the same review · **Priority:** low · **Owner:** M9
 - **Problem:** probes are required on every container, init containers included, but an ordinary init container cannot have liveness or readiness probes. A valid init container therefore fails ("needs a livenessProbe"), so in practice none is allowed.
 - **Acceptance:** probes required on `containers` only; the security controls still apply to `initContainers`; a test with a valid init container.
+
+### PB-191 · `/verify/{token}` answers 500 to a malformed request
+- **Source:** ZAP API scan, run 39897867857 (job 120232689891) on `a150edc`, 2026-10-23, unauthenticated; filed on the owner's direction the same day · **Priority:** high · **Owner:** M6 · **Kind:** defect
+- **Problem:** the customer verification page, which customers open from the SMS link (D-25), answered **500** to two of ZAP's requests: `GET /verify/token?=` (a query parameter with an empty name) and `POST /verify/token`. ZAP's report keeps the method, URL and status but not the POST body it sent. The same token with `?lang=en` rendered the page without an error (its status is not in the report). A malformed request to a customer-facing endpoint must get a client error, not a server error. The cause has not been investigated.
+- **Acceptance:** both requests reproduced in a test against the assembled API; each answers a 4xx with the page's error content and no stack trace; the cause recorded.
+
+### PB-192 · The verification page's security headers
+- **Source:** ZAP API scan, run 39897867857 (job 120232689891) on `a150edc`, 2026-10-23, unauthenticated; filed on the owner's direction the same day · **Priority:** medium · **Owner:** M6 (the verification page, `VerificationPageController`)
+- **Problem:** the page's Content-Security-Policy is `default-src 'none'; style-src 'unsafe-inline'; form-action 'self'`. ZAP rule 10055 raised two Medium alerts on it: `style-src 'unsafe-inline'`, and a directive with no fallback. The page also lacks Cross-Origin-Embedder-Policy, Cross-Origin-Opener-Policy and Permissions-Policy (Low). Five public endpoints (`/api/v1/health`, `/api/v1/environment`, `/api/v1/auth/jwks.json`, `/api/v1/auth/availability`, `POST /api/v1/auth/password-reset/request`) lack Cross-Origin-Resource-Policy (Low).
+- **Acceptance:** inline styles moved to a hashed or nonce'd style, or the exception justified in writing; the missing headers set, or each omission justified; a test asserting the headers; ZAP's next run without these alerts, or with each one recorded as accepted.
+
+### PB-193 · The verification page's `lang` attribute takes user input (XSS candidate)
+- **Source:** ZAP API scan, run 39897867857 (job 120232689891) on `a150edc`, 2026-10-23, unauthenticated; filed on the owner's direction the same day · **Priority:** medium · **Owner:** M6
+- **Problem:** ZAP rule 10031 (Informational, low confidence) found the `lang` query parameter of `GET /verify/{token}?lang=en` reflected into the page's `<html lang>` attribute. ZAP did not show that an injection works; it flags a user-controlled attribute. Filed on its own, not with PB-192's headers, because the page is loaded by customers from an SMS link, where a working injection would matter most.
+- **Acceptance:** the value is shown to be restricted to the supported locales (or escaped) with a test that sends quotes, angle brackets and an event-handler payload in `lang` and asserts none reaches the markup.
+
+### PB-194 · `user_id` in the audit-events query string
+- **Source:** ZAP API scan, run 39897867857 (job 120232689891) on `a150edc`, 2026-10-23, unauthenticated; filed on the owner's direction the same day · **Priority:** low · **Owner:** M7 (`searchAuditEvents`, `AuditSearchController`)
+- **Problem:** `GET /api/v1/admin/audit-events` takes `user_id` as a query parameter (contract line 2314; a staff account's UUID). ZAP rule 10024 (Informational) flagged it on the parameter's name; the scan sent a placeholder, not a real identifier. Identifiers in query strings are written to access logs, proxies and browser history. Noted against D-20's privacy rules (owner, 2026-10-23); whether a staff UUID falls under them is for the owner to decide.
+- **Acceptance:** a recorded decision: the identifier moves to a request body or a path that logs redact, or stays with the logs and proxies that see it listed and their retention stated.
 
 ### PB-190 · Lower-severity findings of the workflow review
 - **Source:** independent review of `.github/workflows/{infrastructure,security,supply-chain}.yml`, 2026-10-21, before M9's merge · **Priority:** low · **Owner:** M9
