@@ -47,3 +47,14 @@ description of the refusal cases; the README's distributed-mode sentence marked 
 Raised for the owner, not decided: the country packs' rates are 2024 World Bank averages held fixed
 for the simulation, and ADR 0063 and V61 say development and demo databases hold synthetic rates
 only (D-21). Recorded in PB-195.
+
+## Review 4: the accepted-currency split (`dd36b91`, amended to `7e0c418`, before it ran)
+
+No blocking findings in either round. Answered in the amended commit: a statistics reset now
+clears the split too (the review named `reset_stats`; checking Locust's source showed that
+`--reset-stats` resets on spawning complete without firing it, so both are handled, and the
+recheck confirmed the two stay together); the passing case requires at least 60 accepted, so that "a missing
+currency is a finding, not chance" holds (below 1e-5 at 60); "accepted" narrowed to what the harness
+counts as a success; and the split described as a local run's, since in a distributed run a
+worker's `accepted_new` covers only its last report to the master (PB-197). Nits: a variable made
+local, the script's case table, the commit subject, a line re-wrapped.

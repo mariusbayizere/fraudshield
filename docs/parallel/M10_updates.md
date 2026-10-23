@@ -57,7 +57,8 @@ Written by the M10 agent. The section above is inherited from M5 and is not edit
 **Status: no measurement exists.** No requirement has been measured, and no chaos experiment
 or browser journey has been run. The only thing executed is step 2's ingest leg on a shared CI
 runner on 2026-10-23, which proves the load harness can run and can fail; its numbers measure
-nothing (section "Step 2, ingest leg", below).
+nothing (section "Step 2, ingest leg", below). Step 2 is not finished: its chaos and journey legs
+cannot run yet (section "Step 2 re-run with the FX seed", below).
 
 ## What this branch adds
 
@@ -293,8 +294,8 @@ request was refused: 90 of 113 new ingests in the passing case (79.6%; Kafka +23
 and 30 of 39 through the proxy (76.9%). That the reason is the missing rate, rather than something
 else confined to those currencies, is still read from the code, since the 503 does not say.
 
-The fix is on `fix/demo-fx-rates`, not merged: the demo seed inserts the country packs' fixed
-simulation rates. Step 2's passing case has not been re-run with it. The harness was not restricted
+The fix was on `fix/demo-fx-rates` when this was written: the demo seed inserts the country packs'
+fixed simulation rates. It merged as `4ce8d4b`, and the re-run with it is recorded below. The harness was not restricted
 to RWF; the owner's words: *"Restricting the harness to RWF would make step 2 green while drifting
 from the specified currency mix"* (2026-10-23).
 
@@ -323,5 +324,66 @@ PB-195 to PB-199 (2026-10-23; PB-191 to PB-194 are claimed on `m9/images`). Used
 
 ### What step 2 did not cover
 
-The chaos leg (no cluster, no Chaos Mesh namespace) and the journey leg (M8 and M8B not on `main`)
-have not run. Every measured row of the plan stays unmeasured; see the plan's §2.
+The chaos leg and the journey leg have not run; why, in "What step 2 still cannot run", below.
+Every measured row of the plan stays unmeasured; see the plan's §2.
+
+## Step 2 re-run with the FX seed (2026-10-23)
+
+**This is not a measurement: it ran on a shared runner at 2 requests a second.** It shows that the
+ingest harness runs end to end against the API with the specified currency mix, and no figure
+below is evidence for any requirement row.
+
+The seed merged to `main` as `4ce8d4b` (PB-195). The passing case's refusals:
+
+| Run | Commit | Seed | New ingests refused (passing case) |
+|---|---|---|---|
+| 39920804992 | `c783540` | no | **90 of 113**, every one in KES, TZS, UGX or CDF |
+| 39932312852 | `8547c7c` | yes | **0 of 117** |
+| 39942490462 | `7e0c418` | yes | **0 of 118**, accepted in all five currencies (below) |
+
+Run 39932312852 accepted everything, but which currencies were accepted could then only be inferred
+from the absence of failures. The harness now counts accepted new ingests by currency and prints
+the split in its provenance line (`accepted_new_by_currency`, `7e0c418`; reviewed twice,
+`docs/reviews/M10/step2-reviews.md`), and the passing case requires at least 60 accepted, a split
+summing to `accepted_new`, and all five pack currencies in it. Run 39942490462, job 120377056768,
+on `7e0c418` (main `4ce8d4b` plus this branch); the job log shows "Seeded 4 demo FX rate(s) from
+the country packs". Counts are from each case's provenance line and the logs' final tables in the
+artifact `m10-step2-ingest`:
+
+| Case | Exit (expected) | What happened | Verdict |
+|---|---|---|---|
+| pass | 0 (0) | 121 requests, 0 failures: 118 new ingests and 3 replays. Accepted by currency: CDF 28, KES 24, RWF 18, TZS 21, UGX 27. Kafka +119 | pass |
+| wrong key | 3 (3) | nothing sent; Kafka +0 | pass |
+| `synthetic_data: false` | 3 (3) | proxy forwarded 0; Kafka +0 | pass |
+| environment without the flag | 3 (3) | forwarded 0 | pass |
+| environment answers 503 | 3 (3) | forwarded 0 | pass |
+| nothing listening | 3 (3) | nothing sent; Kafka +0 | pass |
+| key revoked mid-run | 4 (4) | stopped 4 s into a 60 s run; forwarded 10 | pass |
+| proxy with no fault | 0 (0) | 42 new ingests, 0 failures. CDF 9, KES 8, RWF 10, TZS 8, UGX 7 | pass |
+| mutant: shape defect | 5 (5) | nothing sent | pass |
+| mutant: pacing defect | 6 (6) | 2 requests sent, then the task raised ("TASK RAISED" in its log); Kafka +2 | pass |
+
+Kafka grew by one more than the 118 accepted in the passing case. The case allows up to one per
+user above the count, for requests in flight when the users are stopped, which reach the API but
+not the run's statistics; that this is what the extra record is, is an inference, not read from
+the run.
+
+### What step 2 still cannot run
+
+**A green `m10-harness` job is not a finished step 2.** The plan's step 2 (§3) has three legs, and
+this job runs only the first:
+
+* **Ingest: run, and refused when it must.** Done, as above, on a shared runner in local mode
+  only; distributed mode is not proved (PB-197).
+* **Chaos: one experiment that injects nothing, confirmed to have selected the intended pods.**
+  Cannot run: it needs a Kubernetes cluster with the manifests applied, and Chaos Mesh installed
+  in its own namespace with a network policy that lets it act. Neither exists: there is no
+  cluster, so the manifests on `main` (`infrastructure/k8s`) have never been applied. Cases 02 to
+  04 also need the data-store manifests, which are not written (plan §1).
+* **Journeys: one journey on one browser.** Cannot run: it needs M8's console screens and M8B's
+  analyst API on `main`. Neither milestone has merged: `m8/frontend` is 37 commits ahead of
+  `main`, and of M8B only P1's analyst reads are on `main`, with `m8b/analyst-api` 53 commits
+  ahead (counted 2026-10-23).
+
+Until those two legs run, the chaos and journey harnesses have not been proved able to fail, and
+the plan allows no measured row before each harness has been (§4).
