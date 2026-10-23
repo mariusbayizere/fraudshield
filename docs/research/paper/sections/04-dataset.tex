@@ -164,8 +164,9 @@ The controls, and why each exists:
   \item \textbf{Construction checks}: account events, identifier characters, file order and
         per-channel null signatures must not reveal the label. The account-event check exists
         because of a leak found in that secondary table rather than in the feature matrix: in its
-        first version, \nEventLeakShare{} of events whose timestamp carried a fractional second sat on a fraud
-        account, against a base rate of \nEventLeakBase{} (Section~\ref{sec:discussion}).
+        first version, events whose timestamp carried a fractional second sat on fraud accounts far
+        more often than the base rate (the dataset review records the shares from a probe whose
+        output was not kept; Section~\ref{sec:discussion}).
   \item \textbf{Label noise} in both directions, measured at \nLabelNoiseMissed{} missed and
         \nLabelNoiseFalse{} false labels as a share of true fraud on the evaluation draw.
   \item \textbf{Temporal placement}: the novel sub-variant occurs only in the test period
@@ -197,8 +198,8 @@ can, so the fraud \emph{rate} is still met exactly while the scenario \emph{mix}
 this was found, runs below that size silently lacked \texttt{mule\_account}. The earlier derivations
 of the minimum were wrong, and each failed the same sanity check by returning a minimum below a size
 that had already failed. The derivation used solves $E[\text{holders}](n) \ge \text{needed}(n) +
-\nMinSigmas\sqrt{\text{needed}(n)}$ numerically. The lab notebook reports it giving \nMinRowsA{},
-\nMinRowsB{}, \nMinRowsC{} and \nMinRowsD{} rows from runs at different scales; the test that
+\nMinSigmas\sqrt{\text{needed}(n)}$ numerically. The lab notebook reports it giving minima that agreed across
+runs at different scales, but no run output was kept; the test that
 guards it generates its own smaller runs and requires the minimum they imply to agree within a fixed
 tolerance. A separate minimum, about \nDetectorMinRows{} rows, is where the shortcut detector
 has full power against a planted leak; completeness binds first. The generator now refuses a run

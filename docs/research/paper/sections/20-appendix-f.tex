@@ -22,41 +22,30 @@ worse. Counting killed mutations measures the tests; only investigating the surv
 claims, and an ``equivalent'' or ``defence in depth'' label on a survivor needs the same evidence as
 any other claim. That last rule is written, not enforced.
 
-\subsection*{A ranking metric can hide a change in decisions}
+\subsection*{Served features the evaluation did not see}
  The scoring service as built (milestone
 M5) serves \nSkewConstantFeatures{} of the trained features as constants, because nothing deployed yet
 writes the state they read: the counterparty's labelled-fraud count, the map cell's lagged fraud
 rate and the days since a SIM swap; the synthetic-identity score is computed from fewer of its terms
-(ADR 0034). With the gate model rebuilt at seed 1 and scored over the whole test period on the
-features as served, AUC falls from \nSkewAucTrained{} to \nSkewAucBoth{}, by \nSkewAucDrop{}: more
-than the half-width of the gate's interval (\nSkewHalfWidth{}) and less than its full width, a change
-no AUC-expressed gate here would refuse. The decisions change more: the frauds reaching the flag
-threshold fall from \nSkewFlagTrained{} to \nSkewFlagBoth{}, \nSkewLost{} fewer (\nSkewLostPct{}),
-and \nSkewTierBoth{} risk-tier assignments change (the scorer's low, medium and high tiers: high at the block threshold,
-medium at the flag threshold or when the anomaly score passes its review threshold). The missing outcomes account for most of it (AUC
-\nSkewAucOutcomes{}, \nSkewFlagOutcomes{} frauds flagged), the missing SIM swaps for less
-(\nSkewAucSim{}, \nSkewFlagSim{}). These figures come from ADR 0034 and the scoring milestone's
-re-review by an agent that had written neither the code nor the earlier review
-(Section~\ref{sec:disclosure}), which reproduced every row; no raw output file with a provenance stamp was
-committed for them, so their source is a review record rather than an evidence file. They describe
-what the served feature set does to the evaluated model on the test period, one model at one
-threshold. No deployment has run, so they are not a measured loss of detection in operation, and they
-are not a general property of AUC. Our own gate would have passed this deployment, which is why the
-serving path carries its own acceptance test, and why M10 is required to re-measure the skew and find
+(ADR 0034). ADR 0034 and the scoring milestone's re-review record figures for what this does to
+the evaluated model on the test period, but no run output was kept for it, so it is not reported
+here; whether the gate's metrics would have registered the change is therefore not established. The
+serving path carries its own acceptance test, and M10 is required to re-measure the skew and find
 none (PB-72).
 
 \subsection*{The verification effort was blind in one direction}
  The scoring client was reviewed
 \nFakeReviews{} times (a principal review, a re-review of its fixes, a verification pass and an
 adversarial pass over the promotion path, each by an agent), and the reviewers found \nFakeDefects{} defects in the
-model-promotion path between them, while \nFakeTests{} tests passed. None found that the client
-misread how the model registry reports an unset alias, because every one of those tests ran against an
-in-process fake that encoded the same misreading; a test that starts a real registry container
-caught it in continuous integration. The figures and the failure are recorded in the lab notebook
-(2026-09-23); no raw output was committed beyond that record. Review, mutation testing and
+model-promotion path between them, while the suite passed locally (the lab notebook, 2026-09-23). None
+found that the client misread how the model registry reports an unset alias, because the tests of
+that path ran against an in-process fake that encoded the same misreading. A test that starts a real
+registry container caught it in continuous integration: in that run it was the suite's
+\nFakeCiFailed{} failure while \nFakeCiPassed{} tests passed
+(\texttt{evidence/\allowbreak mlflow\_\allowbreak alias\_\allowbreak ci\_\allowbreak 90078b2.txt}, the
+run's whole log). Review, mutation testing and
 adversarial probing all operate inside the world the test fixtures define; contact with the real
 dependency is the only check outside it. The verification reported for this system therefore does
 not establish correctness against the external services it integrates with, beyond the tests that
 start real ones, and the scoring milestone's re-review records that some of those had not run on any
 machine visible to it.
-

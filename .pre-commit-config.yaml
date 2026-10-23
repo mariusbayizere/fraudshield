@@ -20,10 +20,11 @@ repos:
       - id: end-of-file-fixer
         # The CC BY 4.0 legal code is stored exactly as published; see dataset/release/README.md.
         # A CI job log kept as paper evidence is stored exactly as GitHub served it (its header
-        # records the log's SHA-256), because GitHub deletes job logs after 90 days.
-        exclude: ^docs/(srs|prompts)/|^dataset/release/LICENSE-CC-BY-4\.0\.txt$|^docs/research/paper/evidence/mlflow_alias_ci_90078b2\.txt$
+        # records the log's SHA-256), because GitHub deletes job logs after 90 days; the LOFTO
+        # evidence file is stored exactly as its run wrote it.
+        exclude: ^docs/(srs|prompts)/|^dataset/release/LICENSE-CC-BY-4\.0\.txt$|^docs/research/paper/evidence/mlflow_alias_ci_90078b2\.txt$|^docs/benchmarks/lofto_d8083dbc\.txt$
       - id: trailing-whitespace
-        exclude: ^docs/(srs|prompts)/|\.md$|^dataset/release/LICENSE-CC-BY-4\.0\.txt$|^docs/research/paper/evidence/mlflow_alias_ci_90078b2\.txt$
+        exclude: ^docs/(srs|prompts)/|\.md$|^dataset/release/LICENSE-CC-BY-4\.0\.txt$|^docs/research/paper/evidence/mlflow_alias_ci_90078b2\.txt$|^docs/benchmarks/lofto_d8083dbc\.txt$
 
   - repo: local
     hooks:

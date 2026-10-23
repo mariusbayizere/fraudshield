@@ -2,7 +2,7 @@
 
 Every macro in `numbers.tex` checked against its evidence file at `m4-complete` (`72e7790`), or at the ref its row names, read with `git show`, by `audit_numbers.py`. Values are compared as printed: rounding, sign and interval bounds included. Regenerate with `python3 docs/research/paper/audit_numbers.py`; do not edit by hand.
 
-**1073 macros, 1073 MATCH, 0 not matching.**
+**1051 macros, 1051 MATCH, 0 not matching.**
 
 | Macro | Value in paper | Value in evidence | File | Note | Result |
 |---|---|---|---|---|---|
@@ -18,15 +18,8 @@ Every macro in `numbers.tex` checked against its evidence file at `m4-complete` 
 | `\nFraudParamsCalibrated` | `4` | `four` | `docs/research/limitations.md` |  | MATCH |
 | `\nMinRows` | `170{,}000` | `170,000` | `docs/reviews/M2/milestone-review.md` |  | MATCH |
 | `\nDetectorMinRows` | `60{,}000` | `60,000` | `docs/reviews/M2/milestone-review.md` |  | MATCH |
-| `\nMinRowsA` | `169{,}492` | `169,492` | `docs/research/lab_notebook.md` |  | MATCH |
-| `\nMinRowsB` | `170{,}455` | `170,455` | `docs/research/lab_notebook.md` |  | MATCH |
-| `\nMinRowsC` | `169{,}972` | `169,972` | `docs/research/lab_notebook.md` |  | MATCH |
-| `\nMinRowsD` | `170{,}069` | `170,069` | `docs/research/lab_notebook.md` |  | MATCH |
 | `\nColumnMaxAUC` | `0.706` | `0.706` | `docs/research/claims_register.md` |  | MATCH |
 | `\nEventDelayAUC` | `0.730` | `0.730` | `docs/research/claims_register.md` |  | MATCH |
-| `\nSiblingLeak` | `0.005` | `0.005` | `docs/research/claims_register.md` |  | MATCH |
-| `\nSeedSdSizeSeries` | `0.0055` | `0.0055` | `docs/research/claims_register.md` |  | MATCH |
-| `\nSizeSeriesSpan` | `0.065` | `0.065` | `docs/research/claims_register.md` |  | MATCH |
 | `\nEventDelayBefore` | `0.758` | `0.758` | `docs/research/claims_register.md` |  | MATCH |
 | `\nEventDelayAfter` | `0.730` | `0.730` | `docs/research/claims_register.md` |  | MATCH |
 | `\nEventDelayShare` | `11\%` | `11%` | `docs/research/claims_register.md` |  | MATCH |
@@ -242,8 +235,9 @@ Every macro in `numbers.tex` checked against its evidence file at `m4-complete` 
 | `\nAdaptFraud` | `11` | `11` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
 | `\nRevCaughtFirst` | `4` | `4` | `docs/benchmarks/m4_battery_pb61.txt` (evidence commit `dbda585`) |  | MATCH |
 | `\nRevAUCFirst` | `0.656` | `0.656` | `docs/benchmarks/m4_battery_pb61.txt` (evidence commit `dbda585`) |  | MATCH |
-| `\nHwCPU` | `Intel Core i5-6200U at 2.30~GHz, 2 cores / 4 threads` | `Intel Core i5-6200U @ 2.30 GHz, 2 cores / 4 threads` | `docs/benchmarks/hardware.md` |  | MATCH |
-| `\nHwMem` | `7.8~GiB` | `7.8 GiB` | `docs/benchmarks/hardware.md` |  | MATCH |
+| `\nHwCPU` | `i5-6200U` | `i5-6200U` | `docs/benchmarks/m4_learning_curve_120k_d8083dbc.txt` at `3dacca6` (evidence commit `c59da11`) |  | MATCH |
+| `\nHwCores` | `4` | `4` | `docs/benchmarks/m4_learning_curve_120k_d8083dbc.txt` at `3dacca6` (evidence commit `c59da11`) |  | MATCH |
+| `\nHwMem` | `7.6~GiB` | `7.6 GiB` | `docs/benchmarks/m4_learning_curve_120k_d8083dbc.txt` at `3dacca6` (evidence commit `c59da11`) |  | MATCH |
 | `\nBatTestRows` | `101{,}909` | `101909` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
 | `\nBatTestFraud` | `985` | `985` | `docs/benchmarks/m4_battery_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
 | `\nFrHeldOutRows` | `60{,}000` | `60,000` | `docs/benchmarks/m4_frontier.md` |  | MATCH |
@@ -381,8 +375,6 @@ Every macro in `numbers.tex` checked against its evidence file at `m4-complete` 
 | `\nDeviceNaNFeatures` | `four` | `Four` | `ml/src/fraudshield_ml/features/registry.py` |  | MATCH |
 | `\nAdaptMonthIndex` | `12` | `12` | `dataset/generator/params/fraud.yaml` |  | MATCH |
 | `\nAdaptMonthOrdinal` | `thirteenth` | `thirteenth` | `dataset/generator/params/fraud.yaml` |  | MATCH |
-| `\nEventLeakShare` | `99.84\%` | `99.84%` | `docs/research/lab_notebook.md` |  | MATCH |
-| `\nEventLeakBase` | `41.96\%` | `41.96%` | `docs/research/lab_notebook.md` |  | MATCH |
 | `\nMinSigmas` | `3` | `3` | `dataset/src/fraudshield_dataset/generator/fraud.py` |  | MATCH |
 | `\nFingerprintSampleRows` | `1{,}024` | `1024` | `dataset/src/fraudshield_dataset/fingerprint.py` |  | MATCH |
 | `\nResolutions` | `51` | `51` | `docs/prompts/FraudShield_Master_Build_Prompt.md` |  | MATCH |
@@ -436,8 +428,6 @@ Every macro in `numbers.tex` checked against its evidence file at `m4-complete` 
 | `\nBandWider` | `2.8` | `2.8` | `docs/research/lab_notebook.md` |  | MATCH |
 | `\nBandBlindLow` | `0.509` | `0.509` | `docs/research/lab_notebook.md` |  | MATCH |
 | `\nBandBlindHigh` | `0.530` | `0.530` | `docs/research/lab_notebook.md` |  | MATCH |
-| `\nSiblingLeakChannel` | `0.006` | `0.006` | `docs/research/claims_register.md` |  | MATCH |
-| `\nSiblingLeakCurrency` | `0.001` | `0.001` | `docs/research/claims_register.md` |  | MATCH |
 | `\nFingerprintColsRead` | `three` | `three` | `docs/research/lab_notebook.md` |  | MATCH |
 | `\nFingerprintColsTotal` | `fourteen` | `fourteen` | `docs/research/lab_notebook.md` |  | MATCH |
 | `\nFurtherFeatures` | `three` | `three` | `docs/research/lab_notebook.md` |  | MATCH |
@@ -454,22 +444,10 @@ Every macro in `numbers.tex` checked against its evidence file at `m4-complete` 
 | `\nSeedSdDiffLGB` | `12.5\%` | `12.5%` | `docs/benchmarks/m4_seed_variance_d8083dbc_e1.txt` (evidence commit `d40fca2`) |  | MATCH |
 | `\nPctlFeature` | `95` | `95` | `docs/prompts/FraudShield_Master_Build_Prompt.md` |  | MATCH |
 | `\nSkewConstantFeatures` | `three` | `Three` | `docs/adr/0034-serving-feeds-three-trained-features-from-state-nothing-writes.md` at `151e796` |  | MATCH |
-| `\nSkewAucTrained` | `0.9700` | `0.9700` | `docs/adr/0034-serving-feeds-three-trained-features-from-state-nothing-writes.md` at `151e796` |  | MATCH |
-| `\nSkewFlagTrained` | `725` | `725` | `docs/adr/0034-serving-feeds-three-trained-features-from-state-nothing-writes.md` at `151e796` |  | MATCH |
-| `\nSkewAucOutcomes` | `0.9619` | `0.9619` | `docs/adr/0034-serving-feeds-three-trained-features-from-state-nothing-writes.md` at `151e796` |  | MATCH |
-| `\nSkewFlagOutcomes` | `585` | `585` | `docs/adr/0034-serving-feeds-three-trained-features-from-state-nothing-writes.md` at `151e796` |  | MATCH |
-| `\nSkewAucSim` | `0.9699` | `0.9699` | `docs/adr/0034-serving-feeds-three-trained-features-from-state-nothing-writes.md` at `151e796` |  | MATCH |
-| `\nSkewFlagSim` | `712` | `712` | `docs/adr/0034-serving-feeds-three-trained-features-from-state-nothing-writes.md` at `151e796` |  | MATCH |
-| `\nSkewAucBoth` | `0.9611` | `0.9611` | `docs/adr/0034-serving-feeds-three-trained-features-from-state-nothing-writes.md` at `151e796` |  | MATCH |
-| `\nSkewFlagBoth` | `563` | `563` | `docs/adr/0034-serving-feeds-three-trained-features-from-state-nothing-writes.md` at `151e796` |  | MATCH |
-| `\nSkewTierBoth` | `254` | `254` | `docs/adr/0034-serving-feeds-three-trained-features-from-state-nothing-writes.md` at `151e796` |  | MATCH |
-| `\nSkewHalfWidth` | `0.0075` | `0.0075` | `docs/adr/0034-serving-feeds-three-trained-features-from-state-nothing-writes.md` at `151e796` |  | MATCH |
-| `\nSkewAucDrop` | `0.0089` | `0.0089` | derived | AUC as trained minus AUC as served | MATCH |
-| `\nSkewLost` | `162` | `162` | derived | frauds reaching the flag threshold as trained minus as served | MATCH |
-| `\nSkewLostPct` | `22\%` | `22%` | derived | that loss as a share of the frauds flagged as trained, to a whole per cent | MATCH |
 | `\nFakeReviews` | `four` | `four` | `docs/research/lab_notebook.md` at `488c5b4` |  | MATCH |
 | `\nFakeDefects` | `eleven` | `eleven` | `docs/research/lab_notebook.md` at `488c5b4` |  | MATCH |
-| `\nFakeTests` | `537` | `537` | `docs/research/lab_notebook.md` at `488c5b4` |  | MATCH |
+| `\nFakeCiFailed` | `one` | `1` | `docs/research/paper/evidence/mlflow_alias_ci_90078b2.txt` at `1639d80` (evidence commit `90078b2`) |  | MATCH |
+| `\nFakeCiPassed` | `538` | `538` | `docs/research/paper/evidence/mlflow_alias_ci_90078b2.txt` at `1639d80` (evidence commit `90078b2`) |  | MATCH |
 | `\nRevNovelScored` | `19` | `19` | `docs/research/paper/evidence/reversal_novelty_d8083dbc.txt` at `ab03392` (evidence commit `94bfd69`) |  | MATCH |
 | `\nRevNotNovelScored` | `47` | `47` | `docs/research/paper/evidence/reversal_novelty_d8083dbc.txt` at `ab03392` (evidence commit `94bfd69`) |  | MATCH |
 | `\nRevPriorThreePlus` | `27` | `27` | `docs/research/paper/evidence/reversal_novelty_d8083dbc.txt` at `ab03392` (evidence commit `94bfd69`) |  | MATCH |

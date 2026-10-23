@@ -62,18 +62,14 @@
 % docs/reviews/M2/milestone-review.md "Two minima"; lab_notebook.md 2026-09-18 (M-4).
 \newcommand{\nMinRows}{\meas{170{,}000}}
 \newcommand{\nDetectorMinRows}{\meas{60{,}000}}
-\newcommand{\nMinRowsA}{\meas{169{,}492}}
-\newcommand{\nMinRowsB}{\meas{170{,}455}}
-\newcommand{\nMinRowsC}{\meas{169{,}972}}
-\newcommand{\nMinRowsD}{\meas{170{,}069}}
+
 % claims_register.md C-9 (draw 6abde44e): strongest dataset column and the event-delay channel.
 \newcommand{\nColumnMaxAUC}{\meas{0.706}}
 \newcommand{\nEventDelayAUC}{\meas{0.730}}
 % claims_register.md C-12: account-grouped folds lower merchant_category_code by 0.005.
-\newcommand{\nSiblingLeak}{\meas{0.005}}
+
 % claims_register.md C-13: ten seeds at 300,000 rows; residual size dependence.
-\newcommand{\nSeedSdSizeSeries}{\meas{0.0055}}
-\newcommand{\nSizeSeriesSpan}{\meas{0.065}}
+
 % claims_register.md C-11: event-delay channel before and after PB-56.
 \newcommand{\nEventDelayBefore}{\meas{0.758}}
 \newcommand{\nEventDelayAfter}{\meas{0.730}}
@@ -329,8 +325,10 @@
 \newcommand{\nRevAUCFirst}{\meas{0.656}}
 
 % docs/benchmarks/hardware.md (main), dev-laptop-01, recorded 2026-09-17.
-\newcommand{\nHwCPU}{\meas{Intel Core i5-6200U at 2.30~GHz, 2 cores / 4 threads}}
-\newcommand{\nHwMem}{\meas{7.8~GiB}}
+% The development laptop as the learning curve's evidence-machine stamp records it.
+\newcommand{\nHwCPU}{\meas{i5-6200U}}
+\newcommand{\nHwCores}{\meas{4}}
+\newcommand{\nHwMem}{\meas{7.6~GiB}}
 
 % Row and fraud counts stated in table captions.
 % Battery (m4_battery_d8083dbc_e1.txt, d40fca2): test rows and fraud of the headline line.
@@ -489,8 +487,7 @@
 \newcommand{\nDeviceNaNFeatures}{\meas{four}}   % registry: NaN for a null fingerprint
 \newcommand{\nAdaptMonthIndex}{\meas{12}}       % fraud.yaml adaptation_start_month
 \newcommand{\nAdaptMonthOrdinal}{\meas{thirteenth}}
-\newcommand{\nEventLeakShare}{\meas{99.84\%}}   % lab notebook, the account-events leak
-\newcommand{\nEventLeakBase}{\meas{41.96\%}}
+
 \newcommand{\nMinSigmas}{\meas{3}}              % generator fraud.py, the minimum-scale margin
 \newcommand{\nFingerprintSampleRows}{\meas{1{,}024}}  % fingerprint.py SAMPLE_ROWS
 \newcommand{\nResolutions}{\srcd{51}}           % build prompt: "All 51 defect resolutions"
@@ -536,7 +533,7 @@
 \newcommand{\nRevAmountMultiplier}{\meas{3.5}}  % fraud.yaml reversal_scam_amount_multiplier
 \newcommand{\nBandWider}{\meas{2.8}}          % notebook: the floor is 2.8x wider than the band
 \newcommand{\nBandBlindLow}{\meas{0.509}}\newcommand{\nBandBlindHigh}{\meas{0.530}}
-\newcommand{\nSiblingLeakChannel}{\meas{0.006}}\newcommand{\nSiblingLeakCurrency}{\meas{0.001}}
+
 \newcommand{\nFingerprintColsRead}{\meas{three}}\newcommand{\nFingerprintColsTotal}{\meas{fourteen}}
 \newcommand{\nFurtherFeatures}{\meas{three}}   % notebook: three more instances of the flaw
 \newcommand{\nDetectorT}{\meas{+2.89}}         % notebook: t from the analytic null
@@ -556,18 +553,16 @@
 % principal-re-review.md). No stamped raw output exists; the paper says so where it uses them.
 % ---------------------------------------------------------------------------------------------
 \newcommand{\nSkewConstantFeatures}{\meas{three}}
-\newcommand{\nSkewAucTrained}{\meas{0.9700}}\newcommand{\nSkewFlagTrained}{\meas{725}}
-\newcommand{\nSkewAucOutcomes}{\meas{0.9619}}\newcommand{\nSkewFlagOutcomes}{\meas{585}}
-\newcommand{\nSkewAucSim}{\meas{0.9699}}\newcommand{\nSkewFlagSim}{\meas{712}}
-\newcommand{\nSkewAucBoth}{\meas{0.9611}}\newcommand{\nSkewFlagBoth}{\meas{563}}
-\newcommand{\nSkewTierBoth}{\meas{254}}
-\newcommand{\nSkewHalfWidth}{\meas{0.0075}}
-\newcommand{\nSkewAucDrop}{\meas{0.0089}}     % derived
-\newcommand{\nSkewLost}{\meas{162}}           % derived
-\newcommand{\nSkewLostPct}{\meas{22\%}}       % derived
+
+
+
+
+
 % The fake-MLflow case (lab notebook 2026-09-23, read at 488c5b4).
 \newcommand{\nFakeReviews}{\meas{four}}\newcommand{\nFakeDefects}{\meas{eleven}}
-\newcommand{\nFakeTests}{\meas{537}}
+% The CI run that caught the MLflow alias misreading (paper evidence, the run's whole log).
+\newcommand{\nFakeCiFailed}{\meas{one}}\newcommand{\nFakeCiPassed}{\meas{538}}
+
 % Counterparty novelty on the reversal-scam rows (evidence/reversal_novelty_d8083dbc.txt, ab03392).
 \newcommand{\nRevNovelScored}{\meas{19}}
 \newcommand{\nRevNotNovelScored}{\meas{47}}

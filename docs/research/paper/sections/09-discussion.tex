@@ -18,9 +18,9 @@ parameter value identical, which is why datasets are now identified by a fingerp
 output. A statistical band kept a fixed minimum width that, at release scale, was \nBandWider{} times wider
 than the band it was meant to bound, so the check was blind to a construction leak landing between
 about \nBandBlindLow{} and \nBandBlindHigh{}. Out-of-fold encoding removed each row's own label but
-left the other rows of the same fraud incident in the estimate; grouping folds by account lowered the
-single-column AUC of the strongest dataset column by \nSiblingLeak{}, and of the other columns
-measured by \nSiblingLeakCurrency{} to \nSiblingLeakChannel{}. Later, account grouping turned out not
+left the other rows of the same fraud incident in the estimate, so folds are now grouped by account;
+the lab notebook records that this lowered the single-column AUCs it measured, but no run output was
+kept, so no figure is given here. Later, account grouping turned out not
 to protect features whose unit of history is a counterparty or a map cell, and the control adopted
 for those is temporal: out-of-fold encodings are computed only from rows earlier than the row being
 encoded. The single-column separation ceiling was true of the columns it measured and not of the
@@ -336,9 +336,9 @@ identical; datasets are now identified by a fingerprint over a fixed row sample 
 \addlinespace
 Encodings and folds grouped by each feature's unit of history &
 Leakage between rows of one incident, which inflates single-column scores &
-Out-of-fold encoding grouped by row inflated the strongest column's AUC by \nSiblingLeak{};
-grouping by account lowered it, and for counterparty- and cell-keyed features the control adopted is
-temporal \\
+Out-of-fold encoding grouped by row left an incident's other rows in each estimate;
+grouping by account removed them, and for counterparty- and cell-keyed features the control adopted
+is temporal \\
 \addlinespace
 For every control, a named mutation that would kill it &
 Controls and tests that cannot fail &

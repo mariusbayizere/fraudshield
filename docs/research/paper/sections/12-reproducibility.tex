@@ -37,8 +37,8 @@ re-run, ran on GitHub-hosted runners, virtual machines on shared hardware. Most 
 record the runner's processor and memory; the frontier and single-feature files record no machine,
 and that they ran on a runner is inferred from the paths in their recorded commands and from the
 run's record (\texttt{evidence/\allowbreak round2\_\allowbreak run\_\allowbreak d8083dbc.txt}). The earlier evidence files that record a machine name the development
-laptop (\nHwCPU{}, \nHwMem{}, recorded in \texttt{docs/\allowbreak benchmarks/\allowbreak
-hardware.md}); earlier files record none, and that they were made on the same laptop is inferred.
+laptop, which their stamps record as an Intel Core \nHwCPU{} with \nHwCores{} logical cores and
+\nHwMem{}; earlier files record none, and that they were made on the same laptop is inferred.
 Latency figures from either kind of machine are reported as shapes, not as gate numbers (ADR 0010).
 
 \paragraph{One command.} A single target that regenerates the dataset, trains, evaluates and

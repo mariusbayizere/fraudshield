@@ -46,7 +46,6 @@ M2REV = "docs/reviews/M2/milestone-review.md"
 M3REV = "docs/reviews/M3/milestone-review.md"
 NOTEBOOK = "docs/research/lab_notebook.md"
 PARITY = "docs/ml/training_serving_parity.md"
-HARDWARE = "docs/benchmarks/hardware.md"
 ADR28 = "docs/adr/0028-one-pre-registered-non-burst-fraud-variant.md"
 PROMPT = "docs/prompts/FraudShield_Master_Build_Prompt.md"
 GATE_JSON = "docs/benchmarks/m4_gate_d8083dbc_v3/metrics.json"
@@ -57,6 +56,9 @@ REV_LABELS = "docs/research/paper/evidence/reversal_labels_d8083dbc.txt"
 REV_LABELS_REF = "94bfd69"
 REV_NOVELTY = "docs/research/paper/evidence/reversal_novelty_d8083dbc.txt"
 REV_NOVELTY_REF = "ab03392"
+# The CI log that caught the MLflow alias misreading, kept whole because GitHub deletes job logs.
+FAKE_CI = "docs/research/paper/evidence/mlflow_alias_ci_90078b2.txt"
+FAKE_CI_REF = "1639d80"
 #: PB-67's learning curve, merged to main after m4-complete; read at the commit that last
 #: touched it.
 LC = "docs/benchmarks/m4_learning_curve_{}_d8083dbc.txt"
@@ -97,11 +99,6 @@ ADR34 = "docs/adr/0034-serving-feeds-three-trained-features-from-state-nothing-w
 CLU = "docs/research/paper/evidence/clustered_intervals_d8083dbc.txt"
 CLU_REF = "33596a2"
 ADR34_REF = "151e796"
-#: The rows of ADR 0034's skew table, up to the first value.
-TRAINED = r"\| as trained \| "
-OUTCOMES = r"\| outcomes missing \(no labels consumer\) \| "
-SIM = r"\| SIM swaps missing \(no topic\) \| "
-BOTH = r"\| \*\*both, i\.e\. as M5 shipped\*\* \| "
 #: The commit on this branch that last changed the reference audit.
 REF_AUDIT_REF = "ee97bbd"
 #: The gate line for recall at the 1% FPR budget, up to its value.
@@ -427,18 +424,11 @@ SOURCES: dict[str, Src | Derived] = {
     # ---- the ~170,000-row minimum (M2) ----
     "nMinRows": Src(M2REV, r"all eight fraud scenarios \| ~([\d,]+) rows"),
     "nDetectorMinRows": Src(M2REV, r"0\.6-strength leak \| ~([\d,]+) rows"),
-    "nMinRowsA": Src(NOTEBOOK, r"four different scales: ([\d,]+) /"),
-    "nMinRowsB": Src(NOTEBOOK, r"four different scales: [\d,]+ / ([\d,]+) /"),
-    "nMinRowsC": Src(NOTEBOOK, r"four different scales: [\d,]+ / [\d,]+ / ([\d,]+) /"),
-    "nMinRowsD": Src(NOTEBOOK, r"four different scales: [\d,]+ / [\d,]+ / [\d,]+ / ([\d,]+)\."),
     # ---- claims register (C-9, C-11, C-12, C-13, C-6) ----
     "nColumnMaxAUC": Src(
         CLAIMS, r"Strongest transaction column `merchant_category_code` \*\*([\d.]+)\*\*"
     ),
     "nEventDelayAUC": Src(CLAIMS, r"event-to-transaction delay \*\*([\d.]+)\*\*"),
-    "nSiblingLeak": Src(CLAIMS, r"lowers `merchant_category_code` by ([\d.]+)"),
-    "nSeedSdSizeSeries": Src(CLAIMS, r"seed-to-seed sd of ([\d.]+)"),
-    "nSizeSeriesSpan": Src(CLAIMS, r"three-point series spanned ([\d.]+)"),
     "nEventDelayBefore": Src(CLAIMS, r"channel fell from \*\*([\d.]+) to [\d.]+\*\*"),
     "nEventDelayAfter": Src(CLAIMS, r"channel fell from \*\*[\d.]+ to ([\d.]+)\*\*"),
     "nEventDelayShare": Src(CLAIMS, r"about \*\*(\d+%) of the excess"),
@@ -890,8 +880,22 @@ SOURCES: dict[str, Src | Derived] = {
     "nIntervalLevel": Src(GATE, r"value  (\d+%) CI"),
     "nTrainableFeatures": Src(BAT, r"full model, (\d+) features"),
     # ---- hardware ----
-    "nHwCPU": Src(HARDWARE, r"\| CPU \| (Intel Core i5-6200U @ 2\.30 GHz, 2 cores / 4 threads) \|"),
-    "nHwMem": Src(HARDWARE, r"\| Memory \| ([\d.]+ GiB) total"),
+    # The laptop as an evidence-machine stamp records it (hardware.md records 7.8 GiB from `free`).
+    "nHwCPU": Src(
+        LC.format("120k"),
+        r"evidence-machine: Intel\(R\) Core\(TM\) (i5-6200U) CPU",
+        ref=LC_REF,
+    ),
+    "nHwCores": Src(
+        LC.format("120k"),
+        r"i5-6200U CPU @ [^;]+; (\d+) logical cores",
+        ref=LC_REF,
+    ),
+    "nHwMem": Src(
+        LC.format("120k"),
+        r"i5-6200U CPU @ [^;]+; \d+ logical cores; ([\d.]+ GiB)",
+        ref=LC_REF,
+    ),
     # ---- specification values (SOURCED, build prompt) ----
     "nWeightXGB": Src(PROMPT, r"Combine raw probabilities as ([\d.]+)·p_xgb"),
     "nWeightLGB": Src(PROMPT, r"·p_xgb \+ ([\d.]+)·p_lgb"),
@@ -1095,8 +1099,6 @@ SOURCES: dict[str, Src | Derived] = {
     "nDeviceNaNFeatures": Src(REGISTRY, r"\((?:\d+)\)\. (Four) are NaN for a null fingerprint"),
     "nAdaptMonthIndex": Src(FRAUD_YAML, r"adaptation_start_month:\s*\n\s*value: (\d+)"),
     "nAdaptMonthOrdinal": Src(FRAUD_YAML, r"as index 12, the (thirteenth) month"),
-    "nEventLeakShare": Src(NOTEBOOK, r"\*\*([\d.]+%)\*\* of them sat on a"),
-    "nEventLeakBase": Src(NOTEBOOK, r"fraud account against a ([\d.]+%) base rate"),
     "nMinSigmas": Src(FRAUD_PY, r"b\*n \+ (\d+)\*sqrt\(b\*n\)"),
     "nFingerprintSampleRows": Src(FINGERPRINT, r"^SAMPLE_ROWS = (\d+)"),
     "nResolutions": Src(PROMPT, r"All (\d+) defect resolutions"),
@@ -1107,34 +1109,18 @@ SOURCES: dict[str, Src | Derived] = {
     "nSeedSdDiffLGB": Src(SEEDS, r"ensemble stdev vs lightgbm alone: \+([\d.]+%)"),
     "nPctlFeature": Src(PROMPT, r"`benchmark\.py features` p(\d+) <"),
     "nSkewConstantFeatures": _adr34(r"# 0034 — (Three) trained features are fed from state"),
-    "nSkewAucTrained": _adr34(TRAINED + r"\*\*([\d.]+)\*\*"),
-    "nSkewFlagTrained": _adr34(TRAINED + r"\*\*[\d.]+\*\* \| — \| \*\*(\d+)\*\*"),
-    "nSkewAucOutcomes": _adr34(OUTCOMES + r"([\d.]+) \|"),
-    "nSkewFlagOutcomes": _adr34(OUTCOMES + r"[\d.]+ \| \d+ \| (\d+) \|"),
-    "nSkewAucSim": _adr34(SIM + r"([\d.]+) \|"),
-    "nSkewFlagSim": _adr34(SIM + r"[\d.]+ \| \d+ \| (\d+) \|"),
-    "nSkewAucBoth": _adr34(BOTH + r"\*\*([\d.]+)\*\*"),
-    "nSkewTierBoth": _adr34(BOTH + r"\*\*[\d.]+\*\* \| \*\*(\d+)\*\*"),
-    "nSkewFlagBoth": _adr34(BOTH + r"\*\*[\d.]+\*\* \| \*\*\d+\*\* \| \*\*(\d+)\*\*"),
-    "nSkewHalfWidth": _adr34(r"95% interval \(±([\d.]+)\)"),
-    "nSkewAucDrop": Derived(
-        ("nSkewAucTrained", "nSkewAucBoth"),
-        lambda a, b: f"{Decimal(a) - Decimal(b):.4f}",
-        "AUC as trained minus AUC as served",
-    ),
-    "nSkewLost": Derived(
-        ("nSkewFlagTrained", "nSkewFlagBoth"),
-        lambda a, b: str(int(a) - int(b)),
-        "frauds reaching the flag threshold as trained minus as served",
-    ),
-    "nSkewLostPct": Derived(
-        ("nSkewFlagTrained", "nSkewFlagBoth"),
-        lambda a, b: f"{(Decimal(a) - Decimal(b)) * 100 / Decimal(a):.0f}%",
-        "that loss as a share of the frauds flagged as trained, to a whole per cent",
-    ),
     "nFakeReviews": Src(NOTEBOOK, r"had been reviewed (four) times", ref=NOTEBOOK_MAIN_REF),
     "nFakeDefects": Src(NOTEBOOK, r"found (eleven) real defects", ref=NOTEBOOK_MAIN_REF),
-    "nFakeTests": Src(NOTEBOOK, r"(\d+) tests passed\.\s+Four\s+reviewers", ref=NOTEBOOK_MAIN_REF),
+    "nFakeCiFailed": Src(
+        FAKE_CI,
+        r"^\d{4}-\d\d-\d\dT\S+ (\d+) failed, \d+ passed, \d+ skipped in",
+        ref=FAKE_CI_REF,
+    ),
+    "nFakeCiPassed": Src(
+        FAKE_CI,
+        r"^\d{4}-\d\d-\d\dT\S+ \d+ failed, (\d+) passed, \d+ skipped in",
+        ref=FAKE_CI_REF,
+    ),
     "nRevNovelScored": Src(
         REV_NOVELTY,
         r"scored as fraud.*?\n\s+counterparty_is_new_for_account true: (\d+)",
@@ -1327,8 +1313,6 @@ SOURCES: dict[str, Src | Derived] = {
     "nBandWider": Src(NOTEBOOK, r"the floor is\s+\*\*([\d.]+)× wider\*\*"),
     "nBandBlindLow": Src(NOTEBOOK, r"landing between roughly\s+([\d.]+) and [\d.]+\."),
     "nBandBlindHigh": Src(NOTEBOOK, r"landing between roughly\s+[\d.]+ and ([\d.]+)\."),
-    "nSiblingLeakChannel": Src(CLAIMS, r"`channel` by ([\d.]+) and"),
-    "nSiblingLeakCurrency": Src(CLAIMS, r"`currency` by ([\d.]+) at"),
     "nFingerprintColsRead": Src(NOTEBOOK, r"The fingerprint read (three) columns of fourteen"),
     "nFingerprintColsTotal": Src(NOTEBOOK, r"The fingerprint read three columns of (fourteen)"),
     "nFurtherFeatures": Src(NOTEBOOK, r"found (three) more instances the review had missed"),
