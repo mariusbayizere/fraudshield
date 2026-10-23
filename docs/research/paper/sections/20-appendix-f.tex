@@ -2,8 +2,9 @@
 \label{app:engineering}
 
 These findings concern the system built around the benchmark rather than the benchmark itself. They
-are moved here from the main text so that it stays the benchmark audit; none is removed, and only the
-opening sentence of each is adapted to its new place.
+are moved here from the main text so that it stays the benchmark audit; only the opening sentence of
+each is adapted to its new place, except the served-constants finding, whose figures and the claim
+they carried were removed because no run output was kept for them.
 
 \subsection*{A fix that did nothing in its own scenario}
 
@@ -37,10 +38,11 @@ none (PB-72).
  The scoring client was reviewed
 \nFakeReviews{} times (a principal review, a re-review of its fixes, a verification pass and an
 adversarial pass over the promotion path, each by an agent), and the reviewers found \nFakeDefects{} defects in the
-model-promotion path between them, while the suite passed locally (the lab notebook, 2026-09-23). None
-found that the client misread how the model registry reports an unset alias, because the tests of
-that path ran against an in-process fake that encoded the same misreading. A test that starts a real
-registry container caught it in continuous integration: in that run it was the suite's
+model-promotion path between them, while the suite passed locally with its real-registry test skipped,
+since nothing that runs without Docker touches a real server (\texttt{docs/\allowbreak parallel/\allowbreak
+M5\_updates.md}). None found that the client misread how the model registry reports an unset alias,
+because the tests of that path that ran without Docker used an in-process fake that encoded the same
+misreading. The test that starts a real registry container caught it in continuous integration: in that run it was the suite's
 \nFakeCiFailed{} failure while \nFakeCiPassed{} tests passed
 (\texttt{evidence/\allowbreak mlflow\_\allowbreak alias\_\allowbreak ci\_\allowbreak 90078b2.txt}, the
 run's whole log). Review, mutation testing and

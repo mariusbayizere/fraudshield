@@ -66,10 +66,6 @@
 % claims_register.md C-9 (draw 6abde44e): strongest dataset column and the event-delay channel.
 \newcommand{\nColumnMaxAUC}{\meas{0.706}}
 \newcommand{\nEventDelayAUC}{\meas{0.730}}
-% claims_register.md C-12: account-grouped folds lower merchant_category_code by 0.005.
-
-% claims_register.md C-13: ten seeds at 300,000 rows; residual size dependence.
-
 % claims_register.md C-11: event-delay channel before and after PB-56.
 \newcommand{\nEventDelayBefore}{\meas{0.758}}
 \newcommand{\nEventDelayAfter}{\meas{0.730}}
@@ -324,7 +320,6 @@
 \newcommand{\nRevCaughtFirst}{\meas{4}}
 \newcommand{\nRevAUCFirst}{\meas{0.656}}
 
-% docs/benchmarks/hardware.md (main), dev-laptop-01, recorded 2026-09-17.
 % The development laptop as the learning curve's evidence-machine stamp records it.
 \newcommand{\nHwCPU}{\meas{i5-6200U}}
 \newcommand{\nHwCores}{\meas{4}}
@@ -549,14 +544,10 @@
 \newcommand{\nPctlFeature}{\srcd{95}}  % build prompt M3 gate: features latency percentile
 
 % ---------------------------------------------------------------------------------------------
-% Training-serving skew (ADR 0034, read at 151e796; reproduced by docs/reviews/M5/
-% principal-re-review.md). No stamped raw output exists; the paper says so where it uses them.
+% Training-serving skew (ADR 0034, read at 151e796): only the count of served constants is used;
+% the skew figures had no stamped raw output and were cut.
 % ---------------------------------------------------------------------------------------------
 \newcommand{\nSkewConstantFeatures}{\meas{three}}
-
-
-
-
 
 % The fake-MLflow case (lab notebook 2026-09-23, read at 488c5b4).
 \newcommand{\nFakeReviews}{\meas{four}}\newcommand{\nFakeDefects}{\meas{eleven}}

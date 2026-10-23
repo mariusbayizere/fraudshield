@@ -71,9 +71,7 @@ of the specified ensemble over a single XGBoost model was detected here, the ben
 what the ensemble adds.
 
 \paragraph{Scale and volume.} Results are at \nRowsDrawB{} rows or fewer, not the \nSpecRows{} the
-specification requires, a scale that is \deferred{M10}. The strongest dataset column's AUC moves with
-dataset size by more than seed noise, and the cause is unexplained; every figure is therefore stated
-at its scale. The failing gate metrics (recall and false-negative rate at the flag threshold) did not
+specification requires, a scale that is \deferred{M10}. Every figure is stated at its scale. The failing gate metrics (recall and false-negative rate at the flag threshold) did not
 close in any run measured, from \nLcTrainA{} training rows up to all \nFvTrainRows{} rows of the
 training period (Section~\ref{sec:volume}). The training period ends there, so more data of this
 draw cannot be tried; whether another model, or another draw, would close the gap is not tested.
@@ -95,10 +93,9 @@ volume, against \nBatECEDecision{} for the diagnostic model; over all rows, in t
 bins, the errors are \nGateCalECEAll{} and \nFvCalECEAll{}. No interval was computed for the decision-region figures,
 which rest on few rows per bin. A row-weighted figure, including the specification's own gate metric, hides this.
 
-\paragraph{Engineering findings.} Findings about the system rather than the benchmark, a
-measured gap between the features the model was trained on and those the scoring service serves, and
-a verification effort that missed a defect its fixtures shared, are reported in
-Appendix~\ref{app:engineering}.
+\paragraph{Engineering findings.} Findings about the system rather than the benchmark, among
+them trained features the scoring service serves as constants and a verification effort that missed a
+defect its fixtures shared, are reported in Appendix~\ref{app:engineering}.
 
 \paragraph{Latency.} No latency figure here is a gate figure. The frontier is a difference of
 medians on a GitHub-hosted runner, a virtual machine on shared hardware; an earlier laptop run's
