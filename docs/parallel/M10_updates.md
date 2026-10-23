@@ -54,9 +54,10 @@ The backlog numbers above are proposals for the owner to confirm at integration:
 
 Written by the M10 agent. The section above is inherited from M5 and is not edited here.
 
-**Status: harnesses written, nothing executed.** No measurement, chaos experiment or browser
-journey has been run, and no number of any kind is recorded on this branch. Every file states
-"not yet executed — requires the integrated system and dedicated hardware (ADR 0010)".
+**Status: no measurement exists.** No requirement has been measured, and no chaos experiment
+or browser journey has been run. The only thing executed is step 2's ingest leg on a shared CI
+runner on 2026-10-23, which proves the load harness can run and can fail; its numbers measure
+nothing (section "Step 2, ingest leg", below).
 
 ## What this branch adds
 
@@ -206,3 +207,99 @@ The items belonging to other milestones are written into their files, not decide
    stands as the requirement in the meantime and now says so in its status line.
 
 **M10 stops here.** It waits for M6, M7, M8 and M9 on `main`, and for the hardware decision.
+
+## Step 2, ingest leg (2026-10-23)
+
+**Nothing from this is a measurement.** It ran on a shared GitHub runner at 2 requests a second
+against the Compose stack (ADR 0010). It shows whether the load harness runs and fails when it
+must, and no figure below is evidence for any requirement row.
+
+The owner asked for step 2 (`docs/benchmarks/m10_plan.md` §3) on `main` once the API image, the
+API in Compose and `GET /api/v1/environment` had merged: run the harness, and prove that it stops
+on a wrong key, and when the environment endpoint reports `synthetic_data` false or cannot be
+reached. *"A run that only succeeds proves nothing."*
+
+What ran: `.github/workflows/m10-harness.yml` running `tests/performance/step2/prove-harness.sh`,
+run 39909394023, job 120268607480, on `4ac1092` (main `e17cc18` plus this branch). The workflow and
+harness changes had an independent review: 12 findings, all answered; the recheck found nothing
+blocking.
+
+| Case | Exit (expected) | What reached the API | Verdict |
+|---|---|---|---|
+| pass: the real API, 2 users at 1 request a second for 60 s | 1 (0) | 118 ingests, 94 answered 503; Kafka +24, the 24 accepted | **FAIL** (PB-195) |
+| wrong key | 3 (3) | nothing; Kafka +0 | pass |
+| `synthetic_data: false` (fault proxy) | 3 (3) | proxy forwarded 0; Kafka +0 | pass |
+| environment answers without the flag | 3 (3) | forwarded 0 | pass |
+| environment answers 503 | 3 (3) | forwarded 0 | pass |
+| nothing listening at the host | 3 (3) | nothing | pass |
+| key revoked mid-run (fault proxy) | 4 (4) | stopped 4 s into a 60 s run; forwarded 10, the preflight's key check included | pass |
+| proxy with no fault | 1 (0) | 42 ingests, 35 answered 503 | **FAIL** (PB-195) |
+| mutant: the shape defect restored | 5 (5) | nothing | pass |
+| mutant: the pacing defect restored | 6 (6) | the task's exception caught | pass |
+
+The fault proxy (`step2/fault_proxy.py`) forwards every request to the real API except the fault it
+injects, so a harness that ignored the fault would have sent real load and Kafka would have shown it.
+
+### 1. The harness ended every run with no request and exit 0
+
+Before step 2 the harness had never run. Its first run found three defects:
+
+1. **The plateau shape stopped every run without `--fs-target-users` at once**, with no request
+   sent and exit status 0. Observed with Locust 2.43.4 against a local fake upstream. **A load
+   test could have reported success having measured nothing.** The docstring said the shape was
+   "disabled unless set" and honoured `-u`/`-r`; Locust uses any shape class the file defines, and
+   a `tick` that returns None ends the run.
+2. **`response.js` does not exist** on Locust's `FastHttpUser` responses; every task raised after
+   its first request.
+3. **The pacing function was assigned to the instance**, so every user raised on its first wait.
+
+Locust records a task's exception and exits 1, so with `--fs-target-users` the second and third
+would have failed the run after at most one request per user (inferred from Locust's source, not
+observed). All three are fixed. Two new exit statuses close the class: 5 when a run that was
+allowed to start sent nothing, 6 when a task raised.
+
+### 2. Every refusal now stops the run, and the reintroduced defects are caught
+
+The preflight refuses with exit 3 before the first request when `GET /api/v1/environment` cannot
+be reached, does not answer 200, is not JSON, or does not report `synthetic_data` true; when the key
+check (an ingest `POST` with a malformed body, which the API answers 400 only after the key and its
+`ingest:write` scope pass) answers anything else; and when the preflight itself raises. A 401 or 403
+during the run stops it with exit 4. All six refusal cases exited as specified: the five preflight
+cases sent no ingest, and the revocation case stopped at the first 401, after the nine real ingests
+the proxy allowed. The two mutants, copies of the harness with the shape and the pacing defect put
+back, exited 5 and 6: the class of failure that let the harness report success is now caught.
+
+### 3. The FX gap, found only because something finally sent the specified currency mix
+
+**PB-195** (owner M9 and the demo seed). The passing case failed for a real reason: ingest answers
+503 for a currency with no FX rate (ADR 0063), RWF is converted at one without reading the table
+(`JdbcFxRates.java:56-57`), and nothing outside the tests inserts into `fx_rates`. The harness
+draws its currency uniformly from five, so four in five refusals were predicted: observed 79.7%
+(94 of 118) and 83.3% (35 of 42). The API's own start test sends RWF only, and passed. The cause is inferred from the ratio and the code, because the 503
+says only "retry the same request" (**PB-196**, owner M6: the reason is neither sent nor logged).
+
+The fix is on `fix/demo-fx-rates`, not merged: the demo seed inserts the country packs' fixed
+simulation rates. Step 2's passing case has not been re-run with it. Restricting the harness to RWF
+would have made step 2 green while drifting from the specified mix, and was not done (owner,
+2026-10-23).
+
+The harness's failure messages now carry the problem's type, title and detail, and the request's
+currency, so failures group by currency in the run's own failure table. With today's API the detail
+is generic; the currency split is what would have shown this gap without inference.
+
+### 4. Distributed mode: exit codes 3 and 4 never reach the master
+
+**PB-197** (owner M10). A refusal sets the status of the process that saw it. In a master/worker
+run that is a worker: the master never sees 3 or 4, ends with 5 or 1, and keeps the other workers
+loading after a key is revoked. Found by the review and confirmed by reading Locust's source, not
+observed. Step 2 ran in local mode only. **This must be fixed before any distributed run.**
+
+### Identifiers claimed by this branch
+
+PB-195 to PB-199 (2026-10-23; PB-191 to PB-194 are claimed on `m9/images`). Used: PB-195 to PB-197.
+
+### What step 2 did not cover
+
+The chaos leg (no cluster, no Chaos Mesh namespace) and the journey leg (M8 and M8B not on `main`)
+have not run. Every measured row of the plan stays unmeasured; see the plan's §2.
+

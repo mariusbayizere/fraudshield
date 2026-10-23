@@ -3340,3 +3340,45 @@ and the sentence it is meant to justify; if the nouns differ, it does not justif
 
 It is also an argument for the practice rather than the rule: the defect had been in the code and
 in review, and it survived both. It surfaced only because a number had to be defended in writing.
+
+### 2026-10-23 · A load test that had never run, and the first thing it found
+
+M10's step 2 asks for each harness to be shown to run and to fail before anything is measured with
+it (`docs/benchmarks/m10_plan.md` §3). The ingest load harness had been written a month earlier
+against the frozen contract and reviewed, but never run: there was no API to point it at. Once the
+API ran in Compose it was run, on a CI runner at 2 requests a second (run 39909394023 on
+`m10/verification` `4ac1092`). Nothing from it is a measurement.
+
+**The harness ended every run with no request and exit 0.** Its plateau shape returned None when
+no target was set, and Locust ends a run when a shape does that: no request, no failure, status 0
+(observed with Locust 2.43.4). Two more defects lay behind it, a response attribute that does not
+exist and a pacing function bound wrongly, each raising in every user. So a load test could have
+reported success having measured nothing, and the throughput rows would have been read from a run
+that never loaded the system. The docstring said the shape was disabled unless a target was set,
+which was the opposite of what the code did.
+
+**Every refusal case now stops the run.** A wrong key, an environment endpoint that reports
+`synthetic_data` false, omits it, fails or cannot be reached, and a key revoked mid-run each end the
+run with their own exit status: the preflight cases before any ingest, the revocation at its first
+401. Two
+mutants, copies of the harness with the shape and the pacing defect put back, are caught with exit
+5 (nothing sent) and 6 (a task raised). The cases assert the exact status, not merely a non-zero
+one, so a run that failed for some other reason cannot pass as the refusal it was meant to prove.
+
+**The FX gap was found only because something finally sent the specified currency mix.** The
+passing case failed: about four in five ingests were answered 503 (79.7% and 83.3% against a
+predicted 80%), because nothing inserts FX rates and ingest refuses any currency without one; RWF
+alone is converted without the table (PB-195). The API's own start test sent one RWF
+transaction, the one currency that cannot fail this way. The 503 said only
+"retry the same request" and the API logged no reason (PB-196), so the cause was inferred from the
+ratio and the code rather than read from the run; the harness's failure messages now carry the
+problem and the request's currency, so the next such gap groups itself.
+
+**Distributed mode is not yet safe.** A refusal sets the exit status of the process that saw it,
+and in a master/worker run that is a worker: exit codes 3 and 4 never reach the master, which keeps
+the other workers loading (PB-197, from the review and Locust's source, not observed). It must be
+fixed before any distributed run.
+
+The rule this adds: **a harness is not evidence until it has been seen to fail, and a test input
+that is always the easy case proves only the easy case.** The start test's single RWF transaction
+was correct and passed, and it could not have found PB-195.

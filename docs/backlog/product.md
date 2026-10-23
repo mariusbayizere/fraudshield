@@ -25,6 +25,7 @@ taken twice. Claims made on branches not yet merged, as of 2026-10-17:
 | PB-102 to PB-130 | M7 | `M7_updates.md`, "Numbering reserved by this branch" | the merge round's unowned items and M7's rows proved only in part (PB-102 to PB-124 used) |
 | PB-151 to PB-170 | M8B | `M8B_updates.md`, "Numbering reserved by this branch" | the analyst API's follow-ups (PB-151 to PB-159 used); M8B also holds ADR 0110–0119 and Flyway V80–V89 |
 | PB-171 to PB-190 | M9 | `M9_updates.md`, "Identifiers claimed by this branch" and "Backlog ids filed on `main`" | M9's follow-ups and items it files for other owners (PB-171 to PB-190 all used) |
+| PB-195 to PB-199 | M10 (`m10/verification`) | `M10_updates.md`, "Identifiers claimed by this branch" | step 2's findings, filed for M9, M6 and M10 (PB-195 to PB-197 used); PB-191 to PB-194 are claimed on `m9/images` |
 
 ---
 
@@ -1662,3 +1663,21 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
   7. Each signing writes the repository, workflow, branch and commit to the public Rekor log; the repository is public, so only branch names outlive their deletion.
   8. `images` holds `packages: write` and `id-token: write` on every ref, though only `main` uses them; a feature branch's signature would fail the anchored verification, so this is hardening only.
 - **Acceptance:** 1: a retried database step before `trivy image` and the check bundle pinned by digest; 2: a gate job that fails on `main` when a target is absent, if these become required checks; 3: `cancel-in-progress` false on `main`; 4: `.dockerignore` files excluding `.git` and `persist-credentials: false`; 5: the value passed through `env:`; 6: `defaults.run.shell: bash` (which adds `pipefail`); 7: no change needed, recorded; 8: the push and signing steps in a job that runs only on `refs/heads/main`.
+
+### PB-195 · The demo and Compose databases have no FX rates, so ingest refuses four of five currencies
+- **Source:** M10 step 2, ingest leg, run 39909394023 (job 120268607480) on `m10/verification` `4ac1092`, 2026-10-23 · **Priority:** high · **Owner:** M9 (the Compose stack) and the demo seed (ADR 0019)
+- **Problem:** ingest answers 503 for a currency with no FX rate (ADR 0063; `IngestService.java:182-183`). RWF is converted at one without reading the table (`JdbcFxRates.java:56-57`), and nothing outside the tests inserts into `fx_rates`: no migration and no demo seed. The Compose stack therefore accepts RWF only. The API's own start test sends RWF and passed.
+- **Evidence:** the harness draws its currency uniformly from RWF, KES, TZS, UGX and CDF, so four in five requests were predicted to be refused. Observed: 94 of 118 ingests answered 503 in the passing case (79.7%) and 35 of 42 through the fault proxy (83.3%). The cause is inferred from that ratio and the code: the 503 body says only "retry the same request" (PB-196).
+- **Fix:** branch `fix/demo-fx-rates`. The demo seed inserts one rate per non-RWF currency of the country packs, read from their `fx_rate_to_base`, the fixed rates the training data was generated at; it runs apart from the institution's seed, so an existing demo database gains the rates on the next `make seed-demo`. Not merged.
+- **Acceptance:** after `make seed-demo`, an ingest in each of KES, TZS, UGX and CDF is decided (200), and step 2's passing case passes on the Compose stack with the specified currency mix.
+- **Open, for the owner:** ADR 0063 and V61 say development and demo databases hold synthetic rates only (D-21). The packs' rates are 2024 World Bank averages held fixed for the simulation; whether a fixed simulation parameter counts as synthetic in D-21's sense is the owner's to confirm.
+
+### PB-196 · A 503 from ingest says neither its reason nor logs it
+- **Source:** M10 step 2, while finding PB-195's cause, 2026-10-23 · **Priority:** medium · **Owner:** M6
+- **Problem:** `IngestService.Unavailable` carries a reason ("no FX rate for KES", "idempotency is unavailable", "the same submission is still being decided", an exception's class), and `IngestController.unavailable` drops it: the body is the generic `service-unavailable` problem with the detail "retry the same request", and nothing in `IngestService` or `IngestController` logs the reason. A client, an operator and a load test see the same refusal for a missing reference rate as for a transient outage. PB-195's cause had to be inferred from a ratio.
+- **Acceptance:** the reason reaches the operator (a log line or a metric labelled by reason, with the correlation id), and the problem body distinguishes a refusal the client cannot cure by retrying (a currency with no rate) from one it can. Whether the body names the currency is M6's call.
+
+### PB-197 · In a distributed load run, the harness's refusals never reach the master
+- **Source:** independent review of the step 2 harness, 2026-10-23 (finding 5), confirmed by reading Locust 2.43.4's source; not observed · **Priority:** high before any distributed run · **Owner:** M10
+- **Problem:** the preflight refusal (exit 3) and the in-run key refusal (exit 4) set the exit status of the process that saw them and quit it. In a master/worker run that is a worker: the master never sees 3 or 4, ends with 5 (nothing sent) or 1, and keeps the other workers loading after a key is revoked. The campaign's load runs are distributed (`tests/performance/README.md`).
+- **Acceptance:** a worker's refusal stops the whole run and the master exits with the refusal's status, shown by step 2 cases run in master/worker mode. **This must be fixed before any distributed run.**
