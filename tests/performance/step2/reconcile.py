@@ -13,7 +13,11 @@ classes each record:
 * ``duplicate``: a second or later record of the same id; reported with it are whether the
   envelope's ``event_id`` repeats (a re-publish that consumers deduplicate) or differs, and
   whether the harness replayed that id;
-* ``foreign``: an id the harness never sent in this case.
+* ``foreign``: an id the harness never sent in this case;
+* ``unparsed``: a line whose key is not a ``transaction_id`` (a UUID) at all, such as a message the
+  console consumer printed among the records. Counted apart, so it is not mistaken for a record;
+  the read count alone can still balance a junk line against a missing record, which then shows
+  here as unparsed and as an accepted id without a record.
 
 It also lists the accepted ids with no record. It reports and exits 0 whatever it finds: the case's
 verdict is unchanged until a run has shown what the extra records are.
@@ -24,10 +28,13 @@ Usage: reconcile.py <ids.json> <records.tsv> <out.json>; prints a one-line summa
 from __future__ import annotations
 
 import json
+import re
 import sys
 from collections import Counter
 from pathlib import Path
 from typing import Any
+
+UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
 
 def event_id(value: str) -> str | None:
@@ -53,6 +60,10 @@ def reconcile(ids: dict[str, list[str]], lines: list[str]) -> dict[str, Any]:
             "id": key,
             "event_id": event_id(value),
         }
+        if not UUID.match(key):
+            classes["unparsed"] += 1
+            extra.append(dict(record, kind="unparsed"))
+            continue
         earlier = seen.setdefault(key, [])
         if earlier:
             kind = "duplicate"
