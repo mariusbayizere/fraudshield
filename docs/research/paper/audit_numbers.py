@@ -93,7 +93,6 @@ TEST_REGISTRY = "ml/tests/features/test_registry.py"
 FLOOR_RAW = "docs/benchmarks/m3_single_feature_auc_2c80ef6.txt"
 REF_AUDIT = "docs/research/paper/reference_audit.md"
 DEFECTS = "docs/srs/defect_register.md"
-BACKLOG = "docs/backlog/product.md"
 ADR34 = "docs/adr/0034-serving-feeds-three-trained-features-from-state-nothing-writes.md"
 CLU = "docs/research/paper/evidence/clustered_intervals_d8083dbc.txt"
 CLU_REF = "33596a2"
@@ -1104,7 +1103,6 @@ SOURCES: dict[str, Src | Derived] = {
     "nLatencyTargetFlagged": Src(PROMPT, r"budget targets p95 ≤ (\d+) ms for flagged"),
     "nSpecRows": Src(PROMPT, r"Targets \(SRS 7\.1\): ≥ ([\d,]+) rows"),
     "nRazaqInterviews": Src(REF_AUDIT, r"We interviewed (\d+) participants", ref=REF_AUDIT_REF),
-    "nFeaturePassRate": Src(BACKLOG, r"the feature pass costs about (\d+) rows a second"),
     "nSeedSdDiffXGB": Src(SEEDS, r"ensemble stdev vs xgboost alone: (-[\d.]+%)"),
     "nSeedSdDiffLGB": Src(SEEDS, r"ensemble stdev vs lightgbm alone: \+([\d.]+%)"),
     "nPctlFeature": Src(PROMPT, r"`benchmark\.py features` p(\d+) <"),

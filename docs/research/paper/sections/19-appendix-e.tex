@@ -20,11 +20,12 @@ smaller; every result is reported at its stated scale (Section~\ref{sec:dataset}
 Latency of the online feature path at its \nPctlFeature{}th percentile, against the
 \nFeatureLatencyTarget{}~ms target & M10 & Latency percentiles are admissible only from a dedicated
 machine (ADR 0010); none was available. \\
-Gate-admissible latency of the scoring service, and the shadow-mode AUC difference & M10 & Measured
-only on shared development hardware, which cannot give a gate figure; no shadow comparison has run
-(ADR 0035). \\
-End-to-end decision latency and throughput at the specified load & M10 & Measured only on shared
-development hardware and recorded as not met there (ADR 0059). \\
+Gate-admissible latency of the scoring service, and the shadow-mode AUC difference & M10 & Not
+measured for the gate: the only latency runs were on shared development hardware, which ADR 0010
+does not accept for gate figures; no shadow comparison has produced an AUC delta (ADR 0035). \\
+End-to-end decision latency and throughput at the specified load & M10 & Not measured for the gate:
+the only runs were on shared development hardware, which ADR 0010 does not accept for gate figures,
+with the scorer replaced by a stand-in that answers at once (ADR 0059). \\
 The latency--explainability frontier at the \nPctlTail{}th percentile, for the ensemble in the
 multi-process service, against the \nLatencyPNineNineShap{}~ms constraint & M10 & The frontier here is
 one booster in one process on a shared GitHub-hosted runner, reported at the median only

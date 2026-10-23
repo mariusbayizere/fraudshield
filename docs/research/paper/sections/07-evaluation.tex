@@ -63,9 +63,9 @@ legitimate test rows are blocked, a false-positive rate of \nGateFPRBlockPct{} (
 the expected calibration error over \nEceBins{} equal-mass bins is \nGateECE{}. In all, \nGatePassed{} of the
 \nGateMeasured{} gate metrics measurable at this stage pass. The specification's gate has
 \nGateTotal{}: the other \nGateUnmeasured{}, inference latency at the \nPctlTail{}th percentile and the
-shadow-mode AUC delta, need the scoring service. Its latency has been measured only on shared
-development hardware, which cannot give a gate figure, and no shadow comparison has produced an AUC
-delta (ADR 0035); both are \deferred{M10}.
+shadow-mode AUC delta, need the scoring service. Its latency has not been measured for the gate:
+the only runs were on shared development hardware, which ADR 0010 does not accept for gate figures.
+No shadow comparison has produced an AUC delta (ADR 0035). Both are \deferred{M10}.
 
 The recall miss is recorded as a finding at this training volume, with the threshold unchanged and
 nothing tuned on the test period (ADR 0031). It holds for the flag threshold and for every
@@ -588,8 +588,12 @@ in the evidence file rather than here.
 
 \begin{itemize}
   \item The value of Isolation Forest routing for novelty: not measured.
-    \item Shadow-mode AUC delta and gate-admissible scoring latency of the serving path: measured only
-        on shared development hardware or not at all (ADR 0035), \deferred{M10}.
-  \item End-to-end decision latency and throughput at the specified load: measured only on shared
-        development hardware, recorded as not met there (ADR 0059), \deferred{M10}.
+    \item Shadow-mode AUC delta and scoring latency of the serving path: not measured for the gate.
+        The only latency runs were on shared development hardware, which ADR 0010 does not accept
+        for gate figures, and no shadow comparison has produced an AUC delta (ADR 0035);
+        \deferred{M10}.
+  \item End-to-end decision latency and throughput at the specified load: not measured for the
+        gate. The only runs were on shared development hardware, which ADR 0010 does not accept for
+        gate figures, and with the scorer replaced by a stand-in that answers at once, so model inference was in neither
+        (ADR 0059); \deferred{M10}.
 \end{itemize}

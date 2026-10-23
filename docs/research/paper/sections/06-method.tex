@@ -30,9 +30,8 @@ corpus and stored, which every later fit on that corpus reads.
 \paragraph{Training volume.} The declared gate model, the one model whose run was declared in
 advance to be the gate's result, was trained on \nTrainUsed{} rows holding
 \nGateTrainFraud{} observed fraud, a subset of the \nTrainRows{} rows in the training period.
-The backlog records the reason as the cost of the feature pass, about \nFeaturePassRate{} rows a
-second on the development machine (PB-67); no document records why \nTrainUsed{} rather than another
-size. The same design was later trained on every one of the \nFvTrainRows{} training rows, on a
+The backlog records the reason as the cost of the feature pass (PB-67); no document records why
+\nTrainUsed{} rather than another size. The same design was later trained on every one of the \nFvTrainRows{} training rows, on a
 GitHub-hosted runner (PB-66; Section~\ref{sec:volume}). Figures in Section~\ref{sec:evaluation} say
 which model they describe; the diagnostic battery below is at \nTrainUsed{} rows throughout.
 
