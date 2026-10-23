@@ -100,3 +100,14 @@ of `--property`, whose deprecation warning Kafka 4.3 prints on stdout (seen in r
 a line whose key is not a UUID is counted apart as unparsed. Noted, not fixed: CI never runs mypy
 over `tests/performance` (filed as PB-200), and offsets are computed from position, which a stray
 line would shift.
+
+## Review 9: the safe-push cherry-pick, the replaced tolerance, and their records
+
+The cherry-pick (`a2e08c3`) is faithful and needs nothing beyond `main`; its 26 tests run the real
+script against a real temporary remote, with only `uv` stubbed; nothing anywhere records a test
+count of 253. Noted: a commit that changes `uv.lock` is checked against the old environment. The
+tolerance replacement (`ef26ddc`) behaves as specified on the real artifacts and on synthetic
+duplicates, foreign, unparsed and missing records, through the real `eval` path. Answered in the
+records: the cherry-pick named as `a2e08c3`, not `34520b3`; the settle-window edge stated as what the
+code does (a late record can fail a later case, is not certain to); D-15 cited for the spool's
+at-least-once re-publish, not for consumer deduplication; "in flight" marked as inferred.

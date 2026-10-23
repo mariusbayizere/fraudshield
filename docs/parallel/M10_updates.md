@@ -326,8 +326,9 @@ pushed through the governance checks joined by hand with `&&`, and a failing ste
 once let a commit and push proceed (the lab notebook, "A check that ran, failed, and did not stop
 the push"). It reached `main` on its own that day (branch `tools/safe-push`: `a2e08c3`, a
 cherry-pick of `5640dcf` without the rest of that branch, and `34520b3`, a note in M8B's scope), and
-from then on this branch pushes only through it. It runs nine of CI's governance checks and leaves
-pre-commit, gitleaks and the rest to CI, so CI is still read at job level after every push.
+from then on this branch pushes only through it. It runs nine of CI's governance checks (its own
+tests: 26, all passing) and leaves pre-commit, gitleaks and the rest to CI, so CI is still read at
+job level after every push.
 
 ### Identifiers claimed by this branch
 
@@ -408,10 +409,24 @@ retire the +119 of run 39942490462: its cause is still unestablished, and PB-198
 **The tolerance is replaced (2026-10-23).** As written in `prove-harness.sh`, both passing cases now
 fail on any duplicate, any record the harness did not send, any unparsed line, an accepted id with
 no record, a read that does not match the offsets, or a named count that differs from the topic's
-growth; no run had exercised the new verdict when this was written. A duplicate fails even when its
-`event_id` repeats, a re-publish that D-15's at-least-once spool can produce. Late records (sent,
-not counted as accepted) pass, by the owner's decision, but only inside the case's settle window;
-none has yet been seen, since the two such ids of run 39958911822 left no record.
+growth. A duplicate fails even when its `event_id` repeats, a re-publish that D-15's at-least-once
+spool can produce. Late records (sent, not counted as accepted) pass, by the owner's decision, not
+on evidence, and only inside the case's settle window; none has yet been seen.
+
+**The first run with the new verdict:** run 39968916860, job 120466063412, on `ef26ddc`, all ten
+cases passed (not a measurement either: the same shared runner at 2 requests a second).
+
+| Case | Sent | Accepted | Kafka | Records named |
+|---|---|---|---|---|
+| pass | 117 | 117 | +117 | 117 accepted; none extra |
+| proxy with no fault | 42 | 40 | +40 | 40 accepted; none extra |
+
+The two ids the proxy control sent and did not count as accepted have no record, as with the passing
+case's two in run 39958911822. Still no extra record has been seen, so PB-198 stays open on the
+cause of the +119. PB-198 also carries the owner's standing notes: a same-`event_id` re-publish from
+the spool fails step 2 by design and is to be investigated first as such, fixed by classing it
+separately, not by loosening the rule; and a record landing after the settle window can fail a later
+case but is not certain to, since some cases do not check the topic (the row says which).
 
 The run before 39958911822 (39956259180, all cases passing) is not counted as evidence: Kafka 4.3
 printed a deprecation warning on stdout ahead of each partition's records, so each partition read
