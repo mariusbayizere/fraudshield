@@ -321,7 +321,7 @@ job when memory is short, use `SKIP=spotless`, and read that job at job level.
 
 ### Identifiers claimed by this branch
 
-PB-195 to PB-199 (2026-10-23; PB-191 to PB-194 are claimed on `m9/images`). Used: PB-195 to PB-197.
+PB-195 to PB-199 (2026-10-23; PB-191 to PB-194 are claimed on `m9/images`). Used: PB-195 to PB-199.
 
 ### What step 2 did not cover
 
@@ -333,7 +333,7 @@ Every measured row of the plan stays unmeasured; see the plan's §2.
 **This is not a measurement: it ran on a shared runner at 2 requests a second.** It shows that the
 ingest harness's `sustained` scenario runs end to end against the API with the specified currency
 mix, and no figure below is evidence for any requirement row. It is the only scenario step 2 runs
-(`prove-harness.sh` passes `--tags sustained`); the other five have never run (below).
+(`prove-harness.sh` passes `--tags sustained`); the other five have never run (below; PB-199).
 
 The seed is on `main` as `6bdb77a`, with a test rename on top, `4ce8d4b` (PB-195). The passing
 case's refusals:
@@ -369,7 +369,8 @@ artifact `m10-step2-ingest`:
 Kafka grew by one more than the 118 accepted in the passing case. The case allows up to one per
 user above the count, for requests in flight when the users are stopped, which reach the API but
 not the run's statistics; that this is what the extra record is, is an inference, not read from
-the run.
+the run. The cause is unestablished, and replacing the allowance with a comparison by
+`transaction_id` is PB-198.
 
 ### What step 2 still cannot run
 
@@ -380,7 +381,7 @@ the first:
 * **Ingest: run, and refused when it must.** Done for the `sustained` scenario only, on a shared
   runner in local mode only. The batch, duplicate-storm, idempotency-conflict, hold-follow-up and
   validation-mix scenarios have never run: every case's log in which users spawned (nine of ten)
-  shows their users filtered out by `--tags sustained`. Distributed mode is not proved (PB-197).
+  shows their users filtered out by `--tags sustained` (PB-199). Distributed mode is not proved (PB-197).
 * **Chaos: one experiment that injects nothing, confirmed to have selected the intended pods.**
   Cannot run: it needs a Kubernetes cluster with the manifests applied, and Chaos Mesh installed
   in its own namespace with a network policy that lets it act. Neither exists: the plan's §1
