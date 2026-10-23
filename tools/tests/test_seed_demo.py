@@ -77,6 +77,28 @@ def test_incomplete_or_malformed_file_is_refused(tmp_path: Path) -> None:
         seed_demo.load_or_create(path)
 
 
+def test_a_new_file_takes_the_api_pepper_and_a_different_one_is_refused(tmp_path: Path) -> None:
+    path = tmp_path / ".demo-credentials"
+    pepper = "ab" * 32
+    created, _ = seed_demo.load_or_create(path, pepper)
+    assert created[seed_demo.PEPPER] == pepper
+    assert seed_demo.load_or_create(path, pepper)[0] == created
+    assert seed_demo.load_or_create(path)[0] == created
+    with pytest.raises(seed_demo.SeedDemoError, match="reject its API key"):
+        seed_demo.load_or_create(path, "cd" * 32)
+
+
+def test_api_pepper_comes_from_the_environment_or_dot_env_and_is_checked(tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    assert seed_demo.api_pepper({}, env_file) is None
+    env_file.write_text(f"{seed_demo.API_PEPPER}={'01' * 32}\n", encoding="utf-8")
+    assert seed_demo.api_pepper({}, env_file) == "01" * 32
+    assert seed_demo.api_pepper({seed_demo.API_PEPPER: "02" * 32}, env_file) == "02" * 32
+    for weak in ("03" * 31, "not-hex"):
+        with pytest.raises(seed_demo.SeedDemoError, match="32 bytes"):
+            seed_demo.api_pepper({seed_demo.API_PEPPER: weak}, env_file)
+
+
 def test_announcement_lists_every_account_and_the_banner() -> None:
     credentials = seed_demo.generate()
     text = seed_demo.announcement(credentials, Path(".demo-credentials"))

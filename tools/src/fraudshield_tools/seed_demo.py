@@ -6,6 +6,10 @@ them to the git-ignored ``.demo-credentials`` file (mode 600) and prints them on
 the file without printing. It then starts the database tool (``backend/persistence``) with the
 ``demo`` profile, which applies the migrations and seeds the demo institution idempotently.
 
+The API-key pepper is the API's: ``FS_API_KEY_PEPPER_HEX`` from the environment or ``.env``, which
+the API in Compose reads as its pepper version 1, so the demo API key it hashes is one that API
+accepts. Without that variable (a database outside the Compose stack) a random pepper is generated.
+
 The credentials reach the Java process through its environment, never its command line, so they do
 not appear in process listings. The database tool itself refuses to seed under any profile other
 than ``dev`` or ``demo``.
@@ -44,6 +48,8 @@ ACCOUNTS: dict[str, str] = {
 }
 API_KEY = "FRAUDSHIELD_DEMOSEED_APIKEY"
 PEPPER = "FRAUDSHIELD_DEMOSEED_APIKEYPEPPERHEX"
+# The API's pepper version 1 in .env (docker-compose.yml passes it to the API).
+API_PEPPER = "FS_API_KEY_PEPPER_HEX"
 REQUIRED = (*ACCOUNTS, API_KEY, PEPPER)
 
 PASSWORD_LENGTH = 24
@@ -78,10 +84,10 @@ def generate_api_key() -> str:
     return f"fsk_dev_{key_id}_{secrets.token_urlsafe(32)}"
 
 
-def generate() -> dict[str, str]:
+def generate(pepper: str | None = None) -> dict[str, str]:
     credentials = {name: generate_password() for name in ACCOUNTS}
     credentials[API_KEY] = generate_api_key()
-    credentials[PEPPER] = secrets.token_hex(32)
+    credentials[PEPPER] = pepper or secrets.token_hex(32)
     return credentials
 
 
@@ -113,8 +119,12 @@ def write_new(path: Path, credentials: Mapping[str, str]) -> None:
         handle.write(render(credentials))
 
 
-def load_or_create(path: Path) -> tuple[dict[str, str], bool]:
-    """The credentials and whether they were created by this call."""
+def load_or_create(path: Path, pepper: str | None = None) -> tuple[dict[str, str], bool]:
+    """The credentials and whether they were created by this call.
+
+    A new file takes ``pepper`` when one is given. An existing file whose pepper differs from it
+    is refused: its API key was hashed with that other pepper, so the API would reject the key.
+    """
     if path.exists():
         if path.stat().st_mode & 0o077:
             raise SeedDemoError(
@@ -126,8 +136,14 @@ def load_or_create(path: Path) -> tuple[dict[str, str], bool]:
             raise SeedDemoError(
                 f"{path.name} is missing {', '.join(missing)}; delete it to regenerate"
             )
+        if pepper is not None and credentials[PEPPER] != pepper:
+            raise SeedDemoError(
+                f"{path.name} holds an API-key pepper other than {API_PEPPER} in .env, so the API"
+                f" would reject its API key; delete {path.name} and reset the database"
+                " (docker compose --profile full down -v) to reseed"
+            )
         return credentials, False
-    credentials = generate()
+    credentials = generate(pepper)
     write_new(path, credentials)
     return credentials, True
 
@@ -153,6 +169,22 @@ def migrator_password(environ: Mapping[str, str], env_file: Path) -> str:
     raise SeedDemoError(
         "no fs_migrator password: set FRAUDSHIELD_DB_MIGRATOR_PASSWORD or run `make env`"
     )
+
+
+def api_pepper(environ: Mapping[str, str], env_file: Path) -> str | None:
+    """The API's pepper (hex, at least 32 bytes), or None when neither source sets it."""
+    pepper = environ.get(API_PEPPER)
+    if not pepper and env_file.exists():
+        pepper = parse(env_file.read_text(encoding="utf-8")).get(API_PEPPER)
+    if not pepper:
+        return None
+    try:
+        length = len(bytes.fromhex(pepper))
+    except ValueError:
+        length = 0
+    if length < 32:
+        raise SeedDemoError(f"{API_PEPPER} must be at least 32 bytes in hex")
+    return pepper
 
 
 def child_environment(
@@ -185,7 +217,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if not args.jar.is_file():
             raise SeedDemoError(f"{args.jar} not found; build it with `make seed-demo`")
         password = migrator_password(os.environ, ENV_FILE)
-        credentials, created = load_or_create(args.credentials)
+        credentials, created = load_or_create(args.credentials, api_pepper(os.environ, ENV_FILE))
     except SeedDemoError as error:
         print(f"seed-demo: {error}", file=sys.stderr)
         return 2

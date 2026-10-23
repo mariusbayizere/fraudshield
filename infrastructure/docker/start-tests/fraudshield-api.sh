@@ -8,7 +8,7 @@
 # 2026-10-22). The three lines below prove that the image's launcher, its classpath (the PostgreSQL
 # driver included: its own refusal must appear, not a missing-driver error) and the guard's
 # registration work. It does not prove that the API serves requests; the compose stack's start
-# test will, once the API is in the `full` profile (not yet).
+# test does (compose-fraudshield-api.sh, run by CI's stack job).
 #
 # The container runs as the Kubernetes manifest runs it: user 10001, read-only root filesystem,
 # a writable /tmp, every capability dropped (infrastructure/k8s/base/api.yaml).

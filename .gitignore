@@ -3,6 +3,7 @@
 .env.*
 !.env.example
 .demo-credentials
+.dev-secrets/
 *.pem
 *.key
 *.p12

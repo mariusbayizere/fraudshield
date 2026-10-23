@@ -33,8 +33,10 @@ concurrency:
 env:
   REQUIRE_DOCKER: "1"
   # Inputs of the stack: compose files, Dockerfiles, container scripts and config, the Makefile
-  # targets that drive them, the devcontainer, and dependency locks.
-  STACK_INPUTS: '^(docker-compose[^/]*\.ya?ml|.*Dockerfile[^/]*|\.dockerignore|\.env\.example|infrastructure/docker/.*|\.devcontainer/.*|Makefile|uv\.lock|frontend/pnpm-lock\.yaml|backend/(.*/)?pom\.xml|backend/persistence/src/main/.*|tools/src/fraudshield_tools/seed_demo\.py|\.github/workflows/stack\.yml)$'
+  # targets that drive them, the devcontainer, and dependency locks. Since the API joined the
+  # `full` profile (M9), also everything its image is built from: the backend's main sources
+  # and the contracts and country packs the build reads (backend/Dockerfile).
+  STACK_INPUTS: '^(docker-compose[^/]*\.ya?ml|.*Dockerfile[^/]*|\.dockerignore|\.env\.example|infrastructure/docker/.*|\.devcontainer/.*|Makefile|uv\.lock|frontend/pnpm-lock\.yaml|backend/(.*/)?pom\.xml|backend/.*/src/main/.*|contracts/(openapi|proto|kafka)/.*|dataset/generator/params/countries/.*|tools/src/fraudshield_tools/seed_demo\.py|\.github/workflows/stack\.yml)$'
 
 jobs:
   changes:
@@ -83,7 +85,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.run == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    # The API's image is built inside the job (Maven, no layer cache between runs).
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: make env
@@ -103,6 +106,13 @@ jobs:
         run: |
           make seed-demo 2>&1 | grep -v -e 'fsk_dev_' -e '@example.com' | tee stack-seed.log
           ./infrastructure/docker/scripts/check-seeded-stack.sh 2>&1 | tee -a stack-seed.log
+      # The API in the `full` profile, on the seeded database: built, started after its
+      # migrations and topics, and shown to serve requests (M9; owner, 2026-10-23).
+      - name: Compose start test of the API (profile full)
+        shell: bash
+        run: |
+          set -o pipefail
+          ./infrastructure/docker/start-tests/compose-fraudshield-api.sh 2>&1 | tee stack-api.log
       # Job logs need authentication; annotations do not. The log has no secrets (filtered above).
       - name: Annotate seed-demo failure
         if: failure()
@@ -144,6 +154,7 @@ jobs:
           path: |
             stack-smoke.log
             stack-seed.log
+            stack-api.log
           if-no-files-found: ignore
       - if: always()
         run: docker compose --profile full down -v
