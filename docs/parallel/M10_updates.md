@@ -215,18 +215,23 @@ against the Compose stack (ADR 0010). It shows whether the load harness runs and
 must, and no figure below is evidence for any requirement row.
 
 The owner asked for step 2 (`docs/benchmarks/m10_plan.md` §3) on `main` once the API image, the
-API in Compose and `GET /api/v1/environment` had merged: run the harness, and prove that it stops
-on a wrong key, and when the environment endpoint reports `synthetic_data` false or cannot be
-reached. *"A run that only succeeds proves nothing."*
+API in Compose and `GET /api/v1/environment` had merged. The owner's words: *"Prove the harness can fail, not only that it passes: it must stop on
+a wrong key, and stop when the environment endpoint reports synthetic_data false or is
+unreachable. A run that only succeeds proves nothing."*
 
 What ran: `.github/workflows/m10-harness.yml` running `tests/performance/step2/prove-harness.sh`,
 run 39909394023, job 120268607480, on `4ac1092` (main `e17cc18` plus this branch). The workflow and
-harness changes had an independent review: 12 findings, all answered; the recheck found nothing
-blocking.
+harness changes had an independent review before they ran (`docs/reviews/M10/step2-reviews.md`):
+12 findings, all answered, the distributed-mode one by documenting it (PB-197); the recheck found
+nothing blocking.
+
+Counts are from the final console tables in each case's log in the run's artifact
+(`m10-step2-ingest`). The per-case CSVs are rewritten once a second and miss the last of a run, so
+they read slightly lower (117 and 94, 40 and 33).
 
 | Case | Exit (expected) | What reached the API | Verdict |
 |---|---|---|---|
-| pass: the real API, 2 users at 1 request a second for 60 s | 1 (0) | 118 ingests, 94 answered 503; Kafka +24, the 24 accepted | **FAIL** (PB-195) |
+| pass: the real API, 2 users at 1 request a second for 60 s | 1 (0) | 122 requests: 118 new ingests, 94 of them answered 503, and 4 replays; Kafka +24, the 24 accepted | **FAIL** (PB-195) |
 | wrong key | 3 (3) | nothing; Kafka +0 | pass |
 | `synthetic_data: false` (fault proxy) | 3 (3) | proxy forwarded 0; Kafka +0 | pass |
 | environment answers without the flag | 3 (3) | forwarded 0 | pass |
@@ -256,7 +261,8 @@ Before step 2 the harness had never run. Its first run found three defects:
 Locust records a task's exception and exits 1, so with `--fs-target-users` the second and third
 would have failed the run after at most one request per user (inferred from Locust's source, not
 observed). All three are fixed. Two new exit statuses close the class: 5 when a run that was
-allowed to start sent nothing, 6 when a task raised.
+allowed to start sent nothing, 6 when a task raised: the three defects, and any run that sends
+nothing or whose task raises, now fail.
 
 ### 2. Every refusal now stops the run, and the reintroduced defects are caught
 
@@ -267,21 +273,23 @@ check (an ingest `POST` with a malformed body, which the API answers 400 only af
 during the run stops it with exit 4. All six refusal cases exited as specified: the five preflight
 cases sent no ingest, and the revocation case stopped at the first 401, after the nine real ingests
 the proxy allowed. The two mutants, copies of the harness with the shape and the pacing defect put
-back, exited 5 and 6: the class of failure that let the harness report success is now caught.
+back, exited 5 and 6: those two defects are caught if they return.
 
 ### 3. The FX gap, found only because something finally sent the specified currency mix
 
-**PB-195** (owner M9 and the demo seed). The passing case failed for a real reason: ingest answers
-503 for a currency with no FX rate (ADR 0063), RWF is converted at one without reading the table
-(`JdbcFxRates.java:56-57`), and nothing outside the tests inserts into `fx_rates`. The harness
-draws its currency uniformly from five, so four in five refusals were predicted: observed 79.7%
-(94 of 118) and 83.3% (35 of 42). The API's own start test sends RWF only, and passed. The cause is inferred from the ratio and the code, because the 503
-says only "retry the same request" (**PB-196**, owner M6: the reason is neither sent nor logged).
+**PB-195** (owner M9 and the demo seed). The passing case failed, and the cause is inferred from
+the code and the ratio, not read from the run: the 503 says only "retry the same request"
+(**PB-196**, owner M6: the reason is kept from clients by design and not logged). The code: ingest
+answers 503 for a currency with no FX rate (ADR 0063), RWF is converted at one without reading the
+table (`JdbcFxRates.java:56-57`), and nothing outside the tests inserts into `fx_rates`. The ratio:
+the harness draws its currency uniformly from five, so four in five refusals were predicted;
+observed 79.7% (94 of 118) and 83.3% (35 of 42). The API's own start test sends one RWF
+transaction, and passed.
 
 The fix is on `fix/demo-fx-rates`, not merged: the demo seed inserts the country packs' fixed
-simulation rates. Step 2's passing case has not been re-run with it. Restricting the harness to RWF
-would have made step 2 green while drifting from the specified mix, and was not done (owner,
-2026-10-23).
+simulation rates. Step 2's passing case has not been re-run with it. The harness was not restricted
+to RWF; the owner's words: *"Restricting the harness to RWF would make step 2 green while drifting
+from the specified currency mix"* (2026-10-23).
 
 The harness's failure messages now carry the problem's type, title and detail, and the request's
 currency, so failures group by currency in the run's own failure table. With today's API the detail
@@ -302,4 +310,3 @@ PB-195 to PB-199 (2026-10-23; PB-191 to PB-194 are claimed on `m9/images`). Used
 
 The chaos leg (no cluster, no Chaos Mesh namespace) and the journey leg (M8 and M8B not on `main`)
 have not run. Every measured row of the plan stays unmeasured; see the plan's §2.
-

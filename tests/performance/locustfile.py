@@ -224,11 +224,13 @@ def json_object(response: Any) -> dict[str, Any] | None:
     """The response body as a JSON object, or None when it is empty, not JSON, or not an object.
 
     An earlier version read ``response.js``, which Locust's ``FastHttpUser`` responses do not have:
-    every task raised after its first request.
+    every task raised after its first request. A failed connection has no body at all (status 0,
+    ``text`` None), and ``json()`` then raises TypeError: caught too, or the request would leave the
+    failure table and show only as a task exception.
     """
     try:
         payload = response.json()
-    except ValueError:
+    except (ValueError, TypeError):
         return None
     return payload if isinstance(payload, dict) else None
 
@@ -244,8 +246,9 @@ def refusal(response: Any, prefix: str = "", sent: dict[str, Any] | None = None)
 
     The API's own detail does not always carry the cause: its 503 says only "retry the same
     request", and the reason it decided (no FX rate for the currency, idempotency unavailable) is
-    not sent or logged (PB-196). The request's currency is added so that failures group by it, and
-    a refusal confined to some currencies shows as such in the run's failure table.
+    kept from clients by design and not logged (PB-196). The request's currency is added so that
+    failures group by it, and a refusal confined to some currencies shows as such in the run's
+    failure table.
     """
     parts = [f"{prefix}HTTP {response.status_code}"]
     problem = json_object(response) or {}

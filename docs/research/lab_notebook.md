@@ -3367,8 +3367,9 @@ one, so a run that failed for some other reason cannot pass as the refusal it wa
 
 **The FX gap was found only because something finally sent the specified currency mix.** The
 passing case failed: about four in five ingests were answered 503 (79.7% and 83.3% against a
-predicted 80%), because nothing inserts FX rates and ingest refuses any currency without one; RWF
-alone is converted without the table (PB-195). The API's own start test sent one RWF
+predicted 80%). The cause, inferred from that ratio and the code rather than read from the run, is
+that nothing inserts FX rates and ingest refuses any currency without one; RWF alone is converted
+without the table (PB-195). The API's own start test sent one RWF
 transaction, the one currency that cannot fail this way. The 503 said only
 "retry the same request" and the API logged no reason (PB-196), so the cause was inferred from the
 ratio and the code rather than read from the run; the harness's failure messages now carry the
