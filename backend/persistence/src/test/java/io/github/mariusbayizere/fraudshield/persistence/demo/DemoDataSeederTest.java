@@ -195,7 +195,7 @@ class DemoDataSeederTest {
   }
 
   @Test
-  void addsFxRatesToADatabaseSeededBeforeTheyExisted() throws SQLException {
+  void addsFxRatesToDatabaseSeededBeforeTheyExisted() throws SQLException {
     TestDatabase other = TestDatabase.create();
     try (Connection admin = other.superuser();
         Statement statement = admin.createStatement()) {
@@ -210,7 +210,7 @@ class DemoDataSeederTest {
   }
 
   @Test
-  void leavesACurrencyThatAlreadyHasARateAndAddsTheOthers() throws SQLException {
+  void keepsAnExistingRateAndAddsTheMissingCurrencies() throws SQLException {
     TestDatabase other = TestDatabase.create();
     try (Connection admin = other.superuser();
         Statement statement = admin.createStatement()) {
