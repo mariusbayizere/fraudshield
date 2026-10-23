@@ -1569,3 +1569,41 @@ later. Every quotation of the 1,012,522-row figure is corrected or annotated.
 - **Acceptance:** the citation scan skips the index it writes (done: `EVIDENCE_INDEX` in
   `audit_numbers.py`), and a test fails if a row whose only citation is the index itself survives a
   regeneration. The test is not yet written.
+
+### PB-144 · Paper v2: Appendix E credits M10 with measurements M10 cannot produce as things stand
+- **Source:** owner review of Appendix E at the v1 source `17cc65f`, 2026-10-23 · **Priority:**
+  medium · **Due:** M11, the paper's v2. Nothing in Appendix E is false as written; v1 is unchanged.
+- **Problem:** Appendix E (`sections/19-appendix-e.tex`) lists seven deferred measurements and gives
+  M10 as the owner of the first five. Checked against `docs/benchmarks/m10_plan.md` and ADR 0010
+  point 4 (gate latency figures only from a dedicated machine recorded in `hardware.md`), "owner:
+  M10" implies a delivery that depends on things M10 does not control:
+  - **Row 1** (every result at the specification's 5,000,000-row scale; M10 plan row 24, ML-DATA-01,
+    PB-25) is an accuracy figure, not a performance benchmark, so ADR 0010 does not block it. Whether
+    a standard 16 GB GitHub runner can hold the feature caches at that scale is **untested**: the
+    full-volume run on the 1,006,317-row draw (features for 995,403 of its rows) completed on one,
+    and five times the rows may not. The plan's row 24 and PB-25 also name a dispatch blocker
+    (`workflow_dispatch` registers from the default branch); the default branch has been `main` since
+    2026-10-23 and `.github/workflows/dataset.yml` is on it, so that blocker looks cleared, but no
+    dispatch has confirmed it.
+  - **Row 2** (online feature-path latency at the 95th percentile against 10 ms; plan row 17) needs
+    the dedicated machine of `docs/benchmarks/m10_machine_spec.md`, which is **not provisioned**.
+  - **Row 3** is two claims with different blockers. Its latency half (gate-admissible scoring
+    latency; plan rows 1, 2 and 16) needs that machine. Its shadow-mode AUC delta (ML-GATE-13; plan
+    row 4) is an accuracy figure that needs a deployment running the shadow comparator for the full
+    specified window, which does not exist; hardware is not its blocker.
+  - **Row 4** (end-to-end decision latency and throughput at the specified load; plan rows 6, 13 and
+    15) needs the machine **and** the integrated system with M5's real scorer in place of the
+    stand-in (ADR 0059).
+  - **Row 5** (the latency–explainability frontier at the 99th percentile for the ensemble in the
+    multi-process service, against 40 ms; plan row 2) needs the machine.
+  - **Rows 6 and 7** (one reproduction command; publication scripts and a DOI) are M11's own, need
+    no dedicated hardware, and are accurate as they stand.
+  Whether the dedicated machine is provisioned is **the owner's decision, unresolved**
+  (`m10_plan.md` §1: "who provisions the machine").
+- **Acceptance:** in v2, rows 2, 4 and 5 say they are deferred until the dedicated machine of
+  `m10_machine_spec.md` exists, and name that provisioning decision as unresolved and the owner's;
+  row 4 also names the integrated system with M5's real scorer; row 3 is split into a latency row
+  (the machine) and a shadow-delta row (a deployment running the comparator for the full window);
+  row 1 says it is not hardware-blocked and that a runner's capacity at 5,000,000 rows is untested;
+  rows 6 and 7 are unchanged. Each reworded row is checked against `m10_plan.md` and ADR 0010 before
+  it is committed, and no other section's "deferred to M10" is left contradicting them.
